@@ -28,63 +28,6 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_unrecognized_all) = false;
 
-// A ResponseCacheEntry is a union type containing instances of all
-// mutating commands. Note that any entry added here must be handled
-// in storage/engine/db.cc in GetResponseHeader(). This message is used
-// for storing responses to mutating commands in the response cache.
-message ResponseCacheEntry {
-  option (gogoproto.onlyone) = true;
-  oneof value {
-    PutResponse put = 1;
-    ConditionalPutResponse conditional_put = 2;
-    IncrementResponse increment = 3;
-    DeleteResponse delete = 4;
-    DeleteRangeResponse delete_range = 5;
-    EndTransactionResponse end_transaction = 6;
-    HeartbeatTxnResponse heartbeat_txn = 7;
-    GCResponse gc = 8;
-    PushTxnResponse push_txn = 9;
-    ResolveIntentResponse resolve_intent = 10;
-    ResolveIntentRangeResponse resolve_intent_range = 11;
-    MergeResponse merge = 12;
-    TruncateLogResponse truncate_log = 13;
-    LeaderLeaseResponse leader_lease = 14;
-    BatchResponse batch = 30;
-  }
-}
-
-// A RaftCommandUnion is the union of all commands which can be sent
-// via raft.
-message RaftCommandUnion {
-  option (gogoproto.onlyone) = true;
-  oneof value {
-    // Non-batched external requests. This section is the same as RequestUnion.
-    GetRequest get = 1;
-    PutRequest put = 2;
-    ConditionalPutRequest conditional_put = 3;
-    IncrementRequest increment = 4;
-    DeleteRequest delete = 5;
-    DeleteRangeRequest delete_range = 6;
-    ScanRequest scan = 7;
-    EndTransactionRequest end_transaction = 8;
-
-    RangeLookupRequest range_lookup = 9;
-    HeartbeatTxnRequest heartbeat_txn = 10;
-    GCRequest gc = 11 [(gogoproto.customname) = "GC"];
-    PushTxnRequest push_txn = 12;
-    ResolveIntentRequest resolve_intent = 13;
-    ResolveIntentRangeRequest resolve_intent_range = 14;
-    MergeRequest merge_response = 15;
-    TruncateLogRequest truncate_log = 16;
-    LeaderLeaseRequest lease = 17;
-    ReverseScanRequest reverse_scan = 18;
-
-    // Other requests. Allow a gap in tag numbers so the previous list can
-    // be copy/pasted from RequestUnion.
-    BatchRequest batch = 30;
-  }
-}
-
 // A RaftCommand is a command which can be serialized and sent via
 // raft.
 message RaftCommand {
@@ -92,7 +35,7 @@ message RaftCommand {
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
   optional uint64 origin_node_id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "OriginNodeID", (gogoproto.casttype) = "RaftNodeID"];
-  optional RaftCommandUnion cmd = 3 [(gogoproto.nullable) = false];
+  optional BatchRequest cmd = 3 [(gogoproto.nullable) = false];
 }
 
 // InternalValueType defines a set of string constants placed in the

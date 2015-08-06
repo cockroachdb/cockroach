@@ -149,3 +149,52 @@ func TestSetGoErrorCopy(t *testing.T) {
 		t.Fatalf("SetGoError did not create a new error")
 	}
 }
+
+func TestBatchKeyRange(t *testing.T) {
+	verify := func(br *BatchRequest, start, end Key) {
+		if !br.Key.Equal(start) {
+			t.Errorf("expected batch start key %s; got %s", start, br.Key)
+		}
+		if !br.EndKey.Equal(end) {
+			t.Errorf("expected batch end key %s; got %s", end, br.EndKey)
+		}
+	}
+
+	br := &BatchRequest{}
+	br.Add(&GetRequest{
+		RequestHeader: RequestHeader{
+			Key: Key("a"),
+		},
+	})
+	verify(br, Key("a"), nil)
+	// Add "a" again; shouldn't set end key.
+	br.Add(&GetRequest{
+		RequestHeader: RequestHeader{
+			Key: Key("a"),
+		},
+	})
+	verify(br, Key("a"), nil)
+
+	br.Add(&GetRequest{
+		RequestHeader: RequestHeader{
+			Key: Key("b"),
+		},
+	})
+	verify(br, Key("a"), Key("b"))
+
+	br.Add(&ScanRequest{
+		RequestHeader: RequestHeader{
+			Key:    Key("c"),
+			EndKey: Key("d"),
+		},
+	})
+	verify(br, Key("a"), Key("d"))
+
+	br.Add(&ScanRequest{
+		RequestHeader: RequestHeader{
+			Key:    Key("A"),
+			EndKey: Key("d1"),
+		},
+	})
+	verify(br, Key("A"), Key("d1"))
+}

@@ -916,13 +916,8 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, args proto.ResolveIntentRequest) (proto.ResolveIntentResponse, error) {
 	var reply proto.ResolveIntentResponse
 
-	if args.Txn == nil {
-		return reply, util.Errorf("no transaction specified to ResolveIntent")
-	}
-	if err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, args.Timestamp, args.Txn); err != nil {
-		return reply, err
-	}
-	return reply, nil
+	err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, args.Timestamp, &args.IntentTxn)
+	return reply, err
 }
 
 // ResolveIntentRange resolves write intents in the specified
@@ -931,10 +926,7 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	args proto.ResolveIntentRangeRequest) (proto.ResolveIntentRangeResponse, error) {
 	var reply proto.ResolveIntentRangeResponse
 
-	if args.Txn == nil {
-		return reply, util.Errorf("no transaction specified to ResolveIntentRange")
-	}
-	_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, args.Timestamp, args.Txn)
+	_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, args.Timestamp, &args.IntentTxn)
 	return reply, err
 }
 

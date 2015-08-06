@@ -164,9 +164,8 @@ struct RequestUnionOneofInstance {
   const ::cockroach::proto::DeleteRequest* delete__;
   const ::cockroach::proto::DeleteRangeRequest* delete_range_;
   const ::cockroach::proto::ScanRequest* scan_;
+  const ::cockroach::proto::ReverseScanRequest* reverse_scan_;
   const ::cockroach::proto::EndTransactionRequest* end_transaction_;
-  const ::cockroach::proto::AdminSplitRequest* admin_split_;
-  const ::cockroach::proto::AdminMergeRequest* admin_merge_;
   const ::cockroach::proto::HeartbeatTxnRequest* heartbeat_txn_;
   const ::cockroach::proto::GCRequest* gc_;
   const ::cockroach::proto::PushTxnRequest* push_txn_;
@@ -176,7 +175,6 @@ struct RequestUnionOneofInstance {
   const ::cockroach::proto::MergeRequest* merge_;
   const ::cockroach::proto::TruncateLogRequest* truncate_;
   const ::cockroach::proto::LeaderLeaseRequest* leader_lease_;
-  const ::cockroach::proto::ReverseScanRequest* reverse_scan_;
 }* RequestUnion_default_oneof_instance_ = NULL;
 const ::google::protobuf::Descriptor* ResponseUnion_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
@@ -189,9 +187,8 @@ struct ResponseUnionOneofInstance {
   const ::cockroach::proto::DeleteResponse* delete__;
   const ::cockroach::proto::DeleteRangeResponse* delete_range_;
   const ::cockroach::proto::ScanResponse* scan_;
+  const ::cockroach::proto::ReverseScanResponse* reverse_scan_;
   const ::cockroach::proto::EndTransactionResponse* end_transaction_;
-  const ::cockroach::proto::AdminSplitResponse* admin_split_;
-  const ::cockroach::proto::AdminMergeResponse* admin_merge_;
   const ::cockroach::proto::HeartbeatTxnResponse* heartbeat_txn_;
   const ::cockroach::proto::GCResponse* gc_;
   const ::cockroach::proto::PushTxnResponse* push_txn_;
@@ -201,7 +198,6 @@ struct ResponseUnionOneofInstance {
   const ::cockroach::proto::MergeResponse* merge_;
   const ::cockroach::proto::TruncateLogResponse* truncate_;
   const ::cockroach::proto::LeaderLeaseResponse* leader_lease_;
-  const ::cockroach::proto::ReverseScanResponse* reverse_scan_;
 }* ResponseUnion_default_oneof_instance_ = NULL;
 const ::google::protobuf::Descriptor* BatchRequest_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
@@ -773,8 +769,9 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(PushTxnResponse, _internal_metadata_),
       -1);
   ResolveIntentRequest_descriptor_ = file->message_type(33);
-  static const int ResolveIntentRequest_offsets_[1] = {
+  static const int ResolveIntentRequest_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResolveIntentRequest, header_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResolveIntentRequest, intent_txn_),
   };
   ResolveIntentRequest_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -803,8 +800,9 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResolveIntentResponse, _internal_metadata_),
       -1);
   ResolveIntentRangeRequest_descriptor_ = file->message_type(35);
-  static const int ResolveIntentRangeRequest_offsets_[1] = {
+  static const int ResolveIntentRangeRequest_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResolveIntentRangeRequest, header_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResolveIntentRangeRequest, intent_txn_),
   };
   ResolveIntentRangeRequest_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -926,7 +924,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaderLeaseResponse, _internal_metadata_),
       -1);
   RequestUnion_descriptor_ = file->message_type(43);
-  static const int RequestUnion_offsets_[21] = {
+  static const int RequestUnion_offsets_[19] = {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, get_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, put_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, conditional_put_),
@@ -934,9 +932,8 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, delete__),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, delete_range_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, scan_),
+    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, reverse_scan_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, end_transaction_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, admin_split_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, admin_merge_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, heartbeat_txn_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, gc_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, push_txn_),
@@ -946,7 +943,6 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, merge_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, truncate_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, leader_lease_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, reverse_scan_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, value_),
   };
   RequestUnion_reflection_ =
@@ -963,7 +959,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, _internal_metadata_),
       -1);
   ResponseUnion_descriptor_ = file->message_type(44);
-  static const int ResponseUnion_offsets_[21] = {
+  static const int ResponseUnion_offsets_[19] = {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, get_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, put_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, conditional_put_),
@@ -971,9 +967,8 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, delete__),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, delete_range_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, scan_),
+    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, reverse_scan_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, end_transaction_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, admin_split_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, admin_merge_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, heartbeat_txn_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, gc_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, push_txn_),
@@ -983,7 +978,6 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, merge_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, truncate_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, leader_lease_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, reverse_scan_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, value_),
   };
   ResponseUnion_reflection_ =
@@ -1366,100 +1360,97 @@ void protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto() {
     "\001(\010B\004\310\336\037\000\"~\n\017PushTxnResponse\0229\n\006header\030\001"
     " \001(\0132\037.cockroach.proto.ResponseHeaderB\010\310"
     "\336\037\000\320\336\037\001\0220\n\npushee_txn\030\002 \001(\0132\034.cockroach."
-    "proto.Transaction\"P\n\024ResolveIntentReques"
+    "proto.Transaction\"\210\001\n\024ResolveIntentReque"
+    "st\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Req"
+    "uestHeaderB\010\310\336\037\000\320\336\037\001\0226\n\nintent_txn\030\002 \001(\013"
+    "2\034.cockroach.proto.TransactionB\004\310\336\037\000\"R\n\025"
+    "ResolveIntentResponse\0229\n\006header\030\001 \001(\0132\037."
+    "cockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001"
+    "\"\215\001\n\031ResolveIntentRangeRequest\0228\n\006header"
+    "\030\001 \001(\0132\036.cockroach.proto.RequestHeaderB\010"
+    "\310\336\037\000\320\336\037\001\0226\n\nintent_txn\030\002 \001(\0132\034.cockroach"
+    ".proto.TransactionB\004\310\336\037\000\"W\n\032ResolveInten"
+    "tRangeResponse\0229\n\006header\030\001 \001(\0132\037.cockroa"
+    "ch.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"u\n\014Mer"
+    "geRequest\0228\n\006header\030\001 \001(\0132\036.cockroach.pr"
+    "oto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005value\030\002 \001"
+    "(\0132\026.cockroach.proto.ValueB\004\310\336\037\000\"J\n\rMerg"
+    "eResponse\0229\n\006header\030\001 \001(\0132\037.cockroach.pr"
+    "oto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"c\n\022Truncate"
+    "LogRequest\0228\n\006header\030\001 \001(\0132\036.cockroach.p"
+    "roto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\023\n\005index\030\002 "
+    "\001(\004B\004\310\336\037\000\"P\n\023TruncateLogResponse\0229\n\006head"
+    "er\030\001 \001(\0132\037.cockroach.proto.ResponseHeade"
+    "rB\010\310\336\037\000\320\336\037\001\"{\n\022LeaderLeaseRequest\0228\n\006hea"
+    "der\030\001 \001(\0132\036.cockroach.proto.RequestHeade"
+    "rB\010\310\336\037\000\320\336\037\001\022+\n\005lease\030\002 \001(\0132\026.cockroach.p"
+    "roto.LeaseB\004\310\336\037\000\"P\n\023LeaderLeaseResponse\022"
+    "9\n\006header\030\001 \001(\0132\037.cockroach.proto.Respon"
+    "seHeaderB\010\310\336\037\000\320\336\037\001\"\233\010\n\014RequestUnion\022*\n\003g"
+    "et\030\001 \001(\0132\033.cockroach.proto.GetRequestH\000\022"
+    "*\n\003put\030\002 \001(\0132\033.cockroach.proto.PutReques"
+    "tH\000\022A\n\017conditional_put\030\003 \001(\0132&.cockroach"
+    ".proto.ConditionalPutRequestH\000\0226\n\tincrem"
+    "ent\030\004 \001(\0132!.cockroach.proto.IncrementReq"
+    "uestH\000\0220\n\006delete\030\005 \001(\0132\036.cockroach.proto"
+    ".DeleteRequestH\000\022;\n\014delete_range\030\006 \001(\0132#"
+    ".cockroach.proto.DeleteRangeRequestH\000\022,\n"
+    "\004scan\030\007 \001(\0132\034.cockroach.proto.ScanReques"
+    "tH\000\022;\n\014reverse_scan\030\010 \001(\0132#.cockroach.pr"
+    "oto.ReverseScanRequestH\000\022A\n\017end_transact"
+    "ion\030\t \001(\0132&.cockroach.proto.EndTransacti"
+    "onRequestH\000\022=\n\rheartbeat_txn\030\n \001(\0132$.coc"
+    "kroach.proto.HeartbeatTxnRequestH\000\022(\n\002gc"
+    "\030\013 \001(\0132\032.cockroach.proto.GCRequestH\000\0223\n\010"
+    "push_txn\030\014 \001(\0132\037.cockroach.proto.PushTxn"
+    "RequestH\000\022;\n\014range_lookup\030\r \001(\0132#.cockro"
+    "ach.proto.RangeLookupRequestH\000\022\?\n\016resolv"
+    "e_intent\030\016 \001(\0132%.cockroach.proto.Resolve"
+    "IntentRequestH\000\022J\n\024resolve_intent_range\030"
+    "\017 \001(\0132*.cockroach.proto.ResolveIntentRan"
+    "geRequestH\000\022.\n\005merge\030\020 \001(\0132\035.cockroach.p"
+    "roto.MergeRequestH\000\0227\n\010truncate\030\021 \001(\0132#."
+    "cockroach.proto.TruncateLogRequestH\000\022;\n\014"
+    "leader_lease\030\022 \001(\0132#.cockroach.proto.Lea"
+    "derLeaseRequestH\000:\004\310\240\037\001B\007\n\005value\"\256\010\n\rRes"
+    "ponseUnion\022+\n\003get\030\001 \001(\0132\034.cockroach.prot"
+    "o.GetResponseH\000\022+\n\003put\030\002 \001(\0132\034.cockroach"
+    ".proto.PutResponseH\000\022B\n\017conditional_put\030"
+    "\003 \001(\0132\'.cockroach.proto.ConditionalPutRe"
+    "sponseH\000\0227\n\tincrement\030\004 \001(\0132\".cockroach."
+    "proto.IncrementResponseH\000\0221\n\006delete\030\005 \001("
+    "\0132\037.cockroach.proto.DeleteResponseH\000\022<\n\014"
+    "delete_range\030\006 \001(\0132$.cockroach.proto.Del"
+    "eteRangeResponseH\000\022-\n\004scan\030\007 \001(\0132\035.cockr"
+    "oach.proto.ScanResponseH\000\022<\n\014reverse_sca"
+    "n\030\010 \001(\0132$.cockroach.proto.ReverseScanRes"
+    "ponseH\000\022B\n\017end_transaction\030\t \001(\0132\'.cockr"
+    "oach.proto.EndTransactionResponseH\000\022>\n\rh"
+    "eartbeat_txn\030\n \001(\0132%.cockroach.proto.Hea"
+    "rtbeatTxnResponseH\000\022)\n\002gc\030\013 \001(\0132\033.cockro"
+    "ach.proto.GCResponseH\000\0224\n\010push_txn\030\014 \001(\013"
+    "2 .cockroach.proto.PushTxnResponseH\000\022<\n\014"
+    "range_lookup\030\r \001(\0132$.cockroach.proto.Ran"
+    "geLookupResponseH\000\022@\n\016resolve_intent\030\016 \001"
+    "(\0132&.cockroach.proto.ResolveIntentRespon"
+    "seH\000\022K\n\024resolve_intent_range\030\017 \001(\0132+.coc"
+    "kroach.proto.ResolveIntentRangeResponseH"
+    "\000\022/\n\005merge\030\020 \001(\0132\036.cockroach.proto.Merge"
+    "ResponseH\000\0228\n\010truncate\030\021 \001(\0132$.cockroach"
+    ".proto.TruncateLogResponseH\000\022<\n\014leader_l"
+    "ease\030\022 \001(\0132$.cockroach.proto.LeaderLease"
+    "ResponseH\000:\004\310\240\037\001B\007\n\005value\"\177\n\014BatchReques"
     "t\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Requ"
-    "estHeaderB\010\310\336\037\000\320\336\037\001\"R\n\025ResolveIntentResp"
-    "onse\0229\n\006header\030\001 \001(\0132\037.cockroach.proto.R"
-    "esponseHeaderB\010\310\336\037\000\320\336\037\001\"U\n\031ResolveIntent"
-    "RangeRequest\0228\n\006header\030\001 \001(\0132\036.cockroach"
-    ".proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"W\n\032Resolv"
-    "eIntentRangeResponse\0229\n\006header\030\001 \001(\0132\037.c"
-    "ockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\""
-    "u\n\014MergeRequest\0228\n\006header\030\001 \001(\0132\036.cockro"
-    "ach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005val"
-    "ue\030\002 \001(\0132\026.cockroach.proto.ValueB\004\310\336\037\000\"J"
-    "\n\rMergeResponse\0229\n\006header\030\001 \001(\0132\037.cockro"
-    "ach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"c\n\022Tr"
-    "uncateLogRequest\0228\n\006header\030\001 \001(\0132\036.cockr"
-    "oach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\023\n\005in"
-    "dex\030\002 \001(\004B\004\310\336\037\000\"P\n\023TruncateLogResponse\0229"
-    "\n\006header\030\001 \001(\0132\037.cockroach.proto.Respons"
-    "eHeaderB\010\310\336\037\000\320\336\037\001\"{\n\022LeaderLeaseRequest\022"
-    "8\n\006header\030\001 \001(\0132\036.cockroach.proto.Reques"
-    "tHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005lease\030\002 \001(\0132\026.cockr"
-    "oach.proto.LeaseB\004\310\336\037\000\"P\n\023LeaderLeaseRes"
-    "ponse\0229\n\006header\030\001 \001(\0132\037.cockroach.proto."
-    "ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\221\t\n\014RequestUnio"
-    "n\022*\n\003get\030\001 \001(\0132\033.cockroach.proto.GetRequ"
-    "estH\000\022*\n\003put\030\002 \001(\0132\033.cockroach.proto.Put"
-    "RequestH\000\022A\n\017conditional_put\030\003 \001(\0132&.coc"
-    "kroach.proto.ConditionalPutRequestH\000\0226\n\t"
-    "increment\030\004 \001(\0132!.cockroach.proto.Increm"
-    "entRequestH\000\0220\n\006delete\030\005 \001(\0132\036.cockroach"
-    ".proto.DeleteRequestH\000\022;\n\014delete_range\030\006"
-    " \001(\0132#.cockroach.proto.DeleteRangeReques"
-    "tH\000\022,\n\004scan\030\007 \001(\0132\034.cockroach.proto.Scan"
-    "RequestH\000\022A\n\017end_transaction\030\010 \001(\0132&.coc"
-    "kroach.proto.EndTransactionRequestH\000\0229\n\013"
-    "admin_split\030\t \001(\0132\".cockroach.proto.Admi"
-    "nSplitRequestH\000\0229\n\013admin_merge\030\n \001(\0132\".c"
-    "ockroach.proto.AdminMergeRequestH\000\022=\n\rhe"
-    "artbeat_txn\030\013 \001(\0132$.cockroach.proto.Hear"
-    "tbeatTxnRequestH\000\022(\n\002gc\030\014 \001(\0132\032.cockroac"
-    "h.proto.GCRequestH\000\0223\n\010push_txn\030\r \001(\0132\037."
-    "cockroach.proto.PushTxnRequestH\000\022;\n\014rang"
-    "e_lookup\030\016 \001(\0132#.cockroach.proto.RangeLo"
-    "okupRequestH\000\022\?\n\016resolve_intent\030\017 \001(\0132%."
-    "cockroach.proto.ResolveIntentRequestH\000\022J"
-    "\n\024resolve_intent_range\030\020 \001(\0132*.cockroach"
-    ".proto.ResolveIntentRangeRequestH\000\022.\n\005me"
-    "rge\030\021 \001(\0132\035.cockroach.proto.MergeRequest"
-    "H\000\0227\n\010truncate\030\022 \001(\0132#.cockroach.proto.T"
-    "runcateLogRequestH\000\022;\n\014leader_lease\030\023 \001("
-    "\0132#.cockroach.proto.LeaderLeaseRequestH\000"
-    "\022;\n\014reverse_scan\030\024 \001(\0132#.cockroach.proto"
-    ".ReverseScanRequestH\000:\004\310\240\037\001B\007\n\005value\"\246\t\n"
-    "\rResponseUnion\022+\n\003get\030\001 \001(\0132\034.cockroach."
-    "proto.GetResponseH\000\022+\n\003put\030\002 \001(\0132\034.cockr"
-    "oach.proto.PutResponseH\000\022B\n\017conditional_"
-    "put\030\003 \001(\0132\'.cockroach.proto.ConditionalP"
-    "utResponseH\000\0227\n\tincrement\030\004 \001(\0132\".cockro"
-    "ach.proto.IncrementResponseH\000\0221\n\006delete\030"
-    "\005 \001(\0132\037.cockroach.proto.DeleteResponseH\000"
-    "\022<\n\014delete_range\030\006 \001(\0132$.cockroach.proto"
-    ".DeleteRangeResponseH\000\022-\n\004scan\030\007 \001(\0132\035.c"
-    "ockroach.proto.ScanResponseH\000\022B\n\017end_tra"
-    "nsaction\030\010 \001(\0132\'.cockroach.proto.EndTran"
-    "sactionResponseH\000\022:\n\013admin_split\030\t \001(\0132#"
-    ".cockroach.proto.AdminSplitResponseH\000\022:\n"
-    "\013admin_merge\030\n \001(\0132#.cockroach.proto.Adm"
-    "inMergeResponseH\000\022>\n\rheartbeat_txn\030\013 \001(\013"
-    "2%.cockroach.proto.HeartbeatTxnResponseH"
-    "\000\022)\n\002gc\030\014 \001(\0132\033.cockroach.proto.GCRespon"
-    "seH\000\0224\n\010push_txn\030\r \001(\0132 .cockroach.proto"
-    ".PushTxnResponseH\000\022<\n\014range_lookup\030\016 \001(\013"
-    "2$.cockroach.proto.RangeLookupResponseH\000"
-    "\022@\n\016resolve_intent\030\017 \001(\0132&.cockroach.pro"
-    "to.ResolveIntentResponseH\000\022K\n\024resolve_in"
-    "tent_range\030\020 \001(\0132+.cockroach.proto.Resol"
-    "veIntentRangeResponseH\000\022/\n\005merge\030\021 \001(\0132\036"
-    ".cockroach.proto.MergeResponseH\000\0228\n\010trun"
-    "cate\030\022 \001(\0132$.cockroach.proto.TruncateLog"
-    "ResponseH\000\022<\n\014leader_lease\030\023 \001(\0132$.cockr"
-    "oach.proto.LeaderLeaseResponseH\000\022<\n\014reve"
-    "rse_scan\030\024 \001(\0132$.cockroach.proto.Reverse"
-    "ScanResponseH\000:\004\310\240\037\001B\007\n\005value\"\177\n\014BatchRe"
-    "quest\0228\n\006header\030\001 \001(\0132\036.cockroach.proto."
-    "RequestHeaderB\010\310\336\037\000\320\336\037\001\0225\n\010requests\030\002 \003("
-    "\0132\035.cockroach.proto.RequestUnionB\004\310\336\037\000\"\203"
-    "\001\n\rBatchResponse\0229\n\006header\030\001 \001(\0132\037.cockr"
-    "oach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\0227\n\tr"
-    "esponses\030\002 \003(\0132\036.cockroach.proto.Respons"
-    "eUnionB\004\310\336\037\000*L\n\023ReadConsistencyType\022\016\n\nC"
-    "ONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSISTE"
-    "NT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n\016PUSH_TIMEST"
-    "AMP\020\000\022\r\n\tABORT_TXN\020\001\022\017\n\013CLEANUP_TXN\020\002\032\004\210"
-    "\243\036\000B\027Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 8108);
+    "estHeaderB\010\310\336\037\000\320\336\037\001\0225\n\010requests\030\002 \003(\0132\035."
+    "cockroach.proto.RequestUnionB\004\310\336\037\000\"\203\001\n\rB"
+    "atchResponse\0229\n\006header\030\001 \001(\0132\037.cockroach"
+    ".proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\0227\n\trespo"
+    "nses\030\002 \003(\0132\036.cockroach.proto.ResponseUni"
+    "onB\004\310\336\037\000*L\n\023ReadConsistencyType\022\016\n\nCONSI"
+    "STENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSISTENT\020\002"
+    "\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n\016PUSH_TIMESTAMP\020"
+    "\000\022\r\n\tABORT_TXN\020\001\022\017\n\013CLEANUP_TXN\020\002\032\004\210\243\036\000B"
+    "\027Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 7984);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/api.proto", &protobuf_RegisterTypes);
   ClientCmdID::default_instance_ = new ClientCmdID();
@@ -14462,6 +14453,7 @@ void PushTxnResponse::clear_pushee_txn() {
 
 #ifndef _MSC_VER
 const int ResolveIntentRequest::kHeaderFieldNumber;
+const int ResolveIntentRequest::kIntentTxnFieldNumber;
 #endif  // !_MSC_VER
 
 ResolveIntentRequest::ResolveIntentRequest()
@@ -14472,6 +14464,7 @@ ResolveIntentRequest::ResolveIntentRequest()
 
 void ResolveIntentRequest::InitAsDefaultInstance() {
   header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  intent_txn_ = const_cast< ::cockroach::proto::Transaction*>(&::cockroach::proto::Transaction::default_instance());
 }
 
 ResolveIntentRequest::ResolveIntentRequest(const ResolveIntentRequest& from)
@@ -14485,6 +14478,7 @@ ResolveIntentRequest::ResolveIntentRequest(const ResolveIntentRequest& from)
 void ResolveIntentRequest::SharedCtor() {
   _cached_size_ = 0;
   header_ = NULL;
+  intent_txn_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -14496,6 +14490,7 @@ ResolveIntentRequest::~ResolveIntentRequest() {
 void ResolveIntentRequest::SharedDtor() {
   if (this != default_instance_) {
     delete header_;
+    delete intent_txn_;
   }
 }
 
@@ -14525,8 +14520,13 @@ ResolveIntentRequest* ResolveIntentRequest::New(::google::protobuf::Arena* arena
 }
 
 void ResolveIntentRequest::Clear() {
-  if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (_has_bits_[0 / 32] & 3u) {
+    if (has_header()) {
+      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+    }
+    if (has_intent_txn()) {
+      if (intent_txn_ != NULL) intent_txn_->::cockroach::proto::Transaction::Clear();
+    }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -14549,6 +14549,19 @@ bool ResolveIntentRequest::MergePartialFromCodedStream(
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_intent_txn;
+        break;
+      }
+
+      // optional .cockroach.proto.Transaction intent_txn = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_intent_txn:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_intent_txn()));
         } else {
           goto handle_unusual;
         }
@@ -14587,6 +14600,12 @@ void ResolveIntentRequest::SerializeWithCachedSizes(
       1, *this->header_, output);
   }
 
+  // optional .cockroach.proto.Transaction intent_txn = 2;
+  if (has_intent_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      2, *this->intent_txn_, output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -14604,6 +14623,13 @@ void ResolveIntentRequest::SerializeWithCachedSizes(
         1, *this->header_, target);
   }
 
+  // optional .cockroach.proto.Transaction intent_txn = 2;
+  if (has_intent_txn()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        2, *this->intent_txn_, target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -14615,13 +14641,22 @@ void ResolveIntentRequest::SerializeWithCachedSizes(
 int ResolveIntentRequest::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.RequestHeader header = 1;
-  if (has_header()) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-        *this->header_);
-  }
+  if (_has_bits_[0 / 32] & 3) {
+    // optional .cockroach.proto.RequestHeader header = 1;
+    if (has_header()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->header_);
+    }
 
+    // optional .cockroach.proto.Transaction intent_txn = 2;
+    if (has_intent_txn()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->intent_txn_);
+    }
+
+  }
   if (_internal_metadata_.have_unknown_fields()) {
     total_size +=
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
@@ -14650,6 +14685,9 @@ void ResolveIntentRequest::MergeFrom(const ResolveIntentRequest& from) {
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
       mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+    }
+    if (from.has_intent_txn()) {
+      mutable_intent_txn()->::cockroach::proto::Transaction::MergeFrom(from.intent_txn());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -14680,6 +14718,7 @@ void ResolveIntentRequest::Swap(ResolveIntentRequest* other) {
 }
 void ResolveIntentRequest::InternalSwap(ResolveIntentRequest* other) {
   std::swap(header_, other->header_);
+  std::swap(intent_txn_, other->intent_txn_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -14737,6 +14776,49 @@ void ResolveIntentRequest::clear_header() {
     clear_has_header();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResolveIntentRequest.header)
+}
+
+// optional .cockroach.proto.Transaction intent_txn = 2;
+bool ResolveIntentRequest::has_intent_txn() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void ResolveIntentRequest::set_has_intent_txn() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void ResolveIntentRequest::clear_has_intent_txn() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void ResolveIntentRequest::clear_intent_txn() {
+  if (intent_txn_ != NULL) intent_txn_->::cockroach::proto::Transaction::Clear();
+  clear_has_intent_txn();
+}
+ const ::cockroach::proto::Transaction& ResolveIntentRequest::intent_txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ResolveIntentRequest.intent_txn)
+  return intent_txn_ != NULL ? *intent_txn_ : *default_instance_->intent_txn_;
+}
+ ::cockroach::proto::Transaction* ResolveIntentRequest::mutable_intent_txn() {
+  set_has_intent_txn();
+  if (intent_txn_ == NULL) {
+    intent_txn_ = new ::cockroach::proto::Transaction;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ResolveIntentRequest.intent_txn)
+  return intent_txn_;
+}
+ ::cockroach::proto::Transaction* ResolveIntentRequest::release_intent_txn() {
+  clear_has_intent_txn();
+  ::cockroach::proto::Transaction* temp = intent_txn_;
+  intent_txn_ = NULL;
+  return temp;
+}
+ void ResolveIntentRequest::set_allocated_intent_txn(::cockroach::proto::Transaction* intent_txn) {
+  delete intent_txn_;
+  intent_txn_ = intent_txn;
+  if (intent_txn) {
+    set_has_intent_txn();
+  } else {
+    clear_has_intent_txn();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResolveIntentRequest.intent_txn)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -15028,6 +15110,7 @@ void ResolveIntentResponse::clear_header() {
 
 #ifndef _MSC_VER
 const int ResolveIntentRangeRequest::kHeaderFieldNumber;
+const int ResolveIntentRangeRequest::kIntentTxnFieldNumber;
 #endif  // !_MSC_VER
 
 ResolveIntentRangeRequest::ResolveIntentRangeRequest()
@@ -15038,6 +15121,7 @@ ResolveIntentRangeRequest::ResolveIntentRangeRequest()
 
 void ResolveIntentRangeRequest::InitAsDefaultInstance() {
   header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  intent_txn_ = const_cast< ::cockroach::proto::Transaction*>(&::cockroach::proto::Transaction::default_instance());
 }
 
 ResolveIntentRangeRequest::ResolveIntentRangeRequest(const ResolveIntentRangeRequest& from)
@@ -15051,6 +15135,7 @@ ResolveIntentRangeRequest::ResolveIntentRangeRequest(const ResolveIntentRangeReq
 void ResolveIntentRangeRequest::SharedCtor() {
   _cached_size_ = 0;
   header_ = NULL;
+  intent_txn_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -15062,6 +15147,7 @@ ResolveIntentRangeRequest::~ResolveIntentRangeRequest() {
 void ResolveIntentRangeRequest::SharedDtor() {
   if (this != default_instance_) {
     delete header_;
+    delete intent_txn_;
   }
 }
 
@@ -15091,8 +15177,13 @@ ResolveIntentRangeRequest* ResolveIntentRangeRequest::New(::google::protobuf::Ar
 }
 
 void ResolveIntentRangeRequest::Clear() {
-  if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (_has_bits_[0 / 32] & 3u) {
+    if (has_header()) {
+      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+    }
+    if (has_intent_txn()) {
+      if (intent_txn_ != NULL) intent_txn_->::cockroach::proto::Transaction::Clear();
+    }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -15115,6 +15206,19 @@ bool ResolveIntentRangeRequest::MergePartialFromCodedStream(
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_intent_txn;
+        break;
+      }
+
+      // optional .cockroach.proto.Transaction intent_txn = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_intent_txn:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_intent_txn()));
         } else {
           goto handle_unusual;
         }
@@ -15153,6 +15257,12 @@ void ResolveIntentRangeRequest::SerializeWithCachedSizes(
       1, *this->header_, output);
   }
 
+  // optional .cockroach.proto.Transaction intent_txn = 2;
+  if (has_intent_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      2, *this->intent_txn_, output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -15170,6 +15280,13 @@ void ResolveIntentRangeRequest::SerializeWithCachedSizes(
         1, *this->header_, target);
   }
 
+  // optional .cockroach.proto.Transaction intent_txn = 2;
+  if (has_intent_txn()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        2, *this->intent_txn_, target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -15181,13 +15298,22 @@ void ResolveIntentRangeRequest::SerializeWithCachedSizes(
 int ResolveIntentRangeRequest::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.RequestHeader header = 1;
-  if (has_header()) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-        *this->header_);
-  }
+  if (_has_bits_[0 / 32] & 3) {
+    // optional .cockroach.proto.RequestHeader header = 1;
+    if (has_header()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->header_);
+    }
 
+    // optional .cockroach.proto.Transaction intent_txn = 2;
+    if (has_intent_txn()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->intent_txn_);
+    }
+
+  }
   if (_internal_metadata_.have_unknown_fields()) {
     total_size +=
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
@@ -15216,6 +15342,9 @@ void ResolveIntentRangeRequest::MergeFrom(const ResolveIntentRangeRequest& from)
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
       mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+    }
+    if (from.has_intent_txn()) {
+      mutable_intent_txn()->::cockroach::proto::Transaction::MergeFrom(from.intent_txn());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -15246,6 +15375,7 @@ void ResolveIntentRangeRequest::Swap(ResolveIntentRangeRequest* other) {
 }
 void ResolveIntentRangeRequest::InternalSwap(ResolveIntentRangeRequest* other) {
   std::swap(header_, other->header_);
+  std::swap(intent_txn_, other->intent_txn_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -15303,6 +15433,49 @@ void ResolveIntentRangeRequest::clear_header() {
     clear_has_header();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResolveIntentRangeRequest.header)
+}
+
+// optional .cockroach.proto.Transaction intent_txn = 2;
+bool ResolveIntentRangeRequest::has_intent_txn() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void ResolveIntentRangeRequest::set_has_intent_txn() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void ResolveIntentRangeRequest::clear_has_intent_txn() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void ResolveIntentRangeRequest::clear_intent_txn() {
+  if (intent_txn_ != NULL) intent_txn_->::cockroach::proto::Transaction::Clear();
+  clear_has_intent_txn();
+}
+ const ::cockroach::proto::Transaction& ResolveIntentRangeRequest::intent_txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ResolveIntentRangeRequest.intent_txn)
+  return intent_txn_ != NULL ? *intent_txn_ : *default_instance_->intent_txn_;
+}
+ ::cockroach::proto::Transaction* ResolveIntentRangeRequest::mutable_intent_txn() {
+  set_has_intent_txn();
+  if (intent_txn_ == NULL) {
+    intent_txn_ = new ::cockroach::proto::Transaction;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ResolveIntentRangeRequest.intent_txn)
+  return intent_txn_;
+}
+ ::cockroach::proto::Transaction* ResolveIntentRangeRequest::release_intent_txn() {
+  clear_has_intent_txn();
+  ::cockroach::proto::Transaction* temp = intent_txn_;
+  intent_txn_ = NULL;
+  return temp;
+}
+ void ResolveIntentRangeRequest::set_allocated_intent_txn(::cockroach::proto::Transaction* intent_txn) {
+  delete intent_txn_;
+  intent_txn_ = intent_txn;
+  if (intent_txn) {
+    set_has_intent_txn();
+  } else {
+    clear_has_intent_txn();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResolveIntentRangeRequest.intent_txn)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -17547,9 +17720,8 @@ const int RequestUnion::kIncrementFieldNumber;
 const int RequestUnion::kDeleteFieldNumber;
 const int RequestUnion::kDeleteRangeFieldNumber;
 const int RequestUnion::kScanFieldNumber;
+const int RequestUnion::kReverseScanFieldNumber;
 const int RequestUnion::kEndTransactionFieldNumber;
-const int RequestUnion::kAdminSplitFieldNumber;
-const int RequestUnion::kAdminMergeFieldNumber;
 const int RequestUnion::kHeartbeatTxnFieldNumber;
 const int RequestUnion::kGcFieldNumber;
 const int RequestUnion::kPushTxnFieldNumber;
@@ -17559,7 +17731,6 @@ const int RequestUnion::kResolveIntentRangeFieldNumber;
 const int RequestUnion::kMergeFieldNumber;
 const int RequestUnion::kTruncateFieldNumber;
 const int RequestUnion::kLeaderLeaseFieldNumber;
-const int RequestUnion::kReverseScanFieldNumber;
 #endif  // !_MSC_VER
 
 RequestUnion::RequestUnion()
@@ -17576,9 +17747,8 @@ void RequestUnion::InitAsDefaultInstance() {
   RequestUnion_default_oneof_instance_->delete__ = const_cast< ::cockroach::proto::DeleteRequest*>(&::cockroach::proto::DeleteRequest::default_instance());
   RequestUnion_default_oneof_instance_->delete_range_ = const_cast< ::cockroach::proto::DeleteRangeRequest*>(&::cockroach::proto::DeleteRangeRequest::default_instance());
   RequestUnion_default_oneof_instance_->scan_ = const_cast< ::cockroach::proto::ScanRequest*>(&::cockroach::proto::ScanRequest::default_instance());
+  RequestUnion_default_oneof_instance_->reverse_scan_ = const_cast< ::cockroach::proto::ReverseScanRequest*>(&::cockroach::proto::ReverseScanRequest::default_instance());
   RequestUnion_default_oneof_instance_->end_transaction_ = const_cast< ::cockroach::proto::EndTransactionRequest*>(&::cockroach::proto::EndTransactionRequest::default_instance());
-  RequestUnion_default_oneof_instance_->admin_split_ = const_cast< ::cockroach::proto::AdminSplitRequest*>(&::cockroach::proto::AdminSplitRequest::default_instance());
-  RequestUnion_default_oneof_instance_->admin_merge_ = const_cast< ::cockroach::proto::AdminMergeRequest*>(&::cockroach::proto::AdminMergeRequest::default_instance());
   RequestUnion_default_oneof_instance_->heartbeat_txn_ = const_cast< ::cockroach::proto::HeartbeatTxnRequest*>(&::cockroach::proto::HeartbeatTxnRequest::default_instance());
   RequestUnion_default_oneof_instance_->gc_ = const_cast< ::cockroach::proto::GCRequest*>(&::cockroach::proto::GCRequest::default_instance());
   RequestUnion_default_oneof_instance_->push_txn_ = const_cast< ::cockroach::proto::PushTxnRequest*>(&::cockroach::proto::PushTxnRequest::default_instance());
@@ -17588,7 +17758,6 @@ void RequestUnion::InitAsDefaultInstance() {
   RequestUnion_default_oneof_instance_->merge_ = const_cast< ::cockroach::proto::MergeRequest*>(&::cockroach::proto::MergeRequest::default_instance());
   RequestUnion_default_oneof_instance_->truncate_ = const_cast< ::cockroach::proto::TruncateLogRequest*>(&::cockroach::proto::TruncateLogRequest::default_instance());
   RequestUnion_default_oneof_instance_->leader_lease_ = const_cast< ::cockroach::proto::LeaderLeaseRequest*>(&::cockroach::proto::LeaderLeaseRequest::default_instance());
-  RequestUnion_default_oneof_instance_->reverse_scan_ = const_cast< ::cockroach::proto::ReverseScanRequest*>(&::cockroach::proto::ReverseScanRequest::default_instance());
 }
 
 RequestUnion::RequestUnion(const RequestUnion& from)
@@ -17673,16 +17842,12 @@ void RequestUnion::clear_value() {
       delete value_.scan_;
       break;
     }
+    case kReverseScan: {
+      delete value_.reverse_scan_;
+      break;
+    }
     case kEndTransaction: {
       delete value_.end_transaction_;
-      break;
-    }
-    case kAdminSplit: {
-      delete value_.admin_split_;
-      break;
-    }
-    case kAdminMerge: {
-      delete value_.admin_merge_;
       break;
     }
     case kHeartbeatTxn: {
@@ -17719,10 +17884,6 @@ void RequestUnion::clear_value() {
     }
     case kLeaderLease: {
       delete value_.leader_lease_;
-      break;
-    }
-    case kReverseScan: {
-      delete value_.reverse_scan_;
       break;
     }
     case VALUE_NOT_SET: {
@@ -17837,172 +17998,146 @@ bool RequestUnion::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(66)) goto parse_end_transaction;
+        if (input->ExpectTag(66)) goto parse_reverse_scan;
         break;
       }
 
-      // optional .cockroach.proto.EndTransactionRequest end_transaction = 8;
+      // optional .cockroach.proto.ReverseScanRequest reverse_scan = 8;
       case 8: {
         if (tag == 66) {
+         parse_reverse_scan:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_reverse_scan()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(74)) goto parse_end_transaction;
+        break;
+      }
+
+      // optional .cockroach.proto.EndTransactionRequest end_transaction = 9;
+      case 9: {
+        if (tag == 74) {
          parse_end_transaction:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_end_transaction()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(74)) goto parse_admin_split;
+        if (input->ExpectTag(82)) goto parse_heartbeat_txn;
         break;
       }
 
-      // optional .cockroach.proto.AdminSplitRequest admin_split = 9;
-      case 9: {
-        if (tag == 74) {
-         parse_admin_split:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_admin_split()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(82)) goto parse_admin_merge;
-        break;
-      }
-
-      // optional .cockroach.proto.AdminMergeRequest admin_merge = 10;
+      // optional .cockroach.proto.HeartbeatTxnRequest heartbeat_txn = 10;
       case 10: {
         if (tag == 82) {
-         parse_admin_merge:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_admin_merge()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(90)) goto parse_heartbeat_txn;
-        break;
-      }
-
-      // optional .cockroach.proto.HeartbeatTxnRequest heartbeat_txn = 11;
-      case 11: {
-        if (tag == 90) {
          parse_heartbeat_txn:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_heartbeat_txn()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(98)) goto parse_gc;
+        if (input->ExpectTag(90)) goto parse_gc;
         break;
       }
 
-      // optional .cockroach.proto.GCRequest gc = 12;
-      case 12: {
-        if (tag == 98) {
+      // optional .cockroach.proto.GCRequest gc = 11;
+      case 11: {
+        if (tag == 90) {
          parse_gc:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_gc()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(106)) goto parse_push_txn;
+        if (input->ExpectTag(98)) goto parse_push_txn;
         break;
       }
 
-      // optional .cockroach.proto.PushTxnRequest push_txn = 13;
-      case 13: {
-        if (tag == 106) {
+      // optional .cockroach.proto.PushTxnRequest push_txn = 12;
+      case 12: {
+        if (tag == 98) {
          parse_push_txn:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_push_txn()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(114)) goto parse_range_lookup;
+        if (input->ExpectTag(106)) goto parse_range_lookup;
         break;
       }
 
-      // optional .cockroach.proto.RangeLookupRequest range_lookup = 14;
-      case 14: {
-        if (tag == 114) {
+      // optional .cockroach.proto.RangeLookupRequest range_lookup = 13;
+      case 13: {
+        if (tag == 106) {
          parse_range_lookup:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_range_lookup()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(122)) goto parse_resolve_intent;
+        if (input->ExpectTag(114)) goto parse_resolve_intent;
         break;
       }
 
-      // optional .cockroach.proto.ResolveIntentRequest resolve_intent = 15;
-      case 15: {
-        if (tag == 122) {
+      // optional .cockroach.proto.ResolveIntentRequest resolve_intent = 14;
+      case 14: {
+        if (tag == 114) {
          parse_resolve_intent:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_resolve_intent()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(130)) goto parse_resolve_intent_range;
+        if (input->ExpectTag(122)) goto parse_resolve_intent_range;
         break;
       }
 
-      // optional .cockroach.proto.ResolveIntentRangeRequest resolve_intent_range = 16;
-      case 16: {
-        if (tag == 130) {
+      // optional .cockroach.proto.ResolveIntentRangeRequest resolve_intent_range = 15;
+      case 15: {
+        if (tag == 122) {
          parse_resolve_intent_range:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_resolve_intent_range()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(138)) goto parse_merge;
+        if (input->ExpectTag(130)) goto parse_merge;
         break;
       }
 
-      // optional .cockroach.proto.MergeRequest merge = 17;
-      case 17: {
-        if (tag == 138) {
+      // optional .cockroach.proto.MergeRequest merge = 16;
+      case 16: {
+        if (tag == 130) {
          parse_merge:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_merge()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(146)) goto parse_truncate;
+        if (input->ExpectTag(138)) goto parse_truncate;
         break;
       }
 
-      // optional .cockroach.proto.TruncateLogRequest truncate = 18;
-      case 18: {
-        if (tag == 146) {
+      // optional .cockroach.proto.TruncateLogRequest truncate = 17;
+      case 17: {
+        if (tag == 138) {
          parse_truncate:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_truncate()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(154)) goto parse_leader_lease;
+        if (input->ExpectTag(146)) goto parse_leader_lease;
         break;
       }
 
-      // optional .cockroach.proto.LeaderLeaseRequest leader_lease = 19;
-      case 19: {
-        if (tag == 154) {
+      // optional .cockroach.proto.LeaderLeaseRequest leader_lease = 18;
+      case 18: {
+        if (tag == 146) {
          parse_leader_lease:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_leader_lease()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(162)) goto parse_reverse_scan;
-        break;
-      }
-
-      // optional .cockroach.proto.ReverseScanRequest reverse_scan = 20;
-      case 20: {
-        if (tag == 162) {
-         parse_reverse_scan:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_reverse_scan()));
         } else {
           goto handle_unusual;
         }
@@ -18077,82 +18212,70 @@ void RequestUnion::SerializeWithCachedSizes(
       7, *value_.scan_, output);
   }
 
-  // optional .cockroach.proto.EndTransactionRequest end_transaction = 8;
-  if (has_end_transaction()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      8, *value_.end_transaction_, output);
-  }
-
-  // optional .cockroach.proto.AdminSplitRequest admin_split = 9;
-  if (has_admin_split()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      9, *value_.admin_split_, output);
-  }
-
-  // optional .cockroach.proto.AdminMergeRequest admin_merge = 10;
-  if (has_admin_merge()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      10, *value_.admin_merge_, output);
-  }
-
-  // optional .cockroach.proto.HeartbeatTxnRequest heartbeat_txn = 11;
-  if (has_heartbeat_txn()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      11, *value_.heartbeat_txn_, output);
-  }
-
-  // optional .cockroach.proto.GCRequest gc = 12;
-  if (has_gc()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      12, *value_.gc_, output);
-  }
-
-  // optional .cockroach.proto.PushTxnRequest push_txn = 13;
-  if (has_push_txn()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      13, *value_.push_txn_, output);
-  }
-
-  // optional .cockroach.proto.RangeLookupRequest range_lookup = 14;
-  if (has_range_lookup()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      14, *value_.range_lookup_, output);
-  }
-
-  // optional .cockroach.proto.ResolveIntentRequest resolve_intent = 15;
-  if (has_resolve_intent()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      15, *value_.resolve_intent_, output);
-  }
-
-  // optional .cockroach.proto.ResolveIntentRangeRequest resolve_intent_range = 16;
-  if (has_resolve_intent_range()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      16, *value_.resolve_intent_range_, output);
-  }
-
-  // optional .cockroach.proto.MergeRequest merge = 17;
-  if (has_merge()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      17, *value_.merge_, output);
-  }
-
-  // optional .cockroach.proto.TruncateLogRequest truncate = 18;
-  if (has_truncate()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      18, *value_.truncate_, output);
-  }
-
-  // optional .cockroach.proto.LeaderLeaseRequest leader_lease = 19;
-  if (has_leader_lease()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      19, *value_.leader_lease_, output);
-  }
-
-  // optional .cockroach.proto.ReverseScanRequest reverse_scan = 20;
+  // optional .cockroach.proto.ReverseScanRequest reverse_scan = 8;
   if (has_reverse_scan()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      20, *value_.reverse_scan_, output);
+      8, *value_.reverse_scan_, output);
+  }
+
+  // optional .cockroach.proto.EndTransactionRequest end_transaction = 9;
+  if (has_end_transaction()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      9, *value_.end_transaction_, output);
+  }
+
+  // optional .cockroach.proto.HeartbeatTxnRequest heartbeat_txn = 10;
+  if (has_heartbeat_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      10, *value_.heartbeat_txn_, output);
+  }
+
+  // optional .cockroach.proto.GCRequest gc = 11;
+  if (has_gc()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      11, *value_.gc_, output);
+  }
+
+  // optional .cockroach.proto.PushTxnRequest push_txn = 12;
+  if (has_push_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      12, *value_.push_txn_, output);
+  }
+
+  // optional .cockroach.proto.RangeLookupRequest range_lookup = 13;
+  if (has_range_lookup()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      13, *value_.range_lookup_, output);
+  }
+
+  // optional .cockroach.proto.ResolveIntentRequest resolve_intent = 14;
+  if (has_resolve_intent()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      14, *value_.resolve_intent_, output);
+  }
+
+  // optional .cockroach.proto.ResolveIntentRangeRequest resolve_intent_range = 15;
+  if (has_resolve_intent_range()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      15, *value_.resolve_intent_range_, output);
+  }
+
+  // optional .cockroach.proto.MergeRequest merge = 16;
+  if (has_merge()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      16, *value_.merge_, output);
+  }
+
+  // optional .cockroach.proto.TruncateLogRequest truncate = 17;
+  if (has_truncate()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      17, *value_.truncate_, output);
+  }
+
+  // optional .cockroach.proto.LeaderLeaseRequest leader_lease = 18;
+  if (has_leader_lease()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      18, *value_.leader_lease_, output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -18214,95 +18337,81 @@ void RequestUnion::SerializeWithCachedSizes(
         7, *value_.scan_, target);
   }
 
-  // optional .cockroach.proto.EndTransactionRequest end_transaction = 8;
-  if (has_end_transaction()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        8, *value_.end_transaction_, target);
-  }
-
-  // optional .cockroach.proto.AdminSplitRequest admin_split = 9;
-  if (has_admin_split()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        9, *value_.admin_split_, target);
-  }
-
-  // optional .cockroach.proto.AdminMergeRequest admin_merge = 10;
-  if (has_admin_merge()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        10, *value_.admin_merge_, target);
-  }
-
-  // optional .cockroach.proto.HeartbeatTxnRequest heartbeat_txn = 11;
-  if (has_heartbeat_txn()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        11, *value_.heartbeat_txn_, target);
-  }
-
-  // optional .cockroach.proto.GCRequest gc = 12;
-  if (has_gc()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        12, *value_.gc_, target);
-  }
-
-  // optional .cockroach.proto.PushTxnRequest push_txn = 13;
-  if (has_push_txn()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        13, *value_.push_txn_, target);
-  }
-
-  // optional .cockroach.proto.RangeLookupRequest range_lookup = 14;
-  if (has_range_lookup()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        14, *value_.range_lookup_, target);
-  }
-
-  // optional .cockroach.proto.ResolveIntentRequest resolve_intent = 15;
-  if (has_resolve_intent()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        15, *value_.resolve_intent_, target);
-  }
-
-  // optional .cockroach.proto.ResolveIntentRangeRequest resolve_intent_range = 16;
-  if (has_resolve_intent_range()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        16, *value_.resolve_intent_range_, target);
-  }
-
-  // optional .cockroach.proto.MergeRequest merge = 17;
-  if (has_merge()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        17, *value_.merge_, target);
-  }
-
-  // optional .cockroach.proto.TruncateLogRequest truncate = 18;
-  if (has_truncate()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        18, *value_.truncate_, target);
-  }
-
-  // optional .cockroach.proto.LeaderLeaseRequest leader_lease = 19;
-  if (has_leader_lease()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        19, *value_.leader_lease_, target);
-  }
-
-  // optional .cockroach.proto.ReverseScanRequest reverse_scan = 20;
+  // optional .cockroach.proto.ReverseScanRequest reverse_scan = 8;
   if (has_reverse_scan()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        20, *value_.reverse_scan_, target);
+        8, *value_.reverse_scan_, target);
+  }
+
+  // optional .cockroach.proto.EndTransactionRequest end_transaction = 9;
+  if (has_end_transaction()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        9, *value_.end_transaction_, target);
+  }
+
+  // optional .cockroach.proto.HeartbeatTxnRequest heartbeat_txn = 10;
+  if (has_heartbeat_txn()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        10, *value_.heartbeat_txn_, target);
+  }
+
+  // optional .cockroach.proto.GCRequest gc = 11;
+  if (has_gc()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        11, *value_.gc_, target);
+  }
+
+  // optional .cockroach.proto.PushTxnRequest push_txn = 12;
+  if (has_push_txn()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        12, *value_.push_txn_, target);
+  }
+
+  // optional .cockroach.proto.RangeLookupRequest range_lookup = 13;
+  if (has_range_lookup()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        13, *value_.range_lookup_, target);
+  }
+
+  // optional .cockroach.proto.ResolveIntentRequest resolve_intent = 14;
+  if (has_resolve_intent()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        14, *value_.resolve_intent_, target);
+  }
+
+  // optional .cockroach.proto.ResolveIntentRangeRequest resolve_intent_range = 15;
+  if (has_resolve_intent_range()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        15, *value_.resolve_intent_range_, target);
+  }
+
+  // optional .cockroach.proto.MergeRequest merge = 16;
+  if (has_merge()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        16, *value_.merge_, target);
+  }
+
+  // optional .cockroach.proto.TruncateLogRequest truncate = 17;
+  if (has_truncate()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        17, *value_.truncate_, target);
+  }
+
+  // optional .cockroach.proto.LeaderLeaseRequest leader_lease = 18;
+  if (has_leader_lease()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        18, *value_.leader_lease_, target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -18366,95 +18475,81 @@ int RequestUnion::ByteSize() const {
           *value_.scan_);
       break;
     }
-    // optional .cockroach.proto.EndTransactionRequest end_transaction = 8;
+    // optional .cockroach.proto.ReverseScanRequest reverse_scan = 8;
+    case kReverseScan: {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *value_.reverse_scan_);
+      break;
+    }
+    // optional .cockroach.proto.EndTransactionRequest end_transaction = 9;
     case kEndTransaction: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.end_transaction_);
       break;
     }
-    // optional .cockroach.proto.AdminSplitRequest admin_split = 9;
-    case kAdminSplit: {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.admin_split_);
-      break;
-    }
-    // optional .cockroach.proto.AdminMergeRequest admin_merge = 10;
-    case kAdminMerge: {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.admin_merge_);
-      break;
-    }
-    // optional .cockroach.proto.HeartbeatTxnRequest heartbeat_txn = 11;
+    // optional .cockroach.proto.HeartbeatTxnRequest heartbeat_txn = 10;
     case kHeartbeatTxn: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.heartbeat_txn_);
       break;
     }
-    // optional .cockroach.proto.GCRequest gc = 12;
+    // optional .cockroach.proto.GCRequest gc = 11;
     case kGc: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.gc_);
       break;
     }
-    // optional .cockroach.proto.PushTxnRequest push_txn = 13;
+    // optional .cockroach.proto.PushTxnRequest push_txn = 12;
     case kPushTxn: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.push_txn_);
       break;
     }
-    // optional .cockroach.proto.RangeLookupRequest range_lookup = 14;
+    // optional .cockroach.proto.RangeLookupRequest range_lookup = 13;
     case kRangeLookup: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.range_lookup_);
       break;
     }
-    // optional .cockroach.proto.ResolveIntentRequest resolve_intent = 15;
+    // optional .cockroach.proto.ResolveIntentRequest resolve_intent = 14;
     case kResolveIntent: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.resolve_intent_);
       break;
     }
-    // optional .cockroach.proto.ResolveIntentRangeRequest resolve_intent_range = 16;
+    // optional .cockroach.proto.ResolveIntentRangeRequest resolve_intent_range = 15;
     case kResolveIntentRange: {
-      total_size += 2 +
+      total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.resolve_intent_range_);
       break;
     }
-    // optional .cockroach.proto.MergeRequest merge = 17;
+    // optional .cockroach.proto.MergeRequest merge = 16;
     case kMerge: {
       total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.merge_);
       break;
     }
-    // optional .cockroach.proto.TruncateLogRequest truncate = 18;
+    // optional .cockroach.proto.TruncateLogRequest truncate = 17;
     case kTruncate: {
       total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.truncate_);
       break;
     }
-    // optional .cockroach.proto.LeaderLeaseRequest leader_lease = 19;
+    // optional .cockroach.proto.LeaderLeaseRequest leader_lease = 18;
     case kLeaderLease: {
       total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.leader_lease_);
-      break;
-    }
-    // optional .cockroach.proto.ReverseScanRequest reverse_scan = 20;
-    case kReverseScan: {
-      total_size += 2 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.reverse_scan_);
       break;
     }
     case VALUE_NOT_SET: {
@@ -18515,16 +18610,12 @@ void RequestUnion::MergeFrom(const RequestUnion& from) {
       mutable_scan()->::cockroach::proto::ScanRequest::MergeFrom(from.scan());
       break;
     }
+    case kReverseScan: {
+      mutable_reverse_scan()->::cockroach::proto::ReverseScanRequest::MergeFrom(from.reverse_scan());
+      break;
+    }
     case kEndTransaction: {
       mutable_end_transaction()->::cockroach::proto::EndTransactionRequest::MergeFrom(from.end_transaction());
-      break;
-    }
-    case kAdminSplit: {
-      mutable_admin_split()->::cockroach::proto::AdminSplitRequest::MergeFrom(from.admin_split());
-      break;
-    }
-    case kAdminMerge: {
-      mutable_admin_merge()->::cockroach::proto::AdminMergeRequest::MergeFrom(from.admin_merge());
       break;
     }
     case kHeartbeatTxn: {
@@ -18561,10 +18652,6 @@ void RequestUnion::MergeFrom(const RequestUnion& from) {
     }
     case kLeaderLease: {
       mutable_leader_lease()->::cockroach::proto::LeaderLeaseRequest::MergeFrom(from.leader_lease());
-      break;
-    }
-    case kReverseScan: {
-      mutable_reverse_scan()->::cockroach::proto::ReverseScanRequest::MergeFrom(from.reverse_scan());
       break;
     }
     case VALUE_NOT_SET: {
@@ -18938,559 +19025,7 @@ void RequestUnion::clear_scan() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.scan)
 }
 
-// optional .cockroach.proto.EndTransactionRequest end_transaction = 8;
-bool RequestUnion::has_end_transaction() const {
-  return value_case() == kEndTransaction;
-}
-void RequestUnion::set_has_end_transaction() {
-  _oneof_case_[0] = kEndTransaction;
-}
-void RequestUnion::clear_end_transaction() {
-  if (has_end_transaction()) {
-    delete value_.end_transaction_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::EndTransactionRequest& RequestUnion::end_transaction() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.end_transaction)
-  return has_end_transaction() ? *value_.end_transaction_
-                      : ::cockroach::proto::EndTransactionRequest::default_instance();
-}
- ::cockroach::proto::EndTransactionRequest* RequestUnion::mutable_end_transaction() {
-  if (!has_end_transaction()) {
-    clear_value();
-    set_has_end_transaction();
-    value_.end_transaction_ = new ::cockroach::proto::EndTransactionRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.end_transaction)
-  return value_.end_transaction_;
-}
- ::cockroach::proto::EndTransactionRequest* RequestUnion::release_end_transaction() {
-  if (has_end_transaction()) {
-    clear_has_value();
-    ::cockroach::proto::EndTransactionRequest* temp = value_.end_transaction_;
-    value_.end_transaction_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_end_transaction(::cockroach::proto::EndTransactionRequest* end_transaction) {
-  clear_value();
-  if (end_transaction) {
-    set_has_end_transaction();
-    value_.end_transaction_ = end_transaction;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.end_transaction)
-}
-
-// optional .cockroach.proto.AdminSplitRequest admin_split = 9;
-bool RequestUnion::has_admin_split() const {
-  return value_case() == kAdminSplit;
-}
-void RequestUnion::set_has_admin_split() {
-  _oneof_case_[0] = kAdminSplit;
-}
-void RequestUnion::clear_admin_split() {
-  if (has_admin_split()) {
-    delete value_.admin_split_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::AdminSplitRequest& RequestUnion::admin_split() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.admin_split)
-  return has_admin_split() ? *value_.admin_split_
-                      : ::cockroach::proto::AdminSplitRequest::default_instance();
-}
- ::cockroach::proto::AdminSplitRequest* RequestUnion::mutable_admin_split() {
-  if (!has_admin_split()) {
-    clear_value();
-    set_has_admin_split();
-    value_.admin_split_ = new ::cockroach::proto::AdminSplitRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.admin_split)
-  return value_.admin_split_;
-}
- ::cockroach::proto::AdminSplitRequest* RequestUnion::release_admin_split() {
-  if (has_admin_split()) {
-    clear_has_value();
-    ::cockroach::proto::AdminSplitRequest* temp = value_.admin_split_;
-    value_.admin_split_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_admin_split(::cockroach::proto::AdminSplitRequest* admin_split) {
-  clear_value();
-  if (admin_split) {
-    set_has_admin_split();
-    value_.admin_split_ = admin_split;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.admin_split)
-}
-
-// optional .cockroach.proto.AdminMergeRequest admin_merge = 10;
-bool RequestUnion::has_admin_merge() const {
-  return value_case() == kAdminMerge;
-}
-void RequestUnion::set_has_admin_merge() {
-  _oneof_case_[0] = kAdminMerge;
-}
-void RequestUnion::clear_admin_merge() {
-  if (has_admin_merge()) {
-    delete value_.admin_merge_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::AdminMergeRequest& RequestUnion::admin_merge() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.admin_merge)
-  return has_admin_merge() ? *value_.admin_merge_
-                      : ::cockroach::proto::AdminMergeRequest::default_instance();
-}
- ::cockroach::proto::AdminMergeRequest* RequestUnion::mutable_admin_merge() {
-  if (!has_admin_merge()) {
-    clear_value();
-    set_has_admin_merge();
-    value_.admin_merge_ = new ::cockroach::proto::AdminMergeRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.admin_merge)
-  return value_.admin_merge_;
-}
- ::cockroach::proto::AdminMergeRequest* RequestUnion::release_admin_merge() {
-  if (has_admin_merge()) {
-    clear_has_value();
-    ::cockroach::proto::AdminMergeRequest* temp = value_.admin_merge_;
-    value_.admin_merge_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_admin_merge(::cockroach::proto::AdminMergeRequest* admin_merge) {
-  clear_value();
-  if (admin_merge) {
-    set_has_admin_merge();
-    value_.admin_merge_ = admin_merge;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.admin_merge)
-}
-
-// optional .cockroach.proto.HeartbeatTxnRequest heartbeat_txn = 11;
-bool RequestUnion::has_heartbeat_txn() const {
-  return value_case() == kHeartbeatTxn;
-}
-void RequestUnion::set_has_heartbeat_txn() {
-  _oneof_case_[0] = kHeartbeatTxn;
-}
-void RequestUnion::clear_heartbeat_txn() {
-  if (has_heartbeat_txn()) {
-    delete value_.heartbeat_txn_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::HeartbeatTxnRequest& RequestUnion::heartbeat_txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.heartbeat_txn)
-  return has_heartbeat_txn() ? *value_.heartbeat_txn_
-                      : ::cockroach::proto::HeartbeatTxnRequest::default_instance();
-}
- ::cockroach::proto::HeartbeatTxnRequest* RequestUnion::mutable_heartbeat_txn() {
-  if (!has_heartbeat_txn()) {
-    clear_value();
-    set_has_heartbeat_txn();
-    value_.heartbeat_txn_ = new ::cockroach::proto::HeartbeatTxnRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.heartbeat_txn)
-  return value_.heartbeat_txn_;
-}
- ::cockroach::proto::HeartbeatTxnRequest* RequestUnion::release_heartbeat_txn() {
-  if (has_heartbeat_txn()) {
-    clear_has_value();
-    ::cockroach::proto::HeartbeatTxnRequest* temp = value_.heartbeat_txn_;
-    value_.heartbeat_txn_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_heartbeat_txn(::cockroach::proto::HeartbeatTxnRequest* heartbeat_txn) {
-  clear_value();
-  if (heartbeat_txn) {
-    set_has_heartbeat_txn();
-    value_.heartbeat_txn_ = heartbeat_txn;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.heartbeat_txn)
-}
-
-// optional .cockroach.proto.GCRequest gc = 12;
-bool RequestUnion::has_gc() const {
-  return value_case() == kGc;
-}
-void RequestUnion::set_has_gc() {
-  _oneof_case_[0] = kGc;
-}
-void RequestUnion::clear_gc() {
-  if (has_gc()) {
-    delete value_.gc_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::GCRequest& RequestUnion::gc() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.gc)
-  return has_gc() ? *value_.gc_
-                      : ::cockroach::proto::GCRequest::default_instance();
-}
- ::cockroach::proto::GCRequest* RequestUnion::mutable_gc() {
-  if (!has_gc()) {
-    clear_value();
-    set_has_gc();
-    value_.gc_ = new ::cockroach::proto::GCRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.gc)
-  return value_.gc_;
-}
- ::cockroach::proto::GCRequest* RequestUnion::release_gc() {
-  if (has_gc()) {
-    clear_has_value();
-    ::cockroach::proto::GCRequest* temp = value_.gc_;
-    value_.gc_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_gc(::cockroach::proto::GCRequest* gc) {
-  clear_value();
-  if (gc) {
-    set_has_gc();
-    value_.gc_ = gc;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.gc)
-}
-
-// optional .cockroach.proto.PushTxnRequest push_txn = 13;
-bool RequestUnion::has_push_txn() const {
-  return value_case() == kPushTxn;
-}
-void RequestUnion::set_has_push_txn() {
-  _oneof_case_[0] = kPushTxn;
-}
-void RequestUnion::clear_push_txn() {
-  if (has_push_txn()) {
-    delete value_.push_txn_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::PushTxnRequest& RequestUnion::push_txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.push_txn)
-  return has_push_txn() ? *value_.push_txn_
-                      : ::cockroach::proto::PushTxnRequest::default_instance();
-}
- ::cockroach::proto::PushTxnRequest* RequestUnion::mutable_push_txn() {
-  if (!has_push_txn()) {
-    clear_value();
-    set_has_push_txn();
-    value_.push_txn_ = new ::cockroach::proto::PushTxnRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.push_txn)
-  return value_.push_txn_;
-}
- ::cockroach::proto::PushTxnRequest* RequestUnion::release_push_txn() {
-  if (has_push_txn()) {
-    clear_has_value();
-    ::cockroach::proto::PushTxnRequest* temp = value_.push_txn_;
-    value_.push_txn_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_push_txn(::cockroach::proto::PushTxnRequest* push_txn) {
-  clear_value();
-  if (push_txn) {
-    set_has_push_txn();
-    value_.push_txn_ = push_txn;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.push_txn)
-}
-
-// optional .cockroach.proto.RangeLookupRequest range_lookup = 14;
-bool RequestUnion::has_range_lookup() const {
-  return value_case() == kRangeLookup;
-}
-void RequestUnion::set_has_range_lookup() {
-  _oneof_case_[0] = kRangeLookup;
-}
-void RequestUnion::clear_range_lookup() {
-  if (has_range_lookup()) {
-    delete value_.range_lookup_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::RangeLookupRequest& RequestUnion::range_lookup() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.range_lookup)
-  return has_range_lookup() ? *value_.range_lookup_
-                      : ::cockroach::proto::RangeLookupRequest::default_instance();
-}
- ::cockroach::proto::RangeLookupRequest* RequestUnion::mutable_range_lookup() {
-  if (!has_range_lookup()) {
-    clear_value();
-    set_has_range_lookup();
-    value_.range_lookup_ = new ::cockroach::proto::RangeLookupRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.range_lookup)
-  return value_.range_lookup_;
-}
- ::cockroach::proto::RangeLookupRequest* RequestUnion::release_range_lookup() {
-  if (has_range_lookup()) {
-    clear_has_value();
-    ::cockroach::proto::RangeLookupRequest* temp = value_.range_lookup_;
-    value_.range_lookup_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_range_lookup(::cockroach::proto::RangeLookupRequest* range_lookup) {
-  clear_value();
-  if (range_lookup) {
-    set_has_range_lookup();
-    value_.range_lookup_ = range_lookup;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.range_lookup)
-}
-
-// optional .cockroach.proto.ResolveIntentRequest resolve_intent = 15;
-bool RequestUnion::has_resolve_intent() const {
-  return value_case() == kResolveIntent;
-}
-void RequestUnion::set_has_resolve_intent() {
-  _oneof_case_[0] = kResolveIntent;
-}
-void RequestUnion::clear_resolve_intent() {
-  if (has_resolve_intent()) {
-    delete value_.resolve_intent_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::ResolveIntentRequest& RequestUnion::resolve_intent() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.resolve_intent)
-  return has_resolve_intent() ? *value_.resolve_intent_
-                      : ::cockroach::proto::ResolveIntentRequest::default_instance();
-}
- ::cockroach::proto::ResolveIntentRequest* RequestUnion::mutable_resolve_intent() {
-  if (!has_resolve_intent()) {
-    clear_value();
-    set_has_resolve_intent();
-    value_.resolve_intent_ = new ::cockroach::proto::ResolveIntentRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.resolve_intent)
-  return value_.resolve_intent_;
-}
- ::cockroach::proto::ResolveIntentRequest* RequestUnion::release_resolve_intent() {
-  if (has_resolve_intent()) {
-    clear_has_value();
-    ::cockroach::proto::ResolveIntentRequest* temp = value_.resolve_intent_;
-    value_.resolve_intent_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_resolve_intent(::cockroach::proto::ResolveIntentRequest* resolve_intent) {
-  clear_value();
-  if (resolve_intent) {
-    set_has_resolve_intent();
-    value_.resolve_intent_ = resolve_intent;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.resolve_intent)
-}
-
-// optional .cockroach.proto.ResolveIntentRangeRequest resolve_intent_range = 16;
-bool RequestUnion::has_resolve_intent_range() const {
-  return value_case() == kResolveIntentRange;
-}
-void RequestUnion::set_has_resolve_intent_range() {
-  _oneof_case_[0] = kResolveIntentRange;
-}
-void RequestUnion::clear_resolve_intent_range() {
-  if (has_resolve_intent_range()) {
-    delete value_.resolve_intent_range_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::ResolveIntentRangeRequest& RequestUnion::resolve_intent_range() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.resolve_intent_range)
-  return has_resolve_intent_range() ? *value_.resolve_intent_range_
-                      : ::cockroach::proto::ResolveIntentRangeRequest::default_instance();
-}
- ::cockroach::proto::ResolveIntentRangeRequest* RequestUnion::mutable_resolve_intent_range() {
-  if (!has_resolve_intent_range()) {
-    clear_value();
-    set_has_resolve_intent_range();
-    value_.resolve_intent_range_ = new ::cockroach::proto::ResolveIntentRangeRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.resolve_intent_range)
-  return value_.resolve_intent_range_;
-}
- ::cockroach::proto::ResolveIntentRangeRequest* RequestUnion::release_resolve_intent_range() {
-  if (has_resolve_intent_range()) {
-    clear_has_value();
-    ::cockroach::proto::ResolveIntentRangeRequest* temp = value_.resolve_intent_range_;
-    value_.resolve_intent_range_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_resolve_intent_range(::cockroach::proto::ResolveIntentRangeRequest* resolve_intent_range) {
-  clear_value();
-  if (resolve_intent_range) {
-    set_has_resolve_intent_range();
-    value_.resolve_intent_range_ = resolve_intent_range;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.resolve_intent_range)
-}
-
-// optional .cockroach.proto.MergeRequest merge = 17;
-bool RequestUnion::has_merge() const {
-  return value_case() == kMerge;
-}
-void RequestUnion::set_has_merge() {
-  _oneof_case_[0] = kMerge;
-}
-void RequestUnion::clear_merge() {
-  if (has_merge()) {
-    delete value_.merge_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::MergeRequest& RequestUnion::merge() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.merge)
-  return has_merge() ? *value_.merge_
-                      : ::cockroach::proto::MergeRequest::default_instance();
-}
- ::cockroach::proto::MergeRequest* RequestUnion::mutable_merge() {
-  if (!has_merge()) {
-    clear_value();
-    set_has_merge();
-    value_.merge_ = new ::cockroach::proto::MergeRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.merge)
-  return value_.merge_;
-}
- ::cockroach::proto::MergeRequest* RequestUnion::release_merge() {
-  if (has_merge()) {
-    clear_has_value();
-    ::cockroach::proto::MergeRequest* temp = value_.merge_;
-    value_.merge_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_merge(::cockroach::proto::MergeRequest* merge) {
-  clear_value();
-  if (merge) {
-    set_has_merge();
-    value_.merge_ = merge;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.merge)
-}
-
-// optional .cockroach.proto.TruncateLogRequest truncate = 18;
-bool RequestUnion::has_truncate() const {
-  return value_case() == kTruncate;
-}
-void RequestUnion::set_has_truncate() {
-  _oneof_case_[0] = kTruncate;
-}
-void RequestUnion::clear_truncate() {
-  if (has_truncate()) {
-    delete value_.truncate_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::TruncateLogRequest& RequestUnion::truncate() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.truncate)
-  return has_truncate() ? *value_.truncate_
-                      : ::cockroach::proto::TruncateLogRequest::default_instance();
-}
- ::cockroach::proto::TruncateLogRequest* RequestUnion::mutable_truncate() {
-  if (!has_truncate()) {
-    clear_value();
-    set_has_truncate();
-    value_.truncate_ = new ::cockroach::proto::TruncateLogRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.truncate)
-  return value_.truncate_;
-}
- ::cockroach::proto::TruncateLogRequest* RequestUnion::release_truncate() {
-  if (has_truncate()) {
-    clear_has_value();
-    ::cockroach::proto::TruncateLogRequest* temp = value_.truncate_;
-    value_.truncate_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_truncate(::cockroach::proto::TruncateLogRequest* truncate) {
-  clear_value();
-  if (truncate) {
-    set_has_truncate();
-    value_.truncate_ = truncate;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.truncate)
-}
-
-// optional .cockroach.proto.LeaderLeaseRequest leader_lease = 19;
-bool RequestUnion::has_leader_lease() const {
-  return value_case() == kLeaderLease;
-}
-void RequestUnion::set_has_leader_lease() {
-  _oneof_case_[0] = kLeaderLease;
-}
-void RequestUnion::clear_leader_lease() {
-  if (has_leader_lease()) {
-    delete value_.leader_lease_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::LeaderLeaseRequest& RequestUnion::leader_lease() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.leader_lease)
-  return has_leader_lease() ? *value_.leader_lease_
-                      : ::cockroach::proto::LeaderLeaseRequest::default_instance();
-}
- ::cockroach::proto::LeaderLeaseRequest* RequestUnion::mutable_leader_lease() {
-  if (!has_leader_lease()) {
-    clear_value();
-    set_has_leader_lease();
-    value_.leader_lease_ = new ::cockroach::proto::LeaderLeaseRequest;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.leader_lease)
-  return value_.leader_lease_;
-}
- ::cockroach::proto::LeaderLeaseRequest* RequestUnion::release_leader_lease() {
-  if (has_leader_lease()) {
-    clear_has_value();
-    ::cockroach::proto::LeaderLeaseRequest* temp = value_.leader_lease_;
-    value_.leader_lease_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void RequestUnion::set_allocated_leader_lease(::cockroach::proto::LeaderLeaseRequest* leader_lease) {
-  clear_value();
-  if (leader_lease) {
-    set_has_leader_lease();
-    value_.leader_lease_ = leader_lease;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.leader_lease)
-}
-
-// optional .cockroach.proto.ReverseScanRequest reverse_scan = 20;
+// optional .cockroach.proto.ReverseScanRequest reverse_scan = 8;
 bool RequestUnion::has_reverse_scan() const {
   return value_case() == kReverseScan;
 }
@@ -19536,6 +19071,466 @@ void RequestUnion::clear_reverse_scan() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.reverse_scan)
 }
 
+// optional .cockroach.proto.EndTransactionRequest end_transaction = 9;
+bool RequestUnion::has_end_transaction() const {
+  return value_case() == kEndTransaction;
+}
+void RequestUnion::set_has_end_transaction() {
+  _oneof_case_[0] = kEndTransaction;
+}
+void RequestUnion::clear_end_transaction() {
+  if (has_end_transaction()) {
+    delete value_.end_transaction_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::EndTransactionRequest& RequestUnion::end_transaction() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.end_transaction)
+  return has_end_transaction() ? *value_.end_transaction_
+                      : ::cockroach::proto::EndTransactionRequest::default_instance();
+}
+ ::cockroach::proto::EndTransactionRequest* RequestUnion::mutable_end_transaction() {
+  if (!has_end_transaction()) {
+    clear_value();
+    set_has_end_transaction();
+    value_.end_transaction_ = new ::cockroach::proto::EndTransactionRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.end_transaction)
+  return value_.end_transaction_;
+}
+ ::cockroach::proto::EndTransactionRequest* RequestUnion::release_end_transaction() {
+  if (has_end_transaction()) {
+    clear_has_value();
+    ::cockroach::proto::EndTransactionRequest* temp = value_.end_transaction_;
+    value_.end_transaction_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void RequestUnion::set_allocated_end_transaction(::cockroach::proto::EndTransactionRequest* end_transaction) {
+  clear_value();
+  if (end_transaction) {
+    set_has_end_transaction();
+    value_.end_transaction_ = end_transaction;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.end_transaction)
+}
+
+// optional .cockroach.proto.HeartbeatTxnRequest heartbeat_txn = 10;
+bool RequestUnion::has_heartbeat_txn() const {
+  return value_case() == kHeartbeatTxn;
+}
+void RequestUnion::set_has_heartbeat_txn() {
+  _oneof_case_[0] = kHeartbeatTxn;
+}
+void RequestUnion::clear_heartbeat_txn() {
+  if (has_heartbeat_txn()) {
+    delete value_.heartbeat_txn_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::HeartbeatTxnRequest& RequestUnion::heartbeat_txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.heartbeat_txn)
+  return has_heartbeat_txn() ? *value_.heartbeat_txn_
+                      : ::cockroach::proto::HeartbeatTxnRequest::default_instance();
+}
+ ::cockroach::proto::HeartbeatTxnRequest* RequestUnion::mutable_heartbeat_txn() {
+  if (!has_heartbeat_txn()) {
+    clear_value();
+    set_has_heartbeat_txn();
+    value_.heartbeat_txn_ = new ::cockroach::proto::HeartbeatTxnRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.heartbeat_txn)
+  return value_.heartbeat_txn_;
+}
+ ::cockroach::proto::HeartbeatTxnRequest* RequestUnion::release_heartbeat_txn() {
+  if (has_heartbeat_txn()) {
+    clear_has_value();
+    ::cockroach::proto::HeartbeatTxnRequest* temp = value_.heartbeat_txn_;
+    value_.heartbeat_txn_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void RequestUnion::set_allocated_heartbeat_txn(::cockroach::proto::HeartbeatTxnRequest* heartbeat_txn) {
+  clear_value();
+  if (heartbeat_txn) {
+    set_has_heartbeat_txn();
+    value_.heartbeat_txn_ = heartbeat_txn;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.heartbeat_txn)
+}
+
+// optional .cockroach.proto.GCRequest gc = 11;
+bool RequestUnion::has_gc() const {
+  return value_case() == kGc;
+}
+void RequestUnion::set_has_gc() {
+  _oneof_case_[0] = kGc;
+}
+void RequestUnion::clear_gc() {
+  if (has_gc()) {
+    delete value_.gc_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::GCRequest& RequestUnion::gc() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.gc)
+  return has_gc() ? *value_.gc_
+                      : ::cockroach::proto::GCRequest::default_instance();
+}
+ ::cockroach::proto::GCRequest* RequestUnion::mutable_gc() {
+  if (!has_gc()) {
+    clear_value();
+    set_has_gc();
+    value_.gc_ = new ::cockroach::proto::GCRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.gc)
+  return value_.gc_;
+}
+ ::cockroach::proto::GCRequest* RequestUnion::release_gc() {
+  if (has_gc()) {
+    clear_has_value();
+    ::cockroach::proto::GCRequest* temp = value_.gc_;
+    value_.gc_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void RequestUnion::set_allocated_gc(::cockroach::proto::GCRequest* gc) {
+  clear_value();
+  if (gc) {
+    set_has_gc();
+    value_.gc_ = gc;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.gc)
+}
+
+// optional .cockroach.proto.PushTxnRequest push_txn = 12;
+bool RequestUnion::has_push_txn() const {
+  return value_case() == kPushTxn;
+}
+void RequestUnion::set_has_push_txn() {
+  _oneof_case_[0] = kPushTxn;
+}
+void RequestUnion::clear_push_txn() {
+  if (has_push_txn()) {
+    delete value_.push_txn_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::PushTxnRequest& RequestUnion::push_txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.push_txn)
+  return has_push_txn() ? *value_.push_txn_
+                      : ::cockroach::proto::PushTxnRequest::default_instance();
+}
+ ::cockroach::proto::PushTxnRequest* RequestUnion::mutable_push_txn() {
+  if (!has_push_txn()) {
+    clear_value();
+    set_has_push_txn();
+    value_.push_txn_ = new ::cockroach::proto::PushTxnRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.push_txn)
+  return value_.push_txn_;
+}
+ ::cockroach::proto::PushTxnRequest* RequestUnion::release_push_txn() {
+  if (has_push_txn()) {
+    clear_has_value();
+    ::cockroach::proto::PushTxnRequest* temp = value_.push_txn_;
+    value_.push_txn_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void RequestUnion::set_allocated_push_txn(::cockroach::proto::PushTxnRequest* push_txn) {
+  clear_value();
+  if (push_txn) {
+    set_has_push_txn();
+    value_.push_txn_ = push_txn;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.push_txn)
+}
+
+// optional .cockroach.proto.RangeLookupRequest range_lookup = 13;
+bool RequestUnion::has_range_lookup() const {
+  return value_case() == kRangeLookup;
+}
+void RequestUnion::set_has_range_lookup() {
+  _oneof_case_[0] = kRangeLookup;
+}
+void RequestUnion::clear_range_lookup() {
+  if (has_range_lookup()) {
+    delete value_.range_lookup_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::RangeLookupRequest& RequestUnion::range_lookup() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.range_lookup)
+  return has_range_lookup() ? *value_.range_lookup_
+                      : ::cockroach::proto::RangeLookupRequest::default_instance();
+}
+ ::cockroach::proto::RangeLookupRequest* RequestUnion::mutable_range_lookup() {
+  if (!has_range_lookup()) {
+    clear_value();
+    set_has_range_lookup();
+    value_.range_lookup_ = new ::cockroach::proto::RangeLookupRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.range_lookup)
+  return value_.range_lookup_;
+}
+ ::cockroach::proto::RangeLookupRequest* RequestUnion::release_range_lookup() {
+  if (has_range_lookup()) {
+    clear_has_value();
+    ::cockroach::proto::RangeLookupRequest* temp = value_.range_lookup_;
+    value_.range_lookup_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void RequestUnion::set_allocated_range_lookup(::cockroach::proto::RangeLookupRequest* range_lookup) {
+  clear_value();
+  if (range_lookup) {
+    set_has_range_lookup();
+    value_.range_lookup_ = range_lookup;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.range_lookup)
+}
+
+// optional .cockroach.proto.ResolveIntentRequest resolve_intent = 14;
+bool RequestUnion::has_resolve_intent() const {
+  return value_case() == kResolveIntent;
+}
+void RequestUnion::set_has_resolve_intent() {
+  _oneof_case_[0] = kResolveIntent;
+}
+void RequestUnion::clear_resolve_intent() {
+  if (has_resolve_intent()) {
+    delete value_.resolve_intent_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::ResolveIntentRequest& RequestUnion::resolve_intent() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.resolve_intent)
+  return has_resolve_intent() ? *value_.resolve_intent_
+                      : ::cockroach::proto::ResolveIntentRequest::default_instance();
+}
+ ::cockroach::proto::ResolveIntentRequest* RequestUnion::mutable_resolve_intent() {
+  if (!has_resolve_intent()) {
+    clear_value();
+    set_has_resolve_intent();
+    value_.resolve_intent_ = new ::cockroach::proto::ResolveIntentRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.resolve_intent)
+  return value_.resolve_intent_;
+}
+ ::cockroach::proto::ResolveIntentRequest* RequestUnion::release_resolve_intent() {
+  if (has_resolve_intent()) {
+    clear_has_value();
+    ::cockroach::proto::ResolveIntentRequest* temp = value_.resolve_intent_;
+    value_.resolve_intent_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void RequestUnion::set_allocated_resolve_intent(::cockroach::proto::ResolveIntentRequest* resolve_intent) {
+  clear_value();
+  if (resolve_intent) {
+    set_has_resolve_intent();
+    value_.resolve_intent_ = resolve_intent;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.resolve_intent)
+}
+
+// optional .cockroach.proto.ResolveIntentRangeRequest resolve_intent_range = 15;
+bool RequestUnion::has_resolve_intent_range() const {
+  return value_case() == kResolveIntentRange;
+}
+void RequestUnion::set_has_resolve_intent_range() {
+  _oneof_case_[0] = kResolveIntentRange;
+}
+void RequestUnion::clear_resolve_intent_range() {
+  if (has_resolve_intent_range()) {
+    delete value_.resolve_intent_range_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::ResolveIntentRangeRequest& RequestUnion::resolve_intent_range() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.resolve_intent_range)
+  return has_resolve_intent_range() ? *value_.resolve_intent_range_
+                      : ::cockroach::proto::ResolveIntentRangeRequest::default_instance();
+}
+ ::cockroach::proto::ResolveIntentRangeRequest* RequestUnion::mutable_resolve_intent_range() {
+  if (!has_resolve_intent_range()) {
+    clear_value();
+    set_has_resolve_intent_range();
+    value_.resolve_intent_range_ = new ::cockroach::proto::ResolveIntentRangeRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.resolve_intent_range)
+  return value_.resolve_intent_range_;
+}
+ ::cockroach::proto::ResolveIntentRangeRequest* RequestUnion::release_resolve_intent_range() {
+  if (has_resolve_intent_range()) {
+    clear_has_value();
+    ::cockroach::proto::ResolveIntentRangeRequest* temp = value_.resolve_intent_range_;
+    value_.resolve_intent_range_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void RequestUnion::set_allocated_resolve_intent_range(::cockroach::proto::ResolveIntentRangeRequest* resolve_intent_range) {
+  clear_value();
+  if (resolve_intent_range) {
+    set_has_resolve_intent_range();
+    value_.resolve_intent_range_ = resolve_intent_range;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.resolve_intent_range)
+}
+
+// optional .cockroach.proto.MergeRequest merge = 16;
+bool RequestUnion::has_merge() const {
+  return value_case() == kMerge;
+}
+void RequestUnion::set_has_merge() {
+  _oneof_case_[0] = kMerge;
+}
+void RequestUnion::clear_merge() {
+  if (has_merge()) {
+    delete value_.merge_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::MergeRequest& RequestUnion::merge() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.merge)
+  return has_merge() ? *value_.merge_
+                      : ::cockroach::proto::MergeRequest::default_instance();
+}
+ ::cockroach::proto::MergeRequest* RequestUnion::mutable_merge() {
+  if (!has_merge()) {
+    clear_value();
+    set_has_merge();
+    value_.merge_ = new ::cockroach::proto::MergeRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.merge)
+  return value_.merge_;
+}
+ ::cockroach::proto::MergeRequest* RequestUnion::release_merge() {
+  if (has_merge()) {
+    clear_has_value();
+    ::cockroach::proto::MergeRequest* temp = value_.merge_;
+    value_.merge_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void RequestUnion::set_allocated_merge(::cockroach::proto::MergeRequest* merge) {
+  clear_value();
+  if (merge) {
+    set_has_merge();
+    value_.merge_ = merge;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.merge)
+}
+
+// optional .cockroach.proto.TruncateLogRequest truncate = 17;
+bool RequestUnion::has_truncate() const {
+  return value_case() == kTruncate;
+}
+void RequestUnion::set_has_truncate() {
+  _oneof_case_[0] = kTruncate;
+}
+void RequestUnion::clear_truncate() {
+  if (has_truncate()) {
+    delete value_.truncate_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::TruncateLogRequest& RequestUnion::truncate() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.truncate)
+  return has_truncate() ? *value_.truncate_
+                      : ::cockroach::proto::TruncateLogRequest::default_instance();
+}
+ ::cockroach::proto::TruncateLogRequest* RequestUnion::mutable_truncate() {
+  if (!has_truncate()) {
+    clear_value();
+    set_has_truncate();
+    value_.truncate_ = new ::cockroach::proto::TruncateLogRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.truncate)
+  return value_.truncate_;
+}
+ ::cockroach::proto::TruncateLogRequest* RequestUnion::release_truncate() {
+  if (has_truncate()) {
+    clear_has_value();
+    ::cockroach::proto::TruncateLogRequest* temp = value_.truncate_;
+    value_.truncate_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void RequestUnion::set_allocated_truncate(::cockroach::proto::TruncateLogRequest* truncate) {
+  clear_value();
+  if (truncate) {
+    set_has_truncate();
+    value_.truncate_ = truncate;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.truncate)
+}
+
+// optional .cockroach.proto.LeaderLeaseRequest leader_lease = 18;
+bool RequestUnion::has_leader_lease() const {
+  return value_case() == kLeaderLease;
+}
+void RequestUnion::set_has_leader_lease() {
+  _oneof_case_[0] = kLeaderLease;
+}
+void RequestUnion::clear_leader_lease() {
+  if (has_leader_lease()) {
+    delete value_.leader_lease_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::LeaderLeaseRequest& RequestUnion::leader_lease() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.leader_lease)
+  return has_leader_lease() ? *value_.leader_lease_
+                      : ::cockroach::proto::LeaderLeaseRequest::default_instance();
+}
+ ::cockroach::proto::LeaderLeaseRequest* RequestUnion::mutable_leader_lease() {
+  if (!has_leader_lease()) {
+    clear_value();
+    set_has_leader_lease();
+    value_.leader_lease_ = new ::cockroach::proto::LeaderLeaseRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.leader_lease)
+  return value_.leader_lease_;
+}
+ ::cockroach::proto::LeaderLeaseRequest* RequestUnion::release_leader_lease() {
+  if (has_leader_lease()) {
+    clear_has_value();
+    ::cockroach::proto::LeaderLeaseRequest* temp = value_.leader_lease_;
+    value_.leader_lease_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void RequestUnion::set_allocated_leader_lease(::cockroach::proto::LeaderLeaseRequest* leader_lease) {
+  clear_value();
+  if (leader_lease) {
+    set_has_leader_lease();
+    value_.leader_lease_ = leader_lease;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.leader_lease)
+}
+
 bool RequestUnion::has_value() const {
   return value_case() != VALUE_NOT_SET;
 }
@@ -19557,9 +19552,8 @@ const int ResponseUnion::kIncrementFieldNumber;
 const int ResponseUnion::kDeleteFieldNumber;
 const int ResponseUnion::kDeleteRangeFieldNumber;
 const int ResponseUnion::kScanFieldNumber;
+const int ResponseUnion::kReverseScanFieldNumber;
 const int ResponseUnion::kEndTransactionFieldNumber;
-const int ResponseUnion::kAdminSplitFieldNumber;
-const int ResponseUnion::kAdminMergeFieldNumber;
 const int ResponseUnion::kHeartbeatTxnFieldNumber;
 const int ResponseUnion::kGcFieldNumber;
 const int ResponseUnion::kPushTxnFieldNumber;
@@ -19569,7 +19563,6 @@ const int ResponseUnion::kResolveIntentRangeFieldNumber;
 const int ResponseUnion::kMergeFieldNumber;
 const int ResponseUnion::kTruncateFieldNumber;
 const int ResponseUnion::kLeaderLeaseFieldNumber;
-const int ResponseUnion::kReverseScanFieldNumber;
 #endif  // !_MSC_VER
 
 ResponseUnion::ResponseUnion()
@@ -19586,9 +19579,8 @@ void ResponseUnion::InitAsDefaultInstance() {
   ResponseUnion_default_oneof_instance_->delete__ = const_cast< ::cockroach::proto::DeleteResponse*>(&::cockroach::proto::DeleteResponse::default_instance());
   ResponseUnion_default_oneof_instance_->delete_range_ = const_cast< ::cockroach::proto::DeleteRangeResponse*>(&::cockroach::proto::DeleteRangeResponse::default_instance());
   ResponseUnion_default_oneof_instance_->scan_ = const_cast< ::cockroach::proto::ScanResponse*>(&::cockroach::proto::ScanResponse::default_instance());
+  ResponseUnion_default_oneof_instance_->reverse_scan_ = const_cast< ::cockroach::proto::ReverseScanResponse*>(&::cockroach::proto::ReverseScanResponse::default_instance());
   ResponseUnion_default_oneof_instance_->end_transaction_ = const_cast< ::cockroach::proto::EndTransactionResponse*>(&::cockroach::proto::EndTransactionResponse::default_instance());
-  ResponseUnion_default_oneof_instance_->admin_split_ = const_cast< ::cockroach::proto::AdminSplitResponse*>(&::cockroach::proto::AdminSplitResponse::default_instance());
-  ResponseUnion_default_oneof_instance_->admin_merge_ = const_cast< ::cockroach::proto::AdminMergeResponse*>(&::cockroach::proto::AdminMergeResponse::default_instance());
   ResponseUnion_default_oneof_instance_->heartbeat_txn_ = const_cast< ::cockroach::proto::HeartbeatTxnResponse*>(&::cockroach::proto::HeartbeatTxnResponse::default_instance());
   ResponseUnion_default_oneof_instance_->gc_ = const_cast< ::cockroach::proto::GCResponse*>(&::cockroach::proto::GCResponse::default_instance());
   ResponseUnion_default_oneof_instance_->push_txn_ = const_cast< ::cockroach::proto::PushTxnResponse*>(&::cockroach::proto::PushTxnResponse::default_instance());
@@ -19598,7 +19590,6 @@ void ResponseUnion::InitAsDefaultInstance() {
   ResponseUnion_default_oneof_instance_->merge_ = const_cast< ::cockroach::proto::MergeResponse*>(&::cockroach::proto::MergeResponse::default_instance());
   ResponseUnion_default_oneof_instance_->truncate_ = const_cast< ::cockroach::proto::TruncateLogResponse*>(&::cockroach::proto::TruncateLogResponse::default_instance());
   ResponseUnion_default_oneof_instance_->leader_lease_ = const_cast< ::cockroach::proto::LeaderLeaseResponse*>(&::cockroach::proto::LeaderLeaseResponse::default_instance());
-  ResponseUnion_default_oneof_instance_->reverse_scan_ = const_cast< ::cockroach::proto::ReverseScanResponse*>(&::cockroach::proto::ReverseScanResponse::default_instance());
 }
 
 ResponseUnion::ResponseUnion(const ResponseUnion& from)
@@ -19683,16 +19674,12 @@ void ResponseUnion::clear_value() {
       delete value_.scan_;
       break;
     }
+    case kReverseScan: {
+      delete value_.reverse_scan_;
+      break;
+    }
     case kEndTransaction: {
       delete value_.end_transaction_;
-      break;
-    }
-    case kAdminSplit: {
-      delete value_.admin_split_;
-      break;
-    }
-    case kAdminMerge: {
-      delete value_.admin_merge_;
       break;
     }
     case kHeartbeatTxn: {
@@ -19729,10 +19716,6 @@ void ResponseUnion::clear_value() {
     }
     case kLeaderLease: {
       delete value_.leader_lease_;
-      break;
-    }
-    case kReverseScan: {
-      delete value_.reverse_scan_;
       break;
     }
     case VALUE_NOT_SET: {
@@ -19847,172 +19830,146 @@ bool ResponseUnion::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(66)) goto parse_end_transaction;
+        if (input->ExpectTag(66)) goto parse_reverse_scan;
         break;
       }
 
-      // optional .cockroach.proto.EndTransactionResponse end_transaction = 8;
+      // optional .cockroach.proto.ReverseScanResponse reverse_scan = 8;
       case 8: {
         if (tag == 66) {
+         parse_reverse_scan:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_reverse_scan()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(74)) goto parse_end_transaction;
+        break;
+      }
+
+      // optional .cockroach.proto.EndTransactionResponse end_transaction = 9;
+      case 9: {
+        if (tag == 74) {
          parse_end_transaction:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_end_transaction()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(74)) goto parse_admin_split;
+        if (input->ExpectTag(82)) goto parse_heartbeat_txn;
         break;
       }
 
-      // optional .cockroach.proto.AdminSplitResponse admin_split = 9;
-      case 9: {
-        if (tag == 74) {
-         parse_admin_split:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_admin_split()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(82)) goto parse_admin_merge;
-        break;
-      }
-
-      // optional .cockroach.proto.AdminMergeResponse admin_merge = 10;
+      // optional .cockroach.proto.HeartbeatTxnResponse heartbeat_txn = 10;
       case 10: {
         if (tag == 82) {
-         parse_admin_merge:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_admin_merge()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(90)) goto parse_heartbeat_txn;
-        break;
-      }
-
-      // optional .cockroach.proto.HeartbeatTxnResponse heartbeat_txn = 11;
-      case 11: {
-        if (tag == 90) {
          parse_heartbeat_txn:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_heartbeat_txn()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(98)) goto parse_gc;
+        if (input->ExpectTag(90)) goto parse_gc;
         break;
       }
 
-      // optional .cockroach.proto.GCResponse gc = 12;
-      case 12: {
-        if (tag == 98) {
+      // optional .cockroach.proto.GCResponse gc = 11;
+      case 11: {
+        if (tag == 90) {
          parse_gc:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_gc()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(106)) goto parse_push_txn;
+        if (input->ExpectTag(98)) goto parse_push_txn;
         break;
       }
 
-      // optional .cockroach.proto.PushTxnResponse push_txn = 13;
-      case 13: {
-        if (tag == 106) {
+      // optional .cockroach.proto.PushTxnResponse push_txn = 12;
+      case 12: {
+        if (tag == 98) {
          parse_push_txn:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_push_txn()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(114)) goto parse_range_lookup;
+        if (input->ExpectTag(106)) goto parse_range_lookup;
         break;
       }
 
-      // optional .cockroach.proto.RangeLookupResponse range_lookup = 14;
-      case 14: {
-        if (tag == 114) {
+      // optional .cockroach.proto.RangeLookupResponse range_lookup = 13;
+      case 13: {
+        if (tag == 106) {
          parse_range_lookup:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_range_lookup()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(122)) goto parse_resolve_intent;
+        if (input->ExpectTag(114)) goto parse_resolve_intent;
         break;
       }
 
-      // optional .cockroach.proto.ResolveIntentResponse resolve_intent = 15;
-      case 15: {
-        if (tag == 122) {
+      // optional .cockroach.proto.ResolveIntentResponse resolve_intent = 14;
+      case 14: {
+        if (tag == 114) {
          parse_resolve_intent:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_resolve_intent()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(130)) goto parse_resolve_intent_range;
+        if (input->ExpectTag(122)) goto parse_resolve_intent_range;
         break;
       }
 
-      // optional .cockroach.proto.ResolveIntentRangeResponse resolve_intent_range = 16;
-      case 16: {
-        if (tag == 130) {
+      // optional .cockroach.proto.ResolveIntentRangeResponse resolve_intent_range = 15;
+      case 15: {
+        if (tag == 122) {
          parse_resolve_intent_range:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_resolve_intent_range()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(138)) goto parse_merge;
+        if (input->ExpectTag(130)) goto parse_merge;
         break;
       }
 
-      // optional .cockroach.proto.MergeResponse merge = 17;
-      case 17: {
-        if (tag == 138) {
+      // optional .cockroach.proto.MergeResponse merge = 16;
+      case 16: {
+        if (tag == 130) {
          parse_merge:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_merge()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(146)) goto parse_truncate;
+        if (input->ExpectTag(138)) goto parse_truncate;
         break;
       }
 
-      // optional .cockroach.proto.TruncateLogResponse truncate = 18;
-      case 18: {
-        if (tag == 146) {
+      // optional .cockroach.proto.TruncateLogResponse truncate = 17;
+      case 17: {
+        if (tag == 138) {
          parse_truncate:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_truncate()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(154)) goto parse_leader_lease;
+        if (input->ExpectTag(146)) goto parse_leader_lease;
         break;
       }
 
-      // optional .cockroach.proto.LeaderLeaseResponse leader_lease = 19;
-      case 19: {
-        if (tag == 154) {
+      // optional .cockroach.proto.LeaderLeaseResponse leader_lease = 18;
+      case 18: {
+        if (tag == 146) {
          parse_leader_lease:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_leader_lease()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(162)) goto parse_reverse_scan;
-        break;
-      }
-
-      // optional .cockroach.proto.ReverseScanResponse reverse_scan = 20;
-      case 20: {
-        if (tag == 162) {
-         parse_reverse_scan:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_reverse_scan()));
         } else {
           goto handle_unusual;
         }
@@ -20087,82 +20044,70 @@ void ResponseUnion::SerializeWithCachedSizes(
       7, *value_.scan_, output);
   }
 
-  // optional .cockroach.proto.EndTransactionResponse end_transaction = 8;
-  if (has_end_transaction()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      8, *value_.end_transaction_, output);
-  }
-
-  // optional .cockroach.proto.AdminSplitResponse admin_split = 9;
-  if (has_admin_split()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      9, *value_.admin_split_, output);
-  }
-
-  // optional .cockroach.proto.AdminMergeResponse admin_merge = 10;
-  if (has_admin_merge()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      10, *value_.admin_merge_, output);
-  }
-
-  // optional .cockroach.proto.HeartbeatTxnResponse heartbeat_txn = 11;
-  if (has_heartbeat_txn()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      11, *value_.heartbeat_txn_, output);
-  }
-
-  // optional .cockroach.proto.GCResponse gc = 12;
-  if (has_gc()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      12, *value_.gc_, output);
-  }
-
-  // optional .cockroach.proto.PushTxnResponse push_txn = 13;
-  if (has_push_txn()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      13, *value_.push_txn_, output);
-  }
-
-  // optional .cockroach.proto.RangeLookupResponse range_lookup = 14;
-  if (has_range_lookup()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      14, *value_.range_lookup_, output);
-  }
-
-  // optional .cockroach.proto.ResolveIntentResponse resolve_intent = 15;
-  if (has_resolve_intent()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      15, *value_.resolve_intent_, output);
-  }
-
-  // optional .cockroach.proto.ResolveIntentRangeResponse resolve_intent_range = 16;
-  if (has_resolve_intent_range()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      16, *value_.resolve_intent_range_, output);
-  }
-
-  // optional .cockroach.proto.MergeResponse merge = 17;
-  if (has_merge()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      17, *value_.merge_, output);
-  }
-
-  // optional .cockroach.proto.TruncateLogResponse truncate = 18;
-  if (has_truncate()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      18, *value_.truncate_, output);
-  }
-
-  // optional .cockroach.proto.LeaderLeaseResponse leader_lease = 19;
-  if (has_leader_lease()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      19, *value_.leader_lease_, output);
-  }
-
-  // optional .cockroach.proto.ReverseScanResponse reverse_scan = 20;
+  // optional .cockroach.proto.ReverseScanResponse reverse_scan = 8;
   if (has_reverse_scan()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      20, *value_.reverse_scan_, output);
+      8, *value_.reverse_scan_, output);
+  }
+
+  // optional .cockroach.proto.EndTransactionResponse end_transaction = 9;
+  if (has_end_transaction()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      9, *value_.end_transaction_, output);
+  }
+
+  // optional .cockroach.proto.HeartbeatTxnResponse heartbeat_txn = 10;
+  if (has_heartbeat_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      10, *value_.heartbeat_txn_, output);
+  }
+
+  // optional .cockroach.proto.GCResponse gc = 11;
+  if (has_gc()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      11, *value_.gc_, output);
+  }
+
+  // optional .cockroach.proto.PushTxnResponse push_txn = 12;
+  if (has_push_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      12, *value_.push_txn_, output);
+  }
+
+  // optional .cockroach.proto.RangeLookupResponse range_lookup = 13;
+  if (has_range_lookup()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      13, *value_.range_lookup_, output);
+  }
+
+  // optional .cockroach.proto.ResolveIntentResponse resolve_intent = 14;
+  if (has_resolve_intent()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      14, *value_.resolve_intent_, output);
+  }
+
+  // optional .cockroach.proto.ResolveIntentRangeResponse resolve_intent_range = 15;
+  if (has_resolve_intent_range()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      15, *value_.resolve_intent_range_, output);
+  }
+
+  // optional .cockroach.proto.MergeResponse merge = 16;
+  if (has_merge()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      16, *value_.merge_, output);
+  }
+
+  // optional .cockroach.proto.TruncateLogResponse truncate = 17;
+  if (has_truncate()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      17, *value_.truncate_, output);
+  }
+
+  // optional .cockroach.proto.LeaderLeaseResponse leader_lease = 18;
+  if (has_leader_lease()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      18, *value_.leader_lease_, output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -20224,95 +20169,81 @@ void ResponseUnion::SerializeWithCachedSizes(
         7, *value_.scan_, target);
   }
 
-  // optional .cockroach.proto.EndTransactionResponse end_transaction = 8;
-  if (has_end_transaction()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        8, *value_.end_transaction_, target);
-  }
-
-  // optional .cockroach.proto.AdminSplitResponse admin_split = 9;
-  if (has_admin_split()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        9, *value_.admin_split_, target);
-  }
-
-  // optional .cockroach.proto.AdminMergeResponse admin_merge = 10;
-  if (has_admin_merge()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        10, *value_.admin_merge_, target);
-  }
-
-  // optional .cockroach.proto.HeartbeatTxnResponse heartbeat_txn = 11;
-  if (has_heartbeat_txn()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        11, *value_.heartbeat_txn_, target);
-  }
-
-  // optional .cockroach.proto.GCResponse gc = 12;
-  if (has_gc()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        12, *value_.gc_, target);
-  }
-
-  // optional .cockroach.proto.PushTxnResponse push_txn = 13;
-  if (has_push_txn()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        13, *value_.push_txn_, target);
-  }
-
-  // optional .cockroach.proto.RangeLookupResponse range_lookup = 14;
-  if (has_range_lookup()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        14, *value_.range_lookup_, target);
-  }
-
-  // optional .cockroach.proto.ResolveIntentResponse resolve_intent = 15;
-  if (has_resolve_intent()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        15, *value_.resolve_intent_, target);
-  }
-
-  // optional .cockroach.proto.ResolveIntentRangeResponse resolve_intent_range = 16;
-  if (has_resolve_intent_range()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        16, *value_.resolve_intent_range_, target);
-  }
-
-  // optional .cockroach.proto.MergeResponse merge = 17;
-  if (has_merge()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        17, *value_.merge_, target);
-  }
-
-  // optional .cockroach.proto.TruncateLogResponse truncate = 18;
-  if (has_truncate()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        18, *value_.truncate_, target);
-  }
-
-  // optional .cockroach.proto.LeaderLeaseResponse leader_lease = 19;
-  if (has_leader_lease()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        19, *value_.leader_lease_, target);
-  }
-
-  // optional .cockroach.proto.ReverseScanResponse reverse_scan = 20;
+  // optional .cockroach.proto.ReverseScanResponse reverse_scan = 8;
   if (has_reverse_scan()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        20, *value_.reverse_scan_, target);
+        8, *value_.reverse_scan_, target);
+  }
+
+  // optional .cockroach.proto.EndTransactionResponse end_transaction = 9;
+  if (has_end_transaction()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        9, *value_.end_transaction_, target);
+  }
+
+  // optional .cockroach.proto.HeartbeatTxnResponse heartbeat_txn = 10;
+  if (has_heartbeat_txn()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        10, *value_.heartbeat_txn_, target);
+  }
+
+  // optional .cockroach.proto.GCResponse gc = 11;
+  if (has_gc()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        11, *value_.gc_, target);
+  }
+
+  // optional .cockroach.proto.PushTxnResponse push_txn = 12;
+  if (has_push_txn()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        12, *value_.push_txn_, target);
+  }
+
+  // optional .cockroach.proto.RangeLookupResponse range_lookup = 13;
+  if (has_range_lookup()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        13, *value_.range_lookup_, target);
+  }
+
+  // optional .cockroach.proto.ResolveIntentResponse resolve_intent = 14;
+  if (has_resolve_intent()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        14, *value_.resolve_intent_, target);
+  }
+
+  // optional .cockroach.proto.ResolveIntentRangeResponse resolve_intent_range = 15;
+  if (has_resolve_intent_range()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        15, *value_.resolve_intent_range_, target);
+  }
+
+  // optional .cockroach.proto.MergeResponse merge = 16;
+  if (has_merge()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        16, *value_.merge_, target);
+  }
+
+  // optional .cockroach.proto.TruncateLogResponse truncate = 17;
+  if (has_truncate()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        17, *value_.truncate_, target);
+  }
+
+  // optional .cockroach.proto.LeaderLeaseResponse leader_lease = 18;
+  if (has_leader_lease()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        18, *value_.leader_lease_, target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -20376,95 +20307,81 @@ int ResponseUnion::ByteSize() const {
           *value_.scan_);
       break;
     }
-    // optional .cockroach.proto.EndTransactionResponse end_transaction = 8;
+    // optional .cockroach.proto.ReverseScanResponse reverse_scan = 8;
+    case kReverseScan: {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *value_.reverse_scan_);
+      break;
+    }
+    // optional .cockroach.proto.EndTransactionResponse end_transaction = 9;
     case kEndTransaction: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.end_transaction_);
       break;
     }
-    // optional .cockroach.proto.AdminSplitResponse admin_split = 9;
-    case kAdminSplit: {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.admin_split_);
-      break;
-    }
-    // optional .cockroach.proto.AdminMergeResponse admin_merge = 10;
-    case kAdminMerge: {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.admin_merge_);
-      break;
-    }
-    // optional .cockroach.proto.HeartbeatTxnResponse heartbeat_txn = 11;
+    // optional .cockroach.proto.HeartbeatTxnResponse heartbeat_txn = 10;
     case kHeartbeatTxn: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.heartbeat_txn_);
       break;
     }
-    // optional .cockroach.proto.GCResponse gc = 12;
+    // optional .cockroach.proto.GCResponse gc = 11;
     case kGc: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.gc_);
       break;
     }
-    // optional .cockroach.proto.PushTxnResponse push_txn = 13;
+    // optional .cockroach.proto.PushTxnResponse push_txn = 12;
     case kPushTxn: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.push_txn_);
       break;
     }
-    // optional .cockroach.proto.RangeLookupResponse range_lookup = 14;
+    // optional .cockroach.proto.RangeLookupResponse range_lookup = 13;
     case kRangeLookup: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.range_lookup_);
       break;
     }
-    // optional .cockroach.proto.ResolveIntentResponse resolve_intent = 15;
+    // optional .cockroach.proto.ResolveIntentResponse resolve_intent = 14;
     case kResolveIntent: {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.resolve_intent_);
       break;
     }
-    // optional .cockroach.proto.ResolveIntentRangeResponse resolve_intent_range = 16;
+    // optional .cockroach.proto.ResolveIntentRangeResponse resolve_intent_range = 15;
     case kResolveIntentRange: {
-      total_size += 2 +
+      total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.resolve_intent_range_);
       break;
     }
-    // optional .cockroach.proto.MergeResponse merge = 17;
+    // optional .cockroach.proto.MergeResponse merge = 16;
     case kMerge: {
       total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.merge_);
       break;
     }
-    // optional .cockroach.proto.TruncateLogResponse truncate = 18;
+    // optional .cockroach.proto.TruncateLogResponse truncate = 17;
     case kTruncate: {
       total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.truncate_);
       break;
     }
-    // optional .cockroach.proto.LeaderLeaseResponse leader_lease = 19;
+    // optional .cockroach.proto.LeaderLeaseResponse leader_lease = 18;
     case kLeaderLease: {
       total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *value_.leader_lease_);
-      break;
-    }
-    // optional .cockroach.proto.ReverseScanResponse reverse_scan = 20;
-    case kReverseScan: {
-      total_size += 2 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.reverse_scan_);
       break;
     }
     case VALUE_NOT_SET: {
@@ -20525,16 +20442,12 @@ void ResponseUnion::MergeFrom(const ResponseUnion& from) {
       mutable_scan()->::cockroach::proto::ScanResponse::MergeFrom(from.scan());
       break;
     }
+    case kReverseScan: {
+      mutable_reverse_scan()->::cockroach::proto::ReverseScanResponse::MergeFrom(from.reverse_scan());
+      break;
+    }
     case kEndTransaction: {
       mutable_end_transaction()->::cockroach::proto::EndTransactionResponse::MergeFrom(from.end_transaction());
-      break;
-    }
-    case kAdminSplit: {
-      mutable_admin_split()->::cockroach::proto::AdminSplitResponse::MergeFrom(from.admin_split());
-      break;
-    }
-    case kAdminMerge: {
-      mutable_admin_merge()->::cockroach::proto::AdminMergeResponse::MergeFrom(from.admin_merge());
       break;
     }
     case kHeartbeatTxn: {
@@ -20571,10 +20484,6 @@ void ResponseUnion::MergeFrom(const ResponseUnion& from) {
     }
     case kLeaderLease: {
       mutable_leader_lease()->::cockroach::proto::LeaderLeaseResponse::MergeFrom(from.leader_lease());
-      break;
-    }
-    case kReverseScan: {
-      mutable_reverse_scan()->::cockroach::proto::ReverseScanResponse::MergeFrom(from.reverse_scan());
       break;
     }
     case VALUE_NOT_SET: {
@@ -20948,7 +20857,53 @@ void ResponseUnion::clear_scan() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.scan)
 }
 
-// optional .cockroach.proto.EndTransactionResponse end_transaction = 8;
+// optional .cockroach.proto.ReverseScanResponse reverse_scan = 8;
+bool ResponseUnion::has_reverse_scan() const {
+  return value_case() == kReverseScan;
+}
+void ResponseUnion::set_has_reverse_scan() {
+  _oneof_case_[0] = kReverseScan;
+}
+void ResponseUnion::clear_reverse_scan() {
+  if (has_reverse_scan()) {
+    delete value_.reverse_scan_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::ReverseScanResponse& ResponseUnion::reverse_scan() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ResponseUnion.reverse_scan)
+  return has_reverse_scan() ? *value_.reverse_scan_
+                      : ::cockroach::proto::ReverseScanResponse::default_instance();
+}
+ ::cockroach::proto::ReverseScanResponse* ResponseUnion::mutable_reverse_scan() {
+  if (!has_reverse_scan()) {
+    clear_value();
+    set_has_reverse_scan();
+    value_.reverse_scan_ = new ::cockroach::proto::ReverseScanResponse;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ResponseUnion.reverse_scan)
+  return value_.reverse_scan_;
+}
+ ::cockroach::proto::ReverseScanResponse* ResponseUnion::release_reverse_scan() {
+  if (has_reverse_scan()) {
+    clear_has_value();
+    ::cockroach::proto::ReverseScanResponse* temp = value_.reverse_scan_;
+    value_.reverse_scan_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void ResponseUnion::set_allocated_reverse_scan(::cockroach::proto::ReverseScanResponse* reverse_scan) {
+  clear_value();
+  if (reverse_scan) {
+    set_has_reverse_scan();
+    value_.reverse_scan_ = reverse_scan;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.reverse_scan)
+}
+
+// optional .cockroach.proto.EndTransactionResponse end_transaction = 9;
 bool ResponseUnion::has_end_transaction() const {
   return value_case() == kEndTransaction;
 }
@@ -20994,99 +20949,7 @@ void ResponseUnion::clear_end_transaction() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.end_transaction)
 }
 
-// optional .cockroach.proto.AdminSplitResponse admin_split = 9;
-bool ResponseUnion::has_admin_split() const {
-  return value_case() == kAdminSplit;
-}
-void ResponseUnion::set_has_admin_split() {
-  _oneof_case_[0] = kAdminSplit;
-}
-void ResponseUnion::clear_admin_split() {
-  if (has_admin_split()) {
-    delete value_.admin_split_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::AdminSplitResponse& ResponseUnion::admin_split() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.ResponseUnion.admin_split)
-  return has_admin_split() ? *value_.admin_split_
-                      : ::cockroach::proto::AdminSplitResponse::default_instance();
-}
- ::cockroach::proto::AdminSplitResponse* ResponseUnion::mutable_admin_split() {
-  if (!has_admin_split()) {
-    clear_value();
-    set_has_admin_split();
-    value_.admin_split_ = new ::cockroach::proto::AdminSplitResponse;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.ResponseUnion.admin_split)
-  return value_.admin_split_;
-}
- ::cockroach::proto::AdminSplitResponse* ResponseUnion::release_admin_split() {
-  if (has_admin_split()) {
-    clear_has_value();
-    ::cockroach::proto::AdminSplitResponse* temp = value_.admin_split_;
-    value_.admin_split_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void ResponseUnion::set_allocated_admin_split(::cockroach::proto::AdminSplitResponse* admin_split) {
-  clear_value();
-  if (admin_split) {
-    set_has_admin_split();
-    value_.admin_split_ = admin_split;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.admin_split)
-}
-
-// optional .cockroach.proto.AdminMergeResponse admin_merge = 10;
-bool ResponseUnion::has_admin_merge() const {
-  return value_case() == kAdminMerge;
-}
-void ResponseUnion::set_has_admin_merge() {
-  _oneof_case_[0] = kAdminMerge;
-}
-void ResponseUnion::clear_admin_merge() {
-  if (has_admin_merge()) {
-    delete value_.admin_merge_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::AdminMergeResponse& ResponseUnion::admin_merge() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.ResponseUnion.admin_merge)
-  return has_admin_merge() ? *value_.admin_merge_
-                      : ::cockroach::proto::AdminMergeResponse::default_instance();
-}
- ::cockroach::proto::AdminMergeResponse* ResponseUnion::mutable_admin_merge() {
-  if (!has_admin_merge()) {
-    clear_value();
-    set_has_admin_merge();
-    value_.admin_merge_ = new ::cockroach::proto::AdminMergeResponse;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.ResponseUnion.admin_merge)
-  return value_.admin_merge_;
-}
- ::cockroach::proto::AdminMergeResponse* ResponseUnion::release_admin_merge() {
-  if (has_admin_merge()) {
-    clear_has_value();
-    ::cockroach::proto::AdminMergeResponse* temp = value_.admin_merge_;
-    value_.admin_merge_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void ResponseUnion::set_allocated_admin_merge(::cockroach::proto::AdminMergeResponse* admin_merge) {
-  clear_value();
-  if (admin_merge) {
-    set_has_admin_merge();
-    value_.admin_merge_ = admin_merge;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.admin_merge)
-}
-
-// optional .cockroach.proto.HeartbeatTxnResponse heartbeat_txn = 11;
+// optional .cockroach.proto.HeartbeatTxnResponse heartbeat_txn = 10;
 bool ResponseUnion::has_heartbeat_txn() const {
   return value_case() == kHeartbeatTxn;
 }
@@ -21132,7 +20995,7 @@ void ResponseUnion::clear_heartbeat_txn() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.heartbeat_txn)
 }
 
-// optional .cockroach.proto.GCResponse gc = 12;
+// optional .cockroach.proto.GCResponse gc = 11;
 bool ResponseUnion::has_gc() const {
   return value_case() == kGc;
 }
@@ -21178,7 +21041,7 @@ void ResponseUnion::clear_gc() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.gc)
 }
 
-// optional .cockroach.proto.PushTxnResponse push_txn = 13;
+// optional .cockroach.proto.PushTxnResponse push_txn = 12;
 bool ResponseUnion::has_push_txn() const {
   return value_case() == kPushTxn;
 }
@@ -21224,7 +21087,7 @@ void ResponseUnion::clear_push_txn() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.push_txn)
 }
 
-// optional .cockroach.proto.RangeLookupResponse range_lookup = 14;
+// optional .cockroach.proto.RangeLookupResponse range_lookup = 13;
 bool ResponseUnion::has_range_lookup() const {
   return value_case() == kRangeLookup;
 }
@@ -21270,7 +21133,7 @@ void ResponseUnion::clear_range_lookup() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.range_lookup)
 }
 
-// optional .cockroach.proto.ResolveIntentResponse resolve_intent = 15;
+// optional .cockroach.proto.ResolveIntentResponse resolve_intent = 14;
 bool ResponseUnion::has_resolve_intent() const {
   return value_case() == kResolveIntent;
 }
@@ -21316,7 +21179,7 @@ void ResponseUnion::clear_resolve_intent() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.resolve_intent)
 }
 
-// optional .cockroach.proto.ResolveIntentRangeResponse resolve_intent_range = 16;
+// optional .cockroach.proto.ResolveIntentRangeResponse resolve_intent_range = 15;
 bool ResponseUnion::has_resolve_intent_range() const {
   return value_case() == kResolveIntentRange;
 }
@@ -21362,7 +21225,7 @@ void ResponseUnion::clear_resolve_intent_range() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.resolve_intent_range)
 }
 
-// optional .cockroach.proto.MergeResponse merge = 17;
+// optional .cockroach.proto.MergeResponse merge = 16;
 bool ResponseUnion::has_merge() const {
   return value_case() == kMerge;
 }
@@ -21408,7 +21271,7 @@ void ResponseUnion::clear_merge() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.merge)
 }
 
-// optional .cockroach.proto.TruncateLogResponse truncate = 18;
+// optional .cockroach.proto.TruncateLogResponse truncate = 17;
 bool ResponseUnion::has_truncate() const {
   return value_case() == kTruncate;
 }
@@ -21454,7 +21317,7 @@ void ResponseUnion::clear_truncate() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.truncate)
 }
 
-// optional .cockroach.proto.LeaderLeaseResponse leader_lease = 19;
+// optional .cockroach.proto.LeaderLeaseResponse leader_lease = 18;
 bool ResponseUnion::has_leader_lease() const {
   return value_case() == kLeaderLease;
 }
@@ -21498,52 +21361,6 @@ void ResponseUnion::clear_leader_lease() {
     value_.leader_lease_ = leader_lease;
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.leader_lease)
-}
-
-// optional .cockroach.proto.ReverseScanResponse reverse_scan = 20;
-bool ResponseUnion::has_reverse_scan() const {
-  return value_case() == kReverseScan;
-}
-void ResponseUnion::set_has_reverse_scan() {
-  _oneof_case_[0] = kReverseScan;
-}
-void ResponseUnion::clear_reverse_scan() {
-  if (has_reverse_scan()) {
-    delete value_.reverse_scan_;
-    clear_has_value();
-  }
-}
- const ::cockroach::proto::ReverseScanResponse& ResponseUnion::reverse_scan() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.ResponseUnion.reverse_scan)
-  return has_reverse_scan() ? *value_.reverse_scan_
-                      : ::cockroach::proto::ReverseScanResponse::default_instance();
-}
- ::cockroach::proto::ReverseScanResponse* ResponseUnion::mutable_reverse_scan() {
-  if (!has_reverse_scan()) {
-    clear_value();
-    set_has_reverse_scan();
-    value_.reverse_scan_ = new ::cockroach::proto::ReverseScanResponse;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.ResponseUnion.reverse_scan)
-  return value_.reverse_scan_;
-}
- ::cockroach::proto::ReverseScanResponse* ResponseUnion::release_reverse_scan() {
-  if (has_reverse_scan()) {
-    clear_has_value();
-    ::cockroach::proto::ReverseScanResponse* temp = value_.reverse_scan_;
-    value_.reverse_scan_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
- void ResponseUnion::set_allocated_reverse_scan(::cockroach::proto::ReverseScanResponse* reverse_scan) {
-  clear_value();
-  if (reverse_scan) {
-    set_has_reverse_scan();
-    value_.reverse_scan_ = reverse_scan;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.reverse_scan)
 }
 
 bool ResponseUnion::has_value() const {

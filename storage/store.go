@@ -1266,8 +1266,19 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 	trace := tracer.FromCtx(ctx)
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
-	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {
-		return nil, err
+	// TODO(tschottdorf): remove this first branch when we only have batches here.
+	if args.Method() != proto.Batch {
+		if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {
+			return nil, err
+		}
+	} else {
+		for _, union := range args.(*proto.BatchRequest).Requests {
+			arg := union.GetValue().(proto.Request)
+			header := arg.Header()
+			if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(arg)); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if !header.Timestamp.Equal(proto.ZeroTimestamp) {
 		if s.Clock().MaxOffset() > 0 {
@@ -1419,6 +1430,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	header := args.Header()
 	bArgs := &proto.BatchRequest{
 		RequestHeader: proto.RequestHeader{
+			Timestamp:    header.Timestamp,
 			Txn:          header.Txn,
 			UserPriority: header.UserPriority,
 		},
@@ -1509,10 +1521,6 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.RaftCommand) <-chan
 
 // proposeRaftCommandImpl runs on the processRaft goroutine.
 func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd proto.RaftCommand) <-chan error {
-	value := cmd.Cmd.GetValue()
-	if value == nil {
-		panic("proposed a nil command")
-	}
 	// Lazily create group. TODO(bdarnell): make this non-lazy
 	err := s.multiraft.CreateGroup(cmd.RangeID)
 	if err != nil {
@@ -1525,16 +1533,24 @@ func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd proto.RaftCommand) <-
 	if err != nil {
 		log.Fatal(err)
 	}
-	etr, ok := value.(*proto.EndTransactionRequest)
-	if ok && etr.InternalCommitTrigger != nil &&
-		etr.InternalCommitTrigger.ChangeReplicasTrigger != nil {
-		// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
-		// needs to understand it; it cannot simply be an opaque command.
-		crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
-		return s.multiraft.ChangeGroupMembership(cmd.RangeID, string(idKey),
-			changeTypeInternalToRaft[crt.ChangeType],
-			proto.MakeRaftNodeID(crt.NodeID, crt.StoreID),
-			data)
+	for _, union := range cmd.Cmd.Requests {
+		args := union.GetValue().(proto.Request)
+		etr, ok := args.(*proto.EndTransactionRequest)
+		if ok && etr.InternalCommitTrigger != nil && etr.InternalCommitTrigger.ChangeReplicasTrigger != nil {
+			// TODO(tschottdorf): the real check is that EndTransaction needs
+			// to be the last element in the batch. Any caveats to solve before
+			// changing this?
+			if len(cmd.Cmd.Requests) != 1 {
+				panic("EndTransaction should only ever occur by itself in a batch")
+			}
+			// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
+			// needs to understand it; it cannot simply be an opaque command.
+			crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
+			return s.multiraft.ChangeGroupMembership(cmd.RangeID, string(idKey),
+				changeTypeInternalToRaft[crt.ChangeType],
+				proto.MakeRaftNodeID(crt.NodeID, crt.StoreID),
+				data)
+		}
 	}
 	return s.multiraft.SubmitCommand(cmd.RangeID, string(idKey), data)
 }
@@ -1564,8 +1580,7 @@ func (s *Store) processRaft() {
 						log.Fatal(err)
 					}
 					if log.V(6) {
-						log.Infof("store %s: new committed %s command at index %d",
-							s, cmd.Cmd.GetValue().(proto.Request).Method(), e.Index)
+						log.Infof("store %s: new committed command at index %d", s, e.Index)
 					}
 
 				case *multiraft.EventMembershipChangeCommitted:

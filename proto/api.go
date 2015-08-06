@@ -68,9 +68,14 @@ func IsWrite(args Request) bool {
 	return (args.flags() & isWrite) != 0
 }
 
-// IsReadOnly returns true if the request is read-only.
+// IsReadOnly returns true iff the request is read-only.
 func IsReadOnly(args Request) bool {
 	return IsRead(args) && !IsWrite(args)
+}
+
+// IsWriteOnly returns true if the request only requires write permissions.
+func IsWriteOnly(args Request) bool {
+	return !IsRead(args) && IsWrite(args)
 }
 
 // IsTransactionWrite returns true if the request produces write
@@ -83,6 +88,14 @@ func IsTransactionWrite(args Request) bool {
 // a start and an end key.
 func IsRange(args Request) bool {
 	return (args.flags() & isRange) != 0
+}
+
+// CanBatch returns true if the request type can be part of a batch request.
+// TODO(tschottdorf): everything should be batchable. Those requests which
+// currently are !CanBatch should simply have to be alone in their batch.
+// That is easier since only BatchRequest must be supported.
+func CanBatch(args Request) bool {
+	return IsRead(args) || IsWrite(args)
 }
 
 // Request is an interface for RPC requests.
@@ -257,7 +270,7 @@ func (rh *ResponseHeader) GoError() error {
 }
 
 // SetGoError converts the specified type into either one of the proto-
-// defined error types or into a Error for all other Go errors.
+// defined error types or into an Error for all other Go errors.
 func (rh *ResponseHeader) SetGoError(err error) {
 	if err == nil {
 		rh.Error = nil
@@ -295,8 +308,8 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 	return nil
 }
 
-// Add adds a request to the batch request. The batch inherits
-// the key range of the first request added to it.
+// Add adds a request to the batch request. The batch key range is
+// expanded to include the key ranges of all requests which it comprises.
 //
 // TODO(spencer): batches should include a list of key ranges
 //   representing the constituent requests.
@@ -305,9 +318,14 @@ func (br *BatchRequest) Add(args Request) {
 	if !union.SetValue(args) {
 		panic(fmt.Sprintf("unable to add %T to batch request", args))
 	}
-	if br.Key == nil {
-		br.Key = args.Header().Key
-		br.EndKey = args.Header().EndKey
+	h := args.Header()
+	if br.Key == nil || !br.Key.Less(h.Key) {
+		br.Key = h.Key
+	} else if br.EndKey.Less(h.Key) && !br.Key.Equal(h.Key) {
+		br.EndKey = h.Key
+	}
+	if br.EndKey == nil || (h.EndKey != nil && br.EndKey.Less(h.EndKey)) {
+		br.EndKey = h.EndKey
 	}
 	br.Requests = append(br.Requests, union)
 }
@@ -513,4 +531,11 @@ func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*MergeRequest) flags() int              { return isWrite }
 func (*TruncateLogRequest) flags() int        { return isWrite }
 func (*LeaderLeaseRequest) flags() int        { return isWrite }
-func (*BatchRequest) flags() int              { return isWrite }
+
+func (br *BatchRequest) flags() int {
+	var flags int
+	for _, union := range br.Requests {
+		flags |= union.GetValue().(Request).flags()
+	}
+	return flags
+}

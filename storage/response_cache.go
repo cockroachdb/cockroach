@@ -19,7 +19,6 @@ package storage
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -84,17 +83,16 @@ func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID) (
 	}
 
 	// Pull response from the cache and read into reply if available.
-	var rcEntry proto.ResponseCacheEntry
+	bReply := &proto.BatchResponse{}
 	key := keys.ResponseCacheKey(rc.rangeID, &cmdID)
-	ok, err := engine.MVCCGetProto(e, key, proto.ZeroTimestamp, true, nil, &rcEntry)
+	ok, err := engine.MVCCGetProto(e, key, proto.ZeroTimestamp, true, nil, bReply)
 	if err != nil {
 		return proto.ResponseWithError{}, err
 	}
 	if ok {
-		resp := rcEntry.GetValue().(proto.Response)
-		header := resp.Header()
+		header := bReply.Header()
 		defer func() { header.Error = nil }()
-		return proto.ResponseWithError{Reply: resp, Err: header.GoError()}, nil
+		return proto.ResponseWithError{Reply: bReply, Err: header.GoError()}, nil
 	}
 	return proto.ResponseWithError{}, nil
 }
@@ -180,11 +178,7 @@ func (rc *ResponseCache) PutResponse(e engine.Engine, cmdID proto.ClientCmdID, r
 		defer func() { header.Error = nil }()
 
 		key := keys.ResponseCacheKey(rc.rangeID, &cmdID)
-		var rcEntry proto.ResponseCacheEntry
-		if !rcEntry.SetValue(replyWithErr.Reply) {
-			panic(fmt.Sprintf("response %T not supported by response cache", replyWithErr.Reply))
-		}
-		return engine.MVCCPutProto(e, nil, key, proto.ZeroTimestamp, nil, &rcEntry)
+		return engine.MVCCPutProto(e, nil, key, proto.ZeroTimestamp, nil, replyWithErr.Reply)
 	}
 
 	return nil
