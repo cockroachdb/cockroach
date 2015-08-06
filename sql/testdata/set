@@ -1,0 +1,31 @@
+statement error .*name-\\bfoo.* does not exist
+SET DATABASE = foo
+
+# Ensure that the failing SET DATABASE call did not alter the session.
+# The default session.database value is "test".
+statement ok
+SHOW TABLES
+
+statement ok
+CREATE DATABASE foo
+
+statement ok
+SET DATABASE = foo
+
+# Create a table in the session database.
+statement ok
+CREATE TABLE bar (k INT PRIMARY KEY)
+
+# Verify that the table is indeed in "foo".
+query T colnames
+SHOW TABLES FROM foo
+----
+Table
+bar
+
+# Verify set to empty string.
+statement ok
+SET DATABASE = ""
+
+statement error no database specified
+SHOW TABLES
