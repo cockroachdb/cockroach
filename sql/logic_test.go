@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -71,12 +72,63 @@ type logicStatement struct {
 	expectErr string
 }
 
+type logicSorter func(numCols int, values []string)
+
+type rowSorter struct {
+	numCols int
+	numRows int
+	values  []string
+}
+
+func (r rowSorter) row(i int) []string {
+	return r.values[i*r.numCols : (i+1)*r.numCols]
+}
+
+func (r rowSorter) Len() int {
+	return r.numRows
+}
+
+func (r rowSorter) Less(i, j int) bool {
+	a := r.row(i)
+	b := r.row(j)
+	for k := range a {
+		if a[k] < b[k] {
+			return true
+		}
+		if a[k] > b[k] {
+			return false
+		}
+	}
+	return false
+}
+
+func (r rowSorter) Swap(i, j int) {
+	a := r.row(i)
+	b := r.row(j)
+	for i := range a {
+		a[i], b[i] = b[i], a[i]
+	}
+}
+
+func rowSort(numCols int, values []string) {
+	sort.Sort(rowSorter{
+		numCols: numCols,
+		numRows: len(values) / numCols,
+		values:  values,
+	})
+}
+
+func valueSort(numCols int, values []string) {
+	sort.Strings(values)
+}
+
 type logicQuery struct {
 	pos             string
 	sql             string
 	colNames        bool
 	colTypes        string // TODO(pmattis): not (yet) implemented.
 	label           string // TODO(pmattis): not (yet) implemented.
+	sorter          logicSorter
 	expectErr       string
 	expectedValues  int
 	expectedHash    string
@@ -206,8 +258,13 @@ func (t logicTest) run(path string) {
 						switch opt {
 						// TODO(pmattis): The sort options are not yet implemented.
 						case "nosort":
+							query.sorter = nil
+
 						case "rowsort":
+							query.sorter = rowSort
+
 						case "valuesort":
+							query.sorter = valueSort
 
 						case "colnames":
 							query.colNames = true
@@ -321,6 +378,10 @@ func (t logicTest) execQuery(db *sql.DB, query logicQuery) {
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
+	}
+
+	if query.sorter != nil {
+		query.sorter(len(cols), results)
 	}
 
 	if query.expectedHash != "" {
