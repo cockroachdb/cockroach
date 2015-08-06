@@ -1077,10 +1077,10 @@ var AdminViews;
                         sortValue: function (entry) { return entry.store_id; }
                     },
                     {
-                        title: "Raft",
-                        view: function (entry) { return entry.raft_id ? entry.raft_id.toString() : ""; },
+                        title: "Range",
+                        view: function (entry) { return entry.range_id ? entry.range_id.toString() : ""; },
                         sortable: true,
-                        sortValue: function (entry) { return entry.raft_id; }
+                        sortValue: function (entry) { return entry.range_id; }
                     },
                     {
                         title: "Key",

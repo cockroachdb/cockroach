@@ -279,7 +279,7 @@ module Models {
       args: Arg[];
       node_id: number;
       store_id: number;
-      raft_id: number;
+      range_id: number;
       method: number;
       key: string;
       stacks: string;
