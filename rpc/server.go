@@ -345,9 +345,11 @@ func (s *Server) readRequests(codec rpc.ServerCodec, responses chan<- serverResp
 
 	for {
 		req, meth, args, err := s.readRequest(codec)
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			return
-		} else if err != nil {
+		if err != nil {
+			if err == io.EOF || err == io.ErrUnexpectedEOF ||
+				strings.HasSuffix(err.Error(), "use of closed network connection") {
+				return
+			}
 			log.Warningf("rpc: server cannot decode request: %s", err)
 			return
 		}

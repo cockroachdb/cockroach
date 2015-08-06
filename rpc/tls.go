@@ -27,6 +27,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -37,7 +38,10 @@ import (
 // the passed TLS Config.
 func tlsListen(network, address string, config *tls.Config) (net.Listener, error) {
 	if config == nil {
-		if network != "unix" {
+		// Warn if starting a network-accessible server without TLS.
+		// Unix sockets can't use TLS but have other security mechanisms.
+		// Port 0 is mainly used for transient test servers so we don't warn in this case.
+		if network != "unix" && !strings.HasSuffix(address, ":0") {
 			log.Warningf("listening via %s to %s without TLS", network, address)
 		}
 		return net.Listen(network, address)
@@ -53,9 +57,6 @@ var defaultDialer = net.Dialer{
 // the passed TLS Config.
 func tlsDial(network, address string, config *tls.Config) (net.Conn, error) {
 	if config == nil {
-		if network != "unix" {
-			log.Warningf("connecting via %s to %s without TLS", network, address)
-		}
 		return defaultDialer.Dial(network, address)
 	}
 	return tls.DialWithDialer(&defaultDialer, network, address, config)
