@@ -43,14 +43,14 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
-	colMap := map[uint32]int{}
+	colIDtoRowIndex := map[structured.ID]int{}
 	for i, c := range cols {
-		colMap[c.ID] = i
+		colIDtoRowIndex[c.ID] = i
 	}
 
 	// Verify we have at least the columns that are part of the primary key.
 	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
-		if _, ok := colMap[id]; !ok {
+		if _, ok := colIDtoRowIndex[id]; !ok {
 			return nil, fmt.Errorf("missing \"%s\" primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}
@@ -73,14 +73,14 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			return nil, fmt.Errorf("invalid values for columns: %d != %d", len(values), len(cols))
 		}
 
-		primaryIndexKeySuffix, err := encodeIndexKey(primaryIndex, colMap, values, nil)
+		primaryIndexKeySuffix, err := encodeIndexKey(primaryIndex, colIDtoRowIndex, values, nil)
 		if err != nil {
 			return nil, err
 		}
 		primaryIndexKey := bytes.Join([][]byte{primaryIndexKeyPrefix, primaryIndexKeySuffix}, nil)
 
 		// Write the secondary indexes.
-		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, tableDesc.Indexes, colMap, values, primaryIndexKeySuffix)
+		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, values, primaryIndexKeySuffix)
 		if err != nil {
 			return nil, err
 		}

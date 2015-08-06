@@ -925,7 +925,7 @@ func (s *Store) BootstrapRange() error {
 	// We reserve the first 1000 descriptor IDs.
 	key = keys.DescIDGenerator
 	value := proto.Value{}
-	value.SetInteger(structured.MaxReservedDescID + 1)
+	value.SetInteger(int64(structured.MaxReservedDescID + 1))
 	value.InitChecksum(key)
 	if err := engine.MVCCPut(batch, nil, key, now, value, nil); err != nil {
 		return err

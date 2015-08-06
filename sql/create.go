@@ -20,7 +20,6 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
@@ -39,7 +38,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		return nil, fmt.Errorf("only %s is allowed to create databases", security.RootUser)
 	}
 
-	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, string(n.Name))
+	nameKey := structured.MakeNameMetadataKey(structured.RootNamespaceID, string(n.Name))
 	desc := makeDatabaseDesc(n)
 
 	if err := p.writeDescriptor(nameKey, &desc, n.IfNotExists); err != nil {
@@ -77,7 +76,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	nameKey := keys.MakeNameMetadataKey(dbDesc.ID, n.Table.Table())
+	nameKey := structured.MakeNameMetadataKey(dbDesc.ID, n.Table.Table())
 	if err := p.writeDescriptor(nameKey, &desc, n.IfNotExists); err != nil {
 		return nil, err
 	}

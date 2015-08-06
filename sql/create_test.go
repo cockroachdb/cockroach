@@ -64,7 +64,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Database name.
-	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, "test")
+	nameKey := structured.MakeNameMetadataKey(structured.RootNamespaceID, "test")
 	if gr, err := kvDB.Get(nameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
@@ -92,7 +92,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// database descriptor.
-	descKey := keys.MakeDescMetadataKey(uint32(expectedCounter - 1))
+	descKey := structured.MakeDescMetadataKey(structured.ID(expectedCounter - 1))
 	if gr, err := kvDB.Get(descKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {

@@ -50,9 +50,9 @@ func TestAllocateIDs(t *testing.T) {
 			{ID: 1, Name: "a"},
 			{ID: 2, Name: "b"},
 		},
-		PrimaryIndex: IndexDescriptor{ID: 1, Name: "c", ColumnIDs: []uint32{1}, ColumnNames: []string{"a"}},
+		PrimaryIndex: IndexDescriptor{ID: 1, Name: "c", ColumnIDs: []ID{1}, ColumnNames: []string{"a"}},
 		Indexes: []IndexDescriptor{
-			{ID: 2, Name: "d", ColumnIDs: []uint32{2, 1}, ColumnNames: []string{"b", "a"}},
+			{ID: 2, Name: "d", ColumnIDs: []ID{2, 1}, ColumnNames: []string{"b", "a"}},
 		},
 		NextColumnID: 3,
 		NextIndexID:  3,
@@ -139,7 +139,7 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 0, Name: "bar", ColumnIDs: []uint32{0}},
+				PrimaryIndex: IndexDescriptor{ID: 0, Name: "bar", ColumnIDs: []ID{0}},
 				NextColumnID: 2,
 			}},
 		{`index "bar" must contain at least 1 column`,
@@ -149,7 +149,7 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "primary", ColumnIDs: []uint32{1}, ColumnNames: []string{"bar"}},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "primary", ColumnIDs: []ID{1}, ColumnNames: []string{"bar"}},
 				Indexes: []IndexDescriptor{
 					{ID: 2, Name: "bar"},
 				},
@@ -164,7 +164,7 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []uint32{1}},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ID{1}},
 				NextColumnID: 2,
 				NextIndexID:  2,
 			}},
@@ -176,7 +176,7 @@ func TestValidateTableDesc(t *testing.T) {
 					{ID: 1, Name: "bar"},
 					{ID: 2, Name: "blah"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []uint32{1}, ColumnNames: []string{"bar", "blah"}},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ID{1}, ColumnNames: []string{"bar", "blah"}},
 				NextColumnID: 3,
 				NextIndexID:  2,
 			}},
@@ -187,9 +187,9 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []uint32{1}, ColumnNames: []string{"bar"}},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ID{1}, ColumnNames: []string{"bar"}},
 				Indexes: []IndexDescriptor{
-					{ID: 1, Name: "bar", ColumnIDs: []uint32{1}, ColumnNames: []string{"bar"}},
+					{ID: 1, Name: "bar", ColumnIDs: []ID{1}, ColumnNames: []string{"bar"}},
 				},
 				NextColumnID: 2,
 				NextIndexID:  2,
@@ -201,9 +201,9 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []uint32{1}, ColumnNames: []string{"bar"}},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ID{1}, ColumnNames: []string{"bar"}},
 				Indexes: []IndexDescriptor{
-					{ID: 1, Name: "blah", ColumnIDs: []uint32{1}, ColumnNames: []string{"bar"}},
+					{ID: 1, Name: "blah", ColumnIDs: []ID{1}, ColumnNames: []string{"bar"}},
 				},
 				NextColumnID: 2,
 				NextIndexID:  2,
@@ -215,7 +215,7 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []uint32{2}, ColumnNames: []string{"bar"}},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ID{2}, ColumnNames: []string{"bar"}},
 				NextColumnID: 2,
 				NextIndexID:  2,
 			}},
@@ -226,7 +226,7 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []uint32{1}, ColumnNames: []string{"blah"}},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ID{1}, ColumnNames: []string{"blah"}},
 				NextColumnID: 2,
 				NextIndexID:  2,
 			}},
