@@ -1,8 +1,8 @@
 - Feature Name: replica_tombstone
-- Status: draft
+- Status: in-progress
 - Start Date: 2015-07-29
-- RFC PR:
-- Cockroach Issue: #768
+- RFC PR: #1865
+- Cockroach Issue: #768, #1878
 
 # Summary
 
