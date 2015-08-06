@@ -41,12 +41,22 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		if s, ok := val.(parser.DString); ok {
-			p.session.Database = string(s)
-		} else if !ok {
+
+		s, ok := val.(parser.DString)
+		if !ok {
 			return nil, fmt.Errorf("database: requires a single string value: %s is a %s",
 				n.Values[0], val.Type())
 		}
+
+		dbName := string(s)
+		if len(dbName) != 0 {
+			// Verify database descriptor exists.
+			if _, err := p.getDatabaseDesc(dbName); err != nil {
+				return nil, err
+			}
+		}
+		p.session.Database = dbName
+
 	default:
 		return nil, util.Errorf("unknown variable: %s", name)
 	}
