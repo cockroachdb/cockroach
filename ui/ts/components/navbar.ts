@@ -19,6 +19,7 @@ module Components {
     }
 
     export interface TargetSet {
+      baseRoute: string;
       targets: Utils.ReadOnlyProperty<Target[]>;
       /**
        * isActive is a function which determines whether a given target is
@@ -38,7 +39,7 @@ module Components {
           m("a",
             {
               config: m.route,
-              href: t.route
+              href: ts.baseRoute + t.route
             },
             t.title)
          )

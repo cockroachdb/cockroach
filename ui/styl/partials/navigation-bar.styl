@@ -28,27 +28,53 @@ Author: Matt Tracy (matt@cockroachlabs.com)
   z-index: 1
   width: 100%
   modular-font-size '1' 
-  height: 4rem 
+  height: 6rem 
   background-color: -color('dark', 'x-dark')
-  padding: 1rem 1.5rem 
+  padding: 2rem
 
-ul.navigation
-  li 
-    float: left
-    margin-right: 2.5rem
-    color: -color('neutral', 'light')
-    list-style-type: none
+header
+  ul.navigation
+    li 
+      float: left
+      margin-right: 2.5rem
+      color: -color('neutral', 'light')
+      list-style-type: none
 
-    &.active 
-      color: -color('light')
+      &.active 
+        color: -color('light')
 
-    &:hover
-      color: -color('light', 'x-light')
-    
-    a
-      color: inherit
-      text-decoration: none
       &:hover
-      &:visited
-      &:active
-        color: @color
+        color: -color('light', 'x-light')
+      
+      a
+        color: inherit
+        text-decoration: none
+        &:hover
+        &:visited
+        &:active
+          color: @color
+
+.page
+  ul.navigation
+    float: right
+    modular-font-size '1'
+    color: -color('dark', 'x-dark')
+    list-style-type: none
+    padding-left: 2rem
+    line-height: 4rem
+
+
+    li
+      display: inline
+      margin-left: 3rem
+
+      &.active 
+        font-weight: 600 
+
+      a
+        color: inherit
+        text-decoration: none
+        &:hover
+        &:visited
+        &:active
+          color: @color

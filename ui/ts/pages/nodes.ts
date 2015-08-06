@@ -3,6 +3,7 @@
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
+/// <reference path="../components/navbar.ts" />
 /// <reference path="../util/format.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
@@ -14,6 +15,8 @@
  */
 module AdminViews {
   "use strict";
+
+  import MithrilElement = _mithril.MithrilVirtualElement;
 
   /**
    * Nodes is the view for exploring the status of all nodes.
@@ -37,7 +40,7 @@ module AdminViews {
         private static comparisonColumns: Table.TableColumn<NodeStatus>[] = [
           {
             title: "Node ID",
-            view: (status: NodeStatus): _mithril.MithrilVirtualElement =>
+            view: (status: NodeStatus): MithrilElement =>
               m("a", {href: "/nodes/" + status.desc.node_id, config: m.route}, status.desc.node_id.toString()),
             sortable: true,
             sortValue: (status: NodeStatus): number => status.desc.node_id
@@ -63,7 +66,7 @@ module AdminViews {
           },
           {
             title: "Logs",
-            view: (status: NodeStatus): _mithril.MithrilVirtualElement =>
+            view: (status: NodeStatus): MithrilElement =>
               m("a", { href: "/logs/" + status.desc.node_id, config: m.route }, "Log")
           }
         ];
@@ -82,7 +85,7 @@ module AdminViews {
           clearInterval(this._interval);
         }
 
-        public PrimaryStats(): _mithril.MithrilVirtualElement {
+        public RenderPrimaryStats(): MithrilElement {
           let allStats: Models.Proto.Status = nodeStatuses.totalStatus();
           if (allStats) {
             return m(".primary-stats", [
@@ -120,15 +123,15 @@ module AdminViews {
         return new Controller();
       }
 
-      export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
+      export function view(ctrl: Controller): MithrilElement {
         let comparisonData: Table.TableData<NodeStatus> = {
           columns: ctrl.columns,
           rows: nodeStatuses.allStatuses
         };
-        return m("div", [
-          m("h2", "Nodes List"),
-          m(".section", ctrl.PrimaryStats()),
-          m(".stats-table", Components.Table.create(comparisonData))
+        return m(".page", [
+          m(".section.primary", m("h2", "Nodes Overview")),
+          m(".section.primary", ctrl.RenderPrimaryStats()),
+          m(".section", m(".stats-table", Components.Table.create(comparisonData)))
         ]);
       }
     }
@@ -137,7 +140,24 @@ module AdminViews {
      * NodePage show the details of a single node.
      */
     export module NodePage {
+      import NavigationBar = Components.NavigationBar;
+
       class Controller {
+        private static defaultTargets: NavigationBar.Target[] = [
+          {
+            title: "Overview",
+            route: ""
+          },
+          {
+            title: "Graphs",
+            route: "graph"
+          }
+        ];
+
+        private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
+          return ((m.route.param("detail") || "") === t.route);
+        };
+
         private static _queryEveryMS: number = 10000;
         exec: Metrics.Executor;
         axes: Metrics.Axis[] = [];
@@ -170,7 +190,7 @@ module AdminViews {
           this._interval = setInterval(() => this._refresh(), Controller._queryEveryMS);
         }
 
-        public PrimaryStats(): _mithril.MithrilVirtualElement {
+        public RenderPrimaryStats(): MithrilElement {
           let nodeStats: Models.Proto.NodeStatus = nodeStatuses.GetStatus(this._nodeId);
           if (nodeStats) {
             return m(".primary-stats", [
@@ -207,6 +227,27 @@ module AdminViews {
           return m(".primary-stats");
         }
 
+        public RenderGraphs(): MithrilElement {
+          return m(".charts", this.axes.map((axis: Metrics.Axis) => {
+            return m("", { style: "float:left" }, [
+              m("h4", axis.title()),
+              Components.Metrics.LineGraph.create(this.exec, axis)
+            ]);
+          }));
+        }
+
+        public TargetSet(): NavigationBar.TargetSet {
+          return {
+            baseRoute: "/nodes/" + this._nodeId + "/",
+            targets: Utils.Prop(Controller.defaultTargets),
+            isActive: Controller.isActive
+          };
+        }
+
+        public GetNodeId(): string {
+          return this._nodeId;
+        }
+
         private _refresh(): void {
           nodeStatuses.refresh();
           this.exec.refresh();
@@ -223,20 +264,29 @@ module AdminViews {
         return new Controller(nodeId);
       }
 
-      export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
-        let nodeId: string = m.route.param("node_id");
-        return m("div", [
-          m("h2", "Node Status"),
-          m(".section", [
-            m("h3", "Node: " + nodeId),
-            ctrl.PrimaryStats()
+      export function view(ctrl: Controller): MithrilElement {
+        let detail: string = m.route.param("detail");
+
+        // Page title. 
+        let title: string = "Nodes: Node " + ctrl.GetNodeId();
+        if (detail === "graph") {
+          title += ": Graphs";
+        }
+
+        // Primary content
+        let primaryContent: MithrilElement;
+        if (detail === "graph") {
+          primaryContent = ctrl.RenderGraphs();
+        } else {
+          primaryContent = ctrl.RenderPrimaryStats();
+        }
+
+        return m(".page", [
+          m(".section.primary", [
+            m.component(NavigationBar, ctrl.TargetSet()),
+            m("h2", title)
           ]),
-          m(".charts", ctrl.axes.map((axis: Metrics.Axis) => {
-            return m("", { style: "float:left" }, [
-              m("h4", axis.title()),
-              Components.Metrics.LineGraph.create(ctrl.exec, axis)
-            ]);
-          }))
+          m(".section", primaryContent)
         ]);
       }
     }

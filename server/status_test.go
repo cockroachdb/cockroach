@@ -92,7 +92,7 @@ func TestStatusJson(t *testing.T) {
   "nodeID": 1,
   "address": {
     "network": "%s",
-    "string": "%s"
+    "address": "%s"
   },
   "buildInfo": {
     "goVersion": "%s",

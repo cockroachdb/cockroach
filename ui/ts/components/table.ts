@@ -133,7 +133,7 @@ module Components {
           m("th",
             {
               onclick: (e: any): void => this.SetSortColumn(col),
-              className: this.IsSortColumn(col) ? sortClass : null
+              className: this.IsSortColumn(col) ? sortClass : ""
             },
             col.title));
         return m("tr", renderedCols);
@@ -150,7 +150,7 @@ module Components {
           let renderedCols = cols.map((col: TableColumn<T>) =>
             m("td",
               {
-                className: this.IsSortColumn(col) ? "sorted" : null
+                className: this.IsSortColumn(col) ? "sorted" : ""
               },
               col.view(row)));
           return m("tr", renderedCols);
