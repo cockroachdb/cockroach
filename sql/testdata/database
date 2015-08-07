@@ -30,3 +30,52 @@ a
 b
 c
 test
+
+statement ok
+CREATE TABLE b.a (id INT PRIMARY KEY)
+
+statement ok
+INSERT INTO b.a VALUES (3),(7),(2)
+
+query I
+SELECT * FROM b.a
+----
+2
+3
+7
+
+statement ok
+DROP DATABASE b
+
+statement error database "b" does not exist
+SELECT * FROM b.a
+
+statement error database "b" does not exist
+DROP DATABASE b
+
+statement ok
+DROP DATABASE IF EXISTS b
+
+statement error empty database name
+DROP DATABASE ""
+
+query T colnames
+SHOW DATABASES
+----
+Database
+a
+c
+test
+
+statement ok
+CREATE DATABASE b
+
+statement error table "a" does not exist
+SELECT * FROM b.a
+
+statement ok
+CREATE TABLE b.a (id INT PRIMARY KEY)
+
+query I
+SELECT * FROM b.a
+----

@@ -4,6 +4,12 @@ statement ok
 CREATE DATABASE a
 
 statement ok
+DROP DATABASE a
+
+statement ok
+CREATE DATABASE a
+
+statement ok
 SHOW DATABASES
 
 statement ok
@@ -29,6 +35,9 @@ user testuser
 
 statement error only root is allowed to create databases
 CREATE DATABASE b
+
+statement error user testuser does not have WRITE privilege on database a
+DROP DATABASE a
 
 statement ok
 SHOW DATABASES
@@ -61,6 +70,9 @@ user testuser
 
 statement error only root is allowed to create databases
 CREATE DATABASE b
+
+statement error user testuser does not have WRITE privilege on database a
+DROP DATABASE a
 
 statement ok
 SHOW DATABASES
@@ -117,3 +129,16 @@ GRANT ALL ON DATABASE a TO bar
 
 statement ok
 REVOKE ALL ON DATABASE a FROM bar
+
+statement error user testuser does not have WRITE privilege on table a.t
+DROP DATABASE a
+
+user root
+
+statement ok
+GRANT WRITE ON TABLE a.t TO testuser
+
+user testuser
+
+statement ok
+DROP DATABASE a
