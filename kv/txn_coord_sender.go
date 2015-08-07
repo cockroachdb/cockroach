@@ -290,31 +290,50 @@ func (tc *TxnCoordSender) startStats() {
 // of a transaction, the coordinator will initialize the transaction
 // if it's not nil but has an empty ID.
 func (tc *TxnCoordSender) Send(ctx context.Context, call proto.Call) {
-	header := call.Args.Header()
-	tc.maybeBeginTxn(header)
-	header.CmdID = header.GetOrCreateCmdID(tc.clock.PhysicalNow())
+	doSend := func() {
+		header := call.Args.Header()
+		tc.maybeBeginTxn(header)
+		header.CmdID = header.GetOrCreateCmdID(tc.clock.PhysicalNow())
 
-	// This is the earliest point at which the request has a ClientCmdID and/or
-	// TxnID (if applicable). Begin a Trace which follows this request.
-	trace := tc.tracer.NewTrace(call.Args.Header())
-	defer trace.Finalize()
-	defer trace.Epoch(fmt.Sprintf("sending %s", call.Method()))()
-	defer func() {
-		if err := call.Reply.Header().GoError(); err != nil {
-			trace.Event(fmt.Sprintf("reply error: %T", err))
+		// This is the earliest point at which the request has a ClientCmdID and/or
+		// TxnID (if applicable). Begin a Trace which follows this request.
+		trace := tc.tracer.NewTrace(call.Args.Header())
+		defer trace.Finalize()
+		defer trace.Epoch(fmt.Sprintf("sending %s", call.Method()))()
+		defer func() {
+			if err := call.Reply.Header().GoError(); err != nil {
+				trace.Event(fmt.Sprintf("reply error: %T", err))
+			}
+		}()
+		ctx = tracer.ToCtx(ctx, trace)
+
+		// Process batch specially; otherwise, send via wrapped sender.
+		switch args := call.Args.(type) {
+		case *proto.BatchRequest:
+			trace.Event("batch processing")
+			tc.sendBatch(ctx, args, call.Reply.(*proto.BatchResponse))
+		default:
+			// TODO(tschottdorf): should treat all calls as Batch. After all, that
+			// will be almost all calls.
+			tc.sendOne(ctx, call)
 		}
-	}()
-	ctx = tracer.ToCtx(ctx, trace)
+	}
 
-	// Process batch specially; otherwise, send via wrapped sender.
-	switch args := call.Args.(type) {
-	case *proto.BatchRequest:
-		trace.Event("batch processing")
-		tc.sendBatch(ctx, args, call.Reply.(*proto.BatchResponse))
-	default:
-		// TODO(tschottdorf): should treat all calls as Batch. After all, that
-		// will be almost all calls.
-		tc.sendOne(ctx, call)
+	// This is currently the convenient way to handle OpRequiresTxnError.
+	// Likely to be smoothed out by further batch-related refactors.
+	for {
+		doSend()
+		switch call.Reply.Header().GoError().(type) {
+		case *proto.OpRequiresTxnError:
+			call.Reply.Reset()
+			if header := call.Args.Header(); header.Txn != nil {
+				panic("OpRequiresTxnError received for transactional call")
+			} else {
+				header.Txn = &proto.Transaction{Name: "auto-wrap"}
+			}
+			continue
+		}
+		break
 	}
 }
 
@@ -482,31 +501,6 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 	case *proto.TransactionAbortedError:
 		// If already aborted, cleanup the txn on this TxnCoordSender.
 		tc.cleanupTxn(trace, t.Txn)
-	case *proto.OpRequiresTxnError:
-		// Run a one-off transaction with that single command.
-		if log.V(1) {
-			log.Infof("%s: auto-wrapping in txn and re-executing", call.Method())
-		}
-		// TODO(tschottdorf): this part is awkward. Consider resending here
-		// without starting a new call, which is hard to trace. Plus, the
-		// below depends on default configuration.
-		tmpDB, err := client.Open(
-			fmt.Sprintf("//%s?priority=%d",
-				call.Args.Header().User, call.Args.Header().GetUserPriority()),
-			client.SenderOpt(tc))
-		if err != nil {
-			log.Warning(err)
-			return
-		}
-		call.Reply.Reset()
-		if err := tmpDB.Txn(func(txn *client.Txn) error {
-			txn.SetDebugName("auto-wrap")
-			b := &client.Batch{}
-			b.InternalAddCall(call)
-			return txn.Commit(b)
-		}); err != nil {
-			log.Warning(err)
-		}
 	case nil:
 		if txn := call.Reply.Header().Txn; txn != nil {
 			if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
