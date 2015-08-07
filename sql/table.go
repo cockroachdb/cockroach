@@ -168,8 +168,9 @@ func encodeIndexKeyPrefix(tableID, indexID structured.ID) []byte {
 	return key
 }
 
-func encodeIndexKey(columnIDs []structured.ID, colMap map[structured.ID]int, values []parser.Datum, indexKey []byte) ([]byte, error) {
+func encodeIndexKey(columnIDs []structured.ID, colMap map[structured.ID]int, values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	var key []byte
+	var containsNull bool
 	key = append(key, indexKey...)
 
 	for _, id := range columnIDs {
@@ -182,12 +183,16 @@ func encodeIndexKey(columnIDs []structured.ID, colMap map[structured.ID]int, val
 			val = parser.DNull
 		}
 
+		if val == parser.DNull {
+			containsNull = true
+		}
+
 		var err error
 		if key, err = encodeTableKey(key, val); err != nil {
-			return nil, err
+			return nil, containsNull, err
 		}
 	}
-	return key, nil
+	return key, containsNull, nil
 }
 
 func encodeColumnKey(col structured.ColumnDescriptor, primaryKey []byte) []byte {
@@ -274,12 +279,12 @@ func encodeSecondaryIndexes(tableID structured.ID, indexes []structured.IndexDes
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
 		secondaryIndexKeyPrefix := encodeIndexKeyPrefix(tableID, secondaryIndex.ID)
-		secondaryIndexKey, err := encodeIndexKey(secondaryIndex.ColumnIDs, colMap, values, secondaryIndexKeyPrefix)
+		secondaryIndexKey, containsNull, err := encodeIndexKey(secondaryIndex.ColumnIDs, colMap, values, secondaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
 
-		if secondaryIndex.Unique {
+		if secondaryIndex.Unique && !containsNull {
 			secondaryIndexEntries = append(secondaryIndexEntries, indexEntry{
 				key:   secondaryIndexKey,
 				value: primaryIndexKeySuffix,

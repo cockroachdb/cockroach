@@ -120,7 +120,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			return nil, err
 		}
 		rowVals := row.Values()
-		primaryIndexKeySuffix, err := encodeIndexKey(primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, nil)
+		primaryIndexKeySuffix, _, err := encodeIndexKey(primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, nil)
 		if err != nil {
 			return nil, err
 		}

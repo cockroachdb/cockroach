@@ -81,7 +81,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			return nil, fmt.Errorf("invalid values for columns: %d != %d", len(values), len(cols))
 		}
 
-		primaryIndexKeySuffix, err := encodeIndexKey(primaryIndex.ColumnIDs, colIDtoRowIndex, values, nil)
+		primaryIndexKeySuffix, _, err := encodeIndexKey(primaryIndex.ColumnIDs, colIDtoRowIndex, values, nil)
 		if err != nil {
 			return nil, err
 		}
