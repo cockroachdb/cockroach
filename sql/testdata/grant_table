@@ -33,15 +33,15 @@ query TTT colnames
 SHOW GRANTS ON t
 ----
 Table    User      Privileges
-a.t      readwrite READ,WRITE
-a.t      root      READ,WRITE
+t        readwrite READ,WRITE
+t        root      READ,WRITE
 
 query TTT colnames
 SHOW GRANTS ON a.t
 ----
 Table    User      Privileges
-a.t      readwrite READ,WRITE
-a.t      root      READ,WRITE
+t        readwrite READ,WRITE
+t        root      READ,WRITE
 
 statement ok
 GRANT ALL ON t TO readwrite, "test-user"
@@ -49,15 +49,15 @@ GRANT ALL ON t TO readwrite, "test-user"
 query TTT
 SHOW GRANTS ON t
 ----
-a.t   readwrite READ,WRITE
-a.t   root      READ,WRITE
-a.t   test-user READ,WRITE
+t     readwrite READ,WRITE
+t     root      READ,WRITE
+t     test-user READ,WRITE
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-a.t   readwrite READ,WRITE
-a.t   test-user READ,WRITE
+t     readwrite READ,WRITE
+t     test-user READ,WRITE
 
 statement ok
 REVOKE WRITE ON t FROM "test-user",readwrite
@@ -65,15 +65,15 @@ REVOKE WRITE ON t FROM "test-user",readwrite
 query TTT
 SHOW GRANTS ON t
 ----
-a.t   readwrite READ
-a.t   root      READ,WRITE
-a.t   test-user READ
+t     readwrite READ
+t     root      READ,WRITE
+t     test-user READ
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-a.t   readwrite READ
-a.t   test-user READ
+t     readwrite READ
+t     test-user READ
 
 statement ok
 REVOKE READ ON t FROM "test-user"
@@ -81,13 +81,13 @@ REVOKE READ ON t FROM "test-user"
 query TTT
 SHOW GRANTS ON t
 ----
-a.t   readwrite READ
-a.t   root      READ,WRITE
+t     readwrite READ
+t     root      READ,WRITE
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-a.t   readwrite READ
+t     readwrite READ
 
 statement ok
 REVOKE ALL ON t FROM readwrite,"test-user"
@@ -95,7 +95,7 @@ REVOKE ALL ON t FROM readwrite,"test-user"
 query TTT
 SHOW GRANTS ON t
 ----
-a.t   root      READ,WRITE
+t     root      READ,WRITE
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"

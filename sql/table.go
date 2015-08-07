@@ -45,7 +45,7 @@ func (tk tableKey) Name() string {
 
 func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 	desc := structured.TableDescriptor{}
-	desc.Name = p.Table.String()
+	desc.Name = p.Table.Table()
 	for _, def := range p.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
@@ -207,7 +207,7 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 }
 
 func decodeIndexKey(desc *structured.TableDescriptor,
-	index structured.IndexDescriptor, vals map[string]parser.Datum, key []byte) ([]byte, error) {
+	index structured.IndexDescriptor, vals valMap, key []byte) ([]byte, error) {
 	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
 		return nil, fmt.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
@@ -234,16 +234,22 @@ func decodeIndexKey(desc *structured.TableDescriptor,
 		case structured.ColumnType_BIT, structured.ColumnType_INT:
 			var i int64
 			key, i = encoding.DecodeVarint(key)
-			vals[col.Name] = parser.DInt(i)
+			if vals != nil {
+				vals[col.ID] = parser.DInt(i)
+			}
 		case structured.ColumnType_FLOAT:
 			var f float64
 			key, f = encoding.DecodeNumericFloat(key)
-			vals[col.Name] = parser.DFloat(f)
+			if vals != nil {
+				vals[col.ID] = parser.DFloat(f)
+			}
 		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
 			structured.ColumnType_BLOB:
 			var r []byte
 			key, r = encoding.DecodeBytes(key, nil)
-			vals[col.Name] = parser.DString(r)
+			if vals != nil {
+				vals[col.ID] = parser.DString(r)
+			}
 		default:
 			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
 		}

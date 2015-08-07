@@ -130,7 +130,7 @@ GRANT ALL ON DATABASE a TO bar
 statement ok
 REVOKE ALL ON DATABASE a FROM bar
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 DROP DATABASE a
 
 user root

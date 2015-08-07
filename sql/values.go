@@ -29,7 +29,7 @@ func (p *planner) Values(n parser.Values) (planNode, error) {
 		rows: make([]parser.DTuple, 0, len(n)),
 	}
 	for _, tuple := range n {
-		data, err := parser.EvalExpr(tuple, nil)
+		data, err := parser.EvalExpr(tuple)
 		if err != nil {
 			return nil, err
 		}

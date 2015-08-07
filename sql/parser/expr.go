@@ -246,18 +246,20 @@ type QualifiedName struct {
 	Indirect Indirection
 }
 
-// Database returns the database portion of the name.
+// Database returns the database portion of the name. Note that the returned
+// string is not quoted even if the name is a keyword.
 func (n *QualifiedName) Database() string {
 	// The database portion of the name is n.Base, but only as long as an
 	// indirection is present. In a qualified name like "foo" (without an
 	// indirection), "foo" represents a table or column name.
 	if len(n.Indirect) > 0 {
-		return n.Base.String()
+		return string(n.Base)
 	}
 	return ""
 }
 
-// Table returns the table portion of the name.
+// Table returns the table portion of the name. Note that the returned string
+// is not quoted even if the name is a keyword.
 //
 // TODO(pmattis): See the comment for Column() regarding how QualifiedNames are
 // used in context sensitive locations. Sometimes they are referring to tables
@@ -267,14 +269,15 @@ func (n *QualifiedName) Table() string {
 		last := n.Indirect[l-1]
 		switch t := last.(type) {
 		case NameIndirection:
-			return Name(t).String()
+			return string(t)
 		}
 		return ""
 	}
-	return n.Base.String()
+	return string(n.Base)
 }
 
-// Column returns the column portion of the name.
+// Column returns the column portion of the name. Note that the returned string
+// is not quoted even if the name is a keyword.
 //
 // TODO(pmattis) Handling of qualified names is currently very basic and we
 // consider the column portion of the name to simply be the last
@@ -285,6 +288,27 @@ func (n *QualifiedName) Table() string {
 // TableName, IndexName, etc).
 func (n *QualifiedName) Column() string {
 	return n.Table()
+}
+
+// IsStar returns true iff the qualified name contains a non-empty base and is
+// composed of 0 or more name indirections and a trailing star indirection.
+func (n *QualifiedName) IsStar() bool {
+	if len(n.Base) == 0 {
+		return false
+	}
+	count := len(n.Indirect)
+	if count == 0 {
+		return false
+	}
+	if _, ok := n.Indirect[count-1].(StarIndirection); !ok {
+		return false
+	}
+	for _, indirect := range n.Indirect[:count-1] {
+		if _, ok := indirect.(NameIndirection); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (n *QualifiedName) String() string {

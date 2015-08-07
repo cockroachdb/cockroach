@@ -71,3 +71,35 @@ query T
 SELECT k FROM kv
 ----
 1 value hashing to 60b725f10c9c85c70d97880dfe8191b3
+
+query TT
+SELECT kv.K,KV.v FROM kv
+----
+a NULL
+
+query TT
+SELECT kv.* FROM kv
+----
+a NULL
+
+query error table "foo" not found
+SELECT foo.* FROM kv
+----
+
+query T colnames
+SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
+----
+k
+a
+
+statement ok
+CREATE TABLE kw ("from" INT PRIMARY KEY)
+
+statement ok
+INSERT INTO kw VALUES (1)
+
+query I colnames
+SELECT *, "from", kw."from" FROM kw
+----
+from from from
+1    1    1

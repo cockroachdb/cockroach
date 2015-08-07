@@ -19,6 +19,7 @@ package sql
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
@@ -68,13 +69,44 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 				exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
 			}
 		case *parser.NonStarExpr:
+			// If a QualifiedName has a StarIndirection suffix we need to match the
+			// prefix of the qualified name to one of the tables in the query and
+			// then expand the "*" into a list of columns.
+			if qname, ok := t.Expr.(*parser.QualifiedName); ok && qname.IsStar() {
+				if desc == nil {
+					return nil, fmt.Errorf("%s with no tables specified is not valid", qname)
+				}
+				if t.As != "" {
+					return nil, fmt.Errorf("%s cannot be aliased", qname)
+				}
+				if len(qname.Indirect) == 1 {
+					if !strings.EqualFold(desc.Name, string(qname.Base)) {
+						return nil, fmt.Errorf("table \"%s\" not found", qname.Base)
+					}
+
+					// TODO(pmattis): Refactor to share this with the parser.StarExpr
+					// handling above.
+					for _, col := range desc.Columns {
+						columns = append(columns, col.Name)
+						exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
+					}
+					break
+				}
+				// TODO(pmattis): Handle len(qname.Indirect) > 1: <database>.<table>.*.
+			}
+
 			exprs = append(exprs, t.Expr)
 			if t.As != "" {
 				columns = append(columns, string(t.As))
 			} else {
-				// TODO(pmattis): Should verify at this point that any referenced
-				// columns are represented in the tables being selected from.
-				columns = append(columns, t.Expr.String())
+				// If the expression is a qualified name, use the column name, not the
+				// full qualification as the column name to return.
+				switch e := t.Expr.(type) {
+				case *parser.QualifiedName:
+					columns = append(columns, e.Column())
+				default:
+					columns = append(columns, t.Expr.String())
+				}
 			}
 		}
 	}

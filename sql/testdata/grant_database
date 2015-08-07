@@ -31,9 +31,9 @@ query TTT colnames
 SHOW GRANTS ON a.t
 ----
 Table    User      Privileges
-a.t      readwrite READ,WRITE
-a.t      root      READ,WRITE
-a.t      test-user READ,WRITE
+t        readwrite READ,WRITE
+t        root      READ,WRITE
+t        test-user READ,WRITE
 
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
@@ -88,6 +88,6 @@ query TTT colnames
 SHOW GRANTS ON a.t
 ----
 Table    User      Privileges
-a.t      readwrite READ,WRITE
-a.t      root      READ,WRITE
-a.t      test-user READ,WRITE
+t        readwrite READ,WRITE
+t        root      READ,WRITE
+t        test-user READ,WRITE
