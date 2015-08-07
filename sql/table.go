@@ -168,12 +168,11 @@ func encodeIndexKeyPrefix(tableID, indexID structured.ID) []byte {
 	return key
 }
 
-func encodeIndexKey(index structured.IndexDescriptor,
-	colMap map[structured.ID]int, values []parser.Datum, indexKey []byte) ([]byte, error) {
+func encodeIndexKey(columnIDs []structured.ID, colMap map[structured.ID]int, values []parser.Datum, indexKey []byte) ([]byte, error) {
 	var key []byte
 	key = append(key, indexKey...)
 
-	for _, id := range index.ColumnIDs {
+	for _, id := range columnIDs {
 		var val parser.Datum
 		if i, ok := colMap[id]; ok {
 			// TOOD(pmattis): Need to convert the values[i] value to the type
@@ -273,7 +272,7 @@ func encodeSecondaryIndexes(tableID structured.ID, indexes []structured.IndexDes
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
 		secondaryIndexKeyPrefix := encodeIndexKeyPrefix(tableID, secondaryIndex.ID)
-		secondaryIndexKey, err := encodeIndexKey(secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+		secondaryIndexKey, err := encodeIndexKey(secondaryIndex.ColumnIDs, colMap, values, secondaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}

@@ -80,7 +80,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		}
 		values := node.Values()
 
-		primaryIndexKeySuffix, err := encodeIndexKey(primaryIndex, colIDtoRowIndex, values, nil)
+		primaryIndexKeySuffix, err := encodeIndexKey(primaryIndex.ColumnIDs, colIDtoRowIndex, values, nil)
 		if err != nil {
 			return nil, err
 		}
