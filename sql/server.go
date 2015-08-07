@@ -20,6 +20,7 @@ package sql
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -128,10 +129,14 @@ func (p parameters) Arg(i int) (parser.Datum, bool) {
 	if i < 1 || i > len(p) {
 		return nil, false
 	}
-	switch t := p[i-1].GetValue().(type) {
+	arg := p[i-1].GetValue()
+	if arg == nil {
+		return parser.DNull{}, true
+	}
+	switch t := arg.(type) {
 	case *bool:
 		return parser.DBool(*t), true
-	case *int:
+	case *int64:
 		return parser.DInt(*t), true
 	case *float64:
 		return parser.DFloat(*t), true
@@ -139,8 +144,9 @@ func (p parameters) Arg(i int) (parser.Datum, bool) {
 		return parser.DString(t), true
 	case *string:
 		return parser.DString(*t), true
+	default:
+		panic(fmt.Sprintf("Incorrect type %T", t))
 	}
-	return parser.DNull{}, true
 }
 
 // exec executes the request. Any error encountered is returned; it is
