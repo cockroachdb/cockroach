@@ -155,16 +155,16 @@ func encodeIndexKey(index structured.IndexDescriptor,
 	var key []byte
 	key = append(key, indexKey...)
 
-	for i, id := range index.ColumnIDs {
-		j, ok := colMap[id]
-		if !ok {
-			return nil, fmt.Errorf("missing %q primary key column", index.ColumnNames[i])
+	for _, id := range index.ColumnIDs {
+		var val parser.Datum
+		if i, ok := colMap[id]; ok {
+			val = values[i]
+		} else {
+			val = parser.DNull{}
 		}
-		// TOOD(pmattis): Need to convert the values[i] value to the type expected by
-		// the column.
+
 		var err error
-		key, err = encodeTableKey(key, values[j])
-		if err != nil {
+		if key, err = encodeTableKey(key, val); err != nil {
 			return nil, err
 		}
 	}

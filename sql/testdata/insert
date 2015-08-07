@@ -19,7 +19,7 @@ statement error missing "k" primary key column
 INSERT INTO kv (v) VALUES ('a')
 
 statement ok
-INSERT INTO kv VALUES ('nil', NULL)
+INSERT INTO kv (k) VALUES ('nil')
 
 statement ok
 INSERT INTO kv (k,v) VALUES ('a', 'b'), ('c', 'd')
