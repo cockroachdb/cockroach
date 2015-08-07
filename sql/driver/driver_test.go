@@ -181,6 +181,27 @@ func TestPlaceholders(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	if _, err := db.Exec(`CREATE TABLE t.alltypes (a BIGINT PRIMARY KEY, b FLOAT, c TEXT, d BOOLEAN)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO t.alltypes (a, b, c, d) VALUES ($1, $2, $3, $4)`, 123, 3.4, "blah", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE a IN ($1)", 123); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE b IN ($1)", 3.4); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE c IN ($1)", "blah"); err != nil {
+		t.Fatal(err)
+	}
+	// TODO(vivek): This is not working. Fix later.
+	//	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE d IN ($1)", true); err != nil {
+	//	t.Fatal(err)
+	//}
+
 }
 
 func TestInsecure(t *testing.T) {
