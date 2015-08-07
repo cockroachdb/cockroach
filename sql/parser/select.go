@@ -105,17 +105,10 @@ type SelectExpr interface {
 func (*StarExpr) selectExpr()    {}
 func (*NonStarExpr) selectExpr() {}
 
-// StarExpr defines a '*' or 'table.*' expression.
-// TODO(tschottdorf): needs work, see #1810. TableName is never even referenced
-// in the grammar so far.
-type StarExpr struct {
-	TableName *QualifiedName
-}
+// StarExpr defines a '*'.
+type StarExpr struct{}
 
 func (node *StarExpr) String() string {
-	if node.TableName != nil {
-		return fmt.Sprintf("%s.*", node.TableName)
-	}
 	return "*"
 }
 

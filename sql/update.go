@@ -68,9 +68,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	// Query the rows that need updating.
 	// TODO(vivek): Avoid going through Select.
 	row, err := p.Select(&parser.Select{
-		Exprs: parser.SelectExprs{
-			&parser.StarExpr{TableName: &parser.QualifiedName{Base: parser.Name(tableDesc.Name)}},
-		},
+		Exprs: parser.SelectExprs{&parser.StarExpr{}},
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,
 	})
