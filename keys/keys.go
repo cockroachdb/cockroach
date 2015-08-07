@@ -56,52 +56,6 @@ func NodeStatusKey(nodeID int32) proto.Key {
 	return MakeKey(StatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID)))
 }
 
-// indexKeyBufferWidth returns a likely cap on the width of the index key.
-// The buffer width can likely accomodate the encoded constant prefix, tableID,
-// indexID, and column values.
-//
-// This cap is inaccurate because the size of the encoding varies, depending
-// on the ints and the bytes being encoded. We really don't care, as long as
-// a value is chosen such that the  append() builtin used to populate the
-// buffer, infrequently reallocates more space.
-func indexKeyMaxBufferWidth(columnValues ...[]byte) (width int) {
-	// Accomodate the constant prefix, tableID, and indexID.
-	width += len(TableDataPrefix) + 2*encoding.MaxUvarintSize
-	for _, value := range columnValues {
-		// Add 2 for encoding
-		width += len(value) + 2
-	}
-	return
-}
-
-// populateTableIndexKey populates the key passed in with the
-// order encoded values forming the index key.
-func populateTableIndexKey(key []byte, tableID, indexID uint32, columnValues ...[]byte) []byte {
-	key = append(key, TableDataPrefix...)
-	key = encoding.EncodeUvarint(key, uint64(tableID))
-	key = encoding.EncodeUvarint(key, uint64(indexID))
-	for _, value := range columnValues {
-		key = encoding.EncodeBytes(key, value)
-	}
-	return key
-}
-
-// MakeTableIndexKey returns a primary or a secondary index key.
-func MakeTableIndexKey(tableID, indexID uint32, columnValues ...[]byte) proto.Key {
-	k := make([]byte, 0, indexKeyMaxBufferWidth(columnValues...))
-	k = populateTableIndexKey(k, tableID, indexID, columnValues...)
-	return k
-}
-
-// MakeTableDataKey returns a key to a value at a specific row and column
-// in the table.
-func MakeTableDataKey(tableID, indexID, columnID uint32, columnValues ...[]byte) proto.Key {
-	k := make([]byte, 0, indexKeyMaxBufferWidth(columnValues...)+encoding.MaxUvarintSize)
-	k = populateTableIndexKey(k, tableID, indexID, columnValues...)
-	k = encoding.EncodeUvarint(k, uint64(columnID))
-	return k
-}
-
 // MakeRangeIDKey creates a range-local key based on the range's
 // Range ID, metadata key suffix, and optional detail (e.g. the
 // encoded command ID for a response cache entry, etc.).

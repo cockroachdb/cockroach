@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -72,67 +71,6 @@ func TestKeyAddress(t *testing.T) {
 			t.Errorf("%d: expected address for key %q doesn't match %q", i, test.key, test.expAddress)
 		}
 	}
-}
-
-func TestMakeTableIndexKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	key := MakeTableIndexKey(12, 345, []byte("foo"), []byte("bar"))
-	expKey := MakeKey(TableDataPrefix, encoding.EncodeUvarint(nil, 12), encoding.EncodeUvarint(nil, 345), encoding.EncodeBytes(nil, []byte("foo")), encoding.EncodeBytes(nil, []byte("bar")))
-	if !key.Equal(expKey) {
-		t.Errorf("key %q doesn't match expected %q", key, expKey)
-	}
-	// Check that keys are ordered
-	keys := []proto.Key{
-		MakeTableIndexKey(0, 0, []byte("foo")),
-		MakeTableIndexKey(0, 0, []byte("fooo")),
-		MakeTableIndexKey(0, 1, []byte("bar")),
-		MakeTableIndexKey(1, 0, []byte("bar")),
-		MakeTableIndexKey(1, 0, []byte("bar"), []byte("foo")),
-		MakeTableIndexKey(1, 1, []byte("bar"), []byte("fo")),
-		MakeTableIndexKey(1, 1, []byte("bar"), []byte("foo")),
-		MakeTableIndexKey(1, 2, []byte("bar")),
-		MakeTableIndexKey(2, 2, []byte("ba")),
-	}
-	for i := 1; i < len(keys); i++ {
-		if bytes.Compare(keys[i-1], keys[i]) >= 0 {
-			t.Errorf("key %d >= key %d", i-1, i)
-		}
-	}
-}
-
-func TestMakeTableDataKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	key := MakeTableDataKey(12, 345, 6, []byte("foo"), []byte("bar"))
-	// Expected key is the TableIndexKey + ColumnID
-	expKey := MakeKey(MakeTableIndexKey(12, 345, []byte("foo"), []byte("bar")), encoding.EncodeUvarint(nil, 6))
-	if !key.Equal(expKey) {
-		t.Errorf("key %q doesn't match expected %q", key, expKey)
-	}
-	// Check that keys are ordered
-	keys := []proto.Key{
-		// Data-key follows Index key order
-		MakeTableDataKey(0, 0, 0, []byte("foo")),
-		MakeTableDataKey(0, 0, 8, []byte("fooo")),
-		MakeTableDataKey(0, 1, 10, []byte("bar")),
-		MakeTableDataKey(1, 0, 3, []byte("bar")),
-		MakeTableDataKey(1, 0, 5, []byte("bar"), []byte("foo")),
-		MakeTableDataKey(1, 1, 7, []byte("bar"), []byte("fo")),
-		MakeTableDataKey(1, 1, 4, []byte("bar"), []byte("foo")),
-		MakeTableDataKey(1, 2, 89, []byte("bar")),
-		MakeTableDataKey(2, 2, 23, []byte("ba")),
-		// For the same Index key, Data-key follows column ID order.
-		MakeTableDataKey(2, 2, 0, []byte("bar"), []byte("foo")),
-		MakeTableDataKey(2, 2, 7, []byte("bar"), []byte("foo")),
-		MakeTableDataKey(2, 2, 23, []byte("bar"), []byte("foo")),
-		MakeTableDataKey(2, 2, 45, []byte("bar"), []byte("foo")),
-	}
-
-	for i := 1; i < len(keys); i++ {
-		if bytes.Compare(keys[i-1], keys[i]) >= 0 {
-			t.Errorf("key %d >= key %d", i-1, i)
-		}
-	}
-
 }
 
 func TestRangeMetaKey(t *testing.T) {

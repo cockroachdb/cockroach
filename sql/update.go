@@ -90,7 +90,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex
-	primaryIndexKeyPrefix := encodeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
+	primaryIndexKeyPrefix := structured.MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	// Evaluate all the column value expressions.
 	vals := make([]parser.Datum, 0, 10)
@@ -157,7 +157,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 
 		// add the new values
 		for i, val := range vals {
-			key := encodeColumnKey(cols[i], primaryIndexKey)
+			key := structured.MakeColumnKey(cols[i].ID, primaryIndexKey)
 			if log.V(2) {
 				log.Infof("Put %q -> %v", key, val)
 			}

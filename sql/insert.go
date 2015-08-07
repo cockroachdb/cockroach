@@ -71,7 +71,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex
-	primaryIndexKeyPrefix := encodeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
+	primaryIndexKeyPrefix := structured.MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	b := client.Batch{}
 
@@ -102,7 +102,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 		// Write the row.
 		for i, val := range values {
-			key := encodeColumnKey(cols[i], primaryIndexKey)
+			key := structured.MakeColumnKey(cols[i].ID, primaryIndexKey)
 			if log.V(2) {
 				log.Infof("CPut %q -> %v", key, val)
 			}

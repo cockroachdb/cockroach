@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -44,7 +45,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 				p.user, parser.PrivilegeWrite, tableDesc.Name)
 		}
 
-		tablePrefix := encodeTablePrefix(tableDesc.ID)
+		tablePrefix := structured.MakeTablePrefix(tableDesc.ID)
 
 		// Delete rows and indexes starting with the table's prefix.
 		tableStartKey := proto.Key(tablePrefix)
