@@ -158,6 +158,8 @@ func encodeIndexKey(index structured.IndexDescriptor,
 	for _, id := range index.ColumnIDs {
 		var val parser.Datum
 		if i, ok := colMap[id]; ok {
+			// TOOD(pmattis): Need to convert the values[i] value to the type
+			// expected by the column.
 			val = values[i]
 		} else {
 			val = parser.DNull{}
