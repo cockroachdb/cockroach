@@ -129,10 +129,10 @@ type colorProfile struct {
 
 // For terms with 8-color support.
 var colorProfile8 = &colorProfile{
-	infoPrefix:  []byte("\033[0;36;49"),
-	warnPrefix:  []byte("\033[0;33;49"),
-	errorPrefix: []byte("\033[0;31;49"),
-	timePrefix:  []byte("\033[2;37;49"),
+	infoPrefix:  []byte("\033[0;36;49m"),
+	warnPrefix:  []byte("\033[0;33;49m"),
+	errorPrefix: []byte("\033[0;31;49m"),
+	timePrefix:  []byte("\033[2;37;49m"),
 }
 
 // For terms with 256-color support.
