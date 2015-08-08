@@ -172,7 +172,7 @@ func (n *scanNode) renderRow() error {
 				continue
 			}
 			if col.Nullable {
-				n.vals[col.Name] = parser.DNull{}
+				n.vals[col.Name] = parser.DNull
 			}
 		}
 	}
@@ -198,7 +198,7 @@ func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) parser.
 			return parser.DString(kv.ValueBytes())
 		}
 	}
-	return parser.DNull{}
+	return parser.DNull
 }
 
 type valMap map[string]parser.Datum

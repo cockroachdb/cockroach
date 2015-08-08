@@ -59,7 +59,7 @@ func (DInt) expr()            {}
 func (DFloat) expr()          {}
 func (DString) expr()         {}
 func (DTuple) expr()          {}
-func (DNull) expr()           {}
+func (dNull) expr()           {}
 
 // AndExpr represents an AND expression.
 type AndExpr struct {

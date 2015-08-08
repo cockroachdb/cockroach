@@ -85,7 +85,7 @@ func stringBuiltin(f func(string) (Datum, error)) builtin {
 		fn: func(args DTuple) (Datum, error) {
 			s, ok := args[0].(DString)
 			if !ok {
-				return null, argTypeError(args[0], "string")
+				return DNull, argTypeError(args[0], "string")
 			}
 			return f(string(s))
 		},

@@ -131,7 +131,7 @@ func (p parameters) Arg(i int) (parser.Datum, bool) {
 	}
 	arg := p[i-1].GetValue()
 	if arg == nil {
-		return parser.DNull{}, true
+		return parser.DNull, true
 	}
 	switch t := arg.(type) {
 	case *bool:
@@ -187,19 +187,21 @@ func (s *Server) exec(req driver.Request) (driver.Response, error) {
 			row := driver.Result_Row{}
 			row.Values = make([]driver.Datum, 0, len(values))
 			for _, val := range values {
-				switch vt := val.(type) {
-				case parser.DBool:
-					row.Values = append(row.Values, driver.Datum{BoolVal: (*bool)(&vt)})
-				case parser.DInt:
-					row.Values = append(row.Values, driver.Datum{IntVal: (*int64)(&vt)})
-				case parser.DFloat:
-					row.Values = append(row.Values, driver.Datum{FloatVal: (*float64)(&vt)})
-				case parser.DString:
-					row.Values = append(row.Values, driver.Datum{StringVal: (*string)(&vt)})
-				case parser.DNull:
+				if val == parser.DNull {
 					row.Values = append(row.Values, driver.Datum{})
-				default:
-					return resp, util.Errorf("unsupported datum: %T", val)
+				} else {
+					switch vt := val.(type) {
+					case parser.DBool:
+						row.Values = append(row.Values, driver.Datum{BoolVal: (*bool)(&vt)})
+					case parser.DInt:
+						row.Values = append(row.Values, driver.Datum{IntVal: (*int64)(&vt)})
+					case parser.DFloat:
+						row.Values = append(row.Values, driver.Datum{FloatVal: (*float64)(&vt)})
+					case parser.DString:
+						row.Values = append(row.Values, driver.Datum{StringVal: (*string)(&vt)})
+					default:
+						return resp, util.Errorf("unsupported datum: %T", val)
+					}
 				}
 			}
 			result.Rows = append(result.Rows, row)

@@ -179,7 +179,7 @@ func encodeIndexKey(columnIDs []structured.ID, colMap map[structured.ID]int, val
 			// expected by the column.
 			val = values[i]
 		} else {
-			val = parser.DNull{}
+			val = parser.DNull
 		}
 
 		var err error
@@ -196,8 +196,13 @@ func encodeColumnKey(col structured.ColumnDescriptor, primaryKey []byte) []byte 
 	return encoding.EncodeUvarint(key, uint64(col.ID))
 }
 
-func encodeTableKey(b []byte, v parser.Datum) ([]byte, error) {
-	switch t := v.(type) {
+func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
+	if val == parser.DNull {
+		// TODO(tamird,pmattis): This is a hack; we should have proper nil encoding.
+		return encoding.EncodeBytes(b, nil), nil
+	}
+
+	switch t := val.(type) {
 	case parser.DBool:
 		if t {
 			return encoding.EncodeVarint(b, 1), nil
@@ -209,11 +214,8 @@ func encodeTableKey(b []byte, v parser.Datum) ([]byte, error) {
 		return encoding.EncodeNumericFloat(b, float64(t)), nil
 	case parser.DString:
 		return encoding.EncodeBytes(b, []byte(t)), nil
-	case parser.DNull:
-		// TODO(tamird,pmattis): This is a hack; we should have proper nil encoding.
-		return encoding.EncodeBytes(b, nil), nil
 	}
-	return nil, fmt.Errorf("unable to encode table key: %T", v)
+	return nil, fmt.Errorf("unable to encode table key: %T", val)
 }
 
 func decodeIndexKey(desc *structured.TableDescriptor,
@@ -296,7 +298,7 @@ func encodeSecondaryIndexes(tableID structured.ID, indexes []structured.IndexDes
 // will just tank a single goroutine on the server and be silently
 // swallowed.
 func prepareVal(col structured.ColumnDescriptor, val parser.Expr) (interface{}, error) {
-	if _, ok := val.(parser.DNull); ok {
+	if val == parser.DNull {
 		return nil, nil
 	}
 
