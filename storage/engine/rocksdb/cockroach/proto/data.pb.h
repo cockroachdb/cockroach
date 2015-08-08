@@ -984,6 +984,13 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
   ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >*
       mutable_updated_replicas();
 
+  // optional int32 next_replica_id = 6;
+  bool has_next_replica_id() const;
+  void clear_next_replica_id();
+  static const int kNextReplicaIdFieldNumber = 6;
+  ::google::protobuf::int32 next_replica_id() const;
+  void set_next_replica_id(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.ChangeReplicasTrigger)
  private:
   inline void set_has_node_id();
@@ -994,6 +1001,8 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
   inline void clear_has_change_type();
   inline void set_has_replica();
   inline void clear_has_replica();
+  inline void set_has_next_replica_id();
+  inline void clear_has_next_replica_id();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -1001,8 +1010,9 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
   ::google::protobuf::int32 node_id_;
   ::google::protobuf::int32 store_id_;
   ::cockroach::proto::Replica* replica_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica > updated_replicas_;
   int change_type_;
+  ::google::protobuf::int32 next_replica_id_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica > updated_replicas_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
@@ -2642,6 +2652,30 @@ inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >*
 ChangeReplicasTrigger::mutable_updated_replicas() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.proto.ChangeReplicasTrigger.updated_replicas)
   return &updated_replicas_;
+}
+
+// optional int32 next_replica_id = 6;
+inline bool ChangeReplicasTrigger::has_next_replica_id() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void ChangeReplicasTrigger::set_has_next_replica_id() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void ChangeReplicasTrigger::clear_has_next_replica_id() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+inline void ChangeReplicasTrigger::clear_next_replica_id() {
+  next_replica_id_ = 0;
+  clear_has_next_replica_id();
+}
+inline ::google::protobuf::int32 ChangeReplicasTrigger::next_replica_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ChangeReplicasTrigger.next_replica_id)
+  return next_replica_id_;
+}
+inline void ChangeReplicasTrigger::set_next_replica_id(::google::protobuf::int32 value) {
+  set_has_next_replica_id();
+  next_replica_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.ChangeReplicasTrigger.next_replica_id)
 }
 
 // -------------------------------------------------------------------

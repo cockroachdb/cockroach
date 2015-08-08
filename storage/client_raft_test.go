@@ -663,6 +663,16 @@ func TestReplicateAddAndRemove(t *testing.T) {
 
 		// The removed store no longer has any of the data from the range.
 		verify([]int64{39, 0, 39, 39})
+
+		desc := mtc.stores[0].LookupReplica(proto.KeyMin, nil).Desc()
+		replicaIDsByStore := map[proto.StoreID]proto.ReplicaID{}
+		for _, rep := range desc.Replicas {
+			replicaIDsByStore[rep.StoreID] = rep.ReplicaID
+		}
+		expected := map[proto.StoreID]proto.ReplicaID{1: 1, 4: 2, 3: 4}
+		if !reflect.DeepEqual(expected, replicaIDsByStore) {
+			t.Fatalf("expected replica IDs to be %v but got %v", expected, replicaIDsByStore)
+		}
 	}
 }
 

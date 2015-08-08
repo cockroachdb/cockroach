@@ -224,18 +224,28 @@ class Replica : public ::google::protobuf::Message {
   ::google::protobuf::int32 store_id() const;
   void set_store_id(::google::protobuf::int32 value);
 
+  // optional int32 replica_id = 3;
+  bool has_replica_id() const;
+  void clear_replica_id();
+  static const int kReplicaIdFieldNumber = 3;
+  ::google::protobuf::int32 replica_id() const;
+  void set_replica_id(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.Replica)
  private:
   inline void set_has_node_id();
   inline void clear_has_node_id();
   inline void set_has_store_id();
   inline void clear_has_store_id();
+  inline void set_has_replica_id();
+  inline void clear_has_replica_id();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::int32 node_id_;
   ::google::protobuf::int32 store_id_;
+  ::google::protobuf::int32 replica_id_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fmetadata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fmetadata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fmetadata_2eproto();
@@ -352,6 +362,13 @@ class RangeDescriptor : public ::google::protobuf::Message {
   ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >*
       mutable_replicas();
 
+  // optional int32 next_replica_id = 5;
+  bool has_next_replica_id() const;
+  void clear_next_replica_id();
+  static const int kNextReplicaIdFieldNumber = 5;
+  ::google::protobuf::int32 next_replica_id() const;
+  void set_next_replica_id(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.RangeDescriptor)
  private:
   inline void set_has_range_id();
@@ -360,6 +377,8 @@ class RangeDescriptor : public ::google::protobuf::Message {
   inline void clear_has_start_key();
   inline void set_has_end_key();
   inline void clear_has_end_key();
+  inline void set_has_next_replica_id();
+  inline void clear_has_next_replica_id();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -368,6 +387,7 @@ class RangeDescriptor : public ::google::protobuf::Message {
   ::google::protobuf::internal::ArenaStringPtr start_key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica > replicas_;
+  ::google::protobuf::int32 next_replica_id_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fmetadata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fmetadata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fmetadata_2eproto();
@@ -1079,6 +1099,30 @@ inline void Replica::set_store_id(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.proto.Replica.store_id)
 }
 
+// optional int32 replica_id = 3;
+inline bool Replica::has_replica_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void Replica::set_has_replica_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void Replica::clear_has_replica_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void Replica::clear_replica_id() {
+  replica_id_ = 0;
+  clear_has_replica_id();
+}
+inline ::google::protobuf::int32 Replica::replica_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Replica.replica_id)
+  return replica_id_;
+}
+inline void Replica::set_replica_id(::google::protobuf::int32 value) {
+  set_has_replica_id();
+  replica_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.Replica.replica_id)
+}
+
 // -------------------------------------------------------------------
 
 // RangeDescriptor
@@ -1241,6 +1285,30 @@ inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >*
 RangeDescriptor::mutable_replicas() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.proto.RangeDescriptor.replicas)
   return &replicas_;
+}
+
+// optional int32 next_replica_id = 5;
+inline bool RangeDescriptor::has_next_replica_id() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void RangeDescriptor::set_has_next_replica_id() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void RangeDescriptor::clear_has_next_replica_id() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void RangeDescriptor::clear_next_replica_id() {
+  next_replica_id_ = 0;
+  clear_has_next_replica_id();
+}
+inline ::google::protobuf::int32 RangeDescriptor::next_replica_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeDescriptor.next_replica_id)
+  return next_replica_id_;
+}
+inline void RangeDescriptor::set_next_replica_id(::google::protobuf::int32 value) {
+  set_has_next_replica_id();
+  next_replica_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeDescriptor.next_replica_id)
 }
 
 // -------------------------------------------------------------------

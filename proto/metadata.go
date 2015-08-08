@@ -24,6 +24,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // NodeID is a custom type for a cockroach node ID. (not a raft node ID)
@@ -43,6 +45,9 @@ type StoreID int32
 func (n StoreID) String() string {
 	return strconv.FormatInt(int64(n), 10)
 }
+
+// ReplicaID is a custom type for a range replica ID.
+type ReplicaID int32
 
 // RaftNodeID is a custom type for a Raft node ID. A raft node ID
 // is composed of a concatenation of NodeID + StoreID.
@@ -138,6 +143,25 @@ func (r *RangeDescriptor) FindReplica(storeID StoreID) (int, *Replica) {
 		}
 	}
 	return -1, nil
+}
+
+// Validate performs some basic validation of the contents of a range descriptor.
+func (r *RangeDescriptor) Validate() error {
+	if r.NextReplicaID == 0 {
+		return util.Errorf("NextReplicaID must be non-zero")
+	}
+	seen := map[ReplicaID]struct{}{}
+	for _, rep := range r.Replicas {
+		if _, ok := seen[rep.ReplicaID]; ok {
+			return util.Errorf("ReplicaID %d was reused", rep.ReplicaID)
+		}
+		seen[rep.ReplicaID] = struct{}{}
+		if rep.ReplicaID >= r.NextReplicaID {
+			return util.Errorf("ReplicaID %d must be less than NextReplicaID %d",
+				rep.ReplicaID, r.NextReplicaID)
+		}
+	}
+	return nil
 }
 
 // Stringer implementation for replica.

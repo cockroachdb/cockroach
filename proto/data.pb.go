@@ -337,6 +337,7 @@ type ChangeReplicasTrigger struct {
 	Replica Replica `protobuf:"bytes,4,opt,name=replica" json:"replica"`
 	// The new replica list with this change applied.
 	UpdatedReplicas  []Replica `protobuf:"bytes,5,rep,name=updated_replicas" json:"updated_replicas"`
+	NextReplicaID    ReplicaID `protobuf:"varint,6,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
 	XXX_unrecognized []byte    `json:"-"`
 }
 
@@ -1471,6 +1472,22 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NextReplicaID", wireType)
+			}
+			m.NextReplicaID = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.NextReplicaID |= (ReplicaID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {
@@ -2596,6 +2613,7 @@ func (m *ChangeReplicasTrigger) Size() (n int) {
 			n += 1 + l + sovData(uint64(l))
 		}
 	}
+	n += 1 + sovData(uint64(m.NextReplicaID))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -3021,6 +3039,9 @@ func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
+	data[i] = 0x30
+	i++
+	i = encodeVarintData(data, i, uint64(m.NextReplicaID))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

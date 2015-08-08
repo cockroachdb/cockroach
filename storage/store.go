@@ -845,15 +845,20 @@ func (s *Store) RaftStatus(rangeID proto.RangeID) *raft.Status {
 // the range tree and the root node, the first range, to it.
 func (s *Store) BootstrapRange() error {
 	desc := &proto.RangeDescriptor{
-		RangeID:  1,
-		StartKey: proto.KeyMin,
-		EndKey:   proto.KeyMax,
+		RangeID:       1,
+		StartKey:      proto.KeyMin,
+		EndKey:        proto.KeyMax,
+		NextReplicaID: 2,
 		Replicas: []proto.Replica{
 			{
-				NodeID:  1,
-				StoreID: 1,
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 1,
 			},
 		},
+	}
+	if err := desc.Validate(); err != nil {
+		return err
 	}
 	batch := s.engine.NewBatch()
 	ms := &engine.MVCCStats{}
@@ -989,18 +994,22 @@ func (s *Store) EventFeed() StoreEventFeed { return s.feed }
 func (s *Store) Tracer() *tracer.Tracer { return s.ctx.Tracer }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
-// keys and the supplied proto.Replicas slice. It allocates new Raft
-// and range IDs to fill out the supplied replicas.
+// keys and the supplied proto.Replicas slice. It allocates new
+// replica IDs to fill out the supplied replicas.
 func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error) {
 	id, err := s.rangeIDAlloc.Allocate()
 	if err != nil {
 		return nil, err
 	}
 	desc := &proto.RangeDescriptor{
-		RangeID:  proto.RangeID(id),
-		StartKey: start,
-		EndKey:   end,
-		Replicas: append([]proto.Replica(nil), replicas...),
+		RangeID:       proto.RangeID(id),
+		StartKey:      start,
+		EndKey:        end,
+		Replicas:      append([]proto.Replica(nil), replicas...),
+		NextReplicaID: proto.ReplicaID(len(replicas) + 1),
+	}
+	for i := range desc.Replicas {
+		desc.Replicas[i].ReplicaID = proto.ReplicaID(i + 1)
 	}
 	return desc, nil
 }
