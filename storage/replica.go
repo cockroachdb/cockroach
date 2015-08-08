@@ -978,8 +978,10 @@ func (r *Replica) maybeGossipFirstRange() error {
 	ctx := r.context()
 
 	// Gossip the cluster ID from all replicas of the first range.
-	log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.rm.ClusterID(),
-		r.rm.StoreID(), r.Desc().RangeID)
+	if log.V(1) {
+		log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.rm.ClusterID(),
+			r.rm.StoreID(), r.Desc().RangeID)
+	}
 	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
@@ -987,11 +989,15 @@ func (r *Replica) maybeGossipFirstRange() error {
 	if ok, err := r.getLeaseForGossip(ctx); !ok || err != nil {
 		return err
 	}
-	log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
+	if log.V(1) {
+		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
+	}
 	if err := r.rm.Gossip().AddInfo(gossip.KeySentinel, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
-	log.Infoc(ctx, "gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
+	if log.V(1) {
+		log.Infoc(ctx, "gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
+	}
 	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), configGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip first range metadata: %s", err)
 	}
@@ -1046,7 +1052,9 @@ func (r *Replica) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bo
 			}
 			if prevHash, ok := r.configHashes[i]; !ok || !bytes.Equal(prevHash, hash) {
 				r.configHashes[i] = hash
-				log.Infoc(ctx, "gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RangeID)
+				if log.V(1) {
+					log.Infoc(ctx, "gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RangeID)
+				}
 				if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0); err != nil {
 					log.Errorc(ctx, "failed to gossip %s configMap: %s", cd.gossipKey, err)
 				}
