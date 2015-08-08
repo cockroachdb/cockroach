@@ -48,7 +48,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	// convenient access to index keys which we are not currently
 	// deleting.
 	node, err := p.Select(&parser.Select{
-		Exprs: parser.SelectExprs{&parser.StarExpr{}},
+		Exprs: parser.SelectExprs{parser.StarSelectExpr},
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,
 	})

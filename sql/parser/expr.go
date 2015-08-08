@@ -53,7 +53,6 @@ func (*UnaryExpr) expr()      {}
 func (*FuncExpr) expr()       {}
 func (*CaseExpr) expr()       {}
 func (*CastExpr) expr()       {}
-func (*StarExpr) expr()       {}
 func (DBool) expr()           {}
 func (DInt) expr()            {}
 func (DFloat) expr()          {}
@@ -246,6 +245,9 @@ type QualifiedName struct {
 	Indirect Indirection
 }
 
+// StarExpr is a convenience variable that represents an unqualified "*".
+var StarExpr = &QualifiedName{Indirect: Indirection{unqualifiedStar}}
+
 // Database returns the database portion of the name. Note that the returned
 // string is not quoted even if the name is a keyword.
 func (n *QualifiedName) Database() string {
@@ -293,9 +295,6 @@ func (n *QualifiedName) Column() string {
 // IsStar returns true iff the qualified name contains a non-empty base and is
 // composed of 0 or more name indirections and a trailing star indirection.
 func (n *QualifiedName) IsStar() bool {
-	if len(n.Base) == 0 {
-		return false
-	}
 	count := len(n.Indirect)
 	if count == 0 {
 		return false
@@ -312,6 +311,10 @@ func (n *QualifiedName) IsStar() bool {
 }
 
 func (n *QualifiedName) String() string {
+	// Special handling for unqualified star indirection.
+	if n.Base == "" && len(n.Indirect) == 1 && n.Indirect[0] == unqualifiedStar {
+		return n.Indirect[0].String()
+	}
 	return fmt.Sprintf("%s%s", n.Base, n.Indirect)
 }
 

@@ -59,55 +59,45 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	exprs := make([]parser.Expr, 0, len(n.Exprs))
 	columns := make([]string, 0, len(n.Exprs))
 	for _, e := range n.Exprs {
-		switch t := e.(type) {
-		case *parser.StarExpr:
+		// If a QualifiedName has a StarIndirection suffix we need to match the
+		// prefix of the qualified name to one of the tables in the query and
+		// then expand the "*" into a list of columns.
+		if qname, ok := e.Expr.(*parser.QualifiedName); ok && qname.IsStar() {
 			if desc == nil {
-				return nil, fmt.Errorf("* with no tables specified is not valid")
+				return nil, fmt.Errorf("%s with no tables specified is not valid", qname)
 			}
-			for _, col := range desc.Columns {
-				columns = append(columns, col.Name)
-				exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
+			if e.As != "" {
+				return nil, fmt.Errorf("%s cannot be aliased", qname)
 			}
-		case *parser.NonStarExpr:
-			// If a QualifiedName has a StarIndirection suffix we need to match the
-			// prefix of the qualified name to one of the tables in the query and
-			// then expand the "*" into a list of columns.
-			if qname, ok := t.Expr.(*parser.QualifiedName); ok && qname.IsStar() {
-				if desc == nil {
-					return nil, fmt.Errorf("%s with no tables specified is not valid", qname)
+			if len(qname.Indirect) == 1 {
+				if qname.Base != "" && !strings.EqualFold(desc.Name, string(qname.Base)) {
+					return nil, fmt.Errorf("table \"%s\" not found", qname.Base)
 				}
-				if t.As != "" {
-					return nil, fmt.Errorf("%s cannot be aliased", qname)
-				}
-				if len(qname.Indirect) == 1 {
-					if !strings.EqualFold(desc.Name, string(qname.Base)) {
-						return nil, fmt.Errorf("table \"%s\" not found", qname.Base)
-					}
 
-					// TODO(pmattis): Refactor to share this with the parser.StarExpr
-					// handling above.
-					for _, col := range desc.Columns {
-						columns = append(columns, col.Name)
-						exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
-					}
-					break
+				// TODO(pmattis): Refactor to share this with the parser.StarExpr
+				// handling above.
+				for _, col := range desc.Columns {
+					columns = append(columns, col.Name)
+					exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
 				}
-				// TODO(pmattis): Handle len(qname.Indirect) > 1: <database>.<table>.*.
+				continue
 			}
+			// TODO(pmattis): Handle len(qname.Indirect) > 1: <database>.<table>.*.
+		}
 
-			exprs = append(exprs, t.Expr)
-			if t.As != "" {
-				columns = append(columns, string(t.As))
-			} else {
-				// If the expression is a qualified name, use the column name, not the
-				// full qualification as the column name to return.
-				switch e := t.Expr.(type) {
-				case *parser.QualifiedName:
-					columns = append(columns, e.Column())
-				default:
-					columns = append(columns, t.Expr.String())
-				}
-			}
+		exprs = append(exprs, e.Expr)
+		if e.As != "" {
+			columns = append(columns, string(e.As))
+			continue
+		}
+
+		// If the expression is a qualified name, use the column name, not the
+		// full qualification as the column name to return.
+		switch t := e.Expr.(type) {
+		case *parser.QualifiedName:
+			columns = append(columns, t.Column())
+		default:
+			columns = append(columns, e.Expr.String())
 		}
 	}
 

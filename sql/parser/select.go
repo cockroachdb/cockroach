@@ -98,27 +98,16 @@ func (node SelectExprs) String() string {
 }
 
 // SelectExpr represents a SELECT expression.
-type SelectExpr interface {
-	selectExpr()
-}
-
-func (*StarExpr) selectExpr()    {}
-func (*NonStarExpr) selectExpr() {}
-
-// StarExpr defines a '*'.
-type StarExpr struct{}
-
-func (node *StarExpr) String() string {
-	return "*"
-}
-
-// NonStarExpr defines a non-'*' select expr.
-type NonStarExpr struct {
+type SelectExpr struct {
 	Expr Expr
 	As   Name
 }
 
-func (node *NonStarExpr) String() string {
+// StarSelectExpr is a convenience variable that represents an unqualified "*"
+// in a select expression.
+var StarSelectExpr = SelectExpr{Expr: StarExpr}
+
+func (node SelectExpr) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s", node.Expr)
 	if node.As != "" {

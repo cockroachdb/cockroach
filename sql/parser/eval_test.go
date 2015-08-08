@@ -183,7 +183,7 @@ func TestEvalExpr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
+		expr := q[0].(*Select).Exprs[0].Expr
 		r, err := EvalExpr(expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
@@ -228,7 +228,7 @@ func TestEvalExprError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
+		expr := q[0].(*Select).Exprs[0].Expr
 		if _, err := EvalExpr(expr); !testutils.IsError(err, d.expected) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
