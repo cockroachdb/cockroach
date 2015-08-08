@@ -108,8 +108,12 @@ func (n *scanNode) Next() bool {
 
 		var vals valMap
 		if n.primaryKey == nil {
-			// This is the first key for the row, reset our vals map.
-			vals = valMap{}
+			// This is the first key for the row, create the vals map in order to
+			// decode the primary key columns.
+			vals = make(valMap, len(n.desc.PrimaryIndex.ColumnIDs))
+			// Reset the qvals map expressions to nil. The expresssion will get
+			// filled in with the column values as we decode the key-value pairs for
+			// the row.
 			for _, e := range n.qvals {
 				e.Expr = nil
 			}
@@ -163,6 +167,10 @@ func (n *scanNode) init() bool {
 	return n.initScan() && n.initExprs()
 }
 
+// initExprs initializes the render and filter expressions for the
+// scan. Initialization consists of replacing QualifiedName nodes with
+// ParenExpr nodes for which the wrapped expression can be changed for each
+// row.
 func (n *scanNode) initExprs() bool {
 	n.qvals = make(qvalMap)
 	for i := range n.render {
@@ -175,6 +183,12 @@ func (n *scanNode) initExprs() bool {
 	return n.err == nil
 }
 
+// initScan initializes (and performs) the key-value scan.
+//
+// TODO(pmattis): The key-value scan currently reads all of the key-value
+// pairs, but they could just as easily be read in chunks. Probably worthwhile
+// to separate out the retrieval of the key-value pairs into a separate
+// structure.
 func (n *scanNode) initScan() bool {
 	// Initialize our key/values.
 	if n.desc == nil {
@@ -229,11 +243,6 @@ func (n *scanNode) filterRow() (bool, error) {
 func (n *scanNode) renderRow() error {
 	if n.row == nil {
 		n.row = make([]parser.Datum, len(n.render))
-	}
-	for id, e := range n.qvals {
-		if e == nil {
-			panic(fmt.Errorf("col %d is nil", id))
-		}
 	}
 	for i, e := range n.render {
 		var err error
@@ -300,6 +309,12 @@ func (v *qnameVisitor) Visit(expr parser.Expr) parser.Expr {
 }
 
 func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *structured.TableDescriptor {
+	// TODO(pmattis): This logic isn't complete. A QualifiedName like "a.b.c"
+	// currently refers to table "a", while I think it should refer to table "b"
+	// in database "a". Need to track down what the appropriate behavior is and
+	// implement it. This could also doesn't account for ArrayIndirection, so
+	// "a[b]" is currently being interpreted as table "a" while in reality it is
+	// column "a", element "b".
 	if v.desc == nil {
 		return nil
 	}

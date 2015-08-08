@@ -86,6 +86,14 @@ query error table "foo" not found
 SELECT foo.* FROM kv
 ----
 
+query error "*" with no tables specified is not valid
+SELECT *
+----
+
+query error "kv.*" cannot be aliased
+SELECT kv.* AS foo FROM kv
+----
+
 query T colnames
 SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
 ----

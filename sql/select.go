@@ -64,18 +64,16 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		// then expand the "*" into a list of columns.
 		if qname, ok := e.Expr.(*parser.QualifiedName); ok && qname.IsStar() {
 			if desc == nil {
-				return nil, fmt.Errorf("%s with no tables specified is not valid", qname)
+				return nil, fmt.Errorf("\"%s\" with no tables specified is not valid", qname)
 			}
 			if e.As != "" {
-				return nil, fmt.Errorf("%s cannot be aliased", qname)
+				return nil, fmt.Errorf("\"%s\" cannot be aliased", qname)
 			}
 			if len(qname.Indirect) == 1 {
 				if qname.Base != "" && !strings.EqualFold(desc.Name, string(qname.Base)) {
 					return nil, fmt.Errorf("table \"%s\" not found", qname.Base)
 				}
 
-				// TODO(pmattis): Refactor to share this with the parser.StarExpr
-				// handling above.
 				for _, col := range desc.Columns {
 					columns = append(columns, col.Name)
 					exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
