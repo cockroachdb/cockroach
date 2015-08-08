@@ -149,12 +149,14 @@ changing the primary key.
 
 **Secondary key addressing**
 
-Secondary keys will be implemented as a layer of indirection to the primary
-keys. Unique secondary keys will map directly to the primary key via the
-following anatomy: `/TableID/SecondaryIndexID/SecondaryKey` -> `PrimaryKey`.
-Non-unique secondary keys must be able to address multiple primary keys, and
-so will use a prefix-based anatomy:
-`/TableID/SecondaryIndexID/SecondaryKey/PrimaryKey` -> `NULL`.
+Secondary keys are implemented as a layer of indirection to the primary key.
+Non-unique secondary keys address multiple primary keys; their anatomy
+is prefix-based: `/TableID/SecondaryIndexID/SecondaryKey/PrimaryKey` -> `NULL`.
+Unique secondary keys typically map directly to the primary key:
+`/TableID/SecondaryIndexID/SecondaryKey` -> `PrimaryKey`. An exception is made
+when a secondary index contains a `NULL` constituent; SQL defines that `NULL`
+does not compare equal to `NULL`, so these indexes are encoded as though they
+are non-unique.
 
 A lookup will involve looking up the secondary index, using the secondary key
 to pick up all the primary keys, and further using the primary keys to get to

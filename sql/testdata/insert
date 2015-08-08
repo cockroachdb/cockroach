@@ -19,7 +19,16 @@ statement error missing "k" primary key column
 INSERT INTO kv (v) VALUES ('a')
 
 statement ok
-INSERT INTO kv (k) VALUES ('nil')
+INSERT INTO kv (k) VALUES ('nil1')
+
+statement ok
+INSERT INTO kv (k) VALUES ('nil2')
+
+statement ok
+INSERT INTO kv VALUES ('nil3', NULL)
+
+statement ok
+INSERT INTO kv VALUES ('nil4', NULL)
 
 statement ok
 INSERT INTO kv (k,v) VALUES ('a', 'b'), ('c', 'd')
@@ -39,11 +48,14 @@ INSERT INTO kv VALUES ('g', 'g')
 query TT
 SELECT * FROM kv
 ----
-a   b
-c   d
-e   f
-f   g
-nil NULL
+a    b
+c    d
+e    f
+f    g
+nil1 NULL
+nil2 NULL
+nil3 NULL
+nil4 NULL
 
 statement ok
 CREATE TABLE kv2 (

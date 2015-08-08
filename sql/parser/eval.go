@@ -48,7 +48,7 @@ var _ Datum = DInt(0)
 var _ Datum = DFloat(0)
 var _ Datum = DString("")
 var _ Datum = DTuple{}
-var _ Datum = DNull{}
+var _ Datum = dNull{}
 
 // DBool is the boolean Datum.
 type DBool bool
@@ -126,17 +126,17 @@ func (d DTuple) String() string {
 	return buf.String()
 }
 
-// DNull is the NULL Datum.
-type DNull struct{}
+type dNull struct{}
 
-var null = DNull{}
+// DNull is the NULL Datum.
+var DNull = dNull{}
 
 // Type implements the Datum interface.
-func (d DNull) Type() string {
+func (d dNull) Type() string {
 	return "NULL"
 }
 
-func (d DNull) String() string {
+func (d dNull) String() string {
 	return "NULL"
 }
 
@@ -146,7 +146,7 @@ var (
 	floatType  = reflect.TypeOf(DFloat(0))
 	stringType = reflect.TypeOf(DString(""))
 	tupleType  = reflect.TypeOf(DTuple{})
-	nullType   = reflect.TypeOf(null)
+	nullType   = reflect.TypeOf(DNull)
 )
 
 type unaryArgs struct {
@@ -404,7 +404,7 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 	case NumVal:
 		v, err := strconv.ParseFloat(string(t), 64)
 		if err != nil {
-			return null, err
+			return DNull, err
 		}
 		return DFloat(v), nil
 
@@ -415,20 +415,20 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 		// Placeholders should have been replaced before expression evaluation.
 
 	case NullVal:
-		return null, nil
+		return DNull, nil
 
 	case *QualifiedName:
 		if d, ok := env.Get(t.String()); ok {
 			return d, nil
 		}
-		return null, fmt.Errorf("column \"%s\" not found", t)
+		return DNull, fmt.Errorf("column \"%s\" not found", t)
 
 	case Tuple:
 		tuple := make(DTuple, 0, len(t))
 		for _, v := range t {
 			d, err := EvalExpr(v, env)
 			if err != nil {
-				return null, err
+				return DNull, err
 			}
 			tuple = append(tuple, d)
 		}
@@ -460,31 +460,31 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 		panic(fmt.Sprintf("eval: unsupported expression type: %T", expr))
 	}
 
-	return null, fmt.Errorf("eval: unexpected expression: %T", expr)
+	return DNull, fmt.Errorf("eval: unexpected expression: %T", expr)
 }
 
 func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
-	if left == null {
-		return null, nil
+	if left == DNull {
+		return DNull, nil
 	}
 	if v, err := getBool(left); err != nil {
-		return null, err
+		return DNull, err
 	} else if !v {
 		return v, nil
 	}
 	right, err := EvalExpr(expr.Right, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
-	if right == null {
-		return null, nil
+	if right == DNull {
+		return DNull, nil
 	}
 	if v, err := getBool(right); err != nil {
-		return null, err
+		return DNull, err
 	} else if !v {
 		return v, nil
 	}
@@ -494,29 +494,29 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
-	if left != null {
+	if left != DNull {
 		if v, err := getBool(left); err != nil {
-			return null, err
+			return DNull, err
 		} else if v {
 			return v, nil
 		}
 	}
 	right, err := EvalExpr(expr.Right, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
-	if right == null {
-		return null, nil
+	if right == DNull {
+		return DNull, nil
 	}
 	if v, err := getBool(right); err != nil {
-		return null, err
+		return DNull, err
 	} else if v {
 		return v, nil
 	}
-	if left == null {
-		return null, nil
+	if left == DNull {
+		return DNull, nil
 	}
 	return DBool(false), nil
 }
@@ -524,14 +524,14 @@ func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 func evalNotExpr(expr *NotExpr, env Env) (Datum, error) {
 	d, err := EvalExpr(expr.Expr, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
-	if d == null {
-		return null, nil
+	if d == DNull {
+		return DNull, nil
 	}
 	v, err := getBool(d)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
 	return !v, nil
 }
@@ -543,7 +543,7 @@ func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
 
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
 
 	limits := [2]struct {
@@ -558,14 +558,14 @@ func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
 	for _, l := range limits {
 		arg, err := EvalExpr(l.expr, env)
 		if err != nil {
-			return null, err
+			return DNull, err
 		}
 		cmp, err := evalComparisonOp(l.op, left, arg)
 		if err != nil {
-			return null, err
+			return DNull, err
 		}
 		if v, err = getBool(cmp); err != nil {
-			return null, err
+			return DNull, err
 		} else if !v {
 			break
 		}
@@ -580,9 +580,9 @@ func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
 func evalNullCheck(expr *NullCheck, env Env) (Datum, error) {
 	d, err := EvalExpr(expr.Expr, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
-	v := d == null
+	v := d == DNull
 	if expr.Not {
 		v = !v
 	}
@@ -592,19 +592,19 @@ func evalNullCheck(expr *NullCheck, env Env) (Datum, error) {
 func evalComparisonExpr(expr *ComparisonExpr, env Env) (Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
 	right, err := EvalExpr(expr.Right, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
 
 	return evalComparisonOp(expr.Operator, left, right)
 }
 
 func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
-	if left == null || right == null {
-		return null, nil
+	if left == DNull || right == DNull {
+		return DNull, nil
 	}
 
 	not := false
@@ -638,40 +638,40 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 
 	switch op {
 	case Like, NotLike:
-		return null, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
+		return DNull, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 
-	return null, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+	return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
 		left.Type(), op, right.Type())
 }
 
 func evalBinaryExpr(expr *BinaryExpr, env Env) (Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
 	right, err := EvalExpr(expr.Right, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
 	f := binOps[binArgs{expr.Operator, reflect.TypeOf(left), reflect.TypeOf(right)}]
 	if f != nil {
 		return f(left, right)
 	}
-	return null, fmt.Errorf("unsupported binary operator: <%s> %s <%s>",
+	return DNull, fmt.Errorf("unsupported binary operator: <%s> %s <%s>",
 		left.Type(), expr.Operator, right.Type())
 }
 
 func evalUnaryExpr(expr *UnaryExpr, env Env) (Datum, error) {
 	d, err := EvalExpr(expr.Expr, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
 	f := unaryOps[unaryArgs{expr.Operator, reflect.TypeOf(d)}]
 	if f != nil {
 		return f(d)
 	}
-	return null, fmt.Errorf("unsupported unary operator: %s <%s>",
+	return DNull, fmt.Errorf("unsupported unary operator: %s <%s>",
 		expr.Operator, d.Type())
 }
 
@@ -679,10 +679,10 @@ func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
 	name := strings.ToLower(expr.Name.String())
 	b, ok := builtins[name]
 	if !ok {
-		return null, fmt.Errorf("%s: unknown function", expr.Name)
+		return DNull, fmt.Errorf("%s: unknown function", expr.Name)
 	}
 	if b.nArgs != -1 && b.nArgs != len(expr.Exprs) {
-		return null, fmt.Errorf("%s: incorrect number of arguments: %d vs %d",
+		return DNull, fmt.Errorf("%s: incorrect number of arguments: %d vs %d",
 			expr.Name, b.nArgs, len(expr.Exprs))
 	}
 
@@ -690,14 +690,14 @@ func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
 	for _, e := range expr.Exprs {
 		arg, err := EvalExpr(e, env)
 		if err != nil {
-			return null, err
+			return DNull, err
 		}
 		args = append(args, arg)
 	}
 
 	res, err := b.fn(args)
 	if err != nil {
-		return null, fmt.Errorf("%s: %v", expr.Name, err)
+		return DNull, fmt.Errorf("%s: %v", expr.Name, err)
 	}
 	return res, nil
 }
@@ -709,20 +709,20 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 		// For each "when" expression we compare for equality to <val>.
 		val, err := EvalExpr(expr.Expr, env)
 		if err != nil {
-			return null, err
+			return DNull, err
 		}
 
 		for _, when := range expr.Whens {
 			arg, err := EvalExpr(when.Cond, env)
 			if err != nil {
-				return null, err
+				return DNull, err
 			}
 			d, err := evalComparisonOp(EQ, val, arg)
 			if err != nil {
-				return null, err
+				return DNull, err
 			}
 			if v, err := getBool(d); err != nil {
-				return null, err
+				return DNull, err
 			} else if v {
 				return EvalExpr(when.Val, env)
 			}
@@ -732,10 +732,10 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 		for _, when := range expr.Whens {
 			d, err := EvalExpr(when.Cond, env)
 			if err != nil {
-				return null, err
+				return DNull, err
 			}
 			if v, err := getBool(d); err != nil {
-				return null, err
+				return DNull, err
 			} else if v {
 				return EvalExpr(when.Val, env)
 			}
@@ -745,7 +745,7 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 	if expr.Else != nil {
 		return EvalExpr(expr.Else, env)
 	}
-	return null, nil
+	return DNull, nil
 }
 
 func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
@@ -757,10 +757,10 @@ func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
 	for i := range left {
 		d, err := evalComparisonOp(EQ, left[i], right[i])
 		if err != nil {
-			return null, err
+			return DNull, err
 		}
 		if v, err := getBool(d); err != nil {
-			return null, err
+			return DNull, err
 		} else if !v {
 			return v, nil
 		}
@@ -769,7 +769,7 @@ func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
 }
 
 func evalTupleIN(arg, values Datum) (Datum, error) {
-	if arg == null {
+	if arg == DNull {
 		return DBool(false), nil
 	}
 
@@ -787,7 +787,7 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 		m := make(map[Datum]struct{}, len(vtuple))
 		for _, val := range vtuple {
 			if reflect.TypeOf(arg) != reflect.TypeOf(val) {
-				return null, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+				return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
 					arg.Type(), EQ, val.Type())
 			}
 			m[val] = struct{}{}
@@ -801,10 +801,10 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 		for _, val := range vtuple {
 			d, err := evalComparisonOp(EQ, arg, val)
 			if err != nil {
-				return null, err
+				return DNull, err
 			}
 			if v, err := getBool(d); err != nil {
-				return null, err
+				return DNull, err
 			} else if v {
 				return v, nil
 			}
@@ -817,7 +817,7 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 func evalCastExpr(expr *CastExpr, env Env) (Datum, error) {
 	d, err := EvalExpr(expr.Expr, env)
 	if err != nil {
-		return null, err
+		return DNull, err
 	}
 
 	switch expr.Type.(type) {
@@ -834,7 +834,7 @@ func evalCastExpr(expr *CastExpr, env Env) (Datum, error) {
 			// spec. Is that ok?
 			b, err := strconv.ParseBool(string(v))
 			if err != nil {
-				return null, err
+				return DNull, err
 			}
 			return DBool(b), nil
 		}
@@ -853,7 +853,7 @@ func evalCastExpr(expr *CastExpr, env Env) (Datum, error) {
 		case DString:
 			i, err := strconv.ParseInt(string(v), 0, 64)
 			if err != nil {
-				return null, err
+				return DNull, err
 			}
 			return DInt(i), nil
 		}
@@ -872,7 +872,7 @@ func evalCastExpr(expr *CastExpr, env Env) (Datum, error) {
 		case DString:
 			f, err := strconv.ParseFloat(string(v), 64)
 			if err != nil {
-				return null, err
+				return DNull, err
 			}
 			return DFloat(f), nil
 		}
@@ -880,7 +880,7 @@ func evalCastExpr(expr *CastExpr, env Env) (Datum, error) {
 	case *CharType, *TextType, *BlobType:
 		var s DString
 		switch d.(type) {
-		case DBool, DInt, DFloat, DNull:
+		case DBool, DInt, DFloat, dNull:
 			s = DString(d.String())
 		case DString:
 			s = d.(DString)
@@ -902,5 +902,5 @@ func evalCastExpr(expr *CastExpr, env Env) (Datum, error) {
 		// case *TimestampType:
 	}
 
-	return null, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)
+	return DNull, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)
 }
