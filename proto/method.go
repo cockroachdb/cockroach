@@ -47,6 +47,10 @@ const (
 	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
 	// the latter endpoint excluded.
 	Scan
+	// ReverseScan fetches the values for all keys which fall between
+	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
+	// the latter endpoint excluded.
+	ReverseScan
 	// EndTransaction either commits or aborts an ongoing transaction.
 	EndTransaction
 	// AdminSplit is called to coordinate a split of a range.

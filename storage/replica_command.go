@@ -88,6 +88,10 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args pro
 		var resp proto.ScanResponse
 		resp, intents, err = r.Scan(batch, *tArgs)
 		reply = &resp
+	case *proto.ReverseScanRequest:
+		var resp proto.ReverseScanResponse
+		resp, intents, err = r.ReverseScan(batch, *tArgs)
+		reply = &resp
 	case *proto.EndTransactionRequest:
 		var resp proto.EndTransactionResponse
 		resp, intents, err = r.EndTransaction(batch, ms, *tArgs)
@@ -224,6 +228,18 @@ func (r *Replica) Scan(batch engine.Engine, args proto.ScanRequest) (proto.ScanR
 	var reply proto.ScanResponse
 
 	rows, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
+	reply.Rows = rows
+	return reply, intents, err
+}
+
+// ReverseScan scans the range in reverse order starting at end key(exclusive) through
+// start key up to some maximum number of results. The last key of the iteration is
+// returned with the reply.
+func (r *Replica) ReverseScan(batch engine.Engine, args proto.ReverseScanRequest) (proto.ReverseScanResponse, []proto.Intent, error) {
+	var reply proto.ReverseScanResponse
+
+	rows, intents, err := engine.MVCCReverseScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp,
+		args.ReadConsistency == proto.CONSISTENT, args.Txn)
 	reply.Rows = rows
 	return reply, intents, err
 }
@@ -506,13 +522,50 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		rangeCount = 1
 	}
 
-	// We want to search for the metadata key just greater than args.Key. Scan
-	// for both the requested key and the keys immediately afterwards, up to
-	// MaxRanges.
-	startKey, endKey := keys.MetaScanBounds(args.Key)
-	// Scan for descriptors.
-	kvs, intents, err := engine.MVCCScan(batch, startKey, endKey, rangeCount,
-		args.Timestamp, consistent, args.Txn)
+	var kvs []proto.KeyValue
+	var intents []proto.Intent
+	var err error
+	if !args.Reverse {
+		// We want to search for the metadata key just greater than args.Key. Scan
+		// for both the requested key and the keys immediately afterwards, up to
+		// MaxRanges.
+		startKey, endKey := keys.MetaScanBounds(args.Key)
+		// Scan for descriptors.
+		kvs, intents, err = engine.MVCCScan(batch, startKey, endKey, rangeCount,
+			args.Timestamp, consistent, args.Txn)
+	} else {
+		// Use MVCCScan to get first range. There are two cases: 1. The args.Key is
+		// in the middle of the range. 2. The args.Key is the start/end key of the
+		// range.
+		// In case 1, we need use the MVCCScan() to get the first range descriptor,
+		// because the semantic of ReverseScan can`t do the work. For example: If we
+		// hava ranges ["a", "c") and ["c", "f") and the reverse scan request`s key
+		// range is ["b","d")."d".Next() is less than "f", the meta row {"f"->["c", "f")}
+		// will be ignored by MVCCReverseScan.
+		// In case 2, the range descriptor got by MVCCScan wil be filtered before results
+		// are returned.
+		startKey, endKey := keys.MetaScanBounds(args.Key)
+		kvs, intents, err = engine.MVCCScan(batch, startKey, endKey, 1,
+			args.Timestamp, consistent, args.Txn)
+		if err != nil {
+			return reply, nil, err
+		}
+
+		// We want to search for the metadata key just less or equal to args.Key.
+		// Scan in reverse order for both the requested key and the keys immediately
+		// backwards, up to MaxRanges.
+		startKey, endKey, err := keys.MetaReverseScanBounds(args.Key)
+		if err != nil {
+			return reply, nil, err
+		}
+		// Reverse scan for descriptors.
+		revKvs, revIntents, err := engine.MVCCReverseScan(batch, startKey, endKey, rangeCount,
+			args.Timestamp, consistent, args.Txn)
+
+		// Merge the results, the total ranges may be bigger than rangeCount.
+		kvs = append(kvs, revKvs...)
+		intents = append(intents, revIntents...)
+	}
 	if err != nil {
 		// An error here is likely a WriteIntentError when reading consistently.
 		return reply, nil, err
@@ -566,8 +619,21 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 			return reply, nil, err
 		}
 	}
-	reply.Ranges = rds
 
+	// Checks the results before return as the first range descriptor and the total
+	// range count maybe not correct we have talked above.
+	if args.Reverse {
+		// Checks rds[0]. In case 2 we need to remove first range descriptor.
+		if args.Key.Equal(keys.RangeMetaKey(rds[0].StartKey)) {
+			rds = rds[1:]
+		} else {
+			// Checks the results count.
+			if int64(len(rds)) > rangeCount {
+				rds = rds[:rangeCount]
+			}
+		}
+	}
+	reply.Ranges = rds
 	return reply, intents, nil
 }
 

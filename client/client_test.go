@@ -429,6 +429,38 @@ func TestClientBatch(t *testing.T) {
 			t.Errorf("expected scan2 result %d to be %d; got %d", i, i+5, val)
 		}
 	}
+
+	// Try 2 reverse scans.
+	b = &client.Batch{}
+	b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
+	b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
+	if err := db.Run(b); err != nil {
+		t.Error(err)
+	}
+
+	revScan1 := b.Results[0].Rows
+	revScan2 := b.Results[1].Rows
+	expectedCount := 5
+	rev1TopIndex := 4
+	rev2TopIndex := 9
+	if len(revScan1) != expectedCount || len(revScan2) != expectedCount {
+		t.Errorf("expected reverse scan results to include 5 and 5 rows; got %d and %d",
+			len(revScan1), len(revScan2))
+	}
+	for i := 0; i < expectedCount; i++ {
+		if key := proto.Key(revScan1[i].Key); !key.Equal(keys[rev1TopIndex-i]) {
+			t.Errorf("expected revScan1 key %d to be %q; got %q", i, keys[rev1TopIndex-i], key)
+		}
+		if val := revScan1[i].ValueInt(); val != int64(rev1TopIndex-i) {
+			t.Errorf("expected revScan1 result %d to be %d; got %d", i, rev1TopIndex-i, val)
+		}
+		if key := proto.Key(revScan2[i].Key); !key.Equal(keys[rev2TopIndex-i]) {
+			t.Errorf("expected revScan2 key %d to be %q; got %q", i, keys[rev2TopIndex-i], key)
+		}
+		if val := revScan2[i].ValueInt(); val != int64(rev2TopIndex-i) {
+			t.Errorf("expected revScan2 result %d to be %d; got %d", i, rev2TopIndex-i, val)
+		}
+	}
 }
 
 // concurrentIncrements starts two Goroutines in parallel, both of which

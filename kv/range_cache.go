@@ -114,7 +114,7 @@ func (rdc *rangeDescriptorCache) stringLocked() string {
 // the key's data, or an error if any occurred.
 func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	options lookupOptions) (*proto.RangeDescriptor, error) {
-	if _, r := rdc.getCachedRangeDescriptor(key); r != nil {
+	if _, r := rdc.getCachedRangeDescriptor(key, options.useReverseScan); r != nil {
 		return r, nil
 	}
 
@@ -164,7 +164,8 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 // seenDesc should always be passed in and is used as the basis of a
 // compare-and-evict (as pointers); if it is nil, eviction is unconditional
 // but a warning will be logged.
-func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, seenDesc *proto.RangeDescriptor) {
+func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key,
+	seenDesc *proto.RangeDescriptor, isReverse bool) {
 	if seenDesc == nil {
 		log.Warningf("compare-and-evict for key %s with nil descriptor; clearing unconditionally", descKey)
 	}
@@ -172,7 +173,7 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 	rdc.rangeCacheMu.Lock()
 	defer rdc.rangeCacheMu.Unlock()
 
-	rngKey, cachedDesc := rdc.getCachedRangeDescriptorLocked(descKey)
+	rngKey, cachedDesc := rdc.getCachedRangeDescriptorLocked(descKey, isReverse)
 	// Note that we're doing a "compare-and-erase": If seenDesc is not nil,
 	// we want to clean the cache only if it equals the cached range
 	// descriptor as a pointer. If not, then likely some other caller
@@ -194,7 +195,7 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 		// evict that key as well. This loop ends after the meta1 range, which
 		// returns KeyMin as its metadata key.
 		descKey = keys.RangeMetaKey(descKey)
-		rngKey, cachedDesc = rdc.getCachedRangeDescriptorLocked(descKey)
+		rngKey, cachedDesc = rdc.getCachedRangeDescriptorLocked(descKey, isReverse)
 	}
 }
 
@@ -202,22 +203,29 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 // the range which contains the given key, if present in the cache. It
 // acquires a read lock on rdc.rangeCacheMu before delegating to
 // getCachedRangeDescriptorLocked.
-func (rdc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
+func (rdc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key, isReverse bool) (
 	rangeCacheKey, *proto.RangeDescriptor) {
 	rdc.rangeCacheMu.RLock()
 	defer rdc.rangeCacheMu.RUnlock()
-	return rdc.getCachedRangeDescriptorLocked(key)
+	return rdc.getCachedRangeDescriptorLocked(key, isReverse)
 }
 
 // getCachedRangeDescriptorLocked is a helper function to retrieve the
 // descriptor of the range which contains the given key, if present in the
 // cache. It is assumed that the caller holds a read lock on rdc.rangeCacheMu.
-func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key) (
+func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key, isReverse bool) (
 	rangeCacheKey, *proto.RangeDescriptor) {
 	// The cache is indexed using the end-key of the range, but the
-	// end-key is non-inclusive. If inclusive is false, we access the
-	// cache using key.Next().
-	metaKey := keys.RangeMetaKey(key.Next())
+	// end-key is non-inclusive.
+	var metaKey proto.Key
+	if !isReverse {
+		// If it is not reverse scan, we access the cache using key.Next().
+		metaKey = keys.RangeMetaKey(key.Next())
+	} else {
+		// Because reverse scan request is begining at end key(exclusive),so we
+		// access the cache using key directly.
+		metaKey = keys.RangeMetaKey(key)
+	}
 
 	k, v, ok := rdc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if !ok {
@@ -226,8 +234,18 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key) (
 	metaEndKey := k.(rangeCacheKey)
 	rd := v.(*proto.RangeDescriptor)
 
-	// Check that key actually belongs to range
+	// Check that key actually belongs to the range.
 	if !rd.ContainsKey(keys.KeyAddress(key)) {
+		// The key is the EndKey of the range in reverse scan, just return the range descriptor.
+		if isReverse && key.Equal(rd.EndKey) {
+			return metaEndKey, rd
+		}
+		return nil, nil
+	}
+
+	// The key is the StartKey of the range in reverse scan. We need to return the previous range
+	// descriptor, but it is not in the cache yet.
+	if isReverse && key.Equal(rd.StartKey) {
 		return nil, nil
 	}
 	return metaEndKey, rd

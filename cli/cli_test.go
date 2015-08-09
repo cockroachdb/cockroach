@@ -70,6 +70,7 @@ func Example_basic() {
 
 	c.Run("kv put a 1 b 2")
 	c.Run("kv scan")
+	c.Run("kv revscan")
 	c.Run("kv del a")
 	c.Run("kv get a")
 	c.Run("kv get b")
@@ -79,6 +80,7 @@ func Example_basic() {
 	c.Run("kv inc c -- -60")
 	c.Run("kv inc c -- -9")
 	c.Run("kv scan")
+	c.Run("kv revscan")
 	c.Run("kv inc c b")
 	c.Run("quit")
 
@@ -87,6 +89,9 @@ func Example_basic() {
 	// kv scan
 	// "a"	"1"
 	// "b"	"2"
+	// kv revscan
+	// "b"	"2"
+	// "a"	"1"
 	// kv del a
 	// kv get a
 	// "a" not found
@@ -105,6 +110,9 @@ func Example_basic() {
 	// kv scan
 	// "b"	"2"
 	// "c"	"\x00\x00\x00\x00\x00\x00\x00*"
+	// kv revscan
+	// "c"	"\x00\x00\x00\x00\x00\x00\x00*"
+	// "b"	"2"
 	// kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
 	// quit
@@ -173,12 +181,15 @@ func Example_ranges() {
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan")
+	c.Run("kv revscan")
 	c.Run("range split c")
 	c.Run("range ls")
 	c.Run("kv scan")
+	c.Run("kv revscan")
 	c.Run("range merge b")
 	c.Run("range ls")
 	c.Run("kv scan")
+	c.Run("kv revscan")
 	c.Run("quit")
 
 	// Output:
@@ -188,6 +199,11 @@ func Example_ranges() {
 	// "b"	"2"
 	// "c"	"3"
 	// "d"	"4"
+	// kv revscan
+	// "d"	"4"
+	// "c"	"3"
+	// "b"	"2"
+	// "a"	"1"
 	// range split c
 	// range ls
 	// ""-"c" [1]
@@ -199,6 +215,11 @@ func Example_ranges() {
 	// "b"	"2"
 	// "c"	"3"
 	// "d"	"4"
+	// kv revscan
+	// "d"	"4"
+	// "c"	"3"
+	// "b"	"2"
+	// "a"	"1"
 	// range merge b
 	// range ls
 	// ""-"\xff\xff" [1]
@@ -208,6 +229,11 @@ func Example_ranges() {
 	// "b"	"2"
 	// "c"	"3"
 	// "d"	"4"
+	// kv revscan
+	// "d"	"4"
+	// "c"	"3"
+	// "b"	"2"
+	// "a"	"1"
 	// quit
 	// node drained and shutdown: ok
 }
@@ -239,6 +265,7 @@ func Example_max_results() {
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan --max-results=3")
+	c.Run("kv revscan --max-results=2")
 	c.Run("quit")
 
 	// Output:
@@ -246,6 +273,9 @@ func Example_max_results() {
 	// kv scan --max-results=3
 	// "a"	"1"
 	// "b"	"2"
+	// "c"	"3"
+	// kv revscan --max-results=2
+	// "d"	"4"
 	// "c"	"3"
 	// quit
 	// node drained and shutdown: ok

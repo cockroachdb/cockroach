@@ -62,6 +62,7 @@ struct RaftCommandUnionOneofInstance {
   const ::cockroach::proto::MergeRequest* merge_response_;
   const ::cockroach::proto::TruncateLogRequest* truncate_log_;
   const ::cockroach::proto::LeaderLeaseRequest* lease_;
+  const ::cockroach::proto::ReverseScanRequest* reverse_scan_;
   const ::cockroach::proto::BatchRequest* batch_;
 }* RaftCommandUnion_default_oneof_instance_ = NULL;
 const ::google::protobuf::Descriptor* RaftCommand_descriptor_ = NULL;
@@ -132,7 +133,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseCacheEntry, _internal_metadata_),
       -1);
   RaftCommandUnion_descriptor_ = file->message_type(1);
-  static const int RaftCommandUnion_offsets_[19] = {
+  static const int RaftCommandUnion_offsets_[20] = {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RaftCommandUnion_default_oneof_instance_, get_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RaftCommandUnion_default_oneof_instance_, put_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RaftCommandUnion_default_oneof_instance_, conditional_put_),
@@ -150,6 +151,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RaftCommandUnion_default_oneof_instance_, merge_response_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RaftCommandUnion_default_oneof_instance_, truncate_log_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RaftCommandUnion_default_oneof_instance_, lease_),
+    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RaftCommandUnion_default_oneof_instance_, reverse_scan_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RaftCommandUnion_default_oneof_instance_, batch_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftCommandUnion, value_),
   };
@@ -395,7 +397,7 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "<\n\014leader_lease\030\016 \001(\0132$.cockroach.proto."
     "LeaderLeaseResponseH\000\022/\n\005batch\030\036 \001(\0132\036.c"
     "ockroach.proto.BatchResponseH\000:\004\310\240\037\001B\007\n\005"
-    "value\"\240\010\n\020RaftCommandUnion\022*\n\003get\030\001 \001(\0132"
+    "value\"\335\010\n\020RaftCommandUnion\022*\n\003get\030\001 \001(\0132"
     "\033.cockroach.proto.GetRequestH\000\022*\n\003put\030\002 "
     "\001(\0132\033.cockroach.proto.PutRequestH\000\022A\n\017co"
     "nditional_put\030\003 \001(\0132&.cockroach.proto.Co"
@@ -420,30 +422,31 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "uestH\000\022;\n\014truncate_log\030\020 \001(\0132#.cockroach"
     ".proto.TruncateLogRequestH\000\0224\n\005lease\030\021 \001"
     "(\0132#.cockroach.proto.LeaderLeaseRequestH"
-    "\000\022.\n\005batch\030\036 \001(\0132\035.cockroach.proto.Batch"
-    "RequestH\000:\004\310\240\037\001B\007\n\005value\"\255\001\n\013RaftCommand"
-    "\022,\n\010range_id\030\001 \001(\003B\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007R"
-    "angeID\022:\n\016origin_node_id\030\002 \001(\004B\"\310\336\037\000\342\336\037\014"
-    "OriginNodeID\372\336\037\nRaftNodeID\0224\n\003cmd\030\003 \001(\0132"
-    "!.cockroach.proto.RaftCommandUnionB\004\310\336\037\000"
-    "\"O\n\022RaftMessageRequest\022,\n\010group_id\030\001 \001(\004"
-    "B\032\310\336\037\000\342\336\037\007GroupID\372\336\037\007RangeID\022\013\n\003msg\030\002 \001("
-    "\014\"\025\n\023RaftMessageResponse\"\236\001\n\026InternalTim"
-    "eSeriesData\022#\n\025start_timestamp_nanos\030\001 \001"
-    "(\003B\004\310\336\037\000\022#\n\025sample_duration_nanos\030\002 \001(\003B"
-    "\004\310\336\037\000\022:\n\007samples\030\003 \003(\0132).cockroach.proto"
-    ".InternalTimeSeriesSample\"r\n\030InternalTim"
-    "eSeriesSample\022\024\n\006offset\030\001 \001(\005B\004\310\336\037\000\022\023\n\005c"
-    "ount\030\006 \001(\rB\004\310\336\037\000\022\021\n\003sum\030\007 \001(\001B\004\310\336\037\000\022\013\n\003m"
-    "ax\030\010 \001(\001\022\013\n\003min\030\t \001(\001\"=\n\022RaftTruncatedSt"
-    "ate\022\023\n\005index\030\001 \001(\004B\004\310\336\037\000\022\022\n\004term\030\002 \001(\004B\004"
-    "\310\336\037\000\"\274\001\n\020RaftSnapshotData\022@\n\020range_descr"
-    "iptor\030\001 \001(\0132 .cockroach.proto.RangeDescr"
-    "iptorB\004\310\336\037\000\022>\n\002KV\030\002 \003(\0132*.cockroach.prot"
-    "o.RaftSnapshotData.KeyValueB\006\342\336\037\002KV\032&\n\010K"
-    "eyValue\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001(\014*%\n\021I"
-    "nternalValueType\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000B\023Z\005pr"
-    "oto\340\342\036\001\310\342\036\001\320\342\036\001", 2975);
+    "\000\022;\n\014reverse_scan\030\022 \001(\0132#.cockroach.prot"
+    "o.ReverseScanRequestH\000\022.\n\005batch\030\036 \001(\0132\035."
+    "cockroach.proto.BatchRequestH\000:\004\310\240\037\001B\007\n\005"
+    "value\"\255\001\n\013RaftCommand\022,\n\010range_id\030\001 \001(\003B"
+    "\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007RangeID\022:\n\016origin_no"
+    "de_id\030\002 \001(\004B\"\310\336\037\000\342\336\037\014OriginNodeID\372\336\037\nRaf"
+    "tNodeID\0224\n\003cmd\030\003 \001(\0132!.cockroach.proto.R"
+    "aftCommandUnionB\004\310\336\037\000\"O\n\022RaftMessageRequ"
+    "est\022,\n\010group_id\030\001 \001(\004B\032\310\336\037\000\342\336\037\007GroupID\372\336"
+    "\037\007RangeID\022\013\n\003msg\030\002 \001(\014\"\025\n\023RaftMessageRes"
+    "ponse\"\236\001\n\026InternalTimeSeriesData\022#\n\025star"
+    "t_timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022#\n\025sample_"
+    "duration_nanos\030\002 \001(\003B\004\310\336\037\000\022:\n\007samples\030\003 "
+    "\003(\0132).cockroach.proto.InternalTimeSeries"
+    "Sample\"r\n\030InternalTimeSeriesSample\022\024\n\006of"
+    "fset\030\001 \001(\005B\004\310\336\037\000\022\023\n\005count\030\006 \001(\rB\004\310\336\037\000\022\021\n"
+    "\003sum\030\007 \001(\001B\004\310\336\037\000\022\013\n\003max\030\010 \001(\001\022\013\n\003min\030\t \001"
+    "(\001\"=\n\022RaftTruncatedState\022\023\n\005index\030\001 \001(\004B"
+    "\004\310\336\037\000\022\022\n\004term\030\002 \001(\004B\004\310\336\037\000\"\274\001\n\020RaftSnapsh"
+    "otData\022@\n\020range_descriptor\030\001 \001(\0132 .cockr"
+    "oach.proto.RangeDescriptorB\004\310\336\037\000\022>\n\002KV\030\002"
+    " \003(\0132*.cockroach.proto.RaftSnapshotData."
+    "KeyValueB\006\342\336\037\002KV\032&\n\010KeyValue\022\013\n\003key\030\001 \001("
+    "\014\022\r\n\005value\030\002 \001(\014*%\n\021InternalValueType\022\n\n"
+    "\006_CR_TS\020\001\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 3036);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/internal.proto", &protobuf_RegisterTypes);
   ResponseCacheEntry::default_instance_ = new ResponseCacheEntry();
@@ -2086,6 +2089,7 @@ const int RaftCommandUnion::kResolveIntentRangeFieldNumber;
 const int RaftCommandUnion::kMergeResponseFieldNumber;
 const int RaftCommandUnion::kTruncateLogFieldNumber;
 const int RaftCommandUnion::kLeaseFieldNumber;
+const int RaftCommandUnion::kReverseScanFieldNumber;
 const int RaftCommandUnion::kBatchFieldNumber;
 #endif  // !_MSC_VER
 
@@ -2113,6 +2117,7 @@ void RaftCommandUnion::InitAsDefaultInstance() {
   RaftCommandUnion_default_oneof_instance_->merge_response_ = const_cast< ::cockroach::proto::MergeRequest*>(&::cockroach::proto::MergeRequest::default_instance());
   RaftCommandUnion_default_oneof_instance_->truncate_log_ = const_cast< ::cockroach::proto::TruncateLogRequest*>(&::cockroach::proto::TruncateLogRequest::default_instance());
   RaftCommandUnion_default_oneof_instance_->lease_ = const_cast< ::cockroach::proto::LeaderLeaseRequest*>(&::cockroach::proto::LeaderLeaseRequest::default_instance());
+  RaftCommandUnion_default_oneof_instance_->reverse_scan_ = const_cast< ::cockroach::proto::ReverseScanRequest*>(&::cockroach::proto::ReverseScanRequest::default_instance());
   RaftCommandUnion_default_oneof_instance_->batch_ = const_cast< ::cockroach::proto::BatchRequest*>(&::cockroach::proto::BatchRequest::default_instance());
 }
 
@@ -2236,6 +2241,10 @@ void RaftCommandUnion::clear_value() {
     }
     case kLease: {
       delete value_.lease_;
+      break;
+    }
+    case kReverseScan: {
+      delete value_.reverse_scan_;
       break;
     }
     case kBatch: {
@@ -2484,6 +2493,19 @@ bool RaftCommandUnion::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(146)) goto parse_reverse_scan;
+        break;
+      }
+
+      // optional .cockroach.proto.ReverseScanRequest reverse_scan = 18;
+      case 18: {
+        if (tag == 146) {
+         parse_reverse_scan:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_reverse_scan()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectTag(242)) goto parse_batch;
         break;
       }
@@ -2628,6 +2650,12 @@ void RaftCommandUnion::SerializeWithCachedSizes(
       17, *value_.lease_, output);
   }
 
+  // optional .cockroach.proto.ReverseScanRequest reverse_scan = 18;
+  if (has_reverse_scan()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      18, *value_.reverse_scan_, output);
+  }
+
   // optional .cockroach.proto.BatchRequest batch = 30;
   if (has_batch()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
@@ -2761,6 +2789,13 @@ void RaftCommandUnion::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         17, *value_.lease_, target);
+  }
+
+  // optional .cockroach.proto.ReverseScanRequest reverse_scan = 18;
+  if (has_reverse_scan()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        18, *value_.reverse_scan_, target);
   }
 
   // optional .cockroach.proto.BatchRequest batch = 30;
@@ -2901,6 +2936,13 @@ int RaftCommandUnion::ByteSize() const {
           *value_.lease_);
       break;
     }
+    // optional .cockroach.proto.ReverseScanRequest reverse_scan = 18;
+    case kReverseScan: {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *value_.reverse_scan_);
+      break;
+    }
     // optional .cockroach.proto.BatchRequest batch = 30;
     case kBatch: {
       total_size += 2 +
@@ -3004,6 +3046,10 @@ void RaftCommandUnion::MergeFrom(const RaftCommandUnion& from) {
     }
     case kLease: {
       mutable_lease()->::cockroach::proto::LeaderLeaseRequest::MergeFrom(from.lease());
+      break;
+    }
+    case kReverseScan: {
+      mutable_reverse_scan()->::cockroach::proto::ReverseScanRequest::MergeFrom(from.reverse_scan());
       break;
     }
     case kBatch: {
@@ -3839,6 +3885,52 @@ void RaftCommandUnion::clear_lease() {
     value_.lease_ = lease;
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftCommandUnion.lease)
+}
+
+// optional .cockroach.proto.ReverseScanRequest reverse_scan = 18;
+bool RaftCommandUnion::has_reverse_scan() const {
+  return value_case() == kReverseScan;
+}
+void RaftCommandUnion::set_has_reverse_scan() {
+  _oneof_case_[0] = kReverseScan;
+}
+void RaftCommandUnion::clear_reverse_scan() {
+  if (has_reverse_scan()) {
+    delete value_.reverse_scan_;
+    clear_has_value();
+  }
+}
+ const ::cockroach::proto::ReverseScanRequest& RaftCommandUnion::reverse_scan() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RaftCommandUnion.reverse_scan)
+  return has_reverse_scan() ? *value_.reverse_scan_
+                      : ::cockroach::proto::ReverseScanRequest::default_instance();
+}
+ ::cockroach::proto::ReverseScanRequest* RaftCommandUnion::mutable_reverse_scan() {
+  if (!has_reverse_scan()) {
+    clear_value();
+    set_has_reverse_scan();
+    value_.reverse_scan_ = new ::cockroach::proto::ReverseScanRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftCommandUnion.reverse_scan)
+  return value_.reverse_scan_;
+}
+ ::cockroach::proto::ReverseScanRequest* RaftCommandUnion::release_reverse_scan() {
+  if (has_reverse_scan()) {
+    clear_has_value();
+    ::cockroach::proto::ReverseScanRequest* temp = value_.reverse_scan_;
+    value_.reverse_scan_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+ void RaftCommandUnion::set_allocated_reverse_scan(::cockroach::proto::ReverseScanRequest* reverse_scan) {
+  clear_value();
+  if (reverse_scan) {
+    set_has_reverse_scan();
+    value_.reverse_scan_ = reverse_scan;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftCommandUnion.reverse_scan)
 }
 
 // optional .cockroach.proto.BatchRequest batch = 30;

@@ -128,6 +128,13 @@ func (b *Batch) fillResults() error {
 					row.Key = kv.Key
 					row.setValue(&kv.Value)
 				}
+			case *proto.ReverseScanResponse:
+				result.Rows = make([]KeyValue, len(t.Rows))
+				for j, kv := range t.Rows {
+					row := &result.Rows[j]
+					row.Key = kv.Key
+					row.setValue(&kv.Value)
+				}
 			case *proto.DeleteResponse:
 				row := &result.Rows[k]
 				row.Key = []byte(call.Args.(*proto.DeleteRequest).Key)
@@ -288,14 +295,7 @@ func (b *Batch) Inc(key interface{}, value int64) {
 	b.initResult(1, 1, nil)
 }
 
-// Scan retrieves the rows between begin (inclusive) and end (exclusive).
-//
-// A new result will be appended to the batch which will contain up to maxRows
-// rows and Result.Err will indicate success or failure.
-//
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
-func (b *Batch) Scan(s, e interface{}, maxRows int64) {
+func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, err)
@@ -306,8 +306,35 @@ func (b *Batch) Scan(s, e interface{}, maxRows int64) {
 		b.initResult(0, 0, err)
 		return
 	}
-	b.calls = append(b.calls, proto.ScanCall(proto.Key(begin), proto.Key(end), maxRows))
+	if !isReverse {
+		b.calls = append(b.calls, proto.ScanCall(proto.Key(begin), proto.Key(end), maxRows))
+	} else {
+		b.calls = append(b.calls, proto.ReverseScanCall(proto.Key(begin), proto.Key(end), maxRows))
+	}
 	b.initResult(1, 0, nil)
+}
+
+// Scan retrieves the rows between begin (inclusive) and end (exclusive).
+//
+// A new result will be appended to the batch which will contain up to maxRows
+// rows and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler.
+func (b *Batch) Scan(s, e interface{}, maxRows int64) {
+	b.scan(s, e, maxRows, false)
+}
+
+// ReverseScan retrieves the rows in reserve order starting at end (exclusive)
+// and finishing at begin(inclusive).
+//
+// A new result will be appended to the batch which will contain up to maxRows
+// rows and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler.
+func (b *Batch) ReverseScan(s, e interface{}, maxRows int64) {
+	b.scan(s, e, maxRows, true)
 }
 
 // Del deletes one or more keys.

@@ -738,6 +738,30 @@ func (r *rocksDBIterator) Next() {
 	C.DBIterNext(r.iter)
 }
 
+func (r *rocksDBIterator) SeekReverse(key []byte) {
+	if len(key) == 0 {
+		C.DBIterSeekToLast(r.iter)
+	} else {
+		C.DBIterSeek(r.iter, goToCSlice(key))
+		// Maybe the key has exceeded the last key in rocksdb
+		if !r.Valid() {
+			C.DBIterSeekToLast(r.iter)
+		}
+		if !r.Valid() {
+			return
+		}
+		// Make sure the current key is <= the provided key.
+		curKey := r.Key()
+		if proto.EncodedKey(key).Less(curKey) {
+			r.Prev()
+		}
+	}
+}
+
+func (r *rocksDBIterator) Prev() {
+	C.DBIterPrev(r.iter)
+}
+
 func (r *rocksDBIterator) Key() proto.EncodedKey {
 	// The data returned by rocksdb_iter_{key,value} is not meant to be
 	// freed by the client. It is a direct reference to the data managed

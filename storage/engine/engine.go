@@ -37,14 +37,21 @@ type Iterator interface {
 	// Seek advances the iterator to the first key in the engine which
 	// is >= the provided key.
 	Seek(key []byte)
+	// SeekReverse advances the iterator to the first key in the engine which
+	// is <= the provided key.
+	SeekReverse(key []byte)
 	// Valid returns true if the iterator is currently valid. An
 	// iterator which hasn't been seeked or has gone past the end of the
 	// key range is invalid.
 	Valid() bool
-	// Advances the iterator to the next key/value in the
-	// iteration. After this call, the Valid() will be true if the
+	// Next advances the iterator to the next key/value in the
+	// iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the last key.
 	Next()
+	// Prev moves the iterator backward to the previous key/value
+	// in the iteration. After this call, Valid() will be true if the
+	// iterator was not positioned at the first key.
+	Prev()
 	// Key returns the current key as a byte slice.
 	Key() proto.EncodedKey
 	// Value returns the current value as a byte slice.

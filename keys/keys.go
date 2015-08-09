@@ -338,3 +338,25 @@ func MetaScanBounds(key proto.Key) (proto.Key, proto.Key) {
 	// Otherwise find the first entry greater than the given key in the same meta prefix.
 	return key.Next(), proto.Key(key[:len(Meta1Prefix)]).PrefixEnd()
 }
+
+// MetaReverseScanBounds returns the start and end keys of the range within which the
+// desired meta record can be found by means of an engine reverse scan. The given key
+// must be a valid RangeMetaKey as defined by ValidateRangeMetaKey.
+func MetaReverseScanBounds(key proto.Key) (proto.Key, proto.Key, error) {
+	if key.Equal(proto.KeyMin) || key.Equal(Meta1Prefix) {
+		return nil, nil, NewInvalidRangeMetaKeyError("KeyMin and Meta1Prefix can't be used as the key of reverse scan", key)
+	}
+	if key.Equal(Meta2Prefix) {
+		// Special case Meta2Prefix: this is the first key in Meta2, we don't want
+		// to end at itself.
+		return Meta1Prefix, key.Next(), nil
+	}
+	// Otherwise find the first entry greater than the given key and find the last entry
+	// in the same prefix. For MVCCReverseScan the endKey is exclusive, if we want to find
+	// the range descriptor the given key specified,we need to set the key.Next() as the
+	// MVCCReverseScan`s endKey. For example:
+	// If we have ranges ["", "f") and ["f", "z"), then we'll have corresponding meta records
+	// at "f" and "z". If you're looking for the meta record for key "f", then you want the
+	// second record (exclusive in MVCCReverseScan), hence key.Next() below.
+	return key[:len(Meta1Prefix)], key.Next(), nil
+}

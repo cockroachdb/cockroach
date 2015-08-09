@@ -195,6 +195,17 @@ func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
 	return runOneRow(txn, b)
 }
 
+func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]KeyValue, error) {
+	b := txn.NewBatch()
+	if !isReverse {
+		b.Scan(begin, end, maxRows)
+	} else {
+		b.ReverseScan(begin, end, maxRows)
+	}
+	r, err := runOneResult(txn, b)
+	return r.Rows, err
+}
+
 // Scan retrieves the rows between begin (inclusive) and end (exclusive).
 //
 // The returned []KeyValue will contain up to maxRows elements.
@@ -202,10 +213,18 @@ func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	b := txn.NewBatch()
-	b.Scan(begin, end, maxRows)
-	r, err := runOneResult(txn, b)
-	return r.Rows, err
+	return txn.scan(begin, end, maxRows, false)
+}
+
+// ReverseScan retrieves the rows in reserve order starting at end (exclusive)
+// and finishing at begin(inclusive).
+//
+// The returned []KeyValue will contain up to maxRows elements.
+//
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler.
+func (txn *Txn) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
+	return txn.scan(begin, end, maxRows, true)
 }
 
 // Del deletes one or more keys.

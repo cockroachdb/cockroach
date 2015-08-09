@@ -92,7 +92,8 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	_, err := engine.MVCCIterate(r.rm.Engine(),
 		keys.RaftLogKey(r.Desc().RangeID, lo),
 		keys.RaftLogKey(r.Desc().RangeID, hi),
-		proto.ZeroTimestamp, true /* consistent */, nil /* txn */, scanFunc)
+		proto.ZeroTimestamp,
+		true /* consistent */, nil /* txn */, false /* !reverse */, scanFunc)
 
 	if err != nil {
 		return nil, err

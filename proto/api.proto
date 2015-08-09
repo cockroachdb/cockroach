@@ -214,7 +214,7 @@ message DeleteResponse {
 message DeleteRangeRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // If 0, *all* entries between Key (inclusive) and EndKey
-  // (exclusive) are deleted. Must be >= 0
+  // (exclusive) are deleted. Must be >= 0.
   optional int64 max_entries_to_delete = 2 [(gogoproto.nullable) = false];
 }
 
@@ -230,12 +230,29 @@ message DeleteRangeResponse {
 // start and end keys for the scan and the maximum number of results.
 message ScanRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Must be > 0.
+  // If 0, all entries between Key (inclusive) and EndKey
+  // (exclusive) are retrieved. Must be >= 0.
   optional int64 max_results = 2 [(gogoproto.nullable) = false];
 }
 
 // A ScanResponse is the return value from the Scan() method.
 message ScanResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Empty if no rows were scanned.
+  repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
+}
+
+// A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
+// start(inclusive) and end(exclusive) keys for the scan and the maximum number of results.
+message ReverseScanRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // If 0, all entries between Key (inclusive) and EndKey
+  // (exclusive) are retrieved. Must be >= 0.
+  optional int64 max_results = 2 [(gogoproto.nullable) = false];
+}
+
+// A ReverseScanResponse is the return value from the ReverseScan() method.
+message ReverseScanResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
@@ -338,6 +355,8 @@ message RangeLookupRequest {
   // already in service of pushing intents on meta records. Attempting
   // to resolve intents in this case would lead to infinite recursion.
   optional bool ignore_intents = 3 [(gogoproto.nullable) = false];
+  // Use the reverse scan to pre-fill the range descriptor cache.
+  optional bool reverse = 4 [(gogoproto.nullable) = false];
 }
 
 // A RangeLookupResponse is the return value from the RangeLookup()
@@ -538,6 +557,7 @@ message RequestUnion {
     MergeRequest merge = 17;
     TruncateLogRequest truncate = 18;
     LeaderLeaseRequest leader_lease = 19;
+    ReverseScanRequest reverse_scan = 20;
   }
 }
 
@@ -565,6 +585,7 @@ message ResponseUnion {
     MergeResponse merge = 17;
     TruncateLogResponse truncate = 18;
     LeaderLeaseResponse leader_lease = 19;
+    ReverseScanResponse reverse_scan = 20;
   }
 }
 

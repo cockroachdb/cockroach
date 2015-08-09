@@ -19,6 +19,7 @@ package kv
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 
 	"github.com/biogo/store/llrb"
@@ -196,7 +197,7 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCount(t, 0, "xx")
 
 	// Evict clears one level 1 and one level 2 cache
-	db.cache.EvictCachedRangeDescriptor(proto.Key("da"), nil)
+	db.cache.EvictCachedRangeDescriptor(proto.Key("da"), nil, false)
 	doLookup(t, db.cache, "fa")
 	db.assertLookupCount(t, 0, "fa")
 	doLookup(t, db.cache, "da")
@@ -209,12 +210,12 @@ func TestRangeCache(t *testing.T) {
 
 	// Attempt to compare-and-evict with a descriptor that is not equal to the
 	// cached one; it should not alter the cache.
-	db.cache.EvictCachedRangeDescriptor(proto.Key("cz"), &proto.RangeDescriptor{})
+	db.cache.EvictCachedRangeDescriptor(proto.Key("cz"), &proto.RangeDescriptor{}, false)
 	doLookup(t, db.cache, "cz")
 	db.assertLookupCount(t, 0, "cz")
 	// Now evict with the actual descriptor. The cache should clear the
 	// descriptor and the cached meta key.
-	db.cache.EvictCachedRangeDescriptor(proto.Key("cz"), doLookup(t, db.cache, "cz"))
+	db.cache.EvictCachedRangeDescriptor(proto.Key("cz"), doLookup(t, db.cache, "cz"), false)
 	doLookup(t, db.cache, "cz")
 	db.assertLookupCount(t, 2, "cz")
 
@@ -244,12 +245,12 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 	cache.clearOverlappingCachedRangeDescriptors(proto.Key("b"), keys.RangeMetaKey(proto.Key("b")), minToBDesc)
 	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.Key("b"))), minToBDesc)
-	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b")); desc != nil {
+	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b"), false); desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
 	cache.clearOverlappingCachedRangeDescriptors(proto.KeyMax, keys.RangeMetaKey(proto.KeyMax), bToMaxDesc)
 	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), bToMaxDesc)
-	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b")); desc != bToMaxDesc {
+	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b"), false); desc != bToMaxDesc {
 		t.Errorf("expected descriptor %s; got %s", bToMaxDesc, desc)
 	}
 
@@ -257,7 +258,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	cache.clearOverlappingCachedRangeDescriptors(proto.KeyMax, keys.RangeMetaKey(proto.KeyMax), defDesc)
 	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), defDesc)
 	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
-		if _, desc := cache.getCachedRangeDescriptor(key); desc != defDesc {
+		if _, desc := cache.getCachedRangeDescriptor(key, false); desc != defDesc {
 			t.Errorf("expected descriptor %s for key %s; got %s", defDesc, key, desc)
 		}
 	}
@@ -303,4 +304,69 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 		}()
 		cache.clearOverlappingCachedRangeDescriptors(metaSplitDesc.EndKey, keys.RangeMetaKey(metaSplitDesc.EndKey), metaSplitDesc)
 	}()
+}
+
+// TestGetCachedRangeDescriptorUseReverse verifies the correctness of the result that is
+// returned by getCachedRangeDescriptor with isReverse = true.
+func TestGetCachedRangeDescriptorUseReverse(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	testData := []*proto.RangeDescriptor{
+		{StartKey: proto.Key("a"), EndKey: proto.Key("c")},
+		{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
+		{StartKey: proto.Key("g"), EndKey: proto.Key("z")},
+	}
+
+	cache := newRangeDescriptorCache(nil, 2<<10)
+	for _, rd := range testData {
+		cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(rd.EndKey)), rd)
+	}
+
+	testCases := []struct {
+		queryKey proto.Key
+		cacheKey rangeCacheKey
+		rng      *proto.RangeDescriptor
+	}{
+		{
+			// Check range start key.
+			queryKey: proto.Key("a"),
+			cacheKey: nil,
+			rng:      nil,
+		},
+		{
+			// Check range end key.
+			queryKey: proto.Key("c"),
+			cacheKey: rangeCacheKey(keys.RangeMetaKey(proto.Key("c"))),
+			rng:      &proto.RangeDescriptor{StartKey: proto.Key("a"), EndKey: proto.Key("c")},
+		},
+		{
+			// Check range middle key.
+			queryKey: proto.Key("d"),
+			cacheKey: rangeCacheKey(keys.RangeMetaKey(proto.Key("e"))),
+			rng:      &proto.RangeDescriptor{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
+		},
+		{
+			// Check miss range key.
+			queryKey: proto.Key("f"),
+			cacheKey: nil,
+			rng:      nil,
+		},
+		{
+			// Check range start key with previous range miss.
+			queryKey: proto.Key("g"),
+			cacheKey: nil,
+			rng:      nil,
+		},
+	}
+
+	for _, test := range testCases {
+		cacheKey, targetRange := cache.getCachedRangeDescriptor(test.queryKey, true)
+		if !reflect.DeepEqual(targetRange, test.rng) {
+			t.Fatalf("expect range %v, actual get %v", test.rng, targetRange)
+		}
+		if !reflect.DeepEqual(cacheKey, test.cacheKey) {
+			t.Fatalf("expect cache key %v, actual get %v", test.cacheKey, cacheKey)
+		}
+	}
+
 }

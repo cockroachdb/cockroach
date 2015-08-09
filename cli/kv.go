@@ -223,7 +223,7 @@ func runDel(cmd *cobra.Command, args []string) {
 // range.
 var scanCmd = &cobra.Command{
 	Use:   "scan [options] [<start-key> [<end-key>]]",
-	Short: "scans a range of keys\n",
+	Short: "scans a range of keys",
 	Long: `
 Fetches and display the key/value pairs for a range. If no <start-key>
 is specified then all (non-system) key/value pairs are retrieved. If no
@@ -238,21 +238,7 @@ func runScan(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	var (
-		startKey proto.Key
-		endKey   proto.Key
-	)
-	if len(args) >= 1 {
-		startKey = proto.Key(unquoteArg(args[0], false))
-	} else {
-		// Start with the first key after the system key range.
-		startKey = keys.SystemMax
-	}
-	if len(args) >= 2 {
-		endKey = proto.Key(unquoteArg(args[1], false))
-	} else {
-		endKey = proto.KeyMax
-	}
+	startKey, endKey := initArgs(args)
 
 	kvDB := makeDBClient()
 	if kvDB == nil {
@@ -264,6 +250,59 @@ func runScan(cmd *cobra.Command, args []string) {
 		osExit(1)
 		return
 	}
+	showResult(rows)
+}
+
+// A reverseScanCmd command fetches the key/value pairs for a specified
+// range.
+var reverseScanCmd = &cobra.Command{
+	Use:   "revscan [options] [<start-key> [<end-key>]]",
+	Short: "scans a range of keys in reverse order",
+	Long: `
+Fetches and display the key/value pairs for a range. If no <start-key>
+is specified then all (non-system) key/value pairs are retrieved. If no
+<end-key> is specified then all keys greater than or equal to <start-key>
+are retrieved.
+`,
+	Run: runReverseScan,
+}
+
+func runReverseScan(cmd *cobra.Command, args []string) {
+	if len(args) > 2 {
+		cmd.Usage()
+		return
+	}
+	startKey, endKey := initArgs(args)
+	kvDB := makeDBClient()
+	if kvDB == nil {
+		return
+	}
+	rows, err := kvDB.ReverseScan(startKey, endKey, maxResults)
+	if err != nil {
+		fmt.Fprintf(osStderr, "reverse scan failed: %s\n", err)
+		osExit(1)
+		return
+	}
+	showResult(rows)
+}
+
+func initArgs(args []string) (startKey, endKey proto.Key) {
+
+	if len(args) >= 1 {
+		startKey = proto.Key(unquoteArg(args[0], false))
+	} else {
+		// Start with the first key after the system key range.
+		startKey = keys.SystemMax
+	}
+	if len(args) >= 2 {
+		endKey = proto.Key(unquoteArg(args[1], false))
+	} else {
+		endKey = proto.KeyMax
+	}
+	return startKey, endKey
+}
+
+func showResult(rows []client.KeyValue) {
 	for _, row := range rows {
 		if bytes.HasPrefix(row.Key, []byte{0}) {
 			// TODO(pmattis): Pretty-print system keys.
@@ -282,11 +321,12 @@ var kvCmds = []*cobra.Command{
 	incCmd,
 	delCmd,
 	scanCmd,
+	reverseScanCmd,
 }
 
 var kvCmd = &cobra.Command{
 	Use:   "kv",
-	Short: "get, put, increment, delete and scan key/value pairs",
+	Short: "get, put, increment, delete, scan and reverse scan key/value pairs",
 	Long: `
 Special characters in keys or values should be specified according to
 the double-quoted Go string literal rules (see

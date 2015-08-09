@@ -386,6 +386,7 @@ class RaftCommandUnion : public ::google::protobuf::Message {
     kMergeResponse = 15,
     kTruncateLog = 16,
     kLease = 17,
+    kReverseScan = 18,
     kBatch = 30,
     VALUE_NOT_SET = 0,
   };
@@ -584,6 +585,15 @@ class RaftCommandUnion : public ::google::protobuf::Message {
   ::cockroach::proto::LeaderLeaseRequest* release_lease();
   void set_allocated_lease(::cockroach::proto::LeaderLeaseRequest* lease);
 
+  // optional .cockroach.proto.ReverseScanRequest reverse_scan = 18;
+  bool has_reverse_scan() const;
+  void clear_reverse_scan();
+  static const int kReverseScanFieldNumber = 18;
+  const ::cockroach::proto::ReverseScanRequest& reverse_scan() const;
+  ::cockroach::proto::ReverseScanRequest* mutable_reverse_scan();
+  ::cockroach::proto::ReverseScanRequest* release_reverse_scan();
+  void set_allocated_reverse_scan(::cockroach::proto::ReverseScanRequest* reverse_scan);
+
   // optional .cockroach.proto.BatchRequest batch = 30;
   bool has_batch() const;
   void clear_batch();
@@ -613,6 +623,7 @@ class RaftCommandUnion : public ::google::protobuf::Message {
   inline void set_has_merge_response();
   inline void set_has_truncate_log();
   inline void set_has_lease();
+  inline void set_has_reverse_scan();
   inline void set_has_batch();
 
   inline bool has_value() const;
@@ -641,6 +652,7 @@ class RaftCommandUnion : public ::google::protobuf::Message {
     ::cockroach::proto::MergeRequest* merge_response_;
     ::cockroach::proto::TruncateLogRequest* truncate_log_;
     ::cockroach::proto::LeaderLeaseRequest* lease_;
+    ::cockroach::proto::ReverseScanRequest* reverse_scan_;
     ::cockroach::proto::BatchRequest* batch_;
   } value_;
   ::google::protobuf::uint32 _oneof_case_[1];
@@ -2992,6 +3004,52 @@ inline void RaftCommandUnion::set_allocated_lease(::cockroach::proto::LeaderLeas
     value_.lease_ = lease;
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftCommandUnion.lease)
+}
+
+// optional .cockroach.proto.ReverseScanRequest reverse_scan = 18;
+inline bool RaftCommandUnion::has_reverse_scan() const {
+  return value_case() == kReverseScan;
+}
+inline void RaftCommandUnion::set_has_reverse_scan() {
+  _oneof_case_[0] = kReverseScan;
+}
+inline void RaftCommandUnion::clear_reverse_scan() {
+  if (has_reverse_scan()) {
+    delete value_.reverse_scan_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::ReverseScanRequest& RaftCommandUnion::reverse_scan() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RaftCommandUnion.reverse_scan)
+  return has_reverse_scan() ? *value_.reverse_scan_
+                      : ::cockroach::proto::ReverseScanRequest::default_instance();
+}
+inline ::cockroach::proto::ReverseScanRequest* RaftCommandUnion::mutable_reverse_scan() {
+  if (!has_reverse_scan()) {
+    clear_value();
+    set_has_reverse_scan();
+    value_.reverse_scan_ = new ::cockroach::proto::ReverseScanRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftCommandUnion.reverse_scan)
+  return value_.reverse_scan_;
+}
+inline ::cockroach::proto::ReverseScanRequest* RaftCommandUnion::release_reverse_scan() {
+  if (has_reverse_scan()) {
+    clear_has_value();
+    ::cockroach::proto::ReverseScanRequest* temp = value_.reverse_scan_;
+    value_.reverse_scan_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void RaftCommandUnion::set_allocated_reverse_scan(::cockroach::proto::ReverseScanRequest* reverse_scan) {
+  clear_value();
+  if (reverse_scan) {
+    set_has_reverse_scan();
+    value_.reverse_scan_ = reverse_scan;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftCommandUnion.reverse_scan)
 }
 
 // optional .cockroach.proto.BatchRequest batch = 30;

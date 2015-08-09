@@ -162,3 +162,18 @@ func ScanCall(key, endKey Key, maxResults int64) Call {
 		Reply: &ScanResponse{},
 	}
 }
+
+// ReverseScanCall returns a Call object initialized to reverse scan from end to
+// start keys with max results.
+func ReverseScanCall(key, endKey Key, maxResults int64) Call {
+	return Call{
+		Args: &ReverseScanRequest{
+			RequestHeader: RequestHeader{
+				Key:    key,
+				EndKey: endKey,
+			},
+			MaxResults: maxResults,
+		},
+		Reply: &ReverseScanResponse{},
+	}
+}

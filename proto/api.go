@@ -173,6 +173,15 @@ func (sr *ScanResponse) Combine(c Response) {
 }
 
 // Combine implements the Combinable interface.
+func (sr *ReverseScanResponse) Combine(c Response) {
+	otherSR := c.(*ReverseScanResponse)
+	if sr != nil {
+		sr.Rows = append(sr.Rows, otherSR.GetRows()...)
+		sr.Header().Combine(otherSR.Header())
+	}
+}
+
+// Combine implements the Combinable interface.
 func (dr *DeleteRangeResponse) Combine(c Response) {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
@@ -270,6 +279,16 @@ func (sr *ScanResponse) Verify(req Request) error {
 	return nil
 }
 
+// Verify verifies the integrity of every value returned in the reverse scan.
+func (sr *ReverseScanResponse) Verify(req Request) error {
+	for _, kv := range sr.Rows {
+		if err := kv.Value.Verify(kv.Key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Add adds a request to the batch request. The batch inherits
 // the key range of the first request added to it.
 //
@@ -314,6 +333,16 @@ func (sr *ScanRequest) SetBound(bound int64) {
 	sr.MaxResults = bound
 }
 
+// GetBound returns the MaxResults field in ReverseScanRequest.
+func (sr *ReverseScanRequest) GetBound() int64 {
+	return sr.GetMaxResults()
+}
+
+// SetBound sets the MaxResults field in ReverseScanRequest.
+func (sr *ReverseScanRequest) SetBound(bound int64) {
+	sr.MaxResults = bound
+}
+
 // Countable is implemented by response types which have a number of
 // result rows, such as Scan.
 type Countable interface {
@@ -322,6 +351,11 @@ type Countable interface {
 
 // Count returns the number of rows in ScanResponse.
 func (sr *ScanResponse) Count() int64 {
+	return int64(len(sr.Rows))
+}
+
+// Count returns the number of rows in ReverseScanResponse.
+func (sr *ReverseScanResponse) Count() int64 {
 	return int64(len(sr.Rows))
 }
 
@@ -345,6 +379,9 @@ func (*DeleteRangeRequest) Method() Method { return DeleteRange }
 
 // Method implements the Request interface.
 func (*ScanRequest) Method() Method { return Scan }
+
+// Method implements the Request interface.
+func (*ReverseScanRequest) Method() Method { return ReverseScan }
 
 // Method implements the Request interface.
 func (*EndTransactionRequest) Method() Method { return EndTransaction }
@@ -407,6 +444,9 @@ func (*DeleteRangeRequest) CreateReply() Response { return &DeleteRangeResponse{
 func (*ScanRequest) CreateReply() Response { return &ScanResponse{} }
 
 // CreateReply implements the Request interface.
+func (*ReverseScanRequest) CreateReply() Response { return &ReverseScanResponse{} }
+
+// CreateReply implements the Request interface.
 func (*EndTransactionRequest) CreateReply() Response { return &EndTransactionResponse{} }
 
 // CreateReply implements the Request interface.
@@ -454,6 +494,7 @@ func (*IncrementRequest) flags() int          { return isRead | isWrite | isTxnW
 func (*DeleteRequest) flags() int             { return isWrite | isTxnWrite }
 func (*DeleteRangeRequest) flags() int        { return isWrite | isTxnWrite | isRange }
 func (*ScanRequest) flags() int               { return isRead | isRange }
+func (*ReverseScanRequest) flags() int        { return isRead | isRange }
 func (*EndTransactionRequest) flags() int     { return isWrite }
 func (*AdminSplitRequest) flags() int         { return isAdmin }
 func (*AdminMergeRequest) flags() int         { return isAdmin }

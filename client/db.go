@@ -305,6 +305,17 @@ func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
 	return runOneRow(db, b)
 }
 
+func (db *DB) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]KeyValue, error) {
+	b := db.NewBatch()
+	if !isReverse {
+		b.Scan(begin, end, maxRows)
+	} else {
+		b.ReverseScan(begin, end, maxRows)
+	}
+	r, err := runOneResult(db, b)
+	return r.Rows, err
+}
+
 // Scan retrieves the rows between begin (inclusive) and end (exclusive).
 //
 // The returned []KeyValue will contain up to maxRows elements.
@@ -312,10 +323,18 @@ func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	b := db.NewBatch()
-	b.Scan(begin, end, maxRows)
-	r, err := runOneResult(db, b)
-	return r.Rows, err
+	return db.scan(begin, end, maxRows, false)
+}
+
+// ReverseScan retrieves the rows in reserve order starting at end (exclusive)
+// and finishing at begin(inclusive).
+//
+// The returned []KeyValue will contain up to maxRows elements.
+//
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler.
+func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
+	return db.scan(begin, end, maxRows, true)
 }
 
 // Del deletes one or more keys.
