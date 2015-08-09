@@ -23,17 +23,6 @@ import (
 	"time"
 )
 
-// TODO(pmattis):
-//
-// - This file contains the experimental Cockroach sql driver. The driver
-//   currently parses SQL and executes key/value operations in order to execute
-//   the SQL. The execution will fairly quickly migrate to the server with the
-//   driver performing RPCs.
-//
-// - Flesh out basic insert, update, delete and select operations.
-//
-// - Figure out transaction story.
-
 // conn implements the sql/driver.Conn interface. Note that conn is assumed to
 // be stateful and is not used concurrently by multiple goroutines; See
 // https://golang.org/pkg/database/sql/driver/#Conn.

@@ -259,7 +259,7 @@ func (n *QualifiedName) Database() string {
 
 // Table returns the table portion of the name.
 //
-// TOOD(pmattis): See the comment for Column() regarding how QualifiedNames are
+// TODO(pmattis): See the comment for Column() regarding how QualifiedNames are
 // used in context sensitive locations. Sometimes they are referring to tables
 // sometimes to columns.
 func (n *QualifiedName) Table() string {

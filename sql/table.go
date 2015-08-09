@@ -176,7 +176,7 @@ func encodeIndexKey(columnIDs []structured.ID, colMap map[structured.ID]int, val
 	for _, id := range columnIDs {
 		var val parser.Datum
 		if i, ok := colMap[id]; ok {
-			// TOOD(pmattis): Need to convert the values[i] value to the type
+			// TODO(pmattis): Need to convert the values[i] value to the type
 			// expected by the column.
 			val = values[i]
 		} else {
