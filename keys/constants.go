@@ -164,8 +164,6 @@ var (
 	NodeIDGenerator = MakeKey(SystemPrefix, proto.Key("node-idgen"))
 	// RangeIDGenerator is the global range ID generator sequence.
 	RangeIDGenerator = MakeKey(SystemPrefix, proto.Key("range-idgen"))
-	// SchemaPrefix specifies key prefixes for schema definitions.
-	SchemaPrefix = MakeKey(SystemPrefix, proto.Key("schema"))
 	// NameMetadataPrefix is the key prefix for all name metadata.
 	NameMetadataPrefix = MakeKey(SystemPrefix, proto.Key("name-"))
 	// StoreIDGenerator is the global store ID generator sequence.
