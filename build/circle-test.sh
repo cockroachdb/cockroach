@@ -37,7 +37,9 @@ prepare_artifacts() {
       # `echo` below fakes that. It turns out go2xunit doesn't actually
       # care about the content of this line, so long as it matches the
       # correct format.
-      echo 'FAIL github.com/cockroachdb/cockroach/acceptance 1337s' \
+      # We have the choice between 'ok' and 'FAIL', but since excerpt.txt
+      # greps this for failures, 'ok' is easier to handle.
+      echo 'ok github.com/cockroachdb/cockroach/acceptance 1337s' \
         >> "${outdir}/acceptance.log"
 
       ${builder} go2xunit < "${outdir}/acceptance.log" \
@@ -56,7 +58,7 @@ prepare_artifacts() {
     > "${outdir}/slow.txt"
 
   # Generate the excerpt output and fail if it is non-empty.
-  find "${outdir}" -name 'test*.log' -type f -exec \
+  find "${outdir}" -name '*.log' -type f -exec \
     grep -B 5 -A 10 -E "^\-{0,3} *FAIL|${match}" {} ';' > "${outdir}/excerpt.txt"
 
   if [ -s "${outdir}/excerpt.txt" ]; then
