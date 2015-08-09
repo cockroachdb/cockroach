@@ -233,6 +233,13 @@ func (m *KeyValue) Reset()         { *m = KeyValue{} }
 func (m *KeyValue) String() string { return proto1.CompactTextString(m) }
 func (*KeyValue) ProtoMessage()    {}
 
+func (m *KeyValue) GetKey() Key {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
+
 func (m *KeyValue) GetValue() Value {
 	if m != nil {
 		return m.Value
@@ -250,6 +257,13 @@ type RawKeyValue struct {
 func (m *RawKeyValue) Reset()         { *m = RawKeyValue{} }
 func (m *RawKeyValue) String() string { return proto1.CompactTextString(m) }
 func (*RawKeyValue) ProtoMessage()    {}
+
+func (m *RawKeyValue) GetKey() EncodedKey {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
 
 func (m *RawKeyValue) GetValue() []byte {
 	if m != nil {
@@ -277,6 +291,20 @@ func (m *StoreIdent) GetClusterID() string {
 		return m.ClusterID
 	}
 	return ""
+}
+
+func (m *StoreIdent) GetNodeID() NodeID {
+	if m != nil {
+		return m.NodeID
+	}
+	return 0
+}
+
+func (m *StoreIdent) GetStoreID() StoreID {
+	if m != nil {
+		return m.StoreID
+	}
+	return 0
 }
 
 // A SplitTrigger is run after a successful commit of an AdminSplit
@@ -329,6 +357,13 @@ func (m *MergeTrigger) GetUpdatedDesc() RangeDescriptor {
 	return RangeDescriptor{}
 }
 
+func (m *MergeTrigger) GetSubsumedRangeID() RangeID {
+	if m != nil {
+		return m.SubsumedRangeID
+	}
+	return 0
+}
+
 type ChangeReplicasTrigger struct {
 	NodeID     NodeID            `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
 	StoreID    StoreID           `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
@@ -344,6 +379,20 @@ type ChangeReplicasTrigger struct {
 func (m *ChangeReplicasTrigger) Reset()         { *m = ChangeReplicasTrigger{} }
 func (m *ChangeReplicasTrigger) String() string { return proto1.CompactTextString(m) }
 func (*ChangeReplicasTrigger) ProtoMessage()    {}
+
+func (m *ChangeReplicasTrigger) GetNodeID() NodeID {
+	if m != nil {
+		return m.NodeID
+	}
+	return 0
+}
+
+func (m *ChangeReplicasTrigger) GetStoreID() StoreID {
+	if m != nil {
+		return m.StoreID
+	}
+	return 0
+}
 
 func (m *ChangeReplicasTrigger) GetChangeType() ReplicaChangeType {
 	if m != nil {
@@ -364,6 +413,13 @@ func (m *ChangeReplicasTrigger) GetUpdatedReplicas() []Replica {
 		return m.UpdatedReplicas
 	}
 	return nil
+}
+
+func (m *ChangeReplicasTrigger) GetNextReplicaID() ReplicaID {
+	if m != nil {
+		return m.NextReplicaID
+	}
+	return 0
 }
 
 // CommitTrigger encapsulates all of the internal-only commit triggers.
@@ -490,6 +546,13 @@ func (m *Transaction) GetName() string {
 	return ""
 }
 
+func (m *Transaction) GetKey() Key {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
+
 func (m *Transaction) GetID() []byte {
 	if m != nil {
 		return m.ID
@@ -598,6 +661,13 @@ func (m *Lease) GetExpiration() Timestamp {
 	return Timestamp{}
 }
 
+func (m *Lease) GetRaftNodeID() RaftNodeID {
+	if m != nil {
+		return m.RaftNodeID
+	}
+	return 0
+}
+
 // Intent is used to communicate the location of an intent.
 type Intent struct {
 	Key              Key         `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
@@ -609,6 +679,20 @@ type Intent struct {
 func (m *Intent) Reset()         { *m = Intent{} }
 func (m *Intent) String() string { return proto1.CompactTextString(m) }
 func (*Intent) ProtoMessage()    {}
+
+func (m *Intent) GetKey() Key {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
+
+func (m *Intent) GetEndKey() Key {
+	if m != nil {
+		return m.EndKey
+	}
+	return nil
+}
 
 func (m *Intent) GetTxn() Transaction {
 	if m != nil {

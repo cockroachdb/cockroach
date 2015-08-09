@@ -18,11 +18,11 @@ github.com/cockroachdb/yacc 572e006f8e6b0061ebda949d13744f5108389514
 github.com/coreos/etcd 487639b2d8492561acd27d3fe7d957b56a3c3258
 github.com/docker/docker 7374852be9def787921aea2ca831771982badecf
 github.com/elazarl/go-bindata-assetfs 3dcc96556217539f50599357fb481ac0dc7439b9
-github.com/gogo/protobuf 8edb24c179ed858a38f18920d9005c2dde05ec17
+github.com/gogo/protobuf 98e73e511a62a9c232152f94999112c80142a813
 github.com/golang/lint 7b7f4364ff76043e6c3610281525fabc0d90f0e4
 github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
-github.com/jteeuwen/go-bindata 19c9a00bca891d48ac6d66a4a9264f667de06b9f
+github.com/jteeuwen/go-bindata dce55d09e24ac40a6e725c8420902b86554f8046
 github.com/julienschmidt/httprouter 6aacfd5ab513e34f7e64ea9627ab9670371b34e7
 github.com/kisielk/errcheck 50b84cf7fa18ee2985b8c63ba3de5edd604b9259
 github.com/kisielk/gotool d678387370a2eb9b5b0a33218bc8c9d8de15b6be
@@ -36,5 +36,5 @@ github.com/spf13/pflag 67cbc198fd11dab704b214c1e629a97af392c085
 github.com/tebeka/go2xunit d45000af2242dd0e7b8c7b07d82a1068adc5fd40
 golang.org/x/crypto cc04154d65fb9296747569b107cfd05380b1ea3e
 golang.org/x/net 8bfde94a845cb31000de3266ac83edbda58dab09
-golang.org/x/tools 7e0ad01d16aa99fd5a2eb43531862cf7ec5acee3
+golang.org/x/tools d02228d1857b9f49cd0252788516ff5584266eb6
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de

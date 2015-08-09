@@ -48,11 +48,6 @@ func validateName(name, typ string) error {
 	return nil
 }
 
-// GetID implements the sql.descriptorProto interface.
-func (desc *TableDescriptor) GetID() ID {
-	return desc.ID
-}
-
 // SetID implements the sql.descriptorProto interface.
 func (desc *TableDescriptor) SetID(id ID) {
 	desc.ID = id
@@ -254,11 +249,6 @@ func (c *ColumnType) SQLString() string {
 		}
 	}
 	return c.Kind.String()
-}
-
-// GetID implements the sql.descriptorProto interface.
-func (desc *DatabaseDescriptor) GetID() ID {
-	return desc.ID
 }
 
 // SetID implements the sql.descriptorProto interface.

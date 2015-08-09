@@ -363,6 +363,20 @@ func (m *RaftCommand) Reset()         { *m = RaftCommand{} }
 func (m *RaftCommand) String() string { return proto1.CompactTextString(m) }
 func (*RaftCommand) ProtoMessage()    {}
 
+func (m *RaftCommand) GetRangeID() RangeID {
+	if m != nil {
+		return m.RangeID
+	}
+	return 0
+}
+
+func (m *RaftCommand) GetOriginNodeID() RaftNodeID {
+	if m != nil {
+		return m.OriginNodeID
+	}
+	return 0
+}
+
 func (m *RaftCommand) GetCmd() RaftCommandUnion {
 	if m != nil {
 		return m.Cmd
@@ -388,6 +402,13 @@ type RaftMessageRequest struct {
 func (m *RaftMessageRequest) Reset()         { *m = RaftMessageRequest{} }
 func (m *RaftMessageRequest) String() string { return proto1.CompactTextString(m) }
 func (*RaftMessageRequest) ProtoMessage()    {}
+
+func (m *RaftMessageRequest) GetGroupID() RangeID {
+	if m != nil {
+		return m.GroupID
+	}
+	return 0
+}
 
 func (m *RaftMessageRequest) GetMsg() []byte {
 	if m != nil {

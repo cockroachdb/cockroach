@@ -106,6 +106,41 @@ func (m *LogEntry) GetArgs() []LogEntry_Arg {
 	return nil
 }
 
+func (m *LogEntry) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
+	if m != nil && m.NodeID != nil {
+		return *m.NodeID
+	}
+	return 0
+}
+
+func (m *LogEntry) GetStoreID() github_com_cockroachdb_cockroach_proto.StoreID {
+	if m != nil && m.StoreID != nil {
+		return *m.StoreID
+	}
+	return 0
+}
+
+func (m *LogEntry) GetRangeID() github_com_cockroachdb_cockroach_proto.RangeID {
+	if m != nil && m.RangeID != nil {
+		return *m.RangeID
+	}
+	return 0
+}
+
+func (m *LogEntry) GetMethod() github_com_cockroachdb_cockroach_proto.Method {
+	if m != nil && m.Method != nil {
+		return *m.Method
+	}
+	return 0
+}
+
+func (m *LogEntry) GetKey() github_com_cockroachdb_cockroach_proto.Key {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
+
 func (m *LogEntry) GetStacks() []byte {
 	if m != nil {
 		return m.Stacks

@@ -105,6 +105,13 @@ type RangeNotFoundError struct {
 func (m *RangeNotFoundError) Reset()      { *m = RangeNotFoundError{} }
 func (*RangeNotFoundError) ProtoMessage() {}
 
+func (m *RangeNotFoundError) GetRangeID() RangeID {
+	if m != nil {
+		return m.RangeID
+	}
+	return 0
+}
+
 // A RangeKeyMismatchError indicates that a command was sent to a
 // range which did not contain the key(s) specified by the command.
 type RangeKeyMismatchError struct {
@@ -116,6 +123,20 @@ type RangeKeyMismatchError struct {
 
 func (m *RangeKeyMismatchError) Reset()      { *m = RangeKeyMismatchError{} }
 func (*RangeKeyMismatchError) ProtoMessage() {}
+
+func (m *RangeKeyMismatchError) GetRequestStartKey() Key {
+	if m != nil {
+		return m.RequestStartKey
+	}
+	return nil
+}
+
+func (m *RangeKeyMismatchError) GetRequestEndKey() Key {
+	if m != nil {
+		return m.RequestEndKey
+	}
+	return nil
+}
 
 func (m *RangeKeyMismatchError) GetRange() *RangeDescriptor {
 	if m != nil {

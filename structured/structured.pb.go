@@ -142,6 +142,13 @@ func (m *ColumnDescriptor) GetName() string {
 	return ""
 }
 
+func (m *ColumnDescriptor) GetID() ID {
+	if m != nil {
+		return m.ID
+	}
+	return 0
+}
+
 func (m *ColumnDescriptor) GetType() ColumnType {
 	if m != nil {
 		return m.Type
@@ -182,6 +189,13 @@ func (m *IndexDescriptor) GetName() string {
 	return ""
 }
 
+func (m *IndexDescriptor) GetID() ID {
+	if m != nil {
+		return m.ID
+	}
+	return 0
+}
+
 func (m *IndexDescriptor) GetUnique() bool {
 	if m != nil {
 		return m.Unique
@@ -192,6 +206,13 @@ func (m *IndexDescriptor) GetUnique() bool {
 func (m *IndexDescriptor) GetColumnNames() []string {
 	if m != nil {
 		return m.ColumnNames
+	}
+	return nil
+}
+
+func (m *IndexDescriptor) GetColumnIDs() []ID {
+	if m != nil {
+		return m.ColumnIDs
 	}
 	return nil
 }
@@ -252,11 +273,25 @@ func (m *TableDescriptor) GetName() string {
 	return ""
 }
 
+func (m *TableDescriptor) GetID() ID {
+	if m != nil {
+		return m.ID
+	}
+	return 0
+}
+
 func (m *TableDescriptor) GetColumns() []ColumnDescriptor {
 	if m != nil {
 		return m.Columns
 	}
 	return nil
+}
+
+func (m *TableDescriptor) GetNextColumnID() ID {
+	if m != nil {
+		return m.NextColumnID
+	}
+	return 0
 }
 
 func (m *TableDescriptor) GetPrimaryIndex() IndexDescriptor {
@@ -271,6 +306,13 @@ func (m *TableDescriptor) GetIndexes() []IndexDescriptor {
 		return m.Indexes
 	}
 	return nil
+}
+
+func (m *TableDescriptor) GetNextIndexID() ID {
+	if m != nil {
+		return m.NextIndexID
+	}
+	return 0
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
@@ -293,6 +335,13 @@ func (m *DatabaseDescriptor) GetName() string {
 		return m.Name
 	}
 	return ""
+}
+
+func (m *DatabaseDescriptor) GetID() ID {
+	if m != nil {
+		return m.ID
+	}
+	return 0
 }
 
 func init() {
