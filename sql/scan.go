@@ -129,7 +129,7 @@ func (n *scanNode) Next() bool {
 		// references in expressions to refer to <table-id, col-id> tuples.
 		_, colID := encoding.DecodeUvarint(remaining)
 		var col *structured.ColumnDescriptor
-		col, n.err = n.desc.FindColumnByID(structured.ID(colID))
+		col, n.err = n.desc.FindColumnByID(structured.ColumnID(colID))
 		if n.err != nil {
 			return false
 		}

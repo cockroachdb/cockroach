@@ -51,7 +51,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
-	colIDtoRowIndex := map[structured.ID]int{}
+	colIDtoRowIndex := map[structured.ColumnID]int{}
 	for i, c := range cols {
 		colIDtoRowIndex[c.ID] = i
 	}

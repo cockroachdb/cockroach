@@ -44,7 +44,7 @@ func MakeDescMetadataKey(descID ID) proto.Key {
 }
 
 // MakeColumnKey returns the key for the column in the given row.
-func MakeColumnKey(colID ID, primaryKey []byte) proto.Key {
+func MakeColumnKey(colID ColumnID, primaryKey []byte) proto.Key {
 	var key []byte
 	key = append(key, primaryKey...)
 	return encoding.EncodeUvarint(key, uint64(colID))
@@ -59,7 +59,7 @@ func MakeTablePrefix(tableID ID) []byte {
 }
 
 // MakeIndexKeyPrefix returns the key prefix used for the index's data.
-func MakeIndexKeyPrefix(tableID, indexID ID) []byte {
+func MakeIndexKeyPrefix(tableID ID, indexID IndexID) []byte {
 	var key []byte
 	key = append(key, keys.TableDataPrefix...)
 	key = encoding.EncodeUvarint(key, uint64(tableID))

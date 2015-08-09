@@ -54,7 +54,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	}
 
 	// Set of columns being updated
-	colIDSet := map[structured.ID]struct{}{}
+	colIDSet := map[structured.ColumnID]struct{}{}
 	for _, c := range cols {
 		colIDSet[c.ID] = struct{}{}
 	}
@@ -80,7 +80,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
-	colIDtoRowIndex := map[structured.ID]int{}
+	colIDtoRowIndex := map[structured.ColumnID]int{}
 	for i, name := range row.Columns() {
 		c, err := tableDesc.FindColumnByName(name)
 		if err != nil {

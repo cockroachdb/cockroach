@@ -31,12 +31,12 @@ import (
 
 // tableKey implements descriptorKey.
 type tableKey struct {
-	id   structured.ID
-	name string
+	parentID structured.ID
+	name     string
 }
 
 func (tk tableKey) Key() proto.Key {
-	return structured.MakeNameMetadataKey(tk.id, tk.name)
+	return structured.MakeNameMetadataKey(tk.parentID, tk.name)
 }
 
 func (tk tableKey) Name() string {
@@ -153,7 +153,8 @@ func (p *planner) getTableNames(dbDesc *structured.DatabaseDescriptor) (parser.Q
 	return qualifiedNames, nil
 }
 
-func encodeIndexKey(columnIDs []structured.ID, colMap map[structured.ID]int, values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
+func encodeIndexKey(columnIDs []structured.ColumnID, colMap map[structured.ColumnID]int,
+	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	var key []byte
 	var containsNull bool
 	key = append(key, indexKey...)
@@ -217,7 +218,7 @@ func decodeIndexKey(desc *structured.TableDescriptor,
 
 	var indexID uint64
 	key, indexID = encoding.DecodeUvarint(key)
-	if structured.ID(indexID) != index.ID {
+	if structured.IndexID(indexID) != index.ID {
 		return nil, fmt.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
 	}
 
@@ -254,7 +255,7 @@ type indexEntry struct {
 }
 
 func encodeSecondaryIndexes(tableID structured.ID, indexes []structured.IndexDescriptor,
-	colMap map[structured.ID]int, values []parser.Datum, primaryIndexKeySuffix []byte) ([]indexEntry, error) {
+	colMap map[structured.ColumnID]int, values []parser.Datum, primaryIndexKeySuffix []byte) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
 		secondaryIndexKeyPrefix := structured.MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
