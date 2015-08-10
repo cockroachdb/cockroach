@@ -239,73 +239,198 @@ func (NullVal) String() string {
 	return fmt.Sprintf("NULL")
 }
 
+type nameType int
+
+const (
+	unknownName nameType = iota
+	tableName
+	columnName
+)
+
 // QualifiedName is a base name and an optional indirection expression.
 type QualifiedName struct {
-	Base     Name
-	Indirect Indirection
+	Base       Name
+	Indirect   Indirection
+	normalized nameType
 }
 
 // StarExpr is a convenience variable that represents an unqualified "*".
 var StarExpr = &QualifiedName{Indirect: Indirection{unqualifiedStar}}
 
+// NormalizeTableName normalizes the qualified name to contain a database name
+// as prefix, returning an error if unable to do so or if the name is not a
+// valid table name (e.g. it contains an array indirection). The incoming
+// qualified name should have one of the following forms:
+//
+//   table
+//   database.table
+//   table@index
+//   database.table@index
+//
+// On successful normalization, the qualified name will have the form:
+//
+//   database.table@index
+func (n *QualifiedName) NormalizeTableName(database string) error {
+	if n == nil || n.Base == "" {
+		return fmt.Errorf("empty table name: %s", n)
+	}
+	if n.normalized == columnName {
+		return fmt.Errorf("already normalized as a column name: %s", n)
+	}
+	if len(n.Indirect) == 0 {
+		// table -> database.table
+		if database == "" {
+			return fmt.Errorf("no database specified: %s", n)
+		}
+		n.Indirect = append(n.Indirect, NameIndirection(n.Base))
+		n.Base = Name(database)
+		n.normalized = tableName
+		return nil
+	}
+	if len(n.Indirect) > 2 {
+		return fmt.Errorf("invalid table name: %s", n)
+	}
+	// Either database.table or database.table@index.
+	switch n.Indirect[0].(type) {
+	case NameIndirection:
+		// Nothing to do.
+	case IndexIndirection:
+		// table@index -> database.table@index
+		//
+		// Accomplished by prepending n.Base to the existing indirection and then
+		// setting n.Base to the supplied database.
+		if database == "" {
+			return fmt.Errorf("no database specified: %s", n)
+		}
+		n.Indirect = append(Indirection{NameIndirection(n.Base)}, n.Indirect...)
+		n.Base = Name(database)
+	}
+	if len(n.Indirect) == 2 {
+		if _, ok := n.Indirect[1].(IndexIndirection); !ok {
+			return fmt.Errorf("invalid table name: %s", n)
+		}
+	}
+	n.normalized = tableName
+	return nil
+}
+
+// NormalizeColumnName normalizes the qualified name to contain a table name as
+// prefix, returning an error if unable to do so or if the name is not a valid
+// column name (e.g. it contains too many indirections). If normalization
+// occurred, the modified qualified name will have n.Base == "" to indicate no
+// explicit table was specified. The incoming qualified name should have one of
+// the following forms:
+//
+//   *
+//   table.*
+//   column
+//   column[array-indirection]
+//   table.column
+//   table.column[array-indirection]
+//
+// Note that "table" may be the empty string. On successful normalization the
+// qualified name will have one of the forms:
+//
+//   table.*
+//   table.column
+//   table.column[array-indirection]
+func (n *QualifiedName) NormalizeColumnName() error {
+	if n == nil {
+		return fmt.Errorf("empty column name: %s", n)
+	}
+	if n.normalized == tableName {
+		return fmt.Errorf("already normalized as a table name: %s", n)
+	}
+	if len(n.Indirect) == 0 {
+		// column -> table.column
+		if n.Base == "" {
+			return fmt.Errorf("empty column name: %s", n)
+		}
+		n.Indirect = append(n.Indirect, NameIndirection(n.Base))
+		n.Base = ""
+		n.normalized = columnName
+		return nil
+	}
+	if len(n.Indirect) > 2 {
+		return fmt.Errorf("invalid column name: %s", n)
+	}
+	// Either table.column, table.*, column[array-indirection] or
+	// table.column[array-indirection].
+	switch n.Indirect[0].(type) {
+	case NameIndirection, StarIndirection:
+		// Nothing to do.
+	case *ArrayIndirection:
+		// column[array-indirection] -> "".column[array-indirection]
+		//
+		// Accomplished by prepending n.Base to the existing indirection and then
+		// clearing n.Base.
+		n.Indirect = append(Indirection{NameIndirection(n.Base)}, n.Indirect...)
+		n.Base = ""
+	default:
+		return fmt.Errorf("invalid column name: %s", n)
+	}
+	if len(n.Indirect) == 2 {
+		if _, ok := n.Indirect[1].(*ArrayIndirection); !ok {
+			return fmt.Errorf("invalid column name: %s", n)
+		}
+	}
+	n.normalized = columnName
+	return nil
+}
+
 // Database returns the database portion of the name. Note that the returned
 // string is not quoted even if the name is a keyword.
 func (n *QualifiedName) Database() string {
-	// The database portion of the name is n.Base, but only as long as an
-	// indirection is present. In a qualified name like "foo" (without an
-	// indirection), "foo" represents a table or column name.
-	if len(n.Indirect) > 0 {
-		return string(n.Base)
+	if n.normalized != tableName {
+		panic(fmt.Sprintf("%s is not a table name", n))
 	}
-	return ""
+	// The database portion of the name is n.Base.
+	return string(n.Base)
 }
 
 // Table returns the table portion of the name. Note that the returned string
 // is not quoted even if the name is a keyword.
-//
-// TODO(pmattis): See the comment for Column() regarding how QualifiedNames are
-// used in context sensitive locations. Sometimes they are referring to tables
-// sometimes to columns.
 func (n *QualifiedName) Table() string {
-	if l := len(n.Indirect); l > 0 {
-		last := n.Indirect[l-1]
-		switch t := last.(type) {
-		case NameIndirection:
-			return string(t)
-		}
-		return ""
+	if n.normalized != tableName && n.normalized != columnName {
+		panic(fmt.Sprintf("%s is not a table or column name", n))
+	}
+	if n.normalized == tableName {
+		return string(n.Indirect[0].(NameIndirection))
 	}
 	return string(n.Base)
 }
 
-// Column returns the column portion of the name. Note that the returned string
+// Index returns the index portion of the name. Note that the returned string
 // is not quoted even if the name is a keyword.
-//
-// TODO(pmattis) Handling of qualified names is currently very basic and we
-// consider the column portion of the name to simply be the last
-// component. This is identical to the table portion of the name. Perhaps it
-// would be better to name this the "last" component because context matters in
-// determining whether it is a table or column name. Perhaps we can have
-// different types for use in the different contexts (e.g. ColumnName,
-// TableName, IndexName, etc).
-func (n *QualifiedName) Column() string {
-	return n.Table()
+func (n *QualifiedName) Index() string {
+	if n.normalized != tableName {
+		panic(fmt.Sprintf("%s is not a table name", n))
+	}
+	if len(n.Indirect) == 2 {
+		return string(n.Indirect[1].(IndexIndirection))
+	}
+	return ""
 }
 
-// IsStar returns true iff the qualified name contains a non-empty base and is
-// composed of 0 or more name indirections and a trailing star indirection.
+// Column returns the column portion of the name. Note that the returned string
+// is not quoted even if the name is a keyword.
+func (n *QualifiedName) Column() string {
+	if n.normalized != columnName {
+		panic(fmt.Sprintf("%s is not a column name", n))
+	}
+	return string(n.Indirect[0].(NameIndirection))
+}
+
+// IsStar returns true iff the qualified name contains matches "".* or table.*.
 func (n *QualifiedName) IsStar() bool {
-	count := len(n.Indirect)
-	if count == 0 {
+	if n.normalized != columnName {
+		panic(fmt.Sprintf("%s is not a column name", n))
+	}
+	if len(n.Indirect) != 1 {
 		return false
 	}
-	if _, ok := n.Indirect[count-1].(StarIndirection); !ok {
+	if _, ok := n.Indirect[0].(StarIndirection); !ok {
 		return false
-	}
-	for _, indirect := range n.Indirect[:count-1] {
-		if _, ok := indirect.(NameIndirection); !ok {
-			return false
-		}
 	}
 	return true
 }

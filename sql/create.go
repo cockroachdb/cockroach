@@ -49,7 +49,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 // Privileges: WRITE on database.
 //   Notes: postgres/mysql require CREATE on database.
 func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
-	if err := p.normalizeTableName(n.Table); err != nil {
+	if err := n.Table.NormalizeTableName(p.session.Database); err != nil {
 		return nil, err
 	}
 

@@ -108,20 +108,6 @@ func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*structured.TableDesc
 	return desc, nil
 }
 
-func (p *planner) normalizeTableName(qname *parser.QualifiedName) error {
-	if qname == nil || qname.Base == "" {
-		return fmt.Errorf("empty table name: %s", qname)
-	}
-	if len(qname.Indirect) == 0 {
-		if p.session.Database == "" {
-			return fmt.Errorf("no database specified")
-		}
-		qname.Indirect = append(qname.Indirect, parser.NameIndirection(qname.Base))
-		qname.Base = parser.Name(p.session.Database)
-	}
-	return nil
-}
-
 // planNode defines the interface for executing a query or portion of a query.
 type planNode interface {
 	// Columns returns the column names. The length of the returned slice is

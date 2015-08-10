@@ -154,6 +154,7 @@ func TestParse(t *testing.T) {
 		{`SELECT a.b[1] FROM t`},
 		{`SELECT a.b[1 + 1:4][3] FROM t`},
 		{`SELECT 'a' FROM t`},
+		{`SELECT 'a' FROM t@bar`},
 
 		{`SELECT 'a' AS "12345"`},
 		{`SELECT 'a' AS clnm`},

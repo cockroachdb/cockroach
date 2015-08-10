@@ -94,7 +94,7 @@ query error "kv.*" cannot be aliased
 SELECT kv.* AS foo FROM kv
 ----
 
-query error qualified name "bar.kv.*" not found
+query error invalid column name: bar.kv.*
 SELECT bar.kv.* FROM kv
 ----
 
@@ -120,3 +120,44 @@ SELECT *, "from", kw."from" FROM kw
 ----
 from from from
 1    1    1
+
+# SELECT from index.
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  CONSTRAINT foo INDEX (z, y)
+)
+
+statement ok
+INSERT INTO xyz VALUES (4, 5, 6), (1, 2, 3);
+
+query II
+SELECT * FROM xyz@foo
+----
+3 2
+6 5
+
+query I
+SELECT z FROM test.xyz@foo WHERE y = 5
+----
+6
+
+query I
+SELECT foo.y FROM test.xyz@foo WHERE z = 3
+----
+2
+
+query error table "unknown" does not exist
+SELECT z FROM test.unknown@foo WHERE y = 5
+----
+
+query error index "unknown" not found
+SELECT z FROM test.xyz@unknown WHERE y = 5
+----
+
+query error qualified name "foo.x" not found
+SELECT x FROM test.xyz@foo WHERE y = 5
+----

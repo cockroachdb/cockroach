@@ -144,7 +144,9 @@ func (p *planner) processColumns(tableDesc *structured.TableDescriptor,
 	for i, n := range node {
 		// TODO(pmattis): If the name is qualified, verify the table name matches
 		// tableDesc.Name.
-		var err error
+		if err := n.NormalizeColumnName(); err != nil {
+			return nil, err
+		}
 		col, err := tableDesc.FindColumnByName(n.Column())
 		if err != nil {
 			return nil, err

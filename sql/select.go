@@ -32,6 +32,7 @@ import (
 //          mysql requires SELECT.
 func (p *planner) Select(n *parser.Select) (planNode, error) {
 	var desc *structured.TableDescriptor
+	var index *structured.IndexDescriptor
 
 	switch len(n.From) {
 	case 0:
@@ -49,6 +50,46 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 				p.user, parser.PrivilegeRead, desc.Name)
 		}
 
+		// This is only kosher because we know that getAliasedDesc() succeeded.
+		qname := n.From[0].(*parser.AliasedTableExpr).Expr.(*parser.QualifiedName)
+		indexName := qname.Index()
+		if indexName != "" && !strings.EqualFold(desc.PrimaryIndex.Name, indexName) {
+			for i := range desc.Indexes {
+				if strings.EqualFold(desc.Indexes[i].Name, indexName) {
+					// Remove all but the matching index from the descriptor.
+					desc.Indexes = desc.Indexes[i : i+1]
+					index = &desc.Indexes[0]
+					break
+				}
+			}
+			if index == nil {
+				return nil, fmt.Errorf("index \"%s\" not found", indexName)
+			}
+			// If the table was not aliased, use the index name instead of the table
+			// name for fully-qualified columns in the expression.
+			if n.From[0].(*parser.AliasedTableExpr).As == "" {
+				desc.Name = index.Name
+			}
+			// Strip out any columns from the table that are not present in the
+			// index. This will leave us with a "fake" table containing only the
+			// columns from the index.
+			indexColIDs := map[structured.ColumnID]struct{}{}
+			for _, colID := range index.ColumnIDs {
+				indexColIDs[colID] = struct{}{}
+			}
+			var cols []structured.ColumnDescriptor
+			for _, col := range desc.Columns {
+				if _, ok := indexColIDs[col.ID]; !ok {
+					continue
+				}
+				cols = append(cols, col)
+			}
+			desc.Columns = cols
+			desc.PrimaryIndex.Reset()
+		} else {
+			index = &desc.PrimaryIndex
+		}
+
 	default:
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n.From)
 	}
@@ -62,25 +103,35 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		// If a QualifiedName has a StarIndirection suffix we need to match the
 		// prefix of the qualified name to one of the tables in the query and
 		// then expand the "*" into a list of columns.
-		if qname, ok := e.Expr.(*parser.QualifiedName); ok && qname.IsStar() {
-			if desc == nil {
-				return nil, fmt.Errorf("\"%s\" with no tables specified is not valid", qname)
+		if qname, ok := e.Expr.(*parser.QualifiedName); ok {
+			if err := qname.NormalizeColumnName(); err != nil {
+				return nil, err
 			}
-			if e.As != "" {
-				return nil, fmt.Errorf("\"%s\" cannot be aliased", qname)
-			}
-			if len(qname.Indirect) == 1 {
-				if qname.Base != "" && !strings.EqualFold(desc.Name, string(qname.Base)) {
-					return nil, fmt.Errorf("table \"%s\" not found", qname.Base)
+			if qname.IsStar() {
+				if desc == nil {
+					return nil, fmt.Errorf("\"%s\" with no tables specified is not valid", qname)
+				}
+				if e.As != "" {
+					return nil, fmt.Errorf("\"%s\" cannot be aliased", qname)
+				}
+				tableName := qname.Table()
+				if tableName != "" && !strings.EqualFold(desc.Name, tableName) {
+					return nil, fmt.Errorf("table \"%s\" not found", tableName)
 				}
 
-				for _, col := range desc.Columns {
-					columns = append(columns, col.Name)
-					exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
+				if index != &desc.PrimaryIndex {
+					for _, col := range index.ColumnNames {
+						columns = append(columns, col)
+						exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col)})
+					}
+				} else {
+					for _, col := range desc.Columns {
+						columns = append(columns, col.Name)
+						exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
+					}
 				}
 				continue
 			}
-			// TODO(pmattis): Handle len(qname.Indirect) > 1: <database>.<table>.*.
 		}
 
 		exprs = append(exprs, e.Expr)
@@ -93,6 +144,9 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		// full qualification as the column name to return.
 		switch t := e.Expr.(type) {
 		case *parser.QualifiedName:
+			if err := t.NormalizeColumnName(); err != nil {
+				return nil, err
+			}
 			columns = append(columns, t.Column())
 		default:
 			columns = append(columns, e.Expr.String())
@@ -102,8 +156,12 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	s := &scanNode{
 		txn:     p.txn,
 		desc:    desc,
+		index:   index,
 		columns: columns,
 		render:  exprs,
+	}
+	if index != nil {
+		s.isSecondaryIndex = index != &desc.PrimaryIndex
 	}
 	if n.Where != nil {
 		s.filter = n.Where.Expr
