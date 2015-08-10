@@ -40,6 +40,11 @@ func TestMakeTableDescColumns(t *testing.T) {
 			true,
 		},
 		{
+			"BOOLEAN",
+			structured.ColumnType{Kind: structured.ColumnType_BOOL},
+			true,
+		},
+		{
 			"INT",
 			structured.ColumnType{Kind: structured.ColumnType_INT},
 			true,

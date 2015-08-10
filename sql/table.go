@@ -57,6 +57,8 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 			case *parser.BitType:
 				col.Type.Kind = structured.ColumnType_BIT
 				col.Type.Width = int32(t.N)
+			case *parser.BoolType:
+				col.Type.Kind = structured.ColumnType_BOOL
 			case *parser.IntType:
 				col.Type.Kind = structured.ColumnType_INT
 				col.Type.Width = int32(t.N)
@@ -80,6 +82,8 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 				col.Type.Kind = structured.ColumnType_TEXT
 			case *parser.BlobType:
 				col.Type.Kind = structured.ColumnType_BLOB
+			default:
+				panic(fmt.Sprintf("unexpected type %T", t))
 			}
 			desc.Columns = append(desc.Columns, col)
 
@@ -288,6 +292,8 @@ func prepareVal(col structured.ColumnDescriptor, val parser.Expr) (interface{}, 
 
 	switch col.Type.Kind {
 	case structured.ColumnType_BIT:
+		return bool(val.(parser.DBool)), nil
+	case structured.ColumnType_BOOL:
 		return bool(val.(parser.DBool)), nil
 	case structured.ColumnType_INT:
 		return int64(val.(parser.DInt)), nil

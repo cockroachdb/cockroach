@@ -197,11 +197,9 @@ func TestPlaceholders(t *testing.T) {
 	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE c IN ($1)", "blah"); err != nil {
 		t.Fatal(err)
 	}
-	// TODO(vivek): This is not working. Fix later.
-	//	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE d IN ($1)", true); err != nil {
-	//	t.Fatal(err)
-	//}
-
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE d IN ($1)", true); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestInsecure(t *testing.T) {
