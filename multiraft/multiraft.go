@@ -681,6 +681,7 @@ func (s *state) createGroup(groupID proto.RangeID) error {
 		// TODO(bdarnell): make these configurable; evaluate defaults.
 		MaxSizePerMsg:   1024 * 1024,
 		MaxInflightMsgs: 256,
+		Logger:          &raftLogger{group: uint64(groupID)},
 	}
 	if err := s.multiNode.CreateGroup(uint64(groupID), raftCfg, nil); err != nil {
 		return err

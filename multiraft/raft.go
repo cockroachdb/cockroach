@@ -24,7 +24,8 @@ import (
 	"github.com/coreos/etcd/raft"
 )
 
-// init installs an adapter to use clog for all log messages from raft.
+// init installs an adapter to use clog for log messages from raft which
+// don't belong to any raft group.
 func init() {
 	raft.SetLogger(&raftLogger{})
 }
@@ -40,7 +41,20 @@ func init() {
 //
 // This file is named raft.go instead of something like logger.go because this
 // file's name is used to determine the vmodule parameter: --vmodule=raft=1
-type raftLogger struct{}
+type raftLogger struct {
+	group uint64
+}
+
+func (r *raftLogger) prependContext(format string, v []interface{}) string {
+	var s string
+	if r.group != 0 {
+		v2 := append([]interface{}{r.group}, v...)
+		s = fmt.Sprintf("group %d "+format, v2...)
+	} else {
+		s = fmt.Sprintf(format, v...)
+	}
+	return s
+}
 
 func (*raftLogger) Debug(v ...interface{}) {
 	if log.V(2) {
@@ -48,9 +62,9 @@ func (*raftLogger) Debug(v ...interface{}) {
 	}
 }
 
-func (*raftLogger) Debugf(format string, v ...interface{}) {
+func (r *raftLogger) Debugf(format string, v ...interface{}) {
 	if log.V(2) {
-		s := fmt.Sprintf(format, v...)
+		s := r.prependContext(format, v)
 		log.InfoDepth(1, s)
 	}
 }
@@ -61,9 +75,9 @@ func (*raftLogger) Info(v ...interface{}) {
 	}
 }
 
-func (*raftLogger) Infof(format string, v ...interface{}) {
+func (r *raftLogger) Infof(format string, v ...interface{}) {
 	if log.V(1) {
-		s := fmt.Sprintf(format, v...)
+		s := r.prependContext(format, v)
 		log.InfoDepth(1, s)
 	}
 }
@@ -72,8 +86,8 @@ func (*raftLogger) Warning(v ...interface{}) {
 	log.WarningDepth(1, v...)
 }
 
-func (*raftLogger) Warningf(format string, v ...interface{}) {
-	s := fmt.Sprintf(format, v...)
+func (r *raftLogger) Warningf(format string, v ...interface{}) {
+	s := r.prependContext(format, v)
 	log.WarningDepth(1, s)
 }
 
@@ -81,8 +95,8 @@ func (*raftLogger) Error(v ...interface{}) {
 	log.ErrorDepth(1, v...)
 }
 
-func (*raftLogger) Errorf(format string, v ...interface{}) {
-	s := fmt.Sprintf(format, v...)
+func (r *raftLogger) Errorf(format string, v ...interface{}) {
+	s := r.prependContext(format, v)
 	log.ErrorDepth(1, s)
 }
 
@@ -90,8 +104,8 @@ func (*raftLogger) Fatal(v ...interface{}) {
 	log.FatalDepth(1, v...)
 }
 
-func (*raftLogger) Fatalf(format string, v ...interface{}) {
-	s := fmt.Sprintf(format, v...)
+func (r *raftLogger) Fatalf(format string, v ...interface{}) {
+	s := r.prependContext(format, v)
 	log.FatalDepth(1, s)
 }
 
@@ -101,8 +115,8 @@ func (*raftLogger) Panic(v ...interface{}) {
 	panic(s)
 }
 
-func (*raftLogger) Panicf(format string, v ...interface{}) {
-	s := fmt.Sprintf(format, v...)
+func (r *raftLogger) Panicf(format string, v ...interface{}) {
+	s := r.prependContext(format, v)
 	log.ErrorDepth(1, s)
 	panic(s)
 }
