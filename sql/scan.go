@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-type valMap map[structured.ID]parser.Datum
-type qvalMap map[structured.ID]*parser.ParenExpr
+type valMap map[structured.ColumnID]parser.Datum
+type qvalMap map[structured.ColumnID]*parser.ParenExpr
 
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
