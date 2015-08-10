@@ -100,6 +100,11 @@ SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
 k
 a
 
+query T
+SELECT "Foo"."V" FROM kv AS foo WHERE foo.k = 'a'
+----
+NULL
+
 statement ok
 CREATE TABLE kw ("from" INT PRIMARY KEY)
 
