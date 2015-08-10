@@ -29,7 +29,7 @@ import (
 // planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution.
 type planner struct {
-	db      *client.DB
+	db      *client.Txn
 	session Session
 	user    string
 }

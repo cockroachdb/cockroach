@@ -37,7 +37,7 @@ type qvalMap map[structured.ColumnID]*parser.ParenExpr
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
-	db         *client.DB
+	db         *client.Txn
 	desc       *structured.TableDescriptor
 	columns    []string
 	err        error

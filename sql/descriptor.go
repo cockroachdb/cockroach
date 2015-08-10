@@ -86,12 +86,10 @@ func (p *planner) writeDescriptor(plainKey descriptorKey, descriptor descriptorP
 	// difficult to interpret.
 	// TODO(pmattis): Need to handle if-not-exists here as well.
 	descKey := structured.MakeDescMetadataKey(descriptor.GetID())
-	return p.db.Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
-		b.CPut(key, descKey, nil)
-		b.CPut(descKey, descriptor, nil)
-		return txn.Commit(b)
-	})
+	b := client.Batch{}
+	b.CPut(key, descKey, nil)
+	b.CPut(descKey, descriptor, nil)
+	return p.db.Run(&b)
 }
 
 // getDescriptor looks up the descriptor for `key`, validates it,
