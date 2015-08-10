@@ -206,7 +206,8 @@ func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]K
 	return r.Rows, err
 }
 
-// Scan retrieves the rows between begin (inclusive) and end (exclusive).
+// Scan retrieves the rows between begin (inclusive) and end (exclusive) in
+// ascending order.
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
@@ -216,8 +217,8 @@ func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) 
 	return txn.scan(begin, end, maxRows, false)
 }
 
-// ReverseScan retrieves the rows in reserve order starting at end (exclusive)
-// and finishing at begin(inclusive).
+// ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
+// in descending order.
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //

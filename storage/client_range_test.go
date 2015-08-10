@@ -326,7 +326,8 @@ func TestInternalRangeLookupUseReverse(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	// Init test ranges: ["1" , "a"), ["a" , "c"), ["c" , "e"), ["e" , "g") and ["g" , "\xff\xff")
+	// Init test ranges:
+	// ["1","a"), ["a","c"), ["c","e"), ["e","g") and ["g","\xff\xff").
 	splits := []proto.AdminSplitRequest{
 		adminSplitArgs(proto.Key("g"), proto.Key("g"), 1, store.StoreID()),
 		adminSplitArgs(proto.Key("e"), proto.Key("e"), 1, store.StoreID()),
@@ -359,7 +360,7 @@ func TestInternalRangeLookupUseReverse(t *testing.T) {
 				MaxRanges: 2,
 				Reverse:   true,
 			},
-			// ["e" , "g") and ["c" , "e")
+			// ["e","g") and ["c","e").
 			expected: []proto.RangeDescriptor{
 				{StartKey: proto.Key("e"), EndKey: proto.Key("g")},
 				{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
@@ -377,7 +378,7 @@ func TestInternalRangeLookupUseReverse(t *testing.T) {
 				MaxRanges: 3,
 				Reverse:   true,
 			},
-			// ["e" , "g"), ["c" , "e") and ["a" , "c")
+			// ["e","g"), ["c","e") and ["a","c").
 			expected: []proto.RangeDescriptor{
 				{StartKey: proto.Key("e"), EndKey: proto.Key("g")},
 				{StartKey: proto.Key("c"), EndKey: proto.Key("e")},

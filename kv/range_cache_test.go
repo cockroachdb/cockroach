@@ -306,9 +306,9 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	}()
 }
 
-// TestGetCachedRangeDescriptorUseReverse verifies the correctness of the result that is
-// returned by getCachedRangeDescriptor with isReverse = true.
-func TestGetCachedRangeDescriptorUseReverse(t *testing.T) {
+// TestGetCachedRangeDescriptorInclusive verifies the correctness of the result
+// that is returned by getCachedRangeDescriptor with inclusive=true.
+func TestGetCachedRangeDescriptorInclusive(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testData := []*proto.RangeDescriptor{
@@ -360,7 +360,7 @@ func TestGetCachedRangeDescriptorUseReverse(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		cacheKey, targetRange := cache.getCachedRangeDescriptor(test.queryKey, true)
+		cacheKey, targetRange := cache.getCachedRangeDescriptor(test.queryKey, true /* inclusive */)
 		if !reflect.DeepEqual(targetRange, test.rng) {
 			t.Fatalf("expect range %v, actual get %v", test.rng, targetRange)
 		}

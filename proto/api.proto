@@ -227,11 +227,11 @@ message DeleteRangeResponse {
 }
 
 // A ScanRequest is the argument to the Scan() method. It specifies the
-// start and end keys for the scan and the maximum number of results.
+// start and end keys for an ascending scan of [start,end) and the maximum
+// number of results.
 message ScanRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // If 0, all entries between Key (inclusive) and EndKey
-  // (exclusive) are retrieved. Must be >= 0.
+  // If 0, there is no limit on the number of retrieved entries. Must be >= 0.
   optional int64 max_results = 2 [(gogoproto.nullable) = false];
 }
 
@@ -243,11 +243,11 @@ message ScanResponse {
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
-// start(inclusive) and end(exclusive) keys for the scan and the maximum number of results.
+// start and end keys for a descending scan of [start,end) and the maximum
+// number of results.
 message ReverseScanRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // If 0, all entries between Key (inclusive) and EndKey
-  // (exclusive) are retrieved. Must be >= 0.
+  // If 0, there is no limit on the number of retrieved entries. Must be >= 0.
   optional int64 max_results = 2 [(gogoproto.nullable) = false];
 }
 
@@ -355,7 +355,8 @@ message RangeLookupRequest {
   // already in service of pushing intents on meta records. Attempting
   // to resolve intents in this case would lead to infinite recursion.
   optional bool ignore_intents = 3 [(gogoproto.nullable) = false];
-  // Use the reverse scan to pre-fill the range descriptor cache.
+  // Use a reverse scan to pre-fill the range descriptor cache instead
+  // of an ascending scan.
   optional bool reverse = 4 [(gogoproto.nullable) = false];
 }
 

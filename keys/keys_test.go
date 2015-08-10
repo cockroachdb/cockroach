@@ -224,37 +224,31 @@ func TestMetaReverseScanBounds(t *testing.T) {
 
 	testCases := []struct {
 		key, expStart, expEnd proto.Key
-		err                   error
 	}{
 		{
 			key:      proto.Key{},
 			expStart: nil,
 			expEnd:   nil,
-			err:      NewInvalidRangeMetaKeyError("KeyMin or Meta1Prefix can't be used as the key of reverse scan", proto.Key{}),
 		},
 		{
 			key:      Meta1Prefix,
 			expStart: nil,
 			expEnd:   nil,
-			err:      NewInvalidRangeMetaKeyError("KeyMin or Meta1Prefix can't be used as the key of reverse scan", Meta1Prefix),
 		},
 		{
 			key:      proto.MakeKey(Meta2Prefix, proto.Key("foo")),
 			expStart: Meta2Prefix,
 			expEnd:   proto.MakeKey(Meta2Prefix, proto.Key("foo\x00")),
-			err:      nil,
 		},
 		{
 			key:      proto.MakeKey(Meta1Prefix, proto.Key("foo")),
 			expStart: Meta1Prefix,
 			expEnd:   proto.MakeKey(Meta1Prefix, proto.Key("foo\x00")),
-			err:      nil,
 		},
 		{
 			key:      Meta2Prefix,
 			expStart: Meta1Prefix,
 			expEnd:   Meta2Prefix.Next(),
-			err:      nil,
 		},
 	}
 	for i, test := range testCases {

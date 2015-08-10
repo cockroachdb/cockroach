@@ -316,7 +316,8 @@ func (db *DB) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]Key
 	return r.Rows, err
 }
 
-// Scan retrieves the rows between begin (inclusive) and end (exclusive).
+// Scan retrieves the rows between begin (inclusive) and end (exclusive) in
+// ascending order.
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
@@ -326,8 +327,8 @@ func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 	return db.scan(begin, end, maxRows, false)
 }
 
-// ReverseScan retrieves the rows in reserve order starting at end (exclusive)
-// and finishing at begin(inclusive).
+// ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
+// in descending order.
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
