@@ -128,7 +128,7 @@ func (m *ColumnType) GetPrecision() int32 {
 
 type ColumnDescriptor struct {
 	Name             string     `protobuf:"bytes,1,opt,name=name" json:"name"`
-	ID               ID         `protobuf:"varint,2,opt,name=id,casttype=ID" json:"id"`
+	ID               ColumnID   `protobuf:"varint,2,opt,name=id,casttype=ColumnID" json:"id"`
 	Type             ColumnType `protobuf:"bytes,3,opt,name=type" json:"type"`
 	Nullable         bool       `protobuf:"varint,4,opt,name=nullable" json:"nullable"`
 	XXX_unrecognized []byte     `json:"-"`
@@ -143,6 +143,13 @@ func (m *ColumnDescriptor) GetName() string {
 		return m.Name
 	}
 	return ""
+}
+
+func (m *ColumnDescriptor) GetID() ColumnID {
+	if m != nil {
+		return m.ID
+	}
+	return 0
 }
 
 func (m *ColumnDescriptor) GetType() ColumnType {
@@ -160,9 +167,9 @@ func (m *ColumnDescriptor) GetNullable() bool {
 }
 
 type IndexDescriptor struct {
-	Name   string `protobuf:"bytes,1,opt,name=name" json:"name"`
-	ID     ID     `protobuf:"varint,2,opt,name=id,casttype=ID" json:"id"`
-	Unique bool   `protobuf:"varint,3,opt,name=unique" json:"unique"`
+	Name   string  `protobuf:"bytes,1,opt,name=name" json:"name"`
+	ID     IndexID `protobuf:"varint,2,opt,name=id,casttype=IndexID" json:"id"`
+	Unique bool    `protobuf:"varint,3,opt,name=unique" json:"unique"`
 	// An ordered list of column names of which the index is comprised. This list
 	// parallels the column_ids list. If duplicating the storage of the column
 	// names here proves to be prohibitive, we could clear this field before
@@ -170,8 +177,8 @@ type IndexDescriptor struct {
 	ColumnNames []string `protobuf:"bytes,4,rep,name=column_names" json:"column_names,omitempty"`
 	// An ordered list of column ids of which the index is comprised. This list
 	// parallels the column_names list.
-	ColumnIDs        []ID   `protobuf:"varint,5,rep,name=column_ids,casttype=ID" json:"column_ids,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	ColumnIDs        []ColumnID `protobuf:"varint,5,rep,name=column_ids,casttype=ColumnID" json:"column_ids,omitempty"`
+	XXX_unrecognized []byte     `json:"-"`
 }
 
 func (m *IndexDescriptor) Reset()         { *m = IndexDescriptor{} }
@@ -185,6 +192,13 @@ func (m *IndexDescriptor) GetName() string {
 	return ""
 }
 
+func (m *IndexDescriptor) GetID() IndexID {
+	if m != nil {
+		return m.ID
+	}
+	return 0
+}
+
 func (m *IndexDescriptor) GetUnique() bool {
 	if m != nil {
 		return m.Unique
@@ -195,6 +209,13 @@ func (m *IndexDescriptor) GetUnique() bool {
 func (m *IndexDescriptor) GetColumnNames() []string {
 	if m != nil {
 		return m.ColumnNames
+	}
+	return nil
+}
+
+func (m *IndexDescriptor) GetColumnIDs() []ColumnID {
+	if m != nil {
+		return m.ColumnIDs
 	}
 	return nil
 }
@@ -234,12 +255,12 @@ type TableDescriptor struct {
 	ID      ID                 `protobuf:"varint,2,opt,name=id,casttype=ID" json:"id"`
 	Columns []ColumnDescriptor `protobuf:"bytes,3,rep,name=columns" json:"columns"`
 	// next_column_id is used to ensure that deleted column ids are not reused.
-	NextColumnID ID              `protobuf:"varint,4,opt,name=next_column_id,casttype=ID" json:"next_column_id"`
+	NextColumnID ColumnID        `protobuf:"varint,4,opt,name=next_column_id,casttype=ColumnID" json:"next_column_id"`
 	PrimaryIndex IndexDescriptor `protobuf:"bytes,5,opt,name=primary_index" json:"primary_index"`
 	// indexes are all the secondary indexes.
 	Indexes []IndexDescriptor `protobuf:"bytes,6,rep,name=indexes" json:"indexes"`
 	// next_index_id is used to ensure that deleted index ids are not reused.
-	NextIndexID         ID `protobuf:"varint,7,opt,name=next_index_id,casttype=ID" json:"next_index_id"`
+	NextIndexID         IndexID `protobuf:"varint,7,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
 	PrivilegeDescriptor `protobuf:"bytes,8,opt,name=privileges,embedded=privileges" json:"privileges"`
 	XXX_unrecognized    []byte `json:"-"`
 }
@@ -255,11 +276,25 @@ func (m *TableDescriptor) GetName() string {
 	return ""
 }
 
+func (m *TableDescriptor) GetID() ID {
+	if m != nil {
+		return m.ID
+	}
+	return 0
+}
+
 func (m *TableDescriptor) GetColumns() []ColumnDescriptor {
 	if m != nil {
 		return m.Columns
 	}
 	return nil
+}
+
+func (m *TableDescriptor) GetNextColumnID() ColumnID {
+	if m != nil {
+		return m.NextColumnID
+	}
+	return 0
 }
 
 func (m *TableDescriptor) GetPrimaryIndex() IndexDescriptor {
@@ -274,6 +309,13 @@ func (m *TableDescriptor) GetIndexes() []IndexDescriptor {
 		return m.Indexes
 	}
 	return nil
+}
+
+func (m *TableDescriptor) GetNextIndexID() IndexID {
+	if m != nil {
+		return m.NextIndexID
+	}
+	return 0
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
@@ -296,6 +338,13 @@ func (m *DatabaseDescriptor) GetName() string {
 		return m.Name
 	}
 	return ""
+}
+
+func (m *DatabaseDescriptor) GetID() ID {
+	if m != nil {
+		return m.ID
+	}
+	return 0
 }
 
 func init() {
@@ -447,7 +496,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.ID |= (ID(b) & 0x7F) << shift
+				m.ID |= (ColumnID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -575,7 +624,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.ID |= (ID(b) & 0x7F) << shift
+				m.ID |= (IndexID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -623,14 +672,14 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ColumnIDs", wireType)
 			}
-			var v ID
+			var v ColumnID
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[iNdEx]
 				iNdEx++
-				v |= (ID(b) & 0x7F) << shift
+				v |= (ColumnID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -849,7 +898,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.NextColumnID |= (ID(b) & 0x7F) << shift
+				m.NextColumnID |= (ColumnID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -920,7 +969,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.NextIndexID |= (ID(b) & 0x7F) << shift
+				m.NextIndexID |= (IndexID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

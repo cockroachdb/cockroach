@@ -50,6 +50,27 @@ type Replica struct {
 func (m *Replica) Reset()      { *m = Replica{} }
 func (*Replica) ProtoMessage() {}
 
+func (m *Replica) GetNodeID() NodeID {
+	if m != nil {
+		return m.NodeID
+	}
+	return 0
+}
+
+func (m *Replica) GetStoreID() StoreID {
+	if m != nil {
+		return m.StoreID
+	}
+	return 0
+}
+
+func (m *Replica) GetReplicaID() ReplicaID {
+	if m != nil {
+		return m.ReplicaID
+	}
+	return 0
+}
+
 // RangeDescriptor is the value stored in a range metadata key.
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
@@ -74,11 +95,39 @@ func (m *RangeDescriptor) Reset()         { *m = RangeDescriptor{} }
 func (m *RangeDescriptor) String() string { return proto1.CompactTextString(m) }
 func (*RangeDescriptor) ProtoMessage()    {}
 
+func (m *RangeDescriptor) GetRangeID() RangeID {
+	if m != nil {
+		return m.RangeID
+	}
+	return 0
+}
+
+func (m *RangeDescriptor) GetStartKey() Key {
+	if m != nil {
+		return m.StartKey
+	}
+	return nil
+}
+
+func (m *RangeDescriptor) GetEndKey() Key {
+	if m != nil {
+		return m.EndKey
+	}
+	return nil
+}
+
 func (m *RangeDescriptor) GetReplicas() []Replica {
 	if m != nil {
 		return m.Replicas
 	}
 	return nil
+}
+
+func (m *RangeDescriptor) GetNextReplicaID() ReplicaID {
+	if m != nil {
+		return m.NextReplicaID
+	}
+	return 0
 }
 
 // TODO(bram): this comment has rotted, there is no size.
@@ -91,6 +140,13 @@ type RangeTree struct {
 func (m *RangeTree) Reset()         { *m = RangeTree{} }
 func (m *RangeTree) String() string { return proto1.CompactTextString(m) }
 func (*RangeTree) ProtoMessage()    {}
+
+func (m *RangeTree) GetRootKey() Key {
+	if m != nil {
+		return m.RootKey
+	}
+	return nil
+}
 
 // RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
 type RangeTreeNode struct {
@@ -109,11 +165,25 @@ func (m *RangeTreeNode) Reset()         { *m = RangeTreeNode{} }
 func (m *RangeTreeNode) String() string { return proto1.CompactTextString(m) }
 func (*RangeTreeNode) ProtoMessage()    {}
 
+func (m *RangeTreeNode) GetKey() Key {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
+
 func (m *RangeTreeNode) GetBlack() bool {
 	if m != nil {
 		return m.Black
 	}
 	return false
+}
+
+func (m *RangeTreeNode) GetParentKey() Key {
+	if m != nil {
+		return m.ParentKey
+	}
+	return nil
 }
 
 // StoreCapacity contains capacity information for a storage device.
@@ -161,6 +231,13 @@ func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
 func (m *NodeDescriptor) String() string { return proto1.CompactTextString(m) }
 func (*NodeDescriptor) ProtoMessage()    {}
 
+func (m *NodeDescriptor) GetNodeID() NodeID {
+	if m != nil {
+		return m.NodeID
+	}
+	return 0
+}
+
 func (m *NodeDescriptor) GetAddress() cockroach_util.UnresolvedAddr {
 	if m != nil {
 		return m.Address
@@ -188,6 +265,13 @@ type StoreDescriptor struct {
 func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
 func (m *StoreDescriptor) String() string { return proto1.CompactTextString(m) }
 func (*StoreDescriptor) ProtoMessage()    {}
+
+func (m *StoreDescriptor) GetStoreID() StoreID {
+	if m != nil {
+		return m.StoreID
+	}
+	return 0
+}
 
 func (m *StoreDescriptor) GetAttrs() Attributes {
 	if m != nil {

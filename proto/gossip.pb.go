@@ -34,6 +34,13 @@ func (m *GossipRequest) Reset()         { *m = GossipRequest{} }
 func (m *GossipRequest) String() string { return proto1.CompactTextString(m) }
 func (*GossipRequest) ProtoMessage()    {}
 
+func (m *GossipRequest) GetNodeID() NodeID {
+	if m != nil {
+		return m.NodeID
+	}
+	return 0
+}
+
 func (m *GossipRequest) GetAddr() cockroach_util.UnresolvedAddr {
 	if m != nil {
 		return m.Addr

@@ -60,7 +60,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
-	colIDtoRowIndex := map[structured.ID]int{}
+	colIDtoRowIndex := map[structured.ColumnID]int{}
 	for i, name := range node.Columns() {
 		c, err := tableDesc.FindColumnByName(name)
 		if err != nil {

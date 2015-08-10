@@ -276,6 +276,20 @@ func (m *RequestHeader) GetCmdID() ClientCmdID {
 	return ClientCmdID{}
 }
 
+func (m *RequestHeader) GetKey() Key {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
+
+func (m *RequestHeader) GetEndKey() Key {
+	if m != nil {
+		return m.EndKey
+	}
+	return nil
+}
+
 func (m *RequestHeader) GetUser() string {
 	if m != nil {
 		return m.User
@@ -288,6 +302,13 @@ func (m *RequestHeader) GetReplica() Replica {
 		return m.Replica
 	}
 	return Replica{}
+}
+
+func (m *RequestHeader) GetRangeID() RangeID {
+	if m != nil {
+		return m.RangeID
+	}
+	return 0
 }
 
 func (m *RequestHeader) GetUserPriority() int32 {
@@ -712,6 +733,13 @@ func (m *EndTransactionResponse) GetCommitWait() int64 {
 	return 0
 }
 
+func (m *EndTransactionResponse) GetResolved() []Key {
+	if m != nil {
+		return m.Resolved
+	}
+	return nil
+}
+
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
 // existing range which contains RequestHeader.Key is split by
 // split_key. If split_key is not specified, then this method will
@@ -741,6 +769,13 @@ type AdminSplitRequest struct {
 func (m *AdminSplitRequest) Reset()         { *m = AdminSplitRequest{} }
 func (m *AdminSplitRequest) String() string { return proto1.CompactTextString(m) }
 func (*AdminSplitRequest) ProtoMessage()    {}
+
+func (m *AdminSplitRequest) GetSplitKey() Key {
+	if m != nil {
+		return m.SplitKey
+	}
+	return nil
+}
 
 // An AdminSplitResponse is the return value from the AdminSplit()
 // method.
@@ -912,6 +947,13 @@ type GCRequest_GCKey struct {
 func (m *GCRequest_GCKey) Reset()         { *m = GCRequest_GCKey{} }
 func (m *GCRequest_GCKey) String() string { return proto1.CompactTextString(m) }
 func (*GCRequest_GCKey) ProtoMessage()    {}
+
+func (m *GCRequest_GCKey) GetKey() Key {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
 
 func (m *GCRequest_GCKey) GetTimestamp() Timestamp {
 	if m != nil {

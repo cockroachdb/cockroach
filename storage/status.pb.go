@@ -55,6 +55,13 @@ func (m *StoreStatus) GetDesc() cockroach_proto.StoreDescriptor {
 	return cockroach_proto.StoreDescriptor{}
 }
 
+func (m *StoreStatus) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
+	if m != nil {
+		return m.NodeID
+	}
+	return 0
+}
+
 func (m *StoreStatus) GetRangeCount() int32 {
 	if m != nil {
 		return m.RangeCount
