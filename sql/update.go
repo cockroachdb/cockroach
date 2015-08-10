@@ -132,7 +132,12 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		//
 		// Update the row values.
 		for i, col := range cols {
-			rowVals[colIDtoRowIndex[col.ID]] = vals[i]
+			val := vals[i]
+
+			if !col.Nullable && val == parser.DNull {
+				return nil, fmt.Errorf("null value in column %q violates not-null constraint", col.Name)
+			}
+			rowVals[colIDtoRowIndex[col.ID]] = val
 		}
 		newSecondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, indexes, colIDtoRowIndex, rowVals, primaryIndexKeySuffix)
 		if err != nil {
