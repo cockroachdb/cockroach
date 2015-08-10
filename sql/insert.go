@@ -81,6 +81,14 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			values = append(values, parser.DNull)
 		}
 
+		for _, col := range tableDesc.Columns {
+			if !col.Nullable {
+				if i, ok := colIDtoRowIndex[col.ID]; !ok || values[i] == parser.DNull {
+					return nil, fmt.Errorf("null value in column %q violates not-null constraint", col.Name)
+				}
+			}
+		}
+
 		primaryIndexKeySuffix, _, err := encodeIndexKey(primaryIndex.ColumnIDs, colIDtoRowIndex, values, nil)
 		if err != nil {
 			return nil, err

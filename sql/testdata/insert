@@ -76,3 +76,22 @@ a   b
 c   d
 e   f
 f   g
+
+statement ok
+CREATE TABLE kv3 (
+  k CHAR PRIMARY KEY,
+  v CHAR NOT NULL
+)
+
+statement error null value in column "v" violates not-null constraint
+INSERT INTO kv3 VALUES ('a')
+
+statement error null value in column "v" violates not-null constraint
+INSERT INTO kv3 VALUES ('a', NULL)
+
+statement error null value in column "v" violates not-null constraint
+INSERT INTO kv3 (k) VALUES ('a')
+
+query TT
+SELECT * FROM kv3
+----

@@ -67,3 +67,19 @@ c   d
 e   f
 f   g
 
+statement ok
+CREATE TABLE kv3 (
+  k CHAR PRIMARY KEY,
+  v CHAR NOT NULL
+)
+
+statement ok
+INSERT INTO kv3 VALUES ('a', 'b')
+
+statement error null value in column "v" violates not-null constraint
+UPDATE kv3 SET v = NULL WHERE k = 'a'
+
+query TT
+SELECT * FROM kv3
+----
+a   b
