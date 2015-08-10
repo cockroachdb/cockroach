@@ -30,11 +30,12 @@ message ColumnType {
   // sql/parser/types.go.
   enum Kind {
     BIT = 0;        // BIT(width)
-    INT = 1;        // INT(width)
-    FLOAT = 2;      // FLOAT(precision)
-    DECIMAL = 3;    // DECIMAL(precision, width /* scale */)
-    DATE = 4;
-    TIME = 5;
+    BOOL = 1;
+    INT = 2;        // INT(width)
+    FLOAT = 3;      // FLOAT(precision)
+    DECIMAL = 4;    // DECIMAL(precision, width /* scale */)
+    DATE = 5;
+    TIME = 6;
     TIMESTAMP = 7;
     CHAR = 8;       // CHAR(width)
     TEXT = 9;

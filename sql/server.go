@@ -145,7 +145,7 @@ func (p parameters) Arg(i int) (parser.Datum, bool) {
 	case *string:
 		return parser.DString(*t), true
 	default:
-		panic(fmt.Sprintf("Incorrect type %T", t))
+		panic(fmt.Sprintf("unexpected type %T", t))
 	}
 }
 

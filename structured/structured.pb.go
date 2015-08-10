@@ -36,11 +36,12 @@ type ColumnType_Kind int32
 
 const (
 	ColumnType_BIT       ColumnType_Kind = 0
-	ColumnType_INT       ColumnType_Kind = 1
-	ColumnType_FLOAT     ColumnType_Kind = 2
-	ColumnType_DECIMAL   ColumnType_Kind = 3
-	ColumnType_DATE      ColumnType_Kind = 4
-	ColumnType_TIME      ColumnType_Kind = 5
+	ColumnType_BOOL      ColumnType_Kind = 1
+	ColumnType_INT       ColumnType_Kind = 2
+	ColumnType_FLOAT     ColumnType_Kind = 3
+	ColumnType_DECIMAL   ColumnType_Kind = 4
+	ColumnType_DATE      ColumnType_Kind = 5
+	ColumnType_TIME      ColumnType_Kind = 6
 	ColumnType_TIMESTAMP ColumnType_Kind = 7
 	ColumnType_CHAR      ColumnType_Kind = 8
 	ColumnType_TEXT      ColumnType_Kind = 9
@@ -49,11 +50,12 @@ const (
 
 var ColumnType_Kind_name = map[int32]string{
 	0:  "BIT",
-	1:  "INT",
-	2:  "FLOAT",
-	3:  "DECIMAL",
-	4:  "DATE",
-	5:  "TIME",
+	1:  "BOOL",
+	2:  "INT",
+	3:  "FLOAT",
+	4:  "DECIMAL",
+	5:  "DATE",
+	6:  "TIME",
 	7:  "TIMESTAMP",
 	8:  "CHAR",
 	9:  "TEXT",
@@ -61,11 +63,12 @@ var ColumnType_Kind_name = map[int32]string{
 }
 var ColumnType_Kind_value = map[string]int32{
 	"BIT":       0,
-	"INT":       1,
-	"FLOAT":     2,
-	"DECIMAL":   3,
-	"DATE":      4,
-	"TIME":      5,
+	"BOOL":      1,
+	"INT":       2,
+	"FLOAT":     3,
+	"DECIMAL":   4,
+	"DATE":      5,
+	"TIME":      6,
 	"TIMESTAMP": 7,
 	"CHAR":      8,
 	"TEXT":      9,

@@ -191,6 +191,8 @@ func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) parser.
 		switch col.Type.Kind {
 		case structured.ColumnType_BIT, structured.ColumnType_INT:
 			return parser.DInt(kv.ValueInt())
+		case structured.ColumnType_BOOL:
+			return parser.DBool(kv.ValueInt() != 0)
 		case structured.ColumnType_FLOAT:
 			return parser.DFloat(math.Float64frombits(uint64(kv.ValueInt())))
 		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
