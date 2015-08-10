@@ -19,11 +19,10 @@ package client
 
 import (
 	"fmt"
-	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -78,10 +77,8 @@ func newTxn(db DB, depth int) *Txn {
 	}
 	txn.db.Sender = (*txnSender)(txn)
 
-	if _, file, line, ok := runtime.Caller(depth + 1); ok {
-		// TODO(pmattis): include the parent directory?
-		txn.txn.Name = fmt.Sprintf("%s:%d", filepath.Base(file), line)
-	}
+	file, line, fun := caller.Lookup(depth + 1)
+	txn.txn.Name = fmt.Sprintf("%s:%d %s", file, line, fun)
 	return txn
 }
 
@@ -90,11 +87,8 @@ func newTxn(db DB, depth int) *Txn {
 // automatically assigned debug name composed of the file and line number where
 // the transaction was created.
 func (txn *Txn) SetDebugName(name string) {
-	if _, file, line, ok := runtime.Caller(1); ok {
-		txn.txn.Name = fmt.Sprintf("%s:%d: %s", filepath.Base(file), line, name)
-	} else {
-		txn.txn.Name = name
-	}
+	file, line, _ := caller.Lookup(1)
+	txn.txn.Name = fmt.Sprintf("%s:%d %s", file, line, name)
 }
 
 // DebugName returns the debug name associated with the transaction.
