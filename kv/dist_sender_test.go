@@ -506,7 +506,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &proto.Replica{}) && !tc.shouldClearLeader {
 			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %v", i, tc.shouldClearLeader, cur)
 		}
-		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(call.Args.Header().Key, false)
+		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(call.Args.Header().Key, false /* !inclusive */)
 		if cachedDesc == nil != tc.shouldClearReplica {
 			t.Errorf("%d: unexpected second replica lookup behaviour: wanted=%t", i, tc.shouldClearReplica)
 		}
@@ -931,8 +931,8 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	}
 }
 
-// TestRangeLookupOptionOnReverseScan verifies the lookup range option of a reverse scan
-// request is to be true.
+// TestRangeLookupOptionOnReverseScan verifies that a lookup triggered by a
+// ReverseScan request has the `useReverseScan` option specified.
 func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	g, s := makeTestGossip(t)
@@ -946,7 +946,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 		rpcSend: testFn,
 		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
 			if !opts.useReverseScan {
-				t.Fatalf("expected useReverseScan to be %t", true)
+				t.Fatalf("expected useReverseScan to be set")
 			}
 			return []proto.RangeDescriptor{testRangeDescriptor}, nil
 		}),

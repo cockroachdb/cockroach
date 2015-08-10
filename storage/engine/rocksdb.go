@@ -743,7 +743,7 @@ func (r *rocksDBIterator) SeekReverse(key []byte) {
 		C.DBIterSeekToLast(r.iter)
 	} else {
 		C.DBIterSeek(r.iter, goToCSlice(key))
-		// Maybe the key has exceeded the last key in rocksdb
+		// Maybe the key sorts after the last key in RocksDB.
 		if !r.Valid() {
 			C.DBIterSeekToLast(r.iter)
 		}

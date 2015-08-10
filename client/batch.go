@@ -314,7 +314,8 @@ func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
 	b.initResult(1, 0, nil)
 }
 
-// Scan retrieves the rows between begin (inclusive) and end (exclusive).
+// Scan retrieves the rows between begin (inclusive) and end (exclusive) in
+// ascending order.
 //
 // A new result will be appended to the batch which will contain up to maxRows
 // rows and Result.Err will indicate success or failure.
@@ -325,8 +326,8 @@ func (b *Batch) Scan(s, e interface{}, maxRows int64) {
 	b.scan(s, e, maxRows, false)
 }
 
-// ReverseScan retrieves the rows in reserve order starting at end (exclusive)
-// and finishing at begin(inclusive).
+// ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
+// in descending order.
 //
 // A new result will be appended to the batch which will contain up to maxRows
 // rows and Result.Err will indicate success or failure.

@@ -927,10 +927,7 @@ func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey proto.Key, max in
 func getScanMetaKey(iter Iterator, encEndKey proto.EncodedKey) (proto.Key, proto.EncodedKey, error) {
 	metaKey := iter.Key()
 	if bytes.Compare(metaKey, encEndKey) >= 0 {
-		if err := iter.Error(); err != nil {
-			return nil, nil, err
-		}
-		return nil, nil, nil
+		return nil, nil, iter.Error()
 	}
 	key, _, isValue := MVCCDecodeKey(metaKey)
 	if isValue {
@@ -943,46 +940,33 @@ func getReverseScanMetaKey(iter Iterator, encEndKey proto.EncodedKey) (proto.Key
 	metaKey := iter.Key()
 	// The metaKey < encEndKey is exceeding the boundary.
 	if bytes.Compare(metaKey, encEndKey) < 0 {
-		if err := iter.Error(); err != nil {
-			return nil, nil, err
-		}
-		return nil, nil, nil
+		return nil, nil, iter.Error()
 	}
 
 	// The row with oldest version will be got by seeking reversely. We use the
 	// key of this row to get the MVCC metadata key.
 	key, _, isValue := MVCCDecodeKey(metaKey)
+	// If this isn't the meta key yet, scan again to get the meta key.
+	// TODO(tschottdorf): can we save any work here or leverage
+	// getScanMetaKey() above after doing the Seek() below?
 	if isValue {
-		var keyBuf []byte
-		iter.Seek(mvccEncodeKey(keyBuf, key))
+		iter.Seek(MVCCEncodeKey(key))
 		if !iter.Valid() {
-			if err := iter.Error(); err != nil {
-				return nil, nil, err
-			}
-			return nil, nil, nil
+			return nil, nil, iter.Error()
 		}
 
 		metaKey = iter.Key()
-		// The metaKey < encEndKey is exceeding the boundary.
-		if bytes.Compare(metaKey, encEndKey) < 0 {
-			if err := iter.Error(); err != nil {
-				return nil, nil, err
-			}
-			return nil, nil, nil
-		}
 		_, _, isValue = MVCCDecodeKey(metaKey)
 		if isValue {
 			return nil, nil, util.Errorf("expected an MVCC metadata key: %q", metaKey)
 		}
-	} else {
-		//The inline rows don't hava versioned values.
 	}
 	return key, metaKey, nil
 }
 
-// mvccScanInternal scans the key range specified by start key(inclusive) and
-// end key(exclusive) up to some maximum number of results. Specify max=0 for
-// unbounded scans. Specify reverse=true for seeking backward from end key.
+// mvccScanInternal scans the key range [start,end) up to some maximum number
+// of results. Specify max=0 for unbounded scans. Specify reverse=true to scan
+// in descending instead of ascending order.
 func mvccScanInternal(engine Engine, key, endKey proto.Key, max int64, timestamp proto.Timestamp,
 	consistent bool, txn *proto.Transaction, reverse bool) ([]proto.KeyValue, []proto.Intent, error) {
 	res := []proto.KeyValue{}
@@ -1001,29 +985,26 @@ func mvccScanInternal(engine Engine, key, endKey proto.Key, max int64, timestamp
 	return res, intents, nil
 }
 
-// MVCCScan scans the key range specified by start key through end key
-// up to some maximum number of results. Specify max=0 for unbounded
-// scans.
+// MVCCScan scans the key range [start,end) key up to some maximum number of
+// results in ascending order. Specify max=0 for unbounded scans.
 func MVCCScan(engine Engine, key, endKey proto.Key, max int64, timestamp proto.Timestamp,
 	consistent bool, txn *proto.Transaction) ([]proto.KeyValue, []proto.Intent, error) {
 	return mvccScanInternal(engine, key, endKey, max, timestamp,
 		consistent, txn, false /* !reverse */)
 }
 
-// MVCCReverseScan scans the range in reverse order starting at end key(exclusive)
-// through start key up to some maximum number of results.
-// Specify max=0 for unbounded scans.
+// MVCCReverseScan scans the key range [start,end) key up to some maximum number of
+// results in descending order. Specify max=0 for unbounded scans.
 func MVCCReverseScan(engine Engine, key, endKey proto.Key, max int64, timestamp proto.Timestamp,
 	consistent bool, txn *proto.Transaction) ([]proto.KeyValue, []proto.Intent, error) {
 	return mvccScanInternal(engine, key, endKey, max, timestamp,
 		consistent, txn, true /* reverse */)
 }
 
-// MVCCIterate iterates over the key range specified by start and end
-// keys, At each step of the iteration, f() is invoked with the
-// current key/value pair. If f returns true (done) or an error, the
-// iteration stops and the error is propagated. If the reverse flag set
-// to be true, the iterator will be moved in reverse order.
+// MVCCIterate iterates over the key range [start,end). At each step of the
+// iteration, f() is invoked with the current key/value pair. If f returns true
+// (done) or an error, the iteration stops and the error is propagated. If the
+// reverse is flag set the iterator will be moved in reverse order.
 func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Timestamp,
 	consistent bool, txn *proto.Transaction, reverse bool, f func(proto.KeyValue) (bool, error)) ([]proto.Intent, error) {
 	if !consistent && txn != nil {
@@ -1081,9 +1062,8 @@ func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Time
 			return nil, iter.Error()
 		}
 
-		// Because RocksDB moves the iterator to the position of the key given or if the
-		// key doesn't exist, the next key that does exist in the database. So the first
-		// key got by the iterator maybe bigger than the given key.
+		// If the key doesn't exist, the iterator is at the next key that does
+		// exist in the database.
 		metaKey := iter.Key()
 		if bytes.Compare(metaKey, encKey) >= 0 {
 			iter.Prev()
@@ -1105,11 +1085,10 @@ func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Time
 
 	for {
 		key, metaKey, err := getMetaKey(iter, encEndKey)
-		// Iterator invalid error
 		if err != nil {
 			return nil, err
 		}
-		// Exceeding the Boundary
+		// Exceeding the boundary.
 		if key == nil && metaKey == nil {
 			break
 		}
@@ -1143,7 +1122,7 @@ func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Time
 			}
 		}
 		if reverse {
-			// Seeking for the position the meta key given.
+			// Seeking for the position of the given meta key.
 			iter.Seek(metaKey)
 			if !iter.Valid() {
 				if err := iter.Error(); err != nil {
@@ -1151,7 +1130,8 @@ func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Time
 				}
 				break
 			}
-			// Move the iterator backwards to previous logic row
+			// Move the iterator back, which gets us into the previous row
+			// (getMetaKey moves us further back to the meta key).
 			iter.Prev()
 			if !iter.Valid() {
 				if err := iter.Error(); err != nil {

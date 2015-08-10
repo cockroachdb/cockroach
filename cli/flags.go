@@ -223,7 +223,7 @@ func initFlags(ctx *server.Context) {
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
 	}
 
-	// Max results flag for scan and reverse scan
+	// Max results flag for scan and reverse scan.
 	for _, cmd := range []*cobra.Command{scanCmd, reverseScanCmd} {
 		f := cmd.Flags()
 		f.Int64Var(&maxResults, "max-results", defaultMaxResults, flagUsage["max-results"])

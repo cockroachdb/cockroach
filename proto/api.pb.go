@@ -584,11 +584,11 @@ func (m *DeleteRangeResponse) GetNumDeleted() int64 {
 }
 
 // A ScanRequest is the argument to the Scan() method. It specifies the
-// start and end keys for the scan and the maximum number of results.
+// start and end keys for an ascending scan of [start,end) and the maximum
+// number of results.
 type ScanRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	// If 0, all entries between Key (inclusive) and EndKey
-	// (exclusive) are retrieved. Must be >= 0.
+	// If 0, there is no limit on the number of retrieved entries. Must be >= 0.
 	MaxResults       int64  `protobuf:"varint,2,opt,name=max_results" json:"max_results"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -624,11 +624,11 @@ func (m *ScanResponse) GetRows() []KeyValue {
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
-// start(inclusive) and end(exclusive) keys for the scan and the maximum number of results.
+// start and end keys for a descending scan of [start,end) and the maximum
+// number of results.
 type ReverseScanRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	// If 0, all entries between Key (inclusive) and EndKey
-	// (exclusive) are retrieved. Must be >= 0.
+	// If 0, there is no limit on the number of retrieved entries. Must be >= 0.
 	MaxResults       int64  `protobuf:"varint,2,opt,name=max_results" json:"max_results"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -832,7 +832,8 @@ type RangeLookupRequest struct {
 	// already in service of pushing intents on meta records. Attempting
 	// to resolve intents in this case would lead to infinite recursion.
 	IgnoreIntents bool `protobuf:"varint,3,opt,name=ignore_intents" json:"ignore_intents"`
-	// Use the reverse scan to pre-fill the range descriptor cache.
+	// Use a reverse scan to pre-fill the range descriptor cache instead
+	// of an ascending scan.
 	Reverse          bool   `protobuf:"varint,4,opt,name=reverse" json:"reverse"`
 	XXX_unrecognized []byte `json:"-"`
 }

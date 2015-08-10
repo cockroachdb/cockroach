@@ -276,9 +276,9 @@ func ValidateRangeMetaKey(key proto.Key) error {
 	return NewInvalidRangeMetaKeyError("not a meta key", key)
 }
 
-// MetaScanBounds returns the start and end keys of the range within which the
-// desired meta record can be found by means of an engine scan. The given key
-// must be a valid RangeMetaKey as defined by ValidateRangeMetaKey.
+// MetaScanBounds returns the range [start,end) within which the desired meta
+// record can be found by means of an engine scan. The given key must be a
+// valid RangeMetaKey as defined by ValidateRangeMetaKey.
 func MetaScanBounds(key proto.Key) (proto.Key, proto.Key) {
 	if key.Equal(proto.KeyMin) {
 		// Special case KeyMin: find the first entry in meta1.
@@ -293,16 +293,16 @@ func MetaScanBounds(key proto.Key) (proto.Key, proto.Key) {
 	return key.Next(), proto.Key(key[:len(Meta1Prefix)]).PrefixEnd()
 }
 
-// MetaReverseScanBounds returns the start and end keys of the range within which the
-// desired meta record can be found by means of an engine reverse scan. The given key
+// MetaReverseScanBounds returns the range [start,end) within which the desired
+// meta record can be found by means of a reverse engine scan. The given key
 // must be a valid RangeMetaKey as defined by ValidateRangeMetaKey.
 func MetaReverseScanBounds(key proto.Key) (proto.Key, proto.Key, error) {
 	if key.Equal(proto.KeyMin) || key.Equal(Meta1Prefix) {
 		return nil, nil, NewInvalidRangeMetaKeyError("KeyMin and Meta1Prefix can't be used as the key of reverse scan", key)
 	}
 	if key.Equal(Meta2Prefix) {
-		// Special case Meta2Prefix: this is the first key in Meta2, we don't want
-		// to end at itself.
+		// Special case Meta2Prefix: this is the first key in Meta2, and the scan
+		// interval covers all of Meta1.
 		return Meta1Prefix, key.Next(), nil
 	}
 	// Otherwise find the first entry greater than the given key and find the last entry
