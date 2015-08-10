@@ -99,9 +99,6 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 	case Datum:
 		// Terminal node: nothing to do.
 
-	case *StarExpr:
-		// Contains only a terminal node.
-
 	case *Subquery:
 		// TODO(pmattis): Should we recurse into the Subquery?
 
@@ -190,11 +187,8 @@ func WalkStmt(v Visitor, stmt Statement) {
 	case *ParenSelect:
 		WalkStmt(v, stmt.Select)
 	case *Select:
-		for _, expr := range stmt.Exprs {
-			switch expr := expr.(type) {
-			case *NonStarExpr:
-				expr.Expr = WalkExpr(v, expr.Expr)
-			}
+		for i := range stmt.Exprs {
+			stmt.Exprs[i].Expr = WalkExpr(v, stmt.Exprs[i].Expr)
 		}
 		if stmt.Where != nil {
 			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)

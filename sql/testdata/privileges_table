@@ -55,37 +55,37 @@ SET DATABASE = a
 statement ok
 SHOW GRANTS ON t
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 GRANT ALL ON t TO bar
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 REVOKE ALL ON t FROM bar
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 INSERT INTO t VALUES(1, 1),(2, 2)
 
-statement error user testuser does not have READ privilege on table a.t
+statement error user testuser does not have READ privilege on table t
 SELECT * FROM t
 
 statement ok
 SELECT 1
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 DELETE FROM t
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 DELETE FROM t where k = 1
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 UPDATE t SET v = 0
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 UPDATE t SET v = 2 WHERE k = 2
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 TRUNCATE t
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 DROP TABLE t
 
 # Grant READ privilege.
@@ -96,13 +96,13 @@ GRANT READ ON t TO testuser
 
 user testuser
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 GRANT ALL ON t TO bar
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 REVOKE ALL ON t FROM bar
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 INSERT INTO t VALUES(1, 1),(2, 2)
 
 statement ok
@@ -111,22 +111,22 @@ SELECT * FROM t
 statement ok
 SELECT 1
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 DELETE FROM t
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 DELETE FROM t where k = 1
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 UPDATE t SET v = 0
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 UPDATE t SET v = 2 WHERE k = 2
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 TRUNCATE t
 
-statement error user testuser does not have WRITE privilege on table a.t
+statement error user testuser does not have WRITE privilege on table t
 DROP TABLE t
 
 # Grant WRITE privilege.
@@ -149,22 +149,22 @@ REVOKE ALL ON t FROM bar
 statement ok
 INSERT INTO t VALUES(1, 1),(2, 2)
 
-statement error user testuser does not have READ privilege on table a.t
+statement error user testuser does not have READ privilege on table t
 SELECT * FROM t
 
 statement ok
 SELECT 1
 
-statement error user testuser does not have READ privilege on table a.t
+statement error user testuser does not have READ privilege on table t
 DELETE FROM t
 
-statement error user testuser does not have READ privilege on table a.t
+statement error user testuser does not have READ privilege on table t
 DELETE FROM t where k = 1
 
-statement error user testuser does not have READ privilege on table a.t
+statement error user testuser does not have READ privilege on table t
 UPDATE t SET v = 0
 
-statement error user testuser does not have READ privilege on table a.t
+statement error user testuser does not have READ privilege on table t
 UPDATE t SET v = 2 WHERE k = 2
 
 statement ok

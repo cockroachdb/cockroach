@@ -98,7 +98,14 @@ func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*structured.TableDesc
 	if !ok {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	return p.getTableDesc(table)
+	desc, err := p.getTableDesc(table)
+	if err != nil {
+		return nil, err
+	}
+	if ate.As != "" {
+		desc.Name = string(ate.As)
+	}
+	return desc, nil
 }
 
 func (p *planner) normalizeTableName(qname *parser.QualifiedName) error {

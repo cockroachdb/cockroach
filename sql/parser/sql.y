@@ -1885,7 +1885,7 @@ simple_select:
 | TABLE relation_expr
   {
     $$ = &Select{
-      Exprs:       SelectExprs{&StarExpr{}},
+      Exprs:       SelectExprs{StarSelectExpr},
       From:        TableExprs{&AliasedTableExpr{Expr: $2}},
       tableSelect: true,
     }
@@ -3000,7 +3000,7 @@ func_application:
   }
 | func_name '(' '*' ')'
   {
-    $$ = &FuncExpr{Name: $1, Exprs: Exprs{&StarExpr{}}}
+    $$ = &FuncExpr{Name: $1, Exprs: Exprs{StarExpr}}
   }
 
 // func_expr and its cousin func_expr_windowless are split out from c_expr just
@@ -3356,7 +3356,7 @@ indirection_elem:
   }
 | '.' '*'
   {
-    $$ = StarIndirection{}
+    $$ = qualifiedStar
   }
 | '[' a_expr ']'
   {
@@ -3442,7 +3442,7 @@ target_list:
 target_elem:
   a_expr AS col_label
   {
-    $$ = &NonStarExpr{Expr: $1, As: Name($3)}
+    $$ = SelectExpr{Expr: $1, As: Name($3)}
   }
   // We support omitting AS only for column labels that aren't any known
   // keyword. There is an ambiguity against postfix operators: is "a ! b" an
@@ -3451,15 +3451,15 @@ target_elem:
   // IDENT a precedence higher than POSTFIXOP.
 | a_expr IDENT
   {
-    $$ = &NonStarExpr{Expr: $1, As: Name($2)}
+    $$ = SelectExpr{Expr: $1, As: Name($2)}
   }
 | a_expr
   {
-    $$ = &NonStarExpr{Expr: $1}
+    $$ = SelectExpr{Expr: $1}
   }
 | '*'
   {
-    $$ = &StarExpr{}
+    $$ = StarSelectExpr
   }
 
 // Names and constants.

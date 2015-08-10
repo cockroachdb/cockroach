@@ -8057,7 +8057,7 @@ sqldefault:
 		//line sql.y:1886
 		{
 			sqlVAL.stmt = &Select{
-				Exprs:       SelectExprs{&StarExpr{}},
+				Exprs:       SelectExprs{StarSelectExpr},
 				From:        TableExprs{&AliasedTableExpr{Expr: sqlDollar[2].qname}},
 				tableSelect: true,
 			}
@@ -9709,7 +9709,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:3002
 		{
-			sqlVAL.expr = &FuncExpr{Name: sqlDollar[1].qname, Exprs: Exprs{&StarExpr{}}}
+			sqlVAL.expr = &FuncExpr{Name: sqlDollar[1].qname, Exprs: Exprs{StarExpr}}
 		}
 	case 720:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
@@ -10408,7 +10408,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3358
 		{
-			sqlVAL.indirectElem = StarIndirection{}
+			sqlVAL.indirectElem = qualifiedStar
 		}
 	case 856:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
@@ -10502,25 +10502,25 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3444
 		{
-			sqlVAL.selExpr = &NonStarExpr{Expr: sqlDollar[1].expr, As: Name(sqlDollar[3].str)}
+			sqlVAL.selExpr = SelectExpr{Expr: sqlDollar[1].expr, As: Name(sqlDollar[3].str)}
 		}
 	case 874:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3453
 		{
-			sqlVAL.selExpr = &NonStarExpr{Expr: sqlDollar[1].expr, As: Name(sqlDollar[2].str)}
+			sqlVAL.selExpr = SelectExpr{Expr: sqlDollar[1].expr, As: Name(sqlDollar[2].str)}
 		}
 	case 875:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3457
 		{
-			sqlVAL.selExpr = &NonStarExpr{Expr: sqlDollar[1].expr}
+			sqlVAL.selExpr = SelectExpr{Expr: sqlDollar[1].expr}
 		}
 	case 876:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3461
 		{
-			sqlVAL.selExpr = &StarExpr{}
+			sqlVAL.selExpr = StarSelectExpr
 		}
 	case 877:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]

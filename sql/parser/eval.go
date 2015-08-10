@@ -326,39 +326,15 @@ func init() {
 	cmpOps[cmpArgs{In, tupleType, tupleType}] = evalTupleIN
 }
 
-// Env defines the interface for retrieving column values.
-type Env interface {
-	Get(name string) (Datum, bool)
-}
-
-// mapEnv is an Env implementation using a map.
-type mapEnv map[string]Datum
-
-func (e mapEnv) Get(name string) (Datum, bool) {
-	d, ok := e[name]
-	return d, ok
-}
-
-// nilEnv is an empty environment. It's useful to avoid nil checks.
-type nilEnv struct{}
-
-func (*nilEnv) Get(_ string) (Datum, bool) {
-	return nil, false
-}
-
-var emptyEnv *nilEnv
-
-// EvalExpr evaluates an SQL expression in the context of an
-// environment. Expression evaluation is a mostly straightforward walk over the
-// parse tree. The only significant complexity is the handling of types and
-// implicit conversions. See binOps and cmpOps for more details.
-func EvalExpr(expr Expr, env Env) (Datum, error) {
-	if env == nil {
-		// This avoids having to worry about `env` being a nil interface
-		// anywhere else.
-		env = emptyEnv
-	}
-
+// EvalExpr evaluates an SQL expression. Expression evaluation is a mostly
+// straightforward walk over the parse tree. The only significant complexity is
+// the handling of types and implicit conversions. See binOps and cmpOps for
+// more details. Note that expression evaluation returns an error if certain
+// node types are encountered: ValArg, QualifiedName or Subquery. These nodes
+// should be replaced prior to expression evaluation by an appropriate
+// WalkExpr. For example, ValArg should be replace by the argument passed from
+// the client.
+func EvalExpr(expr Expr) (Datum, error) {
 	switch t := expr.(type) {
 	case Row:
 		// Row and Tuple are synonymous: convert Row to Tuple to simplify logic
@@ -368,25 +344,25 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 
 	switch t := expr.(type) {
 	case *AndExpr:
-		return evalAndExpr(t, env)
+		return evalAndExpr(t)
 
 	case *OrExpr:
-		return evalOrExpr(t, env)
+		return evalOrExpr(t)
 
 	case *NotExpr:
-		return evalNotExpr(t, env)
+		return evalNotExpr(t)
 
 	case *ParenExpr:
-		return EvalExpr(t.Expr, env)
+		return EvalExpr(t.Expr)
 
 	case *ComparisonExpr:
-		return evalComparisonExpr(t, env)
+		return evalComparisonExpr(t)
 
 	case *RangeCond:
-		return evalRangeCond(t, env)
+		return evalRangeCond(t)
 
 	case *NullCheck:
-		return evalNullCheck(t, env)
+		return evalNullCheck(t)
 
 	case *ExistsExpr:
 		// The subquery within the exists should have been executed before
@@ -418,15 +394,12 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 		return DNull, nil
 
 	case *QualifiedName:
-		if d, ok := env.Get(t.String()); ok {
-			return d, nil
-		}
-		return DNull, fmt.Errorf("column \"%s\" not found", t)
+		return DNull, fmt.Errorf("qualified name \"%s\" not found", t)
 
 	case Tuple:
 		tuple := make(DTuple, 0, len(t))
 		for _, v := range t {
-			d, err := EvalExpr(v, env)
+			d, err := EvalExpr(v)
 			if err != nil {
 				return DNull, err
 			}
@@ -442,19 +415,19 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 		// the result placed into the expression tree.
 
 	case *BinaryExpr:
-		return evalBinaryExpr(t, env)
+		return evalBinaryExpr(t)
 
 	case *UnaryExpr:
-		return evalUnaryExpr(t, env)
+		return evalUnaryExpr(t)
 
 	case *FuncExpr:
-		return evalFuncExpr(t, env)
+		return evalFuncExpr(t)
 
 	case *CaseExpr:
-		return evalCaseExpr(t, env)
+		return evalCaseExpr(t)
 
 	case *CastExpr:
-		return evalCastExpr(t, env)
+		return evalCastExpr(t)
 
 	default:
 		panic(fmt.Sprintf("eval: unsupported expression type: %T", expr))
@@ -463,8 +436,8 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 	return DNull, fmt.Errorf("eval: unexpected expression: %T", expr)
 }
 
-func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
-	left, err := EvalExpr(expr.Left, env)
+func evalAndExpr(expr *AndExpr) (Datum, error) {
+	left, err := EvalExpr(expr.Left)
 	if err != nil {
 		return DNull, err
 	}
@@ -476,7 +449,7 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	} else if !v {
 		return v, nil
 	}
-	right, err := EvalExpr(expr.Right, env)
+	right, err := EvalExpr(expr.Right)
 	if err != nil {
 		return DNull, err
 	}
@@ -491,8 +464,8 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	return DBool(true), nil
 }
 
-func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
-	left, err := EvalExpr(expr.Left, env)
+func evalOrExpr(expr *OrExpr) (Datum, error) {
+	left, err := EvalExpr(expr.Left)
 	if err != nil {
 		return DNull, err
 	}
@@ -503,7 +476,7 @@ func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 			return v, nil
 		}
 	}
-	right, err := EvalExpr(expr.Right, env)
+	right, err := EvalExpr(expr.Right)
 	if err != nil {
 		return DNull, err
 	}
@@ -521,8 +494,8 @@ func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 	return DBool(false), nil
 }
 
-func evalNotExpr(expr *NotExpr, env Env) (Datum, error) {
-	d, err := EvalExpr(expr.Expr, env)
+func evalNotExpr(expr *NotExpr) (Datum, error) {
+	d, err := EvalExpr(expr.Expr)
 	if err != nil {
 		return DNull, err
 	}
@@ -536,12 +509,12 @@ func evalNotExpr(expr *NotExpr, env Env) (Datum, error) {
 	return !v, nil
 }
 
-func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
+func evalRangeCond(expr *RangeCond) (Datum, error) {
 	// A range such as "left BETWEEN from AND to" is equivalent to "left >= from
 	// AND left <= to". The only tricky part is that we evaluate "left" only
 	// once.
 
-	left, err := EvalExpr(expr.Left, env)
+	left, err := EvalExpr(expr.Left)
 	if err != nil {
 		return DNull, err
 	}
@@ -556,7 +529,7 @@ func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
 
 	var v DBool
 	for _, l := range limits {
-		arg, err := EvalExpr(l.expr, env)
+		arg, err := EvalExpr(l.expr)
 		if err != nil {
 			return DNull, err
 		}
@@ -577,8 +550,8 @@ func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
 	return v, nil
 }
 
-func evalNullCheck(expr *NullCheck, env Env) (Datum, error) {
-	d, err := EvalExpr(expr.Expr, env)
+func evalNullCheck(expr *NullCheck) (Datum, error) {
+	d, err := EvalExpr(expr.Expr)
 	if err != nil {
 		return DNull, err
 	}
@@ -589,12 +562,12 @@ func evalNullCheck(expr *NullCheck, env Env) (Datum, error) {
 	return DBool(v), nil
 }
 
-func evalComparisonExpr(expr *ComparisonExpr, env Env) (Datum, error) {
-	left, err := EvalExpr(expr.Left, env)
+func evalComparisonExpr(expr *ComparisonExpr) (Datum, error) {
+	left, err := EvalExpr(expr.Left)
 	if err != nil {
 		return DNull, err
 	}
-	right, err := EvalExpr(expr.Right, env)
+	right, err := EvalExpr(expr.Right)
 	if err != nil {
 		return DNull, err
 	}
@@ -645,12 +618,12 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 		left.Type(), op, right.Type())
 }
 
-func evalBinaryExpr(expr *BinaryExpr, env Env) (Datum, error) {
-	left, err := EvalExpr(expr.Left, env)
+func evalBinaryExpr(expr *BinaryExpr) (Datum, error) {
+	left, err := EvalExpr(expr.Left)
 	if err != nil {
 		return DNull, err
 	}
-	right, err := EvalExpr(expr.Right, env)
+	right, err := EvalExpr(expr.Right)
 	if err != nil {
 		return DNull, err
 	}
@@ -662,8 +635,8 @@ func evalBinaryExpr(expr *BinaryExpr, env Env) (Datum, error) {
 		left.Type(), expr.Operator, right.Type())
 }
 
-func evalUnaryExpr(expr *UnaryExpr, env Env) (Datum, error) {
-	d, err := EvalExpr(expr.Expr, env)
+func evalUnaryExpr(expr *UnaryExpr) (Datum, error) {
+	d, err := EvalExpr(expr.Expr)
 	if err != nil {
 		return DNull, err
 	}
@@ -675,7 +648,7 @@ func evalUnaryExpr(expr *UnaryExpr, env Env) (Datum, error) {
 		expr.Operator, d.Type())
 }
 
-func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
+func evalFuncExpr(expr *FuncExpr) (Datum, error) {
 	name := strings.ToLower(expr.Name.String())
 	b, ok := builtins[name]
 	if !ok {
@@ -688,7 +661,7 @@ func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
 
 	args := make(DTuple, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
-		arg, err := EvalExpr(e, env)
+		arg, err := EvalExpr(e)
 		if err != nil {
 			return DNull, err
 		}
@@ -702,18 +675,18 @@ func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
 	return res, nil
 }
 
-func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
+func evalCaseExpr(expr *CaseExpr) (Datum, error) {
 	if expr.Expr != nil {
 		// CASE <val> WHEN <expr> THEN ...
 		//
 		// For each "when" expression we compare for equality to <val>.
-		val, err := EvalExpr(expr.Expr, env)
+		val, err := EvalExpr(expr.Expr)
 		if err != nil {
 			return DNull, err
 		}
 
 		for _, when := range expr.Whens {
-			arg, err := EvalExpr(when.Cond, env)
+			arg, err := EvalExpr(when.Cond)
 			if err != nil {
 				return DNull, err
 			}
@@ -724,26 +697,26 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 			if v, err := getBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return EvalExpr(when.Val, env)
+				return EvalExpr(when.Val)
 			}
 		}
 	} else {
 		// CASE WHEN <bool-expr> THEN ...
 		for _, when := range expr.Whens {
-			d, err := EvalExpr(when.Cond, env)
+			d, err := EvalExpr(when.Cond)
 			if err != nil {
 				return DNull, err
 			}
 			if v, err := getBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return EvalExpr(when.Val, env)
+				return EvalExpr(when.Val)
 			}
 		}
 	}
 
 	if expr.Else != nil {
-		return EvalExpr(expr.Else, env)
+		return EvalExpr(expr.Else)
 	}
 	return DNull, nil
 }
@@ -814,8 +787,8 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 	return DBool(false), nil
 }
 
-func evalCastExpr(expr *CastExpr, env Env) (Datum, error) {
-	d, err := EvalExpr(expr.Expr, env)
+func evalCastExpr(expr *CastExpr) (Datum, error) {
+	d, err := EvalExpr(expr.Expr)
 	if err != nil {
 		return DNull, err
 	}

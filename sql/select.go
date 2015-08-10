@@ -19,6 +19,7 @@ package sql
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
@@ -58,24 +59,43 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	exprs := make([]parser.Expr, 0, len(n.Exprs))
 	columns := make([]string, 0, len(n.Exprs))
 	for _, e := range n.Exprs {
-		switch t := e.(type) {
-		case *parser.StarExpr:
+		// If a QualifiedName has a StarIndirection suffix we need to match the
+		// prefix of the qualified name to one of the tables in the query and
+		// then expand the "*" into a list of columns.
+		if qname, ok := e.Expr.(*parser.QualifiedName); ok && qname.IsStar() {
 			if desc == nil {
-				return nil, fmt.Errorf("* with no tables specified is not valid")
+				return nil, fmt.Errorf("\"%s\" with no tables specified is not valid", qname)
 			}
-			for _, col := range desc.Columns {
-				columns = append(columns, col.Name)
-				exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
+			if e.As != "" {
+				return nil, fmt.Errorf("\"%s\" cannot be aliased", qname)
 			}
-		case *parser.NonStarExpr:
-			exprs = append(exprs, t.Expr)
-			if t.As != "" {
-				columns = append(columns, string(t.As))
-			} else {
-				// TODO(pmattis): Should verify at this point that any referenced
-				// columns are represented in the tables being selected from.
-				columns = append(columns, t.Expr.String())
+			if len(qname.Indirect) == 1 {
+				if qname.Base != "" && !strings.EqualFold(desc.Name, string(qname.Base)) {
+					return nil, fmt.Errorf("table \"%s\" not found", qname.Base)
+				}
+
+				for _, col := range desc.Columns {
+					columns = append(columns, col.Name)
+					exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
+				}
+				continue
 			}
+			// TODO(pmattis): Handle len(qname.Indirect) > 1: <database>.<table>.*.
+		}
+
+		exprs = append(exprs, e.Expr)
+		if e.As != "" {
+			columns = append(columns, string(e.As))
+			continue
+		}
+
+		// If the expression is a qualified name, use the column name, not the
+		// full qualification as the column name to return.
+		switch t := e.Expr.(type) {
+		case *parser.QualifiedName:
+			columns = append(columns, t.Column())
+		default:
+			columns = append(columns, e.Expr.String())
 		}
 	}
 

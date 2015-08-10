@@ -98,34 +98,16 @@ func (node SelectExprs) String() string {
 }
 
 // SelectExpr represents a SELECT expression.
-type SelectExpr interface {
-	selectExpr()
-}
-
-func (*StarExpr) selectExpr()    {}
-func (*NonStarExpr) selectExpr() {}
-
-// StarExpr defines a '*' or 'table.*' expression.
-// TODO(tschottdorf): needs work, see #1810. TableName is never even referenced
-// in the grammar so far.
-type StarExpr struct {
-	TableName *QualifiedName
-}
-
-func (node *StarExpr) String() string {
-	if node.TableName != nil {
-		return fmt.Sprintf("%s.*", node.TableName)
-	}
-	return "*"
-}
-
-// NonStarExpr defines a non-'*' select expr.
-type NonStarExpr struct {
+type SelectExpr struct {
 	Expr Expr
 	As   Name
 }
 
-func (node *NonStarExpr) String() string {
+// StarSelectExpr is a convenience variable that represents an unqualified "*"
+// in a select expression.
+var StarSelectExpr = SelectExpr{Expr: StarExpr}
+
+func (node SelectExpr) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s", node.Expr)
 	if node.As != "" {

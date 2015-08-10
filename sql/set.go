@@ -37,7 +37,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		if len(n.Values) != 1 {
 			return nil, fmt.Errorf("database: requires a single string value")
 		}
-		val, err := parser.EvalExpr(n.Values[0], nil)
+		val, err := parser.EvalExpr(n.Values[0])
 		if err != nil {
 			return nil, err
 		}

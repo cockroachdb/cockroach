@@ -52,10 +52,15 @@ func (n NameIndirection) String() string {
 }
 
 // StarIndirection represents ".*" in an indirection expression.
-type StarIndirection struct{}
+type StarIndirection string
 
-func (StarIndirection) String() string {
-	return ".*"
+const (
+	qualifiedStar   StarIndirection = ".*"
+	unqualifiedStar StarIndirection = "*"
+)
+
+func (s StarIndirection) String() string {
+	return string(s)
 }
 
 // ArrayIndirection represents "[<begin>:<end>]" in an indirection expression.

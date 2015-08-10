@@ -89,7 +89,7 @@ func TestFillArgs(t *testing.T) {
 		if err := FillArgs(q[0], d.args); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if s := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr.String(); d.expected != s {
+		if s := q[0].(*Select).Exprs[0].Expr.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 	}
