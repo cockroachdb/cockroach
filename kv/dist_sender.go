@@ -224,7 +224,7 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	if configMap == nil {
 		return util.Errorf("perm configs not available; cannot execute %s", args.Method())
 	}
-	permMap := configMap.(config.PrefixConfigMap)
+	permMap := configMap.(*config.PrefixConfigMap)
 	headerEnd := header.EndKey
 	if len(headerEnd) == 0 {
 		headerEnd = header.Key
