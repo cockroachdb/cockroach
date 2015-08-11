@@ -18,7 +18,9 @@
 package parser
 
 import (
+	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -61,6 +63,7 @@ type builtin struct {
 // customize this to our liking. Would be good to support type conversion
 // functions.
 var builtins = map[string]builtin{
+	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
 	"length": stringBuiltin(func(s string) (Datum, error) {
 		return DInt(len(s)), nil
 	}),
@@ -72,6 +75,74 @@ var builtins = map[string]builtin{
 	"upper": stringBuiltin(func(s string) (Datum, error) {
 		return DString(strings.ToUpper(s)), nil
 	}),
+
+	// TODO(XisiHuang): support the substring(str FROM x FOR y) syntax.
+	"substring": {
+		nArgs: -1,
+		fn: func(args DTuple) (Datum, error) {
+			argsNum := len(args)
+			if argsNum != 2 && argsNum != 3 {
+				return DNull, fmt.Errorf("incorrect number of arguments: %d vs %s",
+					argsNum, "2 or 3")
+			}
+
+			dstr, ok := args[0].(DString)
+			if !ok {
+				return DNull, argTypeError(args[0], dstr.Type())
+			}
+			str := string(dstr)
+
+			start, ok := args[1].(DInt)
+			if !ok {
+				return DNull, argTypeError(args[1], start.Type())
+			}
+			s := int(start)
+
+			var e int
+			if argsNum == 2 {
+				e = len(str) + 1
+			} else {
+				count, ok := args[2].(DInt)
+				if !ok {
+					return DNull, argTypeError(args[2], count.Type())
+				}
+				c := int(count)
+				if c < 0 {
+					return DNull, fmt.Errorf("negative substring length not allowed: %d", c)
+				}
+				e = s + c
+			}
+
+			if e <= 1 || s > len(str) {
+				return DString(""), nil
+			}
+
+			if s < 1 {
+				s = 1
+			}
+			if e > len(str)+1 {
+				e = len(str) + 1
+			}
+			return DString(str[s-1 : e-1]), nil
+		},
+	},
+
+	// concat concatenate the text representations of all the arguments.
+	// NULL arguments are ignored.
+	"concat": {
+		nArgs: -1,
+		fn: func(args DTuple) (Datum, error) {
+			var buffer bytes.Buffer
+			for _, d := range args {
+				ds, err := datumToRawString(d)
+				if err != nil {
+					return DNull, err
+				}
+				buffer.WriteString(ds)
+			}
+			return DString(buffer.String()), nil
+		},
+	},
 }
 
 func argTypeError(arg Datum, expected string) error {
@@ -89,5 +160,30 @@ func stringBuiltin(f func(string) (Datum, error)) builtin {
 			}
 			return f(string(s))
 		},
+	}
+}
+
+func datumToRawString(datum Datum) (string, error) {
+	switch d := datum.(type) {
+	case DString:
+		return string(d), nil
+
+	case DInt:
+		return strconv.FormatInt(int64(d), 10), nil
+
+	case DFloat:
+		return strconv.FormatFloat(float64(d), 'f', -1, 64), nil
+
+	case DBool:
+		if bool(d) {
+			return "t", nil
+		}
+		return "f", nil
+
+	case dNull:
+		return "", nil
+
+	default:
+		return "", fmt.Errorf("argument type unsupported: %s", datum.Type())
 	}
 }
