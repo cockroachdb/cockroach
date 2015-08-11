@@ -37,7 +37,7 @@ type qvalMap map[structured.ColumnID]*parser.ParenExpr
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
-	db         *client.Txn
+	txn        *client.Txn
 	desc       *structured.TableDescriptor
 	columns    []string
 	err        error
@@ -202,7 +202,7 @@ func (n *scanNode) initScan() bool {
 	// Retrieve all of the keys that start with our index key prefix.
 	startKey := proto.Key(structured.MakeIndexKeyPrefix(n.desc.ID, n.desc.PrimaryIndex.ID))
 	endKey := startKey.PrefixEnd()
-	n.kvs, n.err = n.db.Scan(startKey, endKey, 0)
+	n.kvs, n.err = n.txn.Scan(startKey, endKey, 0)
 	if n.err != nil {
 		return false
 	}
