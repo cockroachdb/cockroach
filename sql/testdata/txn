@@ -1,0 +1,137 @@
+statement ok
+CREATE TABLE kv (
+  k CHAR PRIMARY KEY,
+  v CHAR
+)
+
+statement ok
+INSERT INTO kv (k,v) VALUES ('a', 'b')
+
+query TT
+SELECT * FROM kv
+----
+a b
+
+# A transaction to update kv.
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+UPDATE kv SET v = 'c' WHERE k in ('a')
+
+query TT
+SELECT * FROM kv
+----
+a c
+
+statement ok
+COMMIT TRANSACTION
+
+query TT
+SELECT * FROM kv
+----
+a c
+
+# Rollback a transaction before committing.
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+UPDATE kv SET v = 'b' WHERE k in ('a')
+
+query TT
+SELECT * FROM kv
+----
+a b
+
+statement ok
+ROLLBACK TRANSACTION
+
+query TT
+SELECT * FROM kv
+----
+a c
+
+statement ok
+COMMIT TRANSACTION
+
+query TT
+SELECT * FROM kv
+----
+a c
+
+# Statement execution should not depend on request boundaries.
+
+statement ok
+BEGIN TRANSACTION; UPDATE kv SET v = 'b' WHERE k in ('a')
+
+query TT
+SELECT * FROM kv
+----
+a b
+
+query TT
+SELECT * FROM kv; COMMIT; BEGIN; UPDATE kv SET v = 'd' WHERE k in ('a'); SELECT * FROM kv 
+----
+a d
+
+statement ok
+UPDATE kv SET v = 'c' WHERE k in ('a'); COMMIT
+
+query TT
+SELECT * FROM kv
+----
+a c
+
+# Abort transaction with a problematic statment, and ignore statements until the end of the transaction block
+
+statement ok
+BEGIN
+
+statement error duplicate key value .*
+INSERT INTO kv VALUES('a', 'c')
+
+statement error current transaction is aborted, commands ignored until end of transaction block
+UPDATE kv SET v = 'b' WHERE k in ('a')
+
+statement ok
+COMMIT
+
+query TT
+SELECT * FROM kv
+----
+a c
+
+# Ignore BEGIN in the middle of a transaction.
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+UPDATE kv SET v = 'b' WHERE k in ('a')
+
+statement ok
+BEGIN TRANSACTION
+
+query TT
+SELECT * FROM kv
+----
+a b
+
+statement ok
+COMMIT TRANSACTION
+
+# An empty transaction is allowed.
+
+statement ok
+BEGIN; COMMIT
+
+# Commit/ROLLBACK is ignored when no transaction is in progress.
+
+statement ok
+COMMIT TRANSACTION
+
+statement ok
+ROLLBACK TRANSACTION

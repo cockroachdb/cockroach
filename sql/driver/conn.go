@@ -27,8 +27,9 @@ import (
 // be stateful and is not used concurrently by multiple goroutines; See
 // https://golang.org/pkg/database/sql/driver/#Conn.
 type conn struct {
-	sender  Sender
-	session []byte
+	sender           Sender
+	session          []byte
+	beginTransaction bool
 }
 
 func (c *conn) Close() error {
@@ -40,6 +41,7 @@ func (c *conn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (c *conn) Begin() (driver.Tx, error) {
+	c.beginTransaction = true
 	return &tx{conn: c}, nil
 }
 
@@ -52,6 +54,10 @@ func (c *conn) Exec(stmt string, args []driver.Value) (driver.Result, error) {
 }
 
 func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
+	if c.beginTransaction {
+		stmt = "BEGIN TRANSACTION; " + stmt
+		c.beginTransaction = false
+	}
 	params := make([]Datum, 0, len(args))
 	for _, arg := range args {
 		var param Datum

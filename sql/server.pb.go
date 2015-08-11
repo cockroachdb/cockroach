@@ -8,6 +8,7 @@ import proto "github.com/gogo/protobuf/proto"
 import math "math"
 
 // discarding unused import gogoproto "gogoproto"
+import cockroach_proto1 "github.com/cockroachdb/cockroach/proto"
 
 import io "io"
 import fmt "fmt"
@@ -18,6 +19,8 @@ var _ = math.Inf
 
 type Session struct {
 	Database string `protobuf:"bytes,1,opt,name=database" json:"database"`
+	// Open transaction.
+	Txn *cockroach_proto1.Transaction `protobuf:"bytes,2,opt,name=txn" json:"txn,omitempty"`
 }
 
 func (m *Session) Reset()         { *m = Session{} }
@@ -29,6 +32,13 @@ func (m *Session) GetDatabase() string {
 		return m.Database
 	}
 	return ""
+}
+
+func (m *Session) GetTxn() *cockroach_proto1.Transaction {
+	if m != nil {
+		return m.Txn
+	}
+	return nil
 }
 
 func (m *Session) Marshal() (data []byte, err error) {
@@ -50,6 +60,16 @@ func (m *Session) MarshalTo(data []byte) (int, error) {
 	i++
 	i = encodeVarintServer(data, i, uint64(len(m.Database)))
 	i += copy(data[i:], m.Database)
+	if m.Txn != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintServer(data, i, uint64(m.Txn.Size()))
+		n1, err := m.Txn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n1
+	}
 	return i, nil
 }
 
@@ -85,6 +105,10 @@ func (m *Session) Size() (n int) {
 	_ = l
 	l = len(m.Database)
 	n += 1 + l + sovServer(uint64(l))
+	if m.Txn != nil {
+		l = m.Txn.Size()
+		n += 1 + l + sovServer(uint64(l))
+	}
 	return n
 }
 
@@ -141,6 +165,36 @@ func (m *Session) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Database = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthServer
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Txn == nil {
+				m.Txn = &cockroach_proto1.Transaction{}
+			}
+			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		default:
 			var sizeOfWire int

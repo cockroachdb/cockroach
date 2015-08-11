@@ -33,6 +33,9 @@ func TestParse(t *testing.T) {
 		{``},
 		{`VALUES ("")`},
 
+		{`BEGIN TRANSACTION`},
+		{`COMMIT TRANSACTION`},
+		{`ROLLBACK TRANSACTION`},
 		{`CREATE DATABASE a`},
 		{`CREATE DATABASE IF NOT EXISTS a`},
 		{`CREATE TABLE a ()`},

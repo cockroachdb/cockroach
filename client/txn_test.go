@@ -103,7 +103,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		call.Reply.Header().Txn.Timestamp = test.responseTS
 	}))
 
-	txn := newTxn(*db, 0)
+	txn := NewTxn(*db)
 
 	for testIdx = range testCases {
 		txn.db.Sender.Send(context.Background(),
@@ -119,7 +119,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{})
 	}))
 
-	txn := newTxn(*db, 0)
+	txn := NewTxn(*db)
 	txn.db.Sender.Send(context.Background(),
 		proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 

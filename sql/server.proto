@@ -20,6 +20,7 @@ package cockroach.sql;
 option go_package = "sql";
 
 import "gogoproto/gogo.proto";
+import "cockroach/proto/data.proto";
 
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
@@ -28,4 +29,6 @@ option (gogoproto.goproto_unrecognized_all) = false;
 
 message Session {
   optional string database = 1 [(gogoproto.nullable) = false];
+  // Open transaction.
+  optional proto.Transaction txn = 2;
 }

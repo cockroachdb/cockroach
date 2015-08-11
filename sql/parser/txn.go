@@ -13,20 +13,27 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Peter Mattis (peter@cockroachlabs.com)
+// Author: Vivek Menezes (vivek@cockroachlabs.com)
 
-package driver
+package parser
 
-type tx struct {
-	conn *conn
+// BeginTransaction represents a BEGIN statement
+type BeginTransaction struct{}
+
+func (node *BeginTransaction) String() string {
+	return "BEGIN TRANSACTION"
 }
 
-func (t *tx) Commit() error {
-	_, err := t.conn.Exec("COMMIT TRANSACTION", nil)
-	return err
+// CommitTransaction represents a COMMIT statement.
+type CommitTransaction struct{}
+
+func (node *CommitTransaction) String() string {
+	return "COMMIT TRANSACTION"
 }
 
-func (t *tx) Rollback() error {
-	_, err := t.conn.Exec("ROLLBACK TRANSACTION", nil)
-	return err
+// RollbackTransaction represents a ROLLBACK statement.
+type RollbackTransaction struct{}
+
+func (node *RollbackTransaction) String() string {
+	return "ROLLBACK TRANSACTION"
 }

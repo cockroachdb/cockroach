@@ -78,16 +78,35 @@ type Txn struct {
 	haveEndTxn   bool // True if there was an explicit EndTransaction
 }
 
-func newTxn(db DB, depth int) *Txn {
+func newTxn(db DB) *Txn {
 	txn := &Txn{
 		db:      db,
 		wrapped: db.Sender,
 	}
 	txn.db.Sender = (*txnSender)(txn)
 
-	file, line, fun := caller.Lookup(depth + 1)
+	// Caller's caller.
+	file, line, fun := caller.Lookup(2)
 	txn.txn.Name = fmt.Sprintf("%s:%d %s", file, line, fun)
 	return txn
+}
+
+// NewTxn returns a new txn.
+func NewTxn(db DB) *Txn {
+	return newTxn(db)
+}
+
+// NewTxnFromProto returns a transaction created from the preserved
+// state.
+func NewTxnFromProto(db DB, state proto.Transaction) *Txn {
+	txn := newTxn(db)
+	txn.txn = state
+	return txn
+}
+
+// ToProto returns the transaction state in a protobuf.
+func (txn *Txn) ToProto() proto.Transaction {
+	return txn.txn
 }
 
 // SetDebugName sets the debug name associated with the transaction which will
@@ -288,12 +307,22 @@ func (txn *Txn) CommitInBatch(b *Batch) error {
 
 // Commit sends an EndTransactionRequest with Commit=true.
 func (txn *Txn) Commit() error {
-	return txn.sendEndTxnCall(true /* commit */)
+	if txn.txn.Writing {
+		return txn.sendEndTxnCall(true /* commit */)
+	}
+	return nil
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
 func (txn *Txn) Rollback() error {
-	return txn.sendEndTxnCall(false /* commit */)
+	var err error
+	if txn.txn.Writing {
+		err = txn.sendEndTxnCall(false /* commit */)
+	}
+	// Explicitly set the status as ABORTED so that higher layers
+	// know that this transaction has ended.
+	txn.txn.Status = proto.ABORTED
+	return err
 }
 
 func (txn *Txn) sendEndTxnCall(commit bool) error {
@@ -310,11 +339,10 @@ func endTxnCall(commit bool) proto.Call {
 func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-
 	for r := retry.Start(txn.db.txnRetryOptions); r.Next(); {
 		txn.haveTxnWrite, txn.haveEndTxn = false, false // always reset before [re]starting txn
 		if err = retryable(txn); err == nil {
-			if !txn.haveEndTxn && txn.txn.Writing {
+			if !txn.haveEndTxn {
 				// If there were no errors running retryable, commit the txn. This
 				// may block waiting for outstanding writes to complete in case
 				// retryable didn't -- we need the most recent of all response
@@ -336,7 +364,7 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 		}
 		break
 	}
-	if err != nil && txn.txn.Writing {
+	if err != nil {
 		// If the retry logic gave up and haveEndTxn is true, then even if we
 		// tried to run EndTransaction, it must have failed (or was never run;
 		// after all, it's always the last call to be executed). So we pretend

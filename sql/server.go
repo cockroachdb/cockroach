@@ -37,13 +37,14 @@ import (
 )
 
 var (
-	allowedEncodings     = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
-	errNoDatabase        = errors.New("no database specified")
-	errNoTable           = errors.New("no table specified")
-	errEmptyDatabaseName = errors.New("empty database name")
-	errEmptyTableName    = errors.New("empty table name")
-	errEmptyIndexName    = errors.New("empty index name")
-	errEmptyColumnName   = errors.New("empty column name")
+	allowedEncodings      = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
+	errNoDatabase         = errors.New("no database specified")
+	errNoTable            = errors.New("no table specified")
+	errEmptyDatabaseName  = errors.New("empty database name")
+	errEmptyTableName     = errors.New("empty table name")
+	errEmptyIndexName     = errors.New("empty index name")
+	errEmptyColumnName    = errors.New("empty column name")
+	errTransactionAborted = errors.New("current transaction is aborted, commands ignored until end of transaction block")
 )
 
 // A Server provides an HTTP server endpoint serving the SQL API.
@@ -112,12 +113,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	// Open a pending transaction if needed.
+	if planMaker.session.Txn != nil {
+		planMaker.txn = client.NewTxnFromProto(*s.db, *planMaker.session.Txn)
+	}
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
 	reply := s.exec(args, &planMaker)
 
 	// Send back the session state even if there were application-level errors.
+	// Add transaction to session state.
+	if planMaker.txn != nil {
+		t := planMaker.txn.ToProto()
+		planMaker.session.Txn = &t
+	} else {
+		planMaker.session.Txn = nil
+	}
 	bytes, err := gogoproto.Marshal(&planMaker.session)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -162,29 +174,37 @@ func (p parameters) Arg(i int) (parser.Datum, bool) {
 	}
 }
 
+// If we hit an error and there is a pending transaction, rollback
+// the transaction before returning. The client does not have to
+// deal with cleaning up transaction state.
+func rollbackTxnAndReturnResultWithError(planMaker *planner, err error) driver.Result {
+	if planMaker.txn != nil {
+		// What do we do with a rollback error? This is an internally
+		// initiated rollback that the client is unaware of. Reporting it
+		// will only cause confusion. Not reporting it could leave a transaction
+		// pending, but that will get GCed eventually.
+		_ = planMaker.txn.Rollback()
+	}
+	var errProto proto.Error
+	errProto.SetResponseGoError(err)
+	return driver.Result{Error: &errProto}
+}
+
 // exec executes the request. Any error encountered is returned; it is
 // the caller's responsibility to update the response.
 func (s *Server) exec(req driver.Request, planMaker *planner) driver.Response {
 	var resp driver.Response
-
-	// TODO(vivek): This should parse each statement independently, report parse
-	// errors where necessary and execute all statements that were valid. Remove
-	// multiple occurences of this error reporting code.
 	stmts, err := parser.Parse(req.Sql)
 	if err != nil {
 		// A parse error occured: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
-		var errProto proto.Error
-		errProto.SetResponseGoError(err)
-		resp.Results = append(resp.Results, driver.Result{Error: &errProto})
+		resp.Results = append(resp.Results, rollbackTxnAndReturnResultWithError(planMaker, err))
 		return resp
 	}
 	for _, stmt := range stmts {
 		result, err := s.execStmt(stmt, req, planMaker)
 		if err != nil {
-			var errProto proto.Error
-			errProto.SetResponseGoError(err)
-			result.Error = &errProto
+			result = rollbackTxnAndReturnResultWithError(planMaker, err)
 		}
 		resp.Results = append(resp.Results, result)
 	}
@@ -193,19 +213,48 @@ func (s *Server) exec(req driver.Request, planMaker *planner) driver.Response {
 
 func (s *Server) execStmt(stmt parser.Statement, req driver.Request, planMaker *planner) (driver.Result, error) {
 	var result driver.Result
+	if planMaker.txn == nil {
+		if _, ok := stmt.(*parser.BeginTransaction); ok {
+			// Start a transaction here and not in planMaker to prevent begin
+			// transaction from being called within an auto-transaction below.
+			planMaker.txn = client.NewTxn(*s.db)
+		}
+	} else if planMaker.txn.ToProto().Status == proto.ABORTED {
+		switch stmt := stmt.(type) {
+		case *parser.CommitTransaction, *parser.RollbackTransaction:
+			// Reset to allow starting a new transaction.
+			planMaker.txn = nil
+			return result, nil
+		default:
+			// Just have to do something with stmt to keep the compiler happy.
+			_ = stmt
+			return result, errTransactionAborted
+		}
+	}
 	// Bind all the placeholder variables in the stmt to actual values.
 	if err := parser.FillArgs(stmt, parameters(req.Params)); err != nil {
 		return result, err
 	}
 	var plan planNode
-	if err := s.db.Txn(func(txn *client.Txn) error {
-		planMaker.txn = txn
+	// If there is a pending transaction.
+	if planMaker.txn != nil {
+		// Run in transaction planMaker.txn
 		var err error
-		plan, err = planMaker.makePlan(stmt)
-		planMaker.txn = nil
-		return err
-	}); err != nil {
-		return result, err
+		if plan, err = planMaker.makePlan(stmt); err != nil {
+			return result, err
+		}
+	} else {
+		// No transaction. Run the command as a retryable block in an
+		// auto-transaction.
+		if err := s.db.Txn(func(txn *client.Txn) error {
+			planMaker.txn = txn
+			var err error
+			plan, err = planMaker.makePlan(stmt)
+			planMaker.txn = nil
+			return err
+		}); err != nil {
+			return result, err
+		}
 	}
 	result.Columns = plan.Columns()
 	for plan.Next() {

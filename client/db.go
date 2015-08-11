@@ -416,7 +416,7 @@ func (db *DB) Run(b *Batch) error {
 //
 // TODO(pmattis): Allow transaction options to be specified.
 func (db *DB) Txn(retryable func(txn *Txn) error) error {
-	return newTxn(*db, 1 /* depth */).exec(retryable)
+	return newTxn(*db).exec(retryable)
 }
 
 // send runs the specified calls synchronously in a single batch and
