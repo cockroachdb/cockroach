@@ -75,8 +75,7 @@ message RangeDescriptor {
       (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
 }
 
-// TODO(bram): this comment has rotted, there is no size.
-// RangeTree holds the root node and size of the range tree.
+// RangeTree holds the root node of the range tree.
 message RangeTree {
   optional bytes root_key = 1 [(gogoproto.casttype) = "Key"];
 }
@@ -89,9 +88,9 @@ message RangeTreeNode {
   optional bool black = 2 [(gogoproto.nullable) = false];
 
   // If the parent key is null, this is the root node.
-  optional bytes parent_key = 3 [(gogoproto.customtype) = "Key"];
-  optional bytes left_key = 4 [(gogoproto.customtype) = "Key"];
-  optional bytes right_key = 5 [(gogoproto.customtype) = "Key"];
+  optional bytes parent_key = 3 [(gogoproto.casttype) = "Key"];
+  optional bytes left_key = 4 [(gogoproto.casttype) = "Key"];
+  optional bytes right_key = 5 [(gogoproto.casttype) = "Key"];
 }
 
 // StoreCapacity contains capacity information for a storage device.

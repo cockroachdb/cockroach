@@ -130,8 +130,7 @@ func (m *RangeDescriptor) GetNextReplicaID() ReplicaID {
 	return 0
 }
 
-// TODO(bram): this comment has rotted, there is no size.
-// RangeTree holds the root node and size of the range tree.
+// RangeTree holds the root node of the range tree.
 type RangeTree struct {
 	RootKey          Key    `protobuf:"bytes,1,opt,name=root_key,casttype=Key" json:"root_key,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
@@ -154,9 +153,9 @@ type RangeTreeNode struct {
 	// Color is black if true, red if false.
 	Black bool `protobuf:"varint,2,opt,name=black" json:"black"`
 	// If the parent key is null, this is the root node.
-	ParentKey        *Key   `protobuf:"bytes,3,opt,name=parent_key,customtype=Key" json:"parent_key,omitempty"`
-	LeftKey          *Key   `protobuf:"bytes,4,opt,name=left_key,customtype=Key" json:"left_key,omitempty"`
-	RightKey         *Key   `protobuf:"bytes,5,opt,name=right_key,customtype=Key" json:"right_key,omitempty"`
+	ParentKey        Key    `protobuf:"bytes,3,opt,name=parent_key,casttype=Key" json:"parent_key,omitempty"`
+	LeftKey          Key    `protobuf:"bytes,4,opt,name=left_key,casttype=Key" json:"left_key,omitempty"`
+	RightKey         Key    `protobuf:"bytes,5,opt,name=right_key,casttype=Key" json:"right_key,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -176,6 +175,27 @@ func (m *RangeTreeNode) GetBlack() bool {
 		return m.Black
 	}
 	return false
+}
+
+func (m *RangeTreeNode) GetParentKey() Key {
+	if m != nil {
+		return m.ParentKey
+	}
+	return nil
+}
+
+func (m *RangeTreeNode) GetLeftKey() Key {
+	if m != nil {
+		return m.LeftKey
+	}
+	return nil
+}
+
+func (m *RangeTreeNode) GetRightKey() Key {
+	if m != nil {
+		return m.RightKey
+	}
+	return nil
 }
 
 // StoreCapacity contains capacity information for a storage device.
@@ -759,11 +779,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			var v Key
-			m.ParentKey = &v
-			if err := m.ParentKey.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
+			m.ParentKey = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -788,11 +804,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			var v Key
-			m.LeftKey = &v
-			if err := m.LeftKey.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
+			m.LeftKey = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -817,11 +829,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			var v Key
-			m.RightKey = &v
-			if err := m.RightKey.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
+			m.RightKey = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		default:
 			var sizeOfWire int
@@ -1369,15 +1377,15 @@ func (m *RangeTreeNode) Size() (n int) {
 	}
 	n += 2
 	if m.ParentKey != nil {
-		l = m.ParentKey.Size()
+		l = len(m.ParentKey)
 		n += 1 + l + sovMetadata(uint64(l))
 	}
 	if m.LeftKey != nil {
-		l = m.LeftKey.Size()
+		l = len(m.LeftKey)
 		n += 1 + l + sovMetadata(uint64(l))
 	}
 	if m.RightKey != nil {
-		l = m.RightKey.Size()
+		l = len(m.RightKey)
 		n += 1 + l + sovMetadata(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -1617,32 +1625,20 @@ func (m *RangeTreeNode) MarshalTo(data []byte) (n int, err error) {
 	if m.ParentKey != nil {
 		data[i] = 0x1a
 		i++
-		i = encodeVarintMetadata(data, i, uint64(m.ParentKey.Size()))
-		n1, err := m.ParentKey.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
+		i = encodeVarintMetadata(data, i, uint64(len(m.ParentKey)))
+		i += copy(data[i:], m.ParentKey)
 	}
 	if m.LeftKey != nil {
 		data[i] = 0x22
 		i++
-		i = encodeVarintMetadata(data, i, uint64(m.LeftKey.Size()))
-		n2, err := m.LeftKey.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
+		i = encodeVarintMetadata(data, i, uint64(len(m.LeftKey)))
+		i += copy(data[i:], m.LeftKey)
 	}
 	if m.RightKey != nil {
 		data[i] = 0x2a
 		i++
-		i = encodeVarintMetadata(data, i, uint64(m.RightKey.Size()))
-		n3, err := m.RightKey.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
+		i = encodeVarintMetadata(data, i, uint64(len(m.RightKey)))
+		i += copy(data[i:], m.RightKey)
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -1701,19 +1697,19 @@ func (m *NodeDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintMetadata(data, i, uint64(m.Address.Size()))
-	n4, err := m.Address.MarshalTo(data[i:])
+	n1, err := m.Address.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n4
+	i += n1
 	data[i] = 0x1a
 	i++
 	i = encodeVarintMetadata(data, i, uint64(m.Attrs.Size()))
-	n5, err := m.Attrs.MarshalTo(data[i:])
+	n2, err := m.Attrs.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n5
+	i += n2
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -1741,27 +1737,27 @@ func (m *StoreDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintMetadata(data, i, uint64(m.Attrs.Size()))
-	n6, err := m.Attrs.MarshalTo(data[i:])
+	n3, err := m.Attrs.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n6
+	i += n3
 	data[i] = 0x1a
 	i++
 	i = encodeVarintMetadata(data, i, uint64(m.Node.Size()))
-	n7, err := m.Node.MarshalTo(data[i:])
+	n4, err := m.Node.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n7
+	i += n4
 	data[i] = 0x22
 	i++
 	i = encodeVarintMetadata(data, i, uint64(m.Capacity.Size()))
-	n8, err := m.Capacity.MarshalTo(data[i:])
+	n5, err := m.Capacity.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n8
+	i += n5
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

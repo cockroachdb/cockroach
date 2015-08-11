@@ -106,13 +106,13 @@ func (tc *treeContext) setNode(node *proto.RangeTreeNode) {
 
 // getNode returns the RangeTreeNode for the given key. If the key is nil, nil
 // is returned.
-func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
+func (tc *treeContext) getNode(key proto.Key) (*proto.RangeTreeNode, error) {
 	if key == nil {
 		return nil, nil
 	}
 
 	// First check to see if we have the node cached.
-	keyString := string(*key)
+	keyString := string(key)
 	cached, ok := tc.nodes[keyString]
 	if ok {
 		return cached.node, nil
@@ -120,7 +120,7 @@ func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
 
 	// We don't have it cached so fetch it and add it to the cache.
 	node := new(proto.RangeTreeNode)
-	if err := tc.txn.GetProto(keys.RangeTreeNodeKey(*key), node); err != nil {
+	if err := tc.txn.GetProto(keys.RangeTreeNodeKey(key), node); err != nil {
 		return nil, err
 	}
 	tc.nodes[keyString] = cachedNode{
@@ -151,7 +151,7 @@ func (tc *treeContext) sibling(node *proto.RangeTreeNode) (*proto.RangeTreeNode,
 	if parent.LeftKey == nil || parent.RightKey == nil {
 		return nil, nil
 	}
-	if node.Key.Equal(*parent.LeftKey) {
+	if node.Key.Equal(parent.LeftKey) {
 		return tc.getNode(parent.RightKey)
 	}
 	return tc.getNode(parent.LeftKey)
@@ -185,17 +185,17 @@ func (tc *treeContext) replaceNode(oldNode, newNode *proto.RangeTreeNode) (*prot
 		if err != nil {
 			return nil, err
 		}
-		if oldParent.LeftKey != nil && oldNode.Key.Equal(*oldParent.LeftKey) {
+		if oldParent.LeftKey != nil && oldNode.Key.Equal(oldParent.LeftKey) {
 			if newNode == nil {
 				oldParent.LeftKey = nil
 			} else {
-				oldParent.LeftKey = &newNode.Key
+				oldParent.LeftKey = newNode.Key
 			}
 		} else {
 			if newNode == nil {
 				oldParent.RightKey = nil
 			} else {
-				oldParent.RightKey = &newNode.Key
+				oldParent.RightKey = newNode.Key
 			}
 		}
 		tc.setNode(oldParent)
@@ -223,11 +223,11 @@ func (tc *treeContext) rotateLeft(node *proto.RangeTreeNode) (*proto.RangeTreeNo
 		if err != nil {
 			return nil, err
 		}
-		rightLeft.ParentKey = &node.Key
+		rightLeft.ParentKey = node.Key
 		tc.setNode(rightLeft)
 	}
-	right.LeftKey = &node.Key
-	node.ParentKey = &right.Key
+	right.LeftKey = node.Key
+	node.ParentKey = right.Key
 	tc.setNode(right)
 	tc.setNode(node)
 	return right, nil
@@ -249,11 +249,11 @@ func (tc *treeContext) rotateRight(node *proto.RangeTreeNode) (*proto.RangeTreeN
 		if err != nil {
 			return nil, err
 		}
-		leftRight.ParentKey = &node.Key
+		leftRight.ParentKey = node.Key
 		tc.setNode(leftRight)
 	}
-	left.RightKey = &node.Key
-	node.ParentKey = &left.Key
+	left.RightKey = node.Key
+	node.ParentKey = left.Key
 	tc.setNode(left)
 	tc.setNode(node)
 	return left, nil
@@ -285,7 +285,7 @@ func (tc *treeContext) insert(node *proto.RangeTreeNode) error {
 		tc.setRootKey(node.Key)
 	} else {
 		// Walk the tree to find the right place to insert the new node.
-		currentKey := &tc.tree.RootKey
+		currentKey := tc.tree.RootKey
 		for {
 			currentNode, err := tc.getNode(currentKey)
 			if err != nil {
@@ -296,7 +296,7 @@ func (tc *treeContext) insert(node *proto.RangeTreeNode) error {
 			}
 			if node.Key.Less(currentNode.Key) {
 				if currentNode.LeftKey == nil {
-					currentNode.LeftKey = &node.Key
+					currentNode.LeftKey = node.Key
 					tc.setNode(currentNode)
 					break
 				} else {
@@ -304,7 +304,7 @@ func (tc *treeContext) insert(node *proto.RangeTreeNode) error {
 				}
 			} else {
 				if currentNode.RightKey == nil {
-					currentNode.RightKey = &node.Key
+					currentNode.RightKey = node.Key
 					tc.setNode(currentNode)
 					break
 				} else {
@@ -382,12 +382,12 @@ func (tc *treeContext) insertCase4(node *proto.RangeTreeNode) error {
 	if err != nil {
 		return err
 	}
-	if parent.RightKey != nil && grandparent.LeftKey != nil && node.Key.Equal(*parent.RightKey) && parent.Key.Equal(*grandparent.LeftKey) {
+	if parent.RightKey != nil && grandparent.LeftKey != nil && node.Key.Equal(parent.RightKey) && parent.Key.Equal(grandparent.LeftKey) {
 		_, err = tc.rotateLeft(parent)
 		if err != nil {
 			return err
 		}
-		node, err = tc.getNode(&node.Key)
+		node, err = tc.getNode(node.Key)
 		if err != nil {
 			return err
 		}
@@ -395,12 +395,12 @@ func (tc *treeContext) insertCase4(node *proto.RangeTreeNode) error {
 		if err != nil {
 			return err
 		}
-	} else if parent.LeftKey != nil && grandparent.RightKey != nil && node.Key.Equal(*parent.LeftKey) && parent.Key.Equal(*grandparent.RightKey) {
+	} else if parent.LeftKey != nil && grandparent.RightKey != nil && node.Key.Equal(parent.LeftKey) && parent.Key.Equal(grandparent.RightKey) {
 		node, err = tc.rotateRight(parent)
 		if err != nil {
 			return err
 		}
-		node, err = tc.getNode(&node.Key)
+		node, err = tc.getNode(node.Key)
 		if err != nil {
 			return err
 		}
@@ -430,7 +430,7 @@ func (tc *treeContext) insertCase5(node *proto.RangeTreeNode) error {
 	}
 	grandparent.Black = false
 	tc.setNode(grandparent)
-	if parent.LeftKey != nil && node.Key.Equal(*parent.LeftKey) {
+	if parent.LeftKey != nil && node.Key.Equal(parent.LeftKey) {
 		_, err = tc.rotateRight(grandparent)
 		if err != nil {
 			return err

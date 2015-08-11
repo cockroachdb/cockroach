@@ -37,10 +37,10 @@ func loadNodes(t *testing.T, db *client.DB, key proto.Key, nodes map[string]prot
 	}
 	nodes[node.Key.String()] = *node
 	if node.LeftKey != nil {
-		loadNodes(t, db, *node.LeftKey, nodes)
+		loadNodes(t, db, node.LeftKey, nodes)
 	}
 	if node.RightKey != nil {
-		loadNodes(t, db, *node.RightKey, nodes)
+		loadNodes(t, db, node.RightKey, nodes)
 	}
 }
 
