@@ -2576,6 +2576,13 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 // choice of old or new is returned with no error.
 func TestRangeDanglingMetaIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	// Test RangeLookup with Scan.
+	testRangeDanglingMetaIntent(t, false)
+	// Test RangeLookup with ReverseScan.
+	testRangeDanglingMetaIntent(t, true)
+}
+
+func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2591,6 +2598,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 			ReadConsistency: proto.INCONSISTENT,
 		},
 		MaxRanges: 1,
+		Reverse:   isReverse,
 	}
 
 	var rlReply *proto.RangeLookupResponse
@@ -2672,6 +2680,134 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	}
 	if !(origSeen && newSeen) {
 		t.Errorf("didn't see both descriptors after %d attempts", count)
+	}
+}
+
+// TestRangeLookupUseReverseScan verifies the correctness of the results which are retrived
+// from RangeLookup by using ReverseScan.
+func TestRangeLookupUseReverseScan(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// Test ranges: ["a","c"), ["c","f"), ["f","h") and ["h","y").
+	testRanges := []proto.RangeDescriptor{
+		{RangeID: 2, StartKey: proto.Key("a"), EndKey: proto.Key("c")},
+		{RangeID: 3, StartKey: proto.Key("c"), EndKey: proto.Key("f")},
+		{RangeID: 4, StartKey: proto.Key("f"), EndKey: proto.Key("h")},
+		{RangeID: 5, StartKey: proto.Key("h"), EndKey: proto.Key("y")},
+	}
+	// The range ["f","h") has dangling intent in meta2.
+	withIntentRangeIndex := 2
+
+	testCases := []struct {
+		key      string
+		expected proto.RangeDescriptor
+	}{
+		// For testRanges[0|1|3] there is no intent. A key in the middle
+		// and the end key should both give us the range itself.
+		{key: "b", expected: testRanges[0]},
+		{key: "c", expected: testRanges[0]},
+		{key: "d", expected: testRanges[1]},
+		{key: "f", expected: testRanges[1]},
+		{key: "j", expected: testRanges[3]},
+		// testRanges[2] has an intent, so the inconsistent scan will read
+		// an old value (nil). Since we're in reverse mode, testRanges[1]
+		// is the result.
+		{key: "g", expected: testRanges[1]},
+		{key: "h", expected: testRanges[1]},
+	}
+
+	txn := &proto.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
+	for i, r := range testRanges {
+		if i != withIntentRangeIndex {
+			// Write the new descriptor as an intent.
+			data, err := gogoproto.Marshal(&r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pArgs := putArgs(keys.RangeMetaKey(r.EndKey), data,
+				tc.rng.Desc().RangeID, tc.store.StoreID())
+			pArgs.Txn = txn
+
+			if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	// Resolve the intents.
+	rArgs := &proto.ResolveIntentRangeRequest{
+		RequestHeader: proto.RequestHeader{
+			Timestamp: txn.Timestamp,
+			Key:       keys.RangeMetaKey(proto.Key("a")),
+			EndKey:    keys.RangeMetaKey(proto.Key("z")),
+			RangeID:   tc.rng.Desc().RangeID,
+			Replica:   proto.Replica{StoreID: tc.store.StoreID()},
+			Txn:       txn,
+		},
+	}
+	rArgs.Txn.Status = proto.COMMITTED
+	if _, err := tc.rng.AddCmd(tc.rng.context(), rArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get original meta2 descriptor.
+	rlArgs := &proto.RangeLookupRequest{
+		RequestHeader: proto.RequestHeader{
+			RangeID:         tc.rng.Desc().RangeID,
+			Replica:         proto.Replica{StoreID: tc.store.StoreID()},
+			ReadConsistency: proto.INCONSISTENT,
+		},
+		MaxRanges: 1,
+		Reverse:   true,
+	}
+	var rlReply *proto.RangeLookupResponse
+
+	// Test ReverseScan without intents.
+	for _, c := range testCases {
+		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.RangeLookupRequest)
+		clonedRLArgs.Timestamp = proto.ZeroTimestamp
+		clonedRLArgs.Key = keys.RangeMetaKey(proto.Key(c.key))
+		reply, err := tc.rng.AddCmd(tc.rng.context(), clonedRLArgs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rlReply = reply.(*proto.RangeLookupResponse)
+		seen := rlReply.Ranges[0]
+		if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
+			t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
+		}
+	}
+
+	// Write the new descriptor as an intent.
+	intentRange := testRanges[withIntentRangeIndex]
+	data, err := gogoproto.Marshal(&intentRange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pArgs := putArgs(keys.RangeMetaKey(intentRange.EndKey), data, 1, tc.store.StoreID())
+	pArgs.Txn = &proto.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
+	pArgs.Timestamp = pArgs.Txn.Timestamp
+	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test ReverseScan with intents.
+	for _, c := range testCases {
+		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.RangeLookupRequest)
+		clonedRLArgs.Timestamp = proto.ZeroTimestamp
+		clonedRLArgs.Key = keys.RangeMetaKey(proto.Key(c.key))
+		reply, err := tc.rng.AddCmd(tc.rng.context(), clonedRLArgs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rlReply = reply.(*proto.RangeLookupResponse)
+		seen := rlReply.Ranges[0]
+		if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
+			t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
+		}
 	}
 }
 
