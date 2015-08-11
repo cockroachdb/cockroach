@@ -1,8 +1,8 @@
 - Feature Name: explain_debug
 - Status: draft
 - Start Date: 2015-08-10
-- RFC PR:
-- Cockroach Issue: #2047
+- RFC PR: #2047
+- Cockroach Issue:
 
 # Summary
 
