@@ -1,5 +1,5 @@
 - Feature Name: explain_debug
-- Status: draft
+- Status: in-progress
 - Start Date: 2015-08-10
 - RFC PR: #2047
 - Cockroach Issue:
