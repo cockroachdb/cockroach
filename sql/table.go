@@ -124,7 +124,7 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 
 func (p *planner) getTableDesc(qname *parser.QualifiedName) (
 	*structured.TableDescriptor, error) {
-	if err := p.normalizeTableName(qname); err != nil {
+	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, err
 	}
 	dbDesc, err := p.getDatabaseDesc(qname.Database())
@@ -149,10 +149,14 @@ func (p *planner) getTableNames(dbDesc *structured.DatabaseDescriptor) (parser.Q
 	var qualifiedNames parser.QualifiedNames
 	for _, row := range sr {
 		tableName := string(bytes.TrimPrefix(row.Key, prefix))
-		qualifiedNames = append(qualifiedNames, &parser.QualifiedName{
+		qname := &parser.QualifiedName{
 			Base:     parser.Name(dbDesc.Name),
 			Indirect: parser.Indirection{parser.NameIndirection(tableName)},
-		})
+		}
+		if err := qname.NormalizeTableName(""); err != nil {
+			return nil, err
+		}
+		qualifiedNames = append(qualifiedNames, qname)
 	}
 	return qualifiedNames, nil
 }

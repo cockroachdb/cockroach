@@ -33,7 +33,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 	// TODO(XisiHuang): should do truncate and delete descriptor in
 	// the same txn
 	for i, tableQualifiedName := range n.Names {
-		if err := p.normalizeTableName(tableQualifiedName); err != nil {
+		if err := tableQualifiedName.NormalizeTableName(p.session.Database); err != nil {
 			return nil, err
 		}
 

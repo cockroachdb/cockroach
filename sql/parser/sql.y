@@ -3358,6 +3358,10 @@ indirection_elem:
   {
     $$ = qualifiedStar
   }
+| '@' col_label
+  {
+    $$ = IndexIndirection($2)
+  }
 | '[' a_expr ']'
   {
     $$ = &ArrayIndirection{Begin: $2}

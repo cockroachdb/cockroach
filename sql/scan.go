@@ -37,17 +37,19 @@ type qvalMap map[structured.ColumnID]*parser.ParenExpr
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
-	txn        *client.Txn
-	desc       *structured.TableDescriptor
-	columns    []string
-	err        error
-	primaryKey []byte            // the primary key of the current row
-	kvs        []client.KeyValue // the raw key/value pairs
-	kvIndex    int               // current index into the key/value pairs
-	qvals      qvalMap           // the values in the current row
-	row        parser.DTuple     // the rendered row
-	filter     parser.Expr       // filtering expression for rows
-	render     []parser.Expr     // rendering expressions for rows
+	txn              *client.Txn
+	desc             *structured.TableDescriptor
+	index            *structured.IndexDescriptor
+	isSecondaryIndex bool
+	columns          []string
+	err              error
+	indexKey         []byte            // the index key of the current row
+	kvs              []client.KeyValue // the raw key/value pairs
+	kvIndex          int               // current index into the key/value pairs
+	qvals            qvalMap           // the values in the current row
+	row              parser.DTuple     // the rendered row
+	filter           parser.Expr       // filtering expression for rows
+	render           []parser.Expr     // rendering expressions for rows
 }
 
 func (n *scanNode) Columns() []string {
@@ -81,10 +83,10 @@ func (n *scanNode) Next() bool {
 			kv = n.kvs[n.kvIndex]
 		}
 
-		if n.primaryKey != nil &&
-			(n.kvIndex == len(n.kvs) || !bytes.HasPrefix(kv.Key, n.primaryKey)) {
+		if n.indexKey != nil &&
+			(n.kvIndex == len(n.kvs) || !bytes.HasPrefix(kv.Key, n.indexKey)) {
 			// The current key belongs to a new row. Output the current row.
-			n.primaryKey = nil
+			n.indexKey = nil
 			if !n.prepareVals() {
 				return false
 			}
@@ -107,10 +109,10 @@ func (n *scanNode) Next() bool {
 		}
 
 		var vals valMap
-		if n.primaryKey == nil {
+		if n.indexKey == nil {
 			// This is the first key for the row, create the vals map in order to
-			// decode the primary key columns.
-			vals = make(valMap, len(n.desc.PrimaryIndex.ColumnIDs))
+			// decode the index key columns.
+			vals = make(valMap, len(n.index.ColumnIDs))
 			// Reset the qvals map expressions to nil. The expresssion will get
 			// filled in with the column values as we decode the key-value pairs for
 			// the row.
@@ -120,16 +122,16 @@ func (n *scanNode) Next() bool {
 		}
 
 		var remaining []byte
-		remaining, n.err = decodeIndexKey(n.desc, n.desc.PrimaryIndex, vals, kv.Key)
+		remaining, n.err = decodeIndexKey(n.desc, *n.index, vals, kv.Key)
 		if n.err != nil {
 			return false
 		}
 
-		if n.primaryKey == nil {
-			n.primaryKey = []byte(kv.Key[:len(kv.Key)-len(remaining)])
+		if n.indexKey == nil {
+			n.indexKey = []byte(kv.Key[:len(kv.Key)-len(remaining)])
 
 			// This is the first key for the row, initialize the column values that
-			// are part of the primary key.
+			// are part of the index key.
 			for id, val := range vals {
 				if qval := n.qvals[id]; qval != nil {
 					qval.Expr = val
@@ -137,23 +139,29 @@ func (n *scanNode) Next() bool {
 			}
 		}
 
-		_, colID := encoding.DecodeUvarint(remaining)
-		var col *structured.ColumnDescriptor
-		col, n.err = n.desc.FindColumnByID(structured.ColumnID(colID))
-		if n.err != nil {
-			return false
-		}
-		if v, ok := n.qvals[col.ID]; ok && v.Expr == nil {
-			v.Expr = unmarshalValue(*col, kv)
-			if log.V(2) {
-				log.Infof("Scan %q -> %v", kv.Key, n.qvals[col.ID].Expr)
+		if !n.isSecondaryIndex {
+			_, colID := encoding.DecodeUvarint(remaining)
+			var col *structured.ColumnDescriptor
+			col, n.err = n.desc.FindColumnByID(structured.ColumnID(colID))
+			if n.err != nil {
+				return false
+			}
+			if v, ok := n.qvals[col.ID]; ok && v.Expr == nil {
+				v.Expr = unmarshalValue(*col, kv)
+				if log.V(2) {
+					log.Infof("Scan %q -> %v", kv.Key, n.qvals[col.ID].Expr)
+				}
+			} else {
+				// No need to unmarshal the column value. Either the column was part of
+				// the index key or it isn't needed by any of the render or filter
+				// expressions.
+				if log.V(2) {
+					log.Infof("Scan %q -> [%d] (skipped)", kv.Key, col.ID)
+				}
 			}
 		} else {
-			// No need to unmarshal the column value. Either the column was part of
-			// the index key or it isn't needed by any of the render or filter
-			// expressions.
 			if log.V(2) {
-				log.Infof("Scan %q -> [%d] (skipped)", kv.Key, col.ID)
+				log.Infof("Scan %q", kv.Key)
 			}
 		}
 
@@ -176,12 +184,12 @@ func (n *scanNode) init() bool {
 func (n *scanNode) initExprs() bool {
 	n.qvals = make(qvalMap)
 	for i := range n.render {
-		n.render[i], n.err = extractQVals(n.desc, n.qvals, n.render[i])
+		n.render[i], n.err = n.extractQVals(n.render[i])
 		if n.err != nil {
 			return false
 		}
 	}
-	n.filter, n.err = extractQVals(n.desc, n.qvals, n.filter)
+	n.filter, n.err = n.extractQVals(n.filter)
 	return n.err == nil
 }
 
@@ -196,11 +204,11 @@ func (n *scanNode) initScan() bool {
 	if n.desc == nil {
 		// No table to read from, pretend there is a single empty row.
 		n.kvs = []client.KeyValue{}
-		n.primaryKey = []byte{}
+		n.indexKey = []byte{}
 		return true
 	}
 	// Retrieve all of the keys that start with our index key prefix.
-	startKey := proto.Key(structured.MakeIndexKeyPrefix(n.desc.ID, n.desc.PrimaryIndex.ID))
+	startKey := proto.Key(structured.MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
 	endKey := startKey.PrefixEnd()
 	n.kvs, n.err = n.txn.Scan(startKey, endKey, 0)
 	if n.err != nil {
@@ -271,9 +279,8 @@ func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) parser.
 }
 
 type qnameVisitor struct {
-	desc  *structured.TableDescriptor
-	qvals qvalMap
-	err   error
+	*scanNode
+	err error
 }
 
 var _ parser.Visitor = &qnameVisitor{}
@@ -284,6 +291,11 @@ func (v *qnameVisitor) Visit(expr parser.Expr) parser.Expr {
 	}
 	qname, ok := expr.(*parser.QualifiedName)
 	if !ok {
+		return expr
+	}
+
+	v.err = qname.NormalizeColumnName()
+	if v.err != nil {
 		return expr
 	}
 
@@ -308,16 +320,11 @@ func (v *qnameVisitor) Visit(expr parser.Expr) parser.Expr {
 }
 
 func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *structured.TableDescriptor {
-	// TODO(pmattis): This logic isn't complete. A QualifiedName like "a.b.c"
-	// currently refers to table "a", while I think it should refer to table "b"
-	// in database "a". Need to track down what the appropriate behavior is and
-	// implement it. This could also doesn't account for ArrayIndirection, so
-	// "a[b]" is currently being interpreted as table "a" while in reality it is
-	// column "a", element "b".
 	if v.desc == nil {
 		return nil
 	}
-	if len(qname.Indirect) == 0 {
+	if qname.Base == "" {
+		qname.Base = parser.Name(v.desc.Name)
 		return v.desc
 	}
 	if strings.EqualFold(v.desc.Name, string(qname.Base)) {
@@ -326,12 +333,11 @@ func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *structured.TableDes
 	return nil
 }
 
-func extractQVals(desc *structured.TableDescriptor,
-	qvals qvalMap, expr parser.Expr) (parser.Expr, error) {
+func (n *scanNode) extractQVals(expr parser.Expr) (parser.Expr, error) {
 	if expr == nil {
 		return expr, nil
 	}
-	v := qnameVisitor{desc: desc, qvals: qvals}
+	v := qnameVisitor{scanNode: n}
 	expr = parser.WalkExpr(&v, expr)
 	return expr, v.err
 }
