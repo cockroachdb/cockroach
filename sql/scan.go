@@ -130,8 +130,10 @@ func (n *scanNode) Next() bool {
 
 			// This is the first key for the row, initialize the column values that
 			// are part of the primary key.
-			for id := range n.qvals {
-				n.qvals[id].Expr = vals[id]
+			for id, val := range vals {
+				if qval := n.qvals[id]; qval != nil {
+					qval.Expr = val
+				}
 			}
 		}
 
@@ -200,9 +202,6 @@ func (n *scanNode) initScan() bool {
 	// Retrieve all of the keys that start with our index key prefix.
 	startKey := proto.Key(structured.MakeIndexKeyPrefix(n.desc.ID, n.desc.PrimaryIndex.ID))
 	endKey := startKey.PrefixEnd()
-	// TODO(pmattis): Currently we retrieve all of the key/value pairs for
-	// the table. We could enhance this code so that it retrieves the
-	// key/value pairs in chunks.
 	n.kvs, n.err = n.db.Scan(startKey, endKey, 0)
 	if n.err != nil {
 		return false

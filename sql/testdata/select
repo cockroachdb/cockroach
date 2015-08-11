@@ -94,6 +94,10 @@ query error "kv.*" cannot be aliased
 SELECT kv.* AS foo FROM kv
 ----
 
+query error qualified name "bar.kv.*" not found
+SELECT bar.kv.* FROM kv
+----
+
 query T colnames
 SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
 ----

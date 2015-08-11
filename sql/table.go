@@ -207,6 +207,13 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 	return nil, fmt.Errorf("unable to encode table key: %T", val)
 }
 
+// decodeIndexKey decodes the values that are a part of the specified index
+// key. If vals is not-nil, the decoded values are stored there, otherwise they
+// are decoded and tossed (reasonable to do for the primary key index for which
+// there will be multiple keys with the same values). The remaining bytes in
+// the index key are returned which will either be an encoded column ID for the
+// primary key index, the primary key suffix for non-unique secondary indexes
+// or unique secondary indexes containing NULL or empty.
 func decodeIndexKey(desc *structured.TableDescriptor,
 	index structured.IndexDescriptor, vals valMap, key []byte) ([]byte, error) {
 	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
