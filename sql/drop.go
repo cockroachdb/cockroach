@@ -44,7 +44,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 
 		tbKey := tableKey{dbDesc.ID, tableQualifiedName.Table()}
 		nameKey := tbKey.Key()
-		gr, err := p.db.Get(nameKey)
+		gr, err := p.txn.Get(nameKey)
 		if err != nil {
 			return nil, err
 		}
@@ -59,7 +59,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		}
 
 		tableDesc := structured.TableDescriptor{}
-		if err := p.db.GetProto(gr.ValueBytes(), &tableDesc); err != nil {
+		if err := p.txn.GetProto(gr.ValueBytes(), &tableDesc); err != nil {
 			return nil, err
 		}
 		if err := tableDesc.Validate(); err != nil {
@@ -80,7 +80,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		b := &client.Batch{}
 		b.Del(descKey)
 		b.Del(nameKey)
-		err = p.db.Run(b)
+		err = p.txn.Run(b)
 		if err != nil {
 			return nil, err
 		}
@@ -102,7 +102,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	}
 
 	nameKey := structured.MakeNameMetadataKey(structured.RootNamespaceID, string(n.Name))
-	gr, err := p.db.Get(nameKey)
+	gr, err := p.txn.Get(nameKey)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 
 	descKey := gr.ValueBytes()
 	desc := structured.DatabaseDescriptor{}
-	if err := p.db.GetProto(descKey, &desc); err != nil {
+	if err := p.txn.GetProto(descKey, &desc); err != nil {
 		return nil, err
 	}
 	if err := desc.Validate(); err != nil {
@@ -140,7 +140,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	b := &client.Batch{}
 	b.Del(descKey)
 	b.Del(nameKey)
-	if err := p.db.Run(b); err != nil {
+	if err := p.txn.Run(b); err != nil {
 		return nil, err
 	}
 	return &valuesNode{}, nil

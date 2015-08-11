@@ -56,7 +56,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 		b.DelRange(tableStartKey, tableEndKey)
 	}
 
-	if err := p.db.Run(&b); err != nil {
+	if err := p.txn.Run(&b); err != nil {
 		return nil, err
 	}
 

@@ -176,9 +176,9 @@ func (s *Server) exec(req driver.Request) (driver.Response, error) {
 		}
 		var plan planNode
 		if err := s.db.Txn(func(txn *client.Txn) error {
-			planner.db = txn
+			planner.txn = txn
 			plan, err = planner.makePlan(stmt)
-			planner.db = nil
+			planner.txn = nil
 			return err
 		}); err != nil {
 			return resp, err

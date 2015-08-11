@@ -106,7 +106,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		b.DelRange(rowStartKey, rowEndKey)
 	}
 
-	if err := p.db.Run(&b); err != nil {
+	if err := p.txn.Run(&b); err != nil {
 		return nil, err
 	}
 

@@ -51,7 +51,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 //          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
 func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	prefix := structured.MakeNameMetadataKey(structured.RootNamespaceID, "")
-	sr, err := p.db.Scan(prefix, prefix.PrefixEnd(), 0)
+	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
 	}
