@@ -1357,7 +1357,7 @@ any_operator:
 rename_stmt:
   ALTER DATABASE name RENAME TO name
   {
-    $$ = nil
+    $$ = &RenameDatabase{Name: Name($3), NewName: Name($6)}
   }
 | ALTER TABLE relation_expr RENAME TO name
   {

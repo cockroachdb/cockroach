@@ -53,6 +53,7 @@ type descriptorProto interface {
 	SetID(structured.ID)
 	TypeName() string
 	GetName() string
+	SetName(string)
 	Validate() error
 }
 

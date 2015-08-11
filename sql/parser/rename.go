@@ -25,6 +25,18 @@ package parser
 
 import "fmt"
 
+func (*RenameDatabase) statement() {}
+
+// RenameDatabase represents a RENAME DATABASE statement.
+type RenameDatabase struct {
+	Name    Name
+	NewName Name
+}
+
+func (node *RenameDatabase) String() string {
+	return fmt.Sprintf("ALTER DATABASE %s RENAME TO %s", node.Name, node.NewName)
+}
+
 // TODO(tschottdorf): This isn't even referenced from the grammar yet.
 func (*RenameTable) statement() {}
 
