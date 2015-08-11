@@ -20,14 +20,13 @@ package client_test
 import (
 	"fmt"
 	"log"
-	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -322,11 +321,10 @@ func TestDebugName(t *testing.T) {
 	s, db := setup()
 	defer s.Stop()
 
-	_, file, _, _ := runtime.Caller(0)
-	base := filepath.Base(file)
+	file, _, _ := caller.Lookup(0)
 	_ = db.Txn(func(txn *client.Txn) error {
-		if !strings.HasPrefix(txn.DebugName(), base+":") {
-			t.Fatalf("expected \"%s\" to have the prefix \"%s:\"", txn.DebugName(), base)
+		if !strings.HasPrefix(txn.DebugName(), file+":") {
+			t.Fatalf("expected \"%s\" to have the prefix \"%s:\"", txn.DebugName(), file)
 		}
 		return nil
 	})

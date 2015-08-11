@@ -157,7 +157,7 @@ func (s *Server) exec(req driver.Request) (driver.Response, error) {
 	// Pick up current session state.
 	// The request user is validated in ServeHTTP. Even in insecure mode,
 	// it is guaranteed not to be empty.
-	planner := planner{db: s.db, user: req.GetUser()}
+	planner := planner{user: req.GetUser()}
 	if req.Session != nil {
 		// TODO(tschottdorf) will have to validate the Session information (for
 		// instance, whether access to the stored database is permitted).
@@ -175,7 +175,12 @@ func (s *Server) exec(req driver.Request) (driver.Response, error) {
 			return resp, err
 		}
 		var plan planNode
-		if plan, err = planner.makePlan(stmt); err != nil {
+		if err := s.db.Txn(func(txn *client.Txn) error {
+			planner.txn = txn
+			plan, err = planner.makePlan(stmt)
+			planner.txn = nil
+			return err
+		}); err != nil {
 			return resp, err
 		}
 

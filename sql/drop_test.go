@@ -32,21 +32,16 @@ func TestDropTable(t *testing.T) {
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)
 
-	if _, err := sqlDB.Exec("CREATE DATABASE t"); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := sqlDB.Exec("CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)"); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := sqlDB.Exec(`INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'),('b', 'd')`); err != nil {
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+`); err != nil {
 		t.Fatal(err)
 	}
 
 	// The first `MaxReservedDescID` (plus 0) are set aside.
-	expectedDBCounter := uint32(structured.MaxReservedDescID + 1)
-	nameKey := structured.MakeNameMetadataKey(structured.ID(expectedDBCounter), "kv")
+	nameKey := structured.MakeNameMetadataKey(structured.MaxReservedDescID+1, "kv")
 	gr, err := kvDB.Get(nameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +69,7 @@ func TestDropTable(t *testing.T) {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
-	if _, err := sqlDB.Exec("DROP TABLE t.kv"); err != nil {
+	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,7 +100,7 @@ func TestDropDatabase(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'),('b', 'd')
+INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +145,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'),('b', 'd')
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
-	if _, err := sqlDB.Exec("DROP DATABASE t"); err != nil {
+	if _, err := sqlDB.Exec(`DROP DATABASE t`); err != nil {
 		t.Fatal(err)
 	}
 

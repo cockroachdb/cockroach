@@ -18,34 +18,13 @@
 package sql_test
 
 import (
-	"database/sql"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-func setup(t *testing.T) (*server.TestServer, *sql.DB, *client.DB) {
-	s := server.StartTestServer(nil)
-	sqlDB, err := sql.Open("cockroach", "https://root@"+s.ServingAddr()+"?certs=test_certs")
-	if err != nil {
-		t.Fatal(err)
-	}
-	kvDB, err := client.Open("https://root@" + s.ServingAddr() + "?certs=test_certs")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return s, sqlDB, kvDB
-}
-
-func cleanup(s *server.TestServer, db *sql.DB) {
-	_ = db.Close()
-	s.Stop()
-}
 
 func TestDatabaseDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -59,8 +38,8 @@ func TestDatabaseDescriptor(t *testing.T) {
 	// descriptor ID counter.
 	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
-	} else if ir.ValueInt() != expectedCounter {
-		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, ir.ValueInt())
+	} else if actual := ir.ValueInt(); actual != expectedCounter {
+		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
 	// Database name.
@@ -69,6 +48,36 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatal("expected non-existing key")
+	}
+
+	// Write some junk that is going to interfere with table creation.
+	dbDescKey := structured.MakeDescMetadataKey(structured.ID(expectedCounter))
+	if err := kvDB.CPut(dbDescKey, "foo", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Table creation should fail, and nothing should have been written.
+	if _, err := sqlDB.Exec(`CREATE DATABASE test`); !testutils.IsError(err, "unexpected value") {
+		t.Fatalf("unexpected error %s", err)
+	}
+
+	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {
+		t.Fatal(err)
+	} else if actual := ir.ValueInt(); actual != expectedCounter {
+		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
+	}
+
+	if kvs, err := kvDB.Scan(keys.NameMetadataPrefix, keys.NameMetadataPrefix.PrefixEnd(), 0); err != nil {
+		t.Fatal(err)
+	} else {
+		if a, e := len(kvs), 0; a != e {
+			t.Fatalf("expected %d keys to have been written, found %d keys", e, a)
+		}
+	}
+
+	// Remove the junk; allow table creation to proceed.
+	if err := kvDB.Del(dbDescKey); err != nil {
+		t.Fatal(err)
 	}
 
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
@@ -80,8 +89,8 @@ func TestDatabaseDescriptor(t *testing.T) {
 	// descriptor ID counter.
 	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
-	} else if ir.ValueInt() != expectedCounter {
-		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, ir.ValueInt())
+	} else if actual := ir.ValueInt(); actual != expectedCounter {
+		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
 	// Database name.
@@ -92,8 +101,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// database descriptor.
-	descKey := structured.MakeDescMetadataKey(structured.ID(expectedCounter - 1))
-	if gr, err := kvDB.Get(descKey); err != nil {
+	if gr, err := kvDB.Get(dbDescKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
 		t.Fatal("key is missing")
@@ -108,8 +116,8 @@ func TestDatabaseDescriptor(t *testing.T) {
 	// descriptor ID counter.
 	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
-	} else if ir.ValueInt() != expectedCounter {
-		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, ir.ValueInt())
+	} else if actual := ir.ValueInt(); actual != expectedCounter {
+		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
 	// Database name.
@@ -120,7 +128,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// database descriptor.
-	if gr, err := kvDB.Get(descKey); err != nil {
+	if gr, err := kvDB.Get(dbDescKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
 		t.Fatal("key is missing")

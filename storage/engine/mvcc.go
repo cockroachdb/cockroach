@@ -915,8 +915,7 @@ func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey proto.Key, max in
 
 	num := int64(0)
 	for _, kv := range kvs {
-		err = MVCCDelete(engine, ms, kv.Key, timestamp, txn)
-		if err != nil {
+		if err := MVCCDelete(engine, ms, kv.Key, timestamp, txn); err != nil {
 			return num, err
 		}
 		num++

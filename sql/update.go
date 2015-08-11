@@ -172,7 +172,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		}
 	}
 
-	if err := p.db.Run(&b); err != nil {
+	if err := p.txn.Run(&b); err != nil {
 		if tErr, ok := err.(*proto.ConditionFailedError); ok {
 			return nil, fmt.Errorf("duplicate key value %q violates unique constraint %s", tErr.ActualValue.Bytes, "TODO(tamird)")
 		}

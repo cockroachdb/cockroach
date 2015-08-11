@@ -100,7 +100,7 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	}
 
 	s := &scanNode{
-		db:      p.db,
+		txn:     p.txn,
 		desc:    desc,
 		columns: columns,
 		render:  exprs,

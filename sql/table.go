@@ -141,7 +141,7 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (
 
 func (p *planner) getTableNames(dbDesc *structured.DatabaseDescriptor) (parser.QualifiedNames, error) {
 	prefix := structured.MakeNameMetadataKey(dbDesc.ID, "")
-	sr, err := p.db.Scan(prefix, prefix.PrefixEnd(), 0)
+	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
 	}

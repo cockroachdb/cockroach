@@ -61,7 +61,7 @@ type descriptorProto interface {
 func (p *planner) writeDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) error {
 	key := plainKey.Key()
 	// Check whether key exists.
-	gr, err := p.db.Get(key)
+	gr, err := p.txn.Get(key)
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (p *planner) writeDescriptor(plainKey descriptorKey, descriptor descriptorP
 	}
 
 	// Increment unique descriptor counter.
-	if ir, err := p.db.Inc(keys.DescIDGenerator, 1); err == nil {
+	if ir, err := p.txn.Inc(keys.DescIDGenerator, 1); err == nil {
 		descriptor.SetID(structured.ID(ir.ValueInt() - 1))
 	} else {
 		return err
@@ -86,18 +86,16 @@ func (p *planner) writeDescriptor(plainKey descriptorKey, descriptor descriptorP
 	// difficult to interpret.
 	// TODO(pmattis): Need to handle if-not-exists here as well.
 	descKey := structured.MakeDescMetadataKey(descriptor.GetID())
-	return p.db.Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
-		b.CPut(key, descKey, nil)
-		b.CPut(descKey, descriptor, nil)
-		return txn.Commit(b)
-	})
+	b := client.Batch{}
+	b.CPut(key, descKey, nil)
+	b.CPut(descKey, descriptor, nil)
+	return p.txn.Run(&b)
 }
 
 // getDescriptor looks up the descriptor for `key`, validates it,
 // and unmarshals it into `descriptor`.
 func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto) error {
-	gr, err := p.db.Get(plainKey.Key())
+	gr, err := p.txn.Get(plainKey.Key())
 	if err != nil {
 		return err
 	}
@@ -106,7 +104,7 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 	}
 
 	descKey := gr.ValueBytes()
-	if err := p.db.GetProto(descKey, descriptor); err != nil {
+	if err := p.txn.GetProto(descKey, descriptor); err != nil {
 		return err
 	}
 
