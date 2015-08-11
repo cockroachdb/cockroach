@@ -56,6 +56,8 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 		return p.DropDatabase(n)
 	case *parser.DropTable:
 		return p.DropTable(n)
+	case *parser.Explain:
+		return p.Explain(n)
 	case *parser.Grant:
 		return p.Grant(n)
 	case *parser.Insert:
@@ -103,7 +105,9 @@ func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*structured.TableDesc
 		return nil, err
 	}
 	if ate.As != "" {
-		desc.Name = string(ate.As)
+		desc.Alias = string(ate.As)
+	} else {
+		desc.Alias = desc.Name
 	}
 	return desc, nil
 }

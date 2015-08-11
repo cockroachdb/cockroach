@@ -182,6 +182,8 @@ func WalkStmt(v Visitor, stmt Statement) {
 		if stmt.Where != nil {
 			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)
 		}
+	case *Explain:
+		WalkStmt(v, stmt.Statement)
 	case *Insert:
 		WalkStmt(v, stmt.Rows)
 	case *ParenSelect:

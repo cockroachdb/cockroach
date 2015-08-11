@@ -33,6 +33,7 @@ import (
 func (p *planner) Select(n *parser.Select) (planNode, error) {
 	var desc *structured.TableDescriptor
 	var index *structured.IndexDescriptor
+	var visibleCols []structured.ColumnDescriptor
 
 	switch len(n.From) {
 	case 0:
@@ -68,26 +69,23 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 			// If the table was not aliased, use the index name instead of the table
 			// name for fully-qualified columns in the expression.
 			if n.From[0].(*parser.AliasedTableExpr).As == "" {
-				desc.Name = index.Name
+				desc.Alias = index.Name
 			}
 			// Strip out any columns from the table that are not present in the
-			// index. This will leave us with a "fake" table containing only the
-			// columns from the index.
+			// index.
 			indexColIDs := map[structured.ColumnID]struct{}{}
 			for _, colID := range index.ColumnIDs {
 				indexColIDs[colID] = struct{}{}
 			}
-			var cols []structured.ColumnDescriptor
 			for _, col := range desc.Columns {
 				if _, ok := indexColIDs[col.ID]; !ok {
 					continue
 				}
-				cols = append(cols, col)
+				visibleCols = append(visibleCols, col)
 			}
-			desc.Columns = cols
-			desc.PrimaryIndex.Reset()
 		} else {
 			index = &desc.PrimaryIndex
+			visibleCols = desc.Columns
 		}
 
 	default:
@@ -115,7 +113,7 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 					return nil, fmt.Errorf("\"%s\" cannot be aliased", qname)
 				}
 				tableName := qname.Table()
-				if tableName != "" && !strings.EqualFold(desc.Name, tableName) {
+				if tableName != "" && !strings.EqualFold(desc.Alias, tableName) {
 					return nil, fmt.Errorf("table \"%s\" not found", tableName)
 				}
 
@@ -154,11 +152,12 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	}
 
 	s := &scanNode{
-		txn:     p.txn,
-		desc:    desc,
-		index:   index,
-		columns: columns,
-		render:  exprs,
+		txn:         p.txn,
+		desc:        desc,
+		index:       index,
+		visibleCols: visibleCols,
+		columns:     columns,
+		render:      exprs,
 	}
 	if index != nil {
 		s.isSecondaryIndex = index != &desc.PrimaryIndex

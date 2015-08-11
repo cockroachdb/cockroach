@@ -211,15 +211,44 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 	return nil, fmt.Errorf("unable to encode table key: %T", val)
 }
 
+func makeIndexKeyVals(desc *structured.TableDescriptor,
+	index structured.IndexDescriptor) ([]parser.Datum, error) {
+	vals := make([]parser.Datum, len(index.ColumnIDs))
+	for i, id := range index.ColumnIDs {
+		col, err := desc.FindColumnByID(id)
+		if err != nil {
+			return nil, err
+		}
+		switch col.Type.Kind {
+		case structured.ColumnType_BIT, structured.ColumnType_INT:
+			vals[i] = parser.DInt(0)
+		case structured.ColumnType_FLOAT:
+			vals[i] = parser.DFloat(0)
+		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
+			structured.ColumnType_BLOB:
+			vals[i] = parser.DString("")
+		default:
+			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
+		}
+	}
+	if !index.Unique {
+		// Non-unique columns are suffixed by the primary index key.
+		pkVals, err := makeIndexKeyVals(desc, desc.PrimaryIndex)
+		if err != nil {
+			return nil, err
+		}
+		vals = append(vals, pkVals...)
+	}
+	return vals, nil
+}
+
 // decodeIndexKey decodes the values that are a part of the specified index
-// key. If vals is not-nil, the decoded values are stored there, otherwise they
-// are decoded and tossed (reasonable to do for the primary key index for which
-// there will be multiple keys with the same values). The remaining bytes in
+// key. Vals is a slice returned from makeIndexKeyVals. The remaining bytes in
 // the index key are returned which will either be an encoded column ID for the
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
 func decodeIndexKey(desc *structured.TableDescriptor,
-	index structured.IndexDescriptor, vals valMap, key []byte) ([]byte, error) {
+	index structured.IndexDescriptor, vals []parser.Datum, key []byte) ([]byte, error) {
 	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
 		return nil, fmt.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
@@ -237,33 +266,22 @@ func decodeIndexKey(desc *structured.TableDescriptor,
 		return nil, fmt.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
 	}
 
-	for _, id := range index.ColumnIDs {
-		col, err := desc.FindColumnByID(id)
-		if err != nil {
-			return nil, err
-		}
-		switch col.Type.Kind {
-		case structured.ColumnType_BIT, structured.ColumnType_INT:
+	for j := range vals {
+		switch vals[j].(type) {
+		case parser.DInt:
 			var i int64
 			key, i = encoding.DecodeVarint(key)
-			if vals != nil {
-				vals[col.ID] = parser.DInt(i)
-			}
-		case structured.ColumnType_FLOAT:
+			vals[j] = parser.DInt(i)
+		case parser.DFloat:
 			var f float64
 			key, f = encoding.DecodeNumericFloat(key)
-			if vals != nil {
-				vals[col.ID] = parser.DFloat(f)
-			}
-		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
-			structured.ColumnType_BLOB:
+			vals[j] = parser.DFloat(f)
+		case parser.DString:
 			var r []byte
 			key, r = encoding.DecodeBytes(key, nil)
-			if vals != nil {
-				vals[col.ID] = parser.DString(r)
-			}
+			vals[j] = parser.DString(r)
 		default:
-			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
+			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", vals[j].Type())
 		}
 	}
 
