@@ -8,8 +8,8 @@
 
 Extend the SELECT syntax to allow an optional index to be specified in
 table references. The current table reference syntax is `table` or
-`database.table`. This syntax would be extended to allow `table.index`
-and `database.table.index`.
+`database.table`. This syntax would be extended to allow `table:index`
+and `database.table:index`.
 
 # Motivation
 
@@ -22,17 +22,11 @@ explicitness in queries.
 
 # Detailed design
 
-`QualifiedNames` (which are used for table names) already allow an
-arbitrary number of dot-separated elements. Table descriptor lookup in
-`planner.getTableDesc` will be extended so that failure to lookup a
-database descriptor would fall-back to assuming the `table.index`
-syntax had been used.
-
-`planner.Select` will be enhanced to use the normalized
-`QualifiedName` returned by `planner.getTableDesc` to select the index
-to use (if specified). `scanNode` will be enhanced to understand
-scanning from secondary indexes. This latter work will is required to
-support secondary index scans.
+The grammar will be extended to allow a `:index` suffix to
+`QualifiedNames`. `planner.Select` will be enhanced to use the to
+select the index to use (if specified). `scanNode` will be enhanced to
+understand scanning from secondary indexes. This latter work will is
+required to support secondary index scans.
 
 # Drawbacks
 
@@ -47,9 +41,10 @@ support secondary index scans.
 * Testing of index scans can use a different test harness than the
   existing SQL logic test infrastructure.
 
-* Instead of overloading the dot-separated notation for qualified
-  names, we could introduce new syntax. For example, `table@index` or
-  `table:index`. This would remove the ambiguity of whether the first
-  element in a qualified name is a table or a database.
+* Instead of adding a new delimiter for index specification, we could
+  overload the dot-separated notation for qualified names. For
+  example, `table.index` or `database.table.index`. This would remove
+  the need to adjust the grammar but would add ambiguity as to whether
+  the first element in a qualified name is a table or a database.
 
 # Unresolved questions
