@@ -18,34 +18,12 @@
 package sql_test
 
 import (
-	"database/sql"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-func setup(t *testing.T) (*server.TestServer, *sql.DB, *client.DB) {
-	s := server.StartTestServer(nil)
-	sqlDB, err := sql.Open("cockroach", "https://root@"+s.ServingAddr()+"?certs=test_certs")
-	if err != nil {
-		t.Fatal(err)
-	}
-	kvDB, err := client.Open("https://root@" + s.ServingAddr() + "?certs=test_certs")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return s, sqlDB, kvDB
-}
-
-func cleanup(s *server.TestServer, db *sql.DB) {
-	_ = db.Close()
-	s.Stop()
-}
 
 func TestDatabaseDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)
