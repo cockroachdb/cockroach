@@ -30,7 +30,7 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-var config1, config2, config3, config4, config5 gogoproto.Message
+var config1, config2, config3, config4, config5 *ConfigUnion
 
 func buildTestPrefixConfigMap() *PrefixConfigMap {
 	configs := []*PrefixConfig{

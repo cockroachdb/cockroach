@@ -321,7 +321,7 @@ func (gcq *gcQueue) lookupGCPolicy(repl *Replica) (config.GCPolicy, error) {
 	// hasn't been split yet along the new boundary.
 	var gc *config.GCPolicy
 	if err = configMap.VisitPrefixesHierarchically(repl.Desc().StartKey, func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
-		zone := cfg.(*config.ZoneConfig)
+		zone := cfg.(*config.ConfigUnion).GetValue().(*config.ZoneConfig)
 		if zone.GC != nil {
 			repl.RLock()
 			isCovered := !end.Less(repl.Desc().EndKey)

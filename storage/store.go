@@ -752,7 +752,7 @@ func (s *Store) ForceRangeGCScan(t util.Tester) {
 func (s *Store) setRangesMaxBytes(zoneMap *config.PrefixConfigMap) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	zone := zoneMap.Configs[0].Config.(*config.ZoneConfig)
+	zone := zoneMap.Configs[0].Config.GetValue().(*config.ZoneConfig)
 	idx := 0
 	// Note that we must iterate through the ranges in lexicographic
 	// order to match the ordering of the zoneMap.
@@ -760,7 +760,7 @@ func (s *Store) setRangesMaxBytes(zoneMap *config.PrefixConfigMap) {
 		rng := i.(*Replica)
 		if idx < zoneMap.Len()-1 && !rng.Desc().StartKey.Less(zoneMap.Configs[idx+1].Prefix) {
 			idx++
-			zone = zoneMap.Configs[idx].Config.(*config.ZoneConfig)
+			zone = zoneMap.Configs[idx].Config.GetValue().(*config.ZoneConfig)
 		}
 		rng.SetMaxBytes(zone.RangeMaxBytes)
 		return true
@@ -1680,7 +1680,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for rangeID, rng := range s.replicas {
-		zoneConfig := zoneMap.(*config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config.(*config.ZoneConfig)
+		zoneConfig := zoneMap.(*config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config.GetValue().(*config.ZoneConfig)
 		raftStatus := s.RaftStatus(rangeID)
 		if raftStatus == nil {
 			continue

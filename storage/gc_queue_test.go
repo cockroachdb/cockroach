@@ -372,9 +372,10 @@ func TestGCQueueLookupGCPolicy(t *testing.T) {
 		// hierarchical parent's GC policy; in this case, zoneConfig1.
 	}
 	configs := []*config.PrefixConfig{
-		{proto.KeyMin, nil, &zoneConfig1},
-		{proto.Key("/db1"), nil, &zoneConfig2},
+		config.NewPrefixConfig(proto.KeyMin, nil, &zoneConfig1),
+		config.NewPrefixConfig(proto.Key("/db1"), nil, &zoneConfig2),
 	}
+
 	pcc, err := config.NewPrefixConfigMap(configs)
 	if err != nil {
 		t.Fatal(err)

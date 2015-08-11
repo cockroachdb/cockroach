@@ -62,7 +62,7 @@ func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	}
 
 	configMap, err := config.NewPrefixConfigMap([]*config.PrefixConfig{
-		{proto.KeyMin, nil, permConfig},
+		config.NewPrefixConfig(proto.KeyMin, nil, permConfig),
 	})
 	if err != nil {
 		t.Fatalf("failed to make prefix config map, err: %s", err.Error())
@@ -652,8 +652,8 @@ func TestVerifyPermissions(t *testing.T) {
 		Read:  []string{"read2", "readAll", "rw2", "rwAll"},
 		Write: []string{"write2", "writeAll", "rw2", "rwAll"}}
 	configs := []*config.PrefixConfig{
-		{proto.KeyMin, nil, config1},
-		{proto.Key("a"), nil, config2},
+		config.NewPrefixConfig(proto.KeyMin, nil, config1),
+		config.NewPrefixConfig(proto.Key("a"), nil, config2),
 	}
 	configMap, err := config.NewPrefixConfigMap(configs)
 	if err != nil {

@@ -1281,7 +1281,11 @@ func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI gogoproto.Mes
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, cfg); err != nil {
 			return nil, nil, util.Errorf("unable to unmarshal config key %s: %s", string(kv.Key), err)
 		}
-		cfgs = append(cfgs, &config.PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: cfg})
+		cu := &config.ConfigUnion{}
+		if !cu.SetValue(cfg) {
+			log.Fatalf("unsupported type %T", cfg)
+		}
+		cfgs = append(cfgs, &config.PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: cu})
 		sha.Write(kv.Value.Bytes)
 	}
 	m, err := config.NewPrefixConfigMap(cfgs)

@@ -14,6 +14,7 @@
 		PermConfig
 		UserConfig
 		ZoneConfig
+		ConfigUnion
 */
 package config
 
@@ -159,6 +160,47 @@ func (m *ZoneConfig) GetRangeMaxBytes() int64 {
 func (m *ZoneConfig) GetGC() *GCPolicy {
 	if m != nil {
 		return m.GC
+	}
+	return nil
+}
+
+// ConfigUnion is the union of all types that can be stored in PrefixConfig.Config
+type ConfigUnion struct {
+	AcctConfigVal    *AcctConfig `protobuf:"bytes,1,opt,name=acct_config_val" json:"acct_config_val,omitempty"`
+	PermConfigVal    *PermConfig `protobuf:"bytes,2,opt,name=perm_config_val" json:"perm_config_val,omitempty"`
+	UserConfigVal    *UserConfig `protobuf:"bytes,3,opt,name=user_config_val" json:"user_config_val,omitempty"`
+	ZoneConfigVal    *ZoneConfig `protobuf:"bytes,4,opt,name=zone_config_val" json:"zone_config_val,omitempty"`
+	XXX_unrecognized []byte      `json:"-"`
+}
+
+func (m *ConfigUnion) Reset()         { *m = ConfigUnion{} }
+func (m *ConfigUnion) String() string { return proto.CompactTextString(m) }
+func (*ConfigUnion) ProtoMessage()    {}
+
+func (m *ConfigUnion) GetAcctConfigVal() *AcctConfig {
+	if m != nil {
+		return m.AcctConfigVal
+	}
+	return nil
+}
+
+func (m *ConfigUnion) GetPermConfigVal() *PermConfig {
+	if m != nil {
+		return m.PermConfigVal
+	}
+	return nil
+}
+
+func (m *ConfigUnion) GetUserConfigVal() *UserConfig {
+	if m != nil {
+		return m.UserConfigVal
+	}
+	return nil
+}
+
+func (m *ConfigUnion) GetZoneConfigVal() *ZoneConfig {
+	if m != nil {
+		return m.ZoneConfigVal
 	}
 	return nil
 }
@@ -590,6 +632,172 @@ func (m *ZoneConfig) Unmarshal(data []byte) error {
 
 	return nil
 }
+func (m *ConfigUnion) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AcctConfigVal", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AcctConfigVal == nil {
+				m.AcctConfigVal = &AcctConfig{}
+			}
+			if err := m.AcctConfigVal.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PermConfigVal", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.PermConfigVal == nil {
+				m.PermConfigVal = &PermConfig{}
+			}
+			if err := m.PermConfigVal.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UserConfigVal", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.UserConfigVal == nil {
+				m.UserConfigVal = &UserConfig{}
+			}
+			if err := m.UserConfigVal.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ZoneConfigVal", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ZoneConfigVal == nil {
+				m.ZoneConfigVal = &ZoneConfig{}
+			}
+			if err := m.ZoneConfigVal.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipConfig(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
 func skipConfig(data []byte) (n int, err error) {
 	l := len(data)
 	iNdEx := 0
@@ -682,6 +890,37 @@ var (
 	ErrInvalidLengthConfig = fmt.Errorf("proto: negative length found during unmarshaling")
 )
 
+func (this *ConfigUnion) GetValue() interface{} {
+	if this.AcctConfigVal != nil {
+		return this.AcctConfigVal
+	}
+	if this.PermConfigVal != nil {
+		return this.PermConfigVal
+	}
+	if this.UserConfigVal != nil {
+		return this.UserConfigVal
+	}
+	if this.ZoneConfigVal != nil {
+		return this.ZoneConfigVal
+	}
+	return nil
+}
+
+func (this *ConfigUnion) SetValue(value interface{}) bool {
+	switch vt := value.(type) {
+	case *AcctConfig:
+		this.AcctConfigVal = vt
+	case *PermConfig:
+		this.PermConfigVal = vt
+	case *UserConfig:
+		this.UserConfigVal = vt
+	case *ZoneConfig:
+		this.ZoneConfigVal = vt
+	default:
+		return false
+	}
+	return true
+}
 func (m *GCPolicy) Size() (n int) {
 	var l int
 	_ = l
@@ -750,6 +989,31 @@ func (m *ZoneConfig) Size() (n int) {
 	n += 1 + sovConfig(uint64(m.RangeMaxBytes))
 	if m.GC != nil {
 		l = m.GC.Size()
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ConfigUnion) Size() (n int) {
+	var l int
+	_ = l
+	if m.AcctConfigVal != nil {
+		l = m.AcctConfigVal.Size()
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	if m.PermConfigVal != nil {
+		l = m.PermConfigVal.Size()
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	if m.UserConfigVal != nil {
+		l = m.UserConfigVal.Size()
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	if m.ZoneConfigVal != nil {
+		l = m.ZoneConfigVal.Size()
 		n += 1 + l + sovConfig(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -940,6 +1204,67 @@ func (m *ZoneConfig) MarshalTo(data []byte) (n int, err error) {
 			return 0, err
 		}
 		i += n1
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ConfigUnion) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ConfigUnion) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.AcctConfigVal != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintConfig(data, i, uint64(m.AcctConfigVal.Size()))
+		n2, err := m.AcctConfigVal.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n2
+	}
+	if m.PermConfigVal != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintConfig(data, i, uint64(m.PermConfigVal.Size()))
+		n3, err := m.PermConfigVal.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	if m.UserConfigVal != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintConfig(data, i, uint64(m.UserConfigVal.Size()))
+		n4, err := m.UserConfigVal.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n4
+	}
+	if m.ZoneConfigVal != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintConfig(data, i, uint64(m.ZoneConfigVal.Size()))
+		n5, err := m.ZoneConfigVal.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n5
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)

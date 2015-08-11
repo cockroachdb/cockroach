@@ -40,9 +40,11 @@ import (
 // key refers to this "higher-up" PrefixConfig by specifying its prefix
 // so it can be binary searched from within a PrefixConfigMap.
 type PrefixConfig struct {
-	Prefix    proto.Key         // the prefix the config affects
-	Canonical proto.Key         // the prefix for the canonical config, if applicable
-	Config    gogoproto.Message // the config object
+	Prefix    proto.Key // the prefix the config affects
+	Canonical proto.Key // the prefix for the canonical config, if applicable
+	// TODO(thschroeter): do not expose the config union, access only
+	// via Config() method returing gogoproto.Message?
+	Config *ConfigUnion // the config object
 }
 
 // TODO(thschoeter): move type of Config to ConfigUnion for proto
@@ -77,6 +79,20 @@ func (p *PrefixConfigMap) Swap(i, j int) {
 }
 func (p *PrefixConfigMap) Less(i, j int) bool {
 	return p.Configs[i].Prefix.Less(p.Configs[j].Prefix)
+}
+
+// NewPrefixConfig creates a new PrefixConfig.
+func NewPrefixConfig(prefix, canonical proto.Key, configI gogoproto.Message) *PrefixConfig {
+	pc := &PrefixConfig{Prefix: prefix, Canonical: canonical, Config: &ConfigUnion{}}
+	if configI == nil {
+		// TODO(thschroeter): configI is nil in some tests. When allowing nil here
+		// Config.GetValue() will return nil and a later type assertion might fail.
+		return pc
+	}
+	if !pc.Config.SetValue(configI) {
+		panic(fmt.Sprintf("unsupported type %T", configI))
+	}
+	return pc
 }
 
 // NewPrefixConfigMap creates a new prefix config map and sorts

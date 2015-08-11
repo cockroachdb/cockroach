@@ -243,7 +243,7 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 		func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
 			hasPerm := false
 			if err := permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
-				perm := cfg.(*config.PermConfig)
+				perm := cfg.(*config.ConfigUnion).GetValue().(*config.PermConfig)
 				if proto.IsRead(args) && !perm.CanRead(header.User) {
 					return false, nil
 				}
