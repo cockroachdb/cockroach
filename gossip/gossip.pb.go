@@ -23,6 +23,7 @@ import proto "github.com/gogo/protobuf/proto"
 import math "math"
 import cockroach_util "github.com/cockroachdb/cockroach/util"
 import cockroach_proto "github.com/cockroachdb/cockroach/proto"
+import cockroach_storage_config "github.com/cockroachdb/cockroach/config"
 
 // discarding unused import gogoproto "gogoproto"
 
@@ -299,8 +300,11 @@ type ValUnion struct {
 	StringVal          *string                          `protobuf:"bytes,3,opt,name=string_val" json:"string_val,omitempty"`
 	StoreDescriptorVal *cockroach_proto.StoreDescriptor `protobuf:"bytes,4,opt,name=store_descriptor_val" json:"store_descriptor_val,omitempty"`
 	NodeDescriptorVal  *cockroach_proto.NodeDescriptor  `protobuf:"bytes,5,opt,name=node_descriptor_val" json:"node_descriptor_val,omitempty"`
-	TestVal            *TestVal                         `protobuf:"bytes,6,opt,name=test_val" json:"test_val,omitempty"`
-	XXX_unrecognized   []byte                           `json:"-"`
+	RangeDescriptorVal *cockroach_proto.RangeDescriptor `protobuf:"bytes,6,opt,name=range_descriptor_val" json:"range_descriptor_val,omitempty"`
+	// TODO(thschroeter): protofy PrefixConfigMap
+	PrefixConfigMapVal *cockroach_storage_config.PrefixConfigMap `protobuf:"bytes,7,opt,name=prefix_config_map_val" json:"prefix_config_map_val,omitempty"`
+	TestVal            *TestVal                                  `protobuf:"bytes,8,opt,name=test_val" json:"test_val,omitempty"`
+	XXX_unrecognized   []byte                                    `json:"-"`
 }
 
 func (m *ValUnion) Reset()         { *m = ValUnion{} }
@@ -338,6 +342,20 @@ func (m *ValUnion) GetStoreDescriptorVal() *cockroach_proto.StoreDescriptor {
 func (m *ValUnion) GetNodeDescriptorVal() *cockroach_proto.NodeDescriptor {
 	if m != nil {
 		return m.NodeDescriptorVal
+	}
+	return nil
+}
+
+func (m *ValUnion) GetRangeDescriptorVal() *cockroach_proto.RangeDescriptor {
+	if m != nil {
+		return m.RangeDescriptorVal
+	}
+	return nil
+}
+
+func (m *ValUnion) GetPrefixConfigMapVal() *cockroach_storage_config.PrefixConfigMap {
+	if m != nil {
+		return m.PrefixConfigMapVal
 	}
 	return nil
 }
@@ -381,6 +399,12 @@ func (this *ValUnion) GetValue() interface{} {
 	if this.NodeDescriptorVal != nil {
 		return this.NodeDescriptorVal
 	}
+	if this.RangeDescriptorVal != nil {
+		return this.RangeDescriptorVal
+	}
+	if this.PrefixConfigMapVal != nil {
+		return this.PrefixConfigMapVal
+	}
 	if this.TestVal != nil {
 		return this.TestVal
 	}
@@ -399,6 +423,10 @@ func (this *ValUnion) SetValue(value interface{}) bool {
 		this.StoreDescriptorVal = vt
 	case *cockroach_proto.NodeDescriptor:
 		this.NodeDescriptorVal = vt
+	case *cockroach_proto.RangeDescriptor:
+		this.RangeDescriptorVal = vt
+	case *cockroach_storage_config.PrefixConfigMap:
+		this.PrefixConfigMapVal = vt
 	case *TestVal:
 		this.TestVal = vt
 	default:

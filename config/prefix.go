@@ -28,41 +28,15 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// PrefixConfig relate a string prefix to a config object. Config
-// objects include accounting, permissions, users, and zones. PrefixConfig
-// objects are the constituents of PrefixConfigMap objects. In order
-// to support binary searches of hierarchical prefixes (see the
-// comments in NewPrefixConfigMap), PrefixConfig objects are
-// additionally added to a PrefixConfigMap to demarcate the end of a
-// prefix range. Such end-of-range sentinels need to refer back to the
-// next "higher-up" prefix in the hierarchy (many times this is the
-// default prefix which covers the entire range of keys). The Canonical
-// key refers to this "higher-up" PrefixConfig by specifying its prefix
-// so it can be binary searched from within a PrefixConfigMap.
-type PrefixConfig struct {
-	Prefix    proto.Key // the prefix the config affects
-	Canonical proto.Key // the prefix for the canonical config, if applicable
-	// TODO(thschroeter): do not expose the config union, access only
-	// via Config() method returing gogoproto.Message?
-	Config *ConfigUnion // the config object
-}
-
-// TODO(thschoeter): move type of Config to ConfigUnion for proto
+// TODO(thschroeter): re-enable stringer of PrefixConfig, currently gogoproto
+// creates a default.
 
 // String returns a human readable description.
+/*
 func (pc *PrefixConfig) String() string {
 	return fmt.Sprintf("prefix=%s: %s", pc.Prefix, pc.Config)
 }
-
-// PrefixConfigMap is a slice of prefix configs, sorted by
-// prefix. Along with various accessor methods, the config map
-// also contains additional prefix configs in the slice to
-// account for the ends of prefix ranges.
-type PrefixConfigMap struct {
-	Configs []*PrefixConfig
-}
-
-// TODO(thschroeter): move PrefixConfigMap to proto
+*/
 
 // RangeResult is returned by SplitRangeByPrefixes.
 type RangeResult struct {

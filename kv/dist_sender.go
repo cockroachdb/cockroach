@@ -399,9 +399,9 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 	if ownNodeID > 0 {
 		nodeDesc, err := ds.gossip.GetInfo(gossip.MakeNodeIDKey(ownNodeID))
 		if err == nil {
-			d := nodeDesc.(*proto.NodeDescriptor)
-			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(d))
-			return d
+			d := nodeDesc.(proto.NodeDescriptor)
+			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(&d))
+			return &d
 		}
 	}
 	log.Infof("unable to determine this node's attributes for replica " +
@@ -419,6 +419,7 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
 	args proto.Request) (proto.Response, error) {
 	if len(replicas) == 0 {
+		panic("ths break")
 		return nil, util.Errorf("%s: replicas set is empty", args.Method())
 	}
 

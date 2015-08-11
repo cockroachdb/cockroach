@@ -21,7 +21,7 @@ option go_package = "gossip";
 
 import "cockroach/util/unresolved_addr.proto";
 import "cockroach/proto/metadata.proto";
-//import "cockroach/config/config.proto";
+import "cockroach/config/config.proto";
 import "gogoproto/gogo.proto";
 
 // Request is the request struct passed with the Gossip RPC.
@@ -112,9 +112,10 @@ message ValUnion {
     string string_val = 3;
     proto.StoreDescriptor store_descriptor_val = 4;
     proto.NodeDescriptor  node_descriptor_val = 5;
-    TestVal test_val = 6;
+    proto.RangeDescriptor range_descriptor_val = 6; 
     // TODO(thschroeter): protofy PrefixConfigMap
-    //storage.config.PrefixConfigMap prefix_config_map_val = 5; 
+    storage.config.PrefixConfigMap prefix_config_map_val = 7;
+    TestVal test_val = 8;
   }
 }
 

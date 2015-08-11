@@ -105,6 +105,8 @@ var (
 // init registers all the types that are sent over the wire as
 // implementations of info.Val.
 func init() {
+	gob.Register(infoStore{})
+
 	// The last thing that isn't a proto.
 	gob.Register(config.PrefixConfigMap{})
 
@@ -222,8 +224,8 @@ func (g *Gossip) GetNodeDescriptor(nodeID proto.NodeID) (proto.NodeDescriptor, e
 func (g *Gossip) getNodeDescriptorLocked(nodeID proto.NodeID) (*proto.NodeDescriptor, error) {
 	nodeIDKey := MakeNodeIDKey(nodeID)
 	if i := g.is.getInfo(nodeIDKey); i != nil {
-		if nd, ok := i.value().(*proto.NodeDescriptor); ok {
-			return nd, nil
+		if nd, ok := i.value().(proto.NodeDescriptor); ok {
+			return &nd, nil
 		}
 		return nil, util.Errorf("error in node descriptor gossip: %+v", i.Val)
 	}

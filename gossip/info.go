@@ -18,6 +18,7 @@
 package gossip
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -26,17 +27,24 @@ import (
 )
 
 func (i *Info) setValue(v interface{}) {
+	// TODO(thschroeter): avoid duplication.
+	// supported types are listed below and
+	// in ValueUnion in gossip.proto
+	log.Info(fmt.Sprintf("setValue %T: %v", v, v))
 	var nv interface{}
 	switch t := v.(type) {
 	case int64:
-		tmp := int64(t)
-		nv = &tmp
+		nv = &t
 	case float64:
-		tmp := float64(t)
-		nv = &tmp
+		nv = &t
 	case string:
-		tmp := string(t)
-		nv = &tmp
+		nv = &t
+	case proto.RangeDescriptor:
+		nv = &t
+	case proto.NodeDescriptor:
+		nv = &t
+	case proto.StoreDescriptor:
+		nv = &t
 	default:
 		nv = t
 	}
@@ -47,13 +55,20 @@ func (i *Info) setValue(v interface{}) {
 
 func (i *Info) value() interface{} {
 	v := i.Val.GetValue()
+	log.Info(fmt.Sprintf("getValue %T %v", v, v))
 	switch t := v.(type) {
 	case *int64:
-		return int64(*t)
+		return *t
 	case *float64:
-		return float64(*t)
+		return *t
 	case *string:
-		return string(*t)
+		return *t
+	case *proto.RangeDescriptor:
+		return *t
+	case *proto.StoreDescriptor:
+		return *t
+	case *proto.NodeDescriptor:
+		return *t
 	}
 	return v
 }

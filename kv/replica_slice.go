@@ -42,10 +42,14 @@ type replicaSlice []replicaInfo
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossipped are omitted from the result.
 func newReplicaSlice(gossip *gossip.Gossip, desc *proto.RangeDescriptor) replicaSlice {
+	log.Infof("dsc: %v", desc)
+
 	replicas := make(replicaSlice, 0, len(desc.Replicas))
 	for _, r := range desc.Replicas {
 		nd, err := gossip.GetNodeDescriptor(r.NodeID)
 		if err != nil {
+
+			log.Infof("node %d is not gossiped: %v", r.NodeID, err)
 			if log.V(1) {
 				log.Infof("node %d is not gossiped: %v", r.NodeID, err)
 			}

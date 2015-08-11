@@ -34,10 +34,10 @@ var config1, config2, config3, config4, config5 *ConfigUnion
 
 func buildTestPrefixConfigMap() *PrefixConfigMap {
 	configs := []*PrefixConfig{
-		{proto.KeyMin, nil, config1},
-		{proto.Key("/db1"), nil, config2},
-		{proto.Key("/db1/table"), nil, config3},
-		{proto.Key("/db3"), nil, config4},
+		{proto.KeyMin, nil, config1, nil},
+		{proto.Key("/db1"), nil, config2, nil},
+		{proto.Key("/db1/table"), nil, config3, nil},
+		{proto.Key("/db3"), nil, config4, nil},
 	}
 	pcc, err := NewPrefixConfigMap(configs)
 	if err != nil {
@@ -107,7 +107,7 @@ func TestPrefixConfigSort(t *testing.T) {
 	}
 	pcc := &PrefixConfigMap{}
 	for _, key := range keys {
-		pcc.Configs = append(pcc.Configs, &PrefixConfig{key, nil, nil})
+		pcc.Configs = append(pcc.Configs, &PrefixConfig{key, nil, nil, nil})
 	}
 	sort.Sort(pcc)
 	for i, pc := range pcc.Configs {
@@ -123,13 +123,13 @@ func TestPrefixConfigBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	pcc := buildTestPrefixConfigMap()
 	expPrefixConfigs := []PrefixConfig{
-		{proto.KeyMin, nil, config1},
-		{proto.Key("/db1"), nil, config2},
-		{proto.Key("/db1/table"), nil, config3},
-		{proto.Key("/db1/tablf"), nil, config2},
-		{proto.Key("/db2"), nil, config1},
-		{proto.Key("/db3"), nil, config4},
-		{proto.Key("/db4"), nil, config1},
+		{proto.KeyMin, nil, config1, nil},
+		{proto.Key("/db1"), nil, config2, nil},
+		{proto.Key("/db1/table"), nil, config3, nil},
+		{proto.Key("/db1/tablf"), nil, config2, nil},
+		{proto.Key("/db2"), nil, config1, nil},
+		{proto.Key("/db3"), nil, config4, nil},
+		{proto.Key("/db4"), nil, config1, nil},
 	}
 	verifyPrefixConfigMap(pcc, expPrefixConfigs, t)
 }
@@ -137,9 +137,9 @@ func TestPrefixConfigBuild(t *testing.T) {
 func TestPrefixConfigMapDuplicates(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	configs := []*PrefixConfig{
-		{proto.KeyMin, nil, config1},
-		{proto.Key("/db2"), nil, config2},
-		{proto.Key("/db2"), nil, config3},
+		{proto.KeyMin, nil, config1, nil},
+		{proto.Key("/db2"), nil, config2, nil},
+		{proto.Key("/db2"), nil, config3, nil},
 	}
 	if _, err := NewPrefixConfigMap(configs); err == nil {
 		log.Fatalf("expected an error building config map")
@@ -149,24 +149,24 @@ func TestPrefixConfigMapDuplicates(t *testing.T) {
 func TestPrefixConfigSuccessivePrefixes(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	configs := []*PrefixConfig{
-		{proto.KeyMin, nil, config1},
-		{proto.Key("/db2"), nil, config2},
-		{proto.Key("/db2/table1"), nil, config3},
-		{proto.Key("/db2/table2"), nil, config4},
-		{proto.Key("/db3"), nil, config5},
+		{proto.KeyMin, nil, config1, nil},
+		{proto.Key("/db2"), nil, config2, nil},
+		{proto.Key("/db2/table1"), nil, config3, nil},
+		{proto.Key("/db2/table2"), nil, config4, nil},
+		{proto.Key("/db3"), nil, config5, nil},
 	}
 	pcc, err := NewPrefixConfigMap(configs)
 	if err != nil {
 		log.Fatalf("unexpected error building config map: %v", err)
 	}
 	expPrefixConfigs := []PrefixConfig{
-		{proto.KeyMin, nil, config1},
-		{proto.Key("/db2"), nil, config2},
-		{proto.Key("/db2/table1"), nil, config3},
-		{proto.Key("/db2/table2"), nil, config4},
-		{proto.Key("/db2/table3"), nil, config2},
-		{proto.Key("/db3"), nil, config5},
-		{proto.Key("/db4"), nil, config1},
+		{proto.KeyMin, nil, config1, nil},
+		{proto.Key("/db2"), nil, config2, nil},
+		{proto.Key("/db2/table1"), nil, config3, nil},
+		{proto.Key("/db2/table2"), nil, config4, nil},
+		{proto.Key("/db2/table3"), nil, config2, nil},
+		{proto.Key("/db3"), nil, config5, nil},
+		{proto.Key("/db4"), nil, config1, nil},
 	}
 	verifyPrefixConfigMap(pcc, expPrefixConfigs, t)
 }
