@@ -76,14 +76,14 @@ and how an index was accessed.
 Listing all of the primary key-value pairs for a table can be performed by:
 
 ```sql
-  EXPLAIN SELECT * FROM table
+  EXPLAIN DEBUG SELECT * FROM table
 ```
 
 If #2046 is accepted, listing all of a secondary index key-value pairs can be
 performed by:
 
 ```sql
-  EXPLAIN SELECT * FROM table.index
+  EXPLAIN DEBUG SELECT * FROM table.index
 ```
 
 # Detailed design
