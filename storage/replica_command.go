@@ -620,8 +620,10 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 	// descriptor and the total range count may not yet be correct, as
 	// explained above.
 	if args.Reverse {
-		// Checks rds[0]. In case two we need to remove first range descriptor.
-		if args.Key.Equal(keys.RangeMetaKey(rds[0].StartKey)) {
+		// We had to carry out a single ascending scan above, and if our key
+		// corresponds to an end key we've picked up an extra descriptor
+		// we need to discard now.
+		if !keys.RangeMetaKey(rds[0].StartKey).Less(args.Key) {
 			rds = rds[1:]
 		} else {
 			// Check if we're over max result count.
