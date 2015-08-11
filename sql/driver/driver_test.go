@@ -223,7 +223,7 @@ func TestInsecure(t *testing.T) {
 	defer func() {
 		_ = db.Close()
 	}()
-	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
+	if _, err := db.Exec(`SELECT 1`); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -199,10 +199,10 @@ func (t logicTest) run(path string) {
 	// values cached in t.clients and finally closed in t.close().
 	t.setUser("root")
 
-	if _, err := t.db.Exec("CREATE DATABASE test"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := t.db.Exec("SET DATABASE = test"); err != nil {
+	if _, err := t.db.Exec(`
+CREATE DATABASE test;
+SET DATABASE = test;
+`); err != nil {
 		t.Fatal(err)
 	}
 

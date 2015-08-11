@@ -30,14 +30,12 @@ func TestRevoke(t *testing.T) {
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)
 
-	// The first `MaxReservedDescID` (plus 0) are set aside.
-	expectedCounter := structured.MaxReservedDescID + 1
-
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
 
-	descKey := structured.MakeDescMetadataKey(expectedCounter)
+	// The first `MaxReservedDescID` (plus 0) are set aside.
+	descKey := structured.MakeDescMetadataKey(structured.MaxReservedDescID + 1)
 	desc := structured.DatabaseDescriptor{}
 	if err := kvDB.GetProto(descKey, &desc); err != nil {
 		t.Fatal(err)

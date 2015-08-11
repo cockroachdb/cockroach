@@ -59,8 +59,8 @@ func TestDatabaseDescriptor(t *testing.T) {
 	// descriptor ID counter.
 	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
-	} else if ir.ValueInt() != expectedCounter {
-		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, ir.ValueInt())
+	} else if actual := ir.ValueInt(); actual != expectedCounter {
+		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
 	// Database name.
@@ -80,8 +80,8 @@ func TestDatabaseDescriptor(t *testing.T) {
 	// descriptor ID counter.
 	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
-	} else if ir.ValueInt() != expectedCounter {
-		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, ir.ValueInt())
+	} else if actual := ir.ValueInt(); actual != expectedCounter {
+		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
 	// Database name.
@@ -108,8 +108,8 @@ func TestDatabaseDescriptor(t *testing.T) {
 	// descriptor ID counter.
 	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
-	} else if ir.ValueInt() != expectedCounter {
-		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, ir.ValueInt())
+	} else if actual := ir.ValueInt(); actual != expectedCounter {
+		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
 	// Database name.
