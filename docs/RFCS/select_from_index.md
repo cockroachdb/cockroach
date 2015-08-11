@@ -1,5 +1,5 @@
 - Feature Name: select_from_index
-- Status: draft
+- Status: in-progress
 - Start Date: 2015-08-10
 - RFC PR: #2046
 - Cockroach Issue:
