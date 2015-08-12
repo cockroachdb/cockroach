@@ -82,6 +82,17 @@ func newTxn(db DB, depth int) *Txn {
 	return txn
 }
 
+func newTxnFromProto(db DB, depth int, t proto.Transaction) *Txn {
+	txn := newTxn(db, depth)
+	txn.txn = t
+	return txn
+}
+
+// GetProtoFromTxn returns the transaction protobuf.
+func (txn *Txn) GetProtoFromTxn() *proto.Transaction {
+	return &txn.txn
+}
+
 // SetDebugName sets the debug name associated with the transaction which will
 // appear in log files and the web UI. Each transaction starts out with an
 // automatically assigned debug name composed of the file and line number where
@@ -274,6 +285,15 @@ func (txn *Txn) Run(b *Batch) error {
 // function returns without error.
 func (txn *Txn) Commit(b *Batch) error {
 	args := &proto.EndTransactionRequest{Commit: true}
+	reply := &proto.EndTransactionResponse{}
+	b.calls = append(b.calls, proto.Call{Args: args, Reply: reply})
+	b.initResult(1, 0, nil)
+	return txn.Run(b)
+}
+
+// Rollback a transaction.
+func (txn *Txn) Rollback(b *Batch) error {
+	args := &proto.EndTransactionRequest{Commit: false}
 	reply := &proto.EndTransactionResponse{}
 	b.calls = append(b.calls, proto.Call{Args: args, Reply: reply})
 	b.initResult(1, 0, nil)

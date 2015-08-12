@@ -419,6 +419,11 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 	return newTxn(*db, 1 /* depth */).exec(retryable)
 }
 
+// ReconstructTxn from a protobuf.
+func (db *DB) ReconstructTxn(txn proto.Transaction) *Txn {
+	return newTxnFromProto(*db, 1 /* depth */, txn)
+}
+
 // send runs the specified calls synchronously in a single batch and
 // returns any errors.
 func (db *DB) send(calls ...proto.Call) (err error) {
