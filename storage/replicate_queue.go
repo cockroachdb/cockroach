@@ -31,12 +31,13 @@ const (
 	// replicateQueueMaxSize is the max size of the replicate queue.
 	replicateQueueMaxSize = 100
 
-	// replicateQueueTimerDuration is the duration between replication of queued ranges.
+	// replicateQueueTimerDuration is the duration between replication of queued
+	// replicas.
 	replicateQueueTimerDuration = 0 // zero duration to process replication greedily
 )
 
-// replicateQueue manages a queue of ranges to have their replicas
-// change to match the zone config.
+// replicateQueue manages a queue of replicas which may need to add an
+// additional replica to their range.
 type replicateQueue struct {
 	*baseQueue
 	gossip    *gossip.Gossip
@@ -60,30 +61,31 @@ func (rq *replicateQueue) needsLeaderLease() bool {
 	return true
 }
 
-func (rq *replicateQueue) shouldQueue(now proto.Timestamp, rng *Replica) (
+func (rq *replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (
 	shouldQ bool, priority float64) {
-	// If the range spans multiple zones, ignore it until the split queue has processed it.
-	if len(computeSplitKeys(rq.gossip, rng)) > 0 {
+	// If the replica's range spans multiple zones, ignore it until the split
+	// queue has processed it.
+	if len(computeSplitKeys(rq.gossip, repl)) > 0 {
 		return
 	}
 
 	// Load the zone config to find the desired replica attributes.
-	zone, err := lookupZoneConfig(rq.gossip, rng)
+	zone, err := lookupZoneConfig(rq.gossip, repl)
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	return rq.needsReplication(zone, rng)
+	return rq.needsReplication(zone, repl)
 }
 
-func (rq *replicateQueue) needsReplication(zone config.ZoneConfig, rng *Replica) (bool, float64) {
+func (rq *replicateQueue) needsReplication(zone config.ZoneConfig, repl *Replica) (bool, float64) {
 	// TODO(bdarnell): handle non-empty ReplicaAttrs.
 	need := len(zone.ReplicaAttrs)
-	have := len(rng.Desc().Replicas)
+	have := len(repl.Desc().Replicas)
 	if need > have {
 		if log.V(1) {
-			log.Infof("%s needs %d nodes; has %d", rng, need, have)
+			log.Infof("%s needs %d nodes; has %d", repl, need, have)
 		}
 		return true, float64(need - have)
 	}
@@ -91,20 +93,20 @@ func (rq *replicateQueue) needsReplication(zone config.ZoneConfig, rng *Replica)
 	return false, 0
 }
 
-func (rq *replicateQueue) process(now proto.Timestamp, rng *Replica) error {
-	zone, err := lookupZoneConfig(rq.gossip, rng)
+func (rq *replicateQueue) process(now proto.Timestamp, repl *Replica) error {
+	zone, err := lookupZoneConfig(rq.gossip, repl)
 	if err != nil {
 		return err
 	}
 
-	if needs, _ := rq.needsReplication(zone, rng); !needs {
+	if needs, _ := rq.needsReplication(zone, repl); !needs {
 		// Something changed between shouldQueue and process.
 		return nil
 	}
 
 	// TODO(bdarnell): handle non-homogenous ReplicaAttrs.
 	// Allow constraints to be relaxed if necessary.
-	newReplica, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], rng.Desc().Replicas, true)
+	newReplica, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], repl.Desc().Replicas, true)
 	if err != nil {
 		return err
 	}
@@ -113,12 +115,12 @@ func (rq *replicateQueue) process(now proto.Timestamp, rng *Replica) error {
 		NodeID:  newReplica.Node.NodeID,
 		StoreID: newReplica.StoreID,
 	}
-	if err = rng.ChangeReplicas(proto.ADD_REPLICA, replica); err != nil {
+	if err = repl.ChangeReplicas(proto.ADD_REPLICA, replica); err != nil {
 		return err
 	}
 
-	// Enqueue this range again to see if there are more changes to be made.
-	go rq.MaybeAdd(rng, rq.clock.Now())
+	// Enqueue this replica again to see if there are more changes to be made.
+	go rq.MaybeAdd(repl, rq.clock.Now())
 	return nil
 }
 

@@ -190,7 +190,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	// We don't want to actually consume entries from the queues during this test.
 	q1.setDisabled(true)
 	q2.setDisabled(true)
-	s := newRangeScanner(1*time.Millisecond, 0, ranges)
+	s := newReplicaScanner(1*time.Millisecond, 0, ranges)
 	s.AddQueues(q1, q2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -210,7 +210,7 @@ func TestScannerAddToQueues(t *testing.T) {
 		// This is intentionally inside the loop, otherwise this test races as
 		// our removal of the range may be processed before a stray re-queue.
 		// Removing on each attempt makes sure we clean this up as we retry.
-		s.RemoveRange(rng)
+		s.RemoveReplica(rng)
 		c1 := q1.count()
 		c2 := q2.count()
 		log.Infof("q1: %d, q2: %d, wanted: %d", c1, c2, count-1)
@@ -240,7 +240,7 @@ func TestScannerTiming(t *testing.T) {
 	for i, duration := range durations {
 		ranges := newTestRangeSet(count, t)
 		q := &testQueue{}
-		s := newRangeScanner(duration, 0, ranges)
+		s := newReplicaScanner(duration, 0, ranges)
 		s.AddQueues(q)
 		mc := hlc.NewManualClock(0)
 		clock := hlc.NewClock(mc.UnixNano)
@@ -278,16 +278,16 @@ func TestScannerPaceInterval(t *testing.T) {
 	for _, duration := range durations {
 		startTime := time.Now()
 		ranges := newTestRangeSet(count, t)
-		s := newRangeScanner(duration, 0, ranges)
+		s := newReplicaScanner(duration, 0, ranges)
 		interval := s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration/count, interval)
 		// The range set is empty
 		ranges = newTestRangeSet(0, t)
-		s = newRangeScanner(duration, 0, ranges)
+		s = newReplicaScanner(duration, 0, ranges)
 		interval = s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration, interval)
 		ranges = newTestRangeSet(count, t)
-		s = newRangeScanner(duration, 0, ranges)
+		s = newReplicaScanner(duration, 0, ranges)
 		// Move the present to duration time into the future
 		interval = s.paceInterval(startTime, startTime.Add(duration))
 		logErrorWhenNotCloseTo(0, interval)
@@ -299,7 +299,7 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ranges := newTestRangeSet(0, t)
 	q := &testQueue{}
-	s := newRangeScanner(1*time.Millisecond, 0, ranges)
+	s := newReplicaScanner(1*time.Millisecond, 0, ranges)
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
