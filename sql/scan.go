@@ -139,7 +139,7 @@ func (n *scanNode) Next() bool {
 			}
 		}
 
-		if !n.isSecondaryIndex {
+		if !n.isSecondaryIndex && len(remaining) > 0 {
 			_, colID := encoding.DecodeUvarint(remaining)
 			var col *structured.ColumnDescriptor
 			col, n.err = n.desc.FindColumnByID(structured.ColumnID(colID))

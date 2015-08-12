@@ -57,10 +57,12 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	}
 
 	// Verify we have at least the columns that are part of the primary key.
+	primaryKeyCols := map[structured.ColumnID]struct{}{}
 	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
 		if _, ok := colIDtoRowIndex[id]; !ok {
 			return nil, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
+		primaryKeyCols[id] = struct{}{}
 	}
 
 	// Transform the values into a rows object. This expands SELECT statements or
@@ -108,8 +110,21 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
 		}
 
-		// Write the row.
+		// Write the row sentinel.
+		if log.V(2) {
+			log.Infof("CPut %q -> NULL", primaryIndexKey)
+		}
+		b.CPut(primaryIndexKey, nil, nil)
+
+		// Write the row columns.
 		for i, val := range values {
+			if _, ok := primaryKeyCols[cols[i].ID]; ok {
+				// Skip primary key columns as their values are encoded in the row
+				// sentinel key which is guaranteed to exist for as long as the row
+				// exists.
+				continue
+			}
+
 			key := structured.MakeColumnKey(cols[i].ID, primaryIndexKey)
 			if log.V(2) {
 				log.Infof("CPut %q -> %v", key, val)
@@ -118,7 +133,12 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			if err != nil {
 				return nil, err
 			}
-			b.CPut(key, v, nil)
+			if v != nil {
+				// We only output non-NULL values. Non-existent column keys are
+				// considered NULL during scanning and the row sentinel ensures we know
+				// the row exists.
+				b.CPut(key, v, nil)
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
