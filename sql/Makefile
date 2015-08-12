@@ -1,3 +1,3 @@
 .PHONY: bigtest
 bigtest:
-	go test -bigtest -timeout 5h -run '^TestLogic$$'
+	go test -bigtest -timeout 24h -run '^TestLogic$$'
