@@ -518,7 +518,7 @@ func concurrentIncrements(db *client.DB, t *testing.T, isMultiphase bool) {
 					if err, txnProto := applyInc(txn); err != nil {
 						// New txn.
 						txn = db.ReconstructTxn(*txnProto)
-						if err := txn.Rollback(&client.Batch{}); err != nil {
+						if err := txn.Rollback(); err != nil {
 							t.Error(err)
 						} else {
 							// retry

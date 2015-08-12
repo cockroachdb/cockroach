@@ -284,20 +284,21 @@ func (txn *Txn) Run(b *Batch) error {
 // efficient than relying on the implicit commit performed when the transaction
 // function returns without error.
 func (txn *Txn) Commit(b *Batch) error {
-	return txn.endInBatch(b, true)
+	b.calls = append(b.calls, createEndCall(true))
+	b.initResult(1, 0, nil)
+	return txn.Run(b)
 }
 
 // Rollback a transaction.
-func (txn *Txn) Rollback(b *Batch) error {
-	return txn.endInBatch(b, false)
+func (txn *Txn) Rollback() error {
+	return txn.send(createEndCall(false /*dont commit*/))
 }
 
-func (txn *Txn) endInBatch(b *Batch, commit bool) error {
-	args := &proto.EndTransactionRequest{Commit: commit}
-	reply := &proto.EndTransactionResponse{}
-	b.calls = append(b.calls, proto.Call{Args: args, Reply: reply})
-	b.initResult(1, 0, nil)
-	return txn.Run(b)
+func createEndCall(commit bool) proto.Call {
+	return proto.Call{
+		Args:  &proto.EndTransactionRequest{Commit: commit},
+		Reply: &proto.EndTransactionResponse{},
+	}
 }
 
 func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
@@ -311,9 +312,7 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 				// may block waiting for outstanding writes to complete in case
 				// retryable didn't -- we need the most recent of all response
 				// timestamps in order to commit.
-				etArgs := &proto.EndTransactionRequest{Commit: true}
-				etReply := &proto.EndTransactionResponse{}
-				err = txn.send(proto.Call{Args: etArgs, Reply: etReply})
+				err = txn.send(createEndCall(true))
 			}
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
@@ -331,10 +330,7 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 		break
 	}
 	if err != nil && txn.haveTxnWrite {
-		if replyErr := txn.send(proto.Call{
-			Args:  &proto.EndTransactionRequest{Commit: false},
-			Reply: &proto.EndTransactionResponse{},
-		}); replyErr != nil {
+		if replyErr := txn.Rollback(); replyErr != nil {
 			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		}
 	}
