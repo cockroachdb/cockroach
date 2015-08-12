@@ -33,6 +33,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -43,6 +44,7 @@ var (
 	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
 	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(.*)$`)
 	testdata  = flag.String("d", "testdata/*", "test data glob")
+	bigtest   = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
 )
 
 type lineScanner struct {
@@ -147,7 +149,9 @@ type logicTest struct {
 	// re-use them and close them all on exit.
 	clients map[string]*sql.DB
 	// client currently in use.
-	db *sql.DB
+	db           *sql.DB
+	progress     int
+	lastProgress time.Time
 }
 
 func (t *logicTest) close() {
@@ -189,7 +193,8 @@ func (t logicTest) run(path string) {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	base := filepath.Base(path)
+
+	t.lastProgress = time.Now()
 
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
@@ -219,7 +224,7 @@ SET DATABASE = test;
 		}
 		switch cmd {
 		case "statement":
-			stmt := logicStatement{pos: fmt.Sprintf("%s:%d", base, s.line)}
+			stmt := logicStatement{pos: fmt.Sprintf("%s:%d", path, s.line)}
 			// Parse "query error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErr = m[1]
@@ -234,9 +239,10 @@ SET DATABASE = test;
 			}
 			stmt.sql = strings.TrimSpace(buf.String())
 			t.execStatement(stmt)
+			t.success(path)
 
 		case "query":
-			query := logicQuery{pos: fmt.Sprintf("%s:%d", base, s.line)}
+			query := logicQuery{pos: fmt.Sprintf("%s:%d", path, s.line)}
 			// Parse "query error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				query.expectErr = m[1]
@@ -314,6 +320,7 @@ SET DATABASE = test;
 			}
 
 			t.execQuery(query)
+			t.success(path)
 
 		case "halt":
 			break
@@ -335,10 +342,14 @@ SET DATABASE = test;
 	if err := s.Err(); err != nil {
 		t.Fatal(err)
 	}
+
+	fmt.Printf("%s: %d\n", path, t.progress)
 }
 
 func (t *logicTest) execStatement(stmt logicStatement) {
-	fmt.Printf("%s: %s\n", stmt.pos, stmt.sql)
+	if testing.Verbose() {
+		fmt.Printf("%s: %s\n", stmt.pos, stmt.sql)
+	}
 	_, err := t.db.Exec(stmt.sql)
 	switch {
 	case stmt.expectErr == "":
@@ -355,7 +366,9 @@ func (t *logicTest) execStatement(stmt logicStatement) {
 }
 
 func (t *logicTest) execQuery(query logicQuery) {
-	fmt.Printf("%s: %s\n", query.pos, query.sql)
+	if testing.Verbose() {
+		fmt.Printf("%s: %s\n", query.pos, query.sql)
+	}
 	rows, err := t.db.Query(query.sql)
 	if query.expectErr == "" {
 		if err != nil {
@@ -424,13 +437,47 @@ func (t *logicTest) execQuery(query logicQuery) {
 	}
 }
 
+func (t *logicTest) success(file string) {
+	t.progress++
+	now := time.Now()
+	if now.Sub(t.lastProgress) >= 2*time.Second {
+		t.lastProgress = now
+		fmt.Printf("%s: %d\n", file, t.progress)
+	}
+}
+
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	paths, err := filepath.Glob(*testdata)
-	if err != nil {
-		t.Fatal(err)
+	var globs []string
+	if *bigtest {
+		const logicTestPath = "../../sqllogictest"
+		if _, err := os.Stat(logicTestPath); os.IsNotExist(err) {
+			fullPath, err := filepath.Abs(logicTestPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Fatalf("unable to find sqllogictest repo: %s\n"+
+				"git clone https://github.com/cockroachdb/sqllogictest %s",
+				logicTestPath, fullPath)
+			return
+		}
+		globs = []string{
+			logicTestPath + "/test/index/in/*/*.test",
+		}
+	} else {
+		globs = []string{*testdata}
 	}
+
+	var paths []string
+	for _, g := range globs {
+		match, err := filepath.Glob(g)
+		if err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, match...)
+	}
+
 	for _, p := range paths {
 		logicTest{T: t}.run(p)
 	}
