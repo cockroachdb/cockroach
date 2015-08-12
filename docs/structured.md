@@ -134,7 +134,7 @@ before we garbage collect the table in the background.
 ###Data addressing###
 
 The Index data used to find data in the database is stored in the database
-itself at keys with the following prefix: `/TableID/IndexID/Key>`, where TableID
+itself at keys with the following prefix: `/TableID/IndexID/Key`, where TableID
 represents the Table being addressed and IndexID the index in use. The encoding
 used ensures that the data and metadata are well-separated.
 
@@ -146,6 +146,11 @@ unique row in the database. A cell within a row under a particular column is
 addressed by adding the desired ColumnID to the key prefix:
 `/TableID/PrimaryIndexID/Key/ColumnID`. PrimaryIndexID is variable to allow
 changing the primary key.
+
+Every row in a table has a sentinel key that is the primary key prefix with no
+ColumnID suffix: `/TableID/PrimaryIndexID/Key`. This sentinel is created on row
+insertion and removed on row deletion. Column keys are only written if the
+column value is NULL.
 
 **Secondary key addressing**
 

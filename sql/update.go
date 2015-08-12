@@ -143,7 +143,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Update secondary indexes
+		// Update secondary indexes.
 		for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
 			secondaryIndexEntry := secondaryIndexEntries[i]
 			if !bytes.Equal(newSecondaryIndexEntry.key, secondaryIndexEntry.key) {
@@ -158,7 +158,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			}
 		}
 
-		// add the new values
+		// Add the new values.
 		for i, val := range vals {
 			key := structured.MakeColumnKey(cols[i].ID, primaryIndexKey)
 			if log.V(2) {
@@ -168,7 +168,16 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			if err != nil {
 				return nil, err
 			}
-			b.Put(key, v)
+			if v != nil {
+				// We only output non-NULL values. Non-existent column keys are
+				// considered NULL during scanning and the row sentinel ensures we know
+				// the row exists.
+				b.Put(key, v)
+			} else {
+				// The column might have already existed but is being set to NULL, so
+				// delete it.
+				b.Del(key)
+			}
 		}
 	}
 
