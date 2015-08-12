@@ -487,7 +487,7 @@ func concurrentIncrements(db *client.DB, t *testing.T, isMultiphase bool) {
 			wgStart.Wait()
 
 			if isMultiphase {
-				applyInc := func(txn *client.Txn) (error, *proto.Transaction) {
+				applyInc := func(txn *client.Txn) (error, proto.Transaction) {
 					txn.SetDebugName(fmt.Sprintf("test-%d", i))
 					b := client.Batch{}
 					// Retrieve the other key.
@@ -501,7 +501,7 @@ func concurrentIncrements(db *client.DB, t *testing.T, isMultiphase bool) {
 						otherValue = gr.ValueInt()
 					}
 					// New txn.
-					txn = db.ReconstructTxn(*txn.GetState())
+					txn = db.ReconstructTxn(txn.GetState())
 					// Write our key.
 					b = client.Batch{}
 					b.Inc(writeKey, 1+otherValue)
@@ -509,7 +509,7 @@ func concurrentIncrements(db *client.DB, t *testing.T, isMultiphase bool) {
 						return err, txn.GetState()
 					}
 					// New txn.
-					txn = db.ReconstructTxn(*txn.GetState())
+					txn = db.ReconstructTxn(txn.GetState())
 					err := txn.Commit(&client.Batch{})
 					return err, txn.GetState()
 				}
@@ -517,7 +517,7 @@ func concurrentIncrements(db *client.DB, t *testing.T, isMultiphase bool) {
 					txn := db.ReconstructTxn(proto.Transaction{})
 					if err, txnProto := applyInc(txn); err != nil {
 						// New txn.
-						txn = db.ReconstructTxn(*txnProto)
+						txn = db.ReconstructTxn(txnProto)
 						if err := txn.Rollback(); err != nil {
 							t.Error(err)
 						} else {
