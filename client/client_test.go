@@ -591,12 +591,29 @@ func TestConcurrentIncrements(t *testing.T) {
 
 	// Convenience loop: Crank up this number for testing this
 	// more often. It'll increase test duration though.
-	numTests := 6
-	for k := 0; k < numTests; k++ {
+	for k := 0; k < 5; k++ {
 		if err := db.DelRange(testUser+"/value-0", testUser+"/value-1x"); err != nil {
 			t.Fatalf("%d: unable to clean up: %v", k, err)
 		}
-		concurrentIncrements(db, t, k < numTests/2 /*isMultiphase*/)
+		concurrentIncrements(db, t, false /*isMultiphase*/)
+	}
+}
+
+// TestMultiphaseTransactions is a simple explicit test for serializability
+// while running multiphase trasactions.
+func TestMultiphaseTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := server.StartTestServer(t)
+	defer s.Stop()
+	db := createTestClient(s.ServingAddr())
+
+	// Convenience loop: Crank up this number for testing this
+	// more often. It'll increase test duration though.
+	for k := 0; k < 5; k++ {
+		if err := db.DelRange(testUser+"/value-0", testUser+"/value-1x"); err != nil {
+			t.Fatalf("%d: unable to clean up: %v", k, err)
+		}
+		concurrentIncrements(db, t, true /*isMultiphase*/)
 	}
 }
 
