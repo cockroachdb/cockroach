@@ -30,3 +30,6 @@ DELETE FROM kv
 query II
 SELECT * FROM kv
 ----
+
+statement error qualified name "kv.nonexistent" not found
+DELETE FROM kv WHERE nonexistent = 1
