@@ -150,7 +150,7 @@ changing the primary key.
 Every row in a table has a sentinel key that is the primary key prefix with no
 ColumnID suffix: `/TableID/PrimaryIndexID/Key`. This sentinel is created on row
 insertion and removed on row deletion. Column keys are only written if the
-column value is NULL.
+column value is not NULL.
 
 **Secondary key addressing**
 
