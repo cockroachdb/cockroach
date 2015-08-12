@@ -81,7 +81,7 @@ func (e *NodeUnavailableError) Error() string {
 
 // Error formats error.
 func (e *NotLeaderError) Error() string {
-	return fmt.Sprintf("replica %s not leader; leader is %s", e.Replica, e.Leader)
+	return fmt.Sprintf("range %d: replica %s not leader; leader is %s", e.RangeID, e.Replica, e.Leader)
 }
 
 // Error formats error.

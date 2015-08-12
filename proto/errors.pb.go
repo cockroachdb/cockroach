@@ -65,6 +65,7 @@ func (x *TransactionRestart) UnmarshalJSON(data []byte) error {
 type NotLeaderError struct {
 	Replica          *Replica `protobuf:"bytes,1,opt,name=replica" json:"replica,omitempty"`
 	Leader           *Replica `protobuf:"bytes,2,opt,name=leader" json:"leader,omitempty"`
+	RangeID          RangeID  `protobuf:"varint,3,opt,name=range_id,casttype=RangeID" json:"range_id"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -83,6 +84,13 @@ func (m *NotLeaderError) GetLeader() *Replica {
 		return m.Leader
 	}
 	return nil
+}
+
+func (m *NotLeaderError) GetRangeID() RangeID {
+	if m != nil {
+		return m.RangeID
+	}
+	return 0
 }
 
 // A NodeUnavailableError indicates that the sending gateway can
@@ -626,6 +634,22 @@ func (m *NotLeaderError) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
+			}
+			m.RangeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.RangeID |= (RangeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {
@@ -2523,6 +2547,7 @@ func (m *NotLeaderError) Size() (n int) {
 		l = m.Leader.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
+	n += 1 + sovErrors(uint64(m.RangeID))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -2826,6 +2851,9 @@ func (m *NotLeaderError) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n2
 	}
+	data[i] = 0x18
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.RangeID))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

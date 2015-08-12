@@ -97,9 +97,10 @@ void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto() {
       "cockroach/proto/errors.proto");
   GOOGLE_CHECK(file != NULL);
   NotLeaderError_descriptor_ = file->message_type(0);
-  static const int NotLeaderError_offsets_[2] = {
+  static const int NotLeaderError_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NotLeaderError, replica_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NotLeaderError, leader_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NotLeaderError, range_id_),
   };
   NotLeaderError_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -460,70 +461,71 @@ void protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto() {
     "\n\034cockroach/proto/errors.proto\022\017cockroac"
     "h.proto\032\036cockroach/proto/metadata.proto\032"
     "\032cockroach/proto/data.proto\032\024gogoproto/g"
-    "ogo.proto\"e\n\016NotLeaderError\022)\n\007replica\030\001"
-    " \001(\0132\030.cockroach.proto.Replica\022(\n\006leader"
-    "\030\002 \001(\0132\030.cockroach.proto.Replica\"\026\n\024Node"
-    "UnavailableError\"B\n\022RangeNotFoundError\022,"
-    "\n\010range_id\030\001 \001(\003B\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007Ran"
-    "geID\"\216\001\n\025RangeKeyMismatchError\022\"\n\021reques"
-    "t_start_key\030\001 \001(\014B\007\372\336\037\003Key\022 \n\017request_en"
-    "d_key\030\002 \001(\014B\007\372\336\037\003Key\022/\n\005range\030\003 \001(\0132 .co"
-    "ckroach.proto.RangeDescriptor\"\227\001\n\"ReadWi"
-    "thinUncertaintyIntervalError\0223\n\ttimestam"
-    "p\030\001 \001(\0132\032.cockroach.proto.TimestampB\004\310\336\037"
-    "\000\022<\n\022existing_timestamp\030\002 \001(\0132\032.cockroac"
-    "h.proto.TimestampB\004\310\336\037\000\"J\n\027TransactionAb"
-    "ortedError\022/\n\003txn\030\001 \001(\0132\034.cockroach.prot"
-    "o.TransactionB\004\310\336\037\000\"y\n\024TransactionPushEr"
-    "ror\022)\n\003txn\030\001 \001(\0132\034.cockroach.proto.Trans"
-    "action\0226\n\npushee_txn\030\002 \001(\0132\034.cockroach.p"
-    "roto.TransactionB\004\310\336\037\000\"H\n\025TransactionRet"
-    "ryError\022/\n\003txn\030\001 \001(\0132\034.cockroach.proto.T"
-    "ransactionB\004\310\336\037\000\"\\\n\026TransactionStatusErr"
-    "or\022/\n\003txn\030\001 \001(\0132\034.cockroach.proto.Transa"
-    "ctionB\004\310\336\037\000\022\021\n\003msg\030\002 \001(\tB\004\310\336\037\000\"Z\n\020WriteI"
-    "ntentError\022.\n\007intents\030\001 \003(\0132\027.cockroach."
-    "proto.IntentB\004\310\336\037\000\022\026\n\010resolved\030\002 \001(\010B\004\310\336"
-    "\037\000\"\205\001\n\020WriteTooOldError\0223\n\ttimestamp\030\001 \001"
-    "(\0132\032.cockroach.proto.TimestampB\004\310\336\037\000\022<\n\022"
-    "existing_timestamp\030\002 \001(\0132\032.cockroach.pro"
-    "to.TimestampB\004\310\336\037\000\"\024\n\022OpRequiresTxnError"
-    "\"D\n\024ConditionFailedError\022,\n\014actual_value"
-    "\030\001 \001(\0132\026.cockroach.proto.Value\"u\n\022LeaseR"
-    "ejectedError\022/\n\tRequested\030\001 \001(\0132\026.cockro"
-    "ach.proto.LeaseB\004\310\336\037\000\022.\n\010Existing\030\002 \001(\0132"
-    "\026.cockroach.proto.LeaseB\004\310\336\037\000\"\316\007\n\013ErrorD"
-    "etail\0225\n\nnot_leader\030\001 \001(\0132\037.cockroach.pr"
-    "oto.NotLeaderErrorH\000\022>\n\017range_not_found\030"
-    "\002 \001(\0132#.cockroach.proto.RangeNotFoundErr"
-    "orH\000\022D\n\022range_key_mismatch\030\003 \001(\0132&.cockr"
-    "oach.proto.RangeKeyMismatchErrorH\000\022_\n re"
-    "ad_within_uncertainty_interval\030\004 \001(\01323.c"
-    "ockroach.proto.ReadWithinUncertaintyInte"
-    "rvalErrorH\000\022G\n\023transaction_aborted\030\005 \001(\013"
-    "2(.cockroach.proto.TransactionAbortedErr"
-    "orH\000\022A\n\020transaction_push\030\006 \001(\0132%.cockroa"
-    "ch.proto.TransactionPushErrorH\000\022C\n\021trans"
-    "action_retry\030\007 \001(\0132&.cockroach.proto.Tra"
-    "nsactionRetryErrorH\000\022E\n\022transaction_stat"
-    "us\030\010 \001(\0132\'.cockroach.proto.TransactionSt"
-    "atusErrorH\000\0229\n\014write_intent\030\t \001(\0132!.cock"
-    "roach.proto.WriteIntentErrorH\000\022:\n\rwrite_"
-    "too_old\030\n \001(\0132!.cockroach.proto.WriteToo"
-    "OldErrorH\000\022>\n\017op_requires_txn\030\013 \001(\0132#.co"
-    "ckroach.proto.OpRequiresTxnErrorH\000\022A\n\020co"
-    "ndition_failed\030\014 \001(\0132%.cockroach.proto.C"
-    "onditionFailedErrorH\000\022=\n\016lease_rejected\030"
-    "\r \001(\0132#.cockroach.proto.LeaseRejectedErr"
-    "orH\000\022A\n\020node_unavailable\030\016 \001(\0132%.cockroa"
-    "ch.proto.NodeUnavailableErrorH\000:\004\310\240\037\001B\007\n"
-    "\005value\"\255\001\n\005Error\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022"
-    "\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022F\n\023transaction_"
-    "restart\030\004 \001(\0162#.cockroach.proto.Transact"
-    "ionRestartB\004\310\336\037\000\022,\n\006detail\030\003 \001(\0132\034.cockr"
-    "oach.proto.ErrorDetail*;\n\022TransactionRes"
-    "tart\022\t\n\005ABORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIAT"
-    "E\020\002B\027Z\005proto\330\341\036\000\340\342\036\001\310\342\036\001\320\342\036\001", 2668);
+    "ogo.proto\"\223\001\n\016NotLeaderError\022)\n\007replica\030"
+    "\001 \001(\0132\030.cockroach.proto.Replica\022(\n\006leade"
+    "r\030\002 \001(\0132\030.cockroach.proto.Replica\022,\n\010ran"
+    "ge_id\030\003 \001(\003B\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007RangeID\""
+    "\026\n\024NodeUnavailableError\"B\n\022RangeNotFound"
+    "Error\022,\n\010range_id\030\001 \001(\003B\032\310\336\037\000\342\336\037\007RangeID"
+    "\372\336\037\007RangeID\"\216\001\n\025RangeKeyMismatchError\022\"\n"
+    "\021request_start_key\030\001 \001(\014B\007\372\336\037\003Key\022 \n\017req"
+    "uest_end_key\030\002 \001(\014B\007\372\336\037\003Key\022/\n\005range\030\003 \001"
+    "(\0132 .cockroach.proto.RangeDescriptor\"\227\001\n"
+    "\"ReadWithinUncertaintyIntervalError\0223\n\tt"
+    "imestamp\030\001 \001(\0132\032.cockroach.proto.Timesta"
+    "mpB\004\310\336\037\000\022<\n\022existing_timestamp\030\002 \001(\0132\032.c"
+    "ockroach.proto.TimestampB\004\310\336\037\000\"J\n\027Transa"
+    "ctionAbortedError\022/\n\003txn\030\001 \001(\0132\034.cockroa"
+    "ch.proto.TransactionB\004\310\336\037\000\"y\n\024Transactio"
+    "nPushError\022)\n\003txn\030\001 \001(\0132\034.cockroach.prot"
+    "o.Transaction\0226\n\npushee_txn\030\002 \001(\0132\034.cock"
+    "roach.proto.TransactionB\004\310\336\037\000\"H\n\025Transac"
+    "tionRetryError\022/\n\003txn\030\001 \001(\0132\034.cockroach."
+    "proto.TransactionB\004\310\336\037\000\"\\\n\026TransactionSt"
+    "atusError\022/\n\003txn\030\001 \001(\0132\034.cockroach.proto"
+    ".TransactionB\004\310\336\037\000\022\021\n\003msg\030\002 \001(\tB\004\310\336\037\000\"Z\n"
+    "\020WriteIntentError\022.\n\007intents\030\001 \003(\0132\027.coc"
+    "kroach.proto.IntentB\004\310\336\037\000\022\026\n\010resolved\030\002 "
+    "\001(\010B\004\310\336\037\000\"\205\001\n\020WriteTooOldError\0223\n\ttimest"
+    "amp\030\001 \001(\0132\032.cockroach.proto.TimestampB\004\310"
+    "\336\037\000\022<\n\022existing_timestamp\030\002 \001(\0132\032.cockro"
+    "ach.proto.TimestampB\004\310\336\037\000\"\024\n\022OpRequiresT"
+    "xnError\"D\n\024ConditionFailedError\022,\n\014actua"
+    "l_value\030\001 \001(\0132\026.cockroach.proto.Value\"u\n"
+    "\022LeaseRejectedError\022/\n\tRequested\030\001 \001(\0132\026"
+    ".cockroach.proto.LeaseB\004\310\336\037\000\022.\n\010Existing"
+    "\030\002 \001(\0132\026.cockroach.proto.LeaseB\004\310\336\037\000\"\316\007\n"
+    "\013ErrorDetail\0225\n\nnot_leader\030\001 \001(\0132\037.cockr"
+    "oach.proto.NotLeaderErrorH\000\022>\n\017range_not"
+    "_found\030\002 \001(\0132#.cockroach.proto.RangeNotF"
+    "oundErrorH\000\022D\n\022range_key_mismatch\030\003 \001(\0132"
+    "&.cockroach.proto.RangeKeyMismatchErrorH"
+    "\000\022_\n read_within_uncertainty_interval\030\004 "
+    "\001(\01323.cockroach.proto.ReadWithinUncertai"
+    "ntyIntervalErrorH\000\022G\n\023transaction_aborte"
+    "d\030\005 \001(\0132(.cockroach.proto.TransactionAbo"
+    "rtedErrorH\000\022A\n\020transaction_push\030\006 \001(\0132%."
+    "cockroach.proto.TransactionPushErrorH\000\022C"
+    "\n\021transaction_retry\030\007 \001(\0132&.cockroach.pr"
+    "oto.TransactionRetryErrorH\000\022E\n\022transacti"
+    "on_status\030\010 \001(\0132\'.cockroach.proto.Transa"
+    "ctionStatusErrorH\000\0229\n\014write_intent\030\t \001(\013"
+    "2!.cockroach.proto.WriteIntentErrorH\000\022:\n"
+    "\rwrite_too_old\030\n \001(\0132!.cockroach.proto.W"
+    "riteTooOldErrorH\000\022>\n\017op_requires_txn\030\013 \001"
+    "(\0132#.cockroach.proto.OpRequiresTxnErrorH"
+    "\000\022A\n\020condition_failed\030\014 \001(\0132%.cockroach."
+    "proto.ConditionFailedErrorH\000\022=\n\016lease_re"
+    "jected\030\r \001(\0132#.cockroach.proto.LeaseReje"
+    "ctedErrorH\000\022A\n\020node_unavailable\030\016 \001(\0132%."
+    "cockroach.proto.NodeUnavailableErrorH\000:\004"
+    "\310\240\037\001B\007\n\005value\"\255\001\n\005Error\022\025\n\007message\030\001 \001(\t"
+    "B\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022F\n\023trans"
+    "action_restart\030\004 \001(\0162#.cockroach.proto.T"
+    "ransactionRestartB\004\310\336\037\000\022,\n\006detail\030\003 \001(\0132"
+    "\034.cockroach.proto.ErrorDetail*;\n\022Transac"
+    "tionRestart\022\t\n\005ABORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tI"
+    "MMEDIATE\020\002B\027Z\005proto\330\341\036\000\340\342\036\001\310\342\036\001\320\342\036\001", 2715);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -599,6 +601,7 @@ static void MergeFromFail(int line) {
 #ifndef _MSC_VER
 const int NotLeaderError::kReplicaFieldNumber;
 const int NotLeaderError::kLeaderFieldNumber;
+const int NotLeaderError::kRangeIdFieldNumber;
 #endif  // !_MSC_VER
 
 NotLeaderError::NotLeaderError()
@@ -624,6 +627,7 @@ void NotLeaderError::SharedCtor() {
   _cached_size_ = 0;
   replica_ = NULL;
   leader_ = NULL;
+  range_id_ = GOOGLE_LONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -665,13 +669,14 @@ NotLeaderError* NotLeaderError::New(::google::protobuf::Arena* arena) const {
 }
 
 void NotLeaderError::Clear() {
-  if (_has_bits_[0 / 32] & 3u) {
+  if (_has_bits_[0 / 32] & 7u) {
     if (has_replica()) {
       if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
     }
     if (has_leader()) {
       if (leader_ != NULL) leader_->::cockroach::proto::Replica::Clear();
     }
+    range_id_ = GOOGLE_LONGLONG(0);
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -707,6 +712,21 @@ bool NotLeaderError::MergePartialFromCodedStream(
          parse_leader:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_leader()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(24)) goto parse_range_id;
+        break;
+      }
+
+      // optional int64 range_id = 3;
+      case 3: {
+        if (tag == 24) {
+         parse_range_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &range_id_)));
+          set_has_range_id();
         } else {
           goto handle_unusual;
         }
@@ -751,6 +771,11 @@ void NotLeaderError::SerializeWithCachedSizes(
       2, *this->leader_, output);
   }
 
+  // optional int64 range_id = 3;
+  if (has_range_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(3, this->range_id(), output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -775,6 +800,11 @@ void NotLeaderError::SerializeWithCachedSizes(
         2, *this->leader_, target);
   }
 
+  // optional int64 range_id = 3;
+  if (has_range_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(3, this->range_id(), target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -786,7 +816,7 @@ void NotLeaderError::SerializeWithCachedSizes(
 int NotLeaderError::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 7) {
     // optional .cockroach.proto.Replica replica = 1;
     if (has_replica()) {
       total_size += 1 +
@@ -799,6 +829,13 @@ int NotLeaderError::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->leader_);
+    }
+
+    // optional int64 range_id = 3;
+    if (has_range_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->range_id());
     }
 
   }
@@ -834,6 +871,9 @@ void NotLeaderError::MergeFrom(const NotLeaderError& from) {
     if (from.has_leader()) {
       mutable_leader()->::cockroach::proto::Replica::MergeFrom(from.leader());
     }
+    if (from.has_range_id()) {
+      set_range_id(from.range_id());
+    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -864,6 +904,7 @@ void NotLeaderError::Swap(NotLeaderError* other) {
 void NotLeaderError::InternalSwap(NotLeaderError* other) {
   std::swap(replica_, other->replica_);
   std::swap(leader_, other->leader_);
+  std::swap(range_id_, other->range_id_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -964,6 +1005,30 @@ void NotLeaderError::clear_leader() {
     clear_has_leader();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NotLeaderError.leader)
+}
+
+// optional int64 range_id = 3;
+bool NotLeaderError::has_range_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+void NotLeaderError::set_has_range_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+void NotLeaderError::clear_has_range_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+void NotLeaderError::clear_range_id() {
+  range_id_ = GOOGLE_LONGLONG(0);
+  clear_has_range_id();
+}
+ ::google::protobuf::int64 NotLeaderError::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NotLeaderError.range_id)
+  return range_id_;
+}
+ void NotLeaderError::set_range_id(::google::protobuf::int64 value) {
+  set_has_range_id();
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.NotLeaderError.range_id)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
