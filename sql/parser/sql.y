@@ -66,14 +66,11 @@ package parser
 %type <stmt> alter_database_stmt
 %type <stmt> alter_index_stmt
 %type <stmt> alter_table_stmt
-// %type <stmt> alter_view_stmt
 %type <stmt> create_stmt
 %type <stmt> create_database_stmt
 %type <stmt> create_index_stmt
-// %type <stmt> create_schema_stmt
 %type <stmt> create_table_stmt
 %type <stmt> create_table_as_stmt
-// %type <stmt> create_view_stmt
 %type <stmt> delete_stmt
 %type <stmt> drop_stmt
 %type <stmt> explain_stmt
@@ -106,10 +103,6 @@ package parser
 
 %type <empty> opt_with_data
 %type <empty> opt_nowait_or_skip
-
-// %type <empty> opt_schema_name
-// %type <empty> opt_schema_elem_list
-// %type <empty> opt_schema_elem
 
 %type <empty> access_method_clause
 %type <str>   name opt_name
@@ -162,7 +155,6 @@ package parser
 %type <empty> func_type
 
 %type <empty> opt_restart_seqs
-%type <empty> opt_temp
 %type <empty> on_commit_option
 
 %type <empty> for_locking_strength
@@ -257,7 +249,6 @@ package parser
 %type <expr>  non_reserved_word_or_sconst
 %type <expr>  var_value
 %type <empty> zone_value
-// %type <empty> role_spec
 
 %type <str>   unreserved_keyword type_func_name_keyword
 %type <str>   col_name_keyword reserved_keyword
@@ -268,8 +259,6 @@ package parser
 %type <colConstraint> col_constraint col_constraint_elem
 %type <empty> key_actions key_delete key_match key_update key_action
 %type <empty> existing_index
-
-// %type <empty> opt_check_option
 
 %type <expr>  func_application func_expr_common_subexpr
 %type <expr>  func_expr func_expr_windowless
@@ -316,13 +305,13 @@ package parser
 %token <str>   BACKWARD BEFORE BEGIN BETWEEN BIGINT BINARY BIT
 %token <str>   BLOB BOOLEAN BOTH BY
 
-%token <str>   CACHE CALLED CASCADE CASCADED CASE CAST CATALOG CHAIN CHAR
+%token <str>   CACHE CALLED CASCADE CASCADED CASE CAST CHAIN CHAR
 %token <str>   CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLOSE
 %token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str>   COMMITTED CONCAT CONCURRENTLY CONFIGURATION CONFLICT CONNECTION CONSTRAINT
 %token <str>   CONSTRAINTS CONTENT CONTINUE CONVERSION COPY COST CREATE
 %token <str>   CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
-%token <str>   CURRENT_ROLE CURRENT_SCHEMA CURRENT_TIME CURRENT_TIMESTAMP
+%token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str>   CURRENT_USER CURSOR CYCLE
 
 %token <str>   DATA DATABASE DATABASES DATE DAY DEALLOCATE DEC DECIMAL DECLARE DEFAULT DEFAULTS
@@ -369,26 +358,26 @@ package parser
 
 %token <str>   RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REFRESH REINDEX
 %token <str>   RELATIVE RELEASE RENAME REPEATABLE REPLACE REPLICA RESET RESTART
-%token <str>   RESTRICT RETURNING RETURNS REVOKE RIGHT ROLE ROLLBACK ROLLUP
+%token <str>   RESTRICT RETURNING RETURNS REVOKE RIGHT ROLLBACK ROLLUP
 %token <str>   ROW ROWS RULE
 
-%token <str>   SAVEPOINT SCHEMA SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
+%token <str>   SAVEPOINT SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
 %token <str>   SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
 %token <str>   SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL STABLE STANDALONE START
-%token <str>   STATEMENT STATISTICS STDIN STDOUT STORAGE STRICT STRIP SUBSTRING
+%token <str>   STATEMENT STATISTICS STDIN STDOUT STRICT STRIP SUBSTRING
 %token <str>   SYMMETRIC SYSID SYSTEM
 
-%token <str>   TABLE TABLES TABLESAMPLE TABLESPACE TEMP TEMPLATE TEMPORARY TEXT THEN
+%token <str>   TABLE TABLES TEXT THEN
 %token <str>   TIME TIMESTAMP TO TRAILING TRANSACTION TRANSFORM TREAT TRIGGER TRIM TRUE
 %token <str>   TRUNCATE TRUSTED TYPE TYPES
 
 %token <str>   UNBOUNDED UNCOMMITTED UNENCRYPTED UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED
 %token <str>   UNTIL UPDATE USER USING
 
-%token <str>   VACUUM VALID VALIDATE VALIDATOR VALUE VALUES VARCHAR VARIADIC VARYING
-%token <str>   VERBOSE VERSION VIEW VIEWS VOLATILE
+%token <str>   VACUUM VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VARYING
+%token <str>   VERBOSE VERSION
 
-%token <str>   WHEN WHERE WHITESPACE WINDOW WITH WITHIN WITHOUT WORK WRAPPER WRITE
+%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRAPPER WRITE
 
 %token <str>   YEAR YES
 
@@ -507,12 +496,11 @@ stmt:
     $$ = nil
   }
 
-// ALTER [DATABASE|INDEX|TABLE|VIEW]
+// ALTER [DATABASE|INDEX|TABLE]
 alter_stmt:
   alter_database_stmt
 | alter_index_stmt
 | alter_table_stmt
-  // | alter_view_stmt
 
 alter_database_stmt:
   ALTER DATABASE name
@@ -543,32 +531,6 @@ alter_table_stmt:
   {
     $$ = nil
   }
-// | ALTER TABLE relation_expr SET SCHEMA name
-//   {
-//     $$ = nil
-//   }
-// | ALTER TABLE IF EXISTS relation_expr SET SCHEMA name
-//   {
-//     $$ = nil
-//   }
-
-// alter_view_stmt:
-//   ALTER VIEW qualified_name alter_table_cmds
-//   {
-//     $$ = nil
-//   }
-// | ALTER VIEW IF EXISTS qualified_name alter_table_cmds
-//   {
-//     $$ = nil
-//   }
-// | ALTER VIEW qualified_name SET SCHEMA name
-//   {
-//     $$ = nil
-//   }
-// | ALTER VIEW IF EXISTS qualified_name SET SCHEMA name
-//   {
-//     $$ = nil
-//   }
 
 alter_table_cmds:
   alter_table_cmd
@@ -591,8 +553,6 @@ alter_table_cmd:
 | ALTER opt_column name SET reloptions {}
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET ( column_parameter = value [, ... ] )
 | ALTER opt_column name RESET reloptions {}
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET STORAGE <storagemode>
-| ALTER opt_column name SET STORAGE name {}
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS name opt_drop_behavior {}
   // ALTER TABLE <name> DROP [COLUMN] <colname> [RESTRICT|CASCADE]
@@ -665,14 +625,12 @@ reloption_elem:
 | col_label '.' col_label '=' def_arg {}
 | col_label '.' col_label {}
 
-// CREATE [DATABASE|INDEX|SCHEMA|TABLE|TABLE AS|VIEW]
+// CREATE [DATABASE|INDEX|TABLE|TABLE AS]
 create_stmt:
   create_database_stmt
 | create_index_stmt
-// | create_schema_stmt
 | create_table_stmt
 | create_table_as_stmt
-// | create_view_stmt
 
 // DELETE FROM query
 delete_stmt:
@@ -711,8 +669,6 @@ drop_stmt:
 
 drop_type:
   INDEX {}
-// | SCHEMA {}
-// | VIEW {}
 
 any_name_list:
   any_name
@@ -782,39 +738,6 @@ explain_option_arg:
   opt_boolean_or_string {}
 | numeric_only {}
 | /* EMPTY */ {}
-
-// create_schema_stmt:
-//   CREATE SCHEMA opt_schema_name AUTHORIZATION role_spec opt_schema_elem_list
-//   {
-//     $$ = nil
-//   }
-// | CREATE SCHEMA name opt_schema_elem_list
-//   {
-//     $$ = nil
-//   }
-// | CREATE SCHEMA IF NOT EXISTS opt_schema_name AUTHORIZATION role_spec opt_schema_elem_list
-//   {
-//     $$ = nil
-//   }
-// | CREATE SCHEMA IF NOT EXISTS name opt_schema_elem_list
-//   {
-//     $$ = nil
-//   }
-//
-// opt_schema_name:
-//   name {}
-// | /* EMPTY */ {}
-//
-// opt_schema_elem_list:
-//   opt_schema_elem_list opt_schema_elem {}
-// | /* EMPTY */ {}
-//
-// // opt_schema_elem are the ones that can show up inside a CREATE SCHEMA
-// // statement (in addition to by themselves).
-// opt_schema_elem:
-//   create_table_stmt {}
-// | create_index_stmt {}
-// | create_view_stmt {}
 
 // GRANT privileges ON privilege_target TO grantee_list
 grant_stmt:
@@ -931,8 +854,6 @@ set_rest_more:
 | var_name FROM CURRENT {}
   // Special syntaxes mandated by SQL standard:
 | TIME ZONE zone_value {}
-| CATALOG SCONST {}
-// | SCHEMA SCONST {}
 | NAMES opt_encoding {}
 
 var_name:
@@ -1073,45 +994,26 @@ for_grantee_clause:
 
 // CREATE TABLE relname
 create_table_stmt:
-  CREATE opt_temp TABLE any_name '(' opt_table_elem_list ')'
+  CREATE TABLE any_name '(' opt_table_elem_list ')'
     opt_inherit opt_with on_commit_option
   {
-    $$ = &CreateTable{Table: $4, IfNotExists: false, Defs: $6}
+    $$ = &CreateTable{Table: $3, IfNotExists: false, Defs: $5}
   }
-| CREATE opt_temp TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')'
+| CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')'
     opt_inherit opt_with on_commit_option
   {
-    $$ = &CreateTable{Table: $7, IfNotExists: true, Defs: $9}
+    $$ = &CreateTable{Table: $6, IfNotExists: true, Defs: $8}
   }
-| CREATE opt_temp TABLE any_name OF any_name
+| CREATE TABLE any_name OF any_name
     opt_typed_table_elem_list opt_with on_commit_option
   {
     $$ = nil
   }
-| CREATE opt_temp TABLE IF NOT EXISTS any_name OF any_name
+| CREATE TABLE IF NOT EXISTS any_name OF any_name
     opt_typed_table_elem_list opt_with on_commit_option
   {
     $$ = nil
   }
-
-// Redundancy here is needed to avoid shift/reduce conflicts, since TEMP is not
-// a reserved word.
-// 
-// NOTE: we accept both GLOBAL and LOCAL options. They currently do nothing,
-// but future versions might consider GLOBAL to request SQL-spec-compliant temp
-// table behavior, so warn about that. Since we have no modules the LOCAL
-// keyword is really meaningless; furthermore, some other products implement
-// LOCAL as meaning the same as our default temp table behavior, so we'll
-// probably continue to treat LOCAL as a noise word.
-opt_temp:
-  TEMPORARY {}
-| TEMP {}
-| LOCAL TEMPORARY {}
-| LOCAL TEMP {}
-| GLOBAL TEMPORARY {}
-| GLOBAL TEMP {}
-| UNLOGGED {}
-| /* EMPTY */ {}
 
 opt_table_elem_list:
   table_elem_list
@@ -1223,7 +1125,6 @@ table_like_option:
   DEFAULTS {}
 | CONSTRAINTS {}
 | INDEXES {}
-| STORAGE {}
 | COMMENTS {}
 | ALL {}
 
@@ -1338,11 +1239,11 @@ existing_index:
 
 // CREATE TABLE relname AS select_stmt [ WITH [NO] DATA ]
 create_table_as_stmt:
-  CREATE opt_temp TABLE create_as_target AS select_stmt opt_with_data
+  CREATE TABLE create_as_target AS select_stmt opt_with_data
   {
     $$ = nil
   }
-| CREATE opt_temp TABLE IF NOT EXISTS create_as_target AS select_stmt opt_with_data
+| CREATE TABLE IF NOT EXISTS create_as_target AS select_stmt opt_with_data
   {
     $$ = nil
   }
@@ -1468,10 +1369,6 @@ rename_stmt:
   {
     $$ = nil
   }
-// | ALTER SCHEMA name RENAME TO name
-//   {
-//     $$ = nil
-//   }
 | ALTER TABLE relation_expr RENAME TO name
   {
     $$ = nil
@@ -1480,14 +1377,6 @@ rename_stmt:
   {
     $$ = nil
   }
-// | ALTER VIEW qualified_name RENAME TO name
-//   {
-//     $$ = nil
-//   }
-// | ALTER VIEW IF EXISTS qualified_name RENAME TO name
-//   {
-//     $$ = nil
-//   }
 | ALTER INDEX qualified_name RENAME TO name
   {
     $$ = nil
@@ -1601,36 +1490,6 @@ transaction_mode_list:
 transaction_mode_list_or_empty:
   transaction_mode_list {}
 | /* EMPTY */ {}
-
-// CREATE [ OR REPLACE ] [ TEMP ] VIEW <viewname> '('target-list ')'
-//     AS <query> [ WITH [ CASCADED | LOCAL ] CHECK OPTION ]
-// create_view_stmt:
-//   CREATE opt_temp VIEW qualified_name opt_column_list opt_reloptions
-//     AS select_stmt opt_check_option
-//   {
-//     $$ = nil
-//   }
-// | CREATE OR REPLACE opt_temp VIEW qualified_name opt_column_list opt_reloptions
-//     AS select_stmt opt_check_option
-//   {
-//     $$ = nil
-//   }
-// | CREATE opt_temp RECURSIVE VIEW qualified_name '(' name_list ')' opt_reloptions
-//     AS select_stmt opt_check_option
-//   {
-//     $$ = nil
-//   }
-// | CREATE OR REPLACE opt_temp RECURSIVE VIEW qualified_name '(' name_list ')' opt_reloptions
-//     AS select_stmt opt_check_option
-//   {
-//     $$ = nil
-//   }
-//
-// opt_check_option:
-//   WITH CHECK OPTION {}
-// | WITH CASCADED CHECK OPTION {}
-// | WITH LOCAL CHECK OPTION {}
-// | /* EMPTY */ {}
 
 create_database_stmt:
   CREATE DATABASE name
@@ -3046,8 +2905,6 @@ func_expr_common_subexpr:
 | CURRENT_USER {}
 | SESSION_USER {}
 | USER {}
-| CURRENT_CATALOG {}
-| CURRENT_SCHEMA {}
 | CAST '(' a_expr AS typename ')'
   {
     $$ = &CastExpr{Expr: $3, Type: $5}
@@ -3579,11 +3436,6 @@ signed_iconst:
     $$ = -$2
   }
 
-// role_spec:
-//   non_reserved_word {}
-// | CURRENT_USER {}
-// | SESSION_USER {}
-
 // Name classification hierarchy.
 // 
 // IDENT is the lexeme returned by the lexer for identifiers that match no
@@ -3612,7 +3464,7 @@ type_function_name:
 | unreserved_keyword
 | type_func_name_keyword
 
-// Any not-fully-reserved word --- these names can be, eg, role names.
+// Any not-fully-reserved word --- these names can be, eg, variable names.
 non_reserved_word:
   IDENT
 | unreserved_keyword
@@ -3664,7 +3516,6 @@ unreserved_keyword:
 | CALLED
 | CASCADE
 | CASCADED
-| CATALOG
 | CHAIN
 | CHARACTERISTICS
 | CHECKPOINT
@@ -3834,13 +3685,11 @@ unreserved_keyword:
 | RESTRICT
 | RETURNS
 | REVOKE
-| ROLE
 | ROLLBACK
 | ROLLUP
 | ROWS
 | RULE
 | SAVEPOINT
-| SCHEMA
 | SCROLL
 | SEARCH
 | SECOND
@@ -3865,16 +3714,11 @@ unreserved_keyword:
 | STATISTICS
 | STDIN
 | STDOUT
-| STORAGE
 | STRICT
 | STRIP
 | SYSID
 | SYSTEM
 | TABLES
-| TABLESPACE
-| TEMP
-| TEMPLATE
-| TEMPORARY
 | TEXT
 | TRANSACTION
 | TRANSFORM
@@ -3894,14 +3738,9 @@ unreserved_keyword:
 | VACUUM
 | VALID
 | VALIDATE
-| VALIDATOR
 | VALUE
 | VARYING
 | VERSION
-| VIEW
-| VIEWS
-| VOLATILE
-| WHITESPACE
 | WITHIN
 | WITHOUT
 | WORK
@@ -3977,7 +3816,6 @@ type_func_name_keyword:
 | COLLATION
 | CONCURRENTLY
 | CROSS
-| CURRENT_SCHEMA
 | FREEZE
 | FULL
 | INNER
@@ -3990,7 +3828,6 @@ type_func_name_keyword:
 | OVERLAPS
 | RIGHT
 | SIMILAR
-| TABLESAMPLE
 | VERBOSE
 
 // Reserved keyword --- these keywords are usable only as a col_label.
