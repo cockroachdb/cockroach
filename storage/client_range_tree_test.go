@@ -18,668 +18,219 @@
 package storage_test
 
 import (
-	"bytes"
 	"reflect"
-	"strconv"
 	"testing"
 
-	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/randutil"
 )
-
-// TODO(bram): Increase TotalSplits drastically if performance allows.
-const TotalSplits = 10
-
-type testRangeTree struct {
-	Tree  proto.RangeTree
-	Nodes map[string]proto.RangeTreeNode
-}
 
 type Key proto.Key
 
-// nodesEqual is a replacement for reflect.DeepEqual as it was having issues
-// determining similarities between the types.
-func nodesEqual(key proto.Key, expected, actual proto.RangeTreeNode) error {
-	// Check that Key is equal.
-	if !expected.Key.Equal(actual.Key) {
-		return util.Errorf("Range tree node's Key is not as expected for range:%s\nexpected:%+v\nactual:%+v", key, expected, actual)
+// loadNodes fetches a node and recursively all of its children.
+func loadNodes(t *testing.T, db *client.DB, key proto.Key, nodes map[string]proto.RangeTreeNode) {
+	node := new(proto.RangeTreeNode)
+	if err := db.GetProto(keys.RangeTreeNodeKey(key), node); err != nil {
+		t.Fatal(err)
 	}
-	// Check that Black are equal.
-	if expected.Black != actual.Black {
-		return util.Errorf("Range tree node's Black is not as expected for range:%s\nexpected:%+v\nactual:%+v", key, expected, actual)
+	nodes[node.Key.String()] = *node
+	if node.LeftKey != nil {
+		loadNodes(t, db, node.LeftKey, nodes)
 	}
-	// Check that LeftKey are equal.
-	if (expected.LeftKey == nil) || (actual.LeftKey == nil) {
-		if !((expected.LeftKey == nil) && (actual.LeftKey == nil)) {
-			return util.Errorf("Range tree node's LeftKey is not as expected for range:%s\nexpected:%+v\nactual:%+v", key, expected, actual)
-		}
-	} else if !(*expected.LeftKey).Equal(*actual.LeftKey) {
-		return util.Errorf("Range tree node's LeftKey is not as expected for range:%s\nexpected:%+v\nactual:%+v", key, expected, actual)
+	if node.RightKey != nil {
+		loadNodes(t, db, node.RightKey, nodes)
 	}
-	// Check that RightKey are equal.
-	if (expected.RightKey == nil) || (actual.RightKey == nil) {
-		if !((expected.RightKey == nil) && (actual.RightKey == nil)) {
-			return util.Errorf("Range tree node's RightKey is not as expected for range:%s\nexpected:%+v\nactual:%+v", key, expected, actual)
-		}
-	} else if !(*expected.RightKey).Equal(*actual.RightKey) {
-		return util.Errorf("Range tree node's RightKey is not as expected for range:%s\nexpected:%+v\nactual:%+v", key, expected, actual)
-	}
-	// Check that ParentKey are equal.
-	if !expected.ParentKey.Equal(actual.ParentKey) {
-		return util.Errorf("Range tree node's LeftKey is not as expected for range:%s\nexpected:%+v\nactual:%+v", key, expected, actual)
-	}
-	return nil
 }
 
-// treeNodesEqual compares the expectedTree from the provided key to the actual
-// nodes retrieved from the db.  It recursively calls itself on both left and
-// right children if they exist.
-func treeNodesEqual(db *client.DB, expected testRangeTree, key proto.Key) error {
-	expectedNode, ok := expected.Nodes[string(key)]
+// loadTree loads the tree root and all of its nodes. It puts all of the nodes
+// into a map.
+func loadTree(t *testing.T, db *client.DB) (*proto.RangeTree, map[string]proto.RangeTreeNode) {
+	tree := new(proto.RangeTree)
+	if err := db.GetProto(keys.RangeTreeRoot, tree); err != nil {
+		t.Fatal(err)
+	}
+	nodes := make(map[string]proto.RangeTreeNode)
+	if tree.RootKey != nil {
+		loadNodes(t, db, tree.RootKey, nodes)
+	}
+	return tree, nodes
+}
+
+// VerifyTree checks to ensure that the tree is indeed balanced and a correct
+// red-black tree. It does so by checking each of the red-black tree properties.
+// These verify functions are similar to the those found in the range_tree_test
+// but these use a map of nodes instead of a tree context.
+func VerifyTree(t *testing.T, tree *proto.RangeTree, nodes map[string]proto.RangeTreeNode, testName string) {
+	root, ok := nodes[tree.RootKey.String()]
 	if !ok {
-		return util.Errorf("Expected does not contain a node for %s", key)
+		t.Fatalf("%s: could not find root node with key %s", testName, tree.RootKey)
 	}
-	actualNode := &proto.RangeTreeNode{}
-	if err := db.GetProto(keys.RangeTreeNodeKey(key), actualNode); err != nil {
-		return err
-	}
-	if err := nodesEqual(key, expectedNode, *actualNode); err != nil {
-		return err
-	}
-	if expectedNode.LeftKey != nil {
-		if err := treeNodesEqual(db, expected, *expectedNode.LeftKey); err != nil {
-			return err
-		}
-	}
-	if expectedNode.RightKey != nil {
-		if err := treeNodesEqual(db, expected, *expectedNode.RightKey); err != nil {
-			return err
-		}
-	}
-	return nil
+
+	verifyBinarySearchTree(t, nodes, testName, &root)
+	// Property 1 is always correct. All nodes are already colored.
+	verifyProperty2(t, testName, &root)
+	// Property 3 is always correct. All leaves are black.
+	verifyProperty4(t, nodes, testName, &root)
+	pathBlackCount := new(int)
+	*pathBlackCount = -1
+	verifyProperty5(t, nodes, testName, &root, 0, pathBlackCount)
 }
 
-// treesEqual compares the expectedTree and expectedNodes to the actual range
-// tree stored in the db.
-func treesEqual(db *client.DB, expected testRangeTree) error {
-	// Compare the tree roots.
-	actualTree := &proto.RangeTree{}
-	if err := db.GetProto(keys.RangeTreeRoot, actualTree); err != nil {
-		return err
+// isRed will return true only if node exists and is not set to black. This is
+// the same helper function as the one embedded in the range tree.
+func isRed(node *proto.RangeTreeNode) bool {
+	if node == nil {
+		return false
 	}
-	if !reflect.DeepEqual(&expected.Tree, actualTree) {
-		return util.Errorf("Range tree root is not as expected - expected:%+v - actual:%+v", expected.Tree, actualTree)
-	}
-
-	return treeNodesEqual(db, expected, expected.Tree.RootKey)
+	return !node.Black
 }
 
-// splitRange splits whichever range contains the key on that key.
-func splitRange(db *client.DB, key proto.Key) error {
-	return db.AdminSplit(key)
+// getLeftAndRight returns the left and right nodes, if they exist, in order,
+// from the passed in map of nodes.
+func getLeftAndRight(t *testing.T, nodes map[string]proto.RangeTreeNode, testName string, node *proto.RangeTreeNode) (*proto.RangeTreeNode, *proto.RangeTreeNode) {
+	var left *proto.RangeTreeNode
+	var right *proto.RangeTreeNode
+	var ok bool
+	if node.LeftKey != nil {
+		left = new(proto.RangeTreeNode)
+		if *left, ok = nodes[node.LeftKey.String()]; !ok {
+			t.Errorf("%s: could not locate node with key %s", testName, node.LeftKey)
+		}
+	}
+	if node.RightKey != nil {
+		right = new(proto.RangeTreeNode)
+		if *right, ok = nodes[node.RightKey.String()]; !ok {
+			t.Errorf("%s: could not locate node with key %s", testName, node.RightKey)
+		}
+	}
+	return left, right
+}
+
+// verifyBinarySearchTree checks to ensure that all keys to the left of the root
+// node are less than it, and all nodes to the right of the root node are
+// greater than it. Performs this same check for all other nodes as well.
+// Note that this test can be very expensive.
+func verifyBinarySearchTree(t *testing.T, nodes map[string]proto.RangeTreeNode, testName string, root *proto.RangeTreeNode) {
+	left, right := getLeftAndRight(t, nodes, testName, root)
+	verifyBinarySearchTreeHelper(t, nodes, testName, left, root.Key, true)
+	verifyBinarySearchTreeHelper(t, nodes, testName, right, root.Key, false)
+}
+
+// verifyBinarySearchTreeHelper walks the tree and recursively calls itself
+// ensures that all nodes are indeed either less or greater than the passed in
+// key. It also recursively calls itself at each node.
+func verifyBinarySearchTreeHelper(t *testing.T, nodes map[string]proto.RangeTreeNode, testName string, node *proto.RangeTreeNode, key proto.Key, isLess bool) {
+	if node == nil {
+		return
+	}
+	if node.Key.Equal(key) {
+		t.Errorf("%s: Duplicate key detected: %s", testName, key)
+	}
+	if e, a := isLess, node.Key.Less(key); e != a {
+		if isLess {
+			t.Errorf("%s: Failed Property BST - The key %s is not less than %s.", testName, node.Key, key)
+		} else {
+			t.Errorf("%s: Failed Property BST - The key %s is not greater than %s.", testName, node.Key, key)
+		}
+	}
+	left, right := getLeftAndRight(t, nodes, testName, node)
+	// Check that all nodes are less than the passed in key.
+	verifyBinarySearchTreeHelper(t, nodes, testName, left, key, isLess)
+	verifyBinarySearchTreeHelper(t, nodes, testName, right, key, isLess)
+
+	// Check that all nodes to the left are less than the current node's key.
+	verifyBinarySearchTreeHelper(t, nodes, testName, left, node.Key, true)
+	// Check that all nodes to the right are greater than the current node's key.
+	verifyBinarySearchTreeHelper(t, nodes, testName, right, node.Key, false)
+}
+
+// verifyProperty2 ensures that the root node is black.
+func verifyProperty2(t *testing.T, testName string, root *proto.RangeTreeNode) {
+	if e, a := false, isRed(root); e != a {
+		t.Errorf("%s: Failed Property 2 - The root node is not black.", testName)
+	}
+}
+
+// verifyProperty4 ensures that the parent of every red node is black.
+func verifyProperty4(t *testing.T, nodes map[string]proto.RangeTreeNode, testName string, node *proto.RangeTreeNode) {
+	if node == nil {
+		return
+	}
+
+	left, right := getLeftAndRight(t, nodes, testName, node)
+	if isRed(node) {
+		if e, a := false, isRed(left); e != a {
+			t.Errorf("%s: Failed property 4 - Red Node %s's left child %s is also red.", testName, node.Key, left.Key)
+		}
+		if e, a := false, isRed(right); e != a {
+			t.Errorf("%s: Failed property 4 - Red Node %s's right child %s is also red.", testName, node.Key, right.Key)
+		}
+	}
+	verifyProperty4(t, nodes, testName, left)
+	verifyProperty4(t, nodes, testName, right)
+}
+
+// verifyProperty5 ensures that all paths from any given node to its leaf nodes
+// contain the same number of black nodes.
+func verifyProperty5(t *testing.T, nodes map[string]proto.RangeTreeNode, testName string, node *proto.RangeTreeNode, blackCount int, pathBlackCount *int) {
+	if !isRed(node) {
+		blackCount++
+	}
+	if node == nil {
+		if *pathBlackCount == -1 {
+			*pathBlackCount = blackCount
+		} else {
+			if e, a := *pathBlackCount, blackCount; e != a {
+				t.Errorf("%s: Failed property 5 - Expected a black count of %d but instead got %d.", testName, e, a)
+			}
+		}
+		return
+	}
+	left, right := getLeftAndRight(t, nodes, testName, node)
+	verifyProperty5(t, nodes, testName, left, blackCount, pathBlackCount)
+	verifyProperty5(t, nodes, testName, right, blackCount, pathBlackCount)
 }
 
 // TestSetupRangeTree ensures that SetupRangeTree correctly setups up the range
-// tree and first node.  SetupRangeTree is called via store.BootstrapRange.
+// tree and first node. SetupRangeTree is called via store.BootstrapRange.
 func TestSetupRangeTree(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
+	db := store.DB()
 
-	// Check to make sure the range tree is stored correctly.
-	tree := proto.RangeTree{
+	tree, nodes := loadTree(t, db)
+	expectedTree := &proto.RangeTree{
 		RootKey: proto.KeyMin,
 	}
-	nodes := map[string]proto.RangeTreeNode{
-		string(proto.KeyMin): {
-			Key:       proto.KeyMin,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
+	if !reflect.DeepEqual(tree, expectedTree) {
+		t.Fatalf("tree roots do not match - expected:%+v actual:%+v", expectedTree, tree)
 	}
-	expectedTree := testRangeTree{
-		Tree:  tree,
-		Nodes: nodes,
-	}
-	if err := treesEqual(store.DB(), expectedTree); err != nil {
-		t.Fatal(err)
-	}
+	VerifyTree(t, tree, nodes, "setup")
 }
 
-// TestInsertRight tests inserting a collection of 5 nodes, forcing left
-// rotations and flips.
-func TestInsertRight(t *testing.T) {
+// TestInsert is a similar to the one in range_tree_test but this one performs
+// actual splits.
+func TestInsert(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 	db := store.DB()
 
-	keyA := proto.Key("a")
-	keyB := proto.Key("b")
-	keyC := proto.Key("c")
-	keyD := proto.Key("d")
-	keyE := proto.Key("e")
-
-	// Test single split (with a left rotation).
-	tree := proto.RangeTree{
-		RootKey: keyA,
-	}
-	nodes := map[string]proto.RangeTreeNode{
-		string(keyA): {
-			Key:       keyA,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &proto.KeyMin,
-		},
-		string(proto.KeyMin): {
-			Key:       proto.KeyMin,
-			ParentKey: proto.KeyMin,
-			Black:     false,
-		},
-	}
-	expectedTree := testRangeTree{
-		Tree:  tree,
-		Nodes: nodes,
-	}
-	if err := splitRange(db, keyA); err != nil {
-		t.Fatal(err)
-	}
-	if err := treesEqual(db, expectedTree); err != nil {
-		t.Fatal(err)
+	keys := []string{"m",
+		"f", "e", "d", "c", "b", "a",
+		"g", "h", "i", "j", "k", "l",
+		"s", "r", "q", "p", "o", "n",
+		"t", "u", "v", "w", "x", "y", "z",
 	}
 
-	// Test two splits (with a flip).
-	tree = proto.RangeTree{
-		RootKey: keyA,
-	}
-	nodes = map[string]proto.RangeTreeNode{
-		string(keyA): {
-			Key:       keyA,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &proto.KeyMin,
-			RightKey:  &keyB,
-		},
-		string(proto.KeyMin): {
-			Key:       proto.KeyMin,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-		string(keyB): {
-			Key:       keyB,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-	}
-	expectedTree = testRangeTree{
-		Tree:  tree,
-		Nodes: nodes,
-	}
-	if err := splitRange(db, keyB); err != nil {
-		t.Fatal(err)
-	}
-	if err := treesEqual(db, expectedTree); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test three splits (with a left rotation).
-	tree = proto.RangeTree{
-		RootKey: keyA,
-	}
-	nodes = map[string]proto.RangeTreeNode{
-		string(keyA): {
-			Key:       keyA,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &proto.KeyMin,
-			RightKey:  &keyC,
-		},
-		string(proto.KeyMin): {
-			Key:       proto.KeyMin,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-		string(keyC): {
-			Key:       keyC,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &keyB,
-		},
-		string(keyB): {
-			Key:       keyB,
-			ParentKey: proto.KeyMin,
-			Black:     false,
-		},
-	}
-	expectedTree = testRangeTree{
-		Tree:  tree,
-		Nodes: nodes,
-	}
-	if err := splitRange(db, keyC); err != nil {
-		t.Fatal(err)
-	}
-	if err := treesEqual(db, expectedTree); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test four splits (with a flip and left rotation).
-	tree = proto.RangeTree{
-		RootKey: keyC,
-	}
-	nodes = map[string]proto.RangeTreeNode{
-		string(keyC): {
-			Key:       keyC,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &keyA,
-			RightKey:  &keyD,
-		},
-		string(keyA): {
-			Key:       keyA,
-			ParentKey: proto.KeyMin,
-			Black:     false,
-			LeftKey:   &proto.KeyMin,
-			RightKey:  &keyB,
-		},
-		string(proto.KeyMin): {
-			Key:       proto.KeyMin,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-		string(keyB): {
-			Key:       keyB,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-		string(keyD): {
-			Key:       keyD,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-	}
-	expectedTree = testRangeTree{
-		Tree:  tree,
-		Nodes: nodes,
-	}
-	if err := splitRange(db, keyD); err != nil {
-		t.Fatal(err)
-	}
-	if err := treesEqual(db, expectedTree); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test four splits (with a left rotation).
-	tree = proto.RangeTree{
-		RootKey: keyC,
-	}
-	nodes = map[string]proto.RangeTreeNode{
-		string(keyC): {
-			Key:       keyC,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &keyA,
-			RightKey:  &keyE,
-		},
-		string(keyA): {
-			Key:       keyA,
-			ParentKey: proto.KeyMin,
-			Black:     false,
-			LeftKey:   &proto.KeyMin,
-			RightKey:  &keyB,
-		},
-		string(proto.KeyMin): {
-			Key:       proto.KeyMin,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-		string(keyB): {
-			Key:       keyB,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-		string(keyE): {
-			Key:       keyE,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &keyD,
-		},
-		string(keyD): {
-			Key:       keyD,
-			ParentKey: proto.KeyMin,
-			Black:     false,
-		},
-	}
-	expectedTree = testRangeTree{
-		Tree:  tree,
-		Nodes: nodes,
-	}
-	if err := splitRange(db, keyE); err != nil {
-		t.Fatal(err)
-	}
-	if err := treesEqual(db, expectedTree); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// TestInsertLeft tests inserting a collection of 5 nodes, forcing right
-// rotations, left rotations and flips.
-func TestInsertLeft(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	store, stopper := createTestStore(t)
-	defer stopper.Stop()
-	db := store.DB()
-
-	keyE := proto.Key("e")
-	keyD := proto.Key("d")
-	keyC := proto.Key("c")
-	keyB := proto.Key("b")
-	keyA := proto.Key("a")
-
-	// Test single split (with a left rotation).
-	tree := proto.RangeTree{
-		RootKey: keyE,
-	}
-	nodes := map[string]proto.RangeTreeNode{
-		string(keyE): {
-			Key:       keyE,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &proto.KeyMin,
-		},
-		string(proto.KeyMin): {
-			Key:       proto.KeyMin,
-			ParentKey: proto.KeyMin,
-			Black:     false,
-		},
-	}
-	expectedTree := testRangeTree{
-		Tree:  tree,
-		Nodes: nodes,
-	}
-	if err := splitRange(db, keyE); err != nil {
-		t.Fatal(err)
-	}
-	if err := treesEqual(db, expectedTree); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test two splits (with a left, right and flip).
-	tree = proto.RangeTree{
-		RootKey: keyD,
-	}
-	nodes = map[string]proto.RangeTreeNode{
-		string(keyD): {
-			Key:       keyD,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &proto.KeyMin,
-			RightKey:  &keyE,
-		},
-		string(proto.KeyMin): {
-			Key:       proto.KeyMin,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-		string(keyE): {
-			Key:       keyE,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-	}
-	expectedTree = testRangeTree{
-		Tree:  tree,
-		Nodes: nodes,
-	}
-	if err := splitRange(db, keyD); err != nil {
-		t.Fatal(err)
-	}
-	if err := treesEqual(db, expectedTree); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test three splits (with a left rotation).
-	tree = proto.RangeTree{
-		RootKey: keyD,
-	}
-	nodes = map[string]proto.RangeTreeNode{
-		string(keyD): {
-			Key:       keyD,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &keyC,
-			RightKey:  &keyE,
-		},
-		string(keyC): {
-			Key:       keyC,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &proto.KeyMin,
-		},
-		string(proto.KeyMin): {
-			Key:       proto.KeyMin,
-			ParentKey: proto.KeyMin,
-			Black:     false,
-		},
-
-		string(keyE): {
-			Key:       keyE,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-	}
-	expectedTree = testRangeTree{
-		Tree:  tree,
-		Nodes: nodes,
-	}
-	if err := splitRange(db, keyC); err != nil {
-		t.Fatal(err)
-	}
-	if err := treesEqual(db, expectedTree); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test four splits (with a flip and a right and left rotation).
-	tree = proto.RangeTree{
-		RootKey: keyD,
-	}
-	nodes = map[string]proto.RangeTreeNode{
-		string(keyD): {
-			Key:       keyD,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &keyB,
-			RightKey:  &keyE,
-		},
-		string(keyB): {
-			Key:       keyB,
-			ParentKey: proto.KeyMin,
-			Black:     false,
-			LeftKey:   &proto.KeyMin,
-			RightKey:  &keyC,
-		},
-		string(proto.KeyMin): {
-			Key:       proto.KeyMin,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-		string(keyC): {
-			Key:       keyC,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-		string(keyE): {
-			Key:       keyE,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-	}
-	expectedTree = testRangeTree{
-		Tree:  tree,
-		Nodes: nodes,
-	}
-	if err := splitRange(db, keyB); err != nil {
-		t.Fatal(err)
-	}
-	if err := treesEqual(db, expectedTree); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test four splits (with a left rotation).
-	tree = proto.RangeTree{
-		RootKey: keyD,
-	}
-	nodes = map[string]proto.RangeTreeNode{
-		string(keyD): {
-			Key:       keyD,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &keyB,
-			RightKey:  &keyE,
-		},
-		string(keyB): {
-			Key:       keyB,
-			ParentKey: proto.KeyMin,
-			Black:     false,
-			LeftKey:   &keyA,
-			RightKey:  &keyC,
-		},
-		string(keyA): {
-			Key:       keyA,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-			LeftKey:   &proto.KeyMin,
-		},
-		string(proto.KeyMin): {
-			Key:       proto.KeyMin,
-			ParentKey: proto.KeyMin,
-			Black:     false,
-		},
-		string(keyC): {
-			Key:       keyC,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-		string(keyE): {
-			Key:       keyE,
-			ParentKey: proto.KeyMin,
-			Black:     true,
-		},
-	}
-	expectedTree = testRangeTree{
-		Tree:  tree,
-		Nodes: nodes,
-	}
-	if err := splitRange(db, keyA); err != nil {
-		t.Fatal(err)
-	}
-	if err := treesEqual(db, expectedTree); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// Compare implements the llrbComparable interface for keys.
-func (k Key) Compare(b llrb.Comparable) int {
-	return bytes.Compare(k, b.(Key))
-}
-
-// compareBiogoNode compares a biogo node and a range tree node to determine if both
-// contain the same values in the same order.  It recursively calls itself on
-// both children if they exist.
-func compareBiogoNode(db *client.DB, biogoNode *llrb.Node, key *proto.Key) error {
-	// Retrieve the node form the range tree.
-	rtNode := &proto.RangeTreeNode{}
-	if err := db.GetProto(keys.RangeTreeNodeKey(*key), rtNode); err != nil {
-		return err
-	}
-
-	bNode := &proto.RangeTreeNode{
-		Key:       proto.Key(biogoNode.Elem.(Key)),
-		ParentKey: proto.KeyMin,
-		Black:     bool(biogoNode.Color),
-	}
-	if biogoNode.Left != nil {
-		leftKey := proto.Key(biogoNode.Left.Elem.(Key))
-		bNode.LeftKey = &leftKey
-	}
-	if biogoNode.Right != nil {
-		rightKey := proto.Key(biogoNode.Right.Elem.(Key))
-		bNode.RightKey = &rightKey
-	}
-	if err := nodesEqual(*key, *bNode, *rtNode); err != nil {
-		return err
-	}
-	if rtNode.LeftKey != nil {
-		if err := compareBiogoNode(db, biogoNode.Left, rtNode.LeftKey); err != nil {
-			return err
-		}
-	}
-	if rtNode.RightKey != nil {
-		if err := compareBiogoNode(db, biogoNode.Right, rtNode.RightKey); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// compareBiogoTree walks both a biogo tree and the range tree to determine if both
-// contain the same values in the same order.
-func compareBiogoTree(db *client.DB, biogoTree *llrb.Tree) error {
-	rt := &proto.RangeTree{}
-	if err := db.GetProto(keys.RangeTreeRoot, rt); err != nil {
-		return err
-	}
-	return compareBiogoNode(db, biogoTree.Root, &rt.RootKey)
-}
-
-// TestRandomSplits splits the keyspace a total of TotalSplits number of times.
-// At the same time, a biogo LLRB tree is also maintained and at the end of the
-// test, the range tree and the biogo tree are compared to ensure they are
-// equal.
-func TestRandomSplits(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	store, stopper := createTestStore(t)
-	defer stopper.Stop()
-	db := store.DB()
-	rng, seed := randutil.NewPseudoRand()
-	t.Logf("using pseudo random number generator with seed %d", seed)
-
-	tree := &llrb.Tree{}
-	tree.Insert(Key(proto.KeyMin))
-
-	// Test an unsplit tree.
-	if err := compareBiogoTree(db, tree); err != nil {
-		t.Fatalf("Unsplit trees are not equal:%v", err)
-	}
-
-	for i := 0; i < TotalSplits; i++ {
-		keyInt := rng.Int31()
-		keyString := strconv.Itoa(int(keyInt))
-		keyProto := proto.Key(keyString)
-		key := Key(keyProto)
-		// Make sure we avoid collisions.
-		for tree.Get(key) != nil {
-			keyInt = rng.Int31()
-			keyString = strconv.Itoa(int(keyInt))
-			keyProto = proto.Key(keyString)
-			key = Key(keyProto)
-		}
-
-		//t.Logf("Inserting %d:%d", i, keyInt)
-		tree.Insert(key)
-
-		// Split the range.
-		if err := splitRange(db, keyProto); err != nil {
+	for _, key := range keys {
+		if err := db.AdminSplit(key); err != nil {
 			t.Fatal(err)
 		}
-	}
-
-	// Compare the trees
-	if err := compareBiogoTree(db, tree); err != nil {
-		t.Fatal(err)
+		tree, nodes := loadTree(t, db)
+		VerifyTree(t, tree, nodes, key)
 	}
 }

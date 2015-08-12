@@ -177,45 +177,12 @@ func (k EncodedKey) Format(f fmt.State, verb rune) {
 	fmt.Fprint(f, strconv.Quote(string(k)))
 }
 
-// The following methods implement the custom marshalling and
-// unmarshalling necessary to define gogoproto custom types.
-
-// Marshal implements the gogoproto Marshaler interface.
-func (k Key) Marshal() ([]byte, error) {
-	return []byte(k), nil
-}
-
-// Unmarshal implements the gogoproto Unmarshaler interface.  It should never
-// set k to be nil as a nil value should never have unmarshal called for it.
-// Futhermore, appending a 0 length byte slice to a 0 length byte slice will
-// produce a nil byte slice, which can cause problems when unmarshalling the
-// engine.MinKey of "".
-func (k *Key) Unmarshal(bytes []byte) error {
-	if len(bytes) == 0 {
-		*k = []byte{}
-	} else {
-		*k = Key(append([]byte(nil), bytes...))
-	}
-	return nil
-}
-
-// The following methods implement custom unmarshalling necessary
-// for key objects to be converted from JSON.
-
-// UnmarshalJSON implements the json Unmarshaler interface.
+// UnmarshalJSON implements the json Unmarshaler interface. This is required to
+// unmarshal a json proto.Key. As of right now, this is only used in a single
+// test server/status_test/TestStatusGossipJson().
 func (k *Key) UnmarshalJSON(bytes []byte) error {
 	*k = Key(append([]byte(nil), bytes...))
 	return nil
-}
-
-// Size is required for gogoproto's marshaller.
-func (k Key) Size() int {
-	return len(k)
-}
-
-// MarshalTo is required for gogoproto's mashaller.
-func (k *Key) MarshalTo(data []byte) (int, error) {
-	return copy(data, []byte(*k)), nil
 }
 
 // Timestamp constant values.
