@@ -318,29 +318,35 @@ func encodeSecondaryIndexes(tableID structured.ID, indexes []structured.IndexDes
 	return secondaryIndexEntries, nil
 }
 
-// TODO(tamird): make this not panic. Not critical, since a panic here
-// will just tank a single goroutine on the server and be silently
-// swallowed.
 func convertDatum(col structured.ColumnDescriptor, val parser.Datum) (interface{}, error) {
 	if val == parser.DNull {
 		return nil, nil
 	}
 
 	switch col.Type.Kind {
-	case structured.ColumnType_BIT:
-		return bool(val.(parser.DBool)), nil
 	case structured.ColumnType_BOOL:
-		return bool(val.(parser.DBool)), nil
-	case structured.ColumnType_INT:
-		return int64(val.(parser.DInt)), nil
+		if v, ok := val.(parser.DBool); ok {
+			return bool(v), nil
+		}
+	case structured.ColumnType_BIT, structured.ColumnType_INT:
+		if v, ok := val.(parser.DInt); ok {
+			return int64(v), nil
+		}
 	case structured.ColumnType_FLOAT:
-		return float64(val.(parser.DFloat)), nil
+		if v, ok := val.(parser.DFloat); ok {
+			return float64(v), nil
+		}
 	// case structured.ColumnType_DECIMAL:
 	// case structured.ColumnType_DATE:
 	// case structured.ColumnType_TIME:
 	// case structured.ColumnType_TIMESTAMP:
 	case structured.ColumnType_CHAR, structured.ColumnType_TEXT, structured.ColumnType_BLOB:
-		return string(val.(parser.DString)), nil
+		if v, ok := val.(parser.DString); ok {
+			return string(v), nil
+		}
+	default:
+		return nil, fmt.Errorf("unsupported type: %s", val.Type())
 	}
-	return nil, fmt.Errorf("Unsupported type: %T", val)
+	return nil, fmt.Errorf("value type %s doesn't match type %s of column %q",
+		val.Type(), col.Type.Kind, col.Name)
 }
