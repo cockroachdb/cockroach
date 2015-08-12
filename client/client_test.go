@@ -493,7 +493,7 @@ func concurrentIncrements(db *client.DB, t *testing.T, isMultiphase bool) {
 					// Retrieve the other key.
 					b.Get(readKey)
 					if err := txn.Run(&b); err != nil {
-						return err, txn.GetProtoFromTxn()
+						return err, txn.GetState()
 					}
 					otherValue := int64(0)
 					gr := b.Results[0].Rows[0]
@@ -501,17 +501,17 @@ func concurrentIncrements(db *client.DB, t *testing.T, isMultiphase bool) {
 						otherValue = gr.ValueInt()
 					}
 					// New txn.
-					txn = db.ReconstructTxn(*txn.GetProtoFromTxn())
+					txn = db.ReconstructTxn(*txn.GetState())
 					// Write our key.
 					b = client.Batch{}
 					b.Inc(writeKey, 1+otherValue)
 					if err := txn.Run(&b); err != nil {
-						return err, txn.GetProtoFromTxn()
+						return err, txn.GetState()
 					}
 					// New txn.
-					txn = db.ReconstructTxn(*txn.GetProtoFromTxn())
+					txn = db.ReconstructTxn(*txn.GetState())
 					err := txn.Commit(&client.Batch{})
-					return err, txn.GetProtoFromTxn()
+					return err, txn.GetState()
 				}
 				for r := retry.Start(client.DefaultTxnRetryOptions); r.Next(); {
 					txn := db.ReconstructTxn(proto.Transaction{})

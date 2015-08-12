@@ -88,8 +88,8 @@ func newTxnFromProto(db DB, depth int, t proto.Transaction) *Txn {
 	return txn
 }
 
-// GetProtoFromTxn returns the transaction protobuf.
-func (txn *Txn) GetProtoFromTxn() *proto.Transaction {
+// GetState returns the transaction protobuf.
+func (txn *Txn) GetState() *proto.Transaction {
 	return &txn.txn
 }
 
@@ -284,16 +284,16 @@ func (txn *Txn) Run(b *Batch) error {
 // efficient than relying on the implicit commit performed when the transaction
 // function returns without error.
 func (txn *Txn) Commit(b *Batch) error {
-	args := &proto.EndTransactionRequest{Commit: true}
-	reply := &proto.EndTransactionResponse{}
-	b.calls = append(b.calls, proto.Call{Args: args, Reply: reply})
-	b.initResult(1, 0, nil)
-	return txn.Run(b)
+	return txn.endInBatch(b, true)
 }
 
 // Rollback a transaction.
 func (txn *Txn) Rollback(b *Batch) error {
-	args := &proto.EndTransactionRequest{Commit: false}
+	return txn.endInBatch(b, false)
+}
+
+func (txn *Txn) endInBatch(b *Batch, commit bool) error {
+	args := &proto.EndTransactionRequest{Commit: commit}
 	reply := &proto.EndTransactionResponse{}
 	b.calls = append(b.calls, proto.Call{Args: args, Reply: reply})
 	b.initResult(1, 0, nil)

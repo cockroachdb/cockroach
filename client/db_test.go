@@ -349,7 +349,7 @@ func TestCommonMethods(t *testing.T) {
 		key{dbType, "Run"}:                   {},
 		key{dbType, "Txn"}:                   {},
 		key{dbType, "ReconstructTxn"}:        {},
-		key{txnType, "GetProtoFromTxn"}:      {},
+		key{txnType, "GetState"}:             {},
 		key{txnType, "Commit"}:               {},
 		key{txnType, "Rollback"}:             {},
 		key{txnType, "DebugName"}:            {},
