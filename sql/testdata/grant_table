@@ -8,8 +8,8 @@ query TTT colnames
 SHOW GRANTS ON DATABASE a
 ----
 Database User      Privileges
-a        readwrite READ,WRITE
-a        root      READ,WRITE
+a        readwrite ALL
+a        root      ALL
 
 statement error table "t" does not exist
 SHOW GRANTS ON a.t
@@ -33,15 +33,15 @@ query TTT colnames
 SHOW GRANTS ON t
 ----
 Table    User      Privileges
-t        readwrite READ,WRITE
-t        root      READ,WRITE
+t        readwrite ALL
+t        root      ALL
 
 query TTT colnames
 SHOW GRANTS ON a.t
 ----
 Table    User      Privileges
-t        readwrite READ,WRITE
-t        root      READ,WRITE
+t        readwrite ALL
+t        root      ALL
 
 statement ok
 GRANT ALL ON t TO readwrite, "test-user"
@@ -49,45 +49,47 @@ GRANT ALL ON t TO readwrite, "test-user"
 query TTT
 SHOW GRANTS ON t
 ----
-t     readwrite READ,WRITE
-t     root      READ,WRITE
-t     test-user READ,WRITE
+t     readwrite ALL
+t     root      ALL
+t     test-user ALL
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-t     readwrite READ,WRITE
-t     test-user READ,WRITE
+t     readwrite ALL
+t     test-user ALL
 
 statement ok
-REVOKE WRITE ON t FROM "test-user",readwrite
+REVOKE INSERT,DELETE ON t FROM "test-user",readwrite
 
 query TTT
 SHOW GRANTS ON t
 ----
-t     readwrite READ
-t     root      READ,WRITE
-t     test-user READ
+t     readwrite CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
+t     root      ALL
+t     test-user CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-t     readwrite READ
-t     test-user READ
+t     readwrite CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
+t     test-user CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
 
 statement ok
-REVOKE READ ON t FROM "test-user"
+REVOKE SELECT ON t FROM "test-user"
 
 query TTT
 SHOW GRANTS ON t
 ----
-t     readwrite READ
-t     root      READ,WRITE
+t     readwrite CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
+t     root      ALL
+t     test-user CREATE,DROP,GRANT,READ,UPDATE,WRITE
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-t     readwrite READ
+t     readwrite CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
+t     test-user CREATE,DROP,GRANT,READ,UPDATE,WRITE
 
 statement ok
 REVOKE ALL ON t FROM readwrite,"test-user"
@@ -95,7 +97,7 @@ REVOKE ALL ON t FROM readwrite,"test-user"
 query TTT
 SHOW GRANTS ON t
 ----
-t     root      READ,WRITE
+t     root      ALL
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
@@ -106,5 +108,5 @@ query TTT colnames
 SHOW GRANTS ON DATABASE a
 ----
 Database User      Privileges
-a        readwrite READ,WRITE
-a        root      READ,WRITE
+a        readwrite ALL
+a        root      ALL

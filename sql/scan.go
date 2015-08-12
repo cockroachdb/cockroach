@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -123,10 +124,8 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 			return n.err
 		}
 
-		if !n.desc.HasPrivilege(p.user, parser.PrivilegeRead) {
-			n.err = fmt.Errorf("user %s does not have %s privilege on table %s",
-				p.user, parser.PrivilegeRead, n.desc.Name)
-			return n.err
+		if err := p.checkPrivilege(n.desc, privilege.READ); err != nil {
+			return err
 		}
 
 		// This is only kosher because we know that getAliasedDesc() succeeded.

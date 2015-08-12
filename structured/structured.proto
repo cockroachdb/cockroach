@@ -20,6 +20,7 @@ package cockroach.structured;
 option go_package = "structured";
 
 import "gogoproto/gogo.proto";
+import "cockroach/structured/privilege.proto";
 
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
@@ -73,14 +74,6 @@ message IndexDescriptor {
       (gogoproto.casttype) = "ColumnID"];
 }
 
-// PrivilegeDescriptor represents the sets of privileges on a descriptor.
-message PrivilegeDescriptor {
-  // lists of users with read permissions.
-  repeated string read = 1;
-  // lists of users with write permissions.
-  repeated string write = 2;
-}
-
 // A TableDescriptor represents a table and is stored in a structured metadata
 // key. The TableDescriptor has a globally-unique ID, while its member
 // {Column,Index}Descriptors have locally-unique IDs.
@@ -101,7 +94,7 @@ message TableDescriptor {
   // next_index_id is used to ensure that deleted index ids are not reused.
   optional uint32 next_index_id = 8 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
-  optional PrivilegeDescriptor privileges = 9 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional PrivilegeDescriptor privileges = 9;
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
@@ -112,5 +105,5 @@ message DatabaseDescriptor {
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
-  optional PrivilegeDescriptor privileges = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional PrivilegeDescriptor privileges = 3;
 }

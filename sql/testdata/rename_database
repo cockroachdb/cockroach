@@ -6,7 +6,7 @@ test
 query TTT
 SHOW GRANTS ON DATABASE test
 ----
-test        root      READ,WRITE
+test        root      ALL
 
 statement ok
 CREATE TABLE kv (
@@ -44,7 +44,7 @@ u
 query TTT
 SHOW GRANTS ON DATABASE u
 ----
-u        root      READ,WRITE
+u        root      ALL
 
 statement ok	
 SET DATABASE = u

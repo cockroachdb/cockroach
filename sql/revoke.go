@@ -18,9 +18,8 @@
 package sql
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/structured"
 )
 
@@ -40,12 +39,15 @@ func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
 		return nil, err
 	}
 
-	if !descriptor.HasPrivilege(p.user, parser.PrivilegeWrite) {
-		return nil, fmt.Errorf("user %s does not have %s privilege on %s %s",
-			p.user, parser.PrivilegeWrite, descriptor.TypeName(), descriptor.GetName())
+	if err := p.checkPrivilege(descriptor, privilege.WRITE); err != nil {
+		return nil, err
 	}
 
-	if err := descriptor.Revoke(n); err != nil {
+	for _, grantee := range n.Grantees {
+		descriptor.GetPrivileges().Revoke(grantee, n.Privileges)
+	}
+
+	if err := descriptor.Validate(); err != nil {
 		return nil, err
 	}
 

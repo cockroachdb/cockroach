@@ -23,12 +23,16 @@
 
 package parser
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/sql/privilege"
+)
 
 // Revoke represents a REVOKE statements.
 // PrivilegeList and TargetList are defined in grant.go
 type Revoke struct {
-	Privileges PrivilegeList
+	Privileges privilege.List
 	Targets    TargetList
 	Grantees   NameList
 }
