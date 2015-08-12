@@ -114,9 +114,6 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	// Update all the rows.
 	b := client.Batch{}
 	for row.Next() {
-		if err := row.Err(); err != nil {
-			return nil, err
-		}
 		rowVals := row.Values()
 		primaryIndexKeySuffix, _, err := encodeIndexKey(primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, nil)
 		if err != nil {
@@ -179,6 +176,10 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				b.Del(key)
 			}
 		}
+	}
+
+	if err := row.Err(); err != nil {
+		return nil, err
 	}
 
 	if err := p.txn.Run(&b); err != nil {

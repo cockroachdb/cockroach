@@ -73,9 +73,6 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	b := client.Batch{}
 
 	for node.Next() {
-		if err := node.Err(); err != nil {
-			return nil, err
-		}
 		values := node.Values()
 
 		primaryIndexKeySuffix, _, err := encodeIndexKey(primaryIndex.ColumnIDs, colIDtoRowIndex, values, nil)
@@ -104,6 +101,10 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 			log.Infof("DelRange %q - %q", rowStartKey, rowEndKey)
 		}
 		b.DelRange(rowStartKey, rowEndKey)
+	}
+
+	if err := node.Err(); err != nil {
+		return nil, err
 	}
 
 	if err := p.txn.Run(&b); err != nil {

@@ -83,3 +83,6 @@ query TT
 SELECT * FROM kv3
 ----
 a   b
+
+statement error qualified name "kv3.nonexistent" not found
+UPDATE kv3 SET v = NULL WHERE nonexistent = 'a'
