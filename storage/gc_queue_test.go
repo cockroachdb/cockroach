@@ -368,7 +368,7 @@ func TestGCQueueLookupGCPolicy(t *testing.T) {
 		ReplicaAttrs:  []proto.Attributes{},
 		RangeMinBytes: 1 << 10,
 		RangeMaxBytes: 1 << 18,
-		// Note thtere is no GC set here, so we should select the
+		// Note that there is no GC set here, so we should select the
 		// hierarchical parent's GC policy; in this case, zoneConfig1.
 	}
 	configs := []*config.PrefixConfig{

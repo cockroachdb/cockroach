@@ -142,7 +142,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[string]*proto.Transaction{}
-	intentMap := map[string][]proto.Key{}
+	intentMap := map[string][]proto.Intent{}
 
 	// updateOldestIntent atomically updates the oldest intent.
 	updateOldestIntent := func(intentNanos int64) {
@@ -173,7 +173,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 					if meta.Timestamp.Less(intentExp) {
 						id := string(meta.Txn.ID)
 						txnMap[id] = meta.Txn
-						intentMap[id] = append(intentMap[id], expBaseKey)
+						intentMap[id] = append(intentMap[id], proto.Intent{Key: expBaseKey})
 					} else {
 						updateOldestIntent(meta.Txn.OrigTimestamp.WallTime)
 					}
@@ -234,11 +234,13 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 	var intents []proto.Intent
 	for id, txn := range txnMap {
 		if txn.Status != proto.PENDING {
-			for _, key := range intentMap[id] {
-				intents = append(intents, proto.Intent{Key: key, Txn: *txn})
+			for _, intent := range intentMap[id] {
+				intent.Txn = *txn
+				intents = append(intents, intent)
 			}
 		}
 	}
+
 	if len(intents) > 0 {
 		repl.resolveIntents(repl.context(), intents)
 	}
