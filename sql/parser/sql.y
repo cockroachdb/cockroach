@@ -223,10 +223,8 @@ package parser
 %type <selExpr> target_elem
 %type <updateExpr> single_set_clause
 
-%type <empty> explain_option_name
-%type <empty> explain_option_arg
-%type <empty> explain_option_elem
-%type <empty> explain_option_list
+%type <str> explain_option_name
+%type <strs> explain_option_list
 
 %type <colType> typename simple_typename const_typename
 %type <colType> numeric opt_numeric_modifiers
@@ -700,20 +698,15 @@ attrs:
     $$ = append($1, NameIndirection($3))
   }
 
-// EXPLAIN [VERBOSE] query
 // EXPLAIN (options) query
 explain_stmt:
   EXPLAIN explainable_stmt
   {
-    $$ = nil
-  }
-| EXPLAIN VERBOSE explainable_stmt
-  {
-    $$ = nil
+    $$ = &Explain{Statement: $2}
   }
 | EXPLAIN '(' explain_option_list ')' explainable_stmt
   {
-    $$ = nil
+    $$ = &Explain{Options: $3, Statement: $5}
   }
 
 explainable_stmt:
@@ -724,20 +717,17 @@ explainable_stmt:
 | create_table_as_stmt
 
 explain_option_list:
-  explain_option_elem
-| explain_option_list ',' explain_option_elem
-
-explain_option_elem:
-  explain_option_name explain_option_arg
+  explain_option_name
+  {
+    $$ = []string{$1}
+  }
+| explain_option_list ',' explain_option_name
+  {
+    $$ = append($1, $3)
+  }
 
 explain_option_name:
   non_reserved_word
-  {}
-
-explain_option_arg:
-  opt_boolean_or_string {}
-| numeric_only {}
-| /* EMPTY */ {}
 
 // GRANT privileges ON privilege_target TO grantee_list
 grant_stmt:

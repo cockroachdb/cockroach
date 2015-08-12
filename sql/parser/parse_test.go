@@ -65,6 +65,10 @@ func TestParse(t *testing.T) {
 		{`DROP TABLE a, b`},
 		{`DROP TABLE IF EXISTS a`},
 
+		{`EXPLAIN SELECT 1`},
+		{`EXPLAIN (DEBUG) SELECT 1`},
+		{`EXPLAIN (A, B, C) SELECT 1`},
+
 		{`SHOW DATABASES`},
 		{`SHOW TABLES`},
 		{`SHOW TABLES FROM a`},

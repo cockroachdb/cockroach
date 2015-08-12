@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-type valMap map[structured.ColumnID]parser.Datum
 type qvalMap map[structured.ColumnID]*parser.ParenExpr
+type colKindMap map[structured.ColumnID]structured.ColumnType_Kind
 
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
@@ -40,16 +40,23 @@ type scanNode struct {
 	txn              *client.Txn
 	desc             *structured.TableDescriptor
 	index            *structured.IndexDescriptor
+	visibleCols      []structured.ColumnDescriptor
 	isSecondaryIndex bool
 	columns          []string
 	err              error
-	indexKey         []byte            // the index key of the current row
-	kvs              []client.KeyValue // the raw key/value pairs
-	kvIndex          int               // current index into the key/value pairs
-	qvals            qvalMap           // the values in the current row
-	row              parser.DTuple     // the rendered row
-	filter           parser.Expr       // filtering expression for rows
-	render           []parser.Expr     // rendering expressions for rows
+	indexKey         []byte              // the index key of the current row
+	kvs              []client.KeyValue   // the raw key/value pairs
+	kvIndex          int                 // current index into the key/value pairs
+	rowIndex         int                 // the index of the current row
+	colID            structured.ColumnID // column ID of the current key
+	vals             []parser.Datum      // the index key values for the current row
+	qvals            qvalMap             // the values in the current row
+	colKind          colKindMap          // map of column kinds for decoding column values
+	row              parser.DTuple       // the rendered row
+	filter           parser.Expr         // filtering expression for rows
+	render           []parser.Expr       // rendering expressions for rows
+	explain          explainMode
+	explainValue     parser.Datum
 }
 
 func (n *scanNode) Columns() []string {
@@ -78,93 +85,15 @@ func (n *scanNode) Next() bool {
 	// column name. When the index key changes we output a row containing the
 	// current values.
 	for {
-		var kv client.KeyValue
-		if n.kvIndex < len(n.kvs) {
-			kv = n.kvs[n.kvIndex]
+		if n.maybeOutputRow() {
+			return n.err == nil
 		}
-
-		if n.indexKey != nil &&
-			(n.kvIndex == len(n.kvs) || !bytes.HasPrefix(kv.Key, n.indexKey)) {
-			// The current key belongs to a new row. Output the current row.
-			n.indexKey = nil
-			if !n.prepareVals() {
-				return false
-			}
-
-			var output bool
-			output, n.err = n.filterRow()
-			if n.err != nil {
-				return false
-			}
-			if output {
-				if n.err = n.renderRow(); n.err != nil {
-					return false
-				}
-				return true
-			}
-		}
-
 		if n.kvIndex == len(n.kvs) {
 			return false
 		}
-
-		var vals valMap
-		if n.indexKey == nil {
-			// This is the first key for the row, create the vals map in order to
-			// decode the index key columns.
-			vals = make(valMap, len(n.index.ColumnIDs))
-			// Reset the qvals map expressions to nil. The expresssion will get
-			// filled in with the column values as we decode the key-value pairs for
-			// the row.
-			for _, e := range n.qvals {
-				e.Expr = nil
-			}
-		}
-
-		var remaining []byte
-		remaining, n.err = decodeIndexKey(n.desc, *n.index, vals, kv.Key)
-		if n.err != nil {
+		if !n.processKV(n.kvs[n.kvIndex]) {
 			return false
 		}
-
-		if n.indexKey == nil {
-			n.indexKey = []byte(kv.Key[:len(kv.Key)-len(remaining)])
-
-			// This is the first key for the row, initialize the column values that
-			// are part of the index key.
-			for id, val := range vals {
-				if qval := n.qvals[id]; qval != nil {
-					qval.Expr = val
-				}
-			}
-		}
-
-		if !n.isSecondaryIndex && len(remaining) > 0 {
-			_, colID := encoding.DecodeUvarint(remaining)
-			var col *structured.ColumnDescriptor
-			col, n.err = n.desc.FindColumnByID(structured.ColumnID(colID))
-			if n.err != nil {
-				return false
-			}
-			if v, ok := n.qvals[col.ID]; ok && v.Expr == nil {
-				v.Expr = unmarshalValue(*col, kv)
-				if log.V(2) {
-					log.Infof("Scan %q -> %v", kv.Key, n.qvals[col.ID].Expr)
-				}
-			} else {
-				// No need to unmarshal the column value. Either the column was part of
-				// the index key or it isn't needed by any of the render or filter
-				// expressions.
-				if log.V(2) {
-					log.Infof("Scan %q -> [%d] (skipped)", kv.Key, col.ID)
-				}
-			}
-		} else {
-			if log.V(2) {
-				log.Infof("Scan %q", kv.Key)
-			}
-		}
-
 		n.kvIndex++
 	}
 }
@@ -207,6 +136,7 @@ func (n *scanNode) initScan() bool {
 		n.indexKey = []byte{}
 		return true
 	}
+
 	// Retrieve all of the keys that start with our index key prefix.
 	startKey := proto.Key(structured.MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
 	endKey := startKey.PrefixEnd()
@@ -214,12 +144,126 @@ func (n *scanNode) initScan() bool {
 	if n.err != nil {
 		return false
 	}
+
+	// Prepare our index key vals slice.
+	n.vals, n.err = makeIndexKeyVals(n.desc, *n.index)
+	if n.err != nil {
+		return false
+	}
+
+	// Prepare a map from column ID to column kind used for unmarshalling values.
+	n.colKind = make(colKindMap, len(n.desc.Columns))
+	for _, col := range n.desc.Columns {
+		n.colKind[col.ID] = col.Type.Kind
+	}
 	return true
 }
 
-func (n *scanNode) prepareVals() bool {
+func (n *scanNode) processKV(kv client.KeyValue) bool {
+	if n.indexKey == nil {
+		// Reset the qvals map expressions to nil. The expresssions will get filled
+		// in with the column values as we decode the key-value pairs for the row.
+		for _, e := range n.qvals {
+			e.Expr = nil
+		}
+	}
+
+	var remaining []byte
+	remaining, n.err = decodeIndexKey(n.desc, *n.index, n.vals, kv.Key)
+	if n.err != nil {
+		return false
+	}
+
+	if n.indexKey == nil {
+		n.indexKey = []byte(kv.Key[:len(kv.Key)-len(remaining)])
+
+		// This is the first key for the row, initialize the column values that are
+		// part of the index key.
+		for i, id := range n.index.ColumnIDs {
+			if qval := n.qvals[id]; qval != nil {
+				qval.Expr = n.vals[i]
+			}
+		}
+	}
+
+	var value parser.Datum
+	n.colID = 0
+
+	if !n.isSecondaryIndex && len(remaining) > 0 {
+		_, v := encoding.DecodeUvarint(remaining)
+		n.colID = structured.ColumnID(v)
+		if v, ok := n.qvals[n.colID]; ok && v.Expr == nil {
+			value, ok = n.unmarshalValue(kv)
+			if !ok {
+				return false
+			}
+			v.Expr = value
+			if log.V(2) {
+				log.Infof("Scan %q -> %v", kv.Key, value)
+			}
+		} else {
+			// No need to unmarshal the column value. Either the column was part of
+			// the index key or it isn't needed by any of the render or filter
+			// expressions.
+			if log.V(2) {
+				log.Infof("Scan %q -> [%d] (skipped)", kv.Key, n.colID)
+			}
+		}
+	} else {
+		if log.V(2) {
+			log.Infof("Scan %q", kv.Key)
+		}
+	}
+
+	if n.explain == explainDebug {
+		if value == nil {
+			if n.colID > 0 {
+				var ok bool
+				value, ok = n.unmarshalValue(kv)
+				if !ok {
+					return false
+				}
+			} else {
+				value = parser.DNull
+			}
+		}
+		n.explainValue = value
+	}
+	return true
+}
+
+// maybeOutputRow checks to see if the current key belongs to a new row and if
+// it does it outputs the last row. The return value indicates whether a row
+// was output or an error occurred. In either case, iteration should terminate.
+func (n *scanNode) maybeOutputRow() bool {
+	if n.indexKey != nil &&
+		(n.kvIndex == len(n.kvs) || !bytes.HasPrefix(n.kvs[n.kvIndex].Key, n.indexKey)) {
+		// The current key belongs to a new row. Output the current row.
+		n.indexKey = nil
+		output := n.filterRow()
+		if n.err != nil {
+			return true
+		}
+		if output {
+			n.renderRow()
+			return true
+		} else if n.explainValue != nil {
+			n.explainDebug(true, false)
+			return true
+		}
+	} else if n.explainValue != nil {
+		n.explainDebug(false, false)
+		return true
+	}
+	return false
+}
+
+// filterRow checks to see if the current row matches the filter (i.e. the
+// where-clause). May set n.err if an error occurs during expression
+// evaluation.
+func (n *scanNode) filterRow() bool {
 	if n.desc != nil {
-		for _, col := range n.desc.Columns {
+		for _, col := range n.visibleCols {
 			if !col.Nullable {
 				break
 			}
@@ -229,53 +273,111 @@ func (n *scanNode) prepareVals() bool {
 			}
 		}
 	}
-	return true
-}
 
-func (n *scanNode) filterRow() (bool, error) {
 	if n.filter == nil {
-		return true, nil
+		return true
 	}
-	d, err := parser.EvalExpr(n.filter)
-	if err != nil {
-		return false, err
+
+	var d parser.Datum
+	d, n.err = parser.EvalExpr(n.filter)
+	if n.err != nil {
+		return false
 	}
+
 	v, ok := d.(parser.DBool)
 	if !ok {
-		return false, fmt.Errorf("WHERE clause did not evaluate to a boolean")
+		n.err = fmt.Errorf("WHERE clause did not evaluate to a boolean")
+		return false
 	}
-	return bool(v), nil
+	return bool(v)
 }
 
-func (n *scanNode) renderRow() error {
+// renderRow renders the row by evaluating the render expressions. May set
+// n.err if an error occurs during expression evaluation.
+func (n *scanNode) renderRow() {
+	if n.explain == explainDebug {
+		n.explainDebug(true, true)
+		return
+	}
+
 	if n.row == nil {
 		n.row = make([]parser.Datum, len(n.render))
 	}
 	for i, e := range n.render {
-		var err error
-		n.row[i], err = parser.EvalExpr(e)
-		if err != nil {
-			return err
+		n.row[i], n.err = parser.EvalExpr(e)
+		if n.err != nil {
+			return
 		}
 	}
-	return nil
+	n.rowIndex++
 }
 
-func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) parser.Datum {
-	if kv.Exists() {
-		switch col.Type.Kind {
-		case structured.ColumnType_BIT, structured.ColumnType_INT:
-			return parser.DInt(kv.ValueInt())
-		case structured.ColumnType_BOOL:
-			return parser.DBool(kv.ValueInt() != 0)
-		case structured.ColumnType_FLOAT:
-			return parser.DFloat(math.Float64frombits(uint64(kv.ValueInt())))
-		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
-			structured.ColumnType_BLOB:
-			return parser.DString(kv.ValueBytes())
+func (n *scanNode) explainDebug(endOfRow, outputRow bool) {
+	if n.row == nil {
+		n.row = make([]parser.Datum, len(n.columns))
+	}
+	n.row[0] = parser.DInt(n.rowIndex)
+	n.row[1] = parser.DString(n.prettyKey())
+	n.row[2] = parser.DString(n.explainValue.String())
+	if endOfRow {
+		n.row[3] = parser.DBool(outputRow)
+		n.rowIndex++
+	} else {
+		n.row[3] = parser.DNull
+	}
+	n.explainValue = nil
+}
+
+func (n *scanNode) prettyKey() string {
+	if n.desc == nil {
+		return ""
+	}
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "/%s/%s", n.desc.Name, n.index.Name)
+	for _, v := range n.vals {
+		if v == parser.DNull {
+			fmt.Fprintf(&buf, "/NULL")
+			continue
+		}
+		switch t := v.(type) {
+		case parser.DBool:
+			fmt.Fprintf(&buf, "/%v", t)
+		case parser.DInt:
+			fmt.Fprintf(&buf, "/%v", t)
+		case parser.DFloat:
+			fmt.Fprintf(&buf, "/%v", t)
+		case parser.DString:
+			fmt.Fprintf(&buf, "/%v", t)
 		}
 	}
-	return parser.DNull
+	if n.colID > 0 {
+		// TODO(pmattis): This is inefficient, but does it matter?
+		col, _ := n.desc.FindColumnByID(n.colID)
+		fmt.Fprintf(&buf, "/%s", col.Name)
+	}
+	return buf.String()
+}
+
+func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
+	kind, ok := n.colKind[n.colID]
+	if !ok {
+		n.err = fmt.Errorf("column-id \"%d\" does not exist", n.colID)
+		return nil, false
+	}
+	if kv.Exists() {
+		switch kind {
+		case structured.ColumnType_BIT, structured.ColumnType_INT:
+			return parser.DInt(kv.ValueInt()), true
+		case structured.ColumnType_BOOL:
+			return parser.DBool(kv.ValueInt() != 0), true
+		case structured.ColumnType_FLOAT:
+			return parser.DFloat(math.Float64frombits(uint64(kv.ValueInt()))), true
+		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
+			structured.ColumnType_BLOB:
+			return parser.DString(kv.ValueBytes()), true
+		}
+	}
+	return parser.DNull, true
 }
 
 type qnameVisitor struct {
@@ -302,7 +404,7 @@ func (v *qnameVisitor) Visit(expr parser.Expr) parser.Expr {
 	desc := v.getDesc(qname)
 	if desc != nil {
 		name := qname.Column()
-		for _, col := range v.desc.Columns {
+		for _, col := range v.visibleCols {
 			if !strings.EqualFold(name, col.Name) {
 				continue
 			}
@@ -324,10 +426,10 @@ func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *structured.TableDes
 		return nil
 	}
 	if qname.Base == "" {
-		qname.Base = parser.Name(v.desc.Name)
+		qname.Base = parser.Name(v.desc.Alias)
 		return v.desc
 	}
-	if strings.EqualFold(v.desc.Name, string(qname.Base)) {
+	if strings.EqualFold(v.desc.Alias, string(qname.Base)) {
 		return v.desc
 	}
 	return nil

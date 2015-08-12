@@ -1,0 +1,57 @@
+statement ok
+CREATE TABLE abc (
+  a INT,
+  b TEXT,
+  c FLOAT,
+  PRIMARY KEY (a, b),
+  CONSTRAINT foo UNIQUE (b),
+  CONSTRAINT bar INDEX (a)
+)
+
+query ITTB colnames
+EXPLAIN (DEBUG) SELECT * FROM abc
+----
+RowIdx  Key  Value  Output
+
+statement ok
+INSERT INTO abc VALUES (1, 'one', 1.1), (2, 'two', NULL), (3, 'three')
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM abc
+----
+0  /abc/primary/1/'one'    NULL  NULL
+0  /abc/primary/1/'one'/c  1.1   true
+1  /abc/primary/2/'two'    NULL  true
+2  /abc/primary/3/'three'  NULL  true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM abc WHERE a = 2
+----
+0  /abc/primary/1/'one'    NULL  NULL
+0  /abc/primary/1/'one'/c  1.1   false
+1  /abc/primary/2/'two'    NULL  true
+2  /abc/primary/3/'three'  NULL  false
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM abc@foo
+----
+0  /abc/foo/'one'    NULL  true
+1  /abc/foo/'three'  NULL  true
+2  /abc/foo/'two'    NULL  true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM abc@bar
+----
+0  /abc/bar/1/1/'one'    NULL  true
+1  /abc/bar/2/2/'two'    NULL  true
+2  /abc/bar/3/3/'three'  NULL  true
+
+statement ok
+UPDATE abc SET c = NULL WHERE a = 1
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM abc
+----
+0  /abc/primary/1/'one'    NULL  true
+1  /abc/primary/2/'two'    NULL  true
+2  /abc/primary/3/'three'  NULL  true
