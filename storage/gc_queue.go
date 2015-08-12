@@ -231,25 +231,16 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 	wg.Wait()
 
 	// Resolve all intents.
-	// TODO(spencer): use a batch here when available.
+	var intents []proto.Intent
 	for id, txn := range txnMap {
 		if txn.Status != proto.PENDING {
-			// The transaction was successfully pushed, so resolve the intents.
 			for _, key := range intentMap[id] {
-				resolveArgs := &proto.ResolveIntentRequest{
-					RequestHeader: proto.RequestHeader{
-						Timestamp: now,
-						Key:       key,
-						User:      security.RootUser,
-						Txn:       txn,
-					},
-				}
-				if _, err := repl.AddCmd(repl.context(), resolveArgs); err != nil {
-					log.Warningf("resolve of key %q failed: %s", key, err)
-					updateOldestIntent(txn.OrigTimestamp.WallTime)
-				}
+				intents = append(intents, proto.Intent{Key: key, Txn: *txn})
 			}
 		}
+	}
+	if len(intents) > 0 {
+		repl.resolveIntents(repl.context(), intents)
 	}
 
 	// Send GC request through range.
