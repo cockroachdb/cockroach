@@ -68,7 +68,7 @@ func TestQueuePriorityQueue(t *testing.T) {
 	expRanges := make([]*Replica, count+1)
 	pq := make(priorityQueue, count)
 	for i := 0; i < count; {
-		pq[i] = &rangeItem{
+		pq[i] = &replicaItem{
 			value:    &Replica{},
 			priority: float64(i),
 			index:    i,
@@ -79,7 +79,7 @@ func TestQueuePriorityQueue(t *testing.T) {
 	heap.Init(&pq)
 
 	// Insert a new item and then modify its priority.
-	priorityItem := &rangeItem{
+	priorityItem := &replicaItem{
 		value:    &Replica{},
 		priority: 1.0,
 	}
@@ -89,7 +89,7 @@ func TestQueuePriorityQueue(t *testing.T) {
 
 	// Take the items out; they should arrive in decreasing priority order.
 	for i := 0; pq.Len() > 0; i++ {
-		item := heap.Pop(&pq).(*rangeItem)
+		item := heap.Pop(&pq).(*replicaItem)
 		if item.value != expRanges[i] {
 			t.Errorf("%d: unexpected range with priority %f", i, item.priority)
 		}

@@ -36,20 +36,20 @@ import (
 const (
 	// gcQueueMaxSize is the max size of the gc queue.
 	gcQueueMaxSize = 100
-	// gcQueueTimerDuration is the duration between GCs of queued ranges.
+	// gcQueueTimerDuration is the duration between GCs of queued replicas.
 	gcQueueTimerDuration = 1 * time.Second
 	// gcByteCountNormalization is the count of GC'able bytes which
-	// amount to a score of "1" added to total range priority.
+	// amount to a score of "1" added to total replica priority.
 	gcByteCountNormalization = 1 << 20 // 1 MB
 	// intentAgeNormalization is the average age of outstanding intents
-	// which amount to a score of "1" added to total range priority.
+	// which amount to a score of "1" added to total replica priority.
 	intentAgeNormalization = 24 * time.Hour // 1 day
 	// intentAgeThreshold is the threshold after which an extant intent
 	// will be resolved.
 	intentAgeThreshold = 2 * time.Hour // 2 hour
 )
 
-// gcQueue manages a queue of ranges slated to be scanned in their
+// gcQueue manages a queue of replicas slated to be scanned in their
 // entirety using the MVCC versions iterator. The gc queue manages the
 // following tasks:
 //
@@ -75,24 +75,24 @@ func (gcq *gcQueue) needsLeaderLease() bool {
 	return true
 }
 
-// shouldQueue determines whether a range should be queued for garbage
+// shouldQueue determines whether a replica should be queued for garbage
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
-func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bool, priority float64) {
-	// Lookup GC policy for this range.
-	policy, err := gcq.lookupGCPolicy(rng)
+func (gcq *gcQueue) shouldQueue(now proto.Timestamp, repl *Replica) (shouldQ bool, priority float64) {
+	// Lookup GC policy for this replica.
+	policy, err := gcq.lookupGCPolicy(repl)
 	if err != nil {
 		log.Errorf("GC policy: %s", err)
 		return
 	}
 
-	// GC score is the total GC'able bytes age normalized by 1 MB * the range's TTL in seconds.
-	gcScore := float64(rng.stats.GetGCBytesAge(now.WallTime)) / float64(policy.TTLSeconds) / float64(gcByteCountNormalization)
+	// GC score is the total GC'able bytes age normalized by 1 MB * the replica's TTL in seconds.
+	gcScore := float64(repl.stats.GetGCBytesAge(now.WallTime)) / float64(policy.TTLSeconds) / float64(gcByteCountNormalization)
 
 	// Intent score. This computes the average age of outstanding intents
 	// and normalizes.
-	intentScore := rng.stats.GetAvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
+	intentScore := repl.stats.GetAvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
 
 	// Compute priority.
 	if gcScore > 1 {
@@ -105,18 +105,18 @@ func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bool
 	return
 }
 
-// process iterates through all keys in a range, calling the garbage
-// collector for each key and associated set of values. GC'd keys are
-// batched into GC calls. Extant intents are resolved if intents are
-// older than intentAgeThreshold.
-func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
-	snap := rng.rm.Engine().NewSnapshot()
-	iter := newRangeDataIterator(rng.Desc(), snap)
+// process iterates through all keys in a replica's range, calling the garbage
+// collector for each key and associated set of values. GC'd keys are batched
+// into GC calls. Extant intents are resolved if intents are older than
+// intentAgeThreshold.
+func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
+	snap := repl.rm.Engine().NewSnapshot()
+	iter := newRangeDataIterator(repl.Desc(), snap)
 	defer iter.Close()
 	defer snap.Close()
 
 	// Lookup the GC policy for the zone containing this key range.
-	policy, err := gcq.lookupGCPolicy(rng)
+	policy, err := gcq.lookupGCPolicy(repl)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 	gcArgs := &proto.GCRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp: now,
-			RangeID:   rng.Desc().RangeID,
+			RangeID:   repl.Desc().RangeID,
 		},
 	}
 	var mu sync.Mutex
@@ -191,7 +191,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 		}
 	}
 
-	// Iterate through this range's keys and values.
+	// Iterate through the keys and values of this replica's range.
 	for ; iter.Valid(); iter.Next() {
 		baseKey, ts, isValue := engine.MVCCDecodeKey(iter.Key())
 		if !isValue {
@@ -231,7 +231,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 	var wg sync.WaitGroup
 	for _, txn := range txnMap {
 		wg.Add(1)
-		go gcq.pushTxn(rng, now, txn, updateOldestIntent, &wg)
+		go gcq.pushTxn(repl, now, txn, updateOldestIntent, &wg)
 	}
 	wg.Wait()
 
@@ -249,7 +249,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 						Txn:       txn,
 					},
 				}
-				if _, err := rng.AddCmd(rng.context(), resolveArgs); err != nil {
+				if _, err := repl.AddCmd(repl.context(), resolveArgs); err != nil {
 					log.Warningf("resolve of key %q failed: %s", key, err)
 					updateOldestIntent(txn.OrigTimestamp.WallTime)
 				}
@@ -260,21 +260,21 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 	// Send GC request through range.
 	gcMeta.OldestIntentNanos = gogoproto.Int64(oldestIntentNanos)
 	gcArgs.GCMeta = *gcMeta
-	if _, err := rng.AddCmd(rng.context(), gcArgs); err != nil {
+	if _, err := repl.AddCmd(repl.context(), gcArgs); err != nil {
 		return err
 	}
 
-	// Store current timestamp as last verification for this range, as
+	// Store current timestamp as last verification for this replica, as
 	// we've just successfully scanned.
-	if err := rng.SetLastVerificationTimestamp(now); err != nil {
-		log.Errorf("failed to set last verification timestamp for range %s: %s", rng, err)
+	if err := repl.SetLastVerificationTimestamp(now); err != nil {
+		log.Errorf("failed to set last verification timestamp for replica %s: %s", repl, err)
 	}
 
 	return nil
 }
 
 // timer returns a constant duration to space out GC processing
-// for successive queued ranges.
+// for successive queued replicas.
 func (gcq *gcQueue) timer() time.Duration {
 	return gcQueueTimerDuration
 }
@@ -283,7 +283,7 @@ func (gcq *gcQueue) timer() time.Duration {
 // cannot be aborted, the oldestIntentNanos value is atomically
 // updated to the min of oldestIntentNanos and the intent's
 // timestamp. The wait group is signaled on completion.
-func (gcq *gcQueue) pushTxn(rng *Replica, now proto.Timestamp, txn *proto.Transaction, updateOldestIntent func(int64), wg *sync.WaitGroup) {
+func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Transaction, updateOldestIntent func(int64), wg *sync.WaitGroup) {
 	defer wg.Done() // signal wait group always on completion
 	if log.V(1) {
 		log.Infof("pushing txn %s ts=%s", txn, txn.OrigTimestamp)
@@ -305,7 +305,7 @@ func (gcq *gcQueue) pushTxn(rng *Replica, now proto.Timestamp, txn *proto.Transa
 	pushReply := &proto.PushTxnResponse{}
 	b := &client.Batch{}
 	b.InternalAddCall(proto.Call{Args: pushArgs, Reply: pushReply})
-	if err := rng.rm.DB().Run(b); err != nil {
+	if err := repl.rm.DB().Run(b); err != nil {
 		log.Warningf("push of txn %s failed: %s", txn, err)
 		updateOldestIntent(txn.OrigTimestamp.WallTime)
 		return
@@ -315,11 +315,11 @@ func (gcq *gcQueue) pushTxn(rng *Replica, now proto.Timestamp, txn *proto.Transa
 }
 
 // lookupGCPolicy queries the gossip prefix config map based on the
-// supplied range's start key. It queries all matching config prefixes
+// supplied replica's start key. It queries all matching config prefixes
 // and then iterates from most specific to least, returning the first
 // non-nil GC policy.
-func (gcq *gcQueue) lookupGCPolicy(rng *Replica) (config.GCPolicy, error) {
-	info, err := rng.rm.Gossip().GetInfo(gossip.KeyConfigZone)
+func (gcq *gcQueue) lookupGCPolicy(repl *Replica) (config.GCPolicy, error) {
+	info, err := repl.rm.Gossip().GetInfo(gossip.KeyConfigZone)
 	if err != nil {
 		return config.GCPolicy{}, util.Errorf("unable to fetch zone config from gossip: %s", err)
 	}
@@ -328,18 +328,18 @@ func (gcq *gcQueue) lookupGCPolicy(rng *Replica) (config.GCPolicy, error) {
 		return config.GCPolicy{}, util.Errorf("gossiped info is not a prefix configuration map: %+v", info)
 	}
 
-	// Verify that the range doesn't cross over the zone config prefix.
-	// This could be the case if the zone config is new and the range
+	// Verify that the replica's range doesn't cross over the zone config
+	// prefix.  This could be the case if the zone config is new and the range
 	// hasn't been split yet along the new boundary.
 	var gc *config.GCPolicy
-	if err = configMap.VisitPrefixesHierarchically(rng.Desc().StartKey, func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
+	if err = configMap.VisitPrefixesHierarchically(repl.Desc().StartKey, func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
 		zone := cfg.(*config.ZoneConfig)
 		if zone.GC != nil {
-			rng.RLock()
-			isCovered := !end.Less(rng.Desc().EndKey)
-			rng.RUnlock()
+			repl.RLock()
+			isCovered := !end.Less(repl.Desc().EndKey)
+			repl.RUnlock()
 			if !isCovered {
-				return false, util.Errorf("range is only partially covered by zone %s (%q-%q); must wait for range split", cfg, start, end)
+				return false, util.Errorf("replica is only partially covered by zone %s (%q-%q); must wait for range split", cfg, start, end)
 			}
 			gc = zone.GC
 			return true, nil
@@ -354,7 +354,7 @@ func (gcq *gcQueue) lookupGCPolicy(rng *Replica) (config.GCPolicy, error) {
 
 	// We should always match _at least_ the default GC.
 	if gc == nil {
-		return config.GCPolicy{}, util.Errorf("no zone for range with start key %q", rng.Desc().StartKey)
+		return config.GCPolicy{}, util.Errorf("no zone for range with start key %q", repl.Desc().StartKey)
 	}
 	return *gc, nil
 }

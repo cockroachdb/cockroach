@@ -30,16 +30,16 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// A rangeItem holds a range and its priority for use with a priority queue.
-type rangeItem struct {
+// A replicaItem holds a replica and its priority for use with a priority queue.
+type replicaItem struct {
 	value    *Replica
 	priority float64
 	// The index is needed by update and is maintained by the heap.Interface methods.
 	index int // The index of the item in the heap.
 }
 
-// A priorityQueue implements heap.Interface and holds rangeItems.
-type priorityQueue []*rangeItem
+// A priorityQueue implements heap.Interface and holds replicaItems.
+type priorityQueue []*replicaItem
 
 func (pq priorityQueue) Len() int { return len(pq) }
 
@@ -55,7 +55,7 @@ func (pq priorityQueue) Swap(i, j int) {
 
 func (pq *priorityQueue) Push(x interface{}) {
 	n := len(*pq)
-	item := x.(*rangeItem)
+	item := x.(*replicaItem)
 	item.index = n
 	*pq = append(*pq, item)
 }
@@ -69,27 +69,27 @@ func (pq *priorityQueue) Pop() interface{} {
 	return item
 }
 
-// update modifies the priority of a rangeItem in the queue.
-func (pq *priorityQueue) update(item *rangeItem, priority float64) {
+// update modifies the priority of a replicaItem in the queue.
+func (pq *priorityQueue) update(item *replicaItem, priority float64) {
 	item.priority = priority
 	heap.Fix(pq, item.index)
 }
 
 var (
-	errQueueDisabled   = errors.New("queue disabled")
-	errRangeNotAddable = errors.New("range shouldn't be added to queue")
+	errQueueDisabled     = errors.New("queue disabled")
+	errReplicaNotAddable = errors.New("replica shouldn't be added to queue")
 )
 
 type queueImpl interface {
 	// needsLeaderLease returns whether this queue requires the leader
-	// lease to operate on a range.
+	// lease to operate on a replica.
 	needsLeaderLease() bool
 
-	// shouldQueue accepts current time and a Range and returns whether
+	// shouldQueue accepts current time and a replica and returns whether
 	// it should be queued and if so, at what priority.
 	shouldQueue(proto.Timestamp, *Replica) (shouldQueue bool, priority float64)
 
-	// process accepts current time and a range and executes
+	// process accepts current time and a replica and executes
 	// queue-specific work on it.
 	process(proto.Timestamp, *Replica) error
 
@@ -98,7 +98,7 @@ type queueImpl interface {
 	timer() time.Duration
 }
 
-// baseQueue is the base implementation of the rangeQueue interface.
+// baseQueue is the base implementation of the replicaQueue interface.
 // Queue implementations should embed a baseQueue and implement queueImpl.
 //
 // baseQueue is not thread safe and is intended for usage only from
@@ -106,28 +106,28 @@ type queueImpl interface {
 type baseQueue struct {
 	name       string
 	impl       queueImpl
-	maxSize    int                          // Maximum number of ranges to queue
-	incoming   chan struct{}                // Channel signalled when a new range is added to the queue.
-	sync.Mutex                              // Mutex protects priorityQ and ranges
-	priorityQ  priorityQueue                // The priority queue
-	ranges     map[proto.RangeID]*rangeItem // Map from RangeID to rangeItem (for updating priority)
+	maxSize    int                            // Maximum number of replicas to queue
+	incoming   chan struct{}                  // Channel signalled when a new replica is added to the queue.
+	sync.Mutex                                // Mutex protects priorityQ and replicas
+	priorityQ  priorityQueue                  // The priority queue
+	replicas   map[proto.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)
 	// Some tests in this package disable queues.
 	disabled int32 // updated atomically
 }
 
 // newBaseQueue returns a new instance of baseQueue with the
-// specified shouldQueue function to determine which ranges to queue
+// specified shouldQueue function to determine which replicas to queue
 // and maxSize to limit the growth of the queue. Note that
-// maxSize doesn't prevent new ranges from being added, it just
-// limits the total size. Higher priority ranges can still be
-// added; their addition simply removes the lowest priority range.
+// maxSize doesn't prevent new replicas from being added, it just
+// limits the total size. Higher priority replicas can still be
+// added; their addition simply removes the lowest priority replica.
 func newBaseQueue(name string, impl queueImpl, maxSize int) *baseQueue {
 	return &baseQueue{
 		name:     name,
 		impl:     impl,
 		maxSize:  maxSize,
 		incoming: make(chan struct{}, 1),
-		ranges:   map[proto.RangeID]*rangeItem{},
+		replicas: map[proto.RangeID]*replicaItem{},
 	}
 }
 
@@ -153,64 +153,64 @@ func (bq *baseQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	bq.processLoop(clock, stopper)
 }
 
-// Add adds the specified range to the queue, regardless of the return
-// value of bq.shouldQueue. The range is added with specified
-// priority. If the queue is too full, the range may not be added, as
-// the range with the lowest priority will be dropped. Returns an
-// error if the range was not added.
-func (bq *baseQueue) Add(rng *Replica, priority float64) error {
+// Add adds the specified replica to the queue, regardless of the return
+// value of bq.shouldQueue. The replica is added with specified
+// priority. If the queue is too full, the replica may not be added, as
+// the replica with the lowest priority will be dropped. Returns an
+// error if the replica was not added.
+func (bq *baseQueue) Add(repl *Replica, priority float64) error {
 	bq.Lock()
 	defer bq.Unlock()
-	return bq.addInternal(rng, true, priority)
+	return bq.addInternal(repl, true, priority)
 }
 
-// MaybeAdd adds the specified range if bq.shouldQueue specifies it
-// should be queued. Ranges are added to the queue using the priority
-// returned by bq.shouldQueue. If the queue is too full, the range may
-// not be added, as the range with the lowest priority will be
+// MaybeAdd adds the specified replica if bq.shouldQueue specifies it
+// should be queued. Replicas are added to the queue using the priority
+// returned by bq.shouldQueue. If the queue is too full, the replica may
+// not be added, as the replica with the lowest priority will be
 // dropped.
-func (bq *baseQueue) MaybeAdd(rng *Replica, now proto.Timestamp) {
+func (bq *baseQueue) MaybeAdd(repl *Replica, now proto.Timestamp) {
 	bq.Lock()
 	defer bq.Unlock()
-	should, priority := bq.impl.shouldQueue(now, rng)
-	if err := bq.addInternal(rng, should, priority); err != nil && log.V(1) {
-		log.Infof("couldn't add %s to queue %s: %s", rng, bq.name, err)
+	should, priority := bq.impl.shouldQueue(now, repl)
+	if err := bq.addInternal(repl, should, priority); err != nil && log.V(1) {
+		log.Infof("couldn't add %s to queue %s: %s", repl, bq.name, err)
 	}
 }
 
-// addInternal adds the range the queue with specified priority. If the
-// range is already queued, updates the existing priority. Expects the
-// queue lock is held by caller. Returns an error if the range was not
+// addInternal adds the replica the queue with specified priority. If the
+// replica is already queued, updates the existing priority. Expects the
+// queue lock is held by caller. Returns an error if the replica was not
 // added.
-func (bq *baseQueue) addInternal(rng *Replica, should bool, priority float64) error {
+func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) error {
 	if atomic.LoadInt32(&bq.disabled) == 1 {
 		return errQueueDisabled
 	}
-	item, ok := bq.ranges[rng.Desc().RangeID]
+	item, ok := bq.replicas[repl.Desc().RangeID]
 	if !should {
 		if ok {
 			bq.remove(item.index)
 		}
-		return errRangeNotAddable
+		return errReplicaNotAddable
 	} else if ok {
-		// Range has already been added; update priority.
+		// Replica has already been added; update priority.
 		bq.priorityQ.update(item, priority)
 		return nil
 	}
 
 	if log.V(1) {
-		log.Infof("adding range %s to %s queue", rng, bq.name)
+		log.Infof("adding replica %s to %s queue", repl, bq.name)
 	}
-	item = &rangeItem{value: rng, priority: priority}
+	item = &replicaItem{value: repl, priority: priority}
 	heap.Push(&bq.priorityQ, item)
-	bq.ranges[rng.Desc().RangeID] = item
+	bq.replicas[repl.Desc().RangeID] = item
 
-	// If adding this range has pushed the queue past its maximum size,
+	// If adding this replica has pushed the queue past its maximum size,
 	// remove the lowest priority element.
 	if pqLen := bq.priorityQ.Len(); pqLen > bq.maxSize {
 		bq.remove(pqLen - 1)
 	}
-	// Signal the processLoop that a range has been added.
+	// Signal the processLoop that a replica has been added.
 	select {
 	case bq.incoming <- struct{}{}:
 	default:
@@ -219,13 +219,13 @@ func (bq *baseQueue) addInternal(rng *Replica, should bool, priority float64) er
 	return nil
 }
 
-// MaybeRemove removes the specified range from the queue if enqueued.
-func (bq *baseQueue) MaybeRemove(rng *Replica) {
+// MaybeRemove removes the specified replica from the queue if enqueued.
+func (bq *baseQueue) MaybeRemove(repl *Replica) {
 	bq.Lock()
 	defer bq.Unlock()
-	if item, ok := bq.ranges[rng.Desc().RangeID]; ok {
+	if item, ok := bq.replicas[repl.Desc().RangeID]; ok {
 		if log.V(1) {
-			log.Infof("removing range %s from %s queue", item.value, bq.name)
+			log.Infof("removing replica %s from %s queue", item.value, bq.name)
 		}
 		bq.remove(item.index)
 	}
@@ -234,7 +234,7 @@ func (bq *baseQueue) MaybeRemove(rng *Replica) {
 // processLoop processes the entries in the queue until the provided
 // stopper signals exit.
 //
-// TODO(spencer): current load should factor into range processing timer.
+// TODO(spencer): current load should factor into replica processing timer.
 func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 
 	stopper.RunWorker(func() {
@@ -248,17 +248,17 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 		for {
 			select {
 			// Incoming signal sets the next time to process if there were previously
-			// no ranges in the queue.
+			// no replicas in the queue.
 			case <-bq.incoming:
 				if nextTime == nil {
-					// When a range is added, wake up immediately. This is mainly
+					// When a replica is added, wake up immediately. This is mainly
 					// to facilitate testing without unnecessary sleeps.
 					nextTime = immediately
 
 					// In case we're in a test, still block on the impl.
 					bq.impl.timer()
 				}
-			// Process ranges as the timer expires.
+			// Process replicas as the timer expires.
 			case <-nextTime:
 				stopper.RunTask(func() {
 					bq.processOne(clock)
@@ -272,7 +272,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 			// Exit on stopper.
 			case <-stopper.ShouldStop():
 				bq.Lock()
-				bq.ranges = map[proto.RangeID]*rangeItem{}
+				bq.replicas = map[proto.RangeID]*replicaItem{}
 				bq.priorityQ = nil
 				bq.Unlock()
 				return
@@ -284,49 +284,49 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 func (bq *baseQueue) processOne(clock *hlc.Clock) {
 	start := time.Now()
 	bq.Lock()
-	rng := bq.pop()
+	repl := bq.pop()
 	bq.Unlock()
-	if rng != nil {
+	if repl != nil {
 		now := clock.Now()
 		if log.V(1) {
-			log.Infof("processing range %s from %s queue...", rng, bq.name)
+			log.Infof("processing replica %s from %s queue...", repl, bq.name)
 		}
-		// If the queue requires the leader lease to process the
-		// range, check whether this replica has leader lease and
-		// renew or acquire if necessary.
+		// If the queue requires a replica to have the range leader lease in
+		// order to be processed, check whether this replica has leader lease
+		// and renew or acquire if necessary.
 		if bq.impl.needsLeaderLease() {
 			// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 			args := &proto.GetRequest{RequestHeader: proto.RequestHeader{Timestamp: now}}
-			if err := rng.redirectOnOrAcquireLeaderLease(nil /* Trace */, args.Header().Timestamp); err != nil {
+			if err := repl.redirectOnOrAcquireLeaderLease(nil /* Trace */, args.Header().Timestamp); err != nil {
 				if log.V(1) {
-					log.Infof("this replica of %s could not acquire leader lease; skipping...", rng)
+					log.Infof("this replica of %s could not acquire leader lease; skipping...", repl)
 				}
 				return
 			}
 		}
-		if err := bq.impl.process(now, rng); err != nil {
-			log.Errorf("failure processing range %s from %s queue: %s", rng, bq.name, err)
+		if err := bq.impl.process(now, repl); err != nil {
+			log.Errorf("failure processing replica %s from %s queue: %s", repl, bq.name, err)
 		} else if log.V(2) {
-			log.Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
+			log.Infof("processed replica %s from %s queue in %s", repl, bq.name, time.Now().Sub(start))
 		}
 	}
 }
 
-// pop dequeues the highest priority range in the queue. Returns the
-// range if not empty; otherwise, returns nil. Expects mutex to be
+// pop dequeues the highest priority replica in the queue. Returns the
+// replica if not empty; otherwise, returns nil. Expects mutex to be
 // locked.
 func (bq *baseQueue) pop() *Replica {
 	if bq.priorityQ.Len() == 0 {
 		return nil
 	}
-	item := heap.Pop(&bq.priorityQ).(*rangeItem)
-	delete(bq.ranges, item.value.Desc().RangeID)
+	item := heap.Pop(&bq.priorityQ).(*replicaItem)
+	delete(bq.replicas, item.value.Desc().RangeID)
 	return item.value
 }
 
 // remove removes an element from the priority queue by index. Expects
 // mutex to be locked.
 func (bq *baseQueue) remove(index int) {
-	item := heap.Remove(&bq.priorityQ, index).(*rangeItem)
-	delete(bq.ranges, item.value.Desc().RangeID)
+	item := heap.Remove(&bq.priorityQ, index).(*replicaItem)
+	delete(bq.replicas, item.value.Desc().RangeID)
 }

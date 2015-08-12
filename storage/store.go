@@ -265,7 +265,7 @@ type Store struct {
 	verifyQueue    *verifyQueue    // Checksum verification queue
 	replicateQueue *replicateQueue // Replication queue
 	_rangeGCQueue  *rangeGCQueue   // Range GC queue
-	scanner        *rangeScanner   // Range scanner
+	scanner        *replicaScanner // Range scanner
 	feed           StoreEventFeed  // Event Feed
 	multiraft      *multiraft.MultiRaft
 	started        int32
@@ -371,7 +371,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	}
 
 	// Add range scanner and configure with queues.
-	s.scanner = newRangeScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
+	s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
 	s.gcQueue = newGCQueue()
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ReplicaCount)
@@ -1149,7 +1149,7 @@ func (s *Store) RemoveReplica(rng *Replica) error {
 	if s.replicasByKey.Delete(rng) == nil {
 		return util.Errorf("couldn't find range in rangesByKey btree")
 	}
-	s.scanner.RemoveRange(rng)
+	s.scanner.RemoveReplica(rng)
 	return nil
 }
 
