@@ -112,7 +112,7 @@ func BenchmarkTxnWrites(b *testing.B) {
 		if tErr := s.DB.Txn(func(txn *client.Txn) error {
 			b := &client.Batch{}
 			b.Put(key, fmt.Sprintf("value-%d", i))
-			return txn.Commit(b)
+			return txn.CommitInBatch(b)
 		}); tErr != nil {
 			b.Fatal(tErr)
 		}

@@ -117,7 +117,7 @@ func TestIntentResolution(t *testing.T) {
 				b.DelRange(kr[0], kr[1])
 			}
 			if err := s.db.Txn(func(txn *client.Txn) error {
-				return txn.Commit(b)
+				return txn.CommitInBatch(b)
 			}); err != nil {
 				t.Fatalf("%d: %s", i, err)
 			}

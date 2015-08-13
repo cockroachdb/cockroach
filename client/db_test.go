@@ -240,7 +240,7 @@ func ExampleTx_Commit() {
 		b := &client.Batch{}
 		b.Put("aa", "1")
 		b.Put("ab", "2")
-		return txn.Commit(b)
+		return txn.CommitInBatch(b)
 	})
 	if err != nil {
 		panic(err)
@@ -348,8 +348,7 @@ func TestCommonMethods(t *testing.T) {
 		key{dbType, "NewBatch"}:              {},
 		key{dbType, "Run"}:                   {},
 		key{dbType, "Txn"}:                   {},
-		key{dbType, "ReconstructTxn"}:        {},
-		key{txnType, "GetState"}:             {},
+		key{txnType, "CommitInBatch"}:        {},
 		key{txnType, "Commit"}:               {},
 		key{txnType, "Rollback"}:             {},
 		key{txnType, "DebugName"}:            {},

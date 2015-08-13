@@ -503,7 +503,7 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 			txn.SetDebugName("auto-wrap")
 			b := &client.Batch{}
 			b.InternalAddCall(call)
-			return txn.Commit(b)
+			return txn.CommitInBatch(b)
 		}); err != nil {
 			log.Warning(err)
 		}
