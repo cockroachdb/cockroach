@@ -467,7 +467,9 @@ func TestClientBatch(t *testing.T) {
 // read the integers stored at the other's key and add it onto their own.
 // It is checked that the outcome is serializable, i.e. exactly one of the
 // two Goroutines (the later write) sees the previous write by the other.
-func concurrentIncrements(db *client.DB, t *testing.T) {
+// The isMultiphase option runs the transaction in multiple phases recreating
+// the transaction from the transaction protobuf returned from the server.
+func concurrentIncrements(db *client.DB, t *testing.T, isMultiphase bool) {
 	// wgStart waits for all transactions to line up, wgEnd has the main
 	// function wait for them to finish.
 	var wgStart, wgEnd sync.WaitGroup
@@ -484,24 +486,68 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 			// Wait until the other goroutines are running.
 			wgStart.Wait()
 
-			if err := db.Txn(func(txn *client.Txn) error {
-				txn.SetDebugName(fmt.Sprintf("test-%d", i))
+			if isMultiphase {
+				applyInc := func(txn *client.Txn) (error, proto.Transaction) {
+					txn.SetDebugName(fmt.Sprintf("test-%d", i))
+					b := client.Batch{}
+					// Retrieve the other key.
+					b.Get(readKey)
+					if err := txn.Run(&b); err != nil {
+						return err, txn.GetState()
+					}
+					otherValue := int64(0)
+					gr := b.Results[0].Rows[0]
+					if gr.Value != nil {
+						otherValue = gr.ValueInt()
+					}
+					// New txn.
+					txn = db.ReconstructTxn(txn.GetState())
+					// Write our key.
+					b = client.Batch{}
+					b.Inc(writeKey, 1+otherValue)
+					if err := txn.Run(&b); err != nil {
+						return err, txn.GetState()
+					}
+					// New txn.
+					txn = db.ReconstructTxn(txn.GetState())
+					err := txn.Commit(&client.Batch{})
+					return err, txn.GetState()
+				}
+				for r := retry.Start(client.DefaultTxnRetryOptions); r.Next(); {
+					txn := db.ReconstructTxn(proto.Transaction{})
+					if err, txnProto := applyInc(txn); err != nil {
+						// New txn.
+						txn = db.ReconstructTxn(txnProto)
+						if err := txn.Rollback(); err != nil {
+							t.Error(err)
+						} else {
+							// retry
+							continue
+						}
+					}
+					// exit retry
+					break
+				}
+			} else {
+				if err := db.Txn(func(txn *client.Txn) error {
+					txn.SetDebugName(fmt.Sprintf("test-%d", i))
 
-				// Retrieve the other key.
-				gr, err := txn.Get(readKey)
-				if err != nil {
+					// Retrieve the other key.
+					gr, err := txn.Get(readKey)
+					if err != nil {
+						return err
+					}
+
+					otherValue := int64(0)
+					if gr.Value != nil {
+						otherValue = gr.ValueInt()
+					}
+
+					_, err = txn.Inc(writeKey, 1+otherValue)
 					return err
+				}); err != nil {
+					t.Error(err)
 				}
-
-				otherValue := int64(0)
-				if gr.Value != nil {
-					otherValue = gr.ValueInt()
-				}
-
-				_, err = txn.Inc(writeKey, 1+otherValue)
-				return err
-			}); err != nil {
-				t.Error(err)
 			}
 		}(i)
 	}
@@ -549,7 +595,25 @@ func TestConcurrentIncrements(t *testing.T) {
 		if err := db.DelRange(testUser+"/value-0", testUser+"/value-1x"); err != nil {
 			t.Fatalf("%d: unable to clean up: %v", k, err)
 		}
-		concurrentIncrements(db, t)
+		concurrentIncrements(db, t, false /*isMultiphase*/)
+	}
+}
+
+// TestMultiphaseTransactions is a simple explicit test for serializability
+// while running multiphase trasactions.
+func TestMultiphaseTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := server.StartTestServer(t)
+	defer s.Stop()
+	db := createTestClient(s.ServingAddr())
+
+	// Convenience loop: Crank up this number for testing this
+	// more often. It'll increase test duration though.
+	for k := 0; k < 5; k++ {
+		if err := db.DelRange(testUser+"/value-0", testUser+"/value-1x"); err != nil {
+			t.Fatalf("%d: unable to clean up: %v", k, err)
+		}
+		concurrentIncrements(db, t, true /*isMultiphase*/)
 	}
 }
 
