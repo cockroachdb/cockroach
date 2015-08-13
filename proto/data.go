@@ -487,6 +487,10 @@ func (t *Transaction) Update(o *Transaction) {
 	t.CertainNodes = NodeList{Nodes: append(Int32Slice(nil),
 		o.CertainNodes.Nodes...)}
 	t.UpgradePriority(o.Priority)
+	if t.Writing && !o.Writing {
+		panic("r/w status regression")
+	}
+	t.Writing = o.Writing
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
