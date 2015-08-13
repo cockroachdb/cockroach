@@ -162,18 +162,28 @@ class NotLeaderError : public ::google::protobuf::Message {
   ::cockroach::proto::Replica* release_leader();
   void set_allocated_leader(::cockroach::proto::Replica* leader);
 
+  // optional int64 range_id = 3;
+  bool has_range_id() const;
+  void clear_range_id();
+  static const int kRangeIdFieldNumber = 3;
+  ::google::protobuf::int64 range_id() const;
+  void set_range_id(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.NotLeaderError)
  private:
   inline void set_has_replica();
   inline void clear_has_replica();
   inline void set_has_leader();
   inline void clear_has_leader();
+  inline void set_has_range_id();
+  inline void clear_has_range_id();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::proto::Replica* replica_;
   ::cockroach::proto::Replica* leader_;
+  ::google::protobuf::int64 range_id_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
@@ -1921,6 +1931,30 @@ inline void NotLeaderError::set_allocated_leader(::cockroach::proto::Replica* le
     clear_has_leader();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NotLeaderError.leader)
+}
+
+// optional int64 range_id = 3;
+inline bool NotLeaderError::has_range_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void NotLeaderError::set_has_range_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void NotLeaderError::clear_has_range_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void NotLeaderError::clear_range_id() {
+  range_id_ = GOOGLE_LONGLONG(0);
+  clear_has_range_id();
+}
+inline ::google::protobuf::int64 NotLeaderError::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NotLeaderError.range_id)
+  return range_id_;
+}
+inline void NotLeaderError::set_range_id(::google::protobuf::int64 value) {
+  set_has_range_id();
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.NotLeaderError.range_id)
 }
 
 // -------------------------------------------------------------------

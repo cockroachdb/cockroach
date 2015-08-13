@@ -814,13 +814,13 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 	}
 }
 
-// updateLeaderCache updates the cached leader for the given Raft group,
+// updateLeaderCache updates the cached leader for the given range,
 // evicting any previous value in the process.
 func (ds *DistSender) updateLeaderCache(rid proto.RangeID, leader proto.Replica) {
 	oldLeader := ds.leaderCache.Lookup(rid)
 	if leader.StoreID != oldLeader.StoreID {
 		if log.V(1) {
-			log.Infof("raft %d: new cached leader store %d (old: %d)", rid, leader.StoreID, oldLeader.StoreID)
+			log.Infof("range %d: new cached leader store %d (old: %d)", rid, leader.StoreID, oldLeader.StoreID)
 		}
 		ds.leaderCache.Update(rid, leader)
 	}

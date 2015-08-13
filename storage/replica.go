@@ -306,6 +306,7 @@ func (r *Replica) getLease() *proto.Lease {
 func (r *Replica) newNotLeaderError(l *proto.Lease, originNode proto.RaftNodeID) error {
 	err := &proto.NotLeaderError{}
 	if l != nil && l.RaftNodeID != 0 {
+		err.RangeID = r.Desc().RangeID
 		_, originStoreID := proto.DecodeRaftNodeID(originNode)
 		_, err.Replica = r.Desc().FindReplica(originStoreID)
 		_, storeID := proto.DecodeRaftNodeID(proto.RaftNodeID(l.RaftNodeID))
@@ -331,6 +332,7 @@ func (r *Replica) requestLeaderLease(timestamp proto.Timestamp) error {
 				WallTime: r.rm.Clock().Now().WallTime,
 				Random:   rand.Int63(),
 			},
+			RangeID: r.Desc().RangeID,
 		},
 		Lease: proto.Lease{
 			Start:      timestamp,

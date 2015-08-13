@@ -34,6 +34,8 @@ option (gogoproto.unmarshaler_all) = true;
 message NotLeaderError {
   optional Replica replica = 1;
   optional Replica leader = 2;
+  optional int64 range_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
 }
 
 // A NodeUnavailableError indicates that the sending gateway can
