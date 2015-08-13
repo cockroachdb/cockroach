@@ -664,6 +664,656 @@ func TestRotateLeft(t *testing.T) {
 	}
 }
 
+// TestSwapNodes ensures that node swap needed for deletions occur correctly.
+func TestSwapNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	keyA := proto.Key("A")
+	keyAParent := proto.Key("AP")
+	keyAParentLeft := proto.Key("APL")
+	keyAParentRight := proto.Key("APR")
+	keyALeft := proto.Key("AL")
+	keyARight := proto.Key("AR")
+	keyB := proto.Key("B")
+	keyBParent := proto.Key("BP")
+	keyBParentLeft := proto.Key("BPL")
+	keyBParentRight := proto.Key("BPR")
+	keyBLeft := proto.Key("BL")
+	keyBRight := proto.Key("BR")
+	keyRoot := proto.Key("R")
+
+	testCases := []struct {
+		root            proto.Key
+		a               *proto.RangeTreeNode
+		aParent         *proto.RangeTreeNode
+		aLeft           *proto.RangeTreeNode
+		aRight          *proto.RangeTreeNode
+		b               *proto.RangeTreeNode
+		bParent         *proto.RangeTreeNode
+		bLeft           *proto.RangeTreeNode
+		bRight          *proto.RangeTreeNode
+		rootExpected    proto.Key
+		aExpected       *proto.RangeTreeNode
+		aParentExpected *proto.RangeTreeNode
+		aLeftExpected   *proto.RangeTreeNode
+		aRightExpected  *proto.RangeTreeNode
+		bExpected       *proto.RangeTreeNode
+		bParentExpected *proto.RangeTreeNode
+		bLeftExpected   *proto.RangeTreeNode
+		bRightExpected  *proto.RangeTreeNode
+	}{
+		// Test Case 0: Normal swap, two separate nodes, a's a left child, b's a left child
+		// This should just swap all direct references to a and b, leaving
+		// everything else intact.
+		{
+			root: keyRoot,
+			a: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyALeft,
+				RightKey:  keyARight,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			aParent: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyA,
+				RightKey: keyAParentRight,
+			},
+			aLeft: &proto.RangeTreeNode{
+				Key:       keyALeft,
+				ParentKey: keyA,
+			},
+			aRight: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyA,
+			},
+			b: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyBParent,
+				Black:     false,
+			},
+			bParent: &proto.RangeTreeNode{
+				Key:      keyBParent,
+				LeftKey:  keyB,
+				RightKey: keyBParentRight,
+			},
+			bLeft: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyB,
+			},
+			bRight: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyB,
+			},
+			rootExpected: keyRoot,
+			aExpected: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyBParent,
+				Black:     false,
+			},
+			aParentExpected: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyB,
+				RightKey: keyAParentRight,
+			},
+			aLeftExpected: &proto.RangeTreeNode{
+				Key:       keyALeft,
+				ParentKey: keyB,
+			},
+			aRightExpected: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyB,
+			},
+			bExpected: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyALeft,
+				RightKey:  keyARight,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			bParentExpected: &proto.RangeTreeNode{
+				Key:      keyBParent,
+				LeftKey:  keyA,
+				RightKey: keyBParentRight,
+			},
+			bLeftExpected: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyA,
+			},
+			bRightExpected: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyA,
+			},
+		},
+		// Test Case 1: Normal swap, two separate nodes, a's a right child, b's a right child
+		// This should just swap all direct references to a and b, leaving
+		// everything else intact.
+		{
+			root: keyRoot,
+			a: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyALeft,
+				RightKey:  keyARight,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			aParent: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyAParentLeft,
+				RightKey: keyA,
+			},
+			aLeft: &proto.RangeTreeNode{
+				Key:       keyALeft,
+				ParentKey: keyA,
+			},
+			aRight: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyA,
+			},
+			b: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyBParent,
+				Black:     false,
+			},
+			bParent: &proto.RangeTreeNode{
+				Key:      keyBParent,
+				LeftKey:  keyBParentLeft,
+				RightKey: keyB,
+			},
+			bLeft: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyB,
+			},
+			bRight: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyB,
+			},
+			rootExpected: keyRoot,
+			aExpected: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyBParent,
+				Black:     false,
+			},
+			aParentExpected: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyAParentLeft,
+				RightKey: keyB,
+			},
+			aLeftExpected: &proto.RangeTreeNode{
+				Key:       keyALeft,
+				ParentKey: keyB,
+			},
+			aRightExpected: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyB,
+			},
+			bExpected: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyALeft,
+				RightKey:  keyARight,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			bParentExpected: &proto.RangeTreeNode{
+				Key:      keyBParent,
+				LeftKey:  keyBParentLeft,
+				RightKey: keyA,
+			},
+			bLeftExpected: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyA,
+			},
+			bRightExpected: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyA,
+			},
+		},
+		// Test Case 2: b is a's right child, a is a right child
+		{
+			root: keyRoot,
+			a: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyALeft,
+				RightKey:  keyB,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			aParent: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyAParentLeft,
+				RightKey: keyA,
+			},
+			aLeft: &proto.RangeTreeNode{
+				Key:       keyALeft,
+				ParentKey: keyA,
+			},
+			b: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyA,
+				Black:     false,
+			},
+			bLeft: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyB,
+			},
+			bRight: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyB,
+			},
+			rootExpected: keyRoot,
+			aExpected: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyB,
+				Black:     false,
+			},
+			aParentExpected: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyAParentLeft,
+				RightKey: keyB,
+			},
+			aLeftExpected: &proto.RangeTreeNode{
+				Key:       keyALeft,
+				ParentKey: keyB,
+			},
+			bExpected: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyALeft,
+				RightKey:  keyA,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			bLeftExpected: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyA,
+			},
+			bRightExpected: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyA,
+			},
+		},
+		// Test Case 3: b is a's left child, a is a left child
+		{
+			root: keyRoot,
+			a: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyB,
+				RightKey:  keyARight,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			aParent: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyA,
+				RightKey: keyAParentRight,
+			},
+			aRight: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyA,
+			},
+			b: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyA,
+				Black:     false,
+			},
+			bLeft: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyB,
+			},
+			bRight: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyB,
+			},
+			rootExpected: keyRoot,
+			aExpected: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyB,
+				Black:     false,
+			},
+			aParentExpected: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyB,
+				RightKey: keyAParentRight,
+			},
+			aRightExpected: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyB,
+			},
+			bExpected: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyA,
+				RightKey:  keyARight,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			bLeftExpected: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyA,
+			},
+			bRightExpected: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyA,
+			},
+		},
+		// Test Case 4: b is a's right child, a is a left child
+		{
+			root: keyRoot,
+			a: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyALeft,
+				RightKey:  keyB,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			aParent: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyA,
+				RightKey: keyAParentRight,
+			},
+			aLeft: &proto.RangeTreeNode{
+				Key:       keyALeft,
+				ParentKey: keyA,
+			},
+			b: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyA,
+				Black:     false,
+			},
+			bLeft: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyB,
+			},
+			bRight: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyB,
+			},
+			rootExpected: keyRoot,
+			aExpected: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyB,
+				Black:     false,
+			},
+			aParentExpected: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyB,
+				RightKey: keyAParentRight,
+			},
+			aLeftExpected: &proto.RangeTreeNode{
+				Key:       keyALeft,
+				ParentKey: keyB,
+			},
+			bExpected: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyALeft,
+				RightKey:  keyA,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			bLeftExpected: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyA,
+			},
+			bRightExpected: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyA,
+			},
+		},
+		// Test Case 5: b is a's left child, a is a right child
+		{
+			root: keyRoot,
+			a: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyB,
+				RightKey:  keyARight,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			aParent: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyAParentLeft,
+				RightKey: keyA,
+			},
+			aRight: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyA,
+			},
+			b: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyA,
+				Black:     false,
+			},
+			bLeft: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyB,
+			},
+			bRight: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyB,
+			},
+			rootExpected: keyRoot,
+			aExpected: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyB,
+				Black:     false,
+			},
+			aParentExpected: &proto.RangeTreeNode{
+				Key:      keyAParent,
+				LeftKey:  keyAParentLeft,
+				RightKey: keyB,
+			},
+			aRightExpected: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyB,
+			},
+			bExpected: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyA,
+				RightKey:  keyARight,
+				ParentKey: keyAParent,
+				Black:     true,
+			},
+			bLeftExpected: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyA,
+			},
+			bRightExpected: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyA,
+			},
+		},
+		// Test Case 6: a is root, b is unrelated to a
+		{
+			root: keyA,
+			a: &proto.RangeTreeNode{
+				Key:      keyA,
+				LeftKey:  keyALeft,
+				RightKey: keyARight,
+				Black:    true,
+			},
+			aLeft: &proto.RangeTreeNode{
+				Key:       keyALeft,
+				ParentKey: keyA,
+			},
+			aRight: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyA,
+			},
+			b: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyBParent,
+				Black:     false,
+			},
+			bParent: &proto.RangeTreeNode{
+				Key:      keyBParent,
+				LeftKey:  keyB,
+				RightKey: keyBParentRight,
+			},
+			bLeft: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyB,
+			},
+			bRight: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyB,
+			},
+			rootExpected: keyB,
+			aExpected: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyBLeft,
+				RightKey:  keyBRight,
+				ParentKey: keyBParent,
+				Black:     false,
+			},
+			aLeftExpected: &proto.RangeTreeNode{
+				Key:       keyALeft,
+				ParentKey: keyB,
+			},
+			aRightExpected: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyB,
+			},
+			bExpected: &proto.RangeTreeNode{
+				Key:      keyB,
+				LeftKey:  keyALeft,
+				RightKey: keyARight,
+				Black:    true,
+			},
+			bParentExpected: &proto.RangeTreeNode{
+				Key:      keyBParent,
+				LeftKey:  keyA,
+				RightKey: keyBParentRight,
+			},
+			bLeftExpected: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyA,
+			},
+			bRightExpected: &proto.RangeTreeNode{
+				Key:       keyBRight,
+				ParentKey: keyA,
+			},
+		},
+		// Test Case 7: b is a's left child, a is a right child, a is root
+		{
+			root: keyA,
+			a: &proto.RangeTreeNode{
+				Key:      keyA,
+				LeftKey:  keyB,
+				RightKey: keyARight,
+				Black:    true,
+			},
+			aRight: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyA,
+			},
+			b: &proto.RangeTreeNode{
+				Key:       keyB,
+				LeftKey:   keyBLeft,
+				ParentKey: keyA,
+				Black:     false,
+			},
+			bLeft: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyB,
+			},
+			rootExpected: keyB,
+			aExpected: &proto.RangeTreeNode{
+				Key:       keyA,
+				LeftKey:   keyBLeft,
+				ParentKey: keyB,
+				Black:     false,
+			},
+			aRightExpected: &proto.RangeTreeNode{
+				Key:       keyARight,
+				ParentKey: keyB,
+			},
+			bExpected: &proto.RangeTreeNode{
+				Key:      keyB,
+				LeftKey:  keyA,
+				RightKey: keyARight,
+				Black:    true,
+			},
+			bLeftExpected: &proto.RangeTreeNode{
+				Key:       keyBLeft,
+				ParentKey: keyA,
+			},
+		},
+	}
+
+	for i, test := range testCases {
+		tc := createTreeContext(test.root, []*proto.RangeTreeNode{
+			test.a,
+			test.aRight,
+			test.aLeft,
+			test.aParent,
+			test.b,
+			test.bRight,
+			test.bLeft,
+			test.bParent,
+		})
+
+		// Perform the swap.
+		updatedA, updatedB, err := tc.swapNodes(test.a, test.b)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if e, a := test.rootExpected, tc.tree.RootKey; !e.Equal(a) {
+			t.Errorf("%d: Expected root does not match actual.\nExpected: %+snActual: %s", i, e, a)
+		}
+		checkTreeNode(t, tc, i, "a", keyA, test.aExpected, updatedA)
+		checkTreeNode(t, tc, i, "aParent", keyAParent, test.aParentExpected, nil)
+		checkTreeNode(t, tc, i, "aLeft", keyALeft, test.aLeftExpected, nil)
+		checkTreeNode(t, tc, i, "aRight", keyARight, test.aRightExpected, nil)
+		checkTreeNode(t, tc, i, "b", keyB, test.bExpected, updatedB)
+		checkTreeNode(t, tc, i, "bParent", keyBParent, test.bParentExpected, nil)
+		checkTreeNode(t, tc, i, "bLeft", keyBLeft, test.bLeftExpected, nil)
+		checkTreeNode(t, tc, i, "bRight", keyBRight, test.bRightExpected, nil)
+
+		// Perform the swap again and expect to get the original values back.
+		finalA, finalB, err := tc.swapNodes(updatedA, updatedB)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if e, a := test.root, tc.tree.RootKey; !e.Equal(a) {
+			t.Errorf("%d: Expected root does not match actual.\nExpected: %+snActual: %s", i, e, a)
+		}
+		checkTreeNode(t, tc, i, "a-reverse", keyA, test.a, finalA)
+		checkTreeNode(t, tc, i, "aParent-reverse", keyAParent, test.aParent, nil)
+		checkTreeNode(t, tc, i, "aLeft-reverse", keyALeft, test.aLeft, nil)
+		checkTreeNode(t, tc, i, "aRight-reverse", keyARight, test.aRight, nil)
+		checkTreeNode(t, tc, i, "b-reverse", keyB, test.b, finalB)
+		checkTreeNode(t, tc, i, "bParent-reverse", keyBParent, test.bParent, nil)
+		checkTreeNode(t, tc, i, "bLeft-reverse", keyBLeft, test.bLeft, nil)
+		checkTreeNode(t, tc, i, "bRight-reverse", keyBRight, test.bRight, nil)
+	}
+}
+
 // verifyTree checks to ensure that the tree is indeed balanced and a correct
 // red-black tree. It does so by checking each of the red-black tree properties.
 func verifyTree(t *testing.T, tc *treeContext, testName string) {
@@ -672,7 +1322,7 @@ func verifyTree(t *testing.T, tc *treeContext, testName string) {
 		t.Fatal(err)
 	}
 
-	verifyBinarySearchTree(t, tc, testName, root)
+	verifyBinarySearchTree(t, tc, testName, root, proto.KeyMin, proto.KeyMax)
 	// Property 1 is always correct. All nodes are already colored.
 	verifyProperty2(t, tc, testName, root)
 	// Property 3 is always correct. All leaves are black.
@@ -684,62 +1334,28 @@ func verifyTree(t *testing.T, tc *treeContext, testName string) {
 
 // verifyBinarySearchTree checks to ensure that all keys to the left of the root
 // node are less than it, and all nodes to the right of the root node are
-// greater than it. Performs this same check for all other nodes as well.
-// Note that this test can be very expensive.
-func verifyBinarySearchTree(t *testing.T, tc *treeContext, testName string, root *proto.RangeTreeNode) {
-	if root.LeftKey != nil {
-		left, err := tc.getNode(root.LeftKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-		verifyBinarySearchTreeHelper(t, tc, testName, left, root.Key, true)
+// greater than it. It recursively walks the tree to perform this same check.
+func verifyBinarySearchTree(t *testing.T, tc *treeContext, testName string, node *proto.RangeTreeNode, keyMin, keyMax proto.Key) {
+	if !node.Key.Less(keyMax) {
+		t.Errorf("%s: Failed Property BST - The key %s is not less than %s.", testName, node.Key, keyMax)
 	}
-	if root.RightKey != nil {
-		right, err := tc.getNode(root.RightKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-		verifyBinarySearchTreeHelper(t, tc, testName, right, root.Key, false)
+	if !keyMin.Less(node.Key) {
+		t.Errorf("%s: Failed Property BST - The key %s is not greater than %s.", testName, node.Key, keyMin)
 	}
-}
 
-// verifyBinarySearchTreeHelper walks the tree and recursively calls itself
-// ensures that all nodes are indeed either less or greater than the passed in
-// key. It also recursively calls itself at each node.
-func verifyBinarySearchTreeHelper(t *testing.T, tc *treeContext, testName string, node *proto.RangeTreeNode, key proto.Key, isLess bool) {
-	if node.Key.Equal(key) {
-		t.Errorf("%s: Duplicate key detected: %s", testName, key)
-	}
-	if e, a := isLess, node.Key.Less(key); e != a {
-		if isLess {
-			t.Errorf("%s: Failed Property BST - The key %s is not less than %s.", testName, node.Key, key)
-		} else {
-			t.Errorf("%s: Failed Property BST - The key %s is not greater than %s.", testName, node.Key, key)
-		}
-	}
 	if node.LeftKey != nil {
 		left, err := tc.getNode(node.LeftKey)
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Check that all nodes to the left are less or greater than the passed
-		// in key.
-		verifyBinarySearchTreeHelper(t, tc, testName, left, key, isLess)
-		// Check that all nodes to the left are less than the current node's
-		// key.
-		verifyBinarySearchTreeHelper(t, tc, testName, left, node.Key, true)
+		verifyBinarySearchTree(t, tc, testName, left, keyMin, node.Key)
 	}
 	if node.RightKey != nil {
 		right, err := tc.getNode(node.RightKey)
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Check that all nodes to the right are less or greater than the passed
-		// in key.
-		verifyBinarySearchTreeHelper(t, tc, testName, right, key, isLess)
-		// Check that all nodes to the right are greater than the current node's
-		// key.
-		verifyBinarySearchTreeHelper(t, tc, testName, right, node.Key, false)
+		verifyBinarySearchTree(t, tc, testName, right, node.Key, keyMax)
 	}
 }
 
@@ -804,9 +1420,9 @@ func verifyProperty5(t *testing.T, tc *treeContext, testName string, node *proto
 	verifyProperty5(t, tc, testName, right, blackCount, pathBlackCount)
 }
 
-// TestInsert tries inserting nodes into the range tree. The tree is verified
-// after each insert.
-func TestInsert(t *testing.T) {
+// TestTree tries both inserting nodes into and deleting node from the range
+// tree. The tree is verified after each insert or delete.
+func TestTree(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	keyRoot := proto.Key("m")
@@ -823,11 +1439,14 @@ func TestInsert(t *testing.T) {
 	// always adds keys on the far left. The second row adds keys to the left of
 	// the original root. The third row puts keys to the immediate right of the
 	// original root and the last row puts keys on the far right of the tree.
-	keys := []string{"f", "e", "d", "c", "b", "a",
+	keysInsert := []string{"f", "e", "d", "c", "b", "a",
 		"g", "h", "i", "j", "k", "l",
 		"s", "r", "q", "p", "o", "n",
-		"t", "u", "v", "w", "x", "y", "z"}
-	for _, key := range keys {
+		"t", "u", "v", "w", "x", "y",
+		"z"}
+
+	//keys := []string{"f", "e", "d", "z"}
+	for _, key := range keysInsert {
 		node := &proto.RangeTreeNode{
 			Key: proto.Key(key),
 		}
@@ -846,4 +1465,35 @@ func TestInsert(t *testing.T) {
 		t.Fatal("inserting an already existing key should fail")
 	}
 	verifyTree(t, tc, "z-repeat")
+
+	// This order of keys is designed to stress the tree in different ways.
+	// Specifically going through each of the delete case's paths. This order
+	// was chosen experimentally.
+	keysDelete := []string{"f", "e", "d", "c", "x",
+		"g", "h", "i", "j", "k", "l",
+		"z", "n", "o", "p", "q",
+		"t", "u", "v", "w", "y",
+		"r", "b", "a", "s"}
+
+	for _, key := range keysDelete {
+		{
+			node, err := tc.getNode(proto.Key(key))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tc.delete(node); err != nil {
+				t.Fatal(err)
+			}
+		}
+		{
+			node, err := tc.getNode(proto.Key(key))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if node != nil {
+				t.Fatalf("%s: node %s was not deleted", key, key)
+			}
+		}
+		verifyTree(t, tc, key)
+	}
 }

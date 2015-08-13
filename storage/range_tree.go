@@ -40,8 +40,6 @@ type treeContext struct {
 	nodes map[string]cachedNode
 }
 
-// TODO(bram): Add delete for merging ranges.
-
 // SetupRangeTree creates a new RangeTree. This should only be called as part
 // of store.BootstrapRange.
 func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats, timestamp proto.Timestamp, startKey proto.Key) error {
@@ -66,9 +64,13 @@ func (tc *treeContext) flush(b *client.Batch) error {
 	if tc.dirty {
 		b.Put(keys.RangeTreeRoot, tc.tree)
 	}
-	for _, cachedNode := range tc.nodes {
+	for key, cachedNode := range tc.nodes {
 		if cachedNode.dirty {
-			b.Put(keys.RangeTreeNodeKey(cachedNode.node.Key), cachedNode.node)
+			if cachedNode.node == nil {
+				b.Del(keys.RangeTreeNodeKey(proto.Key(key)))
+			} else {
+				b.Put(keys.RangeTreeNodeKey(proto.Key(key)), cachedNode.node)
+			}
 		}
 	}
 	return nil
@@ -100,6 +102,15 @@ func (tc *treeContext) setRootKey(key proto.Key) {
 func (tc *treeContext) setNode(node *proto.RangeTreeNode) {
 	tc.nodes[string(node.Key)] = cachedNode{
 		node:  node,
+		dirty: true,
+	}
+}
+
+// dropNode sets a node in the cache to nil. It also marks the node as dirty for
+// writing during a flush.
+func (tc *treeContext) dropNode(key proto.Key) {
+	tc.nodes[string(key)] = cachedNode{
+		node:  nil,
 		dirty: true,
 	}
 }
@@ -138,9 +149,9 @@ func isRed(node *proto.RangeTreeNode) bool {
 	return !node.Black
 }
 
-// sibling returns the other child of the node's parent. Returns nil if the node
+// getSibling returns the other child of the node's parent. Returns nil if the node
 // has no parent or its parent has only one child.
-func (tc *treeContext) sibling(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
+func (tc *treeContext) getSibling(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
 	if node == nil || node.ParentKey == nil {
 		return nil, nil
 	}
@@ -157,9 +168,9 @@ func (tc *treeContext) sibling(node *proto.RangeTreeNode) (*proto.RangeTreeNode,
 	return tc.getNode(parent.LeftKey)
 }
 
-// uncle returns the node's parent's sibling. Or nil if the node doesn't have a
+// getUncle returns the node's parent's sibling. Or nil if the node doesn't have a
 // grandparent or their parent has no sibling.
-func (tc *treeContext) uncle(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
+func (tc *treeContext) getUncle(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
 	if node == nil || node.ParentKey == nil {
 		return nil, nil
 	}
@@ -167,7 +178,7 @@ func (tc *treeContext) uncle(node *proto.RangeTreeNode) (*proto.RangeTreeNode, e
 	if err != nil {
 		return nil, err
 	}
-	return tc.sibling(parent)
+	return tc.getSibling(parent)
 }
 
 // replaceNode cuts a node away form its parent, substituting a new node or
@@ -269,8 +280,7 @@ func InsertRange(txn *client.Txn, b *client.Batch, key proto.Key) error {
 	newNode := &proto.RangeTreeNode{
 		Key: key,
 	}
-	err = tc.insert(newNode)
-	if err != nil {
+	if err := tc.insert(newNode); err != nil {
 		return err
 	}
 	return tc.flush(b)
@@ -344,7 +354,7 @@ func (tc *treeContext) insertCase2(node *proto.RangeTreeNode) error {
 // insertCase3 handles the case in which the uncle node is red. If so, the uncle
 // and parent become black and the grandparent becomes red.
 func (tc *treeContext) insertCase3(node *proto.RangeTreeNode) error {
-	uncle, err := tc.uncle(node)
+	uncle, err := tc.getUncle(node)
 	if err != nil {
 		return nil
 	}
@@ -383,8 +393,7 @@ func (tc *treeContext) insertCase4(node *proto.RangeTreeNode) error {
 		return err
 	}
 	if parent.RightKey != nil && grandparent.LeftKey != nil && node.Key.Equal(parent.RightKey) && parent.Key.Equal(grandparent.LeftKey) {
-		_, err = tc.rotateLeft(parent)
-		if err != nil {
+		if _, err := tc.rotateLeft(parent); err != nil {
 			return err
 		}
 		node, err = tc.getNode(node.Key)
@@ -431,13 +440,416 @@ func (tc *treeContext) insertCase5(node *proto.RangeTreeNode) error {
 	grandparent.Black = false
 	tc.setNode(grandparent)
 	if parent.LeftKey != nil && node.Key.Equal(parent.LeftKey) {
-		_, err = tc.rotateRight(grandparent)
-		if err != nil {
+		if _, err := tc.rotateRight(grandparent); err != nil {
 			return err
 		}
 	} else {
-		_, err = tc.rotateLeft(grandparent)
+		if _, err := tc.rotateLeft(grandparent); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DeleteRange removes a range from the RangeTree. This should only be called
+// from operations that remove ranges, such as AdminMerge.
+func DeleteRange(txn *client.Txn, b *client.Batch, key proto.Key) error {
+	tc, err := getRangeTree(txn)
+	if err != nil {
+		return err
+	}
+	node, err := tc.getNode(key)
+	if err != nil {
+		return err
+	}
+	if node == nil {
+		return util.Errorf("could not find range tree node with the key %s", key)
+	}
+	if err := tc.delete(node); err != nil {
+		return err
+	}
+	return tc.flush(b)
+}
+
+// swapNodes swaps all aspects of nodes a and b except their keys. This function
+// is needed in order to accommodate the in-place style delete.
+func (tc *treeContext) swapNodes(a, b *proto.RangeTreeNode) (*proto.RangeTreeNode, *proto.RangeTreeNode, error) {
+	newA := &proto.RangeTreeNode{
+		Key:       a.Key,
+		Black:     b.Black,
+		ParentKey: b.ParentKey,
+		LeftKey:   b.LeftKey,
+		RightKey:  b.RightKey,
+	}
+	newB := &proto.RangeTreeNode{
+		Key:       b.Key,
+		Black:     a.Black,
+		ParentKey: a.ParentKey,
+		LeftKey:   a.LeftKey,
+		RightKey:  a.RightKey,
+	}
+
+	if a.ParentKey != nil {
+		// Only change a's parent's child key if the parent is not b.
+		if !a.ParentKey.Equal(b.Key) {
+			parent, err := tc.getNode(a.ParentKey)
+			if err != nil {
+				return nil, nil, err
+			}
+			if parent.LeftKey.Equal(a.Key) {
+				parent.LeftKey = b.Key
+			} else {
+				parent.RightKey = b.Key
+			}
+			tc.setNode(parent)
+		} else {
+			newB.ParentKey = a.Key
+		}
+	} else {
+		tc.setRootKey(b.Key)
+	}
+
+	if a.LeftKey != nil {
+		if !a.LeftKey.Equal(b.Key) {
+			left, err := tc.getNode(a.LeftKey)
+			if err != nil {
+				return nil, nil, err
+			}
+			left.ParentKey = b.Key
+			tc.setNode(left)
+		} else {
+			newB.LeftKey = a.Key
+		}
+	}
+	if a.RightKey != nil {
+		if !a.RightKey.Equal(b.Key) {
+			right, err := tc.getNode(a.RightKey)
+			if err != nil {
+				return nil, nil, err
+			}
+			right.ParentKey = b.Key
+			tc.setNode(right)
+		} else {
+			newB.RightKey = a.Key
+		}
+	}
+
+	if b.ParentKey != nil {
+		// Only change b's parent's child key if the parent is not a.
+		if !b.ParentKey.Equal(a.Key) {
+			parent, err := tc.getNode(b.ParentKey)
+			if err != nil {
+				return nil, nil, err
+			}
+			if parent.LeftKey.Equal(b.Key) {
+				parent.LeftKey = a.Key
+			} else {
+				parent.RightKey = a.Key
+			}
+			tc.setNode(parent)
+		} else {
+			newA.ParentKey = b.Key
+		}
+	} else {
+		tc.setRootKey(a.Key)
+	}
+	if b.LeftKey != nil {
+		if !b.LeftKey.Equal(a.Key) {
+			left, err := tc.getNode(b.LeftKey)
+			if err != nil {
+				return nil, nil, err
+			}
+			left.ParentKey = a.Key
+			tc.setNode(left)
+		} else {
+			newA.LeftKey = b.Key
+		}
+	}
+	if b.RightKey != nil {
+		if !b.RightKey.Equal(a.Key) {
+			right, err := tc.getNode(b.RightKey)
+			if err != nil {
+				return nil, nil, err
+			}
+			right.ParentKey = a.Key
+			tc.setNode(right)
+		} else {
+			newA.RightKey = b.Key
+		}
+	}
+
+	tc.setNode(newA)
+	tc.setNode(newB)
+	return newA, newB, nil
+}
+
+// delete removes a range from the range tree.
+// Since this tree is not stored in memory but persisted through the ranges, in
+// place deletion is not possible. Instead, we use the helper function
+// swapNodes above.
+func (tc *treeContext) delete(node *proto.RangeTreeNode) error {
+	key := node.Key
+	if node.LeftKey != nil && node.RightKey != nil {
+		left, err := tc.getNode(node.LeftKey)
 		if err != nil {
+			return err
+		}
+		predecessor, err := tc.getMaxNode(left)
+		if err != nil {
+			return err
+		}
+		node, _, err = tc.swapNodes(node, predecessor)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Node will always have at most one child.
+	var child *proto.RangeTreeNode
+	var err error
+	if node.LeftKey != nil {
+		if child, err = tc.getNode(node.LeftKey); err != nil {
+			return err
+		}
+	} else if node.RightKey != nil {
+		if child, err = tc.getNode(node.RightKey); err != nil {
+			return err
+		}
+	}
+	if !isRed(node) {
+		// Paint the node to the color of the child node.
+		node.Black = !isRed(child)
+		tc.setNode(node)
+		if err := tc.deleteCase1(node); err != nil {
+			return err
+		}
+	}
+	if _, err := tc.replaceNode(node, child); err != nil {
+		return err
+	}
+
+	// Always set the root back to black
+	if node, err = tc.getNode(node.Key); err != nil {
+		return err
+	}
+	if child != nil && node.ParentKey == nil {
+		if child, err = tc.getNode(child.Key); err != nil {
+			return err
+		}
+		child.Black = true
+		tc.setNode(child)
+	}
+
+	tc.dropNode(key)
+	return nil
+}
+
+// getMaxNode walks the tree to the right until it gets to a node without a
+// right child and returns that node.
+func (tc *treeContext) getMaxNode(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
+	if node.RightKey == nil {
+		return node, nil
+	}
+	right, err := tc.getNode(node.RightKey)
+	if err != nil {
+		return nil, err
+	}
+	return tc.getMaxNode(right)
+}
+
+// deleteCase1 handles the case when node is the new root. If so, there is
+// nothing to do.
+func (tc *treeContext) deleteCase1(node *proto.RangeTreeNode) error {
+	if node.ParentKey == nil {
+		return nil
+	}
+	return tc.deleteCase2(node)
+}
+
+// deleteCase2 handles the case when node has a red sibling.
+func (tc *treeContext) deleteCase2(node *proto.RangeTreeNode) error {
+	sibling, err := tc.getSibling(node)
+	if err != nil {
+		return err
+	}
+	if isRed(sibling) {
+		parent, err := tc.getNode(node.ParentKey)
+		if err != nil {
+			return err
+		}
+		parent.Black = false
+		sibling.Black = true
+		tc.setNode(parent)
+		tc.setNode(sibling)
+		if parent.LeftKey.Equal(node.Key) {
+			if _, err := tc.rotateLeft(parent); err != nil {
+				return err
+			}
+		} else {
+			if _, err := tc.rotateRight(parent); err != nil {
+				return err
+			}
+		}
+	}
+	return tc.deleteCase3(node)
+}
+
+// deleteCase3 handles the case when node's parent, sibling and sibling's
+// children are all black.
+func (tc *treeContext) deleteCase3(node *proto.RangeTreeNode) error {
+	// This check uses cascading ifs to limit the number of db reads.
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
+	}
+	if !isRed(parent) {
+		sibling, err := tc.getSibling(node)
+		if err != nil {
+			return err
+		}
+		if !isRed(sibling) {
+			siblingLeft, err := tc.getNode(sibling.LeftKey)
+			if err != nil {
+				return err
+			}
+			if !isRed(siblingLeft) {
+				siblingRight, err := tc.getNode(sibling.RightKey)
+				if err != nil {
+					return err
+				}
+				if !isRed(siblingRight) {
+					sibling.Black = false
+					tc.setNode(sibling)
+					return tc.deleteCase1(parent)
+				}
+			}
+		}
+	}
+	return tc.deleteCase4(node)
+}
+
+// deleteCase4 handles the case when node's sibling and siblings children are
+// black, but parent is red.
+func (tc *treeContext) deleteCase4(node *proto.RangeTreeNode) error {
+	// This check uses cascading ifs to limit the number of db reads.
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
+	}
+	if isRed(parent) {
+		sibling, err := tc.getSibling(node)
+		if err != nil {
+			return err
+		}
+		if !isRed(sibling) {
+			siblingLeft, err := tc.getNode(sibling.LeftKey)
+			if err != nil {
+				return err
+			}
+			if !isRed(siblingLeft) {
+				siblingRight, err := tc.getNode(sibling.RightKey)
+				if err != nil {
+					return err
+				}
+				if !isRed(siblingRight) {
+					sibling.Black = false
+					tc.setNode(sibling)
+					parent.Black = true
+					tc.setNode(parent)
+					// This corrects the tree, no need to continue.
+					return nil
+				}
+			}
+		}
+	}
+	return tc.deleteCase5(node)
+}
+
+// deleteCase5 handles two mirror cases. The first case is when node is the left
+// child of its parent, node's sibling is black, node's sibling's right child is
+// black but left child is red. Or similarly, when node is the right child of
+// its parent, node's sibling is black, node's sibling's left child is black but
+// right child is red. The operations here actually only prepare the tree for
+// deleteCase6.
+func (tc *treeContext) deleteCase5(node *proto.RangeTreeNode) error {
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
+	}
+	sibling, err := tc.getSibling(node)
+	if err != nil {
+		return err
+	}
+	siblingLeft, err := tc.getNode(sibling.LeftKey)
+	if err != nil {
+		return err
+	}
+	siblingRight, err := tc.getNode(sibling.RightKey)
+	if err != nil {
+		return err
+	}
+	if parent.LeftKey.Equal(node.Key) &&
+		!isRed(sibling) &&
+		!isRed(siblingRight) &&
+		isRed(siblingLeft) {
+		sibling.Black = false
+		tc.setNode(sibling)
+		siblingLeft.Black = true
+		tc.setNode(siblingLeft)
+		if _, err := tc.rotateRight(sibling); err != nil {
+			return err
+		}
+	} else if parent.RightKey.Equal(node.Key) &&
+		!isRed(sibling) &&
+		!isRed(siblingLeft) &&
+		isRed(siblingRight) {
+		sibling.Black = false
+		tc.setNode(sibling)
+		siblingRight.Black = true
+		tc.setNode(siblingRight)
+		if _, err := tc.rotateLeft(sibling); err != nil {
+			return err
+		}
+	}
+	return tc.deleteCase6(node)
+}
+
+// deleteCase6 handles two mirror cases. The first case is when node is the left
+// child of its parent, node's sibling is black and node's sibling's right child
+// is red. Or similarly, when node is the right child of its parent, node's
+// sibling is black  and node's sibling's left child is red. No checks are
+// needed here since we have already been forced into this case by deleteCase5.
+func (tc *treeContext) deleteCase6(node *proto.RangeTreeNode) error {
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
+	}
+	sibling, err := tc.getSibling(node)
+	if err != nil {
+		return err
+	}
+	sibling.Black = parent.Black
+	tc.setNode(sibling)
+	parent.Black = true
+	tc.setNode(parent)
+	if node.Key.Equal(parent.LeftKey) {
+		siblingRight, err := tc.getNode(sibling.RightKey)
+		if err != nil {
+			return err
+		}
+		siblingRight.Black = true
+		tc.setNode(siblingRight)
+		if _, err := tc.rotateLeft(parent); err != nil {
+			return err
+		}
+	} else {
+		siblingLeft, err := tc.getNode(sibling.LeftKey)
+		if err != nil {
+			return err
+		}
+		siblingLeft.Black = true
+		tc.setNode(siblingLeft)
+		if _, err := tc.rotateRight(parent); err != nil {
 			return err
 		}
 	}

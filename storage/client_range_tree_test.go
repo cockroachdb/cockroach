@@ -18,6 +18,7 @@
 package storage_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -68,7 +69,7 @@ func VerifyTree(t *testing.T, tree *proto.RangeTree, nodes map[string]proto.Rang
 		t.Fatalf("%s: could not find root node with key %s", testName, tree.RootKey)
 	}
 
-	verifyBinarySearchTree(t, nodes, testName, &root)
+	verifyBinarySearchTree(t, nodes, testName, &root, proto.KeyMin, proto.KeyMax)
 	// Property 1 is always correct. All nodes are already colored.
 	verifyProperty2(t, testName, &root)
 	// Property 3 is always correct. All leaves are black.
@@ -110,40 +111,21 @@ func getLeftAndRight(t *testing.T, nodes map[string]proto.RangeTreeNode, testNam
 
 // verifyBinarySearchTree checks to ensure that all keys to the left of the root
 // node are less than it, and all nodes to the right of the root node are
-// greater than it. Performs this same check for all other nodes as well.
-// Note that this test can be very expensive.
-func verifyBinarySearchTree(t *testing.T, nodes map[string]proto.RangeTreeNode, testName string, root *proto.RangeTreeNode) {
-	left, right := getLeftAndRight(t, nodes, testName, root)
-	verifyBinarySearchTreeHelper(t, nodes, testName, left, root.Key, true)
-	verifyBinarySearchTreeHelper(t, nodes, testName, right, root.Key, false)
-}
-
-// verifyBinarySearchTreeHelper walks the tree and recursively calls itself
-// ensures that all nodes are indeed either less or greater than the passed in
-// key. It also recursively calls itself at each node.
-func verifyBinarySearchTreeHelper(t *testing.T, nodes map[string]proto.RangeTreeNode, testName string, node *proto.RangeTreeNode, key proto.Key, isLess bool) {
+// greater than it. It recursively walks the tree to perform this same check.
+func verifyBinarySearchTree(t *testing.T, nodes map[string]proto.RangeTreeNode, testName string, node *proto.RangeTreeNode, keyMin, keyMax proto.Key) {
 	if node == nil {
 		return
 	}
-	if node.Key.Equal(key) {
-		t.Errorf("%s: Duplicate key detected: %s", testName, key)
+	if !node.Key.Less(keyMax) {
+		t.Errorf("%s: Failed Property BST - The key %s is not less than %s.", testName, node.Key, keyMax)
 	}
-	if e, a := isLess, node.Key.Less(key); e != a {
-		if isLess {
-			t.Errorf("%s: Failed Property BST - The key %s is not less than %s.", testName, node.Key, key)
-		} else {
-			t.Errorf("%s: Failed Property BST - The key %s is not greater than %s.", testName, node.Key, key)
-		}
+	// We need the extra check since proto.KeyMin is actually a range start key.
+	if !keyMin.Less(node.Key) && !node.Key.Equal(proto.KeyMin) {
+		t.Errorf("%s: Failed Property BST - The key %s is not greater than %s.", testName, node.Key, keyMin)
 	}
 	left, right := getLeftAndRight(t, nodes, testName, node)
-	// Check that all nodes are less than the passed in key.
-	verifyBinarySearchTreeHelper(t, nodes, testName, left, key, isLess)
-	verifyBinarySearchTreeHelper(t, nodes, testName, right, key, isLess)
-
-	// Check that all nodes to the left are less than the current node's key.
-	verifyBinarySearchTreeHelper(t, nodes, testName, left, node.Key, true)
-	// Check that all nodes to the right are greater than the current node's key.
-	verifyBinarySearchTreeHelper(t, nodes, testName, right, node.Key, false)
+	verifyBinarySearchTree(t, nodes, testName, left, keyMin, node.Key)
+	verifyBinarySearchTree(t, nodes, testName, right, node.Key, keyMax)
 }
 
 // verifyProperty2 ensures that the root node is black.
@@ -211,9 +193,9 @@ func TestSetupRangeTree(t *testing.T) {
 	VerifyTree(t, tree, nodes, "setup")
 }
 
-// TestInsert is a similar to the one in range_tree_test but this one performs
-// actual splits.
-func TestInsert(t *testing.T) {
+// TestTree is a similar to the TestTree test in range_tree_test but this one
+// performs actual splits and merges.
+func TestTree(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -233,4 +215,15 @@ func TestInsert(t *testing.T) {
 		tree, nodes := loadTree(t, db)
 		VerifyTree(t, tree, nodes, key)
 	}
+
+	// To test merging, we just call AdminMerge on the lowest key to merge all
+	// ranges back into a single one.
+	for i := 0; i < len(keys); i++ {
+		if err := db.AdminMerge(proto.KeyMin); err != nil {
+			t.Fatal(err)
+		}
+		tree, nodes := loadTree(t, db)
+		VerifyTree(t, tree, nodes, fmt.Sprintf("remove %d", i))
+	}
+
 }

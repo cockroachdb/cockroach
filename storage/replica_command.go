@@ -1253,6 +1253,11 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeResp
 			return err
 		}
 
+		// Update the RangeTree.
+		if err := DeleteRange(txn, b, subsumedDesc.StartKey); err != nil {
+			return err
+		}
+
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
 		b.InternalAddCall(proto.Call{
