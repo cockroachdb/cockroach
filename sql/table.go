@@ -318,6 +318,9 @@ func encodeSecondaryIndexes(tableID structured.ID, indexes []structured.IndexDes
 	return secondaryIndexEntries, nil
 }
 
+// convertDatum returns a Go primitive value equivalent of val, of the
+// type expected by col. If val's type is incompatible with col, or if
+// col's type is not yet implemented, an error is returned.
 func convertDatum(col structured.ColumnDescriptor, val parser.Datum) (interface{}, error) {
 	if val == parser.DNull {
 		return nil, nil
