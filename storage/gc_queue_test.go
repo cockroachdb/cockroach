@@ -316,9 +316,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 	// Two transactions.
 	for i := 0; i < 2; i++ {
-		// 50,000 puts per transaction.
-		// TODO(spencer): increase back to 50000 once batching support is available.
-		for j := 0; j < 5000; j++ {
+		// TODO(spencer): increase once batching support is available.
+		for j := 0; j < 50; j++ {
 			pArgs := putArgs(proto.Key(fmt.Sprintf("%d-%05d", i, j)), []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
 			pArgs.Timestamp = makeTS(1, 0)
 			pArgs.Txn = txns[i]
