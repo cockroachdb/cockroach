@@ -82,17 +82,6 @@ func newTxn(db DB, depth int) *Txn {
 	return txn
 }
 
-func newTxnFromProto(db DB, depth int, t proto.Transaction) *Txn {
-	txn := newTxn(db, depth)
-	txn.Txn = t
-	return txn
-}
-
-// GetState returns the transaction protobuf.
-func (txn *Txn) GetState() proto.Transaction {
-	return txn.Txn
-}
-
 // SetDebugName sets the debug name associated with the transaction which will
 // appear in log files and the web UI. Each transaction starts out with an
 // automatically assigned debug name composed of the file and line number where
