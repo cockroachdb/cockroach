@@ -18,6 +18,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -38,6 +39,7 @@ var (
 		MaxBackoff:     5 * time.Second,
 		Multiplier:     2,
 	}
+	errMultipleEndTxn = errors.New("cannot end transaction multiple times")
 )
 
 // txnSender implements the Sender interface and is used to keep the Send
@@ -328,6 +330,7 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 		break
 	}
 	if err != nil && txn.haveTxnWrite {
+		txn.haveEndTxn = false // if we sent one, it didn't succeed
 		if replyErr := txn.Rollback(); replyErr != nil {
 			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		}
@@ -341,27 +344,38 @@ func (txn *Txn) send(calls ...proto.Call) error {
 	if len(calls) == 0 {
 		return nil
 	}
-	txn.updateState(calls)
+	if err := txn.updateState(calls); err != nil {
+		return err
+	}
 	return txn.db.send(calls...)
 }
 
-func (txn *Txn) updateState(calls []proto.Call) {
+func (txn *Txn) updateState(calls []proto.Call) error {
 	for _, c := range calls {
 		if b, ok := c.Args.(*proto.BatchRequest); ok {
 			for _, br := range b.Requests {
-				txn.updateStateForRequest(br.GetValue().(proto.Request))
+				if err := txn.updateStateForRequest(br.GetValue().(proto.Request)); err != nil {
+					return err
+				}
 			}
 			continue
 		}
-		txn.updateStateForRequest(c.Args)
+		if err := txn.updateStateForRequest(c.Args); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func (txn *Txn) updateStateForRequest(r proto.Request) {
+func (txn *Txn) updateStateForRequest(r proto.Request) error {
 	if !txn.haveTxnWrite {
 		txn.haveTxnWrite = proto.IsTransactionWrite(r)
 	}
 	if _, ok := r.(*proto.EndTransactionRequest); ok {
+		if txn.haveEndTxn {
+			return errMultipleEndTxn
+		}
 		txn.haveEndTxn = true
 	}
+	return nil
 }
