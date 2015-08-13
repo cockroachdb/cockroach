@@ -347,6 +347,18 @@ func (txn *Txn) send(calls ...proto.Call) error {
 	if err := txn.updateState(calls); err != nil {
 		return err
 	}
+
+	// If the transaction record indicates that the coordinator never wrote
+	// an intent (and the client doesn't have one lined up), then there's no
+	// need to send EndTransaction. If there is one anyways, cut it off.
+	if txn.haveEndTxn && !(txn.txn.Writing || txn.haveTxnWrite) {
+		// There's always a call if we get here.
+		lastIndex := len(calls) - 1
+		if calls[lastIndex].Method() != proto.EndTransaction {
+			panic("EndTransaction not sent as last call")
+		}
+		calls = calls[0:lastIndex]
+	}
 	return txn.db.send(calls...)
 }
 

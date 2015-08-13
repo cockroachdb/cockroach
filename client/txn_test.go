@@ -164,6 +164,35 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 	}
 }
 
+// TestCommitReadOnlyTransactionExplicit verifies that a read-only
+// transaction with an explicit EndTransaction call does not send
+// that call.
+func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	for _, withGet := range []bool{true, false} {
+		var calls []proto.Method
+		db := newDB(newTestSender(func(call proto.Call) {
+			calls = append(calls, call.Method())
+		}))
+		if err := db.Txn(func(txn *Txn) error {
+			b := &Batch{}
+			if withGet {
+				b.Get("foo")
+			}
+			return txn.CommitInBatch(b)
+		}); err != nil {
+			t.Errorf("unexpected error on commit: %s", err)
+		}
+		expectedCalls := []proto.Method(nil)
+		if withGet {
+			expectedCalls = append(expectedCalls, proto.Get)
+		}
+		if !reflect.DeepEqual(expectedCalls, calls) {
+			t.Errorf("expected %s, got %s", expectedCalls, calls)
+		}
+	}
+}
+
 // TestCommitMutatingTransaction verifies that transaction is committed
 // upon successful invocation of the retryable func.
 func TestCommitMutatingTransaction(t *testing.T) {
