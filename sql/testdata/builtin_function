@@ -4,7 +4,7 @@ SELECT LENGTH('roach7')
 LENGTH('roach7')
 6
 
-statement error LENGTH: argument type mismatch: string expected, but found int
+statement error unknown signature for LENGTH: LENGTH\(int\)
 SELECT LENGTH(23)
 
 query T colnames
@@ -13,7 +13,7 @@ SELECT UPPER('roacH7')
 UPPER('roacH7')
 ROACH7
 
-statement error UPPER: argument type mismatch: string expected, but found float
+statement error unknown signature for UPPER: UPPER\(float\)
 SELECT UPPER(2.2)
 
 query T colnames
@@ -22,8 +22,20 @@ SELECT LOWER('RoacH7')
 LOWER('RoacH7')
 roach7
 
-statement error LOWER: argument type mismatch: string expected, but found int
+statement error unknown signature for LOWER: LOWER\(int\)
 SELECT LOWER(32)
+
+# Multiplying by zero so the result is deterministic.
+query R
+SELECT RANDOM() * 0.0
+----
+0
+
+# Concatenating 'empty' because the empty string doesn't work in these tests.
+query T
+SELECT CONCAT() || 'empty'
+----
+empty
 
 query T
 SELECT CONCAT('RoacH', null, 73, 64.532)
@@ -40,7 +52,6 @@ SELECT SUBSTR('RoacH', 2, 3)
 ----
 oac
 
-# TODO(XisiHuang): the parser doesn't support the fllowing syntax
 #query T
 #SELECT SUBSTRING('RoacH', 2, 3)
 #----
@@ -71,5 +82,5 @@ SELECT SUBSTR('12345', -2, 77)
 ----
 12345
 
-statement error SUBSTR: negative substring length not allowed: -1
+statement error SUBSTR: negative substring length -1 not allowed
 SELECT SUBSTR('12345', 2, -1)

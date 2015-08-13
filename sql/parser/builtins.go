@@ -20,13 +20,32 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
+	"reflect"
 	"strconv"
 	"strings"
 )
 
+type typeList []reflect.Type
+
 type builtin struct {
-	nArgs int
-	fn    func(args DTuple) (Datum, error)
+	types typeList
+	fn    func(DTuple) (Datum, error)
+}
+
+func (b builtin) match(types typeList) bool {
+	if b.types == nil {
+		return true
+	}
+	if len(types) != len(b.types) {
+		return false
+	}
+	for i := range types {
+		if types[i] != b.types[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // The map from function name to function data. Keep the list of functions
@@ -62,103 +81,103 @@ type builtin struct {
 // Need to figure out if there is a standard set of functions or if we can
 // customize this to our liking. Would be good to support type conversion
 // functions.
-var builtins = map[string]builtin{
+var builtins = map[string][]builtin{
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
-	"length": stringBuiltin(func(s string) (Datum, error) {
+	"length": {stringBuiltin(func(s string) (Datum, error) {
 		return DInt(len(s)), nil
-	}),
+	})},
 
-	"lower": stringBuiltin(func(s string) (Datum, error) {
+	"lower": {stringBuiltin(func(s string) (Datum, error) {
 		return DString(strings.ToLower(s)), nil
-	}),
+	})},
 
-	"upper": stringBuiltin(func(s string) (Datum, error) {
+	"upper": {stringBuiltin(func(s string) (Datum, error) {
 		return DString(strings.ToUpper(s)), nil
-	}),
+	})},
 
-	// TODO(XisiHuang): support the substring(str FROM x FOR y) syntax.
-	"substring": {
-		nArgs: -1,
-		fn: func(args DTuple) (Datum, error) {
-			argsNum := len(args)
-			if argsNum != 2 && argsNum != 3 {
-				return DNull, fmt.Errorf("incorrect number of arguments: %d vs %s",
-					argsNum, "2 or 3")
-			}
+	"substr":    substringImpls,
+	"substring": substringImpls,
 
-			dstr, ok := args[0].(DString)
-			if !ok {
-				return DNull, argTypeError(args[0], dstr.Type())
-			}
-			str := string(dstr)
-
-			start, ok := args[1].(DInt)
-			if !ok {
-				return DNull, argTypeError(args[1], start.Type())
-			}
-			s := int(start)
-
-			var e int
-			if argsNum == 2 {
-				e = len(str) + 1
-			} else {
-				count, ok := args[2].(DInt)
-				if !ok {
-					return DNull, argTypeError(args[2], count.Type())
+	// concat concatenates the text representations of all the arguments.
+	// NULL arguments are ignored.
+	"concat": {
+		builtin{
+			fn: func(args DTuple) (Datum, error) {
+				var buffer bytes.Buffer
+				for _, d := range args {
+					ds, err := datumToRawString(d)
+					if err != nil {
+						return DNull, err
+					}
+					buffer.WriteString(ds)
 				}
-				c := int(count)
-				if c < 0 {
-					return DNull, fmt.Errorf("negative substring length not allowed: %d", c)
-				}
-				e = s + c
-			}
-
-			if e <= 1 || s > len(str) {
-				return DString(""), nil
-			}
-
-			if s < 1 {
-				s = 1
-			}
-			if e > len(str)+1 {
-				e = len(str) + 1
-			}
-			return DString(str[s-1 : e-1]), nil
+				return DString(buffer.String()), nil
+			},
 		},
 	},
 
-	// concat concatenate the text representations of all the arguments.
-	// NULL arguments are ignored.
-	"concat": {
-		nArgs: -1,
-		fn: func(args DTuple) (Datum, error) {
-			var buffer bytes.Buffer
-			for _, d := range args {
-				ds, err := datumToRawString(d)
-				if err != nil {
-					return DNull, err
-				}
-				buffer.WriteString(ds)
-			}
-			return DString(buffer.String()), nil
+	"random": {
+		builtin{
+			types: typeList{},
+			fn: func(args DTuple) (Datum, error) {
+				return DFloat(rand.Float64()), nil
+			},
 		},
 	},
 }
 
-func argTypeError(arg Datum, expected string) error {
-	return fmt.Errorf("argument type mismatch: %s expected, but found %s",
-		expected, arg.Type())
+var substringImpls = []builtin{
+	{
+		types: typeList{stringType, intType},
+		fn: func(args DTuple) (Datum, error) {
+			str := args[0].(DString)
+			// SQL strings are 1-indexed.
+			start := int(args[1].(DInt)) - 1
+
+			if start < 0 {
+				start = 0
+			} else if start > len(str) {
+				start = len(str)
+			}
+
+			return str[start:], nil
+		},
+	},
+	{
+		types: typeList{stringType, intType, intType},
+		fn: func(args DTuple) (Datum, error) {
+			str := args[0].(DString)
+			// SQL strings are 1-indexed.
+			start := int(args[1].(DInt)) - 1
+			length := int(args[2].(DInt))
+
+			if length < 0 {
+				return DNull, fmt.Errorf("negative substring length %d not allowed", length)
+			}
+
+			end := start + length
+			if end < 0 {
+				end = 0
+			} else if end > len(str) {
+				end = len(str)
+			}
+
+			if start < 0 {
+				start = 0
+			} else if start > len(str) {
+				start = len(str)
+			}
+
+			return str[start:end], nil
+		},
+	},
 }
 
 func stringBuiltin(f func(string) (Datum, error)) builtin {
 	return builtin{
-		nArgs: 1,
+		types: typeList{stringType},
 		fn: func(args DTuple) (Datum, error) {
-			s, ok := args[0].(DString)
-			if !ok {
-				return DNull, argTypeError(args[0], "string")
-			}
-			return f(string(s))
+			return f(string(args[0].(DString)))
 		},
 	}
 }

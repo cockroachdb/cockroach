@@ -648,37 +648,42 @@ func evalUnaryExpr(expr *UnaryExpr) (Datum, error) {
 		expr.Operator, d.Type())
 }
 
-func transformAlias(name string) string {
-	switch name {
-	case "substr":
-		return "substring"
-	default:
-		return name
-	}
-}
-
 func evalFuncExpr(expr *FuncExpr) (Datum, error) {
 	name := strings.ToLower(expr.Name.String())
-	name = transformAlias(name)
-	b, ok := builtins[name]
+
+	candidates, ok := builtins[name]
 	if !ok {
-		return DNull, fmt.Errorf("%s: unknown function", expr.Name)
-	}
-	if b.nArgs != -1 && b.nArgs != len(expr.Exprs) {
-		return DNull, fmt.Errorf("%s: incorrect number of arguments: %d vs %d",
-			expr.Name, b.nArgs, len(expr.Exprs))
+		return DNull, fmt.Errorf("unknown function %s", expr.Name)
 	}
 
 	args := make(DTuple, 0, len(expr.Exprs))
+	types := make(typeList, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		arg, err := EvalExpr(e)
 		if err != nil {
 			return DNull, err
 		}
 		args = append(args, arg)
+		types = append(types, reflect.TypeOf(arg))
 	}
 
-	res, err := b.fn(args)
+	var impl func(DTuple) (Datum, error)
+	for _, candidate := range candidates {
+		if candidate.match(types) {
+			impl = candidate.fn
+			break
+		}
+	}
+
+	if impl == nil {
+		typeNames := make([]string, 0, len(args))
+		for _, arg := range args {
+			typeNames = append(typeNames, arg.Type())
+		}
+		return DNull, fmt.Errorf("unknown signature for %s: %s(%s)", expr.Name, expr.Name, strings.Join(typeNames, ", "))
+	}
+
+	res, err := impl(args)
 	if err != nil {
 		return DNull, fmt.Errorf("%s: %v", expr.Name, err)
 	}
