@@ -131,7 +131,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	if err := db.Txn(func(txn *client.Txn) error {
 		b := &client.Batch{}
 		b.DelRange("a", "d")
-		return txn.Commit(b)
+		return txn.CommitInBatch(b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
 	}

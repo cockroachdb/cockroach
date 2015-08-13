@@ -201,7 +201,7 @@ func sumCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 
 // commitCmd commits the transaction.
 func commitCmd(c *cmd, txn *client.Txn, t *testing.T) error {
-	return txn.Commit(&client.Batch{})
+	return txn.CommitInBatch(&client.Batch{})
 }
 
 // cmdDict maps from command name to function implementing the command.

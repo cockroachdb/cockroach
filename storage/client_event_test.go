@@ -232,7 +232,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 		b := &client.Batch{}
 		b.Put("a", "asdf")
 		b.Put("c", "jkl;")
-		return txn.Commit(b)
+		return txn.CommitInBatch(b)
 	})
 	if err != nil {
 		t.Fatalf("error putting data to db: %s", err)

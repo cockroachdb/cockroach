@@ -268,11 +268,11 @@ func (txn *Txn) Run(b *Batch) error {
 	return b.fillResults()
 }
 
-// Commit executes the operations queued up within a batch and commits the
-// transaction. Explicitly committing a transaction is optional, but more
-// efficient than relying on the implicit commit performed when the transaction
-// function returns without error.
-func (txn *Txn) Commit(b *Batch) error {
+// CommitInBatch executes the operations queued up within a batch and
+// commits the transaction. Explicitly committing a transaction is
+// optional, but more efficient than relying on the implicit commit
+// performed when the transaction function returns without error.
+func (txn *Txn) CommitInBatch(b *Batch) error {
 	args := &proto.EndTransactionRequest{Commit: true}
 	reply := &proto.EndTransactionResponse{}
 	b.calls = append(b.calls, proto.Call{Args: args, Reply: reply})

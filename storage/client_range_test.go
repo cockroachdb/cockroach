@@ -265,7 +265,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 
 			b := &client.Batch{}
-			err = txn.Commit(b)
+			err = txn.CommitInBatch(b)
 			return err
 		}); err != nil {
 			t.Fatal(err)

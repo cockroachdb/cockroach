@@ -198,7 +198,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 	if err := db.Txn(func(txn *Txn) error {
 		b := &Batch{}
 		b.Put("z", "adding a write exposed a bug in #1882")
-		return txn.Commit(b)
+		return txn.CommitInBatch(b)
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
