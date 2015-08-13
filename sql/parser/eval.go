@@ -648,8 +648,18 @@ func evalUnaryExpr(expr *UnaryExpr) (Datum, error) {
 		expr.Operator, d.Type())
 }
 
+func transformAlias(name string) string {
+	switch name {
+	case "substr":
+		return "substring"
+	default:
+		return name
+	}
+}
+
 func evalFuncExpr(expr *FuncExpr) (Datum, error) {
 	name := strings.ToLower(expr.Name.String())
+	name = transformAlias(name)
 	b, ok := builtins[name]
 	if !ok {
 		return DNull, fmt.Errorf("%s: unknown function", expr.Name)
