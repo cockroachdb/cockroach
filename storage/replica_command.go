@@ -280,24 +280,24 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 		if reply.Txn.Status == proto.COMMITTED {
 			return reply, nil, proto.NewTransactionStatusError(reply.Txn, "already committed")
 		} else if reply.Txn.Status == proto.ABORTED {
-			// This case is special: If a transaction is aborted by a
-			// concurrent writer's push, the intents are not known on abort.
-			// When the owning coordinator comes along and tries to commit
-			// (with a list of intents), this error results, and we want to
-			// abort the intents, not leave them dangling. That's why we return
-			// them and make sure that skipped intents are always resolved.
-			//
-			// TODO(tschottdorf): In fact, we would want to do the local
-			// resolution as before - but that means we would need to commit a
-			// batch. This is going to be a significant refactor, so leaving it
-			// for now.
+			// If the transaction was previously aborted by a concurrent
+			// writer's push, any intents written are still open. It's only now
+			// that we know them, so we return them all for asynchronous
+			// resolution (we're currently not able to write on error, but
+			// see #1989).
 			return reply, args.Intents, proto.NewTransactionAbortedError(reply.Txn)
 		} else if txn.Epoch < reply.Txn.Epoch {
+			// TODO(tschottdorf): this leaves the Txn record (and more
+			// importantly, intents) dangling; we can't currently write on
+			// error. Would panic, but that makes TestEndTransactionWithErrors
+			// awkward.
 			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("epoch regression: %d", txn.Epoch))
 		} else if txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(txn.OrigTimestamp) {
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
 			// than the original transaction timestamp.
+
+			// TODO(tschottdorf): see above comment on epoch regression.
 			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("timestamp regression: %s", txn.OrigTimestamp))
 		}
 
@@ -377,14 +377,18 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 	}
 
 	// Persist the transaction record with updated status (& possibly timestamp).
-	// TODO(tschottdorf): if all intents resolved, can kill transaction record.
-	// Otherwise, we'll need to store all external intents along with the record,
-	// and any resolve command should also update the record, gc'ing it when the
-	// last intent goes. With that, we shouldn't even need a GC queue for Txn
-	// records. But we'll probably need another command to mark an intent as
-	// resolved since special-casing EndTransaction more seems unwise.
-	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, reply.Txn); err != nil {
-		return reply, nil, err
+	// If we've already resolved all intents locally, we actually delete the
+	// record right away - no use in keeping it around.
+	{
+		var err error
+		if txnAutoGC && len(externalIntents) == 0 {
+			err = engine.MVCCDelete(batch, ms, key, proto.ZeroTimestamp, nil /* txn */)
+		} else {
+			err = engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil /* txn */, reply.Txn)
+		}
+		if err != nil {
+			return reply, nil, err
+		}
 	}
 
 	// Run triggers if successfully committed. Any failures running

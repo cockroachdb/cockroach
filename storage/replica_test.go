@@ -758,6 +758,7 @@ func TestRangeNoGossipConfig(t *testing.T) {
 
 	req2 := endTxnArgs(txn, true /* commit */, rangeID, tc.store.StoreID())
 	req2.Timestamp = txn.Timestamp
+	req2.Intents = []proto.Intent{{Key: key}}
 
 	req3 := getArgs(key, rangeID, tc.store.StoreID())
 	req3.Timestamp = txn.Timestamp
@@ -1547,6 +1548,10 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 // can be committed/aborted before being heartbeat.
 func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	// Don't automatically GC the Txn record: We want to heartbeat the
+	// committed Transaction and compare it against our expectations.
+	// When it's removed, the heartbeat would recreate it.
+	defer withoutTxnAutoGC()()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1777,6 +1782,52 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	}
 }
 
+// TestEndTransactionGC verifies that a transaction record is immediately
+// garbage-collected upon EndTransaction iff all of the supplied intents are
+// local relative to the transaction record's location.
+func TestEndTransactionGC(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	splitKey := proto.Key("c")
+	splitTestRange(tc.store, splitKey, splitKey, t)
+	for i, test := range []struct {
+		intents []proto.Intent
+		expGC   bool
+	}{
+		// Range inside.
+		{[]proto.Intent{{Key: proto.Key("a"), EndKey: proto.Key("b")}}, true},
+		// Two intents inside.
+		{[]proto.Intent{{Key: proto.Key("a")}, {Key: proto.Key("b")}}, true},
+		// Intent range spilling over right endpoint.
+		{[]proto.Intent{{Key: proto.Key("a"), EndKey: splitKey.Next()}}, false},
+		// Intent range completely outside.
+		{[]proto.Intent{{Key: splitKey, EndKey: proto.Key("q")}}, false},
+		// Intent inside and outside.
+		{[]proto.Intent{{Key: proto.Key("a")}, {Key: splitKey}}, false},
+	} {
+		txn := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
+		args := endTxnArgs(txn, true, 1, tc.store.StoreID())
+		args.Timestamp = txn.Timestamp
+		args.Intents = test.intents
+		if _, err := tc.rng.AddCmd(tc.rng.context(), &args); err != nil {
+			t.Fatal(err)
+		}
+		var readTxn proto.Transaction
+		txnKey := keys.TransactionKey(txn.Key, txn.ID)
+		ok, err := engine.MVCCGetProto(tc.rng.rm.Engine(), txnKey, proto.ZeroTimestamp,
+			true /* consistent */, nil /* txn */, &readTxn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok != test.expGC {
+			t.Errorf("%d: unexpected gc'ed: %t", i, !ok)
+		}
+	}
+}
+
 // TestPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.
 func TestPushTxnBadKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -1799,6 +1850,12 @@ func TestPushTxnBadKey(t *testing.T) {
 // (noop) in event that pushee is already committed or aborted.
 func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	// This test simulates running into an open intent and resolving it
+	// using the Txn table. If we auto-gc'ed entries here, the entry would
+	// be deleted and the intents resolved instantaneously on successful
+	// commit (since they're on the same Range). Could split the range and have
+	// non-local intents if we ever wanted to get rid of this.
+	defer withoutTxnAutoGC()()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

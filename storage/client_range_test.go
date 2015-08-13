@@ -390,7 +390,7 @@ func TestInternalRangeLookupUseReverse(t *testing.T) {
 	for _, test := range testCases {
 		resp, err := store.ExecuteCmd(context.Background(), test.request)
 		if err != nil {
-			t.Fatalf("InternalRangeLookup error: %s", err)
+			t.Fatalf("RangeLookup error: %s", err)
 		}
 
 		rlReply := resp.(*proto.RangeLookupResponse)

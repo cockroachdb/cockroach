@@ -1109,11 +1109,24 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 }
 
+func withoutTxnAutoGC() func() {
+	orig := txnAutoGC
+	f := func() {
+		txnAutoGC = orig
+	}
+	txnAutoGC = false
+	return f
+}
+
 // TestStoreReadInconsistent verifies that gets and scans with read
 // consistency set to INCONSISTENT either push or simply ignore extant
 // intents (if they cannot be pushed), depending on the intent priority.
 func TestStoreReadInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	// The test relies on being able to commit a Txn without specifying the
+	// intent, while preserving the Txn record. Turn off
+	// automatic cleanup for this to work.
+	defer withoutTxnAutoGC()()
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -1300,6 +1313,9 @@ func TestStoreScanIntents(t *testing.T) {
 				// Commit the unpushable txn so the read can finish.
 				etArgs := endTxnArgs(txn, true, 1, store.StoreID())
 				etArgs.Timestamp = txn.Timestamp
+				for _, key := range keys {
+					etArgs.Intents = append(etArgs.Intents, proto.Intent{Key: key})
+				}
 				if _, err := store.ExecuteCmd(context.Background(), &etArgs); err != nil {
 					t.Fatal(err)
 				}
@@ -1315,7 +1331,20 @@ func TestStoreScanIntents(t *testing.T) {
 // inconsistent reads are triggering intent resolution.
 func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	// This test relies on having a committed Txn record and open intents on
+	// the same Range. This only works with auto-gc turned off; alternatively
+	// the test could move to splitting its underlying Range.
+	defer withoutTxnAutoGC()()
+	var intercept atomic.Value
+	intercept.Store(true)
+	TestingCommandFilter = func(args proto.Request) error {
+		if _, ok := args.(*proto.ResolveIntentRequest); ok && intercept.Load().(bool) {
+			return util.Errorf("error on purpose")
+		}
+		return nil
+	}
 	store, _, stopper := createTestStore(t)
+	defer func() { TestingCommandFilter = nil }()
 	defer stopper.Stop()
 
 	// Lay down 10 intents to scan over.
@@ -1331,12 +1360,16 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 		}
 	}
 
-	// Now, commit txn without resolving intents.
+	// Now, commit txn without resolving intents. If we hadn't disabled auto-gc
+	// of Txn entries in this test, the Txn entry would be removed and later
+	// attempts to resolve the intents would fail.
 	etArgs := endTxnArgs(txn, true, 1, store.StoreID())
 	etArgs.Timestamp = txn.Timestamp
 	if _, err := store.ExecuteCmd(context.Background(), &etArgs); err != nil {
 		t.Fatal(err)
 	}
+
+	intercept.Store(false) // allow async intent resolution
 
 	// Scan the range repeatedly until we've verified count.
 	sArgs := scanArgs(keys[0], keys[9].Next(), 1, store.StoreID())

@@ -84,6 +84,12 @@ const (
 // storage_test packages.
 var TestingCommandFilter func(proto.Request) error
 
+// This flag controls whether Transaction entries are automatically gc'ed
+// upon EndTransaction if they only have local intents (which can be
+// resolved synchronously with EndTransaction). Certain tests become
+// simpler with this being turned off.
+var txnAutoGC = true
+
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
 // discarded prefix to the log, so we must begin the log at an arbitrary
