@@ -537,20 +537,6 @@ func (ts *testSender) Send(_ context.Context, call proto.Call) {
 func (ts *testSender) Close() {
 }
 
-var testPutReq = &proto.PutRequest{
-	RequestHeader: proto.RequestHeader{
-		Key:          proto.Key("test-key"),
-		User:         security.RootUser,
-		UserPriority: gogoproto.Int32(-1),
-		Txn: &proto.Transaction{
-			Name: "test txn",
-		},
-		Replica: proto.Replica{
-			NodeID: 12345,
-		},
-	},
-}
-
 // TestTxnCoordSenderTxnUpdatedOnError verifies that errors adjust the
 // response transaction's timestamp and priority as appropriate.
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
@@ -580,6 +566,22 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{&proto.TransactionRetryError{Txn: proto.Transaction{
 			Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 10,
 			makeTS(10, 10), makeTS(10, 10), false},
+	}
+
+	// testPutReq is mutated in the course of this test and the test data
+	// reflect that.
+	var testPutReq = &proto.PutRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:          proto.Key("test-key"),
+			User:         security.RootUser,
+			UserPriority: gogoproto.Int32(-1),
+			Txn: &proto.Transaction{
+				Name: "test txn",
+			},
+			Replica: proto.Replica{
+				NodeID: 12345,
+			},
+		},
 	}
 
 	for i, test := range testCases {
