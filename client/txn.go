@@ -65,10 +65,16 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 // Txn is an in-progress distributed database transaction. A Txn is not safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	db           DB
-	wrapped      Sender
-	txn          proto.Transaction
-	haveTxnWrite bool // True if there were transactional writes
+	db      DB
+	wrapped Sender
+	txn     proto.Transaction
+	// haveTxnWrite is true as soon as the current attempt contains a write
+	// (prior to sending). This is in contrast to txn.Writing, which is set
+	// by the coordinator when the first intent has been created, and which
+	// does not reset in-between retries. As such, haveTxnWrite helps deter-
+	// mine whether it makes sense to add an EndTransaction when txn.Writing
+	// is (still) unset.
+	haveTxnWrite bool
 	haveEndTxn   bool // True if there was an explicit EndTransaction
 }
 
