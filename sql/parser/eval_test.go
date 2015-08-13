@@ -18,6 +18,7 @@
 package parser
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/testutils"
@@ -212,9 +213,9 @@ func TestEvalExprError(t *testing.T) {
 		{`1.0 AND true`, `cannot convert float to bool`},
 		{`'a' AND true`, `cannot convert string to bool`},
 		{`(1, 2) AND true`, `cannot convert tuple to bool`},
-		{`lower()`, `incorrect number of arguments`},
-		{`lower(1, 2)`, `incorrect number of arguments`},
-		{`lower(1)`, `argument type mismatch`},
+		{`lower()`, `unknown signature for lower: lower()`},
+		{`lower(1, 2)`, `unknown signature for lower: lower(int, int)`},
+		{`lower(1)`, `unknown signature for lower: lower(int)`},
 		{`1::bit`, `invalid cast: int -> BIT`},
 		{`1::decimal`, `invalid cast: int -> DECIMAL`},
 		{`1::date`, `invalid cast: int -> DATE`},
@@ -229,7 +230,7 @@ func TestEvalExprError(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		expr := q[0].(*Select).Exprs[0].Expr
-		if _, err := EvalExpr(expr); !testutils.IsError(err, d.expected) {
+		if _, err := EvalExpr(expr); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}
