@@ -46,15 +46,15 @@ type txnSender Txn
 
 func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 	// Send call through wrapped sender.
-	call.Args.Header().Txn = &ts.txn
+	call.Args.Header().Txn = &ts.Txn
 	ts.wrapped.Send(ctx, call)
-	ts.txn.Update(call.Reply.Header().Txn)
+	ts.Txn.Update(call.Reply.Header().Txn)
 
 	if err, ok := call.Reply.Header().GoError().(*proto.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
-		ts.txn = proto.Transaction{
-			Name:      ts.txn.Name,
-			Isolation: ts.txn.Isolation,
+		ts.Txn = proto.Transaction{
+			Name:      ts.Txn.Name,
+			Isolation: ts.Txn.Isolation,
 			Priority:  err.Txn.Priority, // acts as a minimum priority on restart
 		}
 	}
@@ -65,7 +65,7 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 type Txn struct {
 	db           DB
 	wrapped      Sender
-	txn          proto.Transaction
+	Txn          proto.Transaction
 	haveTxnWrite bool // True if there were transactional writes
 	haveEndTxn   bool // True if there was an explicit EndTransaction
 }
@@ -78,19 +78,8 @@ func newTxn(db DB, depth int) *Txn {
 	txn.db.Sender = (*txnSender)(txn)
 
 	file, line, fun := caller.Lookup(depth + 1)
-	txn.txn.Name = fmt.Sprintf("%s:%d %s", file, line, fun)
+	txn.Txn.Name = fmt.Sprintf("%s:%d %s", file, line, fun)
 	return txn
-}
-
-func newTxnFromProto(db DB, depth int, t proto.Transaction) *Txn {
-	txn := newTxn(db, depth)
-	txn.txn = t
-	return txn
-}
-
-// GetState returns the transaction protobuf.
-func (txn *Txn) GetState() proto.Transaction {
-	return txn.txn
 }
 
 // SetDebugName sets the debug name associated with the transaction which will
@@ -99,12 +88,12 @@ func (txn *Txn) GetState() proto.Transaction {
 // the transaction was created.
 func (txn *Txn) SetDebugName(name string) {
 	file, line, _ := caller.Lookup(1)
-	txn.txn.Name = fmt.Sprintf("%s:%d %s", file, line, name)
+	txn.Txn.Name = fmt.Sprintf("%s:%d %s", file, line, name)
 }
 
 // DebugName returns the debug name associated with the transaction.
 func (txn *Txn) DebugName() string {
-	return txn.txn.Name
+	return txn.Txn.Name
 }
 
 // SetSnapshotIsolation sets the transaction's isolation type to
@@ -118,7 +107,7 @@ func (txn *Txn) SetSnapshotIsolation() {
 	// TODO(pmattis): Panic if the transaction has already had
 	// operations run on it. Needs to tie into the Txn reset in case of
 	// retries.
-	txn.txn.Isolation = proto.SNAPSHOT
+	txn.Txn.Isolation = proto.SNAPSHOT
 }
 
 // InternalSetPriority sets the transaction priority. It is intended for
