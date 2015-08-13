@@ -157,22 +157,30 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 
 		// Add the new values.
 		for i, val := range vals {
-			key := structured.MakeColumnKey(cols[i].ID, primaryIndexKey)
-			if log.V(2) {
-				log.Infof("Put %q -> %v", key, val)
-			}
-			v, err := prepareVal(cols[i], val)
+			col := cols[i]
+
+			primitive, err := convertDatum(col, val)
 			if err != nil {
 				return nil, err
 			}
-			if v != nil {
+
+			key := structured.MakeColumnKey(col.ID, primaryIndexKey)
+			if primitive != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
-				b.Put(key, v)
+				if log.V(2) {
+					log.Infof("Put %q -> %v", key, val)
+				}
+
+				b.Put(key, primitive)
 			} else {
 				// The column might have already existed but is being set to NULL, so
 				// delete it.
+				if log.V(2) {
+					log.Infof("Del %q", key)
+				}
+
 				b.Del(key)
 			}
 		}
