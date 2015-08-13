@@ -522,7 +522,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 	var intents []proto.Intent
 	var err error
 	if !args.Reverse {
-		// We want to search for the metadata key greater or equal than
+		// We want to search for the metadata key greater than
 		// args.Key. Scan for both the requested key and the keys immediately
 		// afterwards, up to MaxRanges.
 		startKey, endKey := keys.MetaScanBounds(args.Key)
