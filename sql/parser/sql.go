@@ -7408,7 +7408,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
 		//line sql.y:1359
 		{
-			sqlVAL.stmt = nil
+			sqlVAL.stmt = &RenameDatabase{Name: Name(sqlDollar[3].str), NewName: Name(sqlDollar[6].str)}
 		}
 	case 299:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
