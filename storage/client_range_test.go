@@ -319,9 +319,9 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	<-waitTxnComplete
 }
 
-// TestInternalRangeLookupUseReverse tests whether the results and the results count
+// TestRangeLookupUseReverse tests whether the results and the results count
 // are correct when scanning in reverse order.
-func TestInternalRangeLookupUseReverse(t *testing.T) {
+func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
