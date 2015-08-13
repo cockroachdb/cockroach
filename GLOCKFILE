@@ -15,7 +15,7 @@ github.com/cockroachdb/c-protobuf 0f9ab7b988ca7474cf76b9a961ab03c0552abcb3
 github.com/cockroachdb/c-rocksdb 7fc876fe79b96de0e25069c9ae27e6444637bd54
 github.com/cockroachdb/c-snappy 618733f9e5bab8463b9049117a335a7a1bfc9fd5
 github.com/cockroachdb/yacc 572e006f8e6b0061ebda949d13744f5108389514
-github.com/coreos/etcd 487639b2d8492561acd27d3fe7d957b56a3c3258
+github.com/coreos/etcd 18ecc297bc913bed6fc093d66b1fa22020dba7dc
 github.com/docker/docker 7374852be9def787921aea2ca831771982badecf
 github.com/elazarl/go-bindata-assetfs 3dcc96556217539f50599357fb481ac0dc7439b9
 github.com/gogo/protobuf 98e73e511a62a9c232152f94999112c80142a813
