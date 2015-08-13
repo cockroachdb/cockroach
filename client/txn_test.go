@@ -50,13 +50,20 @@ func newTestSender(handler func(proto.Call)) SenderFunc {
 			header.Txn.ID = txnID
 		}
 		call.Reply.Reset()
+		var writing bool
 		switch call.Args.(type) {
 		case *proto.PutRequest:
 			gogoproto.Merge(call.Reply, testPutResp)
+			writing = true
+		case *proto.EndTransactionRequest:
+			writing = true
 		default:
 			// Do nothing.
 		}
 		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
+		if txn := call.Reply.Header().Txn; txn != nil {
+			txn.Writing = writing
+		}
 
 		if handler != nil {
 			handler(call)
