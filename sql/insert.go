@@ -118,26 +118,32 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 		// Write the row columns.
 		for i, val := range values {
-			if _, ok := primaryKeyCols[cols[i].ID]; ok {
+			col := cols[i]
+
+			// Make sure the value can be written to the column before proceeding.
+			primitive, err := convertDatum(col, val)
+			if err != nil {
+				return nil, err
+			}
+
+			if _, ok := primaryKeyCols[col.ID]; ok {
 				// Skip primary key columns as their values are encoded in the row
 				// sentinel key which is guaranteed to exist for as long as the row
 				// exists.
 				continue
 			}
 
-			key := structured.MakeColumnKey(cols[i].ID, primaryIndexKey)
-			if log.V(2) {
-				log.Infof("CPut %q -> %v", key, val)
-			}
-			v, err := prepareVal(cols[i], val)
-			if err != nil {
-				return nil, err
-			}
-			if v != nil {
+			if primitive != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
-				b.CPut(key, v, nil)
+
+				key := structured.MakeColumnKey(col.ID, primaryIndexKey)
+				if log.V(2) {
+					log.Infof("CPut %q -> %v", key, primitive)
+				}
+
+				b.CPut(key, primitive, nil)
 			}
 		}
 	}

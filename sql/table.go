@@ -321,7 +321,7 @@ func encodeSecondaryIndexes(tableID structured.ID, indexes []structured.IndexDes
 // TODO(tamird): make this not panic. Not critical, since a panic here
 // will just tank a single goroutine on the server and be silently
 // swallowed.
-func prepareVal(col structured.ColumnDescriptor, val parser.Expr) (interface{}, error) {
+func convertDatum(col structured.ColumnDescriptor, val parser.Datum) (interface{}, error) {
 	if val == parser.DNull {
 		return nil, nil
 	}
