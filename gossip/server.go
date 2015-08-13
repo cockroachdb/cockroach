@@ -54,7 +54,7 @@ type server struct {
 // newServer creates and returns a server struct.
 func newServer(interval time.Duration) *server {
 	s := &server{
-		is:       newInfoStore(0, nil),
+		is:       newInfoStore(0, util.UnresolvedAddr{}),
 		interval: interval,
 		incoming: newNodeSet(MaxPeers),
 		lAddrMap: map[string]clientInfo{},
@@ -148,7 +148,8 @@ func (s *server) jitteredGossipInterval() time.Duration {
 // loop via goroutine. Periodically, clients connected and awaiting
 // the next round of gossip are awoken via the conditional variable.
 func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
-	s.is.NodeAddr = rpcServer.Addr()
+	addr := rpcServer.Addr()
+	s.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &proto.GossipRequest{}); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)
 	}
