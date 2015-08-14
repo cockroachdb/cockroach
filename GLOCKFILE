@@ -23,6 +23,7 @@ github.com/coreos/etcd cf2d20c5c99ef5ef12bca87b06d9eff8f9fdacbd
 github.com/cpuguy83/go-md2man 71acacd42f85e5e82f70a55327789582a5200a90
 github.com/docker/docker 758fae5f6b079b0125a657854e7e853d638dc569
 github.com/elazarl/go-bindata-assetfs d5cac425555ca5cf00694df246e04f05e6a55150
+github.com/go-sql-driver/mysql d512f204a577a4ab037a1816604c48c9c13210be
 github.com/gogo/protobuf d3235f01ecae4901dd9f7ea6af57a352c0189deb
 github.com/golang/lint 32a87160691b3c96046c0c678fe57c5bef761456
 github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
@@ -32,6 +33,7 @@ github.com/jteeuwen/go-bindata a0ff2567cfb70903282db057e799fd826784d41d
 github.com/julienschmidt/httprouter 77a895ad01ebc98a4dc95d8355bc825ce80a56f6
 github.com/kisielk/errcheck 12fd1ab9811e54c55207f3e83134ff59829fbf21
 github.com/kisielk/gotool 58a7a198f2ec6ea7af221fd216e7f559d663ce02
+github.com/lib/pq cb1604e1bc79f4ddcb8a1d35792d3bbacdb53839
 github.com/mibk/dupl 47b66d6a523fb992d21bc375c1a2fef7320ccaa1
 github.com/montanaflynn/stats b036e5fbfe87f3ad9cef6e236e81e1973aeb4a1d
 github.com/olekukonko/tablewriter a5eefc286b03d5560735698ef36c83728a6ae560

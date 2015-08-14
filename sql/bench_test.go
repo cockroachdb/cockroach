@@ -19,10 +19,29 @@ package sql_test
 
 import (
 	"database/sql"
+	"fmt"
+	"net"
 	"testing"
 
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
+
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql/pgwire"
+	"github.com/cockroachdb/cockroach/util"
 )
+
+func runBenchmarkSelect1(b *testing.B, db *sql.DB) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rows, err := db.Query(`SELECT 1`)
+		if err != nil {
+			b.Fatal(err)
+		}
+		rows.Close()
+	}
+	b.StopTimer()
+}
 
 // benchmarkSelect1 is a benchmark of the simplest SQL query: SELECT 1. This
 // query requires no tables, expression analysis, etc. As such, it is measuring
@@ -44,15 +63,7 @@ func benchmarkSelect1(b *testing.B, scheme string) {
 	}
 	defer db.Close()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		rows, err := db.Query(`SELECT 1`)
-		if err != nil {
-			b.Fatal(err)
-		}
-		rows.Close()
-	}
-	b.StopTimer()
+	runBenchmarkSelect1(b, db)
 }
 
 func BenchmarkSelect1_HTTP(b *testing.B) {
@@ -69,4 +80,52 @@ func BenchmarkSelect1_RPC(b *testing.B) {
 
 func BenchmarkSelect1_RPCS(b *testing.B) {
 	benchmarkSelect1(b, "rpcs")
+}
+
+func BenchmarkSelect1_PGWire(b *testing.B) {
+	s := server.StartTestServer(b)
+	defer s.Stop()
+
+	pgServer := pgwire.NewServer(&pgwire.Context{
+		Context:  &s.Ctx.Context,
+		Executor: s.SQLExecutor(),
+		Stopper:  s.Stopper(),
+	})
+	if err := pgServer.Start(util.CreateTestAddr("tcp")); err != nil {
+		b.Fatal(err)
+	}
+
+	host, port, err := net.SplitHostPort(pgServer.Addr().String())
+	if err != nil {
+		b.Fatal(err)
+	}
+	datasource := fmt.Sprintf("sslmode=disable host=%s port=%s", host, port)
+
+	db, err := sql.Open("postgres", datasource)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	runBenchmarkSelect1(b, db)
+}
+
+func BenchmarkSelect1_Postgres(b *testing.B) {
+	db, err := sql.Open("postgres", "sslmode=disable host=localhost port=5432")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	runBenchmarkSelect1(b, db)
+}
+
+func BenchmarkSelect1_MySQL(b *testing.B) {
+	db, err := sql.Open("mysql", "tcp(localhost:3306)/test")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	runBenchmarkSelect1(b, db)
 }
