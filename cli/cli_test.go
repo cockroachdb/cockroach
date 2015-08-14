@@ -190,6 +190,8 @@ func Example_ranges() {
 	c.Run("range ls")
 	c.Run("kv scan")
 	c.Run("kv revscan")
+	c.Run("kv del --range a c")
+	c.Run("kv scan")
 	c.Run("quit")
 
 	// Output:
@@ -234,6 +236,10 @@ func Example_ranges() {
 	// "c"	"3"
 	// "b"	"2"
 	// "a"	"1"
+	// kv del --range a c
+	// kv scan
+	// "c"	"3"
+	// "d"	"4"
 	// quit
 	// node drained and shutdown: ok
 }
