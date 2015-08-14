@@ -15,47 +15,48 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package sql
+package sql_test
 
 import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestAllocateIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	desc := TableDescriptor{
+	desc := sql.TableDescriptor{
 		ID:   1,
 		Name: "foo",
-		Columns: []ColumnDescriptor{
+		Columns: []sql.ColumnDescriptor{
 			{Name: "a"},
 			{Name: "b"},
 		},
-		PrimaryIndex: IndexDescriptor{Name: "c", ColumnNames: []string{"a"}},
-		Indexes: []IndexDescriptor{
+		PrimaryIndex: sql.IndexDescriptor{Name: "c", ColumnNames: []string{"a"}},
+		Indexes: []sql.IndexDescriptor{
 			{Name: "d", ColumnNames: []string{"b", "a"}},
 		},
-		Privileges: NewDefaultDatabasePrivilegeDescriptor(),
+		Privileges: sql.NewDefaultDatabasePrivilegeDescriptor(),
 	}
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
 
-	expected := TableDescriptor{
+	expected := sql.TableDescriptor{
 		ID:   1,
 		Name: "foo",
-		Columns: []ColumnDescriptor{
+		Columns: []sql.ColumnDescriptor{
 			{ID: 1, Name: "a"},
 			{ID: 2, Name: "b"},
 		},
-		PrimaryIndex: IndexDescriptor{ID: 1, Name: "c", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"a"}},
-		Indexes: []IndexDescriptor{
-			{ID: 2, Name: "d", ColumnIDs: []ColumnID{2, 1}, ColumnNames: []string{"b", "a"}},
+		PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "c", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"a"}},
+		Indexes: []sql.IndexDescriptor{
+			{ID: 2, Name: "d", ColumnIDs: []sql.ColumnID{2, 1}, ColumnNames: []string{"b", "a"}},
 		},
-		Privileges:   NewDefaultDatabasePrivilegeDescriptor(),
+		Privileges:   sql.NewDefaultDatabasePrivilegeDescriptor(),
 		NextColumnID: 3,
 		NextIndexID:  3,
 	}
@@ -69,90 +70,90 @@ func TestValidateTableDesc(t *testing.T) {
 
 	testData := []struct {
 		err  string
-		desc TableDescriptor
+		desc sql.TableDescriptor
 	}{
 		{`empty table name`,
-			TableDescriptor{}},
+			sql.TableDescriptor{}},
 		{`invalid table ID 0`,
-			TableDescriptor{ID: 0, Name: "foo"}},
+			sql.TableDescriptor{ID: 0, Name: "foo"}},
 		{`table must contain at least 1 column`,
-			TableDescriptor{ID: 1, Name: "foo"}},
+			sql.TableDescriptor{ID: 1, Name: "foo"}},
 		{`empty column name`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 0},
 				},
 				NextColumnID: 2,
 			}},
 		{`invalid column ID 0`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 0, Name: "bar"},
 				},
 				NextColumnID: 2,
 			}},
 		{`table must contain a primary key`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
 				NextColumnID: 2,
 			}},
 		{`duplicate column name: "bar"`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 1, Name: "bar"},
 				},
 				NextColumnID: 2,
 			}},
 		{`column "blah" duplicate ID of column "bar": 1`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 1, Name: "blah"},
 				},
 				NextColumnID: 2,
 			}},
 		{`table must contain a primary key`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 0},
+				PrimaryIndex: sql.IndexDescriptor{ID: 0},
 				NextColumnID: 2,
 			}},
 		{`invalid index ID 0`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 0, Name: "bar", ColumnIDs: []ColumnID{0}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 0, Name: "bar", ColumnIDs: []sql.ColumnID{0}},
 				NextColumnID: 2,
 			}},
 		{`index "bar" must contain at least 1 column`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
-				Indexes: []IndexDescriptor{
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "primary", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"}},
+				Indexes: []sql.IndexDescriptor{
 					{ID: 2, Name: "bar"},
 				},
 
@@ -160,75 +161,75 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:  3,
 			}},
 		{`mismatched column IDs (1) and names (0)`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ColumnID{1}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1}},
 				NextColumnID: 2,
 				NextIndexID:  2,
 			}},
 		{`mismatched column IDs (1) and names (2)`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 2, Name: "blah"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar", "blah"}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar", "blah"}},
 				NextColumnID: 3,
 				NextIndexID:  2,
 			}},
 		{`duplicate index name: "bar"`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
-				Indexes: []IndexDescriptor{
-					{ID: 1, Name: "bar", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"}},
+				Indexes: []sql.IndexDescriptor{
+					{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"}},
 				},
 				NextColumnID: 2,
 				NextIndexID:  2,
 			}},
 		{`index "blah" duplicate ID of index "bar": 1`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
-				Indexes: []IndexDescriptor{
-					{ID: 1, Name: "blah", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"}},
+				Indexes: []sql.IndexDescriptor{
+					{ID: 1, Name: "blah", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"}},
 				},
 				NextColumnID: 2,
 				NextIndexID:  2,
 			}},
 		{`index "bar" column "bar" should have ID 1, but found ID 2`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ColumnID{2}, ColumnNames: []string{"bar"}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{2}, ColumnNames: []string{"bar"}},
 				NextColumnID: 2,
 				NextIndexID:  2,
 			}},
 		{`index "bar" contains unknown column "blah"`,
-			TableDescriptor{
+			sql.TableDescriptor{
 				ID:   1,
 				Name: "foo",
-				Columns: []ColumnDescriptor{
+				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"blah"}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"blah"}},
 				NextColumnID: 2,
 				NextIndexID:  2,
 			}},
@@ -246,25 +247,25 @@ func TestColumnTypeSQLString(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testData := []struct {
-		colType     ColumnType
+		colType     sql.ColumnType
 		expectedSQL string
 	}{
-		{ColumnType{Kind: ColumnType_BIT}, "BIT"},
-		{ColumnType{Kind: ColumnType_BIT, Width: 1}, "BIT(1)"},
-		{ColumnType{Kind: ColumnType_INT}, "INT"},
-		{ColumnType{Kind: ColumnType_INT, Width: 2}, "INT(2)"},
-		{ColumnType{Kind: ColumnType_FLOAT}, "FLOAT"},
-		{ColumnType{Kind: ColumnType_FLOAT, Precision: 3}, "FLOAT(3)"},
-		{ColumnType{Kind: ColumnType_DECIMAL}, "DECIMAL"},
-		{ColumnType{Kind: ColumnType_DECIMAL, Precision: 6}, "DECIMAL(6)"},
-		{ColumnType{Kind: ColumnType_DECIMAL, Precision: 7, Width: 8}, "DECIMAL(7,8)"},
-		{ColumnType{Kind: ColumnType_DATE}, "DATE"},
-		{ColumnType{Kind: ColumnType_TIME}, "TIME"},
-		{ColumnType{Kind: ColumnType_TIMESTAMP}, "TIMESTAMP"},
-		{ColumnType{Kind: ColumnType_CHAR}, "CHAR"},
-		{ColumnType{Kind: ColumnType_CHAR, Width: 10}, "CHAR(10)"},
-		{ColumnType{Kind: ColumnType_TEXT}, "TEXT"},
-		{ColumnType{Kind: ColumnType_BLOB}, "BLOB"},
+		{sql.ColumnType{Kind: sql.ColumnType_BIT}, "BIT"},
+		{sql.ColumnType{Kind: sql.ColumnType_BIT, Width: 1}, "BIT(1)"},
+		{sql.ColumnType{Kind: sql.ColumnType_INT}, "INT"},
+		{sql.ColumnType{Kind: sql.ColumnType_INT, Width: 2}, "INT(2)"},
+		{sql.ColumnType{Kind: sql.ColumnType_FLOAT}, "FLOAT"},
+		{sql.ColumnType{Kind: sql.ColumnType_FLOAT, Precision: 3}, "FLOAT(3)"},
+		{sql.ColumnType{Kind: sql.ColumnType_DECIMAL}, "DECIMAL"},
+		{sql.ColumnType{Kind: sql.ColumnType_DECIMAL, Precision: 6}, "DECIMAL(6)"},
+		{sql.ColumnType{Kind: sql.ColumnType_DECIMAL, Precision: 7, Width: 8}, "DECIMAL(7,8)"},
+		{sql.ColumnType{Kind: sql.ColumnType_DATE}, "DATE"},
+		{sql.ColumnType{Kind: sql.ColumnType_TIME}, "TIME"},
+		{sql.ColumnType{Kind: sql.ColumnType_TIMESTAMP}, "TIMESTAMP"},
+		{sql.ColumnType{Kind: sql.ColumnType_CHAR}, "CHAR"},
+		{sql.ColumnType{Kind: sql.ColumnType_CHAR, Width: 10}, "CHAR(10)"},
+		{sql.ColumnType{Kind: sql.ColumnType_TEXT}, "TEXT"},
+		{sql.ColumnType{Kind: sql.ColumnType_BLOB}, "BLOB"},
 	}
 	for i, d := range testData {
 		sql := d.colType.SQLString()

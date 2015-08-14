@@ -15,51 +15,52 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package sql
+package sql_test
 
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestPrivilege(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	descriptor := NewDefaultDatabasePrivilegeDescriptor()
+	descriptor := sql.NewDefaultDatabasePrivilegeDescriptor()
 
 	testCases := []struct {
 		grantee       string // User to grant/revoke privileges on.
 		grant, revoke privilege.List
-		show          []UserPrivilegeString
+		show          []sql.UserPrivilegeString
 	}{
 		{"", nil, nil,
-			[]UserPrivilegeString{{"root", "ALL"}},
+			[]sql.UserPrivilegeString{{"root", "ALL"}},
 		},
 		{"root", privilege.List{privilege.ALL}, nil,
-			[]UserPrivilegeString{{"root", "ALL"}},
+			[]sql.UserPrivilegeString{{"root", "ALL"}},
 		},
 		{"root", privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]UserPrivilegeString{{"root", "ALL"}},
+			[]sql.UserPrivilegeString{{"root", "ALL"}},
 		},
 		{"foo", privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]UserPrivilegeString{{"foo", "DROP,INSERT"}, {"root", "ALL"}},
+			[]sql.UserPrivilegeString{{"foo", "DROP,INSERT"}, {"root", "ALL"}},
 		},
 		{"bar", nil, privilege.List{privilege.INSERT, privilege.ALL},
-			[]UserPrivilegeString{{"foo", "DROP,INSERT"}, {"root", "ALL"}},
+			[]sql.UserPrivilegeString{{"foo", "DROP,INSERT"}, {"root", "ALL"}},
 		},
 		{"foo", privilege.List{privilege.ALL}, nil,
-			[]UserPrivilegeString{{"foo", "ALL"}, {"root", "ALL"}},
+			[]sql.UserPrivilegeString{{"foo", "ALL"}, {"root", "ALL"}},
 		},
 		{"foo", nil, privilege.List{privilege.SELECT, privilege.INSERT, privilege.READ, privilege.WRITE},
-			[]UserPrivilegeString{{"foo", "CREATE,DELETE,DROP,GRANT,UPDATE"}, {"root", "ALL"}},
+			[]sql.UserPrivilegeString{{"foo", "CREATE,DELETE,DROP,GRANT,UPDATE"}, {"root", "ALL"}},
 		},
 		{"foo", nil, privilege.List{privilege.ALL},
-			[]UserPrivilegeString{{"root", "ALL"}},
+			[]sql.UserPrivilegeString{{"root", "ALL"}},
 		},
 		// Validate checks that root still has ALL privileges, but we do not call it here.
 		{"root", nil, privilege.List{privilege.ALL},
-			[]UserPrivilegeString{},
+			[]sql.UserPrivilegeString{},
 		},
 	}
 
@@ -91,7 +92,7 @@ func TestPrivilege(t *testing.T) {
 
 func TestPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	descriptor := NewDefaultDatabasePrivilegeDescriptor()
+	descriptor := sql.NewDefaultDatabasePrivilegeDescriptor()
 	if err := descriptor.Validate(); err != nil {
 		t.Fatal(err)
 	}
