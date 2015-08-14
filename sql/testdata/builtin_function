@@ -92,3 +92,122 @@ SELECT SUBSTR('12345', -2, 77)
 
 statement error SUBSTR: negative substring length -1 not allowed
 SELECT SUBSTR('12345', 2, -1)
+
+query T
+SELECT concat_ws(',', 'abcde', 2, NULL, 22)
+----
+abcde,2,22
+
+query T
+SELECT split_part('abc~@~def~@~ghi', '~@~', 2)
+----
+def
+
+query T
+SELECT repeat('Pg', 4)
+----
+PgPgPgPg
+
+query T
+SELECT repeat('Pg', -1) || 'empty'
+----
+empty
+
+query T
+SELECT ascii('x')
+----
+120
+
+query T
+select ascii('禅');
+----
+31109
+
+query error ascii: the input string should not be empty
+select ascii('');
+----
+
+query T
+SELECT md5('abc')
+----
+900150983cd24fb0d6963f7d28e17f72
+
+query T
+SELECT sha1('abc')
+----
+a9993e364706816aba3e25717850c26c9cd0d89d
+
+query T
+SELECT sha256('abc')
+----
+ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+
+query T
+SELECT to_hex(2147483647)
+----
+7fffffff
+
+query T
+SELECT strpos('high', 'ig')
+----
+2
+
+query T
+SELECT btrim('xyxtrimyyx', 'xy')
+----
+trim
+
+query T
+SELECT 'a' || btrim('    postgres    ') || 'b'
+----
+apostgresb
+
+query T
+SELECT ltrim('zzzytrimxyz', 'xyz')
+----
+trimxyz
+
+query T
+SELECT ltrim('   trimxyz')
+----
+trimxyz
+
+query T
+SELECT rtrim('zzzytrimxyz', 'xyz')
+----
+zzzytrim
+
+query T
+SELECT rtrim('zzzytrimxyz   ')
+----
+zzzytrimxyz
+
+query T
+SELECT reverse('abcde')
+----
+edcba
+
+query T
+SELECT replace('abcdefabcdef', 'cd', 'XX')
+----
+abXXefabXXef
+
+query T
+SELECT replace(initcap('hi THOMAS'), ' ', '')
+----
+HiThomas
+
+query T
+SELECT initcap('THOMAS')
+----
+Thomas
+
+query T
+SELECT left('abcde', 2)
+----
+ab
+
+query T
+SELECT right('abcde', 2)
+----
+de

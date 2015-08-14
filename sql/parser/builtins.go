@@ -19,6 +19,9 @@ package parser
 
 import (
 	"bytes"
+	"crypto/md5"
+	"crypto/sha1"
+	"crypto/sha256"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -83,15 +86,15 @@ func (b builtin) match(types typeList) bool {
 // functions.
 var builtins = map[string][]builtin{
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
-	"length": {stringBuiltin(func(s string) (Datum, error) {
+	"length": {stringBuiltin1(func(s string) (Datum, error) {
 		return DInt(len(s)), nil
 	})},
 
-	"lower": {stringBuiltin(func(s string) (Datum, error) {
+	"lower": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(strings.ToLower(s)), nil
 	})},
 
-	"upper": {stringBuiltin(func(s string) (Datum, error) {
+	"upper": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(strings.ToUpper(s)), nil
 	})},
 
@@ -112,6 +115,181 @@ var builtins = map[string][]builtin{
 					buffer.WriteString(ds)
 				}
 				return DString(buffer.String()), nil
+			},
+		},
+	},
+
+	"concat_ws": {
+		builtin{
+			fn: func(args DTuple) (Datum, error) {
+				dstr, ok := args[0].(DString)
+				if !ok {
+					return DNull, fmt.Errorf("unknown signature for concat_ws: concat_ws(%s, ...)", args[0].Type())
+				}
+				sep := string(dstr)
+				var ss []string
+				for _, d := range args[1:] {
+					if d == DNull {
+						continue
+					}
+					ds, err := datumToRawString(d)
+					if err != nil {
+						return DNull, err
+					}
+					ss = append(ss, ds)
+				}
+				return DString(strings.Join(ss, sep)), nil
+			},
+		},
+	},
+
+	"split_part": {
+		builtin{
+			types: typeList{stringType, stringType, intType},
+			fn: func(args DTuple) (Datum, error) {
+				text := string(args[0].(DString))
+				sep := string(args[1].(DString))
+				field := int(args[2].(DInt))
+
+				if field <= 0 {
+					return DNull, fmt.Errorf("field position must be greater than zero")
+				}
+
+				splits := strings.Split(text, sep)
+				if field > len(splits) {
+					return DString(""), nil
+				}
+				return DString(splits[field-1]), nil
+			},
+		},
+	},
+
+	"repeat": {
+		builtin{
+			types: typeList{stringType, intType},
+			fn: func(args DTuple) (Datum, error) {
+				s := string(args[0].(DString))
+				count := int(args[1].(DInt))
+				if count < 0 {
+					count = 0
+				}
+				return DString(strings.Repeat(s, count)), nil
+			},
+		},
+	},
+
+	"ascii": {stringBuiltin1(func(s string) (Datum, error) {
+		for _, ch := range s {
+			return DInt(ch), nil
+		}
+		return nil, fmt.Errorf("the input string should not be empty")
+	})},
+
+	"md5": {stringBuiltin1(func(s string) (Datum, error) {
+		return DString(fmt.Sprintf("%x", md5.Sum([]byte(s)))), nil
+	})},
+
+	"sha1": {stringBuiltin1(func(s string) (Datum, error) {
+		return DString(fmt.Sprintf("%x", sha1.Sum([]byte(s)))), nil
+	})},
+
+	"sha256": {stringBuiltin1(func(s string) (Datum, error) {
+		return DString(fmt.Sprintf("%x", sha256.Sum256([]byte(s)))), nil
+	})},
+
+	"to_hex": {
+		builtin{
+			types: typeList{intType},
+			fn: func(args DTuple) (Datum, error) {
+				return DString(fmt.Sprintf("%x", int64(args[0].(DInt)))), nil
+			},
+		},
+	},
+
+	// TODO(XisiHuang): support the position(substring in string) syntax.
+	"strpos": {stringBuiltin2(func(s, substring string) (Datum, error) {
+		return DInt(strings.Index(s, substring) + 1), nil
+	})},
+
+	// TODO(XisiHuang): support the trim([leading|trailing|both] [characters]
+	// from string) syntax.
+	"btrim": {
+		stringBuiltin2(func(s, chars string) (Datum, error) {
+			return DString(strings.Trim(s, chars)), nil
+		}),
+		stringBuiltin1(func(s string) (Datum, error) {
+			return DString(strings.Trim(s, " ")), nil
+		}),
+	},
+
+	"ltrim": {
+		stringBuiltin2(func(s, chars string) (Datum, error) {
+			return DString(strings.TrimLeft(s, chars)), nil
+		}),
+		stringBuiltin1(func(s string) (Datum, error) {
+			return DString(strings.TrimLeft(s, " ")), nil
+		}),
+	},
+
+	"rtrim": {
+		stringBuiltin2(func(s, chars string) (Datum, error) {
+			return DString(strings.TrimRight(s, chars)), nil
+		}),
+		stringBuiltin1(func(s string) (Datum, error) {
+			return DString(strings.Trim(s, " ")), nil
+		}),
+	},
+
+	"reverse": {stringBuiltin1(func(s string) (Datum, error) {
+		runes := []rune(s)
+		for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+			runes[i], runes[j] = runes[j], runes[i]
+		}
+		return DString(string(runes)), nil
+	})},
+
+	"replace": {stringBuiltin3(func(s, from, to string) (Datum, error) {
+		return DString(strings.Replace(s, from, to, -1)), nil
+	})},
+
+	"initcap": {stringBuiltin1(func(s string) (Datum, error) {
+		return DString(strings.Title(strings.ToLower(s))), nil
+	})},
+
+	"left": {
+		builtin{
+			types: typeList{stringType, intType},
+			fn: func(args DTuple) (Datum, error) {
+				str := string(args[0].(DString))
+				n := int(args[1].(DInt))
+
+				if n < -len(str) {
+					n = 0
+				} else if n < 0 {
+					n = len(str) + n
+				} else if n > len(str) {
+					n = len(str)
+				}
+				return DString(str[:n]), nil
+			},
+		},
+	},
+
+	"right": {
+		builtin{
+			types: typeList{stringType, intType},
+			fn: func(args DTuple) (Datum, error) {
+				str := string(args[0].(DString))
+				n := int(args[1].(DInt))
+
+				if n < -len(str) {
+					n = 0
+				} else if n < 0 {
+					n = len(str) + n
+				} else if n > len(str) {
+					n = len(str)
+				}
+				return DString(str[len(str)-n:]), nil
 			},
 		},
 	},
@@ -173,11 +351,29 @@ var substringImpls = []builtin{
 	},
 }
 
-func stringBuiltin(f func(string) (Datum, error)) builtin {
+func stringBuiltin1(f func(string) (Datum, error)) builtin {
 	return builtin{
 		types: typeList{stringType},
 		fn: func(args DTuple) (Datum, error) {
 			return f(string(args[0].(DString)))
+		},
+	}
+}
+
+func stringBuiltin2(f func(string, string) (Datum, error)) builtin {
+	return builtin{
+		types: typeList{stringType, stringType},
+		fn: func(args DTuple) (Datum, error) {
+			return f(string(args[0].(DString)), string(args[1].(DString)))
+		},
+	}
+}
+
+func stringBuiltin3(f func(string, string, string) (Datum, error)) builtin {
+	return builtin{
+		types: typeList{stringType, stringType, stringType},
+		fn: func(args DTuple) (Datum, error) {
+			return f(string(args[0].(DString)), string(args[1].(DString)), string(args[2].(DString)))
 		},
 	}
 }
