@@ -218,6 +218,10 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 		return nil
 	}
 	n.filter, n.err = n.resolveQNames(where.Expr)
+	if n.err == nil {
+		// Evaluate the expression once to memoize operators and functions.
+		_, n.err = parser.EvalExpr(n.filter)
+	}
 	return n.err
 }
 
@@ -276,6 +280,10 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	// qualified name found.
 	var resolved parser.Expr
 	if resolved, n.err = n.resolveQNames(target.Expr); n.err != nil {
+		return n.err
+	}
+	// Evaluate the expression once to memoize operators and functions.
+	if _, n.err = parser.EvalExpr(resolved); n.err != nil {
 		return n.err
 	}
 	n.render = append(n.render, resolved)

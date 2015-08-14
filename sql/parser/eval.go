@@ -600,6 +600,8 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 		op = In
 	}
 
+	// TODO(pmattis): Memoize the cmpOps lookup as we've done for unaryOps and
+	// binOps.
 	f := cmpOps[cmpArgs{op, reflect.TypeOf(left), reflect.TypeOf(right)}]
 	if f != nil {
 		d, err := f(left, right)
@@ -627,12 +629,25 @@ func evalBinaryExpr(expr *BinaryExpr) (Datum, error) {
 	if err != nil {
 		return DNull, err
 	}
-	f := binOps[binArgs{expr.Operator, reflect.TypeOf(left), reflect.TypeOf(right)}]
-	if f != nil {
-		return f(left, right)
+	ltype := reflect.TypeOf(left)
+	rtype := reflect.TypeOf(right)
+	if expr.fn == nil {
+		expr.fn = binOps[binArgs{expr.Operator, ltype, rtype}]
+		expr.ltype = ltype
+		expr.rtype = rtype
 	}
-	return DNull, fmt.Errorf("unsupported binary operator: <%s> %s <%s>",
-		left.Type(), expr.Operator, right.Type())
+	if expr.fn == nil {
+		return DNull, fmt.Errorf("unsupported binary operator: <%s> %s <%s>",
+			left.Type(), expr.Operator, right.Type())
+	}
+	if expr.ltype != ltype || expr.rtype != rtype {
+		// The argument types no longer match the memoized function. This happens
+		// when a non-NULL argument becomes NULL. For example, "SELECT col+1 FROM
+		// table" where col is nullable. The SELECT does not error, but returns a
+		// NULL value for that select expression.
+		return DNull, nil
+	}
+	return expr.fn(left, right)
 }
 
 func evalUnaryExpr(expr *UnaryExpr) (Datum, error) {
@@ -640,22 +655,26 @@ func evalUnaryExpr(expr *UnaryExpr) (Datum, error) {
 	if err != nil {
 		return DNull, err
 	}
-	f := unaryOps[unaryArgs{expr.Operator, reflect.TypeOf(d)}]
-	if f != nil {
-		return f(d)
+	dtype := reflect.TypeOf(d)
+	if expr.fn == nil {
+		expr.fn = unaryOps[unaryArgs{expr.Operator, dtype}]
+		expr.dtype = dtype
 	}
-	return DNull, fmt.Errorf("unsupported unary operator: %s <%s>",
-		expr.Operator, d.Type())
+	if expr.fn == nil {
+		return DNull, fmt.Errorf("unsupported unary operator: %s <%s>",
+			expr.Operator, d.Type())
+	}
+	if expr.dtype != dtype {
+		// The argument type no longer match the memoized function. This happens
+		// when a non-NULL argument becomes NULL. For example, "SELECT -col FROM
+		// table" where col is nullable. The SELECT does not error, but returns a
+		// NULL value for that select expression.
+		return DNull, nil
+	}
+	return expr.fn(d)
 }
 
 func evalFuncExpr(expr *FuncExpr) (Datum, error) {
-	name := strings.ToLower(expr.Name.String())
-
-	candidates, ok := builtins[name]
-	if !ok {
-		return DNull, fmt.Errorf("unknown function %s", expr.Name)
-	}
-
 	args := make(DTuple, 0, len(expr.Exprs))
 	types := make(typeList, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
@@ -667,23 +686,39 @@ func evalFuncExpr(expr *FuncExpr) (Datum, error) {
 		types = append(types, reflect.TypeOf(arg))
 	}
 
-	var impl func(DTuple) (Datum, error)
-	for _, candidate := range candidates {
-		if candidate.match(types) {
-			impl = candidate.fn
-			break
+	if expr.fn.fn == nil {
+		candidates, ok := builtins[strings.ToLower(expr.Name.String())]
+		if !ok {
+			return DNull, fmt.Errorf("unknown function %s", expr.Name)
+		}
+
+		for _, candidate := range candidates {
+			if candidate.match(types) {
+				expr.fn = candidate
+				break
+			}
 		}
 	}
 
-	if impl == nil {
+	if expr.fn.fn == nil {
 		typeNames := make([]string, 0, len(args))
 		for _, arg := range args {
 			typeNames = append(typeNames, arg.Type())
 		}
-		return DNull, fmt.Errorf("unknown signature for %s: %s(%s)", expr.Name, expr.Name, strings.Join(typeNames, ", "))
+		return DNull, fmt.Errorf("unknown signature for %s: %s(%s)",
+			expr.Name, expr.Name, strings.Join(typeNames, ", "))
 	}
 
-	res, err := impl(args)
+	if !expr.fn.match(types) {
+		// The argument types no longer match the memoized function. This happens
+		// when a non-NULL argument becomes NULL and the function does not support
+		// NULL arguments. For example, "SELECT LOWER(col) FROM TABLE" where col is
+		// nullable. The SELECT does not error, but returns a NULL value for that
+		// select expression.
+		return DNull, nil
+	}
+
+	res, err := expr.fn.fn(args)
 	if err != nil {
 		return DNull, fmt.Errorf("%s: %v", expr.Name, err)
 	}
