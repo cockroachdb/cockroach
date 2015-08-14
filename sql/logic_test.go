@@ -185,7 +185,7 @@ func (t *logicTest) setUser(user string) {
 	t.db = db
 }
 
-func (t logicTest) run(path string) {
+func (t *logicTest) run(path string) {
 	defer t.close()
 
 	file, err := os.Open(path)
@@ -463,7 +463,29 @@ func TestLogic(t *testing.T) {
 			return
 		}
 		globs = []string{
+			logicTestPath + "/test/index/between/*/*.test",
+			logicTestPath + "/test/index/commute/*/*.test",
+			logicTestPath + "/test/index/delete/*/*.test",
 			logicTestPath + "/test/index/in/*/*.test",
+			logicTestPath + "/test/index/orderby/*/*.test",
+
+			// TODO(pmattis): We don't support aggregate functions.
+			// logicTestPath + "/test/random/expr/*.test",
+
+			// TODO(pmattis): We don't support tables without primary keys.
+			// logicTestPath + "/test/select*.test",
+
+			// TODO(pmattis): We don't support views.
+			// logicTestPath + "/test/index/view/*/*.test",
+
+			// TODO(pmattis): We don't support order by.
+			// logicTestPath + "/test/index/orderby_nosort/*/*.test",
+
+			// TODO(pmattis): We don't support joins.
+			// [uses joins] logicTestPath + "/test/index/random/*/*.test",
+			// [uses joins] logicTestPath + "/test/random/aggregates/*.test",
+			// [uses joins] logicTestPath + "/test/random/groupby/*.test",
+			// [uses joins] logicTestPath + "/test/random/select/*.test",
 		}
 	} else {
 		globs = []string{*testdata}
@@ -478,7 +500,11 @@ func TestLogic(t *testing.T) {
 		paths = append(paths, match...)
 	}
 
+	total := 0
 	for _, p := range paths {
-		logicTest{T: t}.run(p)
+		l := logicTest{T: t}
+		l.run(p)
+		total += l.progress
 	}
+	fmt.Printf("%d tests passed\n", total)
 }
