@@ -596,7 +596,8 @@ func formatLogEntry(entry *LogEntry, colors *colorProfile) []byte {
 func init() {
 	// Default stderrThreshold is so high that nothing gets through.
 	logging.stderrThreshold = NumSeverity
-	if tmpStr := ""; true {
+	{
+		tmpStr := ""
 		logDir = &tmpStr
 	}
 

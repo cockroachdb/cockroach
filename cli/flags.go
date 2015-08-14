@@ -148,14 +148,16 @@ func initFlags(ctx *server.Context) {
 		pf.Var(pflagValue{f.Value}, normalizeStdFlagName(f.Name), f.Usage)
 	})
 
-	if f := initCmd.Flags(); true {
+	{
+		f := initCmd.Flags()
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
 		if err := initCmd.MarkFlagRequired("stores"); err != nil {
 			panic(err)
 		}
 	}
 
-	if f := startCmd.Flags(); true {
+	{
+		f := startCmd.Flags()
 		f.BoolVar(&ctx.TransientSingleNode, "dev", ctx.TransientSingleNode, flagUsage["dev"])
 
 		// Server flags.
@@ -192,7 +194,8 @@ func initFlags(ctx *server.Context) {
 		}
 	}
 
-	if f := exterminateCmd.Flags(); true {
+	{
+		f := exterminateCmd.Flags()
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
 		if err := exterminateCmd.MarkFlagRequired("stores"); err != nil {
 			panic(err)
