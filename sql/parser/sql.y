@@ -1361,11 +1361,11 @@ rename_stmt:
   }
 | ALTER TABLE relation_expr RENAME TO name
   {
-    $$ = nil
+    $$ = &RenameTable{Name: $3, NewName: Name($6), IfExists: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME TO name
   {
-    $$ = nil
+    $$ = &RenameTable{Name: $5, NewName: Name($8), IfExists: true}
   }
 | ALTER INDEX qualified_name RENAME TO name
   {

@@ -27,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/structured"
 )
 
-// RenameDatabase alters a databsase name
+// RenameDatabase renames the database.
 // Privileges: "root" user.
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
-//          mysql >= 5.1.23 does not allow database renames
+//          mysql >= 5.1.23 does not allow database renames.
 func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	if n.Name == "" || n.NewName == "" {
 		return nil, errEmptyDatabaseName
@@ -62,6 +62,75 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	if err := p.txn.Run(&b); err != nil {
 		if _, ok := err.(*proto.ConditionFailedError); ok {
 			return nil, fmt.Errorf("the new database name %s already exists", string(n.NewName))
+		}
+		return nil, err
+	}
+
+	return &valuesNode{}, nil
+}
+
+// RenameTable renames the table.
+// Privileges: WRITE on database.
+//   Notes: postgres requires the table owner.
+//          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
+//          on the new table (and does not copy privileges over).
+func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
+	if n.NewName == "" {
+		return nil, errEmptyTableName
+	}
+
+	if err := n.Name.NormalizeTableName(p.session.Database); err != nil {
+		return nil, err
+	}
+
+	if n.Name.Table() == string(n.NewName) {
+		// Noop.
+		return &valuesNode{}, nil
+	}
+
+	dbDesc, err := p.getDatabaseDesc(n.Name.Database())
+	if err != nil {
+		return nil, err
+	}
+
+	tbKey := tableKey{dbDesc.ID, string(n.Name.Table())}.Key()
+
+	// Check if table exists.
+	gr, err := p.txn.Get(tbKey)
+	if err != nil {
+		return nil, err
+	}
+	if !gr.Exists() {
+		if n.IfExists {
+			// Noop.
+			return &valuesNode{}, nil
+		}
+		// Key does not exist, but we want it to: error out.
+		return nil, fmt.Errorf("table %q does not exist", n.Name.Table())
+	}
+
+	if !dbDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
+		return nil, fmt.Errorf("user %s does not have %s privilege on database %s",
+			p.user, parser.PrivilegeWrite, dbDesc.Name)
+	}
+
+	tableDesc, err := p.getTableDesc(n.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	tableDesc.SetName(string(n.NewName))
+
+	newTbKey := tableKey{dbDesc.ID, string(n.NewName)}.Key()
+	descKey := structured.MakeDescMetadataKey(tableDesc.GetID())
+
+	b := client.Batch{}
+	b.Put(descKey, tableDesc)
+	b.CPut(newTbKey, descKey, nil)
+	b.Del(tbKey)
+	if err := p.txn.Run(&b); err != nil {
+		if _, ok := err.(*proto.ConditionFailedError); ok {
+			return nil, fmt.Errorf("table name %q already exists", n.NewName)
 		}
 		return nil, err
 	}

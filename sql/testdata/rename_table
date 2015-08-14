@@ -1,0 +1,87 @@
+statement error table "foo" does not exist
+ALTER TABLE foo RENAME TO bar
+
+statement ok
+ALTER TABLE IF EXISTS foo RENAME TO bar
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4)
+
+query II
+SELECT * FROM kv
+----
+1 2
+3 4
+
+query T
+SHOW TABLES
+----
+kv
+
+statement ok
+ALTER TABLE kv RENAME TO new_kv
+
+statement error table "kv" does not exist
+SELECT * FROM kv
+
+query II
+SELECT * FROM new_kv
+----
+1 2
+3 4
+
+query T
+SHOW TABLES
+----
+new_kv
+
+# check the name in the descriptor, which is used by SHOW GRANTS, is also changed
+query TTT
+SHOW GRANTS ON TABLE new_kv
+----
+new_kv        root      READ,WRITE
+
+statement error empty table name
+ALTER TABLE "" RENAME TO foo
+
+statement error empty table name
+ALTER TABLE new_kv RENAME TO ""
+
+statement ok
+ALTER TABLE new_kv RENAME TO new_kv
+
+statement ok
+CREATE TABLE t (
+  c1 INT PRIMARY KEY,
+  c2 INT
+)
+
+statement error table name "new_kv" already exists
+ALTER TABLE t RENAME TO new_kv
+
+user testuser
+
+statement error user testuser does not have WRITE privilege on database test
+ALTER TABLE test.t RENAME TO t2
+
+user root
+
+statement ok
+GRANT WRITE ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+ALTER TABLE test.t RENAME TO t2
+
+query T
+SHOW TABLES FROM test
+----
+new_kv
+t2

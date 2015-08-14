@@ -7414,13 +7414,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
 		//line sql.y:1363
 		{
-			sqlVAL.stmt = nil
+			sqlVAL.stmt = &RenameTable{Name: sqlDollar[3].qname, NewName: Name(sqlDollar[6].str), IfExists: false}
 		}
 	case 300:
 		sqlDollar = sqlS[sqlpt-8 : sqlpt+1]
 		//line sql.y:1367
 		{
-			sqlVAL.stmt = nil
+			sqlVAL.stmt = &RenameTable{Name: sqlDollar[5].qname, NewName: Name(sqlDollar[8].str), IfExists: true}
 		}
 	case 301:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]

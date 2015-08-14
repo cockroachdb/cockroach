@@ -276,6 +276,8 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM "0" JOIN "0" USING (id, "0")`}, // last "0" lost its quotes.
 
 		{`ALTER DATABASE a RENAME TO b`},
+		{`ALTER TABLE a RENAME TO b`},
+		{`ALTER TABLE IF EXISTS a RENAME TO b`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)

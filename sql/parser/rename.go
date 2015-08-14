@@ -23,7 +23,10 @@
 
 package parser
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+)
 
 func (*RenameDatabase) statement() {}
 
@@ -37,15 +40,21 @@ func (node *RenameDatabase) String() string {
 	return fmt.Sprintf("ALTER DATABASE %s RENAME TO %s", node.Name, node.NewName)
 }
 
-// TODO(tschottdorf): This isn't even referenced from the grammar yet.
 func (*RenameTable) statement() {}
 
 // RenameTable represents a RENAME TABLE statement.
 type RenameTable struct {
-	Name    Name
-	NewName Name
+	Name     *QualifiedName
+	NewName  Name
+	IfExists bool
 }
 
 func (node *RenameTable) String() string {
-	return fmt.Sprintf("RENAME TABLE %s %s", node.Name, node.NewName)
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("ALTER TABLE ")
+	if node.IfExists {
+		_, _ = buf.WriteString("IF EXISTS ")
+	}
+	_, _ = buf.WriteString(fmt.Sprintf("%s RENAME TO %s", node.Name, node.NewName))
+	return buf.String()
 }
