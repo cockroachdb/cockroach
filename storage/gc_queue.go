@@ -142,7 +142,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[string]*proto.Transaction{}
-	intentMap := map[string][]proto.Key{}
+	intentMap := map[string][]proto.Intent{}
 
 	// updateOldestIntent atomically updates the oldest intent.
 	updateOldestIntent := func(intentNanos int64) {
@@ -173,7 +173,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 					if meta.Timestamp.Less(intentExp) {
 						id := string(meta.Txn.ID)
 						txnMap[id] = meta.Txn
-						intentMap[id] = append(intentMap[id], expBaseKey)
+						intentMap[id] = append(intentMap[id], proto.Intent{Key: expBaseKey})
 					} else {
 						updateOldestIntent(meta.Txn.OrigTimestamp.WallTime)
 					}
@@ -231,25 +231,18 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 	wg.Wait()
 
 	// Resolve all intents.
-	// TODO(spencer): use a batch here when available.
+	var intents []proto.Intent
 	for id, txn := range txnMap {
 		if txn.Status != proto.PENDING {
-			// The transaction was successfully pushed, so resolve the intents.
-			for _, key := range intentMap[id] {
-				resolveArgs := &proto.ResolveIntentRequest{
-					RequestHeader: proto.RequestHeader{
-						Timestamp: now,
-						Key:       key,
-						User:      security.RootUser,
-						Txn:       txn,
-					},
-				}
-				if _, err := repl.AddCmd(repl.context(), resolveArgs); err != nil {
-					log.Warningf("resolve of key %q failed: %s", key, err)
-					updateOldestIntent(txn.OrigTimestamp.WallTime)
-				}
+			for _, intent := range intentMap[id] {
+				intent.Txn = *txn
+				intents = append(intents, intent)
 			}
 		}
+	}
+
+	if len(intents) > 0 {
+		repl.resolveIntents(repl.context(), intents)
 	}
 
 	// Send GC request through range.

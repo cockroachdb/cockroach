@@ -814,6 +814,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	}
 	req2 := endTxnArgs(txn, true /* commit */, rangeID, tc.store.StoreID())
 	req2.Timestamp = txn.Timestamp
+	req2.Intents = []proto.Intent{{Key: key}}
 	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req2); err != nil {
 		t.Fatal(err)
 	}
