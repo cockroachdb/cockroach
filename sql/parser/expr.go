@@ -48,6 +48,7 @@ func (NullVal) expr()         {}
 func (*QualifiedName) expr()  {}
 func (Tuple) expr()           {}
 func (Row) expr()             {}
+func (Array) expr()           {}
 func (*Subquery) expr()       {}
 func (*BinaryExpr) expr()     {}
 func (*UnaryExpr) expr()      {}
@@ -472,6 +473,13 @@ type Row Exprs
 
 func (node Row) String() string {
 	return fmt.Sprintf("ROW(%s)", Exprs(node))
+}
+
+// Array represents an array constructor.
+type Array Exprs
+
+func (node Array) String() string {
+	return fmt.Sprintf("ARRAY[%s]", Exprs(node))
 }
 
 // Exprs represents a list of value expressions. It's not a valid expression

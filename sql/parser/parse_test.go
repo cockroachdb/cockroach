@@ -356,6 +356,11 @@ func TestParse2(t *testing.T) {
 		// See #1948.
 		{`SELECT~~+~++~bd(*)`,
 			`SELECT ~ ~ + ~ + + ~ bd(*)`},
+		// See #1957.
+		{`SELECT+y[array[]]`,
+			`SELECT + y[ARRAY[]]`},
+		{`SELECT(0)FROM y[array[]]`,
+			`SELECT (0) FROM y[ARRAY[]]`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)

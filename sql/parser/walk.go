@@ -96,6 +96,11 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 			t[i] = WalkExpr(v, t[i])
 		}
 
+	case Array:
+		for i := range t {
+			t[i] = WalkExpr(v, t[i])
+		}
+
 	case Datum:
 		// Terminal node: nothing to do.
 
