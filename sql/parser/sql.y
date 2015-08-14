@@ -200,12 +200,14 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <expr>  a_expr b_expr c_expr a_expr_const
 %type <expr>  in_expr
 %type <expr>  having_clause
-%type <empty> func_table array_expr
+%type <empty> func_table
+%type <expr>  array_expr
 %type <empty> exclusion_where_clause
 %type <empty> rowsfrom_item rowsfrom_list opt_col_def_list
 %type <empty> opt_ordinality
 %type <empty> exclusion_constraint_list exclusion_constraint_elem
-%type <empty> type_list array_expr_list
+%type <empty> type_list
+%type <exprs> array_expr_list
 %type <expr>  row explicit_row implicit_row
 %type <expr>  case_expr case_arg case_default
 %type <when>  when_clause
@@ -2839,8 +2841,12 @@ c_expr:
   {
     $$ = &ExistsExpr{Subquery: &Subquery{Select: $2.(SelectStatement)}}
   }
-| ARRAY select_with_parens {}
-| ARRAY array_expr {}
+// TODO(pmattis): Support this notation?
+// | ARRAY select_with_parens {}
+| ARRAY array_expr
+  {
+    $$ = $2
+  }
 | explicit_row
   {
     $$ = $1
@@ -2849,7 +2855,8 @@ c_expr:
   {
     $$ = $1
   }
-| GROUPING '(' expr_list ')' {}
+// TODO(pmattis): Support this notation?
+// | GROUPING '(' expr_list ')' {}
 
 func_application:
   func_name '(' ')'
@@ -3101,13 +3108,28 @@ type_list:
 | type_list ',' typename {}
 
 array_expr:
-  '[' expr_list ']' {}
-| '[' array_expr_list ']' {}
-| '[' ']' {}
+  '[' expr_list ']'
+  {
+    $$ = Array($2)
+  }
+| '[' array_expr_list ']'
+  {
+    $$ = Array($2)
+  }
+| '[' ']'
+  {
+    $$ = Array(nil)
+  }
 
 array_expr_list:
-  array_expr {}
-| array_expr_list ',' array_expr {}
+  array_expr
+  {
+    $$ = Exprs{$1}
+  }
+| array_expr_list ',' array_expr
+  {
+    $$ = append($1, $3)
+  }
 
 extract_list:
   extract_arg FROM a_expr {}
