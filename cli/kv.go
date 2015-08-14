@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 //
-// TODO(pmattis): ConditionalPut, DeleteRange.
+// TODO(pmattis): ConditionalPut.
 
 package cli
 
@@ -214,6 +214,37 @@ func runDel(cmd *cobra.Command, args []string) {
 	}
 }
 
+// A delRangeCmd deletes the values for a range of keys.
+// [startKey, endKey).
+var delRangeCmd = &cobra.Command{
+	Use:   "delrange [options] <startKey> <endKey>",
+	Short: "deletes the values for a range of keys",
+	Long: `
+Deletes the values for the range of keys [startKey, endKey).
+`,
+	Run: runDelRange,
+}
+
+func runDelRange(cmd *cobra.Command, args []string) {
+	if len(args) == 0 {
+		cmd.Usage()
+		return
+	}
+
+	kvDB := makeDBClient()
+	if kvDB == nil {
+		return
+	}
+
+	if err := kvDB.DelRange(
+		unquoteArg(args[0], true /* disallow system keys */),
+		unquoteArg(args[1], true /* disallow system keys */),
+	); err != nil {
+		fmt.Fprintf(osStderr, "delrange failed: %s\n", err)
+		osExit(1)
+	}
+}
+
 // A scanCmd fetches the key/value pairs for a specified
 // range.
 var scanCmd = &cobra.Command{
@@ -316,6 +347,7 @@ var kvCmds = []*cobra.Command{
 	putCmd,
 	incCmd,
 	delCmd,
+	delRangeCmd,
 	scanCmd,
 	reverseScanCmd,
 }
