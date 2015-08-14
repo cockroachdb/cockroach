@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/structured"
 )
 
@@ -66,9 +67,8 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			return nil, err
 		}
 
-		if !tableDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
-			return nil, fmt.Errorf("user %s does not have %s privilege on table %s",
-				p.user, parser.PrivilegeWrite, tableDesc.Name)
+		if err := p.checkPrivilege(&tableDesc, privilege.WRITE); err != nil {
+			return nil, err
 		}
 
 		if _, err = p.Truncate(&parser.Truncate{Tables: n.Names[i : i+1]}); err != nil {
@@ -123,9 +123,8 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 		return nil, err
 	}
 
-	if !desc.HasPrivilege(p.user, parser.PrivilegeWrite) {
-		return nil, fmt.Errorf("user %s does not have %s privilege on database %s",
-			p.user, parser.PrivilegeWrite, desc.Name)
+	if err := p.checkPrivilege(&desc, privilege.WRITE); err != nil {
+		return nil, err
 	}
 
 	tbNames, err := p.getTableNames(&desc)

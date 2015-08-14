@@ -19,7 +19,6 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
 )
@@ -39,11 +38,8 @@ func (dk databaseKey) Name() string {
 
 func makeDatabaseDesc(p *parser.CreateDatabase) structured.DatabaseDescriptor {
 	return structured.DatabaseDescriptor{
-		Name: p.Name.String(),
-		PrivilegeDescriptor: structured.PrivilegeDescriptor{
-			Read:  []string{security.RootUser},
-			Write: []string{security.RootUser},
-		},
+		Name:       p.Name.String(),
+		Privileges: structured.NewDefaultDatabasePrivilegeDescriptor(),
 	}
 }
 

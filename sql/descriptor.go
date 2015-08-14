@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -45,16 +46,22 @@ type descriptorKey interface {
 // TODO(marc): this is getting rather large.
 type descriptorProto interface {
 	gogoproto.Message
-	Grant(*parser.Grant) error
-	Revoke(*parser.Revoke) error
-	Show() (structured.UserPrivilegeList, error)
-	HasPrivilege(string, parser.PrivilegeType) bool
+	GetPrivileges() *structured.PrivilegeDescriptor
 	GetID() structured.ID
 	SetID(structured.ID)
 	TypeName() string
 	GetName() string
 	SetName(string)
 	Validate() error
+}
+
+// checkPrivilege verifies that p.user has `privilege` on `descriptor`.
+func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege.Kind) error {
+	if descriptor.GetPrivileges().CheckPrivilege(p.user, privilege) {
+		return nil
+	}
+	return fmt.Errorf("user %s does not have %s privilege on %s %s",
+		p.user, privilege, descriptor.TypeName(), descriptor.GetName())
 }
 
 // writeDescriptor takes a Table or Database descriptor and writes it

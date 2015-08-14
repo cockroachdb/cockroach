@@ -91,7 +91,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 		wantedUsers[u] = struct{}{}
 	}
 
-	userPrivileges, err := descriptor.Show()
+	userPrivileges, err := descriptor.GetPrivileges().Show()
 	if err != nil {
 		return nil, err
 	}
@@ -104,9 +104,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 		v.rows = append(v.rows, []parser.Datum{
 			parser.DString(descriptor.GetName()),
 			parser.DString(userPriv.User),
-			// The default stringer uses ", " separators. Strip whitespace
-			// to make things easier.
-			parser.DString(userPriv.Privileges.Join(",")),
+			parser.DString(userPriv.Privileges),
 		})
 	}
 	return v, nil

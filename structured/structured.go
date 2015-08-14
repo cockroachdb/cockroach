@@ -20,9 +20,6 @@ package structured
 import (
 	"errors"
 	"fmt"
-	"sort"
-
-	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
@@ -221,7 +218,8 @@ func (desc *TableDescriptor) Validate() error {
 			}
 		}
 	}
-	return nil
+	// Validate the privilege descriptor.
+	return desc.Privileges.Validate()
 }
 
 // FindColumnByName finds the column with specified name.
@@ -291,68 +289,6 @@ func (desc *DatabaseDescriptor) Validate() error {
 	if desc.ID == 0 {
 		return fmt.Errorf("invalid database ID 0")
 	}
-	if len(desc.Read) == 0 {
-		return fmt.Errorf("empty Read permissions")
-	}
-	if len(desc.Write) == 0 {
-		return fmt.Errorf("empty Write permissions")
-	}
-	return nil
-}
-
-// Grant adds new privileges to this descriptor for a given list of users.
-func (p *PrivilegeDescriptor) Grant(n *parser.Grant) error {
-	permissions, err := permissionsFromDescriptor(p)
-	if err != nil {
-		return err
-	}
-
-	if err := permissions.Grant(n); err != nil {
-		return err
-	}
-
-	if err := permissions.FillDescriptor(p); err != nil {
-		return err
-	}
-	return nil
-}
-
-// Revoke removes privileges from this descriptor for a given list of users.
-func (p *PrivilegeDescriptor) Revoke(n *parser.Revoke) error {
-	permissions, err := permissionsFromDescriptor(p)
-	if err != nil {
-		return err
-	}
-
-	if err := permissions.Revoke(n); err != nil {
-		return err
-	}
-
-	if err := permissions.FillDescriptor(p); err != nil {
-		return err
-	}
-	return nil
-}
-
-// Show returns the list of users and associated privileges for this descriptor.
-func (p *PrivilegeDescriptor) Show() (UserPrivilegeList, error) {
-	permissions, err := permissionsFromDescriptor(p)
-	if err != nil {
-		return nil, err
-	}
-
-	return permissions.Show(), nil
-}
-
-// HasPrivilege returns true if `user` has `privilege` on this descriptor.
-func (p *PrivilegeDescriptor) HasPrivilege(user string, privilege parser.PrivilegeType) bool {
-	var privUsers []string
-	switch privilege {
-	case parser.PrivilegeRead:
-		privUsers = p.Read
-	case parser.PrivilegeWrite:
-		privUsers = p.Write
-	}
-	result := sort.SearchStrings(privUsers, user)
-	return result < len(privUsers) && privUsers[result] == user
+	// Validate the privilege descriptor.
+	return desc.Privileges.Validate()
 }

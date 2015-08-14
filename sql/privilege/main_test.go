@@ -13,33 +13,20 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Marc Berhault (marc@cockroachlabs.com)
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package sql
+package privilege_test
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	// Needed for the -verbosity flag on circleci tests.
+	_ "github.com/cockroachdb/cockroach/util/log"
 )
 
-func TestMakeDatabaseDesc(t *testing.T) {
-	defer leaktest.AfterTest(t)
+//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
 
-	stmt, err := parser.Parse("CREATE DATABASE test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	desc := makeDatabaseDesc(stmt[0].(*parser.CreateDatabase))
-	if desc.Name != "test" {
-		t.Fatalf("expected Name == test, got %s", desc.Name)
-	}
-	// ID is not set yet.
-	if desc.ID != 0 {
-		t.Fatalf("expected ID == 0, got %d", desc.ID)
-	}
-	if len(desc.GetPrivileges().Users) != 1 {
-		t.Fatalf("wrong number of privilege users, expected 1, got: %d", len(desc.GetPrivileges().Users))
-	}
+func TestMain(m *testing.M) {
+	leaktest.TestMainWithLeakCheck(m)
 }

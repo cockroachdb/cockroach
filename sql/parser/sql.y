@@ -20,6 +20,7 @@
 
 %{
 package parser
+import "github.com/cockroachdb/cockroach/sql/privilege"
 %}
 
 %union {
@@ -54,8 +55,8 @@ package parser
   limit          *Limit
   targetList     TargetList
   targetListPtr  *TargetList
-  privilegeType  PrivilegeType
-  privilegeList  PrivilegeList
+  privilegeType  privilege.Kind
+  privilegeList  privilege.List
 }
 
 %type <stmts> stmt_block
@@ -760,31 +761,61 @@ privilege_target:
     $$ = TargetList{Databases: NameList($2)}
   }
 
+// ALL is always by itself.
 privileges:
   ALL
   {
-    $$ = []PrivilegeType{PrivilegeAll}
+    $$ = privilege.List{privilege.ALL}
   }
   | privilege_list { }
 
 privilege_list:
   privilege
   {
-    $$ = []PrivilegeType{$1}
+    $$ = privilege.List{$1}
   }
   | privilege_list ',' privilege
   {
     $$ = append($1, $3)
   }
 
+// This list must match the list of privileges in sql/privilege/privilege.go.
 privilege:
-  READ
+  CREATE
   {
-    $$ = PrivilegeRead
+    $$ = privilege.CREATE
   }
-  | WRITE
+| DROP
   {
-    $$ = PrivilegeWrite
+    $$ = privilege.DROP
+  }
+| GRANT
+  {
+    $$ = privilege.GRANT
+  }
+| SELECT
+  {
+    $$ = privilege.SELECT
+  }
+| INSERT
+  {
+    $$ = privilege.INSERT
+  }
+| DELETE
+  {
+    $$ = privilege.DELETE
+  }
+| UPDATE
+  {
+    $$ = privilege.UPDATE
+  }
+| READ
+  {
+    $$ = privilege.READ
+  }
+| WRITE
+  {
+    $$ = privilege.WRITE
   }
 
 // TODO(marc): this should not be 'name', but should instead be a

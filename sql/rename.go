@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/structured"
 )
 
@@ -109,9 +110,8 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, fmt.Errorf("table %q does not exist", n.Name.Table())
 	}
 
-	if !dbDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
-		return nil, fmt.Errorf("user %s does not have %s privilege on database %s",
-			p.user, parser.PrivilegeWrite, dbDesc.Name)
+	if err := p.checkPrivilege(dbDesc, privilege.WRITE); err != nil {
+		return nil, err
 	}
 
 	tableDesc, err := p.getTableDesc(n.Name)

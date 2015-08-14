@@ -18,11 +18,10 @@
 package sql
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -40,9 +39,8 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 			return nil, err
 		}
 
-		if !tableDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
-			return nil, fmt.Errorf("user %s does not have %s privilege on table %s",
-				p.user, parser.PrivilegeWrite, tableDesc.Name)
+		if err := p.checkPrivilege(tableDesc, privilege.WRITE); err != nil {
+			return nil, err
 		}
 
 		tablePrefix := structured.MakeTablePrefix(tableDesc.ID)

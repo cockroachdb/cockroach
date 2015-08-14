@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 )
 
 // CreateDatabase creates a database.
@@ -58,9 +59,8 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	if !dbDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
-		return nil, fmt.Errorf("user %s does not have %s privilege on database %s",
-			p.user, parser.PrivilegeWrite, dbDesc.Name)
+	if err := p.checkPrivilege(dbDesc, privilege.WRITE); err != nil {
+		return nil, err
 	}
 
 	desc, err := makeTableDesc(n)
@@ -68,7 +68,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 	// Inherit permissions from the database descriptor.
-	desc.PrivilegeDescriptor = dbDesc.PrivilegeDescriptor
+	desc.Privileges = dbDesc.GetPrivileges()
 
 	if err := desc.AllocateIDs(); err != nil {
 		return nil, err

@@ -5,23 +5,29 @@ query TTT colnames
 SHOW GRANTS ON DATABASE a
 ----
 Database User Privileges
-a        root READ,WRITE
+a        root ALL
 
 statement error TODO\(marc\): implement SHOW GRANT with no targets
 SHOW GRANTS
 
-statement error root user does not have read privilege
-REVOKE READ ON DATABASE a FROM root
+statement error root user does not have ALL privileges
+REVOKE SELECT ON DATABASE a FROM root
 
 statement ok
 GRANT ALL ON DATABASE a TO readwrite, "test-user"
 
+statement error syntax error
+GRANT SELECT,ALL ON DATABASE a TO readwrite
+
+statement error syntax error
+REVOKE SELECT,ALL ON DATABASE a FROM readwrite
+
 query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a        readwrite READ,WRITE
-a        root      READ,WRITE
-a        test-user READ,WRITE
+a        readwrite ALL
+a        root      ALL
+a        test-user ALL
 
 # Create table to inherit DB permissions.
 statement ok
@@ -31,45 +37,49 @@ query TTT colnames
 SHOW GRANTS ON a.t
 ----
 Table    User      Privileges
-t        readwrite READ,WRITE
-t        root      READ,WRITE
-t        test-user READ,WRITE
+t        readwrite ALL
+t        root      ALL
+t        test-user ALL
 
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a        readwrite READ,WRITE
-a        test-user READ,WRITE
+a        readwrite ALL
+a        test-user ALL
 
 statement ok
-REVOKE WRITE ON DATABASE a FROM "test-user",readwrite
+REVOKE INSERT,UPDATE ON DATABASE a FROM "test-user",readwrite
 
 query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a        readwrite READ
-a        root      READ,WRITE
-a        test-user READ
+a        readwrite CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
+a        root      ALL
+a        test-user CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
 
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a        readwrite READ
-a        test-user READ
+a        readwrite CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
+a        test-user CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
 
 statement ok
-REVOKE READ ON DATABASE a FROM "test-user"
+REVOKE SELECT ON DATABASE a FROM "test-user"
 
 query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a        readwrite READ
-a        root      READ,WRITE
+a        readwrite CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
+a        root      ALL
+a        test-user CREATE,DELETE,DROP,GRANT,READ,WRITE
+
+statement ok
+REVOKE ALL ON DATABASE a FROM "test-user"
 
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a        readwrite READ
+a        readwrite CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
 
 statement ok
 REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
@@ -77,7 +87,7 @@ REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
 query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a        root      READ,WRITE
+a        root      ALL
 
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
@@ -88,6 +98,6 @@ query TTT colnames
 SHOW GRANTS ON a.t
 ----
 Table    User      Privileges
-t        readwrite READ,WRITE
-t        root      READ,WRITE
-t        test-user READ,WRITE
+t        readwrite ALL
+t        root      ALL
+t        test-user ALL

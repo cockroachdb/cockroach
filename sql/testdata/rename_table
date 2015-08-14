@@ -45,7 +45,7 @@ new_kv
 query TTT
 SHOW GRANTS ON TABLE new_kv
 ----
-new_kv        root      READ,WRITE
+new_kv        root      ALL
 
 statement error empty table name
 ALTER TABLE "" RENAME TO foo
