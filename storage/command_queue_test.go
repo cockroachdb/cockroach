@@ -171,3 +171,19 @@ func TestCommandQueueClear(t *testing.T) {
 		t.Fatal("commands should finish when clearing queue")
 	}
 }
+
+// TestCommandQueueExclusiveEnd verifies that an end key is treated as
+// an exclusive end when GetWait calculates overlapping commands. Test
+// it by calling GetWait with a command whose start key is equal to
+// the end key of a previous command.
+func TestCommandQueueExclusiveEnd(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	cq := NewCommandQueue()
+	cq.Add(proto.Key("a"), proto.Key("b"), false)
+
+	wg := sync.WaitGroup{}
+	cq.GetWait(proto.Key("b"), nil, false, &wg)
+	// Verify no wait on the second writer command on "b" since
+	// it does not overlap with the first command on ["a", "b").
+	wg.Wait()
+}

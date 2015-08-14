@@ -216,16 +216,11 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 	processKeysAndValues()
 
 	// Set start and end keys.
-	switch len(gcArgs.Keys) {
-	case 0:
+	if len(gcArgs.Keys) == 0 {
 		return nil
-	case 1:
-		gcArgs.Key = gcArgs.Keys[0].Key
-		gcArgs.EndKey = gcArgs.Key.Next()
-	default:
-		gcArgs.Key = gcArgs.Keys[0].Key
-		gcArgs.EndKey = gcArgs.Keys[len(gcArgs.Keys)-1].Key
 	}
+	gcArgs.Key = gcArgs.Keys[0].Key
+	gcArgs.EndKey = gcArgs.Keys[len(gcArgs.Keys)-1].Key.Next()
 
 	// Process push transactions in parallel.
 	var wg sync.WaitGroup
