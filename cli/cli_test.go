@@ -68,10 +68,10 @@ func (c cliTest) Run(line string) {
 func Example_basic() {
 	c := newCLITest()
 
-	c.Run("kv put a 1 b 2")
+	c.Run("kv put a 1 b 2 c 3")
 	c.Run("kv scan")
 	c.Run("kv revscan")
-	c.Run("kv del a")
+	c.Run("kv del a c")
 	c.Run("kv get a")
 	c.Run("kv get b")
 	c.Run("kv inc c 1")
@@ -85,14 +85,16 @@ func Example_basic() {
 	c.Run("quit")
 
 	// Output:
-	// kv put a 1 b 2
+	// kv put a 1 b 2 c 3
 	// kv scan
 	// "a"	"1"
 	// "b"	"2"
+	// "c"	"3"
 	// kv revscan
+	// "c"	"3"
 	// "b"	"2"
 	// "a"	"1"
-	// kv del a
+	// kv del a c
 	// kv get a
 	// "a" not found
 	// kv get b
