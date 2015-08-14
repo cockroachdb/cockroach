@@ -531,7 +531,8 @@ type Transaction struct {
 	// txn_coord_sender, with brief comments referring here.
 	// See https://github.com/cockroachdb/cockroach/pull/221.
 	CertainNodes NodeList `protobuf:"bytes,12,opt,name=certain_nodes" json:"certain_nodes"`
-	// Writing is true when the Transaction is not read-only.
+	// Writing is true if the transaction has previously executed a successful
+	// write request, i.e. a request that may have left intents (across retries).
 	Writing          bool   `protobuf:"varint,13,opt" json:"Writing"`
 	XXX_unrecognized []byte `json:"-"`
 }

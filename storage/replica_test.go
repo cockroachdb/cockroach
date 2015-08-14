@@ -1952,6 +1952,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		expTxn.Timestamp = test.expTS
 		expTxn.Status = proto.ABORTED
 		expTxn.LastHeartbeat = &test.startTS
+		expTxn.Writing = true // always set for physical txn table entries
 
 		if !reflect.DeepEqual(expTxn, reply.PusheeTxn) {
 			t.Errorf("unexpected push txn in trial %d; expected %+v, got %+v", i, expTxn, reply.PusheeTxn)

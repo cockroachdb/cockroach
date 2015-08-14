@@ -50,13 +50,20 @@ func newTestSender(handler func(proto.Call)) SenderFunc {
 			header.Txn.ID = txnID
 		}
 		call.Reply.Reset()
+		var writing bool
 		switch call.Args.(type) {
 		case *proto.PutRequest:
 			gogoproto.Merge(call.Reply, testPutResp)
+			writing = true
+		case *proto.EndTransactionRequest:
+			writing = true
 		default:
 			// Do nothing.
 		}
 		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
+		if txn := call.Reply.Header().Txn; txn != nil {
+			txn.Writing = writing
+		}
 
 		if handler != nil {
 			handler(call)
@@ -164,6 +171,35 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 	}
 }
 
+// TestCommitReadOnlyTransactionExplicit verifies that a read-only
+// transaction with an explicit EndTransaction call does not send
+// that call.
+func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	for _, withGet := range []bool{true, false} {
+		var calls []proto.Method
+		db := newDB(newTestSender(func(call proto.Call) {
+			calls = append(calls, call.Method())
+		}))
+		if err := db.Txn(func(txn *Txn) error {
+			b := &Batch{}
+			if withGet {
+				b.Get("foo")
+			}
+			return txn.CommitInBatch(b)
+		}); err != nil {
+			t.Errorf("unexpected error on commit: %s", err)
+		}
+		expectedCalls := []proto.Method(nil)
+		if withGet {
+			expectedCalls = append(expectedCalls, proto.Get)
+		}
+		if !reflect.DeepEqual(expectedCalls, calls) {
+			t.Errorf("expected %s, got %s", expectedCalls, calls)
+		}
+	}
+}
+
 // TestCommitMutatingTransaction verifies that transaction is committed
 // upon successful invocation of the retryable func.
 func TestCommitMutatingTransaction(t *testing.T) {
@@ -207,8 +243,8 @@ func TestCommitTransactionOnce(t *testing.T) {
 	}
 }
 
-// TestAbortReadOnlyTransaction verifies that transaction is aborted
-// upon failed invocation of the retryable func.
+// TestAbortReadOnlyTransaction verifies that aborting a read-only
+// transaction does not prompt an EndTransaction call.
 func TestAbortReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	db := newDB(newTestSender(func(call proto.Call) {
@@ -220,6 +256,44 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 		return errors.New("foo")
 	}); err == nil {
 		t.Error("expected error on abort")
+	}
+}
+
+// TestEndWriteRestartReadOnlyTransaction verifies that if
+// a transaction writes, then restarts and turns read-only,
+// an explicit EndTransaction call is still sent if retry-
+// able didn't, regardless of whether there is an error
+// or not.
+func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	for _, success := range []bool{true, false} {
+		expCalls := []proto.Method{proto.Put, proto.EndTransaction}
+		var calls []proto.Method
+		db := newDB(newTestSender(func(call proto.Call) {
+			calls = append(calls, call.Method())
+		}))
+		ok := false
+		if err := db.Txn(func(txn *Txn) error {
+			if !ok {
+				if err := txn.Put("consider", "phlebas"); err != nil {
+					t.Fatal(err)
+				}
+				ok = true
+				return &proto.Error{
+					Message:            "boom",
+					TransactionRestart: proto.TransactionRestart_IMMEDIATE,
+				}
+			}
+			if !success {
+				return errors.New("aborting on purpose")
+			}
+			return nil
+		}); err == nil != success {
+			t.Errorf("expected error: %t, got error: %v", !success, err)
+		}
+		if !reflect.DeepEqual(expCalls, calls) {
+			t.Fatalf("expected %v, got %v", expCalls, calls)
+		}
 	}
 }
 

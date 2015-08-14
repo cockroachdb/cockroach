@@ -196,6 +196,7 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 		// stripped. In this case, we set the start key to "bar" for a
 		// split of the default range; start key must be "" in this case.
 		b := &client.Batch{}
+		b.Put("foo", "only here to make this a rw transaction")
 		b.InternalAddCall(proto.Call{
 			Args: &proto.EndTransactionRequest{
 				RequestHeader: proto.RequestHeader{Key: proto.Key("foo")},

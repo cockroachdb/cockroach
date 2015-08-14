@@ -18,6 +18,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -38,6 +39,7 @@ var (
 		MaxBackoff:     5 * time.Second,
 		Multiplier:     2,
 	}
+	errMultipleEndTxn = errors.New("cannot end transaction multiple times")
 )
 
 // txnSender implements the Sender interface and is used to keep the Send
@@ -63,10 +65,16 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 // Txn is an in-progress distributed database transaction. A Txn is not safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	db           DB
-	wrapped      Sender
-	txn          proto.Transaction
-	haveTxnWrite bool // True if there were transactional writes
+	db      DB
+	wrapped Sender
+	txn     proto.Transaction
+	// haveTxnWrite is true as soon as the current attempt contains a write
+	// (prior to sending). This is in contrast to txn.Writing, which is set
+	// by the coordinator when the first intent has been created, and which
+	// does not reset in-between retries. As such, haveTxnWrite helps deter-
+	// mine whether it makes sense to add an EndTransaction when txn.Writing
+	// is (still) unset.
+	haveTxnWrite bool
 	haveEndTxn   bool // True if there was an explicit EndTransaction
 }
 
@@ -302,10 +310,11 @@ func endTxnCall(commit bool) proto.Call {
 func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
+
 	for r := retry.Start(txn.db.txnRetryOptions); r.Next(); {
 		txn.haveTxnWrite, txn.haveEndTxn = false, false // always reset before [re]starting txn
 		if err = retryable(txn); err == nil {
-			if !txn.haveEndTxn && txn.haveTxnWrite {
+			if !txn.haveEndTxn && txn.txn.Writing {
 				// If there were no errors running retryable, commit the txn. This
 				// may block waiting for outstanding writes to complete in case
 				// retryable didn't -- we need the most recent of all response
@@ -327,7 +336,12 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 		}
 		break
 	}
-	if err != nil && txn.haveTxnWrite {
+	if err != nil && txn.txn.Writing {
+		// If the retry logic gave up and haveEndTxn is true, then even if we
+		// tried to run EndTransaction, it must have failed (or was never run;
+		// after all, it's always the last call to be executed). So we pretend
+		// we never sent one (this is necessary to send another one).
+		txn.haveEndTxn = false // if we sent one, it didn't succeed
 		if replyErr := txn.Rollback(); replyErr != nil {
 			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		}
@@ -336,32 +350,56 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 }
 
 // send runs the specified calls synchronously in a single batch and
-// returns any errors.
+// returns any errors. If the transaction is read-only, a potential
+// EndTransaction call at the end is trimmed.
 func (txn *Txn) send(calls ...proto.Call) error {
 	if len(calls) == 0 {
 		return nil
 	}
-	txn.updateState(calls)
+	if err := txn.updateState(calls); err != nil {
+		return err
+	}
+
+	// If the transaction record indicates that the coordinator never wrote
+	// an intent (and the client doesn't have one lined up), then there's no
+	// need to send EndTransaction. If there is one anyways, cut it off.
+	if txn.haveEndTxn && !(txn.txn.Writing || txn.haveTxnWrite) {
+		// There's always a call if we get here.
+		lastIndex := len(calls) - 1
+		if calls[lastIndex].Method() != proto.EndTransaction {
+			panic("EndTransaction not sent as last call")
+		}
+		calls = calls[0:lastIndex]
+	}
 	return txn.db.send(calls...)
 }
 
-func (txn *Txn) updateState(calls []proto.Call) {
+func (txn *Txn) updateState(calls []proto.Call) error {
 	for _, c := range calls {
 		if b, ok := c.Args.(*proto.BatchRequest); ok {
 			for _, br := range b.Requests {
-				txn.updateStateForRequest(br.GetValue().(proto.Request))
+				if err := txn.updateStateForRequest(br.GetValue().(proto.Request)); err != nil {
+					return err
+				}
 			}
 			continue
 		}
-		txn.updateStateForRequest(c.Args)
+		if err := txn.updateStateForRequest(c.Args); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func (txn *Txn) updateStateForRequest(r proto.Request) {
+func (txn *Txn) updateStateForRequest(r proto.Request) error {
 	if !txn.haveTxnWrite {
 		txn.haveTxnWrite = proto.IsTransactionWrite(r)
 	}
 	if _, ok := r.(*proto.EndTransactionRequest); ok {
+		if txn.haveEndTxn {
+			return errMultipleEndTxn
+		}
 		txn.haveEndTxn = true
 	}
+	return nil
 }
