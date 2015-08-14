@@ -310,10 +310,11 @@ func endTxnCall(commit bool) proto.Call {
 func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
+
 	for r := retry.Start(txn.db.txnRetryOptions); r.Next(); {
 		txn.haveTxnWrite, txn.haveEndTxn = false, false // always reset before [re]starting txn
 		if err = retryable(txn); err == nil {
-			if !txn.haveEndTxn && txn.haveTxnWrite {
+			if !txn.haveEndTxn && txn.txn.Writing {
 				// If there were no errors running retryable, commit the txn. This
 				// may block waiting for outstanding writes to complete in case
 				// retryable didn't -- we need the most recent of all response
@@ -335,7 +336,11 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 		}
 		break
 	}
-	if err != nil && txn.haveTxnWrite {
+	if err != nil && txn.txn.Writing {
+		// If the retry logic gave up and haveEndTxn is true, then even if we
+		// tried to run EndTransaction, it must have failed (or was never run;
+		// after all, it's always the last call to be executed). So we pretend
+		// we never sent one (this is necessary to send another one).
 		txn.haveEndTxn = false // if we sent one, it didn't succeed
 		if replyErr := txn.Rollback(); replyErr != nil {
 			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
@@ -345,7 +350,8 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 }
 
 // send runs the specified calls synchronously in a single batch and
-// returns any errors.
+// returns any errors. If the transaction is read-only, a potential
+// EndTransaction call at the end is trimmed.
 func (txn *Txn) send(calls ...proto.Call) error {
 	if len(calls) == 0 {
 		return nil
