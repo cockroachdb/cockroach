@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -39,33 +38,33 @@ type qvalue struct {
 	// is needed so that select planning can operation on resolved expressions
 	// and map qualified values back to columns.
 	parser.ParenExpr
-	col structured.ColumnDescriptor
+	col ColumnDescriptor
 }
 
-type qvalMap map[structured.ColumnID]*qvalue
-type colKindMap map[structured.ColumnID]structured.ColumnType_Kind
+type qvalMap map[ColumnID]*qvalue
+type colKindMap map[ColumnID]ColumnType_Kind
 
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
 	txn              *client.Txn
-	desc             *structured.TableDescriptor
-	index            *structured.IndexDescriptor
-	visibleCols      []structured.ColumnDescriptor
+	desc             *TableDescriptor
+	index            *IndexDescriptor
+	visibleCols      []ColumnDescriptor
 	isSecondaryIndex bool
 	columns          []string
 	err              error
-	indexKey         []byte              // the index key of the current row
-	kvs              []client.KeyValue   // the raw key/value pairs
-	kvIndex          int                 // current index into the key/value pairs
-	rowIndex         int                 // the index of the current row
-	colID            structured.ColumnID // column ID of the current key
-	vals             []parser.Datum      // the index key values for the current row
-	qvals            qvalMap             // the values in the current row
-	colKind          colKindMap          // map of column kinds for decoding column values
-	row              parser.DTuple       // the rendered row
-	filter           parser.Expr         // filtering expression for rows
-	render           []parser.Expr       // rendering expressions for rows
+	indexKey         []byte            // the index key of the current row
+	kvs              []client.KeyValue // the raw key/value pairs
+	kvIndex          int               // current index into the key/value pairs
+	rowIndex         int               // the index of the current row
+	colID            ColumnID          // column ID of the current key
+	vals             []parser.Datum    // the index key values for the current row
+	qvals            qvalMap           // the values in the current row
+	colKind          colKindMap        // map of column kinds for decoding column values
+	row              parser.DTuple     // the rendered row
+	filter           parser.Expr       // filtering expression for rows
+	render           []parser.Expr     // rendering expressions for rows
 	explain          explainMode
 	explainValue     parser.Datum
 }
@@ -151,7 +150,7 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 			}
 			// Strip out any columns from the table that are not present in the
 			// index.
-			indexColIDs := map[structured.ColumnID]struct{}{}
+			indexColIDs := map[ColumnID]struct{}{}
 			for _, colID := range n.index.ColumnIDs {
 				indexColIDs[colID] = struct{}{}
 			}
@@ -191,7 +190,7 @@ func (n *scanNode) initScan() bool {
 	}
 
 	// Retrieve all of the keys that start with our index key prefix.
-	startKey := proto.Key(structured.MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
+	startKey := proto.Key(MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
 	endKey := startKey.PrefixEnd()
 	n.kvs, n.err = n.txn.Scan(startKey, endKey, 0)
 	if n.err != nil {
@@ -259,7 +258,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 			if n.isSecondaryIndex {
 				for i, col := range n.index.ColumnNames {
 					n.columns = append(n.columns, col)
-					var col *structured.ColumnDescriptor
+					var col *ColumnDescriptor
 					if col, n.err = n.desc.FindColumnByID(n.index.ColumnIDs[i]); n.err != nil {
 						return n.err
 					}
@@ -335,7 +334,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 
 	if !n.isSecondaryIndex && len(remaining) > 0 {
 		_, v := encoding.DecodeUvarint(remaining)
-		n.colID = structured.ColumnID(v)
+		n.colID = ColumnID(v)
 		if qval, ok := n.qvals[n.colID]; ok && qval.Expr == nil {
 			value, ok = n.unmarshalValue(kv)
 			if !ok {
@@ -510,21 +509,21 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 	}
 	if kv.Exists() {
 		switch kind {
-		case structured.ColumnType_BIT, structured.ColumnType_INT:
+		case ColumnType_BIT, ColumnType_INT:
 			return parser.DInt(kv.ValueInt()), true
-		case structured.ColumnType_BOOL:
+		case ColumnType_BOOL:
 			return parser.DBool(kv.ValueInt() != 0), true
-		case structured.ColumnType_FLOAT:
+		case ColumnType_FLOAT:
 			return parser.DFloat(math.Float64frombits(uint64(kv.ValueInt()))), true
-		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
-			structured.ColumnType_BLOB:
+		case ColumnType_CHAR, ColumnType_TEXT,
+			ColumnType_BLOB:
 			return parser.DString(kv.ValueBytes()), true
 		}
 	}
 	return parser.DNull, true
 }
 
-func (n *scanNode) getQVal(col structured.ColumnDescriptor) parser.Expr {
+func (n *scanNode) getQVal(col ColumnDescriptor) parser.Expr {
 	if n.qvals == nil {
 		n.qvals = make(qvalMap)
 	}
@@ -538,14 +537,14 @@ func (n *scanNode) getQVal(col structured.ColumnDescriptor) parser.Expr {
 		// TODO(pmattis): Nullable columns can have NULL values. The type analysis
 		// needs to take that into consideration, but how to surface that info?
 		switch col.Type.Kind {
-		case structured.ColumnType_BIT, structured.ColumnType_INT:
+		case ColumnType_BIT, ColumnType_INT:
 			qval.Expr = parser.DInt(0)
-		case structured.ColumnType_BOOL:
+		case ColumnType_BOOL:
 			qval.Expr = parser.DBool(true)
-		case structured.ColumnType_FLOAT:
+		case ColumnType_FLOAT:
 			qval.Expr = parser.DFloat(0)
-		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
-			structured.ColumnType_BLOB:
+		case ColumnType_CHAR, ColumnType_TEXT,
+			ColumnType_BLOB:
 			qval.Expr = parser.DString("")
 		default:
 			panic(fmt.Sprintf("unsupported column type: %s", col.Type.Kind))
@@ -595,7 +594,7 @@ func (v *qnameVisitor) Visit(expr parser.Expr) parser.Expr {
 	return expr
 }
 
-func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *structured.TableDescriptor {
+func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *TableDescriptor {
 	if v.desc == nil {
 		return nil
 	}

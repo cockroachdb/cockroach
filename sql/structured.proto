@@ -16,11 +16,11 @@
 // Author: Tamir Duberstein (tamird@gmail.com)
 
 syntax = "proto2";
-package cockroach.structured;
-option go_package = "structured";
+package cockroach.sql;
+option go_package = "sql";
 
 import "gogoproto/gogo.proto";
-import "cockroach/structured/privilege.proto";
+import "cockroach/sql/privilege.proto";
 
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;

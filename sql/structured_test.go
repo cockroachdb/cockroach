@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package structured
+package sql
 
 import (
 	"reflect"

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -54,7 +53,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	}
 
 	// Set of columns being updated
-	colIDSet := map[structured.ColumnID]struct{}{}
+	colIDSet := map[ColumnID]struct{}{}
 	for _, c := range cols {
 		colIDSet[c.ID] = struct{}{}
 	}
@@ -78,7 +77,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
-	colIDtoRowIndex := map[structured.ColumnID]int{}
+	colIDtoRowIndex := map[ColumnID]int{}
 	for i, name := range row.Columns() {
 		c, err := tableDesc.FindColumnByName(name)
 		if err != nil {
@@ -88,7 +87,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex
-	primaryIndexKeyPrefix := structured.MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
+	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	// Evaluate all the column value expressions.
 	vals := make([]parser.Datum, 0, 10)
@@ -101,7 +100,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	}
 
 	// Secondary indexes needing updating.
-	var indexes []structured.IndexDescriptor
+	var indexes []IndexDescriptor
 	for _, index := range tableDesc.Indexes {
 		for _, id := range index.ColumnIDs {
 			if _, ok := colIDSet[id]; ok {
@@ -164,7 +163,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				return nil, err
 			}
 
-			key := structured.MakeColumnKey(col.ID, primaryIndexKey)
+			key := MakeColumnKey(col.ID, primaryIndexKey)
 			if primitive != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know

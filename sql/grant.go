@@ -20,7 +20,6 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/structured"
 )
 
 // Grant adds privileges to users.
@@ -54,7 +53,7 @@ func (p *planner) Grant(n *parser.Grant) (planNode, error) {
 	// Now update the descriptor.
 	// TODO(marc): do this inside a transaction. This will be needed
 	// when modifying multiple descriptors in the same op.
-	descKey := structured.MakeDescMetadataKey(descriptor.GetID())
+	descKey := MakeDescMetadataKey(descriptor.GetID())
 	if err := p.txn.Put(descKey, descriptor); err != nil {
 		return nil, err
 	}

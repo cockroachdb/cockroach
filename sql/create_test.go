@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -32,7 +32,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	defer cleanup(s, sqlDB)
 
 	// The first `MaxReservedDescID` (plus 0) are set aside.
-	expectedCounter := int64(structured.MaxReservedDescID + 1)
+	expectedCounter := int64(sql.MaxReservedDescID + 1)
 
 	// Test values before creating the database.
 	// descriptor ID counter.
@@ -43,7 +43,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Database name.
-	nameKey := structured.MakeNameMetadataKey(structured.RootNamespaceID, "test")
+	nameKey := sql.MakeNameMetadataKey(sql.RootNamespaceID, "test")
 	if gr, err := kvDB.Get(nameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
@@ -51,7 +51,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Write some junk that is going to interfere with table creation.
-	dbDescKey := structured.MakeDescMetadataKey(structured.ID(expectedCounter))
+	dbDescKey := sql.MakeDescMetadataKey(sql.ID(expectedCounter))
 	if err := kvDB.CPut(dbDescKey, "foo", nil); err != nil {
 		t.Fatal(err)
 	}

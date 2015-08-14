@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -57,7 +56,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
-	colIDtoRowIndex := map[structured.ColumnID]int{}
+	colIDtoRowIndex := map[ColumnID]int{}
 	for i, name := range node.Columns() {
 		c, err := tableDesc.FindColumnByName(name)
 		if err != nil {
@@ -67,7 +66,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex
-	primaryIndexKeyPrefix := structured.MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
+	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	b := client.Batch{}
 

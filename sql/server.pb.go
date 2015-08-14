@@ -2,15 +2,6 @@
 // source: cockroach/sql/server.proto
 // DO NOT EDIT!
 
-/*
-Package sql is a generated protocol buffer package.
-
-It is generated from these files:
-	cockroach/sql/server.proto
-
-It has these top-level messages:
-	Session
-*/
 package sql
 
 import proto "github.com/gogo/protobuf/proto"

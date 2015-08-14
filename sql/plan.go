@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -95,7 +94,7 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 	}
 }
 
-func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*structured.TableDescriptor, error) {
+func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*TableDescriptor, error) {
 	ate, ok := n.(*parser.AliasedTableExpr)
 	if !ok {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)

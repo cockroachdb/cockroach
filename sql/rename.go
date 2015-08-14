@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/structured"
 )
 
 // RenameDatabase renames the database.
@@ -52,7 +51,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	}
 
 	// Now update the nameMetadataKey and the descriptor.
-	descKey := structured.MakeDescMetadataKey(dbDesc.GetID())
+	descKey := MakeDescMetadataKey(dbDesc.GetID())
 	dbDesc.SetName(string(n.NewName))
 
 	b := client.Batch{}
@@ -122,7 +121,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	tableDesc.SetName(string(n.NewName))
 
 	newTbKey := tableKey{dbDesc.ID, string(n.NewName)}.Key()
-	descKey := structured.MakeDescMetadataKey(tableDesc.GetID())
+	descKey := MakeDescMetadataKey(tableDesc.GetID())
 
 	b := client.Batch{}
 	b.Put(descKey, tableDesc)
