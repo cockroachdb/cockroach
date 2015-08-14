@@ -68,6 +68,16 @@ SELECT k,v FROM kv
 a NULL
 
 query T
+SELECT v||'foo' FROM kv
+----
+NULL
+
+query T
+SELECT LOWER(v) FROM kv
+----
+NULL
+
+query T
 SELECT k FROM kv
 ----
 1 value hashing to 60b725f10c9c85c70d97880dfe8191b3

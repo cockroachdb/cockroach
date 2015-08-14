@@ -27,11 +27,21 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-type qvalMap map[structured.ColumnID]*parser.ParenExpr
+type qvalue struct {
+	// TODO(pmattis): Add a QualifiedValue expression (or IndirectExpr or
+	// DReference) which contains a Datum but also a pointer to the column. This
+	// is needed so that select planning can operation on resolved expressions
+	// and map qualified values back to columns.
+	parser.ParenExpr
+	col structured.ColumnDescriptor
+}
+
+type qvalMap map[structured.ColumnID]*qvalue
 type colKindMap map[structured.ColumnID]structured.ColumnType_Kind
 
 // A scanNode handles scanning over the key/value pairs for a table and
@@ -73,7 +83,7 @@ func (n *scanNode) Next() bool {
 	}
 
 	if n.kvs == nil {
-		if !n.init() {
+		if !n.initScan() {
 			return false
 		}
 	}
@@ -102,24 +112,68 @@ func (n *scanNode) Err() error {
 	return n.err
 }
 
-func (n *scanNode) init() bool {
-	return n.initScan() && n.initExprs()
-}
+func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
+	switch len(from) {
+	case 0:
+		// n.desc remains nil.
+		return nil
 
-// initExprs initializes the render and filter expressions for the
-// scan. Initialization consists of replacing QualifiedName nodes with
-// ParenExpr nodes for which the wrapped expression can be changed for each
-// row.
-func (n *scanNode) initExprs() bool {
-	n.qvals = make(qvalMap)
-	for i := range n.render {
-		n.render[i], n.err = n.extractQVals(n.render[i])
-		if n.err != nil {
-			return false
+	case 1:
+		if n.desc, n.err = p.getAliasedTableDesc(from[0]); n.err != nil {
+			return n.err
 		}
+
+		if !n.desc.HasPrivilege(p.user, parser.PrivilegeRead) {
+			n.err = fmt.Errorf("user %s does not have %s privilege on table %s",
+				p.user, parser.PrivilegeRead, n.desc.Name)
+			return n.err
+		}
+
+		// This is only kosher because we know that getAliasedDesc() succeeded.
+		qname := from[0].(*parser.AliasedTableExpr).Expr.(*parser.QualifiedName)
+		indexName := qname.Index()
+		if indexName != "" && !strings.EqualFold(n.desc.PrimaryIndex.Name, indexName) {
+			for i := range n.desc.Indexes {
+				if strings.EqualFold(n.desc.Indexes[i].Name, indexName) {
+					// Remove all but the matching index from the descriptor.
+					n.desc.Indexes = n.desc.Indexes[i : i+1]
+					n.index = &n.desc.Indexes[0]
+					break
+				}
+			}
+			if n.index == nil {
+				n.err = fmt.Errorf("index \"%s\" not found", indexName)
+				return n.err
+			}
+			// If the table was not aliased, use the index name instead of the table
+			// name for fully-qualified columns in the expression.
+			if from[0].(*parser.AliasedTableExpr).As == "" {
+				n.desc.Alias = n.index.Name
+			}
+			// Strip out any columns from the table that are not present in the
+			// index.
+			indexColIDs := map[structured.ColumnID]struct{}{}
+			for _, colID := range n.index.ColumnIDs {
+				indexColIDs[colID] = struct{}{}
+			}
+			for _, col := range n.desc.Columns {
+				if _, ok := indexColIDs[col.ID]; !ok {
+					continue
+				}
+				n.visibleCols = append(n.visibleCols, col)
+			}
+			n.isSecondaryIndex = true
+		} else {
+			n.index = &n.desc.PrimaryIndex
+			n.visibleCols = n.desc.Columns
+		}
+
+		return nil
+
+	default:
+		n.err = util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
+		return n.err
 	}
-	n.filter, n.err = n.extractQVals(n.filter)
-	return n.err == nil
 }
 
 // initScan initializes (and performs) the key-value scan.
@@ -159,12 +213,103 @@ func (n *scanNode) initScan() bool {
 	return true
 }
 
+func (n *scanNode) initWhere(where *parser.Where) error {
+	if where == nil {
+		return nil
+	}
+	n.filter, n.err = n.resolveQNames(where.Expr)
+	if n.err == nil {
+		// Evaluate the expression once to memoize operators and functions.
+		_, n.err = parser.EvalExpr(n.filter)
+	}
+	return n.err
+}
+
+func (n *scanNode) initTargets(targets parser.SelectExprs) error {
+	// Loop over the select expressions and expand them into the expressions
+	// we're going to use to generate the returned column set and the names for
+	// those columns.
+	for _, target := range targets {
+		if n.err = n.addRender(target); n.err != nil {
+			return n.err
+		}
+	}
+	return nil
+}
+
+func (n *scanNode) addRender(target parser.SelectExpr) error {
+	// If a QualifiedName has a StarIndirection suffix we need to match the
+	// prefix of the qualified name to one of the tables in the query and
+	// then expand the "*" into a list of columns.
+	if qname, ok := target.Expr.(*parser.QualifiedName); ok {
+		if n.err = qname.NormalizeColumnName(); n.err != nil {
+			return n.err
+		}
+		if qname.IsStar() {
+			if n.desc == nil {
+				return fmt.Errorf("\"%s\" with no tables specified is not valid", qname)
+			}
+			if target.As != "" {
+				return fmt.Errorf("\"%s\" cannot be aliased", qname)
+			}
+			tableName := qname.Table()
+			if tableName != "" && !strings.EqualFold(n.desc.Alias, tableName) {
+				return fmt.Errorf("table \"%s\" not found", tableName)
+			}
+
+			if n.isSecondaryIndex {
+				for i, col := range n.index.ColumnNames {
+					n.columns = append(n.columns, col)
+					var col *structured.ColumnDescriptor
+					if col, n.err = n.desc.FindColumnByID(n.index.ColumnIDs[i]); n.err != nil {
+						return n.err
+					}
+					n.render = append(n.render, n.getQVal(*col))
+				}
+			} else {
+				for _, col := range n.desc.Columns {
+					n.columns = append(n.columns, col.Name)
+					n.render = append(n.render, n.getQVal(col))
+				}
+			}
+			return nil
+		}
+	}
+
+	// Resolve qualified names. This has the side-effect of normalizing any
+	// qualified name found.
+	var resolved parser.Expr
+	if resolved, n.err = n.resolveQNames(target.Expr); n.err != nil {
+		return n.err
+	}
+	// Evaluate the expression once to memoize operators and functions.
+	if _, n.err = parser.EvalExpr(resolved); n.err != nil {
+		return n.err
+	}
+	n.render = append(n.render, resolved)
+
+	if target.As != "" {
+		n.columns = append(n.columns, string(target.As))
+		return nil
+	}
+
+	switch t := target.Expr.(type) {
+	case *parser.QualifiedName:
+		// If the expression is a qualified name, use the column name, not the
+		// full qualification as the column name to return.
+		n.columns = append(n.columns, t.Column())
+	default:
+		n.columns = append(n.columns, target.Expr.String())
+	}
+	return nil
+}
+
 func (n *scanNode) processKV(kv client.KeyValue) bool {
 	if n.indexKey == nil {
 		// Reset the qvals map expressions to nil. The expresssions will get filled
 		// in with the column values as we decode the key-value pairs for the row.
-		for _, e := range n.qvals {
-			e.Expr = nil
+		for _, qval := range n.qvals {
+			qval.Expr = nil
 		}
 	}
 
@@ -192,12 +337,12 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 	if !n.isSecondaryIndex && len(remaining) > 0 {
 		_, v := encoding.DecodeUvarint(remaining)
 		n.colID = structured.ColumnID(v)
-		if v, ok := n.qvals[n.colID]; ok && v.Expr == nil {
+		if qval, ok := n.qvals[n.colID]; ok && qval.Expr == nil {
 			value, ok = n.unmarshalValue(kv)
 			if !ok {
 				return false
 			}
-			v.Expr = value
+			qval.Expr = value
 			if log.V(2) {
 				log.Infof("Scan %q -> %v", kv.Key, value)
 			}
@@ -267,8 +412,8 @@ func (n *scanNode) filterRow() bool {
 			if !col.Nullable {
 				break
 			}
-			if v, ok := n.qvals[col.ID]; ok && v.Expr == nil {
-				v.Expr = parser.DNull
+			if qval, ok := n.qvals[col.ID]; ok && qval.Expr == nil {
+				qval.Expr = parser.DNull
 				continue
 			}
 		}
@@ -380,6 +525,37 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 	return parser.DNull, true
 }
 
+func (n *scanNode) getQVal(col structured.ColumnDescriptor) parser.Expr {
+	if n.qvals == nil {
+		n.qvals = make(qvalMap)
+	}
+	qval := n.qvals[col.ID]
+	if qval == nil {
+		qval = &qvalue{col: col}
+		// We initialize the qvalue expression to a datum of the type matching the
+		// column. This allows type analysis to be performed on the expression
+		// before we start retrieving rows.
+		//
+		// TODO(pmattis): Nullable columns can have NULL values. The type analysis
+		// needs to take that into consideration, but how to surface that info?
+		switch col.Type.Kind {
+		case structured.ColumnType_BIT, structured.ColumnType_INT:
+			qval.Expr = parser.DInt(0)
+		case structured.ColumnType_BOOL:
+			qval.Expr = parser.DBool(true)
+		case structured.ColumnType_FLOAT:
+			qval.Expr = parser.DFloat(0)
+		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
+			structured.ColumnType_BLOB:
+			qval.Expr = parser.DString("")
+		default:
+			panic(fmt.Sprintf("unsupported column type: %s", col.Type.Kind))
+		}
+		n.qvals[col.ID] = qval
+	}
+	return &qval.ParenExpr
+}
+
 type qnameVisitor struct {
 	*scanNode
 	err error
@@ -400,6 +576,10 @@ func (v *qnameVisitor) Visit(expr parser.Expr) parser.Expr {
 	if v.err != nil {
 		return expr
 	}
+	if qname.IsStar() {
+		v.err = fmt.Errorf("qualified name \"%s\" not found", qname)
+		return expr
+	}
 
 	desc := v.getDesc(qname)
 	if desc != nil {
@@ -408,12 +588,7 @@ func (v *qnameVisitor) Visit(expr parser.Expr) parser.Expr {
 			if !strings.EqualFold(name, col.Name) {
 				continue
 			}
-			paren := v.qvals[col.ID]
-			if paren == nil {
-				paren = &parser.ParenExpr{Expr: parser.DNull}
-				v.qvals[col.ID] = paren
-			}
-			return paren
+			return v.getQVal(col)
 		}
 	}
 
@@ -435,7 +610,7 @@ func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *structured.TableDes
 	return nil
 }
 
-func (n *scanNode) extractQVals(expr parser.Expr) (parser.Expr, error) {
+func (n *scanNode) resolveQNames(expr parser.Expr) (parser.Expr, error) {
 	if expr == nil {
 		return expr, nil
 	}

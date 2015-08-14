@@ -17,153 +17,22 @@
 
 package sql
 
-import (
-	"fmt"
-	"strings"
-
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/structured"
-	"github.com/cockroachdb/cockroach/util"
-)
+import "github.com/cockroachdb/cockroach/sql/parser"
 
 // Select selects rows from a single table.
 // Privileges: READ on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
 func (p *planner) Select(n *parser.Select) (planNode, error) {
-	var desc *structured.TableDescriptor
-	var index *structured.IndexDescriptor
-	var visibleCols []structured.ColumnDescriptor
-
-	switch len(n.From) {
-	case 0:
-		// desc remains nil.
-
-	case 1:
-		var err error
-		desc, err = p.getAliasedTableDesc(n.From[0])
-		if err != nil {
-			return nil, err
-		}
-
-		if !desc.HasPrivilege(p.user, parser.PrivilegeRead) {
-			return nil, fmt.Errorf("user %s does not have %s privilege on table %s",
-				p.user, parser.PrivilegeRead, desc.Name)
-		}
-
-		// This is only kosher because we know that getAliasedDesc() succeeded.
-		qname := n.From[0].(*parser.AliasedTableExpr).Expr.(*parser.QualifiedName)
-		indexName := qname.Index()
-		if indexName != "" && !strings.EqualFold(desc.PrimaryIndex.Name, indexName) {
-			for i := range desc.Indexes {
-				if strings.EqualFold(desc.Indexes[i].Name, indexName) {
-					// Remove all but the matching index from the descriptor.
-					desc.Indexes = desc.Indexes[i : i+1]
-					index = &desc.Indexes[0]
-					break
-				}
-			}
-			if index == nil {
-				return nil, fmt.Errorf("index \"%s\" not found", indexName)
-			}
-			// If the table was not aliased, use the index name instead of the table
-			// name for fully-qualified columns in the expression.
-			if n.From[0].(*parser.AliasedTableExpr).As == "" {
-				desc.Alias = index.Name
-			}
-			// Strip out any columns from the table that are not present in the
-			// index.
-			indexColIDs := map[structured.ColumnID]struct{}{}
-			for _, colID := range index.ColumnIDs {
-				indexColIDs[colID] = struct{}{}
-			}
-			for _, col := range desc.Columns {
-				if _, ok := indexColIDs[col.ID]; !ok {
-					continue
-				}
-				visibleCols = append(visibleCols, col)
-			}
-		} else {
-			index = &desc.PrimaryIndex
-			visibleCols = desc.Columns
-		}
-
-	default:
-		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n.From)
+	s := &scanNode{txn: p.txn}
+	if err := s.initFrom(p, n.From); err != nil {
+		return nil, err
 	}
-
-	// Loop over the select expressions and expand them into the expressions
-	// we're going to use to generate the returned column set and the names for
-	// those columns.
-	exprs := make([]parser.Expr, 0, len(n.Exprs))
-	columns := make([]string, 0, len(n.Exprs))
-	for _, e := range n.Exprs {
-		// If a QualifiedName has a StarIndirection suffix we need to match the
-		// prefix of the qualified name to one of the tables in the query and
-		// then expand the "*" into a list of columns.
-		if qname, ok := e.Expr.(*parser.QualifiedName); ok {
-			if err := qname.NormalizeColumnName(); err != nil {
-				return nil, err
-			}
-			if qname.IsStar() {
-				if desc == nil {
-					return nil, fmt.Errorf("\"%s\" with no tables specified is not valid", qname)
-				}
-				if e.As != "" {
-					return nil, fmt.Errorf("\"%s\" cannot be aliased", qname)
-				}
-				tableName := qname.Table()
-				if tableName != "" && !strings.EqualFold(desc.Alias, tableName) {
-					return nil, fmt.Errorf("table \"%s\" not found", tableName)
-				}
-
-				if index != &desc.PrimaryIndex {
-					for _, col := range index.ColumnNames {
-						columns = append(columns, col)
-						exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col)})
-					}
-				} else {
-					for _, col := range desc.Columns {
-						columns = append(columns, col.Name)
-						exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
-					}
-				}
-				continue
-			}
-		}
-
-		exprs = append(exprs, e.Expr)
-		if e.As != "" {
-			columns = append(columns, string(e.As))
-			continue
-		}
-
-		// If the expression is a qualified name, use the column name, not the
-		// full qualification as the column name to return.
-		switch t := e.Expr.(type) {
-		case *parser.QualifiedName:
-			if err := t.NormalizeColumnName(); err != nil {
-				return nil, err
-			}
-			columns = append(columns, t.Column())
-		default:
-			columns = append(columns, e.Expr.String())
-		}
+	if err := s.initWhere(n.Where); err != nil {
+		return nil, err
 	}
-
-	s := &scanNode{
-		txn:         p.txn,
-		desc:        desc,
-		index:       index,
-		visibleCols: visibleCols,
-		columns:     columns,
-		render:      exprs,
-	}
-	if index != nil {
-		s.isSecondaryIndex = index != &desc.PrimaryIndex
-	}
-	if n.Where != nil {
-		s.filter = n.Where.Expr
+	if err := s.initTargets(n.Exprs); err != nil {
+		return nil, err
 	}
 	return s, nil
 }

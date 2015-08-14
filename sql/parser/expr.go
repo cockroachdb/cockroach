@@ -20,6 +20,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"strconv"
 )
 
@@ -537,6 +538,9 @@ func (i BinaryOp) String() string {
 type BinaryExpr struct {
 	Operator    BinaryOp
 	Left, Right Expr
+	fn          func(Datum, Datum) (Datum, error)
+	ltype       reflect.Type
+	rtype       reflect.Type
 }
 
 func (node *BinaryExpr) String() string {
@@ -570,6 +574,8 @@ func (i UnaryOp) String() string {
 type UnaryExpr struct {
 	Operator UnaryOp
 	Expr     Expr
+	fn       func(Datum) (Datum, error)
+	dtype    reflect.Type
 }
 
 func (node *UnaryExpr) String() string {
@@ -581,6 +587,7 @@ type FuncExpr struct {
 	Name     *QualifiedName
 	Distinct bool
 	Exprs    Exprs
+	fn       builtin
 }
 
 func (node *FuncExpr) String() string {
