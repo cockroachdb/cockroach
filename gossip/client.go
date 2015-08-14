@@ -113,14 +113,14 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 		lAddr := c.rpcClient.LocalAddr()
 
 		// Send gossip with timeout.
-		args := &proto.GossipRequest{
+		args := &Request{
 			NodeID: nodeID,
 			Addr:   util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 			LAddr:  util.MakeUnresolvedAddr(lAddr.Network(), lAddr.String()),
 			MaxSeq: remoteMaxSeq,
 			Delta:  deltaBytes,
 		}
-		reply := &proto.GossipResponse{}
+		reply := &Response{}
 		gossipCall := c.rpcClient.Go("Gossip.Gossip", args, reply, nil)
 		select {
 		case <-gossipCall.Done:

@@ -9,7 +9,6 @@
 		cockroach/proto/api.proto
 		cockroach/proto/data.proto
 		cockroach/proto/errors.proto
-		cockroach/proto/gossip.proto
 		cockroach/proto/heartbeat.proto
 		cockroach/proto/internal.proto
 		cockroach/proto/metadata.proto

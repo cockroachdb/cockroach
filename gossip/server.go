@@ -67,8 +67,8 @@ func newServer(interval time.Duration) *server {
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
 func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
-	args := argsI.(*proto.GossipRequest)
-	reply := &proto.GossipResponse{}
+	args := argsI.(*Request)
+	reply := &Response{}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -150,7 +150,7 @@ func (s *server) jitteredGossipInterval() time.Duration {
 func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 	addr := rpcServer.Addr()
 	s.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
-	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &proto.GossipRequest{}); err != nil {
+	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &Request{}); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)
 	}
 	rpcServer.AddCloseCallback(s.onClose)
