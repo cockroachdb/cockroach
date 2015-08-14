@@ -119,21 +119,24 @@ func runPut(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// Do not allow system keys to be put.
-	var unquoted []string
-	for i := 0; i < len(args); i++ {
-		unquoted = append(unquoted, unquoteArg(args[i], i%2 == 0 /* disallow system keys */))
+	count := len(args) / 2
+
+	keys := make([]string, 0, count)
+	values := make([]string, 0, count)
+	for i := 0; i < len(args); i += 2 {
+		keys = append(keys, unquoteArg(args[i], true /* disallow system keys */))
+		values = append(values, unquoteArg(args[i+1], false))
 	}
 
 	kvDB := makeDBClient()
 	if kvDB == nil {
 		return
 	}
-	b := &client.Batch{}
-	for i := 0; i < len(unquoted); i += 2 {
-		b.Put(unquoted[i], unquoted[i+1])
+	var b client.Batch
+	for i := 0; i < count; i++ {
+		b.Put(keys[i], values[i])
 	}
-	if err := kvDB.Run(b); err != nil {
+	if err := kvDB.Run(&b); err != nil {
 		fmt.Fprintf(osStderr, "put failed: %s\n", err)
 		osExit(1)
 		return
@@ -198,21 +201,22 @@ func runDel(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// Do not allow system keys to be deleted.
-	var unquoted []string
-	for i := 0; i < len(args); i++ {
-		unquoted = append(unquoted, unquoteArg(args[0], i%2 == 0 /* disallow system keys */))
+	count := len(args)
+
+	keys := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		keys = append(keys, unquoteArg(args[i], true /* disallow system keys */))
 	}
 
 	kvDB := makeDBClient()
 	if kvDB == nil {
 		return
 	}
-	b := &client.Batch{}
-	for i := 0; i < len(unquoted); i++ {
-		b.Del(unquoted[i])
+	var b client.Batch
+	for i := 0; i < count; i++ {
+		b.Del(keys[i])
 	}
-	if err := kvDB.Run(b); err != nil {
+	if err := kvDB.Run(&b); err != nil {
 		fmt.Fprintf(osStderr, "delete failed: %s\n", err)
 		osExit(1)
 		return
@@ -238,7 +242,7 @@ func runScan(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	startKey, endKey := initArgs(args)
+	startKey, endKey := initScanArgs(args)
 
 	kvDB := makeDBClient()
 	if kvDB == nil {
@@ -272,7 +276,7 @@ func runReverseScan(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	startKey, endKey := initArgs(args)
+	startKey, endKey := initScanArgs(args)
 	kvDB := makeDBClient()
 	if kvDB == nil {
 		return
@@ -286,8 +290,7 @@ func runReverseScan(cmd *cobra.Command, args []string) {
 	showResult(rows)
 }
 
-func initArgs(args []string) (startKey, endKey proto.Key) {
-
+func initScanArgs(args []string) (startKey, endKey proto.Key) {
 	if len(args) >= 1 {
 		startKey = proto.Key(unquoteArg(args[0], false))
 	} else {
