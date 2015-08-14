@@ -687,9 +687,15 @@ func evalFuncExpr(expr *FuncExpr) (Datum, error) {
 	}
 
 	if expr.fn.fn == nil {
-		candidates, ok := builtins[strings.ToLower(expr.Name.String())]
+		if len(expr.Name.Indirect) > 0 {
+			// We don't support qualified function names (yet).
+			return DNull, fmt.Errorf("unknown function: %s", expr.Name)
+		}
+
+		name := string(expr.Name.Base)
+		candidates, ok := builtins[strings.ToLower(name)]
 		if !ok {
-			return DNull, fmt.Errorf("unknown function %s", expr.Name)
+			return DNull, fmt.Errorf("unknown function: %s", name)
 		}
 
 		for _, candidate := range candidates {
