@@ -19,15 +19,56 @@ package sql
 
 import (
 	"strings"
+	"unicode"
+
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
+// Special case normalization rules for Turkish/Azeri lowercase dotless-i and
+// uppercase dotted-i. Fold both dotted and dotless 'i' into the ascii i/I, so
+// our case-insensitive comparison functions can be locale-invariant. This
+// mapping implements case-insensitivity for Turkish and other latin-derived
+// languages simultaneously, with the additional quirk that it is also
+// insensitive to the dottedness of the i's
+var normalize = unicode.SpecialCase{
+	unicode.CaseRange{
+		Lo: 0x0130,
+		Hi: 0x0130,
+		Delta: [unicode.MaxCase]rune{
+			0x49 - 0x130, // Upper
+			0x69 - 0x130, // Lower
+			0x49 - 0x130, // Title
+		},
+	},
+	unicode.CaseRange{
+		Lo: 0x0131,
+		Hi: 0x0131,
+		Delta: [unicode.MaxCase]rune{
+			0x49 - 0x131, // Upper
+			0x69 - 0x131, // Lower
+			0x49 - 0x131, // Title
+		},
+	},
+}
+
+// normalizeName normalizes to lowercase and Unicode Normalization Form C
+// (NFC).
+func normalizeName(name string) string {
+	return norm.NFC.String(strings.Map(normalize.ToLower, name))
+}
+
+// equalName returns true iff the normalizations of a and b are equal.
+func equalName(a, b string) bool {
+	return normalizeName(a) == normalizeName(b)
+}
+
 // MakeNameMetadataKey returns the key for the name.
 func MakeNameMetadataKey(parentID ID, name string) proto.Key {
-	name = strings.ToLower(name)
+	name = normalizeName(name)
 	k := make([]byte, 0, len(keys.NameMetadataPrefix)+encoding.MaxUvarintSize+len(name))
 	k = append(k, keys.NameMetadataPrefix...)
 	k = encoding.EncodeUvarint(k, uint64(parentID))

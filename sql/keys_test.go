@@ -15,25 +15,41 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package sql_test
+package sql
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
+
+func TestNormalizeName(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	testCases := []struct {
+		in, expected string
+	}{
+		{"HELLO", "hello"},                            // Lowercase is the norm
+		{"ıİ", "ii"},                                  // Turkish/Azeri special cases
+		{"no\u0308rmalization", "n\u00f6rmalization"}, // NFD -> NFC.
+	}
+	for _, test := range testCases {
+		s := normalizeName(test.in)
+		if test.expected != s {
+			t.Errorf("%s: expected %s, but found %s", test.in, test.expected, s)
+		}
+	}
+}
 
 func TestKeyAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
 		key, expAddress proto.Key
 	}{
-		{sql.MakeNameMetadataKey(0, "foo"), proto.Key("\x00name-\bfoo")},
-		{sql.MakeNameMetadataKey(0, "BAR"), proto.Key("\x00name-\bbar")},
-		{sql.MakeDescMetadataKey(123), proto.Key("\x00desc-\t{")},
+		{MakeNameMetadataKey(0, "foo"), proto.Key("\x00name-\bfoo")},
+		{MakeNameMetadataKey(0, "BAR"), proto.Key("\x00name-\bbar")},
+		{MakeDescMetadataKey(123), proto.Key("\x00desc-\t{")},
 	}
 	for i, test := range testCases {
 		result := keys.KeyAddress(test.key)

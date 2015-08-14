@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
@@ -130,9 +129,9 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 		// This is only kosher because we know that getAliasedDesc() succeeded.
 		qname := from[0].(*parser.AliasedTableExpr).Expr.(*parser.QualifiedName)
 		indexName := qname.Index()
-		if indexName != "" && !strings.EqualFold(n.desc.PrimaryIndex.Name, indexName) {
+		if indexName != "" && !equalName(n.desc.PrimaryIndex.Name, indexName) {
 			for i := range n.desc.Indexes {
-				if strings.EqualFold(n.desc.Indexes[i].Name, indexName) {
+				if equalName(n.desc.Indexes[i].Name, indexName) {
 					// Remove all but the matching index from the descriptor.
 					n.desc.Indexes = n.desc.Indexes[i : i+1]
 					n.index = &n.desc.Indexes[0]
@@ -251,7 +250,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 				return fmt.Errorf("\"%s\" cannot be aliased", qname)
 			}
 			tableName := qname.Table()
-			if tableName != "" && !strings.EqualFold(n.desc.Alias, tableName) {
+			if tableName != "" && !equalName(n.desc.Alias, tableName) {
 				return fmt.Errorf("table \"%s\" not found", tableName)
 			}
 
@@ -583,7 +582,7 @@ func (v *qnameVisitor) Visit(expr parser.Expr) parser.Expr {
 	if desc != nil {
 		name := qname.Column()
 		for _, col := range v.visibleCols {
-			if !strings.EqualFold(name, col.Name) {
+			if !equalName(name, col.Name) {
 				continue
 			}
 			return v.getQVal(col)
@@ -602,7 +601,7 @@ func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *TableDescriptor {
 		qname.Base = parser.Name(v.desc.Alias)
 		return v.desc
 	}
-	if strings.EqualFold(v.desc.Alias, string(qname.Base)) {
+	if equalName(v.desc.Alias, string(qname.Base)) {
 		return v.desc
 	}
 	return nil
