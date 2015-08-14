@@ -25,13 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-var _ descriptorProto = &structured.DatabaseDescriptor{}
-var _ descriptorProto = &structured.TableDescriptor{}
+var _ descriptorProto = &DatabaseDescriptor{}
+var _ descriptorProto = &TableDescriptor{}
 
 // descriptorKey is the interface implemented by both
 // DatabaseKey and TableKey. It is used to easily get the
@@ -46,9 +45,9 @@ type descriptorKey interface {
 // TODO(marc): this is getting rather large.
 type descriptorProto interface {
 	gogoproto.Message
-	GetPrivileges() *structured.PrivilegeDescriptor
-	GetID() structured.ID
-	SetID(structured.ID)
+	GetPrivileges() *PrivilegeDescriptor
+	GetID() ID
+	SetID(ID)
 	TypeName() string
 	GetName() string
 	SetName(string)
@@ -85,7 +84,7 @@ func (p *planner) writeDescriptor(plainKey descriptorKey, descriptor descriptorP
 
 	// Increment unique descriptor counter.
 	if ir, err := p.txn.Inc(keys.DescIDGenerator, 1); err == nil {
-		descriptor.SetID(structured.ID(ir.ValueInt() - 1))
+		descriptor.SetID(ID(ir.ValueInt() - 1))
 	} else {
 		return err
 	}
@@ -93,7 +92,7 @@ func (p *planner) writeDescriptor(plainKey descriptorKey, descriptor descriptorP
 	// TODO(pmattis): The error currently returned below is likely going to be
 	// difficult to interpret.
 	// TODO(pmattis): Need to handle if-not-exists here as well.
-	descKey := structured.MakeDescMetadataKey(descriptor.GetID())
+	descKey := MakeDescMetadataKey(descriptor.GetID())
 	b := client.Batch{}
 	b.CPut(key, descKey, nil)
 	b.CPut(descKey, descriptor, nil)

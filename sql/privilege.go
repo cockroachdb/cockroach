@@ -15,7 +15,7 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package structured
+package sql
 
 import (
 	"fmt"

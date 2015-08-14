@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -47,7 +47,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	// The first `MaxReservedDescID` (plus 0) are set aside.
-	nameKey := structured.MakeNameMetadataKey(structured.MaxReservedDescID+1, "kv")
+	nameKey := sql.MakeNameMetadataKey(sql.MaxReservedDescID+1, "kv")
 	gr, err := kvDB.Get(nameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +58,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	descKey := gr.ValueBytes()
-	desc := structured.TableDescriptor{}
+	desc := sql.TableDescriptor{}
 	if err := kvDB.GetProto(descKey, &desc); err != nil {
 		t.Fatal(err)
 	}

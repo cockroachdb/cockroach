@@ -24,64 +24,63 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 // tableKey implements descriptorKey.
 type tableKey struct {
-	parentID structured.ID
+	parentID ID
 	name     string
 }
 
 func (tk tableKey) Key() proto.Key {
-	return structured.MakeNameMetadataKey(tk.parentID, tk.name)
+	return MakeNameMetadataKey(tk.parentID, tk.name)
 }
 
 func (tk tableKey) Name() string {
 	return tk.name
 }
 
-func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
-	desc := structured.TableDescriptor{}
+func makeTableDesc(p *parser.CreateTable) (TableDescriptor, error) {
+	desc := TableDescriptor{}
 	desc.Name = p.Table.Table()
 	for _, def := range p.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
-			col := structured.ColumnDescriptor{
+			col := ColumnDescriptor{
 				Name:     string(d.Name),
 				Nullable: (d.Nullable != parser.NotNull),
 			}
 			switch t := d.Type.(type) {
 			case *parser.BitType:
-				col.Type.Kind = structured.ColumnType_BIT
+				col.Type.Kind = ColumnType_BIT
 				col.Type.Width = int32(t.N)
 			case *parser.BoolType:
-				col.Type.Kind = structured.ColumnType_BOOL
+				col.Type.Kind = ColumnType_BOOL
 			case *parser.IntType:
-				col.Type.Kind = structured.ColumnType_INT
+				col.Type.Kind = ColumnType_INT
 				col.Type.Width = int32(t.N)
 			case *parser.FloatType:
-				col.Type.Kind = structured.ColumnType_FLOAT
+				col.Type.Kind = ColumnType_FLOAT
 				col.Type.Precision = int32(t.Prec)
 			case *parser.DecimalType:
-				col.Type.Kind = structured.ColumnType_DECIMAL
+				col.Type.Kind = ColumnType_DECIMAL
 				col.Type.Width = int32(t.Scale)
 				col.Type.Precision = int32(t.Prec)
 			case *parser.DateType:
-				col.Type.Kind = structured.ColumnType_DATE
+				col.Type.Kind = ColumnType_DATE
 			case *parser.TimeType:
-				col.Type.Kind = structured.ColumnType_TIME
+				col.Type.Kind = ColumnType_TIME
 			case *parser.TimestampType:
-				col.Type.Kind = structured.ColumnType_TIMESTAMP
+				col.Type.Kind = ColumnType_TIMESTAMP
 			case *parser.CharType:
-				col.Type.Kind = structured.ColumnType_CHAR
+				col.Type.Kind = ColumnType_CHAR
 				col.Type.Width = int32(t.N)
 			case *parser.TextType:
-				col.Type.Kind = structured.ColumnType_TEXT
+				col.Type.Kind = ColumnType_TEXT
 			case *parser.BlobType:
-				col.Type.Kind = structured.ColumnType_BLOB
+				col.Type.Kind = ColumnType_BLOB
 			default:
 				panic(fmt.Sprintf("unexpected type %T", t))
 			}
@@ -89,19 +88,19 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 
 			// Create any associated index.
 			if d.PrimaryKey || d.Unique {
-				index := structured.IndexDescriptor{
+				index := IndexDescriptor{
 					Unique:      true,
 					ColumnNames: []string{string(d.Name)},
 				}
 				if d.PrimaryKey {
-					index.Name = structured.PrimaryKeyIndexName
+					index.Name = PrimaryKeyIndexName
 					desc.PrimaryIndex = index
 				} else {
 					desc.Indexes = append(desc.Indexes, index)
 				}
 			}
 		case *parser.IndexTableDef:
-			index := structured.IndexDescriptor{
+			index := IndexDescriptor{
 				Name:        string(d.Name),
 				Unique:      d.Unique,
 				ColumnNames: d.Columns,
@@ -109,7 +108,7 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 			if d.PrimaryKey {
 				// Only override the index name if it hasn't been set by the user.
 				if index.Name == "" {
-					index.Name = structured.PrimaryKeyIndexName
+					index.Name = PrimaryKeyIndexName
 				}
 				desc.PrimaryIndex = index
 			} else {
@@ -123,7 +122,7 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 }
 
 func (p *planner) getTableDesc(qname *parser.QualifiedName) (
-	*structured.TableDescriptor, error) {
+	*TableDescriptor, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, err
 	}
@@ -132,15 +131,15 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (
 		return nil, err
 	}
 
-	desc := structured.TableDescriptor{}
+	desc := TableDescriptor{}
 	if err := p.getDescriptor(tableKey{dbDesc.ID, qname.Table()}, &desc); err != nil {
 		return nil, err
 	}
 	return &desc, nil
 }
 
-func (p *planner) getTableNames(dbDesc *structured.DatabaseDescriptor) (parser.QualifiedNames, error) {
-	prefix := structured.MakeNameMetadataKey(dbDesc.ID, "")
+func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNames, error) {
+	prefix := MakeNameMetadataKey(dbDesc.ID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -161,7 +160,7 @@ func (p *planner) getTableNames(dbDesc *structured.DatabaseDescriptor) (parser.Q
 	return qualifiedNames, nil
 }
 
-func encodeIndexKey(columnIDs []structured.ColumnID, colMap map[structured.ColumnID]int,
+func encodeIndexKey(columnIDs []ColumnID, colMap map[ColumnID]int,
 	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	var key []byte
 	var containsNull bool
@@ -211,8 +210,8 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 	return nil, fmt.Errorf("unable to encode table key: %T", val)
 }
 
-func makeIndexKeyVals(desc *structured.TableDescriptor,
-	index structured.IndexDescriptor) ([]parser.Datum, error) {
+func makeIndexKeyVals(desc *TableDescriptor,
+	index IndexDescriptor) ([]parser.Datum, error) {
 	vals := make([]parser.Datum, len(index.ColumnIDs))
 	for i, id := range index.ColumnIDs {
 		col, err := desc.FindColumnByID(id)
@@ -220,12 +219,12 @@ func makeIndexKeyVals(desc *structured.TableDescriptor,
 			return nil, err
 		}
 		switch col.Type.Kind {
-		case structured.ColumnType_BIT, structured.ColumnType_INT:
+		case ColumnType_BIT, ColumnType_INT:
 			vals[i] = parser.DInt(0)
-		case structured.ColumnType_FLOAT:
+		case ColumnType_FLOAT:
 			vals[i] = parser.DFloat(0)
-		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
-			structured.ColumnType_BLOB:
+		case ColumnType_CHAR, ColumnType_TEXT,
+			ColumnType_BLOB:
 			vals[i] = parser.DString("")
 		default:
 			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
@@ -247,8 +246,8 @@ func makeIndexKeyVals(desc *structured.TableDescriptor,
 // the index key are returned which will either be an encoded column ID for the
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
-func decodeIndexKey(desc *structured.TableDescriptor,
-	index structured.IndexDescriptor, vals []parser.Datum, key []byte) ([]byte, error) {
+func decodeIndexKey(desc *TableDescriptor,
+	index IndexDescriptor, vals []parser.Datum, key []byte) ([]byte, error) {
 	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
 		return nil, fmt.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
@@ -256,13 +255,13 @@ func decodeIndexKey(desc *structured.TableDescriptor,
 
 	var tableID uint64
 	key, tableID = encoding.DecodeUvarint(key)
-	if structured.ID(tableID) != desc.ID {
+	if ID(tableID) != desc.ID {
 		return nil, fmt.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
 	}
 
 	var indexID uint64
 	key, indexID = encoding.DecodeUvarint(key)
-	if structured.IndexID(indexID) != index.ID {
+	if IndexID(indexID) != index.ID {
 		return nil, fmt.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
 	}
 
@@ -293,11 +292,11 @@ type indexEntry struct {
 	value []byte
 }
 
-func encodeSecondaryIndexes(tableID structured.ID, indexes []structured.IndexDescriptor,
-	colMap map[structured.ColumnID]int, values []parser.Datum, primaryIndexKeySuffix []byte) ([]indexEntry, error) {
+func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
+	colMap map[ColumnID]int, values []parser.Datum, primaryIndexKeySuffix []byte) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
-		secondaryIndexKeyPrefix := structured.MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
+		secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
 		secondaryIndexKey, containsNull, err := encodeIndexKey(secondaryIndex.ColumnIDs, colMap, values, secondaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
@@ -321,29 +320,29 @@ func encodeSecondaryIndexes(tableID structured.ID, indexes []structured.IndexDes
 // convertDatum returns a Go primitive value equivalent of val, of the
 // type expected by col. If val's type is incompatible with col, or if
 // col's type is not yet implemented, an error is returned.
-func convertDatum(col structured.ColumnDescriptor, val parser.Datum) (interface{}, error) {
+func convertDatum(col ColumnDescriptor, val parser.Datum) (interface{}, error) {
 	if val == parser.DNull {
 		return nil, nil
 	}
 
 	switch col.Type.Kind {
-	case structured.ColumnType_BOOL:
+	case ColumnType_BOOL:
 		if v, ok := val.(parser.DBool); ok {
 			return bool(v), nil
 		}
-	case structured.ColumnType_BIT, structured.ColumnType_INT:
+	case ColumnType_BIT, ColumnType_INT:
 		if v, ok := val.(parser.DInt); ok {
 			return int64(v), nil
 		}
-	case structured.ColumnType_FLOAT:
+	case ColumnType_FLOAT:
 		if v, ok := val.(parser.DFloat); ok {
 			return float64(v), nil
 		}
-	// case structured.ColumnType_DECIMAL:
-	// case structured.ColumnType_DATE:
-	// case structured.ColumnType_TIME:
-	// case structured.ColumnType_TIMESTAMP:
-	case structured.ColumnType_CHAR, structured.ColumnType_TEXT, structured.ColumnType_BLOB:
+	// case ColumnType_DECIMAL:
+	// case ColumnType_DATE:
+	// case ColumnType_TIME:
+	// case ColumnType_TIMESTAMP:
+	case ColumnType_CHAR, ColumnType_TEXT, ColumnType_BLOB:
 		if v, ok := val.(parser.DString); ok {
 			return string(v), nil
 		}

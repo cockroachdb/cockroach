@@ -20,7 +20,6 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/structured"
 )
 
 // databaseKey implements descriptorKey.
@@ -29,23 +28,23 @@ type databaseKey struct {
 }
 
 func (dk databaseKey) Key() proto.Key {
-	return structured.MakeNameMetadataKey(structured.RootNamespaceID, dk.name)
+	return MakeNameMetadataKey(RootNamespaceID, dk.name)
 }
 
 func (dk databaseKey) Name() string {
 	return dk.name
 }
 
-func makeDatabaseDesc(p *parser.CreateDatabase) structured.DatabaseDescriptor {
-	return structured.DatabaseDescriptor{
+func makeDatabaseDesc(p *parser.CreateDatabase) DatabaseDescriptor {
+	return DatabaseDescriptor{
 		Name:       p.Name.String(),
-		Privileges: structured.NewDefaultDatabasePrivilegeDescriptor(),
+		Privileges: NewDefaultDatabasePrivilegeDescriptor(),
 	}
 }
 
 // getDatabaseDesc looks up the database descriptor given its name.
-func (p *planner) getDatabaseDesc(name string) (*structured.DatabaseDescriptor, error) {
-	desc := structured.DatabaseDescriptor{}
+func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, error) {
+	desc := DatabaseDescriptor{}
 	if err := p.getDescriptor(databaseKey{name}, &desc); err != nil {
 		return nil, err
 	}

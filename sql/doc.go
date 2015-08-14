@@ -17,13 +17,14 @@
 
 /*
 
-Package structured provides a high-level API for application access to
+Package sql provides a high-level API for application access to
 an underlying cockroach datastore. Cockroach itself provides a single
 monolithic, sorted key-value map. Structured translates between
 familiar RDBMS concepts such as tables, columns and indexes to the
 key-value store.
 
 NOTE: THIS IS WILDLY OUT OF DATE WHILE THIS PACKAGE IS BEING REDESIGNED.
+TODO: THIS SHOULD CONTAIN SQL DOCUMENTATION.
 
 Schemas
 
@@ -461,4 +462,4 @@ Terms can and should efficiently combine multiple source ids into a
 list instead of requiring a separate key for every instance. This is
 left as future work, as it's non-trivial to do efficiently.
 */
-package structured
+package sql

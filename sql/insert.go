@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -51,13 +50,13 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
-	colIDtoRowIndex := map[structured.ColumnID]int{}
+	colIDtoRowIndex := map[ColumnID]int{}
 	for i, c := range cols {
 		colIDtoRowIndex[c.ID] = i
 	}
 
 	// Verify we have at least the columns that are part of the primary key.
-	primaryKeyCols := map[structured.ColumnID]struct{}{}
+	primaryKeyCols := map[ColumnID]struct{}{}
 	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
 		if _, ok := colIDtoRowIndex[id]; !ok {
 			return nil, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
@@ -73,7 +72,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex
-	primaryIndexKeyPrefix := structured.MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
+	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	b := client.Batch{}
 
@@ -138,7 +137,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
 
-				key := structured.MakeColumnKey(col.ID, primaryIndexKey)
+				key := MakeColumnKey(col.ID, primaryIndexKey)
 				if log.V(2) {
 					log.Infof("CPut %q -> %v", key, primitive)
 				}
@@ -160,13 +159,13 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	return &valuesNode{}, nil
 }
 
-func (p *planner) processColumns(tableDesc *structured.TableDescriptor,
-	node parser.QualifiedNames) ([]structured.ColumnDescriptor, error) {
+func (p *planner) processColumns(tableDesc *TableDescriptor,
+	node parser.QualifiedNames) ([]ColumnDescriptor, error) {
 	if node == nil {
 		return tableDesc.Columns, nil
 	}
 
-	cols := make([]structured.ColumnDescriptor, len(node))
+	cols := make([]ColumnDescriptor, len(node))
 	for i, n := range node {
 		// TODO(pmattis): If the name is qualified, verify the table name matches
 		// tableDesc.Name.

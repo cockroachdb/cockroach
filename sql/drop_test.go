@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -41,7 +41,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	// The first `MaxReservedDescID` (plus 0) are set aside.
-	nameKey := structured.MakeNameMetadataKey(structured.MaxReservedDescID+1, "kv")
+	nameKey := sql.MakeNameMetadataKey(sql.MaxReservedDescID+1, "kv")
 	gr, err := kvDB.Get(nameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -52,7 +52,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	descKey := gr.ValueBytes()
-	desc := structured.TableDescriptor{}
+	desc := sql.TableDescriptor{}
 	if err := kvDB.GetProto(descKey, &desc); err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	dbNameKey := structured.MakeNameMetadataKey(structured.RootNamespaceID, "t")
+	dbNameKey := sql.MakeNameMetadataKey(sql.RootNamespaceID, "t")
 	r, err := kvDB.Get(dbNameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -114,12 +114,12 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf(`database "t" does not exist`)
 	}
 	dbDescKey := r.ValueBytes()
-	dbDesc := structured.DatabaseDescriptor{}
+	dbDesc := sql.DatabaseDescriptor{}
 	if err := kvDB.GetProto(dbDescKey, &dbDesc); err != nil {
 		t.Fatal(err)
 	}
 
-	tbNameKey := structured.MakeNameMetadataKey(dbDesc.ID, "kv")
+	tbNameKey := sql.MakeNameMetadataKey(dbDesc.ID, "kv")
 	gr, err := kvDB.Get(tbNameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf(`table "kv" does not exist`)
 	}
 	tbDescKey := gr.ValueBytes()
-	tbDesc := structured.TableDescriptor{}
+	tbDesc := sql.TableDescriptor{}
 	if err := kvDB.GetProto(tbDescKey, &tbDesc); err != nil {
 		t.Fatal(err)
 	}

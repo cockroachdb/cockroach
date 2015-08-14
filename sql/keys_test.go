@@ -13,24 +13,32 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+// Author: Tamir Duberstein (tamird@gmail.com)
 
-package structured_test
+package sql_test
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func init() {
-	security.SetReadFileFn(securitytest.Asset)
-}
-
-//go:generate ../util/leaktest/add-leaktest.sh *_test.go
-
-func TestMain(m *testing.M) {
-	leaktest.TestMainWithLeakCheck(m)
+func TestKeyAddress(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	testCases := []struct {
+		key, expAddress proto.Key
+	}{
+		{sql.MakeNameMetadataKey(0, "foo"), proto.Key("\x00name-\bfoo")},
+		{sql.MakeNameMetadataKey(0, "BAR"), proto.Key("\x00name-\bbar")},
+		{sql.MakeDescMetadataKey(123), proto.Key("\x00desc-\t{")},
+	}
+	for i, test := range testCases {
+		result := keys.KeyAddress(test.key)
+		if !result.Equal(test.expAddress) {
+			t.Errorf("%d: expected address for key %q doesn't match %q", i, test.key, test.expAddress)
+		}
+	}
 }

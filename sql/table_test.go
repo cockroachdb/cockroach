@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -31,72 +30,72 @@ func TestMakeTableDescColumns(t *testing.T) {
 
 	testData := []struct {
 		sqlType  string
-		colType  structured.ColumnType
+		colType  ColumnType
 		nullable bool
 	}{
 		{
 			"BIT(1)",
-			structured.ColumnType{Kind: structured.ColumnType_BIT, Width: 1},
+			ColumnType{Kind: ColumnType_BIT, Width: 1},
 			true,
 		},
 		{
 			"BOOLEAN",
-			structured.ColumnType{Kind: structured.ColumnType_BOOL},
+			ColumnType{Kind: ColumnType_BOOL},
 			true,
 		},
 		{
 			"INT",
-			structured.ColumnType{Kind: structured.ColumnType_INT},
+			ColumnType{Kind: ColumnType_INT},
 			true,
 		},
 		{
 			"FLOAT(3)",
-			structured.ColumnType{Kind: structured.ColumnType_FLOAT, Precision: 3},
+			ColumnType{Kind: ColumnType_FLOAT, Precision: 3},
 			true,
 		},
 		{
 			"DECIMAL(5,6)",
-			structured.ColumnType{Kind: structured.ColumnType_DECIMAL, Precision: 5, Width: 6},
+			ColumnType{Kind: ColumnType_DECIMAL, Precision: 5, Width: 6},
 			true,
 		},
 		{
 			"DATE",
-			structured.ColumnType{Kind: structured.ColumnType_DATE},
+			ColumnType{Kind: ColumnType_DATE},
 			true,
 		},
 		{
 			"TIME",
-			structured.ColumnType{Kind: structured.ColumnType_TIME},
+			ColumnType{Kind: ColumnType_TIME},
 			true,
 		},
 		{
 			"TIMESTAMP",
-			structured.ColumnType{Kind: structured.ColumnType_TIMESTAMP},
+			ColumnType{Kind: ColumnType_TIMESTAMP},
 			true,
 		},
 		{
 			"CHAR",
-			structured.ColumnType{Kind: structured.ColumnType_CHAR},
+			ColumnType{Kind: ColumnType_CHAR},
 			true,
 		},
 		{
 			"TEXT",
-			structured.ColumnType{Kind: structured.ColumnType_TEXT},
+			ColumnType{Kind: ColumnType_TEXT},
 			true,
 		},
 		{
 			"BLOB",
-			structured.ColumnType{Kind: structured.ColumnType_BLOB},
+			ColumnType{Kind: ColumnType_BLOB},
 			true,
 		},
 		{
 			"INT NOT NULL",
-			structured.ColumnType{Kind: structured.ColumnType_INT},
+			ColumnType{Kind: ColumnType_INT},
 			false,
 		},
 		{
 			"INT NULL",
-			structured.ColumnType{Kind: structured.ColumnType_INT},
+			ColumnType{Kind: ColumnType_INT},
 			true,
 		},
 	}
@@ -127,26 +126,26 @@ func TestMakeTableDescIndexes(t *testing.T) {
 
 	testData := []struct {
 		sql     string
-		primary structured.IndexDescriptor
-		indexes []structured.IndexDescriptor
+		primary IndexDescriptor
+		indexes []IndexDescriptor
 	}{
 		{
 			"a INT PRIMARY KEY",
-			structured.IndexDescriptor{
-				Name:        structured.PrimaryKeyIndexName,
+			IndexDescriptor{
+				Name:        PrimaryKeyIndexName,
 				Unique:      true,
 				ColumnNames: []string{"a"},
 			},
-			[]structured.IndexDescriptor{},
+			[]IndexDescriptor{},
 		},
 		{
 			"a INT UNIQUE, b INT PRIMARY KEY",
-			structured.IndexDescriptor{
+			IndexDescriptor{
 				Name:        "primary",
 				Unique:      true,
 				ColumnNames: []string{"b"},
 			},
-			[]structured.IndexDescriptor{
+			[]IndexDescriptor{
 				{
 					Name:        "",
 					Unique:      true,
@@ -156,21 +155,21 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		},
 		{
 			"a INT, b INT, CONSTRAINT c PRIMARY KEY (a, b)",
-			structured.IndexDescriptor{
+			IndexDescriptor{
 				Name:        "c",
 				Unique:      true,
 				ColumnNames: []string{"a", "b"},
 			},
-			[]structured.IndexDescriptor{},
+			[]IndexDescriptor{},
 		},
 		{
 			"a INT, b INT, CONSTRAINT c UNIQUE (b), PRIMARY KEY (a, b)",
-			structured.IndexDescriptor{
+			IndexDescriptor{
 				Name:        "primary",
 				Unique:      true,
 				ColumnNames: []string{"a", "b"},
 			},
-			[]structured.IndexDescriptor{
+			[]IndexDescriptor{
 				{
 					Name:        "c",
 					Unique:      true,
@@ -180,12 +179,12 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		},
 		{
 			"a INT, b INT, PRIMARY KEY (a, b)",
-			structured.IndexDescriptor{
-				Name:        structured.PrimaryKeyIndexName,
+			IndexDescriptor{
+				Name:        PrimaryKeyIndexName,
 				Unique:      true,
 				ColumnNames: []string{"a", "b"},
 			},
-			[]structured.IndexDescriptor{},
+			[]IndexDescriptor{},
 		},
 	}
 	for i, d := range testData {
@@ -204,7 +203,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		if !reflect.DeepEqual(d.primary, schema.PrimaryIndex) {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.primary, schema.PrimaryIndex)
 		}
-		if !reflect.DeepEqual(d.indexes, append([]structured.IndexDescriptor{}, schema.Indexes...)) {
+		if !reflect.DeepEqual(d.indexes, append([]IndexDescriptor{}, schema.Indexes...)) {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.indexes, schema.Indexes)
 		}
 
@@ -225,7 +224,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := desc.AllocateIDs(); err != structured.ErrMissingPrimaryKey {
+	if err := desc.AllocateIDs(); err != ErrMissingPrimaryKey {
 		t.Fatal(err)
 	}
 }

@@ -15,7 +15,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package structured
+package sql
 
 import (
 	"strings"

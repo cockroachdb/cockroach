@@ -22,7 +22,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/structured"
 )
 
 // ShowColumns of a table.
@@ -50,7 +49,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 //   Notes: postgres does not have a "show databases"
 //          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
 func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
-	prefix := structured.MakeNameMetadataKey(structured.RootNamespaceID, "")
+	prefix := MakeNameMetadataKey(RootNamespaceID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -123,7 +122,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 	v := &valuesNode{columns: []string{"Table", "Name", "Unique", "Seq", "Column"}}
 
 	name := n.Table.Table()
-	for _, index := range append([]structured.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
+	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 		for j, col := range index.ColumnNames {
 			v.rows = append(v.rows, []parser.Datum{
 				parser.DString(name),

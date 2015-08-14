@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/structured"
 )
 
 // DropTable drops a table.
@@ -59,7 +58,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			return nil, fmt.Errorf("table %q does not exist", tbKey.Name())
 		}
 
-		tableDesc := structured.TableDescriptor{}
+		tableDesc := TableDescriptor{}
 		if err := p.txn.GetProto(gr.ValueBytes(), &tableDesc); err != nil {
 			return nil, err
 		}
@@ -101,7 +100,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 		return nil, errEmptyDatabaseName
 	}
 
-	nameKey := structured.MakeNameMetadataKey(structured.RootNamespaceID, string(n.Name))
+	nameKey := MakeNameMetadataKey(RootNamespaceID, string(n.Name))
 	gr, err := p.txn.Get(nameKey)
 	if err != nil {
 		return nil, err
@@ -115,7 +114,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	}
 
 	descKey := gr.ValueBytes()
-	desc := structured.DatabaseDescriptor{}
+	desc := DatabaseDescriptor{}
 	if err := p.txn.GetProto(descKey, &desc); err != nil {
 		return nil, err
 	}
