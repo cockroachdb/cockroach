@@ -118,7 +118,6 @@ func init() {
 	// Used...elsewhere?
 	gob.Register(proto.RangeDescriptor{})
 	gob.Register(proto.StoreDescriptor{})
-	gob.Register(util.UnresolvedAddr{})
 }
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.
@@ -406,7 +405,7 @@ func (g *Gossip) getNextBootstrapAddress() net.Addr {
 		if err != nil {
 			log.Errorf("invalid bootstrap address: %+v, %v", resolver, err)
 			continue
-		} else if g.is.NodeAddr != nil && addr.String() == g.is.NodeAddr.String() {
+		} else if addr.String() == g.is.NodeAddr.String() {
 			// Skip our own node address.
 			continue
 		}

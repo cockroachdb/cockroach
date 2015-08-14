@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"net"
 	"reflect"
 	"regexp"
 	"sync"
@@ -49,12 +48,12 @@ type callback struct {
 //
 // infoStores are not thread safe.
 type infoStore struct {
-	Infos     infoMap      `json:"infos,omitempty"`  // Map from key to info
-	Groups    groupMap     `json:"groups,omitempty"` // Map from key prefix to groups of infos
-	NodeID    proto.NodeID `json:"-"`                // Owning node's ID
-	NodeAddr  net.Addr     `json:"-"`                // Address of node owning this info store: "host:port"
-	MaxSeq    int64        `json:"-"`                // Maximum sequence number inserted
-	seqGen    int64        // Sequence generator incremented each time info is added
+	Infos     infoMap             `json:"infos,omitempty"`  // Map from key to info
+	Groups    groupMap            `json:"groups,omitempty"` // Map from key prefix to groups of infos
+	NodeID    proto.NodeID        `json:"-"`                // Owning node's ID
+	NodeAddr  util.UnresolvedAddr `json:"-"`                // Address of node owning this info store: "host:port"
+	MaxSeq    int64               `json:"-"`                // Maximum sequence number inserted
+	seqGen    int64               // Sequence generator incremented each time info is added
 	callbacks []callback
 }
 
@@ -121,7 +120,7 @@ var (
 // newInfoStore allocates and returns a new infoStore.
 // "NodeAddr" is the address of the node owning the infostore
 // in "host:port" format.
-func newInfoStore(nodeID proto.NodeID, nodeAddr net.Addr) *infoStore {
+func newInfoStore(nodeID proto.NodeID, nodeAddr util.UnresolvedAddr) *infoStore {
 	return &infoStore{
 		Infos:    infoMap{},
 		Groups:   groupMap{},

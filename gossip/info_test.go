@@ -24,17 +24,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-// testAddr is a fake net.Addr replacement for unittesting.
-type testAddr string
-
-func (t testAddr) Network() string {
-	return "test"
-}
-func (t testAddr) String() string {
-	return string(t)
+func testAddr(str string) util.UnresolvedAddr {
+	return util.MakeUnresolvedAddr("test", str)
 }
 
 var emptyAddr = testAddr("<test-addr>")
