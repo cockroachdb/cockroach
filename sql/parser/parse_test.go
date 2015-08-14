@@ -353,6 +353,9 @@ func TestParse2(t *testing.T) {
 		{`SELECT -0.-/*test*/-1`,
 			`SELECT - 0. - - 1`,
 		},
+		// See #1948.
+		{`SELECT~~+~++~bd(*)`,
+			`SELECT ~ ~ + ~ + + ~ bd(*)`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
