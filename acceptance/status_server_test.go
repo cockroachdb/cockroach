@@ -80,6 +80,7 @@ func checkNode(t *testing.T, client *http.Client, node *localcluster.Container, 
 // TestStatusServer starts up an N node cluster and tests the status server on
 // each node.
 func TestStatusServer(t *testing.T) {
+	t.Skipf("TODO(Bram): Test is flaky - fix it.")
 	l := localcluster.Create(*numNodes, stopper)
 	l.ForceLogging = true
 	l.Start()
