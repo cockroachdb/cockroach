@@ -31,13 +31,28 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// qvalue implements the parser.DRereference interface and is used as a
+// replacement node for QualifiedNames in expressions that can change their
+// values for each row. Since it is a reference, expression walking can
+// discover the qvalues and the columns they refer to.
 type qvalue struct {
-	// TODO(pmattis): Add a QualifiedValue expression (or IndirectExpr or
-	// DReference) which contains a Datum but also a pointer to the column. This
-	// is needed so that select planning can operation on resolved expressions
-	// and map qualified values back to columns.
-	parser.ParenExpr
-	col ColumnDescriptor
+	datum parser.Datum
+	col   ColumnDescriptor
+
+	// Tricky: we embed a parser.Expr so that qvalue implements parser.expr()!
+	// Note that we can't just have qvalue.expr() as that method is defined in
+	// the wrong package.
+	parser.Expr
+}
+
+var _ parser.DReference = &qvalue{}
+
+func (q *qvalue) Datum() parser.Datum {
+	return q.datum
+}
+
+func (q *qvalue) String() string {
+	return q.datum.String()
 }
 
 type qvalMap map[ColumnID]*qvalue
@@ -306,7 +321,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 		// Reset the qvals map expressions to nil. The expresssions will get filled
 		// in with the column values as we decode the key-value pairs for the row.
 		for _, qval := range n.qvals {
-			qval.Expr = nil
+			qval.datum = nil
 		}
 	}
 
@@ -323,7 +338,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 		// part of the index key.
 		for i, id := range n.index.ColumnIDs {
 			if qval := n.qvals[id]; qval != nil {
-				qval.Expr = n.vals[i]
+				qval.datum = n.vals[i]
 			}
 		}
 	}
@@ -334,12 +349,12 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 	if !n.isSecondaryIndex && len(remaining) > 0 {
 		_, v := encoding.DecodeUvarint(remaining)
 		n.colID = ColumnID(v)
-		if qval, ok := n.qvals[n.colID]; ok && qval.Expr == nil {
+		if qval, ok := n.qvals[n.colID]; ok && qval.datum == nil {
 			value, ok = n.unmarshalValue(kv)
 			if !ok {
 				return false
 			}
-			qval.Expr = value
+			qval.datum = value
 			if log.V(2) {
 				log.Infof("Scan %q -> %v", kv.Key, value)
 			}
@@ -409,8 +424,8 @@ func (n *scanNode) filterRow() bool {
 			if !col.Nullable {
 				break
 			}
-			if qval, ok := n.qvals[col.ID]; ok && qval.Expr == nil {
-				qval.Expr = parser.DNull
+			if qval, ok := n.qvals[col.ID]; ok && qval.datum == nil {
+				qval.datum = parser.DNull
 				continue
 			}
 		}
@@ -537,20 +552,20 @@ func (n *scanNode) getQVal(col ColumnDescriptor) parser.Expr {
 		// needs to take that into consideration, but how to surface that info?
 		switch col.Type.Kind {
 		case ColumnType_BIT, ColumnType_INT:
-			qval.Expr = parser.DInt(0)
+			qval.datum = parser.DInt(0)
 		case ColumnType_BOOL:
-			qval.Expr = parser.DBool(true)
+			qval.datum = parser.DBool(true)
 		case ColumnType_FLOAT:
-			qval.Expr = parser.DFloat(0)
+			qval.datum = parser.DFloat(0)
 		case ColumnType_CHAR, ColumnType_TEXT,
 			ColumnType_BLOB:
-			qval.Expr = parser.DString("")
+			qval.datum = parser.DString("")
 		default:
 			panic(fmt.Sprintf("unsupported column type: %s", col.Type.Kind))
 		}
 		n.qvals[col.ID] = qval
 	}
-	return &qval.ParenExpr
+	return qval
 }
 
 type qnameVisitor struct {
