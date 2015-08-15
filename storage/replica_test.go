@@ -1829,6 +1829,49 @@ func TestEndTransactionGC(t *testing.T) {
 	}
 }
 
+// TestEndTransactionResolveOnlyLocalIntents verifies that an end transaction
+// request resolves only local intents.
+func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// Split the range and create an intent in each range.
+	// The keys of the two intents are next to each other.
+	key := proto.Key("a")
+	splitKey := key.Next()
+	newRng := splitTestRange(tc.store, splitKey, splitKey, t)
+
+	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+	pArgs := putArgs(key, []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
+	pArgs.Txn = txn
+	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	pArgs = putArgs(splitKey, []byte("value"), newRng.Desc().RangeID, tc.store.StoreID())
+	pArgs.Txn = txn
+	if _, err := newRng.AddCmd(newRng.context(), &pArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// End the transaction and resolve the intents.
+	args := endTxnArgs(txn, true /* commit */, 1, tc.store.StoreID())
+	args.Timestamp = txn.Timestamp
+	args.Intents = []proto.Intent{{Key: key, EndKey: splitKey.Next()}}
+	if _, err := tc.rng.AddCmd(tc.rng.context(), &args); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check if the intent in the other range has not yet been resolved.
+	gArgs := getArgs(splitKey, newRng.Desc().RangeID, tc.store.StoreID())
+	_, err := newRng.AddCmd(newRng.context(), &gArgs)
+	if _, ok := err.(*proto.WriteIntentError); !ok {
+		t.Errorf("expected write intent error, but got %s", err)
+	}
+}
+
 // TestPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.
 func TestPushTxnBadKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
