@@ -364,7 +364,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 			externalIntents = append(externalIntents, outsideIntents...)
 			if insideIntent != nil {
 				_, err := engine.MVCCResolveWriteIntentRange(batch, ms,
-					intent.Key, intent.EndKey, 0, reply.Txn.Timestamp, reply.Txn)
+					insideIntent.Key, insideIntent.EndKey, 0, reply.Txn.Timestamp, reply.Txn)
 				return err
 			}
 			return nil
