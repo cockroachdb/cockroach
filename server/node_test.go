@@ -132,6 +132,12 @@ func TestBootstrapCluster(t *testing.T) {
 		proto.Key("\x00store-idgen"),
 		proto.Key("\x00user"),
 		proto.Key("\x00zone"),
+		proto.Key("\xff\t\x02\t\x01\bsystem\x00\x01\t\x03"),
+		proto.Key("\xff\t\x02\t\x01\t\x01descriptor\x00\x01\t\x03"),
+		proto.Key("\xff\t\x02\t\x01\t\x01namespace\x00\x01\t\x03"),
+		proto.Key("\xff\t\x03\t\x01\t\x01\t\x02"),
+		proto.Key("\xff\t\x03\t\x01\t\x02\t\x02"),
+		proto.Key("\xff\t\x03\t\x01\t\x03\t\x02"),
 	}
 	if !reflect.DeepEqual(keys, expectedKeys) {
 		t.Errorf("expected keys mismatch:\n%s\n  -- vs. -- \n\n%s",

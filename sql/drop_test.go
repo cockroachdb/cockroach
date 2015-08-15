@@ -51,7 +51,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("TableDescriptor %q does not exist", nameKey)
 	}
 
-	descKey := gr.ValueBytes()
+	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
 	desc := sql.TableDescriptor{}
 	if err := kvDB.GetProto(descKey, &desc); err != nil {
 		t.Fatal(err)
@@ -113,7 +113,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if !r.Exists() {
 		t.Fatalf(`database "t" does not exist`)
 	}
-	dbDescKey := r.ValueBytes()
+	dbDescKey := sql.MakeDescMetadataKey(sql.ID(r.ValueInt()))
 	dbDesc := sql.DatabaseDescriptor{}
 	if err := kvDB.GetProto(dbDescKey, &dbDesc); err != nil {
 		t.Fatal(err)
@@ -127,7 +127,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if !gr.Exists() {
 		t.Fatalf(`table "kv" does not exist`)
 	}
-	tbDescKey := gr.ValueBytes()
+	tbDescKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
 	tbDesc := sql.TableDescriptor{}
 	if err := kvDB.GetProto(tbDescKey, &tbDesc); err != nil {
 		t.Fatal(err)

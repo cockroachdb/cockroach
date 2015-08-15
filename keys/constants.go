@@ -158,14 +158,10 @@ var (
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.
 	DescIDGenerator = MakeKey(SystemPrefix, proto.Key("desc-idgen"))
-	// DescMetadataPrefix is the key prefix for all descriptor metadata.
-	DescMetadataPrefix = MakeKey(SystemPrefix, proto.Key("desc-"))
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = MakeKey(SystemPrefix, proto.Key("node-idgen"))
 	// RangeIDGenerator is the global range ID generator sequence.
 	RangeIDGenerator = MakeKey(SystemPrefix, proto.Key("range-idgen"))
-	// NameMetadataPrefix is the key prefix for all name metadata.
-	NameMetadataPrefix = MakeKey(SystemPrefix, proto.Key("name-"))
 	// StoreIDGenerator is the global store ID generator sequence.
 	StoreIDGenerator = MakeKey(SystemPrefix, proto.Key("store-idgen"))
 	// RangeTreeRoot specifies the root range in the range tree.
@@ -177,7 +173,9 @@ var (
 	StatusStorePrefix = MakeKey(StatusPrefix, proto.Key("store-"))
 	// StatusNodePrefix stores all status info for nodes.
 	StatusNodePrefix = MakeKey(StatusPrefix, proto.Key("node-"))
-	// TableDataPrefix prefixes all Table data to aid in transitioning
-	// key:value data to Table data, and for ease of debugging.
-	TableDataPrefix = proto.Key("table-")
+
+	// TableDataPrefix prefixes all table data. It is specifically chosen to
+	// occur after the range of common user data prefixes so that tests which use
+	// those prefixes will not see table data.
+	TableDataPrefix = proto.Key("\xff")
 )

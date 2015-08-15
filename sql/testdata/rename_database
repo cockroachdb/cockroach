@@ -1,6 +1,7 @@
 query T
 SHOW DATABASES
 ----
+system
 test
 
 query TTT
@@ -38,6 +39,7 @@ SHOW GRANTS ON DATABASE test
 query T
 SHOW DATABASES
 ----
+system
 u
 
 # check the name in descriptor is also changed
@@ -83,5 +85,6 @@ ALTER DATABASE t RENAME TO v
 query T
 SHOW DATABASES
 ----
+system
 t
 u

@@ -306,13 +306,14 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	// Split the range at the first user key.
-	args := adminSplitArgs(proto.KeyMin, proto.Key("\x01"), 1, store.StoreID())
+	// Split the range after the last table data key.
+	keyPrefix := proto.Key("\xff\xfe")
+	args := adminSplitArgs(proto.KeyMin, keyPrefix, 1, store.StoreID())
 	if _, err := store.ExecuteCmd(context.Background(), &args); err != nil {
 		t.Fatal(err)
 	}
 	// Verify empty range has empty stats.
-	rng := store.LookupReplica(proto.Key("\x01"), nil)
+	rng := store.LookupReplica(keyPrefix, nil)
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	if err := verifyRangeStats(store.Engine(), rng.Desc().RangeID, engine.MVCCStats{}); err != nil {
@@ -322,7 +323,8 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Write random data.
 	src := rand.New(rand.NewSource(0))
 	for i := 0; i < 100; i++ {
-		key := randutil.RandBytes(src, int(src.Int31n(1<<7)))
+		key := append([]byte(nil), keyPrefix...)
+		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val, rng.Desc().RangeID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
@@ -337,7 +339,9 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
-	args = adminSplitArgs(proto.Key("\x01"), proto.Key("Z"), rng.Desc().RangeID, store.StoreID())
+	midKey := append([]byte(nil), keyPrefix...)
+	midKey = append(midKey, []byte("Z")...)
+	args = adminSplitArgs(keyPrefix, midKey, rng.Desc().RangeID, store.StoreID())
 	if _, err := store.ExecuteCmd(context.Background(), &args); err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +350,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc().RangeID, &msLeft); err != nil {
 		t.Fatal(err)
 	}
-	rngRight := store.LookupReplica(proto.Key("Z"), nil)
+	rngRight := store.LookupReplica(midKey, nil)
 	if err := engine.MVCCGetRangeStats(store.Engine(), rngRight.Desc().RangeID, &msRight); err != nil {
 		t.Fatal(err)
 	}

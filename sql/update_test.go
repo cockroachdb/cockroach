@@ -57,7 +57,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("TableDescriptor %q does not exist", nameKey)
 	}
 
-	descKey := gr.ValueBytes()
+	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
 	desc := sql.TableDescriptor{}
 	if err := kvDB.GetProto(descKey, &desc); err != nil {
 		t.Fatal(err)

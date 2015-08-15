@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 // ShowColumns of a table.
@@ -49,6 +50,10 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 //   Notes: postgres does not have a "show databases"
 //          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
 func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
+	// TODO(pmattis): This could be implemented as:
+	//
+	//   SELECT id FROM system.namespace WHERE parentID = 0
+
 	prefix := MakeNameMetadataKey(RootNamespaceID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
@@ -56,7 +61,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	}
 	v := &valuesNode{columns: []string{"Database"}}
 	for _, row := range sr {
-		name := string(bytes.TrimPrefix(row.Key, prefix))
+		_, name := encoding.DecodeBytes(bytes.TrimPrefix(row.Key, prefix), nil)
 		v.rows = append(v.rows, []parser.Datum{parser.DString(name)})
 	}
 	return v, nil
@@ -141,13 +146,19 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 //   Notes: postgres does not have a SHOW TABLES statement.
 //          mysql only returns tables you have privileges on.
 func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
+	// TODO(pmattis): This could be implemented as:
+	//
+	//   SELECT name FROM system.namespace
+	//     WHERE parentID = (SELECT id FROM system.namespace
+	//                       WHERE parentID = 0 AND name = <database>)
+
 	if n.Name == nil {
 		if p.session.Database == "" {
 			return nil, errNoDatabase
 		}
 		n.Name = &parser.QualifiedName{Base: parser.Name(p.session.Database)}
 	}
-	dbDesc, err := p.getDatabaseDesc(n.Name.String())
+	dbDesc, err := p.getDatabaseDesc(string(n.Name.Base))
 	if err != nil {
 		return nil, err
 	}
