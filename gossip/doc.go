@@ -27,7 +27,7 @@ captured by info objects. Info objects may be stored individually
 groups (e.g. multiple values of the same type from different
 originators).
 
-Groups organize multiple instance of info for the same key
+Groups organize multiple instances of info for the same key
 prefix. Groups come in two types: MinGroup groups keep only the
 minimum values seen; MaxGroup groups keep only the maximum values
 seen. An example is load or disk capacity values for nodes. In a
