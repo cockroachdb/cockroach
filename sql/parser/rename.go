@@ -28,8 +28,6 @@ import (
 	"fmt"
 )
 
-func (*RenameDatabase) statement() {}
-
 // RenameDatabase represents a RENAME DATABASE statement.
 type RenameDatabase struct {
 	Name    Name
@@ -39,8 +37,6 @@ type RenameDatabase struct {
 func (node *RenameDatabase) String() string {
 	return fmt.Sprintf("ALTER DATABASE %s RENAME TO %s", node.Name, node.NewName)
 }
-
-func (*RenameTable) statement() {}
 
 // RenameTable represents a RENAME TABLE statement.
 type RenameTable struct {
@@ -52,6 +48,23 @@ type RenameTable struct {
 func (node *RenameTable) String() string {
 	var buf bytes.Buffer
 	_, _ = buf.WriteString("ALTER TABLE ")
+	if node.IfExists {
+		_, _ = buf.WriteString("IF EXISTS ")
+	}
+	_, _ = buf.WriteString(fmt.Sprintf("%s RENAME TO %s", node.Name, node.NewName))
+	return buf.String()
+}
+
+// RenameIndex represents a RENAME INDEX statement.
+type RenameIndex struct {
+	Name     *QualifiedName
+	NewName  Name
+	IfExists bool
+}
+
+func (node *RenameIndex) String() string {
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("ALTER INDEX ")
 	if node.IfExists {
 		_, _ = buf.WriteString("IF EXISTS ")
 	}

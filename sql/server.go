@@ -42,6 +42,7 @@ var (
 	errNoTable           = errors.New("no table specified")
 	errEmptyDatabaseName = errors.New("empty database name")
 	errEmptyTableName    = errors.New("empty table name")
+	errEmptyIndexName    = errors.New("empty index name")
 )
 
 // A Server provides an HTTP server endpoint serving the SQL API.

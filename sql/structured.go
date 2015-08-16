@@ -290,7 +290,7 @@ func (desc *TableDescriptor) Validate() error {
 // FindColumnByName finds the column with specified name.
 func (desc *TableDescriptor) FindColumnByName(name string) (*ColumnDescriptor, error) {
 	for i, c := range desc.Columns {
-		if c.Name == name {
+		if equalName(c.Name, name) {
 			return &desc.Columns[i], nil
 		}
 	}
@@ -305,6 +305,16 @@ func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, err
 		}
 	}
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+}
+
+// FindIndexByName finds the index with specified name.
+func (desc *TableDescriptor) FindIndexByName(name string) (*IndexDescriptor, error) {
+	for i, idx := range desc.Indexes {
+		if equalName(idx.Name, name) {
+			return &desc.Indexes[i], nil
+		}
+	}
+	return nil, fmt.Errorf("index \"%s\" does not exist", name)
 }
 
 // SQLString returns the SQL string corresponding to the type.
