@@ -75,7 +75,11 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
-	if n.NewName == "" {
+	if err := n.NewName.NormalizeTableName(p.session.Database); err != nil {
+		return nil, err
+	}
+
+	if n.NewName.Table() == "" {
 		return nil, errEmptyTableName
 	}
 
@@ -83,7 +87,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 
-	if n.Name.Table() == string(n.NewName) {
+	if n.Name.Database() == n.NewName.Database() && n.Name.Table() == n.NewName.Table() {
 		// Noop.
 		return &valuesNode{}, nil
 	}
@@ -113,14 +117,23 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 
+	targetDbDesc, err := p.getDatabaseDesc(n.NewName.Database())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.checkPrivilege(targetDbDesc, privilege.WRITE); err != nil {
+		return nil, err
+	}
+
 	tableDesc, err := p.getTableDesc(n.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	tableDesc.SetName(string(n.NewName))
+	tableDesc.SetName(n.NewName.Table())
 
-	newTbKey := tableKey{dbDesc.ID, string(n.NewName)}.Key()
+	newTbKey := tableKey{targetDbDesc.ID, n.NewName.Table()}.Key()
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
 
 	b := client.Batch{}
@@ -129,7 +142,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	b.Del(tbKey)
 	if err := p.txn.Run(&b); err != nil {
 		if _, ok := err.(*proto.ConditionFailedError); ok {
-			return nil, fmt.Errorf("table name %q already exists", n.NewName)
+			return nil, fmt.Errorf("table name %q already exists", n.NewName.Table())
 		}
 		return nil, err
 	}

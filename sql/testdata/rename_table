@@ -62,10 +62,16 @@ CREATE TABLE t (
   c2 INT
 )
 
+statement ok
+INSERT INTO t VALUES (4, 16), (5, 25)
+
 statement error table name "new_kv" already exists
 ALTER TABLE t RENAME TO new_kv
 
 user testuser
+
+statement ok
+set database to test
 
 statement error user testuser does not have WRITE privilege on database test
 ALTER TABLE test.t RENAME TO t2
@@ -74,6 +80,9 @@ user root
 
 statement ok
 GRANT WRITE ON DATABASE test TO testuser
+
+statement ok
+create database test2
 
 user testuser
 
@@ -85,3 +94,43 @@ SHOW TABLES FROM test
 ----
 new_kv
 t2
+
+statement error user testuser does not have WRITE privilege on database test2
+ALTER TABLE test.t2 RENAME TO test2.t
+
+user root
+
+statement ok
+GRANT WRITE ON DATABASE test2 TO testuser
+
+user testuser
+
+statement ok
+ALTER TABLE test.new_kv RENAME TO test2.t
+
+statement ok
+ALTER TABLE test.t2 RENAME TO test2.t2
+
+query T
+SHOW TABLES FROM test
+----
+
+query T
+SHOW TABLES FROM test2
+----
+t
+t2
+
+user root
+
+query II
+SELECT * FROM test2.t
+----
+1 2
+3 4
+
+query II
+SELECT * FROM test2.t2
+----
+4 16
+5 25

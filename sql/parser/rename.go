@@ -45,7 +45,7 @@ func (*RenameTable) statement() {}
 // RenameTable represents a RENAME TABLE statement.
 type RenameTable struct {
 	Name     *QualifiedName
-	NewName  Name
+	NewName  *QualifiedName
 	IfExists bool
 }
 
