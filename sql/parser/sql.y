@@ -1392,13 +1392,13 @@ rename_stmt:
   {
     $$ = &RenameDatabase{Name: Name($3), NewName: Name($6)}
   }
-| ALTER TABLE relation_expr RENAME TO name
+| ALTER TABLE relation_expr RENAME TO qualified_name
   {
-    $$ = &RenameTable{Name: $3, NewName: Name($6), IfExists: false}
+    $$ = &RenameTable{Name: $3, NewName: $6, IfExists: false}
   }
-| ALTER TABLE IF EXISTS relation_expr RENAME TO name
+| ALTER TABLE IF EXISTS relation_expr RENAME TO qualified_name
   {
-    $$ = &RenameTable{Name: $5, NewName: Name($8), IfExists: true}
+    $$ = &RenameTable{Name: $5, NewName: $8, IfExists: true}
   }
 | ALTER INDEX qualified_name RENAME TO name
   {
