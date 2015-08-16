@@ -217,8 +217,8 @@ func (g *group) addInfo(i *Info) (contentsChanged bool, err error) {
 	// If the group is not empty, verify types match by comparing to
 	// gatekeeper.
 	if g.gatekeeper != nil {
-		t1 := reflect.TypeOf(i.Val).Kind()
-		t2 := reflect.TypeOf(g.gatekeeper.Val).Kind()
+		t1 := reflect.TypeOf(i.value())
+		t2 := reflect.TypeOf(g.gatekeeper.value())
 		if t1 != t2 {
 			err = util.Errorf("info %+v has type %s whereas group has type %s", i, t1, t2)
 			return

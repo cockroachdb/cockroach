@@ -138,15 +138,16 @@ func (is *infoStore) newInfo(key string, val interface{}, ttl time.Duration) *In
 	if ttl == 0 {
 		ttlStamp = math.MaxInt64
 	}
-	return &Info{
+	i := &Info{
 		Key:       key,
-		Val:       val,
 		Timestamp: now,
 		TTLStamp:  ttlStamp,
 		NodeID:    is.NodeID,
 		PeerID:    is.NodeID,
 		Seq:       is.seqGen,
 	}
+	i.setValue(val)
+	return i
 }
 
 // getInfo returns an info object by key or nil if it doesn't exist.

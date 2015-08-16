@@ -21,7 +21,7 @@ option go_package = "gossip";
 
 import "cockroach/util/unresolved_addr.proto";
 import "cockroach/proto/metadata.proto";
-import "cockroach/config/config.proto";
+//import "cockroach/config/config.proto";
 import "gogoproto/gogo.proto";
 
 // Request is the request struct passed with the Gossip RPC.
@@ -50,7 +50,7 @@ message Response {
   optional util.UnresolvedAddr alternate = 2;
 }
 
-message InfoStoreDelta {
+message InfoStore {
   // Map from key to info
   map<string, Info> infos = 1;
   // Map from key prefix to groups of infos
@@ -93,6 +93,14 @@ message Info {
   optional int32 node_id = 6 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
+  // TODO(thschroeter): peer_id and seq used to be local fields, added them to the
+  // message nevertheless to keep Info flat, neglecting the slight overhead.
+  // Otherwise we could write infoContext struct that extends this message with
+  // these two fields.
+  optional int32 peer_id = 7 [(gogoproto.nullable) = false,
+      (gogoproto.customname) =  "PeerID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
+  optional int64 seq = 8 [(gogoproto.nullable) = false];
 }
 
 // ValUnion is the union of all types gossip supports
@@ -102,8 +110,14 @@ message ValUnion {
     int64 int64_val = 1;
     double float_val = 2;
     string string_val = 3;
-    proto.StoreDescriptor store_descriptor_val = 4; 
-    storage.config.PrefixConfigMap prefix_config_map_val = 5; 
+    proto.StoreDescriptor store_descriptor_val = 4;
+    proto.NodeDescriptor  node_descriptor_val = 5;
+    TestVal test_val = 6;
+    // TODO(thschroeter): protofy PrefixConfigMap
+    //storage.config.PrefixConfigMap prefix_config_map_val = 5; 
   }
 }
 
+message TestVal {
+  optional int64 val = 1 [(gogoproto.nullable) = false];
+}

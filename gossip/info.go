@@ -25,20 +25,37 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// info is the basic unit of information traded over the gossip
-// network.
-type Info struct {
-	Key string // Info key
-	// Info value: must be one of {int64, float64, string} or
-	// implement the util.Ordered interface to be used with groups.
-	// For single infos any type is allowed.
-	Val       interface{}
-	Timestamp int64        `json:"-"` // Wall time at origination (Unix-nanos)
-	TTLStamp  int64        `json:"-"` // Wall time before info is discarded (Unix-nanos)
-	Hops      uint32       `json:"-"` // Number of hops from originator
-	NodeID    proto.NodeID `json:"-"` // Originating node's ID
-	PeerID    proto.NodeID // Proximate peer's ID which passed us the info
-	Seq       int64        // Sequence number for incremental updates
+func (i *Info) setValue(v interface{}) {
+	var nv interface{}
+	switch t := v.(type) {
+	case int64:
+		tmp := int64(t)
+		nv = &tmp
+	case float64:
+		tmp := float64(t)
+		nv = &tmp
+	case string:
+		tmp := string(t)
+		nv = &tmp
+	default:
+		nv = t
+	}
+	if !i.Val.SetValue(nv) {
+		log.Fatalf("unsupported type %T   type v: %T type nv: %T v: %v", v, v, nv, v)
+	}
+}
+
+func (i *Info) value() interface{} {
+	v := i.Val.GetValue()
+	switch t := v.(type) {
+	case *int64:
+		return int64(*t)
+	case *float64:
+		return float64(*t)
+	case *string:
+		return string(*t)
+	}
+	return v
 }
 
 // infoPrefix returns the text preceding the last period within
@@ -53,16 +70,18 @@ func infoPrefix(key string) string {
 // less returns true if i's value is less than b's value. i's and
 // b's types must match.
 func (i *Info) less(b *Info) bool {
-	switch t := i.Val.(type) {
-	case int64:
-		return t < b.Val.(int64)
-	case float64:
-		return t < b.Val.(float64)
-	case string:
-		return t < b.Val.(string)
+	v := i.Val.GetValue()
+	bv := b.Val.GetValue()
+	switch t := v.(type) {
+	case *int64:
+		return *t < *bv.(*int64)
+	case *float64:
+		return *t < *bv.(*float64)
+	case *string:
+		return *t < *bv.(*string)
 	default:
-		if ord, ok := i.Val.(util.Ordered); ok {
-			return ord.Less(b.Val.(util.Ordered))
+		if ord, ok := v.(util.Ordered); ok {
+			return ord.Less(bv.(util.Ordered))
 		}
 		log.Fatalf("unhandled info value type: %s", t)
 	}

@@ -11,10 +11,11 @@
 	It has these top-level messages:
 		Request
 		Response
-		InfoStoreDelta
+		InfoStore
 		Group
 		Info
 		ValUnion
+		TestVal
 */
 package gossip
 
@@ -22,7 +23,6 @@ import proto "github.com/gogo/protobuf/proto"
 import math "math"
 import cockroach_util "github.com/cockroachdb/cockroach/util"
 import cockroach_proto "github.com/cockroachdb/cockroach/proto"
-import cockroach_storage_config "github.com/cockroachdb/cockroach/config"
 
 // discarding unused import gogoproto "gogoproto"
 
@@ -115,7 +115,7 @@ func (m *Response) GetAlternate() *cockroach_util.UnresolvedAddr {
 	return nil
 }
 
-type InfoStoreDelta struct {
+type InfoStore struct {
 	// Map from key to info
 	Infos map[string]*Info `protobuf:"bytes,1,rep,name=infos" json:"infos,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Map from key prefix to groups of infos
@@ -129,39 +129,39 @@ type InfoStoreDelta struct {
 	XXX_unrecognized []byte `json:"-"`
 }
 
-func (m *InfoStoreDelta) Reset()         { *m = InfoStoreDelta{} }
-func (m *InfoStoreDelta) String() string { return proto.CompactTextString(m) }
-func (*InfoStoreDelta) ProtoMessage()    {}
+func (m *InfoStore) Reset()         { *m = InfoStore{} }
+func (m *InfoStore) String() string { return proto.CompactTextString(m) }
+func (*InfoStore) ProtoMessage()    {}
 
-func (m *InfoStoreDelta) GetInfos() map[string]*Info {
+func (m *InfoStore) GetInfos() map[string]*Info {
 	if m != nil {
 		return m.Infos
 	}
 	return nil
 }
 
-func (m *InfoStoreDelta) GetGroups() map[string]*Group {
+func (m *InfoStore) GetGroups() map[string]*Group {
 	if m != nil {
 		return m.Groups
 	}
 	return nil
 }
 
-func (m *InfoStoreDelta) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
+func (m *InfoStore) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
 	if m != nil {
 		return m.NodeID
 	}
 	return 0
 }
 
-func (m *InfoStoreDelta) GetNodeAddr() cockroach_util.UnresolvedAddr {
+func (m *InfoStore) GetNodeAddr() cockroach_util.UnresolvedAddr {
 	if m != nil {
 		return m.NodeAddr
 	}
 	return cockroach_util.UnresolvedAddr{}
 }
 
-func (m *InfoStoreDelta) GetMaxSeq() int64 {
+func (m *InfoStore) GetMaxSeq() int64 {
 	if m != nil {
 		return m.MaxSeq
 	}
@@ -222,7 +222,13 @@ type Info struct {
 	// Number of hops from originator
 	Hops uint32 `protobuf:"varint,5,opt,name=hops" json:"hops"`
 	// Originating node's ID
-	NodeID           github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,6,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id"`
+	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,6,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id"`
+	// TODO(thschroeter): peer_id and seq used to be local fields, added them to the
+	// message nevertheless to keep Info flat, neglecting the slight overhead.
+	// Otherwise we could write infoContext struct that extends this message with
+	// these two fields.
+	PeerID           github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,7,opt,name=peer_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"peer_id"`
+	Seq              int64                                         `protobuf:"varint,8,opt,name=seq" json:"seq"`
 	XXX_unrecognized []byte                                        `json:"-"`
 }
 
@@ -272,14 +278,29 @@ func (m *Info) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
 	return 0
 }
 
+func (m *Info) GetPeerID() github_com_cockroachdb_cockroach_proto.NodeID {
+	if m != nil {
+		return m.PeerID
+	}
+	return 0
+}
+
+func (m *Info) GetSeq() int64 {
+	if m != nil {
+		return m.Seq
+	}
+	return 0
+}
+
 // ValUnion is the union of all types gossip supports
 type ValUnion struct {
-	Int64Val           *int64                                    `protobuf:"varint,1,opt,name=int64_val" json:"int64_val,omitempty"`
-	FloatVal           *float64                                  `protobuf:"fixed64,2,opt,name=float_val" json:"float_val,omitempty"`
-	StringVal          *string                                   `protobuf:"bytes,3,opt,name=string_val" json:"string_val,omitempty"`
-	StoreDescriptorVal *cockroach_proto.StoreDescriptor          `protobuf:"bytes,4,opt,name=store_descriptor_val" json:"store_descriptor_val,omitempty"`
-	PrefixConfigMapVal *cockroach_storage_config.PrefixConfigMap `protobuf:"bytes,5,opt,name=prefix_config_map_val" json:"prefix_config_map_val,omitempty"`
-	XXX_unrecognized   []byte                                    `json:"-"`
+	Int64Val           *int64                           `protobuf:"varint,1,opt,name=int64_val" json:"int64_val,omitempty"`
+	FloatVal           *float64                         `protobuf:"fixed64,2,opt,name=float_val" json:"float_val,omitempty"`
+	StringVal          *string                          `protobuf:"bytes,3,opt,name=string_val" json:"string_val,omitempty"`
+	StoreDescriptorVal *cockroach_proto.StoreDescriptor `protobuf:"bytes,4,opt,name=store_descriptor_val" json:"store_descriptor_val,omitempty"`
+	NodeDescriptorVal  *cockroach_proto.NodeDescriptor  `protobuf:"bytes,5,opt,name=node_descriptor_val" json:"node_descriptor_val,omitempty"`
+	TestVal            *TestVal                         `protobuf:"bytes,6,opt,name=test_val" json:"test_val,omitempty"`
+	XXX_unrecognized   []byte                           `json:"-"`
 }
 
 func (m *ValUnion) Reset()         { *m = ValUnion{} }
@@ -314,11 +335,34 @@ func (m *ValUnion) GetStoreDescriptorVal() *cockroach_proto.StoreDescriptor {
 	return nil
 }
 
-func (m *ValUnion) GetPrefixConfigMapVal() *cockroach_storage_config.PrefixConfigMap {
+func (m *ValUnion) GetNodeDescriptorVal() *cockroach_proto.NodeDescriptor {
 	if m != nil {
-		return m.PrefixConfigMapVal
+		return m.NodeDescriptorVal
 	}
 	return nil
+}
+
+func (m *ValUnion) GetTestVal() *TestVal {
+	if m != nil {
+		return m.TestVal
+	}
+	return nil
+}
+
+type TestVal struct {
+	Val              int64  `protobuf:"varint,1,opt,name=val" json:"val"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *TestVal) Reset()         { *m = TestVal{} }
+func (m *TestVal) String() string { return proto.CompactTextString(m) }
+func (*TestVal) ProtoMessage()    {}
+
+func (m *TestVal) GetVal() int64 {
+	if m != nil {
+		return m.Val
+	}
+	return 0
 }
 
 func (this *ValUnion) GetValue() interface{} {
@@ -334,8 +378,11 @@ func (this *ValUnion) GetValue() interface{} {
 	if this.StoreDescriptorVal != nil {
 		return this.StoreDescriptorVal
 	}
-	if this.PrefixConfigMapVal != nil {
-		return this.PrefixConfigMapVal
+	if this.NodeDescriptorVal != nil {
+		return this.NodeDescriptorVal
+	}
+	if this.TestVal != nil {
+		return this.TestVal
 	}
 	return nil
 }
@@ -350,8 +397,10 @@ func (this *ValUnion) SetValue(value interface{}) bool {
 		this.StringVal = vt
 	case *cockroach_proto.StoreDescriptor:
 		this.StoreDescriptorVal = vt
-	case *cockroach_storage_config.PrefixConfigMap:
-		this.PrefixConfigMapVal = vt
+	case *cockroach_proto.NodeDescriptor:
+		this.NodeDescriptorVal = vt
+	case *TestVal:
+		this.TestVal = vt
 	default:
 		return false
 	}

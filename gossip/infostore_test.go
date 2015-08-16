@@ -185,7 +185,7 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	}
 
 	i := is.getInfo("a")
-	if i.Hops != info1.Hops || i.Val != info1.Val {
+	if i.Hops != info1.Hops || i.value() != info1.value() {
 		t.Error("failed to properly combine hops and value", i)
 	}
 
@@ -195,7 +195,7 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 		t.Error(err)
 	}
 	i = is.getInfo("a")
-	if i.Hops != info3.Hops || i.Val != info3.Val {
+	if i.Hops != info3.Hops || i.value() != info3.value() {
 		t.Error("failed to properly combine hops and value", i)
 	}
 }
@@ -332,7 +332,7 @@ func TestCombine(t *testing.T) {
 	}
 
 	infosB := is1.getGroupInfos("b")
-	if len(infosB) != 1 || infosB[0].Key != "b.a" || infosB[0].Val != info2Overlap.Val {
+	if len(infosB) != 1 || infosB[0].Key != "b.a" || infosB[0].value() != info2Overlap.value() {
 		t.Error("group b missing", infosB)
 	}
 	if infosB[0].PeerID != 2 {

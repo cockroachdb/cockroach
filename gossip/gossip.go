@@ -222,7 +222,7 @@ func (g *Gossip) GetNodeDescriptor(nodeID proto.NodeID) (proto.NodeDescriptor, e
 func (g *Gossip) getNodeDescriptorLocked(nodeID proto.NodeID) (*proto.NodeDescriptor, error) {
 	nodeIDKey := MakeNodeIDKey(nodeID)
 	if i := g.is.getInfo(nodeIDKey); i != nil {
-		if nd, ok := i.Val.(*proto.NodeDescriptor); ok {
+		if nd, ok := i.value().(*proto.NodeDescriptor); ok {
 			return nd, nil
 		}
 		return nil, util.Errorf("error in node descriptor gossip: %+v", i.Val)
@@ -260,7 +260,7 @@ func (g *Gossip) GetInfo(key string) (interface{}, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if i := g.is.getInfo(key); i != nil {
-		return i.Val, nil
+		return i.value(), nil
 	}
 	return nil, util.Errorf("key %q does not exist or has expired", key)
 }
@@ -284,7 +284,7 @@ func (g *Gossip) GetGroupInfos(prefix string) ([]interface{}, error) {
 	}
 	values := make([]interface{}, len(infos))
 	for i, info := range infos {
-		values[i] = info.Val
+		values[i] = info.value()
 	}
 	return values, nil
 }
@@ -361,7 +361,7 @@ func (g *Gossip) maxToleratedHops() uint32 {
 	// Get info directly as we have mutex held here.
 	var nodeCount = int64(defaultNodeCount)
 	if info := g.is.getInfo(KeyNodeCount); info != nil {
-		nodeCount = info.Val.(int64)
+		nodeCount = info.value().(int64)
 	}
 	return uint32(math.Ceil(math.Log(float64(nodeCount))/math.Log(float64(MaxPeers))))*2 + 1
 }

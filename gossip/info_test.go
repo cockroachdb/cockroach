@@ -51,19 +51,25 @@ func TestPrefix(t *testing.T) {
 	}
 }
 
+func newInfo(k string, val interface{}) *Info {
+	i := new(Info)
+	i.setValue(val)
+	return i
+}
+
 func TestSort(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	infos := infoSlice{
-		{"a", 3.0, 0, 0, 0, 0, 0, 0},
-		{"b", 1.0, 0, 0, 0, 0, 0, 0},
-		{"c", 2.1, 0, 0, 0, 0, 0, 0},
-		{"d", 2.0, 0, 0, 0, 0, 0, 0},
-		{"e", -1.0, 0, 0, 0, 0, 0, 0},
+		newInfo("a", 3.0),
+		newInfo("b", 1.0),
+		newInfo("c", 2.1),
+		newInfo("d", 2.0),
+		newInfo("e", -1.0),
 	}
 
 	// Verify forward sort.
 	sort.Sort(infos)
-	last := &Info{"last", -math.MaxFloat64, 0, 0, 0, 0, 0, 0}
+	last := newInfo("last", -math.MaxFloat64)
 	for _, i := range infos {
 		if i.less(last) {
 			t.Errorf("info val %v not increasing", i.Val)
@@ -73,7 +79,7 @@ func TestSort(t *testing.T) {
 
 	// Verify reverse sort.
 	sort.Sort(sort.Reverse(infos))
-	last = &Info{"last", math.MaxFloat64, 0, 0, 0, 0, 0, 0}
+	last = newInfo("last", math.MaxFloat64)
 	for _, i := range infos {
 		if !i.less(last) {
 			t.Errorf("info val %v not decreasing", i.Val)
@@ -85,7 +91,9 @@ func TestSort(t *testing.T) {
 func TestExpired(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	now := time.Now().UnixNano()
-	i := Info{"a", float64(1), now, now + int64(time.Millisecond), 0, 0, 0, 0}
+	i := newInfo("a", float64(1))
+	i.Timestamp = now
+	i.TTLStamp = now + int64(time.Millisecond)
 	if i.expired(now) {
 		t.Error("premature expiration")
 	}
@@ -101,7 +109,12 @@ func TestIsFresh(t *testing.T) {
 	node1 := proto.NodeID(1)
 	node2 := proto.NodeID(2)
 	node3 := proto.NodeID(3)
-	i := Info{"a", float64(1), now, now + int64(time.Millisecond), 0, node1, node2, seq}
+	i := newInfo("a", float64(1))
+	i.Timestamp = now
+	i.TTLStamp = now + int64(time.Millisecond)
+	i.NodeID = node1
+	i.PeerID = node2
+	i.Seq = seq
 	if !i.isFresh(node3, seq-1) {
 		t.Error("info should be fresh:", i)
 	}
