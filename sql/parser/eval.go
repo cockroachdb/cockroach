@@ -140,6 +140,12 @@ func (d dNull) String() string {
 	return "NULL"
 }
 
+// DReference holds a pointer to a Datum. It is used as a level of indirection
+// to replace QualifiedNames with a node whose value can change on each row.
+type DReference interface {
+	Datum() Datum
+}
+
 var (
 	boolType   = reflect.TypeOf(DBool(false))
 	intType    = reflect.TypeOf(DInt(0))
@@ -406,6 +412,9 @@ func EvalExpr(expr Expr) (Datum, error) {
 			tuple = append(tuple, d)
 		}
 		return tuple, nil
+
+	case DReference:
+		return t.Datum(), nil
 
 	case Datum:
 		return t, nil
