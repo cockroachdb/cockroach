@@ -27,7 +27,7 @@ import (
 
 // info is the basic unit of information traded over the gossip
 // network.
-type info struct {
+type Info struct {
 	Key string // Info key
 	// Info value: must be one of {int64, float64, string} or
 	// implement the util.Ordered interface to be used with groups.
@@ -37,8 +37,8 @@ type info struct {
 	TTLStamp  int64        `json:"-"` // Wall time before info is discarded (Unix-nanos)
 	Hops      uint32       `json:"-"` // Number of hops from originator
 	NodeID    proto.NodeID `json:"-"` // Originating node's ID
-	peerID    proto.NodeID // Proximate peer's ID which passed us the info
-	seq       int64        // Sequence number for incremental updates
+	PeerID    proto.NodeID // Proximate peer's ID which passed us the info
+	Seq       int64        // Sequence number for incremental updates
 }
 
 // infoPrefix returns the text preceding the last period within
@@ -52,7 +52,7 @@ func infoPrefix(key string) string {
 
 // less returns true if i's value is less than b's value. i's and
 // b's types must match.
-func (i *info) less(b *info) bool {
+func (i *Info) less(b *Info) bool {
 	switch t := i.Val.(type) {
 	case int64:
 		return t < b.Val.(int64)
@@ -70,31 +70,31 @@ func (i *info) less(b *info) bool {
 }
 
 // expired returns true if the node's time to live (TTL) has expired.
-func (i *info) expired(now int64) bool {
+func (i *Info) expired(now int64) bool {
 	return i.TTLStamp <= now
 }
 
 // isFresh returns true if the info has a sequence number newer
 // than seq and wasn't either passed directly or originated from
 // the same node.
-func (i *info) isFresh(nodeID proto.NodeID, seq int64) bool {
-	if i.seq <= seq {
+func (i *Info) isFresh(nodeID proto.NodeID, seq int64) bool {
+	if i.Seq <= seq {
 		return false
 	}
 	if nodeID != 0 && i.NodeID == nodeID {
 		return false
 	}
-	if nodeID != 0 && i.peerID == nodeID {
+	if nodeID != 0 && i.PeerID == nodeID {
 		return false
 	}
 	return true
 }
 
 // infoMap is a map of keys to info object pointers.
-type infoMap map[string]*info
+type infoMap map[string]*Info
 
 // infoSlice is a slice of Info object pointers.
-type infoSlice []*info
+type infoSlice []*Info
 
 // Implement sort.Interface for infoSlice.
 func (a infoSlice) Len() int           { return len(a) }

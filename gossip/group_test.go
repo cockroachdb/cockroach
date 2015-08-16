@@ -28,10 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func newTestInfo(key string, val interface{}) *info {
+func newTestInfo(key string, val interface{}) *Info {
 	now := monotonicUnixNano()
 	ttl := now + int64(time.Minute)
-	return &info{
+	return &Info{
 		Key:       key,
 		Val:       val,
 		Timestamp: now,
@@ -117,7 +117,7 @@ func TestTypeMismatch(t *testing.T) {
 	if _, err := group.addInfo(info1); err != nil {
 		t.Error(err)
 	}
-	info2 := &info{
+	info2 := &Info{
 		Key:       "a.b",
 		Val:       "foo",
 		Timestamp: info1.Timestamp,

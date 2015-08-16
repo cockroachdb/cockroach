@@ -50,7 +50,7 @@ type group struct {
 	TypeOf      GroupType // Minimums or maximums of all values encountered
 	Infos       infoMap   // Map of infos in group
 	minTTLStamp int64     // Minimum of all infos' TTLs (Unix nanos)
-	gatekeeper  *info     // Minimum or maximum value in infos map, depending on type
+	gatekeeper  *Info     // Minimum or maximum value in infos map, depending on type
 }
 
 // groupMap is a map of group prefixes => *group.
@@ -72,7 +72,7 @@ func newGroup(prefix string, limit int, typeOf GroupType) *group {
 
 // shouldInclude returns true if the specified info should belong
 // in the group according to the group type and the value.
-func (g *group) shouldInclude(i *info) bool {
+func (g *group) shouldInclude(i *Info) bool {
 	if g.gatekeeper == nil {
 		return true
 	}
@@ -91,7 +91,7 @@ func (g *group) shouldInclude(i *info) bool {
 // single info. Stats include minimum time-to-live (used to decide
 // when compaction is possible), and updates gatekeeper (used to
 // decide when to add to group).
-func (g *group) updateIncremental(i *info) {
+func (g *group) updateIncremental(i *Info) {
 	if i.TTLStamp < g.minTTLStamp {
 		g.minTTLStamp = i.TTLStamp
 	}
@@ -135,13 +135,13 @@ func (g *group) compact() bool {
 }
 
 // addInternal adds info to group, incrementally updating group stats.
-func (g *group) addInternal(i *info) {
+func (g *group) addInternal(i *Info) {
 	g.Infos[i.Key] = i
 	g.updateIncremental(i)
 }
 
 // removeInternal removes info from group, updating group stats wholesale if necessary.
-func (g *group) removeInternal(i *info) {
+func (g *group) removeInternal(i *Info) {
 	delete(g.Infos, i.Key)
 	if g.gatekeeper == i || g.minTTLStamp == i.TTLStamp {
 		g.update()
@@ -149,7 +149,7 @@ func (g *group) removeInternal(i *info) {
 }
 
 // getInfo returns an info by key.
-func (g *group) getInfo(key string) *info {
+func (g *group) getInfo(key string) *Info {
 	if i, ok := g.Infos[key]; ok {
 		// Check TTL and discard if too old.
 		now := time.Now().UnixNano()
@@ -195,7 +195,7 @@ func (g *group) infosAsSlice() infoSlice {
 // contentsChanged is false. An error is returned if the info types
 // don't match an existing group or the info was older than what we
 // currently have.
-func (g *group) addInfo(i *info) (contentsChanged bool, err error) {
+func (g *group) addInfo(i *Info) (contentsChanged bool, err error) {
 	// First, see if info is already in the group. If so, and this
 	// info timestamp is newer, remove existing info. If the
 	// timestamps are equal (i.e. this is the same info), but hops
