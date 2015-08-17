@@ -29,7 +29,7 @@ func TestAllocateIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	desc := sql.TableDescriptor{
-		ID:   1,
+		ID:   sql.MaxReservedDescID + 1,
 		Name: "foo",
 		Columns: []sql.ColumnDescriptor{
 			{Name: "a"},
@@ -46,7 +46,7 @@ func TestAllocateIDs(t *testing.T) {
 	}
 
 	expected := sql.TableDescriptor{
-		ID:   1,
+		ID:   sql.MaxReservedDescID + 1,
 		Name: "foo",
 		Columns: []sql.ColumnDescriptor{
 			{ID: 1, Name: "a"},

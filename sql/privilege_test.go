@@ -93,29 +93,57 @@ func TestPrivilege(t *testing.T) {
 func TestPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	descriptor := sql.NewDefaultDatabasePrivilegeDescriptor()
-	if err := descriptor.Validate(); err != nil {
+	if err := descriptor.Validate(false); err != nil {
 		t.Fatal(err)
 	}
 	descriptor.Grant("foo", privilege.List{privilege.ALL})
-	if err := descriptor.Validate(); err != nil {
+	if err := descriptor.Validate(false); err != nil {
 		t.Fatal(err)
 	}
 	descriptor.Grant("root", privilege.List{privilege.SELECT})
-	if err := descriptor.Validate(); err != nil {
+	if err := descriptor.Validate(false); err != nil {
 		t.Fatal(err)
 	}
 	descriptor.Revoke("root", privilege.List{privilege.SELECT})
-	if err := descriptor.Validate(); err == nil {
+	if err := descriptor.Validate(false); err == nil {
 		t.Fatal("unexpected success")
 	}
 	// TODO(marc): validate fails here because we do not aggregate
 	// privileges into ALL when all are set.
 	descriptor.Grant("root", privilege.List{privilege.SELECT})
-	if err := descriptor.Validate(); err == nil {
+	if err := descriptor.Validate(false); err == nil {
 		t.Fatal("unexpected success")
 	}
 	descriptor.Revoke("root", privilege.List{privilege.ALL})
-	if err := descriptor.Validate(); err == nil {
+	if err := descriptor.Validate(false); err == nil {
+		t.Fatal("unexpected success")
+	}
+}
+
+func TestSystemPrivilegeValidate(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	descriptor := sql.NewSystemObjectPrivilegeDescriptor()
+	if err := descriptor.Validate(true); err != nil {
+		t.Fatal(err)
+	}
+	descriptor.Grant("foo", privilege.List{privilege.SELECT, privilege.GRANT})
+	if err := descriptor.Validate(true); err != nil {
+		t.Fatal(err)
+	}
+	descriptor.Grant("root", privilege.List{privilege.SELECT})
+	if err := descriptor.Validate(true); err != nil {
+		t.Fatal(err)
+	}
+	descriptor.Revoke("root", privilege.List{privilege.SELECT})
+	if err := descriptor.Validate(true); err == nil {
+		t.Fatal("unexpected success")
+	}
+	descriptor.Grant("root", privilege.List{privilege.INSERT})
+	if err := descriptor.Validate(true); err == nil {
+		t.Fatal("unexpected success")
+	}
+	descriptor.Revoke("root", privilege.List{privilege.ALL})
+	if err := descriptor.Validate(true); err == nil {
 		t.Fatal("unexpected success")
 	}
 }

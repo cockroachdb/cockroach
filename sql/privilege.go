@@ -40,6 +40,10 @@ func (upl userPrivilegeList) Less(i, j int) bool {
 	return upl[i].User < upl[j].User
 }
 
+func isPrivilegeSet(bits uint32, priv privilege.Kind) bool {
+	return bits&priv.Mask() != 0
+}
+
 // findUserIndex looks for a given user and returns its
 // index in the User array if found. Returns -1 otherwise.
 func (p *PrivilegeDescriptor) findUserIndex(user string) int {
@@ -94,6 +98,19 @@ func (p *PrivilegeDescriptor) removeUser(user string) {
 	p.Users = p.Users[:len(p.Users)-1]
 }
 
+// NewSystemObjectPrivilegeDescriptor returns a privilege descriptor for system
+// databases and tables.
+func NewSystemObjectPrivilegeDescriptor() *PrivilegeDescriptor {
+	return &PrivilegeDescriptor{
+		Users: []*UserPrivileges{
+			{
+				User:       security.RootUser,
+				Privileges: privilege.SELECT.Mask() | privilege.GRANT.Mask(),
+			},
+		},
+	}
+}
+
 // NewDefaultDatabasePrivilegeDescriptor returns a privilege descriptor
 // with ALL privileges for the root user.
 func NewDefaultDatabasePrivilegeDescriptor() *PrivilegeDescriptor {
@@ -101,7 +118,7 @@ func NewDefaultDatabasePrivilegeDescriptor() *PrivilegeDescriptor {
 		Users: []*UserPrivileges{
 			{
 				User:       security.RootUser,
-				Privileges: (1 << privilege.ALL),
+				Privileges: privilege.ALL.Mask(),
 			},
 		},
 	}
@@ -112,17 +129,17 @@ func NewDefaultDatabasePrivilegeDescriptor() *PrivilegeDescriptor {
 // them into ALL?
 func (p *PrivilegeDescriptor) Grant(user string, privList privilege.List) {
 	userPriv := p.findOrCreateUser(user)
-	if userPriv.Privileges&(1<<privilege.ALL) != 0 {
+	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
 		// User already has 'ALL' privilege: no-op.
 		return
 	}
 
 	bits := privList.ToBitField()
-	if bits&(1<<privilege.ALL) != 0 {
+	if isPrivilegeSet(bits, privilege.ALL) {
 		// Granting 'ALL' privilege: overwrite.
 		// TODO(marc): the grammar does not allow it, but we should
 		// check if other privileges are being specified and error out.
-		userPriv.Privileges = (1 << privilege.ALL)
+		userPriv.Privileges = privilege.ALL.Mask()
 		return
 	}
 	userPriv.Privileges |= bits
@@ -137,7 +154,7 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 	}
 
 	bits := privList.ToBitField()
-	if bits&(1<<privilege.ALL) != 0 {
+	if isPrivilegeSet(bits, privilege.ALL) {
 		// Revoking 'ALL' privilege: remove user.
 		// TODO(marc): the grammar does not allow it, but we should
 		// check if other privileges are being specified and error out.
@@ -145,13 +162,13 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 		return
 	}
 
-	if userPriv.Privileges&(1<<privilege.ALL) != 0 {
+	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
 		// User has 'ALL' privilege. Remove it and set
 		// all other privileges one.
 		userPriv.Privileges = 0
 		for _, v := range privilege.ByValue {
 			if v != privilege.ALL {
-				userPriv.Privileges |= (1 << v)
+				userPriv.Privileges |= v.Mask()
 			}
 		}
 	}
@@ -165,16 +182,36 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 }
 
 // Validate is called when writing a descriptor.
-func (p *PrivilegeDescriptor) Validate() error {
+// If 'isSystem' is true, perform validation for system
+// database and tables.
+func (p *PrivilegeDescriptor) Validate(isSystem bool) error {
 	if p == nil {
 		return fmt.Errorf("missing privilege descriptor")
 	}
 	userPriv, ok := p.findUser(security.RootUser)
 	if !ok {
-		return fmt.Errorf("%s user does not have privileges", security.RootUser)
+		return fmt.Errorf("user %s does not have privileges", security.RootUser)
 	}
-	if userPriv.Privileges&(1<<privilege.ALL) == 0 {
-		return fmt.Errorf("%s user does not have ALL privileges", security.RootUser)
+	if isSystem {
+		// System databases and tables must have read-only permissions
+		// only (SELECT and GRANT). These must remain set for the root user.
+		allowedPrivileges := privilege.SELECT.Mask() | privilege.GRANT.Mask()
+		if userPriv.Privileges&allowedPrivileges != allowedPrivileges {
+			return fmt.Errorf("user %s must have %s privileges on system objects",
+				security.RootUser, privilege.ListFromBitField(allowedPrivileges))
+		}
+
+		// For all users (root included), no other privileges must be granted.
+		for _, u := range p.Users {
+			if remaining := u.Privileges &^ allowedPrivileges; remaining != 0 {
+				return fmt.Errorf("user %s must not have %s privileges on system objects",
+					u.User, privilege.ListFromBitField(remaining))
+			}
+		}
+	} else if !isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
+		// Non-system databases and tables must preserve ALL
+		// privileges for the root user.
+		return fmt.Errorf("user %s does not have ALL privileges", security.RootUser)
 	}
 	return nil
 }
@@ -206,8 +243,8 @@ func (p *PrivilegeDescriptor) CheckPrivilege(user string, priv privilege.Kind) b
 		return false
 	}
 	// ALL is always good.
-	if userPriv.Privileges&(1<<privilege.ALL) != 0 {
+	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
 		return true
 	}
-	return userPriv.Privileges&(1<<priv) != 0
+	return isPrivilegeSet(userPriv.Privileges, priv)
 }
