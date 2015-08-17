@@ -20,7 +20,7 @@
 ## Status
 
 See our
-[Roadmap](https://github.com/cockroachdb/cockroach/wiki/Roadmap) and
+[Roadmap](https://github.com/cockroachdb/cockroach/issues/2132) and
 [Issues](https://github.com/cockroachdb/cockroach/issues)
 
 ## Running Cockroach Locally
