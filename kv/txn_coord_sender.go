@@ -89,12 +89,6 @@ type txnMetadata struct {
 	// txnEnd is closed when the transaction is aborted or committed,
 	// terminating the associated heartbeat instance.
 	txnEnd chan struct{}
-
-	// triggerChan is used in testing to manually trigger heartbeats.
-	triggerChan chan struct{}
-
-	// heartbeatWG blocks as long as the heartbeat goroutine is running.
-	heartbeatWG sync.WaitGroup
 }
 
 // addKeyRange adds the specified key range to the interval cache,
@@ -465,13 +459,10 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						lastUpdateNanos:  tc.clock.PhysicalNow(),
 						timeoutDuration:  tc.clientTimeout,
 						txnEnd:           make(chan struct{}),
-						triggerChan:      make(chan struct{}, 1),
 					}
 					tc.txns[id] = txnMeta
-					txnMeta.heartbeatWG.Add(1)
 					if !tc.stopper.RunAsyncTask(func() {
 						tc.heartbeatLoop(id)
-						txnMeta.heartbeatWG.Done()
 					}) {
 						// The system is already draining and we can't start the
 						// heartbeat. We refuse new transactions for now because
@@ -691,10 +682,10 @@ func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, rep
 func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction) {
 	id := string(txn.ID)
 	tc.Lock()
+	defer tc.Unlock()
 	txnMeta, ok := tc.txns[id]
 	// Only clean up once per transaction.
 	if !ok || txnMeta.txnEnd == nil {
-		tc.Unlock()
 		return
 	}
 
@@ -705,11 +696,6 @@ func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction)
 	trace.Event("coordinator stops")
 	close(txnMeta.txnEnd)
 	txnMeta.txnEnd = nil // for idempotency; checked above
-
-	tc.Unlock()
-	// Wait for the heartbeat goroutine to finish and clean up the txn record.
-	txnMeta.heartbeatWG.Wait()
-	tc.unregisterTxn(id)
 }
 
 // unregisterTxn deletes a txnMetadata object from the sender
@@ -748,14 +734,14 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 		tickChan = ticker.C
 		defer ticker.Stop()
 	}
+	defer tc.unregisterTxn(id)
+
 	var closer <-chan struct{}
-	var trigger <-chan struct{}
 	var trace *tracer.Trace
 	{
 		tc.Lock()
 		txnMeta := tc.txns[id] // do not leak to outer scope
 		closer = txnMeta.txnEnd
-		trigger = txnMeta.triggerChan
 		trace = tc.tracer.NewTrace(&txnMeta.txn)
 		tc.Unlock()
 	}
@@ -769,10 +755,6 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 	// Loop with ticker for periodic heartbeats.
 	for {
 		select {
-		case <-trigger:
-			if !tc.heartbeat(id, trace, ctx) {
-				return
-			}
 		case <-tickChan:
 			if !tc.heartbeat(id, trace, ctx) {
 				return
@@ -807,7 +789,6 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	txn := txnMeta.txn
 	tc.Unlock()
 	if !proceed {
-		tc.unregisterTxn(id)
 		return false
 	}
 
@@ -834,10 +815,15 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	// write intents accordingly.
 	if reply.GoError() != nil {
 		log.Warningf("heartbeat to %s failed: %s", txn, reply.GoError())
-	} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
-		// The transaction has been committed or aborted, so no use
-		// sending any more heartbeats.
-		return false
 	}
+	// TODO(bdarnell): once we have gotten a heartbeat response with
+	// Status != PENDING, future heartbeats are useless. However, we
+	// need to continue the heartbeatLoop until the client either
+	// commits or abandons the transaction. We could save a little
+	// pointless work by restructuring this loop to stop sending
+	// heartbeats between the time that the transaction is aborted and
+	// the client finds out. Furthermore, we could use this information
+	// to send TransactionAbortedErrors to the client so it can restart
+	// immediately instead of running until its EndTransaction.
 	return true
 }
