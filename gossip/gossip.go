@@ -246,6 +246,8 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
 
 // AddInfo adds or updates an info object. Returns an error if info
 // couldn't be added.
+// TODO(thschroeter): change type of `val` to `gogoproto.Message`? It seems doable
+// but basic types need to be wrapped in message.
 func (g *Gossip) AddInfo(key string, val interface{}, ttl time.Duration) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()

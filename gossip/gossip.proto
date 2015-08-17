@@ -50,7 +50,8 @@ message Response {
   optional util.UnresolvedAddr alternate = 2;
 }
 
-message InfoStore {
+// TODO(thschroeter): check if all fields below are required
+message InfoStoreDelta {
   // Map from key to info
   map<string, Info> infos = 1;
   // Map from key prefix to groups of infos

@@ -655,3 +655,34 @@ func TestRegisterCallback(t *testing.T) {
 		t.Errorf("expected %v, got %v", expKeys, cb.Keys())
 	}
 }
+
+func TestInfoStoreDeltaProtoInfos(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	is := newInfoStore(1, emptyAddr)
+
+	k1 := "key1"
+	i1 := is.newInfo(k1, float64(1), time.Second)
+	if err := is.addInfo(i1); err != nil {
+		t.Fatal(err)
+	}
+	d := is.deltaProto()
+	if len(d.Infos) != 1 || d.Infos[k1].Key != k1 {
+		t.Error("expected InfoStoreDelta to contain info")
+	}
+}
+
+func TestInfoStoreDeltaProtoGroups(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	is := createTestInfoStore(t)
+	d := is.deltaProto()
+	if len(d.Groups) != len(is.Groups) {
+		t.Errorf("expected matching group length")
+	}
+	for k, group := range d.Groups {
+		if group != &is.Groups[k].G {
+			t.Errorf("expected the same Group under key %v", k)
+		}
+	}
+}

@@ -18,7 +18,6 @@
 package gossip
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -30,7 +29,6 @@ func (i *Info) setValue(v interface{}) {
 	// TODO(thschroeter): avoid duplication.
 	// supported types are listed below and
 	// in ValueUnion in gossip.proto
-	log.Info(fmt.Sprintf("setValue %T: %v", v, v))
 	var nv interface{}
 	switch t := v.(type) {
 	case int64:
@@ -49,13 +47,12 @@ func (i *Info) setValue(v interface{}) {
 		nv = t
 	}
 	if !i.Val.SetValue(nv) {
-		log.Fatalf("unsupported type %T   type v: %T type nv: %T v: %v", v, v, nv, v)
+		log.Fatalf("unsupported type %T", nv)
 	}
 }
 
 func (i *Info) value() interface{} {
 	v := i.Val.GetValue()
-	log.Info(fmt.Sprintf("getValue %T %v", v, v))
 	switch t := v.(type) {
 	case *int64:
 		return *t

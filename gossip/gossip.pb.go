@@ -11,7 +11,7 @@
 	It has these top-level messages:
 		Request
 		Response
-		InfoStore
+		InfoStoreDelta
 		Group
 		Info
 		ValUnion
@@ -116,7 +116,7 @@ func (m *Response) GetAlternate() *cockroach_util.UnresolvedAddr {
 	return nil
 }
 
-type InfoStore struct {
+type InfoStoreDelta struct {
 	// Map from key to info
 	Infos map[string]*Info `protobuf:"bytes,1,rep,name=infos" json:"infos,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Map from key prefix to groups of infos
@@ -130,39 +130,39 @@ type InfoStore struct {
 	XXX_unrecognized []byte `json:"-"`
 }
 
-func (m *InfoStore) Reset()         { *m = InfoStore{} }
-func (m *InfoStore) String() string { return proto.CompactTextString(m) }
-func (*InfoStore) ProtoMessage()    {}
+func (m *InfoStoreDelta) Reset()         { *m = InfoStoreDelta{} }
+func (m *InfoStoreDelta) String() string { return proto.CompactTextString(m) }
+func (*InfoStoreDelta) ProtoMessage()    {}
 
-func (m *InfoStore) GetInfos() map[string]*Info {
+func (m *InfoStoreDelta) GetInfos() map[string]*Info {
 	if m != nil {
 		return m.Infos
 	}
 	return nil
 }
 
-func (m *InfoStore) GetGroups() map[string]*Group {
+func (m *InfoStoreDelta) GetGroups() map[string]*Group {
 	if m != nil {
 		return m.Groups
 	}
 	return nil
 }
 
-func (m *InfoStore) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
+func (m *InfoStoreDelta) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
 	if m != nil {
 		return m.NodeID
 	}
 	return 0
 }
 
-func (m *InfoStore) GetNodeAddr() cockroach_util.UnresolvedAddr {
+func (m *InfoStoreDelta) GetNodeAddr() cockroach_util.UnresolvedAddr {
 	if m != nil {
 		return m.NodeAddr
 	}
 	return cockroach_util.UnresolvedAddr{}
 }
 
-func (m *InfoStore) GetMaxSeq() int64 {
+func (m *InfoStoreDelta) GetMaxSeq() int64 {
 	if m != nil {
 		return m.MaxSeq
 	}
