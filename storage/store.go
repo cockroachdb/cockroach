@@ -933,8 +933,40 @@ func (s *Store) BootstrapRange() error {
 	value := proto.Value{}
 	value.SetInteger(int64(sql.MaxReservedDescID + 1))
 	value.InitChecksum(key)
-	if err := engine.MVCCPut(batch, nil, key, now, value, nil); err != nil {
+	if err := engine.MVCCPut(batch, ms, key, now, value, nil); err != nil {
 		return err
+	}
+
+	// Setup the system database, the namespace table and the descriptor table
+	// entries.
+	//
+	// TODO(pmattis): This setup really belongs in the sql package. Minor
+	// challenge is to place it there without making the sql package depend on
+	// storage/engine. One thought is to pass a "put func(key, value string)"
+	// argument to an sql.Setup function which would call down into
+	// engine.MVCCPut.
+	systemData := []struct {
+		parentID sql.ID
+		name     string
+		id       sql.ID
+		desc     gogoproto.Message
+	}{
+		{sql.RootNamespaceID, sql.SystemDB.Name, sql.SystemDB.ID, &sql.SystemDB},
+		{sql.SystemDB.ID, sql.NamespaceTable.Name, sql.NamespaceTable.ID, &sql.NamespaceTable},
+		{sql.SystemDB.ID, sql.DescriptorTable.Name, sql.DescriptorTable.ID, &sql.DescriptorTable},
+	}
+	for _, d := range systemData {
+		key = sql.MakeNameMetadataKey(d.parentID, d.name)
+		value = proto.Value{}
+		value.SetInteger(int64(d.id))
+		value.InitChecksum(key)
+		if err := engine.MVCCPut(batch, ms, key, now, value, nil); err != nil {
+			return err
+		}
+		key = sql.MakeDescMetadataKey(d.id)
+		if err := engine.MVCCPutProto(batch, ms, key, now, nil, d.desc); err != nil {
+			return err
+		}
 	}
 
 	// Range Tree setup.

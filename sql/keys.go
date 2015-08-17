@@ -66,21 +66,27 @@ func equalName(a, b string) bool {
 	return normalizeName(a) == normalizeName(b)
 }
 
-// MakeNameMetadataKey returns the key for the name.
+// MakeNameMetadataKey returns the key for the name. Pass name == "" in order
+// to generate the prefix key to use to scan over all of the names for the
+// specified parentID.
 func MakeNameMetadataKey(parentID ID, name string) proto.Key {
 	name = normalizeName(name)
-	k := make([]byte, 0, len(keys.NameMetadataPrefix)+encoding.MaxUvarintSize+len(name))
-	k = append(k, keys.NameMetadataPrefix...)
+	k := MakeTablePrefix(NamespaceTable.ID)
+	k = encoding.EncodeUvarint(k, uint64(NamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarint(k, uint64(parentID))
-	k = append(k, name...)
+	if name != "" {
+		k = encoding.EncodeBytes(k, []byte(name))
+		k = encoding.EncodeUvarint(k, uint64(NamespaceTable.Columns[2].ID))
+	}
 	return k
 }
 
 // MakeDescMetadataKey returns the key for the descriptor.
 func MakeDescMetadataKey(descID ID) proto.Key {
-	k := make([]byte, 0, len(keys.DescMetadataPrefix)+encoding.MaxUvarintSize)
-	k = append(k, keys.DescMetadataPrefix...)
+	k := MakeTablePrefix(DescriptorTable.ID)
+	k = encoding.EncodeUvarint(k, uint64(DescriptorTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarint(k, uint64(descID))
+	k = encoding.EncodeUvarint(k, uint64(DescriptorTable.Columns[1].ID))
 	return k
 }
 

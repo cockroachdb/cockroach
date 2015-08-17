@@ -300,7 +300,9 @@ func initScanArgs(args []string) (startKey, endKey proto.Key) {
 	if len(args) >= 2 {
 		endKey = proto.Key(unquoteArg(args[1], false))
 	} else {
-		endKey = proto.KeyMax
+		// Exclude table data keys by default. The user can explicitly request them
+		// by passing \xff\xff for the end key.
+		endKey = keys.TableDataPrefix
 	}
 	return startKey, endKey
 }

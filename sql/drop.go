@@ -59,7 +59,8 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		}
 
 		tableDesc := TableDescriptor{}
-		if err := p.txn.GetProto(gr.ValueBytes(), &tableDesc); err != nil {
+		descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
+		if err := p.txn.GetProto(descKey, &tableDesc); err != nil {
 			return nil, err
 		}
 		if err := tableDesc.Validate(); err != nil {
@@ -75,7 +76,6 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		}
 
 		// Delete table descriptor
-		descKey := gr.ValueBytes()
 		b := &client.Batch{}
 		b.Del(descKey)
 		b.Del(nameKey)
@@ -113,7 +113,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 		return nil, fmt.Errorf("database %q does not exist", n.Name)
 	}
 
-	descKey := gr.ValueBytes()
+	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
 	desc := DatabaseDescriptor{}
 	if err := p.txn.GetProto(descKey, &desc); err != nil {
 		return nil, err

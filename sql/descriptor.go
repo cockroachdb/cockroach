@@ -91,10 +91,16 @@ func (p *planner) writeDescriptor(plainKey descriptorKey, descriptor descriptorP
 
 	// TODO(pmattis): The error currently returned below is likely going to be
 	// difficult to interpret.
+	//
 	// TODO(pmattis): Need to handle if-not-exists here as well.
+	//
+	// TODO(pmattis): This is writing the namespace and descriptor table entries,
+	// but not going through the normal INSERT logic and not performing a precise
+	// mimicry. In particular, we're only writing a single key per table, while
+	// perfect mimicry would involve writing a sentinel key for each row as well.
 	descKey := MakeDescMetadataKey(descriptor.GetID())
 	b := client.Batch{}
-	b.CPut(key, descKey, nil)
+	b.CPut(key, descriptor.GetID(), nil)
 	b.CPut(descKey, descriptor, nil)
 	return p.txn.Run(&b)
 }
@@ -110,7 +116,7 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 		return fmt.Errorf("%s %q does not exist", descriptor.TypeName(), plainKey.Name())
 	}
 
-	descKey := gr.ValueBytes()
+	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
 	if err := p.txn.GetProto(descKey, descriptor); err != nil {
 		return err
 	}

@@ -1,0 +1,35 @@
+query T
+SHOW DATABASES
+----
+system
+test
+
+query T
+SHOW TABLES FROM system
+----
+descriptor
+namespace
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM system.namespace
+----
+0 /namespace/primary/0/'system'/id     1    true
+1 /namespace/primary/0/'test'/id       1000 true
+2 /namespace/primary/1/'descriptor'/id 3    true
+3 /namespace/primary/1/'namespace'/id  2    true
+
+query ITI
+SELECT * FROM system.namespace
+----
+0 system     1
+0 test       1000
+1 descriptor 3
+1 namespace  2
+
+query I
+SELECT id FROM system.descriptor
+----
+1
+2
+3
+1000

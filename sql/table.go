@@ -44,7 +44,11 @@ func (tk tableKey) Name() string {
 
 func makeTableDesc(p *parser.CreateTable) (TableDescriptor, error) {
 	desc := TableDescriptor{}
+	if err := p.Table.NormalizeTableName(""); err != nil {
+		return desc, err
+	}
 	desc.Name = p.Table.Table()
+
 	for _, def := range p.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
@@ -147,7 +151,7 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 
 	var qualifiedNames parser.QualifiedNames
 	for _, row := range sr {
-		tableName := string(bytes.TrimPrefix(row.Key, prefix))
+		_, tableName := encoding.DecodeBytes(bytes.TrimPrefix(row.Key, prefix), nil)
 		qname := &parser.QualifiedName{
 			Base:     parser.Name(dbDesc.Name),
 			Indirect: parser.Indirection{parser.NameIndirection(tableName)},

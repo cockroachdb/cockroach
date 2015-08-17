@@ -20,6 +20,9 @@ package sql
 import (
 	"errors"
 	"fmt"
+	"log"
+
+	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
@@ -42,10 +45,72 @@ const (
 	MaxReservedDescID ID = 999
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID ID = 0
+
+	// systemDatabaseID is the ID of the system database.
+	systemDatabaseID ID = 1
+	// namespaceTableID is the ID of the namespace table.
+	namespaceTableID ID = 2
+	// descriptorTableID is the ID of the descriptor table.
+	descriptorTableID ID = 3
 )
 
 // ErrMissingPrimaryKey exported to the sql package.
 var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
+
+// SystemDB is the descriptor for the system database.
+var SystemDB = DatabaseDescriptor{
+	Name: "system",
+	ID:   systemDatabaseID,
+	// TODO(marc): The system database and namespace and descriptor tables should
+	// be read-only by everyone (including root).
+	Privileges: NewDefaultDatabasePrivilegeDescriptor(),
+}
+
+// NamespaceTable is the descriptor for the namespace table.
+var NamespaceTable TableDescriptor
+
+// DescriptorTable is the descriptor for the descriptor table.
+var DescriptorTable TableDescriptor
+
+func init() {
+	const sql = `
+CREATE TABLE system.namespace (
+  "parentID" INT,
+  "name"     CHAR,
+  "id"       INT,
+  PRIMARY KEY (parentID, name)
+);
+
+CREATE TABLE system.descriptor (
+  "id"   INT PRIMARY KEY,
+  "desc" BLOB
+);
+`
+	stmts, err := parser.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	NamespaceTable, err = makeTableDesc(stmts[0].(*parser.CreateTable))
+	if err != nil {
+		log.Fatal(err)
+	}
+	NamespaceTable.Privileges = SystemDB.Privileges
+	NamespaceTable.ID = namespaceTableID
+	if err := NamespaceTable.AllocateIDs(); err != nil {
+		log.Fatal(err)
+	}
+
+	DescriptorTable, err = makeTableDesc(stmts[1].(*parser.CreateTable))
+	if err != nil {
+		log.Fatal(err)
+	}
+	DescriptorTable.Privileges = SystemDB.Privileges
+	DescriptorTable.ID = descriptorTableID
+	if err := DescriptorTable.AllocateIDs(); err != nil {
+		log.Fatal(err)
+	}
+}
 
 func validateName(name, typ string) error {
 	if len(name) == 0 {
