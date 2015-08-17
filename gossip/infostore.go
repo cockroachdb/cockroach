@@ -454,6 +454,7 @@ func newInfoStoreFromProto(p *InfoStoreDelta) *infoStore {
 		NodeAddr: p.NodeAddr,
 		MaxSeq:   p.MaxSeq,
 	}
+	is.Groups = groupMap{}
 	for k, gr := range p.Groups {
 		g := &group{G: *gr}
 		is.Groups[k] = g

@@ -686,3 +686,15 @@ func TestInfoStoreDeltaProtoGroups(t *testing.T) {
 		}
 	}
 }
+
+func TestInfoStoreFromProto(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	is := createTestInfoStore(t)
+	p := is.Proto()
+	is2 := newInfoStoreFromProto(p)
+
+	if len(is.Groups) != len(is2.Groups) {
+		t.Errorf("expected matching group length")
+	}
+}
