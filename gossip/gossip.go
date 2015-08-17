@@ -296,7 +296,7 @@ func (g *Gossip) GetGroupInfos(prefix string) ([]interface{}, error) {
 func (g *Gossip) RegisterGroup(prefix string, limit int, typeOf GroupType) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.is.registerGroup(newGroup(prefix, limit, typeOf))
+	return g.is.registerGroup(newGroup(prefix, int32(limit), typeOf))
 }
 
 // Callback is a callback method to be invoked on gossip update

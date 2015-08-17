@@ -211,6 +211,9 @@ func (m *Group) GetInfos() map[string]*Info {
 
 // Info is the basic unit of information traded over the
 // gossip network.
+// TODO(thschroeter): remove `peer_id` and `seq` that are
+// exposing internals and get overwritten as `Info` is
+// received.
 type Info struct {
 	// Info key
 	Key string `protobuf:"bytes,1,opt,name=key" json:"key"`
@@ -223,11 +226,7 @@ type Info struct {
 	// Number of hops from originator
 	Hops uint32 `protobuf:"varint,5,opt,name=hops" json:"hops"`
 	// Originating node's ID
-	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,6,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id"`
-	// TODO(thschroeter): peer_id and seq used to be local fields, added them to the
-	// message nevertheless to keep Info flat, neglecting the slight overhead.
-	// Otherwise we could write infoContext struct that extends this message with
-	// these two fields.
+	NodeID           github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,6,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id"`
 	PeerID           github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,7,opt,name=peer_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"peer_id"`
 	Seq              int64                                         `protobuf:"varint,8,opt,name=seq" json:"seq"`
 	XXX_unrecognized []byte                                        `json:"-"`
@@ -295,13 +294,12 @@ func (m *Info) GetSeq() int64 {
 
 // ValUnion is the union of all types gossip supports
 type ValUnion struct {
-	Int64Val           *int64                           `protobuf:"varint,1,opt,name=int64_val" json:"int64_val,omitempty"`
-	FloatVal           *float64                         `protobuf:"fixed64,2,opt,name=float_val" json:"float_val,omitempty"`
-	StringVal          *string                          `protobuf:"bytes,3,opt,name=string_val" json:"string_val,omitempty"`
-	StoreDescriptorVal *cockroach_proto.StoreDescriptor `protobuf:"bytes,4,opt,name=store_descriptor_val" json:"store_descriptor_val,omitempty"`
-	NodeDescriptorVal  *cockroach_proto.NodeDescriptor  `protobuf:"bytes,5,opt,name=node_descriptor_val" json:"node_descriptor_val,omitempty"`
-	RangeDescriptorVal *cockroach_proto.RangeDescriptor `protobuf:"bytes,6,opt,name=range_descriptor_val" json:"range_descriptor_val,omitempty"`
-	// TODO(thschroeter): protofy PrefixConfigMap
+	Int64Val           *int64                                    `protobuf:"varint,1,opt,name=int64_val" json:"int64_val,omitempty"`
+	FloatVal           *float64                                  `protobuf:"fixed64,2,opt,name=float_val" json:"float_val,omitempty"`
+	StringVal          *string                                   `protobuf:"bytes,3,opt,name=string_val" json:"string_val,omitempty"`
+	StoreDescriptorVal *cockroach_proto.StoreDescriptor          `protobuf:"bytes,4,opt,name=store_descriptor_val" json:"store_descriptor_val,omitempty"`
+	NodeDescriptorVal  *cockroach_proto.NodeDescriptor           `protobuf:"bytes,5,opt,name=node_descriptor_val" json:"node_descriptor_val,omitempty"`
+	RangeDescriptorVal *cockroach_proto.RangeDescriptor          `protobuf:"bytes,6,opt,name=range_descriptor_val" json:"range_descriptor_val,omitempty"`
 	PrefixConfigMapVal *cockroach_storage_config.PrefixConfigMap `protobuf:"bytes,7,opt,name=prefix_config_map_val" json:"prefix_config_map_val,omitempty"`
 	TestVal            *TestVal                                  `protobuf:"bytes,8,opt,name=test_val" json:"test_val,omitempty"`
 	XXX_unrecognized   []byte                                    `json:"-"`

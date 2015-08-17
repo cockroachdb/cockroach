@@ -88,7 +88,7 @@ func (is *infoStore) String() string {
 
 	// Compute delta of groups and infos.
 	if err := is.visitInfos(func(g *group) error {
-		str := fmt.Sprintf("%sgroup %q", prepend, g.Prefix)
+		str := fmt.Sprintf("%sgroup %q", prepend, g.G.Prefix)
 		prepend = ", "
 		_, err := buf.WriteString(str)
 		return err
@@ -182,14 +182,14 @@ func (is *infoStore) getGroupInfos(prefix string) infoSlice {
 //
 // REQUIRES: group.prefix is not already in the info store's groups map.
 func (is *infoStore) registerGroup(g *group) error {
-	if g2, ok := is.Groups[g.Prefix]; ok {
-		if g.Prefix != g2.Prefix || g.Limit != g2.Limit || g.TypeOf != g2.TypeOf {
+	if g2, ok := is.Groups[g.G.Prefix]; ok {
+		if g.G.Prefix != g2.G.Prefix || g.G.Limit != g2.G.Limit || g.G.TypeOf != g2.G.TypeOf {
 			return util.Errorf("group %q already in group map with different settings %v vs. %v",
-				g.Prefix, g, g2)
+				g.G.Prefix, g, g2)
 		}
 		return nil
 	}
-	is.Groups[g.Prefix] = g
+	is.Groups[g.G.Prefix] = g
 	return nil
 }
 
@@ -240,7 +240,7 @@ func (is *infoStore) addInfo(i *Info) error {
 func (is *infoStore) infoCount() uint32 {
 	count := uint32(len(is.Infos))
 	for _, group := range is.Groups {
-		count += uint32(len(group.Infos))
+		count += uint32(len(group.G.Infos))
 	}
 	return count
 }
@@ -316,9 +316,9 @@ func (is *infoStore) visitInfos(visitGroup func(*group) error, visitInfo func(*I
 			}
 		}
 		if visitInfo != nil {
-			for _, i := range g.Infos {
+			for _, i := range g.G.Infos {
 				if i.expired(now) {
-					delete(g.Infos, i.Key)
+					delete(g.G.Infos, i.Key)
 					continue
 				}
 				if err := visitInfo(i); err != nil {
@@ -354,9 +354,9 @@ func (is *infoStore) combine(delta *infoStore) int {
 	// one-by-one using addInfo.
 	var freshCount int
 	if err := delta.visitInfos(func(g *group) error {
-		if _, ok := is.Groups[g.Prefix]; !ok {
+		if _, ok := is.Groups[g.G.Prefix]; !ok {
 			// Make a copy of the group.
-			gCopy := newGroup(g.Prefix, g.Limit, g.TypeOf)
+			gCopy := newGroup(g.G.Prefix, g.G.Limit, g.G.TypeOf)
 			return is.registerGroup(gCopy)
 		}
 		return nil
@@ -392,7 +392,7 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) *infoStore {
 
 	// Compute delta of groups and infos.
 	if err := is.visitInfos(func(g *group) error {
-		gDelta := newGroup(g.Prefix, g.Limit, g.TypeOf)
+		gDelta := newGroup(g.G.Prefix, g.G.Limit, g.G.TypeOf)
 		return delta.registerGroup(gDelta)
 	}, func(i *Info) error {
 		if i.isFresh(nodeID, seq) {

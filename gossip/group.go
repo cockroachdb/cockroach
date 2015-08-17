@@ -45,28 +45,28 @@ const (
 // MinGroup, MaxGroup: maintain only minimum/maximum values added
 // to group respectively.
 type group struct {
-	Prefix      string    // Key prefix for Info items in group
-	Limit       int       // Maximum number of keys in group
-	TypeOf      GroupType // Minimums or maximums of all values encountered
-	Infos       infoMap   // Map of infos in group
-	minTTLStamp int64     // Minimum of all infos' TTLs (Unix nanos)
-	gatekeeper  *Info     // Minimum or maximum value in infos map, depending on type
+	G           Group // Group data exchanged over the wire (currently exported for gob)
+	minTTLStamp int64 // Minimum of all infos' TTLs (Unix nanos)
+	gatekeeper  *Info // Minimum or maximum value in infos map, depending on type
 }
 
 // groupMap is a map of group prefixes => *group.
 type groupMap map[string]*group
 
 // newGroup allocates and returns a new group with prefix, limit and type.
-func newGroup(prefix string, limit int, typeOf GroupType) *group {
+func newGroup(prefix string, limit int32, typeOf GroupType) *group {
 	if limit <= 0 {
 		log.Fatalf("group size limit must be a positive number (%d <= 0)", limit)
 	}
+	g := Group{
+		Prefix: prefix,
+		Limit:  limit,
+		TypeOf: typeOf,
+		Infos:  make(infoMap),
+	}
 	return &group{
-		Prefix:      prefix,
-		Limit:       limit,
-		TypeOf:      typeOf,
+		G:           g,
 		minTTLStamp: math.MaxInt64,
-		Infos:       make(infoMap),
 	}
 }
 
@@ -76,13 +76,13 @@ func (g *group) shouldInclude(i *Info) bool {
 	if g.gatekeeper == nil {
 		return true
 	}
-	switch g.TypeOf {
+	switch g.G.TypeOf {
 	case MinGroup:
 		return i.less(g.gatekeeper)
 	case MaxGroup:
 		return !i.less(g.gatekeeper)
 	default:
-		log.Fatalf("unknown group type %d", g.TypeOf)
+		log.Fatalf("unknown group type %d", g.G.TypeOf)
 		return false
 	}
 }
@@ -107,7 +107,7 @@ func (g *group) update() {
 	g.minTTLStamp = math.MaxInt64
 	g.gatekeeper = nil
 
-	for _, i := range g.Infos {
+	for _, i := range g.G.Infos {
 		g.updateIncremental(i)
 	}
 }
@@ -123,7 +123,7 @@ func (g *group) compact() bool {
 	// Delete expired entries && update group stats.
 	g.minTTLStamp = math.MaxInt64
 	g.gatekeeper = nil
-	for _, i := range g.Infos {
+	for _, i := range g.G.Infos {
 		if i.expired(now) {
 			g.removeInternal(i)
 		} else {
@@ -131,18 +131,18 @@ func (g *group) compact() bool {
 		}
 	}
 
-	return len(g.Infos) < g.Limit
+	return len(g.G.Infos) < int(g.G.Limit)
 }
 
 // addInternal adds info to group, incrementally updating group stats.
 func (g *group) addInternal(i *Info) {
-	g.Infos[i.Key] = i
+	g.G.Infos[i.Key] = i
 	g.updateIncremental(i)
 }
 
 // removeInternal removes info from group, updating group stats wholesale if necessary.
 func (g *group) removeInternal(i *Info) {
-	delete(g.Infos, i.Key)
+	delete(g.G.Infos, i.Key)
 	if g.gatekeeper == i || g.minTTLStamp == i.TTLStamp {
 		g.update()
 	}
@@ -150,7 +150,7 @@ func (g *group) removeInternal(i *Info) {
 
 // getInfo returns an info by key.
 func (g *group) getInfo(key string) *Info {
-	if i, ok := g.Infos[key]; ok {
+	if i, ok := g.G.Infos[key]; ok {
 		// Check TTL and discard if too old.
 		now := time.Now().UnixNano()
 		if i.expired(now) {
@@ -167,8 +167,8 @@ func (g *group) getInfo(key string) *Info {
 // MaxGroup: descending).
 func (g *group) infosAsSlice() infoSlice {
 	now := time.Now().UnixNano()
-	infos := make(infoSlice, 0, len(g.Infos))
-	for _, i := range g.Infos {
+	infos := make(infoSlice, 0, len(g.G.Infos))
+	for _, i := range g.G.Infos {
 		// Check TTL and discard if too old.
 		if i.expired(now) {
 			g.removeInternal(i)
@@ -176,7 +176,7 @@ func (g *group) infosAsSlice() infoSlice {
 			infos = append(infos, i)
 		}
 	}
-	switch g.TypeOf {
+	switch g.G.TypeOf {
 	case MinGroup:
 		sort.Sort(infos)
 	case MaxGroup:
@@ -201,7 +201,7 @@ func (g *group) addInfo(i *Info) (contentsChanged bool, err error) {
 	// timestamps are equal (i.e. this is the same info), but hops
 	// value of prospective info is lower, take the minimum of the two
 	// Hops values.
-	if existingInfo, ok := g.Infos[i.Key]; ok {
+	if existingInfo, ok := g.G.Infos[i.Key]; ok {
 		if i.Timestamp < existingInfo.Timestamp ||
 			(i.Timestamp == existingInfo.Timestamp && i.Hops >= existingInfo.Hops) {
 			err = util.Errorf("info %+v older than current info %+v", i, existingInfo)
@@ -226,7 +226,7 @@ func (g *group) addInfo(i *Info) (contentsChanged bool, err error) {
 	}
 
 	// If there's free space or we successfully compacted, add info.
-	if len(g.Infos) < g.Limit || g.compact() {
+	if len(g.G.Infos) < int(g.G.Limit) || g.compact() {
 		g.addInternal(i)
 		return
 	}

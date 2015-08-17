@@ -77,6 +77,9 @@ message Group {
 
 // Info is the basic unit of information traded over the
 // gossip network.
+// TODO(thschroeter): remove `peer_id` and `seq` that are
+// exposing internals and get overwritten as `Info` is
+// received.
 message Info {
   // Info key
   optional string key = 1 [(gogoproto.nullable) = false];
@@ -93,10 +96,6 @@ message Info {
   optional int32 node_id = 6 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
-  // TODO(thschroeter): peer_id and seq used to be local fields, added them to the
-  // message nevertheless to keep Info flat, neglecting the slight overhead.
-  // Otherwise we could write infoContext struct that extends this message with
-  // these two fields.
   optional int32 peer_id = 7 [(gogoproto.nullable) = false,
       (gogoproto.customname) =  "PeerID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
@@ -112,8 +111,7 @@ message ValUnion {
     string string_val = 3;
     proto.StoreDescriptor store_descriptor_val = 4;
     proto.NodeDescriptor  node_descriptor_val = 5;
-    proto.RangeDescriptor range_descriptor_val = 6; 
-    // TODO(thschroeter): protofy PrefixConfigMap
+    proto.RangeDescriptor range_descriptor_val = 6;
     storage.config.PrefixConfigMap prefix_config_map_val = 7;
     TestVal test_val = 8;
   }
