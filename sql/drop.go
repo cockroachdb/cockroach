@@ -26,7 +26,7 @@ import (
 )
 
 // DropTable drops a table.
-// Privileges: WRITE on table.
+// Privileges: DROP on table.
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
@@ -67,7 +67,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			return nil, err
 		}
 
-		if err := p.checkPrivilege(&tableDesc, privilege.WRITE); err != nil {
+		if err := p.checkPrivilege(&tableDesc, privilege.DROP); err != nil {
 			return nil, err
 		}
 
@@ -88,7 +88,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 }
 
 // DropDatabase drops a database.
-// Privileges: WRITE on database.
+// Privileges: DROP on database.
 //   Notes: postgres allows only the database owner to DROP a database.
 //          mysql requires the DROP privileges on the database.
 // TODO(XisiHuang): our DROP DATABASE is like the postgres DROP SCHEMA
@@ -122,7 +122,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(&desc, privilege.WRITE); err != nil {
+	if err := p.checkPrivilege(&desc, privilege.DROP); err != nil {
 		return nil, err
 	}
 

@@ -52,7 +52,7 @@ func TestPrivilege(t *testing.T) {
 		{"foo", privilege.List{privilege.ALL}, nil,
 			[]sql.UserPrivilegeString{{"foo", "ALL"}, {"root", "ALL"}},
 		},
-		{"foo", nil, privilege.List{privilege.SELECT, privilege.INSERT, privilege.READ, privilege.WRITE},
+		{"foo", nil, privilege.List{privilege.SELECT, privilege.INSERT},
 			[]sql.UserPrivilegeString{{"foo", "CREATE,DELETE,DROP,GRANT,UPDATE"}, {"root", "ALL"}},
 		},
 		{"foo", nil, privilege.List{privilege.ALL},

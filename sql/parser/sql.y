@@ -811,14 +811,6 @@ privilege:
   {
     $$ = privilege.UPDATE
   }
-| READ
-  {
-    $$ = privilege.READ
-  }
-| WRITE
-  {
-    $$ = privilege.WRITE
-  }
 
 // TODO(marc): this should not be 'name', but should instead be a
 // type just for usernames.

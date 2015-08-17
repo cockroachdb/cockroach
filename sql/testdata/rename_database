@@ -75,7 +75,7 @@ statement error the new database name .* already exists
 ALTER DATABASE t RENAME TO u
 
 statement ok
-GRANT WRITE ON DATABASE t TO testuser
+GRANT ALL ON DATABASE t TO testuser
 
 user testuser
 

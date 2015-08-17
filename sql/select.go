@@ -20,7 +20,7 @@ package sql
 import "github.com/cockroachdb/cockroach/sql/parser"
 
 // Select selects rows from a single table.
-// Privileges: READ on table
+// Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
 func (p *planner) Select(n *parser.Select) (planNode, error) {

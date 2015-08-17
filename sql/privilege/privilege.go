@@ -30,7 +30,6 @@ type Kind uint32
 
 // List of privileges. ALL is specifically encoded so that it will automatically
 // pick up new privileges.
-// TODO(marc): deprecate READ|WRITE.
 const (
 	_        = iota
 	ALL Kind = iota
@@ -41,13 +40,11 @@ const (
 	INSERT
 	DELETE
 	UPDATE
-	READ
-	WRITE
 )
 
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
-	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, READ, WRITE,
+	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE,
 }
 
 // List is a list of privileges.

@@ -26,7 +26,7 @@ import (
 )
 
 // Truncate deletes all rows from a table.
-// Privileges: WRITE on table.
+// Privileges: DROP on table.
 //   Notes: postgres requires TRUNCATE.
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
 func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
@@ -38,7 +38,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 			return nil, err
 		}
 
-		if err := p.checkPrivilege(tableDesc, privilege.WRITE); err != nil {
+		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
 			return nil, err
 		}
 

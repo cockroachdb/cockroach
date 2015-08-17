@@ -47,7 +47,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 }
 
 // CreateTable creates a table.
-// Privileges: WRITE on database.
+// Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
 func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 	if err := n.Table.NormalizeTableName(p.session.Database); err != nil {
@@ -59,7 +59,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(dbDesc, privilege.WRITE); err != nil {
+	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
