@@ -666,7 +666,7 @@ func TestInfoStoreDeltaProtoInfos(t *testing.T) {
 	if err := is.addInfo(i1); err != nil {
 		t.Fatal(err)
 	}
-	d := is.deltaProto()
+	d := is.Proto()
 	if len(d.Infos) != 1 || d.Infos[k1].Key != k1 {
 		t.Error("expected InfoStoreDelta to contain info")
 	}
@@ -676,7 +676,7 @@ func TestInfoStoreDeltaProtoGroups(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	is := createTestInfoStore(t)
-	d := is.deltaProto()
+	d := is.Proto()
 	if len(d.Groups) != len(is.Groups) {
 		t.Errorf("expected matching group length")
 	}

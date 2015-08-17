@@ -446,3 +446,36 @@ func (is *infoStore) leastUseful(nodes *nodeSet) proto.NodeID {
 	}
 	return leastNode
 }
+
+func newInfoStoreFromProto(p *InfoStoreDelta) *infoStore {
+	is := &infoStore{
+		Infos:    p.Infos,
+		NodeID:   p.NodeID,
+		NodeAddr: p.NodeAddr,
+		MaxSeq:   p.MaxSeq,
+	}
+	for k, gr := range p.Groups {
+		g := &group{G: *gr}
+		is.Groups[k] = g
+	}
+	return is
+}
+
+// TODO(thschroeter): rename to lowercase
+func (is *infoStore) Proto() *InfoStoreDelta {
+	d := InfoStoreDelta{
+		NodeID: is.NodeID,
+		MaxSeq: is.MaxSeq,
+		Infos:  is.Infos,
+	}
+	// TODO(thschroeter): copying could be avoided by exporting all fields
+	// of `group` in the proto message `Group`. Like this, groupMap would
+	// be the same in the `infoStore` and the `InfoStoreDelta` proto.
+	// I think, this is better than exporting local fields just to avoid the
+	// copy loop below.
+	d.Groups = make(map[string]*Group)
+	for k, group := range is.Groups {
+		d.Groups[k] = &group.G
+	}
+	return &d
+}

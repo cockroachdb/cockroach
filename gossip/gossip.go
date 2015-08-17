@@ -56,14 +56,12 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
-	"encoding/gob"
 	"encoding/json"
 	"math"
 	"net"
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -101,26 +99,6 @@ var (
 	// TestBootstrap is the default gossip bootstrap used for running tests.
 	TestBootstrap = []resolver.Resolver{}
 )
-
-// init registers all the types that are sent over the wire as
-// implementations of info.Val.
-func init() {
-	gob.Register(infoStore{})
-
-	// The last thing that isn't a proto.
-	gob.Register(config.PrefixConfigMap{})
-
-	// Used in config.PrefixConfig.
-	gob.Register(&config.AcctConfig{})
-	gob.Register(&config.PermConfig{})
-	gob.Register(&config.UserConfig{})
-	gob.Register(&config.ZoneConfig{})
-	gob.Register(&proto.NodeDescriptor{})
-
-	// Used...elsewhere?
-	gob.Register(proto.RangeDescriptor{})
-	gob.Register(proto.StoreDescriptor{})
-}
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.
 // During bootstrapping, the bootstrap list contains candidates for

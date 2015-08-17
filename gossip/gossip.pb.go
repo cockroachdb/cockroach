@@ -45,8 +45,8 @@ type Request struct {
 	// Maximum sequence number of gossip from this peer.
 	MaxSeq int64 `protobuf:"varint,4,opt,name=max_seq" json:"max_seq"`
 	// Reciprocal delta of new info since last gossip.
-	Delta            []byte `protobuf:"bytes,5,opt,name=delta" json:"delta,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Delta            *InfoStoreDelta `protobuf:"bytes,5,opt,name=delta" json:"delta,omitempty"`
+	XXX_unrecognized []byte          `json:"-"`
 }
 
 func (m *Request) Reset()         { *m = Request{} }
@@ -81,7 +81,7 @@ func (m *Request) GetMaxSeq() int64 {
 	return 0
 }
 
-func (m *Request) GetDelta() []byte {
+func (m *Request) GetDelta() *InfoStoreDelta {
 	if m != nil {
 		return m.Delta
 	}
@@ -92,7 +92,7 @@ func (m *Request) GetDelta() []byte {
 // Delta will be nil in the event that Alternate is set.
 type Response struct {
 	// Requested delta of server's infostore.
-	Delta []byte `protobuf:"bytes,1,opt,name=delta" json:"delta,omitempty"`
+	Delta *InfoStoreDelta `protobuf:"bytes,1,opt,name=delta" json:"delta,omitempty"`
 	// Non-nil means client should retry with this address.
 	Alternate        *cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=alternate" json:"alternate,omitempty"`
 	XXX_unrecognized []byte                         `json:"-"`
@@ -102,7 +102,7 @@ func (m *Response) Reset()         { *m = Response{} }
 func (m *Response) String() string { return proto.CompactTextString(m) }
 func (*Response) ProtoMessage()    {}
 
-func (m *Response) GetDelta() []byte {
+func (m *Response) GetDelta() *InfoStoreDelta {
 	if m != nil {
 		return m.Delta
 	}
@@ -116,6 +116,7 @@ func (m *Response) GetAlternate() *cockroach_util.UnresolvedAddr {
 	return nil
 }
 
+// TODO(thschroeter): check if all fields below are required
 type InfoStoreDelta struct {
 	// Map from key to info
 	Infos map[string]*Info `protobuf:"bytes,1,rep,name=infos" json:"infos,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`

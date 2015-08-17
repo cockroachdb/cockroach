@@ -18,8 +18,6 @@
 package gossip
 
 import (
-	"bytes"
-	"encoding/gob"
 	"math/rand"
 	"net"
 	"sync"
@@ -104,10 +102,7 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 
 	// Update infostore with gossiped infos.
 	if args.Delta != nil {
-		delta := &infoStore{}
-		if err := gob.NewDecoder(bytes.NewBuffer(args.Delta)).Decode(delta); err != nil {
-			return nil, util.Errorf("infostore could not be decoded: %s", err)
-		}
+		delta := newInfoStoreFromProto(args.Delta)
 		if delta.infoCount() > 0 {
 			if log.V(1) {
 				log.Infof("gossip: received %s", delta)
@@ -128,11 +123,7 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 	// Return reciprocal delta.
 	delta := s.is.delta(args.NodeID, args.MaxSeq)
 	if delta != nil {
-		var buf bytes.Buffer
-		if err := gob.NewEncoder(&buf).Encode(delta); err != nil {
-			log.Fatalf("infostore could not be encoded: %s", err)
-		}
-		reply.Delta = buf.Bytes()
+		reply.Delta = delta.Proto()
 	}
 	return reply, nil
 }

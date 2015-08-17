@@ -419,7 +419,6 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
 	args proto.Request) (proto.Response, error) {
 	if len(replicas) == 0 {
-		panic("ths break")
 		return nil, util.Errorf("%s: replicas set is empty", args.Method())
 	}
 
