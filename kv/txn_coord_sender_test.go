@@ -772,15 +772,16 @@ func TestTxnDrainingNode(t *testing.T) {
 	<-s.Stopper.IsStopped()
 }
 
-// TestTxnCoordIdempotentCleanup verifies that cleanupTxn is idempotent.
-func TestTxnCoordIdempotentCleanup(t *testing.T) {
+func TestTxnCoordCallAfterFailedHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
-	txn := newTxn(s.Clock, proto.Key("a"))
-	pReply := &proto.PutResponse{}
+	// Send a write to start a heartbeat thread.
 	key := proto.Key("a")
+	txn := newTxn(s.Clock, key)
+	txn.Priority = 1
+	pReply := &proto.PutResponse{}
 	call := proto.Call{
 		Args:  createPutRequest(key, []byte("value"), txn),
 		Reply: pReply,
@@ -788,11 +789,43 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
-
 	if pReply.Error != nil {
 		t.Fatal(pReply.GoError())
 	}
-	s.Sender.cleanupTxn(nil, *txn) // first call
+
+	// Grab the txn metadata for later.
+	s.Sender.Lock()
+	txnMeta := s.Sender.txns[string(txn.ID)]
+	s.Sender.Unlock()
+
+	// Push (abort) the txn)
+	txn2 := newTxn(s.Clock, key)
+	txn2.Priority = 2
+	pushArgs := &proto.PushTxnRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: txn.Key,
+			Txn: txn2,
+		},
+		Now:       s.Clock.Now(),
+		PusheeTxn: *txn,
+		PushType:  proto.ABORT_TXN,
+	}
+	call = proto.Call{
+		Args:  pushArgs,
+		Reply: &proto.PushTxnResponse{},
+	}
+	if err := sendCall(s.Sender, call); err != nil {
+		t.Fatal(err)
+	}
+
+	// Trigger a heartbeat and wait for the heartbeat thread to exit.
+	txnMeta.triggerChan <- struct{}{}
+	txnMeta.heartbeatWG.Wait()
+
+	// Now from the "main" thread (which hasn't gotten a response from
+	// the heartbeat thread), try to commit. This must fail with a
+	// TxnAbortedError, not some other error (previously, it would
+	// fail with util.Errorf("cannot commit a read-only transaction")
 	etReply := &proto.EndTransactionResponse{}
 	s.Sender.Send(context.Background(), proto.Call{
 		Args: &proto.EndTransactionRequest{
@@ -804,9 +837,9 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 			Commit: true,
 		},
 		Reply: etReply,
-	}) // second call
-	if etReply.Error != nil {
-		t.Fatal(etReply.GoError())
+	})
+	if _, ok := etReply.GoError().(*proto.TransactionAbortedError); !ok {
+		t.Fatalf("expected TxnAbortedError, got %T: %s", etReply.Error, etReply.Error)
 	}
 }
 
