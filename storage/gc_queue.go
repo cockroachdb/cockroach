@@ -320,8 +320,8 @@ func (gcq *gcQueue) lookupGCPolicy(repl *Replica) (config.GCPolicy, error) {
 	// prefix.  This could be the case if the zone config is new and the range
 	// hasn't been split yet along the new boundary.
 	var gc *config.GCPolicy
-	if err = configMap.VisitPrefixesHierarchically(repl.Desc().StartKey, func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
-		zone := cfg.(*config.ZoneConfig)
+	if err = configMap.VisitPrefixesHierarchically(repl.Desc().StartKey, func(start, end proto.Key, cfg config.ConfigUnion) (bool, error) {
+		zone := cfg.GetValue().(*config.ZoneConfig)
 		if zone.GC != nil {
 			repl.RLock()
 			isCovered := !end.Less(repl.Desc().EndKey)

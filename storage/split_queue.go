@@ -164,5 +164,5 @@ func lookupZoneConfig(g *gossip.Gossip, rng *Replica) (config.ZoneConfig, error)
 		return config.ZoneConfig{}, util.Errorf("unable to lookup zone config for range %s: %s", rng, err)
 	}
 	prefixConfig := zoneMap.(config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey)
-	return *prefixConfig.Config.(*config.ZoneConfig), nil
+	return *prefixConfig.Config.GetValue().(*config.ZoneConfig), nil
 }

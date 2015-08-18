@@ -27,17 +27,16 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-var config1, config2, config3, config4, config5 gogoproto.Message
+var config1, config2, config3, config4, config5 ConfigUnion
 
 func buildTestPrefixConfigMap() PrefixConfigMap {
-	configs := []*PrefixConfig{
-		{proto.KeyMin, nil, config1},
-		{proto.Key("/db1"), nil, config2},
-		{proto.Key("/db1/table"), nil, config3},
-		{proto.Key("/db3"), nil, config4},
+	configs := []PrefixConfig{
+		{Prefix: proto.KeyMin, Canonical: nil, Config: config1},
+		{Prefix: proto.Key("/db1"), Canonical: nil, Config: config2},
+		{Prefix: proto.Key("/db1/table"), Canonical: nil, Config: config3},
+		{Prefix: proto.Key("/db3"), Canonical: nil, Config: config4},
 	}
 	pcc, err := NewPrefixConfigMap(configs)
 	if err != nil {
@@ -107,7 +106,7 @@ func TestPrefixConfigSort(t *testing.T) {
 	}
 	pcc := PrefixConfigMap{}
 	for _, key := range keys {
-		pcc = append(pcc, &PrefixConfig{key, nil, nil})
+		pcc = append(pcc, PrefixConfig{Prefix: key})
 	}
 	sort.Sort(pcc)
 	for i, pc := range pcc {
@@ -136,7 +135,7 @@ func TestPrefixConfigBuild(t *testing.T) {
 
 func TestPrefixConfigMapDuplicates(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	configs := []*PrefixConfig{
+	configs := []PrefixConfig{
 		{proto.KeyMin, nil, config1},
 		{proto.Key("/db2"), nil, config2},
 		{proto.Key("/db2"), nil, config3},
@@ -148,7 +147,7 @@ func TestPrefixConfigMapDuplicates(t *testing.T) {
 
 func TestPrefixConfigSuccessivePrefixes(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	configs := []*PrefixConfig{
+	configs := []PrefixConfig{
 		{proto.KeyMin, nil, config1},
 		{proto.Key("/db2"), nil, config2},
 		{proto.Key("/db2/table1"), nil, config3},
@@ -207,21 +206,21 @@ func TestMatchesByPrefix(t *testing.T) {
 	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
 		key        proto.Key
-		expConfigs []interface{}
+		expConfigs []ConfigUnion
 	}{
-		{proto.KeyMin, []interface{}{config1}},
-		{proto.Key("\x01"), []interface{}{config1}},
-		{proto.Key("/db"), []interface{}{config1}},
-		{proto.Key("/db1"), []interface{}{config2, config1}},
-		{proto.Key("/db1/a"), []interface{}{config2, config1}},
-		{proto.Key("/db1/table1"), []interface{}{config3, config2, config1}},
-		{proto.Key("/db1/table\xff"), []interface{}{config3, config2, config1}},
-		{proto.Key("/db2"), []interface{}{config1}},
-		{proto.Key("/db3"), []interface{}{config4, config1}},
-		{proto.Key("/db3\xff"), []interface{}{config4, config1}},
-		{proto.Key("/db5"), []interface{}{config1}},
-		{proto.Key("/xfe"), []interface{}{config1}},
-		{proto.Key("/xff"), []interface{}{config1}},
+		{proto.KeyMin, []ConfigUnion{config1}},
+		{proto.Key("\x01"), []ConfigUnion{config1}},
+		{proto.Key("/db"), []ConfigUnion{config1}},
+		{proto.Key("/db1"), []ConfigUnion{config2, config1}},
+		{proto.Key("/db1/a"), []ConfigUnion{config2, config1}},
+		{proto.Key("/db1/table1"), []ConfigUnion{config3, config2, config1}},
+		{proto.Key("/db1/table\xff"), []ConfigUnion{config3, config2, config1}},
+		{proto.Key("/db2"), []ConfigUnion{config1}},
+		{proto.Key("/db3"), []ConfigUnion{config4, config1}},
+		{proto.Key("/db3\xff"), []ConfigUnion{config4, config1}},
+		{proto.Key("/db5"), []ConfigUnion{config1}},
+		{proto.Key("/xfe"), []ConfigUnion{config1}},
+		{proto.Key("/xff"), []ConfigUnion{config1}},
 	}
 	for i, test := range testData {
 		pcs := pcc.MatchesByPrefix(test.key)
@@ -241,7 +240,7 @@ func TestMatchesByPrefix(t *testing.T) {
 // for splitting ranges.
 func TestSplitRangeByPrefixesError(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	if _, err := NewPrefixConfigMap([]*PrefixConfig{}); err == nil {
+	if _, err := NewPrefixConfigMap([]PrefixConfig{}); err == nil {
 		t.Error("expected error building config map with no default prefix")
 	}
 	pcc := buildTestPrefixConfigMap()
@@ -338,47 +337,54 @@ func TestSplitRangeByPrefixes(t *testing.T) {
 func TestVisitPrefixesHierarchically(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	pcc := buildTestPrefixConfigMap()
-	var configs []interface{}
-	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config gogoproto.Message) (bool, error) {
-		configs = append(configs, config)
-		return false, nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	expConfigs := []interface{}{config3, config2, config1}
-	if !reflect.DeepEqual(expConfigs, configs) {
-		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+	{
+		configs := []ConfigUnion{}
+		if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config ConfigUnion) (bool, error) {
+			configs = append(configs, config)
+			return false, nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		expConfigs := []ConfigUnion{config3, config2, config1}
+		if !reflect.DeepEqual(expConfigs, configs) {
+			t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+		}
 	}
 
 	// Now, stop partway through by returning done=true.
-	configs = []interface{}{}
-	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config gogoproto.Message) (bool, error) {
-		configs = append(configs, config)
-		if len(configs) == 2 {
-			return true, nil
+	{
+		configs := []ConfigUnion{}
+		if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config ConfigUnion) (bool, error) {
+			configs = append(configs, config)
+			if len(configs) == 2 {
+				return true, nil
+			}
+			return false, nil
+		}); err != nil {
+			t.Fatal(err)
 		}
-		return false, nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	expConfigs = []interface{}{config3, config2}
-	if !reflect.DeepEqual(expConfigs, configs) {
-		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+		expConfigs := []ConfigUnion{config3, config2}
+		if !reflect.DeepEqual(expConfigs, configs) {
+			t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+		}
 	}
 
 	// Now, stop partway through by returning an error.
-	configs = []interface{}{}
-	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config gogoproto.Message) (bool, error) {
-		configs = append(configs, config)
-		if len(configs) == 2 {
-			return false, util.Errorf("foo")
+	{
+		configs := []ConfigUnion{}
+		if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config ConfigUnion) (bool, error) {
+			configs = append(configs, config)
+			if len(configs) == 2 {
+				return false, util.Errorf("foo")
+			}
+			return false, nil
+		}); err == nil {
+			t.Fatalf("expected an error, but didn't get one")
 		}
-		return false, nil
-	}); err == nil {
-		t.Fatalf("expected an error, but didn't get one")
-	}
-	if !reflect.DeepEqual(expConfigs, configs) {
-		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+		expConfigs := []ConfigUnion{config3, config2}
+		if !reflect.DeepEqual(expConfigs, configs) {
+			t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+		}
 	}
 }
 
@@ -389,7 +395,7 @@ func TestVisitPrefixes(t *testing.T) {
 	testData := []struct {
 		start, end proto.Key
 		expRanges  [][2]proto.Key
-		expConfigs []interface{}
+		expConfigs []ConfigUnion
 	}{
 		{proto.KeyMin, proto.KeyMax,
 			[][2]proto.Key{
@@ -400,18 +406,18 @@ func TestVisitPrefixes(t *testing.T) {
 				{proto.Key("/db2"), proto.Key("/db3")},
 				{proto.Key("/db3"), proto.Key("/db4")},
 				{proto.Key("/db4"), proto.KeyMax},
-			}, []interface{}{config1, config2, config3, config2, config1, config4, config1}},
+			}, []ConfigUnion{config1, config2, config3, config2, config1, config4, config1}},
 		{proto.Key("/db0"), proto.Key("/db1/table/foo"),
 			[][2]proto.Key{
 				{proto.Key("/db0"), proto.Key("/db1")},
 				{proto.Key("/db1"), proto.Key("/db1/table")},
 				{proto.Key("/db1/table"), proto.Key("/db1/table/foo")},
-			}, []interface{}{config1, config2, config3}},
+			}, []ConfigUnion{config1, config2, config3}},
 	}
 	for i, test := range testData {
 		ranges := [][2]proto.Key{}
-		configs := []interface{}{}
-		if err := pcc.VisitPrefixes(test.start, test.end, func(start, end proto.Key, config gogoproto.Message) (bool, error) {
+		configs := []ConfigUnion{}
+		if err := pcc.VisitPrefixes(test.start, test.end, func(start, end proto.Key, config ConfigUnion) (bool, error) {
 			ranges = append(ranges, [2]proto.Key{start, end})
 			configs = append(configs, config)
 			return false, nil
@@ -427,33 +433,38 @@ func TestVisitPrefixes(t *testing.T) {
 	}
 
 	// Now, stop partway through by returning done=true.
-	configs := []interface{}{}
-	if err := pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config gogoproto.Message) (bool, error) {
-		configs = append(configs, config)
-		if len(configs) == 2 {
-			return true, nil
+	{
+		configs := []ConfigUnion{}
+		if err := pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config ConfigUnion) (bool, error) {
+			configs = append(configs, config)
+			if len(configs) == 2 {
+				return true, nil
+			}
+			return false, nil
+		}); err != nil {
+			t.Fatal(err)
 		}
-		return false, nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	expConfigs := []interface{}{config1, config4}
-	if !reflect.DeepEqual(expConfigs, configs) {
-		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+		expConfigs := []ConfigUnion{config1, config4}
+		if !reflect.DeepEqual(expConfigs, configs) {
+			t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+		}
 	}
 
 	// Now, stop partway through by returning an error.
-	configs = []interface{}{}
-	if err := pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config gogoproto.Message) (bool, error) {
-		configs = append(configs, config)
-		if len(configs) == 2 {
-			return false, util.Errorf("foo")
+	{
+		configs := []ConfigUnion{}
+		if err := pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config ConfigUnion) (bool, error) {
+			configs = append(configs, config)
+			if len(configs) == 2 {
+				return false, util.Errorf("foo")
+			}
+			return false, nil
+		}); err == nil {
+			t.Fatalf("expected an error, but didn't get one")
 		}
-		return false, nil
-	}); err == nil {
-		t.Fatalf("expected an error, but didn't get one")
-	}
-	if !reflect.DeepEqual(expConfigs, configs) {
-		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+		expConfigs := []ConfigUnion{config1, config4}
+		if !reflect.DeepEqual(expConfigs, configs) {
+			t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+		}
 	}
 }

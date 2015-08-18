@@ -26,10 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
-
-var config1, config2 gogoproto.Message
 
 // TestSplitQueueShouldQueue verifies shouldQueue method correctly
 // combines splits in accounting and zone configs with the size of
@@ -41,9 +38,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	defer tc.Stop()
 
 	// Set accounting and zone configs.
-	acctMap, err := config.NewPrefixConfigMap([]*config.PrefixConfig{
-		{proto.KeyMin, nil, config1},
-		{proto.Key("/dbA"), nil, config2},
+	acctMap, err := config.NewPrefixConfigMap([]config.PrefixConfig{
+		{Prefix: proto.KeyMin},
+		{Prefix: proto.Key("/dbA")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -52,9 +49,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	zoneMap, err := config.NewPrefixConfigMap([]*config.PrefixConfig{
-		{proto.KeyMin, nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}},
-		{proto.Key("/dbB"), nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}},
+	zoneMap, err := config.NewPrefixConfigMap([]config.PrefixConfig{
+		config.MakePrefixConfig(proto.KeyMin, nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}),
+		config.MakePrefixConfig(proto.Key("/dbB"), nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}),
 	})
 	if err != nil {
 		t.Fatal(err)

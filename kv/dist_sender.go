@@ -240,10 +240,10 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	//   shortest to longest instead for performance. Keep an eye on profiling
 	//   for this code path as permission sets grow large.
 	return permMap.VisitPrefixes(header.Key, headerEnd,
-		func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
+		func(start, end proto.Key, cfg config.ConfigUnion) (bool, error) {
 			hasPerm := false
-			if err := permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
-				perm := cfg.(*config.PermConfig)
+			if err := permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, cfg config.ConfigUnion) (bool, error) {
+				perm := cfg.GetValue().(*config.PermConfig)
 				if proto.IsRead(args) && !perm.CanRead(header.User) {
 					return false, nil
 				}

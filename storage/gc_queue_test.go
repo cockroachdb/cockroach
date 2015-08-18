@@ -371,9 +371,9 @@ func TestGCQueueLookupGCPolicy(t *testing.T) {
 		// Note that there is no GC set here, so we should select the
 		// hierarchical parent's GC policy; in this case, zoneConfig1.
 	}
-	configs := []*config.PrefixConfig{
-		{proto.KeyMin, nil, &zoneConfig1},
-		{proto.Key("/db1"), nil, &zoneConfig2},
+	configs := []config.PrefixConfig{
+		config.MakePrefixConfig(proto.KeyMin, nil, &zoneConfig1),
+		config.MakePrefixConfig(proto.Key("/db1"), nil, &zoneConfig2),
 	}
 	pcc, err := config.NewPrefixConfigMap(configs)
 	if err != nil {
