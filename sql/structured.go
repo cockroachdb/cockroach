@@ -42,10 +42,14 @@ const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
 	PrimaryKeyIndexName = "primary"
 	// MaxReservedDescID is the maximum reserved descriptor ID.
+	// All objects with ID <= MaxReservedDescID are system object
+	// with special rules.
 	MaxReservedDescID ID = 999
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID ID = 0
 
+	// System IDs should be kept in sync with IsSystem methods on
+	// DatabaseDescriptor and TableDescriptor.
 	// systemDatabaseID is the ID of the system database.
 	systemDatabaseID ID = 1
 	// namespaceTableID is the ID of the namespace table.
@@ -59,11 +63,9 @@ var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
 
 // SystemDB is the descriptor for the system database.
 var SystemDB = DatabaseDescriptor{
-	Name: "system",
-	ID:   systemDatabaseID,
-	// TODO(marc): The system database and namespace and descriptor tables should
-	// be read-only by everyone (including root).
-	Privileges: NewDefaultDatabasePrivilegeDescriptor(),
+	Name:       "system",
+	ID:         systemDatabaseID,
+	Privileges: NewSystemObjectPrivilegeDescriptor(),
 }
 
 // NamespaceTable is the descriptor for the namespace table.
@@ -110,6 +112,11 @@ CREATE TABLE system.descriptor (
 	if err := DescriptorTable.AllocateIDs(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// IsSystemID returns true if this ID is reserved for system objects.
+func IsSystemID(id ID) bool {
+	return id > 0 && id <= MaxReservedDescID
 }
 
 func validateName(name, typ string) error {
@@ -178,11 +185,13 @@ func (desc *TableDescriptor) AllocateIDs() error {
 		}
 	}
 
-	// This is sort of ugly. We want to make sure the descriptor is valid, except
-	// for checking the table ID. So we whack in a valid table ID for the
-	// duration of the call to Validate.
+	// This is sort of ugly. If the descriptor does not have an ID, we hack one in
+	// to pass the table ID check. We use a non-reserved ID, reserved ones being set
+	// before AllocateIDs.
 	savedID := desc.ID
-	desc.ID = 1
+	if desc.ID == 0 {
+		desc.ID = MaxReservedDescID + 1
+	}
 	err := desc.Validate()
 	desc.ID = savedID
 	return err
@@ -284,7 +293,7 @@ func (desc *TableDescriptor) Validate() error {
 		}
 	}
 	// Validate the privilege descriptor.
-	return desc.Privileges.Validate()
+	return desc.Privileges.Validate(IsSystemID(desc.GetID()))
 }
 
 // FindColumnByName finds the column with specified name.
@@ -365,5 +374,5 @@ func (desc *DatabaseDescriptor) Validate() error {
 		return fmt.Errorf("invalid database ID 0")
 	}
 	// Validate the privilege descriptor.
-	return desc.Privileges.Validate()
+	return desc.Privileges.Validate(IsSystemID(desc.GetID()))
 }

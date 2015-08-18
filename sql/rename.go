@@ -54,6 +54,10 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	descKey := MakeDescMetadataKey(dbDesc.GetID())
 	dbDesc.SetName(string(n.NewName))
 
+	if err := dbDesc.Validate(); err != nil {
+		return nil, err
+	}
+
 	b := client.Batch{}
 	b.CPut(databaseKey{string(n.NewName)}.Key(), dbDesc.GetID(), nil)
 	b.Put(descKey, dbDesc)
@@ -135,6 +139,10 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 
 	newTbKey := tableKey{targetDbDesc.ID, n.NewName.Table()}.Key()
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
+
+	if err := tableDesc.Validate(); err != nil {
+		return nil, err
+	}
 
 	b := client.Batch{}
 	b.Put(descKey, tableDesc)

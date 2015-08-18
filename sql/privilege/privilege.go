@@ -42,6 +42,11 @@ const (
 	UPDATE
 )
 
+// Mask returns the bitmask for a given privilege.
+func (k Kind) Mask() uint32 {
+	return 1 << k
+}
+
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
 	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE,
@@ -92,7 +97,7 @@ func (pl List) SortedString() string {
 func (pl List) ToBitField() uint32 {
 	var ret uint32
 	for _, p := range pl {
-		ret |= (1 << p)
+		ret |= p.Mask()
 	}
 	return ret
 }
@@ -103,7 +108,7 @@ func (pl List) ToBitField() uint32 {
 func ListFromBitField(m uint32) List {
 	ret := List{}
 	for _, p := range ByValue {
-		if m&(1<<p) != 0 {
+		if m&p.Mask() != 0 {
 			ret = append(ret, p)
 		}
 	}

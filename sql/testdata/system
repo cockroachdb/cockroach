@@ -33,3 +33,64 @@ SELECT id FROM system.descriptor
 2
 3
 1000
+
+query TTT
+SHOW GRANTS ON DATABASE system
+----
+system root GRANT,SELECT
+
+query TTT
+SHOW GRANTS ON system.namespace
+----
+namespace root GRANT,SELECT
+
+query TTT
+SHOW GRANTS ON system.descriptor
+----
+descriptor root GRANT,SELECT
+
+# Non-root users can have privileges on system objects, but limited to GRANT, SELECT.
+statement error user testuser must not have ALL privileges on system objects
+GRANT ALL ON DATABASE system TO testuser
+
+statement error user testuser must not have INSERT privileges on system objects
+GRANT GRANT, SELECT, INSERT ON DATABASE system TO testuser
+
+statement ok
+GRANT GRANT, SELECT ON DATABASE system TO testuser
+
+statement error user testuser must not have ALL privileges on system objects
+GRANT ALL ON system.namespace TO testuser
+
+statement error user testuser must not have INSERT privileges on system objects
+GRANT GRANT, SELECT, INSERT ON system.namespace TO testuser
+
+statement ok
+GRANT GRANT, SELECT ON system.namespace TO testuser
+
+statement ok
+GRANT SELECT ON system.descriptor TO testuser
+
+statement error user root must have GRANT, SELECT privileges on system objects
+GRANT ALL ON DATABASE system TO root
+
+statement error user root must not have INSERT, DELETE privileges on system objects
+GRANT DELETE, INSERT ON DATABASE system TO root
+
+statement error user root must have GRANT, SELECT privileges on system objects
+GRANT ALL ON system.namespace TO root
+
+statement error user root must not have INSERT, DELETE privileges on system objects
+GRANT DELETE, INSERT ON system.descriptor TO root
+
+statement error user root must have GRANT, SELECT privileges on system objects
+GRANT ALL ON system.descriptor TO root
+
+statement error user root must have GRANT, SELECT privileges on system objects
+REVOKE GRANT ON DATABASE system FROM root
+
+statement error user root must have GRANT, SELECT privileges on system objects
+REVOKE GRANT ON system.namespace FROM root
+
+statement error user root does not have privileges
+REVOKE ALL ON system.namespace FROM root

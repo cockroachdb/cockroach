@@ -10,7 +10,7 @@ a        root ALL
 statement error TODO\(marc\): implement SHOW GRANT with no targets
 SHOW GRANTS
 
-statement error root user does not have ALL privileges
+statement error user root does not have ALL privileges
 REVOKE SELECT ON DATABASE a FROM root
 
 statement ok
