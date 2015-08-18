@@ -1,0 +1,162 @@
+statement ok
+CREATE TABLE t (
+  a INT,
+  b CHAR,
+  c INT,
+  d CHAR,
+  PRIMARY KEY (a, b),
+  CONSTRAINT bc INDEX (b, c),
+  CONSTRAINT dc INDEX (d, c)
+)
+
+statement ok
+INSERT INTO t VALUES
+  (1, 'one', 11, 'foo'),
+  (2, 'two', 22, 'bar'),
+  (3, 'three', 33, 'blah')
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 2
+----
+0 /t/primary/2/'two'   NULL  NULL
+0 /t/primary/2/'two'/c 22    NULL
+0 /t/primary/2/'two'/d 'bar' true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a < 2
+----
+0 /t/primary/1/'one'   NULL  NULL
+0 /t/primary/1/'one'/c 11    NULL
+0 /t/primary/1/'one'/d 'foo' true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a <= (1 + 1)
+----
+0 /t/primary/1/'one'   NULL  NULL
+0 /t/primary/1/'one'/c 11    NULL
+0 /t/primary/1/'one'/d 'foo' true
+1 /t/primary/2/'two'   NULL  NULL
+1 /t/primary/2/'two'/c 22    NULL
+1 /t/primary/2/'two'/d 'bar' true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT a, b FROM t WHERE b > 't'
+----
+0 /t/bc/'three'/33/3/'three' NULL true
+1 /t/bc/'two'/22/2/'two'     NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE d < ('b' || 'l')
+----
+0 /t/dc/'bar'/22/2/'two' NULL true
+
+# The where-clause does not contain columns matching a prefix of any
+# index. Note that the index "dc" was chosen because it contains fewer
+# keys per row than the primary key index while still containing all
+# of the needed columns.
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE c = 22
+----
+0 /t/dc/'bar'/22/2/'two'    NULL true
+1 /t/dc/'blah'/33/3/'three' NULL false
+2 /t/dc/'foo'/11/1/'one'    NULL false
+
+statement ok
+TRUNCATE TABLE t
+
+statement ok
+INSERT INTO t VALUES
+  (1, 'a', NULL, NULL),
+  (1, 'b', NULL, NULL),
+  (1, 'c', NULL, NULL)
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND b > 'b'
+----
+0 /t/primary/1/'c' NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b
+----
+0 /t/primary/1/'b' NULL true
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  CONSTRAINT ab INDEX (a, b)
+)
+
+statement ok
+INSERT INTO t VALUES (1, 2), (3, 4), (5, 6)
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a >= 3 AND a < 5
+----
+0 /t/ab/3/4/3 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a BETWEEN 3 AND 4
+----
+0 /t/ab/3/4/3 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a BETWEEN 3 AND 5
+----
+0 /t/ab/3/4/3 NULL true
+1 /t/ab/5/6/5 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 2 OR a < 4
+----
+0 /t/ab/1/2/1 NULL true
+1 /t/ab/3/4/3 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 3 OR a <= 3
+----
+0 /t/ab/1/2/1 NULL true
+1 /t/ab/3/4/3 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a <= 3 OR a < 3
+----
+0 /t/ab/1/2/1 NULL true
+1 /t/ab/3/4/3 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a > 3 OR a >= 3
+----
+0 /t/ab/3/4/3 NULL true
+1 /t/ab/5/6/5 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a >= 3 OR a > 3
+----
+0 /t/ab/3/4/3 NULL true
+1 /t/ab/5/6/5 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a = 3 OR a = 5
+----
+0 /t/ab/3/4/3 NULL true
+1 /t/ab/5/6/5 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 3 OR a > 3
+----
+0 /t/ab/1/2/1 NULL true
+1 /t/ab/3/4/3 NULL false
+2 /t/ab/5/6/5 NULL true
+
+# TODO(pmattis): We should be able to restrict the scan in this case,
+# but currently don't.
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a + 1 = 4
+----
+0 /t/ab/1/2/1 NULL false
+1 /t/ab/3/4/3 NULL true
+2 /t/ab/5/6/5 NULL false

@@ -127,6 +127,17 @@ func validateName(name, typ string) error {
 	return nil
 }
 
+// containsColumnID returns true if the index descriptor contains the specified
+// column ID.
+func (desc *IndexDescriptor) containsColumnID(colID ColumnID) bool {
+	for _, id := range desc.ColumnIDs {
+		if id == colID {
+			return true
+		}
+	}
+	return false
+}
+
 // SetID implements the descriptorProto interface.
 func (desc *TableDescriptor) SetID(id ID) {
 	desc.ID = id

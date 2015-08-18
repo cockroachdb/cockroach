@@ -27,10 +27,7 @@ EXPLAIN (DEBUG) SELECT * FROM abc
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM abc WHERE a = 2
 ----
-0  /abc/primary/1/'one'    NULL  NULL
-0  /abc/primary/1/'one'/c  1.1   false
-1  /abc/primary/2/'two'    NULL  true
-2  /abc/primary/3/'three'  NULL  false
+0  /abc/primary/2/'two'  NULL  true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM abc@foo
