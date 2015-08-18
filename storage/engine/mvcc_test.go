@@ -1245,6 +1245,45 @@ func TestMVCCConditionalPut(t *testing.T) {
 	}
 }
 
+// TestMVCCReverseScan verifies that MVCCReverseScan scans [start,
+// end) in descending order of keys.
+func TestMVCCReverseScan(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	engine := createTestEngine()
+	defer engine.Close()
+
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey2, makeTS(1, 0), value3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey2, makeTS(3, 0), value4, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey3, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey4, makeTS(1, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	kvs, _, err := MVCCReverseScan(engine, testKey2, testKey4, 0, makeTS(1, 0), true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 2 ||
+		!bytes.Equal(kvs[0].Key, testKey3) ||
+		!bytes.Equal(kvs[1].Key, testKey2) ||
+		!bytes.Equal(kvs[0].Value.Bytes, value1.Bytes) ||
+		!bytes.Equal(kvs[1].Value.Bytes, value3.Bytes) {
+		t.Errorf("unexpected value: %v", kvs)
+	}
+}
+
 func TestMVCCResolveTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
