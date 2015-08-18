@@ -56,7 +56,6 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
-	"encoding/gob"
 	"encoding/json"
 	"math"
 	"net"
@@ -72,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -101,21 +101,6 @@ var (
 	// TestBootstrap is the default gossip bootstrap used for running tests.
 	TestBootstrap = []resolver.Resolver{}
 )
-
-// init registers all the types that are sent over the wire as
-// implementations of info.Val.
-func init() {
-	// The last thing that isn't a proto.
-	gob.Register(config.PrefixConfigMap{})
-
-	// Used in config.PrefixConfig.
-	gob.Register(&config.ZoneConfig{})
-	gob.Register(&proto.NodeDescriptor{})
-
-	// Used...elsewhere?
-	gob.Register(proto.RangeDescriptor{})
-	gob.Register(proto.StoreDescriptor{})
-}
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.
 // During bootstrapping, the bootstrap list contains candidates for
@@ -174,9 +159,8 @@ func (g *Gossip) GetNodeID() proto.NodeID {
 // SetNodeDescriptor adds the node descriptor to the gossip network
 // and sets the infostore's node ID.
 func (g *Gossip) SetNodeDescriptor(desc *proto.NodeDescriptor) error {
-	nodeIDKey := MakeNodeIDKey(desc.NodeID)
 	log.Infof("gossiping node descriptor %+v", desc)
-	if err := g.AddInfo(nodeIDKey, desc, ttlNodeIDGossip); err != nil {
+	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, ttlNodeIDGossip); err != nil {
 		return util.Errorf("couldn't gossip descriptor for node %d: %v", desc.NodeID, err)
 	}
 	g.mu.Lock()
@@ -203,14 +187,13 @@ func (g *Gossip) GetNodeIDAddress(nodeID proto.NodeID) (net.Addr, error) {
 }
 
 // GetNodeDescriptor looks up the descriptor of the node by ID.
-func (g *Gossip) GetNodeDescriptor(nodeID proto.NodeID) (proto.NodeDescriptor, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	nd, err := g.getNodeDescriptorLocked(nodeID)
-	if err != nil {
-		return proto.NodeDescriptor{}, err
+func (g *Gossip) GetNodeDescriptor(nodeID proto.NodeID) (*proto.NodeDescriptor, error) {
+	nodeDescriptor := &proto.NodeDescriptor{}
+	if err := g.GetInfoProto(MakeNodeIDKey(nodeID), nodeDescriptor); err != nil {
+		return nil, util.Errorf("unable to lookup descriptor for node %d: %s", nodeID, err)
 	}
-	return *nd, err
+
+	return nodeDescriptor, nil
 }
 
 // getNodeDescriptorLocked looks up the descriptor of the node by ID. The mutex
@@ -218,13 +201,22 @@ func (g *Gossip) GetNodeDescriptor(nodeID proto.NodeID) (proto.NodeDescriptor, e
 // GetNodeDescriptor and internally by getNodeIDAddressLocked.
 func (g *Gossip) getNodeDescriptorLocked(nodeID proto.NodeID) (*proto.NodeDescriptor, error) {
 	nodeIDKey := MakeNodeIDKey(nodeID)
+
+	// We can't use GetInfoProto here because that method grabs the lock.
 	if i := g.is.getInfo(nodeIDKey); i != nil {
-		if nd, ok := i.Val.(*proto.NodeDescriptor); ok {
-			return nd, nil
+		if err := i.Value.Verify([]byte(nodeIDKey)); err != nil {
+			return nil, err
 		}
-		return nil, util.Errorf("error in node descriptor gossip: %+v", i.Val)
+		nodeDescriptor := &proto.NodeDescriptor{}
+
+		if err := gogoproto.Unmarshal(i.Value.Bytes, nodeDescriptor); err != nil {
+			return nil, err
+		}
+
+		return nodeDescriptor, nil
 	}
-	return nil, util.Errorf("unable to lookup descriptor for node: %d", nodeID)
+
+	return nil, util.Errorf("unable to lookup descriptor for node %d", nodeID)
 }
 
 // getNodeIDAddressLocked looks up the address of the node by ID. The mutex is
@@ -241,7 +233,7 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
 
 // AddInfo adds or updates an info object. Returns an error if info
 // couldn't be added.
-func (g *Gossip) AddInfo(key string, val interface{}, ttl time.Duration) error {
+func (g *Gossip) AddInfo(key string, val []byte, ttl time.Duration) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	err := g.is.addInfo(key, g.is.newInfo(val, ttl))
@@ -251,15 +243,49 @@ func (g *Gossip) AddInfo(key string, val interface{}, ttl time.Duration) error {
 	return err
 }
 
+// AddInfoProto adds or updates an info object. Returns an error if info
+// couldn't be added.
+func (g *Gossip) AddInfoProto(key string, proto gogoproto.Message, ttl time.Duration) error {
+	bytes, err := gogoproto.Marshal(proto)
+	if err != nil {
+		return err
+	}
+	return g.AddInfo(key, bytes, ttl)
+}
+
 // GetInfo returns an info value by key or an error if specified
 // key does not exist or has expired.
-func (g *Gossip) GetInfo(key string) (interface{}, error) {
+func (g *Gossip) GetInfo(key string) ([]byte, error) {
 	g.mu.Lock()
-	defer g.mu.Unlock()
-	if i := g.is.getInfo(key); i != nil {
-		return i.Val, nil
+	i := g.is.getInfo(key)
+	g.mu.Unlock()
+
+	if i != nil {
+		if err := i.Value.Verify([]byte(key)); err != nil {
+			return nil, err
+		}
+		return i.Value.Bytes, nil
 	}
 	return nil, util.Errorf("key %q does not exist or has expired", key)
+}
+
+// GetInfoProto returns an info value by key or an error if specified
+// key does not exist or has expired.
+func (g *Gossip) GetInfoProto(key string, proto gogoproto.Message) error {
+	bytes, err := g.GetInfo(key)
+	if err != nil {
+		return err
+	}
+	return gogoproto.Unmarshal(bytes, proto)
+}
+
+// GetZoneConfig returns the zone config map.
+func (g *Gossip) GetZoneConfig() (*config.PrefixConfigMap, error) {
+	configMap := &config.PrefixConfigMap{}
+	if err := g.GetInfoProto(KeyConfigZone, configMap); err != nil {
+		return nil, err
+	}
+	return configMap, nil
 }
 
 // GetInfosAsJSON returns the contents of the infostore, marshalled to
@@ -274,7 +300,7 @@ func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
 // of info denoted by key. The contentsChanged bool indicates whether
 // the info contents were updated. False indicates the info timestamp
 // was refreshed, but its contents remained unchanged.
-type Callback func(key string, contentsChanged bool, content interface{})
+type Callback func(key string, contentsChanged bool, content []byte)
 
 // RegisterCallback registers a callback for a key pattern to be
 // invoked whenever new info for a gossip key matching pattern is
@@ -334,7 +360,7 @@ func (g *Gossip) maxToleratedHops() uint32 {
 	var nodeCount int64
 
 	// will never error because `return nil` below
-	_ = g.is.visitInfos(func(key string, i *info) error {
+	_ = g.is.visitInfos(func(key string, i *Info) error {
 		if strings.HasPrefix(key, KeyNodeIDPrefix) {
 			nodeCount++
 		}

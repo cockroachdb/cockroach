@@ -24,6 +24,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/btree"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -41,8 +44,6 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	gogoproto "github.com/gogo/protobuf/proto"
-	"github.com/google/btree"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -652,16 +653,17 @@ func (s *Store) maybeGossipConfigs() error {
 
 // configGossipUpdate is a callback for gossip updates to
 // configuration maps which affect range split boundaries.
-func (s *Store) configGossipUpdate(key string, contentsChanged bool, content interface{}) {
+func (s *Store) configGossipUpdate(key string, contentsChanged bool, content []byte) {
 	if !contentsChanged {
 		return // Skip update if it's just a newer timestamp or fewer hops to info
 	}
 	ctx := s.Context(nil)
-	configMap, ok := content.(config.PrefixConfigMap)
-	if !ok {
-		log.Errorc(ctx, "gossiped info is not a prefix configuration map: %+v", content)
+	configMap := &config.PrefixConfigMap{}
+	if err := gogoproto.Unmarshal(content, configMap); err != nil {
+		log.Errorc(ctx, "gossiped info is not a prefix configuration map: %s", err)
 		return
 	}
+
 	s.maybeSplitRangesByConfigs(configMap)
 
 	// If the zone configs changed, run through ranges and set max bytes.
@@ -672,8 +674,9 @@ func (s *Store) configGossipUpdate(key string, contentsChanged bool, content int
 
 // GossipStore broadcasts the store on the gossip network.
 func (s *Store) GossipStore() {
-	storeDesc, err := s.Descriptor()
 	ctx := s.Context(nil)
+
+	storeDesc, err := s.Descriptor()
 	if err != nil {
 		log.Warningc(ctx, "problem getting store descriptor for store %+v: %v", s.Ident, err)
 		return
@@ -681,8 +684,7 @@ func (s *Store) GossipStore() {
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
-	err = s.ctx.Gossip.AddInfo(gossipStoreKey, *storeDesc, ttlStoreGossip)
-	if err != nil {
+	if err := s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
 		log.Warningc(ctx, "%s", err)
 	}
 }
@@ -690,10 +692,10 @@ func (s *Store) GossipStore() {
 // maybeSplitRangesByConfigs determines ranges which should be
 // split by the boundaries of the prefix config map, if any, and
 // adds them to the split queue.
-func (s *Store) maybeSplitRangesByConfigs(configMap config.PrefixConfigMap) {
+func (s *Store) maybeSplitRangesByConfigs(configMap *config.PrefixConfigMap) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, config := range configMap {
+	for _, config := range configMap.Configs {
 		// Find the range which contains this config prefix, if any.
 		var rng *Replica
 		s.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(config.Prefix.Next()), func(i btree.Item) bool {
@@ -741,18 +743,18 @@ func (s *Store) ForceRangeGCScan(t util.Tester) {
 //
 // TODO(spencer): scanning all ranges with the lock held could cause
 // perf issues if the number of ranges grows large enough.
-func (s *Store) setRangesMaxBytes(zoneMap config.PrefixConfigMap) {
+func (s *Store) setRangesMaxBytes(zoneMap *config.PrefixConfigMap) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	zone := zoneMap[0].Config.GetValue().(*config.ZoneConfig)
+	zone := zoneMap.Configs[0].Config.GetValue().(*config.ZoneConfig)
 	idx := 0
 	// Note that we must iterate through the ranges in lexicographic
 	// order to match the ordering of the zoneMap.
 	s.replicasByKey.Ascend(func(i btree.Item) bool {
 		rng := i.(*Replica)
-		if idx < len(zoneMap)-1 && !rng.Desc().StartKey.Less(zoneMap[idx+1].Prefix) {
+		if idx < zoneMap.Len()-1 && !rng.Desc().StartKey.Less(zoneMap.Configs[idx+1].Prefix) {
 			idx++
-			zone = zoneMap[idx].Config.GetValue().(*config.ZoneConfig)
+			zone = zoneMap.Configs[idx].Config.GetValue().(*config.ZoneConfig)
 		}
 		rng.SetMaxBytes(zone.RangeMaxBytes)
 		return true
@@ -1619,8 +1621,8 @@ func (s *Store) computeReplicationStatus(now int64) (
 	leaderRangeCount, replicatedRangeCount, availableRangeCount int32) {
 	// Get the zone configs, which are needed to determine if a range is
 	// under-replicated.
-	zoneMap, err := s.Gossip().GetInfo(gossip.KeyConfigZone)
-	if err != nil || zoneMap == nil {
+	zoneMap, err := s.Gossip().GetZoneConfig()
+	if err != nil {
 		log.Error("unable to get zone configs")
 		return
 	}
@@ -1629,7 +1631,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for rangeID, rng := range s.replicas {
-		configUnion := zoneMap.(config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config
+		configUnion := zoneMap.MatchByPrefix(rng.Desc().StartKey).Config
 		zoneConfig := configUnion.GetValue().(*config.ZoneConfig)
 		raftStatus := s.RaftStatus(rangeID)
 		if raftStatus == nil {

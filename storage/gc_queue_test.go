@@ -386,7 +386,7 @@ func TestGCQueueLookupGCPolicy(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	if err := tc.rng.rm.Gossip().AddInfo(gossip.KeyConfigZone, pcc, 0); err != nil {
+	if err := tc.rng.rm.Gossip().AddInfoProto(gossip.KeyConfigZone, pcc, 0); err != nil {
 		t.Fatal(err)
 	}
 

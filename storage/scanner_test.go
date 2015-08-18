@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/btree"
+
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -30,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/google/btree"
 )
 
 // Test implementation of a range set backed by btree.BTree.

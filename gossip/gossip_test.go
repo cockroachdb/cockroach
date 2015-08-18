@@ -18,6 +18,7 @@
 package gossip
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -33,28 +34,11 @@ func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), nil)
 	g := New(rpcContext, TestInterval, TestBootstrap)
-	if err := g.AddInfo("i", int64(1), time.Hour); err != nil {
+	slice := []byte("b")
+	if err := g.AddInfo("s", slice, time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	if val, err := g.GetInfo("i"); val.(int64) != int64(1) || err != nil {
-		t.Errorf("error fetching int64: %v", err)
-	}
-	if _, err := g.GetInfo("i2"); err == nil {
-		t.Errorf("expected error fetching nonexistent key \"i2\"")
-	}
-	if err := g.AddInfo("f", float64(3.14), time.Hour); err != nil {
-		t.Fatal(err)
-	}
-	if val, err := g.GetInfo("f"); val.(float64) != float64(3.14) || err != nil {
-		t.Errorf("error fetching float64: %v", err)
-	}
-	if _, err := g.GetInfo("f2"); err == nil {
-		t.Errorf("expected error fetching nonexistent key \"f2\"")
-	}
-	if err := g.AddInfo("s", "b", time.Hour); err != nil {
-		t.Fatal(err)
-	}
-	if val, err := g.GetInfo("s"); val.(string) != "b" || err != nil {
+	if val, err := g.GetInfo("s"); !bytes.Equal(val, slice) || err != nil {
 		t.Errorf("error fetching string: %v", err)
 	}
 	if _, err := g.GetInfo("s2"); err == nil {

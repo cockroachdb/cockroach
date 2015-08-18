@@ -56,14 +56,14 @@ func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	n := simulation.NewNetwork(1, "tcp", gossip.TestInterval)
 	g := n.Nodes[0].Gossip
 
-	if err := g.AddInfo(gossip.KeySentinel, "cluster1", time.Hour); err != nil {
+	if err := g.AddInfo(gossip.KeySentinel, nil, time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.AddInfo(gossip.KeyFirstRangeDescriptor, testRangeDescriptor, time.Hour); err != nil {
+	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testRangeDescriptor, time.Hour); err != nil {
 		t.Fatal(err)
 	}
 	nodeIDKey := gossip.MakeNodeIDKey(1)
-	if err := g.AddInfo(nodeIDKey, &proto.NodeDescriptor{
+	if err := g.AddInfoProto(nodeIDKey, &proto.NodeDescriptor{
 		NodeID:  1,
 		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
 		Attrs:   proto.Attributes{Attrs: []string{"attr1", "attr2"}},
@@ -86,15 +86,15 @@ func TestMoveLocalReplicaToFront(t *testing.T) {
 			slice: replicaSlice{
 				replicaInfo{
 					Replica:  proto.Replica{NodeID: 2, StoreID: 2},
-					NodeDesc: proto.NodeDescriptor{NodeID: 2},
+					NodeDesc: &proto.NodeDescriptor{NodeID: 2},
 				},
 				replicaInfo{
 					Replica:  proto.Replica{NodeID: 3, StoreID: 3},
-					NodeDesc: proto.NodeDescriptor{NodeID: 3},
+					NodeDesc: &proto.NodeDescriptor{NodeID: 3},
 				},
 				replicaInfo{
 					Replica:  proto.Replica{NodeID: 1, StoreID: 1},
-					NodeDesc: proto.NodeDescriptor{NodeID: 1},
+					NodeDesc: &proto.NodeDescriptor{NodeID: 1},
 				},
 			},
 			localNodeDesc: proto.NodeDescriptor{NodeID: 1},
@@ -104,15 +104,15 @@ func TestMoveLocalReplicaToFront(t *testing.T) {
 			slice: replicaSlice{
 				replicaInfo{
 					Replica:  proto.Replica{NodeID: 2, StoreID: 2},
-					NodeDesc: proto.NodeDescriptor{NodeID: 2, Attrs: proto.Attributes{Attrs: []string{"ad"}}},
+					NodeDesc: &proto.NodeDescriptor{NodeID: 2, Attrs: proto.Attributes{Attrs: []string{"ad"}}},
 				},
 				replicaInfo{
 					Replica:  proto.Replica{NodeID: 3, StoreID: 3},
-					NodeDesc: proto.NodeDescriptor{NodeID: 3, Attrs: proto.Attributes{Attrs: []string{"ab", "c"}}},
+					NodeDesc: &proto.NodeDescriptor{NodeID: 3, Attrs: proto.Attributes{Attrs: []string{"ab", "c"}}},
 				},
 				replicaInfo{
 					Replica:  proto.Replica{NodeID: 1, StoreID: 1},
-					NodeDesc: proto.NodeDescriptor{NodeID: 1, Attrs: proto.Attributes{Attrs: []string{"ab"}}},
+					NodeDesc: &proto.NodeDescriptor{NodeID: 1, Attrs: proto.Attributes{Attrs: []string{"ab"}}},
 				},
 			},
 			localNodeDesc: proto.NodeDescriptor{NodeID: 1, Attrs: proto.Attributes{Attrs: []string{"ab"}}},
@@ -293,7 +293,7 @@ func TestSendRPCOrder(t *testing.T) {
 					Attrs: nodeAttrs[i],
 				},
 			}
-			if err := g.AddInfo(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
+			if err := g.AddInfoProto(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
 				t.Fatal(err)
 			}
 			descriptor.Replicas = append(descriptor.Replicas, proto.Replica{
@@ -601,7 +601,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	// Add first RangeDescriptor to a node different from the node for
 	// this dist sender and ensure that this dist sender has the
 	// information within a given time.
-	if err := n.Nodes[1].Gossip.AddInfo(gossip.KeyFirstRangeDescriptor, *expectedDesc, time.Hour); err != nil {
+	if err := n.Nodes[1].Gossip.AddInfoProto(gossip.KeyFirstRangeDescriptor, expectedDesc, time.Hour); err != nil {
 		t.Fatal(err)
 	}
 	maxCycles := 10
@@ -645,7 +645,7 @@ func TestSendRPCRetry(t *testing.T) {
 			NodeID:  proto.NodeID(i),
 			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		}
-		if err := g.AddInfo(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
+		if err := g.AddInfoProto(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
 			t.Fatal(err)
 		}
 

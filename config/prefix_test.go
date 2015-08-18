@@ -31,7 +31,7 @@ import (
 
 var config1, config2, config3, config4, config5 ConfigUnion
 
-func buildTestPrefixConfigMap() PrefixConfigMap {
+func buildTestPrefixConfigMap() *PrefixConfigMap {
 	configs := []PrefixConfig{
 		{Prefix: proto.KeyMin, Canonical: nil, Config: config1},
 		{Prefix: proto.Key("/db1"), Canonical: nil, Config: config2},
@@ -45,12 +45,12 @@ func buildTestPrefixConfigMap() PrefixConfigMap {
 	return pcc
 }
 
-func verifyPrefixConfigMap(pcc PrefixConfigMap, expPrefixConfigs []PrefixConfig, t *testing.T) {
-	if len(pcc) != len(expPrefixConfigs) {
+func verifyPrefixConfigMap(pcc *PrefixConfigMap, expPrefixConfigs []PrefixConfig, t *testing.T) {
+	if pcc.Len() != len(expPrefixConfigs) {
 		t.Fatalf("incorrect number of built prefix configs; expected %d, got %d",
-			len(expPrefixConfigs), len(pcc))
+			len(expPrefixConfigs), pcc.Len())
 	}
-	for i, pc := range pcc {
+	for i, pc := range pcc.Configs {
 		exp := expPrefixConfigs[i]
 		if bytes.Compare(pc.Prefix, exp.Prefix) != 0 {
 			t.Errorf("prefix for index %d incorrect; expected %q, got %q", i, exp.Prefix, pc.Prefix)
@@ -104,12 +104,12 @@ func TestPrefixConfigSort(t *testing.T) {
 		proto.Key("\xfe"),
 		proto.KeyMax,
 	}
-	pcc := PrefixConfigMap{}
+	pcc := &PrefixConfigMap{}
 	for _, key := range keys {
-		pcc = append(pcc, PrefixConfig{Prefix: key})
+		pcc.Configs = append(pcc.Configs, PrefixConfig{Prefix: key})
 	}
 	sort.Sort(pcc)
-	for i, pc := range pcc {
+	for i, pc := range pcc.Configs {
 		if bytes.Compare(pc.Prefix, expKeys[i]) != 0 {
 			t.Errorf("order for index %d incorrect; expected %q, got %q", i, expKeys[i], pc.Prefix)
 		}

@@ -53,6 +53,14 @@ message ZoneConfig {
   optional GCPolicy gc = 4 [(gogoproto.customname) = "GC", (gogoproto.moretags) = "yaml:\"gc,omitempty\""];
 }
 
+// PrefixConfigMap contains a slice of prefix configs, sorted by
+// prefix. Along with various accessor methods, the config map
+// also contains additional prefix configs in the slice to
+// account for the ends of prefix ranges.
+message PrefixConfigMap {
+  repeated PrefixConfig configs = 1 [(gogoproto.nullable) = false];
+}
+
 // PrefixConfig relates a prefix key to a config object. PrefixConfig
 // objects are the constituents of PrefixConfigMap objects. In order to
 // support binary searches of hierarchical PrefixConfig objects,

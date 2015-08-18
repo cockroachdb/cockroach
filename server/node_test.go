@@ -220,14 +220,18 @@ func TestNodeJoin(t *testing.T) {
 	node1Key := gossip.MakeNodeIDKey(node1.Descriptor.NodeID)
 	node2Key := gossip.MakeNodeIDKey(node2.Descriptor.NodeID)
 	if err := util.IsTrueWithin(func() bool {
-		if val, err := node1.ctx.Gossip.GetInfo(node2Key); err != nil {
+		nodeDesc1 := &proto.NodeDescriptor{}
+		if err := node1.ctx.Gossip.GetInfoProto(node2Key, nodeDesc1); err != nil {
 			return false
-		} else if addr2 := val.(*proto.NodeDescriptor).Address.AddressField; addr2 != server2.Addr().String() {
+		}
+		if addr2 := nodeDesc1.Address.AddressField; addr2 != server2.Addr().String() {
 			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2, server2.Addr().String())
 		}
-		if val, err := node2.ctx.Gossip.GetInfo(node1Key); err != nil {
+		nodeDesc2 := &proto.NodeDescriptor{}
+		if err := node2.ctx.Gossip.GetInfoProto(node1Key, nodeDesc2); err != nil {
 			return false
-		} else if addr1 := val.(*proto.NodeDescriptor).Address.AddressField; addr1 != server1.Addr().String() {
+		}
+		if addr1 := nodeDesc2.Address.AddressField; addr1 != server1.Addr().String() {
 			t.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1, server1.Addr().String())
 		}
 		return true

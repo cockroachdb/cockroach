@@ -120,23 +120,23 @@ func (sq *splitQueue) timer() time.Duration {
 // computeSplitKeys returns an array of keys at which the supplied
 // range should be split, as computed by intersecting the range with
 // zone config map boundaries.
-func computeSplitKeys(g *gossip.Gossip, rng *Replica) []proto.Key {
+func computeSplitKeys(g *gossip.Gossip, repl *Replica) []proto.Key {
 	// Now split the range into pieces by intersecting it with the
 	// boundaries of the config map.
-	splitKeys := proto.KeySlice{}
-	info, err := g.GetInfo(gossip.KeyConfigZone)
+	configMap, err := repl.rm.Gossip().GetZoneConfig()
 	if err != nil {
-		log.Errorf("unable to fetch %s config from gossip: %s", gossip.KeyConfigZone, err)
+		log.Errorf("unable to fetch zone config from gossip: %s", err)
 		return nil
 	}
-	configMap := info.(config.PrefixConfigMap)
-	desc := rng.Desc()
+	desc := repl.Desc()
 	splits, err := configMap.SplitRangeByPrefixes(desc.StartKey, desc.EndKey)
 	if err != nil {
-		log.Errorf("unable to split %s by prefix map %s", rng, configMap)
+		log.Errorf("unable to split %s by prefix map %s", repl, configMap)
 		return nil
 	}
+
 	// Gather new splits.
+	var splitKeys proto.KeySlice
 	for _, split := range splits {
 		if split.End.Less(desc.EndKey) {
 			splitKeys = append(splitKeys, split.End)
@@ -156,11 +156,11 @@ func computeSplitKeys(g *gossip.Gossip, rng *Replica) []proto.Key {
 }
 
 // lookupZoneConfig returns the zone config matching the range.
-func lookupZoneConfig(g *gossip.Gossip, rng *Replica) (config.ZoneConfig, error) {
-	zoneMap, err := g.GetInfo(gossip.KeyConfigZone)
-	if err != nil || zoneMap == nil {
-		return config.ZoneConfig{}, util.Errorf("unable to lookup zone config for range %s: %s", rng, err)
+func lookupZoneConfig(g *gossip.Gossip, repl *Replica) (config.ZoneConfig, error) {
+	zoneMap, err := g.GetZoneConfig()
+	if err != nil {
+		return config.ZoneConfig{}, util.Errorf("unable to lookup zone config for range %s: %s", repl, err)
 	}
-	prefixConfig := zoneMap.(config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey)
+	prefixConfig := zoneMap.MatchByPrefix(repl.Desc().StartKey)
 	return *prefixConfig.Config.GetValue().(*config.ZoneConfig), nil
 }

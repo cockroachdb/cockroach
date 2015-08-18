@@ -89,10 +89,10 @@ func TestClientGossip(t *testing.T) {
 		}
 	}()
 
-	if err := local.AddInfo("local-key", "local value", time.Second); err != nil {
+	if err := local.AddInfo("local-key", nil, time.Second); err != nil {
 		t.Fatal(err)
 	}
-	if err := remote.AddInfo("remote-key", "remote value", time.Second); err != nil {
+	if err := remote.AddInfo("remote-key", nil, time.Second); err != nil {
 		t.Fatal(err)
 	}
 

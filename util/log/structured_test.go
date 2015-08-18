@@ -23,8 +23,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
 	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/proto"
 )
 
 type testArg struct {

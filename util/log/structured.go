@@ -24,10 +24,10 @@ import (
 	"reflect"
 	"unicode/utf8"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/caller"
-
-	"golang.org/x/net/context"
 )
 
 // AddStructured creates a structured log entry to be written to the

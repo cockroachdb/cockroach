@@ -18,8 +18,6 @@
 package gossip
 
 import (
-	"bytes"
-	"encoding/gob"
 	"net"
 	"time"
 
@@ -99,16 +97,8 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 		delta := g.is.delta(c.peerID, localMaxSeq)
 		nodeID := g.is.NodeID // needs to be accessed with the lock held
 		g.mu.Unlock()
-		var deltaBytes []byte
-		if delta != nil {
-			localMaxSeq = delta.MaxSeq
-			var buf bytes.Buffer
-			if err := gob.NewEncoder(&buf).Encode(delta); err != nil {
-				return util.Errorf("infostore could not be encoded: %s", err)
-			}
-			deltaBytes = buf.Bytes()
-		}
 
+		localMaxSeq = delta.MaxSeq
 		addr := g.is.NodeAddr
 		lAddr := c.rpcClient.LocalAddr()
 
@@ -118,7 +108,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 			Addr:   util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 			LAddr:  util.MakeUnresolvedAddr(lAddr.Network(), lAddr.String()),
 			MaxSeq: remoteMaxSeq,
-			Delta:  deltaBytes,
+			Delta:  delta,
 		}
 		reply := &Response{}
 		gossipCall := c.rpcClient.Go("Gossip.Gossip", args, reply, nil)
@@ -146,33 +136,28 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 			return util.Errorf("received forward from %s to %s", c.addr, reply.Alternate)
 		}
 
-		// Combine remote node's infostore delta with ours.
 		now := time.Now().UnixNano()
-		if reply.Delta != nil {
-			delta := &infoStore{}
-			if err := gob.NewDecoder(bytes.NewBuffer(reply.Delta)).Decode(delta); err != nil {
-				return util.Errorf("infostore could not be decoded: %s", err)
+		// Combine remote node's infostore delta with ours.
+		respInfoStore := newInfoStoreFromProto(reply.Delta)
+		if infoCount := len(respInfoStore.Infos); infoCount > 0 {
+			if log.V(1) {
+				log.Infof("gossip: received %s from %s", respInfoStore, c.addr)
+			} else {
+				log.Infof("gossip: received %d info(s) from %s", infoCount, c.addr)
 			}
-			if infoCount := len(delta.Infos); infoCount > 0 {
-				if log.V(1) {
-					log.Infof("gossip: received %s", delta)
-				} else {
-					log.Infof("gossip: received %d info(s) from %s", infoCount, c.addr)
-				}
-			}
-			g.mu.Lock()
-			c.peerID = delta.NodeID
-			g.outgoing.addNode(c.peerID)
-			freshCount := g.is.combine(delta)
-			if freshCount > 0 {
-				c.lastFresh = now
-			}
-			remoteMaxSeq = delta.MaxSeq
-
-			// If we have the sentinel gossip, we're considered connected.
-			g.checkHasConnected()
-			g.mu.Unlock()
 		}
+		g.mu.Lock()
+		c.peerID = respInfoStore.NodeID
+		g.outgoing.addNode(c.peerID)
+		freshCount := g.is.combine(respInfoStore)
+		if freshCount > 0 {
+			c.lastFresh = now
+		}
+		remoteMaxSeq = respInfoStore.MaxSeq
+
+		// If we have the sentinel gossip, we're considered connected.
+		g.checkHasConnected()
+		g.mu.Unlock()
 
 		// Check whether this outgoing client is duplicating work already
 		// being done by an incoming client. To avoid mutual shutdown, we

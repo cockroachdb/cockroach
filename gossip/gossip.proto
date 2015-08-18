@@ -19,12 +19,15 @@ syntax = "proto2";
 package cockroach.gossip;
 option go_package = "gossip";
 
+import "cockroach/proto/data.proto";
+import "cockroach/proto/metadata.proto";
 import "cockroach/util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
+// These options generate broken code when using maps.
+// option (gogoproto.sizer_all) = true;
+// option (gogoproto.marshaler_all) = true;
+// option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_unrecognized_all) = false;
 
 // Request is the request struct passed with the Gossip RPC.
@@ -41,14 +44,50 @@ message Request {
   // Maximum sequence number of gossip from this peer.
   optional int64 max_seq = 4 [(gogoproto.nullable) = false];
   // Reciprocal delta of new info since last gossip.
-  optional bytes delta = 5;
+  optional InfoStoreDelta delta = 5 [(gogoproto.nullable) = false];
 }
 
 // Response is returned from the Gossip.Gossip RPC.
 // Delta will be nil in the event that Alternate is set.
 message Response {
   // Requested delta of server's infostore.
-  optional bytes delta = 1;
+  optional InfoStoreDelta delta = 1 [(gogoproto.nullable) = false];
   // Non-nil means client should retry with this address.
   optional util.UnresolvedAddr alternate = 2;
+}
+
+// TODO(thschroeter): check if all fields below are required
+message InfoStoreDelta {
+  // Map from key to info.
+  map<string, Info> infos = 1;
+  // Owning node's ID
+  optional int32 node_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
+  // Address of node owning this info store.
+  optional util.UnresolvedAddr node_addr = 3 [(gogoproto.nullable) = false];
+  // Maximum sequence number inserted
+  optional int64 max_seq = 4 [(gogoproto.nullable) = false];
+}
+
+// Info is the basic unit of information traded over the
+// gossip network.
+// TODO(thschroeter): remove `peer_id` and `seq` that are
+// exposing internals and get overwritten as `Info` is
+// received.
+message Info {
+  optional proto.Value value = 1 [(gogoproto.nullable) = false];
+  // Wall time when info is to be discarded (Unix-nanos)
+  optional int64 ttl_stamp = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "TTLStamp"];
+  // Number of hops from originator
+  optional uint32 hops = 3 [(gogoproto.nullable) = false];
+  // Originating node's ID
+  optional int32 node_id = 4 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
+  optional int32 peer_id = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) =  "PeerID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
+  optional int64 seq = 6 [(gogoproto.nullable) = false];
 }

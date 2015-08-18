@@ -511,17 +511,16 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	}
 
 	verifyZone := func() bool {
-		info, err := tc.gossip.GetInfo(gossip.KeyConfigZone)
+		configMap, err := tc.gossip.GetZoneConfig()
 		if err != nil {
 			t.Fatal(err)
 		}
-		configMap := info.(config.PrefixConfigMap)
 		expConfigs := []config.PrefixConfig{
 			config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
 			config.MakePrefixConfig(proto.Key("/db1"), nil, &db1Zone),
 			config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
 		}
-		return reflect.DeepEqual([]config.PrefixConfig(configMap), expConfigs)
+		return reflect.DeepEqual(configMap.Configs, expConfigs)
 	}
 
 	// If this actually failed, we would have gossiped from MVCCPutProto.
@@ -614,19 +613,21 @@ func TestRangeGossipFirstRange(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 	for _, key := range []string{gossip.KeyClusterID, gossip.KeyFirstRangeDescriptor, gossip.KeySentinel} {
-		info, err := tc.gossip.GetInfo(key)
+		bytes, err := tc.gossip.GetInfo(key)
 		if err != nil {
 			t.Errorf("missing first range gossip of key %s", key)
 		}
-		if key == gossip.KeyFirstRangeDescriptor &&
-			info.(proto.RangeDescriptor).RangeID == 0 {
-			t.Errorf("expected gossiped range location, got %+v", info.(proto.RangeDescriptor))
+		if key == gossip.KeyFirstRangeDescriptor {
+			var rangeDesc proto.RangeDescriptor
+			if err := gogoproto.Unmarshal(bytes, &rangeDesc); err != nil {
+				t.Fatal(err)
+			}
 		}
-		if key == gossip.KeyClusterID && info.(string) == "" {
-			t.Errorf("expected non-empty gossiped cluster ID, got %+v", info)
+		if key == gossip.KeyClusterID && len(bytes) == 0 {
+			t.Errorf("expected non-empty gossiped cluster ID, got %q", bytes)
 		}
-		if key == gossip.KeySentinel && info.(string) == "" {
-			t.Errorf("expected non-empty gossiped sentinel, got %+v", info)
+		if key == gossip.KeySentinel && len(bytes) == 0 {
+			t.Errorf("expected non-empty gossiped sentinel, got %q", bytes)
 		}
 	}
 }
@@ -679,17 +680,16 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	info, err := tc.gossip.GetInfo(gossip.KeyConfigZone)
+	configMap, err := tc.gossip.GetZoneConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	configMap := info.(config.PrefixConfigMap)
 	expConfigs := []config.PrefixConfig{
 		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
 		config.MakePrefixConfig(proto.Key("/db1"), nil, db1Zone),
 		config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
 	}
-	if !reflect.DeepEqual([]config.PrefixConfig(configMap), expConfigs) {
+	if !reflect.DeepEqual(configMap.Configs, expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
 }
@@ -723,17 +723,16 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	info, err := tc.gossip.GetInfo(gossip.KeyConfigZone)
+	configMap, err := tc.gossip.GetZoneConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	configMap := info.(config.PrefixConfigMap)
 	expConfigs := []config.PrefixConfig{
 		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
 		config.MakePrefixConfig(proto.Key("/db1"), nil, db1Zone),
 		config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
 	}
-	if !reflect.DeepEqual([]config.PrefixConfig(configMap), expConfigs) {
+	if !reflect.DeepEqual(configMap.Configs, expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
 }
@@ -778,15 +777,14 @@ func TestRangeNoGossipConfig(t *testing.T) {
 		}
 
 		// Information for db1 is not gossiped.
-		info, err := tc.gossip.GetInfo(gossip.KeyConfigZone)
+		configMap, err := tc.gossip.GetZoneConfig()
 		if err != nil {
 			t.Fatal(err)
 		}
-		configMap := info.(config.PrefixConfigMap)
 		expConfigs := []config.PrefixConfig{
 			config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
 		}
-		if !reflect.DeepEqual([]config.PrefixConfig(configMap), expConfigs) {
+		if !reflect.DeepEqual(configMap.Configs, expConfigs) {
 			t.Errorf("%d: expected gossiped configs to be equal %s vs %s",
 				i, configMap, expConfigs)
 		}
@@ -846,15 +844,14 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	tc.rng.maybeGossipConfigs(func(configPrefix proto.Key) bool {
 		return tc.rng.ContainsKey(configPrefix)
 	})
-	info, err := tc.gossip.GetInfo(gossip.KeyConfigZone)
+	configMap, err := tc.gossip.GetZoneConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	configMap := info.(config.PrefixConfigMap)
 	expConfigs := []config.PrefixConfig{
 		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
 	}
-	if !reflect.DeepEqual([]config.PrefixConfig(configMap), expConfigs) {
+	if !reflect.DeepEqual(configMap.Configs, expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s",
 			configMap, expConfigs)
 	}

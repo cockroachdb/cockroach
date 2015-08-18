@@ -69,7 +69,7 @@ func TestReplicaSetSortByCommonAttributePrefix(t *testing.T) {
 		rs := replicaSlice{}
 		for _, c := range replicaAttrs {
 			rs = append(rs, replicaInfo{
-				NodeDesc: proto.NodeDescriptor{
+				NodeDesc: &proto.NodeDescriptor{
 					Attrs: proto.Attributes{Attrs: c},
 				},
 			})

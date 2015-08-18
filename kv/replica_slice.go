@@ -28,7 +28,7 @@ import (
 // descriptor.
 type replicaInfo struct {
 	proto.Replica
-	NodeDesc proto.NodeDescriptor
+	NodeDesc *proto.NodeDescriptor
 }
 
 func (i *replicaInfo) attrs() []string {

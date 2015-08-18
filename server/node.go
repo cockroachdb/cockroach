@@ -406,11 +406,11 @@ func (n *Node) connectGossip() {
 	// sufficient for diagnosing this type of condition.
 	<-n.ctx.Gossip.Connected
 
-	val, err := n.ctx.Gossip.GetInfo(gossip.KeyClusterID)
-	if err != nil || val == nil {
+	bytes, err := n.ctx.Gossip.GetInfo(gossip.KeyClusterID)
+	if err != nil {
 		log.Fatalf("unable to ascertain cluster ID from gossip network: %s", err)
 	}
-	gossipClusterID := val.(string)
+	gossipClusterID := string(bytes)
 
 	if n.ClusterID == "" {
 		n.ClusterID = gossipClusterID

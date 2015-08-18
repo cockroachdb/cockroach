@@ -17,40 +17,30 @@
 
 package gossip
 
-import "github.com/cockroachdb/cockroach/proto"
-
-// info is the basic unit of information traded over the gossip
-// network.
-type info struct {
-	Val       interface{}  // Permitted types are enumerated in init()
-	Timestamp int64        `json:"-"` // Wall time at origination (Unix-nanos)
-	TTLStamp  int64        `json:"-"` // Wall time before info is discarded (Unix-nanos)
-	Hops      uint32       `json:"-"` // Number of hops from originator
-	NodeID    proto.NodeID `json:"-"` // Originating node's ID
-	peerID    proto.NodeID // Proximate peer's ID which passed us the info
-	seq       int64        // Sequence number for incremental updates
-}
+import (
+	"github.com/cockroachdb/cockroach/proto"
+)
 
 // expired returns true if the node's time to live (TTL) has expired.
-func (i *info) expired(now int64) bool {
+func (i *Info) expired(now int64) bool {
 	return i.TTLStamp <= now
 }
 
 // isFresh returns true if the info has a sequence number newer
 // than seq and wasn't either passed directly or originated from
 // the same node.
-func (i *info) isFresh(nodeID proto.NodeID, seq int64) bool {
-	if i.seq <= seq {
+func (i *Info) isFresh(nodeID proto.NodeID, seq int64) bool {
+	if i.Seq <= seq {
 		return false
 	}
 	if nodeID != 0 && i.NodeID == nodeID {
 		return false
 	}
-	if nodeID != 0 && i.peerID == nodeID {
+	if nodeID != 0 && i.PeerID == nodeID {
 		return false
 	}
 	return true
 }
 
 // infoMap is a map of keys to info object pointers.
-type infoMap map[string]*info
+type infoMap map[string]*Info
