@@ -42,8 +42,8 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 
 	// Set accounting and zone configs.
 	acctMap, err := config.NewPrefixConfigMap([]*config.PrefixConfig{
-		{proto.KeyMin, nil, config1},
-		{proto.Key("/dbA"), nil, config2},
+		config.NewPrefixConfig(proto.KeyMin, nil, config1),
+		config.NewPrefixConfig(proto.Key("/dbA"), nil, config2),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -53,8 +53,8 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	}
 
 	zoneMap, err := config.NewPrefixConfigMap([]*config.PrefixConfig{
-		{proto.KeyMin, nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}},
-		{proto.Key("/dbB"), nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}},
+		config.NewPrefixConfig(proto.KeyMin, nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}),
+		config.NewPrefixConfig(proto.Key("/dbB"), nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}),
 	})
 	if err != nil {
 		t.Fatal(err)

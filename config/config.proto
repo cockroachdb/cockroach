@@ -70,3 +70,44 @@ message ZoneConfig {
   // in the zone config hierarchy, up to the default policy if necessary.
   optional GCPolicy gc = 4 [(gogoproto.customname) = "GC", (gogoproto.moretags) = "yaml:\"gc,omitempty\""];
 }
+
+// PrefixConfigMap contains a slice of prefix configs, sorted by
+// prefix. Along with various accessor methods, the config map
+// also contains additional prefix configs in the slice to
+// account for the ends of prefix ranges.
+message PrefixConfigMap {
+  repeated PrefixConfig configs = 1;
+}
+
+// PrefixConfig relate a string prefix to a config object. Config
+// objects include accounting, permissions, users, and zones. PrefixConfig
+// objects are the constituents of PrefixConfigMap objects. In order
+// to support binary searches of hierarchical prefixes (see the
+// comments in NewPrefixConfigMap), PrefixConfig objects are
+// additionally added to a PrefixConfigMap to demarcate the end of a
+// prefix range. Such end-of-range sentinels need to refer back to the
+// next "higher-up" prefix in the hierarchy (many times this is the
+// default prefix which covers the entire range of keys). The Canonical
+// key refers to this "higher-up" PrefixConfig by specifying its prefix
+// so it can be binary searched from within a PrefixConfigMap.
+message PrefixConfig {
+  // the prefix the config affects
+  optional bytes prefix = 1
+      [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.Key"];
+  // the prefix for the canonical config, if applicable
+  optional bytes canonical = 2
+      [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.Key"];
+  // the config object
+  optional ConfigUnion config = 3;
+}
+
+// ConfigUnion is the union of all types that can be stored in PrefixConfig.Config
+message ConfigUnion {
+  option (gogoproto.onlyone) = true;
+  oneof value {
+    AcctConfig acct_config_val = 1;
+    PermConfig perm_config_val = 2;
+    UserConfig user_config_val = 3;
+    ZoneConfig zone_config_val = 4;
+  }
+}

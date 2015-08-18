@@ -131,7 +131,7 @@ func computeSplitKeys(g *gossip.Gossip, rng *Replica) []proto.Key {
 			log.Errorf("unable to fetch %s config from gossip: %s", configKey, err)
 			continue
 		}
-		configMap := info.(config.PrefixConfigMap)
+		configMap := info.(*config.PrefixConfigMap)
 		splits, err := configMap.SplitRangeByPrefixes(rng.Desc().StartKey, rng.Desc().EndKey)
 		if err != nil {
 			log.Errorf("unable to split %s by prefix map %s", rng, configMap)
@@ -163,6 +163,6 @@ func lookupZoneConfig(g *gossip.Gossip, rng *Replica) (config.ZoneConfig, error)
 	if err != nil || zoneMap == nil {
 		return config.ZoneConfig{}, util.Errorf("unable to lookup zone config for range %s: %s", rng, err)
 	}
-	prefixConfig := zoneMap.(config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey)
-	return *prefixConfig.Config.(*config.ZoneConfig), nil
+	prefixConfig := zoneMap.(*config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey)
+	return *prefixConfig.Config.GetValue().(*config.ZoneConfig), nil
 }

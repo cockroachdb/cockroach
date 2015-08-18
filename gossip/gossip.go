@@ -56,14 +56,12 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
-	"encoding/gob"
 	"encoding/json"
 	"math"
 	"net"
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -101,24 +99,6 @@ var (
 	// TestBootstrap is the default gossip bootstrap used for running tests.
 	TestBootstrap = []resolver.Resolver{}
 )
-
-// init registers all the types that are sent over the wire as
-// implementations of info.Val.
-func init() {
-	// The last thing that isn't a proto.
-	gob.Register(config.PrefixConfigMap{})
-
-	// Used in config.PrefixConfig.
-	gob.Register(&config.AcctConfig{})
-	gob.Register(&config.PermConfig{})
-	gob.Register(&config.UserConfig{})
-	gob.Register(&config.ZoneConfig{})
-	gob.Register(&proto.NodeDescriptor{})
-
-	// Used...elsewhere?
-	gob.Register(proto.RangeDescriptor{})
-	gob.Register(proto.StoreDescriptor{})
-}
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.
 // During bootstrapping, the bootstrap list contains candidates for
@@ -222,8 +202,8 @@ func (g *Gossip) GetNodeDescriptor(nodeID proto.NodeID) (proto.NodeDescriptor, e
 func (g *Gossip) getNodeDescriptorLocked(nodeID proto.NodeID) (*proto.NodeDescriptor, error) {
 	nodeIDKey := MakeNodeIDKey(nodeID)
 	if i := g.is.getInfo(nodeIDKey); i != nil {
-		if nd, ok := i.Val.(*proto.NodeDescriptor); ok {
-			return nd, nil
+		if nd, ok := i.value().(proto.NodeDescriptor); ok {
+			return &nd, nil
 		}
 		return nil, util.Errorf("error in node descriptor gossip: %+v", i.Val)
 	}
@@ -244,6 +224,8 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
 
 // AddInfo adds or updates an info object. Returns an error if info
 // couldn't be added.
+// TODO(thschroeter): change type of `val` to `gogoproto.Message`? It seems doable
+// but basic types need to be wrapped in message.
 func (g *Gossip) AddInfo(key string, val interface{}, ttl time.Duration) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -260,7 +242,7 @@ func (g *Gossip) GetInfo(key string) (interface{}, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if i := g.is.getInfo(key); i != nil {
-		return i.Val, nil
+		return i.value(), nil
 	}
 	return nil, util.Errorf("key %q does not exist or has expired", key)
 }
@@ -284,7 +266,7 @@ func (g *Gossip) GetGroupInfos(prefix string) ([]interface{}, error) {
 	}
 	values := make([]interface{}, len(infos))
 	for i, info := range infos {
-		values[i] = info.Val
+		values[i] = info.value()
 	}
 	return values, nil
 }
@@ -294,7 +276,7 @@ func (g *Gossip) GetGroupInfos(prefix string) ([]interface{}, error) {
 func (g *Gossip) RegisterGroup(prefix string, limit int, typeOf GroupType) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.is.registerGroup(newGroup(prefix, limit, typeOf))
+	return g.is.registerGroup(newGroup(prefix, int32(limit), typeOf))
 }
 
 // Callback is a callback method to be invoked on gossip update
@@ -361,7 +343,7 @@ func (g *Gossip) maxToleratedHops() uint32 {
 	// Get info directly as we have mutex held here.
 	var nodeCount = int64(defaultNodeCount)
 	if info := g.is.getInfo(KeyNodeCount); info != nil {
-		nodeCount = info.Val.(int64)
+		nodeCount = info.value().(int64)
 	}
 	return uint32(math.Ceil(math.Log(float64(nodeCount))/math.Log(float64(MaxPeers))))*2 + 1
 }
@@ -643,4 +625,11 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 		}
 	}
 	return nil
+}
+
+// GetUser implements UserRequest.
+// Gossip messages are always sent by the node user.
+func (m *Request) GetUser() string {
+	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
+	return "node"
 }

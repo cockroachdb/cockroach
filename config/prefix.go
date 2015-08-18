@@ -28,33 +28,15 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// PrefixConfig relate a string prefix to a config object. Config
-// objects include accounting, permissions, users, and zones. PrefixConfig
-// objects are the constituents of PrefixConfigMap objects. In order
-// to support binary searches of hierarchical prefixes (see the
-// comments in NewPrefixConfigMap), PrefixConfig objects are
-// additionally added to a PrefixConfigMap to demarcate the end of a
-// prefix range. Such end-of-range sentinels need to refer back to the
-// next "higher-up" prefix in the hierarchy (many times this is the
-// default prefix which covers the entire range of keys). The Canonical
-// key refers to this "higher-up" PrefixConfig by specifying its prefix
-// so it can be binary searched from within a PrefixConfigMap.
-type PrefixConfig struct {
-	Prefix    proto.Key         // the prefix the config affects
-	Canonical proto.Key         // the prefix for the canonical config, if applicable
-	Config    gogoproto.Message // the config object
-}
+// TODO(thschroeter): re-enable stringer of PrefixConfig, currently gogoproto
+// creates a default.
 
 // String returns a human readable description.
+/*
 func (pc *PrefixConfig) String() string {
 	return fmt.Sprintf("prefix=%s: %s", pc.Prefix, pc.Config)
 }
-
-// PrefixConfigMap is a slice of prefix configs, sorted by
-// prefix. Along with various accessor methods, the config map
-// also contains additional prefix configs in the slice to
-// account for the ends of prefix ranges.
-type PrefixConfigMap []*PrefixConfig
+*/
 
 // RangeResult is returned by SplitRangeByPrefixes.
 type RangeResult struct {
@@ -63,14 +45,28 @@ type RangeResult struct {
 }
 
 // Implementation of sort.Interface.
-func (p PrefixConfigMap) Len() int {
-	return len(p)
+func (p *PrefixConfigMap) Len() int {
+	return len(p.Configs)
 }
-func (p PrefixConfigMap) Swap(i, j int) {
-	p[i], p[j] = p[j], p[i]
+func (p *PrefixConfigMap) Swap(i, j int) {
+	p.Configs[i], p.Configs[j] = p.Configs[j], p.Configs[i]
 }
-func (p PrefixConfigMap) Less(i, j int) bool {
-	return p[i].Prefix.Less(p[j].Prefix)
+func (p *PrefixConfigMap) Less(i, j int) bool {
+	return p.Configs[i].Prefix.Less(p.Configs[j].Prefix)
+}
+
+// NewPrefixConfig creates a new PrefixConfig.
+func NewPrefixConfig(prefix, canonical proto.Key, configI gogoproto.Message) *PrefixConfig {
+	pc := &PrefixConfig{Prefix: prefix, Canonical: canonical, Config: &ConfigUnion{}}
+	if configI == nil {
+		// TODO(thschroeter): configI is nil in some tests. When allowing nil here
+		// Config.GetValue() will return nil and a later type assertion might fail.
+		return pc
+	}
+	if !pc.Config.SetValue(configI) {
+		panic(fmt.Sprintf("unsupported type %T", configI))
+	}
+	return pc
 }
 
 // NewPrefixConfigMap creates a new prefix config map and sorts
@@ -107,25 +103,25 @@ func (p PrefixConfigMap) Less(i, j int) bool {
 //
 //   "/db1/table3": config2
 //   "/db3":        config1
-func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
-	p := PrefixConfigMap(configs)
+func NewPrefixConfigMap(configs []*PrefixConfig) (*PrefixConfigMap, error) {
+	p := &PrefixConfigMap{Configs: configs}
 	sort.Sort(p)
 
-	if len(p) == 0 || !p[0].Prefix.Equal(proto.KeyMin) {
+	if p.Len() == 0 || !p.Configs[0].Prefix.Equal(proto.KeyMin) {
 		return nil, util.Errorf("no default prefix specified")
 	}
 
 	prefixSet := map[string]struct{}{}
-	for _, entry := range p {
+	for _, entry := range p.Configs {
 		prefixSet[string(entry.Prefix)] = struct{}{}
 	}
 
 	var newConfigs []*PrefixConfig
 	stack := list.New()
 
-	for i, entry := range p {
+	for i, entry := range p.Configs {
 		// Check for duplicates in the original set of prefix configs.
-		if i > 0 && entry.Prefix.Equal(p[i-1].Prefix) {
+		if i > 0 && entry.Prefix.Equal(p.Configs[i-1].Prefix) {
 			return nil, util.Errorf("duplicate prefix found while building map: %q", entry.Prefix)
 		}
 		// Pop entries from the stack which aren't prefixes.
@@ -146,7 +142,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 
 	// Add newly created configs and re-sort.
 	for _, config := range newConfigs {
-		p = append(p, config)
+		p.Configs = append(p.Configs, config)
 	}
 	sort.Sort(p)
 
@@ -169,26 +165,26 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 // To find the longest matching prefix, we take the lower bound of the
 // specified key.
 func (p PrefixConfigMap) MatchByPrefix(key proto.Key) *PrefixConfig {
-	n := sort.Search(len(p), func(i int) bool {
-		return key.Compare(p[i].Prefix) < 0
+	n := sort.Search(p.Len(), func(i int) bool {
+		return key.Compare(p.Configs[i].Prefix) < 0
 	})
-	if n == 0 || n > len(p) {
+	if n == 0 || n > p.Len() {
 		panic("should never match a key outside of default range")
 	}
 	// If the matched prefix config is already canonical, return it immediately.
-	pc := p[n-1]
+	pc := p.Configs[n-1]
 	if pc.Canonical == nil {
 		return pc
 	}
 	// Otherwise, search for the canonical prefix config.
-	n = sort.Search(len(p), func(i int) bool {
-		return pc.Canonical.Compare(p[i].Prefix) <= 0
+	n = sort.Search(p.Len(), func(i int) bool {
+		return pc.Canonical.Compare(p.Configs[i].Prefix) <= 0
 	})
 	// Should find an exact match every time.
-	if n >= len(p) || !pc.Canonical.Equal(p[n].Prefix) {
+	if n >= p.Len() || !pc.Canonical.Equal(p.Configs[n].Prefix) {
 		panic(fmt.Sprintf("canonical lookup for key %q failed", string(pc.Canonical)))
 	}
-	return p[n]
+	return p.Configs[n]
 }
 
 // MatchesByPrefix returns a list of PrefixConfig objects with
@@ -234,37 +230,37 @@ func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
 	if comp > 0 {
 		return util.Errorf("start key %q not less than or equal to end key %q", start, end)
 	}
-	startIdx := sort.Search(len(p), func(i int) bool {
-		return start.Compare(p[i].Prefix) < 0
+	startIdx := sort.Search(p.Len(), func(i int) bool {
+		return start.Compare(p.Configs[i].Prefix) < 0
 	})
 	// Common case of start == end.
 	endIdx := startIdx
 	if comp != 0 {
-		endIdx = sort.Search(len(p), func(i int) bool {
-			return end.Compare(p[i].Prefix) < 0
+		endIdx = sort.Search(p.Len(), func(i int) bool {
+			return end.Compare(p.Configs[i].Prefix) < 0
 		})
 	}
 
-	if startIdx > len(p) || endIdx > len(p) {
+	if startIdx > p.Len() || endIdx > p.Len() {
 		return util.Errorf("start and/or end keys (%q, %q) fall outside prefix range; "+
-			"startIdx: %d, endIdx: %d, len(p): %d", start, end, startIdx, endIdx, len(p))
+			"startIdx: %d, endIdx: %d, p.Len(): %d", start, end, startIdx, endIdx, p.Len())
 	}
 
 	if startIdx == endIdx {
-		_, err := visitor(start, end, p[startIdx-1].Config)
+		_, err := visitor(start, end, p.Configs[startIdx-1].Config)
 		return err
 	}
 	for i := startIdx; i < endIdx; i++ {
-		done, err := visitor(start, p[i].Prefix, p[i-1].Config)
+		done, err := visitor(start, p.Configs[i].Prefix, p.Configs[i-1].Config)
 		if done || err != nil {
 			return err
 		}
-		if p[i].Prefix.Equal(end) {
+		if p.Configs[i].Prefix.Equal(end) {
 			return nil
 		}
-		start = p[i].Prefix
+		start = p.Configs[i].Prefix
 	}
-	done, err := visitor(start, end, p[endIdx-1].Config)
+	done, err := visitor(start, end, p.Configs[endIdx-1].Config)
 	if done || err != nil {
 		return err
 	}

@@ -665,7 +665,7 @@ func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
 		log.Errorc(ctx, "unable to fetch %s config from gossip: %s", key, err)
 		return
 	}
-	configMap, ok := info.(config.PrefixConfigMap)
+	configMap, ok := info.(*config.PrefixConfigMap)
 	if !ok {
 		log.Errorc(ctx, "gossiped info is not a prefix configuration map: %+v", info)
 		return
@@ -698,10 +698,10 @@ func (s *Store) GossipCapacity() {
 // maybeSplitRangesByConfigs determines ranges which should be
 // split by the boundaries of the prefix config map, if any, and
 // adds them to the split queue.
-func (s *Store) maybeSplitRangesByConfigs(configMap config.PrefixConfigMap) {
+func (s *Store) maybeSplitRangesByConfigs(configMap *config.PrefixConfigMap) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, config := range configMap {
+	for _, config := range configMap.Configs {
 		// Find the range which contains this config prefix, if any.
 		var rng *Replica
 		s.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(config.Prefix.Next()), func(i btree.Item) bool {
@@ -749,18 +749,18 @@ func (s *Store) ForceRangeGCScan(t util.Tester) {
 //
 // TODO(spencer): scanning all ranges with the lock held could cause
 // perf issues if the number of ranges grows large enough.
-func (s *Store) setRangesMaxBytes(zoneMap config.PrefixConfigMap) {
+func (s *Store) setRangesMaxBytes(zoneMap *config.PrefixConfigMap) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	zone := zoneMap[0].Config.(*config.ZoneConfig)
+	zone := zoneMap.Configs[0].Config.GetValue().(*config.ZoneConfig)
 	idx := 0
 	// Note that we must iterate through the ranges in lexicographic
 	// order to match the ordering of the zoneMap.
 	s.replicasByKey.Ascend(func(i btree.Item) bool {
 		rng := i.(*Replica)
-		if idx < len(zoneMap)-1 && !rng.Desc().StartKey.Less(zoneMap[idx+1].Prefix) {
+		if idx < zoneMap.Len()-1 && !rng.Desc().StartKey.Less(zoneMap.Configs[idx+1].Prefix) {
 			idx++
-			zone = zoneMap[idx].Config.(*config.ZoneConfig)
+			zone = zoneMap.Configs[idx].Config.GetValue().(*config.ZoneConfig)
 		}
 		rng.SetMaxBytes(zone.RangeMaxBytes)
 		return true
@@ -1680,7 +1680,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for rangeID, rng := range s.replicas {
-		zoneConfig := zoneMap.(config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config.(*config.ZoneConfig)
+		zoneConfig := zoneMap.(*config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config.GetValue().(*config.ZoneConfig)
 		raftStatus := s.RaftStatus(rangeID)
 		if raftStatus == nil {
 			continue

@@ -88,11 +88,11 @@ func (is *infoStore) String() string {
 
 	// Compute delta of groups and infos.
 	if err := is.visitInfos(func(g *group) error {
-		str := fmt.Sprintf("%sgroup %q", prepend, g.Prefix)
+		str := fmt.Sprintf("%sgroup %q", prepend, g.G.Prefix)
 		prepend = ", "
 		_, err := buf.WriteString(str)
 		return err
-	}, func(i *info) error {
+	}, func(i *Info) error {
 		str := fmt.Sprintf("%sinfo %q: %+v", prepend, i.Key, i.Val)
 		prepend = ", "
 		_, err := buf.WriteString(str)
@@ -131,26 +131,27 @@ func newInfoStore(nodeID proto.NodeID, nodeAddr util.UnresolvedAddr) *infoStore 
 
 // newInfo allocates and returns a new info object using specified key,
 // value, and time-to-live.
-func (is *infoStore) newInfo(key string, val interface{}, ttl time.Duration) *info {
+func (is *infoStore) newInfo(key string, val interface{}, ttl time.Duration) *Info {
 	is.seqGen++
 	now := monotonicUnixNano()
 	ttlStamp := now + int64(ttl)
 	if ttl == 0 {
 		ttlStamp = math.MaxInt64
 	}
-	return &info{
+	i := &Info{
 		Key:       key,
-		Val:       val,
 		Timestamp: now,
 		TTLStamp:  ttlStamp,
 		NodeID:    is.NodeID,
-		peerID:    is.NodeID,
-		seq:       is.seqGen,
+		PeerID:    is.NodeID,
+		Seq:       is.seqGen,
 	}
+	i.setValue(val)
+	return i
 }
 
 // getInfo returns an info object by key or nil if it doesn't exist.
-func (is *infoStore) getInfo(key string) *info {
+func (is *infoStore) getInfo(key string) *Info {
 	if group := is.belongsToGroup(key); group != nil {
 		return group.getInfo(key)
 	}
@@ -181,14 +182,14 @@ func (is *infoStore) getGroupInfos(prefix string) infoSlice {
 //
 // REQUIRES: group.prefix is not already in the info store's groups map.
 func (is *infoStore) registerGroup(g *group) error {
-	if g2, ok := is.Groups[g.Prefix]; ok {
-		if g.Prefix != g2.Prefix || g.Limit != g2.Limit || g.TypeOf != g2.TypeOf {
+	if g2, ok := is.Groups[g.G.Prefix]; ok {
+		if g.G.Prefix != g2.G.Prefix || g.G.Limit != g2.G.Limit || g.G.TypeOf != g2.G.TypeOf {
 			return util.Errorf("group %q already in group map with different settings %v vs. %v",
-				g.Prefix, g, g2)
+				g.G.Prefix, g, g2)
 		}
 		return nil
 	}
-	is.Groups[g.Prefix] = g
+	is.Groups[g.G.Prefix] = g
 	return nil
 }
 
@@ -198,15 +199,15 @@ func (is *infoStore) registerGroup(g *group) error {
 // until last period '.'). Otherwise, the info is added to the infos map.
 //
 // Returns nil if info was added; error otherwise.
-func (is *infoStore) addInfo(i *info) error {
+func (is *infoStore) addInfo(i *Info) error {
 	// If the prefix matches a group, add to group.
 	if group := is.belongsToGroup(i.Key); group != nil {
 		contentsChanged, err := group.addInfo(i)
 		if err != nil {
 			return err
 		}
-		if i.seq > is.MaxSeq {
-			is.MaxSeq = i.seq
+		if i.Seq > is.MaxSeq {
+			is.MaxSeq = i.Seq
 		}
 		is.processCallbacks(i.Key, contentsChanged)
 		return nil
@@ -226,8 +227,8 @@ func (is *infoStore) addInfo(i *info) error {
 	}
 	// Update info map.
 	is.Infos[i.Key] = i
-	if i.seq > is.MaxSeq {
-		is.MaxSeq = i.seq
+	if i.Seq > is.MaxSeq {
+		is.MaxSeq = i.Seq
 	}
 	is.processCallbacks(i.Key, contentsChanged)
 	return nil
@@ -239,7 +240,7 @@ func (is *infoStore) addInfo(i *info) error {
 func (is *infoStore) infoCount() uint32 {
 	count := uint32(len(is.Infos))
 	for _, group := range is.Groups {
-		count += uint32(len(group.Infos))
+		count += uint32(len(group.G.Infos))
 	}
 	return count
 }
@@ -250,7 +251,7 @@ func (is *infoStore) infoCount() uint32 {
 func (is *infoStore) maxHops() uint32 {
 	var maxHops uint32
 	// will never error because `return nil` below
-	_ = is.visitInfos(nil, func(i *info) error {
+	_ = is.visitInfos(nil, func(i *Info) error {
 		if i.Hops > maxHops {
 			maxHops = i.Hops
 		}
@@ -264,8 +265,8 @@ func (is *infoStore) maxHops() uint32 {
 func (is *infoStore) registerCallback(pattern string, method Callback) {
 	re := regexp.MustCompile(pattern)
 	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
-	var infos []*info
-	if err := is.visitInfos(nil, func(i *info) error {
+	var infos []*Info
+	if err := is.visitInfos(nil, func(i *Info) error {
 		if re.MatchString(i.Key) {
 			infos = append(infos, i)
 		}
@@ -306,7 +307,7 @@ func (is *infoStore) processCallbacks(key string, contentsChanged bool) {
 // against each of its infos. Finally, after all groups have been
 // visitied, the visitInfo function is run against each non-group info
 // in turn. Be sure to skip over any expired infos.
-func (is *infoStore) visitInfos(visitGroup func(*group) error, visitInfo func(*info) error) error {
+func (is *infoStore) visitInfos(visitGroup func(*group) error, visitInfo func(*Info) error) error {
 	now := time.Now().UnixNano()
 	for _, g := range is.Groups {
 		if visitGroup != nil {
@@ -315,9 +316,9 @@ func (is *infoStore) visitInfos(visitGroup func(*group) error, visitInfo func(*i
 			}
 		}
 		if visitInfo != nil {
-			for _, i := range g.Infos {
+			for _, i := range g.G.Infos {
 				if i.expired(now) {
-					delete(g.Infos, i.Key)
+					delete(g.G.Infos, i.Key)
 					continue
 				}
 				if err := visitInfo(i); err != nil {
@@ -353,17 +354,17 @@ func (is *infoStore) combine(delta *infoStore) int {
 	// one-by-one using addInfo.
 	var freshCount int
 	if err := delta.visitInfos(func(g *group) error {
-		if _, ok := is.Groups[g.Prefix]; !ok {
+		if _, ok := is.Groups[g.G.Prefix]; !ok {
 			// Make a copy of the group.
-			gCopy := newGroup(g.Prefix, g.Limit, g.TypeOf)
+			gCopy := newGroup(g.G.Prefix, g.G.Limit, g.G.TypeOf)
 			return is.registerGroup(gCopy)
 		}
 		return nil
-	}, func(i *info) error {
+	}, func(i *Info) error {
 		is.seqGen++
-		i.seq = is.seqGen
+		i.Seq = is.seqGen
 		i.Hops++
-		i.peerID = delta.NodeID
+		i.PeerID = delta.NodeID
 		// Errors from addInfo here are not a problem; they simply
 		// indicate that the data in *is is newer than in *delta.
 		if err := is.addInfo(i); err == nil {
@@ -391,9 +392,9 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) *infoStore {
 
 	// Compute delta of groups and infos.
 	if err := is.visitInfos(func(g *group) error {
-		gDelta := newGroup(g.Prefix, g.Limit, g.TypeOf)
+		gDelta := newGroup(g.G.Prefix, g.G.Limit, g.G.TypeOf)
 		return delta.registerGroup(gDelta)
-	}, func(i *info) error {
+	}, func(i *Info) error {
 		if i.isFresh(nodeID, seq) {
 			return delta.addInfo(i)
 		}
@@ -411,7 +412,7 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) *infoStore {
 func (is *infoStore) distant(maxHops uint32) *nodeSet {
 	ns := newNodeSet(0)
 	// will never error because `return nil` below
-	_ = is.visitInfos(nil, func(i *info) error {
+	_ = is.visitInfos(nil, func(i *Info) error {
 		if i.Hops > maxHops {
 			ns.addNode(i.NodeID)
 		}
@@ -428,8 +429,8 @@ func (is *infoStore) leastUseful(nodes *nodeSet) proto.NodeID {
 		contrib[node] = 0
 	}
 	// will never error because `return nil` below
-	_ = is.visitInfos(nil, func(i *info) error {
-		contrib[i.peerID]++
+	_ = is.visitInfos(nil, func(i *Info) error {
+		contrib[i.PeerID]++
 		return nil
 	})
 
@@ -444,4 +445,38 @@ func (is *infoStore) leastUseful(nodes *nodeSet) proto.NodeID {
 		}
 	}
 	return leastNode
+}
+
+func newInfoStoreFromProto(p *InfoStoreDelta) *infoStore {
+	is := &infoStore{
+		Infos:    p.Infos,
+		NodeID:   p.NodeID,
+		NodeAddr: p.NodeAddr,
+		MaxSeq:   p.MaxSeq,
+	}
+	is.Groups = groupMap{}
+	for k, gr := range p.Groups {
+		g := &group{G: *gr}
+		is.Groups[k] = g
+	}
+	return is
+}
+
+// TODO(thschroeter): rename to lowercase
+func (is *infoStore) Proto() *InfoStoreDelta {
+	d := InfoStoreDelta{
+		NodeID: is.NodeID,
+		MaxSeq: is.MaxSeq,
+		Infos:  is.Infos,
+	}
+	// TODO(thschroeter): copying could be avoided by exporting all fields
+	// of `group` in the proto message `Group`. Like this, groupMap would
+	// be the same in the `infoStore` and the `InfoStoreDelta` proto.
+	// I think, this is better than exporting local fields just to avoid the
+	// copy loop below.
+	d.Groups = make(map[string]*Group)
+	for k, group := range is.Groups {
+		d.Groups[k] = &group.G
+	}
+	return &d
 }

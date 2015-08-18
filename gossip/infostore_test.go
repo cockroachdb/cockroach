@@ -89,8 +89,8 @@ func TestNewInfo(t *testing.T) {
 	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo("a", float64(1), time.Second)
 	info2 := is.newInfo("a", float64(1), time.Second)
-	if info1.seq != info2.seq-1 {
-		t.Errorf("sequence numbers should increment %d, %d", info1.seq, info2.seq)
+	if info1.Seq != info2.Seq-1 {
+		t.Errorf("sequence numbers should increment %d, %d", info1.Seq, info2.Seq)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	if is.infoCount() != 1 {
 		t.Errorf("infostore count incorrect %d != 1", is.infoCount())
 	}
-	if is.MaxSeq != i.seq {
+	if is.MaxSeq != i.Seq {
 		t.Error("max seq value wasn't updated")
 	}
 	if is.getInfo("a") != i {
@@ -185,7 +185,7 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	}
 
 	i := is.getInfo("a")
-	if i.Hops != info1.Hops || i.Val != info1.Val {
+	if i.Hops != info1.Hops || i.value() != info1.value() {
 		t.Error("failed to properly combine hops and value", i)
 	}
 
@@ -195,7 +195,7 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 		t.Error(err)
 	}
 	i = is.getInfo("a")
-	if i.Hops != info3.Hops || i.Val != info3.Val {
+	if i.Hops != info3.Hops || i.value() != info3.value() {
 		t.Error("failed to properly combine hops and value", i)
 	}
 }
@@ -220,8 +220,8 @@ func TestAddGroupInfos(t *testing.T) {
 	if is.infoCount() != 2 {
 		t.Errorf("infostore count incorrect %d != 2", is.infoCount())
 	}
-	if is.MaxSeq != info2.seq {
-		t.Errorf("store max seq info2 seq %d != %d", is.MaxSeq, info2.seq)
+	if is.MaxSeq != info2.Seq {
+		t.Errorf("store max seq info2 seq %d != %d", is.MaxSeq, info2.Seq)
 	}
 
 	infos := is.getGroupInfos("a")
@@ -245,8 +245,8 @@ func TestAddGroupInfos(t *testing.T) {
 	if is.infoCount() != 4 {
 		t.Errorf("infostore count incorrect %d != 4", is.infoCount())
 	}
-	if is.MaxSeq != info4.seq {
-		t.Errorf("store max seq info4 seq %d != %d", is.MaxSeq, info4.seq)
+	if is.MaxSeq != info4.Seq {
+		t.Errorf("store max seq info4 seq %d != %d", is.MaxSeq, info4.Seq)
 	}
 
 	infos = is.getGroupInfos("b")
@@ -272,8 +272,8 @@ func TestAddGroupInfos(t *testing.T) {
 	if is.infoCount() != 5 {
 		t.Errorf("infostore count incorrect %d != 5", is.infoCount())
 	}
-	if is.MaxSeq != info5.seq {
-		t.Errorf("store max seq info5 seq %d != %d", is.MaxSeq, info5.seq)
+	if is.MaxSeq != info5.Seq {
+		t.Errorf("store max seq info5 seq %d != %d", is.MaxSeq, info5.Seq)
 	}
 }
 
@@ -327,15 +327,15 @@ func TestCombine(t *testing.T) {
 	if len(infosA) != 2 || infosA[0].Key != "a.a" || infosA[1].Key != "a.b" {
 		t.Error("group a missing", infosA[0], infosA[1])
 	}
-	if infosA[0].peerID != 1 || infosA[1].peerID != 1 {
+	if infosA[0].PeerID != 1 || infosA[1].PeerID != 1 {
 		t.Error("infoA peer nodes not set properly", infosA[0], infosA[1])
 	}
 
 	infosB := is1.getGroupInfos("b")
-	if len(infosB) != 1 || infosB[0].Key != "b.a" || infosB[0].Val != info2Overlap.Val {
+	if len(infosB) != 1 || infosB[0].Key != "b.a" || infosB[0].value() != info2Overlap.value() {
 		t.Error("group b missing", infosB)
 	}
-	if infosB[0].peerID != 2 {
+	if infosB[0].PeerID != 2 {
 		t.Error("infoB peer node not set properly", infosB[0])
 	}
 
@@ -343,7 +343,7 @@ func TestCombine(t *testing.T) {
 	if len(infosC) != 2 || infosC[0].Key != "c.a" || infosC[1].Key != "c.b" {
 		t.Error("group c missing", infosC)
 	}
-	if infosC[0].peerID != 2 || infosC[1].peerID != 2 {
+	if infosC[0].PeerID != 2 || infosC[1].PeerID != 2 {
 		t.Error("infoC peer nodes not set properly", infosC[0], infosC[1])
 	}
 
@@ -476,7 +476,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf1 := is.newInfo("a1", float64(1), time.Second)
-	inf1.peerID = 1
+	inf1.PeerID = 1
 	if err := is.addInfo(inf1); err != nil {
 		t.Fatal(err)
 	}
@@ -490,7 +490,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf2 := is.newInfo("a2", float64(2), time.Second)
-	inf2.peerID = 1
+	inf2.PeerID = 1
 	if err := is.addInfo(inf2); err != nil {
 		t.Fatal(err)
 	}
@@ -504,7 +504,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf3 := is.newInfo("a3", float64(3), time.Second)
-	inf3.peerID = 2
+	inf3.PeerID = 2
 	if err := is.addInfo(inf3); err != nil {
 		t.Fatal(err)
 	}
@@ -653,5 +653,48 @@ func TestRegisterCallback(t *testing.T) {
 	sort.Strings(actKeys)
 	if expKeys := []string{"key1-true", "key2-true"}; !reflect.DeepEqual(actKeys, expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, cb.Keys())
+	}
+}
+
+func TestInfoStoreDeltaProtoInfos(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	is := newInfoStore(1, emptyAddr)
+
+	k1 := "key1"
+	i1 := is.newInfo(k1, float64(1), time.Second)
+	if err := is.addInfo(i1); err != nil {
+		t.Fatal(err)
+	}
+	d := is.Proto()
+	if len(d.Infos) != 1 || d.Infos[k1].Key != k1 {
+		t.Error("expected InfoStoreDelta to contain info")
+	}
+}
+
+func TestInfoStoreDeltaProtoGroups(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	is := createTestInfoStore(t)
+	d := is.Proto()
+	if len(d.Groups) != len(is.Groups) {
+		t.Errorf("expected matching group length")
+	}
+	for k, group := range d.Groups {
+		if group != &is.Groups[k].G {
+			t.Errorf("expected the same Group under key %v", k)
+		}
+	}
+}
+
+func TestInfoStoreFromProto(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	is := createTestInfoStore(t)
+	p := is.Proto()
+	is2 := newInfoStoreFromProto(p)
+
+	if len(is.Groups) != len(is2.Groups) {
+		t.Errorf("expected matching group length")
 	}
 }

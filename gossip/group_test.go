@@ -28,15 +28,17 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func newTestInfo(key string, val interface{}) *info {
+func newTestInfo(key string, val interface{}) *Info {
 	now := monotonicUnixNano()
 	ttl := now + int64(time.Minute)
-	return &info{
+	i := &Info{
 		Key:       key,
-		Val:       val,
 		Timestamp: now,
 		TTLStamp:  ttl,
 	}
+	i.setValue(val)
+	return i
+
 }
 
 // TestMinGroupShouldInclude tests MinGroup type groups
@@ -117,12 +119,12 @@ func TestTypeMismatch(t *testing.T) {
 	if _, err := group.addInfo(info1); err != nil {
 		t.Error(err)
 	}
-	info2 := &info{
+	info2 := &Info{
 		Key:       "a.b",
-		Val:       "foo",
 		Timestamp: info1.Timestamp,
 		TTLStamp:  info1.TTLStamp,
 	}
+	info2.setValue("foo")
 	if _, err := group.addInfo(info2); err == nil {
 		t.Error("expected error inserting string info into float64 group")
 	}
@@ -359,21 +361,16 @@ func TestGroupGetInfoTTL(t *testing.T) {
 	// Wait until info2 is expired.
 	time.Sleep(time.Nanosecond)
 	infos := g.infosAsSlice()
-	if len(infos) != 1 || infos[0].Val != info1.Val {
+	if len(infos) != 1 || infos[0].value() != info1.value() {
 		t.Error("only one info should be returned", infos)
 	}
-	if g.gatekeeper == nil || g.gatekeeper.Val != info1.Val {
+	if g.gatekeeper == nil || g.gatekeeper.value() != info1.value() {
 		t.Error("gatekeeper should have been updated", g.gatekeeper)
 	}
 }
 
-type testValue struct {
-	intVal    int64
-	stringVal string
-}
-
-func (t *testValue) Less(o util.Ordered) bool {
-	return t.intVal < o.(*testValue).intVal
+func (t *TestVal) Less(o util.Ordered) bool {
+	return t.Val < o.(*TestVal).Val
 }
 
 // TestGroupWithStructVal verifies group operation with a value which
@@ -381,9 +378,9 @@ func (t *testValue) Less(o util.Ordered) bool {
 func TestGroupWithStructVal(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	g := newGroup("a", 10, MinGroup)
-	i1 := newTestInfo("a.a", &testValue{3, "a"})
-	i2 := newTestInfo("a.b", &testValue{1, "b"})
-	i3 := newTestInfo("a.c", &testValue{2, "c"})
+	i1 := newTestInfo("a.a", &TestVal{3, nil})
+	i2 := newTestInfo("a.b", &TestVal{1, nil})
+	i3 := newTestInfo("a.c", &TestVal{2, nil})
 	if _, err := g.addInfo(i1); err != nil {
 		t.Fatal(err)
 	}
@@ -395,7 +392,7 @@ func TestGroupWithStructVal(t *testing.T) {
 	}
 
 	infos := g.infosAsSlice()
-	if infos[0].Val != i2.Val || infos[1].Val != i3.Val || infos[2].Val != i1.Val {
+	if infos[0].value() != i2.value() || infos[1].value() != i3.value() || infos[2].value() != i1.value() {
 		t.Error("Ordered interface not working properly with groups")
 	}
 }

@@ -224,7 +224,7 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	if configMap == nil {
 		return util.Errorf("perm configs not available; cannot execute %s", args.Method())
 	}
-	permMap := configMap.(config.PrefixConfigMap)
+	permMap := configMap.(*config.PrefixConfigMap)
 	headerEnd := header.EndKey
 	if len(headerEnd) == 0 {
 		headerEnd = header.Key
@@ -243,7 +243,7 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 		func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
 			hasPerm := false
 			if err := permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
-				perm := cfg.(*config.PermConfig)
+				perm := cfg.(*config.ConfigUnion).GetValue().(*config.PermConfig)
 				if proto.IsRead(args) && !perm.CanRead(header.User) {
 					return false, nil
 				}
@@ -399,9 +399,9 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 	if ownNodeID > 0 {
 		nodeDesc, err := ds.gossip.GetInfo(gossip.MakeNodeIDKey(ownNodeID))
 		if err == nil {
-			d := nodeDesc.(*proto.NodeDescriptor)
-			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(d))
-			return d
+			d := nodeDesc.(proto.NodeDescriptor)
+			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(&d))
+			return &d
 		}
 	}
 	log.Infof("unable to determine this node's attributes for replica " +

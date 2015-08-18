@@ -18,8 +18,6 @@
 package gossip
 
 import (
-	"bytes"
-	"encoding/gob"
 	"math/rand"
 	"net"
 	"sync"
@@ -67,8 +65,8 @@ func newServer(interval time.Duration) *server {
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
 func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
-	args := argsI.(*proto.GossipRequest)
-	reply := &proto.GossipResponse{}
+	args := argsI.(*Request)
+	reply := &Response{}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -104,10 +102,7 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 
 	// Update infostore with gossiped infos.
 	if args.Delta != nil {
-		delta := &infoStore{}
-		if err := gob.NewDecoder(bytes.NewBuffer(args.Delta)).Decode(delta); err != nil {
-			return nil, util.Errorf("infostore could not be decoded: %s", err)
-		}
+		delta := newInfoStoreFromProto(args.Delta)
 		if delta.infoCount() > 0 {
 			if log.V(1) {
 				log.Infof("gossip: received %s", delta)
@@ -128,11 +123,7 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 	// Return reciprocal delta.
 	delta := s.is.delta(args.NodeID, args.MaxSeq)
 	if delta != nil {
-		var buf bytes.Buffer
-		if err := gob.NewEncoder(&buf).Encode(delta); err != nil {
-			log.Fatalf("infostore could not be encoded: %s", err)
-		}
-		reply.Delta = buf.Bytes()
+		reply.Delta = delta.Proto()
 	}
 	return reply, nil
 }
@@ -150,7 +141,7 @@ func (s *server) jitteredGossipInterval() time.Duration {
 func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 	addr := rpcServer.Addr()
 	s.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
-	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &proto.GossipRequest{}); err != nil {
+	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &Request{}); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)
 	}
 	rpcServer.AddCloseCallback(s.onClose)

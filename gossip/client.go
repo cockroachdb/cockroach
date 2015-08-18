@@ -18,8 +18,6 @@
 package gossip
 
 import (
-	"bytes"
-	"encoding/gob"
 	"net"
 	"time"
 
@@ -97,30 +95,29 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 		// Compute the delta of local node's infostore to send with request.
 		g.mu.Lock()
 		delta := g.is.delta(c.peerID, localMaxSeq)
+		var deltaProto *InfoStoreDelta
+		if delta != nil {
+			// assuming Proto() needs to be called with lock held
+			deltaProto = delta.Proto()
+		}
 		nodeID := g.is.NodeID // needs to be accessed with the lock held
 		g.mu.Unlock()
-		var deltaBytes []byte
 		if delta != nil {
 			localMaxSeq = delta.MaxSeq
-			var buf bytes.Buffer
-			if err := gob.NewEncoder(&buf).Encode(delta); err != nil {
-				return util.Errorf("infostore could not be encoded: %s", err)
-			}
-			deltaBytes = buf.Bytes()
 		}
 
 		addr := g.is.NodeAddr
 		lAddr := c.rpcClient.LocalAddr()
 
 		// Send gossip with timeout.
-		args := &proto.GossipRequest{
+		args := &Request{
 			NodeID: nodeID,
 			Addr:   util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 			LAddr:  util.MakeUnresolvedAddr(lAddr.Network(), lAddr.String()),
 			MaxSeq: remoteMaxSeq,
-			Delta:  deltaBytes,
+			Delta:  deltaProto,
 		}
-		reply := &proto.GossipResponse{}
+		reply := &Response{}
 		gossipCall := c.rpcClient.Go("Gossip.Gossip", args, reply, nil)
 		select {
 		case <-gossipCall.Done:
@@ -149,10 +146,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 		// Combine remote node's infostore delta with ours.
 		now := time.Now().UnixNano()
 		if reply.Delta != nil {
-			delta := &infoStore{}
-			if err := gob.NewDecoder(bytes.NewBuffer(reply.Delta)).Decode(delta); err != nil {
-				return util.Errorf("infostore could not be decoded: %s", err)
-			}
+			delta := newInfoStoreFromProto(reply.Delta)
 			if delta.infoCount() > 0 {
 				if log.V(1) {
 					log.Infof("gossip: received %s", delta)
