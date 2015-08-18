@@ -39,10 +39,9 @@ func TestPrivilegeDecode(t *testing.T) {
 		{144, privilege.List{privilege.GRANT, privilege.DELETE}, "GRANT, DELETE", "DELETE,GRANT"},
 		{2047,
 			privilege.List{privilege.ALL, privilege.CREATE, privilege.DROP, privilege.GRANT,
-				privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE,
-				privilege.READ, privilege.WRITE},
-			"ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, READ, WRITE",
-			"ALL,CREATE,DELETE,DROP,GRANT,INSERT,READ,SELECT,UPDATE,WRITE",
+				privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE},
+			"ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE",
+			"ALL,CREATE,DELETE,DROP,GRANT,INSERT,SELECT,UPDATE",
 		},
 	}
 

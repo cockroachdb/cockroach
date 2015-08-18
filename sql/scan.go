@@ -137,7 +137,7 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 			return n.err
 		}
 
-		if err := p.checkPrivilege(n.desc, privilege.READ); err != nil {
+		if err := p.checkPrivilege(n.desc, privilege.SELECT); err != nil {
 			return err
 		}
 

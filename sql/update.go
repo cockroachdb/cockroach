@@ -29,7 +29,7 @@ import (
 )
 
 // Update updates columns for a selection of rows from a table.
-// Privileges: WRITE and READ on table. We currently always use a select statement.
+// Privileges: UPDATE and SELECT on table. We currently always use a select statement.
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *planner) Update(n *parser.Update) (planNode, error) {
@@ -38,7 +38,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.WRITE); err != nil {
+	if err := p.checkPrivilege(tableDesc, privilege.UPDATE); err != nil {
 		return nil, err
 	}
 

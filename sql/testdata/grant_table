@@ -65,15 +65,15 @@ REVOKE INSERT,DELETE ON t FROM "test-user",readwrite
 query TTT
 SHOW GRANTS ON t
 ----
-t     readwrite CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
+t     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
 t     root      ALL
-t     test-user CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
+t     test-user CREATE,DROP,GRANT,SELECT,UPDATE
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-t     readwrite CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
-t     test-user CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
+t     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
+t     test-user CREATE,DROP,GRANT,SELECT,UPDATE
 
 statement ok
 REVOKE SELECT ON t FROM "test-user"
@@ -81,15 +81,15 @@ REVOKE SELECT ON t FROM "test-user"
 query TTT
 SHOW GRANTS ON t
 ----
-t     readwrite CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
+t     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
 t     root      ALL
-t     test-user CREATE,DROP,GRANT,READ,UPDATE,WRITE
+t     test-user CREATE,DROP,GRANT,UPDATE
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-t     readwrite CREATE,DROP,GRANT,READ,SELECT,UPDATE,WRITE
-t     test-user CREATE,DROP,GRANT,READ,UPDATE,WRITE
+t     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
+t     test-user CREATE,DROP,GRANT,UPDATE
 
 statement ok
 REVOKE ALL ON t FROM readwrite,"test-user"

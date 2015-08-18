@@ -70,7 +70,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 }
 
 // RenameTable renames the table.
-// Privileges: WRITE on database.
+// Privileges: DROP on source table, CREATE on destination database.
 //   Notes: postgres requires the table owner.
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
@@ -113,21 +113,21 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, fmt.Errorf("table %q does not exist", n.Name.Table())
 	}
 
-	if err := p.checkPrivilege(dbDesc, privilege.WRITE); err != nil {
-		return nil, err
-	}
-
 	targetDbDesc, err := p.getDatabaseDesc(n.NewName.Database())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(targetDbDesc, privilege.WRITE); err != nil {
+	if err := p.checkPrivilege(targetDbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
 	tableDesc, err := p.getTableDesc(n.Name)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 

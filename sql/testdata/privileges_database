@@ -36,7 +36,7 @@ user testuser
 statement error only root is allowed to create databases
 CREATE DATABASE b
 
-statement error user testuser does not have WRITE privilege on database a
+statement error user testuser does not have DROP privilege on database a
 DROP DATABASE a
 
 statement ok
@@ -45,7 +45,7 @@ SHOW DATABASES
 statement ok
 SET DATABASE = a
 
-statement error user testuser does not have WRITE privilege on database a
+statement error user testuser does not have CREATE privilege on database a
 CREATE TABLE t2 (id INT PRIMARY KEY)
 
 statement ok
@@ -54,24 +54,24 @@ SHOW TABLES
 statement ok
 SHOW GRANTS ON DATABASE a
 
-statement error user testuser does not have WRITE privilege on database a
+statement error user testuser does not have GRANT privilege on database a
 GRANT ALL ON DATABASE a TO bar
 
-statement error user testuser does not have WRITE privilege on database a
+statement error user testuser does not have GRANT privilege on database a
 REVOKE ALL ON DATABASE a FROM bar
 
-# Grant READ privilege.
+# Grant read-only privileges.
 user root
 
 statement ok
-GRANT READ ON DATABASE a TO testuser
+GRANT SELECT ON DATABASE a TO testuser
 
 user testuser
 
 statement error only root is allowed to create databases
 CREATE DATABASE b
 
-statement error user testuser does not have WRITE privilege on database a
+statement error user testuser does not have DROP privilege on database a
 DROP DATABASE a
 
 statement ok
@@ -80,7 +80,7 @@ SHOW DATABASES
 statement ok
 SET DATABASE = a
 
-statement error user testuser does not have WRITE privilege on database a
+statement error user testuser does not have CREATE privilege on database a
 CREATE TABLE t2 (id INT PRIMARY KEY)
 
 statement ok
@@ -89,20 +89,17 @@ SHOW TABLES
 statement ok
 SHOW GRANTS ON DATABASE a
 
-statement error user testuser does not have WRITE privilege on database a
+statement error user testuser does not have GRANT privilege on database a
 GRANT ALL ON DATABASE a TO bar
 
-statement error user testuser does not have WRITE privilege on database a
+statement error user testuser does not have GRANT privilege on database a
 REVOKE ALL ON DATABASE a FROM bar
 
-# Grant WRITE privilege.
+# Grant all privileges.
 user root
 
 statement ok
-REVOKE READ ON DATABASE a FROM testuser
-
-statement ok
-GRANT WRITE ON DATABASE a TO testuser
+GRANT ALL ON DATABASE a TO testuser
 
 user testuser
 
@@ -130,13 +127,13 @@ GRANT ALL ON DATABASE a TO bar
 statement ok
 REVOKE ALL ON DATABASE a FROM bar
 
-statement error user testuser does not have WRITE privilege on table t
+statement error user testuser does not have DROP privilege on table t
 DROP DATABASE a
 
 user root
 
 statement ok
-GRANT WRITE ON TABLE a.t TO testuser
+GRANT DROP ON TABLE a.t TO testuser
 
 user testuser
 

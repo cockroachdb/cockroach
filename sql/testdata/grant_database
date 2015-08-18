@@ -53,15 +53,15 @@ REVOKE INSERT,UPDATE ON DATABASE a FROM "test-user",readwrite
 query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a        readwrite CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
+a        readwrite CREATE,DELETE,DROP,GRANT,SELECT
 a        root      ALL
-a        test-user CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
+a        test-user CREATE,DELETE,DROP,GRANT,SELECT
 
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a        readwrite CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
-a        test-user CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
+a        readwrite CREATE,DELETE,DROP,GRANT,SELECT
+a        test-user CREATE,DELETE,DROP,GRANT,SELECT
 
 statement ok
 REVOKE SELECT ON DATABASE a FROM "test-user"
@@ -69,9 +69,9 @@ REVOKE SELECT ON DATABASE a FROM "test-user"
 query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a        readwrite CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
+a        readwrite CREATE,DELETE,DROP,GRANT,SELECT
 a        root      ALL
-a        test-user CREATE,DELETE,DROP,GRANT,READ,WRITE
+a        test-user CREATE,DELETE,DROP,GRANT
 
 statement ok
 REVOKE ALL ON DATABASE a FROM "test-user"
@@ -79,7 +79,7 @@ REVOKE ALL ON DATABASE a FROM "test-user"
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a        readwrite CREATE,DELETE,DROP,GRANT,READ,SELECT,WRITE
+a        readwrite CREATE,DELETE,DROP,GRANT,SELECT
 
 statement ok
 REVOKE ALL ON DATABASE a FROM readwrite,"test-user"

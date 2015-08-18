@@ -4,9 +4,9 @@ package privilege
 
 import "fmt"
 
-const _Kind_name = "ALLCREATEDROPGRANTSELECTINSERTDELETEUPDATEREADWRITE"
+const _Kind_name = "ALLCREATEDROPGRANTSELECTINSERTDELETEUPDATE"
 
-var _Kind_index = [...]uint8{0, 3, 9, 13, 18, 24, 30, 36, 42, 46, 51}
+var _Kind_index = [...]uint8{0, 3, 9, 13, 18, 24, 30, 36, 42}
 
 func (i Kind) String() string {
 	i -= 1

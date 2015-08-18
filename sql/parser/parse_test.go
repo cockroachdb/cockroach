@@ -90,22 +90,22 @@ func TestParse(t *testing.T) {
 
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
-		{`GRANT READ ON foo TO root`},
-		{`GRANT WRITE, READ ON foo, db.foo TO root, bar`},
-		{`GRANT READ ON DATABASE foo TO root`},
+		{`GRANT SELECT ON foo TO root`},
+		{`GRANT SELECT, DELETE, UPDATE ON foo, db.foo TO root, bar`},
+		{`GRANT DROP ON DATABASE foo TO root`},
 		{`GRANT ALL ON DATABASE foo TO root, test`},
-		{`GRANT READ, WRITE ON DATABASE bar TO foo, bar, baz`},
-		{`GRANT READ, WRITE ON DATABASE db1, db2 TO foo, bar, baz`},
-		{`GRANT READ, WRITE ON DATABASE db1, db2 TO "test-user"`},
+		{`GRANT SELECT, INSERT ON DATABASE bar TO foo, bar, baz`},
+		{`GRANT SELECT, INSERT ON DATABASE db1, db2 TO foo, bar, baz`},
+		{`GRANT SELECT, INSERT ON DATABASE db1, db2 TO "test-user"`},
 
 		// Tables are the default, but can also be specified with
 		// REVOKE x ON TABLE y. However, the stringer does not output TABLE.
-		{`REVOKE READ ON foo FROM root`},
-		{`REVOKE WRITE, READ ON foo, db.foo FROM root, bar`},
-		{`REVOKE READ ON DATABASE foo FROM root`},
+		{`REVOKE SELECT ON foo FROM root`},
+		{`REVOKE UPDATE, DELETE ON foo, db.foo FROM root, bar`},
+		{`REVOKE INSERT ON DATABASE foo FROM root`},
 		{`REVOKE ALL ON DATABASE foo FROM root, test`},
-		{`REVOKE READ, WRITE ON DATABASE bar FROM foo, bar, baz`},
-		{`REVOKE READ, WRITE ON DATABASE db1, db2 FROM foo, bar, baz`},
+		{`REVOKE SELECT, INSERT ON DATABASE bar FROM foo, bar, baz`},
+		{`REVOKE SELECT, INSERT ON DATABASE db1, db2 FROM foo, bar, baz`},
 
 		{`INSERT INTO a VALUES (1)`},
 		{`INSERT INTO a.b VALUES (1)`},

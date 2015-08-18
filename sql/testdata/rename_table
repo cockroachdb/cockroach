@@ -73,18 +73,26 @@ user testuser
 statement ok
 set database to test
 
-statement error user testuser does not have WRITE privilege on database test
+statement error user testuser does not have CREATE privilege on database test
 ALTER TABLE test.t RENAME TO t2
 
 user root
 
 statement ok
-GRANT WRITE ON DATABASE test TO testuser
+GRANT CREATE ON DATABASE test TO testuser
 
 statement ok
 create database test2
 
 user testuser
+
+statement error user testuser does not have DROP privilege on table t
+ALTER TABLE test.t RENAME TO t2
+
+user root
+
+statement ok
+GRANT DROP ON TABLE test.t TO testuser
 
 statement ok
 ALTER TABLE test.t RENAME TO t2
@@ -95,13 +103,18 @@ SHOW TABLES FROM test
 new_kv
 t2
 
-statement error user testuser does not have WRITE privilege on database test2
+user testuser
+
+statement error user testuser does not have CREATE privilege on database test2
 ALTER TABLE test.t2 RENAME TO test2.t
 
 user root
 
 statement ok
-GRANT WRITE ON DATABASE test2 TO testuser
+GRANT CREATE ON DATABASE test2 TO testuser
+
+statement ok
+GRANT DROP ON test.new_kv TO testuser
 
 user testuser
 

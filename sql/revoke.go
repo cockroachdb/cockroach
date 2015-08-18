@@ -24,12 +24,11 @@ import (
 
 // Revoke removes privileges from users.
 // Current status:
-// - Target: DATABASE X only
-// - Privileges: ALL, or one or more of READ, WRITE.
+// - Target: single database or table.
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
 // - should we make users case-insensitive?
-// Privileges: WRITE on database.
+// Privileges: GRANT on database/table.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
@@ -38,7 +37,7 @@ func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(descriptor, privilege.WRITE); err != nil {
+	if err := p.checkPrivilege(descriptor, privilege.GRANT); err != nil {
 		return nil, err
 	}
 

@@ -29,7 +29,7 @@ import (
 )
 
 // Insert inserts rows into the database.
-// Privileges: WRITE on table
+// Privileges: INSERT on table
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(n *parser.Insert) (planNode, error) {
@@ -38,7 +38,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.WRITE); err != nil {
+	if err := p.checkPrivilege(tableDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
 
