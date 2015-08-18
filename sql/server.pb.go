@@ -17,8 +17,7 @@ var _ = proto.Marshal
 var _ = math.Inf
 
 type Session struct {
-	Database         string `protobuf:"bytes,1,opt,name=database" json:"database"`
-	XXX_unrecognized []byte `json:"-"`
+	Database string `protobuf:"bytes,1,opt,name=database" json:"database"`
 }
 
 func (m *Session) Reset()         { *m = Session{} }
@@ -93,7 +92,6 @@ func (m *Session) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -197,9 +195,6 @@ func (m *Session) Size() (n int) {
 	_ = l
 	l = len(m.Database)
 	n += 1 + l + sovServer(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -226,7 +221,7 @@ func (m *Session) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Session) MarshalTo(data []byte) (n int, err error) {
+func (m *Session) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -235,9 +230,6 @@ func (m *Session) MarshalTo(data []byte) (n int, err error) {
 	i++
 	i = encodeVarintServer(data, i, uint64(len(m.Database)))
 	i += copy(data[i:], m.Database)
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 

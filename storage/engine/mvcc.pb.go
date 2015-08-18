@@ -35,8 +35,7 @@ type MVCCValue struct {
 	// be nil.
 	Deleted bool `protobuf:"varint,1,opt,name=deleted" json:"deleted"`
 	// The value. Nil if deleted is true; not nil otherwise.
-	Value            *cockroach_proto1.Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-	XXX_unrecognized []byte                  `json:"-"`
+	Value *cockroach_proto1.Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 }
 
 func (m *MVCCValue) Reset()         { *m = MVCCValue{} }
@@ -73,8 +72,7 @@ type MVCCMetadata struct {
 	// and subsequent version rows. If timestamp == (0, 0), then there
 	// is only a single MVCC metadata row with value inlined, and with
 	// empty timestamp, key_bytes, and val_bytes.
-	Value            *cockroach_proto1.Value `protobuf:"bytes,6,opt,name=value" json:"value,omitempty"`
-	XXX_unrecognized []byte                  `json:"-"`
+	Value *cockroach_proto1.Value `protobuf:"bytes,6,opt,name=value" json:"value,omitempty"`
 }
 
 func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
@@ -134,20 +132,19 @@ func (m *MVCCMetadata) GetValue() *cockroach_proto1.Value {
 //  - Intents (provisional values written during txns)
 //  - System-local key counts and byte totals
 type MVCCStats struct {
-	LiveBytes        int64  `protobuf:"varint,1,opt,name=live_bytes" json:"live_bytes"`
-	KeyBytes         int64  `protobuf:"varint,2,opt,name=key_bytes" json:"key_bytes"`
-	ValBytes         int64  `protobuf:"varint,3,opt,name=val_bytes" json:"val_bytes"`
-	IntentBytes      int64  `protobuf:"varint,4,opt,name=intent_bytes" json:"intent_bytes"`
-	LiveCount        int64  `protobuf:"varint,5,opt,name=live_count" json:"live_count"`
-	KeyCount         int64  `protobuf:"varint,6,opt,name=key_count" json:"key_count"`
-	ValCount         int64  `protobuf:"varint,7,opt,name=val_count" json:"val_count"`
-	IntentCount      int64  `protobuf:"varint,8,opt,name=intent_count" json:"intent_count"`
-	IntentAge        int64  `protobuf:"varint,9,opt,name=intent_age" json:"intent_age"`
-	GCBytesAge       int64  `protobuf:"varint,10,opt,name=gc_bytes_age" json:"gc_bytes_age"`
-	SysBytes         int64  `protobuf:"varint,12,opt,name=sys_bytes" json:"sys_bytes"`
-	SysCount         int64  `protobuf:"varint,13,opt,name=sys_count" json:"sys_count"`
-	LastUpdateNanos  int64  `protobuf:"varint,30,opt,name=last_update_nanos" json:"last_update_nanos"`
-	XXX_unrecognized []byte `json:"-"`
+	LiveBytes       int64 `protobuf:"varint,1,opt,name=live_bytes" json:"live_bytes"`
+	KeyBytes        int64 `protobuf:"varint,2,opt,name=key_bytes" json:"key_bytes"`
+	ValBytes        int64 `protobuf:"varint,3,opt,name=val_bytes" json:"val_bytes"`
+	IntentBytes     int64 `protobuf:"varint,4,opt,name=intent_bytes" json:"intent_bytes"`
+	LiveCount       int64 `protobuf:"varint,5,opt,name=live_count" json:"live_count"`
+	KeyCount        int64 `protobuf:"varint,6,opt,name=key_count" json:"key_count"`
+	ValCount        int64 `protobuf:"varint,7,opt,name=val_count" json:"val_count"`
+	IntentCount     int64 `protobuf:"varint,8,opt,name=intent_count" json:"intent_count"`
+	IntentAge       int64 `protobuf:"varint,9,opt,name=intent_age" json:"intent_age"`
+	GCBytesAge      int64 `protobuf:"varint,10,opt,name=gc_bytes_age" json:"gc_bytes_age"`
+	SysBytes        int64 `protobuf:"varint,12,opt,name=sys_bytes" json:"sys_bytes"`
+	SysCount        int64 `protobuf:"varint,13,opt,name=sys_count" json:"sys_count"`
+	LastUpdateNanos int64 `protobuf:"varint,30,opt,name=last_update_nanos" json:"last_update_nanos"`
 }
 
 func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
@@ -331,7 +328,6 @@ func (m *MVCCValue) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -513,7 +509,6 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -767,7 +762,6 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -874,9 +868,6 @@ func (m *MVCCValue) Size() (n int) {
 		l = m.Value.Size()
 		n += 1 + l + sovMvcc(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -895,9 +886,6 @@ func (m *MVCCMetadata) Size() (n int) {
 	if m.Value != nil {
 		l = m.Value.Size()
 		n += 1 + l + sovMvcc(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -918,9 +906,6 @@ func (m *MVCCStats) Size() (n int) {
 	n += 1 + sovMvcc(uint64(m.SysBytes))
 	n += 1 + sovMvcc(uint64(m.SysCount))
 	n += 2 + sovMvcc(uint64(m.LastUpdateNanos))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -947,7 +932,7 @@ func (m *MVCCValue) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *MVCCValue) MarshalTo(data []byte) (n int, err error) {
+func (m *MVCCValue) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -970,9 +955,6 @@ func (m *MVCCValue) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n1
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -986,7 +968,7 @@ func (m *MVCCMetadata) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *MVCCMetadata) MarshalTo(data []byte) (n int, err error) {
+func (m *MVCCMetadata) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1033,9 +1015,6 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n4
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1049,7 +1028,7 @@ func (m *MVCCStats) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *MVCCStats) MarshalTo(data []byte) (n int, err error) {
+func (m *MVCCStats) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1095,9 +1074,6 @@ func (m *MVCCStats) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x1
 	i++
 	i = encodeVarintMvcc(data, i, uint64(m.LastUpdateNanos))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 

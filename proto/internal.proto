@@ -26,6 +26,7 @@ import "gogoproto/gogo.proto";
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
 
 // A ResponseCacheEntry is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled

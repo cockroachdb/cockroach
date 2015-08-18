@@ -41,7 +41,6 @@ type NodeStatus struct {
 	LeaderRangeCount     int32                                            `protobuf:"varint,7,opt,name=leader_range_count" json:"leader_range_count"`
 	ReplicatedRangeCount int32                                            `protobuf:"varint,8,opt,name=replicated_range_count" json:"replicated_range_count"`
 	AvailableRangeCount  int32                                            `protobuf:"varint,9,opt,name=available_range_count" json:"available_range_count"`
-	XXX_unrecognized     []byte                                           `json:"-"`
 }
 
 func (m *NodeStatus) Reset()         { *m = NodeStatus{} }
@@ -317,7 +316,6 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -434,9 +432,6 @@ func (m *NodeStatus) Size() (n int) {
 	n += 1 + sovStatus(uint64(m.LeaderRangeCount))
 	n += 1 + sovStatus(uint64(m.ReplicatedRangeCount))
 	n += 1 + sovStatus(uint64(m.AvailableRangeCount))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -463,7 +458,7 @@ func (m *NodeStatus) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *NodeStatus) MarshalTo(data []byte) (n int, err error) {
+func (m *NodeStatus) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -509,9 +504,6 @@ func (m *NodeStatus) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x48
 	i++
 	i = encodeVarintStatus(data, i, uint64(m.AvailableRangeCount))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 

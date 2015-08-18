@@ -8,6 +8,11 @@ option go_package = "message";
 
 import "gogoproto/gogo.proto";
 
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
+
 message ArithRequest {
 	optional int32 a = 1 [(gogoproto.nullable) = false];
 	optional int32 b = 2 [(gogoproto.nullable) = false];

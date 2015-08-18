@@ -18,7 +18,7 @@ github.com/cockroachdb/yacc 572e006f8e6b0061ebda949d13744f5108389514
 github.com/coreos/etcd 18ecc297bc913bed6fc093d66b1fa22020dba7dc
 github.com/docker/docker 7374852be9def787921aea2ca831771982badecf
 github.com/elazarl/go-bindata-assetfs 3dcc96556217539f50599357fb481ac0dc7439b9
-github.com/gogo/protobuf 98e73e511a62a9c232152f94999112c80142a813
+github.com/gogo/protobuf cabd153b69f71bab8b89fd667a2d9bb28c92ceb4
 github.com/golang/lint 7b7f4364ff76043e6c3610281525fabc0d90f0e4
 github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75

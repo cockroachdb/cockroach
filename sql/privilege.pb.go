@@ -32,8 +32,7 @@ var _ = math.Inf
 type UserPrivileges struct {
 	User string `protobuf:"bytes,1,opt,name=user" json:"user"`
 	// privileges is a bitfield of 1<<Privilege values.
-	Privileges       uint32 `protobuf:"varint,2,opt,name=privileges" json:"privileges"`
-	XXX_unrecognized []byte `json:"-"`
+	Privileges uint32 `protobuf:"varint,2,opt,name=privileges" json:"privileges"`
 }
 
 func (m *UserPrivileges) Reset()         { *m = UserPrivileges{} }
@@ -57,8 +56,7 @@ func (m *UserPrivileges) GetPrivileges() uint32 {
 // PrivilegeDescriptor describes a list of users and attached
 // privileges. The list should be sorted by user for fast access.
 type PrivilegeDescriptor struct {
-	Users            []*UserPrivileges `protobuf:"bytes,1,rep,name=users" json:"users,omitempty"`
-	XXX_unrecognized []byte            `json:"-"`
+	Users []*UserPrivileges `protobuf:"bytes,1,rep,name=users" json:"users,omitempty"`
 }
 
 func (m *PrivilegeDescriptor) Reset()         { *m = PrivilegeDescriptor{} }
@@ -149,7 +147,6 @@ func (m *UserPrivileges) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -223,7 +220,6 @@ func (m *PrivilegeDescriptor) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -328,9 +324,6 @@ func (m *UserPrivileges) Size() (n int) {
 	l = len(m.User)
 	n += 1 + l + sovPrivilege(uint64(l))
 	n += 1 + sovPrivilege(uint64(m.Privileges))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -342,9 +335,6 @@ func (m *PrivilegeDescriptor) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovPrivilege(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -372,7 +362,7 @@ func (m *UserPrivileges) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *UserPrivileges) MarshalTo(data []byte) (n int, err error) {
+func (m *UserPrivileges) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -384,9 +374,6 @@ func (m *UserPrivileges) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintPrivilege(data, i, uint64(m.Privileges))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -400,7 +387,7 @@ func (m *PrivilegeDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *PrivilegeDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *PrivilegeDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -416,9 +403,6 @@ func (m *PrivilegeDescriptor) MarshalTo(data []byte) (n int, err error) {
 			}
 			i += n
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }

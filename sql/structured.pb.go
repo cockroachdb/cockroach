@@ -83,8 +83,7 @@ type ColumnType struct {
 	// BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
 	Width int32 `protobuf:"varint,2,opt,name=width" json:"width"`
 	// FLOAT and DECIMAL.
-	Precision        int32  `protobuf:"varint,3,opt,name=precision" json:"precision"`
-	XXX_unrecognized []byte `json:"-"`
+	Precision int32 `protobuf:"varint,3,opt,name=precision" json:"precision"`
 }
 
 func (m *ColumnType) Reset()         { *m = ColumnType{} }
@@ -113,11 +112,10 @@ func (m *ColumnType) GetPrecision() int32 {
 }
 
 type ColumnDescriptor struct {
-	Name             string     `protobuf:"bytes,1,opt,name=name" json:"name"`
-	ID               ColumnID   `protobuf:"varint,2,opt,name=id,casttype=ColumnID" json:"id"`
-	Type             ColumnType `protobuf:"bytes,3,opt,name=type" json:"type"`
-	Nullable         bool       `protobuf:"varint,4,opt,name=nullable" json:"nullable"`
-	XXX_unrecognized []byte     `json:"-"`
+	Name     string     `protobuf:"bytes,1,opt,name=name" json:"name"`
+	ID       ColumnID   `protobuf:"varint,2,opt,name=id,casttype=ColumnID" json:"id"`
+	Type     ColumnType `protobuf:"bytes,3,opt,name=type" json:"type"`
+	Nullable bool       `protobuf:"varint,4,opt,name=nullable" json:"nullable"`
 }
 
 func (m *ColumnDescriptor) Reset()         { *m = ColumnDescriptor{} }
@@ -163,8 +161,7 @@ type IndexDescriptor struct {
 	ColumnNames []string `protobuf:"bytes,4,rep,name=column_names" json:"column_names,omitempty"`
 	// An ordered list of column ids of which the index is comprised. This list
 	// parallels the column_names list.
-	ColumnIDs        []ColumnID `protobuf:"varint,5,rep,name=column_ids,casttype=ColumnID" json:"column_ids,omitempty"`
-	XXX_unrecognized []byte     `json:"-"`
+	ColumnIDs []ColumnID `protobuf:"varint,5,rep,name=column_ids,casttype=ColumnID" json:"column_ids,omitempty"`
 }
 
 func (m *IndexDescriptor) Reset()         { *m = IndexDescriptor{} }
@@ -222,9 +219,8 @@ type TableDescriptor struct {
 	// indexes are all the secondary indexes.
 	Indexes []IndexDescriptor `protobuf:"bytes,7,rep,name=indexes" json:"indexes"`
 	// next_index_id is used to ensure that deleted index ids are not reused.
-	NextIndexID      IndexID              `protobuf:"varint,8,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
-	Privileges       *PrivilegeDescriptor `protobuf:"bytes,9,opt,name=privileges" json:"privileges,omitempty"`
-	XXX_unrecognized []byte               `json:"-"`
+	NextIndexID IndexID              `protobuf:"varint,8,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
+	Privileges  *PrivilegeDescriptor `protobuf:"bytes,9,opt,name=privileges" json:"privileges,omitempty"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -299,10 +295,9 @@ func (m *TableDescriptor) GetPrivileges() *PrivilegeDescriptor {
 // ID shared with the TableDescriptor ID.
 // Permissions are applied to all tables in the namespace.
 type DatabaseDescriptor struct {
-	Name             string               `protobuf:"bytes,1,opt,name=name" json:"name"`
-	ID               ID                   `protobuf:"varint,2,opt,name=id,casttype=ID" json:"id"`
-	Privileges       *PrivilegeDescriptor `protobuf:"bytes,3,opt,name=privileges" json:"privileges,omitempty"`
-	XXX_unrecognized []byte               `json:"-"`
+	Name       string               `protobuf:"bytes,1,opt,name=name" json:"name"`
+	ID         ID                   `protobuf:"varint,2,opt,name=id,casttype=ID" json:"id"`
+	Privileges *PrivilegeDescriptor `protobuf:"bytes,3,opt,name=privileges" json:"privileges,omitempty"`
 }
 
 func (m *DatabaseDescriptor) Reset()         { *m = DatabaseDescriptor{} }
@@ -420,7 +415,6 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -548,7 +542,6 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -688,7 +681,6 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -939,7 +931,6 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1053,7 +1044,6 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1158,9 +1148,6 @@ func (m *ColumnType) Size() (n int) {
 	n += 1 + sovStructured(uint64(m.Kind))
 	n += 1 + sovStructured(uint64(m.Width))
 	n += 1 + sovStructured(uint64(m.Precision))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1173,9 +1160,6 @@ func (m *ColumnDescriptor) Size() (n int) {
 	l = m.Type.Size()
 	n += 1 + l + sovStructured(uint64(l))
 	n += 2
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1196,9 +1180,6 @@ func (m *IndexDescriptor) Size() (n int) {
 		for _, e := range m.ColumnIDs {
 			n += 1 + sovStructured(uint64(e))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1231,9 +1212,6 @@ func (m *TableDescriptor) Size() (n int) {
 		l = m.Privileges.Size()
 		n += 1 + l + sovStructured(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1246,9 +1224,6 @@ func (m *DatabaseDescriptor) Size() (n int) {
 	if m.Privileges != nil {
 		l = m.Privileges.Size()
 		n += 1 + l + sovStructured(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1276,7 +1251,7 @@ func (m *ColumnType) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ColumnType) MarshalTo(data []byte) (n int, err error) {
+func (m *ColumnType) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1290,9 +1265,6 @@ func (m *ColumnType) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Precision))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1306,7 +1278,7 @@ func (m *ColumnDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ColumnDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *ColumnDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1334,9 +1306,6 @@ func (m *ColumnDescriptor) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0
 	}
 	i++
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1350,7 +1319,7 @@ func (m *IndexDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *IndexDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *IndexDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1392,9 +1361,6 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (n int, err error) {
 			i = encodeVarintStructured(data, i, uint64(num))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1408,7 +1374,7 @@ func (m *TableDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1472,9 +1438,6 @@ func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n3
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1488,7 +1451,7 @@ func (m *DatabaseDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *DatabaseDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *DatabaseDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1509,9 +1472,6 @@ func (m *DatabaseDescriptor) MarshalTo(data []byte) (n int, err error) {
 			return 0, err
 		}
 		i += n4
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }

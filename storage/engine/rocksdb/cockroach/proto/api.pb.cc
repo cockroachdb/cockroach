@@ -1460,8 +1460,8 @@ void protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto() {
     "ConsistencyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSE"
     "NSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000*G\n\013PushTx"
     "nType\022\022\n\016PUSH_TIMESTAMP\020\000\022\r\n\tABORT_TXN\020\001"
-    "\022\017\n\013CLEANUP_TXN\020\002\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001"
-    "\320\342\036\001", 8124);
+    "\022\017\n\013CLEANUP_TXN\020\002\032\004\210\243\036\000B\027Z\005proto\340\342\036\001\310\342\036\001"
+    "\320\342\036\001\220\343\036\000", 8128);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/api.proto", &protobuf_RegisterTypes);
   ClientCmdID::default_instance_ = new ClientCmdID();

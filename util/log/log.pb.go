@@ -49,8 +49,7 @@ type LogEntry struct {
 	Method  *github_com_cockroachdb_cockroach_proto.Method  `protobuf:"varint,11,opt,name=method,casttype=github.com/cockroachdb/cockroach/proto.Method" json:"method,omitempty"`
 	Key     github_com_cockroachdb_cockroach_proto.Key      `protobuf:"bytes,12,opt,name=key,casttype=github.com/cockroachdb/cockroach/proto.Key" json:"key,omitempty"`
 	// Stack traces if requested.
-	Stacks           []byte `protobuf:"bytes,13,opt,name=stacks" json:"stacks,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Stacks []byte `protobuf:"bytes,13,opt,name=stacks" json:"stacks,omitempty"`
 }
 
 func (m *LogEntry) Reset()         { *m = LogEntry{} }
@@ -153,8 +152,7 @@ type LogEntry_Arg struct {
 	Type string `protobuf:"bytes,1,opt,name=type" json:"type"`
 	Str  string `protobuf:"bytes,2,opt,name=str" json:"str"`
 	// Optional json representation.
-	Json             []byte `protobuf:"bytes,3,opt,name=json" json:"json,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Json []byte `protobuf:"bytes,3,opt,name=json" json:"json,omitempty"`
 }
 
 func (m *LogEntry_Arg) Reset()         { *m = LogEntry_Arg{} }
@@ -475,7 +473,6 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -590,7 +587,6 @@ func (m *LogEntry_Arg) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -726,9 +722,6 @@ func (m *LogEntry) Size() (n int) {
 		l = len(m.Stacks)
 		n += 1 + l + sovLog(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -742,9 +735,6 @@ func (m *LogEntry_Arg) Size() (n int) {
 	if m.Json != nil {
 		l = len(m.Json)
 		n += 1 + l + sovLog(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -772,7 +762,7 @@ func (m *LogEntry) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *LogEntry) MarshalTo(data []byte) (n int, err error) {
+func (m *LogEntry) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -841,9 +831,6 @@ func (m *LogEntry) MarshalTo(data []byte) (n int, err error) {
 		i = encodeVarintLog(data, i, uint64(len(m.Stacks)))
 		i += copy(data[i:], m.Stacks)
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -857,7 +844,7 @@ func (m *LogEntry_Arg) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *LogEntry_Arg) MarshalTo(data []byte) (n int, err error) {
+func (m *LogEntry_Arg) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -875,9 +862,6 @@ func (m *LogEntry_Arg) MarshalTo(data []byte) (n int, err error) {
 		i++
 		i = encodeVarintLog(data, i, uint64(len(m.Json)))
 		i += copy(data[i:], m.Json)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }

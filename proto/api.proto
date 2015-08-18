@@ -27,6 +27,7 @@ import "gogoproto/gogo.proto";
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
 
 // ClientCmdID provides a unique ID for client commands. Clients which
 // provide ClientCmdID gain operation idempotence. In other words,

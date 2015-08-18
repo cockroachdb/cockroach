@@ -90,7 +90,6 @@ type RequestHeader struct {
 	MethodId         int32           `protobuf:"varint,3,opt,name=method_id" json:"method_id"`
 	Compression      CompressionType `protobuf:"varint,4,opt,name=compression,enum=cockroach.rpc.codec.wire.CompressionType" json:"compression"`
 	UncompressedSize uint32          `protobuf:"varint,5,opt,name=uncompressed_size" json:"uncompressed_size"`
-	XXX_unrecognized []byte          `json:"-"`
 }
 
 func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
@@ -138,7 +137,6 @@ type ResponseHeader struct {
 	Error            string          `protobuf:"bytes,3,opt,name=error" json:"error"`
 	Compression      CompressionType `protobuf:"varint,4,opt,name=compression,enum=cockroach.rpc.codec.wire.CompressionType" json:"compression"`
 	UncompressedSize uint32          `protobuf:"varint,5,opt,name=uncompressed_size" json:"uncompressed_size"`
-	XXX_unrecognized []byte          `json:"-"`
 }
 
 func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
@@ -309,7 +307,6 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -448,7 +445,6 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -558,9 +554,6 @@ func (m *RequestHeader) Size() (n int) {
 	n += 1 + sovWire(uint64(m.MethodId))
 	n += 1 + sovWire(uint64(m.Compression))
 	n += 1 + sovWire(uint64(m.UncompressedSize))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -576,9 +569,6 @@ func (m *ResponseHeader) Size() (n int) {
 	n += 1 + l + sovWire(uint64(l))
 	n += 1 + sovWire(uint64(m.Compression))
 	n += 1 + sovWire(uint64(m.UncompressedSize))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -605,7 +595,7 @@ func (m *RequestHeader) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
+func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -628,9 +618,6 @@ func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x28
 	i++
 	i = encodeVarintWire(data, i, uint64(m.UncompressedSize))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -644,7 +631,7 @@ func (m *ResponseHeader) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ResponseHeader) MarshalTo(data []byte) (n int, err error) {
+func (m *ResponseHeader) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -668,9 +655,6 @@ func (m *ResponseHeader) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x28
 	i++
 	i = encodeVarintWire(data, i, uint64(m.UncompressedSize))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 

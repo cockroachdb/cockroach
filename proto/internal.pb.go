@@ -73,7 +73,6 @@ type ResponseCacheEntry struct {
 	TruncateLog        *TruncateLogResponse        `protobuf:"bytes,13,opt,name=truncate_log" json:"truncate_log,omitempty"`
 	LeaderLease        *LeaderLeaseResponse        `protobuf:"bytes,14,opt,name=leader_lease" json:"leader_lease,omitempty"`
 	Batch              *BatchResponse              `protobuf:"bytes,30,opt,name=batch" json:"batch,omitempty"`
-	XXX_unrecognized   []byte                      `json:"-"`
 }
 
 func (m *ResponseCacheEntry) Reset()         { *m = ResponseCacheEntry{} }
@@ -209,8 +208,7 @@ type RaftCommandUnion struct {
 	ReverseScan        *ReverseScanRequest        `protobuf:"bytes,18,opt,name=reverse_scan" json:"reverse_scan,omitempty"`
 	// Other requests. Allow a gap in tag numbers so the previous list can
 	// be copy/pasted from RequestUnion.
-	Batch            *BatchRequest `protobuf:"bytes,30,opt,name=batch" json:"batch,omitempty"`
-	XXX_unrecognized []byte        `json:"-"`
+	Batch *BatchRequest `protobuf:"bytes,30,opt,name=batch" json:"batch,omitempty"`
 }
 
 func (m *RaftCommandUnion) Reset()         { *m = RaftCommandUnion{} }
@@ -353,10 +351,9 @@ func (m *RaftCommandUnion) GetBatch() *BatchRequest {
 // A RaftCommand is a command which can be serialized and sent via
 // raft.
 type RaftCommand struct {
-	RangeID          RangeID          `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
-	OriginNodeID     RaftNodeID       `protobuf:"varint,2,opt,name=origin_node_id,casttype=RaftNodeID" json:"origin_node_id"`
-	Cmd              RaftCommandUnion `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
-	XXX_unrecognized []byte           `json:"-"`
+	RangeID      RangeID          `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
+	OriginNodeID RaftNodeID       `protobuf:"varint,2,opt,name=origin_node_id,casttype=RaftNodeID" json:"origin_node_id"`
+	Cmd          RaftCommandUnion `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
 }
 
 func (m *RaftCommand) Reset()         { *m = RaftCommand{} }
@@ -395,8 +392,7 @@ type RaftMessageRequest struct {
 	// The raft payload, an encoded raftpb.Message. We transmit the message as
 	// an opaque blob to avoid the complexity of importing proto files across
 	// packages.
-	Msg              []byte `protobuf:"bytes,2,opt,name=msg" json:"msg,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Msg []byte `protobuf:"bytes,2,opt,name=msg" json:"msg,omitempty"`
 }
 
 func (m *RaftMessageRequest) Reset()         { *m = RaftMessageRequest{} }
@@ -419,7 +415,6 @@ func (m *RaftMessageRequest) GetMsg() []byte {
 
 // RaftMessageResponse is an empty message returned by raft RPCs.
 type RaftMessageResponse struct {
-	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *RaftMessageResponse) Reset()         { *m = RaftMessageResponse{} }
@@ -452,8 +447,7 @@ type InternalTimeSeriesData struct {
 	// The duration of each sample interval, expressed in nanoseconds.
 	SampleDurationNanos int64 `protobuf:"varint,2,opt,name=sample_duration_nanos" json:"sample_duration_nanos"`
 	// The actual data samples for this metric.
-	Samples          []*InternalTimeSeriesSample `protobuf:"bytes,3,rep,name=samples" json:"samples,omitempty"`
-	XXX_unrecognized []byte                      `json:"-"`
+	Samples []*InternalTimeSeriesSample `protobuf:"bytes,3,rep,name=samples" json:"samples,omitempty"`
 }
 
 func (m *InternalTimeSeriesData) Reset()         { *m = InternalTimeSeriesData{} }
@@ -513,8 +507,7 @@ type InternalTimeSeriesSample struct {
 	// Maximum encountered measurement in this sample.
 	Max *float64 `protobuf:"fixed64,8,opt,name=max" json:"max,omitempty"`
 	// Minimum encountered measurement in this sample.
-	Min              *float64 `protobuf:"fixed64,9,opt,name=min" json:"min,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	Min *float64 `protobuf:"fixed64,9,opt,name=min" json:"min,omitempty"`
 }
 
 func (m *InternalTimeSeriesSample) Reset()         { *m = InternalTimeSeriesSample{} }
@@ -563,8 +556,7 @@ type RaftTruncatedState struct {
 	// The highest index that has been removed from the log.
 	Index uint64 `protobuf:"varint,1,opt,name=index" json:"index"`
 	// The term corresponding to 'index'.
-	Term             uint64 `protobuf:"varint,2,opt,name=term" json:"term"`
-	XXX_unrecognized []byte `json:"-"`
+	Term uint64 `protobuf:"varint,2,opt,name=term" json:"term"`
 }
 
 func (m *RaftTruncatedState) Reset()         { *m = RaftTruncatedState{} }
@@ -589,9 +581,8 @@ func (m *RaftTruncatedState) GetTerm() uint64 {
 // all of the range's data and metadata, including the raft log, response cache, etc.
 type RaftSnapshotData struct {
 	// The latest RangeDescriptor
-	RangeDescriptor  RangeDescriptor              `protobuf:"bytes,1,opt,name=range_descriptor" json:"range_descriptor"`
-	KV               []*RaftSnapshotData_KeyValue `protobuf:"bytes,2,rep" json:"KV,omitempty"`
-	XXX_unrecognized []byte                       `json:"-"`
+	RangeDescriptor RangeDescriptor              `protobuf:"bytes,1,opt,name=range_descriptor" json:"range_descriptor"`
+	KV              []*RaftSnapshotData_KeyValue `protobuf:"bytes,2,rep" json:"KV,omitempty"`
 }
 
 func (m *RaftSnapshotData) Reset()         { *m = RaftSnapshotData{} }
@@ -613,9 +604,8 @@ func (m *RaftSnapshotData) GetKV() []*RaftSnapshotData_KeyValue {
 }
 
 type RaftSnapshotData_KeyValue struct {
-	Key              []byte `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
-	Value            []byte `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Key   []byte `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
+	Value []byte `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 }
 
 func (m *RaftSnapshotData_KeyValue) Reset()         { *m = RaftSnapshotData_KeyValue{} }
@@ -1128,7 +1118,6 @@ func (m *ResponseCacheEntry) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1744,7 +1733,6 @@ func (m *RaftCommandUnion) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1849,7 +1837,6 @@ func (m *RaftCommand) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1936,7 +1923,6 @@ func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1981,7 +1967,6 @@ func (m *RaftMessageResponse) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2087,7 +2072,6 @@ func (m *InternalTimeSeriesData) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2221,7 +2205,6 @@ func (m *InternalTimeSeriesSample) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2299,7 +2282,6 @@ func (m *RaftTruncatedState) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2400,7 +2382,6 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2496,7 +2477,6 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2850,9 +2830,6 @@ func (m *ResponseCacheEntry) Size() (n int) {
 		l = m.Batch.Size()
 		n += 2 + l + sovInternal(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2935,9 +2912,6 @@ func (m *RaftCommandUnion) Size() (n int) {
 		l = m.Batch.Size()
 		n += 2 + l + sovInternal(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2948,9 +2922,6 @@ func (m *RaftCommand) Size() (n int) {
 	n += 1 + sovInternal(uint64(m.OriginNodeID))
 	l = m.Cmd.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2962,18 +2933,12 @@ func (m *RaftMessageRequest) Size() (n int) {
 		l = len(m.Msg)
 		n += 1 + l + sovInternal(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
 func (m *RaftMessageResponse) Size() (n int) {
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2987,9 +2952,6 @@ func (m *InternalTimeSeriesData) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovInternal(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -3006,9 +2968,6 @@ func (m *InternalTimeSeriesSample) Size() (n int) {
 	if m.Min != nil {
 		n += 9
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3017,9 +2976,6 @@ func (m *RaftTruncatedState) Size() (n int) {
 	_ = l
 	n += 1 + sovInternal(uint64(m.Index))
 	n += 1 + sovInternal(uint64(m.Term))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3034,9 +2990,6 @@ func (m *RaftSnapshotData) Size() (n int) {
 			n += 1 + l + sovInternal(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3050,9 +3003,6 @@ func (m *RaftSnapshotData_KeyValue) Size() (n int) {
 	if m.Value != nil {
 		l = len(m.Value)
 		n += 1 + l + sovInternal(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -3080,7 +3030,7 @@ func (m *ResponseCacheEntry) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ResponseCacheEntry) MarshalTo(data []byte) (n int, err error) {
+func (m *ResponseCacheEntry) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3237,9 +3187,6 @@ func (m *ResponseCacheEntry) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n15
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3253,7 +3200,7 @@ func (m *RaftCommandUnion) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftCommandUnion) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3456,9 +3403,6 @@ func (m *RaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n34
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3472,7 +3416,7 @@ func (m *RaftCommand) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftCommand) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftCommand) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3491,9 +3435,6 @@ func (m *RaftCommand) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n35
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3507,7 +3448,7 @@ func (m *RaftMessageRequest) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftMessageRequest) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftMessageRequest) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3520,9 +3461,6 @@ func (m *RaftMessageRequest) MarshalTo(data []byte) (n int, err error) {
 		i++
 		i = encodeVarintInternal(data, i, uint64(len(m.Msg)))
 		i += copy(data[i:], m.Msg)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -3537,14 +3475,11 @@ func (m *RaftMessageResponse) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftMessageResponse) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftMessageResponse) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3558,7 +3493,7 @@ func (m *InternalTimeSeriesData) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *InternalTimeSeriesData) MarshalTo(data []byte) (n int, err error) {
+func (m *InternalTimeSeriesData) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3581,9 +3516,6 @@ func (m *InternalTimeSeriesData) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3597,7 +3529,7 @@ func (m *InternalTimeSeriesSample) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *InternalTimeSeriesSample) MarshalTo(data []byte) (n int, err error) {
+func (m *InternalTimeSeriesSample) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3621,9 +3553,6 @@ func (m *InternalTimeSeriesSample) MarshalTo(data []byte) (n int, err error) {
 		i++
 		i = encodeFixed64Internal(data, i, uint64(math.Float64bits(*m.Min)))
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3637,7 +3566,7 @@ func (m *RaftTruncatedState) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftTruncatedState) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftTruncatedState) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3648,9 +3577,6 @@ func (m *RaftTruncatedState) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintInternal(data, i, uint64(m.Term))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3664,7 +3590,7 @@ func (m *RaftSnapshotData) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftSnapshotData) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftSnapshotData) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3689,9 +3615,6 @@ func (m *RaftSnapshotData) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3705,7 +3628,7 @@ func (m *RaftSnapshotData_KeyValue) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftSnapshotData_KeyValue) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftSnapshotData_KeyValue) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3721,9 +3644,6 @@ func (m *RaftSnapshotData_KeyValue) MarshalTo(data []byte) (n int, err error) {
 		i++
 		i = encodeVarintInternal(data, i, uint64(len(m.Value)))
 		i += copy(data[i:], m.Value)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
