@@ -36,11 +36,6 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 		return nil, errEmptyDatabaseName
 	}
 
-	if n.Name == n.NewName {
-		//noop
-		return &valuesNode{}, nil
-	}
-
 	if p.user != security.RootUser {
 		return nil, fmt.Errorf("only %s is allowed to rename databases", security.RootUser)
 	}
@@ -48,6 +43,11 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	dbDesc, err := p.getDatabaseDesc(string(n.Name))
 	if err != nil {
 		return nil, err
+	}
+
+	if n.Name == n.NewName {
+		// Noop.
+		return &valuesNode{}, nil
 	}
 
 	// Now update the nameMetadataKey and the descriptor.
@@ -87,11 +87,6 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 
-	if n.Name.Database() == n.NewName.Database() && n.Name.Table() == n.NewName.Table() {
-		// Noop.
-		return &valuesNode{}, nil
-	}
-
 	dbDesc, err := p.getDatabaseDesc(n.Name.Database())
 	if err != nil {
 		return nil, err
@@ -122,6 +117,11 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 
+	if n.Name.Database() == n.NewName.Database() && n.Name.Table() == n.NewName.Table() {
+		// Noop.
+		return &valuesNode{}, nil
+	}
+
 	tableDesc, err := p.getTableDesc(n.Name)
 	if err != nil {
 		return nil, err
@@ -144,6 +144,58 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		if _, ok := err.(*proto.ConditionFailedError); ok {
 			return nil, fmt.Errorf("table name %q already exists", n.NewName.Table())
 		}
+		return nil, err
+	}
+
+	return &valuesNode{}, nil
+}
+
+// RenameIndex renames the index.
+// Privileges: CREATE on table.
+//   notes: postgres requires CREATE on the table.
+//          mysql requires ALTER, CREATE, INSERT on the table.
+func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
+	newIdxName := string(n.NewName)
+	if newIdxName == "" {
+		return nil, errEmptyIndexName
+	}
+
+	if err := n.Name.NormalizeTableName(p.session.Database); err != nil {
+		return nil, err
+	}
+
+	tableDesc, err := p.getTableDesc(n.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	idxName := n.Name.Index()
+	idx, err := tableDesc.FindIndexByName(idxName)
+	if err != nil {
+		if n.IfExists {
+			// Noop.
+			return &valuesNode{}, nil
+		}
+		// index does not exist, but we want it to: error out.
+		return nil, fmt.Errorf("index %q does not exist", idxName)
+	}
+
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+		return nil, err
+	}
+
+	if equalName(idxName, newIdxName) {
+		// Noop.
+		return &valuesNode{}, nil
+	}
+
+	if _, err := tableDesc.FindIndexByName(newIdxName); err == nil {
+		return nil, fmt.Errorf("index name %q already exists", n.NewName)
+	}
+
+	idx.Name = newIdxName
+	descKey := MakeDescMetadataKey(tableDesc.GetID())
+	if err := p.txn.Put(descKey, tableDesc); err != nil {
 		return nil, err
 	}
 

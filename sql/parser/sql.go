@@ -7465,13 +7465,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
 		//line sql.y:1396
 		{
-			sqlVAL.stmt = nil
+			sqlVAL.stmt = &RenameIndex{Name: sqlDollar[3].qname, NewName: Name(sqlDollar[6].str), IfExists: false}
 		}
 	case 307:
 		sqlDollar = sqlS[sqlpt-8 : sqlpt+1]
 		//line sql.y:1400
 		{
-			sqlVAL.stmt = nil
+			sqlVAL.stmt = &RenameIndex{Name: sqlDollar[5].qname, NewName: Name(sqlDollar[8].str), IfExists: true}
 		}
 	case 308:
 		sqlDollar = sqlS[sqlpt-8 : sqlpt+1]

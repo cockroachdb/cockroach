@@ -49,6 +49,9 @@ func (*Explain) statement()        {}
 func (*Grant) statement()          {}
 func (*Insert) statement()         {}
 func (*ParenSelect) statement()    {}
+func (*RenameDatabase) statement() {}
+func (*RenameIndex) statement()    {}
+func (*RenameTable) statement()    {}
 func (*Revoke) statement()         {}
 func (*Select) statement()         {}
 func (*Set) statement()            {}

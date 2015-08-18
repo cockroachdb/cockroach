@@ -1394,11 +1394,11 @@ rename_stmt:
   }
 | ALTER INDEX qualified_name RENAME TO name
   {
-    $$ = nil
+    $$ = &RenameIndex{Name: $3, NewName: Name($6), IfExists: false}
   }
 | ALTER INDEX IF EXISTS qualified_name RENAME TO name
   {
-    $$ = nil
+    $$ = &RenameIndex{Name: $5, NewName: Name($8), IfExists: true}
   }
 | ALTER TABLE relation_expr RENAME opt_column name TO name
   {

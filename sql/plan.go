@@ -65,6 +65,8 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 		return p.makePlan(n.Select)
 	case *parser.RenameDatabase:
 		return p.RenameDatabase(n)
+	case *parser.RenameIndex:
+		return p.RenameIndex(n)
 	case *parser.RenameTable:
 		return p.RenameTable(n)
 	case *parser.Revoke:
