@@ -757,8 +757,8 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	} else {
 		// Some sanity checks for case where we don't find a transaction record.
 		if args.PusheeTxn.LastHeartbeat != nil {
-			return reply, proto.NewTransactionStatusError(&args.PusheeTxn,
-				"no txn persisted, yet intent has heartbeat")
+			// Noop. Txn entry was gc'ed, see #2111.
+			return reply, nil
 		} else if args.PusheeTxn.Status != proto.PENDING {
 			return reply, proto.NewTransactionStatusError(&args.PusheeTxn,
 				fmt.Sprintf("no txn persisted, yet intent has status %s", args.PusheeTxn.Status))
