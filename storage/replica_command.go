@@ -743,6 +743,24 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	if err != nil {
 		return reply, err
 	}
+	// There are three cases in which there is no transaction entry, in
+	// decreasing likelihood:
+	// * the pushee is still active; it just hasn't committed, restarted,
+	//   aborted or heartbeat yet.
+	// * the pushee resolved its intents synchronously on successful commit;
+	//   in this case, the transaction record of the pushee is also removed.
+	//   Note that in this case, the intent which prompted this PushTxn
+	//   doesn't exist any more.
+	// * the pushee timed out or was aborted and the intent not cleaned up,
+	//   but the transaction record garbage collected.
+	//
+	// We currently make no attempt at guessing which one it is, though we
+	// could (see #1939). Instead, a new entry is always written.
+	//
+	// TODO(tschottdorf): we should actually improve this when we
+	// garbage-collect aborted transactions, or we run the risk of a push
+	// recreating a GC'ed transaction as PENDING, which is an error if it
+	// has open intents (which is likely if someone pushes it).
 	if ok {
 		// Start with the persisted transaction record as final transaction.
 		reply.PusheeTxn = gogoproto.Clone(existTxn).(*proto.Transaction)
@@ -756,10 +774,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 		}
 	} else {
 		// Some sanity checks for case where we don't find a transaction record.
-		if args.PusheeTxn.LastHeartbeat != nil {
-			return reply, proto.NewTransactionStatusError(&args.PusheeTxn,
-				"no txn persisted, yet intent has heartbeat")
-		} else if args.PusheeTxn.Status != proto.PENDING {
+		if args.PusheeTxn.Status != proto.PENDING {
 			return reply, proto.NewTransactionStatusError(&args.PusheeTxn,
 				fmt.Sprintf("no txn persisted, yet intent has status %s", args.PusheeTxn.Status))
 		}
