@@ -412,6 +412,7 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 				// TransactionAbortedError instead of this ambivalent error.
 				call.Reply.Header().SetGoError(util.Errorf(
 					"transaction is already committed or aborted"))
+				return
 			} else if len(args.Intents) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state in
