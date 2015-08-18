@@ -1276,7 +1276,7 @@ func (m *ColumnType) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ColumnType) MarshalTo(data []byte) (n int, err error) {
+func (m *ColumnType) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1306,7 +1306,7 @@ func (m *ColumnDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ColumnDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *ColumnDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1350,7 +1350,7 @@ func (m *IndexDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *IndexDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *IndexDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1408,7 +1408,7 @@ func (m *TableDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1488,7 +1488,7 @@ func (m *DatabaseDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *DatabaseDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *DatabaseDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

@@ -605,7 +605,7 @@ func (m *RequestHeader) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
+func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -644,7 +644,7 @@ func (m *ResponseHeader) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ResponseHeader) MarshalTo(data []byte) (n int, err error) {
+func (m *ResponseHeader) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

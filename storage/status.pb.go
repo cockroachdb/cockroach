@@ -458,7 +458,7 @@ func (m *StoreStatus) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *StoreStatus) MarshalTo(data []byte) (n int, err error) {
+func (m *StoreStatus) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

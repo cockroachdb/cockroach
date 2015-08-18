@@ -781,7 +781,7 @@ func (m *GCPolicy) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *GCPolicy) MarshalTo(data []byte) (n int, err error) {
+func (m *GCPolicy) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -805,7 +805,7 @@ func (m *AcctConfig) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *AcctConfig) MarshalTo(data []byte) (n int, err error) {
+func (m *AcctConfig) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -830,7 +830,7 @@ func (m *PermConfig) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *PermConfig) MarshalTo(data []byte) (n int, err error) {
+func (m *PermConfig) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -881,7 +881,7 @@ func (m *UserConfig) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *UserConfig) MarshalTo(data []byte) (n int, err error) {
+func (m *UserConfig) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -908,7 +908,7 @@ func (m *ZoneConfig) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ZoneConfig) MarshalTo(data []byte) (n int, err error) {
+func (m *ZoneConfig) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

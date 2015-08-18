@@ -226,7 +226,7 @@ func (m *Session) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Session) MarshalTo(data []byte) (n int, err error) {
+func (m *Session) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

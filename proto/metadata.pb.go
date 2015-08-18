@@ -1459,7 +1459,7 @@ func (m *Attributes) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Attributes) MarshalTo(data []byte) (n int, err error) {
+func (m *Attributes) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1495,7 +1495,7 @@ func (m *Replica) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Replica) MarshalTo(data []byte) (n int, err error) {
+func (m *Replica) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1525,7 +1525,7 @@ func (m *RangeDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RangeDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *RangeDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1576,7 +1576,7 @@ func (m *RangeTree) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RangeTree) MarshalTo(data []byte) (n int, err error) {
+func (m *RangeTree) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1603,7 +1603,7 @@ func (m *RangeTreeNode) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RangeTreeNode) MarshalTo(data []byte) (n int, err error) {
+func (m *RangeTreeNode) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1656,7 +1656,7 @@ func (m *StoreCapacity) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *StoreCapacity) MarshalTo(data []byte) (n int, err error) {
+func (m *StoreCapacity) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1686,7 +1686,7 @@ func (m *NodeDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *NodeDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *NodeDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1726,7 +1726,7 @@ func (m *StoreDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *StoreDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *StoreDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

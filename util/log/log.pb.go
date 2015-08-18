@@ -772,7 +772,7 @@ func (m *LogEntry) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *LogEntry) MarshalTo(data []byte) (n int, err error) {
+func (m *LogEntry) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -857,7 +857,7 @@ func (m *LogEntry_Arg) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *LogEntry_Arg) MarshalTo(data []byte) (n int, err error) {
+func (m *LogEntry_Arg) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

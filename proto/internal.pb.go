@@ -3080,7 +3080,7 @@ func (m *ResponseCacheEntry) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ResponseCacheEntry) MarshalTo(data []byte) (n int, err error) {
+func (m *ResponseCacheEntry) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3253,7 +3253,7 @@ func (m *RaftCommandUnion) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftCommandUnion) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3472,7 +3472,7 @@ func (m *RaftCommand) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftCommand) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftCommand) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3507,7 +3507,7 @@ func (m *RaftMessageRequest) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftMessageRequest) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftMessageRequest) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3537,7 +3537,7 @@ func (m *RaftMessageResponse) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftMessageResponse) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftMessageResponse) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3558,7 +3558,7 @@ func (m *InternalTimeSeriesData) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *InternalTimeSeriesData) MarshalTo(data []byte) (n int, err error) {
+func (m *InternalTimeSeriesData) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3597,7 +3597,7 @@ func (m *InternalTimeSeriesSample) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *InternalTimeSeriesSample) MarshalTo(data []byte) (n int, err error) {
+func (m *InternalTimeSeriesSample) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3637,7 +3637,7 @@ func (m *RaftTruncatedState) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftTruncatedState) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftTruncatedState) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3664,7 +3664,7 @@ func (m *RaftSnapshotData) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftSnapshotData) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftSnapshotData) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3705,7 +3705,7 @@ func (m *RaftSnapshotData_KeyValue) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RaftSnapshotData_KeyValue) MarshalTo(data []byte) (n int, err error) {
+func (m *RaftSnapshotData_KeyValue) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

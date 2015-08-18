@@ -2826,7 +2826,7 @@ func (m *NotLeaderError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *NotLeaderError) MarshalTo(data []byte) (n int, err error) {
+func (m *NotLeaderError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -2870,7 +2870,7 @@ func (m *NodeUnavailableError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *NodeUnavailableError) MarshalTo(data []byte) (n int, err error) {
+func (m *NodeUnavailableError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -2891,7 +2891,7 @@ func (m *RangeNotFoundError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RangeNotFoundError) MarshalTo(data []byte) (n int, err error) {
+func (m *RangeNotFoundError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -2915,7 +2915,7 @@ func (m *RangeKeyMismatchError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RangeKeyMismatchError) MarshalTo(data []byte) (n int, err error) {
+func (m *RangeKeyMismatchError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -2958,7 +2958,7 @@ func (m *ReadWithinUncertaintyIntervalError) Marshal() (data []byte, err error) 
 	return data[:n], nil
 }
 
-func (m *ReadWithinUncertaintyIntervalError) MarshalTo(data []byte) (n int, err error) {
+func (m *ReadWithinUncertaintyIntervalError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -2995,7 +2995,7 @@ func (m *TransactionAbortedError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *TransactionAbortedError) MarshalTo(data []byte) (n int, err error) {
+func (m *TransactionAbortedError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3024,7 +3024,7 @@ func (m *TransactionPushError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *TransactionPushError) MarshalTo(data []byte) (n int, err error) {
+func (m *TransactionPushError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3063,7 +3063,7 @@ func (m *TransactionRetryError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *TransactionRetryError) MarshalTo(data []byte) (n int, err error) {
+func (m *TransactionRetryError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3092,7 +3092,7 @@ func (m *TransactionStatusError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *TransactionStatusError) MarshalTo(data []byte) (n int, err error) {
+func (m *TransactionStatusError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3125,7 +3125,7 @@ func (m *WriteIntentError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *WriteIntentError) MarshalTo(data []byte) (n int, err error) {
+func (m *WriteIntentError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3166,7 +3166,7 @@ func (m *WriteTooOldError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *WriteTooOldError) MarshalTo(data []byte) (n int, err error) {
+func (m *WriteTooOldError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3203,7 +3203,7 @@ func (m *OpRequiresTxnError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *OpRequiresTxnError) MarshalTo(data []byte) (n int, err error) {
+func (m *OpRequiresTxnError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3224,7 +3224,7 @@ func (m *ConditionFailedError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ConditionFailedError) MarshalTo(data []byte) (n int, err error) {
+func (m *ConditionFailedError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3255,7 +3255,7 @@ func (m *LeaseRejectedError) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *LeaseRejectedError) MarshalTo(data []byte) (n int, err error) {
+func (m *LeaseRejectedError) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3292,7 +3292,7 @@ func (m *ErrorDetail) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ErrorDetail) MarshalTo(data []byte) (n int, err error) {
+func (m *ErrorDetail) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3453,7 +3453,7 @@ func (m *Error) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Error) MarshalTo(data []byte) (n int, err error) {
+func (m *Error) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

@@ -372,7 +372,7 @@ func (m *UserPrivileges) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *UserPrivileges) MarshalTo(data []byte) (n int, err error) {
+func (m *UserPrivileges) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -400,7 +400,7 @@ func (m *PrivilegeDescriptor) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *PrivilegeDescriptor) MarshalTo(data []byte) (n int, err error) {
+func (m *PrivilegeDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

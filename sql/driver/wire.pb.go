@@ -1367,7 +1367,7 @@ func (m *RequestHeader) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
+func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1412,7 +1412,7 @@ func (m *ResponseHeader) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ResponseHeader) MarshalTo(data []byte) (n int, err error) {
+func (m *ResponseHeader) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1455,7 +1455,7 @@ func (m *Datum) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Datum) MarshalTo(data []byte) (n int, err error) {
+func (m *Datum) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1508,7 +1508,7 @@ func (m *Result) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Result) MarshalTo(data []byte) (n int, err error) {
+func (m *Result) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1556,7 +1556,7 @@ func (m *Result_Row) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Result_Row) MarshalTo(data []byte) (n int, err error) {
+func (m *Result_Row) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1589,7 +1589,7 @@ func (m *Request) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Request) MarshalTo(data []byte) (n int, err error) {
+func (m *Request) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1634,7 +1634,7 @@ func (m *Response) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Response) MarshalTo(data []byte) (n int, err error) {
+func (m *Response) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

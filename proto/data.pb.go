@@ -2847,7 +2847,7 @@ func (m *Timestamp) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Timestamp) MarshalTo(data []byte) (n int, err error) {
+func (m *Timestamp) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -2874,7 +2874,7 @@ func (m *Value) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Value) MarshalTo(data []byte) (n int, err error) {
+func (m *Value) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -2922,7 +2922,7 @@ func (m *KeyValue) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *KeyValue) MarshalTo(data []byte) (n int, err error) {
+func (m *KeyValue) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -2957,7 +2957,7 @@ func (m *RawKeyValue) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RawKeyValue) MarshalTo(data []byte) (n int, err error) {
+func (m *RawKeyValue) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -2990,7 +2990,7 @@ func (m *StoreIdent) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *StoreIdent) MarshalTo(data []byte) (n int, err error) {
+func (m *StoreIdent) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3021,7 +3021,7 @@ func (m *SplitTrigger) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *SplitTrigger) MarshalTo(data []byte) (n int, err error) {
+func (m *SplitTrigger) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3058,7 +3058,7 @@ func (m *MergeTrigger) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *MergeTrigger) MarshalTo(data []byte) (n int, err error) {
+func (m *MergeTrigger) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3090,7 +3090,7 @@ func (m *ChangeReplicasTrigger) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (n int, err error) {
+func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3143,7 +3143,7 @@ func (m *InternalCommitTrigger) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *InternalCommitTrigger) MarshalTo(data []byte) (n int, err error) {
+func (m *InternalCommitTrigger) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3194,7 +3194,7 @@ func (m *NodeList) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *NodeList) MarshalTo(data []byte) (n int, err error) {
+func (m *NodeList) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3233,7 +3233,7 @@ func (m *Transaction) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Transaction) MarshalTo(data []byte) (n int, err error) {
+func (m *Transaction) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3332,7 +3332,7 @@ func (m *Lease) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Lease) MarshalTo(data []byte) (n int, err error) {
+func (m *Lease) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3372,7 +3372,7 @@ func (m *Intent) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Intent) MarshalTo(data []byte) (n int, err error) {
+func (m *Intent) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -3413,7 +3413,7 @@ func (m *GCMetadata) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *GCMetadata) MarshalTo(data []byte) (n int, err error) {
+func (m *GCMetadata) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int

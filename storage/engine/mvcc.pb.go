@@ -947,7 +947,7 @@ func (m *MVCCValue) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *MVCCValue) MarshalTo(data []byte) (n int, err error) {
+func (m *MVCCValue) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -986,7 +986,7 @@ func (m *MVCCMetadata) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *MVCCMetadata) MarshalTo(data []byte) (n int, err error) {
+func (m *MVCCMetadata) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1049,7 +1049,7 @@ func (m *MVCCStats) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *MVCCStats) MarshalTo(data []byte) (n int, err error) {
+func (m *MVCCStats) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
