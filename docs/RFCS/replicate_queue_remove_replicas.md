@@ -14,7 +14,8 @@ removal of replicas from a range which has too many replicas.
 With this addition, the replicate queue will be able to correct the replication
 of any range to its optimal replica count, regardless of how the range got into
 a sub-optimal state. Most immediately, this will provide crucial support for the
-highly desired "Rebalance" and "Repair" operations.
+highly desired "Rebalance" and "Repair" operations, but it will also provide
+support any other operation which needs to relocate a replica.
 
 This RFC will not address the issue of non-homogenous ReplicaAttrs. While not
 exceptionally difficult, we are simply not yet deploying with non-homogenous
@@ -30,30 +31,30 @@ Another important missing feature is Repair; detecting when a store is down, and
 relocating the replicas that were on that store. The relocation of these replicas
 is similar to Rebalancing, but happens in a slightly different fashion.
 
-Regardless of the motivation, every relocation operation is conceptually the
+Regardless of the origin, every relocation operation is conceptually the
 transfer of one replica in a range: the replica is removed from one store (the
 source) and added to another (the target).  To work with raft, this is
 explicitly divided into two separate operations: removing from the source store,
 and adding to the target store. These operations can generally happen in either
 order, but must be performed one at a time.
 
-The replicate queue will be responsible for the second operation in either case;
-whether adding or removing a replica. The simple goal of the replicate queue is
-to restore a range to its ideal replication state.
+The replicate queue can be responsible for the second operation of all
+relocations; whether adding or removing a replica. The simple goal of the
+replicate queue is to restore a range to its ideal replication state.
 
 With the backing of the replicate queue, both rebalance and repair operations
 can be thought of as "perturbing" the ideal replication state, by adding or
 removing a replica respectively. The replicate queue will restore the ideal
 replication state by performing the opposite operation, and thus completing the
-relocation. This significantly reduces the complexity of the operations
-initiating a relocation. 
+relocation. 
 
-The replication queue will work in general for any other "perturbing" operation;
-for example, a change to ReplicaAttrs. 
-  
+This significantly reduces the complexity of the operations which initiate a
+relocation (rebalance, repair).  This will apply in general for all "perturbing"
+operation; for example, a change to ReplicaAttrs.  
+
 By attaching it to the replica scanner, the replicate queue can also
 (eventually) repair unanticipated replication configurations resulting from
-exotic failure situations.
+exotic failure situations, a highly desirable property.
 
 # Detailed design
 The basic infrastructure to add and remove individual replicas is already in
@@ -61,10 +62,11 @@ place; the etcd raft implementation has built-in support for the integrity-safe
 addition or removal of single replicas, and that ability has already been
 exposed to our replicas via the ChangeReplicas function.
 
-The replicate queue already adds replicas to under-replicated ranges (this
-is how the initial replicas are created on the second and third store of a
-three-node cluster).  However, the replicate queue does not current remove ranges
-from over-replicated ranges.
+The replicate queue already adds replicas to under-replicated ranges using
+ChangeReplicas (this is how the initial replicas are created on the second and
+third store of a three-node cluster).  The replicate queue does not currently
+remove ranges from over-replicated ranges; however, this functionality can be
+added with relatively few changes.
 
 ## Code Changes
 The Replicate Queue will be augmented in the following ways:
@@ -131,5 +133,34 @@ That issue is a prequisite for this RFC.
 # Drawbacks
 
 # Alternatives
+
+### Two queues
+A simple alternative to the design would split the replicate queue into two
+queues, an 'up-replicate' and 'down-replicate' queue. 
+
+However, this does not make the function of the queue significantly clearer; the
+goal of "right-sizing" the replication factor for a range is very clear, and
+dividing it further does not add clarity.
+
+### One queue for all possible changes
+Another queue-based alternative (which represents further work) would be to combine the
+rebalance, repair and replicate queues into a single queue. This queue would be
+able to make more complicated decisions about the replication state of a range.
+
+However, this muddles the focus of each individual part. The conditions for
+rebalance are significantly different than the conditions for repair, which are
+in turn significantly different than the conditions for "correcting" the
+replication factor.
+
+Dividing these into three queues is the clearest solution.
+
+### Non-queue solution.
+Another alternative would be to express this functionality as something
+different than a queue - perhaps a "correction" function which is called by
+other processes.
+
+However, expression as a queue is flexible enough to meet those needs; other
+processes can simply add a replica to the queue. By expressing as a queue, the
+scanner can be used directly.
 
 # Unresolved questions
