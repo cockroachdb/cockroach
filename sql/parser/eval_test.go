@@ -66,7 +66,7 @@ func TestEvalExpr(t *testing.T) {
 		{`true AND false`, `false`},
 		{`true AND NULL`, `NULL`},
 		{`NULL AND true`, `NULL`},
-		{`NULL AND false`, `NULL`},
+		{`NULL AND false`, `false`},
 		{`NULL AND NULL`, `NULL`},
 		{`false OR true`, `true`},
 		{`false OR NULL`, `NULL`},

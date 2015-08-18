@@ -152,11 +152,7 @@ EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 3 OR a > 3
 1 /t/ab/3/4/3 NULL false
 2 /t/ab/5/6/5 NULL true
 
-# TODO(pmattis): We should be able to restrict the scan in this case,
-# but currently don't.
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a + 1 = 4
 ----
-0 /t/ab/1/2/1 NULL false
-1 /t/ab/3/4/3 NULL true
-2 /t/ab/5/6/5 NULL false
+0 /t/ab/3/4/3 NULL true

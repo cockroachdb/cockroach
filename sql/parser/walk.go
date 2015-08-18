@@ -23,14 +23,18 @@ import "fmt"
 // WalkExpr. The returned Expr replaces the pointer to the visited expression
 // in the parent node and can be used for rewriting expressions.
 type Visitor interface {
-	Visit(expr Expr) Expr
+	Visit(expr Expr, pre bool) (Visitor, Expr)
 }
 
 // WalkExpr traverses the nodes in an expression. It starts by calling
-// v.Visit(expr). It then recursively traverses the children nodes of the
-// expression returned by v.Visit().
+// v.Visit(expr, true). If the visitor returned by v.Pre(expr) is not nil it
+// recursively calls WalkExpr on the children of the node returned by
+// v.Visit(expr, true) and finishes with a call to v.Visit(expr, false).
 func WalkExpr(v Visitor, expr Expr) Expr {
-	expr = v.Visit(expr)
+	v, expr = v.Visit(expr, true)
+	if v == nil {
+		return expr
+	}
 
 	switch t := expr.(type) {
 	case *AndExpr:
@@ -141,6 +145,7 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 		panic(fmt.Sprintf("walk: unsupported expression type: %T", expr))
 	}
 
+	_, expr = v.Visit(expr, false)
 	return expr
 }
 
@@ -157,20 +162,20 @@ type argVisitor struct {
 
 var _ Visitor = &argVisitor{}
 
-func (v *argVisitor) Visit(expr Expr) Expr {
-	if v.err != nil {
-		return expr
+func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
+	if !pre || v.err != nil {
+		return nil, expr
 	}
 	placeholder, ok := expr.(ValArg)
 	if !ok {
-		return expr
+		return v, expr
 	}
 	d, found := v.args.Arg(int(placeholder))
 	if !found {
 		v.err = fmt.Errorf("arg %s not found", placeholder)
-		return expr
+		return nil, expr
 	}
-	return d
+	return v, d
 }
 
 // FillArgs replaces any placeholder nodes in the expression with arguments
