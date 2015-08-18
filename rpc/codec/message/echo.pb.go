@@ -17,8 +17,7 @@ var _ = proto.Marshal
 var _ = math.Inf
 
 type EchoRequest struct {
-	Msg              string `protobuf:"bytes,1,opt,name=msg" json:"msg"`
-	XXX_unrecognized []byte `json:"-"`
+	Msg string `protobuf:"bytes,1,opt,name=msg" json:"msg"`
 }
 
 func (m *EchoRequest) Reset()         { *m = EchoRequest{} }
@@ -33,8 +32,7 @@ func (m *EchoRequest) GetMsg() string {
 }
 
 type EchoResponse struct {
-	Msg              string `protobuf:"bytes,1,opt,name=msg" json:"msg"`
-	XXX_unrecognized []byte `json:"-"`
+	Msg string `protobuf:"bytes,1,opt,name=msg" json:"msg"`
 }
 
 func (m *EchoResponse) Reset()         { *m = EchoResponse{} }
@@ -109,7 +107,6 @@ func (m *EchoRequest) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -177,7 +174,6 @@ func (m *EchoResponse) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -281,9 +277,6 @@ func (m *EchoRequest) Size() (n int) {
 	_ = l
 	l = len(m.Msg)
 	n += 1 + l + sovEcho(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -292,9 +285,6 @@ func (m *EchoResponse) Size() (n int) {
 	_ = l
 	l = len(m.Msg)
 	n += 1 + l + sovEcho(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -330,9 +320,6 @@ func (m *EchoRequest) MarshalTo(data []byte) (int, error) {
 	i++
 	i = encodeVarintEcho(data, i, uint64(len(m.Msg)))
 	i += copy(data[i:], m.Msg)
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -355,9 +342,6 @@ func (m *EchoResponse) MarshalTo(data []byte) (int, error) {
 	i++
 	i = encodeVarintEcho(data, i, uint64(len(m.Msg)))
 	i += copy(data[i:], m.Msg)
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 

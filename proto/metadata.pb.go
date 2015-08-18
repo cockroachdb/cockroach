@@ -20,8 +20,7 @@ var _ = math.Inf
 // Attributes specifies a list of arbitrary strings describing
 // node topology, store type, and machine capabilities.
 type Attributes struct {
-	Attrs            []string `protobuf:"bytes,1,rep,name=attrs" json:"attrs,omitempty" yaml:"attrs,flow"`
-	XXX_unrecognized []byte   `json:"-"`
+	Attrs []string `protobuf:"bytes,1,rep,name=attrs" json:"attrs,omitempty" yaml:"attrs,flow"`
 }
 
 func (m *Attributes) Reset()      { *m = Attributes{} }
@@ -43,8 +42,7 @@ type Replica struct {
 	// ReplicaID uniquely identifies a replica instance. If a range is removed from
 	// a store and then re-added to the same store, the new instance will have a
 	// higher ReplicaID.
-	ReplicaID        ReplicaID `protobuf:"varint,3,opt,name=replica_id,casttype=ReplicaID" json:"replica_id"`
-	XXX_unrecognized []byte    `json:"-"`
+	ReplicaID ReplicaID `protobuf:"varint,3,opt,name=replica_id,casttype=ReplicaID" json:"replica_id"`
 }
 
 func (m *Replica) Reset()      { *m = Replica{} }
@@ -87,8 +85,7 @@ type RangeDescriptor struct {
 	// permutation.
 	Replicas []Replica `protobuf:"bytes,4,rep,name=replicas" json:"replicas"`
 	// NextReplicaID is a counter used to generate replica IDs.
-	NextReplicaID    ReplicaID `protobuf:"varint,5,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
-	XXX_unrecognized []byte    `json:"-"`
+	NextReplicaID ReplicaID `protobuf:"varint,5,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
 }
 
 func (m *RangeDescriptor) Reset()         { *m = RangeDescriptor{} }
@@ -132,8 +129,7 @@ func (m *RangeDescriptor) GetNextReplicaID() ReplicaID {
 
 // RangeTree holds the root node of the range tree.
 type RangeTree struct {
-	RootKey          Key    `protobuf:"bytes,1,opt,name=root_key,casttype=Key" json:"root_key,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	RootKey Key `protobuf:"bytes,1,opt,name=root_key,casttype=Key" json:"root_key,omitempty"`
 }
 
 func (m *RangeTree) Reset()         { *m = RangeTree{} }
@@ -153,10 +149,9 @@ type RangeTreeNode struct {
 	// Color is black if true, red if false.
 	Black bool `protobuf:"varint,2,opt,name=black" json:"black"`
 	// If the parent key is null, this is the root node.
-	ParentKey        Key    `protobuf:"bytes,3,opt,name=parent_key,casttype=Key" json:"parent_key,omitempty"`
-	LeftKey          Key    `protobuf:"bytes,4,opt,name=left_key,casttype=Key" json:"left_key,omitempty"`
-	RightKey         Key    `protobuf:"bytes,5,opt,name=right_key,casttype=Key" json:"right_key,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	ParentKey Key `protobuf:"bytes,3,opt,name=parent_key,casttype=Key" json:"parent_key,omitempty"`
+	LeftKey   Key `protobuf:"bytes,4,opt,name=left_key,casttype=Key" json:"left_key,omitempty"`
+	RightKey  Key `protobuf:"bytes,5,opt,name=right_key,casttype=Key" json:"right_key,omitempty"`
 }
 
 func (m *RangeTreeNode) Reset()         { *m = RangeTreeNode{} }
@@ -200,10 +195,9 @@ func (m *RangeTreeNode) GetRightKey() Key {
 
 // StoreCapacity contains capacity information for a storage device.
 type StoreCapacity struct {
-	Capacity         int64  `protobuf:"varint,1,opt" json:"Capacity"`
-	Available        int64  `protobuf:"varint,2,opt" json:"Available"`
-	RangeCount       int32  `protobuf:"varint,3,opt" json:"RangeCount"`
-	XXX_unrecognized []byte `json:"-"`
+	Capacity   int64 `protobuf:"varint,1,opt" json:"Capacity"`
+	Available  int64 `protobuf:"varint,2,opt" json:"Available"`
+	RangeCount int32 `protobuf:"varint,3,opt" json:"RangeCount"`
 }
 
 func (m *StoreCapacity) Reset()         { *m = StoreCapacity{} }
@@ -233,10 +227,9 @@ func (m *StoreCapacity) GetRangeCount() int32 {
 
 // NodeDescriptor holds details on node physical/network topology.
 type NodeDescriptor struct {
-	NodeID           NodeID                        `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
-	Address          cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=address" json:"address"`
-	Attrs            Attributes                    `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
-	XXX_unrecognized []byte                        `json:"-"`
+	NodeID  NodeID                        `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	Address cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=address" json:"address"`
+	Attrs   Attributes                    `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
 }
 
 func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
@@ -267,11 +260,10 @@ func (m *NodeDescriptor) GetAttrs() Attributes {
 // StoreDescriptor holds store information including store attributes, node
 // descriptor and store capacity.
 type StoreDescriptor struct {
-	StoreID          StoreID        `protobuf:"varint,1,opt,name=store_id,casttype=StoreID" json:"store_id"`
-	Attrs            Attributes     `protobuf:"bytes,2,opt,name=attrs" json:"attrs"`
-	Node             NodeDescriptor `protobuf:"bytes,3,opt,name=node" json:"node"`
-	Capacity         StoreCapacity  `protobuf:"bytes,4,opt,name=capacity" json:"capacity"`
-	XXX_unrecognized []byte         `json:"-"`
+	StoreID  StoreID        `protobuf:"varint,1,opt,name=store_id,casttype=StoreID" json:"store_id"`
+	Attrs    Attributes     `protobuf:"bytes,2,opt,name=attrs" json:"attrs"`
+	Node     NodeDescriptor `protobuf:"bytes,3,opt,name=node" json:"node"`
+	Capacity StoreCapacity  `protobuf:"bytes,4,opt,name=capacity" json:"capacity"`
 }
 
 func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
@@ -367,7 +359,6 @@ func (m *Attributes) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -461,7 +452,6 @@ func (m *Replica) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -617,7 +607,6 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -688,7 +677,6 @@ func (m *RangeTree) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -851,7 +839,6 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -945,7 +932,6 @@ func (m *StoreCapacity) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1061,7 +1047,6 @@ func (m *NodeDescriptor) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1204,7 +1189,6 @@ func (m *StoreDescriptor) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1312,9 +1296,6 @@ func (m *Attributes) Size() (n int) {
 			n += 1 + l + sovMetadata(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1324,9 +1305,6 @@ func (m *Replica) Size() (n int) {
 	n += 1 + sovMetadata(uint64(m.NodeID))
 	n += 1 + sovMetadata(uint64(m.StoreID))
 	n += 1 + sovMetadata(uint64(m.ReplicaID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1349,9 +1327,6 @@ func (m *RangeDescriptor) Size() (n int) {
 		}
 	}
 	n += 1 + sovMetadata(uint64(m.NextReplicaID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1361,9 +1336,6 @@ func (m *RangeTree) Size() (n int) {
 	if m.RootKey != nil {
 		l = len(m.RootKey)
 		n += 1 + l + sovMetadata(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1388,9 +1360,6 @@ func (m *RangeTreeNode) Size() (n int) {
 		l = len(m.RightKey)
 		n += 1 + l + sovMetadata(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1400,9 +1369,6 @@ func (m *StoreCapacity) Size() (n int) {
 	n += 1 + sovMetadata(uint64(m.Capacity))
 	n += 1 + sovMetadata(uint64(m.Available))
 	n += 1 + sovMetadata(uint64(m.RangeCount))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1414,9 +1380,6 @@ func (m *NodeDescriptor) Size() (n int) {
 	n += 1 + l + sovMetadata(uint64(l))
 	l = m.Attrs.Size()
 	n += 1 + l + sovMetadata(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1430,9 +1393,6 @@ func (m *StoreDescriptor) Size() (n int) {
 	n += 1 + l + sovMetadata(uint64(l))
 	l = m.Capacity.Size()
 	n += 1 + l + sovMetadata(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1479,9 +1439,6 @@ func (m *Attributes) MarshalTo(data []byte) (int, error) {
 			i += copy(data[i:], s)
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1509,9 +1466,6 @@ func (m *Replica) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintMetadata(data, i, uint64(m.ReplicaID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1560,9 +1514,6 @@ func (m *RangeDescriptor) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x28
 	i++
 	i = encodeVarintMetadata(data, i, uint64(m.NextReplicaID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1586,9 +1537,6 @@ func (m *RangeTree) MarshalTo(data []byte) (int, error) {
 		i++
 		i = encodeVarintMetadata(data, i, uint64(len(m.RootKey)))
 		i += copy(data[i:], m.RootKey)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -1640,9 +1588,6 @@ func (m *RangeTreeNode) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintMetadata(data, i, uint64(len(m.RightKey)))
 		i += copy(data[i:], m.RightKey)
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1670,9 +1615,6 @@ func (m *StoreCapacity) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintMetadata(data, i, uint64(m.RangeCount))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1710,9 +1652,6 @@ func (m *NodeDescriptor) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n2
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1758,9 +1697,6 @@ func (m *StoreDescriptor) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n5
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 

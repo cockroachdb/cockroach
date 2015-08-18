@@ -22,6 +22,10 @@ option go_package = "proto";
 import "cockroach/util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
 
 // GossipRequest is the request struct passed with the Gossip RPC.
 message GossipRequest {

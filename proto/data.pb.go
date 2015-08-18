@@ -145,8 +145,7 @@ type Timestamp struct {
 	// times are equal. It is effectively bounded by (maximum clock
 	// skew)/(minimal ns between events) and nearly impossible to
 	// overflow.
-	Logical          int32  `protobuf:"varint,2,opt,name=logical" json:"logical"`
-	XXX_unrecognized []byte `json:"-"`
+	Logical int32 `protobuf:"varint,2,opt,name=logical" json:"logical"`
 }
 
 func (m *Timestamp) Reset()      { *m = Timestamp{} }
@@ -185,8 +184,7 @@ type Value struct {
 	// Tag is an optional string value which can be used to add additional
 	// metadata to this value. For example, Tag might provide information on how
 	// the bytes in the "bytes" field should be interpreted.
-	Tag              *string `protobuf:"bytes,5,opt,name=tag" json:"tag,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
+	Tag *string `protobuf:"bytes,5,opt,name=tag" json:"tag,omitempty"`
 }
 
 func (m *Value) Reset()         { *m = Value{} }
@@ -224,9 +222,8 @@ func (m *Value) GetTag() string {
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
 // from ScanRequest/ScanResponse. It embeds a Key and a Value.
 type KeyValue struct {
-	Key              Key    `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
-	Value            Value  `protobuf:"bytes,2,opt,name=value" json:"value"`
-	XXX_unrecognized []byte `json:"-"`
+	Key   Key   `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
+	Value Value `protobuf:"bytes,2,opt,name=value" json:"value"`
 }
 
 func (m *KeyValue) Reset()         { *m = KeyValue{} }
@@ -249,9 +246,8 @@ func (m *KeyValue) GetValue() Value {
 
 // RawKeyValue contains the raw bytes of the value for a key.
 type RawKeyValue struct {
-	Key              EncodedKey `protobuf:"bytes,1,opt,name=key,casttype=EncodedKey" json:"key,omitempty"`
-	Value            []byte     `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-	XXX_unrecognized []byte     `json:"-"`
+	Key   EncodedKey `protobuf:"bytes,1,opt,name=key,casttype=EncodedKey" json:"key,omitempty"`
+	Value []byte     `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 }
 
 func (m *RawKeyValue) Reset()         { *m = RawKeyValue{} }
@@ -276,10 +272,9 @@ func (m *RawKeyValue) GetValue() []byte {
 // StoreIdent is written to the underlying storage engine at a
 // store-reserved system key (KeyLocalIdent).
 type StoreIdent struct {
-	ClusterID        string  `protobuf:"bytes,1,opt,name=cluster_id" json:"cluster_id"`
-	NodeID           NodeID  `protobuf:"varint,2,opt,name=node_id,casttype=NodeID" json:"node_id"`
-	StoreID          StoreID `protobuf:"varint,3,opt,name=store_id,casttype=StoreID" json:"store_id"`
-	XXX_unrecognized []byte  `json:"-"`
+	ClusterID string  `protobuf:"bytes,1,opt,name=cluster_id" json:"cluster_id"`
+	NodeID    NodeID  `protobuf:"varint,2,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	StoreID   StoreID `protobuf:"varint,3,opt,name=store_id,casttype=StoreID" json:"store_id"`
 }
 
 func (m *StoreIdent) Reset()         { *m = StoreIdent{} }
@@ -313,9 +308,8 @@ func (m *StoreIdent) GetStoreID() StoreID {
 // second half. This information allows the final bookkeeping for
 // the split to be completed and the new range put into operation.
 type SplitTrigger struct {
-	UpdatedDesc      RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
-	NewDesc          RangeDescriptor `protobuf:"bytes,2,opt,name=new_desc" json:"new_desc"`
-	XXX_unrecognized []byte          `json:"-"`
+	UpdatedDesc RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
+	NewDesc     RangeDescriptor `protobuf:"bytes,2,opt,name=new_desc" json:"new_desc"`
 }
 
 func (m *SplitTrigger) Reset()         { *m = SplitTrigger{} }
@@ -341,9 +335,8 @@ func (m *SplitTrigger) GetNewDesc() RangeDescriptor {
 // what was originally both ranges. This information allows the final bookkeeping
 // for the merge to be completed and put into operation.
 type MergeTrigger struct {
-	UpdatedDesc      RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
-	SubsumedRangeID  RangeID         `protobuf:"varint,2,opt,name=subsumed_range_id,casttype=RangeID" json:"subsumed_range_id"`
-	XXX_unrecognized []byte          `json:"-"`
+	UpdatedDesc     RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
+	SubsumedRangeID RangeID         `protobuf:"varint,2,opt,name=subsumed_range_id,casttype=RangeID" json:"subsumed_range_id"`
 }
 
 func (m *MergeTrigger) Reset()         { *m = MergeTrigger{} }
@@ -371,9 +364,8 @@ type ChangeReplicasTrigger struct {
 	// The replica being modified.
 	Replica Replica `protobuf:"bytes,4,opt,name=replica" json:"replica"`
 	// The new replica list with this change applied.
-	UpdatedReplicas  []Replica `protobuf:"bytes,5,rep,name=updated_replicas" json:"updated_replicas"`
-	NextReplicaID    ReplicaID `protobuf:"varint,6,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
-	XXX_unrecognized []byte    `json:"-"`
+	UpdatedReplicas []Replica `protobuf:"bytes,5,rep,name=updated_replicas" json:"updated_replicas"`
+	NextReplicaID   ReplicaID `protobuf:"varint,6,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
 }
 
 func (m *ChangeReplicasTrigger) Reset()         { *m = ChangeReplicasTrigger{} }
@@ -427,7 +419,6 @@ type InternalCommitTrigger struct {
 	SplitTrigger          *SplitTrigger          `protobuf:"bytes,1,opt,name=split_trigger" json:"split_trigger,omitempty"`
 	MergeTrigger          *MergeTrigger          `protobuf:"bytes,2,opt,name=merge_trigger" json:"merge_trigger,omitempty"`
 	ChangeReplicasTrigger *ChangeReplicasTrigger `protobuf:"bytes,3,opt,name=change_replicas_trigger" json:"change_replicas_trigger,omitempty"`
-	XXX_unrecognized      []byte                 `json:"-"`
 }
 
 func (m *InternalCommitTrigger) Reset()         { *m = InternalCommitTrigger{} }
@@ -460,8 +451,7 @@ func (m *InternalCommitTrigger) GetChangeReplicasTrigger() *ChangeReplicasTrigge
 type NodeList struct {
 	// Note that this does not use the NodeID custom type because that appears
 	// to interact badly with the repeated and/or packed options.
-	Nodes            []int32 `protobuf:"varint,1,rep,packed,name=nodes" json:"nodes,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
+	Nodes []int32 `protobuf:"varint,1,rep,packed,name=nodes" json:"nodes,omitempty"`
 }
 
 func (m *NodeList) Reset()         { *m = NodeList{} }
@@ -533,8 +523,7 @@ type Transaction struct {
 	CertainNodes NodeList `protobuf:"bytes,12,opt,name=certain_nodes" json:"certain_nodes"`
 	// Writing is true if the transaction has previously executed a successful
 	// write request, i.e. a request that may have left intents (across retries).
-	Writing          bool   `protobuf:"varint,13,opt" json:"Writing"`
-	XXX_unrecognized []byte `json:"-"`
+	Writing bool `protobuf:"varint,13,opt" json:"Writing"`
 }
 
 func (m *Transaction) Reset()      { *m = Transaction{} }
@@ -641,8 +630,7 @@ type Lease struct {
 	// The expiration is a timestamp at which the lease will expire.
 	Expiration Timestamp `protobuf:"bytes,2,opt,name=expiration" json:"expiration"`
 	// The Raft NodeID on which the would-be lease holder lives.
-	RaftNodeID       RaftNodeID `protobuf:"varint,3,opt,name=raft_node_id,casttype=RaftNodeID" json:"raft_node_id"`
-	XXX_unrecognized []byte     `json:"-"`
+	RaftNodeID RaftNodeID `protobuf:"varint,3,opt,name=raft_node_id,casttype=RaftNodeID" json:"raft_node_id"`
 }
 
 func (m *Lease) Reset()      { *m = Lease{} }
@@ -671,10 +659,9 @@ func (m *Lease) GetRaftNodeID() RaftNodeID {
 
 // Intent is used to communicate the location of an intent.
 type Intent struct {
-	Key              Key         `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
-	EndKey           Key         `protobuf:"bytes,2,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
-	Txn              Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn"`
-	XXX_unrecognized []byte      `json:"-"`
+	Key    Key         `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
+	EndKey Key         `protobuf:"bytes,2,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
+	Txn    Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn"`
 }
 
 func (m *Intent) Reset()         { *m = Intent{} }
@@ -710,7 +697,6 @@ type GCMetadata struct {
 	// The oldest unresolved write intent in nanoseconds since epoch.
 	// Null if there are no unresolved write intents.
 	OldestIntentNanos *int64 `protobuf:"varint,2,opt,name=oldest_intent_nanos" json:"oldest_intent_nanos,omitempty"`
-	XXX_unrecognized  []byte `json:"-"`
 }
 
 func (m *GCMetadata) Reset()         { *m = GCMetadata{} }
@@ -807,7 +793,6 @@ func (m *Timestamp) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -945,7 +930,6 @@ func (m *Value) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1043,7 +1027,6 @@ func (m *KeyValue) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1139,7 +1122,6 @@ func (m *RawKeyValue) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1239,7 +1221,6 @@ func (m *StoreIdent) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1339,7 +1320,6 @@ func (m *SplitTrigger) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1428,7 +1408,6 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1593,7 +1572,6 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1729,7 +1707,6 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1825,7 +1802,6 @@ func (m *NodeList) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2162,7 +2138,6 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2278,7 +2253,6 @@ func (m *Lease) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2401,7 +2375,6 @@ func (m *Intent) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2480,7 +2453,6 @@ func (m *GCMetadata) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2584,9 +2556,6 @@ func (m *Timestamp) Size() (n int) {
 	_ = l
 	n += 1 + sovData(uint64(m.WallTime))
 	n += 1 + sovData(uint64(m.Logical))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2608,9 +2577,6 @@ func (m *Value) Size() (n int) {
 		l = len(*m.Tag)
 		n += 1 + l + sovData(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2623,9 +2589,6 @@ func (m *KeyValue) Size() (n int) {
 	}
 	l = m.Value.Size()
 	n += 1 + l + sovData(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2640,9 +2603,6 @@ func (m *RawKeyValue) Size() (n int) {
 		l = len(m.Value)
 		n += 1 + l + sovData(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2653,9 +2613,6 @@ func (m *StoreIdent) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	n += 1 + sovData(uint64(m.NodeID))
 	n += 1 + sovData(uint64(m.StoreID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2666,9 +2623,6 @@ func (m *SplitTrigger) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	l = m.NewDesc.Size()
 	n += 1 + l + sovData(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2678,9 +2632,6 @@ func (m *MergeTrigger) Size() (n int) {
 	l = m.UpdatedDesc.Size()
 	n += 1 + l + sovData(uint64(l))
 	n += 1 + sovData(uint64(m.SubsumedRangeID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2699,9 +2650,6 @@ func (m *ChangeReplicasTrigger) Size() (n int) {
 		}
 	}
 	n += 1 + sovData(uint64(m.NextReplicaID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2720,9 +2668,6 @@ func (m *InternalCommitTrigger) Size() (n int) {
 		l = m.ChangeReplicasTrigger.Size()
 		n += 1 + l + sovData(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2735,9 +2680,6 @@ func (m *NodeList) Size() (n int) {
 			l += sovData(uint64(e))
 		}
 		n += 1 + sovData(uint64(l)) + l
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2772,9 +2714,6 @@ func (m *Transaction) Size() (n int) {
 	l = m.CertainNodes.Size()
 	n += 1 + l + sovData(uint64(l))
 	n += 2
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2786,9 +2725,6 @@ func (m *Lease) Size() (n int) {
 	l = m.Expiration.Size()
 	n += 1 + l + sovData(uint64(l))
 	n += 1 + sovData(uint64(m.RaftNodeID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2805,9 +2741,6 @@ func (m *Intent) Size() (n int) {
 	}
 	l = m.Txn.Size()
 	n += 1 + l + sovData(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2817,9 +2750,6 @@ func (m *GCMetadata) Size() (n int) {
 	n += 1 + sovData(uint64(m.LastScanNanos))
 	if m.OldestIntentNanos != nil {
 		n += 1 + sovData(uint64(*m.OldestIntentNanos))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2858,9 +2788,6 @@ func (m *Timestamp) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintData(data, i, uint64(m.Logical))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2906,9 +2833,6 @@ func (m *Value) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintData(data, i, uint64(len(*m.Tag)))
 		i += copy(data[i:], *m.Tag)
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2941,9 +2865,6 @@ func (m *KeyValue) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n2
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2974,9 +2895,6 @@ func (m *RawKeyValue) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintData(data, i, uint64(len(m.Value)))
 		i += copy(data[i:], m.Value)
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3005,9 +2923,6 @@ func (m *StoreIdent) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.StoreID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3042,9 +2957,6 @@ func (m *SplitTrigger) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n4
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3074,9 +2986,6 @@ func (m *MergeTrigger) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintData(data, i, uint64(m.SubsumedRangeID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3127,9 +3036,6 @@ func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x30
 	i++
 	i = encodeVarintData(data, i, uint64(m.NextReplicaID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3178,9 +3084,6 @@ func (m *InternalCommitTrigger) MarshalTo(data []byte) (int, error) {
 		}
 		i += n9
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3216,9 +3119,6 @@ func (m *NodeList) MarshalTo(data []byte) (int, error) {
 		i++
 		i = encodeVarintData(data, i, uint64(j10))
 		i += copy(data[i:], data11[:j10])
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -3316,9 +3216,6 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3356,9 +3253,6 @@ func (m *Lease) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.RaftNodeID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3397,9 +3291,6 @@ func (m *Intent) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n19
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3425,9 +3316,6 @@ func (m *GCMetadata) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x10
 		i++
 		i = encodeVarintData(data, i, uint64(*m.OldestIntentNanos))
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }

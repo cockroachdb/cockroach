@@ -282,8 +282,8 @@ void protobuf_AddDesc_cockroach_2fproto_2fmetadata_2eproto() {
     "(\0132\033.cockroach.proto.AttributesB\004\310\336\037\000\0223\n"
     "\004node\030\003 \001(\0132\037.cockroach.proto.NodeDescri"
     "ptorB\004\310\336\037\000\0226\n\010capacity\030\004 \001(\0132\036.cockroach"
-    ".proto.StoreCapacityB\004\310\336\037\000B\023Z\005proto\340\342\036\001\310"
-    "\342\036\001\320\342\036\001", 1247);
+    ".proto.StoreCapacityB\004\310\336\037\000B\027Z\005proto\340\342\036\001\310"
+    "\342\036\001\320\342\036\001\220\343\036\000", 1251);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/metadata.proto", &protobuf_RegisterTypes);
   Attributes::default_instance_ = new Attributes();

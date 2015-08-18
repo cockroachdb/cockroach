@@ -24,6 +24,7 @@ import "gogoproto/gogo.proto";
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
 
 // UserPrivileges describes the list of privileges available for a given user.
 message UserPrivileges {
@@ -36,4 +37,4 @@ message UserPrivileges {
 // privileges. The list should be sorted by user for fast access.
 message PrivilegeDescriptor {
   repeated UserPrivileges users = 1;
-} 
+}

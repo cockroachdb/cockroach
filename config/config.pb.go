@@ -40,8 +40,7 @@ type GCPolicy struct {
 	// TTLSeconds specifies the maximum age of a value before it's
 	// garbage collected. Only older versions of values are garbage
 	// collected. Specifying <=0 mean older versions are never GC'd.
-	TTLSeconds       int32  `protobuf:"varint,1,opt,name=ttl_seconds" json:"ttl_seconds"`
-	XXX_unrecognized []byte `json:"-"`
+	TTLSeconds int32 `protobuf:"varint,1,opt,name=ttl_seconds" json:"ttl_seconds"`
 }
 
 func (m *GCPolicy) Reset()         { *m = GCPolicy{} }
@@ -57,8 +56,7 @@ func (m *GCPolicy) GetTTLSeconds() int32 {
 
 // AcctConfig holds accounting configuration.
 type AcctConfig struct {
-	ClusterId        string `protobuf:"bytes,1,opt,name=cluster_id" json:"cluster_id" yaml:"cluster_id,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	ClusterId string `protobuf:"bytes,1,opt,name=cluster_id" json:"cluster_id" yaml:"cluster_id,omitempty"`
 }
 
 func (m *AcctConfig) Reset()         { *m = AcctConfig{} }
@@ -77,8 +75,7 @@ type PermConfig struct {
 	// ACL lists users with read permissions.
 	Read []string `protobuf:"bytes,1,rep,name=read" json:"read,omitempty" yaml:"read,omitempty"`
 	// ACL lists users with write permissions.
-	Write            []string `protobuf:"bytes,2,rep,name=write" json:"write,omitempty" yaml:"write,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	Write []string `protobuf:"bytes,2,rep,name=write" json:"write,omitempty" yaml:"write,omitempty"`
 }
 
 func (m *PermConfig) Reset()         { *m = PermConfig{} }
@@ -102,8 +99,7 @@ func (m *PermConfig) GetWrite() []string {
 // UserConfig holds per-user configuration needed for authentication.
 type UserConfig struct {
 	// Output of bcrypt: contains hash, salt, and cost.
-	HashedPassword   []byte `protobuf:"bytes,1,opt,name=hashed_password" json:"hashed_password,omitempty" yaml:"hashed_password,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	HashedPassword []byte `protobuf:"bytes,1,opt,name=hashed_password" json:"hashed_password,omitempty" yaml:"hashed_password,omitempty"`
 }
 
 func (m *UserConfig) Reset()         { *m = UserConfig{} }
@@ -127,8 +123,7 @@ type ZoneConfig struct {
 	RangeMaxBytes int64                        `protobuf:"varint,3,opt,name=range_max_bytes" json:"range_max_bytes" yaml:"range_max_bytes,omitempty"`
 	// If GC policy is not set, uses the next highest, non-null policy
 	// in the zone config hierarchy, up to the default policy if necessary.
-	GC               *GCPolicy `protobuf:"bytes,4,opt,name=gc" json:"gc,omitempty" yaml:"gc,omitempty"`
-	XXX_unrecognized []byte    `json:"-"`
+	GC *GCPolicy `protobuf:"bytes,4,opt,name=gc" json:"gc,omitempty" yaml:"gc,omitempty"`
 }
 
 func (m *ZoneConfig) Reset()         { *m = ZoneConfig{} }
@@ -218,7 +213,6 @@ func (m *GCPolicy) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -286,7 +280,6 @@ func (m *AcctConfig) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -376,7 +369,6 @@ func (m *PermConfig) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -447,7 +439,6 @@ func (m *UserConfig) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -583,7 +574,6 @@ func (m *ZoneConfig) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -686,9 +676,6 @@ func (m *GCPolicy) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovConfig(uint64(m.TTLSeconds))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -697,9 +684,6 @@ func (m *AcctConfig) Size() (n int) {
 	_ = l
 	l = len(m.ClusterId)
 	n += 1 + l + sovConfig(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -718,9 +702,6 @@ func (m *PermConfig) Size() (n int) {
 			n += 1 + l + sovConfig(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -730,9 +711,6 @@ func (m *UserConfig) Size() (n int) {
 	if m.HashedPassword != nil {
 		l = len(m.HashedPassword)
 		n += 1 + l + sovConfig(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -751,9 +729,6 @@ func (m *ZoneConfig) Size() (n int) {
 	if m.GC != nil {
 		l = m.GC.Size()
 		n += 1 + l + sovConfig(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -789,9 +764,6 @@ func (m *GCPolicy) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.TTLSeconds))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -814,9 +786,6 @@ func (m *AcctConfig) MarshalTo(data []byte) (int, error) {
 	i++
 	i = encodeVarintConfig(data, i, uint64(len(m.ClusterId)))
 	i += copy(data[i:], m.ClusterId)
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -865,9 +834,6 @@ func (m *PermConfig) MarshalTo(data []byte) (int, error) {
 			i += copy(data[i:], s)
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -891,9 +857,6 @@ func (m *UserConfig) MarshalTo(data []byte) (int, error) {
 		i++
 		i = encodeVarintConfig(data, i, uint64(len(m.HashedPassword)))
 		i += copy(data[i:], m.HashedPassword)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -940,9 +903,6 @@ func (m *ZoneConfig) MarshalTo(data []byte) (int, error) {
 			return 0, err
 		}
 		i += n1
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }

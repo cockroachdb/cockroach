@@ -21,6 +21,10 @@ option go_package = "proto";
 
 import "gogoproto/gogo.proto";
 
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
 
 // TimeSeriesDatapoint is a single point of time series data; a value associated
 // with a timestamp.

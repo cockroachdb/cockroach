@@ -26,6 +26,7 @@ import "gogoproto/gogo.proto";
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
 
 // Timestamp represents a state of the hybrid logical clock.
 message Timestamp {

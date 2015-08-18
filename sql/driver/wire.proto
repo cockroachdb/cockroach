@@ -26,6 +26,7 @@ import "gogoproto/gogo.proto";
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
 
 // RequestHeader is supplied with every Request.
 message RequestHeader {

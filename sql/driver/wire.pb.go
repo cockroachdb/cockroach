@@ -45,8 +45,7 @@ type RequestHeader struct {
 	Txn []byte `protobuf:"bytes,2,opt,name=txn" json:"txn,omitempty"`
 	// CmdID is optionally specified for request idempotence
 	// (i.e. replay protection).
-	CmdID            cockroach_proto3.ClientCmdID `protobuf:"bytes,3,opt,name=cmd_id" json:"cmd_id"`
-	XXX_unrecognized []byte                       `json:"-"`
+	CmdID cockroach_proto3.ClientCmdID `protobuf:"bytes,3,opt,name=cmd_id" json:"cmd_id"`
 }
 
 func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
@@ -91,8 +90,7 @@ type ResponseHeader struct {
 	// Transaction message returned in a response; not to be interpreted by
 	// the recipient and reflected in a subsequent request. When not set,
 	// the subsequent request should not contain a transaction object.
-	Txn              []byte `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Txn []byte `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
 }
 
 func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
@@ -121,12 +119,11 @@ func (m *ResponseHeader) GetTxn() []byte {
 }
 
 type Datum struct {
-	BoolVal          *bool    `protobuf:"varint,1,opt,name=bool_val" json:"bool_val,omitempty"`
-	IntVal           *int64   `protobuf:"varint,2,opt,name=int_val" json:"int_val,omitempty"`
-	FloatVal         *float64 `protobuf:"fixed64,3,opt,name=float_val" json:"float_val,omitempty"`
-	BytesVal         []byte   `protobuf:"bytes,4,opt,name=bytes_val" json:"bytes_val,omitempty"`
-	StringVal        *string  `protobuf:"bytes,5,opt,name=string_val" json:"string_val,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	BoolVal   *bool    `protobuf:"varint,1,opt,name=bool_val" json:"bool_val,omitempty"`
+	IntVal    *int64   `protobuf:"varint,2,opt,name=int_val" json:"int_val,omitempty"`
+	FloatVal  *float64 `protobuf:"fixed64,3,opt,name=float_val" json:"float_val,omitempty"`
+	BytesVal  []byte   `protobuf:"bytes,4,opt,name=bytes_val" json:"bytes_val,omitempty"`
+	StringVal *string  `protobuf:"bytes,5,opt,name=string_val" json:"string_val,omitempty"`
 }
 
 func (m *Datum) Reset()      { *m = Datum{} }
@@ -174,8 +171,7 @@ type Result struct {
 	// values in each Row.
 	Columns []string `protobuf:"bytes,1,rep,name=columns" json:"columns,omitempty"`
 	// The rows in the result set.
-	Rows             []Result_Row `protobuf:"bytes,2,rep,name=rows" json:"rows"`
-	XXX_unrecognized []byte       `json:"-"`
+	Rows []Result_Row `protobuf:"bytes,2,rep,name=rows" json:"rows"`
 }
 
 func (m *Result) Reset()         { *m = Result{} }
@@ -198,8 +194,7 @@ func (m *Result) GetRows() []Result_Row {
 
 // A Row is a collection of values representing a row in a result.
 type Result_Row struct {
-	Values           []Datum `protobuf:"bytes,1,rep,name=values" json:"values"`
-	XXX_unrecognized []byte  `json:"-"`
+	Values []Datum `protobuf:"bytes,1,rep,name=values" json:"values"`
 }
 
 func (m *Result_Row) Reset()         { *m = Result_Row{} }
@@ -222,8 +217,7 @@ type Request struct {
 	// statements are passed as a single string separated by semicolons.
 	Sql string `protobuf:"bytes,2,opt,name=sql" json:"sql"`
 	// Parameters referred to in the above SQL statement(s) using "?".
-	Params           []Datum `protobuf:"bytes,3,rep,name=params" json:"params"`
-	XXX_unrecognized []byte  `json:"-"`
+	Params []Datum `protobuf:"bytes,3,rep,name=params" json:"params"`
 }
 
 func (m *Request) Reset()         { *m = Request{} }
@@ -248,8 +242,7 @@ type Response struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The list of results. There is one result object per SQL statement in the
 	// request.
-	Results          []Result `protobuf:"bytes,2,rep,name=results" json:"results"`
-	XXX_unrecognized []byte   `json:"-"`
+	Results []Result `protobuf:"bytes,2,rep,name=results" json:"results"`
 }
 
 func (m *Response) Reset()         { *m = Response{} }
@@ -401,7 +394,6 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -527,7 +519,6 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -675,7 +666,6 @@ func (m *Datum) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -771,7 +761,6 @@ func (m *Result) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -845,7 +834,6 @@ func (m *Result_Row) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -968,7 +956,6 @@ func (m *Request) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1069,7 +1056,6 @@ func (m *Response) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1219,9 +1205,6 @@ func (m *RequestHeader) Size() (n int) {
 	}
 	l = m.CmdID.Size()
 	n += 1 + l + sovWire(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1239,9 +1222,6 @@ func (m *ResponseHeader) Size() (n int) {
 	if m.Txn != nil {
 		l = len(m.Txn)
 		n += 1 + l + sovWire(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1266,9 +1246,6 @@ func (m *Datum) Size() (n int) {
 		l = len(*m.StringVal)
 		n += 1 + l + sovWire(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1287,9 +1264,6 @@ func (m *Result) Size() (n int) {
 			n += 1 + l + sovWire(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1301,9 +1275,6 @@ func (m *Result_Row) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovWire(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1321,9 +1292,6 @@ func (m *Request) Size() (n int) {
 			n += 1 + l + sovWire(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1337,9 +1305,6 @@ func (m *Response) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovWire(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1396,9 +1361,6 @@ func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
 	i++
 	i = encodeVarintWire(data, i, uint64(len(m.User)))
 	i += copy(data[i:], m.User)
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1438,9 +1400,6 @@ func (m *ResponseHeader) MarshalTo(data []byte) (int, error) {
 		i++
 		i = encodeVarintWire(data, i, uint64(len(m.Txn)))
 		i += copy(data[i:], m.Txn)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -1492,9 +1451,6 @@ func (m *Datum) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintWire(data, i, uint64(len(*m.StringVal)))
 		i += copy(data[i:], *m.StringVal)
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1540,9 +1496,6 @@ func (m *Result) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1572,9 +1525,6 @@ func (m *Result_Row) MarshalTo(data []byte) (int, error) {
 			}
 			i += n
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -1618,9 +1568,6 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1658,9 +1605,6 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 			}
 			i += n
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }

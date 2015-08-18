@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Vivek Menezes (vivek@cockroachlabs.com) 
+// Author: Vivek Menezes (vivek@cockroachlabs.com)
 
 syntax = "proto2";
 package cockroach.sql;
@@ -24,6 +24,7 @@ import "gogoproto/gogo.proto";
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
 
 message Session {
   optional string database = 1 [(gogoproto.nullable) = false];
