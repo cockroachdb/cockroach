@@ -396,14 +396,26 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 				return
 			}
 			tc.Lock()
-			if txnMeta := tc.txns[id]; id != "" && txnMeta != nil {
+			txnMeta, metaOK := tc.txns[id]
+			if id != "" && metaOK {
 				args.Intents = txnMeta.intents()
 			}
 			tc.Unlock()
-			// If there aren't any intents, then there's factually no
-			// transaction to end. Read-only txns have all of their state in
-			// the client.
-			if len(args.Intents) == 0 {
+
+			if !metaOK {
+				// If we don't have the transaction, then this must be a retry
+				// by the client. We can no longer reconstruct a correct
+				// request so we must fail.
+				//
+				// TODO(bdarnell): if we had a GetTransactionStatus API then
+				// we could lookup the transaction and return either nil or
+				// TransactionAbortedError instead of this ambivalent error.
+				call.Reply.Header().SetGoError(util.Errorf(
+					"transaction is already committed or aborted"))
+			} else if len(args.Intents) == 0 {
+				// If there aren't any intents, then there's factually no
+				// transaction to end. Read-only txns have all of their state in
+				// the client.
 				call.Reply.Header().SetGoError(util.Errorf(
 					"cannot commit a read-only transaction"))
 				return
@@ -450,7 +462,7 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 					}
 					tc.txns[id] = txnMeta
 					if !tc.stopper.RunAsyncTask(func() {
-						tc.heartbeat(id)
+						tc.heartbeatLoop(id)
 					}) {
 						// The system is already draining and we can't start the
 						// heartbeat. We refuse new transactions for now because
@@ -668,15 +680,16 @@ func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, rep
 // updated and the heartbeat goroutine signaled to clean up the transaction
 // gracefully.
 func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction) {
+	id := string(txn.ID)
 	tc.Lock()
 	defer tc.Unlock()
-	txnMeta, ok := tc.txns[string(txn.ID)]
+	txnMeta, ok := tc.txns[id]
 	// Only clean up once per transaction.
 	if !ok || txnMeta.txnEnd == nil {
 		return
 	}
 
-	// The supplied txn may be newed than the one in txnMeta, which is relevant
+	// The supplied txn may be newer than the one in txnMeta, which is relevant
 	// for stats.
 	txnMeta.txn = txn
 	// Trigger heartbeat shutdown.
@@ -705,15 +718,16 @@ func (tc *TxnCoordSender) unregisterTxn(id string) {
 		tc.txnStats.committed++
 	}
 	txnMeta.keys.Clear()
+
 	delete(tc.txns, id)
 }
 
-// heartbeat periodically sends a HeartbeatTxn RPC to an extant
+// heartbeatLoop periodically sends a HeartbeatTxn RPC to an extant
 // transaction, stopping in the event the transaction is aborted or
 // committed after attempting to resolve the intents. When the
 // heartbeat stops, the transaction is unregistered from the
 // coordinator,
-func (tc *TxnCoordSender) heartbeat(id string) {
+func (tc *TxnCoordSender) heartbeatLoop(id string) {
 	var tickChan <-chan time.Time
 	{
 		ticker := time.NewTicker(tc.heartbeatInterval)
@@ -742,58 +756,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 	for {
 		select {
 		case <-tickChan:
-			tc.Lock()
-			proceed := true
-			txnMeta := tc.txns[id]
-			// Before we send a heartbeat, determine whether this transaction
-			// should be considered abandoned. If so, exit heartbeat.
-			if txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
-				// TODO(tschottdorf): should we be more proactive here?
-				// The client might be continuing the transaction
-				// through another coordinator, but in the most likely
-				// case it's just gone and the open transaction record
-				// could block concurrent operations.
-				if log.V(1) {
-					log.Infof("transaction %s abandoned; stopping heartbeat",
-						txnMeta.txn)
-				}
-				proceed = false
-			}
-			// txnMeta.txn is possibly replaced concurrently,
-			// so grab a copy before unlocking.
-			txn := txnMeta.txn
-			tc.Unlock()
-			if !proceed {
-				return
-			}
-
-			request := &proto.HeartbeatTxnRequest{
-				RequestHeader: proto.RequestHeader{
-					Key:  txn.Key,
-					User: security.RootUser,
-					Txn:  &txn,
-				},
-			}
-
-			request.Header().Timestamp = tc.clock.Now()
-			reply := &proto.HeartbeatTxnResponse{}
-			call := proto.Call{
-				Args:  request,
-				Reply: reply,
-			}
-
-			epochEnds := trace.Epoch("heartbeat")
-			tc.wrapped.Send(ctx, call)
-			epochEnds()
-			// If the transaction is not in pending state, then we can stop
-			// the heartbeat. It's either aborted or committed, and we resolve
-			// write intents accordingly.
-			if reply.GoError() != nil {
-				log.Warningf("heartbeat to %s failed: %s", txn, reply.GoError())
-			} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
-				// Signal cleanup. Doesn't do much but stop this goroutine, but
-				// let's be future-proof.
-				tc.cleanupTxn(trace, *reply.Txn)
+			if !tc.heartbeat(id, trace, ctx) {
 				return
 			}
 		case <-closer:
@@ -801,4 +764,66 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 			return
 		}
 	}
+}
+
+func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.Context) bool {
+	tc.Lock()
+	proceed := true
+	txnMeta := tc.txns[id]
+	// Before we send a heartbeat, determine whether this transaction
+	// should be considered abandoned. If so, exit heartbeat.
+	if txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
+		// TODO(tschottdorf): should we be more proactive here?
+		// The client might be continuing the transaction
+		// through another coordinator, but in the most likely
+		// case it's just gone and the open transaction record
+		// could block concurrent operations.
+		if log.V(1) {
+			log.Infof("transaction %s abandoned; stopping heartbeat",
+				txnMeta.txn)
+		}
+		proceed = false
+	}
+	// txnMeta.txn is possibly replaced concurrently,
+	// so grab a copy before unlocking.
+	txn := txnMeta.txn
+	tc.Unlock()
+	if !proceed {
+		return false
+	}
+
+	request := &proto.HeartbeatTxnRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:  txn.Key,
+			User: security.RootUser,
+			Txn:  &txn,
+		},
+	}
+
+	request.Header().Timestamp = tc.clock.Now()
+	reply := &proto.HeartbeatTxnResponse{}
+	call := proto.Call{
+		Args:  request,
+		Reply: reply,
+	}
+
+	epochEnds := trace.Epoch("heartbeat")
+	tc.wrapped.Send(ctx, call)
+	epochEnds()
+	// If the transaction is not in pending state, then we can stop
+	// the heartbeat. It's either aborted or committed, and we resolve
+	// write intents accordingly.
+	if reply.GoError() != nil {
+		log.Warningf("heartbeat to %s failed: %s", txn, reply.GoError())
+	}
+	// TODO(bdarnell): once we have gotten a heartbeat response with
+	// Status != PENDING, future heartbeats are useless. However, we
+	// need to continue the heartbeatLoop until the client either
+	// commits or abandons the transaction. We could save a little
+	// pointless work by restructuring this loop to stop sending
+	// heartbeats between the time that the transaction is aborted and
+	// the client finds out. Furthermore, we could use this information
+	// to send TransactionAbortedErrors to the client so it can restart
+	// immediately instead of running until its EndTransaction.
+	return true
 }
