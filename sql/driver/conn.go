@@ -77,8 +77,12 @@ func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
 		}
 		params = append(params, param)
 	}
+	// Forget the session state, and use the one provided in the server
+	// response for the next request.
+	session := c.session
+	c.session = nil
 	return c.send(Request{
-		RequestHeader: RequestHeader{Session: c.session},
+		RequestHeader: RequestHeader{Session: session},
 		Sql:           stmt,
 		Params:        params,
 	})
@@ -90,10 +94,16 @@ func (c *conn) send(args Request) (*rows, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Set the session state even if the server returns an application error.
+	// The server is responsible for constructing the correct session state
+	// and sending it back.
+	if c.session != nil {
+		panic("connection has lingering session state")
+	}
+	c.session = resp.Session
 	if resp.Error != nil {
 		return nil, resp.Error
 	}
-	c.session = resp.Session
 	// Translate into rows
 	r := &rows{}
 	// Only use the last result to populate the response
