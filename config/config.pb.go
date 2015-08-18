@@ -14,6 +14,8 @@
 		PermConfig
 		UserConfig
 		ZoneConfig
+		PrefixConfig
+		ConfigUnion
 */
 package config
 
@@ -22,6 +24,8 @@ import math "math"
 import cockroach_proto "github.com/cockroachdb/cockroach/proto"
 
 // discarding unused import gogoproto "gogoproto"
+
+import github_com_cockroachdb_cockroach_proto "github.com/cockroachdb/cockroach/proto"
 
 import io "io"
 import fmt "fmt"
@@ -154,6 +158,82 @@ func (m *ZoneConfig) GetRangeMaxBytes() int64 {
 func (m *ZoneConfig) GetGC() *GCPolicy {
 	if m != nil {
 		return m.GC
+	}
+	return nil
+}
+
+// PrefixConfig relates a prefix key to a config object. PrefixConfig
+// objects are the constituents of PrefixConfigMap objects. In order to
+// support binary searches of hierarchical PrefixConfig objects,
+// end-of-prefix PrefixConfig objects are added to a PrefixConfigMap to
+// demarcate the end of a prefix range. Such end-of-range sentinels
+// need to refer back to their parent prefix.
+// The Canonical key refers to this parent PrefixConfig by its prefix.
+type PrefixConfig struct {
+	Prefix    github_com_cockroachdb_cockroach_proto.Key `protobuf:"bytes,1,opt,name=prefix,casttype=github.com/cockroachdb/cockroach/proto.Key" json:"prefix,omitempty"`
+	Canonical github_com_cockroachdb_cockroach_proto.Key `protobuf:"bytes,2,opt,name=canonical,casttype=github.com/cockroachdb/cockroach/proto.Key" json:"canonical,omitempty"`
+	Config    ConfigUnion                                `protobuf:"bytes,3,opt,name=config" json:"config"`
+}
+
+func (m *PrefixConfig) Reset()      { *m = PrefixConfig{} }
+func (*PrefixConfig) ProtoMessage() {}
+
+func (m *PrefixConfig) GetPrefix() github_com_cockroachdb_cockroach_proto.Key {
+	if m != nil {
+		return m.Prefix
+	}
+	return nil
+}
+
+func (m *PrefixConfig) GetCanonical() github_com_cockroachdb_cockroach_proto.Key {
+	if m != nil {
+		return m.Canonical
+	}
+	return nil
+}
+
+func (m *PrefixConfig) GetConfig() ConfigUnion {
+	if m != nil {
+		return m.Config
+	}
+	return ConfigUnion{}
+}
+
+type ConfigUnion struct {
+	Acct *AcctConfig `protobuf:"bytes,1,opt,name=acct" json:"acct,omitempty"`
+	Perm *PermConfig `protobuf:"bytes,2,opt,name=perm" json:"perm,omitempty"`
+	User *UserConfig `protobuf:"bytes,3,opt,name=user" json:"user,omitempty"`
+	Zone *ZoneConfig `protobuf:"bytes,4,opt,name=zone" json:"zone,omitempty"`
+}
+
+func (m *ConfigUnion) Reset()         { *m = ConfigUnion{} }
+func (m *ConfigUnion) String() string { return proto.CompactTextString(m) }
+func (*ConfigUnion) ProtoMessage()    {}
+
+func (m *ConfigUnion) GetAcct() *AcctConfig {
+	if m != nil {
+		return m.Acct
+	}
+	return nil
+}
+
+func (m *ConfigUnion) GetPerm() *PermConfig {
+	if m != nil {
+		return m.Perm
+	}
+	return nil
+}
+
+func (m *ConfigUnion) GetUser() *UserConfig {
+	if m != nil {
+		return m.User
+	}
+	return nil
+}
+
+func (m *ConfigUnion) GetZone() *ZoneConfig {
+	if m != nil {
+		return m.Zone
 	}
 	return nil
 }
@@ -580,6 +660,293 @@ func (m *ZoneConfig) Unmarshal(data []byte) error {
 
 	return nil
 }
+func (m *PrefixConfig) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Prefix", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Prefix = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Canonical", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Canonical = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Config", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Config.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipConfig(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
+func (m *ConfigUnion) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Acct", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Acct == nil {
+				m.Acct = &AcctConfig{}
+			}
+			if err := m.Acct.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Perm", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Perm == nil {
+				m.Perm = &PermConfig{}
+			}
+			if err := m.Perm.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.User == nil {
+				m.User = &UserConfig{}
+			}
+			if err := m.User.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Zone", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Zone == nil {
+				m.Zone = &ZoneConfig{}
+			}
+			if err := m.Zone.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipConfig(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
 func skipConfig(data []byte) (n int, err error) {
 	l := len(data)
 	iNdEx := 0
@@ -672,6 +1039,37 @@ var (
 	ErrInvalidLengthConfig = fmt.Errorf("proto: negative length found during unmarshaling")
 )
 
+func (this *ConfigUnion) GetValue() interface{} {
+	if this.Acct != nil {
+		return this.Acct
+	}
+	if this.Perm != nil {
+		return this.Perm
+	}
+	if this.User != nil {
+		return this.User
+	}
+	if this.Zone != nil {
+		return this.Zone
+	}
+	return nil
+}
+
+func (this *ConfigUnion) SetValue(value interface{}) bool {
+	switch vt := value.(type) {
+	case *AcctConfig:
+		this.Acct = vt
+	case *PermConfig:
+		this.Perm = vt
+	case *UserConfig:
+		this.User = vt
+	case *ZoneConfig:
+		this.Zone = vt
+	default:
+		return false
+	}
+	return true
+}
 func (m *GCPolicy) Size() (n int) {
 	var l int
 	_ = l
@@ -728,6 +1126,44 @@ func (m *ZoneConfig) Size() (n int) {
 	n += 1 + sovConfig(uint64(m.RangeMaxBytes))
 	if m.GC != nil {
 		l = m.GC.Size()
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	return n
+}
+
+func (m *PrefixConfig) Size() (n int) {
+	var l int
+	_ = l
+	if m.Prefix != nil {
+		l = len(m.Prefix)
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	if m.Canonical != nil {
+		l = len(m.Canonical)
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	l = m.Config.Size()
+	n += 1 + l + sovConfig(uint64(l))
+	return n
+}
+
+func (m *ConfigUnion) Size() (n int) {
+	var l int
+	_ = l
+	if m.Acct != nil {
+		l = m.Acct.Size()
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	if m.Perm != nil {
+		l = m.Perm.Size()
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	if m.User != nil {
+		l = m.User.Size()
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	if m.Zone != nil {
+		l = m.Zone.Size()
 		n += 1 + l + sovConfig(uint64(l))
 	}
 	return n
@@ -903,6 +1339,102 @@ func (m *ZoneConfig) MarshalTo(data []byte) (int, error) {
 			return 0, err
 		}
 		i += n1
+	}
+	return i, nil
+}
+
+func (m *PrefixConfig) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *PrefixConfig) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Prefix != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintConfig(data, i, uint64(len(m.Prefix)))
+		i += copy(data[i:], m.Prefix)
+	}
+	if m.Canonical != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintConfig(data, i, uint64(len(m.Canonical)))
+		i += copy(data[i:], m.Canonical)
+	}
+	data[i] = 0x1a
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.Config.Size()))
+	n2, err := m.Config.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	return i, nil
+}
+
+func (m *ConfigUnion) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ConfigUnion) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Acct != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintConfig(data, i, uint64(m.Acct.Size()))
+		n3, err := m.Acct.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	if m.Perm != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintConfig(data, i, uint64(m.Perm.Size()))
+		n4, err := m.Perm.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n4
+	}
+	if m.User != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintConfig(data, i, uint64(m.User.Size()))
+		n5, err := m.User.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n5
+	}
+	if m.Zone != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintConfig(data, i, uint64(m.Zone.Size()))
+		n6, err := m.Zone.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n6
 	}
 	return i, nil
 }

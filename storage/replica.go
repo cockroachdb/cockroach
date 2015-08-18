@@ -1272,7 +1272,7 @@ func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI gogoproto.Mes
 	if err != nil {
 		return nil, nil, err
 	}
-	var cfgs []*config.PrefixConfig
+	var cfgs []config.PrefixConfig
 	sha := sha256.New()
 	for _, kv := range kvs {
 		// Instantiate an instance of the config type by unmarshalling
@@ -1281,7 +1281,7 @@ func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI gogoproto.Mes
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, cfg); err != nil {
 			return nil, nil, util.Errorf("unable to unmarshal config key %s: %s", string(kv.Key), err)
 		}
-		cfgs = append(cfgs, &config.PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: cfg})
+		cfgs = append(cfgs, config.MakePrefixConfig(bytes.TrimPrefix(kv.Key, keyPrefix), nil, cfg))
 		sha.Write(kv.Value.Bytes)
 	}
 	m, err := config.NewPrefixConfigMap(cfgs)

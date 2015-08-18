@@ -28,21 +28,13 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// PrefixConfig relate a string prefix to a config object. Config
-// objects include accounting, permissions, users, and zones. PrefixConfig
-// objects are the constituents of PrefixConfigMap objects. In order
-// to support binary searches of hierarchical prefixes (see the
-// comments in NewPrefixConfigMap), PrefixConfig objects are
-// additionally added to a PrefixConfigMap to demarcate the end of a
-// prefix range. Such end-of-range sentinels need to refer back to the
-// next "higher-up" prefix in the hierarchy (many times this is the
-// default prefix which covers the entire range of keys). The Canonical
-// key refers to this "higher-up" PrefixConfig by specifying its prefix
-// so it can be binary searched from within a PrefixConfigMap.
-type PrefixConfig struct {
-	Prefix    proto.Key         // the prefix the config affects
-	Canonical proto.Key         // the prefix for the canonical config, if applicable
-	Config    gogoproto.Message // the config object
+// MakePrefixConfig creates a new PrefixConfig.
+func MakePrefixConfig(prefix, canonical proto.Key, configI gogoproto.Message) PrefixConfig {
+	pc := PrefixConfig{Prefix: prefix, Canonical: canonical}
+	if !pc.Config.SetValue(configI) {
+		panic(fmt.Sprintf("unsupported type %T", configI))
+	}
+	return pc
 }
 
 // String returns a human readable description.
@@ -54,12 +46,12 @@ func (pc *PrefixConfig) String() string {
 // prefix. Along with various accessor methods, the config map
 // also contains additional prefix configs in the slice to
 // account for the ends of prefix ranges.
-type PrefixConfigMap []*PrefixConfig
+type PrefixConfigMap []PrefixConfig
 
 // RangeResult is returned by SplitRangeByPrefixes.
 type RangeResult struct {
 	Start, End proto.Key
-	config     gogoproto.Message
+	config     ConfigUnion
 }
 
 // Implementation of sort.Interface.
@@ -107,7 +99,7 @@ func (p PrefixConfigMap) Less(i, j int) bool {
 //
 //   "/db1/table3": config2
 //   "/db3":        config1
-func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
+func NewPrefixConfigMap(configs []PrefixConfig) (PrefixConfigMap, error) {
 	p := PrefixConfigMap(configs)
 	sort.Sort(p)
 
@@ -120,7 +112,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 		prefixSet[string(entry.Prefix)] = struct{}{}
 	}
 
-	var newConfigs []*PrefixConfig
+	var newConfigs []PrefixConfig
 	stack := list.New()
 
 	for i, entry := range p {
@@ -129,16 +121,18 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 			return nil, util.Errorf("duplicate prefix found while building map: %q", entry.Prefix)
 		}
 		// Pop entries from the stack which aren't prefixes.
-		for stack.Len() > 0 && !bytes.HasPrefix(entry.Prefix, stack.Back().Value.(*PrefixConfig).Prefix) {
+		for stack.Len() > 0 && !bytes.HasPrefix(entry.Prefix, stack.Back().Value.(PrefixConfig).Prefix) {
 			stack.Remove(stack.Back())
 		}
 		// Add additional entry to mark the end of key prefix range as
 		// long as there's not an existing range that starts there.
 		if _, ok := prefixSet[string(entry.Prefix.PrefixEnd())]; !ok && stack.Len() != 0 {
-			newConfigs = append(newConfigs, &PrefixConfig{
+			cfg := stack.Back().Value.(PrefixConfig)
+
+			newConfigs = append(newConfigs, PrefixConfig{
 				Prefix:    entry.Prefix.PrefixEnd(),
-				Canonical: stack.Back().Value.(*PrefixConfig).Prefix,
-				Config:    stack.Back().Value.(*PrefixConfig).Config,
+				Canonical: cfg.Prefix,
+				Config:    cfg.Config,
 			})
 		}
 		stack.PushBack(entry)
@@ -168,7 +162,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 //
 // To find the longest matching prefix, we take the lower bound of the
 // specified key.
-func (p PrefixConfigMap) MatchByPrefix(key proto.Key) *PrefixConfig {
+func (p PrefixConfigMap) MatchByPrefix(key proto.Key) PrefixConfig {
 	n := sort.Search(len(p), func(i int) bool {
 		return key.Compare(p[i].Prefix) < 0
 	})
@@ -194,8 +188,8 @@ func (p PrefixConfigMap) MatchByPrefix(key proto.Key) *PrefixConfig {
 // MatchesByPrefix returns a list of PrefixConfig objects with
 // prefixes satisfying the specified key. The results are returned in
 // order of longest matching prefix to shortest.
-func (p PrefixConfigMap) MatchesByPrefix(key proto.Key) []*PrefixConfig {
-	var configs []*PrefixConfig
+func (p PrefixConfigMap) MatchesByPrefix(key proto.Key) []PrefixConfig {
+	var configs []PrefixConfig
 	prefix := key
 	for {
 		config := p.MatchByPrefix(prefix)
@@ -214,7 +208,7 @@ func (p PrefixConfigMap) MatchesByPrefix(key proto.Key) []*PrefixConfig {
 // shortest. If visitor returns done=true or an error, the visitation
 // is halted.
 func (p PrefixConfigMap) VisitPrefixesHierarchically(key proto.Key,
-	visitor func(start, end proto.Key, config gogoproto.Message) (bool, error)) error {
+	visitor func(start, end proto.Key, config ConfigUnion) (bool, error)) error {
 	prefixConfigs := p.MatchesByPrefix(key)
 	for _, pc := range prefixConfigs {
 		done, err := visitor(pc.Prefix, pc.Prefix.PrefixEnd(), pc.Config)
@@ -229,7 +223,7 @@ func (p PrefixConfigMap) VisitPrefixesHierarchically(key proto.Key,
 // by the specified key range [start, end). If visitor returns done=true
 // or an error, the visitation is halted.
 func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
-	visitor func(start, end proto.Key, config gogoproto.Message) (bool, error)) error {
+	visitor func(start, end proto.Key, config ConfigUnion) (bool, error)) error {
 	comp := start.Compare(end)
 	if comp > 0 {
 		return util.Errorf("start key %q not less than or equal to end key %q", start, end)
@@ -300,7 +294,7 @@ func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
 // PrefixConfig records and create a RangeResult for each.
 func (p PrefixConfigMap) SplitRangeByPrefixes(start, end proto.Key) ([]*RangeResult, error) {
 	var results []*RangeResult
-	err := p.VisitPrefixes(start, end, func(start, end proto.Key, config gogoproto.Message) (bool, error) {
+	err := p.VisitPrefixes(start, end, func(start, end proto.Key, config ConfigUnion) (bool, error) {
 		results = append(results, &RangeResult{Start: start, End: end, config: config})
 		return false, nil
 	})
