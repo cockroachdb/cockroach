@@ -43,9 +43,10 @@ func (p *planner) Values(n parser.Values) (planNode, error) {
 }
 
 type valuesNode struct {
-	columns []string
-	rows    []parser.DTuple
-	nextRow int // The index of the next row.
+	columns  []string
+	ordering []int
+	rows     []parser.DTuple
+	nextRow  int // The index of the next row.
 }
 
 func (n *valuesNode) Columns() []string {
@@ -70,4 +71,39 @@ func (n *valuesNode) Next() bool {
 
 func (*valuesNode) Err() error {
 	return nil
+}
+
+func (n *valuesNode) Len() int {
+	return len(n.rows)
+}
+
+func (n *valuesNode) Less(i, j int) bool {
+	// TODO(pmattis): An alternative to this type of field-based comparison would
+	// be to construct a sort-key per row using encodeTableKey(). Using a
+	// sort-key approach would likely fit better with a disk-based sort.
+	ra, rb := n.rows[i], n.rows[j]
+	for _, k := range n.ordering {
+		var da, db parser.Datum
+		if k < 0 {
+			da = rb[-(k + 1)]
+			db = ra[-(k + 1)]
+		} else {
+			da = ra[k-1]
+			db = rb[k-1]
+		}
+		// TODO(pmattis): This is assuming that the datum types are compatible. I'm
+		// not sure this always holds as `CASE` expressions can return different
+		// types for a column for different rows. Investigate how other RDBMs
+		// handle this.
+		if c := da.Compare(db); c < 0 {
+			return true
+		} else if c > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (n *valuesNode) Swap(i, j int) {
+	n.rows[i], n.rows[j] = n.rows[j], n.rows[i]
 }
