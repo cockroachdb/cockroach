@@ -119,23 +119,19 @@ func runPut(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	count := len(args) / 2
-
-	keys := make([]string, 0, count)
-	values := make([]string, 0, count)
+	var b client.Batch
 	for i := 0; i < len(args); i += 2 {
-		keys = append(keys, unquoteArg(args[i], true /* disallow system keys */))
-		values = append(values, unquoteArg(args[i+1], false))
+		b.Put(
+			unquoteArg(args[i], true /* disallow system keys */),
+			unquoteArg(args[i+1], false),
+		)
 	}
 
 	kvDB := makeDBClient()
 	if kvDB == nil {
 		return
 	}
-	var b client.Batch
-	for i := 0; i < count; i++ {
-		b.Put(keys[i], values[i])
-	}
+
 	if err := kvDB.Run(&b); err != nil {
 		fmt.Fprintf(osStderr, "put failed: %s\n", err)
 		osExit(1)
@@ -201,21 +197,16 @@ func runDel(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	count := len(args)
-
-	keys := make([]string, 0, count)
-	for i := 0; i < count; i++ {
-		keys = append(keys, unquoteArg(args[i], true /* disallow system keys */))
+	var b client.Batch
+	for _, arg := range args {
+		b.Del(unquoteArg(arg, true /* disallow system keys */))
 	}
 
 	kvDB := makeDBClient()
 	if kvDB == nil {
 		return
 	}
-	var b client.Batch
-	for i := 0; i < count; i++ {
-		b.Del(keys[i])
-	}
+
 	if err := kvDB.Run(&b); err != nil {
 		fmt.Fprintf(osStderr, "delete failed: %s\n", err)
 		osExit(1)
