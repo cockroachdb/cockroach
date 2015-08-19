@@ -68,7 +68,7 @@ func unquoteArg(arg string, disallowSystem bool) string {
 	return s
 }
 
-// A getCmd command gets the value for the specified key.
+// A getCmd gets the value for the specified key.
 var getCmd = &cobra.Command{
 	Use:   "get [options] <key>",
 	Short: "gets the value for a key",
@@ -102,10 +102,10 @@ func runGet(cmd *cobra.Command, args []string) {
 	fmt.Printf("%q\n", r.Value)
 }
 
-// A putCmd command sets the value for one or more keys.
+// A putCmd sets the value for one or more keys.
 var putCmd = &cobra.Command{
 	Use:   "put [options] <key> <value> [<key2> <value2>...]",
-	Short: "sets the value for a key",
+	Short: "sets the value for one or more keys",
 	Long: `
 Sets the value for one or more keys. Keys and values must be provided
 in pairs on the command line.
@@ -143,7 +143,7 @@ func runPut(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A incCmd command increments the value for one or more keys.
+// An incCmd increments the value for one or more keys.
 var incCmd = &cobra.Command{
 	Use:   "inc [options] <key> [<amount>]",
 	Short: "increments the value for a key",
@@ -185,12 +185,12 @@ func runInc(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A delCmd command sets the value for one or more keys.
+// A delCmd deletes the values of one or more keys.
 var delCmd = &cobra.Command{
 	Use:   "del [options] <key> [<key2>...]",
-	Short: "deletes the value for a key",
+	Short: "deletes the values of one or more keys",
 	Long: `
-Deletes the value for one or more keys.
+Deletes the values of one or more keys.
 `,
 	Run: runDel,
 }
@@ -223,7 +223,7 @@ func runDel(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A scanCmd command fetches the key/value pairs for a specified
+// A scanCmd fetches the key/value pairs for a specified
 // range.
 var scanCmd = &cobra.Command{
 	Use:   "scan [options] [<start-key> [<end-key>]]",
@@ -257,7 +257,7 @@ func runScan(cmd *cobra.Command, args []string) {
 	showResult(rows)
 }
 
-// A reverseScanCmd command fetches the key/value pairs for a specified
+// A reverseScanCmd fetches the key/value pairs for a specified
 // range.
 var reverseScanCmd = &cobra.Command{
 	Use:   "revscan [options] [<start-key> [<end-key>]]",
@@ -331,7 +331,7 @@ var kvCmds = []*cobra.Command{
 
 var kvCmd = &cobra.Command{
 	Use:   "kv",
-	Short: "get, put, increment, delete, scan and reverse scan key/value pairs",
+	Short: "get, put, increment, delete, scan, and reverse scan key/value pairs",
 	Long: `
 Special characters in keys or values should be specified according to
 the double-quoted Go string literal rules (see
