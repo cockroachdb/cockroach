@@ -1051,9 +1051,12 @@ func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replic
 // range. The new range is added to the ranges map and the rangesByKey
 // btree.
 func (s *Store) SplitRange(origRng, newRng *Replica) error {
-	if !bytes.Equal(origRng.Desc().EndKey, newRng.Desc().EndKey) ||
-		bytes.Compare(origRng.Desc().StartKey, newRng.Desc().StartKey) >= 0 {
-		return util.Errorf("orig range is not splittable by new range: %+v, %+v", origRng.Desc(), newRng.Desc())
+	origDesc := origRng.Desc()
+	newDesc := newRng.Desc()
+
+	if !bytes.Equal(origDesc.EndKey, newDesc.EndKey) ||
+		bytes.Compare(origDesc.StartKey, newDesc.StartKey) >= 0 {
+		return util.Errorf("orig range is not splittable by new range: %+v, %+v", origDesc, newDesc)
 	}
 
 	s.mu.Lock()
@@ -1064,8 +1067,8 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		return util.Errorf("couldn't find range %s in rangesByKey btree", origRng)
 	}
 
-	copyDesc := *origRng.Desc()
-	copyDesc.EndKey = append([]byte(nil), newRng.Desc().StartKey...)
+	copyDesc := *origDesc
+	copyDesc.EndKey = append([]byte(nil), newDesc.StartKey...)
 	origRng.setDescWithoutProcessUpdate(&copyDesc)
 
 	if s.replicasByKey.ReplaceOrInsert(origRng) != nil {
@@ -1088,19 +1091,22 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 // This merge operation will fail if the two ranges are not collocated
 // on the same store.
 func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRangeID proto.RangeID) error {
-	if !subsumingRng.Desc().EndKey.Less(updatedEndKey) {
+	subsumingDesc := subsumingRng.Desc()
+
+	if !subsumingDesc.EndKey.Less(updatedEndKey) {
 		return util.Errorf("the new end key is not greater than the current one: %+v <= %+v",
-			updatedEndKey, subsumingRng.Desc().EndKey)
+			updatedEndKey, subsumingDesc.EndKey)
 	}
 
 	subsumedRng, err := s.GetReplica(subsumedRangeID)
 	if err != nil {
 		return util.Errorf("could not find the subsumed range: %d", subsumedRangeID)
 	}
+	subsumedDesc := subsumedRng.Desc()
 
-	if !replicaSetsEqual(subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas()) {
+	if !replicaSetsEqual(subsumedDesc.Replicas, subsumingDesc.Replicas) {
 		return util.Errorf("ranges are not on the same replicas sets: %+v != %+v",
-			subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas())
+			subsumedDesc.Replicas, subsumingDesc.Replicas)
 	}
 
 	// Remove and destroy the subsumed range.
@@ -1111,7 +1117,7 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsu
 	// TODO(bram): The removed range needs to have all of its metadata removed.
 
 	// Update the end key of the subsuming range.
-	copy := *subsumingRng.Desc()
+	copy := *subsumingDesc
 	copy.EndKey = updatedEndKey
 	if err := subsumingRng.setDesc(&copy); err != nil {
 		return err
@@ -1159,25 +1165,29 @@ func (s *Store) addReplicaInternal(rng *Replica) error {
 
 // addReplicaToRangeMap adds the replica to the replicas map.
 func (s *Store) addReplicaToRangeMap(rng *Replica) error {
-	if exRng, ok := s.replicas[rng.Desc().RangeID]; ok {
+	rangeID := rng.Desc().RangeID
+
+	if exRng, ok := s.replicas[rangeID]; ok {
 		return &rangeAlreadyExists{exRng}
 	}
-	s.replicas[rng.Desc().RangeID] = rng
+	s.replicas[rangeID] = rng
 	return nil
 }
 
 // RemoveReplica removes the replica from the store's replica map and from
 // the sorted replicasByKey btree.
 func (s *Store) RemoveReplica(rng *Replica) error {
+	rangeID := rng.Desc().RangeID
+
 	// RemoveGroup needs to access the storage, which in turn needs the
 	// lock. Some care is needed to avoid deadlocks.
-	if err := s.multiraft.RemoveGroup(rng.Desc().RangeID); err != nil {
+	if err := s.multiraft.RemoveGroup(rangeID); err != nil {
 		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	delete(s.replicas, rng.Desc().RangeID)
+	delete(s.replicas, rangeID)
 	if s.replicasByKey.Delete(rng) == nil {
 		return util.Errorf("couldn't find range in rangesByKey btree")
 	}
@@ -1198,11 +1208,13 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 		return util.Errorf("attempted to process uninitialized range %s", rng)
 	}
 
-	if _, ok := s.uninitReplicas[rng.Desc().RangeID]; !ok {
+	rangeID := rng.Desc().RangeID
+
+	if _, ok := s.uninitReplicas[rangeID]; !ok {
 		// Do nothing if the range has already been initialized.
 		return nil
 	}
-	delete(s.uninitReplicas, rng.Desc().RangeID)
+	delete(s.uninitReplicas, rangeID)
 	s.feed.registerRange(rng, false /* scan */)
 
 	if s.replicasByKey.Has(rng) {

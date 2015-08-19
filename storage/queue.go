@@ -186,7 +186,10 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 	if atomic.LoadInt32(&bq.disabled) == 1 {
 		return errQueueDisabled
 	}
-	item, ok := bq.replicas[repl.Desc().RangeID]
+
+	rangeID := repl.Desc().RangeID
+
+	item, ok := bq.replicas[rangeID]
 	if !should {
 		if ok {
 			bq.remove(item.index)
@@ -203,7 +206,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 	}
 	item = &replicaItem{value: repl, priority: priority}
 	heap.Push(&bq.priorityQ, item)
-	bq.replicas[repl.Desc().RangeID] = item
+	bq.replicas[rangeID] = item
 
 	// If adding this replica has pushed the queue past its maximum size,
 	// remove the lowest priority element.
