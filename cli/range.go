@@ -33,8 +33,6 @@ var lsRangesCmd = &cobra.Command{
 	Short: "lists the ranges",
 	Long: `
 Lists the ranges in a cluster.
-
-Caveat: Currently only lists up to 1000 rangges.
 `,
 	Run: runLsRanges,
 }
@@ -55,7 +53,7 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
-	rows, err := kvDB.Scan(startKey, keys.Meta2Prefix.PrefixEnd(), 1000)
+	rows, err := kvDB.Scan(startKey, keys.Meta2Prefix.PrefixEnd(), maxResults)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
 		osExit(1)
@@ -74,6 +72,7 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 				i, replica.NodeID, replica.StoreID)
 		}
 	}
+	fmt.Printf("%d result(s)\n", len(rows))
 }
 
 // A splitRangeCmd command splits a range.
