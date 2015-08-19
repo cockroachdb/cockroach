@@ -74,6 +74,8 @@ func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Replica) (bool, flo
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica) error {
+	desc := rng.Desc()
+
 	// Calls to RangeLookup typically use inconsistent reads, but we
 	// want to do a consistent read here. This is important when we are
 	// considering one of the metadata ranges: we must not do an
@@ -83,7 +85,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica) error {
 	b.InternalAddCall(proto.Call{
 		Args: &proto.RangeLookupRequest{
 			RequestHeader: proto.RequestHeader{
-				Key: keys.RangeMetaKey(rng.Desc().StartKey),
+				Key: keys.RangeMetaKey(desc.StartKey),
 			},
 			MaxRanges: 1,
 		},
@@ -96,11 +98,11 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica) error {
 	if len(reply.Ranges) != 1 {
 		return util.Errorf("expected 1 range descriptor, got %d", len(reply.Ranges))
 	}
-	desc := reply.Ranges[0]
 
+	replyDesc := reply.Ranges[0]
 	currentMember := false
 	if me := rng.GetReplica(); me != nil {
-		for _, rep := range desc.Replicas {
+		for _, rep := range replyDesc.Replicas {
 			if rep.StoreID == me.StoreID {
 				currentMember = true
 				break
@@ -111,7 +113,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica) error {
 	if !currentMember {
 		// We are no longer a member of this range; clean up our local data.
 		if log.V(1) {
-			log.Infof("destroying local data from range %d", rng.Desc().RangeID)
+			log.Infof("destroying local data from range %d", desc.RangeID)
 		}
 		if err := rng.rm.RemoveReplica(rng); err != nil {
 			return err
@@ -122,13 +124,13 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica) error {
 		if err := rng.Destroy(); err != nil {
 			return err
 		}
-	} else if desc.RangeID != rng.Desc().RangeID {
+	} else if desc.RangeID != desc.RangeID {
 		// If we get a different  range ID back, then the range has been merged
 		// away. But currentMember is true, so we are still a member of the
 		// subsuming range. Shut down raft processing for the former range
 		// and delete any remaining metadata, but do not delete the data.
 		if log.V(1) {
-			log.Infof("removing merged range %d", rng.Desc().RangeID)
+			log.Infof("removing merged range %d", desc.RangeID)
 		}
 		if err := rng.rm.RemoveReplica(rng); err != nil {
 			return err

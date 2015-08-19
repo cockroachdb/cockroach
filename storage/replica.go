@@ -255,7 +255,8 @@ func NewReplica(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) 
 
 // String returns a string representation of the range.
 func (r *Replica) String() string {
-	return fmt.Sprintf("range=%d [%s-%s)", r.Desc().RangeID, r.Desc().StartKey, r.Desc().EndKey)
+	desc := r.Desc()
+	return fmt.Sprintf("range=%d [%s-%s)", desc.RangeID, desc.StartKey, desc.EndKey)
 }
 
 // Destroy cleans up all data associated with this range.
@@ -312,11 +313,13 @@ func (r *Replica) getLease() *proto.Lease {
 func (r *Replica) newNotLeaderError(l *proto.Lease, originNode proto.RaftNodeID) error {
 	err := &proto.NotLeaderError{}
 	if l != nil && l.RaftNodeID != 0 {
-		err.RangeID = r.Desc().RangeID
+		desc := r.Desc()
+
+		err.RangeID = desc.RangeID
 		_, originStoreID := proto.DecodeRaftNodeID(originNode)
-		_, err.Replica = r.Desc().FindReplica(originStoreID)
+		_, err.Replica = desc.FindReplica(originStoreID)
 		_, storeID := proto.DecodeRaftNodeID(proto.RaftNodeID(l.RaftNodeID))
-		_, err.Leader = r.Desc().FindReplica(storeID)
+		_, err.Leader = desc.FindReplica(storeID)
 	}
 	return err
 }
@@ -330,15 +333,16 @@ func (r *Replica) requestLeaderLease(timestamp proto.Timestamp) error {
 	duration := int64(DefaultLeaderLeaseDuration)
 	// Prepare a Raft command to get a leader lease for this replica.
 	expiration := timestamp.Add(duration, 0)
+	desc := r.Desc()
 	args := &proto.LeaderLeaseRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       r.Desc().StartKey,
+			Key:       desc.StartKey,
 			Timestamp: timestamp,
 			CmdID: proto.ClientCmdID{
 				WallTime: r.rm.Clock().Now().WallTime,
 				Random:   rand.Int63(),
 			},
-			RangeID: r.Desc().RangeID,
+			RangeID: desc.RangeID,
 		},
 		Lease: proto.Lease{
 			Start:      timestamp,
@@ -985,6 +989,8 @@ func (r *Replica) maybeGossipFirstRange() error {
 
 	ctx := r.context()
 
+	desc := *r.Desc()
+
 	// Gossip the cluster ID from all replicas of the first range.
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.rm.ClusterID(),
@@ -998,15 +1004,15 @@ func (r *Replica) maybeGossipFirstRange() error {
 		return err
 	}
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
+		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.rm.StoreID(), desc.RangeID)
 	}
 	if err := r.rm.Gossip().AddInfo(gossip.KeySentinel, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
+		log.Infoc(ctx, "gossiping first range from store %d, range %d", r.rm.StoreID(), desc.RangeID)
 	}
-	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), configGossipTTL); err != nil {
+	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, desc, configGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip first range metadata: %s", err)
 	}
 	return nil

@@ -37,7 +37,8 @@ var _ multiraft.WriteableGroupStorage = &Replica{}
 // InitialState implements the raft.Storage interface.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
-	found, err := engine.MVCCGetProto(r.rm.Engine(), keys.RaftHardStateKey(r.Desc().RangeID),
+	desc := r.Desc()
+	found, err := engine.MVCCGetProto(r.rm.Engine(), keys.RaftHardStateKey(desc.RangeID),
 		proto.ZeroTimestamp, true, nil, &hs)
 	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -60,7 +61,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var cs raftpb.ConfState
 	// For uninitalized ranges, membership is unknown at this point.
 	if found || r.isInitialized() {
-		for _, rep := range r.Desc().Replicas {
+		for _, rep := range desc.Replicas {
 			cs.Nodes = append(cs.Nodes, uint64(proto.MakeRaftNodeID(rep.NodeID, rep.StoreID)))
 		}
 	}
@@ -89,9 +90,11 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 		return maxBytes > 0 && size > maxBytes, nil
 	}
 
+	rangeID := r.Desc().RangeID
+
 	_, err := engine.MVCCIterate(r.rm.Engine(),
-		keys.RaftLogKey(r.Desc().RangeID, lo),
-		keys.RaftLogKey(r.Desc().RangeID, hi),
+		keys.RaftLogKey(rangeID, lo),
+		keys.RaftLogKey(rangeID, hi),
 		proto.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, false /* !reverse */, scanFunc)
 
@@ -241,11 +244,13 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
+
+	curDesc := r.Desc()
 	var desc proto.RangeDescriptor
 	// We ignore intents on the range descriptor (consistent=false) because we
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
-	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(r.Desc().StartKey),
+	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(curDesc.StartKey),
 		r.rm.Clock().Now(), false /* !consistent */, nil, &desc)
 	if err != nil {
 		return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
@@ -259,7 +264,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 	// Iterate over all the data in the range, including local-only data like
 	// the response cache.
-	for iter := newRangeDataIterator(r.Desc(), snap); iter.Valid(); iter.Next() {
+	for iter := newRangeDataIterator(curDesc, snap); iter.Valid(); iter.Next() {
 		snapData.KV = append(snapData.KV,
 			&proto.RaftSnapshotData_KeyValue{Key: iter.Key(), Value: iter.Value()})
 	}
@@ -298,8 +303,10 @@ func (r *Replica) Append(entries []raftpb.Entry) error {
 	batch := r.rm.Engine().NewBatch()
 	defer batch.Close()
 
+	rangeID := r.Desc().RangeID
+
 	for _, ent := range entries {
-		err := engine.MVCCPutProto(batch, nil, keys.RaftLogKey(r.Desc().RangeID, ent.Index),
+		err := engine.MVCCPutProto(batch, nil, keys.RaftLogKey(rangeID, ent.Index),
 			proto.ZeroTimestamp, nil, &ent)
 		if err != nil {
 			return err
@@ -310,14 +317,14 @@ func (r *Replica) Append(entries []raftpb.Entry) error {
 	// Delete any previously appended log entries which never committed.
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
 		err := engine.MVCCDelete(batch, nil,
-			keys.RaftLogKey(r.Desc().RangeID, i), proto.ZeroTimestamp, nil)
+			keys.RaftLogKey(rangeID, i), proto.ZeroTimestamp, nil)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Commit the batch and update the last index.
-	if err := setLastIndex(batch, r.Desc().RangeID, lastIndex); err != nil {
+	if err := setLastIndex(batch, rangeID, lastIndex); err != nil {
 		return err
 	}
 	if err := batch.Commit(); err != nil {
@@ -360,9 +367,11 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 		return err
 	}
 
+	rangeID := r.Desc().RangeID
+
 	// First, save the HardState.  The HardState must not be changed
 	// because it may record a previous vote cast by this node.
-	hardStateKey := keys.RaftHardStateKey(r.Desc().RangeID)
+	hardStateKey := keys.RaftHardStateKey(rangeID)
 	hardState, _, err := engine.MVCCGet(r.rm.Engine(), hardStateKey, proto.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return err
@@ -423,7 +432,7 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 	// performance implications are not likely to be drastic. If our feelings
 	// about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
-	if err := setLastIndex(batch, r.Desc().RangeID, snap.Metadata.Index); err != nil {
+	if err := setLastIndex(batch, rangeID, snap.Metadata.Index); err != nil {
 		return err
 	}
 

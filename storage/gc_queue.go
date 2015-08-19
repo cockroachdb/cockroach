@@ -111,7 +111,8 @@ func (gcq *gcQueue) shouldQueue(now proto.Timestamp, repl *Replica) (shouldQ boo
 // intentAgeThreshold.
 func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 	snap := repl.rm.Engine().NewSnapshot()
-	iter := newRangeDataIterator(repl.Desc(), snap)
+	desc := repl.Desc()
+	iter := newRangeDataIterator(desc, snap)
 	defer iter.Close()
 	defer snap.Close()
 
@@ -131,7 +132,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 	gcArgs := &proto.GCRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp: now,
-			RangeID:   repl.Desc().RangeID,
+			RangeID:   desc.RangeID,
 		},
 	}
 	var mu sync.Mutex
@@ -316,15 +317,17 @@ func (gcq *gcQueue) lookupGCPolicy(repl *Replica) (config.GCPolicy, error) {
 		return config.GCPolicy{}, util.Errorf("gossiped info is not a prefix configuration map: %+v", info)
 	}
 
+	desc := repl.Desc()
+
 	// Verify that the replica's range doesn't cross over the zone config
 	// prefix.  This could be the case if the zone config is new and the range
 	// hasn't been split yet along the new boundary.
 	var gc *config.GCPolicy
-	if err = configMap.VisitPrefixesHierarchically(repl.Desc().StartKey, func(start, end proto.Key, cfg config.ConfigUnion) (bool, error) {
+	if err = configMap.VisitPrefixesHierarchically(desc.StartKey, func(start, end proto.Key, cfg config.ConfigUnion) (bool, error) {
 		zone := cfg.GetValue().(*config.ZoneConfig)
 		if zone.GC != nil {
 			repl.RLock()
-			isCovered := !end.Less(repl.Desc().EndKey)
+			isCovered := !end.Less(desc.EndKey)
 			repl.RUnlock()
 			if !isCovered {
 				return false, util.Errorf("replica is only partially covered by zone %s (%q-%q); must wait for range split", cfg, start, end)
@@ -342,7 +345,7 @@ func (gcq *gcQueue) lookupGCPolicy(repl *Replica) (config.GCPolicy, error) {
 
 	// We should always match _at least_ the default GC.
 	if gc == nil {
-		return config.GCPolicy{}, util.Errorf("no zone for range with start key %q", repl.Desc().StartKey)
+		return config.GCPolicy{}, util.Errorf("no zone for range with start key %q", desc.StartKey)
 	}
 	return *gc, nil
 }

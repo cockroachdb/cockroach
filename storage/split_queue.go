@@ -132,14 +132,15 @@ func computeSplitKeys(g *gossip.Gossip, rng *Replica) []proto.Key {
 			continue
 		}
 		configMap := info.(config.PrefixConfigMap)
-		splits, err := configMap.SplitRangeByPrefixes(rng.Desc().StartKey, rng.Desc().EndKey)
+		desc := rng.Desc()
+		splits, err := configMap.SplitRangeByPrefixes(desc.StartKey, desc.EndKey)
 		if err != nil {
 			log.Errorf("unable to split %s by prefix map %s", rng, configMap)
 			continue
 		}
 		// Gather new splits.
 		for _, split := range splits {
-			if split.End.Less(rng.Desc().EndKey) {
+			if split.End.Less(desc.EndKey) {
 				splitKeys = append(splitKeys, split.End)
 			}
 		}

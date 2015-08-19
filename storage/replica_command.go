@@ -336,7 +336,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 	// Resolve any explicit intents. All that are local to this range get
 	// resolved synchronously in the same batch. The remainder are collected
 	// and handed off to asynchronous processing.
-	desc := *(r.Desc())
+	desc := *r.Desc()
 	if wideDesc := args.GetInternalCommitTrigger().GetMergeTrigger().GetUpdatedDesc(); wideDesc.RangeID != 0 {
 		// If this is a merge, then use the post-merge descriptor to determine
 		// which intents are local (note that for a split, we want to use the
@@ -922,8 +922,9 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, args pr
 	if err != nil {
 		return reply, err
 	}
-	start := keys.RaftLogKey(r.Desc().RangeID, 0)
-	end := keys.RaftLogKey(r.Desc().RangeID, args.Index)
+	rangeID := r.Desc().RangeID
+	start := keys.RaftLogKey(rangeID, 0)
+	end := keys.RaftLogKey(rangeID, args.Index)
 	if err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end), func(kv proto.RawKeyValue) (bool, error) {
 		return false, batch.Clear(kv.Key)
 	}); err != nil {
@@ -933,7 +934,7 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, args pr
 		Index: args.Index - 1,
 		Term:  term,
 	}
-	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(r.Desc().RangeID), proto.ZeroTimestamp, nil, &ts)
+	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(rangeID), proto.ZeroTimestamp, nil, &ts)
 }
 
 // LeaderLease sets the leader lease for this range. The command fails
@@ -998,8 +999,10 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 
 	args.Lease.Start = effectiveStart
 
+	rangeID := r.Desc().RangeID
+
 	// Store the lease to disk & in-memory.
-	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(r.Desc().RangeID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(rangeID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(&args.Lease))
@@ -1011,7 +1014,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 	// node.
 	if r.getLease().RaftNodeID == r.rm.RaftNodeID() && prevLease.RaftNodeID != r.getLease().RaftNodeID {
 		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
-		log.Infof("range %d: new leader lease %s", r.Desc().RangeID, args.Lease)
+		log.Infof("range %d: new leader lease %s", rangeID, args.Lease)
 	}
 
 	// Gossip configs in the event this range contains config info.
@@ -1129,8 +1132,9 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest) (proto.AdminSplitResp
 // recomputes stats for both the existing, updated range and the new
 // range.
 func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) error {
-	if !bytes.Equal(r.Desc().StartKey, split.UpdatedDesc.StartKey) ||
-		!bytes.Equal(r.Desc().EndKey, split.NewDesc.EndKey) {
+	desc := r.Desc()
+	if !bytes.Equal(desc.StartKey, split.UpdatedDesc.StartKey) ||
+		!bytes.Equal(desc.EndKey, split.NewDesc.EndKey) {
 		return util.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
 			split.UpdatedDesc.StartKey, split.UpdatedDesc.EndKey,
 			split.NewDesc.StartKey, split.NewDesc.EndKey, r)
@@ -1299,14 +1303,15 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeResp
 // mergeTrigger is called on a successful commit of an AdminMerge
 // transaction. It recomputes stats for the receiving range.
 func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) error {
-	if !bytes.Equal(r.Desc().StartKey, merge.UpdatedDesc.StartKey) {
+	desc := r.Desc()
+	if !bytes.Equal(desc.StartKey, merge.UpdatedDesc.StartKey) {
 		return util.Errorf("range and updated range start keys do not match: %s != %s",
-			r.Desc().StartKey, merge.UpdatedDesc.StartKey)
+			desc.StartKey, merge.UpdatedDesc.StartKey)
 	}
 
-	if !r.Desc().EndKey.Less(merge.UpdatedDesc.EndKey) {
+	if !desc.EndKey.Less(merge.UpdatedDesc.EndKey) {
 		return util.Errorf("range end key is not less than the post merge end key: %s >= %s",
-			r.Desc().EndKey, merge.UpdatedDesc.EndKey)
+			desc.EndKey, merge.UpdatedDesc.EndKey)
 	}
 
 	if merge.SubsumedRangeID <= 0 {
