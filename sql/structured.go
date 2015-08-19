@@ -138,6 +138,33 @@ func (desc *IndexDescriptor) containsColumnID(colID ColumnID) bool {
 	return false
 }
 
+// fullColumnIDs returns the index column IDs including any implicit column IDs
+// for non-unique indexes.
+func (desc *IndexDescriptor) fullColumnIDs(tableDesc *TableDescriptor) []ColumnID {
+	// Verify that the index is associated with the table descriptor. Note that
+	// we're using pointer comparisons here!
+	if desc != &tableDesc.PrimaryIndex {
+		found := false
+		for i := range tableDesc.Indexes {
+			if desc == &tableDesc.Indexes[i] {
+				found = true
+				break
+			}
+		}
+		if !found {
+			panic(fmt.Sprintf("unable to find index \"%s\" in table: %+v", desc.Name, tableDesc))
+		}
+	}
+
+	if desc.Unique {
+		return desc.ColumnIDs
+	}
+	// Non-unique indexes have the primary key columns appended to their key.
+	columnIDs := append([]ColumnID(nil), desc.ColumnIDs...)
+	columnIDs = append(columnIDs, tableDesc.PrimaryIndex.ColumnIDs...)
+	return columnIDs
+}
+
 // SetID implements the descriptorProto interface.
 func (desc *TableDescriptor) SetID(id ID) {
 	desc.ID = id

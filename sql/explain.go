@@ -48,14 +48,25 @@ func (p *planner) Explain(n *parser.Explain) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
+	plan, err = markExplain(plan, mode)
+	if err != nil {
+		return nil, fmt.Errorf("%v: %s", err, n)
+	}
+	return plan, nil
+}
 
+func markExplain(plan planNode, mode explainMode) (planNode, error) {
 	switch t := plan.(type) {
 	case *scanNode:
 		// Mark the node as being explained.
 		t.columns = []string{"RowIdx", "Key", "Value", "Output"}
 		t.explain = mode
-		return t, err
+		return t, nil
+
+	case *sortNode:
+		return markExplain(t.plan, mode)
+
 	default:
-		return nil, fmt.Errorf("TODO(pmattis): unimplemented %T: %s", plan, n)
+		return nil, fmt.Errorf("TODO(pmattis): unimplemented %T", plan)
 	}
 }

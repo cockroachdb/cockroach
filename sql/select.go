@@ -52,8 +52,7 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	// TODO(pmattis): Consider ORDER BY during index selection.
-	plan, err := p.selectIndex(scan)
+	plan, err := p.selectIndex(scan, sort.Ordering())
 	if err != nil {
 		return nil, err
 	}
@@ -121,19 +120,14 @@ func (p *planner) expandSubqueries(stmt parser.Statement) error {
 // the query (we currently only support covering indexes) and selects the
 // "best" index from that set. The cost model based on keys per row, key size
 // and number of index elements used.
-func (p *planner) selectIndex(s *scanNode) (planNode, error) {
-	if s.desc == nil || s.filter == nil {
-		// No table or where-clause.
+func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
+	if s.desc == nil || (s.filter == nil && ordering == nil) {
+		// No table or no where-clause and no ordering.
 		s.initOrdering()
 		return s, nil
 	}
 
-	// Analyze the filter expression to compute the qvalue range info.
-	rangeInfo := make(qvalueRangeMap)
-	rangeInfo.analyzeExpr(s.filter)
-
 	candidates := make([]*indexInfo, 0, len(s.desc.Indexes)+1)
-
 	if s.isSecondaryIndex {
 		// An explicit secondary index was requested. Only add it to the candidate
 		// indexes list.
@@ -155,7 +149,23 @@ func (p *planner) selectIndex(s *scanNode) (planNode, error) {
 	}
 
 	for _, c := range candidates {
-		c.analyzeRanges(s, rangeInfo)
+		c.init(s)
+	}
+
+	if s.filter != nil {
+		// Analyze the filter expression to compute the qvalue range info.
+		rangeInfo := make(qvalueRangeMap)
+		rangeInfo.analyzeExpr(s.filter)
+
+		for _, c := range candidates {
+			c.analyzeRanges(rangeInfo)
+		}
+	}
+
+	if ordering != nil {
+		for _, c := range candidates {
+			c.analyzeOrdering(s, ordering)
+		}
 	}
 
 	sort.Sort(indexInfoByCost(candidates))
@@ -420,17 +430,13 @@ type indexInfo struct {
 	cost  float64
 }
 
-// analyzeRanges analyzes the scanNode and range map to determine the cost of
-// using the index.
-func (v *indexInfo) analyzeRanges(s *scanNode, m qvalueRangeMap) {
+func (v *indexInfo) init(s *scanNode) {
 	if !v.isCoveringIndex(s.qvals) {
 		// TODO(pmattis): Support non-coverying indexes.
 		v.cost = math.MaxFloat64
+		v.index = nil
 		return
 	}
-
-	v.makeStartInfo(m)
-	v.makeEndInfo(m)
 
 	// The base cost is the number of keys per row.
 	if v.index == &v.desc.PrimaryIndex {
@@ -438,8 +444,19 @@ func (v *indexInfo) analyzeRanges(s *scanNode, m qvalueRangeMap) {
 		// row.
 		v.cost = float64(1 + len(v.desc.Columns) - len(v.desc.PrimaryIndex.ColumnIDs))
 	} else {
-		v.cost = float64(len(v.index.ColumnIDs))
+		v.cost = 1
 	}
+}
+
+// analyzeRanges examines the range map to determine the cost of using the
+// index.
+func (v *indexInfo) analyzeRanges(m qvalueRangeMap) {
+	if v.index == nil {
+		return
+	}
+
+	v.makeStartInfo(m)
+	v.makeEndInfo(m)
 
 	// Count the number of elements used to limit the start and end keys. We then
 	// boost the cost by what fraction of the index keys are being used. The
@@ -451,6 +468,42 @@ func (v *indexInfo) analyzeRanges(s *scanNode, m qvalueRangeMap) {
 	} else {
 		v.cost *= float64(len(v.index.ColumnIDs)+len(v.index.ColumnIDs)) /
 			float64(len(v.start)+len(v.end))
+	}
+}
+
+// analyzeOrdering analyzes the ordering provided by the index and determines
+// if it matches the ordering requested by the query. Non-matching orderings
+// increase the cost of using the index.
+func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
+	if v.index == nil {
+		return
+	}
+
+	// Compute the ordering provided by the index.
+	//
+	// TODO(pmattis): We should also consider the ordering provided by a reverse
+	// scan of the index.
+	indexOrdering := scan.computeOrdering(v.index.fullColumnIDs(v.desc))
+
+	var i int
+	for i = 0; i < len(ordering); i++ {
+		if i >= len(indexOrdering) || ordering[i] != indexOrdering[i] {
+			break
+		}
+	}
+
+	// Weight the cost by how much of the ordering matched.
+	//
+	// TODO(pmattis): Need to determine the relative weight for index selection
+	// based on sorting vs index selection based on filtering. Sorting is
+	// expensive due to the need to buffer up the rows and perform the sort, but
+	// not filtering is also expensive due to the larger number of rows scanned.
+	weight := float64(len(ordering)+1) / float64(i+1)
+	v.cost *= weight
+
+	if log.V(2) {
+		log.Infof("%s: analyzeOrdering: weight=%0.2f index=%d requested=%d",
+			v.index.Name, weight, indexOrdering, ordering)
 	}
 }
 

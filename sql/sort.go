@@ -137,6 +137,9 @@ func (n *sortNode) Columns() []string {
 }
 
 func (n *sortNode) Ordering() []int {
+	if n == nil {
+		return nil
+	}
 	return n.ordering
 }
 
