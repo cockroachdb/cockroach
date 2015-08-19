@@ -160,11 +160,12 @@ func (s *Server) exec(req driver.Request) (resp driver.Response, err error) {
 	// it is guaranteed not to be empty.
 	planMaker := planner{user: req.GetUser()}
 	defer func() {
-		// Update session state.
-		var marshalErr error
-		if resp.Session, marshalErr = gogoproto.Marshal(&planMaker.session); marshalErr != nil {
-			// Marshaling an internal protobuf can never fail.
-			panic(marshalErr)
+		// Update session state even if an error occurs.
+		if bytes, err := gogoproto.Marshal(&planMaker.session); err != nil {
+			// Marshaling a `Session` never errors (known from reading the code).
+			panic(err)
+		} else {
+			resp.Session = bytes
 		}
 	}()
 
@@ -176,8 +177,7 @@ func (s *Server) exec(req driver.Request) (resp driver.Response, err error) {
 		}
 	}
 	var stmts parser.StatementList
-	stmts, err = parser.Parse(req.Sql)
-	if err != nil {
+	if stmts, err = parser.Parse(req.Sql); err != nil {
 		return
 	}
 	for _, stmt := range stmts {
