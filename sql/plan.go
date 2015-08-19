@@ -122,6 +122,10 @@ type planNode interface {
 	// Columns returns the column names. The length of the returned slice is
 	// guaranteed to be equal to the length of the tuple returned by Values().
 	Columns() []string
+	// The indexes of the columns the output is ordered by. Indexes are 1-based
+	// and negative indexes indicate descending ordering. The []int result may be
+	// nil if no ordering has been performed.
+	Ordering() []int
 	// Values returns the values at the current row. The result is only valid
 	// until the next call to Next().
 	Values() parser.DTuple
@@ -133,6 +137,7 @@ type planNode interface {
 }
 
 var _ planNode = &scanNode{}
+var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
 
-// TODO(pmattis): orderByNode, groupByNode, joinNode.
+// TODO(pmattis): groupByNode, joinNode.

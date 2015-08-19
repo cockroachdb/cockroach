@@ -41,6 +41,9 @@ var errZeroModulus = errors.New("zero modulus")
 type Datum interface {
 	Expr
 	Type() string
+	// Compare returns -1 if the receiver is less than other, 0 if receiver is
+	// equal to other and +1 if receiver is greater than other.
+	Compare(other Datum) int
 }
 
 var _ Datum = DBool(false)
@@ -65,6 +68,22 @@ func (d DBool) Type() string {
 	return "bool"
 }
 
+// Compare implements the Datum interface.
+func (d DBool) Compare(other Datum) int {
+	v, ok := other.(DBool)
+	if !ok {
+		// Anything other than a DBool compares greater (e.g. `true > NULL`).
+		return 1
+	}
+	if d && !v {
+		return -1
+	}
+	if !v && d {
+		return 1
+	}
+	return 0
+}
+
 func (d DBool) String() string {
 	return BoolVal(d).String()
 }
@@ -75,6 +94,22 @@ type DInt int64
 // Type implements the Datum interface.
 func (d DInt) Type() string {
 	return "int"
+}
+
+// Compare implements the Datum interface.
+func (d DInt) Compare(other Datum) int {
+	v, ok := other.(DInt)
+	if !ok {
+		// Anything other than a DInt compares greater (e.g. `1 > NULL`).
+		return 1
+	}
+	if d < v {
+		return -1
+	}
+	if d > v {
+		return 1
+	}
+	return 0
 }
 
 func (d DInt) String() string {
@@ -89,6 +124,22 @@ func (d DFloat) Type() string {
 	return "float"
 }
 
+// Compare implements the Datum interface.
+func (d DFloat) Compare(other Datum) int {
+	v, ok := other.(DFloat)
+	if !ok {
+		// Anything other than a DFloat compares greater (e.g. `1.0 > NULL`).
+		return 1
+	}
+	if d < v {
+		return -1
+	}
+	if d > v {
+		return 1
+	}
+	return 0
+}
+
 func (d DFloat) String() string {
 	return strconv.FormatFloat(float64(d), 'g', -1, 64)
 }
@@ -101,6 +152,22 @@ func (d DString) Type() string {
 	return "string"
 }
 
+// Compare implements the Datum interface.
+func (d DString) Compare(other Datum) int {
+	v, ok := other.(DString)
+	if !ok {
+		// Anything other than a DString compares greater (e.g. `"hello" > NULL`).
+		return 1
+	}
+	if d < v {
+		return -1
+	}
+	if d > v {
+		return 1
+	}
+	return 0
+}
+
 func (d DString) String() string {
 	return StrVal(d).String()
 }
@@ -111,6 +178,32 @@ type DTuple []Datum
 // Type implements the Datum interface.
 func (d DTuple) Type() string {
 	return "tuple"
+}
+
+// Compare implements the Datum interface.
+func (d DTuple) Compare(other Datum) int {
+	v, ok := other.(DTuple)
+	if !ok {
+		// Anything other than a DTuple compares greater (e.g. `(1, 2) > NULL`).
+		return 1
+	}
+	n := len(d)
+	if n > len(v) {
+		n = len(v)
+	}
+	for i := 0; i < n; i++ {
+		c := d[i].Compare(v[i])
+		if c != 0 {
+			return c
+		}
+	}
+	if len(d) < len(v) {
+		return -1
+	}
+	if len(d) > len(v) {
+		return 1
+	}
+	return 0
 }
 
 func (d DTuple) String() string {
@@ -134,6 +227,14 @@ var DNull = dNull{}
 // Type implements the Datum interface.
 func (d dNull) Type() string {
 	return "NULL"
+}
+
+// Compare implements the Datum interface.
+func (d dNull) Compare(other Datum) int {
+	if other == DNull {
+		return 0
+	}
+	return -1
 }
 
 func (d dNull) String() string {

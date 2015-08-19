@@ -52,6 +52,10 @@ func (n *valuesNode) Columns() []string {
 	return n.columns
 }
 
+func (n *valuesNode) Ordering() []int {
+	return nil
+}
+
 func (n *valuesNode) Values() parser.DTuple {
 	return n.rows[n.nextRow-1]
 }

@@ -70,6 +70,7 @@ type scanNode struct {
 	isSecondaryIndex bool
 	columns          []string
 	columnIDs        []ColumnID
+	ordering         []int
 	err              error
 	indexKey         []byte            // the index key of the current row
 	kvs              []client.KeyValue // the raw key/value pairs
@@ -88,6 +89,10 @@ type scanNode struct {
 
 func (n *scanNode) Columns() []string {
 	return n.columns
+}
+
+func (n *scanNode) Ordering() []int {
+	return n.ordering
 }
 
 func (n *scanNode) Values() parser.DTuple {
@@ -219,11 +224,6 @@ func (n *scanNode) initScan() bool {
 	}
 
 	// Prepare our index key vals slice.
-	n.columnIDs = n.index.ColumnIDs
-	if !n.index.Unique {
-		// Non-unique indexes have the primary key columns appended to their key.
-		n.columnIDs = append(n.columnIDs, n.desc.PrimaryIndex.ColumnIDs...)
-	}
 	n.vals, n.err = makeKeyVals(n.desc, n.columnIDs)
 	if n.err != nil {
 		return false
@@ -260,6 +260,32 @@ func (n *scanNode) initTargets(targets parser.SelectExprs) error {
 		}
 	}
 	return nil
+}
+
+// initOrdering initializes the ordering info using the selected index. This
+// must be called after index selection is performed.
+func (n *scanNode) initOrdering() {
+	if n.index == nil {
+		return
+	}
+
+	n.columnIDs = n.index.ColumnIDs
+	if !n.index.Unique {
+		// Non-unique indexes have the primary key columns appended to their key.
+		n.columnIDs = append(n.columnIDs, n.desc.PrimaryIndex.ColumnIDs...)
+	}
+
+	// Loop over the column IDs and determine if they are used for any of the
+	// render targets.
+	n.ordering = nil
+	for _, colID := range n.columnIDs {
+		for i, r := range n.render {
+			if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
+				n.ordering = append(n.ordering, i+1)
+				break
+			}
+		}
+	}
 }
 
 func (n *scanNode) addRender(target parser.SelectExpr) error {
