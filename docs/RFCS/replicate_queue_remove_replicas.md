@@ -72,14 +72,18 @@ added with relatively few changes.
 The Replicate Queue will be augmented in the following ways:
 
 #### replicateQueue.needsReplication
-The existing `replicateQueue.needsReplication()` method will be modified to return
-`true` in the case where there are too many replicas. This method also returns
-the difference between the current number of replicas and the target number;
-this will be negative in the case of too many replicas.
+The existing `replicateQueue.needsReplication()` method will be modified to
+return `true` in the case where there are either too few or too many replicas.
+
+This method also returns the difference between the current number of replicas
+and the target number; this will be negative in the case of too many replicas.
 
 `replicateQueue.shouldQueue()` is currently using the difference returned by
-`needsReplication()` as the priority for the replica; the method will now return
-the absolute value of the difference.
+`needsReplication()` as the priority for the replica; for negative numbers (too
+many replicas) the method will now return the absolute value of the difference.
+For *positive* numbers (too few replicas) it will now return the diffrence +
+10, to ensure that missing replicas are prioritized over excess replicas (10 is
+an arbitrary choice).
 
 #### allocator
 The `allocator` class is currently used by the replicate queue to select stores
@@ -111,13 +115,20 @@ Process will now use the following logic for a replica which requires a replicat
 3. In either case, the queued replica will be re-queued to check for additional
    changes, unless it was the replica that was removed.
 
-## Distribution Concerns
-The replication queue process can occur on any replica of a range; there is no
-requirement that it runs only on the leader or any other specific replica.
-Therefore, it is possible that multiple replicas for the same range could be
-placed in the queue at the same time.
+If an error occurs during step 1 or 2, the replica will *not* be re-queued. This
+will prevent the possibility of an infinite queueing loop due to some unforseen
+persistent error.
 
-At the same time, many of the stats used to evaluate the allocator's methods
+# Prequisites
+
+## Distribution Concerns
+The replication queue process will only take action on a replica that is the
+range leader; however, once initiated, there is no requirement that the replica
+remains the range leader through the operation.  Therefore, it is possible that
+multiple replicas for the same range could be performing range repair operations
+at the same time.
+
+Compounding this, many of the stats used to evaluate the allocator's methods
 (e.g. `evaluateStore()`) are derived from gossip statistics, which may be
 inconsistent across stores.  Therefore, the queues on different stores could
 come to different conclusions on which replica should be added or removed. If
@@ -127,8 +138,9 @@ or double removes.
 The existing ChangeReplicas does have some protection against races, but it is
 not adequate in our case. 
 
-This problem is specially captured in issue [#2152](https://github.com/cockroachdb/cockroach/issues/2152), which includes a solution.
-That issue is a prequisite for this RFC.
+This problem is specially captured in issue
+[#2152](https://github.com/cockroachdb/cockroach/issues/2152), which includes a
+solution.  That issue is a prequisite for this RFC.
 
 # Drawbacks
 
@@ -144,8 +156,8 @@ dividing it further does not add clarity.
 
 ### One queue for all possible changes
 Another queue-based alternative (which represents further work) would be to combine the
-rebalance, repair and replicate queues into a single queue. This queue would be
-able to make more complicated decisions about the replication state of a range.
+rebalance, repair and replicate queues into a single queue.  This queue would be able to make more complicated decisions about the
+replication state of a range. 
 
 However, this muddles the focus of each individual part. The conditions for
 rebalance are significantly different than the conditions for repair, which are
