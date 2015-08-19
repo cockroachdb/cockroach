@@ -38,17 +38,26 @@ import (
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
 func (p *planner) Select(n *parser.Select) (planNode, error) {
-	s := &scanNode{txn: p.txn}
-	if err := s.initFrom(p, n.From); err != nil {
+	scan := &scanNode{txn: p.txn}
+	if err := scan.initFrom(p, n.From); err != nil {
 		return nil, err
 	}
-	if err := s.initWhere(n.Where); err != nil {
+	if err := scan.initWhere(n.Where); err != nil {
 		return nil, err
 	}
-	if err := s.initTargets(n.Exprs); err != nil {
+	if err := scan.initTargets(n.Exprs); err != nil {
 		return nil, err
 	}
-	return p.selectIndex(s)
+	sort, err := p.orderBy(n, scan)
+	if err != nil {
+		return nil, err
+	}
+	// TODO(pmattis): Consider ORDER BY during index selection.
+	plan, err := p.selectIndex(scan)
+	if err != nil {
+		return nil, err
+	}
+	return sort.wrap(plan), nil
 }
 
 type subqueryVisitor struct {
@@ -115,6 +124,7 @@ func (p *planner) expandSubqueries(stmt parser.Statement) error {
 func (p *planner) selectIndex(s *scanNode) (planNode, error) {
 	if s.desc == nil || s.filter == nil {
 		// No table or where-clause.
+		s.initOrdering()
 		return s, nil
 	}
 
@@ -163,6 +173,7 @@ func (p *planner) selectIndex(s *scanNode) (planNode, error) {
 	s.isSecondaryIndex = (s.index != &s.desc.PrimaryIndex)
 	s.startKey = candidates[0].makeStartKey()
 	s.endKey = candidates[0].makeEndKey()
+	s.initOrdering()
 	return s, nil
 }
 

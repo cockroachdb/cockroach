@@ -468,6 +468,7 @@ func TestLogic(t *testing.T) {
 			logicTestPath + "/test/index/delete/*/*.test",
 			logicTestPath + "/test/index/in/*/*.test",
 			logicTestPath + "/test/index/orderby/*/*.test",
+			logicTestPath + "/test/index/orderby_nosort/*/*.test",
 
 			// TODO(pmattis): We don't support aggregate functions.
 			// logicTestPath + "/test/random/expr/*.test",
@@ -477,9 +478,6 @@ func TestLogic(t *testing.T) {
 
 			// TODO(pmattis): We don't support views.
 			// logicTestPath + "/test/index/view/*/*.test",
-
-			// TODO(pmattis): We don't support order by.
-			// logicTestPath + "/test/index/orderby_nosort/*/*.test",
 
 			// TODO(pmattis): We don't support joins.
 			// [uses joins] logicTestPath + "/test/index/random/*/*.test",

@@ -1,0 +1,120 @@
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT
+)
+
+statement ok
+INSERT INTO t VALUES (1, 9), (2, 8), (3, 7)
+
+query II
+SELECT a, b FROM t ORDER BY b
+----
+3 7
+2 8
+1 9
+
+query II
+SELECT a, b FROM t ORDER BY b DESC
+----
+1 9
+2 8
+3 7
+
+query II
+SELECT a FROM t ORDER BY 1 DESC
+----
+3
+2
+1
+
+query II
+SELECT a AS foo, b FROM t ORDER BY foo DESC
+----
+3 7
+2 8
+1 9
+
+query II
+SELECT a AS "foo.bar", b FROM t ORDER BY "foo.bar" DESC
+----
+3 7
+2 8
+1 9
+
+query II
+SELECT a AS foo, b FROM t ORDER BY a DESC
+----
+3 7
+2 8
+1 9
+
+query I
+SELECT b FROM t ORDER BY a DESC
+----
+7
+8
+9
+
+statement ok
+INSERT INTO t VALUES (4, 7), (5, 7)
+
+query II
+SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
+----
+3 7
+4 7
+5 7
+
+query II
+SELECT a, b FROM t ORDER BY b, a DESC
+----
+5 7
+4 7
+3 7
+2 8
+1 9
+
+SELECT II
+SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
+----
+5 7 12
+4 7 11
+1 9 10
+2 8 10
+3 7 10
+
+
+query I
+SELECT a FROM t ORDER BY a+b DESC, a
+----
+5
+4
+1
+2
+3
+
+query I
+SELECT a FROM t ORDER BY (((a)))
+----
+1
+2
+3
+4
+5
+
+query error invalid ORDER BY index: 0 not in range \[1, 2\]
+SELECT * FROM t ORDER BY 0
+----
+
+query error invalid ORDER BY: true
+SELECT * FROM t ORDER BY true
+----
+
+query error qualified name "t.foo" not found
+SELECT * FROM t ORDER BY foo
+----
+
+query error qualified name "a.b" not found
+SELECT a FROM t ORDER BY a.b
+----
