@@ -64,7 +64,7 @@ func (v *normalizeVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 	}
 
 	// Evaluate constant expressions.
-	if IsConst(expr) {
+	if isConst(expr) {
 		expr, v.err = EvalExpr(expr)
 		if v.err != nil {
 			return nil, expr
@@ -120,7 +120,7 @@ func (v *normalizeVisitor) normalizeRangeCond(n *RangeCond) Expr {
 
 func (v *normalizeVisitor) normalizeAndExpr(n *AndExpr) (Visitor, Expr) {
 	// Use short-circuit evaluation to simplify AND expressions.
-	if IsConst(n.Left) {
+	if isConst(n.Left) {
 		n.Left, v.err = EvalExpr(n.Left)
 		if v.err != nil {
 			return nil, n
@@ -135,7 +135,7 @@ func (v *normalizeVisitor) normalizeAndExpr(n *AndExpr) (Visitor, Expr) {
 		}
 		return v, n
 	}
-	if IsConst(n.Right) {
+	if isConst(n.Right) {
 		n.Right, v.err = EvalExpr(n.Right)
 		if v.err != nil {
 			return nil, n
@@ -155,7 +155,7 @@ func (v *normalizeVisitor) normalizeAndExpr(n *AndExpr) (Visitor, Expr) {
 
 func (v *normalizeVisitor) normalizeOrExpr(n *OrExpr) (Visitor, Expr) {
 	// Use short-circuit evaluation to simplify OR expressions.
-	if IsConst(n.Left) {
+	if isConst(n.Left) {
 		n.Left, v.err = EvalExpr(n.Left)
 		if v.err != nil {
 			return nil, n
@@ -169,7 +169,7 @@ func (v *normalizeVisitor) normalizeOrExpr(n *OrExpr) (Visitor, Expr) {
 			return v, n.Right
 		}
 	}
-	if IsConst(n.Right) {
+	if isConst(n.Right) {
 		n.Right, v.err = EvalExpr(n.Right)
 		if v.err != nil {
 			return nil, n
@@ -216,7 +216,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 	// pre-condition, we know there is at least one variable in the expression
 	// tree or we would not have entered this code path.
 	for {
-		if IsConst(n.Left) {
+		if isConst(n.Left) {
 			switch n.Right.(type) {
 			case *BinaryExpr, DReference, *ExistsExpr, *QualifiedName, *Subquery, ValArg:
 				break
@@ -228,7 +228,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 			// the left side is a binary expression or variable.
 			n.Operator = invertComparisonOp(n.Operator)
 			n.Left, n.Right = n.Right, n.Left
-		} else if !IsConst(n.Right) {
+		} else if !isConst(n.Right) {
 			return v, n
 		}
 
@@ -241,7 +241,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 		// comparison combining portions that are const.
 
 		switch {
-		case IsConst(left.Right):
+		case isConst(left.Right):
 			//        cmp          cmp
 			//       /   \        /   \
 			//    [+-/]   2  ->  a   [-+*]
@@ -268,11 +268,9 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 					// variable.
 					continue
 				}
-
-				// TODO(pmattis): Handle Div?
 			}
 
-		case IsConst(left.Left):
+		case isConst(left.Left):
 			//       cmp              cmp
 			//      /   \            /   \
 			//    [+-]   2  ->     [+-]   a
@@ -298,8 +296,6 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 					// variable.
 					continue
 				}
-
-				// TODO(pmattis): Handle Div?
 			}
 		}
 
@@ -342,9 +338,9 @@ func (v *isConstVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 	return v, expr
 }
 
-// IsConst returns true if the expression contains only constant values
+// isConst returns true if the expression contains only constant values
 // (i.e. it does not contain a DReference).
-func IsConst(expr Expr) bool {
+func isConst(expr Expr) bool {
 	v := isConstVisitor{isConst: true}
 	expr = WalkExpr(&v, expr)
 	return v.isConst

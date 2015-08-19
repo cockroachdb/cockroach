@@ -21,14 +21,17 @@ import "fmt"
 
 // The Visitor Visit method is invoked for each Expr node encountered by
 // WalkExpr. The returned Expr replaces the pointer to the visited expression
-// in the parent node and can be used for rewriting expressions.
+// in the parent node and can be used for rewriting expressions. The pre
+// argument indicates whether the visit is a pre-order or post-order visit. On
+// a pre-order visit, if the result Visitor is nil children nodes are skipped
+// from the traversal.
 type Visitor interface {
 	Visit(expr Expr, pre bool) (Visitor, Expr)
 }
 
 // WalkExpr traverses the nodes in an expression. It starts by calling
-// v.Visit(expr, true). If the visitor returned by v.Pre(expr) is not nil it
-// recursively calls WalkExpr on the children of the node returned by
+// v.Visit(expr, true). If the visitor returned by v.Visit(expr, true) is not
+// nil it recursively calls WalkExpr on the children of the node returned by
 // v.Visit(expr, true) and finishes with a call to v.Visit(expr, false).
 func WalkExpr(v Visitor, expr Expr) Expr {
 	v, expr = v.Visit(expr, true)
