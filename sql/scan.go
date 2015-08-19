@@ -68,6 +68,7 @@ type scanNode struct {
 	endKey           proto.Key
 	visibleCols      []ColumnDescriptor
 	isSecondaryIndex bool
+	reverse          bool
 	columns          []string
 	columnIDs        []ColumnID
 	ordering         []int
@@ -218,7 +219,11 @@ func (n *scanNode) initScan() bool {
 	if len(n.endKey) == 0 {
 		n.endKey = n.startKey.PrefixEnd()
 	}
-	n.kvs, n.err = n.txn.Scan(n.startKey, n.endKey, 0)
+	if n.reverse {
+		n.kvs, n.err = n.txn.ReverseScan(n.startKey, n.endKey, 0)
+	} else {
+		n.kvs, n.err = n.txn.Scan(n.startKey, n.endKey, 0)
+	}
 	if n.err != nil {
 		return false
 	}
@@ -270,6 +275,11 @@ func (n *scanNode) initOrdering() {
 	}
 	n.columnIDs = n.index.fullColumnIDs(n.desc)
 	n.ordering = n.computeOrdering(n.columnIDs)
+	if n.reverse {
+		for i := range n.ordering {
+			n.ordering[i] = -n.ordering[i]
+		}
+	}
 }
 
 // computeOrdering computes the ordering information for the specified set of
@@ -279,11 +289,18 @@ func (n *scanNode) computeOrdering(columnIDs []ColumnID) []int {
 	// render targets.
 	var ordering []int
 	for _, colID := range columnIDs {
+		found := false
 		for i, r := range n.render {
 			if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
+				found = true
 				ordering = append(ordering, i+1)
 				break
 			}
+		}
+		if !found {
+			// Exit if the column ID in the index is not one of the output
+			// expressions.
+			break
 		}
 	}
 	return ordering
