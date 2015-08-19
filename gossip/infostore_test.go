@@ -32,46 +32,6 @@ import (
 
 // testAddr and emptyAddr are defined in info_test.go.
 
-// TestRegisterGroup registers two groups and verifies operation of
-// belongsToGroup.
-func TestRegisterGroup(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
-
-	groupA := newGroup("a", 1, MinGroup)
-	if is.registerGroup(groupA) != nil {
-		t.Error("could not register group A")
-	}
-	groupB := newGroup("b", 1, MinGroup)
-	if is.registerGroup(groupB) != nil {
-		t.Error("could not register group B")
-	}
-
-	if is.belongsToGroup("a.b") != groupA {
-		t.Error("should belong to group A")
-	}
-	if is.belongsToGroup("a.c") != groupA {
-		t.Error("should belong to group A")
-	}
-	if is.belongsToGroup("b.a") != groupB {
-		t.Error("should belong to group B")
-	}
-	if is.belongsToGroup("c.a") != nil {
-		t.Error("shouldn't belong to a group")
-	}
-
-	// Try to register a group that's already been registered; will
-	// succeed if identical.
-	if is.registerGroup(groupA) != nil {
-		t.Error("should be able to register group A twice")
-	}
-	// Now change the group type and try again.
-	groupAAlt := newGroup("a", 1, MaxGroup)
-	if is.registerGroup(groupAAlt) == nil {
-		t.Error("should not be able to register group A again with different properties")
-	}
-}
-
 // TestZeroDuration verifies that specifying a zero duration sets
 // TTLStamp to max int64.
 func TestZeroDuration(t *testing.T) {
@@ -103,8 +63,8 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	if err := is.addInfo(i); err != nil {
 		t.Error(err)
 	}
-	if is.infoCount() != 1 {
-		t.Errorf("infostore count incorrect %d != 1", is.infoCount())
+	if infoCount := len(is.Infos); infoCount != 1 {
+		t.Errorf("infostore count incorrect %d != 1", infoCount)
 	}
 	if is.MaxSeq != i.seq {
 		t.Error("max seq value wasn't updated")
@@ -117,8 +77,7 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	}
 }
 
-// Verify TTL is respected on info fetched by key
-// and group.
+// Verify TTL is respected on info fetched by key.
 func TestInfoStoreGetInfoTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
@@ -200,178 +159,10 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	}
 }
 
-// Register groups, add and fetch group infos from min/max groups and
-// verify ordering. Add an additional non-group info and fetch that as
-// well.
-func TestAddGroupInfos(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
-
-	group := newGroup("a", 10, MinGroup)
-	if is.registerGroup(group) != nil {
-		t.Error("could not register group")
-	}
-
-	info1 := is.newInfo("a.a", float64(1), time.Second)
-	info2 := is.newInfo("a.b", float64(2), time.Second)
-	if err1, err2 := is.addInfo(info1), is.addInfo(info2); err1 != nil || err2 != nil {
-		t.Error(err1, err2)
-	}
-	if is.infoCount() != 2 {
-		t.Errorf("infostore count incorrect %d != 2", is.infoCount())
-	}
-	if is.MaxSeq != info2.seq {
-		t.Errorf("store max seq info2 seq %d != %d", is.MaxSeq, info2.seq)
-	}
-
-	infos := is.getGroupInfos("a")
-	if infos == nil {
-		t.Error("unable to fetch group infos")
-	}
-	if infos[0].Key != "a.a" || infos[1].Key != "a.b" {
-		t.Error("fetch group infos have incorrect order:", infos)
-	}
-
-	// Try with a max group.
-	MaxGroup := newGroup("b", 10, MaxGroup)
-	if is.registerGroup(MaxGroup) != nil {
-		t.Error("could not register group")
-	}
-	info3 := is.newInfo("b.a", float64(1), time.Second)
-	info4 := is.newInfo("b.b", float64(2), time.Second)
-	if err1, err2 := is.addInfo(info3), is.addInfo(info4); err1 != nil || err2 != nil {
-		t.Error(err1, err2)
-	}
-	if is.infoCount() != 4 {
-		t.Errorf("infostore count incorrect %d != 4", is.infoCount())
-	}
-	if is.MaxSeq != info4.seq {
-		t.Errorf("store max seq info4 seq %d != %d", is.MaxSeq, info4.seq)
-	}
-
-	infos = is.getGroupInfos("b")
-	if infos == nil {
-		t.Error("unable to fetch group infos")
-	}
-	if infos[0].Key != "b.b" || infos[1].Key != "b.a" {
-		t.Error("fetch group infos have incorrect order:", infos)
-	}
-
-	// Finally, add a non-group info and verify it cannot be fetched
-	// by group, but can be fetched solo.
-	info5 := is.newInfo("c.a", float64(3), time.Second)
-	if err := is.addInfo(info5); err != nil {
-		t.Error(err)
-	}
-	if is.getGroupInfos("c") != nil {
-		t.Error("shouldn't be able to fetch non-existent group c")
-	}
-	if is.getInfo("c.a") != info5 {
-		t.Error("unable to fetch info5 by key")
-	}
-	if is.infoCount() != 5 {
-		t.Errorf("infostore count incorrect %d != 5", is.infoCount())
-	}
-	if is.MaxSeq != info5.seq {
-		t.Errorf("store max seq info5 seq %d != %d", is.MaxSeq, info5.seq)
-	}
-}
-
-// Verify infostore combination with overlapping group and non-group
-// infos.
-func TestCombine(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	is1 := newInfoStore(1, emptyAddr)
-
-	group1 := newGroup("a", 10, MinGroup)
-	group1Overlap := newGroup("b", 10, MinGroup)
-	if is1.registerGroup(group1) != nil || is1.registerGroup(group1Overlap) != nil {
-		t.Error("could not register group1 or group1Overlap")
-	}
-
-	info1a := is1.newInfo("a.a", float64(1), time.Second)
-	info1b := is1.newInfo("a.b", float64(2), time.Second)
-	info1c := is1.newInfo("a", float64(3), time.Second) // non-group info
-	if is1.addInfo(info1a) != nil || is1.addInfo(info1b) != nil || is1.addInfo(info1c) != nil {
-		t.Error("unable to add infos")
-	}
-	info1Overlap := is1.newInfo("b.a", float64(3), time.Second)
-	if err := is1.addInfo(info1Overlap); err != nil {
-		t.Error("unable to add info1Overlap:", err)
-	}
-
-	is2 := newInfoStore(2, testAddr("peer"))
-
-	group2 := newGroup("c", 10, MinGroup)
-	group2Overlap := newGroup("b", 10, MinGroup)
-	if is2.registerGroup(group2) != nil || is2.registerGroup(group2Overlap) != nil {
-		t.Error("could not register group2 or group2Overlap")
-	}
-
-	info2a := is2.newInfo("c.a", float64(1), time.Second)
-	info2b := is2.newInfo("c.b", float64(2), time.Second)
-	info2c := is2.newInfo("c", float64(3), time.Second)
-	if is2.addInfo(info2a) != nil || is2.addInfo(info2b) != nil || is2.addInfo(info2c) != nil {
-		t.Error("unable to add infos")
-	}
-	info2Overlap := is2.newInfo("b.a", float64(4), time.Second)
-	if err := is2.addInfo(info2Overlap); err != nil {
-		t.Error("unable to add info2Overlap:", err)
-	}
-
-	if freshCount := is1.combine(is2); freshCount != 4 {
-		t.Error("expected 4 fresh infos on combine")
-	}
-
-	infosA := is1.getGroupInfos("a")
-	if len(infosA) != 2 || infosA[0].Key != "a.a" || infosA[1].Key != "a.b" {
-		t.Error("group a missing", infosA[0], infosA[1])
-	}
-	if infosA[0].peerID != 1 || infosA[1].peerID != 1 {
-		t.Error("infoA peer nodes not set properly", infosA[0], infosA[1])
-	}
-
-	infosB := is1.getGroupInfos("b")
-	if len(infosB) != 1 || infosB[0].Key != "b.a" || infosB[0].Val != info2Overlap.Val {
-		t.Error("group b missing", infosB)
-	}
-	if infosB[0].peerID != 2 {
-		t.Error("infoB peer node not set properly", infosB[0])
-	}
-
-	infosC := is1.getGroupInfos("c")
-	if len(infosC) != 2 || infosC[0].Key != "c.a" || infosC[1].Key != "c.b" {
-		t.Error("group c missing", infosC)
-	}
-	if infosC[0].peerID != 2 || infosC[1].peerID != 2 {
-		t.Error("infoC peer nodes not set properly", infosC[0], infosC[1])
-	}
-
-	if is1.getInfo("a") == nil {
-		t.Error("non-group a info missing")
-	}
-	if is1.getInfo("c") == nil {
-		t.Error("non-group c info missing")
-	}
-
-	// Combine again and verify 0 fresh infos.
-	if freshCount := is1.combine(is2); freshCount != 0 {
-		t.Error("expected no fresh infos on follow-up combine")
-	}
-}
-
-// Helper method creates an infostore with two groups with 10
-// infos each and 10 non-group infos.
+// Helper method creates an infostore with 10 infos.
 func createTestInfoStore(t *testing.T) *infoStore {
 	is := newInfoStore(1, emptyAddr)
 
-	groupA := newGroup("a", 10, MinGroup)
-	groupB := newGroup("b", 10, MinGroup)
-	if is.registerGroup(groupA) != nil || is.registerGroup(groupB) != nil {
-		t.Error("unable to register groups")
-	}
-
-	// Insert 10 keys each for groupA, groupB and non-group successively.
 	for i := 0; i < 10; i++ {
 		infoA := is.newInfo(fmt.Sprintf("a.%d", i), float64(i), time.Second)
 		if err := is.addInfo(infoA); err != nil {
@@ -392,8 +183,7 @@ func createTestInfoStore(t *testing.T) *infoStore {
 	return is
 }
 
-// Check infostore delta (both group and non-group infos) based on
-// info sequence numbers.
+// Check infostore delta based on info sequence numbers.
 func TestInfoStoreDelta(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := createTestInfoStore(t)
@@ -401,27 +191,16 @@ func TestInfoStoreDelta(t *testing.T) {
 	// Verify deltas with successive sequence numbers.
 	for i := 0; i < 10; i++ {
 		delta := is.delta(2, int64(i*3))
-		infosA := delta.getGroupInfos("a")
-		infosB := delta.getGroupInfos("b")
-		if len(infosA) != 10-i || len(infosB) != 10-i {
-			t.Fatalf("expected %d infos, not %d, %d", 10-i, len(infosA), len(infosB))
-		}
-		for j := 0; j < 10-i; j++ {
-			expAKey := fmt.Sprintf("a.%d", j+i)
-			expBKey := fmt.Sprintf("b.%d", j+i)
-			if infosA[j].Key != expAKey || infosB[j].Key != expBKey {
-				t.Errorf("run %d: key mismatch at index %d: %s != %s, %s != %s",
-					i, j, infosA[j].Key, expAKey, infosB[j].Key, expBKey)
-			}
 
+		for j := 0; j < 10-i; j++ {
 			infoC := delta.getInfo(fmt.Sprintf("c.%d", j+i))
 			if infoC == nil {
-				t.Errorf("unable to fetch non-group info %d", j+i)
+				t.Errorf("unable to fetch info %d", j+i)
 			}
 			if i > 0 {
 				infoC = delta.getInfo(fmt.Sprintf("c.%d", 0))
 				if infoC != nil {
-					t.Errorf("erroneously fetched non-group info %d", j+i+1)
+					t.Errorf("erroneously fetched info %d", j+i+1)
 				}
 			}
 		}

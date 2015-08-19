@@ -37,9 +37,9 @@ type callback struct {
 	method  Callback
 }
 
-// infoStore objects manage maps of Info and maps of Info Group
-// objects. They maintain a sequence number generator which they use
-// to allocate new info objects.
+// infoStore objects manage maps of Info objects. They maintain a
+// sequence number generator which they use to allocate new info
+// objects.
 //
 // infoStores can be queried for incremental updates occurring since a
 // specified sequence number.
@@ -48,11 +48,10 @@ type callback struct {
 //
 // infoStores are not thread safe.
 type infoStore struct {
-	Infos     infoMap             `json:"infos,omitempty"`  // Map from key to info
-	Groups    groupMap            `json:"groups,omitempty"` // Map from key prefix to groups of infos
-	NodeID    proto.NodeID        `json:"-"`                // Owning node's ID
-	NodeAddr  util.UnresolvedAddr `json:"-"`                // Address of node owning this info store: "host:port"
-	MaxSeq    int64               `json:"-"`                // Maximum sequence number inserted
+	Infos     infoMap             `json:"infos,omitempty"` // Map from key to info
+	NodeID    proto.NodeID        `json:"-"`               // Owning node's ID
+	NodeAddr  util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
+	MaxSeq    int64               `json:"-"`               // Maximum sequence number inserted
 	seqGen    int64               // Sequence generator incremented each time info is added
 	callbacks []callback
 }
@@ -78,21 +77,15 @@ func monotonicUnixNano() int64 {
 // String returns a string representation of an infostore.
 func (is *infoStore) String() string {
 	buf := bytes.Buffer{}
-	if count := is.infoCount(); count > 0 {
-		buf.WriteString(fmt.Sprintf("infostore with %d info(s): ", count))
+	if infoCount := len(is.Infos); infoCount > 0 {
+		buf.WriteString(fmt.Sprintf("infostore with %d info(s): ", infoCount))
 	} else {
 		return "infostore (empty)"
 	}
 
 	prepend := ""
 
-	// Compute delta of groups and infos.
-	if err := is.visitInfos(func(g *group) error {
-		str := fmt.Sprintf("%sgroup %q", prepend, g.Prefix)
-		prepend = ", "
-		_, err := buf.WriteString(str)
-		return err
-	}, func(i *info) error {
+	if err := is.visitInfos(func(i *info) error {
 		str := fmt.Sprintf("%sinfo %q: %+v", prepend, i.Key, i.Val)
 		prepend = ", "
 		_, err := buf.WriteString(str)
@@ -101,15 +94,6 @@ func (is *infoStore) String() string {
 		log.Errorf("failed to properly construct string representation of infoStore: %s", err)
 	}
 	return buf.String()
-}
-
-// Returns true if the info belongs to a group registered with
-// the info store; false otherwise.
-func (is *infoStore) belongsToGroup(key string) *group {
-	if g, ok := is.Groups[infoPrefix(key)]; ok {
-		return g
-	}
-	return nil
 }
 
 var (
@@ -123,7 +107,6 @@ var (
 func newInfoStore(nodeID proto.NodeID, nodeAddr util.UnresolvedAddr) *infoStore {
 	return &infoStore{
 		Infos:    infoMap{},
-		Groups:   groupMap{},
 		NodeID:   nodeID,
 		NodeAddr: nodeAddr,
 	}
@@ -151,9 +134,6 @@ func (is *infoStore) newInfo(key string, val interface{}, ttl time.Duration) *in
 
 // getInfo returns an info object by key or nil if it doesn't exist.
 func (is *infoStore) getInfo(key string) *info {
-	if group := is.belongsToGroup(key); group != nil {
-		return group.getInfo(key)
-	}
 	if info, ok := is.Infos[key]; ok {
 		// Check TTL and discard if too old.
 		if info.expired(time.Now().UnixNano()) {
@@ -165,52 +145,10 @@ func (is *infoStore) getInfo(key string) *info {
 	return nil
 }
 
-// getGroupInfos returns an array of info objects from specified group.
-// Returns nil if group is not registered.
-func (is *infoStore) getGroupInfos(prefix string) infoSlice {
-	if group, ok := is.Groups[prefix]; ok {
-		return group.infosAsSlice()
-	}
-	return nil
-}
-
-// registerGroup registers a new group with info store. Subsequent
-// additions of infos will first check whether the info prefix matches
-// a group. On match, the info will be added to the group instead of
-// to the info map.
-//
-// REQUIRES: group.prefix is not already in the info store's groups map.
-func (is *infoStore) registerGroup(g *group) error {
-	if g2, ok := is.Groups[g.Prefix]; ok {
-		if g.Prefix != g2.Prefix || g.Limit != g2.Limit || g.TypeOf != g2.TypeOf {
-			return util.Errorf("group %q already in group map with different settings %v vs. %v",
-				g.Prefix, g, g2)
-		}
-		return nil
-	}
-	is.Groups[g.Prefix] = g
-	return nil
-}
-
-// addInfo adds or updates an info in the infos or groups maps. If the
-// prefix of the info is a key of the info store's groups map, then the
-// info is added to that group (prefix is defined by prefix of string up
-// until last period '.'). Otherwise, the info is added to the infos map.
+// addInfo adds or updates an info in the infos map.
 //
 // Returns nil if info was added; error otherwise.
 func (is *infoStore) addInfo(i *info) error {
-	// If the prefix matches a group, add to group.
-	if group := is.belongsToGroup(i.Key); group != nil {
-		contentsChanged, err := group.addInfo(i)
-		if err != nil {
-			return err
-		}
-		if i.seq > is.MaxSeq {
-			is.MaxSeq = i.seq
-		}
-		is.processCallbacks(i.Key, contentsChanged)
-		return nil
-	}
 	// Only replace an existing info if new timestamp is greater, or if
 	// timestamps are equal, but new hops is smaller.
 	var contentsChanged bool
@@ -233,24 +171,13 @@ func (is *infoStore) addInfo(i *info) error {
 	return nil
 }
 
-// infoCount returns the count of infos stored in groups and the
-// non-group infos map. This is really just an approximation as
-// we don't check whether infos are expired.
-func (is *infoStore) infoCount() uint32 {
-	count := uint32(len(is.Infos))
-	for _, group := range is.Groups {
-		count += uint32(len(group.Infos))
-	}
-	return count
-}
-
 // maxHops returns the maximum hops across all infos in the store.
 // This is the maximum number of gossip exchanges between any
 // originator and this node.
 func (is *infoStore) maxHops() uint32 {
 	var maxHops uint32
 	// will never error because `return nil` below
-	_ = is.visitInfos(nil, func(i *info) error {
+	_ = is.visitInfos(func(i *info) error {
 		if i.Hops > maxHops {
 			maxHops = i.Hops
 		}
@@ -265,7 +192,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 	re := regexp.MustCompile(pattern)
 	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
 	var infos []*info
-	if err := is.visitInfos(nil, func(i *info) error {
+	if err := is.visitInfos(func(i *info) error {
 		if re.MatchString(i.Key) {
 			infos = append(infos, i)
 		}
@@ -299,33 +226,11 @@ func (is *infoStore) processCallbacks(key string, contentsChanged bool) {
 	}()
 }
 
-// visitInfos implements a visitor pattern to run two methods in the
-// course of visiting all groups, all group infos, and all non-group
-// infos. The visitGroup function is run against each group in
-// turn. After each group is visited, the visitInfo function is run
-// against each of its infos. Finally, after all groups have been
-// visitied, the visitInfo function is run against each non-group info
-// in turn. Be sure to skip over any expired infos.
-func (is *infoStore) visitInfos(visitGroup func(*group) error, visitInfo func(*info) error) error {
+// visitInfos implements a visitor pattern to run the visitInfo
+// function against each info in turn. Be sure to skip over any expired
+// infos.
+func (is *infoStore) visitInfos(visitInfo func(*info) error) error {
 	now := time.Now().UnixNano()
-	for _, g := range is.Groups {
-		if visitGroup != nil {
-			if err := visitGroup(g); err != nil {
-				return err
-			}
-		}
-		if visitInfo != nil {
-			for _, i := range g.Infos {
-				if i.expired(now) {
-					delete(g.Infos, i.Key)
-					continue
-				}
-				if err := visitInfo(i); err != nil {
-					return err
-				}
-			}
-		}
-	}
 
 	if visitInfo != nil {
 		for _, i := range is.Infos {
@@ -348,18 +253,8 @@ func (is *infoStore) visitInfos(visitGroup func(*group) error, visitInfo func(*i
 // incremented to indicate they've arrived from an external source.
 // Returns the count of "fresh" infos in the provided delta.
 func (is *infoStore) combine(delta *infoStore) int {
-	// combine group info. If the group doesn't yet exist, register
-	// it. Extract the infos from the group and combine them
-	// one-by-one using addInfo.
 	var freshCount int
-	if err := delta.visitInfos(func(g *group) error {
-		if _, ok := is.Groups[g.Prefix]; !ok {
-			// Make a copy of the group.
-			gCopy := newGroup(g.Prefix, g.Limit, g.TypeOf)
-			return is.registerGroup(gCopy)
-		}
-		return nil
-	}, func(i *info) error {
+	if err := delta.visitInfos(func(i *info) error {
 		is.seqGen++
 		i.seq = is.seqGen
 		i.Hops++
@@ -389,11 +284,8 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) *infoStore {
 
 	delta := newInfoStore(is.NodeID, is.NodeAddr)
 
-	// Compute delta of groups and infos.
-	if err := is.visitInfos(func(g *group) error {
-		gDelta := newGroup(g.Prefix, g.Limit, g.TypeOf)
-		return delta.registerGroup(gDelta)
-	}, func(i *info) error {
+	// Compute delta of infos.
+	if err := is.visitInfos(func(i *info) error {
 		if i.isFresh(nodeID, seq) {
 			return delta.addInfo(i)
 		}
@@ -411,7 +303,7 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) *infoStore {
 func (is *infoStore) distant(maxHops uint32) *nodeSet {
 	ns := newNodeSet(0)
 	// will never error because `return nil` below
-	_ = is.visitInfos(nil, func(i *info) error {
+	_ = is.visitInfos(func(i *info) error {
 		if i.Hops > maxHops {
 			ns.addNode(i.NodeID)
 		}
@@ -428,7 +320,7 @@ func (is *infoStore) leastUseful(nodes *nodeSet) proto.NodeID {
 		contrib[node] = 0
 	}
 	// will never error because `return nil` below
-	_ = is.visitInfos(nil, func(i *info) error {
+	_ = is.visitInfos(func(i *info) error {
 		contrib[i.peerID]++
 		return nil
 	})
