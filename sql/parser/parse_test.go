@@ -284,6 +284,8 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE IF EXISTS a RENAME TO b`},
 		{`ALTER INDEX a RENAME TO b`},
 		{`ALTER INDEX IF EXISTS a RENAME TO b`},
+		{`ALTER TABLE a RENAME COLUMN c1 TO c2`},
+		{`ALTER TABLE IF EXISTS a RENAME COLUMN c1 TO c2`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)

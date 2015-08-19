@@ -71,3 +71,22 @@ func (node *RenameIndex) String() string {
 	_, _ = buf.WriteString(fmt.Sprintf("%s RENAME TO %s", node.Name, node.NewName))
 	return buf.String()
 }
+
+// RenameColumn represents a RENAME COLUMN statement.
+type RenameColumn struct {
+	Table   *QualifiedName
+	Name    Name
+	NewName Name
+	// IfExists refers to the table, not the column.
+	IfExists bool
+}
+
+func (node *RenameColumn) String() string {
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("ALTER TABLE ")
+	if node.IfExists {
+		_, _ = buf.WriteString("IF EXISTS ")
+	}
+	_, _ = buf.WriteString(fmt.Sprintf("%s RENAME COLUMN %s TO %s", node.Table, node.Name, node.NewName))
+	return buf.String()
+}
