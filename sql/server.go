@@ -153,37 +153,46 @@ func (p parameters) Arg(i int) (parser.Datum, bool) {
 
 // exec executes the request. Any error encountered is returned; it is
 // the caller's responsibility to update the response.
-func (s *Server) exec(req driver.Request) (driver.Response, error) {
-	var resp driver.Response
+func (s *Server) exec(req driver.Request) (resp driver.Response, err error) {
 
 	// Pick up current session state.
 	// The request user is validated in ServeHTTP. Even in insecure mode,
 	// it is guaranteed not to be empty.
-	planner := planner{user: req.GetUser()}
+	planMaker := planner{user: req.GetUser()}
+	defer func() {
+		// Update session state.
+		var marshalErr error
+		if resp.Session, marshalErr = gogoproto.Marshal(&planMaker.session); marshalErr != nil {
+			// Marshaling an internal protobuf can never fail.
+			panic(marshalErr)
+		}
+	}()
+
 	if req.Session != nil {
 		// TODO(tschottdorf) will have to validate the Session information (for
 		// instance, whether access to the stored database is permitted).
-		if err := gogoproto.Unmarshal(req.Session, &planner.session); err != nil {
-			return resp, err
+		if err = gogoproto.Unmarshal(req.Session, &planMaker.session); err != nil {
+			return
 		}
 	}
-	stmts, err := parser.Parse(req.Sql)
+	var stmts parser.StatementList
+	stmts, err = parser.Parse(req.Sql)
 	if err != nil {
-		return resp, err
+		return
 	}
 	for _, stmt := range stmts {
 		// Bind all the placeholder variables in the stmt to actual values.
-		if err := parser.FillArgs(stmt, parameters(req.Params)); err != nil {
-			return resp, err
+		if err = parser.FillArgs(stmt, parameters(req.Params)); err != nil {
+			return
 		}
 		var plan planNode
-		if err := s.db.Txn(func(txn *client.Txn) error {
-			planner.txn = txn
-			plan, err = planner.makePlan(stmt)
-			planner.txn = nil
+		if err = s.db.Txn(func(txn *client.Txn) error {
+			planMaker.txn = txn
+			plan, err = planMaker.makePlan(stmt)
+			planMaker.txn = nil
 			return err
 		}); err != nil {
-			return resp, err
+			return
 		}
 
 		result := driver.Result{
@@ -207,20 +216,19 @@ func (s *Server) exec(req driver.Request) (driver.Response, error) {
 					case parser.DString:
 						row.Values = append(row.Values, driver.Datum{StringVal: (*string)(&vt)})
 					default:
-						return resp, util.Errorf("unsupported datum: %T", val)
+						err = util.Errorf("unsupported datum: %T", val)
+						return
 					}
 				}
 			}
 			result.Rows = append(result.Rows, row)
 		}
-		if err := plan.Err(); err != nil {
-			return resp, err
+		if err = plan.Err(); err != nil {
+			return
 		}
 
 		resp.Results = append(resp.Results, result)
 	}
 
-	// Update session state.
-	resp.Session, err = gogoproto.Marshal(&planner.session)
-	return resp, err
+	return
 }
