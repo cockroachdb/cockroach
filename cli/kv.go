@@ -33,10 +33,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultMaxResults = 1000
-
-var maxResults int64
-
 var osExit = os.Exit
 var osStderr = os.Stderr
 
@@ -340,6 +336,7 @@ func showResult(rows []client.KeyValue) {
 		key := proto.Key(row.Key)
 		fmt.Printf("%s\t%q\n", key, row.Value)
 	}
+	fmt.Printf("%d result(s)\n", len(rows))
 }
 
 var kvCmds = []*cobra.Command{
