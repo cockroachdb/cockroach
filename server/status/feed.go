@@ -68,16 +68,20 @@ func (nef NodeEventFeed) StartNode(desc proto.NodeDescriptor, startedAt int64) {
 // CallComplete is called by a node whenever it completes a request. This will
 // publish an appropriate event to the feed based on the results of the call.
 func (nef NodeEventFeed) CallComplete(args proto.Request, reply proto.Response) {
+	method := args.Method()
+	if bArgs, ok := args.(*proto.BatchRequest); ok {
+		method = bArgs.Requests[0].GetValue().(proto.Request).Method()
+	}
 	if err := reply.Header().Error; err != nil &&
 		err.CanRestartTransaction() == proto.TransactionRestart_ABORT {
 		nef.f.Publish(&CallErrorEvent{
 			NodeID: nef.id,
-			Method: args.Method(),
+			Method: method,
 		})
 	} else {
 		nef.f.Publish(&CallSuccessEvent{
 			NodeID: nef.id,
-			Method: args.Method(),
+			Method: method,
 		})
 	}
 }

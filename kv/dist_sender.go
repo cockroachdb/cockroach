@@ -415,13 +415,15 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 	// necessary. This prevents a potential infinite loop; see the
 	// comments in proto.RangeLookupRequest.
 	options := lookupOptions{}
-	if pushArgs, ok := call.Args.(*proto.PushTxnRequest); ok {
+	// TODO(tschottdorf): needs to properly comb the batch for a Push to flip
+	// this switch.
+	if pushArgs, ok := call.Args.(*proto.BatchRequest).Requests[0].GetValue().(*proto.PushTxnRequest); ok {
 		options.ignoreIntents = pushArgs.RangeLookup
 	}
 
 	var desc *proto.RangeDescriptor
 	var err error
-	_, isReverseScan := call.Args.(*proto.ReverseScanRequest)
+	isReverseScan := call.Args.(*proto.BatchRequest).IsReverse()
 	if !isReverseScan {
 		desc, err = ds.rangeCache.LookupRangeDescriptor(call.Args.Header().Key, options)
 	} else {
@@ -477,7 +479,7 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, args proto.Request, desc 
 	defer trace.Epoch("sending RPC")()
 	// Truncate the request to our current range, making sure not to
 	// touch it unless we have to.
-	if _, isReverseScan := args.(*proto.ReverseScanRequest); isReverseScan {
+	if args.(*proto.BatchRequest).IsReverse() {
 		// Truncate to the current range if the reverse scan crosses range boundaries.
 		if key := args.Header().Key; key != nil && key.Less(desc.StartKey) {
 			defer func(k proto.Key) { args.Header().Key = k }(key)
@@ -502,7 +504,11 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, args proto.Request, desc 
 
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front.
-	if !(proto.IsRead(args) && args.Header().ReadConsistency == proto.INCONSISTENT) &&
+	// TODO(tschottdorf): replace IsRead() by IsReadOnlyBatch or something like that,
+	// but depending on Spencer's RFC we don't need that (if we decide that a
+	// batch can't be read and write). In the latter case, IsRead for a BatchRequest
+	// will be straightforward to adapt.
+	if !(proto.IsReadOnlyBatch(args.(*proto.BatchRequest)) && args.Header().ReadConsistency == proto.INCONSISTENT) &&
 		leader.StoreID > 0 {
 		if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 			replicas.MoveToFront(i)
@@ -524,6 +530,44 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, args proto.Request, desc 
 // This may temporarily adjust the request headers, so the proto.Call
 // must not be used concurrently until Send has returned.
 func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
+	// TODO(tschottdorf): provisional code that wraps everything in a one-
+	// element Batch.
+	if _, ok := call.Args.(*proto.BatchRequest); !ok {
+		bArgs := &proto.BatchRequest{}
+		bArgs.RequestHeader = *(gogoproto.Clone(call.Args.Header()).(*proto.RequestHeader))
+		if !proto.IsRange(call.Args) {
+			bArgs.RequestHeader.EndKey = bArgs.RequestHeader.Key.Next()
+		}
+		bArgs.Add(call.Args)
+		call.Args = bArgs
+		origReply := call.Reply
+		bReply := &proto.BatchResponse{}
+		// TODO(tschottdorf): really ought to drop `proto.Call` and move to
+		// request/response. We must mutate origReply, but adding it to the
+		// Batch actually doesn't mean it's populated, because `sendRPC`
+		// always creates new replies. Those do get assigned back to the original,
+		// but we've changed call.Reply here - so the actual original needs
+		// a manual merge below. Yuck.
+		// Plus there are issues with args.CreateReply() with batches - you
+		// get an empty reply, so the contents don't match up. Needs
+		// special casing.
+		call.Reply = bReply
+		defer func() {
+			// TODO(tschottdorf): update tests which don't return a Batch to
+			// do just that.
+			// We must merge into the originally supplied reply, or the caller
+			// will not see it.
+			origReply.Header().SetGoError(call.Reply.Header().GoError())
+			if len(bReply.Responses) > 0 {
+				log.Warningf("%+v", bReply.Responses[0].GetValue().(proto.Response))
+				gogoproto.Merge(origReply, bReply.Responses[0].GetValue().(proto.Response))
+			} else {
+				bReply.Add(origReply)
+				origReply.Header().SetGoError(call.Reply.Header().GoError())
+			}
+		}()
+	}
+
 	args := call.Args
 
 	trace := tracer.FromCtx(ctx)
@@ -540,6 +584,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 
 	// If this is a bounded request, we will change its bound as we receive
 	// replies. This undoes that when we return.
+	// TODO(tschottdorf): rip this out. Batch needs per-request handling.
 	boundedArgs, argsBounded := args.(proto.Bounded)
 
 	if argsBounded {
@@ -558,7 +603,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 
 	first := true
 
-	_, isReverseScan := call.Args.(*proto.ReverseScanRequest)
+	isReverseScan := call.Args.(*proto.BatchRequest).IsReverse()
 	// Retry logic for lookup of range by key and RPCs to range replicas.
 	for {
 		var curReply proto.Response
@@ -679,7 +724,10 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 			// This was the second or later call in a multi-range request.
 			// Combine the new response with the existing one.
 			if cReply, ok := call.Reply.(proto.Combinable); ok {
-				cReply.Combine(curReply)
+				if err := cReply.Combine(curReply); err != nil {
+					call.Reply.Header().SetGoError(err)
+					return
+				}
 			} else {
 				// This should never apply in practice, as we'll only end up here
 				// for range-spanning requests.
@@ -702,6 +750,27 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 					} else {
 						// Set flag to break the loop.
 						descNext = nil
+					}
+				}
+			}
+		}
+
+		if bArgs, ok := args.(*proto.BatchRequest); ok && curReply.Header().GoError() == nil &&
+			len(curReply.(*proto.BatchResponse).Responses) == len(bArgs.Requests) {
+			for i, l := 0, len(bArgs.Requests); i < l; i++ {
+				if boundedArg, ok := bArgs.Requests[i].GetValue().(proto.Bounded); ok {
+					prevBound := boundedArg.GetBound()
+					if cReply, ok := curReply.(*proto.BatchResponse).Responses[i].GetValue().(proto.Countable); ok && prevBound > 0 {
+						if nextBound := prevBound - cReply.Count(); nextBound > 0 {
+							defer func(c int64) {
+								// Dirty way of undoing. The defers will pile up,
+								// and execute so that the last one works.
+								boundedArg.SetBound(c)
+							}(prevBound)
+							boundedArg.SetBound(nextBound)
+						} else {
+							descNext = nil
+						}
 					}
 				}
 			}

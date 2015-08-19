@@ -599,6 +599,8 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		// we choose randomly between the pre- and post- transaction
 		// values. If we guess wrong, the client will try again and get
 		// the other value (within a few tries).
+		//
+		// TODO(tschottdorf): Double-check that randomness is allowed here.
 		if rand.Intn(2) == 0 {
 			key, txn := intents[0].Key, &intents[0].Txn
 			val, _, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)

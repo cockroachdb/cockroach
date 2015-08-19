@@ -65,7 +65,7 @@ func TestKVDBCoverage(t *testing.T) {
 	if gr, err := db.Get(key); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
-		t.Error("expected key to exist after delete")
+		t.Error("expected key to exist")
 	}
 
 	// Conditional put should succeed, changing value1 to value2.

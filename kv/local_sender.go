@@ -162,12 +162,16 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 		reply, err = store.ExecuteCmd(ctx, call.Args)
 	}
 	if reply != nil {
+		call.Reply.Reset() // required for BatchRequest (concats response otherwise)
 		gogoproto.Merge(call.Reply, reply)
 	}
 	if call.Reply.Header().Error != nil {
 		panic(proto.ErrorUnexpectedlySet)
 	}
 	if err != nil {
+		// TODO(tschottdorf): Later error needs to be associated to an index
+		// and ideally individual requests don't even have an error in their
+		// header.
 		call.Reply.Header().SetGoError(err)
 	}
 }

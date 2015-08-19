@@ -1259,10 +1259,38 @@ func (s *Store) ReplicaCount() int {
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
+func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto.Response, _ error) {
 	ctx = s.Context(ctx)
 	trace := tracer.FromCtx(ctx)
-	// If the request has a zero timestamp, initialize to this node's clock.
+	if trace == nil {
+		trace = s.ctx.Tracer.NewTrace(args.Header())
+		ctx = tracer.ToCtx(ctx, trace)
+		defer trace.Finalize()
+	}
+	if batch, isBatch := args.(*proto.BatchRequest); isBatch {
+		// TODO(tschottdorf): provisional batch handling: only singletons.
+		args = batch.Requests[0].GetValue().(proto.Request)
+		header := args.Header()
+		origEndKey := header.EndKey
+		*header = *gogoproto.Clone(&batch.RequestHeader).(*proto.RequestHeader)
+		header.EndKey = origEndKey
+		if len(header.EndKey) != 0 {
+			// TODO(tschottdorf): mostly for truncation, since the way we set
+			// things up doesn't truncate the contained arg, only the batch.
+			header.EndKey = batch.RequestHeader.EndKey
+		}
+		defer func() {
+			bReply := &proto.BatchResponse{}
+			if reply != nil {
+				bReply.Add(reply)
+				bReply.ResponseHeader = *(gogoproto.Clone(reply.Header()).(*proto.ResponseHeader))
+			}
+			reply = bReply
+		}()
+	}
+	if args.Method() == proto.Batch {
+		panic("batch")
+	}
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {
 		return nil, err
@@ -1283,6 +1311,11 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		// advances the local node's clock to a high water mark from
 		// amongst all nodes with which it has interacted.
 		s.ctx.Clock.Update(header.Timestamp)
+	} else {
+		// If the request has a zero timestamp, initialize to this node's clock.
+		// TODO(tschottdorf): the above comment was there, but not the line below.
+		// Check if this is done anywhere else.
+		header.Timestamp = s.ctx.Clock.Now()
 	}
 
 	defer trace.Epoch("executing " + args.Method().String())()
@@ -1296,6 +1329,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 	}
 	var rng *Replica
 	var err error
+
 	// Add the command to the range for execution; exit retry loop on success.
 	for r := retry.Start(s.ctx.RangeRetryOptions); next(&r); {
 		// Get range and add command to the range for execution.

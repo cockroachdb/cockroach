@@ -583,9 +583,6 @@ func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 
 // sendBatch unrolls a batched command and sends each constituent
 // command in parallel.
-// TODO(tschottdorf): modify sendBatch so that it sends truly parallel requests
-// when outside of a Transaction. This can then be used to address the TODO in
-// (*TxnCoordSender).resolve().
 func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.BatchRequest, batchReply *proto.BatchResponse) {
 	// Prepare the calls by unrolling the batch. If the batchReply is
 	// pre-initialized with replies, use those; otherwise create replies

@@ -425,9 +425,9 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 				}
 				rows := scan.Reply.(*proto.ScanResponse).Rows
 				if start+maxResults <= len(tc.keys) && len(rows) != maxResults {
-					t.Fatalf("%d: start=%s: expected %d rows, but got %d", i, tc.keys[start], maxResults, len(rows))
+					t.Errorf("%d: start=%s: expected %d rows, but got %d", i, tc.keys[start], maxResults, len(rows))
 				} else if start+maxResults == len(tc.keys)+1 && len(rows) != maxResults-1 {
-					t.Fatalf("%d: expected %d rows, but got %d", i, maxResults-1, len(rows))
+					t.Errorf("%d: expected %d rows, but got %d", i, maxResults-1, len(rows))
 				}
 			}
 		}

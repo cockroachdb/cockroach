@@ -656,13 +656,15 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	// Define our rpcSend stub which returns success on the second address.
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-		if method == "Node.Scan" {
+		if method == "Node.Batch" {
 			// reply from first address failed
 			_ = getReply()
 			// reply from second address succeed
-			reply := getReply()
-			reply.(*proto.ScanResponse).Rows = append([]proto.KeyValue{}, proto.KeyValue{Key: proto.Key("b"), Value: proto.Value{}})
-			return []gogoproto.Message{reply}, nil
+			batchReply := getReply().(*proto.BatchResponse)
+			reply := &proto.ScanResponse{}
+			batchReply.Add(reply)
+			reply.Rows = append([]proto.KeyValue{}, proto.KeyValue{Key: proto.Key("b"), Value: proto.Value{}})
+			return []gogoproto.Message{batchReply}, nil
 		}
 		return nil, util.Errorf("Not expected method %v", method)
 	}
@@ -745,11 +747,13 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		{Key: proto.Key("c"), Value: proto.Value{Bytes: []byte("2")}},
 	}
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-		if method != "Node.Scan" {
+		if method != "Node.Batch" {
 			t.Fatalf("unexpected method:%s", method)
 		}
 		header := getArgs(testAddress).(proto.Request).Header()
-		reply := getReply().(*proto.ScanResponse)
+		batchReply := getReply().(*proto.BatchResponse)
+		reply := &proto.ScanResponse{}
+		batchReply.Add(reply)
 		results := []proto.KeyValue{}
 		for _, curKV := range existingKVs {
 			if header.Key.Less(curKV.Key.Next()) && curKV.Key.Less(header.EndKey) {
@@ -757,7 +761,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 			}
 		}
 		reply.Rows = results
-		return []gogoproto.Message{reply}, nil
+		return []gogoproto.Message{batchReply}, nil
 	}
 	ctx := &DistSenderContext{
 		rpcSend: testFn,

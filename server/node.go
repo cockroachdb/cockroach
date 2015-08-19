@@ -227,6 +227,7 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	attrs proto.Attributes, stopper *stop.Stopper) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	requests := []proto.Request{
+		&proto.BatchRequest{},
 		&proto.GetRequest{},
 		&proto.PutRequest{},
 		&proto.ConditionalPutRequest{},

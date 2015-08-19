@@ -20,6 +20,7 @@ package tracer
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -120,14 +121,18 @@ func (t *Trace) epoch(name string) func() {
 // Finalize submits the Trace to the underlying feed. If there is an open
 // Epoch, a panic occurs.
 func (t *Trace) Finalize() {
-	if t == nil {
+	if t == nil || len(t.Content) == 0 {
 		return
 	}
 	if t.depth != 0 {
 		panic("attempt to finalize unbalanced trace:\n" + t.String())
 	}
 	t.depth = math.MinInt32
-	t.tracer.feed.Publish(t) // by reference
+	if t.tracer.feed != nil {
+		t.tracer.feed.Publish(t) // by reference
+	} else {
+		log.Println(t)
+	}
 }
 
 func (t *Trace) add(name string) int {
@@ -199,7 +204,7 @@ func NewTracer(f *util.Feed, origin string) *Tracer {
 }
 
 var dummyTracer = &Tracer{
-	now: func() time.Time { return time.Time{} },
+	now: time.Now,
 }
 
 // NewTrace creates a Trace for the given Traceable.
