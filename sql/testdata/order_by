@@ -84,7 +84,6 @@ SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
 2 8 10
 3 7 10
 
-
 query I
 SELECT a FROM t ORDER BY a+b DESC, a
 ----
@@ -118,3 +117,55 @@ SELECT * FROM t ORDER BY foo
 query error qualified name "a.b" not found
 SELECT a FROM t ORDER BY a.b
 ----
+
+statement ok
+CREATE TABLE abc (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a, b, c),
+  CONSTRAINT bc INDEX (b, c),
+  CONSTRAINT ba INDEX (b, a)
+)
+
+statement ok
+INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
+----
+0 /abc/primary/1/2/3 NULL true
+1 /abc/primary/4/5/6 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b, a
+----
+0 /abc/ba/2/1/1/2/3 NULL true
+1 /abc/ba/5/4/4/5/6 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b, c
+----
+0 /abc/bc/2/3/1/2/3 NULL true
+1 /abc/bc/5/6/4/5/6 NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b
+----
+0 /abc/bc/2/3/1/2/3 NULL true
+1 /abc/bc/5/6/4/5/6 NULL true
+
+# TODO(pmattis): This will break when reverse scan is implemented.
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a DESC
+----
+0 /abc/primary/1/2/3 NULL true
+1 /abc/primary/4/5/6 NULL true
+
+query ITTB
+SELECT * FROM abc ORDER BY a DESC
+----
+4 5 6
+1 2 3
+

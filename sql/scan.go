@@ -268,24 +268,25 @@ func (n *scanNode) initOrdering() {
 	if n.index == nil {
 		return
 	}
+	n.columnIDs = n.index.fullColumnIDs(n.desc)
+	n.ordering = n.computeOrdering(n.columnIDs)
+}
 
-	n.columnIDs = n.index.ColumnIDs
-	if !n.index.Unique {
-		// Non-unique indexes have the primary key columns appended to their key.
-		n.columnIDs = append(n.columnIDs, n.desc.PrimaryIndex.ColumnIDs...)
-	}
-
+// computeOrdering computes the ordering information for the specified set of
+// columns.
+func (n *scanNode) computeOrdering(columnIDs []ColumnID) []int {
 	// Loop over the column IDs and determine if they are used for any of the
 	// render targets.
-	n.ordering = nil
-	for _, colID := range n.columnIDs {
+	var ordering []int
+	for _, colID := range columnIDs {
 		for i, r := range n.render {
 			if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
-				n.ordering = append(n.ordering, i+1)
+				ordering = append(ordering, i+1)
 				break
 			}
 		}
 	}
+	return ordering
 }
 
 func (n *scanNode) addRender(target parser.SelectExpr) error {
