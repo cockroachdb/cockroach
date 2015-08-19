@@ -1,0 +1,82 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+//
+// Author: Tobias Schottdorf
+
+syntax = "proto2";
+package cockroach.proto;
+option go_package = "proto";
+
+import "cockroach/proto/metadata.proto";
+import "cockroach/proto/data.proto";
+import "cockroach/proto/api.proto";
+import "gogoproto/gogo.proto";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
+
+// Removed completely:
+//  optional ReadConsistencyType read_consistency = 10 [(gogoproto.nullable) = false];
+//    -> If we need it again, we'll have to add InconsistentScan, ... commands, or
+//       add flags to each read command. Won't be a big deal.
+//
+//  optional Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+//    -> The only situation in which the client supplies a timestamp is that of
+//       a Transaction - still possible. There is still timestamp handling at
+//       the Store, but whatever the Store does, there's no need for it to be
+//       in the protos.
+// At Store, used for the following:
+// - ExecuteCmd: check for excess clock offset, update HLC (prior to proposing).
+//   Retries related to conflict-resolution: Those usually increase the timestamp.
+// - Replica: AddCmd sets local timestamp if zero found.
+//            addWriteCmd increases it depending on the timestamp cache.
+//            applyRaftCommandInBatch checks that the lease covers the timestamp
+//
+// All of those would work with one timestamp per Batch. When executing a Batch
+// outside of a Txn, we'll need to do something though, otherwise a Batch whose
+// requests have overlapping keys will likely fail, for example writing a key
+// twice. That must not happen at the same timestamp. We need to "abuse" the
+// logical component for this.
+
+// KeyHeader replaces RequestHeader.
+message KeyHeader {
+  optional bytes key = 1 [(gogoproto.casttype) = "Key"];
+  optional bytes end_key = 2 [(gogoproto.casttype) = "Key"];
+}
+
+// NBatch is the only type of request sent by clients. Currently named
+// NBatch only since Batch is taken.
+message NBatch {
+  optional ClientCmdID cmd_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
+  optional string user = 2 [(gogoproto.nullable) = false];
+  optional int32 user_priority = 3 [default = 1];
+  optional Transaction txn = 4;
+
+  repeated RequestUnion requests = 5 [(gogoproto.nullable) = false];
+}
+
+// A Batch is internally cut into at least one BatchChunk. The criteria are
+// * BatchChunk doesn't contain both "standard" and reverse operations.
+// * BatchChunk is either completely Raft or completely non-Raft.
+// * BatchChunk's requests address a single range (or it needs re-cutting).
+message BatchChunk {
+  optional Replica replica = 1 [(gogoproto.nullable) = false];
+  optional int64 range_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+
+  optional NBatch batch = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true]; 
+}
