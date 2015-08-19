@@ -27,6 +27,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var maxResults int64
+
 // pflagValue wraps flag.Value and implements the extra methods of the
 // pflag.Value interface.
 type pflagValue struct {
@@ -226,10 +228,10 @@ func initFlags(ctx *server.Context) {
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
 	}
 
-	// Max results flag for scan and reverse scan.
-	for _, cmd := range []*cobra.Command{scanCmd, reverseScanCmd} {
+	// Max results flag for scan, reverse scan, and range list.
+	for _, cmd := range []*cobra.Command{scanCmd, reverseScanCmd, lsRangesCmd} {
 		f := cmd.Flags()
-		f.Int64Var(&maxResults, "max-results", defaultMaxResults, flagUsage["max-results"])
+		f.Int64Var(&maxResults, "max-results", 1000, flagUsage["max-results"])
 	}
 }
 

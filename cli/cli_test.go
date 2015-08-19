@@ -90,10 +90,12 @@ func Example_basic() {
 	// "a"	"1"
 	// "b"	"2"
 	// "c"	"3"
+	// 3 result(s)
 	// kv revscan
 	// "c"	"3"
 	// "b"	"2"
 	// "a"	"1"
+	// 3 result(s)
 	// kv del a c
 	// kv get a
 	// "a" not found
@@ -112,9 +114,11 @@ func Example_basic() {
 	// kv scan
 	// "b"	"2"
 	// "c"	"\x00\x00\x00\x00\x00\x00\x00*"
+	// 2 result(s)
 	// kv revscan
 	// "c"	"\x00\x00\x00\x00\x00\x00\x00*"
 	// "b"	"2"
+	// 2 result(s)
 	// kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
 	// quit
@@ -145,6 +149,7 @@ func Example_quoted() {
 	// "a\x01"	"日本語"
 	// "a\x02"	"日本語"
 	// "a\x03"	"日本語"
+	// 4 result(s)
 	// kv get a\x00
 	// "日本語"
 	// kv del a\x00
@@ -174,6 +179,7 @@ func Example_insecure() {
 	// kv --insecure scan
 	// "a"	"1"
 	// "b"	"2"
+	// 2 result(s)
 	// quit --insecure
 	// node drained and shutdown: ok
 }
@@ -201,41 +207,49 @@ func Example_ranges() {
 	// "b"	"2"
 	// "c"	"3"
 	// "d"	"4"
+	// 4 result(s)
 	// kv revscan
 	// "d"	"4"
 	// "c"	"3"
 	// "b"	"2"
 	// "a"	"1"
+	// 4 result(s)
 	// range split c
 	// range ls
 	// ""-"c" [1]
 	// 	0: node-id=1 store-id=1
 	// "c"-"\xff\xff" [2]
 	// 	0: node-id=1 store-id=1
+	// 2 result(s)
 	// kv scan
 	// "a"	"1"
 	// "b"	"2"
 	// "c"	"3"
 	// "d"	"4"
+	// 4 result(s)
 	// kv revscan
 	// "d"	"4"
 	// "c"	"3"
 	// "b"	"2"
 	// "a"	"1"
+	// 4 result(s)
 	// range merge b
 	// range ls
 	// ""-"\xff\xff" [1]
 	// 	0: node-id=1 store-id=1
+	// 1 result(s)
 	// kv scan
 	// "a"	"1"
 	// "b"	"2"
 	// "c"	"3"
 	// "d"	"4"
+	// 4 result(s)
 	// kv revscan
 	// "d"	"4"
 	// "c"	"3"
 	// "b"	"2"
 	// "a"	"1"
+	// 4 result(s)
 	// quit
 	// node drained and shutdown: ok
 }
@@ -253,11 +267,17 @@ func Example_logging() {
 
 	// Output:
 	// kv --alsologtostderr=false scan
+	// 0 result(s)
 	// kv --log-backtrace-at=foo.go:1 scan
+	// 0 result(s)
 	// kv --log-dir='' scan
+	// 0 result(s)
 	// kv --logtostderr=true scan
+	// 0 result(s)
 	// kv --verbosity=0 scan
+	// 0 result(s)
 	// kv --vmodule=foo=1 scan
+	// 0 result(s)
 	// quit
 	// node drained and shutdown: ok
 }
@@ -268,6 +288,9 @@ func Example_max_results() {
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan --max-results=3")
 	c.Run("kv revscan --max-results=2")
+	c.Run("range split c")
+	c.Run("range split d")
+	c.Run("range ls --max-results=2")
 	c.Run("quit")
 
 	// Output:
@@ -276,9 +299,19 @@ func Example_max_results() {
 	// "a"	"1"
 	// "b"	"2"
 	// "c"	"3"
+	// 3 result(s)
 	// kv revscan --max-results=2
 	// "d"	"4"
 	// "c"	"3"
+	// 2 result(s)
+	// range split c
+	// range split d
+	// range ls --max-results=2
+	// ""-"c" [1]
+	// 	0: node-id=1 store-id=1
+	// "c"-"d" [2]
+	// 	0: node-id=1 store-id=1
+	// 2 result(s)
 	// quit
 	// node drained and shutdown: ok
 }
