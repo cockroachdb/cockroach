@@ -57,6 +57,10 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   targetListPtr  *TargetList
   privilegeType  privilege.Kind
   privilegeList  privilege.List
+  orderBy        OrderBy
+  orders         []*Order
+  order          *Order
+  dir            Direction
 }
 
 %type <stmts> stmt_block
@@ -92,7 +96,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <stmt> simple_select values_clause
 
 %type <empty> alter_column_default alter_using
-%type <empty> opt_asc_desc opt_nulls_order
+%type <dir> opt_asc_desc
 
 %type <empty> alter_table_cmd opt_collate_clause
 %type <empty> alter_table_cmds
@@ -126,7 +130,9 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> reloptions opt_reloptions
 %type <empty> opt_with distinct_clause opt_all_clause
 %type <strs> opt_column_list
-%type <empty> sort_clause opt_sort_clause sortby_list index_params
+%type <orderBy> sort_clause opt_sort_clause
+%type <orders> sortby_list
+%type <empty> index_params
 %type <strs> name_list opt_name_list
 %type <empty> opt_array_bounds
 %type <tblExprs> from_clause from_list
@@ -217,7 +223,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <expr> numeric_only
 %type <str> alias_clause opt_alias_clause
 %type <empty> func_alias_clause
-%type <empty> sortby
+%type <order> sortby
 %type <empty> index_elem
 %type <tblExpr> table_ref
 %type <tblExpr> joined_table
@@ -1340,11 +1346,11 @@ index_params:
 // expressions in parens. For backwards-compatibility reasons, we allow an
 // expression that's just a function call to be written without parens.
 index_elem:
-  name opt_collate opt_class opt_asc_desc opt_nulls_order
+  name opt_collate opt_class opt_asc_desc
   {}
-| func_expr_windowless opt_collate opt_class opt_asc_desc opt_nulls_order
+| func_expr_windowless opt_collate opt_class opt_asc_desc
   {}
-| '(' a_expr ')' opt_collate opt_class opt_asc_desc opt_nulls_order
+| '(' a_expr ')' opt_collate opt_class opt_asc_desc
   {}
 
 opt_collate:
@@ -1357,14 +1363,18 @@ opt_class:
 | /* EMPTY */ {}
 
 opt_asc_desc:
-  ASC {}
-| DESC {}
-| /* EMPTY */ {}
-
-opt_nulls_order:
-  NULLS_LA FIRST {}
-| NULLS_LA LAST {}
-| /* EMPTY */ {}
+  ASC
+  {
+    $$ = Ascending
+  }
+| DESC
+  {
+    $$ = Descending
+  }
+| /* EMPTY */
+  {
+    $$ = DefaultDirection
+  }
 
 // We would like to make the %TYPE productions here be name attrs etc, but
 // that causes reduce/reduce conflicts. type_function_name is next best
@@ -1666,11 +1676,15 @@ select_no_parens:
 | select_clause sort_clause
   {
     $$ = $1
+    if s, ok := $$.(*Select); ok {
+      s.OrderBy = $2
+    }
   }
 | select_clause opt_sort_clause for_locking_clause opt_select_limit
   {
     $$ = $1
     if s, ok := $$.(*Select); ok {
+      s.OrderBy = $2
       s.Limit = $4
     }
   }
@@ -1678,6 +1692,7 @@ select_no_parens:
   {
     $$ = $1
     if s, ok := $$.(*Select); ok {
+      s.OrderBy = $2
       s.Limit = $3
     }
   }
@@ -1688,11 +1703,15 @@ select_no_parens:
 | with_clause select_clause sort_clause
   {
     $$ = $2
+    if s, ok := $$.(*Select); ok {
+      s.OrderBy = $3
+    }
   }
 | with_clause select_clause opt_sort_clause for_locking_clause opt_select_limit
   {
     $$ = $2
     if s, ok := $$.(*Select); ok {
+      s.OrderBy = $3
       s.Limit = $5
     }
   }
@@ -1700,6 +1719,7 @@ select_no_parens:
   {
     $$ = $2
     if s, ok := $$.(*Select); ok {
+      s.OrderBy = $3
       s.Limit = $4
     }
   }
@@ -1842,19 +1862,38 @@ opt_all_clause:
 | /* EMPTY */ {}
 
 opt_sort_clause:
-  sort_clause {}
-| /* EMPTY */ {}
+  sort_clause
+  {
+    $$ = $1
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 sort_clause:
-  ORDER BY sortby_list {}
+  ORDER BY sortby_list
+  {
+    $$ = OrderBy($3)
+  }
 
 sortby_list:
-  sortby {}
-| sortby_list ',' sortby {}
+  sortby
+  {
+    $$ = []*Order{$1}
+  }
+| sortby_list ',' sortby
+  {
+    $$ = append($1, $3)
+  }
 
 sortby:
-  a_expr USING math_op opt_nulls_order {}
-| a_expr opt_asc_desc opt_nulls_order {}
+  a_expr opt_asc_desc
+  {
+    $$ = &Order{Expr: $1, Direction: $2}
+  }
+// TODO(pmattis): Support ordering using arbitrary math ops?
+// | a_expr USING math_op {}
 
 select_limit:
   limit_clause offset_clause
