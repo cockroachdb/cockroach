@@ -31,30 +31,46 @@ import (
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 type details struct {
 	NodeID proto.NodeID `json:"nodeID"`
 }
 
+var retryOptions = retry.Options{
+	InitialBackoff: 100 * time.Millisecond,
+	MaxRetries:     4,
+	Multiplier:     2,
+}
+
 // get performs an HTTPS GET to the specified path for a specific node.
 func get(t *testing.T, client *http.Client, node *localcluster.Container, path string) []byte {
 	url := fmt.Sprintf("https://%s%s", node.Addr(""), path)
-	resp, err := client.Get(url)
-	if err != nil {
-		t.Fatalf("could not GET %s - %s", url, err)
+	// There seems to be some issues while trying to connect to the status
+	// server, so retry (up to 5 times) with a 1 second delay each time.
+	// TODO(Bram): Clean this up once we get to the bottom of the issue.
+	for r := retry.Start(retryOptions); r.Next(); {
+		resp, err := client.Get(url)
+		if err != nil {
+			t.Logf("could not GET %s - %s", url, err)
+			continue
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Logf("could not open body for %s - %s", url, err)
+			continue
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Logf("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
+			continue
+		}
+		t.Logf("OK response from %s", url)
+		return body
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("could not GET %s - statuscode: %d", url, resp.StatusCode)
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("could not open body for %s - %s", url, err)
-	}
-	log.Infof("OK response from %s", url)
-	return body
+	t.Fatalf("There was an error retrieving %s", url)
+	return []byte("")
 }
 
 // checkNode checks all the endpoints of the status server hosted by node and
@@ -80,7 +96,6 @@ func checkNode(t *testing.T, client *http.Client, node *localcluster.Container, 
 // TestStatusServer starts up an N node cluster and tests the status server on
 // each node.
 func TestStatusServer(t *testing.T) {
-	t.Skipf("TODO(Bram): Test is flaky - fix it.")
 	l := localcluster.Create(*numNodes, stopper)
 	l.ForceLogging = true
 	l.Start()
