@@ -243,8 +243,9 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	}
 	n.filter, n.err = n.resolveQNames(where.Expr)
 	if n.err == nil {
-		// Evaluate the expression once to memoize operators and functions.
-		_, n.err = parser.EvalExpr(n.filter)
+		// Normalize the expression (this will also evaluate any branches that are
+		// constant).
+		n.filter, n.err = parser.NormalizeExpr(n.filter)
 	}
 	return n.err
 }
@@ -587,22 +588,22 @@ type qnameVisitor struct {
 
 var _ parser.Visitor = &qnameVisitor{}
 
-func (v *qnameVisitor) Visit(expr parser.Expr) parser.Expr {
-	if v.err != nil {
-		return expr
+func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
+	if !pre || v.err != nil {
+		return nil, expr
 	}
 	qname, ok := expr.(*parser.QualifiedName)
 	if !ok {
-		return expr
+		return v, expr
 	}
 
 	v.err = qname.NormalizeColumnName()
 	if v.err != nil {
-		return expr
+		return v, expr
 	}
 	if qname.IsStar() {
 		v.err = fmt.Errorf("qualified name \"%s\" not found", qname)
-		return expr
+		return nil, expr
 	}
 
 	desc := v.getDesc(qname)
@@ -612,12 +613,12 @@ func (v *qnameVisitor) Visit(expr parser.Expr) parser.Expr {
 			if !equalName(name, col.Name) {
 				continue
 			}
-			return v.getQVal(col)
+			return v, v.getQVal(col)
 		}
 	}
 
 	v.err = fmt.Errorf("qualified name \"%s\" not found", qname)
-	return expr
+	return nil, expr
 }
 
 func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *TableDescriptor {

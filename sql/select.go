@@ -58,17 +58,17 @@ type subqueryVisitor struct {
 
 var _ parser.Visitor = &subqueryVisitor{}
 
-func (v *subqueryVisitor) Visit(expr parser.Expr) parser.Expr {
-	if v.err != nil {
-		return expr
+func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
+	if !pre || v.err != nil {
+		return nil, expr
 	}
 	subquery, ok := expr.(*parser.Subquery)
 	if !ok {
-		return expr
+		return v, expr
 	}
 	var plan planNode
 	if plan, v.err = v.makePlan(subquery.Select); v.err != nil {
-		return expr
+		return nil, expr
 	}
 	var rows parser.DTuple
 	for plan.Next() {
@@ -91,7 +91,10 @@ func (v *subqueryVisitor) Visit(expr parser.Expr) parser.Expr {
 		}
 	}
 	v.err = plan.Err()
-	return rows
+	if v.err != nil {
+		return nil, expr
+	}
+	return v, rows
 }
 
 func (p *planner) expandSubqueries(stmt parser.Statement) error {
@@ -325,37 +328,6 @@ func (m qvalueRangeMap) analyzeExpr(expr parser.Expr) {
 
 	case *parser.ComparisonExpr:
 		m.analyzeComparisonExpr(t)
-
-	case *parser.RangeCond:
-		if t.Not {
-			// "a NOT BETWEEN b AND c" -> "a < b OR a > c"
-			m.analyzeExpr(&parser.OrExpr{
-				Left: &parser.ComparisonExpr{
-					Operator: parser.LT,
-					Left:     t.Left,
-					Right:    t.From,
-				},
-				Right: &parser.ComparisonExpr{
-					Operator: parser.GT,
-					Left:     t.Left,
-					Right:    t.To,
-				},
-			})
-		} else {
-			// "a BETWEEN b AND c" -> "a >= b AND a <= c"
-			m.analyzeExpr(&parser.AndExpr{
-				Left: &parser.ComparisonExpr{
-					Operator: parser.GE,
-					Left:     t.Left,
-					Right:    t.From,
-				},
-				Right: &parser.ComparisonExpr{
-					Operator: parser.LE,
-					Left:     t.Left,
-					Right:    t.To,
-				},
-			})
-		}
 	}
 }
 
@@ -373,43 +345,18 @@ func (m qvalueRangeMap) analyzeComparisonExpr(node *parser.ComparisonExpr) {
 		return
 	}
 
+	// NormalizeExpr has guaranteed that qvalues will appear on the left side of
+	// comparison expressions.
 	qval, ok := node.Left.(*qvalue)
-	var constExpr parser.Expr
-	if ok {
-		if !isConst(node.Right) {
-			// qvalue <op> non-constant.
-			return
-		}
-		constExpr = node.Right
-		// qval <op> constant.
-	} else {
-		qval, ok = node.Right.(*qvalue)
-		if !ok {
-			// non-qvalue <op> non-qvalue.
-			return
-		}
-		if !isConst(node.Left) {
-			// non-constant <op> qvalue.
-			return
-		}
-		constExpr = node.Left
-		// constant <op> qval: invert the operation.
-		switch op {
-		case parser.LT:
-			op = parser.GT
-		case parser.LE:
-			op = parser.GE
-		case parser.GT:
-			op = parser.LT
-		case parser.GE:
-			op = parser.LE
-		}
+	if !ok {
+		return
 	}
-
-	// Evaluate the constant expression.
-	datum, err := parser.EvalExpr(constExpr)
-	if err != nil {
-		// TODO(pmattis): Should we pass the error up the stack?
+	datum, ok := node.Right.(parser.Datum)
+	if !ok {
+		// qvalue <op> non-constant.
+		return
+	} else if _, ok := datum.(parser.DReference); ok {
+		// qvalue <op> non-constant.
 		return
 	}
 
@@ -570,7 +517,7 @@ func (v *indexInfo) makeEndKey() proto.Key {
 	return key
 }
 
-// coveringIndex returns true if all of the columns referenced by the target
+// isCoveringIndex returns true if all of the columns referenced by the target
 // expressions and where clause are contained within the index. This allows a
 // scan of only the index to be performed without requiring subsequent lookup
 // of the full row.
@@ -587,29 +534,6 @@ func (v *indexInfo) isCoveringIndex(qvals qvalMap) bool {
 		}
 	}
 	return true
-}
-
-type isConstVisitor struct {
-	isConst bool
-}
-
-var _ parser.Visitor = &isConstVisitor{}
-
-func (v *isConstVisitor) Visit(expr parser.Expr) parser.Expr {
-	if v.isConst {
-		if _, ok := expr.(parser.DReference); ok {
-			v.isConst = false
-		}
-	}
-	return expr
-}
-
-// isConst returns true if the expression contains only constant values
-// (i.e. it does not contain a DReference).
-func isConst(expr parser.Expr) bool {
-	v := isConstVisitor{isConst: true}
-	expr = parser.WalkExpr(&v, expr)
-	return v.isConst
 }
 
 type indexInfoByCost []*indexInfo

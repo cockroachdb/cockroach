@@ -450,13 +450,12 @@ func evalAndExpr(expr *AndExpr) (Datum, error) {
 	if err != nil {
 		return DNull, err
 	}
-	if left == DNull {
-		return DNull, nil
-	}
-	if v, err := getBool(left); err != nil {
-		return DNull, err
-	} else if !v {
-		return v, nil
+	if left != DNull {
+		if v, err := getBool(left); err != nil {
+			return DNull, err
+		} else if !v {
+			return v, nil
+		}
 	}
 	right, err := EvalExpr(expr.Right)
 	if err != nil {
@@ -470,7 +469,7 @@ func evalAndExpr(expr *AndExpr) (Datum, error) {
 	} else if !v {
 		return v, nil
 	}
-	return DBool(true), nil
+	return left, nil
 }
 
 func evalOrExpr(expr *OrExpr) (Datum, error) {
