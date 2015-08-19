@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 //
-// TODO(pmattis): ConditionalPut, DeleteRange.
+// TODO(pmattis): ConditionalPut.
 
 package cli
 
@@ -32,10 +32,6 @@ import (
 
 	"github.com/spf13/cobra"
 )
-
-const defaultMaxResults = 1000
-
-var maxResults int64
 
 var osExit = os.Exit
 var osStderr = os.Stderr
@@ -68,7 +64,7 @@ func unquoteArg(arg string, disallowSystem bool) string {
 	return s
 }
 
-// A getCmd command gets the value for the specified key.
+// A getCmd gets the value for the specified key.
 var getCmd = &cobra.Command{
 	Use:   "get [options] <key>",
 	Short: "gets the value for a key",
@@ -102,10 +98,10 @@ func runGet(cmd *cobra.Command, args []string) {
 	fmt.Printf("%q\n", r.Value)
 }
 
-// A putCmd command sets the value for one or more keys.
+// A putCmd sets the value for one or more keys.
 var putCmd = &cobra.Command{
 	Use:   "put [options] <key> <value> [<key2> <value2>...]",
-	Short: "sets the value for a key",
+	Short: "sets the value for one or more keys",
 	Long: `
 Sets the value for one or more keys. Keys and values must be provided
 in pairs on the command line.
@@ -119,23 +115,19 @@ func runPut(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	count := len(args) / 2
-
-	keys := make([]string, 0, count)
-	values := make([]string, 0, count)
+	var b client.Batch
 	for i := 0; i < len(args); i += 2 {
-		keys = append(keys, unquoteArg(args[i], true /* disallow system keys */))
-		values = append(values, unquoteArg(args[i+1], false))
+		b.Put(
+			unquoteArg(args[i], true /* disallow system keys */),
+			unquoteArg(args[i+1], false),
+		)
 	}
 
 	kvDB := makeDBClient()
 	if kvDB == nil {
 		return
 	}
-	var b client.Batch
-	for i := 0; i < count; i++ {
-		b.Put(keys[i], values[i])
-	}
+
 	if err := kvDB.Run(&b); err != nil {
 		fmt.Fprintf(osStderr, "put failed: %s\n", err)
 		osExit(1)
@@ -143,7 +135,7 @@ func runPut(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A incCmd command increments the value for one or more keys.
+// An incCmd increments the value for one or more keys.
 var incCmd = &cobra.Command{
 	Use:   "inc [options] <key> [<amount>]",
 	Short: "increments the value for a key",
@@ -185,12 +177,12 @@ func runInc(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A delCmd command sets the value for one or more keys.
+// A delCmd deletes the values of one or more keys.
 var delCmd = &cobra.Command{
 	Use:   "del [options] <key> [<key2>...]",
-	Short: "deletes the value for a key",
+	Short: "deletes the values of one or more keys",
 	Long: `
-Deletes the value for one or more keys.
+Deletes the values of one or more keys.
 `,
 	Run: runDel,
 }
@@ -201,21 +193,16 @@ func runDel(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	count := len(args)
-
-	keys := make([]string, 0, count)
-	for i := 0; i < count; i++ {
-		keys = append(keys, unquoteArg(args[i], true /* disallow system keys */))
+	var b client.Batch
+	for _, arg := range args {
+		b.Del(unquoteArg(arg, true /* disallow system keys */))
 	}
 
 	kvDB := makeDBClient()
 	if kvDB == nil {
 		return
 	}
-	var b client.Batch
-	for i := 0; i < count; i++ {
-		b.Del(keys[i])
-	}
+
 	if err := kvDB.Run(&b); err != nil {
 		fmt.Fprintf(osStderr, "delete failed: %s\n", err)
 		osExit(1)
@@ -223,7 +210,38 @@ func runDel(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A scanCmd command fetches the key/value pairs for a specified
+// A delRangeCmd deletes the values for a range of keys.
+// [startKey, endKey).
+var delRangeCmd = &cobra.Command{
+	Use:   "delrange [options] <startKey> <endKey>",
+	Short: "deletes the values for a range of keys",
+	Long: `
+Deletes the values for the range of keys [startKey, endKey).
+`,
+	Run: runDelRange,
+}
+
+func runDelRange(cmd *cobra.Command, args []string) {
+	if len(args) == 0 {
+		cmd.Usage()
+		return
+	}
+
+	kvDB := makeDBClient()
+	if kvDB == nil {
+		return
+	}
+
+	if err := kvDB.DelRange(
+		unquoteArg(args[0], true /* disallow system keys */),
+		unquoteArg(args[1], true /* disallow system keys */),
+	); err != nil {
+		fmt.Fprintf(osStderr, "delrange failed: %s\n", err)
+		osExit(1)
+	}
+}
+
+// A scanCmd fetches the key/value pairs for a specified
 // range.
 var scanCmd = &cobra.Command{
 	Use:   "scan [options] [<start-key> [<end-key>]]",
@@ -257,7 +275,7 @@ func runScan(cmd *cobra.Command, args []string) {
 	showResult(rows)
 }
 
-// A reverseScanCmd command fetches the key/value pairs for a specified
+// A reverseScanCmd fetches the key/value pairs for a specified
 // range.
 var reverseScanCmd = &cobra.Command{
 	Use:   "revscan [options] [<start-key> [<end-key>]]",
@@ -318,6 +336,7 @@ func showResult(rows []client.KeyValue) {
 		key := proto.Key(row.Key)
 		fmt.Printf("%s\t%q\n", key, row.Value)
 	}
+	fmt.Printf("%d result(s)\n", len(rows))
 }
 
 var kvCmds = []*cobra.Command{
@@ -325,13 +344,14 @@ var kvCmds = []*cobra.Command{
 	putCmd,
 	incCmd,
 	delCmd,
+	delRangeCmd,
 	scanCmd,
 	reverseScanCmd,
 }
 
 var kvCmd = &cobra.Command{
 	Use:   "kv",
-	Short: "get, put, increment, delete, scan and reverse scan key/value pairs",
+	Short: "get, put, increment, delete, scan, and reverse scan key/value pairs",
 	Long: `
 Special characters in keys or values should be specified according to
 the double-quoted Go string literal rules (see
