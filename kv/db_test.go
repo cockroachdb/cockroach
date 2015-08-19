@@ -66,7 +66,7 @@ func TestKVDBCoverage(t *testing.T) {
 	if gr, err := db.Get(key); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
-		t.Error("expected key to exist after delete")
+		t.Error("expected key to exist")
 	}
 
 	// Conditional put should succeed, changing value1 to value2.
@@ -143,6 +143,7 @@ func TestKVDBCoverage(t *testing.T) {
 // HTTP DB interface.
 func TestKVDBInternalMethods(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("test broken & disabled; obsolete after after #2271")
 	s := server.StartTestServer(t)
 	defer s.Stop()
 

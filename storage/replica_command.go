@@ -132,6 +132,8 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args pro
 		var resp proto.LeaderLeaseResponse
 		resp, err = r.LeaderLease(batch, ms, *tArgs)
 		reply = &resp
+	case *proto.NoopRequest:
+		reply = &proto.NoopResponse{}
 	default:
 		err = util.Errorf("unrecognized command %s", args.Method())
 	}
@@ -244,6 +246,8 @@ func (r *Replica) ReverseScan(batch engine.Engine, args proto.ReverseScanRequest
 
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
+// TODO(tschottdorf): return nil reply on any error. The error itself
+// must be the authoritative source of information.
 func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args proto.EndTransactionRequest) (proto.EndTransactionResponse, []proto.Intent, error) {
 	var reply proto.EndTransactionResponse
 
@@ -432,6 +436,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 // A range-local intent range is never split: It's returned as either
 // belonging to or outside of the descriptor's key range, and passing an intent
 // which begins range-local but ends non-local results in a panic.
+// TODO(tschottdorf) move to proto, make more gen-purpose.
 func intersectIntent(intent proto.Intent, desc proto.RangeDescriptor) (middle *proto.Intent, outside []proto.Intent) {
 	start, end := desc.StartKey, desc.EndKey
 	if !intent.Key.Less(intent.EndKey) {

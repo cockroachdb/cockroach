@@ -18,6 +18,7 @@
 package proto
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 
@@ -51,6 +52,7 @@ const (
 	isWrite                // write cmds go through raft and must be proposed on leader
 	isTxnWrite             // txn write cmds start heartbeat and are marked for intent resolution
 	isRange                // range commands may span multiple keys
+	isReverse              // reverse commands traverse ranges in descending direction
 )
 
 // IsAdmin returns true if the request is an admin request.
@@ -78,6 +80,11 @@ func IsWriteOnly(args Request) bool {
 	return !IsRead(args) && IsWrite(args)
 }
 
+// IsReverse returns true if the request is reverse.
+func IsReverse(args Request) bool {
+	return (args.flags() & isReverse) != 0
+}
+
 // IsTransactionWrite returns true if the request produces write
 // intents when used within a transaction.
 func IsTransactionWrite(args Request) bool {
@@ -90,12 +97,117 @@ func IsRange(args Request) bool {
 	return (args.flags() & isRange) != 0
 }
 
+// IsAdmin returns true iff the BatchRequest contains an admin request.
+func (br *BatchRequest) IsAdmin() bool {
+	for _, arg := range br.Requests {
+		if IsAdmin(arg.GetValue().(Request)) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsRead returns true if all requests within are flagged as reading data.
+func (br *BatchRequest) IsRead() bool {
+	for i := range br.Requests {
+		if !IsRead(br.Requests[i].GetValue().(Request)) {
+			return false
+		}
+	}
+	return true
+}
+
+// IsWrite returns true iff the BatchRequest contains a write.
+func (br *BatchRequest) IsWrite() bool {
+	for _, arg := range br.Requests {
+		if IsWrite(arg.GetValue().(Request)) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsReadOnly returns true if all requests within are read-only.
+func (br *BatchRequest) IsReadOnly() bool {
+	for i := range br.Requests {
+		if !IsReadOnly(br.Requests[i].GetValue().(Request)) {
+			return false
+		}
+	}
+	return true
+}
+
+// IsReverse returns true iff the BatchRequest contains a reverse request.
+func (br *BatchRequest) IsReverse() bool {
+	if len(br.Requests) == 0 {
+		panic("empty batch")
+	}
+	reverse := IsReverse(br.Requests[0].GetValue().(Request))
+	for _, arg := range br.Requests[1:] {
+		if req := arg.GetValue().(Request); IsReverse(req) != reverse {
+			panic(fmt.Sprintf("argument mixes reverse and non-reverse: %T", req))
+		}
+	}
+	return reverse
+}
+
+// IsTransactionWrite returns true iff the BatchRequest contains a txn write.
+func (br *BatchRequest) IsTransactionWrite() bool {
+	for _, arg := range br.Requests {
+		if IsTransactionWrite(arg.GetValue().(Request)) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsRange returns true iff the BatchRequest contains a range request.
+func (br *BatchRequest) IsRange() bool {
+	return (br.flags() & isRange) != 0
+}
+
 // CanBatch returns true if the request type can be part of a batch request.
 // TODO(tschottdorf): everything should be batchable. Those requests which
 // currently are !CanBatch should simply have to be alone in their batch.
 // That is easier since only BatchRequest must be supported.
 func CanBatch(args Request) bool {
 	return IsRead(args) || IsWrite(args)
+}
+
+// GetArg returns the first request of the given type, if possible.
+func (br *BatchRequest) GetArg(method Method) (Request, bool) {
+	for _, arg := range br.Requests {
+		if req := arg.GetValue().(Request); req.Method() == method {
+			return req, true
+		}
+	}
+	return nil, false
+}
+
+// First returns the first response of the given type, if possible.
+func (br *BatchResponse) First() Response {
+	if len(br.Responses) > 0 {
+		return br.Responses[0].GetValue().(Response)
+	}
+	return nil
+}
+
+// GetIntents returns a slice of key pairs corresponding to transactional writes
+// contained in the batch.
+// TODO(tschottdorf): use keys.Span here instead of []Intent. Actually
+// Intent should be Intents = {Txn, []Span} so that a []Span can
+// be turned into Intents easily by just adding a Txn.
+func (br *BatchRequest) GetIntents() []Intent {
+	var intents []Intent
+	for _, arg := range br.Requests {
+		req := arg.GetValue().(Request)
+		if !IsTransactionWrite(req) {
+			continue
+		}
+		h := req.Header()
+		intents = append(intents, Intent{Key: h.Key, EndKey: h.EndKey})
+	}
+	return intents
 }
 
 // Request is an interface for RPC requests.
@@ -123,10 +235,8 @@ type Response interface {
 // requests may cross range boundaries, such as Scan or DeleteRange.
 // Combine() allows responses from individual ranges to be aggregated
 // into a single one.
-// It is not expected that Combine() perform any error checking; this
-// should be done by the caller instead.
 type Combinable interface {
-	Combine(Response)
+	Combine(Response) error
 }
 
 // GetUser implements userRequest.
@@ -169,9 +279,13 @@ func (rh *RequestHeader) TraceName() string {
 	return rh.CmdID.TraceName()
 }
 
+func combineError(a, b interface{}) error {
+	return fmt.Errorf("illegal combination: (%T).Combine(%T)", a, b)
+}
+
 // Combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
 // to merge their headers.
-func (rh *ResponseHeader) Combine(otherRH *ResponseHeader) {
+func (rh *ResponseHeader) Combine(otherRH *ResponseHeader) error {
 	if rh != nil {
 		if ts := otherRH.GetTimestamp(); rh.Timestamp.Less(ts) {
 			rh.Timestamp = ts
@@ -180,41 +294,99 @@ func (rh *ResponseHeader) Combine(otherRH *ResponseHeader) {
 			rh.Txn = nil
 		}
 	}
+	return nil
 }
 
 // Combine implements the Combinable interface.
-func (sr *ScanResponse) Combine(c Response) {
+func (sr *ScanResponse) Combine(c Response) error {
 	otherSR := c.(*ScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.GetRows()...)
-		sr.Header().Combine(otherSR.Header())
+		if err := sr.Header().Combine(otherSR.Header()); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // Combine implements the Combinable interface.
-func (sr *ReverseScanResponse) Combine(c Response) {
+func (sr *ReverseScanResponse) Combine(c Response) error {
 	otherSR := c.(*ReverseScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.GetRows()...)
-		sr.Header().Combine(otherSR.Header())
+		if err := sr.Header().Combine(otherSR.Header()); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // Combine implements the Combinable interface.
-func (dr *DeleteRangeResponse) Combine(c Response) {
+func (dr *DeleteRangeResponse) Combine(c Response) error {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
 		dr.NumDeleted += otherDR.GetNumDeleted()
-		dr.Header().Combine(otherDR.Header())
+		if err := dr.Header().Combine(otherDR.Header()); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // Combine implements the Combinable interface.
-func (rr *ResolveIntentRangeResponse) Combine(c Response) {
+func (rr *ResolveIntentRangeResponse) Combine(c Response) error {
 	otherRR := c.(*ResolveIntentRangeResponse)
 	if rr != nil {
-		rr.Header().Combine(otherRR.Header())
+		if err := rr.Header().Combine(otherRR.Header()); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// ResetAll resets all the contained requests to their original state.
+func (br *BatchResponse) ResetAll() {
+	if br == nil {
+		return
+	}
+	for _, rsp := range br.Responses {
+		// TODO(tschottdorf) `rsp.Reset()` isn't enough because rsp
+		// isn't a pointer.
+		rsp.GetValue().(Response).Reset()
+	}
+}
+
+// Combine implements the Combinable interface. It combines each slot of the
+// given request into the corresponding slot of the base response. The number
+// of slots must be equal and the respective slots must be combinable.
+// TODO(tschottdorf): write tests.
+func (br *BatchResponse) Combine(c Response) error {
+	otherBatch, ok := c.(*BatchResponse)
+	if !ok {
+		return combineError(br, c)
+	}
+	if len(otherBatch.Responses) != len(br.Responses) {
+		return errors.New("unable to combine batch responses of different length")
+	}
+	for i, l := 0, len(br.Responses); i < l; i++ {
+		valLeft := br.Responses[i].GetValue()
+		valRight := otherBatch.Responses[i].GetValue()
+		args, lOK := valLeft.(Combinable)
+		reply, rOK := valRight.(Combinable)
+		if lOK && rOK {
+			if err := args.Combine(reply.(Response)); err != nil {
+				return err
+			}
+			continue
+		}
+		// If our slot is a NoopResponse, then whatever the other batch has is
+		// the result. Note that the result can still be a NoopResponse, to be
+		// filled in by a future Combine().
+		if _, ok := valLeft.(*NoopResponse); ok {
+			br.Responses[i] = otherBatch.Responses[i]
+		}
+	}
+	return nil
 }
 
 // Header implements the Request interface for RequestHeader.
@@ -432,6 +604,9 @@ func (*ResolveIntentRequest) Method() Method { return ResolveIntent }
 func (*ResolveIntentRangeRequest) Method() Method { return ResolveIntentRange }
 
 // Method implements the Request interface.
+func (*NoopRequest) Method() Method { return Noop }
+
+// Method implements the Request interface.
 func (*MergeRequest) Method() Method { return Merge }
 
 // Method implements the Request interface.
@@ -442,6 +617,15 @@ func (*LeaderLeaseRequest) Method() Method { return LeaderLease }
 
 // Method implements the Request interface.
 func (*BatchRequest) Method() Method { return Batch }
+
+// Methods returns a slice of the contained methods.
+func (br *BatchRequest) Methods() []Method {
+	var res []Method
+	for _, arg := range br.Requests {
+		res = append(res, arg.GetValue().(Request).Method())
+	}
+	return res
+}
 
 // CreateReply implements the Request interface.
 func (*GetRequest) CreateReply() Response { return &GetResponse{} }
@@ -497,6 +681,9 @@ func (*ResolveIntentRangeRequest) CreateReply() Response {
 }
 
 // CreateReply implements the Request interface.
+func (*NoopRequest) CreateReply() Response { return &NoopResponse{} }
+
+// CreateReply implements the Request interface.
 func (*MergeRequest) CreateReply() Response { return &MergeResponse{} }
 
 // CreateReply implements the Request interface.
@@ -515,7 +702,7 @@ func (*IncrementRequest) flags() int          { return isRead | isWrite | isTxnW
 func (*DeleteRequest) flags() int             { return isWrite | isTxnWrite }
 func (*DeleteRangeRequest) flags() int        { return isWrite | isTxnWrite | isRange }
 func (*ScanRequest) flags() int               { return isRead | isRange }
-func (*ReverseScanRequest) flags() int        { return isRead | isRange }
+func (*ReverseScanRequest) flags() int        { return isRead | isRange | isReverse }
 func (*EndTransactionRequest) flags() int     { return isWrite }
 func (*AdminSplitRequest) flags() int         { return isAdmin }
 func (*AdminMergeRequest) flags() int         { return isAdmin }
@@ -525,6 +712,7 @@ func (*PushTxnRequest) flags() int            { return isWrite }
 func (*RangeLookupRequest) flags() int        { return isRead }
 func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
+func (*NoopRequest) flags() int               { return isRead } // slightly special
 func (*MergeRequest) flags() int              { return isWrite }
 func (*TruncateLogRequest) flags() int        { return isWrite }
 func (*LeaderLeaseRequest) flags() int        { return isWrite }

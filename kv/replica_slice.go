@@ -42,6 +42,9 @@ type replicaSlice []replicaInfo
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossipped are omitted from the result.
 func newReplicaSlice(gossip *gossip.Gossip, desc *proto.RangeDescriptor) replicaSlice {
+	if gossip == nil {
+		return nil
+	}
 	replicas := make(replicaSlice, 0, len(desc.Replicas))
 	for _, r := range desc.Replicas {
 		nd, err := gossip.GetNodeDescriptor(r.NodeID)

@@ -86,7 +86,9 @@ var TestingCommandFilter func(proto.Request) error
 // upon EndTransaction if they only have local intents (which can be
 // resolved synchronously with EndTransaction). Certain tests become
 // simpler with this being turned off.
-var txnAutoGC = true
+// TODO(tschottdorf): currently disabled since missing batch atomicity on Store
+// can lay down intents which are never tracked by the coordinator.
+var txnAutoGC = false
 
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
@@ -138,9 +140,11 @@ type pendingCmd struct {
 	done chan proto.ResponseWithError // Used to signal waiting RPC handler
 }
 
-// A rangeManager is an interface satisfied by Store through which ranges
+// A RangeManager is an interface satisfied by Store through which ranges
 // contained in the store can access the methods required for splitting.
-type rangeManager interface {
+// TODO(tschottdorf): consider moving LocalSender to storage, in which
+// case this can be unexported.
+type RangeManager interface {
 	// Accessors for shared state.
 	ClusterID() string
 	StoreID() proto.StoreID
@@ -177,7 +181,7 @@ type rangeManager interface {
 // as appropriate.
 type Replica struct {
 	desc     unsafe.Pointer // Atomic pointer for *proto.RangeDescriptor
-	rm       rangeManager   // Makes some store methods available
+	rm       RangeManager   // Makes some store methods available
 	stats    *rangeStats    // Range statistics
 	maxBytes int64          // Max bytes before split.
 	// Last index persisted to the raft log (not necessarily committed).
@@ -197,7 +201,7 @@ type Replica struct {
 }
 
 // NewReplica initializes the replica using the given metadata.
-func NewReplica(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) {
+func NewReplica(desc *proto.RangeDescriptor, rm RangeManager) (*Replica, error) {
 	r := &Replica{
 		rm:          rm,
 		cmdQ:        NewCommandQueue(),
@@ -660,8 +664,14 @@ func (r *Replica) beginCmds(bArgs *proto.BatchRequest) ([]interface{}, error) {
 	// clock has been updated to the high water mark of any commands
 	// which might overlap this one in effect.
 	if bArgs.Timestamp.Equal(proto.ZeroTimestamp) {
-		bArgs.Timestamp = r.rm.Clock().Now()
+		if bArgs.Txn != nil {
+			// TODO(tschottdorf): see if this is already done somewhere else.
+			bArgs.Timestamp = bArgs.Txn.Timestamp
+		} else {
+			bArgs.Timestamp = r.rm.Clock().Now()
+		}
 	}
+
 	for _, union := range bArgs.Requests {
 		args := union.GetValue().(proto.Request)
 		header := args.Header()
@@ -944,13 +954,17 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto
 		ctx = r.context()
 	}
 
-	execDone := tracer.FromCtx(ctx).Epoch(fmt.Sprintf("applying batch"))
+	trace := tracer.FromCtx(ctx)
+	execDone := trace.Epoch("applying batch")
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
 	bReply, err := r.applyRaftCommand(ctx, index, proto.RaftNodeID(raftCmd.OriginNodeID), &raftCmd.Cmd)
 	err = r.maybeSetCorrupt(err)
 	execDone()
+	if err != nil {
+		trace.Event(fmt.Sprintf("error: %T", err))
+	}
 
 	if cmd != nil {
 		cmd.done <- proto.ResponseWithError{Reply: bReply, Err: err}
@@ -1238,11 +1252,9 @@ func (r *Replica) handleSkippedIntents(args proto.Request, intents []proto.Inten
 
 	ctx := r.context()
 	stopper := r.rm.Stopper()
-	// TODO(tschottdorf): There's a chance that #1684 will make a comeback
-	// since intent resolution on commit has since moved to EndTransaction,
-	// which returns (some of) them as skipped intents. If so, need to resolve
-	// synchronously if we're not allowed to do async (or just launch
-	// goroutines).
+	// TODO(tschottdorf): avoid data race related to batch unrolling in ExecuteCmd;
+	// can probably go again when that provisional code there is gone.
+	args = gogoproto.Clone(args).(proto.Request)
 	stopper.RunAsyncTask(func() {
 		err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
 			Intents: intents,
@@ -1382,8 +1394,13 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		action := func() {
 			// Trace this under the ID of the intent owner.
 			ctx := tracer.ToCtx(ctx, r.rm.Tracer().NewTrace(bArgsLocal.Header()))
-			if _, err := r.addWriteCmd(ctx, bArgsLocal, &wg); err != nil && log.V(1) {
-				log.Warningc(ctx, "batch resolve failed: %s", err)
+			if _, err := r.addWriteCmd(ctx, bArgsLocal, &wg); err != nil {
+				if log.V(1) {
+					log.Warningc(ctx, "batch resolve failed: %s", err)
+				}
+				if _, ok := err.(*proto.RangeKeyMismatchError); !ok {
+					panic("intent resolution failed") // TODO(tschottdorf)
+				}
 			}
 		}
 		wg.Add(1)
@@ -1396,19 +1413,18 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		}
 	}
 
-	// Resolve all of the intents which aren't local to the Range. This is a
-	// no-op if all are local.
-	b := &client.Batch{}
-	b.InternalAddCall(proto.Call{Args: bArgs, Reply: &proto.BatchResponse{}})
+	// Resolve all of the intents which aren't local to the Range.
 	if len(bArgs.Requests) > 0 {
+		// TODO(tschottdorf): should be able use the Batch normally and do
+		// without InternalAddCall.
+		b := &client.Batch{}
+		b.InternalAddCall(proto.Call{Args: bArgs, Reply: &proto.BatchResponse{}})
 		action := func() {
-			// TODO(tschottdorf): no tracing here yet. Probably useful at some point,
-			// but needs a) the corresponding interface and b) facilities for tracing
-			// multiple tracees at the same time (batch full of possibly individual
-			// txns).
+			// TODO(tschottdorf): no tracing here yet.
 			if err := r.rm.DB().Run(b); err != nil {
-				if log.V(1) {
-					log.Infoc(ctx, "%s", err)
+				if log.V(0) {
+					log.Warningf("unable to resolve: %s", err)
+					panic("TODO(tschottdorf)")
 				}
 			}
 		}

@@ -44,7 +44,9 @@ EXPLAIN (DEBUG) SELECT * FROM t@foo
 0  /t/foo/1/1  NULL  true
 1  /t/foo/1/2  NULL  true
 
-statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
+# TODO(tschottdorf): #1891, then:
+# statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
+statement error unexpected value.*
 CREATE UNIQUE INDEX bar ON t (b)
 
 query TTTTT colnames
