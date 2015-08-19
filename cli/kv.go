@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 //
-// TODO(pmattis): ConditionalPut, DeleteRange.
+// TODO(pmattis): ConditionalPut.
 
 package cli
 
@@ -36,6 +36,8 @@ import (
 const defaultMaxResults = 1000
 
 var maxResults int64
+
+var delRange bool
 
 var osExit = os.Exit
 var osStderr = os.Stderr
@@ -190,7 +192,9 @@ var delCmd = &cobra.Command{
 	Use:   "del [options] <key> [<key2>...]",
 	Short: "deletes the value for a key",
 	Long: `
-Deletes the value for one or more keys.
+Deletes the value for one or more keys. Only two keys are expected when
+--range flag is specified. If the --range flag is specified then all the keys in
+the range of <key1> and <key2> is deleted including <key1> and excluding <key2>.
 `,
 	Run: runDel,
 }
@@ -212,6 +216,19 @@ func runDel(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
+
+	if delRange {
+		if len(keys) != 2 {
+			cmd.Usage()
+			return
+		}
+		if err := kvDB.DelRange(keys[0], keys[1]); err != nil {
+			fmt.Fprintf(osStderr, "del with --range failed: %s\n", err)
+			osExit(1)
+		}
+		return
+	}
+
 	var b client.Batch
 	for i := 0; i < count; i++ {
 		b.Del(keys[i])

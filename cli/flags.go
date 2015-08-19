@@ -231,6 +231,10 @@ func initFlags(ctx *server.Context) {
 		f := cmd.Flags()
 		f.Int64Var(&maxResults, "max-results", defaultMaxResults, flagUsage["max-results"])
 	}
+
+	// range flag for delete.
+	f := delCmd.Flags()
+	f.BoolVar(&delRange, "range", false, "range to delete")
 }
 
 func init() {
