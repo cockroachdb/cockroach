@@ -284,20 +284,40 @@ func (node OrderBy) String() string {
 	return buf.String()
 }
 
+// Direction for ordering results.
+type Direction int
+
+// Direction values.
+const (
+	DefaultDirection Direction = iota
+	Ascending
+	Descending
+)
+
+var directionName = [...]string{
+	DefaultDirection: "",
+	Ascending:        "ASC",
+	Descending:       "DESC",
+}
+
+func (d Direction) String() string {
+	if d < 0 || d > Direction(len(directionName)-1) {
+		return fmt.Sprintf("Direction(%d)", d)
+	}
+	return directionName[d]
+}
+
 // Order represents an ordering expression.
 type Order struct {
 	Expr      Expr
-	Direction string
+	Direction Direction
 }
 
-// Order.Direction
-const (
-	astAsc  = " ASC"
-	astDesc = " DESC"
-)
-
 func (node *Order) String() string {
-	return fmt.Sprintf("%s%s", node.Expr, node.Direction)
+	if node.Direction == DefaultDirection {
+		return node.Expr.String()
+	}
+	return fmt.Sprintf("%s %s", node.Expr, node.Direction)
 }
 
 // Limit represents a LIMIT clause.

@@ -234,6 +234,10 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t WHERE a = COUNT(*)`},
 		{`SELECT (a.b) FROM t WHERE (b.c) = 2`},
 
+		{`SELECT FROM t ORDER BY a`},
+		{`SELECT FROM t ORDER BY a ASC`},
+		{`SELECT FROM t ORDER BY a DESC`},
+
 		{`SELECT FROM t HAVING a = b`},
 
 		{`SELECT FROM t UNION SELECT 1 FROM t`},
@@ -395,9 +399,6 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT e'\'\"\b\n\r\t\\' FROM t`},
 		{`SELECT '\x' FROM t`},
 		{`SELECT 1 FROM t GROUP BY a`},
-		{`SELECT 1 FROM t ORDER BY a`},
-		{`SELECT 1 FROM t ORDER BY a ASC`},
-		{`SELECT 1 FROM t ORDER BY a DESC`},
 		{`CREATE INDEX a ON b (c)`},
 		{`CREATE INDEX a ON b.c (d)`},
 		{`CREATE INDEX ON a (b)`},
