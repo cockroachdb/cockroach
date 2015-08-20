@@ -133,7 +133,7 @@ func runPut(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A cPutCmd command conditionally sets a value for a key.
+// A cPutCmd conditionally sets a value for a key.
 var cPutCmd = &cobra.Command{
 	Use:   "cput [options] <key> <value> [<expValue>]",
 	Short: "conditionally sets a value for a key",
