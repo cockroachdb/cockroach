@@ -1327,7 +1327,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		// Maybe resolve a potential write intent error. We do this here
 		// because this is the code path with the requesting client
 		// waiting. We don't want every replica to attempt to resolve the
-		// intent independently, so we can't do it in Range.executeCmd.
+		// intent independently, so we can't do it in Replica.executeCmd.
 		if wiErr, ok := err.(*proto.WriteIntentError); ok {
 			var pushType proto.PushTxnType
 			if proto.IsWrite(args) {
