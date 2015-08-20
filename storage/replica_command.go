@@ -1034,10 +1034,6 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 func (r *Replica) AdminSplit(args proto.AdminSplitRequest) (proto.AdminSplitResponse, error) {
 	var reply proto.AdminSplitResponse
 
-	// Only allow a single split per range at a time.
-	r.metaLock.Lock()
-	defer r.metaLock.Unlock()
-
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
 	// other commands.
@@ -1222,10 +1218,6 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) e
 func (r *Replica) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeResponse, error) {
 	var reply proto.AdminMergeResponse
 
-	// Only allow a single split/merge per range at a time.
-	r.metaLock.Lock()
-	defer r.metaLock.Unlock()
-
 	// Lookup subsumed range.
 	desc := r.Desc()
 	if desc.EndKey.Equal(proto.KeyMax) {
@@ -1374,10 +1366,6 @@ func (r *Replica) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) err
 // in a distributed transaction and takes effect when that transaction is committed.
 // When removing a replica, only the NodeID and StoreID fields of the Replica are used.
 func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.Replica) error {
-	// Only allow a single change per range at a time.
-	r.metaLock.Lock()
-	defer r.metaLock.Unlock()
-
 	// Validate the request and prepare the new descriptor.
 	desc := r.Desc()
 	updatedDesc := *desc

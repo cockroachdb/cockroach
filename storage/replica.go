@@ -190,8 +190,6 @@ type Replica struct {
 	rm       rangeManager   // Makes some store methods available
 	stats    *rangeStats    // Range statistics
 	maxBytes int64          // Max bytes before split.
-	// Held while a split, merge, or replica change is underway.
-	metaLock sync.Mutex // TODO(bdarnell): Revisit the metaLock.
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
