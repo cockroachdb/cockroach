@@ -79,6 +79,7 @@ type scanNode struct {
 	rowIndex         int               // the index of the current row
 	colID            ColumnID          // column ID of the current key
 	vals             []parser.Datum    // the index key values for the current row
+	pkVals           []parser.Datum    // the primary key index key values for unique indexes
 	qvals            qvalMap           // the values in the current row
 	colKind          colKindMap        // map of column kinds for decoding column values
 	row              parser.DTuple     // the rendered row
@@ -229,9 +230,16 @@ func (n *scanNode) initScan() bool {
 	}
 
 	// Prepare our index key vals slice.
-	n.vals, n.err = makeKeyVals(n.desc, n.columnIDs)
-	if n.err != nil {
+	if n.vals, n.err = makeKeyVals(n.desc, n.columnIDs); n.err != nil {
 		return false
+	}
+
+	if n.isSecondaryIndex && n.index.Unique {
+		// Unique secondary indexes have a value that is the primary index
+		// key. Prepare pkVals for use in decoding this value.
+		if n.pkVals, n.err = makeKeyVals(n.desc, n.desc.PrimaryIndex.ColumnIDs); n.err != nil {
+			return false
+		}
 	}
 
 	// Prepare a map from column ID to column kind used for unmarshalling values.
@@ -394,7 +402,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 		// This is the first key for the row, initialize the column values that are
 		// part of the index key.
 		for i, id := range n.columnIDs {
-			if qval := n.qvals[id]; qval != nil {
+			if qval, ok := n.qvals[id]; ok {
 				qval.datum = n.vals[i]
 			}
 		}
@@ -424,6 +432,17 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 			}
 		}
 	} else {
+		if n.pkVals != nil {
+			if _, n.err = decodeKeyVals(n.pkVals, kv.ValueBytes()); n.err != nil {
+				return false
+			}
+			for i, id := range n.desc.PrimaryIndex.ColumnIDs {
+				if qval, ok := n.qvals[id]; ok {
+					qval.datum = n.pkVals[i]
+				}
+			}
+		}
+
 		if log.V(2) {
 			log.Infof("Scan %q", kv.Key)
 		}
@@ -532,7 +551,11 @@ func (n *scanNode) explainDebug(endOfRow, outputRow bool) {
 	}
 	n.row[0] = parser.DInt(n.rowIndex)
 	n.row[1] = parser.DString(n.prettyKey())
-	n.row[2] = parser.DString(n.explainValue.String())
+	if n.pkVals != nil {
+		n.row[2] = parser.DString(n.prettyKeyVals(n.pkVals))
+	} else {
+		n.row[2] = parser.DString(n.explainValue.String())
+	}
 	if endOfRow {
 		n.row[3] = parser.DBool(outputRow)
 		n.rowIndex++
@@ -547,8 +570,21 @@ func (n *scanNode) prettyKey() string {
 		return ""
 	}
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "/%s/%s", n.desc.Name, n.index.Name)
-	for _, v := range n.vals {
+	fmt.Fprintf(&buf, "/%s/%s%s", n.desc.Name, n.index.Name, n.prettyKeyVals(n.vals))
+	if n.colID > 0 {
+		// TODO(pmattis): This is inefficient, but does it matter?
+		col, err := n.desc.FindColumnByID(n.colID)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Fprintf(&buf, "/%s", col.Name)
+	}
+	return buf.String()
+}
+
+func (n *scanNode) prettyKeyVals(vals []parser.Datum) string {
+	var buf bytes.Buffer
+	for _, v := range vals {
 		if v == parser.DNull {
 			fmt.Fprintf(&buf, "/NULL")
 			continue
@@ -563,11 +599,6 @@ func (n *scanNode) prettyKey() string {
 		case parser.DString:
 			fmt.Fprintf(&buf, "/%v", t)
 		}
-	}
-	if n.colID > 0 {
-		// TODO(pmattis): This is inefficient, but does it matter?
-		col, _ := n.desc.FindColumnByID(n.colID)
-		fmt.Fprintf(&buf, "/%s", col.Name)
 	}
 	return buf.String()
 }

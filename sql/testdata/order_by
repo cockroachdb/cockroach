@@ -149,14 +149,14 @@ EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
 query ITTB
 EXPLAIN (DEBUG) SELECT b, c FROM abc ORDER BY b, c
 ----
-0 /abc/bc/2/3 NULL true
-1 /abc/bc/5/6 NULL true
+0 /abc/bc/2/3 /1/2/3 true
+1 /abc/bc/5/6 /4/5/6 true
 
 query ITTB
-EXPLAIN (DEBUG) SELECT b FROM abc ORDER BY b
+EXPLAIN (DEBUG) SELECT a, b, c FROM abc ORDER BY b
 ----
-0 /abc/bc/2/3 NULL true
-1 /abc/bc/5/6 NULL true
+0 /abc/bc/2/3 /1/2/3 true
+1 /abc/bc/5/6 /4/5/6 true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT a FROM abc ORDER BY a DESC

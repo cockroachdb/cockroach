@@ -32,9 +32,9 @@ EXPLAIN (DEBUG) SELECT * FROM abc WHERE a = 2
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM abc@foo
 ----
-0  /abc/foo/'one'    NULL  true
-1  /abc/foo/'three'  NULL  true
-2  /abc/foo/'two'    NULL  true
+0  /abc/foo/'one'    /1/'one'   true
+1  /abc/foo/'three'  /3/'three' true
+2  /abc/foo/'two'    /2/'two'   true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM abc@bar

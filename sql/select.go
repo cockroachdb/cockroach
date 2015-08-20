@@ -605,8 +605,11 @@ func (v *indexInfo) isCoveringIndex(qvals qvalMap) bool {
 	}
 
 	for colID := range qvals {
+		// All indexes contain the primary key columns. Unique indexes contain
+		// those columns in the value and non-unique indexes contain those columns
+		// in the key in order to make them unique.
 		if !v.index.containsColumnID(colID) &&
-			(v.index.Unique || !v.desc.PrimaryIndex.containsColumnID(colID)) {
+			!v.desc.PrimaryIndex.containsColumnID(colID) {
 			return false
 		}
 	}
