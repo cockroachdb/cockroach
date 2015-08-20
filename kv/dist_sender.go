@@ -411,14 +411,12 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 // call.Args.Key is looked up. If call.Args.EndKey exceeds that of the
 // returned descriptor, the next descriptor is obtained as well.
 func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *proto.RangeDescriptor, error) {
-	// If this is a PushTxn, set ignoreIntents option as
+	// If the call contains a PushTxn, set ignoreIntents option as
 	// necessary. This prevents a potential infinite loop; see the
 	// comments in proto.RangeLookupRequest.
 	options := lookupOptions{}
-	// TODO(tschottdorf): needs to properly comb the batch for a Push to flip
-	// this switch.
-	if pushArgs, ok := call.Args.(*proto.BatchRequest).Requests[0].GetValue().(*proto.PushTxnRequest); ok {
-		options.ignoreIntents = pushArgs.RangeLookup
+	if arg, ok := proto.GetArg(call.Args, proto.PushTxn); ok {
+		options.ignoreIntents = arg.(*proto.PushTxnRequest).RangeLookup
 	}
 
 	var desc *proto.RangeDescriptor
@@ -555,7 +553,6 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 			// will not see it.
 			origReply.Header().SetGoError(call.Reply.Header().GoError())
 			if len(bReply.Responses) > 0 {
-				log.Warningf("%+v", bReply.Responses[0].GetValue().(proto.Response))
 				gogoproto.Merge(origReply, bReply.Responses[0].GetValue().(proto.Response))
 			} else {
 				bReply.Add(origReply)

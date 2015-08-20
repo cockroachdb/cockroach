@@ -1285,25 +1285,28 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 			action()
 		}
 	}
-	// Resolve all of the intents which aren't local to the Range. This is a
-	// no-op if all are local.
-	b := &client.Batch{}
-	b.InternalAddCall(proto.Call{Args: bArgs, Reply: &proto.BatchResponse{}})
-	action := func() {
-		// TODO(tschottdorf): no tracing here yet. Probably useful at some point,
-		// but needs a) the corresponding interface and b) facilities for tracing
-		// multiple tracees at the same time (batch full of possibly individual
-		// txns).
-		if err := r.rm.DB().Run(b); err != nil {
-			if log.V(1) {
-				log.Infoc(ctx, "%s", err)
+	// Resolve all of the intents which aren't local to the Range.
+	if len(bArgs.Requests) > 0 {
+		// TODO(tschottdorf): should be able use the Batch normally and do
+		// without InternalAddCall.
+		b := &client.Batch{}
+		b.InternalAddCall(proto.Call{Args: bArgs, Reply: &proto.BatchResponse{}})
+		action := func() {
+			// TODO(tschottdorf): no tracing here yet. Probably useful at some point,
+			// but needs a) the corresponding interface and b) facilities for tracing
+			// multiple tracees at the same time (batch full of possibly individual
+			// txns).
+			if err := r.rm.DB().Run(b); err != nil {
+				if log.V(1) {
+					log.Infoc(ctx, "%s", err)
+				}
 			}
 		}
-	}
-	if !r.rm.Stopper().RunAsyncTask(action) {
-		// As with local intents, try async to not keep the caller waiting, but
-		// when draining just go ahead and do it synchronously. See #1684.
-		action()
+		if !r.rm.Stopper().RunAsyncTask(action) {
+			// As with local intents, try async to not keep the caller waiting, but
+			// when draining just go ahead and do it synchronously. See #1684.
+			action()
+		}
 	}
 
 	// Wait until all the local `ResolveIntent`s have been submitted to raft.

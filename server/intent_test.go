@@ -135,3 +135,17 @@ func TestIntentResolution(t *testing.T) {
 
 	}
 }
+
+func TestTobias(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := StartTestServer(t)
+	defer s.Stop()
+	if err := s.db.Txn(func(txn *client.Txn) error {
+		b := &client.Batch{}
+		b.Put("a", "1")
+		b.Put("b", "2")
+		return txn.CommitInBatch(b)
+	}); err != nil {
+		t.Error(err)
+	}
+}

@@ -1308,6 +1308,8 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto
 				// Use last response header, but keep our Txn
 				prevTxn := bReply.Txn
 				bReply.ResponseHeader, bReply.Txn = *(gogoproto.Clone(reply.Header()).(*proto.ResponseHeader)), prevTxn
+				// TODO(tschottdorf): figure out whether we really want to update
+				// the txn on errors returned.
 				if txn := reply.Header().Txn; txn != nil {
 					bReply.Txn.Update(txn)
 				}

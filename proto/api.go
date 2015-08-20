@@ -183,6 +183,51 @@ func (br *BatchRequest) IsRange() bool {
 	return false
 }
 
+// GetArg returns the first request of the given type, if possible.
+func (br *BatchRequest) GetArg(method Method) (Request, bool) {
+	for _, arg := range br.Requests {
+		if r, ok := GetArg(arg.GetValue().(Request), method); ok {
+			return r, ok
+		}
+	}
+	return nil, false
+}
+
+// GetIntents returns a slice of key pairs corresponding to transactional writes
+// contained in the batch.
+// TODO(tschottdorf) return Intent, not [2]Key.
+func (br *BatchRequest) GetIntents() [][2]Key {
+	var intents [][2]Key
+	for _, arg := range br.Requests {
+		intents = append(intents, GetIntents(arg.GetValue().(Request))...)
+	}
+	return intents
+}
+
+// GetArg returns true iff the request is or contains a request of the given
+// type, along with the first match.
+func GetArg(args Request, method Method) (Request, bool) {
+	if br, ok := args.(*BatchRequest); ok {
+		return br.GetArg(method)
+	}
+	if args.Method() == method {
+		return args, true
+	}
+	return nil, false
+}
+
+// GetIntents returns a slice of key pairs corresponding to transactional writes
+// contained in the request.
+func GetIntents(args Request) [][2]Key {
+	if br, ok := args.(*BatchRequest); ok {
+		return br.GetIntents()
+	}
+	if !IsTransactionWrite(args) {
+		return nil
+	}
+	return [][2]Key{{args.Header().Key, args.Header().EndKey}}
+}
+
 // Request is an interface for RPC requests.
 type Request interface {
 	gogoproto.Message

@@ -306,15 +306,22 @@ func (tc *TxnCoordSender) Send(ctx context.Context, call proto.Call) {
 	ctx = tracer.ToCtx(ctx, trace)
 
 	// Process batch specially; otherwise, send via wrapped sender.
-	switch args := call.Args.(type) {
+	switch batchArgs := call.Args.(type) {
 	case *proto.BatchRequest:
 		trace.Event("batch processing")
-		tc.sendBatch(ctx, args, call.Reply.(*proto.BatchResponse))
-	default:
-		// TODO(tschottdorf): should treat all calls as Batch. After all, that
-		// will be almost all calls.
-		tc.sendOne(ctx, call)
+		for _, arg := range batchArgs.Requests {
+			if err := updateForBatch(arg.GetValue().(proto.Request), batchArgs.RequestHeader); err != nil {
+				call.Reply.Header().SetGoError(err)
+				return
+			}
+			trace.Event(fmt.Sprintf("%T", arg.GetValue()))
+		}
+		// TODO(tschottdorf): remove.
+		// For now: commented=send batches whole, uncommented=single reqs.
+		tc.sendBatch(ctx, batchArgs, call.Reply.(*proto.BatchResponse))
+		return
 	}
+	tc.sendOne(ctx, call)
 }
 
 // maybeBeginTxn begins a new transaction if a txn has been specified
@@ -380,7 +387,9 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 			header.Timestamp = header.Txn.Timestamp
 		}
 
-		if args, ok := call.Args.(*proto.EndTransactionRequest); ok {
+		// TODO(tschottdorf): when done, GetArg goes on BatchRequest.
+		if rArgs, ok := proto.GetArg(call.Args, proto.EndTransaction); ok {
+			args := rArgs.(*proto.EndTransactionRequest)
 			// Remember when EndTransaction started in case we want to
 			// be linearizable.
 			startNS = tc.clock.PhysicalNow()
@@ -401,7 +410,12 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 			}
 			tc.Unlock()
 
-			if !metaOK {
+			// TODO(tschottdorf): now that whole batches come through, we've
+			// got to track planned writes before EndTransaction in the cur-
+			// rent batch. This is a hacky way to get that for now.
+			if len(proto.GetIntents(call.Args)) > 0 {
+				// Writes in Batch, so EndTransaction is fine.
+			} else if !metaOK {
 				// If we don't have the transaction, then this must be a retry
 				// by the client. We can no longer reconstruct a correct
 				// request so we must fail.
@@ -448,7 +462,7 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 		// or key range to the intents map. If the transaction metadata doesn't yet
 		// exist, create it.
 		if call.Reply.Header().GoError() == nil {
-			if proto.IsTransactionWrite(call.Args) {
+			if intents := proto.GetIntents(call.Args); len(intents) > 0 {
 				if txnMeta == nil {
 					txn.Writing = true
 					trace.Event("coordinator spawns")
@@ -474,7 +488,9 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						return
 					}
 				}
-				txnMeta.addKeyRange(header.Key, header.EndKey)
+				for _, rg := range intents {
+					txnMeta.addKeyRange(rg[0], rg[1])
+				}
 			}
 			// Update our record of this transaction.
 			if txnMeta != nil {
@@ -521,7 +537,7 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 		}
 	case nil:
 		if txn := call.Reply.Header().Txn; txn != nil {
-			if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
+			if _, ok := proto.GetArg(call.Args, proto.EndTransaction); ok {
 				// If the --linearizable flag is set, we want to make sure that
 				// all the clocks in the system are past the commit timestamp
 				// of the transaction. This is guaranteed if either
@@ -591,10 +607,6 @@ func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.BatchR
 	batchReply.Txn = batchArgs.Txn
 	for i := range batchArgs.Requests {
 		args := batchArgs.Requests[i].GetValue().(proto.Request)
-		if err := updateForBatch(args, batchArgs.RequestHeader); err != nil {
-			batchReply.Header().SetGoError(err)
-			return
-		}
 		call := proto.Call{Args: args}
 		// Create a reply from the method type and add to batch response.
 		if i >= len(batchReply.Responses) {
