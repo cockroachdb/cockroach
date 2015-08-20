@@ -1268,29 +1268,62 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto
 		defer trace.Finalize()
 	}
 	if batch, isBatch := args.(*proto.BatchRequest); isBatch {
-		// TODO(tschottdorf): provisional batch handling: only singletons.
-		args = batch.Requests[0].GetValue().(proto.Request)
-		header := args.Header()
-		origEndKey := header.EndKey
-		*header = *gogoproto.Clone(&batch.RequestHeader).(*proto.RequestHeader)
-		header.EndKey = origEndKey
-		if len(header.EndKey) != 0 {
-			// TODO(tschottdorf): mostly for truncation, since the way we set
-			// things up doesn't truncate the contained arg, only the batch.
-			header.EndKey = batch.RequestHeader.EndKey
+		// TODO(tschottdorf): provisional batch handling.
+		bReply := &proto.BatchResponse{}
+		var isTxn bool
+		if txn := batch.Txn; txn != nil {
+			bReply.Txn = gogoproto.Clone(txn).(*proto.Transaction) // init response txn
+			isTxn = true
 		}
-		defer func() {
-			bReply := &proto.BatchResponse{}
+		for i, bArg := range batch.Requests {
+			args := bArg.GetValue().(proto.Request)
+			header := args.Header()
+			origHeader := *gogoproto.Clone(header).(*proto.RequestHeader)
+			*header = *gogoproto.Clone(&batch.RequestHeader).(*proto.RequestHeader)
+			header.CmdID = proto.ClientCmdID{} // because response cache
+			// Only Key and EndKey are allowed to diverge from the iterated
+			// Batch header.
+			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
+			if len(origHeader.EndKey) > 0 {
+				// Hack around the fact that DistSender still truncates the request,
+				// but now it only sees a BatchRequest. It doesn't touch the actual
+				// requests. So if the request looks "rangey", try to make sure it's
+				// properly contained in the Batch's range (if that has one).
+				if keys.KeyAddress(batch.RequestHeader.EndKey).Less(keys.KeyAddress(header.EndKey)) {
+					header.EndKey = batch.RequestHeader.EndKey
+				}
+				if keys.KeyAddress(header.Key).Less(keys.KeyAddress(batch.RequestHeader.Key)) {
+					header.Key = batch.RequestHeader.Key
+				}
+			}
+
+			if isTxn && i > 0 {
+				// Propagate Txn of last reply to current request.
+				*header.Txn = *bReply.Txn
+			}
+			reply, err := s.executeOne(ctx, args)
+			*header = origHeader
 			if reply != nil {
 				bReply.Add(reply)
-				bReply.ResponseHeader = *(gogoproto.Clone(reply.Header()).(*proto.ResponseHeader))
+				// Use last response header, but keep our Txn
+				prevTxn := bReply.Txn
+				bReply.ResponseHeader, bReply.Txn = *(gogoproto.Clone(reply.Header()).(*proto.ResponseHeader)), prevTxn
+				if txn := reply.Header().Txn; txn != nil {
+					bReply.Txn.Update(txn)
+				}
+
 			}
-			reply = bReply
-		}()
+			if err != nil {
+				return bReply, err
+			}
+		}
+		return bReply, nil
 	}
-	if args.Method() == proto.Batch {
-		panic("batch")
-	}
+	return s.executeOne(ctx, args)
+}
+
+func (s *Store) executeOne(ctx context.Context, args proto.Request) (proto.Response, error) {
+	trace := tracer.FromCtx(ctx)
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {
 		return nil, err
@@ -1451,6 +1484,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	header := args.Header()
 	bArgs := &proto.BatchRequest{
 		RequestHeader: proto.RequestHeader{
+			Timestamp:    header.Timestamp,
 			Txn:          header.Txn,
 			UserPriority: header.UserPriority,
 		},
@@ -1459,24 +1493,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	for _, intent := range pushIntents {
 		pushArgs := &proto.PushTxnRequest{
 			RequestHeader: proto.RequestHeader{
-				Timestamp: header.Timestamp,
-				Key:       intent.Txn.Key,
-				// TODO(tschottdorf):
-				// The following fields should not be supplied here, but store
-				// tests (for example TestStoreResolveWriteIntent) which do not
-				// go through TxnCoordSender rely on them being specified on
-				// the individual calls (and TxnCoordSender is in charge of
-				// filling them in here later).
-				Txn: header.Txn,
-				// This is here only for legacy reasons: testSender in the
-				// storage tests duplicates batch processing and isn't as
-				// smart as TxnCoordSender. A test that relies on this is
-				// TestStoreResolveWriteIntentNoTxn.
-				// This should disappear naturally when batches which address
-				// the same Range get sent to that Range wholesale:
-				// testSender then simply sends batches as any other call,
-				// which should be enough for the few tests that need them.
-				UserPriority: header.UserPriority,
+				Key: intent.Txn.Key,
 			},
 			PusheeTxn: intent.Txn,
 			// The timestamp is used by PushTxn for figuring out whether the

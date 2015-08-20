@@ -767,7 +767,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		rpcSend: testFn,
 		rangeDescriptorDB: mockRangeDescriptorDB(func(key proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 			if !merged {
-				// Asume a range merge operation happened
+				// Assume a range merge operation happened.
 				merged = true
 				return []proto.RangeDescriptor{firstRange}, nil
 			}

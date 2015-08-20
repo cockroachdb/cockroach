@@ -95,35 +95,6 @@ func safeSetGoError(reply proto.Response, err error) {
 // Since kv/ depends on storage/, we can't get access to a
 // txn_coord_sender from here.
 func (db *testSender) Send(_ context.Context, call proto.Call) {
-	reqs := []requestUnion{}
-	switch t := call.Args.(type) {
-	case *proto.BatchRequest:
-		for i := range t.Requests {
-			reqs = append(reqs, &t.Requests[i])
-		}
-		if err := db.sendBatch(reqs, call.Reply.(*proto.BatchResponse)); err != nil {
-			safeSetGoError(call.Reply, err)
-		}
-	default:
-		db.sendOne(call)
-	}
-}
-
-func (db *testSender) sendBatch(reqs []requestUnion, adder responseAdder) error {
-	var batchErr error
-	for _, req := range reqs {
-		args := req.GetValue().(proto.Request)
-		call := proto.Call{Args: args, Reply: args.CreateReply()}
-		db.sendOne(call)
-		adder.Add(call.Reply)
-		if err := call.Reply.Header().GoError(); batchErr == nil && err != nil {
-			batchErr = err
-		}
-	}
-	return batchErr
-}
-
-func (db *testSender) sendOne(call proto.Call) {
 	switch call.Args.(type) {
 	case *proto.EndTransactionRequest:
 		safeSetGoError(call.Reply, util.Errorf("%s method not supported", call.Method()))
