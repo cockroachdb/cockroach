@@ -46,7 +46,7 @@ func runGetZone(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Zone)
+	admin := client.NewAdminClient(&context.Context, context.Addr, client.Zone)
 	body, err := admin.GetYAML(args[0])
 	if err != nil {
 		log.Error(err)
@@ -75,7 +75,7 @@ func runLsZones(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Zone)
+	admin := client.NewAdminClient(&context.Context, context.Addr, client.Zone)
 	list, err := admin.List()
 	if err != nil {
 		log.Error(err)
@@ -105,7 +105,7 @@ func runRmZone(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Zone)
+	admin := client.NewAdminClient(&context.Context, context.Addr, client.Zone)
 	if err := admin.Delete(args[0]); err != nil {
 		log.Error(err)
 		return
@@ -161,7 +161,7 @@ func runSetZone(cmd *cobra.Command, args []string) {
 		log.Errorf("unable to read zone config file %q: %s", args[1], err)
 		return
 	}
-	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Zone)
+	admin := client.NewAdminClient(&context.Context, context.Addr, client.Zone)
 	if err := admin.SetYAML(args[0], string(body)); err != nil {
 		log.Error(err)
 		return

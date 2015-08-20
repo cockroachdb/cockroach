@@ -44,7 +44,7 @@ individual files in the directory specified by --certs (required).
 // runCreateCACert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateCACert(cmd *cobra.Command, args []string) {
-	err := security.RunCreateCACert(Context.Certs, keySize)
+	err := security.RunCreateCACert(context.Certs, keySize)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate CA certificate: %s\n", err)
 		osExit(1)
@@ -69,7 +69,7 @@ At least one host should be passed in (either IP address of dns name).
 // runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateNodeCert(cmd *cobra.Command, args []string) {
-	err := security.RunCreateNodeCert(Context.Certs, keySize, args)
+	err := security.RunCreateNodeCert(context.Certs, keySize, args)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate node certificate: %s\n", err)
 		osExit(1)
@@ -97,7 +97,7 @@ func runCreateClientCert(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	err := security.RunCreateClientCert(Context.Certs, keySize, args[0])
+	err := security.RunCreateClientCert(context.Certs, keySize, args[0])
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate clent certificate: %s\n", err)
 		osExit(1)

@@ -37,9 +37,9 @@ func makeSQLClient() *sql.DB {
 	// reasonable. Perhaps Context.Addr should be considered a URL.
 	db, err := sql.Open("cockroach",
 		fmt.Sprintf("%s://root@%s?certs=%s",
-			Context.RequestScheme(),
-			Context.Addr,
-			Context.Certs))
+			context.RequestScheme(),
+			context.Addr,
+			context.Certs))
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to initialize SQL client: %s\n", err)
 		osExit(1)

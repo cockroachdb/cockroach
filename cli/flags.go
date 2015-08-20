@@ -240,5 +240,5 @@ func initFlags(ctx *server.Context) {
 }
 
 func init() {
-	initFlags(Context)
+	initFlags(context)
 }

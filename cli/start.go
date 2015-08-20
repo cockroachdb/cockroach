@@ -39,7 +39,7 @@ import (
 )
 
 // Context is the CLI Context used for the server.
-var Context = server.NewContext()
+var context = server.NewContext()
 
 // initCmd command initializes a new Cockroach cluster.
 var initCmd = &cobra.Command{
@@ -59,9 +59,9 @@ are already part of a pre-existing cluster, the bootstrap will fail.
 // store. The bootstrap engine may not be an in-memory type.
 func runInit(cmd *cobra.Command, args []string) {
 	// Default user for servers.
-	Context.User = security.NodeUser
+	context.User = security.NodeUser
 
-	if err := Context.InitStores(); err != nil {
+	if err := context.InitStores(); err != nil {
 		log.Errorf("failed to initialize stores: %s", err)
 		return
 	}
@@ -69,7 +69,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.NewUUID4().String()
 	stopper := stop.NewStopper()
-	if _, err := server.BootstrapCluster(clusterID, Context.Engines, stopper); err != nil {
+	if _, err := server.BootstrapCluster(clusterID, context.Engines, stopper); err != nil {
 		log.Errorf("unable to bootstrap cluster: %s", err)
 		return
 	}
@@ -111,28 +111,28 @@ func runStart(cmd *cobra.Command, args []string) {
 	log.Infof("build Deps: %s", info.Deps)
 
 	// Default user for servers.
-	Context.User = security.NodeUser
+	context.User = security.NodeUser
 
-	if Context.EphemeralSingleNode {
-		Context.Stores = "mem=1073741824"
-		Context.GossipBootstrap = server.SelfGossipAddr
+	if context.EphemeralSingleNode {
+		context.Stores = "mem=1073741824"
+		context.GossipBootstrap = server.SelfGossipAddr
 
 		runInit(cmd, args)
 	} else {
-		if err := Context.InitStores(); err != nil {
+		if err := context.InitStores(); err != nil {
 			log.Errorf("failed to initialize stores: %s", err)
 			return
 		}
 	}
 
-	if err := Context.InitNode(); err != nil {
+	if err := context.InitNode(); err != nil {
 		log.Errorf("failed to initialize node: %s", err)
 		return
 	}
 
 	log.Info("starting cockroach cluster")
 	stopper := stop.NewStopper()
-	s, err := server.NewServer(Context, stopper)
+	s, err := server.NewServer(context, stopper)
 	if err != nil {
 		log.Errorf("failed to start Cockroach server: %s", err)
 		return
@@ -143,7 +143,7 @@ func runStart(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	if Context.EphemeralSingleNode {
+	if context.EphemeralSingleNode {
 		// TODO(tamird): pass this to BootstrapRange rather than doing it
 		// at runtime. This was quicker, though.
 		if err := testutils.SetDefaultRangeReplicaNum(makeDBClient(), 1); err != nil {
@@ -207,23 +207,23 @@ node, cycling through each store specified by the --stores flag.
 
 // runExterminate destroys the data held in the specified stores.
 func runExterminate(cmd *cobra.Command, args []string) {
-	if err := Context.InitStores(); err != nil {
+	if err := context.InitStores(); err != nil {
 		log.Errorf("failed to initialize context: %s", err)
 		return
 	}
 
 	// First attempt to shutdown the server. Note that an error of EOF just
 	// means the HTTP server shutdown before the request to quit returned.
-	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Quit)
+	admin := client.NewAdminClient(&context.Context, context.Addr, client.Quit)
 	body, err := admin.Get()
 	if err != nil {
-		log.Infof("shutdown node %s: %s", Context.Addr, err)
+		log.Infof("shutdown node %s: %s", context.Addr, err)
 	} else {
 		log.Infof("shutdown node in anticipation of data extermination: %s", body)
 	}
 
 	// Exterminate all data held in specified stores.
-	for _, e := range Context.Engines {
+	for _, e := range context.Engines {
 		if rocksdb, ok := e.(*engine.RocksDB); ok {
 			log.Infof("exterminating data from store %s", e)
 			if err := rocksdb.Destroy(); err != nil {
@@ -232,7 +232,7 @@ func runExterminate(cmd *cobra.Command, args []string) {
 			}
 		}
 	}
-	log.Infof("exterminated all data from stores %s", Context.Engines)
+	log.Infof("exterminated all data from stores %s", context.Engines)
 }
 
 // quitCmd command shuts down the node server.
@@ -249,7 +249,7 @@ completed, the server exits.
 
 // runQuit accesses the quit shutdown path.
 func runQuit(cmd *cobra.Command, args []string) {
-	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Quit)
+	admin := client.NewAdminClient(&context.Context, context.Addr, client.Quit)
 	body, err := admin.Get()
 	if err != nil {
 		fmt.Printf("shutdown node error: %s\n", err)

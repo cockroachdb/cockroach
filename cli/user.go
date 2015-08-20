@@ -46,7 +46,7 @@ func runGetUser(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.User)
+	admin := client.NewAdminClient(&context.Context, context.Addr, client.User)
 	body, err := admin.GetYAML(args[0])
 	if err != nil {
 		log.Error(err)
@@ -72,7 +72,7 @@ func runLsUsers(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.User)
+	admin := client.NewAdminClient(&context.Context, context.Addr, client.User)
 	list, err := admin.List()
 	if err != nil {
 		log.Error(err)
@@ -98,7 +98,7 @@ func runRmUser(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.User)
+	admin := client.NewAdminClient(&context.Context, context.Addr, client.User)
 	if err := admin.Delete(args[0]); err != nil {
 		log.Error(err)
 		return
@@ -140,7 +140,7 @@ func runSetUser(cmd *cobra.Command, args []string) {
 		log.Error(err)
 		return
 	}
-	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.User)
+	admin := client.NewAdminClient(&context.Context, context.Addr, client.User)
 	if err := admin.SetYAML(args[0], string(contents)); err != nil {
 		log.Error(err)
 		return
