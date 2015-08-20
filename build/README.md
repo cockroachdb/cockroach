@@ -26,7 +26,7 @@ There are development and deploy images available.
 ### Development
 The development image is bulky, dynamically linked and contains a complete build toolchain.
 It is well suited to hacking around and running the tests (including acceptance
-tests and such). To build this image, run `./build-docker-dev.sh`.
+tests and such). To build this image, run `./builder.sh init`.
 
 ### Deployment
 The deploy image is a downsized image containing a minimal environment for
