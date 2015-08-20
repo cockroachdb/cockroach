@@ -504,11 +504,7 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, args proto.Request, desc 
 
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front.
-	// TODO(tschottdorf): replace IsRead() by IsReadOnlyBatch or something like that,
-	// but depending on Spencer's RFC we don't need that (if we decide that a
-	// batch can't be read and write). In the latter case, IsRead for a BatchRequest
-	// will be straightforward to adapt.
-	if !(proto.IsReadOnlyBatch(args.(*proto.BatchRequest)) && args.Header().ReadConsistency == proto.INCONSISTENT) &&
+	if !(proto.IsReadOnly(args) && args.Header().ReadConsistency == proto.INCONSISTENT) &&
 		leader.StoreID > 0 {
 		if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 			replicas.MoveToFront(i)

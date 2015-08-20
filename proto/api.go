@@ -57,33 +57,96 @@ const (
 
 // IsAdmin returns true if the request is an admin request.
 func IsAdmin(args Request) bool {
+	if br, ok := args.(*BatchRequest); ok {
+		return br.IsAdmin()
+	}
 	return (args.flags() & isAdmin) != 0
 }
 
 // IsRead returns true if the request is a read request.
 func IsRead(args Request) bool {
+	if br, ok := args.(*BatchRequest); ok {
+		return br.IsRead()
+	}
 	return (args.flags() & isRead) != 0
 }
 
 // IsWrite returns true if the request is a write request.
 func IsWrite(args Request) bool {
+	if br, ok := args.(*BatchRequest); ok {
+		return br.IsWrite()
+	}
 	return (args.flags() & isWrite) != 0
 }
 
 // IsReadOnly returns true if the request is read-only.
 func IsReadOnly(args Request) bool {
+	if br, ok := args.(*BatchRequest); ok {
+		return br.IsReadOnly()
+	}
 	return IsRead(args) && !IsWrite(args)
 }
 
 // IsReverse returns true if the request is reverse.
 func IsReverse(args Request) bool {
+	if br, ok := args.(*BatchRequest); ok {
+		return br.IsReverse()
+	}
 	return (args.flags() & isReverse) != 0
 }
 
-// IsReadOnlyBatch returns true if all requests within are read-only.
-func IsReadOnlyBatch(batch *BatchRequest) bool {
-	for i := range batch.Requests {
-		if !IsReadOnly(batch.Requests[i].GetValue().(Request)) {
+// IsTransactionWrite returns true if the request produces write
+// intents when used within a transaction.
+func IsTransactionWrite(args Request) bool {
+	if br, ok := args.(*BatchRequest); ok {
+		return br.IsTransactionWrite()
+	}
+	return (args.flags() & isTxnWrite) != 0
+}
+
+// IsRange returns true if the operation is range-based and must include
+// a start and an end key.
+func IsRange(args Request) bool {
+	if br, ok := args.(*BatchRequest); ok {
+		return br.IsRange()
+	}
+	return (args.flags() & isRange) != 0
+}
+
+// IsAdmin returns true iff the BatchRequest contains an admin request.
+func (br *BatchRequest) IsAdmin() bool {
+	for _, arg := range br.Requests {
+		if IsAdmin(arg.GetValue().(Request)) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsRead returns true if all requests within are flagged as reading data.
+func (br *BatchRequest) IsRead() bool {
+	for i := range br.Requests {
+		if !IsRead(br.Requests[i].GetValue().(Request)) {
+			return false
+		}
+	}
+	return true
+}
+
+// IsWrite returns true iff the BatchRequest contains a write.
+func (br *BatchRequest) IsWrite() bool {
+	for _, arg := range br.Requests {
+		if IsWrite(arg.GetValue().(Request)) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsReadOnly returns true if all requests within are read-only.
+func (br *BatchRequest) IsReadOnly() bool {
+	for i := range br.Requests {
+		if !IsReadOnly(br.Requests[i].GetValue().(Request)) {
 			return false
 		}
 	}
@@ -92,24 +155,32 @@ func IsReadOnlyBatch(batch *BatchRequest) bool {
 
 // IsReverse returns true iff the BatchRequest contains a reverse request.
 func (br *BatchRequest) IsReverse() bool {
-	for i := range br.Requests {
-		if _, ok := br.Requests[i].GetValue().(*ReverseScanRequest); ok {
+	for _, arg := range br.Requests {
+		if IsReverse(arg.GetValue().(Request)) {
 			return true
 		}
 	}
 	return false
 }
 
-// IsTransactionWrite returns true if the request produces write
-// intents when used within a transaction.
-func IsTransactionWrite(args Request) bool {
-	return (args.flags() & isTxnWrite) != 0
+// IsTransactionWrite returns true iff the BatchRequest contains a txn write.
+func (br *BatchRequest) IsTransactionWrite() bool {
+	for _, arg := range br.Requests {
+		if IsTransactionWrite(arg.GetValue().(Request)) {
+			return true
+		}
+	}
+	return false
 }
 
-// IsRange returns true if the operation is range-based and must include
-// a start and an end key.
-func IsRange(args Request) bool {
-	return (args.flags() & isRange) != 0
+// IsRange returns true iff the BatchRequest contains a range request.
+func (br *BatchRequest) IsRange() bool {
+	for _, arg := range br.Requests {
+		if IsRange(arg.GetValue().(Request)) {
+			return true
+		}
+	}
+	return false
 }
 
 // Request is an interface for RPC requests.
