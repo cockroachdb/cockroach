@@ -108,35 +108,6 @@ Now let's talk to this node. The easiest way to do that is to use the `cockroach
 
 Check out `./cockroach help` to see all available commands.
 
-#### Building the Docker images yourself
-See [build/README.md](build/) for more information on the available Docker
-images `cockroachdb/cockroach` and `cockroachdb/cockroach-dev`.
-You can build both of these images yourself:
-
-* `cockroachdb/cockroach-dev`: `(cd build ; ./build-docker-dev.sh)`
-* `cockroachdb/cockroach`: `(cd build ; ./build-docker-deploy.sh)`
-  (this will build the first image as well)
-
-Once you've built your image, you may want to run the tests:
-* `docker run "cockroachdb/cockroach-dev" test`
-* `make acceptance`
-
-Assuming you've built `cockroachdb/cockroach`, let's run a simple Cockroach node:
-
-```bash
-docker run -v /data -v /certs cockroachdb/cockroach init --stores=ssd=/data
-docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
-  cert create-ca --certs=/certs
-docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
-  cert create-node --certs=/certs 127.0.0.1 localhost roachnode
-docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
-  cert create-client root
-docker run -p 8080:8080 -h roachnode --volumes-from=$(docker ps -q -n 1) \
-  cockroachdb/cockroach start --certs=/certs --stores=ssd=/data --gossip=self=
-```
-
-Run `docker run cockroachdb/cockroach help` to get an overview over the available commands and settings, and see [Running Cockroach](#running-cockroach) for first steps on interacting with your new node.
-
 
 ## Deploying Cockroach in production
 
