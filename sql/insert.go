@@ -18,7 +18,6 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -90,14 +89,15 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			}
 		}
 
-		primaryIndexKeySuffix, _, err := encodeIndexKey(primaryIndex.ColumnIDs, colIDtoRowIndex, values, nil)
+		primaryIndexKey, _, err := encodeIndexKey(
+			primaryIndex.ColumnIDs, colIDtoRowIndex, values, primaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
-		primaryIndexKey := bytes.Join([][]byte{primaryIndexKeyPrefix, primaryIndexKeySuffix}, nil)
 
 		// Write the secondary indexes.
-		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, values, primaryIndexKeySuffix)
+		secondaryIndexEntries, err := encodeSecondaryIndexes(
+			tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, values)
 		if err != nil {
 			return nil, err
 		}

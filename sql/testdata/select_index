@@ -42,8 +42,8 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE a <= (1 + 1)
 query ITTB
 EXPLAIN (DEBUG) SELECT a, b FROM t WHERE b > 't'
 ----
-0 /t/bc/'three'/33/3/'three' NULL true
-1 /t/bc/'two'/22/2/'two'     NULL true
+0 /t/bc/'three'/33/3 NULL true
+1 /t/bc/'two'/22/2   NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE d < ('b' || 'l')
@@ -96,63 +96,63 @@ INSERT INTO t VALUES (1, 2), (3, 4), (5, 6)
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a >= 3 AND a < 5
 ----
-0 /t/ab/3/4/3 NULL true
+0 /t/ab/3/4 NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a BETWEEN 3 AND 4
 ----
-0 /t/ab/3/4/3 NULL true
+0 /t/ab/3/4 NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a BETWEEN 3 AND 5
 ----
-0 /t/ab/3/4/3 NULL true
-1 /t/ab/5/6/5 NULL true
+0 /t/ab/3/4 NULL true
+1 /t/ab/5/6 NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 2 OR a < 4
 ----
-0 /t/ab/1/2/1 NULL true
-1 /t/ab/3/4/3 NULL true
+0 /t/ab/1/2 NULL true
+1 /t/ab/3/4 NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 3 OR a <= 3
 ----
-0 /t/ab/1/2/1 NULL true
-1 /t/ab/3/4/3 NULL true
+0 /t/ab/1/2 NULL true
+1 /t/ab/3/4 NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a <= 3 OR a < 3
 ----
-0 /t/ab/1/2/1 NULL true
-1 /t/ab/3/4/3 NULL true
+0 /t/ab/1/2 NULL true
+1 /t/ab/3/4 NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a > 3 OR a >= 3
 ----
-0 /t/ab/3/4/3 NULL true
-1 /t/ab/5/6/5 NULL true
+0 /t/ab/3/4 NULL true
+1 /t/ab/5/6 NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a >= 3 OR a > 3
 ----
-0 /t/ab/3/4/3 NULL true
-1 /t/ab/5/6/5 NULL true
+0 /t/ab/3/4 NULL true
+1 /t/ab/5/6 NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a = 3 OR a = 5
 ----
-0 /t/ab/3/4/3 NULL true
-1 /t/ab/5/6/5 NULL true
+0 /t/ab/3/4 NULL true
+1 /t/ab/5/6 NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 3 OR a > 3
 ----
-0 /t/ab/1/2/1 NULL true
-1 /t/ab/3/4/3 NULL false
-2 /t/ab/5/6/5 NULL true
+0 /t/ab/1/2 NULL true
+1 /t/ab/3/4 NULL false
+2 /t/ab/5/6 NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a + 1 = 4
 ----
-0 /t/ab/3/4/3 NULL true
+0 /t/ab/3/4 NULL true

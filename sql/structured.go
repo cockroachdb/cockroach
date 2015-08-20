@@ -128,9 +128,15 @@ func validateName(name, typ string) error {
 }
 
 // containsColumnID returns true if the index descriptor contains the specified
-// column ID.
+// column ID either in its explicit column IDs or the implicit "extra" column
+// IDs.
 func (desc *IndexDescriptor) containsColumnID(colID ColumnID) bool {
 	for _, id := range desc.ColumnIDs {
+		if id == colID {
+			return true
+		}
+	}
+	for _, id := range desc.ImplicitColumnIDs {
 		if id == colID {
 			return true
 		}
@@ -140,28 +146,14 @@ func (desc *IndexDescriptor) containsColumnID(colID ColumnID) bool {
 
 // fullColumnIDs returns the index column IDs including any implicit column IDs
 // for non-unique indexes.
-func (desc *IndexDescriptor) fullColumnIDs(tableDesc *TableDescriptor) []ColumnID {
-	// Verify that the index is associated with the table descriptor. Note that
-	// we're using pointer comparisons here!
-	if desc != &tableDesc.PrimaryIndex {
-		found := false
-		for i := range tableDesc.Indexes {
-			if desc == &tableDesc.Indexes[i] {
-				found = true
-				break
-			}
-		}
-		if !found {
-			panic(fmt.Sprintf("unable to find index \"%s\" in table: %+v", desc.Name, tableDesc))
-		}
-	}
-
+func (desc *IndexDescriptor) fullColumnIDs() []ColumnID {
 	if desc.Unique {
 		return desc.ColumnIDs
 	}
-	// Non-unique indexes have the primary key columns appended to their key.
+	// Non-unique indexes have the some of the primary-key columns appended to
+	// their key.
 	columnIDs := append([]ColumnID(nil), desc.ColumnIDs...)
-	columnIDs = append(columnIDs, tableDesc.PrimaryIndex.ColumnIDs...)
+	columnIDs = append(columnIDs, desc.ImplicitColumnIDs...)
 	return columnIDs
 }
 
@@ -220,6 +212,15 @@ func (desc *TableDescriptor) AllocateIDs() error {
 			if index.ColumnIDs[j] == 0 {
 				index.ColumnIDs[j] = columnNames[colName]
 			}
+		}
+		if index != &desc.PrimaryIndex {
+			var extraColumnIDs []ColumnID
+			for _, primaryColID := range desc.PrimaryIndex.ColumnIDs {
+				if !index.containsColumnID(primaryColID) {
+					extraColumnIDs = append(extraColumnIDs, primaryColID)
+				}
+			}
+			index.ImplicitColumnIDs = extraColumnIDs
 		}
 	}
 

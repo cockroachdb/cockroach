@@ -484,7 +484,7 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 	}
 
 	// Compute the ordering provided by the index.
-	indexOrdering := scan.computeOrdering(v.index.fullColumnIDs(v.desc))
+	indexOrdering := scan.computeOrdering(v.index.fullColumnIDs())
 
 	// Compute how much of the index ordering matches the requested ordering for
 	// both forward and reverse scans.
@@ -605,11 +605,7 @@ func (v *indexInfo) isCoveringIndex(qvals qvalMap) bool {
 	}
 
 	for colID := range qvals {
-		// All indexes contain the primary key columns. Unique indexes contain
-		// those columns in the value and non-unique indexes contain those columns
-		// in the key in order to make them unique.
-		if !v.index.containsColumnID(colID) &&
-			!v.desc.PrimaryIndex.containsColumnID(colID) {
+		if !v.index.containsColumnID(colID) {
 			return false
 		}
 	}

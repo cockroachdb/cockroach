@@ -73,6 +73,13 @@ message IndexDescriptor {
   // parallels the column_names list.
   repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
+  // An ordered list of implicit column ids associated with the index. For
+  // non-unique indexes, these columns will be appended to the key. For unique
+  // indexes these columns will be stored in the value. The extra column IDs is
+  // computed as PrimaryIndex.column_ids - column_ids. For the primary index
+  // the list will be empty.
+  repeated uint32 implicit_column_ids = 6 [(gogoproto.customname) = "ImplicitColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
 }
 
 // A TableDescriptor represents a table and is stored in a structured metadata
