@@ -160,7 +160,7 @@ func initFlags(ctx *server.Context) {
 
 	{
 		f := startCmd.Flags()
-		f.BoolVar(&ctx.TransientSingleNode, "dev", ctx.TransientSingleNode, flagUsage["dev"])
+		f.BoolVar(&ctx.EphemeralSingleNode, "dev", ctx.EphemeralSingleNode, flagUsage["dev"])
 
 		// Server flags.
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])

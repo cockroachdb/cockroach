@@ -113,7 +113,7 @@ func runStart(cmd *cobra.Command, args []string) {
 	// Default user for servers.
 	Context.User = security.NodeUser
 
-	if Context.TransientSingleNode {
+	if Context.EphemeralSingleNode {
 		Context.Stores = "mem=1073741824"
 		Context.GossipBootstrap = server.SelfGossipAddr
 
@@ -143,7 +143,7 @@ func runStart(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	if Context.TransientSingleNode {
+	if Context.EphemeralSingleNode {
 		// TODO(tamird): pass this to BootstrapRange rather than doing it
 		// at runtime. This was quicker, though.
 		if err := testutils.SetDefaultRangeReplicaNum(makeDBClient(), 1); err != nil {
