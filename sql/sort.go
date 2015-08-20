@@ -128,7 +128,7 @@ type sortNode struct {
 	plan     planNode
 	columns  []string
 	ordering []int
-	values   *valuesNode
+	needSort bool
 	err      error
 }
 
@@ -146,17 +146,18 @@ func (n *sortNode) Ordering() []int {
 func (n *sortNode) Values() parser.DTuple {
 	// If an ordering expression was used the number of columns in each row might
 	// differ from the number of columns requested, so trim the result.
-	v := n.values.Values()
+	v := n.plan.Values()
 	return v[:len(n.columns)]
 }
 
 func (n *sortNode) Next() bool {
-	if n.values == nil {
+	if n.needSort {
+		n.needSort = false
 		if !n.initValues() {
 			return false
 		}
 	}
-	return n.values.Next()
+	return n.plan.Next()
 }
 
 func (n *sortNode) Err() error {
@@ -175,8 +176,16 @@ func (n *sortNode) wrap(plan planNode) planNode {
 					log.Infof("Sort: %d != %d", existingOrdering, n.ordering)
 				}
 				n.plan = plan
+				n.needSort = true
 				return n
 			}
+		}
+
+		if len(n.columns) < len(plan.Columns()) {
+			// No sorting required, but we have to strip off the extra render
+			// expressions we added.
+			n.plan = plan
+			return n
 		}
 	}
 
@@ -189,52 +198,18 @@ func (n *sortNode) wrap(plan planNode) planNode {
 func (n *sortNode) initValues() bool {
 	// TODO(pmattis): If the result set is large, we might need to perform the
 	// sort on disk.
-	n.values = &valuesNode{}
+	v := &valuesNode{ordering: n.ordering}
 	for n.plan.Next() {
 		values := n.plan.Values()
 		valuesCopy := make(parser.DTuple, len(values))
 		copy(valuesCopy, values)
-		n.values.rows = append(n.values.rows, valuesCopy)
+		v.rows = append(v.rows, valuesCopy)
 	}
 	n.err = n.plan.Err()
 	if n.err != nil {
 		return false
 	}
-	sort.Sort(n)
+	sort.Sort(v)
+	n.plan = v
 	return true
-}
-
-func (n *sortNode) Len() int {
-	return len(n.values.rows)
-}
-
-func (n *sortNode) Less(i, j int) bool {
-	// TODO(pmattis): An alternative to this type of field-based comparison would
-	// be to construct a sort-key per row using encodeTableKey(). Using a
-	// sort-key approach would likely fit better with a disk-based sort.
-	ra, rb := n.values.rows[i], n.values.rows[j]
-	for _, k := range n.ordering {
-		var da, db parser.Datum
-		if k < 0 {
-			da = rb[-(k + 1)]
-			db = ra[-(k + 1)]
-		} else {
-			da = ra[k-1]
-			db = rb[k-1]
-		}
-		// TODO(pmattis): This is assuming that the datum types are compatible. I'm
-		// not sure this always holds as `CASE` expressions can return different
-		// types for a column for different rows. Investigate how other RDBMs
-		// handle this.
-		if c := da.Compare(db); c < 0 {
-			return true
-		} else if c > 0 {
-			return false
-		}
-	}
-	return true
-}
-
-func (n *sortNode) Swap(i, j int) {
-	n.values.rows[i], n.values.rows[j] = n.values.rows[j], n.values.rows[i]
 }

@@ -172,17 +172,19 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 
 	if log.V(2) {
 		for i, c := range candidates {
-			log.Infof("%d: selectIndex(%s): %v %s %s",
-				i, c.index.Name, c.cost, c.makeStartKey(), c.makeEndKey())
+			log.Infof("%d: selectIndex(%s): %v %s %s: %p",
+				i, c.index.Name, c.cost, c.makeStartKey(), c.makeEndKey(), c)
 		}
 	}
 
 	// After sorting, candidates[0] contains the best index. Copy its info into
 	// the scanNode.
-	s.index = candidates[0].index
-	s.isSecondaryIndex = (s.index != &s.desc.PrimaryIndex)
-	s.startKey = candidates[0].makeStartKey()
-	s.endKey = candidates[0].makeEndKey()
+	c := candidates[0]
+	s.index = c.index
+	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
+	s.startKey = c.makeStartKey()
+	s.endKey = c.makeEndKey()
+	s.reverse = c.reverse
 	s.initOrdering()
 	return s, nil
 }
@@ -423,18 +425,20 @@ func (m qvalueRangeMap) getRange(colID ColumnID) *qvalueRange {
 }
 
 type indexInfo struct {
-	desc  *TableDescriptor
-	index *IndexDescriptor
-	start []qvalueInfo
-	end   []qvalueInfo
-	cost  float64
+	desc     *TableDescriptor
+	index    *IndexDescriptor
+	start    []qvalueInfo
+	end      []qvalueInfo
+	cost     float64
+	covering bool // indicates whether the index covers the required qvalues
+	reverse  bool
 }
 
 func (v *indexInfo) init(s *scanNode) {
-	if !v.isCoveringIndex(s.qvals) {
+	v.covering = v.isCoveringIndex(s.qvals)
+	if !v.covering {
 		// TODO(pmattis): Support non-coverying indexes.
 		v.cost = math.MaxFloat64
-		v.index = nil
 		return
 	}
 
@@ -451,7 +455,7 @@ func (v *indexInfo) init(s *scanNode) {
 // analyzeRanges examines the range map to determine the cost of using the
 // index.
 func (v *indexInfo) analyzeRanges(m qvalueRangeMap) {
-	if v.index == nil {
+	if !v.covering {
 		return
 	}
 
@@ -475,19 +479,23 @@ func (v *indexInfo) analyzeRanges(m qvalueRangeMap) {
 // if it matches the ordering requested by the query. Non-matching orderings
 // increase the cost of using the index.
 func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
-	if v.index == nil {
+	if !v.covering {
 		return
 	}
 
 	// Compute the ordering provided by the index.
-	//
-	// TODO(pmattis): We should also consider the ordering provided by a reverse
-	// scan of the index.
 	indexOrdering := scan.computeOrdering(v.index.fullColumnIDs(v.desc))
 
-	var i int
-	for i = 0; i < len(ordering); i++ {
-		if i >= len(indexOrdering) || ordering[i] != indexOrdering[i] {
+	// Compute how much of the index ordering matches the requested ordering for
+	// both forward and reverse scans.
+	fwdMatch, revMatch := 0, 0
+	for ; fwdMatch < len(ordering); fwdMatch++ {
+		if fwdMatch >= len(indexOrdering) || ordering[fwdMatch] != indexOrdering[fwdMatch] {
+			break
+		}
+	}
+	for ; revMatch < len(ordering); revMatch++ {
+		if revMatch >= len(indexOrdering) || ordering[revMatch] != -indexOrdering[revMatch] {
 			break
 		}
 	}
@@ -498,12 +506,17 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 	// based on sorting vs index selection based on filtering. Sorting is
 	// expensive due to the need to buffer up the rows and perform the sort, but
 	// not filtering is also expensive due to the larger number of rows scanned.
-	weight := float64(len(ordering)+1) / float64(i+1)
+	match := fwdMatch
+	if match < revMatch {
+		match = revMatch
+		v.reverse = true
+	}
+	weight := float64(len(ordering)+1) / float64(match+1)
 	v.cost *= weight
 
 	if log.V(2) {
-		log.Infof("%s: analyzeOrdering: weight=%0.2f index=%d requested=%d",
-			v.index.Name, weight, indexOrdering, ordering)
+		log.Infof("%s: analyzeOrdering: weight=%0.2f reverse=%v index=%d requested=%d",
+			v.index.Name, weight, v.reverse, indexOrdering, ordering)
 	}
 }
 

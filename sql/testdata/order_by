@@ -123,49 +123,52 @@ CREATE TABLE abc (
   a INT,
   b INT,
   c INT,
+  d CHAR,
   PRIMARY KEY (a, b, c),
-  CONSTRAINT bc INDEX (b, c),
+  CONSTRAINT bc UNIQUE (b, c),
   CONSTRAINT ba INDEX (b, a)
 )
 
 statement ok
-INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
+INSERT INTO abc VALUES (1, 2, 3, 'one'), (4, 5, 6, 'two')
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
 ----
-0 /abc/primary/1/2/3 NULL true
-1 /abc/primary/4/5/6 NULL true
+0 /abc/primary/1/2/3   NULL  NULL
+0 /abc/primary/1/2/3/d 'one' true
+1 /abc/primary/4/5/6   NULL  NULL
+1 /abc/primary/4/5/6/d 'two' true
 
 query ITTB
-EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b, a
+EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
 ----
 0 /abc/ba/2/1/1/2/3 NULL true
 1 /abc/ba/5/4/4/5/6 NULL true
 
 query ITTB
-EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b, c
+EXPLAIN (DEBUG) SELECT b, c FROM abc ORDER BY b, c
 ----
-0 /abc/bc/2/3/1/2/3 NULL true
-1 /abc/bc/5/6/4/5/6 NULL true
+0 /abc/bc/2/3 NULL true
+1 /abc/bc/5/6 NULL true
 
 query ITTB
-EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b
+EXPLAIN (DEBUG) SELECT b FROM abc ORDER BY b
 ----
-0 /abc/bc/2/3/1/2/3 NULL true
-1 /abc/bc/5/6/4/5/6 NULL true
-
-# TODO(pmattis): This will break when reverse scan is implemented.
+0 /abc/bc/2/3 NULL true
+1 /abc/bc/5/6 NULL true
 
 query ITTB
-EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a DESC
+EXPLAIN (DEBUG) SELECT a FROM abc ORDER BY a DESC
 ----
-0 /abc/primary/1/2/3 NULL true
-1 /abc/primary/4/5/6 NULL true
+0 /abc/primary/4/5/6/d 'two' NULL
+0 /abc/primary/4/5/6   NULL  true
+1 /abc/primary/1/2/3/d 'one' NULL
+1 /abc/primary/1/2/3   NULL  true
 
 query ITTB
-SELECT * FROM abc ORDER BY a DESC
+SELECT a FROM abc ORDER BY a DESC
 ----
-4 5 6
-1 2 3
+4
+1
 
