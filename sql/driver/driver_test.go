@@ -203,6 +203,55 @@ func TestPlaceholders(t *testing.T) {
 	}
 }
 
+func TestinConnectionSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := server.StartTestServer(nil)
+	url := "https://root@" + s.ServingAddr() + "?certs=test_certs"
+	// Create a new Database called t.
+	db, err := sql.Open("cockroach", url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// Open a new db client against the server with
+	// a fresh set of connections with the new settings.
+	// We create a database 't' above because you cannot
+	// use sql: "SET DATABASE = t" without the database
+	// existing.
+	url += "&database=t"
+	if db, err = sql.Open("cockroach", url); err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup(s, db)
+	if _, err := db.Exec(`CREATE TABLE kv (k CHAR PRIMARY KEY, v CHAR)`); err != nil {
+		t.Fatal(err)
+	}
+	numTxs := 5
+	txs := make([]*sql.Tx, 0, numTxs)
+	for i := 0; i < numTxs; i++ {
+		// Each transaction gets its own connection.
+		if tx, err := db.Begin(); err != nil {
+			t.Fatal(err)
+		} else {
+			txs = append(txs, tx)
+		}
+	}
+	for _, tx := range txs {
+		// Settings work!
+		if _, err := tx.Exec(`SELECT * from kv`); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Start test server in insecure mode.
