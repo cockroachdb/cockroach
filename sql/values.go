@@ -18,6 +18,7 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -28,6 +29,8 @@ func (p *planner) Values(n parser.Values) (planNode, error) {
 	v := &valuesNode{
 		rows: make([]parser.DTuple, 0, len(n)),
 	}
+
+	nCols := 0
 	for _, tuple := range n {
 		data, err := parser.EvalExpr(tuple)
 		if err != nil {
@@ -37,7 +40,17 @@ func (p *planner) Values(n parser.Values) (planNode, error) {
 		if !ok {
 			return nil, fmt.Errorf("expected a tuple, but found %T", data)
 		}
+		if len(v.rows) == 0 {
+			nCols = len(vals)
+		} else if nCols != len(vals) {
+			return nil, errors.New("VALUES lists must all be the same length")
+		}
 		v.rows = append(v.rows, vals)
+	}
+
+	v.columns = make([]string, nCols)
+	for i := 0; i < nCols; i++ {
+		v.columns[i] = fmt.Sprintf("column%d", i+1)
 	}
 	return v, nil
 }
@@ -106,4 +119,18 @@ func (n *valuesNode) Less(i, j int) bool {
 
 func (n *valuesNode) Swap(i, j int) {
 	n.rows[i], n.rows[j] = n.rows[j], n.rows[i]
+}
+
+func (n *valuesNode) ExplainPlan() (name, description string, children []planNode) {
+	name = "values"
+	pluralize := func(n int) string {
+		if n == 1 {
+			return ""
+		}
+		return "s"
+	}
+	description = fmt.Sprintf("%d column%s, %d row%s",
+		len(n.columns), pluralize(len(n.columns)),
+		len(n.rows), pluralize(len(n.rows)))
+	return name, description, nil
 }

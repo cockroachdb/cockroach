@@ -136,6 +136,8 @@ type planNode interface {
 	Next() bool
 	// Err returns the error, if any, encountered during iteration.
 	Err() error
+	// ExplainPlan returns a name and description and a list of child nodes.
+	ExplainPlan() (name, description string, children []planNode)
 }
 
 var _ planNode = &scanNode{}

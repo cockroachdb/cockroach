@@ -14,12 +14,24 @@ SELECT a, b FROM t ORDER BY b
 2 8
 1 9
 
+query ITT
+EXPLAIN SELECT a, b FROM t ORDER BY b
+----
+0 sort +b
+1 scan t@primary
+
 query II
 SELECT a, b FROM t ORDER BY b DESC
 ----
 1 9
 2 8
 3 7
+
+query ITT
+EXPLAIN SELECT a, b FROM t ORDER BY b DESC
+----
+0 sort -b
+1 scan t@primary
 
 query II
 SELECT a FROM t ORDER BY 1 DESC
@@ -55,6 +67,12 @@ SELECT b FROM t ORDER BY a DESC
 7
 8
 9
+
+query ITT
+EXPLAIN SELECT b FROM t ORDER BY a DESC
+----
+0 nosort -a
+1 revscan t@primary
 
 statement ok
 INSERT INTO t VALUES (4, 7), (5, 7)
@@ -140,11 +158,21 @@ EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
 1 /abc/primary/4/5/6   NULL  NULL
 1 /abc/primary/4/5/6/d 'two' true
 
+query ITT
+EXPLAIN SELECT * FROM abc ORDER BY a
+----
+0 scan abc@primary
+
 query ITTB
 EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
 ----
 0 /abc/ba/2/1/1/2/3 NULL true
 1 /abc/ba/5/4/4/5/6 NULL true
+
+query ITT
+EXPLAIN SELECT a, b FROM abc ORDER BY b, a
+----
+0 scan abc@ba
 
 query ITTB
 EXPLAIN (DEBUG) SELECT b, c FROM abc ORDER BY b, c
@@ -166,9 +194,13 @@ EXPLAIN (DEBUG) SELECT a FROM abc ORDER BY a DESC
 1 /abc/primary/1/2/3/d 'one' NULL
 1 /abc/primary/1/2/3   NULL  true
 
-query ITTB
+query ITT
+EXPLAIN SELECT a FROM abc ORDER BY a DESC
+----
+0 revscan abc@primary
+
+query I
 SELECT a FROM abc ORDER BY a DESC
 ----
 4
 1
-

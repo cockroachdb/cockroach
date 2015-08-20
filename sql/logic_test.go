@@ -402,7 +402,10 @@ func (t *logicTest) execQuery(query logicQuery) {
 		for _, v := range vals {
 			nullStr := v.(*sql.NullString)
 			if nullStr.Valid {
-				results = append(results, nullStr.String)
+				// We split string results on whitespace and append a separate result
+				// for each string. A bit unusual, but otherwise we can't match strings
+				// containing whitespace.
+				results = append(results, strings.Fields(nullStr.String)...)
 			} else {
 				results = append(results, "NULL")
 			}

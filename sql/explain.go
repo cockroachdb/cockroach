@@ -29,6 +29,7 @@ type explainMode int
 const (
 	explainNone explainMode = iota
 	explainDebug
+	explainPlan
 )
 
 // Explain executes the explain statement, providing debugging and analysis
@@ -39,8 +40,10 @@ func (p *planner) Explain(n *parser.Explain) (planNode, error) {
 	mode := explainNone
 	if len(n.Options) == 1 && strings.EqualFold(n.Options[0], "DEBUG") {
 		mode = explainDebug
+	} else if len(n.Options) == 0 {
+		mode = explainPlan
 	}
-	if mode != explainDebug {
+	if mode == explainNone {
 		return nil, fmt.Errorf("unsupported EXPLAIN options: %s", n)
 	}
 
@@ -48,14 +51,25 @@ func (p *planner) Explain(n *parser.Explain) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	plan, err = markExplain(plan, mode)
-	if err != nil {
-		return nil, fmt.Errorf("%v: %s", err, n)
+	switch mode {
+	case explainDebug:
+		plan, err = markDebug(plan, mode)
+		if err != nil {
+			return nil, fmt.Errorf("%v: %s", err, n)
+		}
+		return plan, nil
+	case explainPlan:
+		v := &valuesNode{}
+		v.columns = []string{"Level", "Type", "Description"}
+		populateExplain(v, plan, 0)
+		plan = v
+	default:
+		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
 	}
 	return plan, nil
 }
 
-func markExplain(plan planNode, mode explainMode) (planNode, error) {
+func markDebug(plan planNode, mode explainMode) (planNode, error) {
 	switch t := plan.(type) {
 	case *scanNode:
 		// Mark the node as being explained.
@@ -64,9 +78,24 @@ func markExplain(plan planNode, mode explainMode) (planNode, error) {
 		return t, nil
 
 	case *sortNode:
-		return markExplain(t.plan, mode)
+		return markDebug(t.plan, mode)
 
 	default:
 		return nil, fmt.Errorf("TODO(pmattis): unimplemented %T", plan)
+	}
+}
+
+func populateExplain(v *valuesNode, plan planNode, level int) {
+	name, description, children := plan.ExplainPlan()
+
+	row := parser.DTuple{
+		parser.DInt(level),
+		parser.DString(name),
+		parser.DString(description),
+	}
+	v.rows = append(v.rows, row)
+
+	for _, child := range children {
+		populateExplain(v, child, level+1)
 	}
 }

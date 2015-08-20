@@ -14,7 +14,7 @@ EXPLAIN (DEBUG) SELECT * FROM abc
 RowIdx  Key  Value  Output
 
 statement ok
-INSERT INTO abc VALUES (1, 'one', 1.1), (2, 'two', NULL), (3, 'three')
+INSERT INTO abc VALUES (1, 'one', 1.1), (2, 'two', NULL), (3, 'three', NULL)
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM abc
