@@ -289,6 +289,37 @@ func Example_logging() {
 	// node drained and shutdown: ok
 }
 
+func Example_cput() {
+	c := newCLITest()
+
+	c.Run("kv put a 1 b 2 c 3 d 4")
+	c.Run("kv scan")
+	c.Run("kv cput e 5")
+	c.Run("kv cput b 3 2")
+	c.Run("kv scan")
+	c.Run("quit")
+
+	// Output:
+	// kv put a 1 b 2 c 3 d 4
+	// kv scan
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
+	// 4 result(s)
+	// kv cput e 5
+	// kv cput b 3 2
+	// kv scan
+	// "a"	"1"
+	// "b"	"3"
+	// "c"	"3"
+	// "d"	"4"
+	// "e"	"5"
+	// 5 result(s)
+	// quit
+	// node drained and shutdown: ok
+}
+
 func Example_max_results() {
 	c := newCLITest()
 

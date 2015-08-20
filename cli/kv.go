@@ -14,8 +14,6 @@
 // for names of contributors.
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
-//
-// TODO(pmattis): ConditionalPut.
 
 package cli
 
@@ -135,7 +133,45 @@ func runPut(cmd *cobra.Command, args []string) {
 	}
 }
 
-// An incCmd increments the value for one or more keys.
+// A cPutCmd command conditionally sets a value for a key.
+var cPutCmd = &cobra.Command{
+	Use:   "cput [options] <key> <value> [<expValue>]",
+	Short: "conditionally sets a value for a key",
+	Long: `
+Conditionally sets a value for a key if the existing value is equal
+to expValue. To conditionally set a value only if there is no existing entry
+pass nil for expValue. The expValue defaults to 1 if not specified.
+`,
+	Run: runCPut,
+}
+
+func runCPut(cmd *cobra.Command, args []string) {
+	if len(args) != 2 && len(args) != 3 {
+		cmd.Usage()
+		return
+	}
+
+	kvDB := makeDBClient()
+	if kvDB == nil {
+		return
+	}
+
+	key := unquoteArg(args[0], true /* disallow system keys */)
+	value := unquoteArg(args[1], false)
+	var err error
+	if len(args) == 3 {
+		err = kvDB.CPut(key, value, unquoteArg(args[2], false))
+	} else {
+		err = kvDB.CPut(key, value, nil)
+	}
+
+	if err != nil {
+		fmt.Fprintf(osStderr, "conditionally put failed: %s\n", err)
+		osExit(1)
+	}
+}
+
+// A incCmd command increments the value for a key.
 var incCmd = &cobra.Command{
 	Use:   "inc [options] <key> [<amount>]",
 	Short: "increments the value for a key",
@@ -342,6 +378,7 @@ func showResult(rows []client.KeyValue) {
 var kvCmds = []*cobra.Command{
 	getCmd,
 	putCmd,
+	cPutCmd,
 	incCmd,
 	delCmd,
 	delRangeCmd,
@@ -351,7 +388,7 @@ var kvCmds = []*cobra.Command{
 
 var kvCmd = &cobra.Command{
 	Use:   "kv",
-	Short: "get, put, increment, delete, scan, and reverse scan key/value pairs",
+	Short: "get, put, conditional put, increment, delete, scan, and reverse scan key/value pairs",
 	Long: `
 Special characters in keys or values should be specified according to
 the double-quoted Go string literal rules (see
