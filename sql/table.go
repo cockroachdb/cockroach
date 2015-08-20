@@ -260,6 +260,13 @@ func decodeIndexKey(desc *TableDescriptor,
 		return nil, fmt.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
 	}
 
+	return decodeKeyVals(vals, key)
+}
+
+// decodeKeyVals decodes the values that are part of the key. Vals is a slice
+// returned from makeKeyVals. The remaining bytes in the key after decoding the
+// values are returned.
+func decodeKeyVals(vals []parser.Datum, key []byte) ([]byte, error) {
 	for j := range vals {
 		switch vals[j].(type) {
 		case parser.DInt:
