@@ -65,6 +65,106 @@ func (m *ArithResponse) GetC() int32 {
 	return 0
 }
 
+func (m *ArithRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ArithRequest) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintArith(data, i, uint64(m.A))
+	data[i] = 0x10
+	i++
+	i = encodeVarintArith(data, i, uint64(m.B))
+	return i, nil
+}
+
+func (m *ArithResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ArithResponse) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintArith(data, i, uint64(m.C))
+	return i, nil
+}
+
+func encodeFixed64Arith(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Arith(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintArith(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *ArithRequest) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovArith(uint64(m.A))
+	n += 1 + sovArith(uint64(m.B))
+	return n
+}
+
+func (m *ArithResponse) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovArith(uint64(m.C))
+	return n
+}
+
+func sovArith(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozArith(x uint64) (n int) {
+	return sovArith(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *ArithRequest) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -294,104 +394,3 @@ func skipArith(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthArith = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *ArithRequest) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovArith(uint64(m.A))
-	n += 1 + sovArith(uint64(m.B))
-	return n
-}
-
-func (m *ArithResponse) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovArith(uint64(m.C))
-	return n
-}
-
-func sovArith(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozArith(x uint64) (n int) {
-	return sovArith(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *ArithRequest) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ArithRequest) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintArith(data, i, uint64(m.A))
-	data[i] = 0x10
-	i++
-	i = encodeVarintArith(data, i, uint64(m.B))
-	return i, nil
-}
-
-func (m *ArithResponse) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ArithResponse) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintArith(data, i, uint64(m.C))
-	return i, nil
-}
-
-func encodeFixed64Arith(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Arith(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintArith(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

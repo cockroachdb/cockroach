@@ -25,8 +25,9 @@ import cockroach_proto2 "github.com/cockroachdb/cockroach/proto"
 
 // discarding unused import gogoproto "gogoproto"
 
-import io "io"
 
+
+import io "io"
 import fmt "fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -256,6 +257,488 @@ func (m *Response) GetResults() []Result {
 	return nil
 }
 
+func (m *RequestHeader) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Session != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintWire(data, i, uint64(len(m.Session)))
+		i += copy(data[i:], m.Session)
+	}
+	if m.Txn != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintWire(data, i, uint64(len(m.Txn)))
+		i += copy(data[i:], m.Txn)
+	}
+	data[i] = 0x1a
+	i++
+	i = encodeVarintWire(data, i, uint64(m.CmdID.Size()))
+	n1, err := m.CmdID.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	data[i] = 0x2a
+	i++
+	i = encodeVarintWire(data, i, uint64(len(m.User)))
+	i += copy(data[i:], m.User)
+	return i, nil
+}
+
+func (m *ResponseHeader) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ResponseHeader) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Error != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintWire(data, i, uint64(m.Error.Size()))
+		n2, err := m.Error.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n2
+	}
+	if m.Session != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintWire(data, i, uint64(len(m.Session)))
+		i += copy(data[i:], m.Session)
+	}
+	if m.Txn != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintWire(data, i, uint64(len(m.Txn)))
+		i += copy(data[i:], m.Txn)
+	}
+	return i, nil
+}
+
+func (m *Datum) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Datum) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.BoolVal != nil {
+		data[i] = 0x8
+		i++
+		if *m.BoolVal {
+			data[i] = 1
+		} else {
+			data[i] = 0
+		}
+		i++
+	}
+	if m.IntVal != nil {
+		data[i] = 0x10
+		i++
+		i = encodeVarintWire(data, i, uint64(*m.IntVal))
+	}
+	if m.FloatVal != nil {
+		data[i] = 0x19
+		i++
+		i = encodeFixed64Wire(data, i, uint64(math.Float64bits(*m.FloatVal)))
+	}
+	if m.BytesVal != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintWire(data, i, uint64(len(m.BytesVal)))
+		i += copy(data[i:], m.BytesVal)
+	}
+	if m.StringVal != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintWire(data, i, uint64(len(*m.StringVal)))
+		i += copy(data[i:], *m.StringVal)
+	}
+	return i, nil
+}
+
+func (m *Result) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Result) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			data[i] = 0xa
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if len(m.Rows) > 0 {
+		for _, msg := range m.Rows {
+			data[i] = 0x12
+			i++
+			i = encodeVarintWire(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *Result_Row) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Result_Row) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Values) > 0 {
+		for _, msg := range m.Values {
+			data[i] = 0xa
+			i++
+			i = encodeVarintWire(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *Request) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Request) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintWire(data, i, uint64(m.RequestHeader.Size()))
+	n3, err := m.RequestHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	data[i] = 0x12
+	i++
+	i = encodeVarintWire(data, i, uint64(len(m.Sql)))
+	i += copy(data[i:], m.Sql)
+	if len(m.Params) > 0 {
+		for _, msg := range m.Params {
+			data[i] = 0x1a
+			i++
+			i = encodeVarintWire(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *Response) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Response) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintWire(data, i, uint64(m.ResponseHeader.Size()))
+	n4, err := m.ResponseHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
+	if len(m.Results) > 0 {
+		for _, msg := range m.Results {
+			data[i] = 0x12
+			i++
+			i = encodeVarintWire(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func encodeFixed64Wire(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Wire(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintWire(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *RequestHeader) Size() (n int) {
+	var l int
+	_ = l
+	if m.Session != nil {
+		l = len(m.Session)
+		n += 1 + l + sovWire(uint64(l))
+	}
+	if m.Txn != nil {
+		l = len(m.Txn)
+		n += 1 + l + sovWire(uint64(l))
+	}
+	l = m.CmdID.Size()
+	n += 1 + l + sovWire(uint64(l))
+	l = len(m.User)
+	n += 1 + l + sovWire(uint64(l))
+	return n
+}
+
+func (m *ResponseHeader) Size() (n int) {
+	var l int
+	_ = l
+	if m.Error != nil {
+		l = m.Error.Size()
+		n += 1 + l + sovWire(uint64(l))
+	}
+	if m.Session != nil {
+		l = len(m.Session)
+		n += 1 + l + sovWire(uint64(l))
+	}
+	if m.Txn != nil {
+		l = len(m.Txn)
+		n += 1 + l + sovWire(uint64(l))
+	}
+	return n
+}
+
+func (m *Datum) Size() (n int) {
+	var l int
+	_ = l
+	if m.BoolVal != nil {
+		n += 2
+	}
+	if m.IntVal != nil {
+		n += 1 + sovWire(uint64(*m.IntVal))
+	}
+	if m.FloatVal != nil {
+		n += 9
+	}
+	if m.BytesVal != nil {
+		l = len(m.BytesVal)
+		n += 1 + l + sovWire(uint64(l))
+	}
+	if m.StringVal != nil {
+		l = len(*m.StringVal)
+		n += 1 + l + sovWire(uint64(l))
+	}
+	return n
+}
+
+func (m *Result) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			l = len(s)
+			n += 1 + l + sovWire(uint64(l))
+		}
+	}
+	if len(m.Rows) > 0 {
+		for _, e := range m.Rows {
+			l = e.Size()
+			n += 1 + l + sovWire(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Result_Row) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Values) > 0 {
+		for _, e := range m.Values {
+			l = e.Size()
+			n += 1 + l + sovWire(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Request) Size() (n int) {
+	var l int
+	_ = l
+	l = m.RequestHeader.Size()
+	n += 1 + l + sovWire(uint64(l))
+	l = len(m.Sql)
+	n += 1 + l + sovWire(uint64(l))
+	if len(m.Params) > 0 {
+		for _, e := range m.Params {
+			l = e.Size()
+			n += 1 + l + sovWire(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Response) Size() (n int) {
+	var l int
+	_ = l
+	l = m.ResponseHeader.Size()
+	n += 1 + l + sovWire(uint64(l))
+	if len(m.Results) > 0 {
+		for _, e := range m.Results {
+			l = e.Size()
+			n += 1 + l + sovWire(uint64(l))
+		}
+	}
+	return n
+}
+
+func sovWire(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozWire(x uint64) (n int) {
+	return sovWire(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (this *Datum) GetValue() interface{} {
+	if this.BoolVal != nil {
+		return this.BoolVal
+	}
+	if this.IntVal != nil {
+		return this.IntVal
+	}
+	if this.FloatVal != nil {
+		return this.FloatVal
+	}
+	if this.BytesVal != nil {
+		return this.BytesVal
+	}
+	if this.StringVal != nil {
+		return this.StringVal
+	}
+	return nil
+}
+
+func (this *Datum) SetValue(value interface{}) bool {
+	switch vt := value.(type) {
+	case *bool:
+		this.BoolVal = vt
+	case *int64:
+		this.IntVal = vt
+	case *float64:
+		this.FloatVal = vt
+	case []byte:
+		this.BytesVal = vt
+	case *string:
+		this.StringVal = vt
+	default:
+		return false
+	}
+	return true
+}
 func (m *RequestHeader) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -275,28 +758,6 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		switch fieldNum {
-		case 5:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + int(stringLen)
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.User = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
 		case 1:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Session", wireType)
@@ -373,6 +834,28 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			if err := m.CmdID.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.User = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			var sizeOfWire int
@@ -1153,486 +1636,3 @@ func skipWire(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthWire = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (this *Datum) GetValue() interface{} {
-	if this.BoolVal != nil {
-		return this.BoolVal
-	}
-	if this.IntVal != nil {
-		return this.IntVal
-	}
-	if this.FloatVal != nil {
-		return this.FloatVal
-	}
-	if this.BytesVal != nil {
-		return this.BytesVal
-	}
-	if this.StringVal != nil {
-		return this.StringVal
-	}
-	return nil
-}
-
-func (this *Datum) SetValue(value interface{}) bool {
-	switch vt := value.(type) {
-	case *bool:
-		this.BoolVal = vt
-	case *int64:
-		this.IntVal = vt
-	case *float64:
-		this.FloatVal = vt
-	case []byte:
-		this.BytesVal = vt
-	case *string:
-		this.StringVal = vt
-	default:
-		return false
-	}
-	return true
-}
-func (m *RequestHeader) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.User)
-	n += 1 + l + sovWire(uint64(l))
-	if m.Session != nil {
-		l = len(m.Session)
-		n += 1 + l + sovWire(uint64(l))
-	}
-	if m.Txn != nil {
-		l = len(m.Txn)
-		n += 1 + l + sovWire(uint64(l))
-	}
-	l = m.CmdID.Size()
-	n += 1 + l + sovWire(uint64(l))
-	return n
-}
-
-func (m *ResponseHeader) Size() (n int) {
-	var l int
-	_ = l
-	if m.Error != nil {
-		l = m.Error.Size()
-		n += 1 + l + sovWire(uint64(l))
-	}
-	if m.Session != nil {
-		l = len(m.Session)
-		n += 1 + l + sovWire(uint64(l))
-	}
-	if m.Txn != nil {
-		l = len(m.Txn)
-		n += 1 + l + sovWire(uint64(l))
-	}
-	return n
-}
-
-func (m *Datum) Size() (n int) {
-	var l int
-	_ = l
-	if m.BoolVal != nil {
-		n += 2
-	}
-	if m.IntVal != nil {
-		n += 1 + sovWire(uint64(*m.IntVal))
-	}
-	if m.FloatVal != nil {
-		n += 9
-	}
-	if m.BytesVal != nil {
-		l = len(m.BytesVal)
-		n += 1 + l + sovWire(uint64(l))
-	}
-	if m.StringVal != nil {
-		l = len(*m.StringVal)
-		n += 1 + l + sovWire(uint64(l))
-	}
-	return n
-}
-
-func (m *Result) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Columns) > 0 {
-		for _, s := range m.Columns {
-			l = len(s)
-			n += 1 + l + sovWire(uint64(l))
-		}
-	}
-	if len(m.Rows) > 0 {
-		for _, e := range m.Rows {
-			l = e.Size()
-			n += 1 + l + sovWire(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *Result_Row) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Values) > 0 {
-		for _, e := range m.Values {
-			l = e.Size()
-			n += 1 + l + sovWire(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *Request) Size() (n int) {
-	var l int
-	_ = l
-	l = m.RequestHeader.Size()
-	n += 1 + l + sovWire(uint64(l))
-	l = len(m.Sql)
-	n += 1 + l + sovWire(uint64(l))
-	if len(m.Params) > 0 {
-		for _, e := range m.Params {
-			l = e.Size()
-			n += 1 + l + sovWire(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *Response) Size() (n int) {
-	var l int
-	_ = l
-	l = m.ResponseHeader.Size()
-	n += 1 + l + sovWire(uint64(l))
-	if len(m.Results) > 0 {
-		for _, e := range m.Results {
-			l = e.Size()
-			n += 1 + l + sovWire(uint64(l))
-		}
-	}
-	return n
-}
-
-func sovWire(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozWire(x uint64) (n int) {
-	return sovWire(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *RequestHeader) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Session != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintWire(data, i, uint64(len(m.Session)))
-		i += copy(data[i:], m.Session)
-	}
-	if m.Txn != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintWire(data, i, uint64(len(m.Txn)))
-		i += copy(data[i:], m.Txn)
-	}
-	data[i] = 0x1a
-	i++
-	i = encodeVarintWire(data, i, uint64(m.CmdID.Size()))
-	n1, err := m.CmdID.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	data[i] = 0x2a
-	i++
-	i = encodeVarintWire(data, i, uint64(len(m.User)))
-	i += copy(data[i:], m.User)
-	return i, nil
-}
-
-func (m *ResponseHeader) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ResponseHeader) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Error != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintWire(data, i, uint64(m.Error.Size()))
-		n2, err := m.Error.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
-	}
-	if m.Session != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintWire(data, i, uint64(len(m.Session)))
-		i += copy(data[i:], m.Session)
-	}
-	if m.Txn != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintWire(data, i, uint64(len(m.Txn)))
-		i += copy(data[i:], m.Txn)
-	}
-	return i, nil
-}
-
-func (m *Datum) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Datum) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.BoolVal != nil {
-		data[i] = 0x8
-		i++
-		if *m.BoolVal {
-			data[i] = 1
-		} else {
-			data[i] = 0
-		}
-		i++
-	}
-	if m.IntVal != nil {
-		data[i] = 0x10
-		i++
-		i = encodeVarintWire(data, i, uint64(*m.IntVal))
-	}
-	if m.FloatVal != nil {
-		data[i] = 0x19
-		i++
-		i = encodeFixed64Wire(data, i, uint64(math.Float64bits(*m.FloatVal)))
-	}
-	if m.BytesVal != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintWire(data, i, uint64(len(m.BytesVal)))
-		i += copy(data[i:], m.BytesVal)
-	}
-	if m.StringVal != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintWire(data, i, uint64(len(*m.StringVal)))
-		i += copy(data[i:], *m.StringVal)
-	}
-	return i, nil
-}
-
-func (m *Result) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Result) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Columns) > 0 {
-		for _, s := range m.Columns {
-			data[i] = 0xa
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
-	if len(m.Rows) > 0 {
-		for _, msg := range m.Rows {
-			data[i] = 0x12
-			i++
-			i = encodeVarintWire(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func (m *Result_Row) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Result_Row) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Values) > 0 {
-		for _, msg := range m.Values {
-			data[i] = 0xa
-			i++
-			i = encodeVarintWire(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func (m *Request) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Request) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintWire(data, i, uint64(m.RequestHeader.Size()))
-	n3, err := m.RequestHeader.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
-	data[i] = 0x12
-	i++
-	i = encodeVarintWire(data, i, uint64(len(m.Sql)))
-	i += copy(data[i:], m.Sql)
-	if len(m.Params) > 0 {
-		for _, msg := range m.Params {
-			data[i] = 0x1a
-			i++
-			i = encodeVarintWire(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func (m *Response) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Response) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintWire(data, i, uint64(m.ResponseHeader.Size()))
-	n4, err := m.ResponseHeader.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n4
-	if len(m.Results) > 0 {
-		for _, msg := range m.Results {
-			data[i] = 0x12
-			i++
-			i = encodeVarintWire(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func encodeFixed64Wire(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Wire(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintWire(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

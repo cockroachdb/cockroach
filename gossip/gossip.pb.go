@@ -110,6 +110,156 @@ func (m *Response) GetAlternate() *cockroach_util.UnresolvedAddr {
 	return nil
 }
 
+func (m *Request) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Request) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintGossip(data, i, uint64(m.NodeID))
+	data[i] = 0x12
+	i++
+	i = encodeVarintGossip(data, i, uint64(m.Addr.Size()))
+	n1, err := m.Addr.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	data[i] = 0x1a
+	i++
+	i = encodeVarintGossip(data, i, uint64(m.LAddr.Size()))
+	n2, err := m.LAddr.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	data[i] = 0x20
+	i++
+	i = encodeVarintGossip(data, i, uint64(m.MaxSeq))
+	if m.Delta != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintGossip(data, i, uint64(len(m.Delta)))
+		i += copy(data[i:], m.Delta)
+	}
+	return i, nil
+}
+
+func (m *Response) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Response) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Delta != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintGossip(data, i, uint64(len(m.Delta)))
+		i += copy(data[i:], m.Delta)
+	}
+	if m.Alternate != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintGossip(data, i, uint64(m.Alternate.Size()))
+		n3, err := m.Alternate.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	return i, nil
+}
+
+func encodeFixed64Gossip(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Gossip(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintGossip(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *Request) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovGossip(uint64(m.NodeID))
+	l = m.Addr.Size()
+	n += 1 + l + sovGossip(uint64(l))
+	l = m.LAddr.Size()
+	n += 1 + l + sovGossip(uint64(l))
+	n += 1 + sovGossip(uint64(m.MaxSeq))
+	if m.Delta != nil {
+		l = len(m.Delta)
+		n += 1 + l + sovGossip(uint64(l))
+	}
+	return n
+}
+
+func (m *Response) Size() (n int) {
+	var l int
+	_ = l
+	if m.Delta != nil {
+		l = len(m.Delta)
+		n += 1 + l + sovGossip(uint64(l))
+	}
+	if m.Alternate != nil {
+		l = m.Alternate.Size()
+		n += 1 + l + sovGossip(uint64(l))
+	}
+	return n
+}
+
+func sovGossip(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozGossip(x uint64) (n int) {
+	return sovGossip(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *Request) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -457,154 +607,3 @@ func skipGossip(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthGossip = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *Request) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovGossip(uint64(m.NodeID))
-	l = m.Addr.Size()
-	n += 1 + l + sovGossip(uint64(l))
-	l = m.LAddr.Size()
-	n += 1 + l + sovGossip(uint64(l))
-	n += 1 + sovGossip(uint64(m.MaxSeq))
-	if m.Delta != nil {
-		l = len(m.Delta)
-		n += 1 + l + sovGossip(uint64(l))
-	}
-	return n
-}
-
-func (m *Response) Size() (n int) {
-	var l int
-	_ = l
-	if m.Delta != nil {
-		l = len(m.Delta)
-		n += 1 + l + sovGossip(uint64(l))
-	}
-	if m.Alternate != nil {
-		l = m.Alternate.Size()
-		n += 1 + l + sovGossip(uint64(l))
-	}
-	return n
-}
-
-func sovGossip(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozGossip(x uint64) (n int) {
-	return sovGossip(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *Request) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Request) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintGossip(data, i, uint64(m.NodeID))
-	data[i] = 0x12
-	i++
-	i = encodeVarintGossip(data, i, uint64(m.Addr.Size()))
-	n1, err := m.Addr.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	data[i] = 0x1a
-	i++
-	i = encodeVarintGossip(data, i, uint64(m.LAddr.Size()))
-	n2, err := m.LAddr.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	data[i] = 0x20
-	i++
-	i = encodeVarintGossip(data, i, uint64(m.MaxSeq))
-	if m.Delta != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintGossip(data, i, uint64(len(m.Delta)))
-		i += copy(data[i:], m.Delta)
-	}
-	return i, nil
-}
-
-func (m *Response) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Response) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Delta != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintGossip(data, i, uint64(len(m.Delta)))
-		i += copy(data[i:], m.Delta)
-	}
-	if m.Alternate != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintGossip(data, i, uint64(m.Alternate.Size()))
-		n3, err := m.Alternate.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
-	}
-	return i, nil
-}
-
-func encodeFixed64Gossip(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Gossip(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintGossip(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

@@ -46,6 +46,106 @@ func (m *EchoResponse) GetMsg() string {
 	return ""
 }
 
+func (m *EchoRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *EchoRequest) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintEcho(data, i, uint64(len(m.Msg)))
+	i += copy(data[i:], m.Msg)
+	return i, nil
+}
+
+func (m *EchoResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *EchoResponse) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintEcho(data, i, uint64(len(m.Msg)))
+	i += copy(data[i:], m.Msg)
+	return i, nil
+}
+
+func encodeFixed64Echo(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Echo(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintEcho(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *EchoRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Msg)
+	n += 1 + l + sovEcho(uint64(l))
+	return n
+}
+
+func (m *EchoResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Msg)
+	n += 1 + l + sovEcho(uint64(l))
+	return n
+}
+
+func sovEcho(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozEcho(x uint64) (n int) {
+	return sovEcho(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *EchoRequest) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -271,104 +371,3 @@ func skipEcho(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthEcho = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *EchoRequest) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Msg)
-	n += 1 + l + sovEcho(uint64(l))
-	return n
-}
-
-func (m *EchoResponse) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Msg)
-	n += 1 + l + sovEcho(uint64(l))
-	return n
-}
-
-func sovEcho(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozEcho(x uint64) (n int) {
-	return sovEcho(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *EchoRequest) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *EchoRequest) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintEcho(data, i, uint64(len(m.Msg)))
-	i += copy(data[i:], m.Msg)
-	return i, nil
-}
-
-func (m *EchoResponse) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *EchoResponse) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintEcho(data, i, uint64(len(m.Msg)))
-	i += copy(data[i:], m.Msg)
-	return i, nil
-}
-
-func encodeFixed64Echo(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Echo(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintEcho(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

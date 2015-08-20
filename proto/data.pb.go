@@ -722,6 +722,802 @@ func init() {
 	proto1.RegisterEnum("cockroach.proto.IsolationType", IsolationType_name, IsolationType_value)
 	proto1.RegisterEnum("cockroach.proto.TransactionStatus", TransactionStatus_name, TransactionStatus_value)
 }
+func (m *Timestamp) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Timestamp) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintData(data, i, uint64(m.WallTime))
+	data[i] = 0x10
+	i++
+	i = encodeVarintData(data, i, uint64(m.Logical))
+	return i, nil
+}
+
+func (m *Value) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Value) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Bytes != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.Bytes)))
+		i += copy(data[i:], m.Bytes)
+	}
+	if m.Checksum != nil {
+		data[i] = 0x1d
+		i++
+		i = encodeFixed32Data(data, i, uint32(*m.Checksum))
+	}
+	if m.Timestamp != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
+		n1, err := m.Timestamp.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n1
+	}
+	if m.Tag != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintData(data, i, uint64(len(*m.Tag)))
+		i += copy(data[i:], *m.Tag)
+	}
+	return i, nil
+}
+
+func (m *KeyValue) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *KeyValue) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Key != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Value.Size()))
+	n2, err := m.Value.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	return i, nil
+}
+
+func (m *RawKeyValue) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RawKeyValue) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Key != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	if m.Value != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.Value)))
+		i += copy(data[i:], m.Value)
+	}
+	return i, nil
+}
+
+func (m *StoreIdent) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *StoreIdent) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintData(data, i, uint64(len(m.ClusterID)))
+	i += copy(data[i:], m.ClusterID)
+	data[i] = 0x10
+	i++
+	i = encodeVarintData(data, i, uint64(m.NodeID))
+	data[i] = 0x18
+	i++
+	i = encodeVarintData(data, i, uint64(m.StoreID))
+	return i, nil
+}
+
+func (m *SplitTrigger) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *SplitTrigger) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintData(data, i, uint64(m.UpdatedDesc.Size()))
+	n3, err := m.UpdatedDesc.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.NewDesc.Size()))
+	n4, err := m.NewDesc.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
+	return i, nil
+}
+
+func (m *MergeTrigger) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *MergeTrigger) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintData(data, i, uint64(m.UpdatedDesc.Size()))
+	n5, err := m.UpdatedDesc.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n5
+	data[i] = 0x10
+	i++
+	i = encodeVarintData(data, i, uint64(m.SubsumedRangeID))
+	return i, nil
+}
+
+func (m *ChangeReplicasTrigger) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintData(data, i, uint64(m.NodeID))
+	data[i] = 0x10
+	i++
+	i = encodeVarintData(data, i, uint64(m.StoreID))
+	data[i] = 0x18
+	i++
+	i = encodeVarintData(data, i, uint64(m.ChangeType))
+	data[i] = 0x22
+	i++
+	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
+	n6, err := m.Replica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n6
+	if len(m.UpdatedReplicas) > 0 {
+		for _, msg := range m.UpdatedReplicas {
+			data[i] = 0x2a
+			i++
+			i = encodeVarintData(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	data[i] = 0x30
+	i++
+	i = encodeVarintData(data, i, uint64(m.NextReplicaID))
+	return i, nil
+}
+
+func (m *InternalCommitTrigger) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *InternalCommitTrigger) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.SplitTrigger != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintData(data, i, uint64(m.SplitTrigger.Size()))
+		n7, err := m.SplitTrigger.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n7
+	}
+	if m.MergeTrigger != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintData(data, i, uint64(m.MergeTrigger.Size()))
+		n8, err := m.MergeTrigger.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n8
+	}
+	if m.ChangeReplicasTrigger != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintData(data, i, uint64(m.ChangeReplicasTrigger.Size()))
+		n9, err := m.ChangeReplicasTrigger.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n9
+	}
+	return i, nil
+}
+
+func (m *NodeList) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *NodeList) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Nodes) > 0 {
+		data11 := make([]byte, len(m.Nodes)*10)
+		var j10 int
+		for _, num1 := range m.Nodes {
+			num := uint64(num1)
+			for num >= 1<<7 {
+				data11[j10] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j10++
+			}
+			data11[j10] = uint8(num)
+			j10++
+		}
+		data[i] = 0xa
+		i++
+		i = encodeVarintData(data, i, uint64(j10))
+		i += copy(data[i:], data11[:j10])
+	}
+	return i, nil
+}
+
+func (m *Transaction) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Transaction) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintData(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	if m.Key != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	if m.ID != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.ID)))
+		i += copy(data[i:], m.ID)
+	}
+	data[i] = 0x20
+	i++
+	i = encodeVarintData(data, i, uint64(m.Priority))
+	data[i] = 0x28
+	i++
+	i = encodeVarintData(data, i, uint64(m.Isolation))
+	data[i] = 0x30
+	i++
+	i = encodeVarintData(data, i, uint64(m.Status))
+	data[i] = 0x38
+	i++
+	i = encodeVarintData(data, i, uint64(m.Epoch))
+	if m.LastHeartbeat != nil {
+		data[i] = 0x42
+		i++
+		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
+		n12, err := m.LastHeartbeat.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n12
+	}
+	data[i] = 0x4a
+	i++
+	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
+	n13, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n13
+	data[i] = 0x52
+	i++
+	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
+	n14, err := m.OrigTimestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n14
+	data[i] = 0x5a
+	i++
+	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
+	n15, err := m.MaxTimestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n15
+	data[i] = 0x62
+	i++
+	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
+	n16, err := m.CertainNodes.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n16
+	data[i] = 0x68
+	i++
+	if m.Writing {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	return i, nil
+}
+
+func (m *Lease) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Lease) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintData(data, i, uint64(m.Start.Size()))
+	n17, err := m.Start.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n17
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
+	n18, err := m.Expiration.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n18
+	data[i] = 0x18
+	i++
+	i = encodeVarintData(data, i, uint64(m.RaftNodeID))
+	return i, nil
+}
+
+func (m *Intent) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Intent) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Key != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	if m.EndKey != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.EndKey)))
+		i += copy(data[i:], m.EndKey)
+	}
+	data[i] = 0x1a
+	i++
+	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
+	n19, err := m.Txn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n19
+	return i, nil
+}
+
+func (m *GCMetadata) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *GCMetadata) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintData(data, i, uint64(m.LastScanNanos))
+	if m.OldestIntentNanos != nil {
+		data[i] = 0x10
+		i++
+		i = encodeVarintData(data, i, uint64(*m.OldestIntentNanos))
+	}
+	return i, nil
+}
+
+func encodeFixed64Data(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Data(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintData(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *Timestamp) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovData(uint64(m.WallTime))
+	n += 1 + sovData(uint64(m.Logical))
+	return n
+}
+
+func (m *Value) Size() (n int) {
+	var l int
+	_ = l
+	if m.Bytes != nil {
+		l = len(m.Bytes)
+		n += 1 + l + sovData(uint64(l))
+	}
+	if m.Checksum != nil {
+		n += 5
+	}
+	if m.Timestamp != nil {
+		l = m.Timestamp.Size()
+		n += 1 + l + sovData(uint64(l))
+	}
+	if m.Tag != nil {
+		l = len(*m.Tag)
+		n += 1 + l + sovData(uint64(l))
+	}
+	return n
+}
+
+func (m *KeyValue) Size() (n int) {
+	var l int
+	_ = l
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovData(uint64(l))
+	}
+	l = m.Value.Size()
+	n += 1 + l + sovData(uint64(l))
+	return n
+}
+
+func (m *RawKeyValue) Size() (n int) {
+	var l int
+	_ = l
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovData(uint64(l))
+	}
+	if m.Value != nil {
+		l = len(m.Value)
+		n += 1 + l + sovData(uint64(l))
+	}
+	return n
+}
+
+func (m *StoreIdent) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.ClusterID)
+	n += 1 + l + sovData(uint64(l))
+	n += 1 + sovData(uint64(m.NodeID))
+	n += 1 + sovData(uint64(m.StoreID))
+	return n
+}
+
+func (m *SplitTrigger) Size() (n int) {
+	var l int
+	_ = l
+	l = m.UpdatedDesc.Size()
+	n += 1 + l + sovData(uint64(l))
+	l = m.NewDesc.Size()
+	n += 1 + l + sovData(uint64(l))
+	return n
+}
+
+func (m *MergeTrigger) Size() (n int) {
+	var l int
+	_ = l
+	l = m.UpdatedDesc.Size()
+	n += 1 + l + sovData(uint64(l))
+	n += 1 + sovData(uint64(m.SubsumedRangeID))
+	return n
+}
+
+func (m *ChangeReplicasTrigger) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovData(uint64(m.NodeID))
+	n += 1 + sovData(uint64(m.StoreID))
+	n += 1 + sovData(uint64(m.ChangeType))
+	l = m.Replica.Size()
+	n += 1 + l + sovData(uint64(l))
+	if len(m.UpdatedReplicas) > 0 {
+		for _, e := range m.UpdatedReplicas {
+			l = e.Size()
+			n += 1 + l + sovData(uint64(l))
+		}
+	}
+	n += 1 + sovData(uint64(m.NextReplicaID))
+	return n
+}
+
+func (m *InternalCommitTrigger) Size() (n int) {
+	var l int
+	_ = l
+	if m.SplitTrigger != nil {
+		l = m.SplitTrigger.Size()
+		n += 1 + l + sovData(uint64(l))
+	}
+	if m.MergeTrigger != nil {
+		l = m.MergeTrigger.Size()
+		n += 1 + l + sovData(uint64(l))
+	}
+	if m.ChangeReplicasTrigger != nil {
+		l = m.ChangeReplicasTrigger.Size()
+		n += 1 + l + sovData(uint64(l))
+	}
+	return n
+}
+
+func (m *NodeList) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Nodes) > 0 {
+		l = 0
+		for _, e := range m.Nodes {
+			l += sovData(uint64(e))
+		}
+		n += 1 + sovData(uint64(l)) + l
+	}
+	return n
+}
+
+func (m *Transaction) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovData(uint64(l))
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovData(uint64(l))
+	}
+	if m.ID != nil {
+		l = len(m.ID)
+		n += 1 + l + sovData(uint64(l))
+	}
+	n += 1 + sovData(uint64(m.Priority))
+	n += 1 + sovData(uint64(m.Isolation))
+	n += 1 + sovData(uint64(m.Status))
+	n += 1 + sovData(uint64(m.Epoch))
+	if m.LastHeartbeat != nil {
+		l = m.LastHeartbeat.Size()
+		n += 1 + l + sovData(uint64(l))
+	}
+	l = m.Timestamp.Size()
+	n += 1 + l + sovData(uint64(l))
+	l = m.OrigTimestamp.Size()
+	n += 1 + l + sovData(uint64(l))
+	l = m.MaxTimestamp.Size()
+	n += 1 + l + sovData(uint64(l))
+	l = m.CertainNodes.Size()
+	n += 1 + l + sovData(uint64(l))
+	n += 2
+	return n
+}
+
+func (m *Lease) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Start.Size()
+	n += 1 + l + sovData(uint64(l))
+	l = m.Expiration.Size()
+	n += 1 + l + sovData(uint64(l))
+	n += 1 + sovData(uint64(m.RaftNodeID))
+	return n
+}
+
+func (m *Intent) Size() (n int) {
+	var l int
+	_ = l
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovData(uint64(l))
+	}
+	if m.EndKey != nil {
+		l = len(m.EndKey)
+		n += 1 + l + sovData(uint64(l))
+	}
+	l = m.Txn.Size()
+	n += 1 + l + sovData(uint64(l))
+	return n
+}
+
+func (m *GCMetadata) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovData(uint64(m.LastScanNanos))
+	if m.OldestIntentNanos != nil {
+		n += 1 + sovData(uint64(*m.OldestIntentNanos))
+	}
+	return n
+}
+
+func sovData(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozData(x uint64) (n int) {
+	return sovData(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *Timestamp) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -2550,800 +3346,3 @@ func skipData(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthData = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *Timestamp) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovData(uint64(m.WallTime))
-	n += 1 + sovData(uint64(m.Logical))
-	return n
-}
-
-func (m *Value) Size() (n int) {
-	var l int
-	_ = l
-	if m.Bytes != nil {
-		l = len(m.Bytes)
-		n += 1 + l + sovData(uint64(l))
-	}
-	if m.Checksum != nil {
-		n += 5
-	}
-	if m.Timestamp != nil {
-		l = m.Timestamp.Size()
-		n += 1 + l + sovData(uint64(l))
-	}
-	if m.Tag != nil {
-		l = len(*m.Tag)
-		n += 1 + l + sovData(uint64(l))
-	}
-	return n
-}
-
-func (m *KeyValue) Size() (n int) {
-	var l int
-	_ = l
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovData(uint64(l))
-	}
-	l = m.Value.Size()
-	n += 1 + l + sovData(uint64(l))
-	return n
-}
-
-func (m *RawKeyValue) Size() (n int) {
-	var l int
-	_ = l
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovData(uint64(l))
-	}
-	if m.Value != nil {
-		l = len(m.Value)
-		n += 1 + l + sovData(uint64(l))
-	}
-	return n
-}
-
-func (m *StoreIdent) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.ClusterID)
-	n += 1 + l + sovData(uint64(l))
-	n += 1 + sovData(uint64(m.NodeID))
-	n += 1 + sovData(uint64(m.StoreID))
-	return n
-}
-
-func (m *SplitTrigger) Size() (n int) {
-	var l int
-	_ = l
-	l = m.UpdatedDesc.Size()
-	n += 1 + l + sovData(uint64(l))
-	l = m.NewDesc.Size()
-	n += 1 + l + sovData(uint64(l))
-	return n
-}
-
-func (m *MergeTrigger) Size() (n int) {
-	var l int
-	_ = l
-	l = m.UpdatedDesc.Size()
-	n += 1 + l + sovData(uint64(l))
-	n += 1 + sovData(uint64(m.SubsumedRangeID))
-	return n
-}
-
-func (m *ChangeReplicasTrigger) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovData(uint64(m.NodeID))
-	n += 1 + sovData(uint64(m.StoreID))
-	n += 1 + sovData(uint64(m.ChangeType))
-	l = m.Replica.Size()
-	n += 1 + l + sovData(uint64(l))
-	if len(m.UpdatedReplicas) > 0 {
-		for _, e := range m.UpdatedReplicas {
-			l = e.Size()
-			n += 1 + l + sovData(uint64(l))
-		}
-	}
-	n += 1 + sovData(uint64(m.NextReplicaID))
-	return n
-}
-
-func (m *InternalCommitTrigger) Size() (n int) {
-	var l int
-	_ = l
-	if m.SplitTrigger != nil {
-		l = m.SplitTrigger.Size()
-		n += 1 + l + sovData(uint64(l))
-	}
-	if m.MergeTrigger != nil {
-		l = m.MergeTrigger.Size()
-		n += 1 + l + sovData(uint64(l))
-	}
-	if m.ChangeReplicasTrigger != nil {
-		l = m.ChangeReplicasTrigger.Size()
-		n += 1 + l + sovData(uint64(l))
-	}
-	return n
-}
-
-func (m *NodeList) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Nodes) > 0 {
-		l = 0
-		for _, e := range m.Nodes {
-			l += sovData(uint64(e))
-		}
-		n += 1 + sovData(uint64(l)) + l
-	}
-	return n
-}
-
-func (m *Transaction) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Name)
-	n += 1 + l + sovData(uint64(l))
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovData(uint64(l))
-	}
-	if m.ID != nil {
-		l = len(m.ID)
-		n += 1 + l + sovData(uint64(l))
-	}
-	n += 1 + sovData(uint64(m.Priority))
-	n += 1 + sovData(uint64(m.Isolation))
-	n += 1 + sovData(uint64(m.Status))
-	n += 1 + sovData(uint64(m.Epoch))
-	if m.LastHeartbeat != nil {
-		l = m.LastHeartbeat.Size()
-		n += 1 + l + sovData(uint64(l))
-	}
-	l = m.Timestamp.Size()
-	n += 1 + l + sovData(uint64(l))
-	l = m.OrigTimestamp.Size()
-	n += 1 + l + sovData(uint64(l))
-	l = m.MaxTimestamp.Size()
-	n += 1 + l + sovData(uint64(l))
-	l = m.CertainNodes.Size()
-	n += 1 + l + sovData(uint64(l))
-	n += 2
-	return n
-}
-
-func (m *Lease) Size() (n int) {
-	var l int
-	_ = l
-	l = m.Start.Size()
-	n += 1 + l + sovData(uint64(l))
-	l = m.Expiration.Size()
-	n += 1 + l + sovData(uint64(l))
-	n += 1 + sovData(uint64(m.RaftNodeID))
-	return n
-}
-
-func (m *Intent) Size() (n int) {
-	var l int
-	_ = l
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovData(uint64(l))
-	}
-	if m.EndKey != nil {
-		l = len(m.EndKey)
-		n += 1 + l + sovData(uint64(l))
-	}
-	l = m.Txn.Size()
-	n += 1 + l + sovData(uint64(l))
-	return n
-}
-
-func (m *GCMetadata) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovData(uint64(m.LastScanNanos))
-	if m.OldestIntentNanos != nil {
-		n += 1 + sovData(uint64(*m.OldestIntentNanos))
-	}
-	return n
-}
-
-func sovData(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozData(x uint64) (n int) {
-	return sovData(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *Timestamp) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Timestamp) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintData(data, i, uint64(m.WallTime))
-	data[i] = 0x10
-	i++
-	i = encodeVarintData(data, i, uint64(m.Logical))
-	return i, nil
-}
-
-func (m *Value) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Value) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Bytes != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.Bytes)))
-		i += copy(data[i:], m.Bytes)
-	}
-	if m.Checksum != nil {
-		data[i] = 0x1d
-		i++
-		i = encodeFixed32Data(data, i, uint32(*m.Checksum))
-	}
-	if m.Timestamp != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-		n1, err := m.Timestamp.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
-	}
-	if m.Tag != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintData(data, i, uint64(len(*m.Tag)))
-		i += copy(data[i:], *m.Tag)
-	}
-	return i, nil
-}
-
-func (m *KeyValue) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *KeyValue) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Key != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
-	}
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Value.Size()))
-	n2, err := m.Value.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	return i, nil
-}
-
-func (m *RawKeyValue) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RawKeyValue) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Key != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
-	}
-	if m.Value != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.Value)))
-		i += copy(data[i:], m.Value)
-	}
-	return i, nil
-}
-
-func (m *StoreIdent) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *StoreIdent) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintData(data, i, uint64(len(m.ClusterID)))
-	i += copy(data[i:], m.ClusterID)
-	data[i] = 0x10
-	i++
-	i = encodeVarintData(data, i, uint64(m.NodeID))
-	data[i] = 0x18
-	i++
-	i = encodeVarintData(data, i, uint64(m.StoreID))
-	return i, nil
-}
-
-func (m *SplitTrigger) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *SplitTrigger) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintData(data, i, uint64(m.UpdatedDesc.Size()))
-	n3, err := m.UpdatedDesc.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.NewDesc.Size()))
-	n4, err := m.NewDesc.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n4
-	return i, nil
-}
-
-func (m *MergeTrigger) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *MergeTrigger) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintData(data, i, uint64(m.UpdatedDesc.Size()))
-	n5, err := m.UpdatedDesc.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n5
-	data[i] = 0x10
-	i++
-	i = encodeVarintData(data, i, uint64(m.SubsumedRangeID))
-	return i, nil
-}
-
-func (m *ChangeReplicasTrigger) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintData(data, i, uint64(m.NodeID))
-	data[i] = 0x10
-	i++
-	i = encodeVarintData(data, i, uint64(m.StoreID))
-	data[i] = 0x18
-	i++
-	i = encodeVarintData(data, i, uint64(m.ChangeType))
-	data[i] = 0x22
-	i++
-	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
-	n6, err := m.Replica.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n6
-	if len(m.UpdatedReplicas) > 0 {
-		for _, msg := range m.UpdatedReplicas {
-			data[i] = 0x2a
-			i++
-			i = encodeVarintData(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	data[i] = 0x30
-	i++
-	i = encodeVarintData(data, i, uint64(m.NextReplicaID))
-	return i, nil
-}
-
-func (m *InternalCommitTrigger) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *InternalCommitTrigger) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.SplitTrigger != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintData(data, i, uint64(m.SplitTrigger.Size()))
-		n7, err := m.SplitTrigger.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n7
-	}
-	if m.MergeTrigger != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintData(data, i, uint64(m.MergeTrigger.Size()))
-		n8, err := m.MergeTrigger.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n8
-	}
-	if m.ChangeReplicasTrigger != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintData(data, i, uint64(m.ChangeReplicasTrigger.Size()))
-		n9, err := m.ChangeReplicasTrigger.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n9
-	}
-	return i, nil
-}
-
-func (m *NodeList) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *NodeList) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Nodes) > 0 {
-		data11 := make([]byte, len(m.Nodes)*10)
-		var j10 int
-		for _, num1 := range m.Nodes {
-			num := uint64(num1)
-			for num >= 1<<7 {
-				data11[j10] = uint8(uint64(num)&0x7f | 0x80)
-				num >>= 7
-				j10++
-			}
-			data11[j10] = uint8(num)
-			j10++
-		}
-		data[i] = 0xa
-		i++
-		i = encodeVarintData(data, i, uint64(j10))
-		i += copy(data[i:], data11[:j10])
-	}
-	return i, nil
-}
-
-func (m *Transaction) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Transaction) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintData(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	if m.Key != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
-	}
-	if m.ID != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.ID)))
-		i += copy(data[i:], m.ID)
-	}
-	data[i] = 0x20
-	i++
-	i = encodeVarintData(data, i, uint64(m.Priority))
-	data[i] = 0x28
-	i++
-	i = encodeVarintData(data, i, uint64(m.Isolation))
-	data[i] = 0x30
-	i++
-	i = encodeVarintData(data, i, uint64(m.Status))
-	data[i] = 0x38
-	i++
-	i = encodeVarintData(data, i, uint64(m.Epoch))
-	if m.LastHeartbeat != nil {
-		data[i] = 0x42
-		i++
-		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
-		n12, err := m.LastHeartbeat.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n12
-	}
-	data[i] = 0x4a
-	i++
-	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n13, err := m.Timestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n13
-	data[i] = 0x52
-	i++
-	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
-	n14, err := m.OrigTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n14
-	data[i] = 0x5a
-	i++
-	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
-	n15, err := m.MaxTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n15
-	data[i] = 0x62
-	i++
-	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
-	n16, err := m.CertainNodes.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n16
-	data[i] = 0x68
-	i++
-	if m.Writing {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
-	return i, nil
-}
-
-func (m *Lease) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Lease) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintData(data, i, uint64(m.Start.Size()))
-	n17, err := m.Start.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n17
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
-	n18, err := m.Expiration.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n18
-	data[i] = 0x18
-	i++
-	i = encodeVarintData(data, i, uint64(m.RaftNodeID))
-	return i, nil
-}
-
-func (m *Intent) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Intent) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Key != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
-	}
-	if m.EndKey != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.EndKey)))
-		i += copy(data[i:], m.EndKey)
-	}
-	data[i] = 0x1a
-	i++
-	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-	n19, err := m.Txn.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n19
-	return i, nil
-}
-
-func (m *GCMetadata) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *GCMetadata) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintData(data, i, uint64(m.LastScanNanos))
-	if m.OldestIntentNanos != nil {
-		data[i] = 0x10
-		i++
-		i = encodeVarintData(data, i, uint64(*m.OldestIntentNanos))
-	}
-	return i, nil
-}
-
-func encodeFixed64Data(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Data(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintData(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

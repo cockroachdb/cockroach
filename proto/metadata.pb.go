@@ -298,6 +298,446 @@ func (m *StoreDescriptor) GetCapacity() StoreCapacity {
 	return StoreCapacity{}
 }
 
+func (m *Attributes) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Attributes) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Attrs) > 0 {
+		for _, s := range m.Attrs {
+			data[i] = 0xa
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	return i, nil
+}
+
+func (m *Replica) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Replica) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.NodeID))
+	data[i] = 0x10
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.StoreID))
+	data[i] = 0x18
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.ReplicaID))
+	return i, nil
+}
+
+func (m *RangeDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RangeDescriptor) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.RangeID))
+	if m.StartKey != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintMetadata(data, i, uint64(len(m.StartKey)))
+		i += copy(data[i:], m.StartKey)
+	}
+	if m.EndKey != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintMetadata(data, i, uint64(len(m.EndKey)))
+		i += copy(data[i:], m.EndKey)
+	}
+	if len(m.Replicas) > 0 {
+		for _, msg := range m.Replicas {
+			data[i] = 0x22
+			i++
+			i = encodeVarintMetadata(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	data[i] = 0x28
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.NextReplicaID))
+	return i, nil
+}
+
+func (m *RangeTree) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RangeTree) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.RootKey != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintMetadata(data, i, uint64(len(m.RootKey)))
+		i += copy(data[i:], m.RootKey)
+	}
+	return i, nil
+}
+
+func (m *RangeTreeNode) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RangeTreeNode) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Key != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintMetadata(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	data[i] = 0x10
+	i++
+	if m.Black {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	if m.ParentKey != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintMetadata(data, i, uint64(len(m.ParentKey)))
+		i += copy(data[i:], m.ParentKey)
+	}
+	if m.LeftKey != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintMetadata(data, i, uint64(len(m.LeftKey)))
+		i += copy(data[i:], m.LeftKey)
+	}
+	if m.RightKey != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintMetadata(data, i, uint64(len(m.RightKey)))
+		i += copy(data[i:], m.RightKey)
+	}
+	return i, nil
+}
+
+func (m *StoreCapacity) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *StoreCapacity) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.Capacity))
+	data[i] = 0x10
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.Available))
+	data[i] = 0x18
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.RangeCount))
+	return i, nil
+}
+
+func (m *NodeDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *NodeDescriptor) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.NodeID))
+	data[i] = 0x12
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.Address.Size()))
+	n1, err := m.Address.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	data[i] = 0x1a
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.Attrs.Size()))
+	n2, err := m.Attrs.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	return i, nil
+}
+
+func (m *StoreDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *StoreDescriptor) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.StoreID))
+	data[i] = 0x12
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.Attrs.Size()))
+	n3, err := m.Attrs.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	data[i] = 0x1a
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.Node.Size()))
+	n4, err := m.Node.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
+	data[i] = 0x22
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.Capacity.Size()))
+	n5, err := m.Capacity.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n5
+	return i, nil
+}
+
+func encodeFixed64Metadata(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Metadata(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintMetadata(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *Attributes) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Attrs) > 0 {
+		for _, s := range m.Attrs {
+			l = len(s)
+			n += 1 + l + sovMetadata(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Replica) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovMetadata(uint64(m.NodeID))
+	n += 1 + sovMetadata(uint64(m.StoreID))
+	n += 1 + sovMetadata(uint64(m.ReplicaID))
+	return n
+}
+
+func (m *RangeDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovMetadata(uint64(m.RangeID))
+	if m.StartKey != nil {
+		l = len(m.StartKey)
+		n += 1 + l + sovMetadata(uint64(l))
+	}
+	if m.EndKey != nil {
+		l = len(m.EndKey)
+		n += 1 + l + sovMetadata(uint64(l))
+	}
+	if len(m.Replicas) > 0 {
+		for _, e := range m.Replicas {
+			l = e.Size()
+			n += 1 + l + sovMetadata(uint64(l))
+		}
+	}
+	n += 1 + sovMetadata(uint64(m.NextReplicaID))
+	return n
+}
+
+func (m *RangeTree) Size() (n int) {
+	var l int
+	_ = l
+	if m.RootKey != nil {
+		l = len(m.RootKey)
+		n += 1 + l + sovMetadata(uint64(l))
+	}
+	return n
+}
+
+func (m *RangeTreeNode) Size() (n int) {
+	var l int
+	_ = l
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovMetadata(uint64(l))
+	}
+	n += 2
+	if m.ParentKey != nil {
+		l = len(m.ParentKey)
+		n += 1 + l + sovMetadata(uint64(l))
+	}
+	if m.LeftKey != nil {
+		l = len(m.LeftKey)
+		n += 1 + l + sovMetadata(uint64(l))
+	}
+	if m.RightKey != nil {
+		l = len(m.RightKey)
+		n += 1 + l + sovMetadata(uint64(l))
+	}
+	return n
+}
+
+func (m *StoreCapacity) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovMetadata(uint64(m.Capacity))
+	n += 1 + sovMetadata(uint64(m.Available))
+	n += 1 + sovMetadata(uint64(m.RangeCount))
+	return n
+}
+
+func (m *NodeDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovMetadata(uint64(m.NodeID))
+	l = m.Address.Size()
+	n += 1 + l + sovMetadata(uint64(l))
+	l = m.Attrs.Size()
+	n += 1 + l + sovMetadata(uint64(l))
+	return n
+}
+
+func (m *StoreDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovMetadata(uint64(m.StoreID))
+	l = m.Attrs.Size()
+	n += 1 + l + sovMetadata(uint64(l))
+	l = m.Node.Size()
+	n += 1 + l + sovMetadata(uint64(l))
+	l = m.Capacity.Size()
+	n += 1 + l + sovMetadata(uint64(l))
+	return n
+}
+
+func sovMetadata(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozMetadata(x uint64) (n int) {
+	return sovMetadata(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *Attributes) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -1286,444 +1726,3 @@ func skipMetadata(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthMetadata = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *Attributes) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Attrs) > 0 {
-		for _, s := range m.Attrs {
-			l = len(s)
-			n += 1 + l + sovMetadata(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *Replica) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovMetadata(uint64(m.NodeID))
-	n += 1 + sovMetadata(uint64(m.StoreID))
-	n += 1 + sovMetadata(uint64(m.ReplicaID))
-	return n
-}
-
-func (m *RangeDescriptor) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovMetadata(uint64(m.RangeID))
-	if m.StartKey != nil {
-		l = len(m.StartKey)
-		n += 1 + l + sovMetadata(uint64(l))
-	}
-	if m.EndKey != nil {
-		l = len(m.EndKey)
-		n += 1 + l + sovMetadata(uint64(l))
-	}
-	if len(m.Replicas) > 0 {
-		for _, e := range m.Replicas {
-			l = e.Size()
-			n += 1 + l + sovMetadata(uint64(l))
-		}
-	}
-	n += 1 + sovMetadata(uint64(m.NextReplicaID))
-	return n
-}
-
-func (m *RangeTree) Size() (n int) {
-	var l int
-	_ = l
-	if m.RootKey != nil {
-		l = len(m.RootKey)
-		n += 1 + l + sovMetadata(uint64(l))
-	}
-	return n
-}
-
-func (m *RangeTreeNode) Size() (n int) {
-	var l int
-	_ = l
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovMetadata(uint64(l))
-	}
-	n += 2
-	if m.ParentKey != nil {
-		l = len(m.ParentKey)
-		n += 1 + l + sovMetadata(uint64(l))
-	}
-	if m.LeftKey != nil {
-		l = len(m.LeftKey)
-		n += 1 + l + sovMetadata(uint64(l))
-	}
-	if m.RightKey != nil {
-		l = len(m.RightKey)
-		n += 1 + l + sovMetadata(uint64(l))
-	}
-	return n
-}
-
-func (m *StoreCapacity) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovMetadata(uint64(m.Capacity))
-	n += 1 + sovMetadata(uint64(m.Available))
-	n += 1 + sovMetadata(uint64(m.RangeCount))
-	return n
-}
-
-func (m *NodeDescriptor) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovMetadata(uint64(m.NodeID))
-	l = m.Address.Size()
-	n += 1 + l + sovMetadata(uint64(l))
-	l = m.Attrs.Size()
-	n += 1 + l + sovMetadata(uint64(l))
-	return n
-}
-
-func (m *StoreDescriptor) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovMetadata(uint64(m.StoreID))
-	l = m.Attrs.Size()
-	n += 1 + l + sovMetadata(uint64(l))
-	l = m.Node.Size()
-	n += 1 + l + sovMetadata(uint64(l))
-	l = m.Capacity.Size()
-	n += 1 + l + sovMetadata(uint64(l))
-	return n
-}
-
-func sovMetadata(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozMetadata(x uint64) (n int) {
-	return sovMetadata(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *Attributes) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Attributes) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Attrs) > 0 {
-		for _, s := range m.Attrs {
-			data[i] = 0xa
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
-	return i, nil
-}
-
-func (m *Replica) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Replica) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.NodeID))
-	data[i] = 0x10
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.StoreID))
-	data[i] = 0x18
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.ReplicaID))
-	return i, nil
-}
-
-func (m *RangeDescriptor) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RangeDescriptor) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.RangeID))
-	if m.StartKey != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintMetadata(data, i, uint64(len(m.StartKey)))
-		i += copy(data[i:], m.StartKey)
-	}
-	if m.EndKey != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintMetadata(data, i, uint64(len(m.EndKey)))
-		i += copy(data[i:], m.EndKey)
-	}
-	if len(m.Replicas) > 0 {
-		for _, msg := range m.Replicas {
-			data[i] = 0x22
-			i++
-			i = encodeVarintMetadata(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	data[i] = 0x28
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.NextReplicaID))
-	return i, nil
-}
-
-func (m *RangeTree) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RangeTree) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.RootKey != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintMetadata(data, i, uint64(len(m.RootKey)))
-		i += copy(data[i:], m.RootKey)
-	}
-	return i, nil
-}
-
-func (m *RangeTreeNode) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RangeTreeNode) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Key != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintMetadata(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
-	}
-	data[i] = 0x10
-	i++
-	if m.Black {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
-	if m.ParentKey != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintMetadata(data, i, uint64(len(m.ParentKey)))
-		i += copy(data[i:], m.ParentKey)
-	}
-	if m.LeftKey != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintMetadata(data, i, uint64(len(m.LeftKey)))
-		i += copy(data[i:], m.LeftKey)
-	}
-	if m.RightKey != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintMetadata(data, i, uint64(len(m.RightKey)))
-		i += copy(data[i:], m.RightKey)
-	}
-	return i, nil
-}
-
-func (m *StoreCapacity) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *StoreCapacity) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.Capacity))
-	data[i] = 0x10
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.Available))
-	data[i] = 0x18
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.RangeCount))
-	return i, nil
-}
-
-func (m *NodeDescriptor) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *NodeDescriptor) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.NodeID))
-	data[i] = 0x12
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.Address.Size()))
-	n1, err := m.Address.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	data[i] = 0x1a
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.Attrs.Size()))
-	n2, err := m.Attrs.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	return i, nil
-}
-
-func (m *StoreDescriptor) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *StoreDescriptor) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.StoreID))
-	data[i] = 0x12
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.Attrs.Size()))
-	n3, err := m.Attrs.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
-	data[i] = 0x1a
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.Node.Size()))
-	n4, err := m.Node.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n4
-	data[i] = 0x22
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.Capacity.Size()))
-	n5, err := m.Capacity.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n5
-	return i, nil
-}
-
-func encodeFixed64Metadata(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Metadata(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintMetadata(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

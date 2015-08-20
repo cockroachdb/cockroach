@@ -118,6 +118,162 @@ func (m *PingResponse) GetServerTime() int64 {
 	return 0
 }
 
+func (m *RemoteOffset) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RemoteOffset) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintHeartbeat(data, i, uint64(m.Offset))
+	data[i] = 0x10
+	i++
+	i = encodeVarintHeartbeat(data, i, uint64(m.Uncertainty))
+	data[i] = 0x18
+	i++
+	i = encodeVarintHeartbeat(data, i, uint64(m.MeasuredAt))
+	return i, nil
+}
+
+func (m *PingRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *PingRequest) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintHeartbeat(data, i, uint64(len(m.Ping)))
+	i += copy(data[i:], m.Ping)
+	data[i] = 0x12
+	i++
+	i = encodeVarintHeartbeat(data, i, uint64(m.Offset.Size()))
+	n1, err := m.Offset.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	data[i] = 0x1a
+	i++
+	i = encodeVarintHeartbeat(data, i, uint64(len(m.Addr)))
+	i += copy(data[i:], m.Addr)
+	return i, nil
+}
+
+func (m *PingResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *PingResponse) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintHeartbeat(data, i, uint64(len(m.Pong)))
+	i += copy(data[i:], m.Pong)
+	data[i] = 0x10
+	i++
+	i = encodeVarintHeartbeat(data, i, uint64(m.ServerTime))
+	return i, nil
+}
+
+func encodeFixed64Heartbeat(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Heartbeat(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintHeartbeat(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *RemoteOffset) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovHeartbeat(uint64(m.Offset))
+	n += 1 + sovHeartbeat(uint64(m.Uncertainty))
+	n += 1 + sovHeartbeat(uint64(m.MeasuredAt))
+	return n
+}
+
+func (m *PingRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Ping)
+	n += 1 + l + sovHeartbeat(uint64(l))
+	l = m.Offset.Size()
+	n += 1 + l + sovHeartbeat(uint64(l))
+	l = len(m.Addr)
+	n += 1 + l + sovHeartbeat(uint64(l))
+	return n
+}
+
+func (m *PingResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Pong)
+	n += 1 + l + sovHeartbeat(uint64(l))
+	n += 1 + sovHeartbeat(uint64(m.ServerTime))
+	return n
+}
+
+func sovHeartbeat(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozHeartbeat(x uint64) (n int) {
+	return sovHeartbeat(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *RemoteOffset) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -501,160 +657,3 @@ func skipHeartbeat(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthHeartbeat = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *RemoteOffset) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovHeartbeat(uint64(m.Offset))
-	n += 1 + sovHeartbeat(uint64(m.Uncertainty))
-	n += 1 + sovHeartbeat(uint64(m.MeasuredAt))
-	return n
-}
-
-func (m *PingRequest) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Ping)
-	n += 1 + l + sovHeartbeat(uint64(l))
-	l = m.Offset.Size()
-	n += 1 + l + sovHeartbeat(uint64(l))
-	l = len(m.Addr)
-	n += 1 + l + sovHeartbeat(uint64(l))
-	return n
-}
-
-func (m *PingResponse) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Pong)
-	n += 1 + l + sovHeartbeat(uint64(l))
-	n += 1 + sovHeartbeat(uint64(m.ServerTime))
-	return n
-}
-
-func sovHeartbeat(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozHeartbeat(x uint64) (n int) {
-	return sovHeartbeat(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *RemoteOffset) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RemoteOffset) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintHeartbeat(data, i, uint64(m.Offset))
-	data[i] = 0x10
-	i++
-	i = encodeVarintHeartbeat(data, i, uint64(m.Uncertainty))
-	data[i] = 0x18
-	i++
-	i = encodeVarintHeartbeat(data, i, uint64(m.MeasuredAt))
-	return i, nil
-}
-
-func (m *PingRequest) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *PingRequest) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintHeartbeat(data, i, uint64(len(m.Ping)))
-	i += copy(data[i:], m.Ping)
-	data[i] = 0x12
-	i++
-	i = encodeVarintHeartbeat(data, i, uint64(m.Offset.Size()))
-	n1, err := m.Offset.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	data[i] = 0x1a
-	i++
-	i = encodeVarintHeartbeat(data, i, uint64(len(m.Addr)))
-	i += copy(data[i:], m.Addr)
-	return i, nil
-}
-
-func (m *PingResponse) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *PingResponse) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintHeartbeat(data, i, uint64(len(m.Pong)))
-	i += copy(data[i:], m.Pong)
-	data[i] = 0x10
-	i++
-	i = encodeVarintHeartbeat(data, i, uint64(m.ServerTime))
-	return i, nil
-}
-
-func encodeFixed64Heartbeat(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Heartbeat(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintHeartbeat(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

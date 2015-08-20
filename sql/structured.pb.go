@@ -328,6 +328,367 @@ func (m *DatabaseDescriptor) GetPrivileges() *PrivilegeDescriptor {
 func init() {
 	proto.RegisterEnum("cockroach.sql.ColumnType_Kind", ColumnType_Kind_name, ColumnType_Kind_value)
 }
+func (m *ColumnType) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ColumnType) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Kind))
+	data[i] = 0x10
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Width))
+	data[i] = 0x18
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Precision))
+	return i, nil
+}
+
+func (m *ColumnDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ColumnDescriptor) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	data[i] = 0x10
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.ID))
+	data[i] = 0x1a
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Type.Size()))
+	n1, err := m.Type.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	data[i] = 0x20
+	i++
+	if m.Nullable {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	return i, nil
+}
+
+func (m *IndexDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *IndexDescriptor) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	data[i] = 0x10
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.ID))
+	data[i] = 0x18
+	i++
+	if m.Unique {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	if len(m.ColumnNames) > 0 {
+		for _, s := range m.ColumnNames {
+			data[i] = 0x22
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if len(m.ColumnIDs) > 0 {
+		for _, num := range m.ColumnIDs {
+			data[i] = 0x28
+			i++
+			i = encodeVarintStructured(data, i, uint64(num))
+		}
+	}
+	return i, nil
+}
+
+func (m *TableDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	data[i] = 0x12
+	i++
+	i = encodeVarintStructured(data, i, uint64(len(m.Alias)))
+	i += copy(data[i:], m.Alias)
+	data[i] = 0x18
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.ID))
+	if len(m.Columns) > 0 {
+		for _, msg := range m.Columns {
+			data[i] = 0x22
+			i++
+			i = encodeVarintStructured(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	data[i] = 0x28
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.NextColumnID))
+	data[i] = 0x32
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.PrimaryIndex.Size()))
+	n2, err := m.PrimaryIndex.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	if len(m.Indexes) > 0 {
+		for _, msg := range m.Indexes {
+			data[i] = 0x3a
+			i++
+			i = encodeVarintStructured(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	data[i] = 0x40
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.NextIndexID))
+	if m.Privileges != nil {
+		data[i] = 0x4a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
+		n3, err := m.Privileges.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	return i, nil
+}
+
+func (m *DatabaseDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *DatabaseDescriptor) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	data[i] = 0x10
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.ID))
+	if m.Privileges != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
+		n4, err := m.Privileges.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n4
+	}
+	return i, nil
+}
+
+func encodeFixed64Structured(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Structured(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintStructured(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *ColumnType) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovStructured(uint64(m.Kind))
+	n += 1 + sovStructured(uint64(m.Width))
+	n += 1 + sovStructured(uint64(m.Precision))
+	return n
+}
+
+func (m *ColumnDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovStructured(uint64(l))
+	n += 1 + sovStructured(uint64(m.ID))
+	l = m.Type.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	n += 2
+	return n
+}
+
+func (m *IndexDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovStructured(uint64(l))
+	n += 1 + sovStructured(uint64(m.ID))
+	n += 2
+	if len(m.ColumnNames) > 0 {
+		for _, s := range m.ColumnNames {
+			l = len(s)
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if len(m.ColumnIDs) > 0 {
+		for _, e := range m.ColumnIDs {
+			n += 1 + sovStructured(uint64(e))
+		}
+	}
+	return n
+}
+
+func (m *TableDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovStructured(uint64(l))
+	l = len(m.Alias)
+	n += 1 + l + sovStructured(uint64(l))
+	n += 1 + sovStructured(uint64(m.ID))
+	if len(m.Columns) > 0 {
+		for _, e := range m.Columns {
+			l = e.Size()
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	n += 1 + sovStructured(uint64(m.NextColumnID))
+	l = m.PrimaryIndex.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if len(m.Indexes) > 0 {
+		for _, e := range m.Indexes {
+			l = e.Size()
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	n += 1 + sovStructured(uint64(m.NextIndexID))
+	if m.Privileges != nil {
+		l = m.Privileges.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
+
+func (m *DatabaseDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovStructured(uint64(l))
+	n += 1 + sovStructured(uint64(m.ID))
+	if m.Privileges != nil {
+		l = m.Privileges.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
+
+func sovStructured(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozStructured(x uint64) (n int) {
+	return sovStructured(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *ColumnType) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -1141,365 +1502,3 @@ func skipStructured(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthStructured = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *ColumnType) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovStructured(uint64(m.Kind))
-	n += 1 + sovStructured(uint64(m.Width))
-	n += 1 + sovStructured(uint64(m.Precision))
-	return n
-}
-
-func (m *ColumnDescriptor) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Name)
-	n += 1 + l + sovStructured(uint64(l))
-	n += 1 + sovStructured(uint64(m.ID))
-	l = m.Type.Size()
-	n += 1 + l + sovStructured(uint64(l))
-	n += 2
-	return n
-}
-
-func (m *IndexDescriptor) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Name)
-	n += 1 + l + sovStructured(uint64(l))
-	n += 1 + sovStructured(uint64(m.ID))
-	n += 2
-	if len(m.ColumnNames) > 0 {
-		for _, s := range m.ColumnNames {
-			l = len(s)
-			n += 1 + l + sovStructured(uint64(l))
-		}
-	}
-	if len(m.ColumnIDs) > 0 {
-		for _, e := range m.ColumnIDs {
-			n += 1 + sovStructured(uint64(e))
-		}
-	}
-	return n
-}
-
-func (m *TableDescriptor) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Name)
-	n += 1 + l + sovStructured(uint64(l))
-	l = len(m.Alias)
-	n += 1 + l + sovStructured(uint64(l))
-	n += 1 + sovStructured(uint64(m.ID))
-	if len(m.Columns) > 0 {
-		for _, e := range m.Columns {
-			l = e.Size()
-			n += 1 + l + sovStructured(uint64(l))
-		}
-	}
-	n += 1 + sovStructured(uint64(m.NextColumnID))
-	l = m.PrimaryIndex.Size()
-	n += 1 + l + sovStructured(uint64(l))
-	if len(m.Indexes) > 0 {
-		for _, e := range m.Indexes {
-			l = e.Size()
-			n += 1 + l + sovStructured(uint64(l))
-		}
-	}
-	n += 1 + sovStructured(uint64(m.NextIndexID))
-	if m.Privileges != nil {
-		l = m.Privileges.Size()
-		n += 1 + l + sovStructured(uint64(l))
-	}
-	return n
-}
-
-func (m *DatabaseDescriptor) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Name)
-	n += 1 + l + sovStructured(uint64(l))
-	n += 1 + sovStructured(uint64(m.ID))
-	if m.Privileges != nil {
-		l = m.Privileges.Size()
-		n += 1 + l + sovStructured(uint64(l))
-	}
-	return n
-}
-
-func sovStructured(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozStructured(x uint64) (n int) {
-	return sovStructured(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *ColumnType) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ColumnType) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.Kind))
-	data[i] = 0x10
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.Width))
-	data[i] = 0x18
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.Precision))
-	return i, nil
-}
-
-func (m *ColumnDescriptor) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ColumnDescriptor) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x10
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.ID))
-	data[i] = 0x1a
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.Type.Size()))
-	n1, err := m.Type.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	data[i] = 0x20
-	i++
-	if m.Nullable {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
-	return i, nil
-}
-
-func (m *IndexDescriptor) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *IndexDescriptor) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x10
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.ID))
-	data[i] = 0x18
-	i++
-	if m.Unique {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
-	if len(m.ColumnNames) > 0 {
-		for _, s := range m.ColumnNames {
-			data[i] = 0x22
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
-	if len(m.ColumnIDs) > 0 {
-		for _, num := range m.ColumnIDs {
-			data[i] = 0x28
-			i++
-			i = encodeVarintStructured(data, i, uint64(num))
-		}
-	}
-	return i, nil
-}
-
-func (m *TableDescriptor) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x12
-	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Alias)))
-	i += copy(data[i:], m.Alias)
-	data[i] = 0x18
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.ID))
-	if len(m.Columns) > 0 {
-		for _, msg := range m.Columns {
-			data[i] = 0x22
-			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	data[i] = 0x28
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.NextColumnID))
-	data[i] = 0x32
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.PrimaryIndex.Size()))
-	n2, err := m.PrimaryIndex.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	if len(m.Indexes) > 0 {
-		for _, msg := range m.Indexes {
-			data[i] = 0x3a
-			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	data[i] = 0x40
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.NextIndexID))
-	if m.Privileges != nil {
-		data[i] = 0x4a
-		i++
-		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
-		n3, err := m.Privileges.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
-	}
-	return i, nil
-}
-
-func (m *DatabaseDescriptor) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *DatabaseDescriptor) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x10
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.ID))
-	if m.Privileges != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
-		n4, err := m.Privileges.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n4
-	}
-	return i, nil
-}
-
-func encodeFixed64Structured(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Structured(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintStructured(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

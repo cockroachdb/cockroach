@@ -70,6 +70,122 @@ func (m *PrivilegeDescriptor) GetUsers() []*UserPrivileges {
 	return nil
 }
 
+func (m *UserPrivileges) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *UserPrivileges) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintPrivilege(data, i, uint64(len(m.User)))
+	i += copy(data[i:], m.User)
+	data[i] = 0x10
+	i++
+	i = encodeVarintPrivilege(data, i, uint64(m.Privileges))
+	return i, nil
+}
+
+func (m *PrivilegeDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *PrivilegeDescriptor) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Users) > 0 {
+		for _, msg := range m.Users {
+			data[i] = 0xa
+			i++
+			i = encodeVarintPrivilege(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func encodeFixed64Privilege(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Privilege(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintPrivilege(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *UserPrivileges) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.User)
+	n += 1 + l + sovPrivilege(uint64(l))
+	n += 1 + sovPrivilege(uint64(m.Privileges))
+	return n
+}
+
+func (m *PrivilegeDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Users) > 0 {
+		for _, e := range m.Users {
+			l = e.Size()
+			n += 1 + l + sovPrivilege(uint64(l))
+		}
+	}
+	return n
+}
+
+func sovPrivilege(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozPrivilege(x uint64) (n int) {
+	return sovPrivilege(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *UserPrivileges) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -317,120 +433,3 @@ func skipPrivilege(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthPrivilege = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *UserPrivileges) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.User)
-	n += 1 + l + sovPrivilege(uint64(l))
-	n += 1 + sovPrivilege(uint64(m.Privileges))
-	return n
-}
-
-func (m *PrivilegeDescriptor) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Users) > 0 {
-		for _, e := range m.Users {
-			l = e.Size()
-			n += 1 + l + sovPrivilege(uint64(l))
-		}
-	}
-	return n
-}
-
-func sovPrivilege(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozPrivilege(x uint64) (n int) {
-	return sovPrivilege(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *UserPrivileges) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *UserPrivileges) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintPrivilege(data, i, uint64(len(m.User)))
-	i += copy(data[i:], m.User)
-	data[i] = 0x10
-	i++
-	i = encodeVarintPrivilege(data, i, uint64(m.Privileges))
-	return i, nil
-}
-
-func (m *PrivilegeDescriptor) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *PrivilegeDescriptor) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Users) > 0 {
-		for _, msg := range m.Users {
-			data[i] = 0xa
-			i++
-			i = encodeVarintPrivilege(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func encodeFixed64Privilege(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Privilege(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintPrivilege(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

@@ -31,6 +31,76 @@ func (m *Session) GetDatabase() string {
 	return ""
 }
 
+func (m *Session) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Session) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintServer(data, i, uint64(len(m.Database)))
+	i += copy(data[i:], m.Database)
+	return i, nil
+}
+
+func encodeFixed64Server(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Server(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintServer(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *Session) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Database)
+	n += 1 + l + sovServer(uint64(l))
+	return n
+}
+
+func sovServer(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozServer(x uint64) (n int) {
+	return sovServer(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *Session) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -189,74 +259,3 @@ func skipServer(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthServer = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *Session) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Database)
-	n += 1 + l + sovServer(uint64(l))
-	return n
-}
-
-func sovServer(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozServer(x uint64) (n int) {
-	return sovServer(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *Session) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Session) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintServer(data, i, uint64(len(m.Database)))
-	i += copy(data[i:], m.Database)
-	return i, nil
-}
-
-func encodeFixed64Server(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Server(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintServer(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}
