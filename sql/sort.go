@@ -20,6 +20,7 @@ package sql
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -162,6 +163,28 @@ func (n *sortNode) Next() bool {
 
 func (n *sortNode) Err() error {
 	return n.err
+}
+
+func (n *sortNode) ExplainPlan() (name, description string, children []planNode) {
+	if n.needSort {
+		name = "sort"
+	} else {
+		name = "nosort"
+	}
+
+	columns := n.plan.Columns()
+	strs := make([]string, len(n.ordering))
+	for i, o := range n.ordering {
+		prefix := '+'
+		if o < 0 {
+			o = -o
+			prefix = '-'
+		}
+		strs[i] = fmt.Sprintf("%c%s", prefix, columns[o-1])
+	}
+	description = strings.Join(strs, ",")
+
+	return name, description, []planNode{n.plan}
 }
 
 // wrap the supplied planNode with the sortNode if sorting is required.

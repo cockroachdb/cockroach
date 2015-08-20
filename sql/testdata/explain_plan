@@ -1,0 +1,26 @@
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO t VALUES (1, 2)
+
+query ITT colnames
+EXPLAIN SELECT * FROM t
+----
+Level  Type  Description
+0      scan  t@primary
+
+query ITT colnames
+EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
+----
+Level  Type    Description
+0      values  3 columns, 2 rows
+
+query ITT colnames
+EXPLAIN VALUES (1)
+----
+Level  Type    Description
+0      values  1 column, 1 row

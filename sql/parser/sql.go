@@ -5843,6 +5843,7 @@ func (sqlrcvr *sqlParserImpl) Parse(sqllex sqlLexer) int {
 	var sqllval sqlSymType
 	var sqlVAL sqlSymType
 	var sqlDollar []sqlSymType
+	_ = sqlDollar // silence set and not used
 	sqlS := make([]sqlSymType, sqlMaxDepth)
 
 	Nerrs := 0   /* number of errors */

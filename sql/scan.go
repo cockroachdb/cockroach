@@ -136,6 +136,21 @@ func (n *scanNode) Err() error {
 	return n.err
 }
 
+func (n *scanNode) ExplainPlan() (name, description string, children []planNode) {
+	if n.reverse {
+		name = "revscan"
+	} else {
+		name = "scan"
+	}
+	if n.desc == nil {
+		description = "-"
+	} else {
+		// TODO(pmattis): Display the start and end keys used for the scan?
+		description = fmt.Sprintf("%s@%s", n.desc.Name, n.index.Name)
+	}
+	return name, description, nil
+}
+
 func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 	switch len(from) {
 	case 0:
