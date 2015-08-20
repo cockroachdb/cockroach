@@ -111,7 +111,7 @@ func (lt *localRPCTransport) Listen(id proto.RaftNodeID, server ServerInterface)
 		Stopper:      lt.stopper,
 		DisableCache: true,
 	})
-	err := rpcServer.RegisterAsync(raftMessageName,
+	err := rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
 		func(argsI gogoproto.Message, callback func(gogoproto.Message, error)) {
 			protoArgs := argsI.(*proto.RaftMessageRequest)
 			args := RaftMessageRequest{

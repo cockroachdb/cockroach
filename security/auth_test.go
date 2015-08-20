@@ -99,30 +99,41 @@ func TestAuthenticationHook(t *testing.T) {
 	badRequest := &cockroach_proto.GetResponse{}
 
 	testCases := []struct {
-		insecure         bool
-		tls              *tls.ConnectionState
-		request          proto.Message
-		buildHookSuccess bool
-		runHookSuccess   bool
+		insecure           bool
+		tls                *tls.ConnectionState
+		request            proto.Message
+		buildHookSuccess   bool
+		publicHookSuccess  bool
+		privateHookSuccess bool
 	}{
 		// Insecure mode, nil request.
-		{true, nil, nil, true, false},
+		{true, nil, nil, true, false, false},
 		// Insecure mode, bad request.
-		{true, nil, badRequest, true, false},
+		{true, nil, badRequest, true, false, false},
 		// Insecure mode, userRequest with empty user.
-		{true, nil, makeUserRequest(""), true, false},
+		{true, nil, makeUserRequest(""), true, false, false},
 		// Insecure mode, userRequest with good user.
-		{true, nil, makeUserRequest("foo"), true, true},
+		{true, nil, makeUserRequest("foo"), true, true, false},
+		// Insecure mode, userRequest with root user.
+		{true, nil, makeUserRequest(security.RootUser), true, true, true},
+		// Insecure mode, userRequest with node user.
+		{true, nil, makeUserRequest(security.NodeUser), true, true, true},
 		// Secure mode, no TLS state.
-		{false, nil, nil, false, false},
+		{false, nil, nil, false, false, false},
 		// Secure mode, user mismatch.
-		{false, makeFakeTLSState([]string{"foo"}, []int{1}), makeUserRequest("bar"), true, false},
+		{false, makeFakeTLSState([]string{"foo"}, []int{1}), makeUserRequest("bar"), true, false, false},
 		// Secure mode, user mismatch, but client certificate is for the node user.
-		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), makeUserRequest("bar"), true, true},
+		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), makeUserRequest("bar"), true, true, false},
 		// Secure mode, user mismatch, and the root user does not get blind permissions.
-		{false, makeFakeTLSState([]string{security.RootUser}, []int{1}), makeUserRequest("bar"), true, false},
+		{false, makeFakeTLSState([]string{security.RootUser}, []int{1}), makeUserRequest("bar"), true, false, false},
 		// Secure mode, matching users.
-		{false, makeFakeTLSState([]string{"foo"}, []int{1}), makeUserRequest("foo"), true, true},
+		{false, makeFakeTLSState([]string{"foo"}, []int{1}), makeUserRequest("foo"), true, true, false},
+		// Secure mode, root acting as itself.
+		{false, makeFakeTLSState([]string{security.RootUser}, []int{1}), makeUserRequest(security.RootUser), true, true, true},
+		// Secure mode, node acting as itself.
+		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), makeUserRequest(security.NodeUser), true, true, true},
+		// Secure mode, node acting as root.
+		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), makeUserRequest(security.RootUser), true, true, true},
 	}
 
 	for tcNum, tc := range testCases {
@@ -133,9 +144,13 @@ func TestAuthenticationHook(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		err = hook(tc.request)
-		if (err == nil) != tc.runHookSuccess {
-			t.Fatalf("#%d: expected success=%t, got err=%v", tcNum, tc.runHookSuccess, err)
+		err = hook(tc.request, true /*public*/)
+		if (err == nil) != tc.publicHookSuccess {
+			t.Fatalf("#%d: expected success=%t, got err=%v", tcNum, tc.publicHookSuccess, err)
+		}
+		err = hook(tc.request, false /*not public*/)
+		if (err == nil) != tc.privateHookSuccess {
+			t.Fatalf("#%d: expected success=%t, got err=%v", tcNum, tc.privateHookSuccess, err)
 		}
 	}
 }

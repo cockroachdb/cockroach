@@ -211,7 +211,7 @@ func TestClientNotReady(t *testing.T) {
 		addr:    addr,
 		methods: map[string]method{},
 	}
-	if err := s.Register("Heartbeat.Ping", (&Heartbeat{}).Ping, &proto.PingRequest{}); err != nil {
+	if err := s.RegisterPublic("Heartbeat.Ping", (&Heartbeat{}).Ping, &proto.PingRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Start(); err != nil {

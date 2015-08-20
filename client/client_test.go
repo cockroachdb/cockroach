@@ -76,7 +76,7 @@ func (ss *notifyingSender) Send(ctx context.Context, call proto.Call) {
 }
 
 func createTestClient(addr string) *client.DB {
-	return createTestClientFor(addr, testUser)
+	return createTestClientFor(addr, security.RootUser)
 }
 
 func createTestClientFor(addr, user string) *client.DB {
@@ -554,6 +554,8 @@ func TestConcurrentIncrements(t *testing.T) {
 }
 
 // TestClientPermissions verifies permission enforcement.
+// Only root and node users are now allowed to issue kv commands.
+// We still enforce the permissions config through.
 // This relies on:
 // - r/w permissions config for 'testUser' on the 'testUser' prefix.
 // - permissive checks for 'root' on all paths
@@ -576,13 +578,13 @@ func TestClientPermissions(t *testing.T) {
 		{"foo", test, false},
 		{"foo", root, true},
 
-		{testUser + "/foo", test, true},
+		{testUser + "/foo", test, false},
 		{testUser + "/foo", root, true},
 
-		{testUser + "foo", test, true},
+		{testUser + "foo", test, false},
 		{testUser + "foo", root, true},
 
-		{testUser, test, true},
+		{testUser, test, false},
 		{testUser, root, true},
 
 		{"unknown/foo", test, false},

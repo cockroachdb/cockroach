@@ -73,10 +73,10 @@ func TestDuplicateRegistration(t *testing.T) {
 
 	s := NewServer(util.CreateTestAddr("tcp"), NewNodeTestContext(nil, stopper))
 	heartbeat := &Heartbeat{}
-	if err := s.Register("Foo.Bar", heartbeat.Ping, &proto.PingRequest{}); err != nil {
+	if err := s.RegisterPublic("Foo.Bar", heartbeat.Ping, &proto.PingRequest{}); err != nil {
 		t.Fatalf("unexpected failure on first registration: %s", err)
 	}
-	if err := s.Register("Foo.Bar", heartbeat.Ping, &proto.PingRequest{}); err == nil {
+	if err := s.RegisterPublic("Foo.Bar", heartbeat.Ping, &proto.PingRequest{}); err == nil {
 		t.Fatalf("unexpected success on second registration")
 	}
 }
