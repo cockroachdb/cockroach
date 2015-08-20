@@ -58,32 +58,45 @@ var multiDCConfig = config.ZoneConfig{
 // synchronize on their callbacks. There can only be one storeGossiper used per
 // gossip instance.
 type storeGossiper struct {
-	g  *gossip.Gossip
-	wg sync.WaitGroup
-	mu sync.Mutex
+	g           *gossip.Gossip
+	wg          sync.WaitGroup
+	mu          sync.Mutex
+	storeKeyMap map[string]bool
 }
 
+// newStoreGossiper creates a store gossiper for use by tests. It adds the
+// callback to gossip.
 func newStoreGossiper(g *gossip.Gossip) *storeGossiper {
 	sg := &storeGossiper{
-		g: g,
+		g:           g,
+		storeKeyMap: make(map[string]bool),
 	}
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ []byte) { sg.wg.Done() })
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(key string, _ []byte) {
+		sg.mu.Lock()
+		defer sg.mu.Unlock()
+		if sg.storeKeyMap[key] {
+			sg.wg.Done()
+		}
+	})
 	return sg
 }
 
+// gossipStores queues up a list of stores to gossip and blocks until each one
+// is gossiped before returning.
 func (sg *storeGossiper) gossipStores(stores []*proto.StoreDescriptor, t *testing.T) {
 	sg.mu.Lock()
-	defer sg.mu.Unlock()
-
+	sg.storeKeyMap = make(map[string]bool)
 	sg.wg.Add(len(stores))
 	for _, s := range stores {
-		keyStoreGossip := gossip.MakeStoreKey(s.StoreID)
+		storeKey := gossip.MakeStoreKey(s.StoreID)
+		sg.storeKeyMap[storeKey] = true
 		// Gossip store descriptor.
-		err := sg.g.AddInfoProto(keyStoreGossip, s, 0)
+		err := sg.g.AddInfoProto(storeKey, s, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
+	sg.mu.Unlock()
 
 	// Wait for all gossip callbacks to be invoked.
 	sg.wg.Wait()

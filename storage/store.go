@@ -289,6 +289,7 @@ type StoreContext struct {
 	Clock     *hlc.Clock
 	DB        *client.DB
 	Gossip    *gossip.Gossip
+	StorePool *StorePool
 	Transport multiraft.Transport
 
 	// RangeRetryOptions are the retry options when retryable errors are
