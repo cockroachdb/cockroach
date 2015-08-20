@@ -162,6 +162,12 @@ type IndexDescriptor struct {
 	// An ordered list of column ids of which the index is comprised. This list
 	// parallels the column_names list.
 	ColumnIDs []ColumnID `protobuf:"varint,5,rep,name=column_ids,casttype=ColumnID" json:"column_ids,omitempty"`
+	// An ordered list of implicit column ids associated with the index. For
+	// non-unique indexes, these columns will be appended to the key. For unique
+	// indexes these columns will be stored in the value. The extra column IDs is
+	// computed as PrimaryIndex.column_ids - column_ids. For the primary index
+	// the list will be empty.
+	ImplicitColumnIDs []ColumnID `protobuf:"varint,6,rep,name=implicit_column_ids,casttype=ColumnID" json:"implicit_column_ids,omitempty"`
 }
 
 func (m *IndexDescriptor) Reset()         { *m = IndexDescriptor{} }
@@ -199,6 +205,13 @@ func (m *IndexDescriptor) GetColumnNames() []string {
 func (m *IndexDescriptor) GetColumnIDs() []ColumnID {
 	if m != nil {
 		return m.ColumnIDs
+	}
+	return nil
+}
+
+func (m *IndexDescriptor) GetImplicitColumnIDs() []ColumnID {
+	if m != nil {
+		return m.ImplicitColumnIDs
 	}
 	return nil
 }
@@ -448,6 +461,13 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (int, error) {
 			i = encodeVarintStructured(data, i, uint64(num))
 		}
 	}
+	if len(m.ImplicitColumnIDs) > 0 {
+		for _, num := range m.ImplicitColumnIDs {
+			data[i] = 0x30
+			i++
+			i = encodeVarintStructured(data, i, uint64(num))
+		}
+	}
 	return i, nil
 }
 
@@ -626,6 +646,11 @@ func (m *IndexDescriptor) Size() (n int) {
 	}
 	if len(m.ColumnIDs) > 0 {
 		for _, e := range m.ColumnIDs {
+			n += 1 + sovStructured(uint64(e))
+		}
+	}
+	if len(m.ImplicitColumnIDs) > 0 {
+		for _, e := range m.ImplicitColumnIDs {
 			n += 1 + sovStructured(uint64(e))
 		}
 	}
@@ -1022,6 +1047,23 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			m.ColumnIDs = append(m.ColumnIDs, v)
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ImplicitColumnIDs", wireType)
+			}
+			var v ColumnID
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (ColumnID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ImplicitColumnIDs = append(m.ImplicitColumnIDs, v)
 		default:
 			var sizeOfWire int
 			for {

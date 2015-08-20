@@ -79,7 +79,7 @@ type scanNode struct {
 	rowIndex         int               // the index of the current row
 	colID            ColumnID          // column ID of the current key
 	vals             []parser.Datum    // the index key values for the current row
-	pkVals           []parser.Datum    // the primary key index key values for unique indexes
+	implicitVals     []parser.Datum    // the implicit values for unique indexes
 	qvals            qvalMap           // the values in the current row
 	colKind          colKindMap        // map of column kinds for decoding column values
 	row              parser.DTuple     // the rendered row
@@ -251,8 +251,8 @@ func (n *scanNode) initScan() bool {
 
 	if n.isSecondaryIndex && n.index.Unique {
 		// Unique secondary indexes have a value that is the primary index
-		// key. Prepare pkVals for use in decoding this value.
-		if n.pkVals, n.err = makeKeyVals(n.desc, n.desc.PrimaryIndex.ColumnIDs); n.err != nil {
+		// key. Prepare implicitVals for use in decoding this value.
+		if n.implicitVals, n.err = makeKeyVals(n.desc, n.index.ImplicitColumnIDs); n.err != nil {
 			return false
 		}
 	}
@@ -296,7 +296,7 @@ func (n *scanNode) initOrdering() {
 	if n.index == nil {
 		return
 	}
-	n.columnIDs = n.index.fullColumnIDs(n.desc)
+	n.columnIDs = n.index.fullColumnIDs()
 	n.ordering = n.computeOrdering(n.columnIDs)
 	if n.reverse {
 		for i := range n.ordering {
@@ -447,13 +447,13 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 			}
 		}
 	} else {
-		if n.pkVals != nil {
-			if _, n.err = decodeKeyVals(n.pkVals, kv.ValueBytes()); n.err != nil {
+		if n.implicitVals != nil {
+			if _, n.err = decodeKeyVals(n.implicitVals, kv.ValueBytes()); n.err != nil {
 				return false
 			}
-			for i, id := range n.desc.PrimaryIndex.ColumnIDs {
+			for i, id := range n.index.ImplicitColumnIDs {
 				if qval, ok := n.qvals[id]; ok {
-					qval.datum = n.pkVals[i]
+					qval.datum = n.implicitVals[i]
 				}
 			}
 		}
@@ -566,8 +566,8 @@ func (n *scanNode) explainDebug(endOfRow, outputRow bool) {
 	}
 	n.row[0] = parser.DInt(n.rowIndex)
 	n.row[1] = parser.DString(n.prettyKey())
-	if n.pkVals != nil {
-		n.row[2] = parser.DString(n.prettyKeyVals(n.pkVals))
+	if n.implicitVals != nil {
+		n.row[2] = parser.DString(n.prettyKeyVals(n.implicitVals))
 	} else {
 		n.row[2] = parser.DString(n.explainValue.String())
 	}

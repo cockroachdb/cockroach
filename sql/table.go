@@ -295,26 +295,39 @@ type indexEntry struct {
 }
 
 func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
-	colMap map[ColumnID]int, values []parser.Datum, primaryIndexKeySuffix []byte) ([]indexEntry, error) {
+	colMap map[ColumnID]int, values []parser.Datum) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
 		secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
-		secondaryIndexKey, containsNull, err := encodeIndexKey(secondaryIndex.ColumnIDs, colMap, values, secondaryIndexKeyPrefix)
+		secondaryIndexKey, containsNull, err := encodeIndexKey(
+			secondaryIndex.ColumnIDs, colMap, values, secondaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
 
-		if secondaryIndex.Unique && !containsNull {
-			secondaryIndexEntries = append(secondaryIndexEntries, indexEntry{
-				key:   secondaryIndexKey,
-				value: primaryIndexKeySuffix,
-			})
-		} else {
-			secondaryIndexEntries = append(secondaryIndexEntries, indexEntry{
-				key:   append(secondaryIndexKey, primaryIndexKeySuffix...),
-				value: nil,
-			})
+		extraKey, _, err := encodeIndexKey(secondaryIndex.ImplicitColumnIDs, colMap, values, nil)
+		if err != nil {
+			return nil, err
 		}
+
+		entry := indexEntry{key: secondaryIndexKey}
+
+		if !secondaryIndex.Unique || containsNull {
+			// If the index is not unique or it contains a NULL value, append
+			// extraKey to the key in order to make it unique.
+			entry.key = append(entry.key, extraKey...)
+		}
+		if secondaryIndex.Unique {
+			// Note that a unique secondary index that contains a NULL column value
+			// will have extraKey appended to the key and stored in the value. We
+			// require extraKey to be appended to the key in order to make the key
+			// unique. We could potentially get rid of the duplication here but at
+			// the expense of complicating scanNode when dealing with unique
+			// secondary indexes.
+			entry.value = extraKey
+		}
+
+		secondaryIndexEntries = append(secondaryIndexEntries, entry)
 	}
 	return secondaryIndexEntries, nil
 }

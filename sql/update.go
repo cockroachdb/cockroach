@@ -114,13 +114,14 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	b := client.Batch{}
 	for row.Next() {
 		rowVals := row.Values()
-		primaryIndexKeySuffix, _, err := encodeIndexKey(primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, nil)
+		primaryIndexKey, _, err := encodeIndexKey(
+			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
-		primaryIndexKey := bytes.Join([][]byte{primaryIndexKeyPrefix, primaryIndexKeySuffix}, nil)
 		// Compute the current secondary index key:value pairs for this row.
-		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, indexes, colIDtoRowIndex, rowVals, primaryIndexKeySuffix)
+		secondaryIndexEntries, err := encodeSecondaryIndexes(
+			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
 		if err != nil {
 			return nil, err
 		}
@@ -135,7 +136,8 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			}
 			rowVals[colIDtoRowIndex[col.ID]] = val
 		}
-		newSecondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, indexes, colIDtoRowIndex, rowVals, primaryIndexKeySuffix)
+		newSecondaryIndexEntries, err := encodeSecondaryIndexes(
+			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
 		if err != nil {
 			return nil, err
 		}

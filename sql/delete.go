@@ -18,8 +18,6 @@
 package sql
 
 import (
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -73,14 +71,15 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	for node.Next() {
 		values := node.Values()
 
-		primaryIndexKeySuffix, _, err := encodeIndexKey(primaryIndex.ColumnIDs, colIDtoRowIndex, values, nil)
+		primaryIndexKey, _, err := encodeIndexKey(
+			primaryIndex.ColumnIDs, colIDtoRowIndex, values, primaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
-		primaryIndexKey := bytes.Join([][]byte{primaryIndexKeyPrefix, primaryIndexKeySuffix}, nil)
 
 		// Delete the secondary indexes.
-		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, values, primaryIndexKeySuffix)
+		secondaryIndexEntries, err := encodeSecondaryIndexes(
+			tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, values)
 		if err != nil {
 			return nil, err
 		}

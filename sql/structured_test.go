@@ -18,6 +18,7 @@
 package sql_test
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -34,10 +35,12 @@ func TestAllocateIDs(t *testing.T) {
 		Columns: []sql.ColumnDescriptor{
 			{Name: "a"},
 			{Name: "b"},
+			{Name: "c"},
 		},
-		PrimaryIndex: sql.IndexDescriptor{Name: "c", ColumnNames: []string{"a"}},
+		PrimaryIndex: sql.IndexDescriptor{Name: "c", ColumnNames: []string{"a", "b"}},
 		Indexes: []sql.IndexDescriptor{
 			{Name: "d", ColumnNames: []string{"b", "a"}},
+			{Name: "e", ColumnNames: []string{"b"}},
 		},
 		Privileges: sql.NewDefaultDatabasePrivilegeDescriptor(),
 	}
@@ -51,17 +54,23 @@ func TestAllocateIDs(t *testing.T) {
 		Columns: []sql.ColumnDescriptor{
 			{ID: 1, Name: "a"},
 			{ID: 2, Name: "b"},
+			{ID: 3, Name: "c"},
 		},
-		PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "c", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"a"}},
+		PrimaryIndex: sql.IndexDescriptor{
+			ID: 1, Name: "c", ColumnIDs: []sql.ColumnID{1, 2}, ColumnNames: []string{"a", "b"}},
 		Indexes: []sql.IndexDescriptor{
 			{ID: 2, Name: "d", ColumnIDs: []sql.ColumnID{2, 1}, ColumnNames: []string{"b", "a"}},
+			{ID: 3, Name: "e", ColumnIDs: []sql.ColumnID{2}, ColumnNames: []string{"b"},
+				ImplicitColumnIDs: []sql.ColumnID{1}},
 		},
 		Privileges:   sql.NewDefaultDatabasePrivilegeDescriptor(),
-		NextColumnID: 3,
-		NextIndexID:  3,
+		NextColumnID: 4,
+		NextIndexID:  4,
 	}
 	if !reflect.DeepEqual(expected, desc) {
-		t.Fatalf("expected %+v, but found %+v", expected, desc)
+		a, _ := json.MarshalIndent(expected, "", "  ")
+		b, _ := json.MarshalIndent(desc, "", "  ")
+		t.Fatalf("expected %s, but found %s", a, b)
 	}
 }
 
