@@ -203,6 +203,88 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 
 	idx.Name = newIdxName
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
+	if err := tableDesc.Validate(); err != nil {
+		return nil, err
+	}
+	if err := p.txn.Put(descKey, tableDesc); err != nil {
+		return nil, err
+	}
+
+	return &valuesNode{}, nil
+}
+
+// RenameColumn renames the column.
+// Privileges: CREATE on table.
+//   notes: postgres requires CREATE on the table.
+//          mysql requires ALTER, CREATE, INSERT on the table.
+func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
+	newColName := string(n.NewName)
+	if newColName == "" {
+		return nil, errEmptyColumnName
+	}
+
+	if err := n.Table.NormalizeTableName(p.session.Database); err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.getDatabaseDesc(n.Table.Database())
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if table exists.
+	tbKey := tableKey{dbDesc.ID, n.Table.Table()}.Key()
+	gr, err := p.txn.Get(tbKey)
+	if err != nil {
+		return nil, err
+	}
+	if !gr.Exists() {
+		if n.IfExists {
+			// Noop.
+			return &valuesNode{}, nil
+		}
+		// Key does not exist, but we want it to: error out.
+		return nil, fmt.Errorf("table %q does not exist", n.Table.Table())
+	}
+
+	tableDesc, err := p.getTableDesc(n.Table)
+	if err != nil {
+		return nil, err
+	}
+
+	colName := string(n.Name)
+	column, err := tableDesc.FindColumnByName(colName)
+	// n.IfExists only applies to table, no need to check here.
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+		return nil, err
+	}
+
+	if equalName(colName, newColName) {
+		// Noop.
+		return &valuesNode{}, nil
+	}
+
+	if _, err := tableDesc.FindColumnByName(newColName); err == nil {
+		return nil, fmt.Errorf("column name %q already exists", newColName)
+	}
+
+	for _, idx := range tableDesc.Indexes {
+		for i, id := range idx.ColumnIDs {
+			if id == column.ID {
+				idx.ColumnNames[i] = newColName
+			}
+		}
+	}
+	column.Name = newColName
+
+	descKey := MakeDescMetadataKey(tableDesc.GetID())
+	if err := tableDesc.Validate(); err != nil {
+		return nil, err
+	}
 	if err := p.txn.Put(descKey, tableDesc); err != nil {
 		return nil, err
 	}

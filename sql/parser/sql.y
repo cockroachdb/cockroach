@@ -1412,11 +1412,11 @@ rename_stmt:
   }
 | ALTER TABLE relation_expr RENAME opt_column name TO name
   {
-    $$ = nil
+    $$ = &RenameColumn{Table: $3, Name: Name($6), NewName: Name($8), IfExists: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME opt_column name TO name
   {
-    $$ = nil
+    $$ = &RenameColumn{Table: $5, Name: Name($8), NewName: Name($10), IfExists: true}
   }
 | ALTER TABLE relation_expr RENAME CONSTRAINT name TO name
   {

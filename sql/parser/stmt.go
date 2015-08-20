@@ -49,6 +49,7 @@ func (*Explain) statement()        {}
 func (*Grant) statement()          {}
 func (*Insert) statement()         {}
 func (*ParenSelect) statement()    {}
+func (*RenameColumn) statement()   {}
 func (*RenameDatabase) statement() {}
 func (*RenameIndex) statement()    {}
 func (*RenameTable) statement()    {}

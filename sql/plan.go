@@ -63,6 +63,8 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 		return p.Insert(n)
 	case *parser.ParenSelect:
 		return p.makePlan(n.Select)
+	case *parser.RenameColumn:
+		return p.RenameColumn(n)
 	case *parser.RenameDatabase:
 		return p.RenameDatabase(n)
 	case *parser.RenameIndex:
