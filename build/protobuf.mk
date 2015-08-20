@@ -59,6 +59,7 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC_PLUGIN)
 	  sed -i.bak -E 's/github\.com\/cockroachdb\/(gogoproto|github\.com)/\1/g' $$dir/*.pb.go; \
 	  sed -i.bak -E 's/github\.com\/cockroachdb\/(io|fmt)/\1/g' $$dir/*.pb.go; \
 	  rm -f $$dir/*.bak; \
+	  gofmt -s -w $$dir/*.pb.go; \
 	done
 
 $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)

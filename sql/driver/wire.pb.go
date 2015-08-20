@@ -25,8 +25,6 @@ import cockroach_proto2 "github.com/cockroachdb/cockroach/proto"
 
 // discarding unused import gogoproto "gogoproto"
 
-
-
 import io "io"
 import fmt "fmt"
 
