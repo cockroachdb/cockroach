@@ -23,9 +23,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/server"
-
 	"github.com/spf13/cobra"
+
+	"github.com/cockroachdb/cockroach/server"
 )
 
 var maxResults int64

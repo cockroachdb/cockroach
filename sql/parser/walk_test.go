@@ -18,8 +18,9 @@
 package parser
 
 import (
-	"log"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type mapArgs map[int]Datum

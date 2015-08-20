@@ -19,12 +19,12 @@ package cli
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type cliTest struct {

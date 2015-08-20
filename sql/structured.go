@@ -20,9 +20,9 @@ package sql
 import (
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
