@@ -1,5 +1,5 @@
 - Feature Name: SQL privileges
-- Status: in-progress
+- Status: completed
 - Start Date: 2015-08-10
 - RFC PR: [#2054](https://github.com/cockroachdb/cockroach/pull/2054)
 - Cockroach Issue: [#2005](https://github.com/cockroachdb/cockroach/issues/2005)
