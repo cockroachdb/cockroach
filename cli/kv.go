@@ -37,9 +37,9 @@ var osStderr = os.Stderr
 func makeDBClient() *client.DB {
 	// TODO(pmattis): Initialize the user to something more
 	// reasonable. Perhaps Context.Addr should be considered a URL.
-	db, err := client.Open(Context.RequestScheme() +
-		"://root@" + Context.Addr +
-		"?certs=" + Context.Certs)
+	db, err := client.Open(context.RequestScheme() +
+		"://root@" + context.Addr +
+		"?certs=" + context.Certs)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to initialize KV client: %s\n", err)
 		osExit(1)
@@ -133,7 +133,7 @@ func runPut(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A cPutCmd command conditionally sets a value for a key.
+// A cPutCmd conditionally sets a value for a key.
 var cPutCmd = &cobra.Command{
 	Use:   "cput [options] <key> <value> [<expValue>]",
 	Short: "conditionally sets a value for a key",

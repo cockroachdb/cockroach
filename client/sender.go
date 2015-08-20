@@ -19,7 +19,6 @@ package client
 
 import (
 	"fmt"
-	"log"
 	"net/url"
 	"sync"
 	"time"
@@ -28,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 

@@ -19,12 +19,12 @@ package driver
 
 import (
 	"fmt"
-	"log"
 	"net/url"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 

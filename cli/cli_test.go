@@ -19,12 +19,12 @@ package cli
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type cliTest struct {
@@ -35,7 +35,7 @@ func newCLITest() cliTest {
 	// Reset the client context for each test. We don't reset the
 	// pointer (because they are tied into the flags), but instead
 	// overwrite the existing struct's values.
-	*Context = *server.NewContext()
+	*context = *server.NewContext()
 
 	osExit = func(int) {}
 	osStderr = os.Stdout

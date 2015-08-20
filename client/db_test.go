@@ -19,7 +19,6 @@ package client_test
 
 import (
 	"fmt"
-	"log"
 	"reflect"
 	"strings"
 	"testing"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func setup() (*server.TestServer, *client.DB) {
@@ -270,7 +270,7 @@ func ExampleDB_Insecure() {
 	if err := s.Start(); err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}
-	log.Printf("Test server listening on %s: %s", s.Ctx.RequestScheme(), s.ServingAddr())
+	log.Infof("Test server listening on %s: %s", s.Ctx.RequestScheme(), s.ServingAddr())
 	defer s.Stop()
 
 	db, err := client.Open("http://root@" + s.ServingAddr())

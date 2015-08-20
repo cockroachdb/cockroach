@@ -18,10 +18,10 @@
 package multiraft
 
 import (
-	"log"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 

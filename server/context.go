@@ -84,7 +84,7 @@ type Context struct {
 	GossipInterval time.Duration
 
 	// // Enables running the node as a single-node in-memory cluster.
-	TransientSingleNode bool
+	EphemeralSingleNode bool
 
 	// Enables linearizable behaviour of operations on this node by making sure
 	// that no commit timestamp is reported back to the client until all other
