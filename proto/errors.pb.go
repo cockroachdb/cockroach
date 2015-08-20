@@ -539,6 +539,971 @@ func (m *Error) GetDetail() *ErrorDetail {
 func init() {
 	proto1.RegisterEnum("cockroach.proto.TransactionRestart", TransactionRestart_name, TransactionRestart_value)
 }
+func (m *NotLeaderError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *NotLeaderError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Replica != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Replica.Size()))
+		n1, err := m.Replica.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n1
+	}
+	if m.Leader != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Leader.Size()))
+		n2, err := m.Leader.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n2
+	}
+	data[i] = 0x18
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.RangeID))
+	return i, nil
+}
+
+func (m *NodeUnavailableError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *NodeUnavailableError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func (m *RangeNotFoundError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RangeNotFoundError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.RangeID))
+	return i, nil
+}
+
+func (m *RangeKeyMismatchError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RangeKeyMismatchError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.RequestStartKey != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintErrors(data, i, uint64(len(m.RequestStartKey)))
+		i += copy(data[i:], m.RequestStartKey)
+	}
+	if m.RequestEndKey != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintErrors(data, i, uint64(len(m.RequestEndKey)))
+		i += copy(data[i:], m.RequestEndKey)
+	}
+	if m.Range != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Range.Size()))
+		n3, err := m.Range.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	return i, nil
+}
+
+func (m *ReadWithinUncertaintyIntervalError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ReadWithinUncertaintyIntervalError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Timestamp.Size()))
+	n4, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.ExistingTimestamp.Size()))
+	n5, err := m.ExistingTimestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n5
+	return i, nil
+}
+
+func (m *TransactionAbortedError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TransactionAbortedError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
+	n6, err := m.Txn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n6
+	return i, nil
+}
+
+func (m *TransactionPushError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TransactionPushError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Txn != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
+		n7, err := m.Txn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n7
+	}
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.PusheeTxn.Size()))
+	n8, err := m.PusheeTxn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n8
+	return i, nil
+}
+
+func (m *TransactionRetryError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TransactionRetryError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
+	n9, err := m.Txn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n9
+	return i, nil
+}
+
+func (m *TransactionStatusError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TransactionStatusError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
+	n10, err := m.Txn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n10
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(len(m.Msg)))
+	i += copy(data[i:], m.Msg)
+	return i, nil
+}
+
+func (m *WriteIntentError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *WriteIntentError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Intents) > 0 {
+		for _, msg := range m.Intents {
+			data[i] = 0xa
+			i++
+			i = encodeVarintErrors(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	data[i] = 0x10
+	i++
+	if m.Resolved {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	return i, nil
+}
+
+func (m *WriteTooOldError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *WriteTooOldError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Timestamp.Size()))
+	n11, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n11
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.ExistingTimestamp.Size()))
+	n12, err := m.ExistingTimestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n12
+	return i, nil
+}
+
+func (m *OpRequiresTxnError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *OpRequiresTxnError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func (m *ConditionFailedError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ConditionFailedError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ActualValue != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.ActualValue.Size()))
+		n13, err := m.ActualValue.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n13
+	}
+	return i, nil
+}
+
+func (m *LeaseRejectedError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *LeaseRejectedError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Requested.Size()))
+	n14, err := m.Requested.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n14
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Existing.Size()))
+	n15, err := m.Existing.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n15
+	return i, nil
+}
+
+func (m *ErrorDetail) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ErrorDetail) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.NotLeader != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.NotLeader.Size()))
+		n16, err := m.NotLeader.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n16
+	}
+	if m.RangeNotFound != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.RangeNotFound.Size()))
+		n17, err := m.RangeNotFound.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n17
+	}
+	if m.RangeKeyMismatch != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.RangeKeyMismatch.Size()))
+		n18, err := m.RangeKeyMismatch.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n18
+	}
+	if m.ReadWithinUncertaintyInterval != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.ReadWithinUncertaintyInterval.Size()))
+		n19, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n19
+	}
+	if m.TransactionAborted != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.TransactionAborted.Size()))
+		n20, err := m.TransactionAborted.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n20
+	}
+	if m.TransactionPush != nil {
+		data[i] = 0x32
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.TransactionPush.Size()))
+		n21, err := m.TransactionPush.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n21
+	}
+	if m.TransactionRetry != nil {
+		data[i] = 0x3a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.TransactionRetry.Size()))
+		n22, err := m.TransactionRetry.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n22
+	}
+	if m.TransactionStatus != nil {
+		data[i] = 0x42
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.TransactionStatus.Size()))
+		n23, err := m.TransactionStatus.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n23
+	}
+	if m.WriteIntent != nil {
+		data[i] = 0x4a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.WriteIntent.Size()))
+		n24, err := m.WriteIntent.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n24
+	}
+	if m.WriteTooOld != nil {
+		data[i] = 0x52
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.WriteTooOld.Size()))
+		n25, err := m.WriteTooOld.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n25
+	}
+	if m.OpRequiresTxn != nil {
+		data[i] = 0x5a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.OpRequiresTxn.Size()))
+		n26, err := m.OpRequiresTxn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n26
+	}
+	if m.ConditionFailed != nil {
+		data[i] = 0x62
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.ConditionFailed.Size()))
+		n27, err := m.ConditionFailed.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n27
+	}
+	if m.LeaseRejected != nil {
+		data[i] = 0x6a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.LeaseRejected.Size()))
+		n28, err := m.LeaseRejected.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n28
+	}
+	if m.NodeUnavailable != nil {
+		data[i] = 0x72
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.NodeUnavailable.Size()))
+		n29, err := m.NodeUnavailable.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n29
+	}
+	return i, nil
+}
+
+func (m *Error) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Error) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintErrors(data, i, uint64(len(m.Message)))
+	i += copy(data[i:], m.Message)
+	data[i] = 0x10
+	i++
+	if m.Retryable {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	if m.Detail != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
+		n30, err := m.Detail.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n30
+	}
+	data[i] = 0x20
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.TransactionRestart))
+	return i, nil
+}
+
+func encodeFixed64Errors(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Errors(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintErrors(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *NotLeaderError) Size() (n int) {
+	var l int
+	_ = l
+	if m.Replica != nil {
+		l = m.Replica.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.Leader != nil {
+		l = m.Leader.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	n += 1 + sovErrors(uint64(m.RangeID))
+	return n
+}
+
+func (m *NodeUnavailableError) Size() (n int) {
+	var l int
+	_ = l
+	return n
+}
+
+func (m *RangeNotFoundError) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovErrors(uint64(m.RangeID))
+	return n
+}
+
+func (m *RangeKeyMismatchError) Size() (n int) {
+	var l int
+	_ = l
+	if m.RequestStartKey != nil {
+		l = len(m.RequestStartKey)
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.RequestEndKey != nil {
+		l = len(m.RequestEndKey)
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.Range != nil {
+		l = m.Range.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	return n
+}
+
+func (m *ReadWithinUncertaintyIntervalError) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Timestamp.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	l = m.ExistingTimestamp.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	return n
+}
+
+func (m *TransactionAbortedError) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Txn.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	return n
+}
+
+func (m *TransactionPushError) Size() (n int) {
+	var l int
+	_ = l
+	if m.Txn != nil {
+		l = m.Txn.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	l = m.PusheeTxn.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	return n
+}
+
+func (m *TransactionRetryError) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Txn.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	return n
+}
+
+func (m *TransactionStatusError) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Txn.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	l = len(m.Msg)
+	n += 1 + l + sovErrors(uint64(l))
+	return n
+}
+
+func (m *WriteIntentError) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Intents) > 0 {
+		for _, e := range m.Intents {
+			l = e.Size()
+			n += 1 + l + sovErrors(uint64(l))
+		}
+	}
+	n += 2
+	return n
+}
+
+func (m *WriteTooOldError) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Timestamp.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	l = m.ExistingTimestamp.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	return n
+}
+
+func (m *OpRequiresTxnError) Size() (n int) {
+	var l int
+	_ = l
+	return n
+}
+
+func (m *ConditionFailedError) Size() (n int) {
+	var l int
+	_ = l
+	if m.ActualValue != nil {
+		l = m.ActualValue.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	return n
+}
+
+func (m *LeaseRejectedError) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Requested.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	l = m.Existing.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	return n
+}
+
+func (m *ErrorDetail) Size() (n int) {
+	var l int
+	_ = l
+	if m.NotLeader != nil {
+		l = m.NotLeader.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.RangeNotFound != nil {
+		l = m.RangeNotFound.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.RangeKeyMismatch != nil {
+		l = m.RangeKeyMismatch.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.ReadWithinUncertaintyInterval != nil {
+		l = m.ReadWithinUncertaintyInterval.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.TransactionAborted != nil {
+		l = m.TransactionAborted.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.TransactionPush != nil {
+		l = m.TransactionPush.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.TransactionRetry != nil {
+		l = m.TransactionRetry.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.TransactionStatus != nil {
+		l = m.TransactionStatus.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.WriteIntent != nil {
+		l = m.WriteIntent.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.WriteTooOld != nil {
+		l = m.WriteTooOld.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.OpRequiresTxn != nil {
+		l = m.OpRequiresTxn.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.ConditionFailed != nil {
+		l = m.ConditionFailed.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.LeaseRejected != nil {
+		l = m.LeaseRejected.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.NodeUnavailable != nil {
+		l = m.NodeUnavailable.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	return n
+}
+
+func (m *Error) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Message)
+	n += 1 + l + sovErrors(uint64(l))
+	n += 2
+	if m.Detail != nil {
+		l = m.Detail.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	n += 1 + sovErrors(uint64(m.TransactionRestart))
+	return n
+}
+
+func sovErrors(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozErrors(x uint64) (n int) {
+	return sovErrors(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (this *ErrorDetail) GetValue() interface{} {
+	if this.NotLeader != nil {
+		return this.NotLeader
+	}
+	if this.RangeNotFound != nil {
+		return this.RangeNotFound
+	}
+	if this.RangeKeyMismatch != nil {
+		return this.RangeKeyMismatch
+	}
+	if this.ReadWithinUncertaintyInterval != nil {
+		return this.ReadWithinUncertaintyInterval
+	}
+	if this.TransactionAborted != nil {
+		return this.TransactionAborted
+	}
+	if this.TransactionPush != nil {
+		return this.TransactionPush
+	}
+	if this.TransactionRetry != nil {
+		return this.TransactionRetry
+	}
+	if this.TransactionStatus != nil {
+		return this.TransactionStatus
+	}
+	if this.WriteIntent != nil {
+		return this.WriteIntent
+	}
+	if this.WriteTooOld != nil {
+		return this.WriteTooOld
+	}
+	if this.OpRequiresTxn != nil {
+		return this.OpRequiresTxn
+	}
+	if this.ConditionFailed != nil {
+		return this.ConditionFailed
+	}
+	if this.LeaseRejected != nil {
+		return this.LeaseRejected
+	}
+	if this.NodeUnavailable != nil {
+		return this.NodeUnavailable
+	}
+	return nil
+}
+
+func (this *ErrorDetail) SetValue(value interface{}) bool {
+	switch vt := value.(type) {
+	case *NotLeaderError:
+		this.NotLeader = vt
+	case *RangeNotFoundError:
+		this.RangeNotFound = vt
+	case *RangeKeyMismatchError:
+		this.RangeKeyMismatch = vt
+	case *ReadWithinUncertaintyIntervalError:
+		this.ReadWithinUncertaintyInterval = vt
+	case *TransactionAbortedError:
+		this.TransactionAborted = vt
+	case *TransactionPushError:
+		this.TransactionPush = vt
+	case *TransactionRetryError:
+		this.TransactionRetry = vt
+	case *TransactionStatusError:
+		this.TransactionStatus = vt
+	case *WriteIntentError:
+		this.WriteIntent = vt
+	case *WriteTooOldError:
+		this.WriteTooOld = vt
+	case *OpRequiresTxnError:
+		this.OpRequiresTxn = vt
+	case *ConditionFailedError:
+		this.ConditionFailed = vt
+	case *LeaseRejectedError:
+		this.LeaseRejected = vt
+	case *NodeUnavailableError:
+		this.NodeUnavailable = vt
+	default:
+		return false
+	}
+	return true
+}
 func (m *NotLeaderError) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -2259,22 +3224,6 @@ func (m *Error) Unmarshal(data []byte) error {
 				}
 			}
 			m.Retryable = bool(v != 0)
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TransactionRestart", wireType)
-			}
-			m.TransactionRestart = 0
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.TransactionRestart |= (TransactionRestart(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Detail", wireType)
@@ -2305,6 +3254,22 @@ func (m *Error) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TransactionRestart", wireType)
+			}
+			m.TransactionRestart = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.TransactionRestart |= (TransactionRestart(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {
@@ -2422,969 +3387,3 @@ func skipErrors(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthErrors = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (this *ErrorDetail) GetValue() interface{} {
-	if this.NotLeader != nil {
-		return this.NotLeader
-	}
-	if this.RangeNotFound != nil {
-		return this.RangeNotFound
-	}
-	if this.RangeKeyMismatch != nil {
-		return this.RangeKeyMismatch
-	}
-	if this.ReadWithinUncertaintyInterval != nil {
-		return this.ReadWithinUncertaintyInterval
-	}
-	if this.TransactionAborted != nil {
-		return this.TransactionAborted
-	}
-	if this.TransactionPush != nil {
-		return this.TransactionPush
-	}
-	if this.TransactionRetry != nil {
-		return this.TransactionRetry
-	}
-	if this.TransactionStatus != nil {
-		return this.TransactionStatus
-	}
-	if this.WriteIntent != nil {
-		return this.WriteIntent
-	}
-	if this.WriteTooOld != nil {
-		return this.WriteTooOld
-	}
-	if this.OpRequiresTxn != nil {
-		return this.OpRequiresTxn
-	}
-	if this.ConditionFailed != nil {
-		return this.ConditionFailed
-	}
-	if this.LeaseRejected != nil {
-		return this.LeaseRejected
-	}
-	if this.NodeUnavailable != nil {
-		return this.NodeUnavailable
-	}
-	return nil
-}
-
-func (this *ErrorDetail) SetValue(value interface{}) bool {
-	switch vt := value.(type) {
-	case *NotLeaderError:
-		this.NotLeader = vt
-	case *RangeNotFoundError:
-		this.RangeNotFound = vt
-	case *RangeKeyMismatchError:
-		this.RangeKeyMismatch = vt
-	case *ReadWithinUncertaintyIntervalError:
-		this.ReadWithinUncertaintyInterval = vt
-	case *TransactionAbortedError:
-		this.TransactionAborted = vt
-	case *TransactionPushError:
-		this.TransactionPush = vt
-	case *TransactionRetryError:
-		this.TransactionRetry = vt
-	case *TransactionStatusError:
-		this.TransactionStatus = vt
-	case *WriteIntentError:
-		this.WriteIntent = vt
-	case *WriteTooOldError:
-		this.WriteTooOld = vt
-	case *OpRequiresTxnError:
-		this.OpRequiresTxn = vt
-	case *ConditionFailedError:
-		this.ConditionFailed = vt
-	case *LeaseRejectedError:
-		this.LeaseRejected = vt
-	case *NodeUnavailableError:
-		this.NodeUnavailable = vt
-	default:
-		return false
-	}
-	return true
-}
-func (m *NotLeaderError) Size() (n int) {
-	var l int
-	_ = l
-	if m.Replica != nil {
-		l = m.Replica.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.Leader != nil {
-		l = m.Leader.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	n += 1 + sovErrors(uint64(m.RangeID))
-	return n
-}
-
-func (m *NodeUnavailableError) Size() (n int) {
-	var l int
-	_ = l
-	return n
-}
-
-func (m *RangeNotFoundError) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovErrors(uint64(m.RangeID))
-	return n
-}
-
-func (m *RangeKeyMismatchError) Size() (n int) {
-	var l int
-	_ = l
-	if m.RequestStartKey != nil {
-		l = len(m.RequestStartKey)
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.RequestEndKey != nil {
-		l = len(m.RequestEndKey)
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.Range != nil {
-		l = m.Range.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	return n
-}
-
-func (m *ReadWithinUncertaintyIntervalError) Size() (n int) {
-	var l int
-	_ = l
-	l = m.Timestamp.Size()
-	n += 1 + l + sovErrors(uint64(l))
-	l = m.ExistingTimestamp.Size()
-	n += 1 + l + sovErrors(uint64(l))
-	return n
-}
-
-func (m *TransactionAbortedError) Size() (n int) {
-	var l int
-	_ = l
-	l = m.Txn.Size()
-	n += 1 + l + sovErrors(uint64(l))
-	return n
-}
-
-func (m *TransactionPushError) Size() (n int) {
-	var l int
-	_ = l
-	if m.Txn != nil {
-		l = m.Txn.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	l = m.PusheeTxn.Size()
-	n += 1 + l + sovErrors(uint64(l))
-	return n
-}
-
-func (m *TransactionRetryError) Size() (n int) {
-	var l int
-	_ = l
-	l = m.Txn.Size()
-	n += 1 + l + sovErrors(uint64(l))
-	return n
-}
-
-func (m *TransactionStatusError) Size() (n int) {
-	var l int
-	_ = l
-	l = m.Txn.Size()
-	n += 1 + l + sovErrors(uint64(l))
-	l = len(m.Msg)
-	n += 1 + l + sovErrors(uint64(l))
-	return n
-}
-
-func (m *WriteIntentError) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Intents) > 0 {
-		for _, e := range m.Intents {
-			l = e.Size()
-			n += 1 + l + sovErrors(uint64(l))
-		}
-	}
-	n += 2
-	return n
-}
-
-func (m *WriteTooOldError) Size() (n int) {
-	var l int
-	_ = l
-	l = m.Timestamp.Size()
-	n += 1 + l + sovErrors(uint64(l))
-	l = m.ExistingTimestamp.Size()
-	n += 1 + l + sovErrors(uint64(l))
-	return n
-}
-
-func (m *OpRequiresTxnError) Size() (n int) {
-	var l int
-	_ = l
-	return n
-}
-
-func (m *ConditionFailedError) Size() (n int) {
-	var l int
-	_ = l
-	if m.ActualValue != nil {
-		l = m.ActualValue.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	return n
-}
-
-func (m *LeaseRejectedError) Size() (n int) {
-	var l int
-	_ = l
-	l = m.Requested.Size()
-	n += 1 + l + sovErrors(uint64(l))
-	l = m.Existing.Size()
-	n += 1 + l + sovErrors(uint64(l))
-	return n
-}
-
-func (m *ErrorDetail) Size() (n int) {
-	var l int
-	_ = l
-	if m.NotLeader != nil {
-		l = m.NotLeader.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.RangeNotFound != nil {
-		l = m.RangeNotFound.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.RangeKeyMismatch != nil {
-		l = m.RangeKeyMismatch.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.ReadWithinUncertaintyInterval != nil {
-		l = m.ReadWithinUncertaintyInterval.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.TransactionAborted != nil {
-		l = m.TransactionAborted.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.TransactionPush != nil {
-		l = m.TransactionPush.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.TransactionRetry != nil {
-		l = m.TransactionRetry.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.TransactionStatus != nil {
-		l = m.TransactionStatus.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.WriteIntent != nil {
-		l = m.WriteIntent.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.WriteTooOld != nil {
-		l = m.WriteTooOld.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.OpRequiresTxn != nil {
-		l = m.OpRequiresTxn.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.ConditionFailed != nil {
-		l = m.ConditionFailed.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.LeaseRejected != nil {
-		l = m.LeaseRejected.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.NodeUnavailable != nil {
-		l = m.NodeUnavailable.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	return n
-}
-
-func (m *Error) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Message)
-	n += 1 + l + sovErrors(uint64(l))
-	n += 2
-	n += 1 + sovErrors(uint64(m.TransactionRestart))
-	if m.Detail != nil {
-		l = m.Detail.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	return n
-}
-
-func sovErrors(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozErrors(x uint64) (n int) {
-	return sovErrors(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *NotLeaderError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *NotLeaderError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Replica != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.Replica.Size()))
-		n1, err := m.Replica.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
-	}
-	if m.Leader != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.Leader.Size()))
-		n2, err := m.Leader.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
-	}
-	data[i] = 0x18
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.RangeID))
-	return i, nil
-}
-
-func (m *NodeUnavailableError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *NodeUnavailableError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	return i, nil
-}
-
-func (m *RangeNotFoundError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RangeNotFoundError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.RangeID))
-	return i, nil
-}
-
-func (m *RangeKeyMismatchError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RangeKeyMismatchError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.RequestStartKey != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintErrors(data, i, uint64(len(m.RequestStartKey)))
-		i += copy(data[i:], m.RequestStartKey)
-	}
-	if m.RequestEndKey != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintErrors(data, i, uint64(len(m.RequestEndKey)))
-		i += copy(data[i:], m.RequestEndKey)
-	}
-	if m.Range != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.Range.Size()))
-		n3, err := m.Range.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
-	}
-	return i, nil
-}
-
-func (m *ReadWithinUncertaintyIntervalError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ReadWithinUncertaintyIntervalError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Timestamp.Size()))
-	n4, err := m.Timestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n4
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.ExistingTimestamp.Size()))
-	n5, err := m.ExistingTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n5
-	return i, nil
-}
-
-func (m *TransactionAbortedError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *TransactionAbortedError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
-	n6, err := m.Txn.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n6
-	return i, nil
-}
-
-func (m *TransactionPushError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *TransactionPushError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Txn != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
-		n7, err := m.Txn.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n7
-	}
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.PusheeTxn.Size()))
-	n8, err := m.PusheeTxn.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n8
-	return i, nil
-}
-
-func (m *TransactionRetryError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *TransactionRetryError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
-	n9, err := m.Txn.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n9
-	return i, nil
-}
-
-func (m *TransactionStatusError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *TransactionStatusError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
-	n10, err := m.Txn.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n10
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(len(m.Msg)))
-	i += copy(data[i:], m.Msg)
-	return i, nil
-}
-
-func (m *WriteIntentError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *WriteIntentError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Intents) > 0 {
-		for _, msg := range m.Intents {
-			data[i] = 0xa
-			i++
-			i = encodeVarintErrors(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	data[i] = 0x10
-	i++
-	if m.Resolved {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
-	return i, nil
-}
-
-func (m *WriteTooOldError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *WriteTooOldError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Timestamp.Size()))
-	n11, err := m.Timestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n11
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.ExistingTimestamp.Size()))
-	n12, err := m.ExistingTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n12
-	return i, nil
-}
-
-func (m *OpRequiresTxnError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *OpRequiresTxnError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	return i, nil
-}
-
-func (m *ConditionFailedError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ConditionFailedError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.ActualValue != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.ActualValue.Size()))
-		n13, err := m.ActualValue.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n13
-	}
-	return i, nil
-}
-
-func (m *LeaseRejectedError) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *LeaseRejectedError) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Requested.Size()))
-	n14, err := m.Requested.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n14
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Existing.Size()))
-	n15, err := m.Existing.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n15
-	return i, nil
-}
-
-func (m *ErrorDetail) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ErrorDetail) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.NotLeader != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.NotLeader.Size()))
-		n16, err := m.NotLeader.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n16
-	}
-	if m.RangeNotFound != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.RangeNotFound.Size()))
-		n17, err := m.RangeNotFound.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n17
-	}
-	if m.RangeKeyMismatch != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.RangeKeyMismatch.Size()))
-		n18, err := m.RangeKeyMismatch.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n18
-	}
-	if m.ReadWithinUncertaintyInterval != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.ReadWithinUncertaintyInterval.Size()))
-		n19, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n19
-	}
-	if m.TransactionAborted != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionAborted.Size()))
-		n20, err := m.TransactionAborted.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n20
-	}
-	if m.TransactionPush != nil {
-		data[i] = 0x32
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionPush.Size()))
-		n21, err := m.TransactionPush.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n21
-	}
-	if m.TransactionRetry != nil {
-		data[i] = 0x3a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionRetry.Size()))
-		n22, err := m.TransactionRetry.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n22
-	}
-	if m.TransactionStatus != nil {
-		data[i] = 0x42
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionStatus.Size()))
-		n23, err := m.TransactionStatus.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n23
-	}
-	if m.WriteIntent != nil {
-		data[i] = 0x4a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.WriteIntent.Size()))
-		n24, err := m.WriteIntent.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n24
-	}
-	if m.WriteTooOld != nil {
-		data[i] = 0x52
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.WriteTooOld.Size()))
-		n25, err := m.WriteTooOld.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n25
-	}
-	if m.OpRequiresTxn != nil {
-		data[i] = 0x5a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.OpRequiresTxn.Size()))
-		n26, err := m.OpRequiresTxn.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n26
-	}
-	if m.ConditionFailed != nil {
-		data[i] = 0x62
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.ConditionFailed.Size()))
-		n27, err := m.ConditionFailed.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n27
-	}
-	if m.LeaseRejected != nil {
-		data[i] = 0x6a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.LeaseRejected.Size()))
-		n28, err := m.LeaseRejected.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n28
-	}
-	if m.NodeUnavailable != nil {
-		data[i] = 0x72
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.NodeUnavailable.Size()))
-		n29, err := m.NodeUnavailable.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n29
-	}
-	return i, nil
-}
-
-func (m *Error) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Error) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintErrors(data, i, uint64(len(m.Message)))
-	i += copy(data[i:], m.Message)
-	data[i] = 0x10
-	i++
-	if m.Retryable {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
-	if m.Detail != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
-		n30, err := m.Detail.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n30
-	}
-	data[i] = 0x20
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.TransactionRestart))
-	return i, nil
-}
-
-func encodeFixed64Errors(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Errors(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintErrors(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

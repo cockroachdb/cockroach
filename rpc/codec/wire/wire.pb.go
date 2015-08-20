@@ -181,6 +181,148 @@ func (m *ResponseHeader) GetUncompressedSize() uint32 {
 func init() {
 	proto.RegisterEnum("cockroach.rpc.codec.wire.CompressionType", CompressionType_name, CompressionType_value)
 }
+func (m *RequestHeader) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintWire(data, i, uint64(m.Id))
+	if m.Method != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintWire(data, i, uint64(len(*m.Method)))
+		i += copy(data[i:], *m.Method)
+	}
+	data[i] = 0x18
+	i++
+	i = encodeVarintWire(data, i, uint64(m.MethodId))
+	data[i] = 0x20
+	i++
+	i = encodeVarintWire(data, i, uint64(m.Compression))
+	data[i] = 0x28
+	i++
+	i = encodeVarintWire(data, i, uint64(m.UncompressedSize))
+	return i, nil
+}
+
+func (m *ResponseHeader) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ResponseHeader) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintWire(data, i, uint64(m.Id))
+	if m.Method != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintWire(data, i, uint64(len(*m.Method)))
+		i += copy(data[i:], *m.Method)
+	}
+	data[i] = 0x1a
+	i++
+	i = encodeVarintWire(data, i, uint64(len(m.Error)))
+	i += copy(data[i:], m.Error)
+	data[i] = 0x20
+	i++
+	i = encodeVarintWire(data, i, uint64(m.Compression))
+	data[i] = 0x28
+	i++
+	i = encodeVarintWire(data, i, uint64(m.UncompressedSize))
+	return i, nil
+}
+
+func encodeFixed64Wire(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Wire(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintWire(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *RequestHeader) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovWire(uint64(m.Id))
+	if m.Method != nil {
+		l = len(*m.Method)
+		n += 1 + l + sovWire(uint64(l))
+	}
+	n += 1 + sovWire(uint64(m.MethodId))
+	n += 1 + sovWire(uint64(m.Compression))
+	n += 1 + sovWire(uint64(m.UncompressedSize))
+	return n
+}
+
+func (m *ResponseHeader) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovWire(uint64(m.Id))
+	if m.Method != nil {
+		l = len(*m.Method)
+		n += 1 + l + sovWire(uint64(l))
+	}
+	l = len(m.Error)
+	n += 1 + l + sovWire(uint64(l))
+	n += 1 + sovWire(uint64(m.Compression))
+	n += 1 + sovWire(uint64(m.UncompressedSize))
+	return n
+}
+
+func sovWire(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozWire(x uint64) (n int) {
+	return sovWire(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *RequestHeader) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -542,146 +684,3 @@ func skipWire(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthWire = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *RequestHeader) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovWire(uint64(m.Id))
-	if m.Method != nil {
-		l = len(*m.Method)
-		n += 1 + l + sovWire(uint64(l))
-	}
-	n += 1 + sovWire(uint64(m.MethodId))
-	n += 1 + sovWire(uint64(m.Compression))
-	n += 1 + sovWire(uint64(m.UncompressedSize))
-	return n
-}
-
-func (m *ResponseHeader) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovWire(uint64(m.Id))
-	if m.Method != nil {
-		l = len(*m.Method)
-		n += 1 + l + sovWire(uint64(l))
-	}
-	l = len(m.Error)
-	n += 1 + l + sovWire(uint64(l))
-	n += 1 + sovWire(uint64(m.Compression))
-	n += 1 + sovWire(uint64(m.UncompressedSize))
-	return n
-}
-
-func sovWire(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozWire(x uint64) (n int) {
-	return sovWire(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *RequestHeader) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintWire(data, i, uint64(m.Id))
-	if m.Method != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintWire(data, i, uint64(len(*m.Method)))
-		i += copy(data[i:], *m.Method)
-	}
-	data[i] = 0x18
-	i++
-	i = encodeVarintWire(data, i, uint64(m.MethodId))
-	data[i] = 0x20
-	i++
-	i = encodeVarintWire(data, i, uint64(m.Compression))
-	data[i] = 0x28
-	i++
-	i = encodeVarintWire(data, i, uint64(m.UncompressedSize))
-	return i, nil
-}
-
-func (m *ResponseHeader) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ResponseHeader) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintWire(data, i, uint64(m.Id))
-	if m.Method != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintWire(data, i, uint64(len(*m.Method)))
-		i += copy(data[i:], *m.Method)
-	}
-	data[i] = 0x1a
-	i++
-	i = encodeVarintWire(data, i, uint64(len(m.Error)))
-	i += copy(data[i:], m.Error)
-	data[i] = 0x20
-	i++
-	i = encodeVarintWire(data, i, uint64(m.Compression))
-	data[i] = 0x28
-	i++
-	i = encodeVarintWire(data, i, uint64(m.UncompressedSize))
-	return i, nil
-}
-
-func encodeFixed64Wire(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Wire(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintWire(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

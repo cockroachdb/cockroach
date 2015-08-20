@@ -1,4 +1,4 @@
-FROM golang:1.4.2
+FROM golang:1.5
 
 MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
 

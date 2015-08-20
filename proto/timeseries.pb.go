@@ -10,7 +10,6 @@ import math "math"
 // discarding unused import gogoproto "gogoproto"
 
 import io "io"
-
 import fmt "fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -265,6 +264,339 @@ func (m *TimeSeriesQueryResponse_Result) GetDatapoints() []*TimeSeriesDatapoint 
 
 func init() {
 	proto1.RegisterEnum("cockroach.proto.TimeSeriesQueryAggregator", TimeSeriesQueryAggregator_name, TimeSeriesQueryAggregator_value)
+}
+func (m *TimeSeriesDatapoint) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesDatapoint) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(m.TimestampNanos))
+	data[i] = 0x11
+	i++
+	i = encodeFixed64Timeseries(data, i, uint64(math.Float64bits(m.Value)))
+	return i, nil
+}
+
+func (m *TimeSeriesData) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesData) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	data[i] = 0x12
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(len(m.Source)))
+	i += copy(data[i:], m.Source)
+	if len(m.Datapoints) > 0 {
+		for _, msg := range m.Datapoints {
+			data[i] = 0x1a
+			i++
+			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *TimeSeriesQueryRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesQueryRequest) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(m.StartNanos))
+	data[i] = 0x10
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(m.EndNanos))
+	if len(m.Queries) > 0 {
+		for _, msg := range m.Queries {
+			data[i] = 0x1a
+			i++
+			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *TimeSeriesQueryRequest_Query) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesQueryRequest_Query) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	if m.Aggregator != nil {
+		data[i] = 0x10
+		i++
+		i = encodeVarintTimeseries(data, i, uint64(*m.Aggregator))
+	}
+	return i, nil
+}
+
+func (m *TimeSeriesQueryResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesQueryResponse) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Results) > 0 {
+		for _, msg := range m.Results {
+			data[i] = 0xa
+			i++
+			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *TimeSeriesQueryResponse_Result) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesQueryResponse_Result) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	if len(m.Sources) > 0 {
+		for _, s := range m.Sources {
+			data[i] = 0x12
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if m.Aggregator != nil {
+		data[i] = 0x18
+		i++
+		i = encodeVarintTimeseries(data, i, uint64(*m.Aggregator))
+	}
+	if len(m.Datapoints) > 0 {
+		for _, msg := range m.Datapoints {
+			data[i] = 0x22
+			i++
+			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func encodeFixed64Timeseries(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Timeseries(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintTimeseries(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *TimeSeriesDatapoint) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovTimeseries(uint64(m.TimestampNanos))
+	n += 9
+	return n
+}
+
+func (m *TimeSeriesData) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovTimeseries(uint64(l))
+	l = len(m.Source)
+	n += 1 + l + sovTimeseries(uint64(l))
+	if len(m.Datapoints) > 0 {
+		for _, e := range m.Datapoints {
+			l = e.Size()
+			n += 1 + l + sovTimeseries(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *TimeSeriesQueryRequest) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovTimeseries(uint64(m.StartNanos))
+	n += 1 + sovTimeseries(uint64(m.EndNanos))
+	if len(m.Queries) > 0 {
+		for _, e := range m.Queries {
+			l = e.Size()
+			n += 1 + l + sovTimeseries(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *TimeSeriesQueryRequest_Query) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovTimeseries(uint64(l))
+	if m.Aggregator != nil {
+		n += 1 + sovTimeseries(uint64(*m.Aggregator))
+	}
+	return n
+}
+
+func (m *TimeSeriesQueryResponse) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Results) > 0 {
+		for _, e := range m.Results {
+			l = e.Size()
+			n += 1 + l + sovTimeseries(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *TimeSeriesQueryResponse_Result) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovTimeseries(uint64(l))
+	if len(m.Sources) > 0 {
+		for _, s := range m.Sources {
+			l = len(s)
+			n += 1 + l + sovTimeseries(uint64(l))
+		}
+	}
+	if m.Aggregator != nil {
+		n += 1 + sovTimeseries(uint64(*m.Aggregator))
+	}
+	if len(m.Datapoints) > 0 {
+		for _, e := range m.Datapoints {
+			l = e.Size()
+			n += 1 + l + sovTimeseries(uint64(l))
+		}
+	}
+	return n
+}
+
+func sovTimeseries(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozTimeseries(x uint64) (n int) {
+	return sovTimeseries(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
 func (m *TimeSeriesDatapoint) Unmarshal(data []byte) error {
 	l := len(data)
@@ -949,337 +1281,3 @@ func skipTimeseries(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthTimeseries = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *TimeSeriesDatapoint) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovTimeseries(uint64(m.TimestampNanos))
-	n += 9
-	return n
-}
-
-func (m *TimeSeriesData) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Name)
-	n += 1 + l + sovTimeseries(uint64(l))
-	l = len(m.Source)
-	n += 1 + l + sovTimeseries(uint64(l))
-	if len(m.Datapoints) > 0 {
-		for _, e := range m.Datapoints {
-			l = e.Size()
-			n += 1 + l + sovTimeseries(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *TimeSeriesQueryRequest) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovTimeseries(uint64(m.StartNanos))
-	n += 1 + sovTimeseries(uint64(m.EndNanos))
-	if len(m.Queries) > 0 {
-		for _, e := range m.Queries {
-			l = e.Size()
-			n += 1 + l + sovTimeseries(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *TimeSeriesQueryRequest_Query) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Name)
-	n += 1 + l + sovTimeseries(uint64(l))
-	if m.Aggregator != nil {
-		n += 1 + sovTimeseries(uint64(*m.Aggregator))
-	}
-	return n
-}
-
-func (m *TimeSeriesQueryResponse) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Results) > 0 {
-		for _, e := range m.Results {
-			l = e.Size()
-			n += 1 + l + sovTimeseries(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *TimeSeriesQueryResponse_Result) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Name)
-	n += 1 + l + sovTimeseries(uint64(l))
-	if len(m.Sources) > 0 {
-		for _, s := range m.Sources {
-			l = len(s)
-			n += 1 + l + sovTimeseries(uint64(l))
-		}
-	}
-	if m.Aggregator != nil {
-		n += 1 + sovTimeseries(uint64(*m.Aggregator))
-	}
-	if len(m.Datapoints) > 0 {
-		for _, e := range m.Datapoints {
-			l = e.Size()
-			n += 1 + l + sovTimeseries(uint64(l))
-		}
-	}
-	return n
-}
-
-func sovTimeseries(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozTimeseries(x uint64) (n int) {
-	return sovTimeseries(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *TimeSeriesDatapoint) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *TimeSeriesDatapoint) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintTimeseries(data, i, uint64(m.TimestampNanos))
-	data[i] = 0x11
-	i++
-	i = encodeFixed64Timeseries(data, i, uint64(math.Float64bits(m.Value)))
-	return i, nil
-}
-
-func (m *TimeSeriesData) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *TimeSeriesData) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintTimeseries(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x12
-	i++
-	i = encodeVarintTimeseries(data, i, uint64(len(m.Source)))
-	i += copy(data[i:], m.Source)
-	if len(m.Datapoints) > 0 {
-		for _, msg := range m.Datapoints {
-			data[i] = 0x1a
-			i++
-			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func (m *TimeSeriesQueryRequest) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *TimeSeriesQueryRequest) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintTimeseries(data, i, uint64(m.StartNanos))
-	data[i] = 0x10
-	i++
-	i = encodeVarintTimeseries(data, i, uint64(m.EndNanos))
-	if len(m.Queries) > 0 {
-		for _, msg := range m.Queries {
-			data[i] = 0x1a
-			i++
-			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func (m *TimeSeriesQueryRequest_Query) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *TimeSeriesQueryRequest_Query) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintTimeseries(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	if m.Aggregator != nil {
-		data[i] = 0x10
-		i++
-		i = encodeVarintTimeseries(data, i, uint64(*m.Aggregator))
-	}
-	return i, nil
-}
-
-func (m *TimeSeriesQueryResponse) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *TimeSeriesQueryResponse) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Results) > 0 {
-		for _, msg := range m.Results {
-			data[i] = 0xa
-			i++
-			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func (m *TimeSeriesQueryResponse_Result) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *TimeSeriesQueryResponse_Result) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintTimeseries(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	if len(m.Sources) > 0 {
-		for _, s := range m.Sources {
-			data[i] = 0x12
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
-	if m.Aggregator != nil {
-		data[i] = 0x18
-		i++
-		i = encodeVarintTimeseries(data, i, uint64(*m.Aggregator))
-	}
-	if len(m.Datapoints) > 0 {
-		for _, msg := range m.Datapoints {
-			data[i] = 0x22
-			i++
-			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func encodeFixed64Timeseries(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Timeseries(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintTimeseries(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

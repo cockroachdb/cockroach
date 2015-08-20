@@ -110,6 +110,126 @@ func (m *NodeStatus) GetAvailableRangeCount() int32 {
 	return 0
 }
 
+func (m *NodeStatus) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *NodeStatus) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.Desc.Size()))
+	n1, err := m.Desc.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	if len(m.StoreIDs) > 0 {
+		for _, num := range m.StoreIDs {
+			data[i] = 0x10
+			i++
+			i = encodeVarintStatus(data, i, uint64(num))
+		}
+	}
+	data[i] = 0x18
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.RangeCount))
+	data[i] = 0x20
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.StartedAt))
+	data[i] = 0x28
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.UpdatedAt))
+	data[i] = 0x32
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.Stats.Size()))
+	n2, err := m.Stats.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	data[i] = 0x38
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.LeaderRangeCount))
+	data[i] = 0x40
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.ReplicatedRangeCount))
+	data[i] = 0x48
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.AvailableRangeCount))
+	return i, nil
+}
+
+func encodeFixed64Status(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Status(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintStatus(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *NodeStatus) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Desc.Size()
+	n += 1 + l + sovStatus(uint64(l))
+	if len(m.StoreIDs) > 0 {
+		for _, e := range m.StoreIDs {
+			n += 1 + sovStatus(uint64(e))
+		}
+	}
+	n += 1 + sovStatus(uint64(m.RangeCount))
+	n += 1 + sovStatus(uint64(m.StartedAt))
+	n += 1 + sovStatus(uint64(m.UpdatedAt))
+	l = m.Stats.Size()
+	n += 1 + l + sovStatus(uint64(l))
+	n += 1 + sovStatus(uint64(m.LeaderRangeCount))
+	n += 1 + sovStatus(uint64(m.ReplicatedRangeCount))
+	n += 1 + sovStatus(uint64(m.AvailableRangeCount))
+	return n
+}
+
+func sovStatus(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozStatus(x uint64) (n int) {
+	return sovStatus(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *NodeStatus) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -413,124 +533,3 @@ func skipStatus(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthStatus = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *NodeStatus) Size() (n int) {
-	var l int
-	_ = l
-	l = m.Desc.Size()
-	n += 1 + l + sovStatus(uint64(l))
-	if len(m.StoreIDs) > 0 {
-		for _, e := range m.StoreIDs {
-			n += 1 + sovStatus(uint64(e))
-		}
-	}
-	n += 1 + sovStatus(uint64(m.RangeCount))
-	n += 1 + sovStatus(uint64(m.StartedAt))
-	n += 1 + sovStatus(uint64(m.UpdatedAt))
-	l = m.Stats.Size()
-	n += 1 + l + sovStatus(uint64(l))
-	n += 1 + sovStatus(uint64(m.LeaderRangeCount))
-	n += 1 + sovStatus(uint64(m.ReplicatedRangeCount))
-	n += 1 + sovStatus(uint64(m.AvailableRangeCount))
-	return n
-}
-
-func sovStatus(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozStatus(x uint64) (n int) {
-	return sovStatus(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *NodeStatus) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *NodeStatus) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintStatus(data, i, uint64(m.Desc.Size()))
-	n1, err := m.Desc.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	if len(m.StoreIDs) > 0 {
-		for _, num := range m.StoreIDs {
-			data[i] = 0x10
-			i++
-			i = encodeVarintStatus(data, i, uint64(num))
-		}
-	}
-	data[i] = 0x18
-	i++
-	i = encodeVarintStatus(data, i, uint64(m.RangeCount))
-	data[i] = 0x20
-	i++
-	i = encodeVarintStatus(data, i, uint64(m.StartedAt))
-	data[i] = 0x28
-	i++
-	i = encodeVarintStatus(data, i, uint64(m.UpdatedAt))
-	data[i] = 0x32
-	i++
-	i = encodeVarintStatus(data, i, uint64(m.Stats.Size()))
-	n2, err := m.Stats.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	data[i] = 0x38
-	i++
-	i = encodeVarintStatus(data, i, uint64(m.LeaderRangeCount))
-	data[i] = 0x40
-	i++
-	i = encodeVarintStatus(data, i, uint64(m.ReplicatedRangeCount))
-	data[i] = 0x48
-	i++
-	i = encodeVarintStatus(data, i, uint64(m.AvailableRangeCount))
-	return i, nil
-}
-
-func encodeFixed64Status(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Status(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintStatus(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

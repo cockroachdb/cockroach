@@ -242,6 +242,250 @@ func (m *MVCCStats) GetLastUpdateNanos() int64 {
 	return 0
 }
 
+func (m *MVCCValue) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *MVCCValue) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	if m.Deleted {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	if m.Value != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintMvcc(data, i, uint64(m.Value.Size()))
+		n1, err := m.Value.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n1
+	}
+	return i, nil
+}
+
+func (m *MVCCMetadata) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *MVCCMetadata) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Txn != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintMvcc(data, i, uint64(m.Txn.Size()))
+		n2, err := m.Txn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n2
+	}
+	data[i] = 0x12
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.Timestamp.Size()))
+	n3, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	data[i] = 0x18
+	i++
+	if m.Deleted {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	data[i] = 0x20
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.KeyBytes))
+	data[i] = 0x28
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.ValBytes))
+	if m.Value != nil {
+		data[i] = 0x32
+		i++
+		i = encodeVarintMvcc(data, i, uint64(m.Value.Size()))
+		n4, err := m.Value.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n4
+	}
+	return i, nil
+}
+
+func (m *MVCCStats) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *MVCCStats) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.LiveBytes))
+	data[i] = 0x10
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.KeyBytes))
+	data[i] = 0x18
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.ValBytes))
+	data[i] = 0x20
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.IntentBytes))
+	data[i] = 0x28
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.LiveCount))
+	data[i] = 0x30
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.KeyCount))
+	data[i] = 0x38
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.ValCount))
+	data[i] = 0x40
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.IntentCount))
+	data[i] = 0x48
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.IntentAge))
+	data[i] = 0x50
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.GCBytesAge))
+	data[i] = 0x60
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.SysBytes))
+	data[i] = 0x68
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.SysCount))
+	data[i] = 0xf0
+	i++
+	data[i] = 0x1
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.LastUpdateNanos))
+	return i, nil
+}
+
+func encodeFixed64Mvcc(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Mvcc(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintMvcc(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *MVCCValue) Size() (n int) {
+	var l int
+	_ = l
+	n += 2
+	if m.Value != nil {
+		l = m.Value.Size()
+		n += 1 + l + sovMvcc(uint64(l))
+	}
+	return n
+}
+
+func (m *MVCCMetadata) Size() (n int) {
+	var l int
+	_ = l
+	if m.Txn != nil {
+		l = m.Txn.Size()
+		n += 1 + l + sovMvcc(uint64(l))
+	}
+	l = m.Timestamp.Size()
+	n += 1 + l + sovMvcc(uint64(l))
+	n += 2
+	n += 1 + sovMvcc(uint64(m.KeyBytes))
+	n += 1 + sovMvcc(uint64(m.ValBytes))
+	if m.Value != nil {
+		l = m.Value.Size()
+		n += 1 + l + sovMvcc(uint64(l))
+	}
+	return n
+}
+
+func (m *MVCCStats) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovMvcc(uint64(m.LiveBytes))
+	n += 1 + sovMvcc(uint64(m.KeyBytes))
+	n += 1 + sovMvcc(uint64(m.ValBytes))
+	n += 1 + sovMvcc(uint64(m.IntentBytes))
+	n += 1 + sovMvcc(uint64(m.LiveCount))
+	n += 1 + sovMvcc(uint64(m.KeyCount))
+	n += 1 + sovMvcc(uint64(m.ValCount))
+	n += 1 + sovMvcc(uint64(m.IntentCount))
+	n += 1 + sovMvcc(uint64(m.IntentAge))
+	n += 1 + sovMvcc(uint64(m.GCBytesAge))
+	n += 1 + sovMvcc(uint64(m.SysBytes))
+	n += 1 + sovMvcc(uint64(m.SysCount))
+	n += 2 + sovMvcc(uint64(m.LastUpdateNanos))
+	return n
+}
+
+func sovMvcc(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozMvcc(x uint64) (n int) {
+	return sovMvcc(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *MVCCValue) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -859,248 +1103,3 @@ func skipMvcc(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthMvcc = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *MVCCValue) Size() (n int) {
-	var l int
-	_ = l
-	n += 2
-	if m.Value != nil {
-		l = m.Value.Size()
-		n += 1 + l + sovMvcc(uint64(l))
-	}
-	return n
-}
-
-func (m *MVCCMetadata) Size() (n int) {
-	var l int
-	_ = l
-	if m.Txn != nil {
-		l = m.Txn.Size()
-		n += 1 + l + sovMvcc(uint64(l))
-	}
-	l = m.Timestamp.Size()
-	n += 1 + l + sovMvcc(uint64(l))
-	n += 2
-	n += 1 + sovMvcc(uint64(m.KeyBytes))
-	n += 1 + sovMvcc(uint64(m.ValBytes))
-	if m.Value != nil {
-		l = m.Value.Size()
-		n += 1 + l + sovMvcc(uint64(l))
-	}
-	return n
-}
-
-func (m *MVCCStats) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovMvcc(uint64(m.LiveBytes))
-	n += 1 + sovMvcc(uint64(m.KeyBytes))
-	n += 1 + sovMvcc(uint64(m.ValBytes))
-	n += 1 + sovMvcc(uint64(m.IntentBytes))
-	n += 1 + sovMvcc(uint64(m.LiveCount))
-	n += 1 + sovMvcc(uint64(m.KeyCount))
-	n += 1 + sovMvcc(uint64(m.ValCount))
-	n += 1 + sovMvcc(uint64(m.IntentCount))
-	n += 1 + sovMvcc(uint64(m.IntentAge))
-	n += 1 + sovMvcc(uint64(m.GCBytesAge))
-	n += 1 + sovMvcc(uint64(m.SysBytes))
-	n += 1 + sovMvcc(uint64(m.SysCount))
-	n += 2 + sovMvcc(uint64(m.LastUpdateNanos))
-	return n
-}
-
-func sovMvcc(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozMvcc(x uint64) (n int) {
-	return sovMvcc(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *MVCCValue) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *MVCCValue) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	if m.Deleted {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
-	if m.Value != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintMvcc(data, i, uint64(m.Value.Size()))
-		n1, err := m.Value.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
-	}
-	return i, nil
-}
-
-func (m *MVCCMetadata) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *MVCCMetadata) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Txn != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintMvcc(data, i, uint64(m.Txn.Size()))
-		n2, err := m.Txn.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
-	}
-	data[i] = 0x12
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.Timestamp.Size()))
-	n3, err := m.Timestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
-	data[i] = 0x18
-	i++
-	if m.Deleted {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
-	data[i] = 0x20
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.KeyBytes))
-	data[i] = 0x28
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.ValBytes))
-	if m.Value != nil {
-		data[i] = 0x32
-		i++
-		i = encodeVarintMvcc(data, i, uint64(m.Value.Size()))
-		n4, err := m.Value.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n4
-	}
-	return i, nil
-}
-
-func (m *MVCCStats) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *MVCCStats) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.LiveBytes))
-	data[i] = 0x10
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.KeyBytes))
-	data[i] = 0x18
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.ValBytes))
-	data[i] = 0x20
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.IntentBytes))
-	data[i] = 0x28
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.LiveCount))
-	data[i] = 0x30
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.KeyCount))
-	data[i] = 0x38
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.ValCount))
-	data[i] = 0x40
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.IntentCount))
-	data[i] = 0x48
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.IntentAge))
-	data[i] = 0x50
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.GCBytesAge))
-	data[i] = 0x60
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.SysBytes))
-	data[i] = 0x68
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.SysCount))
-	data[i] = 0xf0
-	i++
-	data[i] = 0x1
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.LastUpdateNanos))
-	return i, nil
-}
-
-func encodeFixed64Mvcc(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Mvcc(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintMvcc(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}

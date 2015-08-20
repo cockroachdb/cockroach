@@ -180,6 +180,214 @@ func (m *LogEntry_Arg) GetJson() []byte {
 	return nil
 }
 
+func (m *LogEntry) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *LogEntry) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintLog(data, i, uint64(m.Severity))
+	data[i] = 0x10
+	i++
+	i = encodeVarintLog(data, i, uint64(m.Time))
+	data[i] = 0x18
+	i++
+	i = encodeVarintLog(data, i, uint64(m.ThreadID))
+	data[i] = 0x22
+	i++
+	i = encodeVarintLog(data, i, uint64(len(m.File)))
+	i += copy(data[i:], m.File)
+	data[i] = 0x28
+	i++
+	i = encodeVarintLog(data, i, uint64(m.Line))
+	data[i] = 0x32
+	i++
+	i = encodeVarintLog(data, i, uint64(len(m.Format)))
+	i += copy(data[i:], m.Format)
+	if len(m.Args) > 0 {
+		for _, msg := range m.Args {
+			data[i] = 0x3a
+			i++
+			i = encodeVarintLog(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.NodeID != nil {
+		data[i] = 0x40
+		i++
+		i = encodeVarintLog(data, i, uint64(*m.NodeID))
+	}
+	if m.StoreID != nil {
+		data[i] = 0x48
+		i++
+		i = encodeVarintLog(data, i, uint64(*m.StoreID))
+	}
+	if m.RangeID != nil {
+		data[i] = 0x50
+		i++
+		i = encodeVarintLog(data, i, uint64(*m.RangeID))
+	}
+	if m.Method != nil {
+		data[i] = 0x58
+		i++
+		i = encodeVarintLog(data, i, uint64(*m.Method))
+	}
+	if m.Key != nil {
+		data[i] = 0x62
+		i++
+		i = encodeVarintLog(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	if m.Stacks != nil {
+		data[i] = 0x6a
+		i++
+		i = encodeVarintLog(data, i, uint64(len(m.Stacks)))
+		i += copy(data[i:], m.Stacks)
+	}
+	return i, nil
+}
+
+func (m *LogEntry_Arg) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *LogEntry_Arg) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintLog(data, i, uint64(len(m.Type)))
+	i += copy(data[i:], m.Type)
+	data[i] = 0x12
+	i++
+	i = encodeVarintLog(data, i, uint64(len(m.Str)))
+	i += copy(data[i:], m.Str)
+	if m.Json != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintLog(data, i, uint64(len(m.Json)))
+		i += copy(data[i:], m.Json)
+	}
+	return i, nil
+}
+
+func encodeFixed64Log(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Log(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintLog(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (m *LogEntry) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovLog(uint64(m.Severity))
+	n += 1 + sovLog(uint64(m.Time))
+	n += 1 + sovLog(uint64(m.ThreadID))
+	l = len(m.File)
+	n += 1 + l + sovLog(uint64(l))
+	n += 1 + sovLog(uint64(m.Line))
+	l = len(m.Format)
+	n += 1 + l + sovLog(uint64(l))
+	if len(m.Args) > 0 {
+		for _, e := range m.Args {
+			l = e.Size()
+			n += 1 + l + sovLog(uint64(l))
+		}
+	}
+	if m.NodeID != nil {
+		n += 1 + sovLog(uint64(*m.NodeID))
+	}
+	if m.StoreID != nil {
+		n += 1 + sovLog(uint64(*m.StoreID))
+	}
+	if m.RangeID != nil {
+		n += 1 + sovLog(uint64(*m.RangeID))
+	}
+	if m.Method != nil {
+		n += 1 + sovLog(uint64(*m.Method))
+	}
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovLog(uint64(l))
+	}
+	if m.Stacks != nil {
+		l = len(m.Stacks)
+		n += 1 + l + sovLog(uint64(l))
+	}
+	return n
+}
+
+func (m *LogEntry_Arg) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Type)
+	n += 1 + l + sovLog(uint64(l))
+	l = len(m.Str)
+	n += 1 + l + sovLog(uint64(l))
+	if m.Json != nil {
+		l = len(m.Json)
+		n += 1 + l + sovLog(uint64(l))
+	}
+	return n
+}
+
+func sovLog(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozLog(x uint64) (n int) {
+	return sovLog(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (m *LogEntry) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -684,212 +892,3 @@ func skipLog(data []byte) (n int, err error) {
 var (
 	ErrInvalidLengthLog = fmt.Errorf("proto: negative length found during unmarshaling")
 )
-
-func (m *LogEntry) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovLog(uint64(m.Severity))
-	n += 1 + sovLog(uint64(m.Time))
-	n += 1 + sovLog(uint64(m.ThreadID))
-	l = len(m.File)
-	n += 1 + l + sovLog(uint64(l))
-	n += 1 + sovLog(uint64(m.Line))
-	l = len(m.Format)
-	n += 1 + l + sovLog(uint64(l))
-	if len(m.Args) > 0 {
-		for _, e := range m.Args {
-			l = e.Size()
-			n += 1 + l + sovLog(uint64(l))
-		}
-	}
-	if m.NodeID != nil {
-		n += 1 + sovLog(uint64(*m.NodeID))
-	}
-	if m.StoreID != nil {
-		n += 1 + sovLog(uint64(*m.StoreID))
-	}
-	if m.RangeID != nil {
-		n += 1 + sovLog(uint64(*m.RangeID))
-	}
-	if m.Method != nil {
-		n += 1 + sovLog(uint64(*m.Method))
-	}
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovLog(uint64(l))
-	}
-	if m.Stacks != nil {
-		l = len(m.Stacks)
-		n += 1 + l + sovLog(uint64(l))
-	}
-	return n
-}
-
-func (m *LogEntry_Arg) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Type)
-	n += 1 + l + sovLog(uint64(l))
-	l = len(m.Str)
-	n += 1 + l + sovLog(uint64(l))
-	if m.Json != nil {
-		l = len(m.Json)
-		n += 1 + l + sovLog(uint64(l))
-	}
-	return n
-}
-
-func sovLog(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozLog(x uint64) (n int) {
-	return sovLog(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *LogEntry) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *LogEntry) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintLog(data, i, uint64(m.Severity))
-	data[i] = 0x10
-	i++
-	i = encodeVarintLog(data, i, uint64(m.Time))
-	data[i] = 0x18
-	i++
-	i = encodeVarintLog(data, i, uint64(m.ThreadID))
-	data[i] = 0x22
-	i++
-	i = encodeVarintLog(data, i, uint64(len(m.File)))
-	i += copy(data[i:], m.File)
-	data[i] = 0x28
-	i++
-	i = encodeVarintLog(data, i, uint64(m.Line))
-	data[i] = 0x32
-	i++
-	i = encodeVarintLog(data, i, uint64(len(m.Format)))
-	i += copy(data[i:], m.Format)
-	if len(m.Args) > 0 {
-		for _, msg := range m.Args {
-			data[i] = 0x3a
-			i++
-			i = encodeVarintLog(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	if m.NodeID != nil {
-		data[i] = 0x40
-		i++
-		i = encodeVarintLog(data, i, uint64(*m.NodeID))
-	}
-	if m.StoreID != nil {
-		data[i] = 0x48
-		i++
-		i = encodeVarintLog(data, i, uint64(*m.StoreID))
-	}
-	if m.RangeID != nil {
-		data[i] = 0x50
-		i++
-		i = encodeVarintLog(data, i, uint64(*m.RangeID))
-	}
-	if m.Method != nil {
-		data[i] = 0x58
-		i++
-		i = encodeVarintLog(data, i, uint64(*m.Method))
-	}
-	if m.Key != nil {
-		data[i] = 0x62
-		i++
-		i = encodeVarintLog(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
-	}
-	if m.Stacks != nil {
-		data[i] = 0x6a
-		i++
-		i = encodeVarintLog(data, i, uint64(len(m.Stacks)))
-		i += copy(data[i:], m.Stacks)
-	}
-	return i, nil
-}
-
-func (m *LogEntry_Arg) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *LogEntry_Arg) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintLog(data, i, uint64(len(m.Type)))
-	i += copy(data[i:], m.Type)
-	data[i] = 0x12
-	i++
-	i = encodeVarintLog(data, i, uint64(len(m.Str)))
-	i += copy(data[i:], m.Str)
-	if m.Json != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintLog(data, i, uint64(len(m.Json)))
-		i += copy(data[i:], m.Json)
-	}
-	return i, nil
-}
-
-func encodeFixed64Log(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
-	return offset + 8
-}
-func encodeFixed32Log(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	return offset + 4
-}
-func encodeVarintLog(data []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	data[offset] = uint8(v)
-	return offset + 1
-}
