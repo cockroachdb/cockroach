@@ -95,9 +95,10 @@ var flagUsage = map[string]string{
         other node clocks have necessarily passed it.
 `,
 	"dev": `
-        Runs the node as a standalone in-memory cluster. Useful for developing
-        Cockroach itself. Can also be enabled by running from an environment
-        with COCKROACH_DEV=1.
+        Runs the node as a standalone in-memory cluster and forces --insecure
+        for all server and client commands. Useful for developing Cockroach
+        itself. Can also be enabled by running from an environment with
+        COCKROACH_DEV=1.
 `,
 	"insecure": `
         Run over plain HTTP. WARNING: this is strongly discouraged.
@@ -227,6 +228,8 @@ func initFlags(ctx *server.Context) {
 	}
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
+		f.BoolVar(&context.EphemeralSingleNode, "dev", isEnvRoachDev, flagUsage["dev"])
+
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, flagUsage["insecure"])
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
@@ -241,4 +244,10 @@ func initFlags(ctx *server.Context) {
 
 func init() {
 	initFlags(context)
+
+	cobra.OnInitialize(func() {
+		if context.EphemeralSingleNode {
+			context.Insecure = true
+		}
+	})
 }
