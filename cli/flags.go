@@ -19,6 +19,7 @@ package cli
 
 import (
 	"flag"
+	"os"
 	"reflect"
 	"strings"
 
@@ -95,7 +96,8 @@ var flagUsage = map[string]string{
 `,
 	"dev": `
         Runs the node as a standalone in-memory cluster. Useful for developing
-        Cockroach itself.
+        Cockroach itself. Can also be enabled by running from an environment
+        with COCKROACH_DEV=1.
 `,
 	"insecure": `
         Run over plain HTTP. WARNING: this is strongly discouraged.
@@ -158,9 +160,11 @@ func initFlags(ctx *server.Context) {
 		}
 	}
 
+	isEnvRoachDev := os.Getenv("COCKROACH_DEV") == "1"
+
 	{
 		f := startCmd.Flags()
-		f.BoolVar(&ctx.EphemeralSingleNode, "dev", ctx.EphemeralSingleNode, flagUsage["dev"])
+		f.BoolVar(&ctx.EphemeralSingleNode, "dev", isEnvRoachDev, flagUsage["dev"])
 
 		// Server flags.
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
