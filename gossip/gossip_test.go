@@ -18,7 +18,6 @@
 package gossip
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -63,83 +62,6 @@ func TestGossipInfoStore(t *testing.T) {
 	}
 	if _, err := g.GetInfo("s2"); err == nil {
 		t.Errorf("expected error fetching nonexistent key \"s2\"")
-	}
-}
-
-// TestGossipGroupsInfoStore verifies gossiping of groups via the
-// gossip instance infostore.
-func TestGossipGroupsInfoStore(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), nil)
-	g := New(rpcContext, TestInterval, TestBootstrap)
-
-	// For int64.
-	if err := g.RegisterGroup("i", 3, MinGroup); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 3; i++ {
-		if err := g.AddInfo(fmt.Sprintf("i.%d", i), int64(i), time.Hour); err != nil {
-			t.Fatal(err)
-		}
-	}
-	values, err := g.GetGroupInfos("i")
-	if err != nil {
-		t.Errorf("error fetching int64 group: %v", err)
-	}
-	if len(values) != 3 {
-		t.Errorf("incorrect number of values in group: %v", values)
-	}
-	for i := 0; i < 3; i++ {
-		if values[i].(int64) != int64(i) {
-			t.Errorf("index %d has incorrect value: %d, expected %d", i, values[i].(int64), i)
-		}
-	}
-	if _, err := g.GetGroupInfos("i2"); err == nil {
-		t.Errorf("expected error fetching nonexistent key \"i2\"")
-	}
-
-	// For float64.
-	if err := g.RegisterGroup("f", 3, MinGroup); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 3; i++ {
-		if err := g.AddInfo(fmt.Sprintf("f.%d", i), float64(i), time.Hour); err != nil {
-			t.Fatal(err)
-		}
-	}
-	values, err = g.GetGroupInfos("f")
-	if err != nil {
-		t.Errorf("error fetching float64 group: %v", err)
-	}
-	if len(values) != 3 {
-		t.Errorf("incorrect number of values in group: %v", values)
-	}
-	for i := 0; i < 3; i++ {
-		if values[i].(float64) != float64(i) {
-			t.Errorf("index %d has incorrect value: %f, expected %d", i, values[i].(float64), i)
-		}
-	}
-
-	// For string.
-	if err := g.RegisterGroup("s", 3, MinGroup); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 3; i++ {
-		if err := g.AddInfo(fmt.Sprintf("s.%d", i), fmt.Sprintf("%d", i), time.Hour); err != nil {
-			t.Fatal(err)
-		}
-	}
-	values, err = g.GetGroupInfos("s")
-	if err != nil {
-		t.Errorf("error fetching string group: %v", err)
-	}
-	if len(values) != 3 {
-		t.Errorf("incorrect number of values in group: %v", values)
-	}
-	for i := 0; i < 3; i++ {
-		if values[i].(string) != fmt.Sprintf("%d", i) {
-			t.Errorf("index %d has incorrect value: %d, expected %s", i, values[i], fmt.Sprintf("%d", i))
-		}
 	}
 }
 

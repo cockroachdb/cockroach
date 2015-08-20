@@ -28,11 +28,8 @@ import (
 // info is the basic unit of information traded over the gossip
 // network.
 type info struct {
-	Key string // Info key
-	// Info value: must be one of {int64, float64, string} or
-	// implement the util.Ordered interface to be used with groups.
-	// For single infos any type is allowed.
-	Val       interface{}
+	Key       string       // Info key
+	Val       interface{}  // Permitted types are enumerated in init()
 	Timestamp int64        `json:"-"` // Wall time at origination (Unix-nanos)
 	TTLStamp  int64        `json:"-"` // Wall time before info is discarded (Unix-nanos)
 	Hops      uint32       `json:"-"` // Number of hops from originator

@@ -108,11 +108,11 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 		if err := gob.NewDecoder(bytes.NewBuffer(args.Delta)).Decode(delta); err != nil {
 			return nil, util.Errorf("infostore could not be decoded: %s", err)
 		}
-		if delta.infoCount() > 0 {
+		if infoCount := len(delta.Infos); infoCount > 0 {
 			if log.V(1) {
 				log.Infof("gossip: received %s", delta)
 			} else {
-				log.Infof("gossip: received %d info(s) from %s", delta.infoCount(), addr)
+				log.Infof("gossip: received %d info(s) from %s", infoCount, addr)
 			}
 		}
 		s.is.combine(delta)

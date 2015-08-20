@@ -273,30 +273,6 @@ func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
 	return json.MarshalIndent(g.is, "", "  ")
 }
 
-// GetGroupInfos returns a slice of info values from specified group,
-// or an error if group is not registered.
-func (g *Gossip) GetGroupInfos(prefix string) ([]interface{}, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	infos := g.is.getGroupInfos(prefix)
-	if infos == nil {
-		return nil, util.Errorf("group %q doesn't exist", prefix)
-	}
-	values := make([]interface{}, len(infos))
-	for i, info := range infos {
-		values[i] = info.Val
-	}
-	return values, nil
-}
-
-// RegisterGroup registers a new group with info store. Returns an
-// error if the group was already registered.
-func (g *Gossip) RegisterGroup(prefix string, limit int, typeOf GroupType) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.is.registerGroup(newGroup(prefix, limit, typeOf))
-}
-
 // Callback is a callback method to be invoked on gossip update
 // of info denoted by key. The contentsChanged bool indicates whether
 // the info contents were updated. False indicates the info timestamp
