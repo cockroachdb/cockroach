@@ -180,8 +180,7 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 // by consulting each store in turn via Store.LookupRange(key).
 // Returns RangeID and replica on success; RangeKeyMismatch error
 // if not found.
-// TODO(tschottdorf) with a very large number of stores, the LocalSender
-// may want to avoid scanning the whole map of stores on each invocation.
+// This is only for testing usage; performance doesn't matter.
 func (ls *LocalSender) lookupReplica(start, end proto.Key) (rangeID proto.RangeID, replica *proto.Replica, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()

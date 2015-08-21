@@ -876,7 +876,14 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key proto.Key, timestamp p
 		return err
 	}
 
-	if expValue == nil && existVal != nil {
+	if _, _, err := MVCCGet(engine, key, timestamp, true /* consistent */, nil); txn != nil && existVal != nil && bytes.Equal(value.Bytes, existVal.Bytes) &&
+		func() bool { _, ok := err.(*proto.WriteIntentError); return ok }() {
+		// TODO(tschottdorf): There's a chance that we've executed this
+		// ConditionalPut before but the Batch containing this request
+		// had to be retried. This is temporary logic until we execute
+		// Batches atomically: If this is written by our transaction,
+		// and it matches what we wanted to write: fine, let's go ahead.
+	} else if expValue == nil && existVal != nil {
 		return &proto.ConditionFailedError{
 			ActualValue: existVal,
 		}
