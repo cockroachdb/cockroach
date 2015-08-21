@@ -269,7 +269,7 @@ func getRequest(t *testing.T, ts TestServer, path string) []byte {
 // startServer will start a server with a short scan interval, wait for
 // the scan to complete, and return the server. The caller is
 // responsible for stopping the server.
-// TODO(Bram): Add more nodes.
+// TODO(bram): Add more nodes.
 func startServer(t *testing.T, keyPrefix string) TestServer {
 	var ts TestServer
 	ts.Ctx = NewTestContext()
