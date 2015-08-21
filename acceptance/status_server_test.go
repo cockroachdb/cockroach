@@ -54,12 +54,12 @@ func get(t *testing.T, client *http.Client, node *localcluster.Container, path s
 			t.Logf("could not GET %s - %s", url, err)
 			continue
 		}
+		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			t.Logf("could not read body for %s - %s", url, err)
 			continue
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Logf("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 			continue
