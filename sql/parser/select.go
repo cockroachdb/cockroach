@@ -103,9 +103,11 @@ type SelectExpr struct {
 	As   Name
 }
 
-// StarSelectExpr is a convenience variable that represents an unqualified "*"
+// StarSelectExpr is a convenience function that represents an unqualified "*"
 // in a select expression.
-var StarSelectExpr = SelectExpr{Expr: StarExpr}
+func StarSelectExpr() SelectExpr {
+	return SelectExpr{Expr: StarExpr()}
+}
 
 func (node SelectExpr) String() string {
 	var buf bytes.Buffer

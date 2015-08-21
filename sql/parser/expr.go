@@ -256,8 +256,10 @@ type QualifiedName struct {
 	normalized nameType
 }
 
-// StarExpr is a convenience variable that represents an unqualified "*".
-var StarExpr = &QualifiedName{Indirect: Indirection{unqualifiedStar}}
+// StarExpr is a convenience function that represents an unqualified "*".
+func StarExpr() *QualifiedName {
+	return &QualifiedName{Indirect: Indirection{unqualifiedStar}}
+}
 
 // NormalizeTableName normalizes the qualified name to contain a database name
 // as prefix, returning an error if unable to do so or if the name is not a
@@ -359,8 +361,10 @@ func (n *QualifiedName) NormalizeColumnName() error {
 	// Either table.column, table.*, column[array-indirection] or
 	// table.column[array-indirection].
 	switch n.Indirect[0].(type) {
-	case NameIndirection, StarIndirection:
+	case NameIndirection:
 		// Nothing to do.
+	case StarIndirection:
+		n.Indirect[0] = qualifiedStar
 	case *ArrayIndirection:
 		// column[array-indirection] -> "".column[array-indirection]
 		//
