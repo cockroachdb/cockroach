@@ -255,6 +255,8 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	descriptor := proto.RangeDescriptor{
+		StartKey: proto.KeyMin,
+		EndKey:   proto.KeyMax,
 		RangeID:  rangeID,
 		Replicas: nil,
 	}
@@ -541,34 +543,37 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 	// Updated below, after it has first been returned.
+	badStartKey := proto.Key("m")
 	newRangeDescriptor := testRangeDescriptor
-	newEndKey := proto.Key("m")
+	goodStartKey := newRangeDescriptor.StartKey
+	newRangeDescriptor.StartKey = badStartKey
 	descStale := true
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
 		header := getArgs(testAddress).(proto.Request).Header()
 		if method == "Node.RangeLookup" {
-			// If the non-broken descriptor has already been returned, that's
-			// an error.
 			if !descStale && bytes.HasPrefix(header.Key, keys.Meta2Prefix) {
 				t.Errorf("unexpected extra lookup for non-stale replica descriptor at %s",
 					header.Key)
 			}
 
 			r := getReply().(*proto.RangeLookupResponse)
-			// The fresh descriptor is about to be returned.
-			if bytes.HasPrefix(header.Key, keys.Meta2Prefix) &&
-				newRangeDescriptor.StartKey.Equal(newEndKey) {
-				descStale = false
-			}
 			r.Ranges = append(r.Ranges, newRangeDescriptor)
+			// If we just returned the stale descriptor, set up returning the
+			// good one next time.
+			if bytes.HasPrefix(header.Key, keys.Meta2Prefix) {
+				if newRangeDescriptor.StartKey.Equal(badStartKey) {
+					newRangeDescriptor.StartKey = goodStartKey
+				} else {
+					descStale = false
+				}
+			}
+
 			return []gogoproto.Message{r}, nil
 		}
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
-		if !newRangeDescriptor.StartKey.Equal(newEndKey) {
-			newRangeDescriptor = *gogoproto.Clone(&testRangeDescriptor).(*proto.RangeDescriptor)
-			newRangeDescriptor.StartKey = newEndKey
+		if !newRangeDescriptor.StartKey.Equal(goodStartKey) {
 			return nil, &proto.RangeKeyMismatchError{RequestStartKey: header.Key,
 				RequestEndKey: header.EndKey}
 		}

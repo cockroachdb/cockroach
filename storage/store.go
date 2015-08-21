@@ -1284,18 +1284,6 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto
 			// Only Key and EndKey are allowed to diverge from the iterated
 			// Batch header.
 			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
-			if len(origHeader.EndKey) > 0 {
-				// Hack around the fact that DistSender still truncates the request,
-				// but now it only sees a BatchRequest. It doesn't touch the actual
-				// requests. So if the request looks "rangey", try to make sure it's
-				// properly contained in the Batch's range (if that has one).
-				if keys.KeyAddress(batch.RequestHeader.EndKey).Less(keys.KeyAddress(header.EndKey)) {
-					header.EndKey = batch.RequestHeader.EndKey
-				}
-				if keys.KeyAddress(header.Key).Less(keys.KeyAddress(batch.RequestHeader.Key)) {
-					header.Key = batch.RequestHeader.Key
-				}
-			}
 
 			if isTxn && i > 0 {
 				// Propagate Txn of last reply to current request.

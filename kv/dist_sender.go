@@ -410,7 +410,11 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 // descriptors associated with it. First, the range descriptor for
 // call.Args.Key is looked up. If call.Args.EndKey exceeds that of the
 // returned descriptor, the next descriptor is obtained as well.
-func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *proto.RangeDescriptor, error) {
+// The returned closure is to be called if the main range descriptor
+// is discovered to be stale.
+// TODO(tschottdorf): isReverse is deducible from the call, but it's
+// also awkward to re-scan the whole call all the time.
+func (ds *DistSender) getDescriptors(call proto.Call, isReverse bool) (*proto.RangeDescriptor, *proto.RangeDescriptor, func(), error) {
 	// If the call contains a PushTxn, set ignoreIntents option as
 	// necessary. This prevents a potential infinite loop; see the
 	// comments in proto.RangeLookupRequest.
@@ -421,33 +425,36 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 
 	var desc *proto.RangeDescriptor
 	var err error
-	isReverseScan := call.Args.(*proto.BatchRequest).IsReverse()
-	if !isReverseScan {
-		desc, err = ds.rangeCache.LookupRangeDescriptor(call.Args.Header().Key, options)
+	header := call.Args.Header()
+	var descKey proto.Key
+	if !isReverse {
+		descKey = header.Key
+		desc, err = ds.rangeCache.LookupRangeDescriptor(descKey, options)
 	} else {
 		options.useReverseScan = true
-		desc, err = ds.rangeCache.LookupRangeDescriptor(call.Args.Header().EndKey, options)
+		descKey = header.EndKey
+		desc, err = ds.rangeCache.LookupRangeDescriptor(descKey, options)
 	}
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Checks whether need to get next range descriptor. If so, returns true
 	// and the key to look up, depending on whether we're in reverse mode.
-	needAnother := func(desc *proto.RangeDescriptor, isReverseScan bool) (proto.Key, bool) {
-		if isReverseScan {
-			return desc.StartKey, call.Args.Header().Key.Less(desc.StartKey)
+	needAnother := func(desc *proto.RangeDescriptor, isReverse bool) (proto.Key, bool) {
+		if isReverse {
+			return desc.StartKey, keys.KeyAddress(call.Args.Header().Key).Less(keys.KeyAddress(desc.StartKey))
 		}
-		return desc.EndKey, desc.EndKey.Less(call.Args.Header().EndKey)
+		return desc.EndKey, keys.KeyAddress(desc.EndKey).Less(keys.KeyAddress(call.Args.Header().EndKey))
 	}
 
 	var descNext *proto.RangeDescriptor
 	// If the request accesses keys beyond the end of this range,
 	// get the descriptor of the adjacent range to address next.
-	if nextKey, ok := needAnother(desc, isReverseScan); ok {
+	if nextKey, ok := needAnother(desc, isReverse); ok {
 		if _, ok := call.Reply.(proto.Combinable); !ok {
-			return nil, nil, util.Errorf("illegal cross-range operation")
+			return nil, nil, nil, util.Errorf("illegal cross-range operation")
 		}
 		// If there's no transaction and op spans ranges, possibly
 		// re-run as part of a transaction for consistency. The
@@ -455,17 +462,78 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 		// consistency is not required.
 		if call.Args.Header().Txn == nil &&
 			call.Args.Header().ReadConsistency != proto.INCONSISTENT {
-			return nil, nil, &proto.OpRequiresTxnError{}
+			return nil, nil, nil, &proto.OpRequiresTxnError{}
 		}
 		// This next lookup is likely for free since we've read the
 		// previous descriptor and range lookups use cache
 		// prefetching.
 		descNext, err = ds.rangeCache.LookupRangeDescriptor(nextKey, options)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
-	return desc, descNext, nil
+	evict := func() {
+		ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, isReverse)
+	}
+	return desc, descNext, evict, nil
+}
+
+// Truncate restricts all contained requests to the given key range.
+// Even on error, the returned closure must be executed.
+func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor) (func(), error) {
+	from, to := desc.StartKey, desc.EndKey
+	truncateOne := func(args proto.Request) ([]func(), error) {
+		header := args.Header()
+		// The BatchRequest hack is necessary as long as BatchRequest itself
+		// is a "Request" which is expected to cover a key range.
+		if _, ok := args.(*proto.BatchRequest); !ok && !proto.IsRange(args) {
+			if len(header.EndKey) > 0 {
+				return nil, util.Errorf("%T is not a range command, but EndKey is set", args)
+			}
+			if !desc.ContainsKey(args.Header().Key) {
+				// TODO(tschottdorf): erroring here prevents merges to go
+				// through until batches are properly chunked. We can get away
+				// with ignoring this as long as all requests go to the same
+				// store - apparently mostly true in tests which span ranges.
+				// return nil, util.Error("batch chopping not yet supported")
+			}
+			return nil, nil
+		}
+		var undo []func()
+		// TODO(tschottdorf): can not handle a range-request which does not
+		// intersect the current key range. Need to split the batch before
+		// that ever gets here.
+		if key := args.Header().Key; key != nil && keys.KeyAddress(key).Less(keys.KeyAddress(from)) {
+			undo = append(undo, func() { args.Header().Key = key })
+			args.Header().Key = from
+		}
+		// It is illegal to send EndKey on commands which do not operate on
+		// key ranges, so don't do it in that case.
+		if endKey := args.Header().EndKey; endKey != nil &&
+			!keys.KeyAddress(endKey).Less(keys.KeyAddress(to)) {
+			undo = append(undo, func() { args.Header().EndKey = endKey })
+			args.Header().EndKey = to
+		}
+		return undo, nil
+	}
+
+	var fns []func()
+	gUndo := func() {
+		for _, f := range fns {
+			f()
+		}
+	}
+
+	for _, arg := range br.Requests {
+		undo, err := truncateOne(arg.GetValue().(proto.Request))
+		fns = append(fns, undo...)
+		if err != nil {
+			return gUndo, err
+		}
+	}
+	undo, err := truncateOne(br) // top-level header
+	fns = append(fns, undo...)
+	return gUndo, err
 }
 
 // sendAttempt is invoked by Send. It temporarily truncates the arguments to
@@ -475,21 +543,15 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 // to be handled separately by the caller.
 func (ds *DistSender) sendAttempt(trace *tracer.Trace, args proto.Request, desc *proto.RangeDescriptor) (proto.Response, error) {
 	defer trace.Epoch("sending RPC")()
-	// Truncate the request to our current range, making sure not to
-	// touch it unless we have to.
-	if args.(*proto.BatchRequest).IsReverse() {
-		// Truncate to the current range if the reverse scan crosses range boundaries.
-		if key := args.Header().Key; key != nil && key.Less(desc.StartKey) {
-			defer func(k proto.Key) { args.Header().Key = k }(key)
-			args.Header().Key = desc.StartKey
-		}
-	} else {
-		// It is illegal to send EndKey on commands which do not operate on ranges.
-		if endKey := args.Header().EndKey; endKey != nil && !endKey.Less(desc.EndKey) {
-			defer func(k proto.Key) { args.Header().EndKey = k }(endKey)
-			args.Header().EndKey = desc.EndKey
+	{
+		// Truncate the request to our current key range.
+		untruncate, err := truncate(args.(*proto.BatchRequest), desc)
+		defer untruncate() // even on error
+		if err != nil {
+			return nil, err
 		}
 	}
+
 	leader := ds.leaderCache.Lookup(proto.RangeID(desc.RangeID))
 
 	// Try to send the call.
@@ -530,6 +592,9 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 		bArgs := &proto.BatchRequest{}
 		bArgs.RequestHeader = *(gogoproto.Clone(call.Args.Header()).(*proto.RequestHeader))
 		if !proto.IsRange(call.Args) {
+			// TODO(tschottdorf): this is only here because BatchRequest is
+			// marked as a `range` operation. This has side effects such as
+			// creating unneccessary intents at TxnCoordSender.
 			bArgs.RequestHeader.EndKey = bArgs.RequestHeader.Key.Next()
 		}
 		bArgs.Add(call.Args)
@@ -589,14 +654,17 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 	// Restore to the original range in case the operation crossed range
 	// boundaries.
 	// TODO(tschottdorf): can manage to only do this when necessary.
-	defer func(start, end proto.Key) {
-		args.Header().Key = start
-		args.Header().EndKey = end
+	untruncate := func(start, end proto.Key) func() {
+		return func() {
+			args.Header().Key = start
+			args.Header().EndKey = end
+		}
 	}(args.Header().Key, args.Header().EndKey)
+	defer untruncate()
 
 	first := true
+	isReverse := call.Args.(*proto.BatchRequest).IsReverse()
 
-	isReverseScan := call.Args.(*proto.BatchRequest).IsReverse()
 	// Retry logic for lookup of range by key and RPCs to range replicas.
 	for {
 		var curReply proto.Response
@@ -610,8 +678,10 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 			// It is safe to pass call here (with its embedded reply) because
 			// the reply is only used to check that it implements
 			// proto.Combinable if the request spans multiple ranges.
-			desc, descNext, err = ds.getDescriptors(call)
+			var evictDesc func()
+			desc, descNext, evictDesc, err = ds.getDescriptors(call, isReverse)
 			descDone()
+
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
 			if err != nil {
@@ -623,13 +693,23 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 				}
 				break
 			}
-			// At this point reply.Header().Error may be non-nil!
-			curReply, err = ds.sendAttempt(trace, args, desc)
 
-			descKey := args.Header().Key
-			if isReverseScan {
-				descKey = args.Header().EndKey
+			// At this point reply.Header().Error may be non-nil!
+			// TODO(tschottdorf): hacky way to prevent the following: A range-
+			// spanning request hits a stale descriptor so that it misses parts
+			// of the keys it's supposed to scan after it's truncated to match
+			// the descriptor. Example revscan [a,g), first desc lookup for "g"
+			// returns descriptor [c,d) -> [d,g) is never scanned.
+			// This didn't happen prior to the refactor because the truncation
+			// was more ad-hoc.
+			// Should really collect all descriptors immediately, and check that
+			// they cover the desired key range, invalidating as necessary.
+			if header := call.Args.Header(); (isReverse && !desc.ContainsKeyRange(keys.KeyAddress(desc.StartKey), keys.KeyAddress(header.EndKey))) || (!isReverse && !desc.ContainsKeyRange(keys.KeyAddress(header.Key), keys.KeyAddress(desc.EndKey))) {
+				evictDesc()
+				continue
 			}
+
+			curReply, err = ds.sendAttempt(trace, args, desc)
 
 			if err != nil {
 				trace.Event(fmt.Sprintf("send error: %T", err))
@@ -641,7 +721,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 				// TODO(tschottdorf): If a replica group goes dead, this will cause clients
 				// to put high read pressure on the first range, so there should be some
 				// rate limiting here.
-				ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, isReverseScan)
+				evictDesc()
 			} else {
 				err = curReply.Header().GoError()
 			}
@@ -653,6 +733,17 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 			if log.V(1) {
 				log.Warningf("failed to invoke %s: %s", call.Method(), err)
 			}
+			// If we're multi-range, possibly we've already collected some
+			// results already. Failing to reset the "final" reply would lead
+			// to duplicates. If we get to restart, it's going to be at the
+			// beginning.
+			// TODO(tschottdorf): shouldn't use call.Args to track the current
+			// state. Instead, keep track of a "cut" key. Merging the responses
+			// later could avoid restarting at the beginning, though it's going
+			// to lead to complicated code - probably not worth it at this
+			// stage.
+			call.Reply.(*proto.BatchResponse).ResetAll()
+			untruncate() // reset keys in call.Args
 
 			// If retryable, allow retry. For range not found or range
 			// key mismatch errors, we don't backoff on the retry,
@@ -661,7 +752,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 			case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
 				trace.Event(fmt.Sprintf("reply error: %T", err))
 				// Range descriptor might be out of date - evict it.
-				ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, isReverseScan)
+				evictDesc()
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
 				if log.V(1) {
@@ -679,7 +770,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 						if log.V(1) {
 							log.Infof("error indicates unknown leader %s, expunging descriptor %s", newLeader, desc)
 						}
-						ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, isReverseScan)
+						evictDesc()
 					}
 				} else {
 					newLeader = &proto.Replica{}
@@ -774,7 +865,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 			break
 		}
 
-		if isReverseScan {
+		if isReverse {
 			// In next iteration, query previous range.
 			// We use the StartKey of the current descriptor as opposed to the
 			// EndKey of the previous one since that doesn't have bugs when

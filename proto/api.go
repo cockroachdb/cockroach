@@ -155,12 +155,16 @@ func (br *BatchRequest) IsReadOnly() bool {
 
 // IsReverse returns true iff the BatchRequest contains a reverse request.
 func (br *BatchRequest) IsReverse() bool {
+	var reverse bool
 	for _, arg := range br.Requests {
 		if IsReverse(arg.GetValue().(Request)) {
-			return true
+			if reverse {
+				panic("mixing reverse and non-reverse in batch")
+			}
+			reverse = true
 		}
 	}
-	return false
+	return reverse
 }
 
 // IsTransactionWrite returns true iff the BatchRequest contains a txn write.
@@ -362,6 +366,15 @@ func (rr *ResolveIntentRangeResponse) Combine(c Response) error {
 		}
 	}
 	return nil
+}
+
+// ResetAll resets all the contained requests to their original state.
+func (br *BatchResponse) ResetAll() {
+	for _, rsp := range br.Responses {
+		// TODO(tschottdorf) `rsp.Reset()` doesn't actually clear it out, I'm
+		// not sure why though.
+		rsp.GetValue().(Response).Reset()
+	}
 }
 
 // Combine implements the Combinable interface. It combines each slot of the
