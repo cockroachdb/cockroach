@@ -42,8 +42,48 @@ c   d
 e   f
 f   g
 
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv2
+----
+0  /kv2/primary/'a'    NULL  NULL
+0  /kv2/primary/'a'/v  'b'   true
+1  /kv2/primary/'c'    NULL  NULL
+1  /kv2/primary/'c'/v  'd'   true
+2  /kv2/primary/'e'    NULL  NULL
+2  /kv2/primary/'e'/v  'f'   true
+3  /kv2/primary/'f'    NULL  NULL
+3  /kv2/primary/'f'/v  'g'   true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv2@a
+----
+0  /kv2/a/'b'  /'a'  true
+1  /kv2/a/'d'  /'c'  true
+2  /kv2/a/'f'  /'e'  true
+3  /kv2/a/'g'  /'f'  true
+
 statement error duplicate key value .* violates unique constraint
 UPDATE kv2 SET v = 'g' WHERE k IN ('a')
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv2
+----
+0  /kv2/primary/'a'    NULL  NULL
+0  /kv2/primary/'a'/v  'b'   true
+1  /kv2/primary/'c'    NULL  NULL
+1  /kv2/primary/'c'/v  'd'   true
+2  /kv2/primary/'e'    NULL  NULL
+2  /kv2/primary/'e'/v  'f'   true
+3  /kv2/primary/'f'    NULL  NULL
+3  /kv2/primary/'f'/v  'g'   true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv2@a
+----
+0  /kv2/a/'b'  /'a'  true
+1  /kv2/a/'d'  /'c'  true
+2  /kv2/a/'f'  /'e'  true
+3  /kv2/a/'g'  /'f'  true
 
 statement ok
 UPDATE kv2 SET v = 'i' WHERE k IN ('a')
