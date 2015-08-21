@@ -101,15 +101,20 @@ func (c *conn) send(args Request) (*rows, error) {
 		panic("connection has lingering session state")
 	}
 	c.session = resp.Session
-	if resp.Error != nil {
-		return nil, resp.Error
-	}
 	// Translate into rows
 	r := &rows{}
 	// Only use the last result to populate the response
 	index := len(resp.Results) - 1
 	if index < 0 {
 		return r, nil
+	}
+	// Check for any application errors.
+	// TODO(vivek): We might want to bunch all errors found here into
+	// a single error.
+	for _, result := range resp.Results {
+		if result.Error != nil {
+			return nil, result.Error
+		}
 	}
 	result := resp.Results[index]
 	r.columns = make([]string, len(result.Columns))

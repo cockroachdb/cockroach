@@ -1,0 +1,54 @@
+statement ok
+CREATE TABLE kv (
+  k CHAR PRIMARY KEY,
+  v CHAR
+)
+
+query TT
+SELECT * FROM kv
+----
+
+statement ok
+INSERT INTO kv (k,v) VALUES ('a', 'b'); INSERT INTO kv (k,v) VALUES ('c', 'd')
+
+query TT
+SELECT * FROM kv
+----
+a b
+c d
+
+# error if either statement returns an error
+# first statement returns an error
+statement error duplicate key value .* violates unique constraint
+INSERT INTO kv (k,v) VALUES ('a', 'b'); INSERT INTO kv (k,v) VALUES ('e', 'f')
+
+query TT
+SELECT * FROM kv
+----
+a b
+c d
+e f
+
+# second statement returns an error
+statement error duplicate key value .* violates unique constraint
+INSERT INTO kv (k,v) VALUES ('g', 'h'); INSERT INTO kv (k,v) VALUES ('a', 'b')
+
+query TT
+SELECT * FROM kv
+----
+a b
+c d
+e f
+g h
+
+# parse error runs nothing 
+statement error syntax error .*
+INSERT INTO kv (k,v) VALUES ('i', 'j'); INSERT INTO VALUES ('k', 'l')
+
+query TT
+SELECT * FROM kv
+----
+a b
+c d
+e f
+g h
