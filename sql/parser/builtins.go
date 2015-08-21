@@ -302,6 +302,67 @@ var builtins = map[string][]builtin{
 			},
 		},
 	},
+
+	// Aggregate functions.
+
+	"avg": {
+		builtin{
+			types: typeList{intType},
+			fn: func(args DTuple) (Datum, error) {
+				if args[0] == DNull {
+					return args[0], nil
+				}
+				// AVG returns a float when given an int argument.
+				return DFloat(args[0].(DInt)), nil
+			},
+		},
+		builtin{
+			types: typeList{floatType},
+			fn: func(args DTuple) (Datum, error) {
+				return args[0], nil
+			},
+		},
+	},
+
+	"count": countImpls(),
+
+	"max": aggregateImpls(boolType, intType, floatType, stringType),
+	"min": aggregateImpls(boolType, intType, floatType, stringType),
+	"sum": aggregateImpls(intType, floatType),
+}
+
+// The aggregate functions all just return their first argument. We don't
+// perform any type checking here either. The bulk of the aggregate function
+// implementation is performed at a higher level in sql.groupNode.
+func aggregateImpls(types ...reflect.Type) []builtin {
+	var r []builtin
+	for _, t := range types {
+		r = append(r, builtin{
+			types: typeList{t},
+			fn: func(args DTuple) (Datum, error) {
+				return args[0], nil
+			},
+		})
+	}
+	return r
+}
+
+func countImpls() []builtin {
+	var r []builtin
+	types := typeList{boolType, intType, floatType, stringType, tupleType}
+	for _, t := range types {
+		r = append(r, builtin{
+			types: typeList{t},
+			fn: func(args DTuple) (Datum, error) {
+				if _, ok := args[0].(DInt); ok {
+					return args[0], nil
+				}
+				// COUNT always returns an int.
+				return DInt(0), nil
+			},
+		})
+	}
+	return r
 }
 
 var substringImpls = []builtin{

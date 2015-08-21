@@ -48,15 +48,28 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	if err := scan.initTargets(n.Exprs); err != nil {
 		return nil, err
 	}
+	group, err := p.groupBy(n, scan)
+	if err != nil {
+		return nil, err
+	}
+	if group != nil && n.OrderBy != nil {
+		// TODO(pmattis): orderBy currently uses deep knowledge of the
+		// scanNode. Need to lift that out or make orderBy compatible with
+		// groupNode as well.
+		return nil, fmt.Errorf("TODO(pmattis): unimplemented ORDER BY with GROUP BY/aggregation")
+	}
 	sort, err := p.orderBy(n, scan)
 	if err != nil {
 		return nil, err
 	}
+	// TODO(pmattis): Consider aggregation functions during index
+	// selection. Specifically, MIN(k) and MAX(k) where k is the first column in
+	// an index can be satisfied with a single read.
 	plan, err := p.selectIndex(scan, sort.Ordering())
 	if err != nil {
 		return nil, err
 	}
-	return sort.wrap(plan), nil
+	return sort.wrap(group.wrap(plan)), nil
 }
 
 type subqueryVisitor struct {
