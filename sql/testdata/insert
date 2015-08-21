@@ -36,14 +36,128 @@ INSERT INTO kv (k,v) VALUES ('a', 'b'), ('c', 'd')
 statement ok
 INSERT INTO kv VALUES ('e', 'f')
 
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv
+----
+0  /kv/primary/'A'     NULL  true
+1  /kv/primary/'a'     NULL  NULL
+1  /kv/primary/'a'/v   'b'   true
+2  /kv/primary/'c'     NULL  NULL
+2  /kv/primary/'c'/v   'd'   true
+3  /kv/primary/'e'     NULL  NULL
+3  /kv/primary/'e'/v   'f'   true
+4  /kv/primary/'nil1'  NULL  true
+5  /kv/primary/'nil2'  NULL  true
+6  /kv/primary/'nil3'  NULL  true
+7  /kv/primary/'nil4'  NULL  true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv@a
+----
+0  /kv/a/''   /'A'     NULL
+0  /kv/a/''   /'nil1'  NULL
+0  /kv/a/''   /'nil2'  NULL
+0  /kv/a/''   /'nil3'  NULL
+0  /kv/a/''   /'nil4'  true
+1  /kv/a/'b'  /'a'     true
+2  /kv/a/'d'  /'c'     true
+3  /kv/a/'f'  /'e'     true
+
 statement error duplicate key value .* violates unique constraint
 INSERT INTO kv VALUES ('e', 'f')
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv
+----
+0  /kv/primary/'A'     NULL  true
+1  /kv/primary/'a'     NULL  NULL
+1  /kv/primary/'a'/v   'b'   true
+2  /kv/primary/'c'     NULL  NULL
+2  /kv/primary/'c'/v   'd'   true
+3  /kv/primary/'e'     NULL  NULL
+3  /kv/primary/'e'/v   'f'   true
+4  /kv/primary/'nil1'  NULL  true
+5  /kv/primary/'nil2'  NULL  true
+6  /kv/primary/'nil3'  NULL  true
+7  /kv/primary/'nil4'  NULL  true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv@a
+----
+0  /kv/a/''   /'A'     NULL
+0  /kv/a/''   /'nil1'  NULL
+0  /kv/a/''   /'nil2'  NULL
+0  /kv/a/''   /'nil3'  NULL
+0  /kv/a/''   /'nil4'  true
+1  /kv/a/'b'  /'a'     true
+2  /kv/a/'d'  /'c'     true
+3  /kv/a/'f'  /'e'     true
 
 statement ok
 INSERT INTO kv VALUES ('f', 'g')
 
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv
+----
+0  /kv/primary/'A'     NULL  true
+1  /kv/primary/'a'     NULL  NULL
+1  /kv/primary/'a'/v   'b'   true
+2  /kv/primary/'c'     NULL  NULL
+2  /kv/primary/'c'/v   'd'   true
+3  /kv/primary/'e'     NULL  NULL
+3  /kv/primary/'e'/v   'f'   true
+4  /kv/primary/'f'     NULL  NULL
+4  /kv/primary/'f'/v   'g'   true
+5  /kv/primary/'nil1'  NULL  true
+6  /kv/primary/'nil2'  NULL  true
+7  /kv/primary/'nil3'  NULL  true
+8  /kv/primary/'nil4'  NULL  true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv@a
+----
+0  /kv/a/''   /'A'     NULL
+0  /kv/a/''   /'nil1'  NULL
+0  /kv/a/''   /'nil2'  NULL
+0  /kv/a/''   /'nil3'  NULL
+0  /kv/a/''   /'nil4'  true
+1  /kv/a/'b'  /'a'     true
+2  /kv/a/'d'  /'c'     true
+3  /kv/a/'f'  /'e'     true
+4  /kv/a/'g'  /'f'     true
+
 statement error duplicate key value .* violates unique constraint
 INSERT INTO kv VALUES ('g', 'g')
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv
+----
+0  /kv/primary/'A'     NULL  true
+1  /kv/primary/'a'     NULL  NULL
+1  /kv/primary/'a'/v   'b'   true
+2  /kv/primary/'c'     NULL  NULL
+2  /kv/primary/'c'/v   'd'   true
+3  /kv/primary/'e'     NULL  NULL
+3  /kv/primary/'e'/v   'f'   true
+4  /kv/primary/'f'     NULL  NULL
+4  /kv/primary/'f'/v   'g'   true
+5  /kv/primary/'nil1'  NULL  true
+6  /kv/primary/'nil2'  NULL  true
+7  /kv/primary/'nil3'  NULL  true
+8  /kv/primary/'nil4'  NULL  true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM kv@a
+----
+0  /kv/a/''   /'A'     NULL
+0  /kv/a/''   /'nil1'  NULL
+0  /kv/a/''   /'nil2'  NULL
+0  /kv/a/''   /'nil3'  NULL
+0  /kv/a/''   /'nil4'  true
+1  /kv/a/'b'  /'a'     true
+2  /kv/a/'d'  /'c'     true
+3  /kv/a/'f'  /'e'     true
+4  /kv/a/'g'  /'f'     true
 
 query TT
 SELECT * FROM kv
