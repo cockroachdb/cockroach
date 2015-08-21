@@ -386,30 +386,30 @@ func (s *Server) readRequests(codec rpc.ServerCodec, authHook func(proto.Message
 }
 
 // readRequest reads a single request from a connection.
-func (s *Server) readRequest(codec rpc.ServerCodec, authHook func(proto.Message, bool) error) (
-	req rpc.Request, m method, args proto.Message, err error) {
-	if err = codec.ReadRequestHeader(&req); err != nil {
-		return
+func (s *Server) readRequest(codec rpc.ServerCodec, authHook func(proto.Message, bool) error) (rpc.Request, method, proto.Message, error) {
+	var req rpc.Request
+	if err := codec.ReadRequestHeader(&req); err != nil {
+		return req, method{}, nil, err
 	}
 
 	s.mu.RLock()
-	var ok bool
-	m, ok = s.methods[req.ServiceMethod]
+	m, ok := s.methods[req.ServiceMethod]
 	s.mu.RUnlock()
 
-	// If we found the method, construct a request protobuf and parse into it.
-	// If not, consume and discard the input by passing nil to ReadRequestBody.
+	// If we found the method, construct a request protobuf, parse into
+	// it, and authenticate it.
 	if ok {
-		args = reflect.New(m.reqType.Elem()).Interface().(proto.Message)
+		args := reflect.New(m.reqType.Elem()).Interface().(proto.Message)
+
+		if err := codec.ReadRequestBody(args); err != nil {
+			return req, m, args, err
+		}
+
+		return req, m, args, authHook(args, m.public)
 	}
-	if err = codec.ReadRequestBody(args); err != nil {
-		return
-	}
-	if args == nil {
-		return
-	}
-	err = authHook(args, m.public)
-	return
+
+	// If not, consume and discard the input by passing nil to ReadRequestBody.
+	return req, m, nil, codec.ReadRequestBody(nil)
 }
 
 // sendResponses sends a stream of responses on a connection, and
