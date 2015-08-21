@@ -47,21 +47,19 @@ var retryOptions = retry.Options{
 // get performs an HTTPS GET to the specified path for a specific node.
 func get(t *testing.T, client *http.Client, node *localcluster.Container, path string) []byte {
 	url := fmt.Sprintf("https://%s%s", node.Addr(""), path)
-	// There seems to be some issues while trying to connect to the status
-	// server, so retry (up to 5 times) with a 1 second delay each time.
-	// TODO(Bram): Clean this up once we get to the bottom of the issue.
+	// TODO(bram) #2059: Remove retry logic.
 	for r := retry.Start(retryOptions); r.Next(); {
 		resp, err := client.Get(url)
 		if err != nil {
 			t.Logf("could not GET %s - %s", url, err)
 			continue
 		}
+		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			t.Logf("could not open body for %s - %s", url, err)
+			t.Logf("could not read body for %s - %s", url, err)
 			continue
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Logf("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 			continue
