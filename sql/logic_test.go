@@ -33,6 +33,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/server"
@@ -436,7 +437,25 @@ func (t *logicTest) execQuery(query logicQuery) {
 			t.Fatalf("%s: expected %s, but found %s", query.pos, query.expectedHash, hash)
 		}
 	} else if !reflect.DeepEqual(query.expectedResults, results) {
-		t.Fatalf("%s: expected %q, but found %q\n", query.pos, query.expectedResults, results)
+		var buf bytes.Buffer
+		tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+
+		fmt.Fprintf(tw, "%s: expected:\n", query.pos)
+		for i := 0; i < len(query.expectedResults); i += len(cols) {
+			for _, value := range query.expectedResults[i : i+len(cols)] {
+				fmt.Fprintf(tw, "%q\t", value)
+			}
+			fmt.Fprint(tw, "\n")
+		}
+		fmt.Fprint(tw, "but found:\n")
+		for i := 0; i < len(results); i += len(cols) {
+			for _, value := range results[i : i+len(cols)] {
+				fmt.Fprintf(tw, "%q\t", value)
+			}
+			fmt.Fprint(tw, "\n")
+		}
+		_ = tw.Flush()
+		t.Fatal(buf.String())
 	}
 }
 
