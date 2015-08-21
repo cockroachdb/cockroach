@@ -1,7 +1,9 @@
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
-  v INT
+  v INT,
+  CONSTRAINT foo UNIQUE (v),
+  CONSTRAINT bar INDEX (k, v)
 )
 
 statement ok
@@ -29,6 +31,18 @@ DELETE FROM kv
 
 query II
 SELECT * FROM kv
+----
+
+query T
+EXPLAIN (DEBUG) SELECT * FROM kv
+----
+
+query T
+EXPLAIN (DEBUG) SELECT * FROM kv@foo
+----
+
+query T
+EXPLAIN (DEBUG) SELECT * FROM kv@bar
 ----
 
 statement error qualified name "kv.nonexistent" not found

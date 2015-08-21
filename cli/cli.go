@@ -26,7 +26,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var versionCmd = &cobra.Command{
@@ -37,15 +36,13 @@ Output build version information.
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		info := util.GetBuildInfo()
-		w := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
-		fmt.Fprintf(w, "Build Vers:  %s\n", info.Vers)
-		fmt.Fprintf(w, "Build Tag:   %s\n", info.Tag)
-		fmt.Fprintf(w, "Build Time:  %s\n", info.Time)
-		fmt.Fprintf(w, "Build Deps:\n\t%s\n",
+		tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
+		fmt.Fprintf(tw, "Build Vers:  %s\n", info.Vers)
+		fmt.Fprintf(tw, "Build Tag:   %s\n", info.Tag)
+		fmt.Fprintf(tw, "Build Time:  %s\n", info.Time)
+		fmt.Fprintf(tw, "Build Deps:\n\t%s\n",
 			strings.Replace(strings.Replace(info.Deps, " ", "\n\t", -1), ":", "\t", -1))
-		if err := w.Flush(); err != nil {
-			log.Fatal(err)
-		}
+		_ = tw.Flush()
 	},
 }
 
