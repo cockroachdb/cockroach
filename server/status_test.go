@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 // TestStatusLocalStacks verifies that goroutine stack traces are available
@@ -235,6 +236,12 @@ func TestStatusGossipJson(t *testing.T) {
 	}
 }
 
+var retryOptions = retry.Options{
+	InitialBackoff: 100 * time.Millisecond,
+	MaxRetries:     4,
+	Multiplier:     2,
+}
+
 // getRequest returns the the results of a get request to the test server with
 // the given path.  It returns the contents of the body of the result.
 func getRequest(t *testing.T, ts TestServer, path string) []byte {
@@ -242,28 +249,40 @@ func getRequest(t *testing.T, ts TestServer, path string) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+ts.ServingAddr()+path, nil)
-	if err != nil {
-		t.Fatal(err)
+
+	url := testContext.RequestScheme() + "://" + ts.ServingAddr() + path
+	// TODO(bram) #1940: Remove retry logic.
+	for r := retry.Start(retryOptions); r.Next(); {
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set(util.AcceptHeader, util.JSONContentType)
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			t.Logf("could not GET %s - %s", url, err)
+			continue
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Logf("could not ready body for %s - %s", url, err)
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Logf("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
+			continue
+		}
+		returnedContentType := resp.Header.Get(util.ContentTypeHeader)
+		if returnedContentType != util.JSONContentType {
+			t.Logf("unexpected content type: %v", returnedContentType)
+			continue
+		}
+		t.Logf("OK response from %s", url)
+		return body
 	}
-	req.Header.Set(util.AcceptHeader, util.JSONContentType)
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("unexpected status code: %v", resp.StatusCode)
-	}
-	returnedContentType := resp.Header.Get(util.ContentTypeHeader)
-	if returnedContentType != util.JSONContentType {
-		t.Errorf("unexpected content type: %v", returnedContentType)
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return body
+	t.Fatalf("There was an error retrieving %s", url)
+	return []byte("")
 }
 
 // startServer will start a server with a short scan interval, wait for
