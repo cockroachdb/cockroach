@@ -1779,7 +1779,7 @@ simple_select:
 | TABLE relation_expr
   {
     $$ = &Select{
-      Exprs:       SelectExprs{StarSelectExpr},
+      Exprs:       SelectExprs{StarSelectExpr()},
       From:        TableExprs{&AliasedTableExpr{Expr: $2}},
       tableSelect: true,
     }
@@ -2918,7 +2918,7 @@ func_application:
   }
 | func_name '(' '*' ')'
   {
-    $$ = &FuncExpr{Name: $1, Exprs: Exprs{StarExpr}}
+    $$ = &FuncExpr{Name: $1, Exprs: Exprs{StarExpr()}}
   }
 
 // func_expr and its cousin func_expr_windowless are split out from c_expr just
@@ -3394,7 +3394,7 @@ target_elem:
   }
 | '*'
   {
-    $$ = StarSelectExpr
+    $$ = StarSelectExpr()
   }
 
 // Names and constants.
