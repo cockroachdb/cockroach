@@ -171,7 +171,7 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check request user against client certificate user.
-	if err := authenticationHook(args); err != nil {
+	if err := authenticationHook(args, false /*not public*/); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}

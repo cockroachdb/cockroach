@@ -66,8 +66,8 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 	}
 
 	if t.rpcServer != nil {
-		if err := t.rpcServer.RegisterAsync(raftMessageName, t.RaftMessage,
-			&proto.RaftMessageRequest{}); err != nil {
+		if err := t.rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
+			t.RaftMessage, &proto.RaftMessageRequest{}); err != nil {
 			return nil, err
 		}
 	}

@@ -37,6 +37,7 @@ import (
 type method struct {
 	handler func(proto.Message, func(proto.Message, error))
 	reqType reflect.Type
+	public  bool
 }
 
 type serverResponse struct {
@@ -94,9 +95,18 @@ func NewServer(addr net.Addr, context *Context) *Server {
 // argument of the same type as `reqPrototype`. Both the argument and
 // return value of 'handler' should be a pointer to a protocol message
 // type. The handler function will be executed in a new goroutine.
-func (s *Server) Register(name string, handler func(proto.Message) (proto.Message, error),
+// Only system users (root and node) are allowed to use these endpoints.
+func (s *Server) Register(name string,
+	handler func(proto.Message) (proto.Message, error),
 	reqPrototype proto.Message) error {
-	return s.RegisterAsync(name, syncAdapter(handler).exec, reqPrototype)
+	return s.RegisterAsync(name, false /*not public*/, syncAdapter(handler).exec, reqPrototype)
+}
+
+// RegisterPublic is similar to Register, but allows non-system users.
+func (s *Server) RegisterPublic(name string,
+	handler func(proto.Message) (proto.Message, error),
+	reqPrototype proto.Message) error {
+	return s.RegisterAsync(name, true /*public*/, syncAdapter(handler).exec, reqPrototype)
 }
 
 // RegisterAsync registers an asynchronous method handler. Instead of
@@ -107,7 +117,10 @@ func (s *Server) Register(name string, handler func(proto.Message) (proto.Messag
 // channel promptly). However, the fact that they are started in the
 // RPC server's goroutine guarantees that the order of requests as
 // they were read from the connection is preserved.
-func (s *Server) RegisterAsync(name string, handler func(proto.Message, func(proto.Message, error)),
+// If 'public' is true, all users may call this method, otherwise
+// system users only (root and node).
+func (s *Server) RegisterAsync(name string, public bool,
+	handler func(proto.Message, func(proto.Message, error)),
 	reqPrototype proto.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -124,6 +137,7 @@ func (s *Server) RegisterAsync(name string, handler func(proto.Message, func(pro
 	s.methods[name] = method{
 		handler: handler,
 		reqType: reqType,
+		public:  public,
 	}
 	return nil
 }
@@ -171,7 +185,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	security.LogTLSState("RPC", r.TLS)
 	io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
 
-	codec := codec.NewServerCodec(conn, authHook)
+	codec := codec.NewServerCodec(conn)
 	responses := make(chan serverResponse)
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -179,7 +193,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.sendResponses(codec, responses)
 		wg.Done()
 	}()
-	s.readRequests(codec, responses)
+	s.readRequests(codec, authHook, responses)
 	wg.Wait()
 
 	codec.Close()
@@ -334,7 +348,7 @@ func (s *Server) Close() {
 // when the handler finishes the response is written to the responses
 // channel. When the connection is closed (and any pending requests
 // have finished), we close the responses channel.
-func (s *Server) readRequests(codec rpc.ServerCodec, responses chan<- serverResponse) {
+func (s *Server) readRequests(codec rpc.ServerCodec, authHook func(proto.Message, bool) error, responses chan<- serverResponse) {
 	var wg sync.WaitGroup
 	defer func() {
 		wg.Wait()
@@ -342,7 +356,7 @@ func (s *Server) readRequests(codec rpc.ServerCodec, responses chan<- serverResp
 	}()
 
 	for {
-		req, meth, args, err := s.readRequest(codec)
+		req, meth, args, err := s.readRequest(codec, authHook)
 		if err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF || isClosedConnection(err) {
 				return
@@ -372,8 +386,8 @@ func (s *Server) readRequests(codec rpc.ServerCodec, responses chan<- serverResp
 }
 
 // readRequest reads a single request from a connection.
-func (s *Server) readRequest(codec rpc.ServerCodec) (req rpc.Request, m method,
-	args proto.Message, err error) {
+func (s *Server) readRequest(codec rpc.ServerCodec, authHook func(proto.Message, bool) error) (
+	req rpc.Request, m method, args proto.Message, err error) {
 	if err = codec.ReadRequestHeader(&req); err != nil {
 		return
 	}
@@ -388,7 +402,13 @@ func (s *Server) readRequest(codec rpc.ServerCodec) (req rpc.Request, m method,
 	if ok {
 		args = reflect.New(m.reqType.Elem()).Interface().(proto.Message)
 	}
-	err = codec.ReadRequestBody(args)
+	if err = codec.ReadRequestBody(args); err != nil {
+		return
+	}
+	if args == nil {
+		return
+	}
+	err = authHook(args, m.public)
 	return
 }
 

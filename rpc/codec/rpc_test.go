@@ -112,7 +112,7 @@ func listenAndServeArithAndEchoService(network, addr string) (net.Addr, error) {
 				log.Infof("clients.Accept(): %v\n", err)
 				continue
 			}
-			go srv.ServeCodec(NewServerCodec(conn, nil /* no request hook */))
+			go srv.ServeCodec(NewServerCodec(conn))
 		}
 	}()
 	return clients.Addr(), nil
@@ -379,7 +379,7 @@ func benchmarkEchoProtoRPC(b *testing.B, size int) {
 	if *startEchoServer {
 		l, err := listenAndServeEchoService("tcp", *echoAddr,
 			func(srv *rpc.Server, conn io.ReadWriteCloser) {
-				go srv.ServeCodec(NewServerCodec(conn, nil /* no request hook */))
+				go srv.ServeCodec(NewServerCodec(conn))
 			})
 		if err != nil {
 			b.Fatal("could not start server")

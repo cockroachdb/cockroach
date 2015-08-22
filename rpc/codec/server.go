@@ -37,9 +37,6 @@ type serverCodec struct {
 
 	methods []string
 
-	// Post body-decoding hook. May be nil in tests.
-	requestBodyHook func(proto.Message) error
-
 	// temporary work space
 	respBodyBuf   bytes.Buffer
 	respHeaderBuf bytes.Buffer
@@ -49,14 +46,13 @@ type serverCodec struct {
 
 // NewServerCodec returns a serverCodec that communicates with the ClientCodec
 // on the other end of the given conn.
-func NewServerCodec(conn io.ReadWriteCloser, requestBodyHook func(proto.Message) error) rpc.ServerCodec {
+func NewServerCodec(conn io.ReadWriteCloser) rpc.ServerCodec {
 	return &serverCodec{
 		baseConn: baseConn{
 			r: bufio.NewReader(conn),
 			w: bufio.NewWriter(conn),
 			c: conn,
 		},
-		requestBodyHook: requestBodyHook,
 	}
 }
 
@@ -101,13 +97,7 @@ func (c *serverCodec) ReadRequestBody(x interface{}) error {
 		return err
 	}
 	c.reqHeader.Reset()
-
-	if c.requestBodyHook == nil || x == nil {
-		// Only call requestBodyHook if we are actually decoding a frame
-		// instead of discarding it.
-		return nil
-	}
-	return c.requestBodyHook(request)
+	return nil
 }
 
 func (c *serverCodec) WriteResponse(r *rpc.Response, x interface{}) error {

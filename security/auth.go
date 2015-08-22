@@ -85,10 +85,10 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 // AuthenticationHook builds an authentication hook based on the
 // security mode and client certificate.
 // Must be called at connection time and passed the TLS state.
-// Returns a func(proto.Message) error. The passed-in proto must implement
+// Returns a func(proto.Message,bool) error. The passed-in proto must implement
 // the GetUser interface.
 func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
-	func(request proto.Message) error, error) {
+	func(request proto.Message, public bool) error, error) {
 	var certUser string
 	var err error
 
@@ -99,7 +99,7 @@ func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
 		}
 	}
 
-	return func(request proto.Message) error {
+	return func(request proto.Message, public bool) error {
 		// userRequest is an interface for RPC requests that have a "requested user".
 		type userRequest interface {
 			// GetUser returns the user from the request.
@@ -117,6 +117,10 @@ func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
 		requestedUser := requestWithUser.GetUser()
 		if len(requestedUser) == 0 {
 			return util.Errorf("missing User in request: %+v", request)
+		}
+
+		if !public && requestedUser != RootUser && requestedUser != NodeUser {
+			return util.Errorf("user %s is not allowed", requestedUser)
 		}
 
 		// If running in insecure mode, we have nothing to verify it against.
