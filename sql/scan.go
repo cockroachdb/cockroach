@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
@@ -330,6 +331,16 @@ func (n *scanNode) computeOrdering(columnIDs []ColumnID) []int {
 }
 
 func (n *scanNode) addRender(target parser.SelectExpr) error {
+	// When generating an output column name it should exactly match the original
+	// expression, so determine the output column name before we perform any
+	// manipulations to the expression (such as star expansion).
+	var outputName string
+	if target.As != "" {
+		outputName = string(target.As)
+	} else {
+		outputName = target.Expr.String()
+	}
+
 	// If a QualifiedName has a StarIndirection suffix we need to match the
 	// prefix of the qualified name to one of the tables in the query and
 	// then expand the "*" into a list of columns.
@@ -380,19 +391,15 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	}
 	n.render = append(n.render, resolved)
 
-	if target.As != "" {
-		n.columns = append(n.columns, string(target.As))
-		return nil
+	if target.As == "" {
+		switch t := target.Expr.(type) {
+		case *parser.QualifiedName:
+			// If the expression is a qualified name, use the column name, not the
+			// full qualification as the column name to return.
+			outputName = t.Column()
+		}
 	}
-
-	switch t := target.Expr.(type) {
-	case *parser.QualifiedName:
-		// If the expression is a qualified name, use the column name, not the
-		// full qualification as the column name to return.
-		n.columns = append(n.columns, t.Column())
-	default:
-		n.columns = append(n.columns, target.Expr.String())
-	}
+	n.columns = append(n.columns, outputName)
 	return nil
 }
 
@@ -640,7 +647,7 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 	return parser.DNull, true
 }
 
-func (n *scanNode) getQVal(col ColumnDescriptor) parser.Expr {
+func (n *scanNode) getQVal(col ColumnDescriptor) *qvalue {
 	if n.qvals == nil {
 		n.qvals = make(qvalMap)
 	}
@@ -682,33 +689,77 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 	if !pre || v.err != nil {
 		return nil, expr
 	}
-	qname, ok := expr.(*parser.QualifiedName)
-	if !ok {
-		return v, expr
-	}
 
-	v.err = qname.NormalizeColumnName()
-	if v.err != nil {
-		return v, expr
-	}
-	if qname.IsStar() {
+	switch t := expr.(type) {
+	case *parser.QualifiedName:
+		qname := t
+
+		v.err = qname.NormalizeColumnName()
+		if v.err != nil {
+			return nil, expr
+		}
+		if qname.IsStar() {
+			v.err = fmt.Errorf("qualified name \"%s\" not found", qname)
+			return nil, expr
+		}
+
+		desc := v.getDesc(qname)
+		if desc != nil {
+			name := qname.Column()
+			for _, col := range v.visibleCols {
+				if !equalName(name, col.Name) {
+					continue
+				}
+				return v, v.getQVal(col)
+			}
+		}
+
 		v.err = fmt.Errorf("qualified name \"%s\" not found", qname)
 		return nil, expr
-	}
 
-	desc := v.getDesc(qname)
-	if desc != nil {
-		name := qname.Column()
-		for _, col := range v.visibleCols {
-			if !equalName(name, col.Name) {
-				continue
-			}
-			return v, v.getQVal(col)
+	case *parser.FuncExpr:
+		// Special case handling for COUNT(*) and COUNT(foo.*), expanding the star
+		// into a tuple containing the columns in the primary key of the referenced
+		// table.
+		if len(t.Name.Indirect) > 0 || !strings.EqualFold(string(t.Name.Base), "count") {
+			break
 		}
+		// The COUNT function takes a single argument. Exit out if this isn't true
+		// as this will be detected during expression evaluation.
+		if len(t.Exprs) != 1 {
+			break
+		}
+		qname, ok := t.Exprs[0].(*parser.QualifiedName)
+		if !ok {
+			break
+		}
+		v.err = qname.NormalizeColumnName()
+		if v.err != nil {
+			return nil, expr
+		}
+		if !qname.IsStar() {
+			// This will cause us to recurse into the arguments of the function which
+			// will perform normal qualified name resolution.
+			break
+		}
+		// We've got either COUNT(*) or COUNT(foo.*). Retrieve the descriptor.
+		desc := v.getDesc(qname)
+		if desc == nil {
+			break
+		}
+		// Replace the function argument with a non-NULL column. We currently use
+		// the first column of the primary index since that column will be a
+		// candidate for index selection, but any non-NULL column would do for
+		// correctness of the aggregate.
+		var col *ColumnDescriptor
+		if col, v.err = desc.FindColumnByID(desc.PrimaryIndex.ColumnIDs[0]); v.err != nil {
+			return nil, expr
+		}
+		t.Exprs[0] = v.getQVal(*col)
+		return v, expr
 	}
 
-	v.err = fmt.Errorf("qualified name \"%s\" not found", qname)
-	return nil, expr
+	return v, expr
 }
 
 func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *TableDescriptor {

@@ -140,8 +140,9 @@ type planNode interface {
 	ExplainPlan() (name, description string, children []planNode)
 }
 
+var _ planNode = &groupNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
 
-// TODO(pmattis): groupByNode, joinNode.
+// TODO(pmattis): joinNode.

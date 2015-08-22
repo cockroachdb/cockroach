@@ -75,10 +75,10 @@ func (d DBool) Compare(other Datum) int {
 		// Anything other than a DBool compares greater (e.g. `true > NULL`).
 		return 1
 	}
-	if d && !v {
+	if !d && v {
 		return -1
 	}
-	if !v && d {
+	if d && !v {
 		return 1
 	}
 	return 0
