@@ -81,8 +81,6 @@ func (m *RequestHeader) GetCmdID() cockroach_proto3.ClientCmdID {
 
 // ResponseHeader is returned with every Response.
 type ResponseHeader struct {
-	// Error is non-nil if an error occurred.
-	Error *cockroach_proto2.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
 	// Setting that should be reflected back in all subsequent requests.
 	// When not set, future requests should continue to use existing settings.
 	Session []byte `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
@@ -95,13 +93,6 @@ type ResponseHeader struct {
 func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
 func (m *ResponseHeader) String() string { return proto.CompactTextString(m) }
 func (*ResponseHeader) ProtoMessage()    {}
-
-func (m *ResponseHeader) GetError() *cockroach_proto2.Error {
-	if m != nil {
-		return m.Error
-	}
-	return nil
-}
 
 func (m *ResponseHeader) GetSession() []byte {
 	if m != nil {
@@ -165,17 +156,26 @@ func (m *Datum) GetStringVal() string {
 
 // A Result is a collection of rows.
 type Result struct {
+	// Error is non-nil if an error occurred while executing the statement.
+	Error *cockroach_proto2.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
 	// The names of the columns returned in the result set in the order specified
 	// in the SQL statement. The number of columns will equal the number of
 	// values in each Row.
-	Columns []string `protobuf:"bytes,1,rep,name=columns" json:"columns,omitempty"`
+	Columns []string `protobuf:"bytes,2,rep,name=columns" json:"columns,omitempty"`
 	// The rows in the result set.
-	Rows []Result_Row `protobuf:"bytes,2,rep,name=rows" json:"rows"`
+	Rows []Result_Row `protobuf:"bytes,3,rep,name=rows" json:"rows"`
 }
 
 func (m *Result) Reset()         { *m = Result{} }
 func (m *Result) String() string { return proto.CompactTextString(m) }
 func (*Result) ProtoMessage()    {}
+
+func (m *Result) GetError() *cockroach_proto2.Error {
+	if m != nil {
+		return m.Error
+	}
+	return nil
+}
 
 func (m *Result) GetColumns() []string {
 	if m != nil {
@@ -312,16 +312,6 @@ func (m *ResponseHeader) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Error != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintWire(data, i, uint64(m.Error.Size()))
-		n2, err := m.Error.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
-	}
 	if m.Session != nil {
 		data[i] = 0x12
 		i++
@@ -402,9 +392,19 @@ func (m *Result) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.Error != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintWire(data, i, uint64(m.Error.Size()))
+		n2, err := m.Error.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n2
+	}
 	if len(m.Columns) > 0 {
 		for _, s := range m.Columns {
-			data[i] = 0xa
+			data[i] = 0x12
 			i++
 			l = len(s)
 			for l >= 1<<7 {
@@ -419,7 +419,7 @@ func (m *Result) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.Rows) > 0 {
 		for _, msg := range m.Rows {
-			data[i] = 0x12
+			data[i] = 0x1a
 			i++
 			i = encodeVarintWire(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -590,10 +590,6 @@ func (m *RequestHeader) Size() (n int) {
 func (m *ResponseHeader) Size() (n int) {
 	var l int
 	_ = l
-	if m.Error != nil {
-		l = m.Error.Size()
-		n += 1 + l + sovWire(uint64(l))
-	}
 	if m.Session != nil {
 		l = len(m.Session)
 		n += 1 + l + sovWire(uint64(l))
@@ -631,6 +627,10 @@ func (m *Datum) Size() (n int) {
 func (m *Result) Size() (n int) {
 	var l int
 	_ = l
+	if m.Error != nil {
+		l = m.Error.Size()
+		n += 1 + l + sovWire(uint64(l))
+	}
 	if len(m.Columns) > 0 {
 		for _, s := range m.Columns {
 			l = len(s)
@@ -900,36 +900,6 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + msglen
-			if msglen < 0 {
-				return ErrInvalidLengthWire
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Error == nil {
-				m.Error = &cockroach_proto2.Error{}
-			}
-			if err := m.Error.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Session", wireType)
@@ -1174,6 +1144,36 @@ func (m *Result) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Error == nil {
+				m.Error = &cockroach_proto2.Error{}
+			}
+			if err := m.Error.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
 			}
 			var stringLen uint64
@@ -1194,7 +1194,7 @@ func (m *Result) Unmarshal(data []byte) error {
 			}
 			m.Columns = append(m.Columns, string(data[iNdEx:postIndex]))
 			iNdEx = postIndex
-		case 2:
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Rows", wireType)
 			}
