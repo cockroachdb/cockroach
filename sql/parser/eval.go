@@ -70,10 +70,13 @@ func (d DBool) Type() string {
 
 // Compare implements the Datum interface.
 func (d DBool) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
 	v, ok := other.(DBool)
 	if !ok {
-		// Anything other than a DBool compares greater (e.g. `true > NULL`).
-		return 1
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
 	if !d && v {
 		return -1
@@ -98,10 +101,13 @@ func (d DInt) Type() string {
 
 // Compare implements the Datum interface.
 func (d DInt) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
 	v, ok := other.(DInt)
 	if !ok {
-		// Anything other than a DInt compares greater (e.g. `1 > NULL`).
-		return 1
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
 	if d < v {
 		return -1
@@ -126,10 +132,13 @@ func (d DFloat) Type() string {
 
 // Compare implements the Datum interface.
 func (d DFloat) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
 	v, ok := other.(DFloat)
 	if !ok {
-		// Anything other than a DFloat compares greater (e.g. `1.0 > NULL`).
-		return 1
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
 	if d < v {
 		return -1
@@ -154,10 +163,13 @@ func (d DString) Type() string {
 
 // Compare implements the Datum interface.
 func (d DString) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
 	v, ok := other.(DString)
 	if !ok {
-		// Anything other than a DString compares greater (e.g. `"hello" > NULL`).
-		return 1
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
 	if d < v {
 		return -1
@@ -182,10 +194,13 @@ func (d DTuple) Type() string {
 
 // Compare implements the Datum interface.
 func (d DTuple) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
 	v, ok := other.(DTuple)
 	if !ok {
-		// Anything other than a DTuple compares greater (e.g. `(1, 2) > NULL`).
-		return 1
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
 	n := len(d)
 	if n > len(v) {
