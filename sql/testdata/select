@@ -49,6 +49,14 @@ SELECT a+b+c AS foo FROM abc
 foo
 6
 
+statement ok
+INSERT INTO abc VALUES (0, 1, 2)
+
+query I
+SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
+----
+1 2
+
 # SELECT of NULL value.
 
 statement ok

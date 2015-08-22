@@ -856,6 +856,45 @@ func evalFuncExpr(expr *FuncExpr) (Datum, error) {
 }
 
 func evalCaseExpr(expr *CaseExpr) (Datum, error) {
+	whenVals := make([]Datum, 0, len(expr.Whens))
+	var condType, valType reflect.Type
+	for _, when := range expr.Whens {
+		cond, err := EvalExpr(when.Cond)
+		if err != nil {
+			return DNull, err
+		}
+		if condType == nil {
+			condType = reflect.TypeOf(cond)
+		} else if cond != DNull && reflect.TypeOf(cond) != condType {
+			return DNull, fmt.Errorf("incompatible condition type %s", cond.Type())
+		}
+
+		val, err := EvalExpr(when.Val)
+		if err != nil {
+			return DNull, err
+		}
+
+		if valType == nil {
+			valType = reflect.TypeOf(val)
+		} else if val != DNull && reflect.TypeOf(val) != valType {
+			return DNull, fmt.Errorf("incompatible value type %s", val.Type())
+		}
+
+		whenVals = append(whenVals, val)
+	}
+
+	var elseVal Datum
+	if expr.Else != nil {
+		val, err := EvalExpr(expr.Else)
+		if err != nil {
+			return DNull, err
+		}
+		if val != DNull && reflect.TypeOf(val) != valType {
+			return DNull, fmt.Errorf("incompatible value type %s", val.Type())
+		}
+		elseVal = val
+	}
+
 	if expr.Expr != nil {
 		// CASE <val> WHEN <expr> THEN ...
 		//
@@ -865,7 +904,7 @@ func evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			return DNull, err
 		}
 
-		for _, when := range expr.Whens {
+		for i, when := range expr.Whens {
 			arg, err := EvalExpr(when.Cond)
 			if err != nil {
 				return DNull, err
@@ -877,12 +916,12 @@ func evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			if v, err := getBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return EvalExpr(when.Val)
+				return whenVals[i], nil
 			}
 		}
 	} else {
 		// CASE WHEN <bool-expr> THEN ...
-		for _, when := range expr.Whens {
+		for i, when := range expr.Whens {
 			d, err := EvalExpr(when.Cond)
 			if err != nil {
 				return DNull, err
@@ -890,13 +929,13 @@ func evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			if v, err := getBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return EvalExpr(when.Val)
+				return whenVals[i], nil
 			}
 		}
 	}
 
-	if expr.Else != nil {
-		return EvalExpr(expr.Else)
+	if elseVal != nil {
+		return elseVal, nil
 	}
 	return DNull, nil
 }
