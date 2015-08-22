@@ -66,7 +66,6 @@ func init() {
 		sqlShellCmd,
 		kvCmd,
 		acctCmd,
-		permCmd,
 		userCmd,
 		rangeCmd,
 		zoneCmd,

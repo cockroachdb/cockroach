@@ -42,9 +42,6 @@ const (
 	// KeyConfigAccounting is the accounting configuration map.
 	KeyConfigAccounting = "accounting"
 
-	// KeyConfigPermission is the permission configuration map.
-	KeyConfigPermission = "permissions"
-
 	// KeyConfigUser is the user configuration map.
 	KeyConfigUser = "user"
 

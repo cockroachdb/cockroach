@@ -11,7 +11,6 @@
 	It has these top-level messages:
 		GCPolicy
 		AcctConfig
-		PermConfig
 		UserConfig
 		ZoneConfig
 		PrefixConfig
@@ -72,32 +71,6 @@ func (m *AcctConfig) GetClusterId() string {
 		return m.ClusterId
 	}
 	return ""
-}
-
-// PermConfig holds permission configuration, specifying read/write ACLs.
-type PermConfig struct {
-	// ACL lists users with read permissions.
-	Read []string `protobuf:"bytes,1,rep,name=read" json:"read,omitempty" yaml:"read,omitempty"`
-	// ACL lists users with write permissions.
-	Write []string `protobuf:"bytes,2,rep,name=write" json:"write,omitempty" yaml:"write,omitempty"`
-}
-
-func (m *PermConfig) Reset()         { *m = PermConfig{} }
-func (m *PermConfig) String() string { return proto.CompactTextString(m) }
-func (*PermConfig) ProtoMessage()    {}
-
-func (m *PermConfig) GetRead() []string {
-	if m != nil {
-		return m.Read
-	}
-	return nil
-}
-
-func (m *PermConfig) GetWrite() []string {
-	if m != nil {
-		return m.Write
-	}
-	return nil
 }
 
 // UserConfig holds per-user configuration needed for authentication.
@@ -201,9 +174,8 @@ func (m *PrefixConfig) GetConfig() ConfigUnion {
 
 type ConfigUnion struct {
 	Acct *AcctConfig `protobuf:"bytes,1,opt,name=acct" json:"acct,omitempty"`
-	Perm *PermConfig `protobuf:"bytes,2,opt,name=perm" json:"perm,omitempty"`
-	User *UserConfig `protobuf:"bytes,3,opt,name=user" json:"user,omitempty"`
-	Zone *ZoneConfig `protobuf:"bytes,4,opt,name=zone" json:"zone,omitempty"`
+	User *UserConfig `protobuf:"bytes,2,opt,name=user" json:"user,omitempty"`
+	Zone *ZoneConfig `protobuf:"bytes,3,opt,name=zone" json:"zone,omitempty"`
 }
 
 func (m *ConfigUnion) Reset()         { *m = ConfigUnion{} }
@@ -213,13 +185,6 @@ func (*ConfigUnion) ProtoMessage()    {}
 func (m *ConfigUnion) GetAcct() *AcctConfig {
 	if m != nil {
 		return m.Acct
-	}
-	return nil
-}
-
-func (m *ConfigUnion) GetPerm() *PermConfig {
-	if m != nil {
-		return m.Perm
 	}
 	return nil
 }
@@ -278,54 +243,6 @@ func (m *AcctConfig) MarshalTo(data []byte) (int, error) {
 	i++
 	i = encodeVarintConfig(data, i, uint64(len(m.ClusterId)))
 	i += copy(data[i:], m.ClusterId)
-	return i, nil
-}
-
-func (m *PermConfig) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *PermConfig) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Read) > 0 {
-		for _, s := range m.Read {
-			data[i] = 0xa
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
-	if len(m.Write) > 0 {
-		for _, s := range m.Write {
-			data[i] = 0x12
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
 	return i, nil
 }
 
@@ -462,35 +379,25 @@ func (m *ConfigUnion) MarshalTo(data []byte) (int, error) {
 		}
 		i += n3
 	}
-	if m.Perm != nil {
+	if m.User != nil {
 		data[i] = 0x12
 		i++
-		i = encodeVarintConfig(data, i, uint64(m.Perm.Size()))
-		n4, err := m.Perm.MarshalTo(data[i:])
+		i = encodeVarintConfig(data, i, uint64(m.User.Size()))
+		n4, err := m.User.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n4
 	}
-	if m.User != nil {
+	if m.Zone != nil {
 		data[i] = 0x1a
 		i++
-		i = encodeVarintConfig(data, i, uint64(m.User.Size()))
-		n5, err := m.User.MarshalTo(data[i:])
+		i = encodeVarintConfig(data, i, uint64(m.Zone.Size()))
+		n5, err := m.Zone.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n5
-	}
-	if m.Zone != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintConfig(data, i, uint64(m.Zone.Size()))
-		n6, err := m.Zone.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n6
 	}
 	return i, nil
 }
@@ -534,24 +441,6 @@ func (m *AcctConfig) Size() (n int) {
 	_ = l
 	l = len(m.ClusterId)
 	n += 1 + l + sovConfig(uint64(l))
-	return n
-}
-
-func (m *PermConfig) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Read) > 0 {
-		for _, s := range m.Read {
-			l = len(s)
-			n += 1 + l + sovConfig(uint64(l))
-		}
-	}
-	if len(m.Write) > 0 {
-		for _, s := range m.Write {
-			l = len(s)
-			n += 1 + l + sovConfig(uint64(l))
-		}
-	}
 	return n
 }
 
@@ -606,10 +495,6 @@ func (m *ConfigUnion) Size() (n int) {
 		l = m.Acct.Size()
 		n += 1 + l + sovConfig(uint64(l))
 	}
-	if m.Perm != nil {
-		l = m.Perm.Size()
-		n += 1 + l + sovConfig(uint64(l))
-	}
 	if m.User != nil {
 		l = m.User.Size()
 		n += 1 + l + sovConfig(uint64(l))
@@ -638,9 +523,6 @@ func (this *ConfigUnion) GetValue() interface{} {
 	if this.Acct != nil {
 		return this.Acct
 	}
-	if this.Perm != nil {
-		return this.Perm
-	}
 	if this.User != nil {
 		return this.User
 	}
@@ -654,8 +536,6 @@ func (this *ConfigUnion) SetValue(value interface{}) bool {
 	switch vt := value.(type) {
 	case *AcctConfig:
 		this.Acct = vt
-	case *PermConfig:
-		this.Perm = vt
 	case *UserConfig:
 		this.User = vt
 	case *ZoneConfig:
@@ -766,95 +646,6 @@ func (m *AcctConfig) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.ClusterId = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipConfig(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthConfig
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	return nil
-}
-func (m *PermConfig) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Read", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + int(stringLen)
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Read = append(m.Read, string(data[iNdEx:postIndex]))
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Write", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + int(stringLen)
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Write = append(m.Write, string(data[iNdEx:postIndex]))
 			iNdEx = postIndex
 		default:
 			var sizeOfWire int
@@ -1260,36 +1051,6 @@ func (m *ConfigUnion) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Perm", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + msglen
-			if msglen < 0 {
-				return ErrInvalidLengthConfig
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Perm == nil {
-				m.Perm = &PermConfig{}
-			}
-			if err := m.Perm.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
 			}
 			var msglen int
@@ -1318,7 +1079,7 @@ func (m *ConfigUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 4:
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Zone", wireType)
 			}

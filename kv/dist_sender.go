@@ -29,7 +29,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -197,73 +196,16 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 }
 
 // verifyPermissions verifies that the requesting user (header.User)
-// has permission to read/write (capabilities depend on method
-// name). In the event that multiple permission configs apply to the
-// key range implicated by the command, the lowest common denominator
-// for permission. For example, if a scan crosses two permission
-// configs, both configs must allow read permissions or the entire
-// scan will fail.
+// is allowed to perform the requested operations.
+// All KV endpoints are restricted to system users, with 'root'
+// being the value of arg.User.
 func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	// The root user can always proceed.
 	header := args.Header()
-	if header.User == security.RootUser {
-		return nil
+	if header.User != security.RootUser {
+		return util.Errorf("user %q cannot invoke %s", header.User, args.Method())
 	}
-	// Check for admin methods.
-	if proto.IsAdmin(args) {
-		if header.User != security.RootUser {
-			return util.Errorf("user %q cannot invoke admin command %s", header.User, args.Method())
-		}
-		return nil
-	}
-	// Get permissions map from gossip.
-	configMap, err := ds.gossip.GetInfo(gossip.KeyConfigPermission)
-	if err != nil {
-		return util.Errorf("permissions not available via gossip")
-	}
-	if configMap == nil {
-		return util.Errorf("perm configs not available; cannot execute %s", args.Method())
-	}
-	permMap := configMap.(config.PrefixConfigMap)
-	headerEnd := header.EndKey
-	if len(headerEnd) == 0 {
-		headerEnd = header.Key
-	}
-	// Visit PermConfig(s) which apply to the method's key range.
-	//   - For each perm config which the range covers, verify read or writes
-	//     are allowed as method requires.
-	//   - Verify the permissions hierarchically; that is, if permissions aren't
-	//     granted at the longest prefix, try next longest, then next, etc., up
-	//     to and including the default prefix.
-	//
-	// TODO(spencer): it might make sense to visit prefixes from the
-	//   shortest to longest instead for performance. Keep an eye on profiling
-	//   for this code path as permission sets grow large.
-	return permMap.VisitPrefixes(header.Key, headerEnd,
-		func(start, end proto.Key, cfg config.ConfigUnion) (bool, error) {
-			hasPerm := false
-			if err := permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, cfg config.ConfigUnion) (bool, error) {
-				perm := cfg.GetValue().(*config.PermConfig)
-				if proto.IsRead(args) && !perm.CanRead(header.User) {
-					return false, nil
-				}
-				if proto.IsWrite(args) && !perm.CanWrite(header.User) {
-					return false, nil
-				}
-				// Return done = true, as permissions have been granted by this config.
-				hasPerm = true
-				return true, nil
-			}); err != nil {
-				return false, err
-			}
-			if !hasPerm {
-				if len(header.EndKey) == 0 {
-					return false, util.Errorf("user %q cannot invoke %s at %q", header.User, args.Method(), start)
-				}
-				return false, util.Errorf("user %q cannot invoke %s at %q-%q", header.User, args.Method(), start, end)
-			}
-			return false, nil
-		})
+	return nil
 }
 
 // lookupOptions capture additional options to pass to RangeLookup.

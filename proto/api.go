@@ -53,23 +53,22 @@ const (
 	isRange                // range commands may span multiple keys
 )
 
-// IsAdmin returns true if the request requires admin permissions.
+// IsAdmin returns true if the request is an admin request.
 func IsAdmin(args Request) bool {
 	return (args.flags() & isAdmin) != 0
 }
 
-// IsRead returns true if the request requires read permissions.
+// IsRead returns true if the request is a read request.
 func IsRead(args Request) bool {
 	return (args.flags() & isRead) != 0
 }
 
-// IsWrite returns true if the request requires write permissions.
+// IsWrite returns true if the request is a write request.
 func IsWrite(args Request) bool {
 	return (args.flags() & isWrite) != 0
 }
 
-// IsReadOnly returns true if the request only requires read
-// permissions.
+// IsReadOnly returns true if the request is read-only.
 func IsReadOnly(args Request) bool {
 	return IsRead(args) && !IsWrite(args)
 }

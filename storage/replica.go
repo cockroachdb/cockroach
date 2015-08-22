@@ -110,11 +110,10 @@ type configDescriptor struct {
 	configI   gogoproto.Message // Config struct interface
 }
 
-// configDescriptors is an array containing the accounting, permissions,
+// configDescriptors is an array containing the accounting,
 // user, and zone configuration descriptors.
 var configDescriptors = [...]*configDescriptor{
 	{keys.ConfigAccountingPrefix, gossip.KeyConfigAccounting, &config.AcctConfig{}},
-	{keys.ConfigPermissionPrefix, gossip.KeyConfigPermission, &config.PermConfig{}},
 	{keys.ConfigUserPrefix, gossip.KeyConfigUser, &config.UserConfig{}},
 	{keys.ConfigZonePrefix, gossip.KeyConfigZone, &config.ZoneConfig{}},
 }
@@ -1020,7 +1019,7 @@ func (r *Replica) maybeGossipFirstRange() error {
 
 // maybeGossipConfigs gossips those configuration maps for which the supplied
 // function returns true and whose contents are marked dirty. Configuration
-// maps include accounting, permissions, users, and zones. The store is in charge of
+// maps include accounting, users, and zones. The store is in charge of
 // the initial update, and the range itself re-triggers updates following
 // writes that may have altered any of the maps.
 //
@@ -1271,7 +1270,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 
 // loadConfigMap scans the config entries under keyPrefix and
 // instantiates/returns a config map and its sha256 hash. Prefix
-// configuration maps include accounting, permissions, users, and zones.
+// configuration maps include accounting, users, and zones.
 func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI gogoproto.Message) (config.PrefixConfigMap, []byte, error) {
 	// TODO(tschottdorf): Currently this does not handle intents well.
 	kvs, _, err := engine.MVCCScan(eng, keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true /* consistent */, nil)

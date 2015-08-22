@@ -35,8 +35,6 @@ const (
 
 	// Accounting expects config.AcctConfig
 	Accounting = "acct"
-	// Permission expects config.PermConfig
-	Permission = "perms"
 	// Quit only handles Get requests.
 	Quit = "quit"
 	// User expects config.UserConfig

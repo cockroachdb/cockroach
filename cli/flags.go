@@ -223,7 +223,7 @@ func initFlags(ctx *server.Context) {
 
 	clientCmds := []*cobra.Command{
 		sqlShellCmd, kvCmd, rangeCmd,
-		acctCmd, permCmd, userCmd, zoneCmd,
+		acctCmd, userCmd, zoneCmd,
 		exterminateCmd, quitCmd, /* startCmd is covered above */
 	}
 	for _, cmd := range clientCmds {
