@@ -731,6 +731,26 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	}
 }
 
+// Wait until the default config is gossipped.
+func WaitForDefaultConfigGossip(t *testing.T, tc testContext) {
+	// Wait until the config is gossiped.
+	util.SucceedsWithin(t, time.Second, func() error {
+		info, err := tc.gossip.GetInfo(gossip.KeyConfigPermission)
+		if err != nil {
+			t.Fatal(err)
+		}
+		configMap := info.(config.PrefixConfigMap)
+		expConfigs := []config.PrefixConfig{
+			config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultPermConfig),
+		}
+		if !reflect.DeepEqual([]config.PrefixConfig(configMap), expConfigs) {
+			return util.Errorf("expected gossiped configs to be equal %s vs %s",
+				configMap, expConfigs)
+		}
+		return nil
+	})
+}
+
 // TestRangeNoGossipConfig verifies that certain commands (e.g.,
 // reads, writes in uncommitted transactions) do not trigger gossip.
 func TestRangeNoGossipConfig(t *testing.T) {
@@ -738,6 +758,8 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
+
+	WaitForDefaultConfigGossip(t, tc)
 
 	// Add a permission for a new key prefix.
 	db1Perm := &config.PermConfig{
@@ -791,6 +813,8 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
+
+	WaitForDefaultConfigGossip(t, tc)
 
 	// Add a permission for a new key prefix. Set the config in a transaction
 	// to avoid gossip.
