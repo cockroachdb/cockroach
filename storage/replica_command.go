@@ -250,6 +250,10 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 	if args.Txn == nil {
 		return reply, nil, util.Errorf("no transaction specified to EndTransaction")
 	}
+	if !bytes.Equal(args.Key, args.Txn.Key) {
+		return reply, nil, util.Errorf("request key %s should match txn key %s", args.Key, args.Txn.Key)
+	}
+
 	// Make a copy of the transaction in case it's mutated below.
 	txn := *args.Txn
 	key := keys.TransactionKey(txn.Key, txn.ID)
@@ -645,6 +649,13 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 // coordinator. Returns the updated transaction.
 func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.HeartbeatTxnRequest) (proto.HeartbeatTxnResponse, error) {
 	var reply proto.HeartbeatTxnResponse
+
+	if args.Txn == nil {
+		return reply, util.Errorf("no transaction specified to HeartbeatTxn")
+	}
+	if !bytes.Equal(args.Key, args.Txn.Key) {
+		return reply, util.Errorf("request key %s should match txn key %s", args.Key, args.Txn.Key)
+	}
 
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
