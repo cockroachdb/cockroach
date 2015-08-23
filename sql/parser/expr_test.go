@@ -29,9 +29,12 @@ func TestQualifiedNameString(t *testing.T) {
 		in, out string
 	}{
 		{"*", `"*"`},
-		// Keyword.
-		{"DATABASE", `"DATABASE"`},
-		{"dAtAbAse", `"dAtAbAse"`},
+		// Non-reserved keyword.
+		{"DATABASE", `DATABASE`},
+		{"dAtAbAse", `dAtAbAse`},
+		// Reserved keyword.
+		{"SELECT", `"SELECT"`},
+		{"sElEcT", `"sElEcT"`},
 		// Ident format: starts with [a-zA-Z_] or extended ascii,
 		// and is then followed by [a-zA-Z0-9$_] or extended ascii.
 		{"foo$09", "foo$09"},

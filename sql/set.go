@@ -33,7 +33,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	// be double quoted.
 	name := strings.ToLower(n.Name.String())
 	switch name {
-	case `"database"`: // Quoted: database is a reserved word
+	case `database`:
 		if len(n.Values) != 1 {
 			return nil, fmt.Errorf("database: requires a single string value")
 		}

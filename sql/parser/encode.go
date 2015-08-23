@@ -59,9 +59,8 @@ func encodeSQLString(buf []byte, in []byte) []byte {
 	return buf
 }
 
-// TODO(pmattis): This method needs testing.
 func encodeSQLIdent(buf *bytes.Buffer, s string) {
-	if _, ok := keywords[strings.ToUpper(s)]; ok {
+	if _, ok := reservedKeywords[strings.ToUpper(s)]; ok {
 		fmt.Fprintf(buf, "\"%s\"", s)
 		return
 	}
