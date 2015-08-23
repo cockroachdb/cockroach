@@ -194,8 +194,7 @@ func encodeIndexKey(columnIDs []ColumnID, colMap map[ColumnID]int,
 
 func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 	if val == parser.DNull {
-		// TODO(tamird,pmattis): This is a hack; we should have proper nil encoding.
-		return encoding.EncodeBytes(b, nil), nil
+		return encoding.EncodeNull(b), nil
 	}
 
 	switch t := val.(type) {
@@ -222,12 +221,12 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 			return nil, err
 		}
 		switch col.Type.Kind {
+		// TODO(pmattis): ColumnType_BOOL.
 		case ColumnType_BIT, ColumnType_INT:
 			vals[i] = parser.DInt(0)
 		case ColumnType_FLOAT:
 			vals[i] = parser.DFloat(0)
-		case ColumnType_CHAR, ColumnType_TEXT,
-			ColumnType_BLOB:
+		case ColumnType_CHAR, ColumnType_TEXT, ColumnType_BLOB:
 			vals[i] = parser.DString("")
 		default:
 			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
@@ -237,12 +236,12 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 }
 
 // decodeIndexKey decodes the values that are a part of the specified index
-// key. Vals is a slice returned from makeKeyVals. The remaining bytes in the
+// key. ValTypes is a slice returned from makeKeyVals. The remaining bytes in the
 // index key are returned which will either be an encoded column ID for the
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
 func decodeIndexKey(desc *TableDescriptor,
-	index IndexDescriptor, vals []parser.Datum, key []byte) ([]byte, error) {
+	index IndexDescriptor, valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
 	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
 		return nil, fmt.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
@@ -260,15 +259,25 @@ func decodeIndexKey(desc *TableDescriptor,
 		return nil, fmt.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
 	}
 
-	return decodeKeyVals(vals, key)
+	return decodeKeyVals(valTypes, vals, key)
 }
 
-// decodeKeyVals decodes the values that are part of the key. Vals is a slice
-// returned from makeKeyVals. The remaining bytes in the key after decoding the
-// values are returned.
-func decodeKeyVals(vals []parser.Datum, key []byte) ([]byte, error) {
-	for j := range vals {
-		switch vals[j].(type) {
+// decodeKeyVals decodes the values that are part of the key. ValTypes is a
+// slice returned from makeKeyVals. The decoded values are stored in the vals
+// parameter while the valTypes parameter is unmodified. Note that len(vals) >=
+// len(valTypes). The types of the decoded values will match the corresponding
+// entry in the valTypes parameter with the exception that a value might also
+// be parser.DNull. The remaining bytes in the key after decoding the values
+// are returned.
+func decodeKeyVals(valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
+	for j := range valTypes {
+		var isNull bool
+		if key, isNull = encoding.DecodeIfNull(key); isNull {
+			vals[j] = parser.DNull
+			continue
+		}
+
+		switch valTypes[j].(type) {
 		case parser.DInt:
 			var i int64
 			key, i = encoding.DecodeVarint(key)
@@ -282,7 +291,7 @@ func decodeKeyVals(vals []parser.Datum, key []byte) ([]byte, error) {
 			key, r = encoding.DecodeString(key, nil)
 			vals[j] = parser.DString(r)
 		default:
-			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", vals[j].Type())
+			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", valTypes[j].Type())
 		}
 	}
 
