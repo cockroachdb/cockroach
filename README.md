@@ -59,7 +59,7 @@ $ eval $(docker-machine env default)
 # To list the VMs (and check out which one is marked as Active):
 $ docker-machine ls
 ```
-Other operating systems will have a similar set of commands. Please check [Docker's documentation](https://www.docker.com/toolbox) for more info.
+Other operating systems will have a similar set of commands. Please check Docker's documentation for more info.
 
 
 Now we're in an environment that has everything set up, and we start by first initializing the cluster and then firing up the node:
