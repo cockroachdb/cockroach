@@ -220,24 +220,24 @@ func EncodeVarint(b []byte, v int64) []byte {
 	if v < 0 {
 		switch {
 		case v >= -0xff:
-			return append(b, 7, byte(v))
+			return append(b, 8, byte(v))
 		case v >= -0xffff:
-			return append(b, 6, byte(v>>8), byte(v))
+			return append(b, 7, byte(v>>8), byte(v))
 		case v >= -0xffffff:
-			return append(b, 5, byte(v>>16), byte(v>>8), byte(v))
+			return append(b, 6, byte(v>>16), byte(v>>8), byte(v))
 		case v >= -0xffffffff:
-			return append(b, 4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+			return append(b, 5, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 		case v >= -0xffffffffff:
-			return append(b, 3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+			return append(b, 4, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 				byte(v))
 		case v >= -0xffffffffffff:
-			return append(b, 2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+			return append(b, 3, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 				byte(v>>8), byte(v))
 		case v >= -0xffffffffffffff:
-			return append(b, 1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+			return append(b, 2, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 				byte(v>>16), byte(v>>8), byte(v))
 		default:
-			return append(b, 0, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+			return append(b, 1, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 				byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 		}
 	}
@@ -258,7 +258,7 @@ func DecodeVarint(b []byte) ([]byte, int64) {
 	if len(b) == 0 {
 		panic("insufficient bytes to decode var uint64 int value")
 	}
-	length := int(b[0]) - 8
+	length := int(b[0]) - 9
 	if length < 0 {
 		length = -length
 		remB := b[1:]
@@ -302,26 +302,26 @@ const (
 func EncodeUvarint(b []byte, v uint64) []byte {
 	switch {
 	case v == 0:
-		return append(b, 8)
+		return append(b, 9)
 	case v <= 0xff:
-		return append(b, 9, byte(v))
+		return append(b, 10, byte(v))
 	case v <= 0xffff:
-		return append(b, 10, byte(v>>8), byte(v))
+		return append(b, 11, byte(v>>8), byte(v))
 	case v <= 0xffffff:
-		return append(b, 11, byte(v>>16), byte(v>>8), byte(v))
+		return append(b, 12, byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffff:
-		return append(b, 12, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		return append(b, 13, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffffff:
-		return append(b, 13, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+		return append(b, 14, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 			byte(v))
 	case v <= 0xffffffffffff:
-		return append(b, 14, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+		return append(b, 15, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 			byte(v>>8), byte(v))
 	case v <= 0xffffffffffffff:
-		return append(b, 15, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+		return append(b, 16, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 			byte(v>>16), byte(v>>8), byte(v))
 	default:
-		return append(b, 16, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+		return append(b, 17, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
 }
@@ -331,34 +331,34 @@ func EncodeUvarint(b []byte, v uint64) []byte {
 func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
 	switch {
 	case v == 0:
-		return append(b, 8)
+		return append(b, 9)
 	case v <= 0xff:
 		v = ^v
-		return append(b, 7, byte(v))
+		return append(b, 8, byte(v))
 	case v <= 0xffff:
 		v = ^v
-		return append(b, 6, byte(v>>8), byte(v))
+		return append(b, 7, byte(v>>8), byte(v))
 	case v <= 0xffffff:
 		v = ^v
-		return append(b, 5, byte(v>>16), byte(v>>8), byte(v))
+		return append(b, 6, byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffff:
 		v = ^v
-		return append(b, 4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		return append(b, 5, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffffff:
 		v = ^v
-		return append(b, 3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+		return append(b, 4, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 			byte(v))
 	case v <= 0xffffffffffff:
 		v = ^v
-		return append(b, 2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+		return append(b, 3, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 			byte(v>>8), byte(v))
 	case v <= 0xffffffffffffff:
 		v = ^v
-		return append(b, 1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+		return append(b, 2, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 			byte(v>>16), byte(v>>8), byte(v))
 	default:
 		v = ^v
-		return append(b, 0, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+		return append(b, 1, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
 }
@@ -370,7 +370,7 @@ func DecodeUvarint(b []byte) ([]byte, uint64) {
 	if len(b) == 0 {
 		panic("insufficient bytes to decode var uint64 int value")
 	}
-	length := int(b[0]) - 8
+	length := int(b[0]) - 9
 	b = b[1:] // skip length byte
 	if length < 0 || length > 8 {
 		panic(fmt.Sprintf("invalid uvarint length of %d", length))
@@ -392,7 +392,7 @@ func DecodeUvarintDecreasing(b []byte) ([]byte, uint64) {
 	if len(b) == 0 {
 		panic("insufficient bytes to decode var uint64 int value")
 	}
-	length := 8 - int(b[0])
+	length := 9 - int(b[0])
 	b = b[1:] // skip length byte
 	if length < 0 || length > 8 {
 		panic(fmt.Sprintf("invalid uvarint length of %d", length))
@@ -409,31 +409,22 @@ func DecodeUvarintDecreasing(b []byte) ([]byte, uint64) {
 const (
 	// <term>     -> \x00\x01
 	// \x00       -> \x00\xff
-	// \xff       -> \xff\x00
-	// <infinity> -> \xff\xff
-	escape1     byte = 0x00
-	escape2     byte = 0xff
+	escape      byte = 0x00
 	escapedTerm byte = 0x01
-	escapedNul  byte = 0xff
+	escaped00   byte = 0xff
 	escapedFF   byte = 0x00
 )
 
 type escapes struct {
-	escape1     byte
-	escape2     byte
+	escape      byte
 	escapedTerm byte
-	escapedNul  byte
+	escaped00   byte
 	escapedFF   byte
 }
 
 var (
-	ascendingEscapes  = escapes{escape1, escape2, escapedTerm, escapedNul, escapedFF}
-	descendingEscapes = escapes{^escape1, ^escape2, ^escapedTerm, ^escapedNul, ^escapedFF}
-)
-
-var (
-	// Infinity compares greater than every other encoded value.
-	Infinity = []byte{0xff, 0xff}
+	ascendingEscapes  = escapes{escape, escapedTerm, escaped00, escapedFF}
+	descendingEscapes = escapes{^escape, ^escapedTerm, ^escaped00, ^escapedFF}
 )
 
 // EncodeBytes encodes the []byte value using an escape-based
@@ -441,29 +432,20 @@ var (
 // "\x00\x01" which is guaranteed to not occur elsewhere in the
 // encoded value. The encoded bytes are append to the supplied buffer
 // and the resulting buffer is returned.
-//
-// The encoded data is guaranteed to compare less than the Infinity
-// symbol \xff\xff. This is accomplished by transforming \xff to
-// \xff\x00 when it occurs at the beginning of the bytes to encode.
 func EncodeBytes(b []byte, data []byte) []byte {
-	if len(data) > 0 && data[0] == escape2 {
-		b = append(b, escape2, escapedFF)
-		data = data[1:]
-	}
-
 	for {
 		// IndexByte is implemented by the go runtime in assembly and is
 		// much faster than looping over the bytes in the slice.
-		i := bytes.IndexByte(data, escape1)
+		i := bytes.IndexByte(data, escape)
 		if i == -1 {
 			break
 		}
 		b = append(b, data[:i]...)
-		b = append(b, escape1, escapedNul)
+		b = append(b, escape, escaped00)
 		data = data[i+1:]
 	}
 	b = append(b, data...)
-	return append(b, escape1, escapedTerm)
+	return append(b, escape, escapedTerm)
 }
 
 // EncodeBytesDecreasing encodes the []byte value using an
@@ -478,19 +460,8 @@ func EncodeBytesDecreasing(b []byte, data []byte) []byte {
 }
 
 func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte) {
-	if len(b) > 0 && b[0] == e.escape2 {
-		if len(b) == 1 {
-			panic("malformed escape")
-		}
-		if b[1] != e.escapedFF {
-			panic("unknown escape")
-		}
-		r = append(r, e.escapedNul)
-		b = b[2:]
-	}
-
 	for {
-		i := bytes.IndexByte(b, e.escape1)
+		i := bytes.IndexByte(b, e.escape)
 		if i == -1 {
 			panic("did not find terminator")
 		}
@@ -508,7 +479,7 @@ func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte) {
 			return b[i+2:], r
 		}
 
-		if v == e.escapedNul {
+		if v == e.escaped00 {
 			r = append(r, b[:i]...)
 			r = append(r, e.escapedFF)
 		} else {
@@ -539,204 +510,92 @@ func DecodeBytesDecreasing(b []byte, r []byte) ([]byte, []byte) {
 	return b, r
 }
 
-func parseVerb(format string, i int) (verb byte, ascending bool, width int, newI int) {
-	if format[i] != '%' {
-		panic("invalid format string: " + format)
+// EncodeString encodes the string value using an escape-based encoding. See
+// EncodeBytes for details. The encoded bytes are append to the supplied buffer
+// and the resulting buffer is returned.
+func EncodeString(b []byte, s string) []byte {
+	if len(s) == 0 {
+		return EncodeBytes(b, nil)
 	}
-	i++
-
-	// Process ascending flag (either "+" or "-").
-	ascending = true
-	if i < len(format) {
-		if format[i] == '+' {
-			i++
-		} else if format[i] == '-' {
-			ascending = false
-			i++
-		}
-	}
-
-	// Process width specifier (either blank, "32" or "64").
-	width = 0
-	if i+1 < len(format) {
-		if format[i] == '3' && format[i+1] == '2' {
-			width = 32
-			i += 2
-		} else if format[i] == '6' && format[i+1] == '4' {
-			width = 64
-			i += 2
-		} else if format[i] >= '0' && format[i] <= '9' {
-			panic("invalid width specifier; use 32 or 64")
-		}
-	}
-
-	if i == len(format) {
-		panic("no verb: " + format)
-	}
-
-	return format[i], ascending, width, i + 1
+	// We unsafely convert the string to a []byte to avoid the
+	// usual allocation when converting to a []byte. This is
+	// kosher because we know that EncodeBytes{,Decreasing} does
+	// not keep a reference to the value it encodes. The first
+	// step is getting access to the string internals.
+	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	// Next we treat the string data as a maximally sized array which we
+	// slice. This usage is safe because the pointer value remains in the string.
+	arg := (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
+	return EncodeBytes(b, arg)
 }
 
-// EncodeKey encodes values to a byte slice according to a format
-// string. Returns the byte slice containing the encoded values.
-//
-// The format string is printf-style with caveats: the primary being
-// that the "fixed" portion of the format must occur as a prefix to
-// the format. The verbs specify precisely what argument type is
-// expected and no attempt is made to perform type conversion. For
-// example, '%d' specifies an argument type of 'int64'. A panic will
-// occur if any other type is encountered.
-//
-// The verbs:
-//	%d	varint (int64) increasing
-//	%-d	varint (int64) decreasing
-//	%u	uvarint (uint64) increasing
-//	%-u	uvarint (uint64) increasing
-//	%32u	uint32 increasing
-//	%-32u	uint32 increasing
-//	%64u	uint64 increasing
-//	%-64u	uint64 increasing
-//	%s	bytes ([]byte,string) increasing
-//	%-s	bytes ([]byte,string) decreasing
-func EncodeKey(b []byte, format string, args ...interface{}) []byte {
-	i, end := 0, len(format)
-	for i < end && format[i] != '%' {
-		i++
+// EncodeStringDecreasing encodes the string value using an escape-based
+// encoding. See EncodeBytesDecreasing for details. The encoded bytes are
+// append to the supplied buffer and the resulting buffer is returned.
+func EncodeStringDecreasing(b []byte, s string) []byte {
+	if len(s) == 0 {
+		return EncodeBytesDecreasing(b, nil)
 	}
-	b = append(b, format[:i]...)
-
-	for i < end {
-		var verb byte
-		var ascending bool
-		var width int
-		verb, ascending, width, i = parseVerb(format, i)
-
-		switch verb {
-		case 'd':
-			if ascending {
-				b = EncodeVarint(b, args[0].(int64))
-			} else {
-				b = EncodeVarintDecreasing(b, args[0].(int64))
-			}
-		case 'u':
-			if ascending {
-				if width == 0 {
-					b = EncodeUvarint(b, args[0].(uint64))
-				} else if width == 32 {
-					b = EncodeUint32(b, args[0].(uint32))
-				} else {
-					b = EncodeUint64(b, args[0].(uint64))
-				}
-			} else {
-				if width == 0 {
-					b = EncodeUvarintDecreasing(b, args[0].(uint64))
-				} else if width == 32 {
-					b = EncodeUint32Decreasing(b, args[0].(uint32))
-				} else {
-					b = EncodeUint64Decreasing(b, args[0].(uint64))
-				}
-			}
-		case 's':
-			var arg []byte
-			if s, ok := args[0].(string); ok {
-				// We unsafely convert the string to a []byte to avoid the
-				// usual allocation when converting to a []byte. This is
-				// kosher because we know that EncodeBytes{,Decreasing} does
-				// not keep a reference to the value it encodes. The first
-				// step is getting access to the string internals.
-				hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
-				// Next we treat the string data as a maximally sized array
-				// which we slice.
-				//
-				// Go vet complains about possible misuse of unsafe.Pointer
-				// here (converting a uintptr to an unsafe.Pointer). This
-				// usage is safe because the pointer value remains in the
-				// string.
-				arg = (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
-			} else {
-				arg = args[0].([]byte)
-			}
-			if ascending {
-				b = EncodeBytes(b, arg)
-			} else {
-				b = EncodeBytesDecreasing(b, arg)
-			}
-		default:
-			panic("unknown format verb")
-		}
-		args = args[1:]
-	}
-	return b
+	// We unsafely convert the string to a []byte to avoid the
+	// usual allocation when converting to a []byte. This is
+	// kosher because we know that EncodeBytes{,Decreasing} does
+	// not keep a reference to the value it encodes. The first
+	// step is getting access to the string internals.
+	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	// Next we treat the string data as a maximally sized array which we
+	// slice. This usage is safe because the pointer value remains in the string.
+	arg := (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
+	return EncodeBytesDecreasing(b, arg)
 }
 
-// DecodeKey decodes values from a byte slice according to the format
-// string. Returns the remainder of the byte slice if it was not
-// completely consumed by the format string. See EncodeKey for details
-// of the format specifiers.
-//
-// The variadic arguments must be pointers to the types specified by
-// the format string. For example, '%d" requires a '*int64' argument.
-func DecodeKey(b []byte, format string, args ...interface{}) []byte {
-	i, end := 0, len(format)
-	for i < end && format[i] != '%' {
-		if len(b) == 0 || b[i] != format[i] {
-			panic("format mismatch")
-		}
-		i++
-	}
-	if i > 0 {
-		b = b[i:]
-	}
+// DecodeString decodes a string value from the input buffer which was encoded
+// using EncodeString or EncodeBytes. The r []byte is used as a temporary
+// buffer in order to avoid memory allocations. The remainder of the input
+// buffer and the decoded string are returned.
+func DecodeString(b []byte, r []byte) ([]byte, string) {
+	b, r = decodeBytes(b, r, ascendingEscapes)
+	return b, string(r)
+}
 
-	for i < end {
-		var verb byte
-		var ascending bool
-		var width int
-		verb, ascending, width, i = parseVerb(format, i)
-
-		switch verb {
-		case 'd':
-			var r int64
-			if ascending {
-				b, r = DecodeVarint(b)
-			} else {
-				b, r = DecodeVarintDecreasing(b)
-			}
-			*(args[0].(*int64)) = r
-		case 'u':
-			if ascending {
-				if width == 0 {
-					b, *(args[0].(*uint64)) = DecodeUvarint(b)
-				} else if width == 32 {
-					b, *(args[0].(*uint32)) = DecodeUint32(b)
-				} else {
-					b, *(args[0].(*uint64)) = DecodeUint64(b)
-				}
-			} else {
-				if width == 0 {
-					b, *(args[0].(*uint64)) = DecodeUvarintDecreasing(b)
-				} else if width == 32 {
-					b, *(args[0].(*uint32)) = DecodeUint32Decreasing(b)
-				} else {
-					b, *(args[0].(*uint64)) = DecodeUint64Decreasing(b)
-				}
-			}
-		case 's':
-			var r []byte
-			if ascending {
-				b, r = DecodeBytes(b, nil)
-			} else {
-				b, r = DecodeBytesDecreasing(b, nil)
-			}
-			if s, ok := args[0].(*string); ok {
-				*s = string(r)
-			} else {
-				*(args[0].(*[]byte)) = r
-			}
-		default:
-			panic("unknown format verb")
-		}
-		args = args[1:]
+// DecodeStringDecreasing decodes a string value from the input buffer which
+// was encoded using EncodeStringDecreasing or EncodeBytesDecreasing. The r
+// []byte is used as a temporary buffer in order to avoid memory
+// allocations. The remainder of the input buffer and the decoded string are
+// returned.
+func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string) {
+	// We need to pass in a non-nil "r" parameter here so that the output is
+	// always copied to a new string instead of just returning the input when
+	// when there are no embedded escapes.
+	if r == nil {
+		r = []byte{}
 	}
-	return b
+	b, r = decodeBytes(b, r, descendingEscapes)
+	onesComplement(r)
+	return b, string(r)
+}
+
+var (
+	encodedNull = []byte{0x00, 0x00}
+)
+
+// EncodeNull encodes a NULL value. The encodes bytes are appended to the
+// supplied buffer and the final buffer is returned. The encoded value for a
+// NULL is guaranteed to not be a prefix for the EncodeVarint, EncodeFloat,
+// EncodeBytes and EncodeString encodings.
+func EncodeNull(b []byte) []byte {
+	return append(b, encodedNull...)
+}
+
+// DecodeIfNull decodes a NULL value from the input buffer. If the input buffer
+// contains a null at the start of the buffer then it is removed from the
+// buffer and true is returned for the second result. Otherwise, the buffer is
+// returned unchanged and false is returned for the second result. Since the
+// NULL value encoding is guaranteed to never occur as the prefix for the
+// EncodeVarint, EncodeFloat, EncodeBytes and EncodeString encodings, it is
+// safe to call DecodeIfNull on their encoded values.
+func DecodeIfNull(b []byte) ([]byte, bool) {
+	if len(b) >= 2 && b[0] == 0x00 && b[1] == 0x00 {
+		return b[2:], true
+	}
+	return b, false
 }

@@ -31,135 +31,14 @@ import (
 
 // Direct mappings or prefixes of encoded data dependent on the type.
 const (
-	orderedEncodingNaN              = 0x06
-	orderedEncodingNegativeInfinity = 0x07
-	orderedEncodingZero             = 0x15
-	orderedEncodingInfinity         = 0x23
-	orderedEncodingTerminator       = 0x00
+	floatNaN              = 0x06
+	floatNegativeInfinity = 0x07
+	floatZero             = 0x15
+	floatInfinity         = 0x23
+	floatTerminator       = 0x00
 )
 
-// EncodeNumericInt returns the resulting byte slice with the encoded int64
-// appended to b. See the notes for EncodeNumericFloat for a complete
-// description.
-func EncodeNumericInt(b []byte, i int64) []byte {
-	if i == 0 {
-		return append(b, orderedEncodingZero)
-	}
-	e, m := intMandE(i)
-	if e <= 0 {
-		panic("integer values should not have negative exponents")
-	}
-	buf := make([]byte, len(m)+maxVarintSize+2)
-	switch {
-	case e > 0 && e <= 10:
-		return append(b, encodeMediumNumber(i < 0, e, m, buf)...)
-	case e >= 11:
-		return append(b, encodeLargeNumber(i < 0, e, m, buf)...)
-	}
-	panic(fmt.Sprintf("unexpected value e: %d", e))
-}
-
-// EncodeNumericIntDecreasing returns the resulting byte slice with
-// the encoded int64 value in decreasing order appended to b.
-func EncodeNumericIntDecreasing(b []byte, i int64) []byte {
-	return EncodeNumericInt(b, ^i)
-}
-
-// DecodeNumericInt returns the remaining byte slice after decoding
-// and the decoded int64 from buf.
-func DecodeNumericInt(buf []byte) ([]byte, int64) {
-	if buf[0] == 0x15 {
-		return buf[1:], 0
-	}
-	if buf[0] == 0x14 || buf[0] == 0x16 {
-		// Negative small or positive small.
-		panic("integer values should not have negative exponents")
-	}
-	idx := bytes.Index(buf, []byte{orderedEncodingTerminator})
-	switch {
-	case buf[0] == 0x08:
-		// Negative large.
-		e, m := decodeLargeNumber(true, buf[:idx+1])
-		return buf[idx+1:], makeIntFromMandE(true, e, m)
-	case buf[0] > 0x08 && buf[0] <= 0x13:
-		// Negative medium.
-		e, m := decodeMediumNumber(true, buf[:idx+1])
-		return buf[idx+1:], makeIntFromMandE(true, e, m)
-	case buf[0] == 0x22:
-		// Positive large.
-		e, m := decodeLargeNumber(false, buf[:idx+1])
-		return buf[idx+1:], makeIntFromMandE(false, e, m)
-	case buf[0] >= 0x17 && buf[0] < 0x22:
-		// Positive large.
-		e, m := decodeMediumNumber(false, buf[:idx+1])
-		return buf[idx+1:], makeIntFromMandE(false, e, m)
-	default:
-		panic(fmt.Sprintf("unknown prefix of the encoded byte slice: %q", buf))
-	}
-}
-
-// DecodeNumericIntDecreasing returns the remaining byte slice after decoding and
-// the decoded int64 in decreasing order from buf.
-func DecodeNumericIntDecreasing(buf []byte) ([]byte, int64) {
-	b, v := DecodeNumericInt(buf)
-	return b, ^v
-}
-
-// intMandE computes and returns the mantissa M and exponent E for i.
-//
-// See the comments in floatMandE for more details of the representation
-// of M. This method computes E and M in a simpler loop.
-func intMandE(i int64) (int, []byte) {
-	var e int
-	var m [12]byte
-	for v := i; v != 0; v /= 100 {
-		e++
-		mod := v % 100
-		if mod < 0 {
-			m[12-e] = byte(2*-mod + 1)
-		} else {
-			m[12-e] = byte(2*mod + 1)
-		}
-	}
-
-	// Remove trailing zeroes which were encoded above as 1.
-	n := 11
-	for ; n > 0; n-- {
-		if m[n] != 1 {
-			break
-		}
-	}
-
-	// The last byte is encoded as 2n+0.
-	m[n]--
-	return e, m[12-e : n+1]
-}
-
-// makeIntFromMandE reconstructs the integer from the mantissa M
-// and exponent E.
-func makeIntFromMandE(negative bool, e int, m []byte) int64 {
-	var i int64
-	for v := 0; v < e; v++ {
-		var t int64
-		if v < len(m) {
-			t = int64(m[v])
-		} else {
-			// Trailing X==0 digits were omitted.
-			t = 0
-		}
-		// The last byte was encoded as 2n+0.
-		if v != len(m)-1 {
-			t--
-		}
-		if negative {
-			t = -t
-		}
-		i = i*100 + t/2
-	}
-	return i
-}
-
-// EncodeNumericFloat returns the resulting byte slice with the encoded float64
+// EncodeFloat returns the resulting byte slice with the encoded float64
 // appended to b.
 //
 // Values are classified as large, medium, or small according to the value of
@@ -176,22 +55,17 @@ func makeIntFromMandE(negative bool, e int, m []byte) int64 {
 // as a byte 0x13-E followed by the ones-complement of M. Large negative values
 // consist of the single byte 0x08 followed by the ones-complement of the
 // varint encoding of E followed by the ones-complement of M.
-//
-// The resulting numeric encodings are all comparable. That is, the result from
-// EncodeNumericInt is comparable with the result from EncodeNumericFloat. But
-// this flexibility comes at the cost of speed. Prefer the EncodeUvarint{32,64}
-// routines for speed.
-func EncodeNumericFloat(b []byte, f float64) []byte {
+func EncodeFloat(b []byte, f float64) []byte {
 	// Handle the simplistic cases first.
 	switch {
 	case math.IsNaN(f):
-		return append(b, orderedEncodingNaN)
+		return append(b, floatNaN)
 	case math.IsInf(f, 1):
-		return append(b, orderedEncodingInfinity)
+		return append(b, floatInfinity)
 	case math.IsInf(f, -1):
-		return append(b, orderedEncodingNegativeInfinity)
+		return append(b, floatNegativeInfinity)
 	case f == 0:
-		return append(b, orderedEncodingZero)
+		return append(b, floatZero)
 	}
 	e, m := floatMandE(f)
 	buf := make([]byte, len(m)+maxVarintSize+2)
@@ -206,19 +80,19 @@ func EncodeNumericFloat(b []byte, f float64) []byte {
 	return nil
 }
 
-// DecodeNumericFloat returns the remaining byte slice after decoding and the decoded
+// DecodeFloat returns the remaining byte slice after decoding and the decoded
 // float64 from buf.
-func DecodeNumericFloat(buf []byte) ([]byte, float64) {
+func DecodeFloat(buf []byte) ([]byte, float64) {
 	if buf[0] == 0x15 {
 		return buf[1:], 0
 	}
-	idx := bytes.Index(buf, []byte{orderedEncodingTerminator})
+	idx := bytes.Index(buf, []byte{floatTerminator})
 	switch {
-	case buf[0] == orderedEncodingNaN:
+	case buf[0] == floatNaN:
 		return buf[1:], math.NaN()
-	case buf[0] == orderedEncodingInfinity:
+	case buf[0] == floatInfinity:
 		return buf[1:], math.Inf(1)
-	case buf[0] == orderedEncodingNegativeInfinity:
+	case buf[0] == floatNegativeInfinity:
 		return buf[1:], math.Inf(-1)
 	case buf[0] == 0x08:
 		// Negative large.
@@ -398,7 +272,7 @@ func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {
 		buf[0] = 0x16
 		onesComplement(buf[1 : 1+n]) // ones complement of exponent
 	}
-	buf[l] = orderedEncodingTerminator
+	buf[l] = floatTerminator
 	return buf[:l+1]
 }
 
@@ -411,7 +285,7 @@ func encodeMediumNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	} else {
 		buf[0] = 0x17 + byte(e)
 	}
-	buf[l] = orderedEncodingTerminator
+	buf[l] = floatTerminator
 	return buf[:l+1]
 }
 
@@ -425,7 +299,7 @@ func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	} else {
 		buf[0] = 0x22
 	}
-	buf[l] = orderedEncodingTerminator
+	buf[l] = floatTerminator
 	return buf[:l+1]
 }
 

@@ -79,7 +79,9 @@ type scanNode struct {
 	kvIndex          int               // current index into the key/value pairs
 	rowIndex         int               // the index of the current row
 	colID            ColumnID          // column ID of the current key
+	valTypes         []parser.Datum    // the index key value types for the current row
 	vals             []parser.Datum    // the index key values for the current row
+	implicitValTypes []parser.Datum    // the implicit value types for unique indexes
 	implicitVals     []parser.Datum    // the implicit values for unique indexes
 	qvals            qvalMap           // the values in the current row
 	colKind          colKindMap        // map of column kinds for decoding column values
@@ -246,16 +248,18 @@ func (n *scanNode) initScan() bool {
 	}
 
 	// Prepare our index key vals slice.
-	if n.vals, n.err = makeKeyVals(n.desc, n.columnIDs); n.err != nil {
+	if n.valTypes, n.err = makeKeyVals(n.desc, n.columnIDs); n.err != nil {
 		return false
 	}
+	n.vals = make([]parser.Datum, len(n.valTypes))
 
 	if n.isSecondaryIndex && n.index.Unique {
 		// Unique secondary indexes have a value that is the primary index
 		// key. Prepare implicitVals for use in decoding this value.
-		if n.implicitVals, n.err = makeKeyVals(n.desc, n.index.ImplicitColumnIDs); n.err != nil {
+		if n.implicitValTypes, n.err = makeKeyVals(n.desc, n.index.ImplicitColumnIDs); n.err != nil {
 			return false
 		}
+		n.implicitVals = make([]parser.Datum, len(n.implicitValTypes))
 	}
 
 	// Prepare a map from column ID to column kind used for unmarshalling values.
@@ -413,7 +417,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 	}
 
 	var remaining []byte
-	remaining, n.err = decodeIndexKey(n.desc, *n.index, n.vals, kv.Key)
+	remaining, n.err = decodeIndexKey(n.desc, *n.index, n.valTypes, n.vals, kv.Key)
 	if n.err != nil {
 		return false
 	}
@@ -455,7 +459,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 		}
 	} else {
 		if n.implicitVals != nil {
-			if _, n.err = decodeKeyVals(n.implicitVals, kv.ValueBytes()); n.err != nil {
+			if _, n.err = decodeKeyVals(n.implicitValTypes, n.implicitVals, kv.ValueBytes()); n.err != nil {
 				return false
 			}
 			for i, id := range n.index.ImplicitColumnIDs {

@@ -44,7 +44,7 @@ var (
 	// KeyMin is a minimum key value which sorts before all other keys.
 	KeyMin = Key("")
 	// KeyMax is a maximum key value which sorts after all other keys.
-	KeyMax = Key(encoding.Infinity)
+	KeyMax = Key{0xff, 0xff}
 )
 
 // Key is a custom type for a byte string in proto
