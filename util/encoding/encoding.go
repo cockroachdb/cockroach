@@ -409,31 +409,22 @@ func DecodeUvarintDecreasing(b []byte) ([]byte, uint64) {
 const (
 	// <term>     -> \x00\x01
 	// \x00       -> \x00\xff
-	// \xff       -> \xff\x00
-	// <infinity> -> \xff\xff
-	escape1     byte = 0x00
-	escape2     byte = 0xff
+	escape      byte = 0x00
 	escapedTerm byte = 0x01
-	escapedNul  byte = 0xff
+	escaped00   byte = 0xff
 	escapedFF   byte = 0x00
 )
 
 type escapes struct {
-	escape1     byte
-	escape2     byte
+	escape      byte
 	escapedTerm byte
-	escapedNul  byte
+	escaped00   byte
 	escapedFF   byte
 }
 
 var (
-	ascendingEscapes  = escapes{escape1, escape2, escapedTerm, escapedNul, escapedFF}
-	descendingEscapes = escapes{^escape1, ^escape2, ^escapedTerm, ^escapedNul, ^escapedFF}
-)
-
-var (
-	// Infinity compares greater than every other encoded value.
-	Infinity = []byte{0xff, 0xff}
+	ascendingEscapes  = escapes{escape, escapedTerm, escaped00, escapedFF}
+	descendingEscapes = escapes{^escape, ^escapedTerm, ^escaped00, ^escapedFF}
 )
 
 // EncodeBytes encodes the []byte value using an escape-based
@@ -441,29 +432,20 @@ var (
 // "\x00\x01" which is guaranteed to not occur elsewhere in the
 // encoded value. The encoded bytes are append to the supplied buffer
 // and the resulting buffer is returned.
-//
-// The encoded data is guaranteed to compare less than the Infinity
-// symbol \xff\xff. This is accomplished by transforming \xff to
-// \xff\x00 when it occurs at the beginning of the bytes to encode.
 func EncodeBytes(b []byte, data []byte) []byte {
-	if len(data) > 0 && data[0] == escape2 {
-		b = append(b, escape2, escapedFF)
-		data = data[1:]
-	}
-
 	for {
 		// IndexByte is implemented by the go runtime in assembly and is
 		// much faster than looping over the bytes in the slice.
-		i := bytes.IndexByte(data, escape1)
+		i := bytes.IndexByte(data, escape)
 		if i == -1 {
 			break
 		}
 		b = append(b, data[:i]...)
-		b = append(b, escape1, escapedNul)
+		b = append(b, escape, escaped00)
 		data = data[i+1:]
 	}
 	b = append(b, data...)
-	return append(b, escape1, escapedTerm)
+	return append(b, escape, escapedTerm)
 }
 
 // EncodeBytesDecreasing encodes the []byte value using an
@@ -478,19 +460,8 @@ func EncodeBytesDecreasing(b []byte, data []byte) []byte {
 }
 
 func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte) {
-	if len(b) > 0 && b[0] == e.escape2 {
-		if len(b) == 1 {
-			panic("malformed escape")
-		}
-		if b[1] != e.escapedFF {
-			panic("unknown escape")
-		}
-		r = append(r, e.escapedNul)
-		b = b[2:]
-	}
-
 	for {
-		i := bytes.IndexByte(b, e.escape1)
+		i := bytes.IndexByte(b, e.escape)
 		if i == -1 {
 			panic("did not find terminator")
 		}
@@ -508,7 +479,7 @@ func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte) {
 			return b[i+2:], r
 		}
 
-		if v == e.escapedNul {
+		if v == e.escaped00 {
 			r = append(r, b[:i]...)
 			r = append(r, e.escapedFF)
 		} else {
