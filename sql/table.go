@@ -284,7 +284,7 @@ func decodeKeyVals(valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
 			vals[j] = parser.DInt(i)
 		case parser.DFloat:
 			var f float64
-			key, f = encoding.DecodeFloat(key)
+			key, f = encoding.DecodeFloat(key, nil)
 			vals[j] = parser.DFloat(f)
 		case parser.DString:
 			var r string

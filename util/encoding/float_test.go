@@ -65,7 +65,7 @@ func TestFloatMandE(t *testing.T) {
 		// {9223372036854775807, 10, []byte{0x13, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x0e}},
 	}
 	for _, c := range testCases {
-		if e, m := floatMandE(c.Value); e != c.E || !bytes.Equal(m, c.M) {
+		if e, m := floatMandE(nil, c.Value); e != c.E || !bytes.Equal(m, c.M) {
 			t.Errorf("unexpected mismatch in E/M for %v. expected E=%v | M=[% x], got E=%v | M=[% x]",
 				c.Value, c.E, c.M, e, m)
 		}
@@ -137,7 +137,7 @@ func TestEncodeFloat(t *testing.T) {
 					c.Value, testCases[i-1].Encoding, enc)
 			}
 		}
-		_, dec := DecodeFloat(enc)
+		_, dec := DecodeFloat(enc, nil)
 		if math.IsNaN(c.Value) {
 			if !math.IsNaN(dec) {
 				t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
@@ -156,7 +156,7 @@ func BenchmarkEncodeFloat(b *testing.B) {
 		vals[i] = rng.Float64()
 	}
 
-	buf := make([]byte, 0, 16)
+	buf := make([]byte, 0, 100)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -172,8 +172,10 @@ func BenchmarkDecodeFloat(b *testing.B) {
 		vals[i] = EncodeFloat(nil, rng.Float64())
 	}
 
+	buf := make([]byte, 0, 100)
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = DecodeFloat(vals[i%len(vals)])
+		_, _ = DecodeFloat(vals[i%len(vals)], buf)
 	}
 }
