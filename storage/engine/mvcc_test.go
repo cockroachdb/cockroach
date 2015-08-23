@@ -1752,8 +1752,9 @@ func TestValidSplitKeys(t *testing.T) {
 		{proto.Key("\x00accu"), true},
 		{proto.Key("\x00perl"), true},
 		{proto.Key("\x00perm"), true},
-		{proto.Key("\x00perm\x00"), false},
-		{proto.Key("\x00perm\xff"), false},
+		// Deprecated permission config key. Valid split.
+		{proto.Key("\x00perm\x00"), true},
+		{proto.Key("\x00perm\xff"), true},
 		{proto.Key("\x00pern"), true},
 		{proto.Key("\x00zond"), true},
 		{proto.Key("\x00zone"), true},

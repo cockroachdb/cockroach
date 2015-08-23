@@ -52,10 +52,6 @@ import (
 
 var (
 	testDefaultAcctConfig = config.AcctConfig{}
-	testDefaultPermConfig = config.PermConfig{
-		Read:  []string{"root"},
-		Write: []string{"root"},
-	}
 	testDefaultUserConfig = config.UserConfig{}
 	testDefaultZoneConfig = config.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
@@ -179,9 +175,9 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.store.WaitForInit()
 	}
 
-	initConfigs(tc.engine, t)
+	realRange := tc.rng == nil
 
-	if tc.rng == nil {
+	if realRange {
 		if tc.bootstrapMode == bootstrapRangeOnly {
 			rng, err := NewReplica(testRangeDescriptor(), tc.store)
 			if err != nil {
@@ -198,6 +194,10 @@ func (tc *testContext) Start(t testing.TB) {
 		}
 		tc.rangeID = tc.rng.Desc().RangeID
 	}
+
+	if err := tc.initConfigs(realRange); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (tc *testContext) Stop() {
@@ -205,20 +205,30 @@ func (tc *testContext) Stop() {
 }
 
 // initConfigs creates default configuration entries.
-func initConfigs(e engine.Engine, t testing.TB) {
-	timestamp := proto.MinTimestamp.Next()
-	if err := engine.MVCCPutProto(e, nil, keys.ConfigAccountingPrefix, timestamp, nil, &testDefaultAcctConfig); err != nil {
-		t.Fatal(err)
+func (tc *testContext) initConfigs(realRange bool) error {
+	var putMethod func(proto.Key, gogoproto.Message) error
+
+	if realRange && tc.bootstrapMode == bootstrapRangeWithMetadata {
+		putMethod = func(key proto.Key, proto gogoproto.Message) error {
+			return tc.store.ctx.DB.Put(key, proto)
+		}
+	} else {
+		timestamp := proto.MinTimestamp.Next()
+		putMethod = func(key proto.Key, proto gogoproto.Message) error {
+			return engine.MVCCPutProto(tc.engine, nil, key, timestamp, nil, proto)
+		}
 	}
-	if err := engine.MVCCPutProto(e, nil, keys.ConfigPermissionPrefix, timestamp, nil, &testDefaultPermConfig); err != nil {
-		t.Fatal(err)
+
+	if err := putMethod(keys.ConfigAccountingPrefix, &testDefaultAcctConfig); err != nil {
+		return err
 	}
-	if err := engine.MVCCPutProto(e, nil, keys.ConfigUserPrefix, timestamp, nil, &testDefaultUserConfig); err != nil {
-		t.Fatal(err)
+	if err := putMethod(keys.ConfigUserPrefix, &testDefaultUserConfig); err != nil {
+		return err
 	}
-	if err := engine.MVCCPutProto(e, nil, keys.ConfigZonePrefix, timestamp, nil, &testDefaultZoneConfig); err != nil {
-		t.Fatal(err)
+	if err := putMethod(keys.ConfigZonePrefix, &testDefaultZoneConfig); err != nil {
+		return err
 	}
+	return nil
 }
 
 func newTransaction(name string, baseKey proto.Key, userPriority int32,
@@ -495,33 +505,35 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Add a permission for a new key prefix.
-	db1Perm := config.PermConfig{
-		Read:  []string{"spencer", "foo", "bar", "baz"},
-		Write: []string{"spencer"},
+	// Add a zone config for a new key prefix.
+	db1Zone := config.ZoneConfig{
+		ReplicaAttrs: []proto.Attributes{
+			{Attrs: []string{"dc1", "ssd"}},
+			{Attrs: []string{"dc2", "ssd"}},
+		},
 	}
-	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
-	if err := engine.MVCCPutProto(tc.engine, nil, key, proto.MinTimestamp, nil, &db1Perm); err != nil {
+	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
+	if err := engine.MVCCPutProto(tc.engine, nil, key, proto.MinTimestamp, nil, &db1Zone); err != nil {
 		t.Fatal(err)
 	}
 
-	verifyPerm := func() bool {
-		info, err := tc.gossip.GetInfo(gossip.KeyConfigPermission)
+	verifyZone := func() bool {
+		info, err := tc.gossip.GetInfo(gossip.KeyConfigZone)
 		if err != nil {
 			t.Fatal(err)
 		}
 		configMap := info.(config.PrefixConfigMap)
 		expConfigs := []config.PrefixConfig{
-			config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultPermConfig),
-			config.MakePrefixConfig(proto.Key("/db1"), nil, &db1Perm),
-			config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultPermConfig),
+			config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
+			config.MakePrefixConfig(proto.Key("/db1"), nil, &db1Zone),
+			config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
 		}
 		return reflect.DeepEqual([]config.PrefixConfig(configMap), expConfigs)
 	}
 
 	// If this actually failed, we would have gossiped from MVCCPutProto.
 	// Unlikely, but why not check.
-	if verifyPerm() {
+	if verifyZone() {
 		t.Errorf("not expecting gossip of new config until new lease is acquired")
 	}
 
@@ -547,7 +559,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 		Expiration: now.Add(20, 0),
 		RaftNodeID: tc.store.RaftNodeID(),
 	})
-	if !verifyPerm() {
+	if !verifyZone() {
 		t.Errorf("expected gossip of new config")
 	}
 }
@@ -637,7 +649,6 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 		configs   []config.PrefixConfig
 	}{
 		{gossip.KeyConfigAccounting, []config.PrefixConfig{config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultAcctConfig)}},
-		{gossip.KeyConfigPermission, []config.PrefixConfig{config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultPermConfig)}},
 		{gossip.KeyConfigUser, []config.PrefixConfig{config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultUserConfig)}},
 		{gossip.KeyConfigZone, []config.PrefixConfig{config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig)}},
 	}
@@ -656,13 +667,15 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	// Add a permission for a new key prefix.
-	db1Perm := &config.PermConfig{
-		Read:  []string{"spencer", "foo", "bar", "baz"},
-		Write: []string{"spencer"},
+	// Add a zone for a new key prefix.
+	db1Zone := &config.ZoneConfig{
+		ReplicaAttrs: []proto.Attributes{
+			{Attrs: []string{"dc1", "ssd"}},
+			{Attrs: []string{"dc2", "ssd"}},
+		},
 	}
-	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
-	data, err := gogoproto.Marshal(db1Perm)
+	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
+	data, err := gogoproto.Marshal(db1Zone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -675,15 +688,15 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	info, err := tc.gossip.GetInfo(gossip.KeyConfigPermission)
+	info, err := tc.gossip.GetInfo(gossip.KeyConfigZone)
 	if err != nil {
 		t.Fatal(err)
 	}
 	configMap := info.(config.PrefixConfigMap)
 	expConfigs := []config.PrefixConfig{
-		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultPermConfig),
-		config.MakePrefixConfig(proto.Key("/db1"), nil, db1Perm),
-		config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultPermConfig),
+		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
+		config.MakePrefixConfig(proto.Key("/db1"), nil, db1Zone),
+		config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
 	}
 	if !reflect.DeepEqual([]config.PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
@@ -691,19 +704,22 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 }
 
 // TestRangeGossipConfigUpdates verifies that writes to the
-// permissions cause the updated configs to be re-gossiped.
+// zones cause the updated configs to be re-gossiped.
 func TestRangeGossipConfigUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	// Add a permission for a new key prefix.
-	db1Perm := &config.PermConfig{
-		Read:  []string{"spencer"},
-		Write: []string{"spencer"},
+	// Add a zone for a new key prefix.
+	db1Zone := &config.ZoneConfig{
+		ReplicaAttrs: []proto.Attributes{
+			{Attrs: []string{"dc1", "ssd"}},
+			{Attrs: []string{"dc2", "ssd"}},
+		},
 	}
-	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
-	data, err := gogoproto.Marshal(db1Perm)
+
+	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
+	data, err := gogoproto.Marshal(db1Zone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -716,15 +732,15 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	info, err := tc.gossip.GetInfo(gossip.KeyConfigPermission)
+	info, err := tc.gossip.GetInfo(gossip.KeyConfigZone)
 	if err != nil {
 		t.Fatal(err)
 	}
 	configMap := info.(config.PrefixConfigMap)
 	expConfigs := []config.PrefixConfig{
-		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultPermConfig),
-		config.MakePrefixConfig(proto.Key("/db1"), nil, db1Perm),
-		config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultPermConfig),
+		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
+		config.MakePrefixConfig(proto.Key("/db1"), nil, db1Zone),
+		config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
 	}
 	if !reflect.DeepEqual([]config.PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
@@ -739,16 +755,18 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Add a permission for a new key prefix.
-	db1Perm := &config.PermConfig{
-		Read:  []string{"spencer"},
-		Write: []string{"spencer"},
+	// Add a zone for a new key prefix.
+	db1Zone := &config.ZoneConfig{
+		ReplicaAttrs: []proto.Attributes{
+			{Attrs: []string{"dc1", "ssd"}},
+			{Attrs: []string{"dc2", "ssd"}},
+		},
 	}
-	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
+	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
 	rangeID := proto.RangeID(1)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
-	data, err := gogoproto.Marshal(db1Perm)
+	data, err := gogoproto.Marshal(db1Zone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -769,13 +787,13 @@ func TestRangeNoGossipConfig(t *testing.T) {
 		}
 
 		// Information for db1 is not gossiped.
-		info, err := tc.gossip.GetInfo(gossip.KeyConfigPermission)
+		info, err := tc.gossip.GetInfo(gossip.KeyConfigZone)
 		if err != nil {
 			t.Fatal(err)
 		}
 		configMap := info.(config.PrefixConfigMap)
 		expConfigs := []config.PrefixConfig{
-			config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultPermConfig),
+			config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
 		}
 		if !reflect.DeepEqual([]config.PrefixConfig(configMap), expConfigs) {
 			t.Errorf("%d: expected gossiped configs to be equal %s vs %s",
@@ -792,17 +810,19 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Add a permission for a new key prefix. Set the config in a transaction
+	// Add a zone for a new key prefix. Set the config in a transaction
 	// to avoid gossip.
-	db1Perm := &config.PermConfig{
-		Read:  []string{"spencer"},
-		Write: []string{"spencer"},
+	db1Zone := &config.ZoneConfig{
+		ReplicaAttrs: []proto.Attributes{
+			{Attrs: []string{"dc1", "ssd"}},
+			{Attrs: []string{"dc2", "ssd"}},
+		},
 	}
-	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
+	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
 	rangeID := proto.RangeID(1)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
-	data, err := gogoproto.Marshal(db1Perm)
+	data, err := gogoproto.Marshal(db1Zone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -835,13 +855,13 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	tc.rng.maybeGossipConfigs(func(configPrefix proto.Key) bool {
 		return tc.rng.ContainsKey(configPrefix)
 	})
-	info, err := tc.gossip.GetInfo(gossip.KeyConfigPermission)
+	info, err := tc.gossip.GetInfo(gossip.KeyConfigZone)
 	if err != nil {
 		t.Fatal(err)
 	}
 	configMap := info.(config.PrefixConfigMap)
 	expConfigs := []config.PrefixConfig{
-		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultPermConfig),
+		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
 	}
 	if !reflect.DeepEqual([]config.PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s",

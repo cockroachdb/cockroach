@@ -127,7 +127,6 @@ func TestBootstrapCluster(t *testing.T) {
 		proto.Key("\x00acct"),
 		proto.Key("\x00desc-idgen"),
 		proto.Key("\x00node-idgen"),
-		proto.Key("\x00perm"),
 		proto.Key("\x00range-tree-root"),
 		proto.Key("\x00store-idgen"),
 		proto.Key("\x00user"),

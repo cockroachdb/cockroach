@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -528,8 +527,8 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// Register callbacks for any changes to accounting and zone
 		// configurations; we split ranges along prefix boundaries to
 		// avoid having a range that has two different accounting/zone
-		// configs. (We don't need a callback for permissions since
-		// permissions don't have such a requirement.)
+		// configs. (We don't need a callback for users since
+		// users don't have such a requirement.)
 		s.ctx.Gossip.RegisterCallback(gossip.KeyConfigAccounting, s.configGossipUpdate)
 		s.ctx.Gossip.RegisterCallback(gossip.KeyConfigZone, s.configGossipUpdate)
 
@@ -839,11 +838,10 @@ func (s *Store) RaftStatus(rangeID proto.RangeID) *raft.Status {
 // BootstrapRange creates the first range in the cluster and manually
 // writes it to the store. Default range addressing records are
 // created for meta1 and meta2. Default configurations for accounting,
-// permissions, users, and zones are created. All configs are specified
+// users, and zones are created. All configs are specified
 // for the empty key prefix, meaning they apply to the entire
-// database. Permissions are granted to all users and the zone
-// requires three replicas with no other specifications. It also adds
-// the range tree and the root node, the first range, to it.
+// database. The zone requires three replicas with no other specifications.
+// It also adds the range tree and the root node, the first range, to it.
 func (s *Store) BootstrapRange() error {
 	desc := &proto.RangeDescriptor{
 		RangeID:       1,
@@ -890,24 +888,13 @@ func (s *Store) BootstrapRange() error {
 	}
 	// Accounting config.
 	acctConfig := &config.AcctConfig{}
-	key := keys.MakeKey(keys.ConfigAccountingPrefix, proto.KeyMin)
-	if err := engine.MVCCPutProto(batch, ms, key, now, nil, acctConfig); err != nil {
-		return err
-	}
-	// Permission config.
-	permConfig := &config.PermConfig{
-		Read:  []string{security.RootUser}, // root user
-		Write: []string{security.RootUser}, // root user
-	}
-	key = keys.MakeKey(keys.ConfigPermissionPrefix, proto.KeyMin)
-	if err := engine.MVCCPutProto(batch, ms, key, now, nil, permConfig); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.ConfigAccountingPrefix, now, nil, acctConfig); err != nil {
 		return err
 	}
 	// User config.
 	// TODO(marc): instead of a root entry, maybe we should have a default "node".
 	userConfig := &config.UserConfig{}
-	key = keys.MakeKey(keys.ConfigUserPrefix, proto.KeyMin)
-	if err := engine.MVCCPutProto(batch, ms, key, now, nil, userConfig); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.ConfigUserPrefix, now, nil, userConfig); err != nil {
 		return err
 	}
 	// Zone config.
@@ -923,13 +910,12 @@ func (s *Store) BootstrapRange() error {
 			TTLSeconds: 24 * 60 * 60, // 1 day
 		},
 	}
-	key = keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin)
-	if err := engine.MVCCPutProto(batch, ms, key, now, nil, zoneConfig); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.ConfigZonePrefix, now, nil, zoneConfig); err != nil {
 		return err
 	}
 
 	// We reserve the first 1000 descriptor IDs.
-	key = keys.DescIDGenerator
+	key := keys.DescIDGenerator
 	value := proto.Value{}
 	value.SetInteger(int64(sql.MaxReservedDescID + 1))
 	value.InitChecksum(key)

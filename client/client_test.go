@@ -47,7 +47,7 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// testUser has a permissions config for the `TestUser` prefix.
+// testUser has valid client certs.
 var testUser = server.TestUser
 
 // notifyingSender is a sender which can set up a notification channel
@@ -555,13 +555,6 @@ func TestConcurrentIncrements(t *testing.T) {
 
 // TestClientPermissions verifies permission enforcement.
 // Only root and node users are now allowed to issue kv commands.
-// We still enforce the permissions config through.
-// This relies on:
-// - r/w permissions config for 'testUser' on the 'testUser' prefix.
-// - permissive checks for 'root' on all paths
-// - all users have client certs
-// Detailed permissions checking (read-only, write-only, etc...) is done elsewhere,
-// this is testing user/path setting by the client.
 func TestClientPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)

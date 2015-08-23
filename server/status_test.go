@@ -174,12 +174,11 @@ func TestStatusGossipJson(t *testing.T) {
 
 	type infos struct {
 		Infos struct {
-			Accounting  *prefixedInfo        `json:"accounting"`
-			FirstRange  *rangeDescriptorInfo `json:"first-range"`
-			Permissions *prefixedInfo        `json:"permissions"`
-			Zones       *prefixedInfo        `json:"zones"`
-			ClusterID   *keyValueStringPair  `json:"cluster-id"`
-			Node1       *nodeDescriptorInfo  `json:"node:1"`
+			Accounting *prefixedInfo        `json:"accounting"`
+			FirstRange *rangeDescriptorInfo `json:"first-range"`
+			Zones      *prefixedInfo        `json:"zones"`
+			ClusterID  *keyValueStringPair  `json:"cluster-id"`
+			Node1      *nodeDescriptorInfo  `json:"node:1"`
 		} `json:"infos"`
 	}
 
@@ -220,9 +219,6 @@ func TestStatusGossipJson(t *testing.T) {
 		}
 		if data.Infos.FirstRange == nil {
 			t.Errorf("no first-range info returned: %v", body)
-		}
-		if data.Infos.Permissions == nil {
-			t.Errorf("no permission info returned: %v", body)
 		}
 		if data.Infos.Zones == nil {
 			t.Errorf("no zone info returned: %v", body)
