@@ -207,7 +207,7 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 	case parser.DInt:
 		return encoding.EncodeVarint(b, int64(t)), nil
 	case parser.DFloat:
-		return encoding.EncodeNumericFloat(b, float64(t)), nil
+		return encoding.EncodeFloat(b, float64(t)), nil
 	case parser.DString:
 		return encoding.EncodeBytes(b, []byte(t)), nil
 	}
@@ -275,7 +275,7 @@ func decodeKeyVals(vals []parser.Datum, key []byte) ([]byte, error) {
 			vals[j] = parser.DInt(i)
 		case parser.DFloat:
 			var f float64
-			key, f = encoding.DecodeNumericFloat(key)
+			key, f = encoding.DecodeFloat(key)
 			vals[j] = parser.DFloat(f)
 		case parser.DString:
 			var r []byte
