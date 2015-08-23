@@ -51,12 +51,11 @@ FATA[0000] Post http:///var/run/docker.sock/v1.17/images/create?fromImage=cockro
 ```
 On OSX:
 ```bash
-# After installing [Docker Toolbox](https://www.docker.com/toolbox), 
-# use your Launchpad to start Docker Quickstart Terminal.
-# In case you insist on running your own shell of choice, 
-# just fire the following command to setup environment variables.
+# After installing [Docker Toolbox](https://www.docker.com/toolbox), start the VM (docker host):
+$ docker-machine start default
+# then fire the following command to setup docker environment variables.
 $ eval $(docker-machine env default)
-# The previous command sets the active docker host VM.
+# The previous command sets "default" as the active docker host VM.
 # To list the VMs (and check out which one is marked as Active):
 $ docker-machine ls
 ```
