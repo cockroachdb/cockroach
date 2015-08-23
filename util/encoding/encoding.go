@@ -220,24 +220,24 @@ func EncodeVarint(b []byte, v int64) []byte {
 	if v < 0 {
 		switch {
 		case v >= -0xff:
-			return append(b, 7, byte(v))
+			return append(b, 8, byte(v))
 		case v >= -0xffff:
-			return append(b, 6, byte(v>>8), byte(v))
+			return append(b, 7, byte(v>>8), byte(v))
 		case v >= -0xffffff:
-			return append(b, 5, byte(v>>16), byte(v>>8), byte(v))
+			return append(b, 6, byte(v>>16), byte(v>>8), byte(v))
 		case v >= -0xffffffff:
-			return append(b, 4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+			return append(b, 5, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 		case v >= -0xffffffffff:
-			return append(b, 3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+			return append(b, 4, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 				byte(v))
 		case v >= -0xffffffffffff:
-			return append(b, 2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+			return append(b, 3, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 				byte(v>>8), byte(v))
 		case v >= -0xffffffffffffff:
-			return append(b, 1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+			return append(b, 2, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 				byte(v>>16), byte(v>>8), byte(v))
 		default:
-			return append(b, 0, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+			return append(b, 1, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 				byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 		}
 	}
@@ -258,7 +258,7 @@ func DecodeVarint(b []byte) ([]byte, int64) {
 	if len(b) == 0 {
 		panic("insufficient bytes to decode var uint64 int value")
 	}
-	length := int(b[0]) - 8
+	length := int(b[0]) - 9
 	if length < 0 {
 		length = -length
 		remB := b[1:]
@@ -302,26 +302,26 @@ const (
 func EncodeUvarint(b []byte, v uint64) []byte {
 	switch {
 	case v == 0:
-		return append(b, 8)
+		return append(b, 9)
 	case v <= 0xff:
-		return append(b, 9, byte(v))
+		return append(b, 10, byte(v))
 	case v <= 0xffff:
-		return append(b, 10, byte(v>>8), byte(v))
+		return append(b, 11, byte(v>>8), byte(v))
 	case v <= 0xffffff:
-		return append(b, 11, byte(v>>16), byte(v>>8), byte(v))
+		return append(b, 12, byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffff:
-		return append(b, 12, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		return append(b, 13, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffffff:
-		return append(b, 13, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+		return append(b, 14, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 			byte(v))
 	case v <= 0xffffffffffff:
-		return append(b, 14, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+		return append(b, 15, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 			byte(v>>8), byte(v))
 	case v <= 0xffffffffffffff:
-		return append(b, 15, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+		return append(b, 16, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 			byte(v>>16), byte(v>>8), byte(v))
 	default:
-		return append(b, 16, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+		return append(b, 17, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
 }
@@ -331,34 +331,34 @@ func EncodeUvarint(b []byte, v uint64) []byte {
 func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
 	switch {
 	case v == 0:
-		return append(b, 8)
+		return append(b, 9)
 	case v <= 0xff:
 		v = ^v
-		return append(b, 7, byte(v))
+		return append(b, 8, byte(v))
 	case v <= 0xffff:
 		v = ^v
-		return append(b, 6, byte(v>>8), byte(v))
+		return append(b, 7, byte(v>>8), byte(v))
 	case v <= 0xffffff:
 		v = ^v
-		return append(b, 5, byte(v>>16), byte(v>>8), byte(v))
+		return append(b, 6, byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffff:
 		v = ^v
-		return append(b, 4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		return append(b, 5, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffffff:
 		v = ^v
-		return append(b, 3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+		return append(b, 4, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 			byte(v))
 	case v <= 0xffffffffffff:
 		v = ^v
-		return append(b, 2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+		return append(b, 3, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 			byte(v>>8), byte(v))
 	case v <= 0xffffffffffffff:
 		v = ^v
-		return append(b, 1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+		return append(b, 2, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 			byte(v>>16), byte(v>>8), byte(v))
 	default:
 		v = ^v
-		return append(b, 0, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+		return append(b, 1, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
 }
@@ -370,7 +370,7 @@ func DecodeUvarint(b []byte) ([]byte, uint64) {
 	if len(b) == 0 {
 		panic("insufficient bytes to decode var uint64 int value")
 	}
-	length := int(b[0]) - 8
+	length := int(b[0]) - 9
 	b = b[1:] // skip length byte
 	if length < 0 || length > 8 {
 		panic(fmt.Sprintf("invalid uvarint length of %d", length))
@@ -392,7 +392,7 @@ func DecodeUvarintDecreasing(b []byte) ([]byte, uint64) {
 	if len(b) == 0 {
 		panic("insufficient bytes to decode var uint64 int value")
 	}
-	length := 8 - int(b[0])
+	length := 9 - int(b[0])
 	b = b[1:] // skip length byte
 	if length < 0 || length > 8 {
 		panic(fmt.Sprintf("invalid uvarint length of %d", length))
@@ -572,4 +572,30 @@ func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string) {
 	b, r = decodeBytes(b, r, descendingEscapes)
 	onesComplement(r)
 	return b, string(r)
+}
+
+var (
+	encodedNull = []byte{0x00, 0x00}
+)
+
+// EncodeNull encodes a NULL value. The encodes bytes are appended to the
+// supplied buffer and the final buffer is returned. The encoded value for a
+// NULL is guaranteed to not be a prefix for the EncodeVarint, EncodeFloat,
+// EncodeBytes and EncodeString encodings.
+func EncodeNull(b []byte) []byte {
+	return append(b, encodedNull...)
+}
+
+// DecodeIfNull decodes a NULL value from the input buffer. If the input buffer
+// contains a null at the start of the buffer then it is removed from the
+// buffer and true is returned for the second result. Otherwise, the buffer is
+// returned unchanged and false is returned for the second result. Since the
+// NULL value encoding is guaranteed to never occur as the prefix for the
+// EncodeVarint, EncodeFloat, EncodeBytes and EncodeString encodings, it is
+// safe to call DecodeIfNull on their encoded values.
+func DecodeIfNull(b []byte) ([]byte, bool) {
+	if len(b) >= 2 && b[0] == 0x00 && b[1] == 0x00 {
+		return b[2:], true
+	}
+	return b, false
 }

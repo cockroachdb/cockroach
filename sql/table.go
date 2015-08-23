@@ -151,7 +151,7 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 
 	var qualifiedNames parser.QualifiedNames
 	for _, row := range sr {
-		_, tableName := encoding.DecodeBytes(bytes.TrimPrefix(row.Key, prefix), nil)
+		_, tableName := encoding.DecodeString(bytes.TrimPrefix(row.Key, prefix), nil)
 		qname := &parser.QualifiedName{
 			Base:     parser.Name(dbDesc.Name),
 			Indirect: parser.Indirection{parser.NameIndirection(tableName)},
@@ -209,7 +209,7 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 	case parser.DFloat:
 		return encoding.EncodeFloat(b, float64(t)), nil
 	case parser.DString:
-		return encoding.EncodeBytes(b, []byte(t)), nil
+		return encoding.EncodeString(b, string(t)), nil
 	}
 	return nil, fmt.Errorf("unable to encode table key: %T", val)
 }
@@ -278,8 +278,8 @@ func decodeKeyVals(vals []parser.Datum, key []byte) ([]byte, error) {
 			key, f = encoding.DecodeFloat(key)
 			vals[j] = parser.DFloat(f)
 		case parser.DString:
-			var r []byte
-			key, r = encoding.DecodeBytes(key, nil)
+			var r string
+			key, r = encoding.DecodeString(key, nil)
 			vals[j] = parser.DString(r)
 		default:
 			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", vals[j].Type())

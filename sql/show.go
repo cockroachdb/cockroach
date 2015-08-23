@@ -61,7 +61,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	}
 	v := &valuesNode{columns: []string{"Database"}}
 	for _, row := range sr {
-		_, name := encoding.DecodeBytes(bytes.TrimPrefix(row.Key, prefix), nil)
+		_, name := encoding.DecodeString(bytes.TrimPrefix(row.Key, prefix), nil)
 		v.rows = append(v.rows, []parser.Datum{parser.DString(name)})
 	}
 	return v, nil
