@@ -18,7 +18,7 @@ rest of the query. For example, consider the following table:
 CREATE TABLE test (
   a INT PRIMARY KEY,
   b TEXT,
-  c BOOL,
+  c BOOLEAN,
   CONSTRAINT foo INDEX (b, c)
 )
 ```
@@ -45,7 +45,7 @@ and meshes with our desire to allow explicitness in queries.
 
 Note that this proposal is essentially a very strict form of an index hint or
 forced index hint functionality. It is possible we'll adjust the semantics in
-the future 
+the future.
 
 # Detailed design
 

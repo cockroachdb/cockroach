@@ -24,7 +24,7 @@ As an example, consider the following table:
 CREATE TABLE foo (
   a INT PRIMARY KEY,
   b TEXT,
-  c BOOL,
+  c BOOLEAN,
   CONSTRAINT bar UNIQUE (b)
 )
 ```
