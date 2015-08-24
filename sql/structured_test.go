@@ -259,8 +259,6 @@ func TestColumnTypeSQLString(t *testing.T) {
 		colType     sql.ColumnType
 		expectedSQL string
 	}{
-		{sql.ColumnType{Kind: sql.ColumnType_BIT}, "BIT"},
-		{sql.ColumnType{Kind: sql.ColumnType_BIT, Width: 1}, "BIT(1)"},
 		{sql.ColumnType{Kind: sql.ColumnType_INT}, "INT"},
 		{sql.ColumnType{Kind: sql.ColumnType_INT, Width: 2}, "INT(2)"},
 		{sql.ColumnType{Kind: sql.ColumnType_FLOAT}, "FLOAT"},
@@ -269,12 +267,10 @@ func TestColumnTypeSQLString(t *testing.T) {
 		{sql.ColumnType{Kind: sql.ColumnType_DECIMAL, Precision: 6}, "DECIMAL(6)"},
 		{sql.ColumnType{Kind: sql.ColumnType_DECIMAL, Precision: 7, Width: 8}, "DECIMAL(7,8)"},
 		{sql.ColumnType{Kind: sql.ColumnType_DATE}, "DATE"},
-		{sql.ColumnType{Kind: sql.ColumnType_TIME}, "TIME"},
 		{sql.ColumnType{Kind: sql.ColumnType_TIMESTAMP}, "TIMESTAMP"},
-		{sql.ColumnType{Kind: sql.ColumnType_CHAR}, "CHAR"},
-		{sql.ColumnType{Kind: sql.ColumnType_CHAR, Width: 10}, "CHAR(10)"},
-		{sql.ColumnType{Kind: sql.ColumnType_TEXT}, "TEXT"},
-		{sql.ColumnType{Kind: sql.ColumnType_BLOB}, "BLOB"},
+		{sql.ColumnType{Kind: sql.ColumnType_STRING}, "STRING"},
+		{sql.ColumnType{Kind: sql.ColumnType_STRING, Width: 10}, "STRING(10)"},
+		{sql.ColumnType{Kind: sql.ColumnType_BYTES}, "BYTES"},
 	}
 	for i, d := range testData {
 		sql := d.colType.SQLString()

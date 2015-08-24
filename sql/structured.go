@@ -292,7 +292,7 @@ func (desc *TableDescriptor) FindIndexByName(name string) (*IndexDescriptor, err
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.Kind {
-	case ColumnType_BIT, ColumnType_INT, ColumnType_CHAR:
+	case ColumnType_INT, ColumnType_STRING:
 		if c.Width > 0 {
 			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Width)
 		}

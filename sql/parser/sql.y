@@ -310,7 +310,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   ASSERTION ASSIGNMENT ASYMMETRIC AT ATTRIBUTE AUTHORIZATION
 
 %token <str>   BACKWARD BEFORE BEGIN BETWEEN BIGINT BINARY BIT
-%token <str>   BLOB BOOLEAN BOTH BY
+%token <str>   BLOB BOOL BOOLEAN BOTH BY BYTES
 
 %token <str>   CACHE CALLED CASCADE CASCADED CASE CAST CHAIN CHAR
 %token <str>   CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLOSE
@@ -337,7 +337,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 
 %token <str>   IDENTITY IF IMMEDIATE IMMUTABLE IMPLICIT IMPORT IN
 %token <str>   INCLUDING INCREMENT INDEX INDEXES INHERIT INHERITS INITIALLY INLINE
-%token <str>   INNER INOUT INPUT INSENSITIVE INSERT INSTEAD INT INTEGER
+%token <str>   INNER INOUT INPUT INSENSITIVE INSERT INSTEAD INT INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO INVOKER IS ISOLATION
 
 %token <str>   JOIN
@@ -371,7 +371,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   SAVEPOINT SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
 %token <str>   SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
 %token <str>   SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL STABLE STANDALONE START
-%token <str>   STATEMENT STATISTICS STDIN STDOUT STRICT STRIP SUBSTRING
+%token <str>   STATEMENT STATISTICS STDIN STDOUT STRICT STRING STRIP SUBSTRING
 %token <str>   SYMMETRIC SYSID SYSTEM
 
 %token <str>   TABLE TABLES TEXT THEN
@@ -2331,11 +2331,19 @@ simple_typename:
 | const_interval '(' ICONST ')' {}
 | BLOB
   {
-    $$ = &BlobType{}
+    $$ = &BytesType{Name: "BLOB"}
+  }
+| BYTES
+  {
+    $$ = &BytesType{Name: "BYTES"}
   }
 | TEXT
   {
-    $$ = &TextType{}
+    $$ = &StringType{Name: "TEXT"}
+  }
+| STRING
+  {
+    $$ = &StringType{Name: "STRING"}
   }
 
 // We have a separate const_typename to allow defaulting fixed-length types
@@ -2371,50 +2379,58 @@ opt_numeric_modifiers:
 numeric:
   INT
   {
-    $$ = &IntType{Name: astInt}
+    $$ = &IntType{Name: "INT"}
+  }
+| INT64
+  {
+    $$ = &IntType{Name: "INT64"}
   }
 | INTEGER
   {
-    $$ = &IntType{Name: astInteger}
+    $$ = &IntType{Name: "INTEGER"}
   }
 | SMALLINT
   {
-    $$ = &IntType{Name: astSmallInt}
+    $$ = &IntType{Name: "SMALLINT"}
   }
 | BIGINT
   {
-    $$ = &IntType{Name: astBigInt}
+    $$ = &IntType{Name: "BIGINT"}
   }
 | REAL
   {
-    $$ = &FloatType{Name: astReal}
+    $$ = &FloatType{Name: "REAL"}
   }
 | FLOAT opt_float
   {
-    $$ = &FloatType{Name: astFloat, Prec: int($2)}
+    $$ = &FloatType{Name: "FLOAT", Prec: int($2)}
   }
 | DOUBLE PRECISION
   {
-    $$ = &FloatType{Name: astDouble}
+    $$ = &FloatType{Name: "DOUBLE PRECISION"}
   }
 | DECIMAL opt_numeric_modifiers
   {
     $$ = $2
-    $$.(*DecimalType).Name = astDecimal
+    $$.(*DecimalType).Name = "DECIMAL"
   }
 | DEC opt_numeric_modifiers
   {
     $$ = $2
-    $$.(*DecimalType).Name = astDecimal
+    $$.(*DecimalType).Name = "DEC"
   }
 | NUMERIC opt_numeric_modifiers
   {
     $$ = $2
-    $$.(*DecimalType).Name = astNumeric
+    $$.(*DecimalType).Name = "NUMERIC"
   }
 | BOOLEAN
   {
-    $$ = &BoolType{}
+    $$ = &BoolType{Name: "BOOLEAN"}
+  }
+| BOOL
+  {
+    $$ = &BoolType{Name: "BOOL"}
   }
 
 opt_float:
@@ -2442,13 +2458,13 @@ const_bit:
 bit_with_length:
   BIT opt_varying '(' ICONST ')'
   {
-    $$ = &BitType{N: int($4)}
+    $$ = &IntType{Name: "BIT", N: int($4)}
   }
 
 bit_without_length:
   BIT opt_varying
   {
-    $$ = &BitType{}
+    $$ = &IntType{Name: "BIT"}
   }
 
 // SQL character data types
@@ -2465,7 +2481,7 @@ character_with_length:
   character_base '(' ICONST ')' opt_charset
   {
     $$ = $1
-    $$.(*CharType).N = int($3)
+    $$.(*StringType).N = int($3)
   }
 
 character_without_length:
@@ -2477,15 +2493,15 @@ character_without_length:
 character_base:
   CHARACTER opt_varying
   {
-    $$ = &CharType{Name: astChar}
+    $$ = &StringType{Name: "CHAR"}
   }
 | CHAR opt_varying
   {
-    $$ = &CharType{Name: astChar}
+    $$ = &StringType{Name: "CHAR"}
   }
 | VARCHAR
   {
-    $$ = &CharType{Name: astVarChar}
+    $$ = &StringType{Name: "VARCHAR"}
   }
 
 opt_varying:
@@ -2500,7 +2516,7 @@ opt_charset:
 const_datetime:
   DATE
   {
-    $$ = &DateType{}
+    $$ = &DateType{Name: "DATE"}
   }
 | TIMESTAMP '(' ICONST ')' opt_timezone
   {
@@ -2512,11 +2528,11 @@ const_datetime:
   }
 | TIME '(' ICONST ')' opt_timezone
   {
-    $$ = &TimeType{}
+    $$ = &DateType{Name: "TIME"}
   }
 | TIME opt_timezone
   {
-    $$ = &TimeType{}
+    $$ = &DateType{Name: "TIME"}
   }
 
 const_interval:
@@ -3837,7 +3853,9 @@ col_name_keyword:
   BETWEEN
 | BIGINT
 | BIT
+| BOOL
 | BOOLEAN
+| BYTES
 | CHAR
 | CHARACTER
 | COALESCE
@@ -3851,6 +3869,7 @@ col_name_keyword:
 | GROUPING
 | INOUT
 | INT
+| INT64
 | INTEGER
 | INTERVAL
 | LEAST
@@ -3867,6 +3886,7 @@ col_name_keyword:
 | ROW
 | SETOF
 | SMALLINT
+| STRING
 | SUBSTRING
 | TIME
 | TIMESTAMP

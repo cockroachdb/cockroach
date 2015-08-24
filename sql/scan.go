@@ -637,14 +637,13 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 	}
 	if kv.Exists() {
 		switch kind {
-		case ColumnType_BIT, ColumnType_INT:
+		case ColumnType_INT:
 			return parser.DInt(kv.ValueInt()), true
 		case ColumnType_BOOL:
 			return parser.DBool(kv.ValueInt() != 0), true
 		case ColumnType_FLOAT:
 			return parser.DFloat(math.Float64frombits(uint64(kv.ValueInt()))), true
-		case ColumnType_CHAR, ColumnType_TEXT,
-			ColumnType_BLOB:
+		case ColumnType_STRING, ColumnType_BYTES:
 			return parser.DString(kv.ValueBytes()), true
 		}
 	}
@@ -665,14 +664,13 @@ func (n *scanNode) getQVal(col ColumnDescriptor) *qvalue {
 		// TODO(pmattis): Nullable columns can have NULL values. The type analysis
 		// needs to take that into consideration, but how to surface that info?
 		switch col.Type.Kind {
-		case ColumnType_BIT, ColumnType_INT:
+		case ColumnType_INT:
 			qval.datum = parser.DInt(0)
 		case ColumnType_BOOL:
 			qval.datum = parser.DBool(true)
 		case ColumnType_FLOAT:
 			qval.datum = parser.DFloat(0)
-		case ColumnType_CHAR, ColumnType_TEXT,
-			ColumnType_BLOB:
+		case ColumnType_STRING, ColumnType_BYTES:
 			qval.datum = parser.DString("")
 		default:
 			panic(fmt.Sprintf("unsupported column type: %s", col.Type.Kind))

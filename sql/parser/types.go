@@ -32,8 +32,6 @@ const (
 	astFloat    = "FLOAT"
 	astDecimal  = "DECIMAL"
 	astNumeric  = "NUMERIC"
-	astChar     = "CHAR"
-	astVarChar  = "VARCHAR"
 )
 
 // ColumnType represents a type in a column definition.
@@ -42,37 +40,22 @@ type ColumnType interface {
 	columnType()
 }
 
-func (*BitType) columnType()       {}
 func (*BoolType) columnType()      {}
 func (*IntType) columnType()       {}
 func (*FloatType) columnType()     {}
 func (*DecimalType) columnType()   {}
 func (*DateType) columnType()      {}
-func (*TimeType) columnType()      {}
 func (*TimestampType) columnType() {}
-func (*CharType) columnType()      {}
-func (*TextType) columnType()      {}
-func (*BlobType) columnType()      {}
-
-// BitType represents a BIT type.
-type BitType struct {
-	N int
-}
-
-func (node *BitType) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "BIT")
-	if node.N > 0 {
-		fmt.Fprintf(&buf, "(%d)", node.N)
-	}
-	return buf.String()
-}
+func (*StringType) columnType()    {}
+func (*BytesType) columnType()     {}
 
 // BoolType represents a BOOLEAN type.
-type BoolType struct{}
+type BoolType struct {
+	Name string
+}
 
 func (node *BoolType) String() string {
-	return "BOOLEAN"
+	return node.Name
 }
 
 // IntType represents an INT, INTEGER, SMALLINT or BIGINT type.
@@ -127,18 +110,11 @@ func (node *DecimalType) String() string {
 
 // DateType represents a DATE type.
 type DateType struct {
+	Name string
 }
 
 func (node *DateType) String() string {
-	return "DATE"
-}
-
-// TimeType represents a TIME type.
-type TimeType struct {
-}
-
-func (node *TimeType) String() string {
-	return "TIME"
+	return node.Name
 }
 
 // TimestampType represents a TIMESTAMP type.
@@ -149,13 +125,13 @@ func (node *TimestampType) String() string {
 	return "TIMESTAMP"
 }
 
-// CharType represents a CHAR or VARCHAR type.
-type CharType struct {
+// StringType represents a STRING, CHAR or VARCHAR type.
+type StringType struct {
 	Name string
 	N    int
 }
 
-func (node *CharType) String() string {
+func (node *StringType) String() string {
 	var buf bytes.Buffer
 	_, _ = buf.WriteString(node.Name)
 	if node.N > 0 {
@@ -164,20 +140,11 @@ func (node *CharType) String() string {
 	return buf.String()
 }
 
-// TextType represents a TEXT type.
-type TextType struct {
+// BytesType represents a BYTES or BLOB type.
+type BytesType struct {
 	Name string
 }
 
-func (node *TextType) String() string {
-	return "TEXT"
-}
-
-// BlobType represents a BLOB type.
-type BlobType struct {
-	Name string
-}
-
-func (node *BlobType) String() string {
-	return "BLOB"
+func (node *BytesType) String() string {
+	return node.Name
 }

@@ -21,44 +21,35 @@ var _ = math.Inf
 type ColumnType_Kind int32
 
 const (
-	ColumnType_BIT       ColumnType_Kind = 0
-	ColumnType_BOOL      ColumnType_Kind = 1
-	ColumnType_INT       ColumnType_Kind = 2
-	ColumnType_FLOAT     ColumnType_Kind = 3
-	ColumnType_DECIMAL   ColumnType_Kind = 4
-	ColumnType_DATE      ColumnType_Kind = 5
-	ColumnType_TIME      ColumnType_Kind = 6
-	ColumnType_TIMESTAMP ColumnType_Kind = 7
-	ColumnType_CHAR      ColumnType_Kind = 8
-	ColumnType_TEXT      ColumnType_Kind = 9
-	ColumnType_BLOB      ColumnType_Kind = 10
+	ColumnType_BOOL      ColumnType_Kind = 0
+	ColumnType_INT       ColumnType_Kind = 1
+	ColumnType_FLOAT     ColumnType_Kind = 2
+	ColumnType_DECIMAL   ColumnType_Kind = 3
+	ColumnType_DATE      ColumnType_Kind = 4
+	ColumnType_TIMESTAMP ColumnType_Kind = 5
+	ColumnType_STRING    ColumnType_Kind = 6
+	ColumnType_BYTES     ColumnType_Kind = 7
 )
 
 var ColumnType_Kind_name = map[int32]string{
-	0:  "BIT",
-	1:  "BOOL",
-	2:  "INT",
-	3:  "FLOAT",
-	4:  "DECIMAL",
-	5:  "DATE",
-	6:  "TIME",
-	7:  "TIMESTAMP",
-	8:  "CHAR",
-	9:  "TEXT",
-	10: "BLOB",
+	0: "BOOL",
+	1: "INT",
+	2: "FLOAT",
+	3: "DECIMAL",
+	4: "DATE",
+	5: "TIMESTAMP",
+	6: "STRING",
+	7: "BYTES",
 }
 var ColumnType_Kind_value = map[string]int32{
-	"BIT":       0,
-	"BOOL":      1,
-	"INT":       2,
-	"FLOAT":     3,
-	"DECIMAL":   4,
-	"DATE":      5,
-	"TIME":      6,
-	"TIMESTAMP": 7,
-	"CHAR":      8,
-	"TEXT":      9,
-	"BLOB":      10,
+	"BOOL":      0,
+	"INT":       1,
+	"FLOAT":     2,
+	"DECIMAL":   3,
+	"DATE":      4,
+	"TIMESTAMP": 5,
+	"STRING":    6,
+	"BYTES":     7,
 }
 
 func (x ColumnType_Kind) Enum() *ColumnType_Kind {
@@ -94,7 +85,7 @@ func (m *ColumnType) GetKind() ColumnType_Kind {
 	if m != nil {
 		return m.Kind
 	}
-	return ColumnType_BIT
+	return ColumnType_BOOL
 }
 
 func (m *ColumnType) GetWidth() int32 {
