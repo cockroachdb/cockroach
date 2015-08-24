@@ -52,7 +52,6 @@ import (
 
 var (
 	testDefaultAcctConfig = config.AcctConfig{}
-	testDefaultUserConfig = config.UserConfig{}
 	testDefaultZoneConfig = config.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			{Attrs: []string{"dc1", "mem"}},
@@ -220,9 +219,6 @@ func (tc *testContext) initConfigs(realRange bool) error {
 	}
 
 	if err := putMethod(keys.ConfigAccountingPrefix, &testDefaultAcctConfig); err != nil {
-		return err
-	}
-	if err := putMethod(keys.ConfigUserPrefix, &testDefaultUserConfig); err != nil {
 		return err
 	}
 	if err := putMethod(keys.ConfigZonePrefix, &testDefaultZoneConfig); err != nil {
@@ -649,7 +645,6 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 		configs   []config.PrefixConfig
 	}{
 		{gossip.KeyConfigAccounting, []config.PrefixConfig{config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultAcctConfig)}},
-		{gossip.KeyConfigUser, []config.PrefixConfig{config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultUserConfig)}},
 		{gossip.KeyConfigZone, []config.PrefixConfig{config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig)}},
 	}
 	for _, test := range testData {

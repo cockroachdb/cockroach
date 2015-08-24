@@ -37,8 +37,6 @@ const (
 	Accounting = "acct"
 	// Quit only handles Get requests.
 	Quit = "quit"
-	// User expects config.UserConfig
-	User = "users"
 	// Zone expects config.ZoneConfig.
 	Zone = "zones"
 )

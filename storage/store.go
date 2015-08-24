@@ -836,8 +836,8 @@ func (s *Store) RaftStatus(rangeID proto.RangeID) *raft.Status {
 
 // BootstrapRange creates the first range in the cluster and manually
 // writes it to the store. Default range addressing records are
-// created for meta1 and meta2. Default configurations for accounting,
-// users, and zones are created. All configs are specified
+// created for meta1 and meta2. Default configurations for accounting
+// and zones are created. All configs are specified
 // for the empty key prefix, meaning they apply to the entire
 // database. The zone requires three replicas with no other specifications.
 // It also adds the range tree and the root node, the first range, to it.
@@ -890,12 +890,6 @@ func (s *Store) BootstrapRange(initialValues []proto.KeyValue) error {
 	// Accounting config.
 	acctConfig := &config.AcctConfig{}
 	if err := engine.MVCCPutProto(batch, ms, keys.ConfigAccountingPrefix, now, nil, acctConfig); err != nil {
-		return err
-	}
-	// User config.
-	// TODO(marc): instead of a root entry, maybe we should have a default "node".
-	userConfig := &config.UserConfig{}
-	if err := engine.MVCCPutProto(batch, ms, keys.ConfigUserPrefix, now, nil, userConfig); err != nil {
 		return err
 	}
 	// Zone config.

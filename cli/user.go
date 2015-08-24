@@ -19,15 +19,11 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
 
 	"github.com/spf13/cobra"
-	yaml "gopkg.in/yaml.v1"
 )
 
 // A getUserCmd command displays the config for the specified username.
@@ -46,13 +42,12 @@ func runGetUser(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&context.Context, context.Addr, client.User)
-	body, err := admin.GetYAML(args[0])
+	db := makeSQLClient()
+	err := processOneLine(db, fmt.Sprintf(`SELECT * FROM system.users WHERE username='%s'`, args[0]))
 	if err != nil {
 		log.Error(err)
 		return
 	}
-	fmt.Printf("User config for %q:\n%s\n", args[0], body)
 }
 
 // A lsUsersCmd command displays a list of user configs.
@@ -72,14 +67,12 @@ func runLsUsers(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&context.Context, context.Addr, client.User)
-	list, err := admin.List()
+	db := makeSQLClient()
+	err := processOneLine(db, `SELECT username FROM system.users`)
 	if err != nil {
 		log.Error(err)
 		return
 	}
-	fmt.Printf("Users:\n%s\n", strings.Join(list, "\n  "))
-
 }
 
 // A rmUserCmd command removes the user config for the specified username.
@@ -98,13 +91,12 @@ func runRmUser(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&context.Context, context.Addr, client.User)
-	if err := admin.Delete(args[0]); err != nil {
+	db := makeSQLClient()
+	err := processOneLine(db, fmt.Sprintf(`DELETE FROM system.users WHERE username='%s'`, args[0]))
+	if err != nil {
 		log.Error(err)
 		return
 	}
-	fmt.Printf("Deleted user %q\n", args[0])
-
 }
 
 // A setUserCmd command creates a new or updates an existing user config.
@@ -132,20 +124,12 @@ func runSetUser(cmd *cobra.Command, args []string) {
 		log.Error(err)
 		return
 	}
-	// Build a UserConfig object. RunSetUser expects Yaml.
-	// TODO(marc): re-work admin client library to take other encodings.
-	pb := &config.UserConfig{HashedPassword: hashed}
-	contents, err := yaml.Marshal(pb)
+	db := makeSQLClient()
+	err = processOneLine(db, fmt.Sprintf(`INSERT INTO system.users VALUES ('%s','%s')`, args[0], hashed))
 	if err != nil {
 		log.Error(err)
 		return
 	}
-	admin := client.NewAdminClient(&context.Context, context.Addr, client.User)
-	if err := admin.SetYAML(args[0], string(contents)); err != nil {
-		log.Error(err)
-		return
-	}
-	fmt.Printf("Wrote user config for %q\n", args[0])
 }
 
 var userCmds = []*cobra.Command{
