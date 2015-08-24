@@ -28,13 +28,13 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 	opts := Options{
 		InitialBackoff: time.Microsecond * 10,
 		MaxBackoff:     time.Microsecond * 10,
-		Multiplier:     10e4,
+		Multiplier:     1e5,
 		MaxRetries:     1,
 	}
 
 	// tolerate a duration two orders of magnitude lower than if MaxBackoff is
 	// not respected.
-	fudgeFactor := opts.Multiplier / 10e2
+	fudgeFactor := opts.Multiplier / 100
 
 	attempts := 0
 	start := time.Now()
