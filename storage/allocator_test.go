@@ -57,7 +57,7 @@ var multiDCConfig = config.ZoneConfig{
 func gossipStores(g *gossip.Gossip, stores []*proto.StoreDescriptor, t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(len(stores))
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool) { wg.Done() })
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool, _ interface{}) { wg.Done() })
 
 	for _, s := range stores {
 		keyStoreGossip := gossip.MakeStoreKey(s.StoreID)
@@ -538,8 +538,9 @@ func TestAllocatorCapacityGossipUpdate(t *testing.T) {
 
 	// Order and value of contentsChanged shouldn't matter.
 	key := "testkey"
-	s.allocator().storeGossipUpdate(key, true)
-	s.allocator().storeGossipUpdate(key, false)
+	var content interface{}
+	s.allocator().storeGossipUpdate(key, true, content)
+	s.allocator().storeGossipUpdate(key, false, content)
 
 	expectedKeys := map[string]struct{}{key: {}}
 	s.allocator().Lock()
@@ -665,7 +666,7 @@ func Example_rebalancing() {
 	alloc.deterministic = true
 
 	var wg sync.WaitGroup
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool) { wg.Done() })
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool, _ interface{}) { wg.Done() })
 
 	const generations = 100
 	const nodes = 20
