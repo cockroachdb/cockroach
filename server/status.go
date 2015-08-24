@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -89,10 +90,6 @@ const (
 	statusStoresPrefix = "/_status/stores/"
 	// statusStorePattern exposes status for a single store.
 	statusStorePattern = "/_status/stores/:store_id"
-
-	// statusProxyTimeout is the timeout used when proxying a request to another
-	// node.
-	statusProxyTimeout = time.Second
 )
 
 // Pattern for local used when determining the node ID.
@@ -117,7 +114,7 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, ctx *Context) *status
 	}
 	httpClient := &http.Client{
 		Transport: &http.Transport{TLSClientConfig: tlsConfig},
-		Timeout:   statusProxyTimeout,
+		Timeout:   base.NetworkTimeout,
 	}
 
 	server := &statusServer{

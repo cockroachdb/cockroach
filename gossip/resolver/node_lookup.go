@@ -23,14 +23,11 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"time"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
-
-const lookupTimeout = time.Second * 3
 
 // nodeLookupResolver implements Resolver.
 // It queries http(s)://<address>/_status/details/local and extracts the node's
@@ -73,7 +70,7 @@ func (nl *nodeLookupResolver) GetAddress() (net.Addr, error) {
 		}
 		nl.httpClient = &http.Client{
 			Transport: &http.Transport{TLSClientConfig: tlsConfig},
-			Timeout:   lookupTimeout,
+			Timeout:   base.NetworkTimeout,
 		}
 	}
 

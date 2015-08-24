@@ -228,17 +228,9 @@ func TestAcceptEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
-	// We can't use the standard test client. Create our own.
-	tlsConfig, err := testContext.GetClientTLSConfig()
+	client, err := testContext.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
-	}
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig:    tlsConfig,
-			Proxy:              http.ProxyFromEnvironment,
-			DisableCompression: true,
-		},
 	}
 
 	testData := []struct {
