@@ -22,12 +22,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
-	"text/tabwriter"
 
 	// Import cockroach driver.
 	_ "github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/olekukonko/tablewriter"
 	"github.com/peterh/liner"
 	"github.com/spf13/cobra"
 )
@@ -79,10 +78,11 @@ func processOneLine(db *sql.DB, line string) error {
 		return nil
 	}
 
-	// Format all rows using tabwriter.
-	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Fprintf(tw, "%s\n", strings.Join(cols, "\t"))
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader(cols)
+
 	vals := make([]interface{}, len(cols))
+	rowStrings := make([]string, len(cols))
 	for rows.Next() {
 		for i := range vals {
 			vals[i] = new(sql.NullString)
@@ -90,17 +90,19 @@ func processOneLine(db *sql.DB, line string) error {
 		if err := rows.Scan(vals...); err != nil {
 			return util.Errorf("scan error: %s", err)
 		}
-		for _, v := range vals {
+		for i, v := range vals {
 			nullStr := v.(*sql.NullString)
 			if nullStr.Valid {
-				fmt.Fprintf(tw, "%s\t", nullStr.String)
+				rowStrings[i] = nullStr.String
 			} else {
-				fmt.Fprint(tw, "NULL\t")
+				rowStrings[i] = "NULL"
 			}
 		}
-		fmt.Fprintf(tw, "\n")
+		table.Append(rowStrings)
 	}
-	_ = tw.Flush()
+
+	table.Render()
+
 	return nil
 }
 
