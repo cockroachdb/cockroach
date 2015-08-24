@@ -17,10 +17,6 @@
 
 package parser
 
-// TODO(pmattis):
-//   - Add support for hexadecimal integer literals. Perhaps octal (0o) and
-//     binary (0b) as well.
-
 import (
 	"bytes"
 	"fmt"
@@ -395,14 +391,28 @@ func (s *scanner) scanIdent(lval *sqlSymType, ch int) {
 
 func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 	start := s.pos - 1
+	isHex := false
 	hasDecimal := ch == '.'
 	hasExponent := false
 
 	for {
 		ch := s.peek()
-		if isDigit(ch) {
+		if isHex && isHexDigit(ch) || isDigit(ch) {
 			s.pos++
 			continue
+		}
+		if ch == 'x' || ch == 'X' {
+			if isHex || s.in[start] != '0' || s.pos != start+1 {
+				lval.id = ERROR
+				lval.str = "invalid hexadecimal literal"
+				return
+			}
+			s.pos++
+			isHex = true
+			continue
+		}
+		if isHex {
+			break
 		}
 		if ch == '.' {
 			if hasDecimal || hasExponent {
@@ -431,7 +441,7 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 			ch = s.peek()
 			if !isDigit(ch) {
 				lval.id = ERROR
-				lval.str = "invalid floating point constant"
+				lval.str = "invalid floating point literal"
 				return
 			}
 			continue
@@ -445,8 +455,19 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 		return
 	}
 
+	// We explicitly parse only decimal and hexadecimal literals here. We could
+	// parse octal as well, but have decided for the present time not to.
 	var err error
-	lval.ival, err = strconv.Atoi(lval.str)
+	if isHex {
+		if s.pos == start+2 {
+			lval.id = ERROR
+			lval.str = "invalid hexadecimal literal"
+			return
+		}
+		lval.ival, err = strconv.ParseInt(lval.str[2:], 16, 64)
+	} else {
+		lval.ival, err = strconv.ParseInt(lval.str, 10, 64)
+	}
 	if err != nil {
 		lval.id = ERROR
 		lval.str = err.Error()
@@ -464,7 +485,7 @@ func (s *scanner) scanParam(lval *sqlSymType) {
 	lval.str = s.in[start:s.pos]
 
 	var err error
-	lval.ival, err = strconv.Atoi(lval.str)
+	lval.ival, err = strconv.ParseInt(lval.str, 10, 64)
 	if err != nil {
 		lval.id = ERROR
 		lval.str = err.Error()
@@ -547,6 +568,12 @@ func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 
 func isDigit(ch int) bool {
 	return ch >= '0' && ch <= '9'
+}
+
+func isHexDigit(ch int) bool {
+	return (ch >= '0' && ch <= '9') ||
+		(ch >= 'a' && ch <= 'f') ||
+		(ch >= 'A' && ch <= 'F')
 }
 
 func isIdent(s string) bool {

@@ -13,7 +13,7 @@ type sqlSymType struct {
 	id             int
 	pos            int
 	empty          struct{}
-	ival           int
+	ival           int64
 	str            string
 	strs           []string
 	qname          *QualifiedName
@@ -8662,13 +8662,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2358
 		{
-			sqlVAL.colType = &DecimalType{Prec: sqlDollar[2].ival}
+			sqlVAL.colType = &DecimalType{Prec: int(sqlDollar[2].ival)}
 		}
 	case 539:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:2362
 		{
-			sqlVAL.colType = &DecimalType{Prec: sqlDollar[2].ival, Scale: sqlDollar[4].ival}
+			sqlVAL.colType = &DecimalType{Prec: int(sqlDollar[2].ival), Scale: int(sqlDollar[4].ival)}
 		}
 	case 540:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
@@ -8710,7 +8710,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2393
 		{
-			sqlVAL.colType = &FloatType{Name: astFloat, Prec: sqlDollar[2].ival}
+			sqlVAL.colType = &FloatType{Name: astFloat, Prec: int(sqlDollar[2].ival)}
 		}
 	case 547:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -8761,7 +8761,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:2444
 		{
-			sqlVAL.colType = &BitType{N: sqlDollar[4].ival}
+			sqlVAL.colType = &BitType{N: int(sqlDollar[4].ival)}
 		}
 	case 559:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -8774,7 +8774,7 @@ sqldefault:
 		//line sql.y:2466
 		{
 			sqlVAL.colType = sqlDollar[1].colType
-			sqlVAL.colType.(*CharType).N = sqlDollar[3].ival
+			sqlVAL.colType.(*CharType).N = int(sqlDollar[3].ival)
 		}
 	case 565:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]

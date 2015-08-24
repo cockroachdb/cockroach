@@ -163,6 +163,10 @@ func TestScanNumber(t *testing.T) {
 		id       int
 	}{
 		{`1`, `1`, ICONST},
+		{`0x1`, `0x1`, ICONST},
+		{`0X2`, `0X2`, ICONST},
+		{`0xff`, `0xff`, ICONST},
+		{`0xff.`, `0xff`, ICONST},
 		{`12345`, `12345`, ICONST},
 		{`1.`, `1.`, FCONST},
 		{`.1`, `.1`, FCONST},
@@ -193,7 +197,7 @@ func TestScanNumber(t *testing.T) {
 func TestScanParam(t *testing.T) {
 	testData := []struct {
 		sql      string
-		expected int
+		expected int64
 	}{
 		{`$1`, 1},
 		{`$1a`, 1},
@@ -267,9 +271,15 @@ func TestScanError(t *testing.T) {
 		sql string
 		err string
 	}{
-		{`1e`, "invalid floating point constant"},
-		{`1e-`, "invalid floating point constant"},
-		{`1e+`, "invalid floating point constant"},
+		{`1e`, "invalid floating point literal"},
+		{`1e-`, "invalid floating point literal"},
+		{`1e+`, "invalid floating point literal"},
+		{`0x`, "invalid hexadecimal literal"},
+		{`1x`, "invalid hexadecimal literal"},
+		{`1.x`, "invalid hexadecimal literal"},
+		{`1.0x`, "invalid hexadecimal literal"},
+		{`0x0x`, "invalid hexadecimal literal"},
+		{`00x0x`, "invalid hexadecimal literal"},
 		{`9223372036854775808`, "value out of range"},
 		{`$9223372036854775808`, "value out of range"},
 	}
