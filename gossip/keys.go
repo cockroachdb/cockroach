@@ -39,12 +39,6 @@ const (
 	// Gossip.Connected channel is closed when we see this key.
 	KeyClusterID = "cluster-id"
 
-	// KeyConfigAccounting is the accounting configuration map.
-	KeyConfigAccounting = "accounting"
-
-	// KeyConfigUser is the user configuration map.
-	KeyConfigUser = "user"
-
 	// KeyConfigZone is the zone configuration map.
 	KeyConfigZone = "zones"
 

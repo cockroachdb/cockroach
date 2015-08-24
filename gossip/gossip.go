@@ -109,7 +109,6 @@ func init() {
 	gob.Register(config.PrefixConfigMap{})
 
 	// Used in config.PrefixConfig.
-	gob.Register(&config.AcctConfig{})
 	gob.Register(&config.ZoneConfig{})
 	gob.Register(&proto.NodeDescriptor{})
 

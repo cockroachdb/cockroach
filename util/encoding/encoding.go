@@ -85,7 +85,7 @@ func wrapChecksum(k []byte, b []byte) []byte {
 
 // Encode translates the given value into a byte representation used to store
 // it in the underlying key-value store. It typically applies to user-level
-// keys, but not to keys operated on internally, such as accounting keys.
+// keys, but not to keys operated on internally, such as zone keys.
 // It returns a byte slice containing, in order, the internal representation
 // of v and a checksum of (k+v).
 // TODO(petermattis) remove this: the only use is in storage/engine.go:Increment.

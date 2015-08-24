@@ -10,7 +10,6 @@
 
 	It has these top-level messages:
 		GCPolicy
-		AcctConfig
 		ZoneConfig
 		PrefixConfig
 		ConfigUnion
@@ -54,22 +53,6 @@ func (m *GCPolicy) GetTTLSeconds() int32 {
 		return m.TTLSeconds
 	}
 	return 0
-}
-
-// AcctConfig holds accounting configuration.
-type AcctConfig struct {
-	ClusterId string `protobuf:"bytes,1,opt,name=cluster_id" json:"cluster_id" yaml:"cluster_id,omitempty"`
-}
-
-func (m *AcctConfig) Reset()         { *m = AcctConfig{} }
-func (m *AcctConfig) String() string { return proto.CompactTextString(m) }
-func (*AcctConfig) ProtoMessage()    {}
-
-func (m *AcctConfig) GetClusterId() string {
-	if m != nil {
-		return m.ClusterId
-	}
-	return ""
 }
 
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
@@ -155,20 +138,12 @@ func (m *PrefixConfig) GetConfig() ConfigUnion {
 }
 
 type ConfigUnion struct {
-	Acct *AcctConfig `protobuf:"bytes,1,opt,name=acct" json:"acct,omitempty"`
-	Zone *ZoneConfig `protobuf:"bytes,2,opt,name=zone" json:"zone,omitempty"`
+	Zone *ZoneConfig `protobuf:"bytes,1,opt,name=zone" json:"zone,omitempty"`
 }
 
 func (m *ConfigUnion) Reset()         { *m = ConfigUnion{} }
 func (m *ConfigUnion) String() string { return proto.CompactTextString(m) }
 func (*ConfigUnion) ProtoMessage()    {}
-
-func (m *ConfigUnion) GetAcct() *AcctConfig {
-	if m != nil {
-		return m.Acct
-	}
-	return nil
-}
 
 func (m *ConfigUnion) GetZone() *ZoneConfig {
 	if m != nil {
@@ -195,28 +170,6 @@ func (m *GCPolicy) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.TTLSeconds))
-	return i, nil
-}
-
-func (m *AcctConfig) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *AcctConfig) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintConfig(data, i, uint64(len(m.ClusterId)))
-	i += copy(data[i:], m.ClusterId)
 	return i, nil
 }
 
@@ -319,25 +272,15 @@ func (m *ConfigUnion) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Acct != nil {
+	if m.Zone != nil {
 		data[i] = 0xa
 		i++
-		i = encodeVarintConfig(data, i, uint64(m.Acct.Size()))
-		n3, err := m.Acct.MarshalTo(data[i:])
+		i = encodeVarintConfig(data, i, uint64(m.Zone.Size()))
+		n3, err := m.Zone.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n3
-	}
-	if m.Zone != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintConfig(data, i, uint64(m.Zone.Size()))
-		n4, err := m.Zone.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n4
 	}
 	return i, nil
 }
@@ -373,14 +316,6 @@ func (m *GCPolicy) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovConfig(uint64(m.TTLSeconds))
-	return n
-}
-
-func (m *AcctConfig) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.ClusterId)
-	n += 1 + l + sovConfig(uint64(l))
 	return n
 }
 
@@ -421,10 +356,6 @@ func (m *PrefixConfig) Size() (n int) {
 func (m *ConfigUnion) Size() (n int) {
 	var l int
 	_ = l
-	if m.Acct != nil {
-		l = m.Acct.Size()
-		n += 1 + l + sovConfig(uint64(l))
-	}
 	if m.Zone != nil {
 		l = m.Zone.Size()
 		n += 1 + l + sovConfig(uint64(l))
@@ -446,9 +377,6 @@ func sozConfig(x uint64) (n int) {
 	return sovConfig(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
 func (this *ConfigUnion) GetValue() interface{} {
-	if this.Acct != nil {
-		return this.Acct
-	}
 	if this.Zone != nil {
 		return this.Zone
 	}
@@ -457,8 +385,6 @@ func (this *ConfigUnion) GetValue() interface{} {
 
 func (this *ConfigUnion) SetValue(value interface{}) bool {
 	switch vt := value.(type) {
-	case *AcctConfig:
-		this.Acct = vt
 	case *ZoneConfig:
 		this.Zone = vt
 	default:
@@ -501,73 +427,6 @@ func (m *GCPolicy) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipConfig(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthConfig
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	return nil
-}
-func (m *AcctConfig) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClusterId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + int(stringLen)
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ClusterId = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -871,36 +730,6 @@ func (m *ConfigUnion) Unmarshal(data []byte) error {
 		wireType := int(wire & 0x7)
 		switch fieldNum {
 		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Acct", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + msglen
-			if msglen < 0 {
-				return ErrInvalidLengthConfig
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Acct == nil {
-				m.Acct = &AcctConfig{}
-			}
-			if err := m.Acct.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Zone", wireType)
 			}

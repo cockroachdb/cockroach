@@ -1745,10 +1745,11 @@ func TestValidSplitKeys(t *testing.T) {
 		{proto.Key("\x00\x00meta2\xff\xff"), false},
 		{proto.Key("\x00\x00meta3"), true},
 		{proto.Key("\x00\x01"), true},
+		// Deprecated accounting config key. Valid split.
 		{proto.Key("\x00accs\xff"), true},
 		{proto.Key("\x00acct"), true},
-		{proto.Key("\x00acct\x00"), false},
-		{proto.Key("\x00acct\xff"), false},
+		{proto.Key("\x00acct\x00"), true},
+		{proto.Key("\x00acct\xff"), true},
 		{proto.Key("\x00accu"), true},
 		{proto.Key("\x00perl"), true},
 		{proto.Key("\x00perm"), true},

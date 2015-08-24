@@ -29,26 +29,14 @@ import (
 )
 
 // TestSplitQueueShouldQueue verifies shouldQueue method correctly
-// combines splits in accounting and zone configs with the size of
-// the range.
+// combines splits in zone configs with the size of the range.
 func TestSplitQueueShouldQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Set accounting and zone configs.
-	acctMap, err := config.NewPrefixConfigMap([]config.PrefixConfig{
-		{Prefix: proto.KeyMin},
-		{Prefix: proto.Key("/dbA")},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := tc.gossip.AddInfo(gossip.KeyConfigAccounting, acctMap, 0); err != nil {
-		t.Fatal(err)
-	}
-
+	// Set zone configs.
 	zoneMap, err := config.NewPrefixConfigMap([]config.PrefixConfig{
 		config.MakePrefixConfig(proto.KeyMin, nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}),
 		config.MakePrefixConfig(proto.Key("/dbB"), nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}),
@@ -68,8 +56,6 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	}{
 		// No intersection, no bytes.
 		{proto.KeyMin, proto.Key("/"), 0, false, 0},
-		// Intersection in accounting, no bytes.
-		{proto.Key("/"), proto.Key("/dbA1"), 0, true, 1},
 		// Intersection in zone, no bytes.
 		{proto.Key("/dbA"), proto.Key("/dbC"), 0, true, 1},
 		// Multiple intersections, no bytes.

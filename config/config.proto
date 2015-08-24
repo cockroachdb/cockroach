@@ -40,11 +40,6 @@ message GCPolicy {
   optional int32 ttl_seconds = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TTLSeconds"];
 }
 
-// AcctConfig holds accounting configuration.
-message AcctConfig {
-  optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"cluster_id,omitempty\""];
-}
-
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
 message ZoneConfig {
   // ReplicaAttrs is a slice of Attributes, each describing required attributes
@@ -76,7 +71,6 @@ message PrefixConfig {
 message ConfigUnion {
   option (gogoproto.onlyone) = true;
   oneof value {
-    AcctConfig acct = 1;
-    ZoneConfig zone = 2;
+    ZoneConfig zone = 1;
   }
 }

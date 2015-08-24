@@ -210,8 +210,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 		i = 0
 		for ; iter.Valid(); iter.Next() {
 			k1, ts1, _ := engine.MVCCDecodeKey(iter.Key())
-			if bytes.HasPrefix(k1, keys.ConfigAccountingPrefix) ||
-				bytes.HasPrefix(k1, keys.ConfigZonePrefix) ||
+			if bytes.HasPrefix(k1, keys.ConfigZonePrefix) ||
 				bytes.HasPrefix(k1, keys.StatusPrefix) {
 				// Some data is written into the system prefix by Store.BootstrapRange,
 				// but it is not in our expected key list so skip it.
