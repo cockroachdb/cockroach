@@ -28,6 +28,7 @@ github.com/kisielk/errcheck 5305053307cdaf346ca8dbc35dd287438adbe725
 github.com/kisielk/gotool 14d7ad1074a71860533c4e9695129461abfc2937
 github.com/lib/pq b269bd035a727d6c1081f76e7a239a1b00674c40
 github.com/montanaflynn/stats fd03720eb269d1ae29484bcf9b284973598e088f
+github.com/olekukonko/tablewriter b9346ac189c55dd419f85c7ad2cd56f810bf19d6
 github.com/peterh/liner c754da6f2d91ef30ddb6c975d2dbe7696eec4fbc
 github.com/robfig/glock cb3c3ec56de988289cab7bbd284eddc04dfee6c9
 github.com/samalba/dockerclient 8802d66ce78e69ff16692f6fa89ad969a5711b8b
