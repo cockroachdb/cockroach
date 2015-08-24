@@ -20,9 +20,6 @@ package sql
 import (
 	"errors"
 	"fmt"
-
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
@@ -41,83 +38,10 @@ type IndexID uint32
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
 	PrimaryKeyIndexName = "primary"
-	// MaxReservedDescID is the maximum reserved descriptor ID.
-	// All objects with ID <= MaxReservedDescID are system object
-	// with special rules.
-	MaxReservedDescID ID = 999
-	// RootNamespaceID is the ID of the root namespace.
-	RootNamespaceID ID = 0
-
-	// System IDs should be kept in sync with IsSystem methods on
-	// DatabaseDescriptor and TableDescriptor.
-	// systemDatabaseID is the ID of the system database.
-	systemDatabaseID ID = 1
-	// namespaceTableID is the ID of the namespace table.
-	namespaceTableID ID = 2
-	// descriptorTableID is the ID of the descriptor table.
-	descriptorTableID ID = 3
 )
 
 // ErrMissingPrimaryKey exported to the sql package.
 var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
-
-// SystemDB is the descriptor for the system database.
-var SystemDB = DatabaseDescriptor{
-	Name:       "system",
-	ID:         systemDatabaseID,
-	Privileges: NewSystemObjectPrivilegeDescriptor(),
-}
-
-// NamespaceTable is the descriptor for the namespace table.
-var NamespaceTable TableDescriptor
-
-// DescriptorTable is the descriptor for the descriptor table.
-var DescriptorTable TableDescriptor
-
-func init() {
-	const sql = `
-CREATE TABLE system.namespace (
-  "parentID" INT,
-  "name"     CHAR,
-  "id"       INT,
-  PRIMARY KEY (parentID, name)
-);
-
-CREATE TABLE system.descriptor (
-  "id"   INT PRIMARY KEY,
-  "desc" BLOB
-);
-`
-	stmts, err := parser.Parse(sql)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	NamespaceTable, err = makeTableDesc(stmts[0].(*parser.CreateTable))
-	if err != nil {
-		log.Fatal(err)
-	}
-	NamespaceTable.Privileges = SystemDB.Privileges
-	NamespaceTable.ID = namespaceTableID
-	if err := NamespaceTable.AllocateIDs(); err != nil {
-		log.Fatal(err)
-	}
-
-	DescriptorTable, err = makeTableDesc(stmts[1].(*parser.CreateTable))
-	if err != nil {
-		log.Fatal(err)
-	}
-	DescriptorTable.Privileges = SystemDB.Privileges
-	DescriptorTable.ID = descriptorTableID
-	if err := DescriptorTable.AllocateIDs(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-// IsSystemID returns true if this ID is reserved for system objects.
-func IsSystemID(id ID) bool {
-	return id > 0 && id <= MaxReservedDescID
-}
 
 func validateName(name, typ string) error {
 	if len(name) == 0 {

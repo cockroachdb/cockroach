@@ -396,11 +396,10 @@ func MVCCGetProto(engine Engine, key proto.Key, timestamp proto.Timestamp, consi
 // MVCCPutProto sets the given key to the protobuf-serialized byte
 // string of msg and the provided timestamp.
 func MVCCPutProto(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction, msg gogoproto.Message) error {
-	data, err := gogoproto.Marshal(msg)
-	if err != nil {
+	value := proto.Value{}
+	if err := value.SetProto(msg); err != nil {
 		return err
 	}
-	value := proto.Value{Bytes: data}
 	value.InitChecksum(key)
 	return MVCCPut(engine, ms, key, timestamp, value, txn)
 }

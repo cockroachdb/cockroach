@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -137,7 +138,10 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 		// not create the range, just its data.  Only do this if this is the
 		// first store.
 		if i == 0 {
-			if err := s.BootstrapRange(); err != nil {
+			// TODO(marc): this is better than having storage/ import sql, but still
+			// not great. Find a better place to keep those.
+			initialValues := sql.GetInitialSystemValues()
+			if err := s.BootstrapRange(initialValues); err != nil {
 				return nil, err
 			}
 		}

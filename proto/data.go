@@ -315,6 +315,16 @@ func (v *Value) GetInteger() (int64, error) {
 	return int64(u), nil
 }
 
+// SetProto encodes the specified proto message into the bytes field of the receiver.
+func (v *Value) SetProto(msg gogoproto.Message) error {
+	data, err := gogoproto.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	v.Bytes = data
+	return nil
+}
+
 // computeChecksum computes a checksum based on the provided key and
 // the contents of the value. If the value contains a byte slice, the
 // checksum includes it directly.
