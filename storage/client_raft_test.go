@@ -517,10 +517,10 @@ func TestStoreRangeReplicate(t *testing.T) {
 	// Initialize the gossip network.
 	var wg sync.WaitGroup
 	wg.Add(len(mtc.stores))
-	key := gossip.MakePrefixPattern(gossip.KeyCapacityPrefix)
+	key := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	mtc.stores[0].Gossip().RegisterCallback(key, func(_ string, _ bool) { wg.Done() })
 	for _, s := range mtc.stores {
-		s.GossipCapacity()
+		s.GossipStore()
 	}
 	wg.Wait()
 

@@ -392,7 +392,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *stop.Stopper) {
 		log.Infof("bootstrapped store %s", s)
 		// Done regularly in Node.startGossip, but this cuts down the time
 		// until this store is used for range allocations.
-		s.GossipCapacity()
+		s.GossipStore()
 	}
 }
 
@@ -427,11 +427,11 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		ticker := time.NewTicker(gossipInterval)
 		defer ticker.Stop()
-		n.gossipCapacities() // one-off run before going to sleep
+		n.gossipStores() // one-off run before going to sleep
 		for {
 			select {
 			case <-ticker.C:
-				n.gossipCapacities()
+				n.gossipStores()
 			case <-stopper.ShouldStop():
 				return
 			}
@@ -439,12 +439,11 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 	})
 }
 
-// gossipCapacities calls capacity on each store and adds it to the
-// gossip network.
-func (n *Node) gossipCapacities() {
+// gossipStores broadcasts each store to the gossip network.
+func (n *Node) gossipStores() {
 	// will never error because `return nil` below
 	_ = n.lSender.VisitStores(func(s *storage.Store) error {
-		s.GossipCapacity()
+		s.GossipStore()
 		return nil
 	})
 }

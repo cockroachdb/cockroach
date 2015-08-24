@@ -54,8 +54,8 @@ const (
 	defaultRaftTickInterval         = 100 * time.Millisecond
 	defaultHeartbeatIntervalTicks   = 3
 	defaultRaftElectionTimeoutTicks = 15
-	// ttlCapacityGossip is time-to-live for capacity-related info.
-	ttlCapacityGossip = 2 * time.Minute
+	// ttlStoreGossip is time-to-live for store-related info.
+	ttlStoreGossip = 2 * time.Minute
 )
 
 var (
@@ -676,8 +676,8 @@ func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
 	}
 }
 
-// GossipCapacity broadcasts the node's capacity on the gossip network.
-func (s *Store) GossipCapacity() {
+// GossipStore broadcasts the store on the gossip network.
+func (s *Store) GossipStore() {
 	storeDesc, err := s.Descriptor()
 	ctx := s.Context(nil)
 	if err != nil {
@@ -685,9 +685,9 @@ func (s *Store) GossipCapacity() {
 		return
 	}
 	// Unique gossip key per store.
-	keyMaxCapacity := gossip.MakeCapacityKey(storeDesc.Node.NodeID, storeDesc.StoreID)
+	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
-	err = s.ctx.Gossip.AddInfo(keyMaxCapacity, *storeDesc, ttlCapacityGossip)
+	err = s.ctx.Gossip.AddInfo(gossipStoreKey, *storeDesc, ttlStoreGossip)
 	if err != nil {
 		log.Warningc(ctx, "%s", err)
 	}
