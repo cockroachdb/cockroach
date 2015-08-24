@@ -123,7 +123,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	txn.db.Sender.Send(context.Background(),
 		proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 
-	if len(txn.txn.ID) != 0 {
+	if len(txn.Proto.ID) != 0 {
 		t.Errorf("expected txn to be cleared")
 	}
 }

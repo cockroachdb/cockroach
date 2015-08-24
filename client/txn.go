@@ -48,15 +48,15 @@ type txnSender Txn
 
 func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 	// Send call through wrapped sender.
-	call.Args.Header().Txn = &ts.txn
+	call.Args.Header().Txn = &ts.Proto
 	ts.wrapped.Send(ctx, call)
-	ts.txn.Update(call.Reply.Header().Txn)
+	ts.Proto.Update(call.Reply.Header().Txn)
 
 	if err, ok := call.Reply.Header().GoError().(*proto.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
-		ts.txn = proto.Transaction{
-			Name:      ts.txn.Name,
-			Isolation: ts.txn.Isolation,
+		ts.Proto = proto.Transaction{
+			Name:      ts.Proto.Name,
+			Isolation: ts.Proto.Isolation,
 			Priority:  err.Txn.Priority, // acts as a minimum priority on restart
 		}
 	}
@@ -67,7 +67,7 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 type Txn struct {
 	db      DB
 	wrapped Sender
-	txn     proto.Transaction
+	Proto   proto.Transaction
 	// haveTxnWrite is true as soon as the current attempt contains a write
 	// (prior to sending). This is in contrast to txn.Writing, which is set
 	// by the coordinator when the first intent has been created, and which
@@ -87,7 +87,7 @@ func newTxn(db DB) *Txn {
 
 	// Caller's caller.
 	file, line, fun := caller.Lookup(2)
-	txn.txn.Name = fmt.Sprintf("%s:%d %s", file, line, fun)
+	txn.Proto.Name = fmt.Sprintf("%s:%d %s", file, line, fun)
 	return txn
 }
 
@@ -96,31 +96,18 @@ func NewTxn(db DB) *Txn {
 	return newTxn(db)
 }
 
-// NewTxnFromProto returns a transaction created from the preserved
-// state.
-func NewTxnFromProto(db DB, state proto.Transaction) *Txn {
-	txn := newTxn(db)
-	txn.txn = state
-	return txn
-}
-
-// ToProto returns the transaction state in a protobuf.
-func (txn *Txn) ToProto() proto.Transaction {
-	return txn.txn
-}
-
 // SetDebugName sets the debug name associated with the transaction which will
 // appear in log files and the web UI. Each transaction starts out with an
 // automatically assigned debug name composed of the file and line number where
 // the transaction was created.
 func (txn *Txn) SetDebugName(name string) {
 	file, line, _ := caller.Lookup(1)
-	txn.txn.Name = fmt.Sprintf("%s:%d %s", file, line, name)
+	txn.Proto.Name = fmt.Sprintf("%s:%d %s", file, line, name)
 }
 
 // DebugName returns the debug name associated with the transaction.
 func (txn *Txn) DebugName() string {
-	return txn.txn.Name
+	return txn.Proto.Name
 }
 
 // SetSnapshotIsolation sets the transaction's isolation type to
@@ -134,7 +121,7 @@ func (txn *Txn) SetSnapshotIsolation() {
 	// TODO(pmattis): Panic if the transaction has already had
 	// operations run on it. Needs to tie into the Txn reset in case of
 	// retries.
-	txn.txn.Isolation = proto.SNAPSHOT
+	txn.Proto.Isolation = proto.SNAPSHOT
 }
 
 // InternalSetPriority sets the transaction priority. It is intended for
@@ -307,7 +294,7 @@ func (txn *Txn) CommitInBatch(b *Batch) error {
 
 // Commit sends an EndTransactionRequest with Commit=true.
 func (txn *Txn) Commit() error {
-	if txn.txn.Writing {
+	if txn.Proto.Writing {
 		return txn.sendEndTxnCall(true /* commit */)
 	}
 	return nil
@@ -316,12 +303,12 @@ func (txn *Txn) Commit() error {
 // Rollback sends an EndTransactionRequest with Commit=false.
 func (txn *Txn) Rollback() error {
 	var err error
-	if txn.txn.Writing {
+	if txn.Proto.Writing {
 		err = txn.sendEndTxnCall(false /* commit */)
 	}
 	// Explicitly set the status as ABORTED so that higher layers
 	// know that this transaction has ended.
-	txn.txn.Status = proto.ABORTED
+	txn.Proto.Status = proto.ABORTED
 	return err
 }
 
@@ -391,7 +378,7 @@ func (txn *Txn) send(calls ...proto.Call) error {
 	// If the transaction record indicates that the coordinator never wrote
 	// an intent (and the client doesn't have one lined up), then there's no
 	// need to send EndTransaction. If there is one anyways, cut it off.
-	if txn.haveEndTxn && !(txn.txn.Writing || txn.haveTxnWrite) {
+	if txn.haveEndTxn && !(txn.Proto.Writing || txn.haveTxnWrite) {
 		// There's always a call if we get here.
 		lastIndex := len(calls) - 1
 		if calls[lastIndex].Method() != proto.EndTransaction {
