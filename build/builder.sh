@@ -21,6 +21,11 @@ CMD ["/bin/bash"]
 EOF
 }
 
+if [ "${1-}" = "pull" ]; then
+  docker pull "${image}"
+  exit 0
+fi
+
 if [ "${1-}" = "init" ]; then
   init
   exit 0
