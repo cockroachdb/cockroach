@@ -113,19 +113,23 @@ const (
 	NotIn
 	Like
 	NotLike
+	SimilarTo
+	NotSimilarTo
 )
 
 var comparisonOpName = [...]string{
-	EQ:      "=",
-	LT:      "<",
-	GT:      ">",
-	LE:      "<=",
-	GE:      ">=",
-	NE:      "!=",
-	In:      "IN",
-	NotIn:   "NOT IN",
-	Like:    "LIKE",
-	NotLike: "NOT LIKE",
+	EQ:           "=",
+	LT:           "<",
+	GT:           ">",
+	LE:           "<=",
+	GE:           ">=",
+	NE:           "!=",
+	In:           "IN",
+	NotIn:        "NOT IN",
+	Like:         "LIKE",
+	NotLike:      "NOT LIKE",
+	SimilarTo:    "SIMILAR TO",
+	NotSimilarTo: "NOT SIMILAR TO",
 }
 
 func (i ComparisonOp) String() string {
