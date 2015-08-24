@@ -28,8 +28,8 @@ import (
 	"net/http"
 	"net/rpc"
 	"strings"
-	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -50,7 +50,7 @@ func tlsListen(network, address string, config *tls.Config) (net.Listener, error
 }
 
 var defaultDialer = net.Dialer{
-	Timeout: 3 * time.Second,
+	Timeout: base.NetworkTimeout,
 }
 
 // tlsDial wraps either net.Dial or crypto/tls.Dial, depending on the contents of

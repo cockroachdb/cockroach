@@ -31,12 +31,22 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/samalba/dockerclient"
 )
+
+// HTTPClient is an http.Client configured for querying the running
+// local cluster.
+var HTTPClient = http.Client{
+	Timeout: base.NetworkTimeout,
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}}
 
 func getTLSConfig() *tls.Config {
 	certPath := os.Getenv("DOCKER_CERT_PATH")
@@ -134,7 +144,8 @@ func createContainer(client dockerclient.Client, config dockerclient.ContainerCo
 	return &Container{
 		ID:            id,
 		containerInfo: dockerclient.ContainerInfo{Id: id},
-		client:        client}, nil
+		client:        client,
+	}, nil
 }
 
 func maybePanic(err error) {
@@ -296,14 +307,7 @@ func (c *Container) Addr(name string) *net.TCPAddr {
 // GetJSON retrieves the URL specified by https://Addr(<port>)<path>
 // and unmarshals the result as JSON.
 func (c *Container) GetJSON(port, path string, v interface{}) error {
-	client := &http.Client{
-		Timeout: 200 * time.Millisecond,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		}}
-	resp, err := client.Get(fmt.Sprintf("https://%s%s", c.Addr(port), path))
+	resp, err := HTTPClient.Get(fmt.Sprintf("https://%s%s", c.Addr(port), path))
 	if err != nil {
 		if log.V(1) {
 			log.Info(err)

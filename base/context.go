@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
@@ -34,6 +35,9 @@ const (
 	defaultUser     = security.RootUser
 	plainScheme     = "http"
 	sslScheme       = "https"
+
+	// NetworkTimeout is the timeout used for network operations.
+	NetworkTimeout = 3 * time.Second
 )
 
 // Context is embedded by server.Context. A base context is not meant to be
@@ -166,7 +170,10 @@ func (ctx *Context) GetHTTPClient() (*http.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	ctx.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+	ctx.httpClient = &http.Client{
+		Transport: &http.Transport{TLSClientConfig: tlsConfig},
+		Timeout:   NetworkTimeout,
+	}
 
 	return ctx.httpClient, nil
 }
