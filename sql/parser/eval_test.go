@@ -216,7 +216,6 @@ func TestEvalExprError(t *testing.T) {
 		{`lower()`, `unknown signature for lower: lower()`},
 		{`lower(1, 2)`, `unknown signature for lower: lower(int, int)`},
 		{`lower(1)`, `unknown signature for lower: lower(int)`},
-		{`1::bit`, `invalid cast: int -> BIT`},
 		{`1::decimal`, `invalid cast: int -> DECIMAL`},
 		{`1::date`, `invalid cast: int -> DATE`},
 		{`1::time`, `invalid cast: int -> TIME`},

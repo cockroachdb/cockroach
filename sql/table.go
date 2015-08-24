@@ -57,9 +57,6 @@ func makeTableDesc(p *parser.CreateTable) (TableDescriptor, error) {
 				Nullable: (d.Nullable != parser.NotNull),
 			}
 			switch t := d.Type.(type) {
-			case *parser.BitType:
-				col.Type.Kind = ColumnType_BIT
-				col.Type.Width = int32(t.N)
 			case *parser.BoolType:
 				col.Type.Kind = ColumnType_BOOL
 			case *parser.IntType:
@@ -74,17 +71,13 @@ func makeTableDesc(p *parser.CreateTable) (TableDescriptor, error) {
 				col.Type.Precision = int32(t.Prec)
 			case *parser.DateType:
 				col.Type.Kind = ColumnType_DATE
-			case *parser.TimeType:
-				col.Type.Kind = ColumnType_TIME
 			case *parser.TimestampType:
 				col.Type.Kind = ColumnType_TIMESTAMP
-			case *parser.CharType:
-				col.Type.Kind = ColumnType_CHAR
+			case *parser.StringType:
+				col.Type.Kind = ColumnType_STRING
 				col.Type.Width = int32(t.N)
-			case *parser.TextType:
-				col.Type.Kind = ColumnType_TEXT
-			case *parser.BlobType:
-				col.Type.Kind = ColumnType_BLOB
+			case *parser.BytesType:
+				col.Type.Kind = ColumnType_BYTES
 			default:
 				panic(fmt.Sprintf("unexpected type %T", t))
 			}
@@ -222,11 +215,11 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 		}
 		switch col.Type.Kind {
 		// TODO(pmattis): ColumnType_BOOL.
-		case ColumnType_BIT, ColumnType_INT:
+		case ColumnType_INT:
 			vals[i] = parser.DInt(0)
 		case ColumnType_FLOAT:
 			vals[i] = parser.DFloat(0)
-		case ColumnType_CHAR, ColumnType_TEXT, ColumnType_BLOB:
+		case ColumnType_STRING, ColumnType_BYTES:
 			vals[i] = parser.DString("")
 		default:
 			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
@@ -354,7 +347,7 @@ func convertDatum(col ColumnDescriptor, val parser.Datum) (interface{}, error) {
 		if v, ok := val.(parser.DBool); ok {
 			return bool(v), nil
 		}
-	case ColumnType_BIT, ColumnType_INT:
+	case ColumnType_INT:
 		if v, ok := val.(parser.DInt); ok {
 			return int64(v), nil
 		}
@@ -364,9 +357,8 @@ func convertDatum(col ColumnDescriptor, val parser.Datum) (interface{}, error) {
 		}
 	// case ColumnType_DECIMAL:
 	// case ColumnType_DATE:
-	// case ColumnType_TIME:
 	// case ColumnType_TIMESTAMP:
-	case ColumnType_CHAR, ColumnType_TEXT, ColumnType_BLOB:
+	case ColumnType_STRING, ColumnType_BYTES:
 		if v, ok := val.(parser.DString); ok {
 			return string(v), nil
 		}

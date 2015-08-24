@@ -35,7 +35,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 	}{
 		{
 			"BIT(1)",
-			ColumnType{Kind: ColumnType_BIT, Width: 1},
+			ColumnType{Kind: ColumnType_INT, Width: 1},
 			true,
 		},
 		{
@@ -65,7 +65,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"TIME",
-			ColumnType{Kind: ColumnType_TIME},
+			ColumnType{Kind: ColumnType_DATE},
 			true,
 		},
 		{
@@ -75,17 +75,17 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"CHAR",
-			ColumnType{Kind: ColumnType_CHAR},
+			ColumnType{Kind: ColumnType_STRING},
 			true,
 		},
 		{
 			"TEXT",
-			ColumnType{Kind: ColumnType_TEXT},
+			ColumnType{Kind: ColumnType_STRING},
 			true,
 		},
 		{
 			"BLOB",
-			ColumnType{Kind: ColumnType_BLOB},
+			ColumnType{Kind: ColumnType_BYTES},
 			true,
 		},
 		{

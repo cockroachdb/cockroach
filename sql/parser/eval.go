@@ -1015,7 +1015,7 @@ func evalCastExpr(expr *CastExpr) (Datum, error) {
 			return DFloat(f), nil
 		}
 
-	case *CharType, *TextType, *BlobType:
+	case *StringType, *BytesType:
 		var s DString
 		switch d.(type) {
 		case DBool, DInt, DFloat, dNull:
@@ -1023,7 +1023,7 @@ func evalCastExpr(expr *CastExpr) (Datum, error) {
 		case DString:
 			s = d.(DString)
 		}
-		if c, ok := expr.Type.(*CharType); ok {
+		if c, ok := expr.Type.(*StringType); ok {
 			// If the CHAR type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
 			if c.N > 0 && c.N < len(s) {
@@ -1033,10 +1033,8 @@ func evalCastExpr(expr *CastExpr) (Datum, error) {
 		return s, nil
 
 		// TODO(pmattis): unimplemented.
-		// case *BitType:
 		// case *DecimalType:
 		// case *DateType:
-		// case *TimeType:
 		// case *TimestampType:
 	}
 

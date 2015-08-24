@@ -238,7 +238,7 @@ INSERT INTO kv4 (int) VALUES ('a')
 statement ok
 INSERT INTO kv4 (int) VALUES (1)
 
-statement error value type string doesn't match type BIT of column "bit"
+statement error value type string doesn't match type INT of column "bit"
 INSERT INTO kv4 (int, bit) VALUES (2, 'a')
 
 statement ok
@@ -250,7 +250,7 @@ INSERT INTO kv4 (int, bool) VALUES (3, 'a')
 statement ok
 INSERT INTO kv4 (int, bool) VALUES (3, true)
 
-statement error value type int doesn't match type CHAR of column "char"
+statement error value type int doesn't match type STRING of column "char"
 INSERT INTO kv4 (int, char) VALUES (4, 1)
 
 statement ok
