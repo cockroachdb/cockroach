@@ -26,20 +26,31 @@ import (
 
 const eof = -1
 const errUnterminated = "unterminated string"
+const singleQuote = '\''
 
 type scanner struct {
-	in        string
-	pos       int
-	tokBuf    sqlSymType
-	lastTok   sqlSymType
-	nextTok   *sqlSymType
-	lastError string
-	stmts     []Statement
-	syntax    Syntax
+	in          string
+	pos         int
+	tokBuf      sqlSymType
+	lastTok     sqlSymType
+	nextTok     *sqlSymType
+	lastError   string
+	stmts       []Statement
+	identQuote  int
+	stringQuote int
+	syntax      Syntax
 }
 
-func newScanner(s string, syntax Syntax) *scanner {
-	return &scanner{in: s, syntax: syntax}
+func newScanner(str string, syntax Syntax) *scanner {
+	s := &scanner{in: str, syntax: syntax}
+	switch syntax {
+	case Traditional:
+		s.identQuote = '"'
+	case Modern:
+		s.identQuote = '`'
+		s.stringQuote = '"'
+	}
+	return s
 }
 
 func (s *scanner) Lex(lval *sqlSymType) int {
@@ -144,53 +155,82 @@ func (s *scanner) scan(lval *sqlSymType) {
 		}
 		return
 
-	case '"':
-		// "[^"]"{whitespace}*
-		if s.scanString(lval, '"', false) {
+	case s.identQuote:
+		// "[^"]"
+		if s.scanString(lval, s.identQuote, false) {
 			lval.id = IDENT
 		}
 		return
 
-	case '\'':
-		// '[^']'{whitespace}*
-		if s.scanString(lval, '\'', false) {
+	case singleQuote:
+		// '[^']'
+		if s.scanString(lval, ch, s.syntax == Modern) {
+			lval.id = SCONST
+		}
+		return
+
+	case s.stringQuote:
+		// '[^']'
+		if s.scanString(lval, s.stringQuote, s.syntax == Modern) {
 			lval.id = SCONST
 		}
 		return
 
 	case 'b', 'B':
-		// Bit string?
-		if s.peek() == '\'' {
-			// [bB]'[^']'{whitespace}*
+		// Bytes?
+		if t := s.peek(); t == singleQuote || t == s.stringQuote {
+			// [bB]'[^']'
 			s.pos++
-			if s.scanString(lval, '\'', false) {
+			if s.scanString(lval, t, s.syntax == Modern) {
 				lval.id = BCONST
 			}
 			return
+		} else if s.syntax == Modern && (t == 'r' || t == 'R') {
+			// Raw bytes?
+			if t := s.peekN(1); t == singleQuote || t == s.stringQuote {
+				// [rRbB]'[^']'
+				s.pos += 2
+				if s.scanString(lval, t, false) {
+					lval.id = BCONST
+				}
+				return
+			}
+		}
+		s.scanIdent(lval, ch)
+		return
+
+	case 'r', 'R':
+		if s.syntax == Modern {
+			// Raw string?
+			if t := s.peek(); t == singleQuote || t == s.stringQuote {
+				// [rR]'[^']'
+				s.pos++
+				if s.scanString(lval, t, false) {
+					lval.id = SCONST
+				}
+				return
+			} else if t == 'b' || t == 'B' {
+				// Raw bytes?
+				if t := s.peekN(1); t == singleQuote || t == s.stringQuote {
+					// [bBrR]'[^']'
+					s.pos += 2
+					if s.scanString(lval, t, false) {
+						lval.id = BCONST
+					}
+					return
+				}
+			}
 		}
 		s.scanIdent(lval, ch)
 		return
 
 	case 'e', 'E':
 		// Escaped string?
-		if s.peek() == '\'' {
-			// [eE]'[^']'{whitespace}*
+		if t := s.peek(); t == singleQuote || t == s.stringQuote {
+			// [eE]'[^']'
 			s.pos++
-			if s.scanString(lval, '\'', true) {
+			if s.scanString(lval, t, true) {
 				lval.id = SCONST
-			}
-			return
-		}
-		s.scanIdent(lval, ch)
-		return
-
-	case 'x', 'X':
-		// Hexadecimal string?
-		if s.peek() == '\'' {
-			// [xX]'[^']'{whitespace}*
-			s.pos++
-			if s.scanString(lval, '\'', false) {
-				lval.id = XCONST
 			}
 			return
 		}
@@ -280,6 +320,14 @@ func (s *scanner) peek() int {
 	return int(s.in[s.pos])
 }
 
+func (s *scanner) peekN(n int) int {
+	pos := s.pos + n
+	if pos >= len(s.in) {
+		return eof
+	}
+	return int(s.in[pos])
+}
+
 func (s *scanner) next() int {
 	ch := s.peek()
 	if ch != eof {
@@ -359,6 +407,16 @@ func (s *scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 			s.pos--
 			return false, true
 		}
+		for {
+			switch s.next() {
+			case eof, '\n':
+				return true, true
+			}
+		}
+	}
+
+	if s.syntax == Modern && ch == '#' {
+		s.pos++
 		for {
 			switch s.next() {
 			case eof, '\n':
@@ -498,35 +556,67 @@ func (s *scanner) scanParam(lval *sqlSymType) {
 func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 	lval.str = ""
 	start := s.pos
+	tripleQuoted := false
+
 	for {
 		switch s.next() {
 		case ch:
-			lval.str += s.in[start : s.pos-1]
-			if s.peek() == ch {
-				// Double quote is translated into a single quote that is part of the
-				// string.
-				start = s.pos
-				s.pos++
-				continue
-			}
+			switch s.syntax {
+			case Traditional:
+				lval.str += s.in[start : s.pos-1]
+				if s.peek() == ch {
+					// Double quote is translated into a single quote that is part of the
+					// string.
+					start = s.pos
+					s.pos++
+					continue
+				}
 
-			if newline, ok := s.skipWhitespace(lval, false); !ok {
-				return false
-			} else if !newline {
-				return true
+				if newline, ok := s.skipWhitespace(lval, false); !ok {
+					return false
+				} else if !newline {
+					return true
+				}
+				// SQL allows joining adjacent strings separated by whitespace as long as
+				// that whitespace contains at least one newline. Kind of strange to
+				// require the newline, but that is the standard.
+				if s.peek() != ch {
+					return true
+				}
+				s.pos++
+				start = s.pos
+
+			case Modern:
+				if s.pos == start+1 && s.peek() == ch {
+					// Triple-quotes at the start of the string.
+					s.pos++
+					start = s.pos
+					tripleQuoted = true
+					continue
+				}
+				if !tripleQuoted {
+					lval.str += s.in[start : s.pos-1]
+					return true
+				}
+				if s.peek() == ch && s.peekN(1) == ch {
+					// Triple-quotes at the end of the string.
+					lval.str += s.in[start : s.pos-1]
+					s.pos += 2
+					return true
+				}
 			}
-			// SQL allows joining adjacent strings separated by whitespace as long as
-			// that whitespace contains at least one newline. Kind of strange to
-			// require the newline, but that is the standard.
-			if s.peek() != ch {
-				return true
-			}
-			s.pos++
-			start = s.pos
 			continue
+
+		case '\n':
+			if s.syntax == Modern && !tripleQuoted {
+				lval.id = ERROR
+				lval.str = fmt.Sprintf("invalid syntax: embedded newline")
+				return false
+			}
 
 		case '\\':
 			t := s.peek()
+
 			if allowEscapes {
 				lval.str += s.in[start : s.pos-1]
 				if t == ch {
