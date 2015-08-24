@@ -11,7 +11,6 @@
 	It has these top-level messages:
 		GCPolicy
 		AcctConfig
-		UserConfig
 		ZoneConfig
 		PrefixConfig
 		ConfigUnion
@@ -71,23 +70,6 @@ func (m *AcctConfig) GetClusterId() string {
 		return m.ClusterId
 	}
 	return ""
-}
-
-// UserConfig holds per-user configuration needed for authentication.
-type UserConfig struct {
-	// Output of bcrypt: contains hash, salt, and cost.
-	HashedPassword []byte `protobuf:"bytes,1,opt,name=hashed_password" json:"hashed_password,omitempty" yaml:"hashed_password,omitempty"`
-}
-
-func (m *UserConfig) Reset()         { *m = UserConfig{} }
-func (m *UserConfig) String() string { return proto.CompactTextString(m) }
-func (*UserConfig) ProtoMessage()    {}
-
-func (m *UserConfig) GetHashedPassword() []byte {
-	if m != nil {
-		return m.HashedPassword
-	}
-	return nil
 }
 
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
@@ -174,8 +156,7 @@ func (m *PrefixConfig) GetConfig() ConfigUnion {
 
 type ConfigUnion struct {
 	Acct *AcctConfig `protobuf:"bytes,1,opt,name=acct" json:"acct,omitempty"`
-	User *UserConfig `protobuf:"bytes,2,opt,name=user" json:"user,omitempty"`
-	Zone *ZoneConfig `protobuf:"bytes,3,opt,name=zone" json:"zone,omitempty"`
+	Zone *ZoneConfig `protobuf:"bytes,2,opt,name=zone" json:"zone,omitempty"`
 }
 
 func (m *ConfigUnion) Reset()         { *m = ConfigUnion{} }
@@ -185,13 +166,6 @@ func (*ConfigUnion) ProtoMessage()    {}
 func (m *ConfigUnion) GetAcct() *AcctConfig {
 	if m != nil {
 		return m.Acct
-	}
-	return nil
-}
-
-func (m *ConfigUnion) GetUser() *UserConfig {
-	if m != nil {
-		return m.User
 	}
 	return nil
 }
@@ -243,30 +217,6 @@ func (m *AcctConfig) MarshalTo(data []byte) (int, error) {
 	i++
 	i = encodeVarintConfig(data, i, uint64(len(m.ClusterId)))
 	i += copy(data[i:], m.ClusterId)
-	return i, nil
-}
-
-func (m *UserConfig) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *UserConfig) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.HashedPassword != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintConfig(data, i, uint64(len(m.HashedPassword)))
-		i += copy(data[i:], m.HashedPassword)
-	}
 	return i, nil
 }
 
@@ -379,25 +329,15 @@ func (m *ConfigUnion) MarshalTo(data []byte) (int, error) {
 		}
 		i += n3
 	}
-	if m.User != nil {
+	if m.Zone != nil {
 		data[i] = 0x12
 		i++
-		i = encodeVarintConfig(data, i, uint64(m.User.Size()))
-		n4, err := m.User.MarshalTo(data[i:])
+		i = encodeVarintConfig(data, i, uint64(m.Zone.Size()))
+		n4, err := m.Zone.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n4
-	}
-	if m.Zone != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintConfig(data, i, uint64(m.Zone.Size()))
-		n5, err := m.Zone.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n5
 	}
 	return i, nil
 }
@@ -444,16 +384,6 @@ func (m *AcctConfig) Size() (n int) {
 	return n
 }
 
-func (m *UserConfig) Size() (n int) {
-	var l int
-	_ = l
-	if m.HashedPassword != nil {
-		l = len(m.HashedPassword)
-		n += 1 + l + sovConfig(uint64(l))
-	}
-	return n
-}
-
 func (m *ZoneConfig) Size() (n int) {
 	var l int
 	_ = l
@@ -495,10 +425,6 @@ func (m *ConfigUnion) Size() (n int) {
 		l = m.Acct.Size()
 		n += 1 + l + sovConfig(uint64(l))
 	}
-	if m.User != nil {
-		l = m.User.Size()
-		n += 1 + l + sovConfig(uint64(l))
-	}
 	if m.Zone != nil {
 		l = m.Zone.Size()
 		n += 1 + l + sovConfig(uint64(l))
@@ -523,9 +449,6 @@ func (this *ConfigUnion) GetValue() interface{} {
 	if this.Acct != nil {
 		return this.Acct
 	}
-	if this.User != nil {
-		return this.User
-	}
 	if this.Zone != nil {
 		return this.Zone
 	}
@@ -536,8 +459,6 @@ func (this *ConfigUnion) SetValue(value interface{}) bool {
 	switch vt := value.(type) {
 	case *AcctConfig:
 		this.Acct = vt
-	case *UserConfig:
-		this.User = vt
 	case *ZoneConfig:
 		this.Zone = vt
 	default:
@@ -646,76 +567,6 @@ func (m *AcctConfig) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.ClusterId = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipConfig(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthConfig
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	return nil
-}
-func (m *UserConfig) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HashedPassword", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthConfig
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.HashedPassword = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		default:
 			var sizeOfWire int
@@ -1050,36 +901,6 @@ func (m *ConfigUnion) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + msglen
-			if msglen < 0 {
-				return ErrInvalidLengthConfig
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.User == nil {
-				m.User = &UserConfig{}
-			}
-			if err := m.User.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Zone", wireType)
 			}

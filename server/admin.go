@@ -52,8 +52,6 @@ const (
 	quitPath = adminEndpoint + "quit"
 	// acctPathPrefix is the prefix for accounting configuration changes.
 	acctPathPrefix = adminEndpoint + "acct"
-	// userPathPrefix is the prefix for zone configuration changes.
-	userPathPrefix = adminEndpoint + "users"
 	// zonePathPrefix is the prefix for zone configuration changes.
 	zonePathPrefix = adminEndpoint + "zones"
 )
@@ -72,7 +70,6 @@ type adminServer struct {
 	db      *client.DB    // Key-value database client
 	stopper *stop.Stopper // Used to shutdown the server
 	acct    *acctHandler
-	user    *userHandler
 	zone    *zoneHandler
 	mux     *http.ServeMux
 }
@@ -84,7 +81,6 @@ func newAdminServer(db *client.DB, stopper *stop.Stopper) *adminServer {
 		db:      db,
 		stopper: stopper,
 		acct:    &acctHandler{db: db},
-		user:    &userHandler{db: db},
 		zone:    &zoneHandler{db: db},
 		mux:     http.NewServeMux(),
 	}
@@ -94,8 +90,6 @@ func newAdminServer(db *client.DB, stopper *stop.Stopper) *adminServer {
 	server.mux.HandleFunc(debugEndpoint, server.handleDebug)
 	server.mux.HandleFunc(healthPath, server.handleHealth)
 	server.mux.HandleFunc(quitPath, server.handleQuit)
-	server.mux.HandleFunc(userPathPrefix, server.handleUserAction)
-	server.mux.HandleFunc(userPathPrefix+"/", server.handleUserAction)
 	server.mux.HandleFunc(zonePathPrefix, server.handleZoneAction)
 	server.mux.HandleFunc(zonePathPrefix+"/", server.handleZoneAction)
 	return server
@@ -134,11 +128,6 @@ func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
 // handleAcctAction handles actions for accounting configuration by method.
 func (s *adminServer) handleAcctAction(w http.ResponseWriter, r *http.Request) {
 	s.handleRESTAction(s.acct, w, r, acctPathPrefix)
-}
-
-// handleUserAction handles actions for user configuration by method.
-func (s *adminServer) handleUserAction(w http.ResponseWriter, r *http.Request) {
-	s.handleRESTAction(s.user, w, r, userPathPrefix)
 }
 
 // handleZoneAction handles actions for zone configuration by method.

@@ -1436,10 +1436,6 @@ var illegalSplitKeyRanges = []struct {
 		end:   MVCCEncodeKey(keys.ConfigAccountingPrefix.PrefixEnd()),
 	},
 	{
-		start: MVCCEncodeKey(keys.ConfigUserPrefix),
-		end:   MVCCEncodeKey(keys.ConfigUserPrefix.PrefixEnd()),
-	},
-	{
 		start: MVCCEncodeKey(keys.ConfigZonePrefix),
 		end:   MVCCEncodeKey(keys.ConfigZonePrefix.PrefixEnd()),
 	},

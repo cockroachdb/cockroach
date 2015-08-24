@@ -45,12 +45,6 @@ message AcctConfig {
   optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"cluster_id,omitempty\""];
 }
 
-// UserConfig holds per-user configuration needed for authentication.
-message UserConfig {
-  // Output of bcrypt: contains hash, salt, and cost.
-  optional bytes hashed_password = 1 [(gogoproto.moretags) = "yaml:\"hashed_password,omitempty\""];
-}
-
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
 message ZoneConfig {
   // ReplicaAttrs is a slice of Attributes, each describing required attributes
@@ -83,7 +77,6 @@ message ConfigUnion {
   option (gogoproto.onlyone) = true;
   oneof value {
     AcctConfig acct = 1;
-    UserConfig user = 2;
-    ZoneConfig zone = 3;
+    ZoneConfig zone = 2;
   }
 }
