@@ -275,7 +275,7 @@ func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
 // of info denoted by key. The contentsChanged bool indicates whether
 // the info contents were updated. False indicates the info timestamp
 // was refreshed, but its contents remained unchanged.
-type Callback func(key string, contentsChanged bool)
+type Callback func(key string, contentsChanged bool, content interface{})
 
 // RegisterCallback registers a callback for a key pattern to be
 // invoked whenever new info for a gossip key matching pattern is

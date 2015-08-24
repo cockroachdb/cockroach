@@ -167,7 +167,7 @@ func (is *infoStore) addInfo(i *info) error {
 	if i.seq > is.MaxSeq {
 		is.MaxSeq = i.seq
 	}
-	is.processCallbacks(i.Key, contentsChanged)
+	is.processCallbacks(i.Key, contentsChanged, i.Val)
 	return nil
 }
 
@@ -203,7 +203,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
 		for _, i := range infos {
-			method(i.Key, true /* contentsChanged */)
+			method(i.Key, true /* contentsChanged */, i.Val)
 		}
 	}()
 }
@@ -211,7 +211,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 // processCallbacks processes callbacks for the specified key by
 // matching callback regular expression against the key and invoking
 // the corresponding callback method on a match.
-func (is *infoStore) processCallbacks(key string, contentsChanged bool) {
+func (is *infoStore) processCallbacks(key string, contentsChanged bool, content interface{}) {
 	var matches []callback
 	for _, cb := range is.callbacks {
 		if cb.pattern.MatchString(key) {
@@ -221,7 +221,7 @@ func (is *infoStore) processCallbacks(key string, contentsChanged bool) {
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
 		for _, cb := range matches {
-			cb.method(key, contentsChanged)
+			cb.method(key, contentsChanged, content)
 		}
 	}()
 }

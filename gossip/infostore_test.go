@@ -298,7 +298,7 @@ type callbackRecord struct {
 	sync.Mutex
 }
 
-func (cr *callbackRecord) Add(key string, contentsChanged bool) {
+func (cr *callbackRecord) Add(key string, contentsChanged bool, _ interface{}) {
 	cr.Lock()
 	defer cr.Unlock()
 	cr.keys = append(cr.keys, fmt.Sprintf("%s-%t", key, contentsChanged))

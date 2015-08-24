@@ -653,19 +653,14 @@ func (s *Store) maybeGossipConfigs() error {
 
 // configGossipUpdate is a callback for gossip updates to
 // configuration maps which affect range split boundaries.
-func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
+func (s *Store) configGossipUpdate(key string, contentsChanged bool, content interface{}) {
 	if !contentsChanged {
 		return // Skip update if it's just a newer timestamp or fewer hops to info
 	}
 	ctx := s.Context(nil)
-	info, err := s.ctx.Gossip.GetInfo(key)
-	if err != nil {
-		log.Errorc(ctx, "unable to fetch %s config from gossip: %s", key, err)
-		return
-	}
-	configMap, ok := info.(config.PrefixConfigMap)
+	configMap, ok := content.(config.PrefixConfigMap)
 	if !ok {
-		log.Errorc(ctx, "gossiped info is not a prefix configuration map: %+v", info)
+		log.Errorc(ctx, "gossiped info is not a prefix configuration map: %+v", content)
 		return
 	}
 	s.maybeSplitRangesByConfigs(configMap)
