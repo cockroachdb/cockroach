@@ -70,10 +70,13 @@ func (d DBool) Type() string {
 
 // Compare implements the Datum interface.
 func (d DBool) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
 	v, ok := other.(DBool)
 	if !ok {
-		// Anything other than a DBool compares greater (e.g. `true > NULL`).
-		return 1
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
 	if !d && v {
 		return -1
@@ -98,10 +101,13 @@ func (d DInt) Type() string {
 
 // Compare implements the Datum interface.
 func (d DInt) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
 	v, ok := other.(DInt)
 	if !ok {
-		// Anything other than a DInt compares greater (e.g. `1 > NULL`).
-		return 1
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
 	if d < v {
 		return -1
@@ -126,10 +132,13 @@ func (d DFloat) Type() string {
 
 // Compare implements the Datum interface.
 func (d DFloat) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
 	v, ok := other.(DFloat)
 	if !ok {
-		// Anything other than a DFloat compares greater (e.g. `1.0 > NULL`).
-		return 1
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
 	if d < v {
 		return -1
@@ -154,10 +163,13 @@ func (d DString) Type() string {
 
 // Compare implements the Datum interface.
 func (d DString) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
 	v, ok := other.(DString)
 	if !ok {
-		// Anything other than a DString compares greater (e.g. `"hello" > NULL`).
-		return 1
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
 	if d < v {
 		return -1
@@ -182,10 +194,13 @@ func (d DTuple) Type() string {
 
 // Compare implements the Datum interface.
 func (d DTuple) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
 	v, ok := other.(DTuple)
 	if !ok {
-		// Anything other than a DTuple compares greater (e.g. `(1, 2) > NULL`).
-		return 1
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
 	n := len(d)
 	if n > len(v) {
@@ -841,6 +856,45 @@ func evalFuncExpr(expr *FuncExpr) (Datum, error) {
 }
 
 func evalCaseExpr(expr *CaseExpr) (Datum, error) {
+	whenVals := make([]Datum, 0, len(expr.Whens))
+	var condType, valType reflect.Type
+	for _, when := range expr.Whens {
+		cond, err := EvalExpr(when.Cond)
+		if err != nil {
+			return DNull, err
+		}
+		if condType == nil {
+			condType = reflect.TypeOf(cond)
+		} else if cond != DNull && reflect.TypeOf(cond) != condType {
+			return DNull, fmt.Errorf("incompatible condition type %s", cond.Type())
+		}
+
+		val, err := EvalExpr(when.Val)
+		if err != nil {
+			return DNull, err
+		}
+
+		if valType == nil {
+			valType = reflect.TypeOf(val)
+		} else if val != DNull && reflect.TypeOf(val) != valType {
+			return DNull, fmt.Errorf("incompatible value type %s", val.Type())
+		}
+
+		whenVals = append(whenVals, val)
+	}
+
+	var elseVal Datum
+	if expr.Else != nil {
+		val, err := EvalExpr(expr.Else)
+		if err != nil {
+			return DNull, err
+		}
+		if val != DNull && reflect.TypeOf(val) != valType {
+			return DNull, fmt.Errorf("incompatible value type %s", val.Type())
+		}
+		elseVal = val
+	}
+
 	if expr.Expr != nil {
 		// CASE <val> WHEN <expr> THEN ...
 		//
@@ -850,7 +904,7 @@ func evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			return DNull, err
 		}
 
-		for _, when := range expr.Whens {
+		for i, when := range expr.Whens {
 			arg, err := EvalExpr(when.Cond)
 			if err != nil {
 				return DNull, err
@@ -862,12 +916,12 @@ func evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			if v, err := getBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return EvalExpr(when.Val)
+				return whenVals[i], nil
 			}
 		}
 	} else {
 		// CASE WHEN <bool-expr> THEN ...
-		for _, when := range expr.Whens {
+		for i, when := range expr.Whens {
 			d, err := EvalExpr(when.Cond)
 			if err != nil {
 				return DNull, err
@@ -875,13 +929,13 @@ func evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			if v, err := getBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return EvalExpr(when.Val)
+				return whenVals[i], nil
 			}
 		}
 	}
 
-	if expr.Else != nil {
-		return EvalExpr(expr.Else)
+	if elseVal != nil {
+		return elseVal, nil
 	}
 	return DNull, nil
 }

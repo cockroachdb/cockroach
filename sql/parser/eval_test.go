@@ -122,7 +122,7 @@ func TestEvalExpr(t *testing.T) {
 		{`CASE WHEN false THEN 1 ELSE 2 END`, `2`},
 		{`CASE WHEN false THEN 1 WHEN false THEN 2 END`, `NULL`},
 		{`CASE 1+1 WHEN 1 THEN 1 WHEN 2 THEN 2 END`, `2`},
-		{`CASE 1+2 WHEN 1 THEN 1 WHEN 2 THEN 2 ELSE 'doh' END`, `'doh'`},
+		{`CASE 1+2 WHEN 1 THEN 1 WHEN 2 THEN 2 ELSE 5 END`, `5`},
 		// Row (tuple) comparisons.
 		{`ROW(1) = ROW(1)`, `true`},
 		{`ROW(1, true) = (1, NOT false)`, `true`},
@@ -220,6 +220,9 @@ func TestEvalExprError(t *testing.T) {
 		{`1::date`, `invalid cast: int -> DATE`},
 		{`1::time`, `invalid cast: int -> TIME`},
 		{`1::timestamp`, `invalid cast: int -> TIMESTAMP`},
+		{`CASE 'one' WHEN 1 THEN 1 WHEN 'two' THEN 2 END`, `incompatible condition type`},
+		{`CASE 1 WHEN 1 THEN 'one' WHEN 2 THEN 2 END`, `incompatible value type`},
+		{`CASE 1 WHEN 1 THEN 'one' ELSE 2 END`, `incompatible value type`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`},
 	}
