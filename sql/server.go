@@ -219,6 +219,7 @@ func (s *Server) execStmt(stmt parser.Statement, req driver.Request, planMaker *
 			// Start a transaction here and not in planMaker to prevent begin
 			// transaction from being called within an auto-transaction below.
 			planMaker.txn = client.NewTxn(*s.db)
+			planMaker.txn.SetDebugName("sql", 0)
 		}
 	} else if planMaker.txn.Proto.Status == proto.ABORTED {
 		switch stmt := stmt.(type) {

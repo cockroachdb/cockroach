@@ -78,30 +78,25 @@ type Txn struct {
 	haveEndTxn   bool // True if there was an explicit EndTransaction
 }
 
-func newTxn(db DB) *Txn {
+// NewTxn returns a new txn.
+func NewTxn(db DB) *Txn {
 	txn := &Txn{
 		db:      db,
 		wrapped: db.Sender,
 	}
 	txn.db.Sender = (*txnSender)(txn)
-
-	// Caller's caller.
-	file, line, fun := caller.Lookup(2)
-	txn.Proto.Name = fmt.Sprintf("%s:%d %s", file, line, fun)
 	return txn
-}
-
-// NewTxn returns a new txn.
-func NewTxn(db DB) *Txn {
-	return newTxn(db)
 }
 
 // SetDebugName sets the debug name associated with the transaction which will
 // appear in log files and the web UI. Each transaction starts out with an
 // automatically assigned debug name composed of the file and line number where
 // the transaction was created.
-func (txn *Txn) SetDebugName(name string) {
-	file, line, _ := caller.Lookup(1)
+func (txn *Txn) SetDebugName(name string, depth int) {
+	file, line, fun := caller.Lookup(depth + 1)
+	if name == "" {
+		name = fun
+	}
 	txn.Proto.Name = fmt.Sprintf("%s:%d %s", file, line, name)
 }
 
