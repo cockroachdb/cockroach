@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -842,7 +841,9 @@ func (s *Store) RaftStatus(rangeID proto.RangeID) *raft.Status {
 // for the empty key prefix, meaning they apply to the entire
 // database. The zone requires three replicas with no other specifications.
 // It also adds the range tree and the root node, the first range, to it.
-func (s *Store) BootstrapRange() error {
+// The 'initialValues' are written as well after each value's checksum
+// is initalized.
+func (s *Store) BootstrapRange(initialValues []proto.KeyValue) error {
 	desc := &proto.RangeDescriptor{
 		RangeID:       1,
 		StartKey:      proto.KeyMin,
@@ -914,43 +915,11 @@ func (s *Store) BootstrapRange() error {
 		return err
 	}
 
-	// We reserve the first 1000 descriptor IDs.
-	key := keys.DescIDGenerator
-	value := proto.Value{}
-	value.SetInteger(int64(sql.MaxReservedDescID + 1))
-	value.InitChecksum(key)
-	if err := engine.MVCCPut(batch, ms, key, now, value, nil); err != nil {
-		return err
-	}
-
-	// Setup the system database, the namespace table and the descriptor table
-	// entries.
-	//
-	// TODO(pmattis): This setup really belongs in the sql package. Minor
-	// challenge is to place it there without making the sql package depend on
-	// storage/engine. One thought is to pass a "put func(key, value string)"
-	// argument to an sql.Setup function which would call down into
-	// engine.MVCCPut.
-	systemData := []struct {
-		parentID sql.ID
-		name     string
-		id       sql.ID
-		desc     gogoproto.Message
-	}{
-		{sql.RootNamespaceID, sql.SystemDB.Name, sql.SystemDB.ID, &sql.SystemDB},
-		{sql.SystemDB.ID, sql.NamespaceTable.Name, sql.NamespaceTable.ID, &sql.NamespaceTable},
-		{sql.SystemDB.ID, sql.DescriptorTable.Name, sql.DescriptorTable.ID, &sql.DescriptorTable},
-	}
-	for _, d := range systemData {
-		key = sql.MakeNameMetadataKey(d.parentID, d.name)
-		value = proto.Value{}
-		value.SetInteger(int64(d.id))
-		value.InitChecksum(key)
-		if err := engine.MVCCPut(batch, ms, key, now, value, nil); err != nil {
-			return err
-		}
-		key = sql.MakeDescMetadataKey(d.id)
-		if err := engine.MVCCPutProto(batch, ms, key, now, nil, d.desc); err != nil {
+	// Now add all passed-in default entries.
+	for _, kv := range initialValues {
+		// Initialize the checksums.
+		kv.Value.InitChecksum(kv.Key)
+		if err := engine.MVCCPut(batch, ms, kv.Key, now, kv.Value, nil); err != nil {
 			return err
 		}
 	}

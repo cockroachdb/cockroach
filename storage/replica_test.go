@@ -165,7 +165,7 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.store.splitQueue().SetDisabled(true)
 
 		if tc.rng == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
-			if err := tc.store.BootstrapRange(); err != nil {
+			if err := tc.store.BootstrapRange(nil); err != nil {
 				t.Fatal(err)
 			}
 		}

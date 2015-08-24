@@ -178,7 +178,7 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.BootstrapRange(); err != nil {
+	if err := store.BootstrapRange(nil); err != nil {
 		t.Fatal(err)
 	}
 	return store, manual, stopper
@@ -226,7 +226,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Bootstrap first range.
-	if err := store.BootstrapRange(); err != nil {
+	if err := store.BootstrapRange(nil); err != nil {
 		t.Errorf("failure to create first range: %s", err)
 	}
 

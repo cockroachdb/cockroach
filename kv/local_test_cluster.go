@@ -139,7 +139,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	ltc.lSender.AddStore(ltc.Store)
-	if err := ltc.Store.BootstrapRange(); err != nil {
+	if err := ltc.Store.BootstrapRange(nil); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	if err := ltc.Store.Start(ltc.Stopper); err != nil {
