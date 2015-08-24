@@ -21,6 +21,11 @@ CMD ["/bin/bash"]
 EOF
 }
 
+if [ "${1-}" = "pull" ]; then
+  docker pull "${image}"
+  exit 0
+fi
+
 if [ "${1-}" = "init" ]; then
   init
   exit 0
@@ -30,7 +35,7 @@ if [ "${1-}" = "push" ]; then
   init
   tag="$(date +%Y%m%d-%H%M%S)"
   docker tag "${image}" "${image}:${tag}"
-  docker push "${image}:${tag}"
+  docker push "${image}"
   exit 0
 fi
 
