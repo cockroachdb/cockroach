@@ -98,7 +98,8 @@ func processOneLine(db *sql.DB, line string) error {
 				rowStrings[i] = "NULL"
 			}
 		}
-		table.Append(rowStrings)
+		// tablewriter.Append always returns nil.
+		_ = table.Append(rowStrings)
 	}
 
 	table.Render()
