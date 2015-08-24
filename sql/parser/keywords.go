@@ -128,7 +128,6 @@ var keywords = map[string]int{
 	"DISCARD":           DISCARD,
 	"DISTINCT":          DISTINCT,
 	"DO":                DO,
-	"DOCUMENT":          DOCUMENT,
 	"DOMAIN":            DOMAIN,
 	"DOUBLE":            DOUBLE,
 	"DROP":              DROP,
