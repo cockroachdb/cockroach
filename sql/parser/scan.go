@@ -26,7 +26,6 @@ import (
 
 const eof = -1
 const errUnterminated = "unterminated string"
-const errUnsupportedEscape = "octal, hex and unicode escape not supported"
 
 type scanner struct {
 	in        string
@@ -529,31 +528,38 @@ func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 			t := s.peek()
 			if allowEscapes {
 				lval.str += s.in[start : s.pos-1]
-				if t == ch || t == '\\' {
+				if t == ch {
 					start = s.pos
 					s.pos++
 					continue
 				}
 
 				switch t {
-				// TODO(pmattis): Handle other back-slash escapes? Octal? Hexadecimal?
-				// Unicode?
-				case 'b', 'f', 'n', 'r', 't', '\'':
-					lval.str += string(decodeMap[byte(t)])
-					s.pos++
+				case 'a', 'b', 'f', 'n', 'r', 't', 'v', 'x', 'X', 'u', 'U', '\\',
+					'0', '1', '2', '3', '4', '5', '6', '7':
+					var tmp string
+					if t == 'X' && len(s.in[s.pos:]) >= 3 {
+						// UnquoteChar doesn't handle 'X' so we create a temporary string
+						// for it to parse.
+						tmp = "\\x" + s.in[s.pos+1:s.pos+3]
+					} else {
+						tmp = s.in[s.pos-1:]
+					}
+					v, _, tail, err := strconv.UnquoteChar(tmp, byte(ch))
+					if err != nil {
+						lval.id = ERROR
+						lval.str = err.Error()
+						return false
+					}
+					lval.str += string(v)
+					s.pos += len(tmp) - len(tail) - 1
 					start = s.pos
 					continue
-				case 'x', 'u', 'U':
-					fallthrough
-				case '0', '1', '2', '3', '4', '5', '6', '7':
-					lval.id = ERROR
-					lval.str = errUnsupportedEscape
-					return false
 				}
 
 				// If we end up here, it's a redundant escape - simply drop the
 				// backslash. For example, e'\"' is equivalent to e'"', and
-				// e'\a\b' to e'a\b'. This is what Postgres does:
+				// e'\d\b' to e'd\b'. This is what Postgres does:
 				// http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html#SQL-SYNTAX-STRINGS-ESCAPE
 				start = s.pos
 			}

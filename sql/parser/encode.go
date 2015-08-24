@@ -33,8 +33,6 @@ var (
 	dontEscape = byte(255)
 	// encodeMap specifies how to escape binary data with '\'.
 	encodeMap [256]byte
-	// decodeMap is the reverse of encodeMap
-	decodeMap [256]byte
 	hexMap    [256][]byte
 )
 
@@ -121,12 +119,10 @@ func init() {
 
 	for i := range encodeMap {
 		encodeMap[i] = dontEscape
-		decodeMap[i] = dontEscape
 	}
 	for i := range encodeMap {
 		if to, ok := encodeRef[byte(i)]; ok {
 			encodeMap[byte(i)] = to
-			decodeMap[to] = byte(i)
 		}
 	}
 
