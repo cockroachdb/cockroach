@@ -1,0 +1,64 @@
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT
+)
+
+statement ok
+INSERT INTO t VALUES (1,1)
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t
+----
+0  /t/primary/1    NULL  NULL
+0  /t/primary/1/b  1     true
+
+user testuser
+
+statement ok
+set database to test
+
+statement error user testuser does not have CREATE privilege on table t
+CREATE INDEX foo ON t (b)
+
+user root
+
+statement ok
+CREATE INDEX foo ON t (b)
+
+query TTTTT colnames
+SHOW INDEX FROM t
+----
+Table Name    Unique Seq Column
+t     primary true   1   a
+t     foo     false  1   b
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@foo
+----
+0  /t/foo/1/1  NULL  true
+
+statement ok
+INSERT INTO t VALUES (2,1)
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@foo
+----
+0  /t/foo/1/1  NULL  true
+1  /t/foo/1/2  NULL  true
+
+statement error duplicate key value .* violates unique constraint
+CREATE UNIQUE INDEX bar ON t (b)
+
+query TTTTT colnames
+SHOW INDEX FROM t
+----
+Table Name    Unique Seq Column
+t     primary true   1   a
+t     foo     false  1   b
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@foo
+----
+0  /t/foo/1/1  NULL  true
+1  /t/foo/1/2  NULL  true
