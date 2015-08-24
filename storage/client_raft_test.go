@@ -217,7 +217,7 @@ func TestReplicateRange(t *testing.T) {
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		}); err != nil {
+		}, rng.Desc()); err != nil {
 		t.Fatal(err)
 	}
 	// Verify no intent remains on range descriptor key.
@@ -279,7 +279,7 @@ func TestRestoreReplicas(t *testing.T) {
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		}); err != nil {
+		}, firstRng.Desc()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -372,7 +372,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		})
+		}, rng.Desc())
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("did not get expected error: %s", err)
 	}
@@ -391,7 +391,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		})
+		}, rng.Desc())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -456,7 +456,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		}); err != nil {
+		}, rng.Desc()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -537,6 +537,65 @@ func TestStoreRangeReplicate(t *testing.T) {
 		}
 		return true
 	}, 1*time.Second); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestChangeReplicasDuplicateError tests that a replica change aborts if
+// another change has been made to the RangeDescriptor since it was initiated.
+func TestChangeReplicasDescriptorInvariant(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	repl, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addReplica := func(storeNum int, desc *proto.RangeDescriptor) error {
+		return repl.ChangeReplicas(proto.ADD_REPLICA,
+			proto.Replica{
+				NodeID:  mtc.stores[storeNum].Ident.NodeID,
+				StoreID: mtc.stores[storeNum].Ident.StoreID,
+			},
+			desc)
+	}
+
+	// Retain the descriptor for the range at this point.
+	origDesc := repl.Desc()
+
+	// Add replica to the second store, which should succeed.
+	if err := addReplica(1, origDesc); err != nil {
+		t.Fatal(err)
+	}
+	if err := util.IsTrueWithin(func() bool {
+		r := mtc.stores[1].LookupReplica(proto.Key("a"), proto.Key("b"))
+		if r == nil {
+			return false
+		}
+		return true
+	}, time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	// Attempt to add replica to the third store with the original descriptor.
+	// This should fail because the descriptor is stale.
+	if err := addReplica(2, origDesc); err == nil {
+		t.Fatal("Expected error calling ChangeReplicas with stale RangeDescriptor")
+	}
+
+	// Add to third store with fresh descriptor.
+	if err := addReplica(2, repl.Desc()); err != nil {
+		t.Fatal(err)
+	}
+	if err := util.IsTrueWithin(func() bool {
+		r := mtc.stores[2].LookupReplica(proto.Key("a"), proto.Key("b"))
+		if r == nil {
+			return false
+		}
+		return true
+	}, time.Second); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -801,9 +860,10 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 		if rng == nil {
 			t.Fatal("failed to look up min range")
 		}
-		args := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("A%03d", i)), rng.Desc().RangeID,
+		desc := rng.Desc()
+		args := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("A%03d", i)), desc.RangeID,
 			mtc.stores[0].StoreID())
-		if _, err := rng.AdminSplit(args); err != nil {
+		if _, err := rng.AdminSplit(args, desc); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -814,8 +874,9 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 		if rng == nil {
 			t.Fatal("failed to look up max range")
 		}
-		args := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("B%03d", i)), rng.Desc().RangeID, mtc.stores[0].StoreID())
-		if _, err := rng.AdminSplit(args); err != nil {
+		desc := rng.Desc()
+		args := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("B%03d", i)), desc.RangeID, mtc.stores[0].StoreID())
+		if _, err := rng.AdminSplit(args, desc); err != nil {
 			t.Fatal(err)
 		}
 	}

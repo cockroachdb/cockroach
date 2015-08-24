@@ -590,10 +590,10 @@ func (r *Replica) addAdminCmd(ctx context.Context, args proto.Request) (proto.Re
 
 	switch tArgs := args.(type) {
 	case *proto.AdminSplitRequest:
-		resp, err := r.AdminSplit(*tArgs)
+		resp, err := r.AdminSplit(*tArgs, r.Desc())
 		return &resp, err
 	case *proto.AdminMergeRequest:
-		resp, err := r.AdminMerge(*tArgs)
+		resp, err := r.AdminMerge(*tArgs, r.Desc())
 		return &resp, err
 	default:
 		return nil, util.Error("unrecognized admin command")

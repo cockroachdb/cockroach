@@ -2617,7 +2617,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	if err := tc.rng.ChangeReplicas(proto.ADD_REPLICA, proto.Replica{
 		NodeID:  tc.store.Ident.NodeID,
 		StoreID: 9999,
-	}); err == nil || !strings.Contains(err.Error(),
+	}, tc.rng.Desc()); err == nil || !strings.Contains(err.Error(),
 		"already present") {
 		t.Fatalf("must not be able to add second replica to same node (err=%s)",
 			err)

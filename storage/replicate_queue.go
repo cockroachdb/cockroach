@@ -76,13 +76,14 @@ func (rq *replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (
 		return
 	}
 
-	return rq.needsReplication(zone, repl)
+	return rq.needsReplication(zone, repl, repl.Desc())
 }
 
-func (rq *replicateQueue) needsReplication(zone config.ZoneConfig, repl *Replica) (bool, float64) {
+func (rq *replicateQueue) needsReplication(zone config.ZoneConfig, repl *Replica,
+	desc *proto.RangeDescriptor) (bool, float64) {
 	// TODO(bdarnell): handle non-empty ReplicaAttrs.
 	need := len(zone.ReplicaAttrs)
-	have := len(repl.Desc().Replicas)
+	have := len(desc.Replicas)
 	if need > have {
 		if log.V(1) {
 			log.Infof("%s needs %d nodes; has %d", repl, need, have)
@@ -99,14 +100,15 @@ func (rq *replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 		return err
 	}
 
-	if needs, _ := rq.needsReplication(zone, repl); !needs {
+	desc := repl.Desc()
+	if needs, _ := rq.needsReplication(zone, repl, desc); !needs {
 		// Something changed between shouldQueue and process.
 		return nil
 	}
 
 	// TODO(bdarnell): handle non-homogenous ReplicaAttrs.
 	// Allow constraints to be relaxed if necessary.
-	newReplica, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], repl.Desc().Replicas, true)
+	newReplica, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true)
 	if err != nil {
 		return err
 	}
@@ -115,7 +117,7 @@ func (rq *replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 		NodeID:  newReplica.Node.NodeID,
 		StoreID: newReplica.StoreID,
 	}
-	if err = repl.ChangeReplicas(proto.ADD_REPLICA, replica); err != nil {
+	if err = repl.ChangeReplicas(proto.ADD_REPLICA, replica, desc); err != nil {
 		return err
 	}
 

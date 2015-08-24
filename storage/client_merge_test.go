@@ -258,8 +258,9 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	argsMerge := adminMergeArgs(rangeA.Desc().StartKey, 1, store.StoreID())
-	if _, err := rangeA.AdminMerge(argsMerge); !testutils.IsError(err, "ranges not collocated") {
+	desc := rangeA.Desc()
+	argsMerge := adminMergeArgs(desc.StartKey, 1, store.StoreID())
+	if _, err := rangeA.AdminMerge(argsMerge, desc); !testutils.IsError(err, "ranges not collocated") {
 		t.Fatalf("did not got expected error; got %s", err)
 	}
 

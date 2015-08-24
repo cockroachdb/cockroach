@@ -301,7 +301,7 @@ func (m *multiTestContext) replicateRange(rangeID proto.RangeID, sourceStoreInde
 			proto.Replica{
 				NodeID:  m.stores[dest].Ident.NodeID,
 				StoreID: m.stores[dest].Ident.StoreID,
-			})
+			}, rng.Desc())
 		if err != nil {
 			m.t.Fatal(err)
 		}
@@ -332,7 +332,7 @@ func (m *multiTestContext) unreplicateRange(rangeID proto.RangeID, source, dest 
 		proto.Replica{
 			NodeID:  m.idents[dest].NodeID,
 			StoreID: m.idents[dest].StoreID,
-		})
+		}, rng.Desc())
 	if err != nil {
 		m.t.Fatal(err)
 	}
