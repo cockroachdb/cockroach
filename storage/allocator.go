@@ -96,7 +96,7 @@ type allocator struct {
 	gossip        *gossip.Gossip
 	randGen       *rand.Rand
 	deterministic bool                  // Set deterministic for unittests
-	capacityKeys  map[string]struct{}   // Tracks gossip keys used for capacity
+	storeKeys     map[string]struct{}   // Tracks gossip keys used for stores
 	storeLists    map[string]*storeList // Cache from attributes to storeList
 }
 
@@ -106,10 +106,10 @@ func newAllocator(g *gossip.Gossip) *allocator {
 		gossip:  g,
 		randGen: rand.New(rand.NewSource(rand.Int63())),
 	}
-	// Callback triggers on any capacity gossip updates.
+	// Callback triggers on any store gossip updates.
 	if a.gossip != nil {
-		capacityRegex := gossip.MakePrefixPattern(gossip.KeyCapacityPrefix)
-		a.gossip.RegisterCallback(capacityRegex, a.capacityGossipUpdate)
+		storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
+		a.gossip.RegisterCallback(storeRegex, a.storeGossipUpdate)
 	}
 	return a
 }
@@ -125,7 +125,7 @@ func getUsedNodes(existing []proto.Replica) map[proto.NodeID]struct{} {
 }
 
 // storeDescFromGossip retrieves a StoreDescriptor from the specified
-// capacity gossip key. Returns an error if the gossip doesn't exist
+// store gossip key. Returns an error if the gossip doesn't exist
 // or is not a StoreDescriptor.
 func storeDescFromGossip(key string, g *gossip.Gossip) (*proto.StoreDescriptor, error) {
 	info, err := g.GetInfo(key)
@@ -140,19 +140,18 @@ func storeDescFromGossip(key string, g *gossip.Gossip) (*proto.StoreDescriptor, 
 	return &storeDesc, nil
 }
 
-// capacityGossipUpdate is a gossip callback triggered whenever capacity
-// information is gossiped. It just tracks keys used for capacity
-// gossip.
-func (a *allocator) capacityGossipUpdate(key string, _ bool) {
+// storeGossipUpdate is a gossip callback triggered whenever store information
+// is gossiped. It just tracks the gossiped keys.
+func (a *allocator) storeGossipUpdate(key string, _ bool) {
 	a.Lock()
 	defer a.Unlock()
 
 	// Clear the cached store lists on new gossip.
 	a.storeLists = nil
-	if a.capacityKeys == nil {
-		a.capacityKeys = map[string]struct{}{}
+	if a.storeKeys == nil {
+		a.storeKeys = map[string]struct{}{}
 	}
-	a.capacityKeys[key] = struct{}{}
+	a.storeKeys[key] = struct{}{}
 }
 
 // AllocateTarget returns a suitable store for a new allocation with
@@ -312,7 +311,7 @@ func (a *allocator) getStoreList(required proto.Attributes) *storeList {
 		if err != nil {
 			// We can no longer retrieve this key from the gossip store,
 			// perhaps it expired.
-			delete(a.capacityKeys, key)
+			delete(a.storeKeys, key)
 		} else if required.IsSubset(*storeDesc.CombinedAttrs()) {
 			sl.Add(storeDesc)
 		}
@@ -320,7 +319,7 @@ func (a *allocator) getStoreList(required proto.Attributes) *storeList {
 
 	if a.deterministic {
 		var keys []string
-		for key := range a.capacityKeys {
+		for key := range a.storeKeys {
 			keys = append(keys, key)
 		}
 		sort.Strings(keys)
@@ -330,7 +329,7 @@ func (a *allocator) getStoreList(required proto.Attributes) *storeList {
 		return sl
 	}
 
-	for key := range a.capacityKeys {
+	for key := range a.storeKeys {
 		updateStoreList(key)
 	}
 	return sl
