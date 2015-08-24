@@ -1443,7 +1443,7 @@ transaction_stmt:
   }
 | BEGIN opt_transaction transaction_mode_list_or_empty
   {
-    $$ = nil
+    $$ = &BeginTransaction{}
   }
 | START TRANSACTION transaction_mode_list_or_empty
   {
@@ -1451,7 +1451,7 @@ transaction_stmt:
   }
 | COMMIT opt_transaction
   {
-    $$ = nil
+    $$ = &CommitTransaction{}
   }
 | END opt_transaction
   {
@@ -1459,7 +1459,7 @@ transaction_stmt:
   }
 | ROLLBACK opt_transaction
   {
-    $$ = nil
+    $$ = &RollbackTransaction{}
   }
 | SAVEPOINT name
   {

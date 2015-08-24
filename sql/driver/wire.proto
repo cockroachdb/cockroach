@@ -19,7 +19,6 @@ syntax = "proto2";
 package cockroach.driver;
 option go_package = "driver";
 
-import "cockroach/proto/api.proto";
 import "cockroach/proto/errors.proto";
 import "gogoproto/gogo.proto";
 
@@ -35,12 +34,6 @@ message RequestHeader {
   // Session settings that were returned in the last response that
   // contained them, being reflected back to the server.
   optional bytes session = 1;
-  // The transaction state returned in the previous response being
-  // reflected back.
-  optional bytes txn = 2;
-  // CmdID is optionally specified for request idempotence
-  // (i.e. replay protection).
-  optional proto.ClientCmdID cmd_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
 }
 
 // ResponseHeader is returned with every Response.
@@ -48,10 +41,6 @@ message ResponseHeader {
   // Setting that should be reflected back in all subsequent requests.
   // When not set, future requests should continue to use existing settings.
   optional bytes session = 2;
-  // Transaction message returned in a response; not to be interpreted by
-  // the recipient and reflected in a subsequent request. When not set,
-  // the subsequent request should not contain a transaction object.
-  optional bytes txn = 3;
 }
 
 message Datum {
