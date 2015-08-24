@@ -2702,22 +2702,18 @@ a_expr:
   {
     $$ = &ComparisonExpr{Operator: Like, Left: $1, Right: $3}
   }
-| a_expr LIKE a_expr ESCAPE a_expr %prec LIKE
-  {
-    $$ = &ComparisonExpr{Operator: Like, Left: $1, Right: $3}
-  }
 | a_expr NOT_LA LIKE a_expr %prec NOT_LA
   {
     $$ = &ComparisonExpr{Operator: NotLike, Left: $1, Right: $4}
   }
-| a_expr NOT_LA LIKE a_expr ESCAPE a_expr %prec NOT_LA
+| a_expr SIMILAR TO a_expr %prec SIMILAR
   {
-    $$ = &ComparisonExpr{Operator: NotLike, Left: $1, Right: $4}
+    $$ = &ComparisonExpr{Operator: SimilarTo, Left: $1, Right: $4}
   }
-| a_expr SIMILAR TO a_expr %prec SIMILAR {}
-| a_expr SIMILAR TO a_expr ESCAPE a_expr %prec SIMILAR {}
-| a_expr NOT_LA SIMILAR TO a_expr %prec NOT_LA {}
-| a_expr NOT_LA SIMILAR TO a_expr ESCAPE a_expr %prec NOT_LA {}
+| a_expr NOT_LA SIMILAR TO a_expr %prec NOT_LA
+  {
+    $$ = &ComparisonExpr{Operator: NotSimilarTo, Left: $1, Right: $5}
+  }
 | a_expr IS NULL %prec IS
   {
     $$ = &NullCheck{Expr: $1}
@@ -3662,7 +3658,6 @@ unreserved_keyword:
 | ENCODING
 | ENCRYPTED
 | ENUM
-| ESCAPE
 | EVENT
 | EXCLUDE
 | EXCLUDING

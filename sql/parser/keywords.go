@@ -138,7 +138,6 @@ var keywords = map[string]int{
 	"ENCRYPTED":         ENCRYPTED,
 	"END":               END,
 	"ENUM":              ENUM,
-	"ESCAPE":            ESCAPE,
 	"EVENT":             EVENT,
 	"EXCEPT":            EXCEPT,
 	"EXCLUDE":           EXCLUDE,
