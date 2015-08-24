@@ -222,7 +222,6 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t WHERE a = b * c`},
 		{`SELECT FROM t WHERE a = b / c`},
 		{`SELECT FROM t WHERE a = b % c`},
-		{`SELECT FROM t WHERE a = b # c`},
 		{`SELECT FROM t WHERE a = b || c`},
 		{`SELECT FROM t WHERE a = + b`},
 		{`SELECT FROM t WHERE a = - b`},

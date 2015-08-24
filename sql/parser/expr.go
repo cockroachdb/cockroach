@@ -522,21 +522,23 @@ const (
 	Mult
 	Div
 	Mod
-	Exp
 	Concat
+	LShift
+	RShift
 )
 
 var binaryOpName = [...]string{
 	Bitand: "&",
 	Bitor:  "|",
-	Bitxor: "#",
+	Bitxor: "^",
 	Plus:   "+",
 	Minus:  "-",
 	Mult:   "*",
 	Div:    "/",
 	Mod:    "%",
-	Exp:    "^",
 	Concat: "||",
+	LShift: "<<",
+	RShift: ">>",
 }
 
 func (i BinaryOp) String() string {

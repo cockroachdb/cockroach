@@ -260,6 +260,10 @@ func (s *scanner) scan(lval *sqlSymType) {
 
 	case '<':
 		switch s.peek() {
+		case '<': // <<
+			s.pos++
+			lval.id = LSHIFT
+			return
 		case '>': // <>
 			s.pos++
 			lval.id = NOT_EQUALS
@@ -273,6 +277,10 @@ func (s *scanner) scan(lval *sqlSymType) {
 
 	case '>':
 		switch s.peek() {
+		case '>': // >>
+			s.pos++
+			lval.id = RSHIFT
+			return
 		case '=': // >=
 			s.pos++
 			lval.id = GREATER_EQUALS
