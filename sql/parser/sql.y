@@ -293,7 +293,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 // 
 // DOT_DOT is unused in the core SQL grammar, and so will always provoke parse
 // errors. It is needed by PL/pgsql.
-%token <str>   IDENT FCONST SCONST BCONST XCONST
+%token <str>   IDENT FCONST SCONST BCONST
 %token <ival>  ICONST PARAM
 %token <str>   TYPECAST DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
@@ -3490,12 +3490,7 @@ a_expr_const:
   }
 | BCONST
   {
-    // TODO(pmattis): bit literal.
-    $$ = StrVal($1)
-  }
-| XCONST
-  {
-    // TODO(pmattis): hex literal.
+    // TODO(pmattis): bytes literal.
     $$ = StrVal($1)
   }
 | func_name '(' expr_list opt_sort_clause ')' SCONST {}

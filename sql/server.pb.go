@@ -19,8 +19,9 @@ var _ = math.Inf
 
 type Session struct {
 	Database string `protobuf:"bytes,1,opt,name=database" json:"database"`
+	Syntax   int32  `protobuf:"varint,2,opt,name=syntax" json:"syntax"`
 	// Open transaction.
-	Txn *cockroach_proto1.Transaction `protobuf:"bytes,2,opt,name=txn" json:"txn,omitempty"`
+	Txn *cockroach_proto1.Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
 }
 
 func (m *Session) Reset()         { *m = Session{} }
@@ -32,6 +33,13 @@ func (m *Session) GetDatabase() string {
 		return m.Database
 	}
 	return ""
+}
+
+func (m *Session) GetSyntax() int32 {
+	if m != nil {
+		return m.Syntax
+	}
+	return 0
 }
 
 func (m *Session) GetTxn() *cockroach_proto1.Transaction {
@@ -60,8 +68,11 @@ func (m *Session) MarshalTo(data []byte) (int, error) {
 	i++
 	i = encodeVarintServer(data, i, uint64(len(m.Database)))
 	i += copy(data[i:], m.Database)
+	data[i] = 0x10
+	i++
+	i = encodeVarintServer(data, i, uint64(m.Syntax))
 	if m.Txn != nil {
-		data[i] = 0x12
+		data[i] = 0x1a
 		i++
 		i = encodeVarintServer(data, i, uint64(m.Txn.Size()))
 		n1, err := m.Txn.MarshalTo(data[i:])
@@ -105,6 +116,7 @@ func (m *Session) Size() (n int) {
 	_ = l
 	l = len(m.Database)
 	n += 1 + l + sovServer(uint64(l))
+	n += 1 + sovServer(uint64(m.Syntax))
 	if m.Txn != nil {
 		l = m.Txn.Size()
 		n += 1 + l + sovServer(uint64(l))
@@ -167,6 +179,22 @@ func (m *Session) Unmarshal(data []byte) error {
 			m.Database = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Syntax", wireType)
+			}
+			m.Syntax = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Syntax |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
 			}

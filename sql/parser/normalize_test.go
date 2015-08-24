@@ -68,7 +68,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`1=a/2`, `a = 2`},
 	}
 	for _, d := range testData {
-		q, err := Parse("SELECT " + d.expr)
+		q, err := ParseTraditional("SELECT " + d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

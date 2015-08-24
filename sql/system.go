@@ -74,7 +74,7 @@ var (
 )
 
 func createSystemTable(id ID, cmd string) TableDescriptor {
-	stmts, err := parser.Parse(cmd)
+	stmts, err := parser.ParseTraditional(cmd)
 	if err != nil {
 		log.Fatal(err)
 	}

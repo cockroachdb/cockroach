@@ -74,7 +74,7 @@ func TestNormalizeTableName(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		stmts, err := Parse("SELECT " + tc.in)
+		stmts, err := ParseTraditional("SELECT " + tc.in)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.in, err)
 		}
@@ -117,7 +117,7 @@ func TestNormalizeColumnName(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		stmts, err := Parse("SELECT " + tc.in)
+		stmts, err := ParseTraditional("SELECT " + tc.in)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.in, err)
 		}

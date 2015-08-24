@@ -44,11 +44,25 @@ func (l StatementList) String() string {
 	return buf.String()
 }
 
+// Syntax is an enum of the various syntax types.
+type Syntax int
+
+// Syntax values.
+const (
+	Traditional Syntax = iota
+	Modern
+)
+
 // Parse parses the sql and returns a list of statements.
-func Parse(sql string) (StatementList, error) {
-	s := newScanner(sql)
+func Parse(sql string, syntax Syntax) (StatementList, error) {
+	s := newScanner(sql, syntax)
 	if sqlParse(s) != 0 {
 		return nil, errors.New(s.lastError)
 	}
 	return s.stmts, nil
+}
+
+// ParseTraditional is short-hand for Parse(sql, Traditional)
+func ParseTraditional(sql string) (StatementList, error) {
+	return Parse(sql, Traditional)
 }
