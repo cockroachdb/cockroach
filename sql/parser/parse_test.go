@@ -307,10 +307,8 @@ func TestParse2(t *testing.T) {
 		sql      string
 		expected string
 	}{
-		// TODO(pmattis): Handle octal and hexadecimal numbers.
-		// {`SELECT 010 FROM t`, ``},
-		// {`SELECT 0xf0 FROM t`, ``},
-		// {`SELECT 0xF0 FROM t`, ``},
+		{`SELECT 0xf0 FROM t`, `SELECT 240 FROM t`},
+		{`SELECT 0xF0 FROM t`, `SELECT 240 FROM t`},
 		// Escaped string literals are not always escaped the same because
 		// '''' and e'\'' scan to the same token. It's more convenient to
 		// prefer escaping ' and \, so we do that.
@@ -466,7 +464,7 @@ CREATE DATABASE a b c
                   ^
 `},
 		{"SELECT 1e-\n-1",
-			`invalid floating point constant
+			`invalid floating point literal
 SELECT 1e-
        ^
 `},
@@ -475,6 +473,13 @@ SELECT 1e-
 SELECT foo''
           ^
 `},
+		{
+			`SELECT 0x FROM t`,
+			`invalid hexadecimal literal
+SELECT 0x FROM t
+       ^
+`,
+		},
 	}
 	for _, d := range testData {
 		_, err := Parse(d.sql)

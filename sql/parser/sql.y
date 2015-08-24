@@ -27,7 +27,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   id             int
   pos            int
   empty          struct{}
-  ival           int
+  ival           int64
   str            string
   strs           []string
   qname          *QualifiedName
@@ -2356,11 +2356,11 @@ const_typename:
 opt_numeric_modifiers:
   '(' ICONST ')'
   {
-    $$ = &DecimalType{Prec: $2}
+    $$ = &DecimalType{Prec: int($2)}
   }
 | '(' ICONST ',' ICONST ')'
   {
-    $$ = &DecimalType{Prec: $2, Scale: $4}
+    $$ = &DecimalType{Prec: int($2), Scale: int($4)}
   }
 | /* EMPTY */
   {
@@ -2391,7 +2391,7 @@ numeric:
   }
 | FLOAT opt_float
   {
-    $$ = &FloatType{Name: astFloat, Prec: $2}
+    $$ = &FloatType{Name: astFloat, Prec: int($2)}
   }
 | DOUBLE PRECISION
   {
@@ -2442,7 +2442,7 @@ const_bit:
 bit_with_length:
   BIT opt_varying '(' ICONST ')'
   {
-    $$ = &BitType{N: $4}
+    $$ = &BitType{N: int($4)}
   }
 
 bit_without_length:
@@ -2465,7 +2465,7 @@ character_with_length:
   character_base '(' ICONST ')' opt_charset
   {
     $$ = $1
-    $$.(*CharType).N = $3
+    $$.(*CharType).N = int($3)
   }
 
 character_without_length:
