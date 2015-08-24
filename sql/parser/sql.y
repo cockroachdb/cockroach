@@ -28,6 +28,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   pos            int
   empty          struct{}
   ival           int64
+  boolVal        bool
   str            string
   strs           []string
   qname          *QualifiedName
@@ -109,7 +110,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> opt_with_data
 %type <empty> opt_nowait_or_skip
 
-%type <empty> access_method_clause
 %type <str>   name opt_name
 
 %type <empty> subquery_op
@@ -127,12 +127,12 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <tblDefs> opt_table_elem_list table_elem_list
 %type <empty> opt_inherit
 %type <empty> opt_typed_table_elem_list typed_table_elem_list
-%type <empty> reloptions opt_reloptions
+%type <empty> reloptions
 %type <empty> opt_with distinct_clause opt_all_clause
 %type <strs> opt_column_list
 %type <orderBy> sort_clause opt_sort_clause
 %type <orders> sortby_list
-%type <empty> index_params
+%type <strs> index_params
 %type <strs> name_list opt_name_list
 %type <empty> opt_array_bounds
 %type <tblExprs> from_clause from_list
@@ -179,7 +179,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> opt_interval interval_second
 %type <empty> overlay_placing substr_from substr_for
 
-%type <empty> opt_unique opt_concurrently
+%type <boolVal> opt_unique
 
 %type <empty> opt_column opt_set_data
 %type <empty> drop_type
@@ -224,7 +224,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <str> alias_clause opt_alias_clause
 %type <empty> func_alias_clause
 %type <order> sortby
-%type <empty> index_elem
+%type <str> index_elem
 %type <tblExpr> table_ref
 %type <tblExpr> joined_table
 %type <qname> relation_expr
@@ -617,10 +617,6 @@ reloptions:
   {
     $$ = $2
   }
-
-opt_reloptions:
-  WITH reloptions {}
-| /* EMPTY */ {}
 
 reloption_list:
   reloption_elem {}
@@ -1182,7 +1178,7 @@ constraint_elem:
     $$ = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: NameList($4)}
   }
 | PRIMARY KEY existing_index {}
-| EXCLUDE access_method_clause '(' exclusion_constraint_list ')'
+| EXCLUDE '(' exclusion_constraint_list ')'
     exclusion_where_clause {}
 | FOREIGN KEY '(' name_list ')' REFERENCES qualified_name
     opt_column_list key_match key_actions {}
@@ -1314,41 +1310,55 @@ opt_restart_seqs:
 
 // CREATE INDEX
 create_index_stmt:
-  CREATE opt_unique INDEX opt_concurrently opt_name
-    ON qualified_name access_method_clause '(' index_params ')'
-    opt_reloptions where_clause
+  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')'
   {
-    $$ = nil
+    $$ = &CreateIndex{
+      Name:    Name($4),
+      Table:   $6,
+      Unique:  $2,
+      Columns: $8,
+    }
   }
-| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS name
-    ON qualified_name access_method_clause '(' index_params ')'
-    opt_reloptions where_clause
+| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')'
   {
-    $$ = nil
+    $$ = &CreateIndex{
+      Name:        Name($7),
+      Table:       $9,
+      Unique:      $2,
+      IfNotExists: true,
+      Columns:     $11,
+    }
   }
 
 opt_unique:
-  UNIQUE {}
-| /* EMPTY */ {}
-
-opt_concurrently:
-  CONCURRENTLY {}
-| /* EMPTY */ {}
-
-access_method_clause:
-  USING name {}
-| /* EMPTY */ {}
+  UNIQUE
+  {
+    $$ = true
+  }
+| /* EMPTY */
+  {
+    $$ = false
+  }
 
 index_params:
-  index_elem {}
-| index_params ',' index_elem {}
+  index_elem
+  {
+    $$ = []string{$1}
+  }
+| index_params ',' index_elem
+  {
+    $$ = append($1, $3)
+  }
 
 // Index attributes can be either simple column references, or arbitrary
 // expressions in parens. For backwards-compatibility reasons, we allow an
 // expression that's just a function call to be written without parens.
 index_elem:
   name opt_collate opt_class opt_asc_desc
-  {}
+  {
+    // TODO(pmattis): Support opt_asc_desc.
+    $$ = $1
+  }
 | func_expr_windowless opt_collate opt_class opt_asc_desc
   {}
 | '(' a_expr ')' opt_collate opt_class opt_asc_desc

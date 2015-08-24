@@ -43,6 +43,7 @@ type Statement interface {
 func (*BeginTransaction) statement()    {}
 func (*CommitTransaction) statement()   {}
 func (*CreateDatabase) statement()      {}
+func (*CreateIndex) statement()         {}
 func (*CreateTable) statement()         {}
 func (*Delete) statement()              {}
 func (*DropDatabase) statement()        {}
