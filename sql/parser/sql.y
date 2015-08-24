@@ -346,7 +346,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 
 %token <str>   LABEL LANGUAGE LARGE LAST LATERAL
 %token <str>   LEADING LEAKPROOF LEAST LEFT LEVEL LIKE LIMIT LISTEN LOAD LOCAL
-%token <str>   LOCALTIME LOCALTIMESTAMP LOCATION LOCK LOCKED LOGGED
+%token <str>   LOCALTIME LOCALTIMESTAMP LOCATION LOCK LOCKED LOGGED LSHIFT
 
 %token <str>   MAPPING MATCH MATERIALIZED MAXVALUE MINUTE MINVALUE MODE MONTH MOVE
 
@@ -366,7 +366,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REFRESH REINDEX
 %token <str>   RELATIVE RELEASE RENAME REPEATABLE REPLACE REPLICA RESET RESTART
 %token <str>   RESTRICT RETURNING RETURNS REVOKE RIGHT ROLLBACK ROLLUP
-%token <str>   ROW ROWS RULE
+%token <str>   ROW ROWS RSHIFT RULE
 
 %token <str>   SAVEPOINT SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
 %token <str>   SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
@@ -441,6 +441,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %left      CONCAT       // multi-character ops
 %left      '+' '-'
 %left      '*' '/' '%'
+%left      LSHIFT RSHIFT
 %left      '&' '|' '^' '#'
 // Unary Operators
 %left      AT                // sets precedence for AT TIME ZONE
@@ -2631,7 +2632,11 @@ a_expr:
   }
 | a_expr '^' a_expr
   {
-    $$ = &BinaryExpr{Operator: Exp, Left: $1, Right: $3}
+    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+  }
+| a_expr '#' a_expr
+  {
+    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
   }
 | a_expr '&' a_expr
   {
@@ -2640,10 +2645,6 @@ a_expr:
 | a_expr '|' a_expr
   {
     $$ = &BinaryExpr{Operator: Bitor, Left: $1, Right: $3}
-  }
-| a_expr '#' a_expr
-  {
-    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
   }
 | a_expr '<' a_expr
   {
@@ -2660,6 +2661,14 @@ a_expr:
 | a_expr CONCAT a_expr
   {
     $$ = &BinaryExpr{Operator: Concat, Left: $1, Right: $3}
+  }
+| a_expr LSHIFT a_expr
+  {
+    $$ = &BinaryExpr{Operator: LShift, Left: $1, Right: $3}
+  }
+| a_expr RSHIFT a_expr
+  {
+    $$ = &BinaryExpr{Operator: RShift, Left: $1, Right: $3}
   }
 | a_expr LESS_EQUALS a_expr
   {
@@ -2805,7 +2814,11 @@ b_expr:
   }
 | b_expr '^' b_expr
   {
-    $$ = &BinaryExpr{Operator: Exp, Left: $1, Right: $3}
+    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+  }
+| b_expr '#' b_expr
+  {
+    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
   }
 | b_expr '&' b_expr
   {
@@ -2814,10 +2827,6 @@ b_expr:
 | b_expr '|' b_expr
   {
     $$ = &BinaryExpr{Operator: Bitor, Left: $1, Right: $3}
-  }
-| b_expr '#' b_expr
-  {
-    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
   }
 | b_expr '<' b_expr
   {
@@ -2834,6 +2843,14 @@ b_expr:
 | b_expr CONCAT b_expr
   {
     $$ = &BinaryExpr{Operator: Concat, Left: $1, Right: $3}
+  }
+| b_expr LSHIFT b_expr
+  {
+    $$ = &BinaryExpr{Operator: LShift, Left: $1, Right: $3}
+  }
+| b_expr RSHIFT b_expr
+  {
+    $$ = &BinaryExpr{Operator: RShift, Left: $1, Right: $3}
   }
 | b_expr LESS_EQUALS b_expr
   {

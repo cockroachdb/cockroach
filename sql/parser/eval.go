@@ -384,6 +384,14 @@ var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
 	binArgs{Concat, stringType, floatType}: func(left Datum, right Datum) (Datum, error) {
 		return left.(DString) + DString(right.String()), nil
 	},
+
+	// TODO(pmattis): Check that the shift is valid.
+	binArgs{LShift, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(DInt) << uint(right.(DInt)), nil
+	},
+	binArgs{RShift, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(DInt) >> uint(right.(DInt)), nil
+	},
 }
 
 type cmpArgs struct {

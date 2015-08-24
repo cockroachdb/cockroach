@@ -41,7 +41,7 @@ func TestFillArgs(t *testing.T) {
 		{`($1, $1, $1)`, `('a', 'a', 'a')`, mapArgs{1: DString(`a`)}},
 		{`$1 & $2`, `1 & 2`, mapArgs{1: DInt(1), 2: DInt(2)}},
 		{`$1 | $2`, `1 | 2`, mapArgs{1: DInt(1), 2: DInt(2)}},
-		{`$1 # $2`, `1 # 2`, mapArgs{1: DInt(1), 2: DInt(2)}},
+		{`$1 ^ $2`, `1 ^ 2`, mapArgs{1: DInt(1), 2: DInt(2)}},
 		{`$1 + $2`, `1 + 2`, mapArgs{1: DInt(1), 2: DInt(2)}},
 		{`$1 - $2`, `1 - 2`, mapArgs{1: DInt(1), 2: DInt(2)}},
 		{`$1 * $2`, `1 * 2`, mapArgs{1: DInt(1), 2: DInt(2)}},

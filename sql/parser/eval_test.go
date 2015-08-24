@@ -32,7 +32,7 @@ func TestEvalExpr(t *testing.T) {
 		// Bitwise operators.
 		{`1 & 3`, `1`},
 		{`1 | 3`, `3`},
-		{`1 # 3`, `2`},
+		{`1 ^ 3`, `2`},
 		// Arithmetic operators.
 		{`1 + 1`, `2`},
 		{`1 - 2`, `-1`},
@@ -52,12 +52,13 @@ func TestEvalExpr(t *testing.T) {
 		{`~0`, `-1`},
 		{`~0 - 1`, `-2`},
 		// Hexadecimal numbers.
-		// TODO(pmattis): {`0xa`, `10`},
-		// Octal numbers.
-		// TODO(pmattis): {`0755`, `493`},
+		{`0xa`, `10`},
 		// String concatenation.
 		{`'a' || 'b'`, `'ab'`},
 		{`'a' || (1 + 2)`, `'a3'`},
+		// Bit shift operators.
+		{`1 << 2`, `4`},
+		{`4 >> 2`, `1`},
 		// Boolean expressions.
 		{`false AND true`, `false`},
 		{`false AND NULL`, `false`},
@@ -173,7 +174,7 @@ func TestEvalExpr(t *testing.T) {
 		{`'0'::boolean`, `false`},
 		{`'123'::int + 1`, `124`},
 		{`'0x123'::int + 1`, `292`},
-		{`'0123'::int + 1`, `84`}, // TODO(pmattis): Should we support octal notation?
+		{`'0123'::int + 1`, `84`},
 		{`'1.23'::float + 1.0`, `2.23`},
 		{`'hello'::text`, `'hello'`},
 		{`CAST('123' AS int) + 1`, `124`},
