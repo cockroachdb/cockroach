@@ -323,7 +323,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 
 %token <str>   DATA DATABASE DATABASES DATE DAY DEALLOCATE DEC DECIMAL DECLARE DEFAULT DEFAULTS
 %token <str>   DEFERRABLE DEFERRED DEFINER DELETE DELIMITER DELIMITERS DESC
-%token <str>   DICTIONARY DISABLE DISCARD DISTINCT DO DOCUMENT DOMAIN DOUBLE DROP
+%token <str>   DICTIONARY DISABLE DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str>   EACH ELSE ENABLE ENCODING ENCRYPTED END ENUM ESCAPE EVENT EXCEPT
 %token <str>   EXCLUDE EXCLUDING EXCLUSIVE EXECUTE EXISTS EXPLAIN EXTENSION EXTERNAL EXTRACT
@@ -2764,8 +2764,6 @@ a_expr:
 | a_expr subquery_op sub_type select_with_parens %prec CONCAT {}
 | a_expr subquery_op sub_type '(' a_expr ')' %prec CONCAT {}
 | UNIQUE select_with_parens {}
-| a_expr IS DOCUMENT %prec IS {}
-| a_expr IS NOT DOCUMENT %prec IS {}
 
 // Restricted expressions
 // 
@@ -2868,8 +2866,6 @@ b_expr:
 | b_expr IS NOT DISTINCT FROM b_expr %prec IS {}
 | b_expr IS OF '(' type_list ')' %prec IS {}
 | b_expr IS NOT OF '(' type_list ')' %prec IS {}
-| b_expr IS DOCUMENT %prec IS {}
-| b_expr IS NOT DOCUMENT %prec IS {}
 
 // Productions that can be used in both a_expr and b_expr.
 // 
@@ -3658,7 +3654,6 @@ unreserved_keyword:
 | DICTIONARY
 | DISABLE
 | DISCARD
-| DOCUMENT
 | DOMAIN
 | DOUBLE
 | DROP
