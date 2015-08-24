@@ -291,7 +291,7 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE IF EXISTS a RENAME COLUMN c1 TO c2`},
 	}
 	for _, d := range testData {
-		stmts, err := Parse(d.sql)
+		stmts, err := ParseTraditional(d.sql)
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %s", d.sql, err)
 		}
@@ -372,7 +372,7 @@ func TestParse2(t *testing.T) {
 			`SELECT (0) FROM y[ARRAY[]]`},
 	}
 	for _, d := range testData {
-		stmts, err := Parse(d.sql)
+		stmts, err := ParseTraditional(d.sql)
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %s", d.sql, err)
 		}
@@ -380,7 +380,7 @@ func TestParse2(t *testing.T) {
 		if d.expected != s {
 			t.Errorf("expected %s, but found %s", d.expected, s)
 		}
-		if _, err := Parse(s); err != nil {
+		if _, err := ParseTraditional(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
 	}
@@ -412,7 +412,7 @@ func TestParseSyntax(t *testing.T) {
 		{`DROP INDEX IF EXISTS a`},
 	}
 	for _, d := range testData {
-		if _, err := Parse(d.sql); err != nil {
+		if _, err := ParseTraditional(d.sql); err != nil {
 			t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
 		}
 	}
@@ -485,7 +485,7 @@ SELECT 0x FROM t
 		},
 	}
 	for _, d := range testData {
-		_, err := Parse(d.sql)
+		_, err := ParseTraditional(d.sql)
 		if err == nil || err.Error() != d.expected {
 			t.Fatalf("%s: expected\n%s, but found\n%v", d.sql, d.expected, err)
 		}
@@ -510,7 +510,7 @@ func TestParsePanic(t *testing.T) {
 		"(F(F(F(F(F(F(F(F(F(F" +
 		"(F(F(F(F(F(F(F(F(F((" +
 		"F(0"
-	_, err := Parse(s)
+	_, err := ParseTraditional(s)
 	expected := `syntax error at or near "EOF"`
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)

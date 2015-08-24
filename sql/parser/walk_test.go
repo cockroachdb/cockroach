@@ -83,7 +83,7 @@ func TestFillArgs(t *testing.T) {
 	}
 
 	for _, d := range testData {
-		q, err := Parse("SELECT " + d.expr)
+		q, err := ParseTraditional("SELECT " + d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -106,7 +106,7 @@ func TestFillArgsError(t *testing.T) {
 		{`$2 AND $1`, `arg $2 not found`, mapArgs{}},
 	}
 	for _, d := range testData {
-		q, err := Parse("SELECT " + d.expr)
+		q, err := ParseTraditional("SELECT " + d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -141,14 +141,14 @@ func TestWalkStmt(t *testing.T) {
 			mapArgs{1: DString(`a`), 2: DString(`b`), 3: DInt(2)}},
 	}
 	for _, d := range testData {
-		q, err := Parse(d.sql)
+		q, err := ParseTraditional(d.sql)
 		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
 		if err := FillArgs(q[0], d.args); err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
-		e, err := Parse(d.expected)
+		e, err := ParseTraditional(d.expected)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expected, err)
 		}

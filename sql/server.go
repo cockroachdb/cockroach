@@ -194,7 +194,7 @@ func rollbackTxnAndReturnResultWithError(planMaker *planner, err error) driver.R
 // the caller's responsibility to update the response.
 func (s *Server) exec(req driver.Request, planMaker *planner) driver.Response {
 	var resp driver.Response
-	stmts, err := parser.Parse(req.Sql)
+	stmts, err := parser.Parse(req.Sql, parser.Syntax(planMaker.session.Syntax))
 	if err != nil {
 		// A parse error occured: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.

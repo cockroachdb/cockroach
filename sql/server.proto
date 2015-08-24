@@ -29,6 +29,7 @@ option (gogoproto.goproto_unrecognized_all) = false;
 
 message Session {
   optional string database = 1 [(gogoproto.nullable) = false];
+  optional int32 syntax = 2 [(gogoproto.nullable) = false];
   // Open transaction.
-  optional proto.Transaction txn = 2;
+  optional proto.Transaction txn = 3;
 }

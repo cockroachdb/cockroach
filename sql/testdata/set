@@ -40,3 +40,16 @@ SHOW TABLES from foo
 ----
 Table
 bar
+
+statement ok
+SET SYNTAX = traditional
+
+statement ok
+SET SYNTAX = modern
+
+statement error SYNTAX: "a" is not in \("modern", "traditional"\)
+SET SYNTAX = a
+
+statement error SYNTAX: requires a single string value
+SET SYNTAX = a, b
+

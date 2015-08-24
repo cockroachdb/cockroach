@@ -180,7 +180,7 @@ func TestEvalExpr(t *testing.T) {
 		{`'hello'::char(2)`, `'he'`},
 	}
 	for _, d := range testData {
-		q, err := Parse("SELECT " + d.expr)
+		q, err := ParseTraditional("SELECT " + d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -227,7 +227,7 @@ func TestEvalExprError(t *testing.T) {
 		// {`~0 + 1`, `0`},
 	}
 	for _, d := range testData {
-		q, err := Parse("SELECT " + d.expr)
+		q, err := ParseTraditional("SELECT " + d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

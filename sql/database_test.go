@@ -27,7 +27,7 @@ import (
 func TestMakeDatabaseDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stmt, err := parser.Parse("CREATE DATABASE test")
+	stmt, err := parser.ParseTraditional("CREATE DATABASE test")
 	if err != nil {
 		t.Fatal(err)
 	}

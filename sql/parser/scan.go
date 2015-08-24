@@ -35,10 +35,11 @@ type scanner struct {
 	nextTok   *sqlSymType
 	lastError string
 	stmts     []Statement
+	syntax    Syntax
 }
 
-func newScanner(s string) *scanner {
-	return &scanner{in: s}
+func newScanner(s string, syntax Syntax) *scanner {
+	return &scanner{in: s, syntax: syntax}
 }
 
 func (s *scanner) Lex(lval *sqlSymType) int {
