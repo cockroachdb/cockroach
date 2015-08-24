@@ -98,22 +98,22 @@ func (p *PrivilegeDescriptor) removeUser(user string) {
 	p.Users = p.Users[:len(p.Users)-1]
 }
 
-// NewSystemObjectPrivilegeDescriptor returns a privilege descriptor for system
-// databases and tables.
-func NewSystemObjectPrivilegeDescriptor() *PrivilegeDescriptor {
+// NewPrivilegeDescriptor returns a privilege descriptor for the given
+// user with the specified list of privileges.
+func NewPrivilegeDescriptor(user string, priv privilege.List) *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
 		Users: []*UserPrivileges{
 			{
-				User:       security.RootUser,
-				Privileges: privilege.SELECT.Mask() | privilege.GRANT.Mask(),
+				User:       user,
+				Privileges: priv.ToBitField(),
 			},
 		},
 	}
 }
 
-// NewDefaultDatabasePrivilegeDescriptor returns a privilege descriptor
+// NewDefaultPrivilegeDescriptor returns a privilege descriptor
 // with ALL privileges for the root user.
-func NewDefaultDatabasePrivilegeDescriptor() *PrivilegeDescriptor {
+func NewDefaultPrivilegeDescriptor() *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
 		Users: []*UserPrivileges{
 			{
@@ -181,10 +181,11 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 	}
 }
 
-// Validate is called when writing a descriptor.
-// If 'isSystem' is true, perform validation for system
-// database and tables.
-func (p *PrivilegeDescriptor) Validate(isSystem bool) error {
+// Validate is called when writing a database or table descriptor.
+// It takes the descriptor ID which is used to determine if
+// it belongs to a system descriptor, in which case the maximum
+// set of allowed privileges is looked up and applied.
+func (p *PrivilegeDescriptor) Validate(id ID) error {
 	if p == nil {
 		return fmt.Errorf("missing privilege descriptor")
 	}
@@ -192,10 +193,15 @@ func (p *PrivilegeDescriptor) Validate(isSystem bool) error {
 	if !ok {
 		return fmt.Errorf("user %s does not have privileges", security.RootUser)
 	}
-	if isSystem {
-		// System databases and tables must have read-only permissions
-		// only (SELECT and GRANT). These must remain set for the root user.
-		allowedPrivileges := privilege.SELECT.Mask() | privilege.GRANT.Mask()
+	if IsSystemID(id) {
+		// System databases and tables have custom maximum allowed privileges.
+		objectPrivileges, ok := SystemAllowedPrivileges[id]
+		if !ok {
+			return fmt.Errorf("no allowed privileges found for system object with ID=%d", id)
+		}
+
+		// The root user must have all the allowed privileges.
+		allowedPrivileges := objectPrivileges.ToBitField()
 		if userPriv.Privileges&allowedPrivileges != allowedPrivileges {
 			return fmt.Errorf("user %s must have %s privileges on system objects",
 				security.RootUser, privilege.ListFromBitField(allowedPrivileges))

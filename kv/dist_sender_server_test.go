@@ -258,10 +258,11 @@ func TestSingleRangeReverseScan(t *testing.T) {
 		t.Errorf("expected 2 rows; got %d", l)
 	}
 	// Case 3: Test proto.KeyMax
+	// TODO(marc): this depends on the sql system objects.
 	if rows, err := db.ReverseScan("g", proto.KeyMax, 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
-	} else if l := len(rows); l != 8 {
-		t.Errorf("expected 2 rows; got %d", l)
+	} else if l := len(rows); l != 10 {
+		t.Errorf("expected 10 rows; got %d", l)
 	}
 	// Case 4: Test keys.SystemMax
 	if rows, err := db.ReverseScan(keys.SystemMax, "b", 0); err != nil {

@@ -38,7 +38,7 @@ func (dk databaseKey) Name() string {
 func makeDatabaseDesc(p *parser.CreateDatabase) DatabaseDescriptor {
 	return DatabaseDescriptor{
 		Name:       p.Name.String(),
-		Privileges: NewDefaultDatabasePrivilegeDescriptor(),
+		Privileges: NewDefaultPrivilegeDescriptor(),
 	}
 }
 

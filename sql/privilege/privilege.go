@@ -42,6 +42,13 @@ const (
 	UPDATE
 )
 
+// Predefined sets of privileges.
+var (
+	ReadData      = List{GRANT, SELECT}
+	WriteData     = List{INSERT, DELETE, UPDATE}
+	ReadWriteData = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
+)
+
 // Mask returns the bitmask for a given privilege.
 func (k Kind) Mask() uint32 {
 	return 1 << k

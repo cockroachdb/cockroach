@@ -72,7 +72,8 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if kvs, err := kvDB.Scan(start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {
-		if a, e := len(kvs), 3; a != e {
+		// TODO(marc): this is the number of system tables + 1.
+		if a, e := len(kvs), 4; a != e {
 			t.Fatalf("expected %d keys to have been written, found %d keys", e, a)
 		}
 	}
