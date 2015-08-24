@@ -63,9 +63,9 @@ func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege
 		p.user, privilege, descriptor.TypeName(), descriptor.GetName())
 }
 
-// writeDescriptor takes a Table or Database descriptor and writes it
+// createDescriptor takes a Table or Database descriptor and creates it
 // if needed, incrementing the descriptor counter.
-func (p *planner) writeDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) error {
+func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) error {
 	key := plainKey.Key()
 	// Check whether key exists.
 	gr, err := p.txn.Get(key)

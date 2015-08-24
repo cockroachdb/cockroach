@@ -40,7 +40,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 
 	desc := makeDatabaseDesc(n)
 
-	if err := p.writeDescriptor(databaseKey{string(n.Name)}, &desc, n.IfNotExists); err != nil {
+	if err := p.createDescriptor(databaseKey{string(n.Name)}, &desc, n.IfNotExists); err != nil {
 		return nil, err
 	}
 	return &valuesNode{}, nil
@@ -74,7 +74,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.writeDescriptor(tableKey{dbDesc.ID, n.Table.Table()}, &desc, n.IfNotExists); err != nil {
+	if err := p.createDescriptor(tableKey{dbDesc.ID, n.Table.Table()}, &desc, n.IfNotExists); err != nil {
 		return nil, err
 	}
 	return &valuesNode{}, nil
