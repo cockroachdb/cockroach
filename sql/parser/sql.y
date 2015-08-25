@@ -28,6 +28,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   pos            int
   empty          struct{}
   ival           int64
+  boolVal        bool
   str            string
   strs           []string
   qname          *QualifiedName
@@ -109,7 +110,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> opt_with_data
 %type <empty> opt_nowait_or_skip
 
-%type <empty> access_method_clause
 %type <str>   name opt_name
 
 %type <empty> subquery_op
@@ -124,15 +124,15 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 
 %type <empty> iso_level opt_encoding
 
-%type <tblDefs> opt_table_elem_list table_elem_list 
+%type <tblDefs> opt_table_elem_list table_elem_list
 %type <empty> opt_inherit
 %type <empty> opt_typed_table_elem_list typed_table_elem_list
-%type <empty> reloptions opt_reloptions
+%type <empty> reloptions
 %type <empty> opt_with distinct_clause opt_all_clause
 %type <strs> opt_column_list
 %type <orderBy> sort_clause opt_sort_clause
 %type <orders> sortby_list
-%type <empty> index_params
+%type <strs> index_params
 %type <strs> name_list opt_name_list
 %type <empty> opt_array_bounds
 %type <tblExprs> from_clause from_list
@@ -179,12 +179,12 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> opt_interval interval_second
 %type <empty> overlay_placing substr_from substr_for
 
-%type <empty> opt_unique opt_concurrently
+%type <boolVal> opt_unique
 
 %type <empty> opt_column opt_set_data
 %type <empty> drop_type
 
-%type <limit> limit_clause offset_clause 
+%type <limit> limit_clause offset_clause
 %type <expr>  select_limit_value
 %type <empty> opt_select_fetch_first_value
 %type <empty> row_or_rows first_or_next
@@ -224,7 +224,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <str> alias_clause opt_alias_clause
 %type <empty> func_alias_clause
 %type <order> sortby
-%type <empty> index_elem
+%type <str> index_elem
 %type <tblExpr> table_ref
 %type <tblExpr> joined_table
 %type <qname> relation_expr
@@ -290,7 +290,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 // must be listed first so that their numeric codes do not depend on the set of
 // keywords. PL/pgsql depends on this so that it can share the same lexer. If
 // you add/change tokens here, fix PL/pgsql to match!
-// 
+//
 // DOT_DOT is unused in the core SQL grammar, and so will always provoke parse
 // errors. It is needed by PL/pgsql.
 %token <str>   IDENT FCONST SCONST BCONST
@@ -393,7 +393,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 // The grammar thinks these are keywords, but they are not in the kwlist.h list
 // and so can never be entered directly. The filter in parser.c creates these
 // tokens when required (based on looking one token ahead).
-// 
+//
 // NOT_LA exists so that productions such as NOT LIKE can be given the same
 // precedence as LIKE; otherwise they'd effectively have the same precedence as
 // NOT, at least with respect to their left-hand subexpression. NULLS_LA and
@@ -422,12 +422,12 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 // follow a_expr without creating postfix-operator problems; and for NULL so
 // that it can follow b_expr in col_qual_list without creating postfix-operator
 // problems.
-// 
+//
 // To support CUBE and ROLLUP in GROUP BY without reserving them, we give them
 // an explicit priority lower than '(', so that a rule with CUBE '(' will shift
 // rather than reducing a conflicting rule that takes CUBE as a function name.
 // Using the same precedence as IDENT seems right for the reasons given above.
-// 
+//
 // The frame_bound productions UNBOUNDED PRECEDING and UNBOUNDED FOLLOWING are
 // even messier: since UNBOUNDED is an unreserved keyword (per spec!), there is
 // no principled way to distinguish these from the productions a_expr
@@ -578,9 +578,9 @@ alter_table_cmd:
 | DROP CONSTRAINT IF EXISTS name opt_drop_behavior {}
   // ALTER TABLE <name> DROP CONSTRAINT <name> [RESTRICT|CASCADE]
 | DROP CONSTRAINT name opt_drop_behavior {}
-  // ALTER TABLE <name> SET LOGGED 
+  // ALTER TABLE <name> SET LOGGED
 | SET LOGGED {}
-  // ALTER TABLE <name> SET UNLOGGED 
+  // ALTER TABLE <name> SET UNLOGGED
 | SET UNLOGGED {}
   // ALTER TABLE <name> INHERIT <parent>
 | INHERIT qualified_name {}
@@ -617,10 +617,6 @@ reloptions:
   {
     $$ = $2
   }
-
-opt_reloptions:
-  WITH reloptions {}
-| /* EMPTY */ {}
 
 reloption_list:
   reloption_elem {}
@@ -1105,12 +1101,12 @@ col_constraint:
 // DEFAULT NULL is already the default for Postgres. But define it here and
 // carry it forward into the system to make it explicit.
 // - thomas 1998-09-13
-// 
+//
 // WITH NULL and NULL are not SQL-standard syntax elements, so leave them
 // out. Use DEFAULT NULL to explicitly indicate that a column may have that
 // value. WITH NULL leads to shift/reduce conflicts with WITH TIME ZONE anyway.
 // - thomas 1999-01-08
-// 
+//
 // DEFAULT expression must be b_expr not a_expr to prevent shift/reduce
 // conflict on NOT (since NOT might start a subsequent NOT NULL constraint, or
 // be part of a_expr NOT LIKE or similar constructs).
@@ -1182,7 +1178,7 @@ constraint_elem:
     $$ = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: NameList($4)}
   }
 | PRIMARY KEY existing_index {}
-| EXCLUDE access_method_clause '(' exclusion_constraint_list ')'
+| EXCLUDE '(' exclusion_constraint_list ')'
     exclusion_where_clause {}
 | FOREIGN KEY '(' name_list ')' REFERENCES qualified_name
     opt_column_list key_match key_actions {}
@@ -1314,41 +1310,55 @@ opt_restart_seqs:
 
 // CREATE INDEX
 create_index_stmt:
-  CREATE opt_unique INDEX opt_concurrently opt_name
-    ON qualified_name access_method_clause '(' index_params ')'
-    opt_reloptions where_clause
+  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')'
   {
-    $$ = nil
+    $$ = &CreateIndex{
+      Name:    Name($4),
+      Table:   $6,
+      Unique:  $2,
+      Columns: $8,
+    }
   }
-| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS name
-    ON qualified_name access_method_clause '(' index_params ')'
-    opt_reloptions where_clause
+| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')'
   {
-    $$ = nil
+    $$ = &CreateIndex{
+      Name:        Name($7),
+      Table:       $9,
+      Unique:      $2,
+      IfNotExists: true,
+      Columns:     $11,
+    }
   }
 
 opt_unique:
-  UNIQUE {}
-| /* EMPTY */ {}
-
-opt_concurrently:
-  CONCURRENTLY {}
-| /* EMPTY */ {}
-
-access_method_clause:
-  USING name {}
-| /* EMPTY */ {}
+  UNIQUE
+  {
+    $$ = true
+  }
+| /* EMPTY */
+  {
+    $$ = false
+  }
 
 index_params:
-  index_elem {}
-| index_params ',' index_elem {}
+  index_elem
+  {
+    $$ = []string{$1}
+  }
+| index_params ',' index_elem
+  {
+    $$ = append($1, $3)
+  }
 
 // Index attributes can be either simple column references, or arbitrary
 // expressions in parens. For backwards-compatibility reasons, we allow an
 // expression that's just a function call to be written without parens.
 index_elem:
   name opt_collate opt_class opt_asc_desc
-  {}
+  {
+    // TODO(pmattis): Support opt_asc_desc.
+    $$ = $1
+  }
 | func_expr_windowless opt_collate opt_class opt_asc_desc
   {}
 | '(' a_expr ')' opt_collate opt_class opt_asc_desc
@@ -1613,10 +1623,10 @@ multiple_set_clause:
 | '(' qualified_name_list ')' '=' select_with_parens {}
 
 // A complete SELECT statement looks like this.
-// 
+//
 // The rule returns either a single select_stmt node or a tree of them,
 // representing a set-operation tree.
-// 
+//
 // There is an ambiguity when a sub-SELECT is within an a_expr and there are
 // excess parentheses: do the parentheses belong to the sub-SELECT or to the
 // surrounding a_expr?  We don't really care, but bison wants to know. To
@@ -1629,7 +1639,7 @@ multiple_set_clause:
 // "SELECT (((SELECT 2)) UNION SELECT 2)". Had we parsed "((SELECT 2))" as an
 // a_expr, it'd be too late to go back to the SELECT viewpoint when we see the
 // UNION.
-// 
+//
 // This approach is implemented by defining a nonterminal select_with_parens,
 // which represents a SELECT with at least one outer layer of parentheses, and
 // being careful to use select_with_parens, never '(' select_stmt ')', in the
@@ -1641,11 +1651,11 @@ multiple_set_clause:
 // reduce to select_with_parens) rather than trying to reduce the inner
 // <select> nonterminal to something else. We use UMINUS precedence for this,
 // which is a fairly arbitrary choice.
-// 
+//
 // To be able to define select_with_parens itself without ambiguity, we need a
 // nonterminal select_no_parens that represents a SELECT structure with no
 // outermost parentheses. This is a little bit tedious, but it works.
-// 
+//
 // In non-expression contexts, we use select_stmt which can represent a SELECT
 // with or without outer parentheses.
 
@@ -1666,7 +1676,7 @@ select_with_parens:
 // This rule parses the equivalent of the standard's <query expression>. The
 // duplicative productions are annoying, but hard to get rid of without
 // creating shift/reduce conflicts.
-// 
+//
 //      The locking clause (FOR UPDATE etc) may be before or after
 //      LIMIT/OFFSET. In <=7.2.X, LIMIT/OFFSET had to be after FOR UPDATE We
 //      now support both orderings, but prefer LIMIT/OFFSET before the locking
@@ -1733,10 +1743,10 @@ select_clause:
 // including UNION, INTERSECT and EXCEPT. '(' and ')' can be used to specify
 // the ordering of the set operations. Without '(' and ')' we want the
 // operations to be ordered per the precedence specs at the head of this file.
-// 
+//
 // As with select_no_parens, simple_select cannot have outer parentheses, but
 // can have parenthesized subclauses.
-// 
+//
 // Note that sort clauses cannot be included at this level --- SQL requires
 //       SELECT foo UNION SELECT bar ORDER BY baz
 // to be parsed as
@@ -1748,7 +1758,7 @@ select_clause:
 // described as part of the select_no_parens production, not simple_select.
 // This does not limit functionality, because you can reintroduce these clauses
 // inside parentheses.
-// 
+//
 // NOTE: only the leftmost component select_stmt should have INTO. However,
 // this is not checked by the grammar; parse analysis must check it.
 simple_select:
@@ -1814,12 +1824,12 @@ simple_select:
   }
 
 // SQL standard WITH clause looks like:
-// 
+//
 // WITH [ RECURSIVE ] <query name> [ (<column>,...) ]
 //        AS (query) [ SEARCH or CYCLE clause ]
-// 
+//
 // We don't currently support the SEARCH or CYCLE clause.
-// 
+//
 // Recognizing WITH_LA here allows a CTE to be named TIME or ORDINALITY.
 with_clause:
   WITH cte_list {}
@@ -1976,18 +1986,18 @@ first_or_next:
 // However, the spec allows only column references, not expressions,
 // which introduces an ambiguity between implicit row constructors
 // (a,b) and lists of column references.
-// 
+//
 // We handle this by using the a_expr production for what the spec calls
 // <ordinary grouping set>, which in the spec represents either one column
 // reference or a parenthesized list of column references. Then, we check the
 // top node of the a_expr to see if it's an implicit RowExpr, and if so, just
 // grab and use the list, discarding the node. (this is done in parse analysis,
 // not here)
-// 
+//
 // (we abuse the row_format field of RowExpr to distinguish implicit and
 // explicit row constructors; it's debatable if anyone sanely wants to use them
 // in a group clause, but if they have a reason to, we make it possible.)
-// 
+//
 // Each item in the group_clause list is either an expression tree or a
 // GroupingSet node of some type.
 group_clause:
@@ -2102,7 +2112,7 @@ table_ref:
 // 'join_type JOIN' separately, rather than allowing join_type to expand to
 // empty; if we try it, the parser generator can't figure out when to reduce an
 // empty join_type right after table_ref.
-// 
+//
 // Note that a CROSS JOIN is the same as an unqualified INNER JOIN, and an
 // INNER JOIN/ON has the same shape but a qualification expression to limit
 // membership. A NATURAL JOIN implicitly matches column names between tables
@@ -2191,7 +2201,7 @@ join_outer:
 //      USING ( column list ) allows only unqualified column names,
 //          which must match between tables.
 //      ON expr allows more general qualifications.
-// 
+//
 // We return USING as a List node, while an ON-expr will not be a List.
 join_qual:
   USING '(' name_list ')'
@@ -2565,19 +2575,19 @@ interval_second:
 | SECOND '(' ICONST ')' {}
 
 // General expressions. This is the heart of the expression syntax.
-// 
+//
 // We have two expression types: a_expr is the unrestricted kind, and b_expr is
 // a subset that must be used in some places to avoid shift/reduce conflicts.
 // For example, we can't do BETWEEN as "BETWEEN a_expr AND a_expr" because that
 // use of AND conflicts with AND as a boolean operator. So, b_expr is used in
 // BETWEEN and we remove boolean keywords from b_expr.
-// 
+//
 // Note that '(' a_expr ')' is a b_expr, so an unrestricted expression can
 // always be used by surrounding it with parens.
-// 
+//
 // c_expr is all the productions that are common to a_expr and b_expr; it's
 // factored out just to eliminate redundant coding.
-// 
+//
 // Be careful of productions involving more than one terminal token. By
 // default, bison will assign such productions the precedence of their last
 // terminal, but in nearly all cases you want it to be the precedence of the
@@ -2595,7 +2605,7 @@ a_expr:
   // bison's automatic operator-precedence handling. All other operator names
   // are handled by the generic productions using "OP", below; and all those
   // operators will have the same precedence.
-  // 
+  //
   // If you add more explicitly-known operators, be sure to add them also to
   // b_expr and to the math_op list below.
 | '+' a_expr %prec UMINUS
@@ -2762,9 +2772,9 @@ a_expr:
 | UNIQUE select_with_parens {}
 
 // Restricted expressions
-// 
+//
 // b_expr is a subset of the complete expression syntax defined by a_expr.
-// 
+//
 // Presently, AND, NOT, IS, and IN are the a_expr keywords that would cause
 // trouble in the places where b_expr is used. For simplicity, we just
 // eliminate all the boolean-keyword-operator productions from b_expr.
@@ -2864,7 +2874,7 @@ b_expr:
 | b_expr IS NOT OF '(' type_list ')' %prec IS {}
 
 // Productions that can be used in both a_expr and b_expr.
-// 
+//
 // Note: productions that refer recursively to a_expr or b_expr mostly cannot
 // appear here. However, it's OK to refer to a_exprs that occur inside
 // parentheses, such as function arguments; that cannot introduce ambiguity to
@@ -3055,7 +3065,7 @@ opt_partition_clause:
 
 // For frame clauses, we return a WindowDef, but only some fields are used:
 // frameOptions, startOffset, and endOffset.
-// 
+//
 // This is only a subset of the full SQL:2008 frame_clause grammar. We don't
 // support <window frame exclusion> yet.
 opt_frame_clause:
@@ -3080,7 +3090,7 @@ frame_bound:
 // Supporting nonterminals for expressions.
 
 // Explicit row production.
-// 
+//
 // SQL99 allows an optional ROW keyword, so we can now do single-element rows
 // without conflicting with the parenthesized a_expr production. Without the
 // ROW keyword, there must be more than one a_expr inside the parens.
@@ -3531,7 +3541,7 @@ signed_iconst:
   }
 
 // Name classification hierarchy.
-// 
+//
 // IDENT is the lexeme returned by the lexer for identifiers that match no
 // known keyword. In most cases, we can accept certain keywords as names, not
 // only IDENTs. We prefer to accept as many such keywords as possible to
@@ -3576,15 +3586,15 @@ col_label:
 
 // Keyword category lists. Generally, every keyword present in the Postgres
 // grammar should appear in exactly one of these lists.
-// 
+//
 // Put a new keyword into the first list that it can go into without causing
 // shift or reduce conflicts. The earlier lists define "less reserved"
 // categories of keywords.
-// 
+//
 // Make sure that each keyword's category in kwlist.h matches where it is
 // listed here. (Someday we may be able to generate these lists and kwlist.h's
 // table from a common master list.)
-// 
+//
 // "Unreserved" keywords --- available for use as any kind of name.
 unreserved_keyword:
   ABORT
@@ -3843,11 +3853,11 @@ unreserved_keyword:
 | ZONE
 
 // Column identifier --- keywords that can be column, table, etc names.
-// 
+//
 // Many of these keywords will in fact be recognized as type or function names
 // too; but they have special productions for the purpose, and so can't be
 // treated as "generic" type or function names.
-// 
+//
 // The type names appearing here are not usable as function names because they
 // can be followed by '(' in typename productions, which looks too much like a
 // function call for an LR(1) parser.
@@ -3898,11 +3908,11 @@ col_name_keyword:
 | VARCHAR
 
 // Type/function identifier --- keywords that can be type or function names.
-// 
+//
 // Most of these are keywords that are used as operators in expressions; in
 // general such keywords can't be column names because they would be ambiguous
 // with variables, but they are unambiguous as function identifiers.
-// 
+//
 // Do not include POSITION, SUBSTRING, etc here since they have explicit
 // productions in a_expr to support the goofy SQL9x argument syntax.
 // - thomas 2000-11-28
@@ -3927,7 +3937,7 @@ type_func_name_keyword:
 | VERBOSE
 
 // Reserved keyword --- these keywords are usable only as a col_label.
-// 
+//
 // Keywords appear here if they could not be distinguished from variable, type,
 // or function names in some contexts. Don't put things here unless forced to.
 reserved_keyword:

@@ -36,8 +36,16 @@ func TestParse(t *testing.T) {
 		{`BEGIN TRANSACTION`},
 		{`COMMIT TRANSACTION`},
 		{`ROLLBACK TRANSACTION`},
+
 		{`CREATE DATABASE a`},
 		{`CREATE DATABASE IF NOT EXISTS a`},
+
+		{`CREATE INDEX a ON b (c)`},
+		{`CREATE INDEX a ON b.c (d)`},
+		{`CREATE INDEX ON a (b)`},
+		{`CREATE UNIQUE INDEX a ON b (c)`},
+		{`CREATE UNIQUE INDEX a ON b.c (d)`},
+
 		{`CREATE TABLE a ()`},
 		{`CREATE TABLE a (b INT)`},
 		{`CREATE TABLE a (b INT, c INT)`},
@@ -311,6 +319,8 @@ func TestParse2(t *testing.T) {
 		sql      string
 		expected string
 	}{
+		{`CREATE INDEX ON a (b ASC, c DESC)`, `CREATE INDEX ON a (b, c)`},
+
 		{`SELECT 0xf0 FROM t`, `SELECT 240 FROM t`},
 		{`SELECT 0xF0 FROM t`, `SELECT 240 FROM t`},
 		// Escaped string literals are not always escaped the same because
@@ -403,12 +413,6 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT e'\'\"\b\n\r\t\\' FROM t`},
 		{`SELECT '\x' FROM t`},
 		{`SELECT 1 FROM t GROUP BY a`},
-		{`CREATE INDEX a ON b (c)`},
-		{`CREATE INDEX a ON b.c (d)`},
-		{`CREATE INDEX ON a (b)`},
-		{`CREATE UNIQUE INDEX a ON b (c)`},
-		{`CREATE UNIQUE INDEX a ON b.c (d)`},
-		{`CREATE UNIQUE INDEX a ON b USING foo (c)`},
 		{`DROP INDEX a`},
 		{`DROP INDEX IF EXISTS a`},
 	}

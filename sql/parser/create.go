@@ -44,6 +44,32 @@ func (node *CreateDatabase) String() string {
 	return buf.String()
 }
 
+// CreateIndex represents a CREATE INDEX statement.
+type CreateIndex struct {
+	Name        Name
+	Table       *QualifiedName
+	Unique      bool
+	IfNotExists bool
+	Columns     NameList
+}
+
+func (node *CreateIndex) String() string {
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("CREATE ")
+	if node.Unique {
+		_, _ = buf.WriteString("UNIQUE ")
+	}
+	_, _ = buf.WriteString("INDEX ")
+	if node.IfNotExists {
+		_, _ = buf.WriteString("IF NOT EXISTS ")
+	}
+	if node.Name != "" {
+		fmt.Fprintf(&buf, "%s ", node.Name)
+	}
+	fmt.Fprintf(&buf, "ON %s (%s)", node.Table, node.Columns)
+	return buf.String()
+}
+
 // TableDef represents a column or index definition within a CREATE TABLE
 // statement.
 type TableDef interface {

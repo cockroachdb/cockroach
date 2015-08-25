@@ -20,9 +20,12 @@ package sql
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // CreateDatabase creates a database.
@@ -40,9 +43,111 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 
 	desc := makeDatabaseDesc(n)
 
-	if err := p.writeDescriptor(databaseKey{string(n.Name)}, &desc, n.IfNotExists); err != nil {
+	if err := p.createDescriptor(databaseKey{string(n.Name)}, &desc, n.IfNotExists); err != nil {
 		return nil, err
 	}
+	return &valuesNode{}, nil
+}
+
+// CreateIndex creates an index.
+// Privileges: CREATE on table.
+//   notes: postgres requires CREATE on the table.
+//          mysql requires ALTER, CREATE, INSERT on the table.
+func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
+	tableDesc, err := p.getTableDesc(n.Table)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := tableDesc.FindIndexByName(string(n.Name)); err == nil {
+		if n.IfNotExists {
+			// Noop.
+			return &valuesNode{}, nil
+		}
+		return nil, fmt.Errorf("index %q already exists", string(n.Name))
+	}
+
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+		return nil, err
+	}
+
+	index := IndexDescriptor{
+		Name:        string(n.Name),
+		Unique:      n.Unique,
+		ColumnNames: n.Columns,
+	}
+	tableDesc.Indexes = append(tableDesc.Indexes, index)
+
+	if err := tableDesc.AllocateIDs(); err != nil {
+		return nil, err
+	}
+
+	// `index` changed on us when we called `tableDesc.AllocateIDs()`.
+	index = tableDesc.Indexes[len(tableDesc.Indexes)-1]
+
+	// Get all the rows affected.
+	// TODO(vivek): Avoid going through Select.
+	// TODO(tamird): Support partial indexes?
+	row, err := p.Select(&parser.Select{
+		Exprs: parser.SelectExprs{parser.StarSelectExpr()},
+		From:  parser.TableExprs{&parser.AliasedTableExpr{Expr: n.Table}},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct a map from column ID to the index the value appears at within a
+	// row.
+	colIDtoRowIndex := map[ColumnID]int{}
+	for i, name := range row.Columns() {
+		c, err := tableDesc.FindColumnByName(name)
+		if err != nil {
+			return nil, err
+		}
+		colIDtoRowIndex[c.ID] = i
+	}
+
+	// TODO(tamird): This will fall down in production use. We need to do
+	// something better (see #2036). In particular, this implementation
+	// has the following problems:
+	// - Very large tables will generate an enormous batch here. This
+	// isn't really a problem in itself except that it will exacerbate
+	// the other issue:
+	// - Any non-quiescent table that this runs against will end up with
+	// an inconsistent index. This is because as inserts/updates continue
+	// to roll in behind this operation's read front, the written index
+	// will become incomplete/stale before it's written.
+	var b client.Batch
+	b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
+
+	for row.Next() {
+		rowVals := row.Values()
+
+		secondaryIndexEntries, err := encodeSecondaryIndexes(
+			tableDesc.ID, []IndexDescriptor{index}, colIDtoRowIndex, rowVals)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, secondaryIndexEntry := range secondaryIndexEntries {
+			if log.V(2) {
+				log.Infof("CPut %q -> %v", secondaryIndexEntry.key, secondaryIndexEntry.value)
+			}
+			b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+		}
+	}
+
+	if err := row.Err(); err != nil {
+		return nil, err
+	}
+
+	if err := p.txn.Run(&b); err != nil {
+		if tErr, ok := err.(*proto.ConditionFailedError); ok {
+			return nil, fmt.Errorf("duplicate key value %q violates unique constraint %s", tErr.ActualValue.Bytes, "TODO(tamird)")
+		}
+		return nil, err
+	}
+
 	return &valuesNode{}, nil
 }
 
@@ -74,7 +179,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.writeDescriptor(tableKey{dbDesc.ID, n.Table.Table()}, &desc, n.IfNotExists); err != nil {
+	if err := p.createDescriptor(tableKey{dbDesc.ID, n.Table.Table()}, &desc, n.IfNotExists); err != nil {
 		return nil, err
 	}
 	return &valuesNode{}, nil

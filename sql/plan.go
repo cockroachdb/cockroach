@@ -51,6 +51,8 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 		return p.CommitTransaction(n)
 	case *parser.CreateDatabase:
 		return p.CreateDatabase(n)
+	case *parser.CreateIndex:
+		return p.CreateIndex(n)
 	case *parser.CreateTable:
 		return p.CreateTable(n)
 	case *parser.Delete:

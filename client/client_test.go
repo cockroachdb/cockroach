@@ -561,7 +561,7 @@ func TestClientPermissions(t *testing.T) {
 	defer s.Stop()
 
 	test := createTestClientFor(s.ServingAddr(), testUser)
-	root := createTestClientFor(s.ServingAddr(), "root")
+	root := createTestClientFor(s.ServingAddr(), security.RootUser)
 
 	testCases := []struct {
 		path    string
