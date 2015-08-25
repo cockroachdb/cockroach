@@ -22,9 +22,12 @@ import (
 	"go/build"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestStdFlagToPflag(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	cf := cockroachCmd.PersistentFlags()
 	flag.VisitAll(func(f *flag.Flag) {
 		if strings.HasPrefix(f.Name, "test.") {
@@ -38,6 +41,7 @@ func TestStdFlagToPflag(t *testing.T) {
 }
 
 func TestNoLinkTesting(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	if build.Default.GOPATH == "" {
 		t.Skip("GOPATH isn't set")
 	}

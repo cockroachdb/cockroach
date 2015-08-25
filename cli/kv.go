@@ -20,26 +20,25 @@ package cli
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 
 	"github.com/spf13/cobra"
 )
 
-var osExit = os.Exit
-var osStderr = os.Stderr
-
 func makeDBClient() *client.DB {
 	// TODO(pmattis): Initialize the user to something more
 	// reasonable. Perhaps Context.Addr should be considered a URL.
-	db, err := client.Open(context.RequestScheme() +
-		"://root@" + context.Addr +
-		"?certs=" + context.Certs)
+	db, err := client.Open(fmt.Sprintf("%s://%s@%s?certs=%s",
+		context.RequestScheme(),
+		security.RootUser,
+		context.Addr,
+		context.Certs))
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to initialize KV client: %s\n", err)
 		osExit(1)
