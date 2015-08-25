@@ -47,7 +47,7 @@ func (l StatementList) String() string {
 // Syntax is an enum of the various syntax types.
 type Syntax int
 
-// Syntax values.
+//go:generate stringer -type=Syntax
 const (
 	Traditional Syntax = iota
 	Modern

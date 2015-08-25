@@ -1,3 +1,9 @@
+statement error unknown variable: "FOO"
+SET FOO = bar
+
+statement error unknown variable: "FOO"
+SHOW FOO
+
 statement error database "foo" does not exist
 SET DATABASE = foo
 
@@ -27,12 +33,24 @@ bar
 statement ok
 SET DATABASE = ""
 
+query T colnames
+SHOW DATABASE
+----
+DATABASE
+
+
 statement error no database specified
 SHOW TABLES
 
 # SET statement succeeds, CREATE TABLE fails.
 statement error table \"bar\" already exists
 SET DATABASE = foo; CREATE TABLE bar (k INT PRIMARY KEY)
+
+query T colnames
+SHOW DATABASE
+----
+DATABASE
+foo
 
 # SET succeeds
 query T colnames
@@ -44,12 +62,35 @@ bar
 statement ok
 SET SYNTAX = traditional
 
+query T colnames
+SHOW SYNTAX
+----
+SYNTAX
+Traditional
+
 statement ok
 SET SYNTAX = modern
 
-statement error SYNTAX: "a" is not in \("modern", "traditional"\)
+query T colnames
+SHOW SYNTAX
+----
+SYNTAX
+Modern
+
+statement error SYNTAX: "a" is not in \("Modern", "Traditional"\)
 SET SYNTAX = a
+
+query T colnames
+SHOW SYNTAX
+----
+SYNTAX
+Modern
 
 statement error SYNTAX: requires a single string value
 SET SYNTAX = a, b
 
+query T colnames
+SHOW SYNTAX
+----
+SYNTAX
+Modern

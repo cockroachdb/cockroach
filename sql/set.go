@@ -22,7 +22,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // Set sets session variables.
@@ -51,17 +50,17 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		switch strings.ToLower(string(s)) {
-		case "modern":
+		switch normalizeName(string(s)) {
+		case normalizeName(parser.Modern.String()):
 			p.session.Syntax = int32(parser.Modern)
-		case "traditional":
+		case normalizeName(parser.Traditional.String()):
 			p.session.Syntax = int32(parser.Traditional)
 		default:
-			return nil, fmt.Errorf("%s: \"%s\" is not in (\"modern\", \"traditional\")", name, s)
+			return nil, fmt.Errorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
 		}
 
 	default:
-		return nil, util.Errorf("unknown variable: %s", name)
+		return nil, fmt.Errorf("unknown variable: %q", name)
 	}
 	return &valuesNode{}, nil
 }

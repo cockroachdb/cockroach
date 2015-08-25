@@ -951,7 +951,15 @@ set_reset_clause:
   SET set_rest {}
 
 show_stmt:
-  SHOW COLUMNS FROM var_name
+  SHOW IDENT
+  {
+    $$ = &Show{Name: $2}
+  }
+| SHOW DATABASE
+  {
+    $$ = &Show{Name: $2}
+  }
+| SHOW COLUMNS FROM var_name
   {
     $$ = &ShowColumns{Table: $4}
   }
