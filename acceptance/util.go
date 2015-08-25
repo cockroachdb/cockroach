@@ -25,11 +25,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/security"
 )
 
 // makeDBClient creates a DB client for node 'i' using the cluster certs dir.
 func makeDBClient(t *testing.T, cluster *localcluster.Cluster, node int) *client.DB {
-	return makeDBClientForUser(t, cluster, "root", node)
+	return makeDBClientForUser(t, cluster, security.RootUser, node)
 }
 
 // makeDBClientForUser creates a DB client for node 'i' and user 'user'.

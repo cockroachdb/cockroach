@@ -36,6 +36,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -203,7 +204,7 @@ func (t *logicTest) run(path string) {
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.setUser("root")
+	t.setUser(security.RootUser)
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE test;
