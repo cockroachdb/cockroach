@@ -25,7 +25,7 @@ local source of truth for those decisions.
 # Detailed design
 
 ## Configuration
-Add a new configuration setting called `timeoutUntilStoreDead` which contains
+Add a new configuration setting called `TimeUntilStoreDead` which contains
 the number of seconds after which if a store was not heard from, it is
 considered dead. The default value for this will be 5 minutes.
 
@@ -39,13 +39,13 @@ of heath statistic about the store. It will also maintain a `lastUpdatedTime`
 which will be set whenever a store descriptor is updated. When this happens,
 if the store was previously marked as dead, it will restored. To maintain this
 map, a callback from gossip for store descriptors will be added. When this
-`lastUpdatedTime` is longer than the `timeoutUntilStoreDead`, the store is
+`lastUpdatedTime` is longer than the `TimeUntilStoreDead`, the store is
 considered dead and any replicas on this store may be removed. Note that that
 the work to remove replicas is performed elsewhere.
 
 Monitor will maintain a timespan `timeUntilNextDead` which is calculated by
 taking the nearest `lastUpdatedTime` for all the stores and adding
-`timeoutUntilStoreDead` and the store ID associated with the timeout.
+`TimeUntilStoreDead` and the store ID associated with the timeout.
 
 Monitor will trigger on `timeUntilNextDead` which when triggered checks to see
 if that store has not been updated.

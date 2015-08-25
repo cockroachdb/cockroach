@@ -122,6 +122,11 @@ var flagUsage = map[string]string{
         Adjusts the max idle time of the scanner. This speeds up the scanner on small
         clusters to be more responsive.
 `,
+	"time-until-store-dead": `
+		Adjusts the timeout for stores.  If there's been no gossiped updated
+		from a store after this time, the store is considered unavailable.
+        Replicas on an unavailable store will be moved to available ones.
+`,
 	"stores": `
         A comma-separated list of stores, specified by a colon-separated list
         of device attributes followed by '=' and either a filepath for a
@@ -172,8 +177,7 @@ func initFlags(ctx *server.Context) {
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, flagUsage["attrs"])
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, flagUsage["max-offset"])
-		f.DurationVar(&ctx.MetricsFrequency, "metrics-frequency", ctx.MetricsFrequency,
-			flagUsage["metrics-frequency"])
+		f.DurationVar(&ctx.MetricsFrequency, "metrics-frequency", ctx.MetricsFrequency, flagUsage["metrics-frequency"])
 
 		// Security flags.
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
@@ -181,8 +185,7 @@ func initFlags(ctx *server.Context) {
 
 		// Gossip flags.
 		f.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap, flagUsage["gossip"])
-		f.DurationVar(&ctx.GossipInterval, "gossip-interval", ctx.GossipInterval,
-			flagUsage["gossip-interval"])
+		f.DurationVar(&ctx.GossipInterval, "gossip-interval", ctx.GossipInterval, flagUsage["gossip-interval"])
 
 		// KV flags.
 		f.BoolVar(&ctx.Linearizable, "linearizable", ctx.Linearizable, flagUsage["linearizable"])
@@ -190,8 +193,8 @@ func initFlags(ctx *server.Context) {
 		// Engine flags.
 		f.Int64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, flagUsage["cache-size"])
 		f.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, flagUsage["scan-interval"])
-		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime,
-			flagUsage["scan-max-idle-time"])
+		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime, flagUsage["scan-max-idle-time"])
+		f.DurationVar(&ctx.TimeUntilStoreDead, "time-until-store-dead", ctx.TimeUntilStoreDead, flagUsage["time-until-store-dead"])
 
 		if err := startCmd.MarkFlagRequired("gossip"); err != nil {
 			panic(err)
