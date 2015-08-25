@@ -294,7 +294,8 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 // DOT_DOT is unused in the core SQL grammar, and so will always provoke parse
 // errors. It is needed by PL/pgsql.
 %token <str>   IDENT FCONST SCONST BCONST
-%token <ival>  ICONST PARAM
+%token <ival>  ICONST
+%token <str>   PARAM
 %token <str>   TYPECAST DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
 %token <str>   ERROR

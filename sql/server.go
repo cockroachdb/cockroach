@@ -23,7 +23,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
@@ -151,8 +153,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type parameters []driver.Datum
 
 // Arg implements the Args interface
-func (p parameters) Arg(i int) (parser.Datum, bool) {
-	if i < 1 || i > len(p) {
+func (p parameters) Arg(name string) (parser.Datum, bool) {
+	if !unicode.IsDigit(rune(name[0])) {
+		// TODO(pmattis): Add support for named parameters (vs the numbered
+		// parameter support below).
+		return nil, false
+	}
+	i, err := strconv.ParseInt(name, 10, 0)
+	if err != nil {
+		return nil, false
+	}
+	if i < 1 || int(i) > len(p) {
 		return nil, false
 	}
 	arg := p[i-1].GetValue()

@@ -155,7 +155,7 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 // Args defines the interface for retrieving arguments. Return false for the
 // second return value if the argument cannot be found.
 type Args interface {
-	Arg(i int) (Datum, bool)
+	Arg(name string) (Datum, bool)
 }
 
 type argVisitor struct {
@@ -173,7 +173,7 @@ func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 	if !ok {
 		return v, expr
 	}
-	d, found := v.args.Arg(int(placeholder))
+	d, found := v.args.Arg(string(placeholder))
 	if !found {
 		v.err = fmt.Errorf("arg %s not found", placeholder)
 		return nil, expr

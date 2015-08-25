@@ -152,6 +152,17 @@ func (s *scanner) scan(lval *sqlSymType) {
 		if isDigit(s.peek()) {
 			s.scanParam(lval)
 			return
+		} else if s.syntax == Modern {
+			// TODO(pmattis): This should really be prefixed with '@', but that
+			// conflicts with using '@' for index indirection in qualified names.
+			//
+			// param? $<ident>
+			if t := s.peek(); isIdentStart(t) {
+				s.pos++
+				s.scanIdent(lval, t)
+				lval.id = PARAM
+				return
+			}
 		}
 		return
 
