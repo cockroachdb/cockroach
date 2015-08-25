@@ -18,8 +18,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
 
@@ -43,7 +41,7 @@ func runGetUser(cmd *cobra.Command, args []string) {
 		return
 	}
 	db := makeSQLClient()
-	err := processOneLine(db, fmt.Sprintf(`SELECT * FROM system.users WHERE username='%s'`, args[0]))
+	err := runQuery(db, `SELECT * FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
 		log.Error(err)
 		return
@@ -68,7 +66,7 @@ func runLsUsers(cmd *cobra.Command, args []string) {
 		return
 	}
 	db := makeSQLClient()
-	err := processOneLine(db, `SELECT username FROM system.users`)
+	err := runQuery(db, `SELECT username FROM system.users`)
 	if err != nil {
 		log.Error(err)
 		return
@@ -92,7 +90,7 @@ func runRmUser(cmd *cobra.Command, args []string) {
 		return
 	}
 	db := makeSQLClient()
-	err := processOneLine(db, fmt.Sprintf(`DELETE FROM system.users WHERE username='%s'`, args[0]))
+	err := runQuery(db, `DELETE FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
 		log.Error(err)
 		return
@@ -125,7 +123,7 @@ func runSetUser(cmd *cobra.Command, args []string) {
 		return
 	}
 	db := makeSQLClient()
-	err = processOneLine(db, fmt.Sprintf(`INSERT INTO system.users VALUES ('%s','%s')`, args[0], hashed))
+	err = runQuery(db, `INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed)
 	if err != nil {
 		log.Error(err)
 		return

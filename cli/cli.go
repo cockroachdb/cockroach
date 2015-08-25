@@ -19,6 +19,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -27,6 +28,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 )
+
+// Proxies to allow overrides in tests.
+var osExit = os.Exit
+var osStdout = io.Writer(os.Stdout)
+var osStderr = os.Stderr
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
