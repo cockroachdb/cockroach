@@ -513,7 +513,7 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 		}
 		call.Reply.Reset()
 		if err := tmpDB.Txn(func(txn *client.Txn) error {
-			txn.SetDebugName("auto-wrap")
+			txn.SetDebugName("auto-wrap", 0)
 			b := &client.Batch{}
 			b.InternalAddCall(call)
 			return txn.CommitInBatch(b)

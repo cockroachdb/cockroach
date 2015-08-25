@@ -563,7 +563,7 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	var retry int
 	txnName := fmt.Sprintf("txn%d", txnIdx)
 	err := db.Txn(func(txn *client.Txn) error {
-		txn.SetDebugName(txnName)
+		txn.SetDebugName(txnName, 0)
 		if isolation == proto.SNAPSHOT {
 			txn.SetSnapshotIsolation()
 		}

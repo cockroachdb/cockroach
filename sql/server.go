@@ -115,7 +115,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Open a pending transaction if needed.
 	if planMaker.session.Txn != nil {
-		planMaker.txn = client.NewTxnFromProto(*s.db, *planMaker.session.Txn)
+		txn := client.NewTxn(*s.db)
+		txn.Proto = *planMaker.session.Txn
+		planMaker.txn = txn
 	}
 
 	// Send the Request for SQL execution and set the application-level error
@@ -125,8 +127,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
 	if planMaker.txn != nil {
-		t := planMaker.txn.ToProto()
-		planMaker.session.Txn = &t
+		planMaker.session.Txn = &planMaker.txn.Proto
 	} else {
 		planMaker.session.Txn = nil
 	}
@@ -218,8 +219,9 @@ func (s *Server) execStmt(stmt parser.Statement, req driver.Request, planMaker *
 			// Start a transaction here and not in planMaker to prevent begin
 			// transaction from being called within an auto-transaction below.
 			planMaker.txn = client.NewTxn(*s.db)
+			planMaker.txn.SetDebugName("sql", 0)
 		}
-	} else if planMaker.txn.ToProto().Status == proto.ABORTED {
+	} else if planMaker.txn.Proto.Status == proto.ABORTED {
 		switch stmt := stmt.(type) {
 		case *parser.CommitTransaction, *parser.RollbackTransaction:
 			// Reset to allow starting a new transaction.
