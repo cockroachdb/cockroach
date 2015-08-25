@@ -50,13 +50,13 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		switch strings.ToLower(string(s)) {
-		case "modern":
+		switch normalizeName(string(s)) {
+		case normalizeName(parser.Modern.String()):
 			p.session.Syntax = int32(parser.Modern)
-		case "traditional":
+		case normalizeName(parser.Traditional.String()):
 			p.session.Syntax = int32(parser.Traditional)
 		default:
-			return nil, fmt.Errorf("%s: \"%s\" is not in (\"modern\", \"traditional\")", name, s)
+			return nil, fmt.Errorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
 		}
 
 	default:

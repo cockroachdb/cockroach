@@ -50,7 +50,7 @@ SET SYNTAX = traditional
 statement ok
 SET SYNTAX = modern
 
-statement error SYNTAX: "a" is not in \("modern", "traditional"\)
+statement error SYNTAX: "a" is not in \("Modern", "Traditional"\)
 SET SYNTAX = a
 
 statement error SYNTAX: requires a single string value
