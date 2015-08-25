@@ -11,7 +11,7 @@ cmd golang.org/x/tools/cmd/stringer
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store e1f74b3c58befe661feed7fa4cf52436de753128
 github.com/cockroachdb/c-lz4 6e71f140a365017bbe0904710007f8725fd3f809
-github.com/cockroachdb/c-protobuf 0f9ab7b988ca7474cf76b9a961ab03c0552abcb3
+github.com/cockroachdb/c-protobuf 6a18bfcdd5169966cd1235edb71d749c950216e8
 github.com/cockroachdb/c-rocksdb 7fc876fe79b96de0e25069c9ae27e6444637bd54
 github.com/cockroachdb/c-snappy 618733f9e5bab8463b9049117a335a7a1bfc9fd5
 github.com/cockroachdb/yacc ebd0d590252fe4f6d9b5053511875810dd1f91a1
