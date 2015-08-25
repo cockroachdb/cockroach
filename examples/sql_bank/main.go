@@ -26,14 +26,18 @@ import (
 
 	"github.com/lib/pq"
 
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
 	maxTransfer = 999
 	numAccounts = 999
-	concurrency = 25
+	concurrency = 5
 	aggregate   = true
+	usePostgres = false
 )
 
 var numTransfers uint64
@@ -49,10 +53,14 @@ func moveMoney(db *sql.DB) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if _, err = tx.Exec("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); err != nil {
-			log.Fatal(err)
+		startTime := time.Now()
+		// Query is very slow and will be fixed by https://github.com/cockroachdb/cockroach/issues/2140
+		query := fmt.Sprintf("SELECT id, balance FROM accounts WHERE id IN (%d, %d)", from, to)
+		rows, err := tx.Query(query)
+		elapsed := time.Now().Sub(startTime)
+		if elapsed > 10*time.Millisecond {
+			log.Infof("%s took %v", query, elapsed)
 		}
-		rows, err := tx.Query("SELECT id, balance FROM accounts WHERE id IN ($1, $2)", from, to)
 		if err != nil {
 			if log.V(1) {
 				log.Warning(err)
@@ -77,25 +85,36 @@ func moveMoney(db *sql.DB) {
 				panic(fmt.Sprintf("got unexpected account %d", id))
 			}
 		}
+		startTime = time.Now()
+		update := fmt.Sprintf("UPDATE accounts SET balance=%d WHERE id=%d", fromBalance-amount, from)
+		if _, err = tx.Exec(update); err != nil {
+			if log.V(1) {
+				log.Warning(err)
+			}
+			if err = tx.Rollback(); err != nil {
+				log.Fatal(err)
+			}
+			continue
+		}
+		elapsed = time.Now().Sub(startTime)
+		if elapsed > 50*time.Millisecond {
+			log.Infof("%s took %v", update, elapsed)
+		}
+		update = fmt.Sprintf("UPDATE accounts SET balance=%d WHERE id=%d", toBalance+amount, to)
+		if _, err = tx.Exec(update); err != nil {
+			if log.V(1) {
+				log.Warning(err)
+			}
+			if err = tx.Rollback(); err != nil {
+				log.Fatal(err)
+			}
+			continue
+		}
+		elapsed = time.Now().Sub(startTime)
+		if elapsed > 50*time.Millisecond {
+			log.Infof("%s took %v", update, elapsed)
+		}
 
-		if _, err = tx.Exec("UPDATE accounts SET balance=$2 WHERE id=$1", from, fromBalance-amount); err != nil {
-			if log.V(1) {
-				log.Warning(err)
-			}
-			if err = tx.Rollback(); err != nil {
-				log.Fatal(err)
-			}
-			continue
-		}
-		if _, err = tx.Exec("UPDATE accounts SET balance=$2 WHERE id=$1", to, toBalance+amount); err != nil {
-			if log.V(1) {
-				log.Warning(err)
-			}
-			if err = tx.Rollback(); err != nil {
-				log.Fatal(err)
-			}
-			continue
-		}
 		if err = tx.Commit(); err != nil {
 			if log.V(1) {
 				log.Warning(err)
@@ -108,7 +127,6 @@ func moveMoney(db *sql.DB) {
 
 func verifyBank(db *sql.DB) {
 	var sum int64
-
 	if aggregate {
 		if err := db.QueryRow("SELECT SUM(balance) FROM accounts").Scan(&sum); err != nil {
 			log.Fatal(err)
@@ -142,25 +160,45 @@ func verifyBank(db *sql.DB) {
 }
 
 func main() {
-	db, err := sql.Open("postgres", "dbname=postgres sslmode=disable")
-	if err != nil {
-		log.Fatal(err)
+	var db *sql.DB
+	var err error
+	var url string
+	if usePostgres {
+		if db, err = sql.Open("postgres", "dbname=postgres sslmode=disable"); err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		security.SetReadFileFn(securitytest.Asset)
+		serv := server.StartTestServer(nil)
+		defer serv.Stop()
+		url = "https://root@" + serv.ServingAddr() + "?certs=test_certs"
+		if db, err = sql.Open("cockroach", url); err != nil {
+			log.Fatal(err)
+		}
 	}
+	if _, err := db.Exec("CREATE DATABASE bank"); err != nil {
+		if pqErr, ok := err.(*pq.Error); usePostgres && (!ok || pqErr.Code.Name() != "duplicate_database") {
+			log.Fatal(err)
+		}
+	}
+	db.Close()
 
-	if _, err = db.Exec("CREATE DATABASE bank"); err != nil {
-		if pqErr, ok := err.(*pq.Error); !ok || pqErr.Code.Name() != "duplicate_database" {
+	// Open db client with database settings.
+	if usePostgres {
+		if db, err = sql.Open("postgres", "dbname=bank sslmode=disable"); err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		if db, err = sql.Open("cockroach", url+"&database=bank"); err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	db, err = sql.Open("postgres", "dbname=bank sslmode=disable")
-	if err != nil {
-		log.Fatal(err)
-	}
+	// concurrency + 1, for this thread and the "concurrency" number of
+	// goroutines that move money
+	db.SetMaxOpenConns(concurrency + 1)
 
-	db.SetMaxOpenConns(concurrency)
-
-	if _, err = db.Exec("CREATE TABLE IF NOT EXISTS accounts (id BIGINT UNIQUE NOT NULL, balance BIGINT NOT NULL)"); err != nil {
+	if _, err = db.Exec("CREATE TABLE IF NOT EXISTS accounts (id BIGINT PRIMARY KEY, balance BIGINT NOT NULL)"); err != nil {
 		log.Fatal(err)
 	}
 
