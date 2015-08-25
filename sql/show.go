@@ -20,10 +20,29 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
+
+// Show a session-local variable name.
+func (p *planner) Show(n *parser.Show) (planNode, error) {
+	name := strings.ToUpper(n.Name)
+
+	v := &valuesNode{columns: []string{name}}
+
+	switch name {
+	case `DATABASE`:
+		v.rows = append(v.rows, []parser.Datum{parser.DString(p.session.Database)})
+	case `SYNTAX`:
+		v.rows = append(v.rows, []parser.Datum{parser.DString(parser.Syntax(p.session.Syntax).String())})
+	default:
+		return nil, fmt.Errorf("unknown variable: %q", name)
+	}
+
+	return v, nil
+}
 
 // ShowColumns of a table.
 // Privileges: None.

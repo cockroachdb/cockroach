@@ -28,6 +28,15 @@ import (
 	"fmt"
 )
 
+// Show represents a SHOW statement.
+type Show struct {
+	Name string
+}
+
+func (node *Show) String() string {
+	return fmt.Sprintf("SHOW %s", node.Name)
+}
+
 // ShowColumns represents a SHOW COLUMNS statement.
 type ShowColumns struct {
 	Table *QualifiedName

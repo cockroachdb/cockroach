@@ -80,6 +80,10 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN (DEBUG) SELECT 1`},
 		{`EXPLAIN (A, B, C) SELECT 1`},
 
+		{`SHOW BARFOO`},
+		{`SHOW DATABASE`},
+		{`SHOW SYNTAX`},
+
 		{`SHOW DATABASES`},
 		{`SHOW TABLES`},
 		{`SHOW TABLES FROM a`},
