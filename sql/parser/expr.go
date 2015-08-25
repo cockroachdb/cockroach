@@ -232,10 +232,10 @@ func (node BoolVal) String() string {
 }
 
 // ValArg represents a named bind var argument.
-type ValArg int
+type ValArg string
 
 func (node ValArg) String() string {
-	return fmt.Sprintf("$%d", int(node))
+	return fmt.Sprintf("$%s", string(node))
 }
 
 // NullVal represents a NULL value.

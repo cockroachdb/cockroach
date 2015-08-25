@@ -128,6 +128,7 @@ func TestScannerModern(t *testing.T) {
 		{`E'a' E"a"`, []int{SCONST, SCONST}},
 		{`r'a' r"a"`, []int{SCONST, SCONST}},
 		{`R'a' R"a"`, []int{SCONST, SCONST}},
+		{`$1 $foo $select`, []int{PARAM, PARAM, PARAM}},
 	}
 	for i, d := range testData {
 		s := newScanner(d.sql, Modern)
