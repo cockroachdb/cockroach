@@ -150,3 +150,14 @@ func (c *conn) send(args Request) (*rows, error) {
 	}
 	return r, nil
 }
+
+// Execute all the URL settings against the db to create
+// the correct session state.
+func (c *conn) applySettings(params map[string]string) error {
+	if db, ok := params["database"]; ok {
+		if _, err := c.Exec("SET DATABASE = "+db, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}

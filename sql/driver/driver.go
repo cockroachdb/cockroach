@@ -23,6 +23,7 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 func init() {
@@ -32,6 +33,8 @@ func init() {
 // roachDriver implements the database/sql/driver.Driver interface. Named
 // roachDriver so as not to conflict with the "driver" package name.
 type roachDriver struct{}
+
+var _ driver.Driver = &roachDriver{}
 
 func (d *roachDriver) Open(dsn string) (driver.Conn, error) {
 	u, err := url.Parse(dsn)
@@ -44,13 +47,24 @@ func (d *roachDriver) Open(dsn string) (driver.Conn, error) {
 		ctx.User = u.User.Username()
 	}
 	q := u.Query()
-	if dir := q["certs"]; len(dir) > 0 {
-		ctx.Certs = dir[0]
+	params := make(map[string]string)
+	for param, value := range q {
+		if len(value) > 1 {
+			return nil, util.Errorf("param: %s repeated", param)
+		}
+		params[param] = value[0]
+	}
+	if dir := params["certs"]; len(dir) > 0 {
+		ctx.Certs = dir
 	}
 
 	sender, err := newSender(u, ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &conn{sender: sender}, nil
+	conn := conn{sender: sender}
+	if err := conn.applySettings(params); err != nil {
+		return nil, err
+	}
+	return &conn, nil
 }
