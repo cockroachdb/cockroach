@@ -30,6 +30,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -54,8 +55,6 @@ var testIdent = proto.StoreIdent{
 	NodeID:    1,
 	StoreID:   1,
 }
-
-var rootTestBaseContext = testutils.NewRootTestBaseContext()
 
 // setTestRetryOptions sets aggressive retries with a limit on number
 // of attempts so we don't get stuck behind indefinite backoff/retry
@@ -160,7 +159,7 @@ func (db *testSender) sendOne(call proto.Call) {
 // responsible for stopping the stopper upon completion.
 func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
+	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	ctx := TestStoreContext
 	ctx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	manual := hlc.NewManualClock(0)
@@ -170,7 +169,7 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.
 	stopper.AddCloser(ctx.Transport)
 	sender := &testSender{}
 	var err error
-	if ctx.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+	if ctx.DB, err = client.Open("//", client.SenderOpt(sender)); err != nil {
 		t.Fatal(err)
 	}
 	store := NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})

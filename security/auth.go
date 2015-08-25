@@ -119,7 +119,7 @@ func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
 			return util.Errorf("missing User in request: %+v", request)
 		}
 
-		if !public && requestedUser != RootUser && requestedUser != NodeUser {
+		if !public && requestedUser != NodeUser {
 			return util.Errorf("user %s is not allowed", requestedUser)
 		}
 

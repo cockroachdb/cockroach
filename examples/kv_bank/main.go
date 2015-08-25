@@ -263,7 +263,8 @@ func main() {
 		security.SetReadFileFn(securitytest.Asset)
 		serv := server.StartTestServer(nil)
 		defer serv.Stop()
-		*dbName = "https://root@" + serv.ServingAddr() + "?certs=test_certs"
+		*dbName = fmt.Sprintf("https://%s@%s?certs=test_certs",
+			security.NodeUser, serv.ServingAddr())
 	}
 	// Create a database handle.
 	db, err := client.Open(*dbName)

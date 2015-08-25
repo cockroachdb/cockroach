@@ -221,16 +221,13 @@ type RequestHeader struct {
 	// that the operation takes place on the key range from Key to EndKey,
 	// including Key and excluding EndKey.
 	EndKey Key `protobuf:"bytes,4,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
-	// User is the originating user. Used to lookup priority when
-	// scheduling queued operations at target node.
-	User string `protobuf:"bytes,5,opt,name=user" json:"user"`
 	// Replica specifies the destination for the request. This is a specific
 	// instance of the available replicas belonging to RangeID.
-	Replica Replica `protobuf:"bytes,6,opt,name=replica" json:"replica"`
+	Replica Replica `protobuf:"bytes,5,opt,name=replica" json:"replica"`
 	// RangeID specifies the ID of the Raft consensus group which the key
 	// range belongs to. This is used by the receiving node to route the
 	// request to the correct range.
-	RangeID RangeID `protobuf:"varint,7,opt,name=range_id,casttype=RangeID" json:"range_id"`
+	RangeID RangeID `protobuf:"varint,6,opt,name=range_id,casttype=RangeID" json:"range_id"`
 	// UserPriority specifies priority multiple for non-transactional
 	// commands. This value should be a positive integer [1, 2^31-1).
 	// It's properly viewed as a multiple for how likely this
@@ -240,17 +237,17 @@ type RequestHeader struct {
 	// with UserPriority=1. This value is ignored if Txn is
 	// specified. If neither this value nor Txn is specified, the value
 	// defaults to 1.
-	UserPriority *int32 `protobuf:"varint,8,opt,name=user_priority,def=1" json:"user_priority,omitempty"`
+	UserPriority *int32 `protobuf:"varint,7,opt,name=user_priority,def=1" json:"user_priority,omitempty"`
 	// Txn is set non-nil if a transaction is underway. To start a txn,
 	// the first request should set this field to non-nil with name and
 	// isolation level set as desired. The response will contain the
 	// fully-initialized transaction with txn ID, priority, initial
 	// timestamp, and maximum timestamp.
-	Txn *Transaction `protobuf:"bytes,9,opt,name=txn" json:"txn,omitempty"`
+	Txn *Transaction `protobuf:"bytes,8,opt,name=txn" json:"txn,omitempty"`
 	// ReadConsistency specifies the consistency for read
 	// operations. The default is CONSISTENT. This value is ignored for
 	// write operations.
-	ReadConsistency ReadConsistencyType `protobuf:"varint,10,opt,name=read_consistency,enum=cockroach.proto.ReadConsistencyType" json:"read_consistency"`
+	ReadConsistency ReadConsistencyType `protobuf:"varint,9,opt,name=read_consistency,enum=cockroach.proto.ReadConsistencyType" json:"read_consistency"`
 }
 
 func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
@@ -285,13 +282,6 @@ func (m *RequestHeader) GetEndKey() Key {
 		return m.EndKey
 	}
 	return nil
-}
-
-func (m *RequestHeader) GetUser() string {
-	if m != nil {
-		return m.User
-	}
-	return ""
 }
 
 func (m *RequestHeader) GetReplica() Replica {
@@ -1615,26 +1605,22 @@ func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
 	}
 	data[i] = 0x2a
 	i++
-	i = encodeVarintApi(data, i, uint64(len(m.User)))
-	i += copy(data[i:], m.User)
-	data[i] = 0x32
-	i++
 	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
 	n3, err := m.Replica.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n3
-	data[i] = 0x38
+	data[i] = 0x30
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RangeID))
 	if m.UserPriority != nil {
-		data[i] = 0x40
+		data[i] = 0x38
 		i++
 		i = encodeVarintApi(data, i, uint64(*m.UserPriority))
 	}
 	if m.Txn != nil {
-		data[i] = 0x4a
+		data[i] = 0x42
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
 		n4, err := m.Txn.MarshalTo(data[i:])
@@ -1643,7 +1629,7 @@ func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
 		}
 		i += n4
 	}
-	data[i] = 0x50
+	data[i] = 0x48
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ReadConsistency))
 	return i, nil
@@ -3581,8 +3567,6 @@ func (m *RequestHeader) Size() (n int) {
 		l = len(m.EndKey)
 		n += 1 + l + sovApi(uint64(l))
 	}
-	l = len(m.User)
-	n += 1 + l + sovApi(uint64(l))
 	l = m.Replica.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.RangeID))
@@ -4666,28 +4650,6 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + int(stringLen)
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.User = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 6:
-			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Replica", wireType)
 			}
 			var msglen int
@@ -4713,7 +4675,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 7:
+		case 6:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
 			}
@@ -4729,7 +4691,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 8:
+		case 7:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UserPriority", wireType)
 			}
@@ -4746,7 +4708,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 				}
 			}
 			m.UserPriority = &v
-		case 9:
+		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
 			}
@@ -4776,7 +4738,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 10:
+		case 9:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ReadConsistency", wireType)
 			}

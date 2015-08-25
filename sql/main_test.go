@@ -19,6 +19,7 @@ package sql_test
 
 import (
 	"database/sql"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -40,11 +41,15 @@ func TestMain(m *testing.M) {
 
 func setup(t *testing.T) (*server.TestServer, *sql.DB, *client.DB) {
 	s := server.StartTestServer(nil)
-	sqlDB, err := sql.Open("cockroach", "https://root@"+s.ServingAddr()+"?certs=test_certs")
+	// SQL requests use "root" which has ALL permissions on everything.
+	sqlDB, err := sql.Open("cockroach", fmt.Sprintf("https://%s@%s?certs=test_certs",
+		security.RootUser, s.ServingAddr()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	kvDB, err := client.Open("https://root@" + s.ServingAddr() + "?certs=test_certs")
+	// All KV requests need "node" certs.
+	kvDB, err := client.Open(fmt.Sprintf("https://%s@%s?certs=test_certs",
+		security.NodeUser, s.ServingAddr()))
 	if err != nil {
 		t.Fatal(err)
 	}

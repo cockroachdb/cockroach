@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -329,7 +328,6 @@ func TestSendRPCOrder(t *testing.T) {
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
 		call := proto.Call{Args: args, Reply: args.CreateReply()}
-		call.Args.Header().User = security.RootUser
 		ds.Send(context.Background(), call)
 		if err := call.Reply.Header().GoError(); err != nil {
 			t.Errorf("%d: %s", n, err)
@@ -374,7 +372,6 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
-	call.Args.Header().User = security.RootUser
 	reply := call.Reply.(*proto.PutResponse)
 	ds.Send(context.Background(), call)
 	if err := reply.GoError(); err != nil {
@@ -423,7 +420,6 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
-	call.Args.Header().User = security.RootUser
 	reply := call.Reply.(*proto.PutResponse)
 	// Fatal error on descriptor lookup, propagated to reply.
 	ds.Send(context.Background(), call)
@@ -488,7 +484,6 @@ func TestEvictCacheOnError(t *testing.T) {
 		ds.updateLeaderCache(1, leader)
 
 		call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
-		call.Args.Header().User = security.RootUser
 		reply := call.Reply.(*proto.PutResponse)
 		ds.Send(context.Background(), call)
 		if err := reply.GoError(); err != nil && err.Error() != "boom" {
@@ -585,7 +580,6 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 0)
-	call.Args.Header().User = security.RootUser
 	sr := call.Reply.(*proto.ScanResponse)
 	ds.Send(context.Background(), call)
 	if err := sr.GoError(); err != nil {
@@ -627,120 +621,6 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 		}
 		return false
 	})
-	n.Stop()
-}
-
-// TestVerifyPermissions verifies permissions are checked for single
-// zones and across multiple zones. It also verifies that permissions
-// are checked hierarchically.
-func TestVerifyPermissions(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	n := simulation.NewNetwork(1, "tcp", gossip.TestInterval)
-	ds := NewDistSender(nil, n.Nodes[0].Gossip)
-
-	allRequestTypes := []proto.Request{
-		&proto.GetRequest{},
-		&proto.PutRequest{},
-		&proto.ConditionalPutRequest{},
-		&proto.IncrementRequest{},
-		&proto.DeleteRequest{},
-		&proto.DeleteRangeRequest{},
-		&proto.ScanRequest{},
-		&proto.ReverseScanRequest{},
-		&proto.EndTransactionRequest{},
-		&proto.AdminSplitRequest{},
-		&proto.AdminMergeRequest{},
-		&proto.HeartbeatTxnRequest{},
-		&proto.GCRequest{},
-		&proto.PushTxnRequest{},
-		&proto.RangeLookupRequest{},
-		&proto.ResolveIntentRequest{},
-		&proto.ResolveIntentRangeRequest{},
-		&proto.MergeRequest{},
-		&proto.TruncateLogRequest{},
-		&proto.LeaderLeaseRequest{},
-		&proto.BatchRequest{},
-	}
-
-	var readOnlyRequests []proto.Request
-	var writeOnlyRequests []proto.Request
-	var readWriteRequests []proto.Request
-
-	for _, r := range allRequestTypes {
-		if proto.IsRead(r) && !proto.IsWrite(r) {
-			readOnlyRequests = append(readOnlyRequests, r)
-		}
-		if proto.IsWrite(r) && !proto.IsRead(r) {
-			writeOnlyRequests = append(writeOnlyRequests, r)
-		}
-		if proto.IsRead(r) && proto.IsWrite(r) {
-			readWriteRequests = append(readWriteRequests, r)
-		}
-	}
-
-	testData := []struct {
-		// Permission-based db methods from the storage package.
-		requests         []proto.Request
-		user             string
-		startKey, endKey proto.Key
-		hasPermission    bool
-	}{
-		// Test permissions within a single range
-		{readOnlyRequests, security.RootUser, proto.KeyMin, proto.KeyMin, true},
-		{readWriteRequests, security.RootUser, proto.KeyMin, proto.KeyMin, true},
-		{writeOnlyRequests, security.RootUser, proto.KeyMin, proto.KeyMin, true},
-		{readOnlyRequests, "random", proto.KeyMin, proto.KeyMin, false},
-		{readWriteRequests, "random", proto.KeyMin, proto.KeyMin, false},
-		{writeOnlyRequests, "random", proto.KeyMin, proto.KeyMin, false},
-		// Test permissions hierarchically.
-		{readOnlyRequests, security.RootUser, proto.Key("a"), proto.Key("a1"), true},
-		{readWriteRequests, security.RootUser, proto.Key("a"), proto.Key("a1"), true},
-		{writeOnlyRequests, security.RootUser, proto.Key("a"), proto.Key("a1"), true},
-		{readOnlyRequests, "random", proto.Key("a"), proto.Key("a1"), false},
-		{readWriteRequests, "random", proto.Key("a"), proto.Key("a1"), false},
-		{writeOnlyRequests, "random", proto.Key("a"), proto.Key("a1"), false},
-		// Test permissions across both ranges.
-		{readOnlyRequests, security.RootUser, proto.KeyMin, proto.Key("b"), true},
-		{readWriteRequests, security.RootUser, proto.KeyMin, proto.Key("b"), true},
-		{writeOnlyRequests, security.RootUser, proto.KeyMin, proto.Key("b"), true},
-		{readOnlyRequests, "random", proto.KeyMin, proto.Key("b"), false},
-		{readWriteRequests, "random", proto.KeyMin, proto.Key("b"), false},
-		{writeOnlyRequests, "random", proto.KeyMin, proto.Key("b"), false},
-		// Test permissions within and around the boundaries of a range,
-		// representatively using rw methods.
-		{readWriteRequests, security.RootUser, proto.Key("a"), proto.Key("b"), true},
-		{readWriteRequests, security.RootUser, proto.Key("a"), proto.Key("a"), true},
-		{readWriteRequests, security.RootUser, proto.Key("a"), proto.Key("a1"), true},
-		{readWriteRequests, security.RootUser, proto.Key("a"), proto.Key("b1"), true},
-		{readWriteRequests, security.RootUser, proto.Key("a3"), proto.Key("a4"), true},
-		{readWriteRequests, security.RootUser, proto.Key("a3"), proto.Key("b1"), true},
-		{readWriteRequests, "random", proto.Key("a"), proto.Key("b"), false},
-		{readWriteRequests, "random", proto.Key("a"), proto.Key("a"), false},
-		{readWriteRequests, "random", proto.Key("a"), proto.Key("a1"), false},
-		{readWriteRequests, "random", proto.Key("a"), proto.Key("b1"), false},
-		{readWriteRequests, "random", proto.Key("a3"), proto.Key("a4"), false},
-		{readWriteRequests, "random", proto.Key("a3"), proto.Key("b1"), false},
-	}
-
-	for i, test := range testData {
-		for _, r := range test.requests {
-			*r.Header() = proto.RequestHeader{
-				User:   test.user,
-				Key:    test.startKey,
-				EndKey: test.endKey,
-			}
-			err := ds.verifyPermissions(r)
-			if err != nil && test.hasPermission {
-				t.Errorf("test %d: user %s should have had permission to %s, err: %s",
-					i, test.user, r.Method(), err.Error())
-				break
-			} else if err == nil && !test.hasPermission {
-				t.Errorf("test %d: user %s should not have had permission to %s",
-					i, test.user, r.Method())
-				break
-			}
-		}
-	}
 	n.Stop()
 }
 
@@ -794,7 +674,6 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 1)
-	call.Args.Header().User = security.RootUser
 	sr := call.Reply.(*proto.ScanResponse)
 	ds.Send(context.Background(), call)
 	if err := sr.GoError(); err != nil {
@@ -895,8 +774,6 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 10)
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	call.Args.Header().Txn = &proto.Transaction{}
-	// Set the user to 'root'.
-	call.Args.Header().User = security.RootUser
 	reply := call.Reply.(*proto.ScanResponse)
 	ds.Send(context.Background(), call)
 	if err := reply.GoError(); err != nil {

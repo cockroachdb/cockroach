@@ -28,15 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// NewRootTestContext returns a rpc.Context for testing.
-// It is meant to be used by clients.
-func NewRootTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
-	if clock == nil {
-		clock = hlc.NewClock(hlc.UnixNano)
-	}
-	return NewContext(testutils.NewRootTestBaseContext(), clock, stopper)
-}
-
 // NewNodeTestContext returns a rpc.Context for testing.
 // It is meant to be used by nodes.
 func NewNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {

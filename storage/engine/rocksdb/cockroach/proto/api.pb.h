@@ -338,54 +338,42 @@ class RequestHeader : public ::google::protobuf::Message {
   ::std::string* release_end_key();
   void set_allocated_end_key(::std::string* end_key);
 
-  // optional string user = 5;
-  bool has_user() const;
-  void clear_user();
-  static const int kUserFieldNumber = 5;
-  const ::std::string& user() const;
-  void set_user(const ::std::string& value);
-  void set_user(const char* value);
-  void set_user(const char* value, size_t size);
-  ::std::string* mutable_user();
-  ::std::string* release_user();
-  void set_allocated_user(::std::string* user);
-
-  // optional .cockroach.proto.Replica replica = 6;
+  // optional .cockroach.proto.Replica replica = 5;
   bool has_replica() const;
   void clear_replica();
-  static const int kReplicaFieldNumber = 6;
+  static const int kReplicaFieldNumber = 5;
   const ::cockroach::proto::Replica& replica() const;
   ::cockroach::proto::Replica* mutable_replica();
   ::cockroach::proto::Replica* release_replica();
   void set_allocated_replica(::cockroach::proto::Replica* replica);
 
-  // optional int64 range_id = 7;
+  // optional int64 range_id = 6;
   bool has_range_id() const;
   void clear_range_id();
-  static const int kRangeIdFieldNumber = 7;
+  static const int kRangeIdFieldNumber = 6;
   ::google::protobuf::int64 range_id() const;
   void set_range_id(::google::protobuf::int64 value);
 
-  // optional int32 user_priority = 8 [default = 1];
+  // optional int32 user_priority = 7 [default = 1];
   bool has_user_priority() const;
   void clear_user_priority();
-  static const int kUserPriorityFieldNumber = 8;
+  static const int kUserPriorityFieldNumber = 7;
   ::google::protobuf::int32 user_priority() const;
   void set_user_priority(::google::protobuf::int32 value);
 
-  // optional .cockroach.proto.Transaction txn = 9;
+  // optional .cockroach.proto.Transaction txn = 8;
   bool has_txn() const;
   void clear_txn();
-  static const int kTxnFieldNumber = 9;
+  static const int kTxnFieldNumber = 8;
   const ::cockroach::proto::Transaction& txn() const;
   ::cockroach::proto::Transaction* mutable_txn();
   ::cockroach::proto::Transaction* release_txn();
   void set_allocated_txn(::cockroach::proto::Transaction* txn);
 
-  // optional .cockroach.proto.ReadConsistencyType read_consistency = 10;
+  // optional .cockroach.proto.ReadConsistencyType read_consistency = 9;
   bool has_read_consistency() const;
   void clear_read_consistency();
-  static const int kReadConsistencyFieldNumber = 10;
+  static const int kReadConsistencyFieldNumber = 9;
   ::cockroach::proto::ReadConsistencyType read_consistency() const;
   void set_read_consistency(::cockroach::proto::ReadConsistencyType value);
 
@@ -399,8 +387,6 @@ class RequestHeader : public ::google::protobuf::Message {
   inline void clear_has_key();
   inline void set_has_end_key();
   inline void clear_has_end_key();
-  inline void set_has_user();
-  inline void clear_has_user();
   inline void set_has_replica();
   inline void clear_has_replica();
   inline void set_has_range_id();
@@ -419,7 +405,6 @@ class RequestHeader : public ::google::protobuf::Message {
   ::cockroach::proto::ClientCmdID* cmd_id_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
-  ::google::protobuf::internal::ArenaStringPtr user_;
   ::cockroach::proto::Replica* replica_;
   ::google::protobuf::int64 range_id_;
   ::cockroach::proto::Transaction* txn_;
@@ -5790,68 +5775,15 @@ inline void RequestHeader::set_allocated_end_key(::std::string* end_key) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.end_key)
 }
 
-// optional string user = 5;
-inline bool RequestHeader::has_user() const {
+// optional .cockroach.proto.Replica replica = 5;
+inline bool RequestHeader::has_replica() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
-inline void RequestHeader::set_has_user() {
+inline void RequestHeader::set_has_replica() {
   _has_bits_[0] |= 0x00000010u;
 }
-inline void RequestHeader::clear_has_user() {
-  _has_bits_[0] &= ~0x00000010u;
-}
-inline void RequestHeader::clear_user() {
-  user_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_user();
-}
-inline const ::std::string& RequestHeader::user() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.user)
-  return user_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void RequestHeader::set_user(const ::std::string& value) {
-  set_has_user();
-  user_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.user)
-}
-inline void RequestHeader::set_user(const char* value) {
-  set_has_user();
-  user_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.proto.RequestHeader.user)
-}
-inline void RequestHeader::set_user(const char* value, size_t size) {
-  set_has_user();
-  user_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.RequestHeader.user)
-}
-inline ::std::string* RequestHeader::mutable_user() {
-  set_has_user();
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestHeader.user)
-  return user_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* RequestHeader::release_user() {
-  clear_has_user();
-  return user_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void RequestHeader::set_allocated_user(::std::string* user) {
-  if (user != NULL) {
-    set_has_user();
-  } else {
-    clear_has_user();
-  }
-  user_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), user);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.user)
-}
-
-// optional .cockroach.proto.Replica replica = 6;
-inline bool RequestHeader::has_replica() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
-}
-inline void RequestHeader::set_has_replica() {
-  _has_bits_[0] |= 0x00000020u;
-}
 inline void RequestHeader::clear_has_replica() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void RequestHeader::clear_replica() {
   if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
@@ -5886,15 +5818,15 @@ inline void RequestHeader::set_allocated_replica(::cockroach::proto::Replica* re
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.replica)
 }
 
-// optional int64 range_id = 7;
+// optional int64 range_id = 6;
 inline bool RequestHeader::has_range_id() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void RequestHeader::set_has_range_id() {
-  _has_bits_[0] |= 0x00000040u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void RequestHeader::clear_has_range_id() {
-  _has_bits_[0] &= ~0x00000040u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void RequestHeader::clear_range_id() {
   range_id_ = GOOGLE_LONGLONG(0);
@@ -5910,15 +5842,15 @@ inline void RequestHeader::set_range_id(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.range_id)
 }
 
-// optional int32 user_priority = 8 [default = 1];
+// optional int32 user_priority = 7 [default = 1];
 inline bool RequestHeader::has_user_priority() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
 inline void RequestHeader::set_has_user_priority() {
-  _has_bits_[0] |= 0x00000080u;
+  _has_bits_[0] |= 0x00000040u;
 }
 inline void RequestHeader::clear_has_user_priority() {
-  _has_bits_[0] &= ~0x00000080u;
+  _has_bits_[0] &= ~0x00000040u;
 }
 inline void RequestHeader::clear_user_priority() {
   user_priority_ = 1;
@@ -5934,15 +5866,15 @@ inline void RequestHeader::set_user_priority(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.user_priority)
 }
 
-// optional .cockroach.proto.Transaction txn = 9;
+// optional .cockroach.proto.Transaction txn = 8;
 inline bool RequestHeader::has_txn() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
 inline void RequestHeader::set_has_txn() {
-  _has_bits_[0] |= 0x00000100u;
+  _has_bits_[0] |= 0x00000080u;
 }
 inline void RequestHeader::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000100u;
+  _has_bits_[0] &= ~0x00000080u;
 }
 inline void RequestHeader::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::proto::Transaction::Clear();
@@ -5977,15 +5909,15 @@ inline void RequestHeader::set_allocated_txn(::cockroach::proto::Transaction* tx
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.txn)
 }
 
-// optional .cockroach.proto.ReadConsistencyType read_consistency = 10;
+// optional .cockroach.proto.ReadConsistencyType read_consistency = 9;
 inline bool RequestHeader::has_read_consistency() const {
-  return (_has_bits_[0] & 0x00000200u) != 0;
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
 inline void RequestHeader::set_has_read_consistency() {
-  _has_bits_[0] |= 0x00000200u;
+  _has_bits_[0] |= 0x00000100u;
 }
 inline void RequestHeader::clear_has_read_consistency() {
-  _has_bits_[0] &= ~0x00000200u;
+  _has_bits_[0] &= ~0x00000100u;
 }
 inline void RequestHeader::clear_read_consistency() {
   read_consistency_ = 0;

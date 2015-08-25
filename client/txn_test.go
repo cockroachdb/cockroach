@@ -130,17 +130,13 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 
 // TestTransactionConfig verifies the proper unwrapping and
 // re-wrapping of the client's sender when starting a transaction.
-// Also verifies that User and UserPriority are propagated to the
+// Also verifies that the UserPriority is propagated to the
 // transactional client.
 func TestTransactionConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	db := newDB(newTestSender(func(call proto.Call) {}))
-	db.user = "foo"
 	db.userPriority = 101
 	if err := db.Txn(func(txn *Txn) error {
-		if txn.db.user != db.user {
-			t.Errorf("expected txn user %s; got %s", db.user, txn.db.user)
-		}
 		if txn.db.userPriority != db.userPriority {
 			t.Errorf("expected txn user priority %d; got %d", db.userPriority, txn.db.userPriority)
 		}

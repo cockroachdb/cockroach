@@ -32,11 +32,11 @@ import (
 )
 
 func makeDBClient() *client.DB {
-	// TODO(pmattis): Initialize the user to something more
-	// reasonable. Perhaps Context.Addr should be considered a URL.
+	// TODO(marc): KV endpoints are now restricted to node users.
+	// This should probably be made more explicit.
 	db, err := client.Open(fmt.Sprintf("%s://%s@%s?certs=%s",
 		context.RequestScheme(),
-		security.RootUser,
+		security.NodeUser,
 		context.Addr,
 		context.Certs))
 	if err != nil {

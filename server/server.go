@@ -122,7 +122,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper)
-	if s.db, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+	if s.db, err = client.Open("//", client.SenderOpt(sender)); err != nil {
 		return nil, err
 	}
 

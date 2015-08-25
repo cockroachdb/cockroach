@@ -71,7 +71,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	}
 	ctx.Gossip = g
 	sender := kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock}, g)
-	if ctx.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+	if ctx.DB, err = client.Open("//", client.SenderOpt(sender)); err != nil {
 		t.Fatal(err)
 	}
 	// TODO(bdarnell): arrange to have the transport closed.

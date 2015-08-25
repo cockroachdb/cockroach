@@ -22,14 +22,13 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-var rootTestBaseContext = testutils.NewRootTestBaseContext()
 
 func TestHttpQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -141,7 +140,7 @@ func TestHttpQuery(t *testing.T) {
 	}
 
 	response := &proto.TimeSeriesQueryResponse{}
-	session := testutils.NewTestHTTPSession(t, rootTestBaseContext, tsrv.ServingAddr())
+	session := testutils.NewTestHTTPSession(t, &base.Context{}, tsrv.ServingAddr())
 	session.PostProto(ts.URLQuery, &proto.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,

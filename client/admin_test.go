@@ -33,7 +33,8 @@ func Example_zone() {
 	s := server.StartTestServer(nil)
 	defer s.Stop()
 
-	context := testutils.NewRootTestBaseContext()
+	// There are no particular permissions on admin endpoints for now.
+	context := testutils.NewTestBaseContext(server.TestUser)
 	client := client.NewAdminClient(context, s.ServingAddr(), client.Zone)
 
 	const yamlConfig = `

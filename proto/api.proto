@@ -85,16 +85,13 @@ message RequestHeader {
   // that the operation takes place on the key range from Key to EndKey,
   // including Key and excluding EndKey.
   optional bytes end_key = 4 [(gogoproto.casttype) = "Key"];
-  // User is the originating user. Used to lookup priority when
-  // scheduling queued operations at target node.
-  optional string user = 5 [(gogoproto.nullable) = false];
   // Replica specifies the destination for the request. This is a specific
   // instance of the available replicas belonging to RangeID.
-  optional Replica replica = 6 [(gogoproto.nullable) = false];
+  optional Replica replica = 5 [(gogoproto.nullable) = false];
   // RangeID specifies the ID of the Raft consensus group which the key
   // range belongs to. This is used by the receiving node to route the
   // request to the correct range.
-  optional int64 range_id = 7 [(gogoproto.nullable) = false,
+  optional int64 range_id = 6 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
   // UserPriority specifies priority multiple for non-transactional
   // commands. This value should be a positive integer [1, 2^31-1).
@@ -105,17 +102,17 @@ message RequestHeader {
   // with UserPriority=1. This value is ignored if Txn is
   // specified. If neither this value nor Txn is specified, the value
   // defaults to 1.
-  optional int32 user_priority = 8 [default = 1];
+  optional int32 user_priority = 7 [default = 1];
   // Txn is set non-nil if a transaction is underway. To start a txn,
   // the first request should set this field to non-nil with name and
   // isolation level set as desired. The response will contain the
   // fully-initialized transaction with txn ID, priority, initial
   // timestamp, and maximum timestamp.
-  optional Transaction txn = 9;
+  optional Transaction txn = 8;
   // ReadConsistency specifies the consistency for read
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
-  optional ReadConsistencyType read_consistency = 10 [(gogoproto.nullable) = false];
+  optional ReadConsistencyType read_consistency = 9 [(gogoproto.nullable) = false];
 }
 
 // ResponseHeader is returned with every storage node response.

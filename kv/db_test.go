@@ -19,6 +19,7 @@ package kv_test
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -30,7 +31,12 @@ import (
 )
 
 func createTestClient(t *testing.T, addr string) *client.DB {
-	db, err := client.Open("https://root@" + addr + "?certs=" + security.EmbeddedCertsDir)
+	return createTestClientForUser(t, addr, security.NodeUser)
+}
+
+func createTestClientForUser(t *testing.T, addr, user string) *client.DB {
+	db, err := client.Open(fmt.Sprintf("https://%s@%s?certs=%s",
+		user, addr, security.EmbeddedCertsDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,14 +274,13 @@ func TestHTTPAuthentication(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	// createTestClient creates a "root" client.
+	// createTestClient creates a "node" client.
 	db := createTestClient(t, s.ServingAddr())
 
 	// We call Run() on the client which lets us build our own request,
 	// specifying the user.
 	arg := &proto.PutRequest{}
 	arg.Header().Key = proto.Key("a")
-	arg.Header().User = security.RootUser
 	reply := &proto.PutResponse{}
 	b := &client.Batch{}
 	b.InternalAddCall(proto.Call{Args: arg, Reply: reply})
@@ -284,11 +289,12 @@ func TestHTTPAuthentication(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Try again, but this time with arg.User = "foo".
-	arg.Header().User = "foo"
+	// Try again, but this time with certs for a non-node user (even the root
+	// user has no KV permissions).
+	db2 := createTestClientForUser(t, s.ServingAddr(), security.RootUser)
 	b = &client.Batch{}
 	b.InternalAddCall(proto.Call{Args: arg, Reply: reply})
-	err = db.Run(b)
+	err = db2.Run(b)
 	if err == nil {
 		t.Fatal("Expected error!")
 	}

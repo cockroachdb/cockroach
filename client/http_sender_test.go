@@ -28,6 +28,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -60,6 +61,12 @@ func startTestHTTPServer(handler http.Handler) (*httptest.Server, string) {
 func TestHTTPSenderSend(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	server, addr := startTestHTTPServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Make sure SSL certs were properly specified.
+		authenticationHook, err := security.AuthenticationHook(false /* !insecure */, r.TLS)
+		if err != nil {
+			t.Error(err)
+		}
+
 		if r.Method != "POST" {
 			t.Errorf("expected method POST; got %s", r.Method)
 		}
@@ -71,10 +78,17 @@ func TestHTTPSenderSend(t *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected error reading body: %s", err)
 		}
+
 		args := &proto.PutRequest{}
 		if err := util.UnmarshalRequest(r, reqBody, args, util.AllEncodings); err != nil {
 			t.Errorf("unexpected error unmarshalling request: %s", err)
 		}
+
+		// Validate request against incoming user.
+		if err := authenticationHook(args, false /*not public*/); err != nil {
+			t.Error(err)
+		}
+
 		if !args.Key.Equal(testPutReq.Key) || !args.Timestamp.Equal(testPutReq.Timestamp) {
 			t.Errorf("expected parsed %+v to equal %+v", args, testPutReq)
 		}
@@ -87,7 +101,7 @@ func TestHTTPSenderSend(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sender, err := newHTTPSender(addr, testutils.NewRootTestBaseContext(), defaultRetryOptions)
+	sender, err := newHTTPSender(addr, testutils.NewNodeTestBaseContext(), defaultRetryOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +158,7 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 			w.Write(body)
 		}))
 
-		sender, err := newHTTPSender(addr, testutils.NewRootTestBaseContext(), retryOptions)
+		sender, err := newHTTPSender(addr, testutils.NewNodeTestBaseContext(), retryOptions)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -207,7 +221,7 @@ func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
 		}))
 
 		s = server
-		sender, err := newHTTPSender(addr, testutils.NewRootTestBaseContext(), retryOptions)
+		sender, err := newHTTPSender(addr, testutils.NewNodeTestBaseContext(), retryOptions)
 		if err != nil {
 			t.Fatal(err)
 		}

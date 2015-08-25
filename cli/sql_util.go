@@ -29,8 +29,8 @@ import (
 )
 
 func makeSQLClient() *sql.DB {
-	// TODO(pmattis): Initialize the user to something more
-	// reasonable. Perhaps Context.Addr should be considered a URL.
+	// Use the sql administrator by default (root user).
+	// TODO(marc): allow passing on the commandline.
 	db, err := sql.Open("cockroach",
 		fmt.Sprintf("%s://%s@%s?certs=%s",
 			context.RequestScheme(),

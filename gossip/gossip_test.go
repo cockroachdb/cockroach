@@ -21,20 +21,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-var rootTestBaseContext = testutils.NewRootTestBaseContext()
-var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
-
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), nil)
+	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), nil)
 	g := New(rpcContext, TestInterval, TestBootstrap)
 	if err := g.AddInfo("i", int64(1), time.Hour); err != nil {
 		t.Fatal(err)
@@ -80,7 +77,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 
 	resolvers := []resolver.Resolver{}
 	for _, rs := range resolverSpecs {
-		resolver, err := resolver.NewResolver(nodeTestBaseContext, rs)
+		resolver, err := resolver.NewResolver(&base.Context{}, rs)
 		if err == nil {
 			resolvers = append(resolvers, resolver)
 		}

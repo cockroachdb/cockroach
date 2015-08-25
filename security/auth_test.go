@@ -83,20 +83,11 @@ func TestGetCertificateUser(t *testing.T) {
 	}
 }
 
-// Build a proto request that implements GetUser.
-func makeUserRequest(user string) proto.Message {
-	get := &cockroach_proto.GetRequest{
-		RequestHeader: cockroach_proto.RequestHeader{
-			User: user,
-		},
-	}
-	return get
-}
-
 func TestAuthenticationHook(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Proto that does not implement GetUser.
 	badRequest := &cockroach_proto.GetResponse{}
+	getRequest := &cockroach_proto.GetRequest{}
 
 	testCases := []struct {
 		insecure           bool
@@ -110,30 +101,16 @@ func TestAuthenticationHook(t *testing.T) {
 		{true, nil, nil, true, false, false},
 		// Insecure mode, bad request.
 		{true, nil, badRequest, true, false, false},
-		// Insecure mode, userRequest with empty user.
-		{true, nil, makeUserRequest(""), true, false, false},
-		// Insecure mode, userRequest with good user.
-		{true, nil, makeUserRequest("foo"), true, true, false},
-		// Insecure mode, userRequest with root user.
-		{true, nil, makeUserRequest(security.RootUser), true, true, true},
-		// Insecure mode, userRequest with node user.
-		{true, nil, makeUserRequest(security.NodeUser), true, true, true},
+		// Insecure mode, good request.
+		{true, nil, getRequest, true, true, true},
 		// Secure mode, no TLS state.
 		{false, nil, nil, false, false, false},
-		// Secure mode, user mismatch.
-		{false, makeFakeTLSState([]string{"foo"}, []int{1}), makeUserRequest("bar"), true, false, false},
-		// Secure mode, user mismatch, but client certificate is for the node user.
-		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), makeUserRequest("bar"), true, true, false},
-		// Secure mode, user mismatch, and the root user does not get blind permissions.
-		{false, makeFakeTLSState([]string{security.RootUser}, []int{1}), makeUserRequest("bar"), true, false, false},
-		// Secure mode, matching users.
-		{false, makeFakeTLSState([]string{"foo"}, []int{1}), makeUserRequest("foo"), true, true, false},
-		// Secure mode, root acting as itself.
-		{false, makeFakeTLSState([]string{security.RootUser}, []int{1}), makeUserRequest(security.RootUser), true, true, true},
-		// Secure mode, node acting as itself.
-		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), makeUserRequest(security.NodeUser), true, true, true},
-		// Secure mode, node acting as root.
-		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), makeUserRequest(security.RootUser), true, true, true},
+		// Secure mode, bad user.
+		{false, makeFakeTLSState([]string{"foo"}, []int{1}), getRequest, true, false, false},
+		// Secure mode, node user.
+		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), getRequest, true, true, true},
+		// Secure mode, root user.
+		{false, makeFakeTLSState([]string{security.RootUser}, []int{1}), getRequest, true, false, false},
 	}
 
 	for tcNum, tc := range testCases {

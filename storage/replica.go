@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -1185,7 +1184,6 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 	var wg sync.WaitGroup
 
 	bArgs := &proto.BatchRequest{}
-	bArgs.User = security.RootUser
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
 		var resolveArgs proto.Request
@@ -1198,7 +1196,6 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 				Timestamp: intent.Txn.Timestamp,
 				Key:       intent.Key,
 				EndKey:    intent.EndKey,
-				User:      security.RootUser,
 				Txn:       &intent.Txn,
 			}
 
