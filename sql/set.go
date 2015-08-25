@@ -22,7 +22,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // Set sets session variables.
@@ -61,7 +60,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		}
 
 	default:
-		return nil, util.Errorf("unknown variable: %s", name)
+		return nil, fmt.Errorf("unknown variable: %q", name)
 	}
 	return &valuesNode{}, nil
 }

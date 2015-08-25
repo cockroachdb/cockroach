@@ -1,3 +1,6 @@
+statement error unknown variable: "FOO"
+SET FOO = bar
+
 statement error database "foo" does not exist
 SET DATABASE = foo
 
