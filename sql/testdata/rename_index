@@ -45,9 +45,6 @@ users bar     true   2   name
 
 user testuser
 
-statement ok
-set database to test
-
 statement error user testuser does not have CREATE privilege on table users
 ALTER INDEX users@bar RENAME TO rar
 
