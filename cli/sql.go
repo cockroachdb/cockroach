@@ -20,10 +20,17 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
+	"strings"
 
 	"github.com/peterh/liner"
 	"github.com/spf13/cobra"
+)
+
+const (
+	infoMessage = `# Welcome to the cockroach SQL interface.
+# All statements must be terminated by a semicolon.
+# To exit: CTRL + D.
+`
 )
 
 // sqlShellCmd opens a sql shell.
@@ -49,22 +56,66 @@ func runTerm(cmd *cobra.Command, args []string) {
 		_ = liner.Close()
 	}()
 
+	fmt.Fprint(osStdout, infoMessage)
+
+	// Default prompt is "hostname> "
+	// continued statement prompt it: "        -> "
+	// TODO(marc): maybe switch to "user@hostname" and strip port if present.
+	fullPrompt := context.Addr
+	if len(fullPrompt) == 0 {
+		fullPrompt = " "
+	}
+	continuePrompt := strings.Repeat(" ", len(fullPrompt)-1) + "-"
+
+	fullPrompt += "> "
+	continuePrompt += "> "
+
+	// TODO(marc): allow passing statements on the command line,
+	// or specifying a flag. This would make testing much simpler.
+	// TODO(marc): detect if we're actually on a terminal. If not,
+	// we may want to repeat the statements on stdout.
+	// TODO(marc): add test.
+	var stmt []string
+	var l string
+	var err error
 	for {
-		// TODO(marc): handle multi-line, this will require ';' terminated statements.
-		l, err := liner.Prompt("> ")
+		if len(stmt) == 0 {
+			l, err = liner.Prompt(fullPrompt)
+		} else {
+			l, err = liner.Prompt(continuePrompt)
+		}
 		if err != nil {
 			if err != io.EOF {
-				fmt.Fprintf(os.Stderr, "Input error: %s\n", err)
+				fmt.Fprintf(osStderr, "Input error: %s\n", err)
 			}
 			break
 		}
-		if len(l) == 0 {
+
+		stmt = append(stmt, l)
+
+		// See if we have a semicolon at the end of the line (ignoring
+		// trailing whitespace).
+		if !strings.HasSuffix(strings.TrimSpace(l), ";") {
+			// No semicolon: read some more.
 			continue
 		}
-		liner.AppendHistory(l)
 
-		if err := runQuery(db, l); err != nil {
-			fmt.Printf("Error: %s\n", err)
+		// We always insert a newline when continuing statements.
+		// However, it causes problems with lines in the middle of:
+		// - qualified names (eg: database.<newline>table)
+		// - quoted strings (eg: 'foo<newline>bar')
+		// This also makes the history replay horrible.
+		// mysql replaces newlines with spaces in the history, which works
+		// because string concatenation with newlines can also be done with spaces.
+		// postgres keeps the line intact in the history.
+		fullStmt := strings.Join(stmt, "\n")
+		liner.AppendHistory(fullStmt)
+
+		if err := runQuery(db, fullStmt); err != nil {
+			fmt.Fprintf(osStdout, "Error: %s\n", err)
 		}
+
+		// Clear the saved statement.
+		stmt = stmt[:0]
 	}
 }
