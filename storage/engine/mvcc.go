@@ -1409,9 +1409,6 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []proto.GCRequest_GCK
 // any of these ranges are considered invalid.
 //
 //   - \x00\x00meta1 < SplitKey < \x00\x00meta2
-//   - \x00acct < SplitKey < \x00accu
-//   - \x00perm < SplitKey < \x00pern
-//   - \x00user < SplitKey < \x00user
 //   - \x00zone < SplitKey < \x00zonf
 // And split key equal to Meta2KeyMax (\x00\x00meta2\xff\xff) is
 // considered invalid.
@@ -1430,10 +1427,6 @@ var illegalSplitKeyRanges = []struct {
 	{
 		start: MVCCEncodeKey(proto.KeyMin),
 		end:   MVCCEncodeKey(keys.Meta2Prefix),
-	},
-	{
-		start: MVCCEncodeKey(keys.ConfigAccountingPrefix),
-		end:   MVCCEncodeKey(keys.ConfigAccountingPrefix.PrefixEnd()),
 	},
 	{
 		start: MVCCEncodeKey(keys.ConfigZonePrefix),

@@ -143,9 +143,6 @@ var (
 	// MetaMax is the end of the range of addressing keys.
 	MetaMax = MakeKey(SystemPrefix, proto.Key("\x01"))
 
-	// ConfigAccountingPrefix specifies the key prefix for accounting
-	// configurations. The suffix is the affected key prefix.
-	ConfigAccountingPrefix = MakeKey(SystemPrefix, proto.Key("acct"))
 	// ConfigZonePrefix specifies the key prefix for zone
 	// configurations. The suffix is the affected key prefix.
 	ConfigZonePrefix = MakeKey(SystemPrefix, proto.Key("zone"))

@@ -37,7 +37,7 @@ const (
 )
 
 // splitQueue manages a queue of ranges slated to be split due to size
-// or along intersecting accounting or zone config boundaries.
+// or along intersecting zone config boundaries.
 type splitQueue struct {
 	*baseQueue
 	db     *client.DB
@@ -59,11 +59,10 @@ func (sq *splitQueue) needsLeaderLease() bool {
 }
 
 // shouldQueue determines whether a range should be queued for
-// splitting. This is true if the range is intersected by any
-// accounting or zone config prefix or if the range's size in
-// bytes exceeds the limit for the zone.
+// splitting. This is true if the range is intersected by a zone config
+// prefix or if the range's size in bytes exceeds the limit for the zone.
 func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bool, priority float64) {
-	// Set priority to 1 in the event the range is split by acct or zone configs.
+	// Set priority to 1 in the event the range is split by zone configs.
 	if len(computeSplitKeys(sq.gossip, rng)) > 0 {
 		priority = 1
 		shouldQ = true
@@ -85,7 +84,7 @@ func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bo
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(now proto.Timestamp, rng *Replica) error {
-	// First handle case of splitting due to accounting and zone config maps.
+	// First handle case of splitting due to zone config maps.
 	splitKeys := computeSplitKeys(sq.gossip, rng)
 	if len(splitKeys) > 0 {
 		log.Infof("splitting %s at keys %v", rng, splitKeys)
@@ -120,34 +119,32 @@ func (sq *splitQueue) timer() time.Duration {
 
 // computeSplitKeys returns an array of keys at which the supplied
 // range should be split, as computed by intersecting the range with
-// accounting and zone config map boundaries.
+// zone config map boundaries.
 func computeSplitKeys(g *gossip.Gossip, rng *Replica) []proto.Key {
 	// Now split the range into pieces by intersecting it with the
 	// boundaries of the config map.
 	splitKeys := proto.KeySlice{}
-	for _, configKey := range []string{gossip.KeyConfigAccounting, gossip.KeyConfigZone} {
-		info, err := g.GetInfo(configKey)
-		if err != nil {
-			log.Errorf("unable to fetch %s config from gossip: %s", configKey, err)
-			continue
-		}
-		configMap := info.(config.PrefixConfigMap)
-		desc := rng.Desc()
-		splits, err := configMap.SplitRangeByPrefixes(desc.StartKey, desc.EndKey)
-		if err != nil {
-			log.Errorf("unable to split %s by prefix map %s", rng, configMap)
-			continue
-		}
-		// Gather new splits.
-		for _, split := range splits {
-			if split.End.Less(desc.EndKey) {
-				splitKeys = append(splitKeys, split.End)
-			}
+	info, err := g.GetInfo(gossip.KeyConfigZone)
+	if err != nil {
+		log.Errorf("unable to fetch %s config from gossip: %s", gossip.KeyConfigZone, err)
+		return nil
+	}
+	configMap := info.(config.PrefixConfigMap)
+	desc := rng.Desc()
+	splits, err := configMap.SplitRangeByPrefixes(desc.StartKey, desc.EndKey)
+	if err != nil {
+		log.Errorf("unable to split %s by prefix map %s", rng, configMap)
+		return nil
+	}
+	// Gather new splits.
+	for _, split := range splits {
+		if split.End.Less(desc.EndKey) {
+			splitKeys = append(splitKeys, split.End)
 		}
 	}
 
 	// Sort and unique the combined split keys from intersections with
-	// both the accounting and zone config maps.
+	// the zone config maps.
 	sort.Sort(splitKeys)
 	var unique []proto.Key
 	for i, key := range splitKeys {

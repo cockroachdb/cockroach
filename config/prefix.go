@@ -83,8 +83,8 @@ func (p PrefixConfigMap) Less(i, j int) bool {
 //
 // These additional entries allow for simple lookups by prefix and
 // provide a way to split a range by prefixes which affect it. This
-// last is necessary for accounting and zone configs; ranges must not
-// span accounting or zone config boundaries.
+// last is necessary for zone configs; ranges must not
+// span zone config boundaries.
 //
 // Similarly, if the map contains successive prefix entries:
 //

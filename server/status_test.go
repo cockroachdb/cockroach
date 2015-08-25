@@ -174,7 +174,6 @@ func TestStatusGossipJson(t *testing.T) {
 
 	type infos struct {
 		Infos struct {
-			Accounting *prefixedInfo        `json:"accounting"`
 			FirstRange *rangeDescriptorInfo `json:"first-range"`
 			Zones      *prefixedInfo        `json:"zones"`
 			ClusterID  *keyValueStringPair  `json:"cluster-id"`
@@ -213,9 +212,6 @@ func TestStatusGossipJson(t *testing.T) {
 		data := infos{}
 		if err = json.Unmarshal(body, &data); err != nil {
 			t.Fatal(err)
-		}
-		if data.Infos.Accounting == nil {
-			t.Errorf("no accounting info returned: %v,", body)
 		}
 		if data.Infos.FirstRange == nil {
 			t.Errorf("no first-range info returned: %v", body)

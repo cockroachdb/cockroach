@@ -77,7 +77,6 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		keys.Meta1Prefix,
 		keys.MakeKey(keys.Meta1Prefix, []byte("a")),
 		keys.MakeKey(keys.Meta1Prefix, proto.KeyMax),
-		keys.MakeKey(keys.ConfigAccountingPrefix, []byte("a")),
 		keys.MakeKey(keys.ConfigZonePrefix, []byte("a")),
 	} {
 		args := adminSplitArgs(proto.KeyMin, key, 1, store.StoreID())
@@ -104,11 +103,6 @@ func TestStoreRangeSplitBetweenConfigPrefix(t *testing.T) {
 	}
 
 	// Update configs to trigger gossip in both of the ranges.
-	acctConfig := &config.AcctConfig{}
-	key = keys.MakeKey(keys.ConfigAccountingPrefix, proto.KeyMin)
-	if err = store.DB().Put(key, acctConfig); err != nil {
-		t.Fatal(err)
-	}
 	zoneConfig := &config.ZoneConfig{}
 	key = keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin)
 	if err = store.DB().Put(key, zoneConfig); err != nil {
@@ -481,25 +475,19 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	})
 }
 
-// TestStoreRangeSplitOnConfigs verifies that config changes to both
-// accounting and zone configs cause ranges to be split along prefix
-// boundaries.
+// TestStoreRangeSplitOnConfigs verifies that config changes to
+// zone configs cause ranges to be split along prefix boundaries.
 func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	acctConfig := &config.AcctConfig{}
 	zoneConfig := &config.ZoneConfig{}
 
-	// Write zone configs for db3 & db4.
+	// Write zone configs for db1/2/3/4.
 	b := &client.Batch{}
-	for _, k := range []string{"db4", "db3"} {
+	for _, k := range []string{"db4", "db3", "db2", "db1"} {
 		b.Put(keys.MakeKey(keys.ConfigZonePrefix, proto.Key(k)), zoneConfig)
-	}
-	// Write accounting configs for db1 & db2.
-	for _, k := range []string{"db2", "db1"} {
-		b.Put(keys.MakeKey(keys.ConfigAccountingPrefix, proto.Key(k)), acctConfig)
 	}
 	if err := store.DB().Run(b); err != nil {
 		t.Fatal(err)
@@ -574,11 +562,11 @@ func TestStoreRangeManySplits(t *testing.T) {
 	}
 
 	// Then start the second round of splits.
-	acctConfig := &config.AcctConfig{}
+	zoneConfig = &config.ZoneConfig{}
 	b = &client.Batch{}
 	for i := 0; i < numDbs; i++ {
 		key := proto.Key(fmt.Sprintf("db%02d/table", 20-i))
-		b.Put(keys.MakeKey(keys.ConfigZonePrefix, key), acctConfig)
+		b.Put(keys.MakeKey(keys.ConfigZonePrefix, key), zoneConfig)
 	}
 	if err := store.DB().Run(b); err != nil {
 		t.Fatal(err)

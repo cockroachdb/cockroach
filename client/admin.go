@@ -33,8 +33,6 @@ import (
 const (
 	// Types of admin config to manipulate.
 
-	// Accounting expects config.AcctConfig
-	Accounting = "acct"
 	// Quit only handles Get requests.
 	Quit = "quit"
 	// Zone expects config.ZoneConfig.
