@@ -42,7 +42,7 @@ func TestAllocateIDs(t *testing.T) {
 			{Name: "d", ColumnNames: []string{"b", "a"}},
 			{Name: "e", ColumnNames: []string{"b"}},
 		},
-		Privileges: sql.NewDefaultDatabasePrivilegeDescriptor(),
+		Privileges: sql.NewDefaultPrivilegeDescriptor(),
 	}
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
@@ -63,7 +63,7 @@ func TestAllocateIDs(t *testing.T) {
 			{ID: 3, Name: "e", ColumnIDs: []sql.ColumnID{2}, ColumnNames: []string{"b"},
 				ImplicitColumnIDs: []sql.ColumnID{1}},
 		},
-		Privileges:   sql.NewDefaultDatabasePrivilegeDescriptor(),
+		Privileges:   sql.NewDefaultPrivilegeDescriptor(),
 		NextColumnID: 4,
 		NextIndexID:  4,
 	}

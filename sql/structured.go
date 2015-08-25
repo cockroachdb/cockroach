@@ -256,7 +256,7 @@ func (desc *TableDescriptor) Validate() error {
 		}
 	}
 	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(IsSystemID(desc.GetID()))
+	return desc.Privileges.Validate(desc.GetID())
 }
 
 // FindColumnByName finds the column with specified name.
@@ -337,5 +337,5 @@ func (desc *DatabaseDescriptor) Validate() error {
 		return fmt.Errorf("invalid database ID 0")
 	}
 	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(IsSystemID(desc.GetID()))
+	return desc.Privileges.Validate(desc.GetID())
 }

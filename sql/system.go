@@ -22,7 +22,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 )
 
 const (
@@ -34,12 +36,10 @@ const (
 	RootNamespaceID ID = 0
 
 	// System IDs should remain <= MaxReservedDescID.
-	// systemDatabaseID is the ID of the system database.
-	systemDatabaseID ID = 1
-	// namespaceTableID is the ID of the namespace table.
-	namespaceTableID ID = 2
-	// descriptorTableID is the ID of the descriptor table.
+	systemDatabaseID  ID = 1
+	namespaceTableID  ID = 2
 	descriptorTableID ID = 3
+	usersTableID      ID = 4
 
 	// sql CREATE commands and full schema for each system table.
 	// TODO(marc): wouldn't it be better to use a pre-parsed version?
@@ -56,14 +56,22 @@ CREATE TABLE system.descriptor (
   "id"   INT PRIMARY KEY,
   "desc" BLOB
 );`
+
+	usersTableSchema = `
+CREATE TABLE system.users (
+  "username"       CHAR PRIMARY KEY,
+  "hashedPassword" BLOB
+);`
 )
 
 var (
 	// SystemDB is the descriptor for the system database.
 	SystemDB = DatabaseDescriptor{
-		Name:       "system",
-		ID:         systemDatabaseID,
-		Privileges: NewSystemObjectPrivilegeDescriptor(),
+		Name: "system",
+		ID:   systemDatabaseID,
+		// Assign max privileges to root user.
+		Privileges: NewPrivilegeDescriptor(security.RootUser,
+			SystemAllowedPrivileges[systemDatabaseID]),
 	}
 
 	// NamespaceTable is the descriptor for the namespace table.
@@ -71,6 +79,20 @@ var (
 
 	// DescriptorTable is the descriptor for the descriptor table.
 	DescriptorTable = createSystemTable(descriptorTableID, descriptorTableSchema)
+
+	// UsersTable is the descriptor for the users table.
+	UsersTable = createSystemTable(usersTableID, usersTableSchema)
+
+	// SystemAllowedPrivileges describes the privileges allowed for each
+	// system object. No user may have more than those privileges, and
+	// the root user must have exactly those privileges.
+	// CREATE|DROP|ALL should always be denied.
+	SystemAllowedPrivileges = map[ID]privilege.List{
+		systemDatabaseID:  privilege.ReadData,
+		namespaceTableID:  privilege.ReadData,
+		descriptorTableID: privilege.ReadData,
+		usersTableID:      privilege.ReadWriteData,
+	}
 )
 
 func createSystemTable(id ID, cmd string) TableDescriptor {
@@ -84,7 +106,10 @@ func createSystemTable(id ID, cmd string) TableDescriptor {
 		log.Fatal(err)
 	}
 
-	desc.Privileges = SystemDB.Privileges
+	// Assign max privileges to root user.
+	desc.Privileges = NewPrivilegeDescriptor(security.RootUser,
+		SystemAllowedPrivileges[id])
+
 	desc.ID = id
 	if err := desc.AllocateIDs(); err != nil {
 		log.Fatal(err)
@@ -103,6 +128,7 @@ func GetInitialSystemValues() []proto.KeyValue {
 		{RootNamespaceID, &SystemDB},
 		{SystemDB.ID, &NamespaceTable},
 		{SystemDB.ID, &DescriptorTable},
+		{SystemDB.ID, &UsersTable},
 	}
 
 	numEntries := 1 + len(systemData)*2

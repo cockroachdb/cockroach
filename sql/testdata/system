@@ -9,6 +9,7 @@ SHOW TABLES FROM system
 ----
 descriptor
 namespace
+users
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM system.namespace
@@ -17,6 +18,7 @@ EXPLAIN (DEBUG) SELECT * FROM system.namespace
 1 /namespace/primary/0/'test'/id       1000 true
 2 /namespace/primary/1/'descriptor'/id 3    true
 3 /namespace/primary/1/'namespace'/id  2    true
+4 /namespace/primary/1/'users'/id      4    true
 
 query ITI
 SELECT * FROM system.namespace
@@ -25,6 +27,7 @@ SELECT * FROM system.namespace
 0 test       1000
 1 descriptor 3
 1 namespace  2
+1 users      4
 
 query I
 SELECT id FROM system.descriptor
@@ -32,6 +35,7 @@ SELECT id FROM system.descriptor
 1
 2
 3
+4
 1000
 
 query TTT
@@ -48,6 +52,11 @@ query TTT
 SHOW GRANTS ON system.descriptor
 ----
 descriptor root GRANT,SELECT
+
+query TTT
+SHOW GRANTS ON system.users
+----
+users root DELETE,GRANT,INSERT,SELECT,UPDATE
 
 # Non-root users can have privileges on system objects, but limited to GRANT, SELECT.
 statement error user testuser must not have ALL privileges on system objects
