@@ -170,8 +170,23 @@ func (t *logicTest) close() {
 	t.db = nil
 }
 
-// setUser sets the DB client to the specified user, creating it if needed.
+// setUser sets the DB client to the specified user.
 func (t *logicTest) setUser(user string) {
+	if t.db != nil {
+		var dbName string
+
+		if err := t.db.QueryRow("SHOW DATABASE").Scan(&dbName); err != nil {
+			t.Fatal(err)
+		}
+
+		defer func() {
+			// Propagate the DATABASE setting to the newly-live connection.
+			if _, err := t.db.Exec(fmt.Sprintf("SET DATABASE = %s", dbName)); err != nil {
+				t.Fatal(err)
+			}
+		}()
+	}
+
 	if t.clients == nil {
 		t.clients = map[string]*sql.DB{}
 	}

@@ -44,9 +44,6 @@ id name  species
 
 user testuser
 
-statement ok
-set database to test
-
 statement error user testuser does not have CREATE privilege on table users
 ALTER TABLE users RENAME COLUMN name TO username
 

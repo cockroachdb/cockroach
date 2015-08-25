@@ -15,9 +15,6 @@ EXPLAIN (DEBUG) SELECT * FROM t
 
 user testuser
 
-statement ok
-set database to test
-
 statement error user testuser does not have CREATE privilege on table t
 CREATE INDEX foo ON t (b)
 

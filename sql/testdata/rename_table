@@ -70,9 +70,6 @@ ALTER TABLE t RENAME TO new_kv
 
 user testuser
 
-statement ok
-set database to test
-
 statement error user testuser does not have CREATE privilege on database test
 ALTER TABLE test.t RENAME TO t2
 
