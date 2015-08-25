@@ -41,7 +41,7 @@ var useTransaction = flag.Bool("use-transaction", true, "Turn off to disable tra
 var firstAccount = flag.Int("first-account", 0, "First account in the account range.")
 var numAccounts = flag.Int("num-accounts", 1000, "Number of accounts in the account range.")
 
-var numParallelTransfers = flag.Int("num-parallel-transfers", 50, "Number of parallel transfers.")
+var numParallelTransfers = flag.Int("num-parallel-transfers", 5, "Number of parallel transfers.")
 
 // Bank stores all the bank related state.
 type Bank struct {
@@ -206,18 +206,8 @@ func (bank *Bank) initBankAccounts(cash int64) int64 {
 }
 
 func (bank *Bank) periodicallyCheckBalances(expTotalCash int64) {
-	var lastNumTransfers int32
-	lastNow := time.Now()
-
 	// Wake up periodically to verify the balance and post an update.
 	for range time.NewTicker(time.Second).C {
-		now := time.Now()
-		elapsed := now.Sub(lastNow)
-		numTransfers := atomic.LoadInt32(&bank.numTransfers)
-		fmt.Printf("%d transfers were executed at %.1f/second.\n", (numTransfers - lastNumTransfers),
-			float64(numTransfers-lastNumTransfers)/elapsed.Seconds())
-		lastNumTransfers = numTransfers
-		lastNow = now
 		// Check that all the money is accounted for.
 		accounts, totalCash := bank.sumAllAccounts()
 		if totalCash != expTotalCash {
@@ -227,6 +217,26 @@ func (bank *Bank) periodicallyCheckBalances(expTotalCash int64) {
 			log.Fatalf("\nTotal cash in the bank $%d; expected $%d.", totalCash, expTotalCash)
 		}
 		fmt.Printf("The bank is in good order.\n")
+	}
+}
+
+func (bank *Bank) periodicallyReportStats() {
+	var lastNumTransfers int32
+	lastNow := time.Now()
+
+	// Wake up periodically to verify the balance and post an update.
+	for range time.NewTicker(time.Second).C {
+		now := time.Now()
+		elapsed := now.Sub(lastNow)
+		numTransfers := atomic.LoadInt32(&bank.numTransfers)
+		newTransfers := numTransfers - lastNumTransfers
+		if newTransfers == 0 {
+			log.Errorf("no progress made")
+		}
+		fmt.Printf("%d transfers were executed at %.1f/second.\n", newTransfers,
+			float64(newTransfers)/elapsed.Seconds())
+		lastNumTransfers = numTransfers
+		lastNow = now
 	}
 }
 
@@ -271,5 +281,6 @@ func main() {
 		go bank.continuouslyTransferMoney(initCash / 10)
 	}
 
+	go bank.periodicallyReportStats()
 	bank.periodicallyCheckBalances(totalCash)
 }
