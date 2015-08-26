@@ -25,7 +25,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
@@ -154,7 +153,12 @@ type parameters []driver.Datum
 
 // Arg implements the Args interface
 func (p parameters) Arg(name string) (parser.Datum, bool) {
-	if !unicode.IsDigit(rune(name[0])) {
+	if len(name) == 0 {
+		// This shouldn't happen unless the parser let through an invalid parameter
+		// specification.
+		panic(fmt.Sprintf("invalid empty parameter name"))
+	}
+	if ch := name[0]; ch < '0' || ch > '9' {
 		// TODO(pmattis): Add support for named parameters (vs the numbered
 		// parameter support below).
 		return nil, false
