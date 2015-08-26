@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -56,7 +57,7 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		// TODO(pmattis): orderBy currently uses deep knowledge of the
 		// scanNode. Need to lift that out or make orderBy compatible with
 		// groupNode as well.
-		return nil, fmt.Errorf("TODO(pmattis): unimplemented ORDER BY with GROUP BY/aggregation")
+		return nil, util.Errorf("TODO(pmattis): unimplemented ORDER BY with GROUP BY/aggregation")
 	}
 	sort, err := p.orderBy(n, scan)
 	if err != nil {

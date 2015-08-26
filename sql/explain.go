@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 type explainMode int
@@ -81,7 +82,7 @@ func markDebug(plan planNode, mode explainMode) (planNode, error) {
 		return markDebug(t.plan, mode)
 
 	default:
-		return nil, fmt.Errorf("TODO(pmattis): unimplemented %T", plan)
+		return nil, util.Errorf("TODO(pmattis): unimplemented %T", plan)
 	}
 }
 
