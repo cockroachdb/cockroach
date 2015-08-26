@@ -66,6 +66,8 @@ func TestNormalizeExpr(t *testing.T) {
 		{`b+c<=1+1`, `b + c <= 2`},
 		{`a/2=1`, `a = 2`},
 		{`1=a/2`, `a = 2`},
+		{`a=lower('FOO')`, `a = 'foo'`},
+		{`lower(a)='foo'`, `lower(a) = 'foo'`},
 	}
 	for _, d := range testData {
 		q, err := ParseTraditional("SELECT " + d.expr)
