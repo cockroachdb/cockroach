@@ -145,7 +145,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <selExprs> target_list opt_target_list
 %type <updateExprs> set_clause_list
 %type <updateExpr> set_clause multiple_set_clause
-%type <indirect> indirection opt_indirection
+%type <indirect> indirection
 %type <exprs> ctext_expr_list ctext_row
 %type <empty> reloption_list group_clause
 %type <limit> select_limit opt_select_limit
@@ -891,6 +891,10 @@ var_list:
 var_value:
   opt_boolean_or_string
 | numeric_only
+| PARAM
+  {
+    $$ = ValArg($1)
+  }
 
 iso_level:
   READ UNCOMMITTED {}
@@ -2894,11 +2898,11 @@ c_expr:
     $$ = $1
   }
 | a_expr_const
-| PARAM opt_indirection
+| PARAM
   {
     $$ = ValArg($1)
   }
-| '(' a_expr ')' opt_indirection
+| '(' a_expr ')'
   {
     $$ = &ParenExpr{Expr: $2}
   }
@@ -3352,16 +3356,6 @@ indirection:
     $$ = Indirection{$1}
   }
 | indirection indirection_elem
-  {
-    $$ = append($1, $2)
-  }
-
-opt_indirection:
-  /* EMPTY */
-  {
-    $$ = nil
-  }
-| opt_indirection indirection_elem
   {
     $$ = append($1, $2)
   }

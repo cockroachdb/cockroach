@@ -181,7 +181,7 @@ func (t *logicTest) setUser(user string) {
 
 		defer func() {
 			// Propagate the DATABASE setting to the newly-live connection.
-			if _, err := t.db.Exec(fmt.Sprintf("SET DATABASE = %s", dbName)); err != nil {
+			if _, err := t.db.Exec("SET DATABASE = $1", dbName); err != nil {
 				t.Fatal(err)
 			}
 		}()

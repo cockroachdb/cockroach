@@ -228,6 +228,10 @@ func WalkStmt(v Visitor, stmt Statement) {
 				stmt.Limit.Count = WalkExpr(v, stmt.Limit.Count)
 			}
 		}
+	case *Set:
+		for i, expr := range stmt.Values {
+			stmt.Values[i] = WalkExpr(v, expr)
+		}
 	case *Update:
 		for i, expr := range stmt.Exprs {
 			stmt.Exprs[i].Expr = WalkExpr(v, expr.Expr)
