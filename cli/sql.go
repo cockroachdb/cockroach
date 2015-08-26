@@ -112,7 +112,7 @@ func runTerm(cmd *cobra.Command, args []string) {
 		liner.AppendHistory(fullStmt)
 
 		if err := runQuery(db, fullStmt); err != nil {
-			fmt.Fprintf(osStdout, "Error: %s\n", err)
+			fmt.Fprintln(osStdout, err)
 		}
 
 		// Clear the saved statement.
