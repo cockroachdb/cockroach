@@ -18,12 +18,17 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
+	"regexp"
 	"strings"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -352,4 +357,86 @@ func Example_max_results() {
 	// 2 result(s)
 	// quit
 	// node drained and shutdown: ok
+}
+
+// TestFlagUsage is a basic test to make sure the fragile
+// help template does not break.
+func TestFlagUsage(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	// Override os.Stdout with our own.
+	old := os.Stdout
+	defer func() {
+		os.Stdout = old
+	}()
+
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	done := make(chan struct{})
+	var buf bytes.Buffer
+	// copy the output in a separate goroutine so printing can't block indefinitely.
+	go func() {
+		// Copy reads 'r' until EOF is reached.
+		_, _ = io.Copy(&buf, r)
+		close(done)
+	}()
+
+	if err := Run([]string{"help"}); err != nil {
+		fmt.Println(err)
+	}
+
+	// back to normal state
+	w.Close()
+	<-done
+
+	// Filter out all test flags.
+	testFlagRE := regexp.MustCompile(`--test\.`)
+	lines := strings.Split(buf.String(), "\n")
+	final := []string{}
+	for _, l := range lines {
+		if testFlagRE.MatchString(l) {
+			continue
+		}
+		final = append(final, l)
+	}
+	got := strings.Join(final, "\n")
+	expected := `Usage:
+  cockroach [command]
+
+Available Commands:
+  init        init new Cockroach cluster
+  start       start a node by joining the gossip network
+  cert        create ca, node, and client certs
+  exterminate destroy all data held by the node
+  quit        drain and shutdown node
+
+  log         make log files human-readable
+
+  sql         open a sql shell
+  kv          get, put, conditional put, increment, delete, scan, and reverse scan key/value pairs
+  user        get, set, list and remove users
+  range       list, split and merge ranges
+  zone        get, set, list and remove zones
+
+  version     output version information
+  help        Help about any command
+
+Flags:
+      --alsologtostderr=false: log to standard error as well as files
+      --color="auto": colorize standard error output according to severity
+  -h, --help[=false]: help for cockroach
+      --log-backtrace-at=:0: when logging hits line file:N, emit a stack trace
+      --log-dir="": if non-empty, write log files in this directory
+      --logtostderr=true: log to standard error instead of files
+      --verbosity=0: log level for V logs
+      --vmodule=: comma-separated list of file=N settings for file-filtered logging
+
+Use "cockroach help [command]" for more information about a command.
+
+`
+
+	if got != expected {
+		t.Errorf("got:\n%s\n----\nexpected:\n%s", got, expected)
+	}
 }

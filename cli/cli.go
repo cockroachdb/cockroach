@@ -85,7 +85,7 @@ func init() {
 	// shown unnecessarily and it doesn't place a newline before the
 	// "Flags:" section if there are no subcommands. We should really
 	// get these tweaks merged upstream.
-	cockroachCmd.SetUsageTemplate(`{{ $cmd := . }}Usage: {{if .Runnable}}
+	cockroachCmd.SetUsageTemplate(`{{ $cmd := . }}Usage:{{if .Runnable}}
   {{.UseLine}}{{if .HasFlags}} [flags]{{end}}{{end}}{{if .HasSubCommands}}
   {{ .CommandPath}} [command]{{end}}{{if gt .Aliases 0}}
 
@@ -94,9 +94,9 @@ Aliases:
 {{end}}{{if .HasExample}}
 
 Examples:
-{{ .Example }}{{end}}{{ if .HasRunnableSubCommands}}
+{{ .Example }}{{end}}{{ if .HasNonHelpSubCommands}}
 
-Available Commands: {{range .Commands}}{{if and (.Runnable) (not .Deprecated)}}
+Available Commands:{{range .Commands}}{{if and (.Runnable) (not .Deprecated)}}
   {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}
 {{ if .HasLocalFlags}}
 Flags:
