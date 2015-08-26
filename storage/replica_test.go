@@ -31,6 +31,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -118,7 +119,7 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.stopper = stop.NewStopper()
 	}
 	if tc.gossip == nil {
-		rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), tc.stopper)
+		rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), tc.stopper)
 		tc.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	}
 	if tc.manualClock == nil {
@@ -146,7 +147,7 @@ func (tc *testContext) Start(t testing.TB) {
 		// store will be passed to the sender after it is created and bootstrapped.
 		sender := &testSender{}
 		var err error
-		if ctx.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+		if ctx.DB, err = client.Open("//", client.SenderOpt(sender)); err != nil {
 			t.Fatal(err)
 		}
 		tc.store = NewStore(ctx, tc.engine, &proto.NodeDescriptor{NodeID: 1})
@@ -1119,7 +1120,7 @@ func TestRangeCommandQueue(t *testing.T) {
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
 	TestingCommandFilter = func(args proto.Request) error {
-		if args.Header().User == "Foo" {
+		if args.Header().GetUserPriority() == 42 {
 			blockingStart <- struct{}{}
 			<-blockingDone
 		}
@@ -1146,7 +1147,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		cmd1Done := make(chan struct{})
 		go func() {
 			args := readOrWriteArgs(key1, test.cmd1Read, tc.rng.Desc().RangeID, tc.store.StoreID())
-			args.Header().User = "Foo"
+			args.Header().UserPriority = gogoproto.Int32(42)
 
 			_, err := tc.rng.AddCmd(tc.rng.context(), args)
 

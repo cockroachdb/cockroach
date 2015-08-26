@@ -18,35 +18,21 @@
 package testutils
 
 import (
-	"net/http"
-
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
 )
-
-// NewRootTestBaseContext creates a base context for testing.
-// This uses embedded certs and the "root" user (default client user).
-// The "root" user has client certificates only.
-func NewRootTestBaseContext() *base.Context {
-	return newTestBaseContext(security.RootUser)
-}
 
 // NewNodeTestBaseContext creates a base context for testing.
 // This uses embedded certs and the "node" user (default node user).
 // The "node" user has both server and client certificates.
 func NewNodeTestBaseContext() *base.Context {
-	return newTestBaseContext(security.NodeUser)
+	return NewTestBaseContext(security.NodeUser)
 }
 
-func newTestBaseContext(user string) *base.Context {
+// NewTestBaseContext creates a secure base context for 'user'.
+func NewTestBaseContext(user string) *base.Context {
 	return &base.Context{
 		Certs: security.EmbeddedCertsDir,
 		User:  user,
 	}
-}
-
-// NewTestHTTPClient creates a HTTP client on the fly using a test context.
-// Useful when contexts don't need to be reused.
-func NewTestHTTPClient() (*http.Client, error) {
-	return NewRootTestBaseContext().GetHTTPClient()
 }

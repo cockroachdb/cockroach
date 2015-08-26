@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -195,19 +194,6 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	return ds
 }
 
-// verifyPermissions verifies that the requesting user (header.User)
-// is allowed to perform the requested operations.
-// All KV endpoints are restricted to system users, with 'root'
-// being the value of arg.User.
-func (ds *DistSender) verifyPermissions(args proto.Request) error {
-	// The root user can always proceed.
-	header := args.Header()
-	if header.User != security.RootUser {
-		return util.Errorf("user %q cannot invoke %s", header.User, args.Method())
-	}
-	return nil
-}
-
 // lookupOptions capture additional options to pass to RangeLookup.
 type lookupOptions struct {
 	ignoreIntents  bool
@@ -228,7 +214,6 @@ func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
 	args := &proto.RangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:             key,
-			User:            security.RootUser,
 			ReadConsistency: proto.INCONSISTENT,
 		},
 		MaxRanges:     ds.rangeLookupMaxRanges,
@@ -543,12 +528,6 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, args proto.Request, desc 
 // must not be used concurrently until Send has returned.
 func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 	args := call.Args
-
-	// Verify permissions.
-	if err := ds.verifyPermissions(call.Args); err != nil {
-		call.Reply.Header().SetGoError(err)
-		return
-	}
 
 	trace := tracer.FromCtx(ctx)
 

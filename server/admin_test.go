@@ -35,7 +35,8 @@ import (
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
 func getText(url string) ([]byte, error) {
-	client, err := testutils.NewTestHTTPClient()
+	// There are no particular permissions on admin endpoints, TestUser is fine.
+	client, err := testutils.NewTestBaseContext(TestUser).GetHTTPClient()
 	if err != nil {
 		return nil, err
 	}

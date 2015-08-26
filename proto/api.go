@@ -116,6 +116,13 @@ type Combinable interface {
 	Combine(Response)
 }
 
+// GetUser implements UserRequest.
+// KV messages are always sent by the node user.
+func (rh *RequestHeader) GetUser() string {
+	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
+	return "node"
+}
+
 // GetOrCreateCmdID returns the request header's command ID if available.
 // Otherwise, creates a new ClientCmdID, initialized with current time
 // and random salt.

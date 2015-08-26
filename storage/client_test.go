@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
@@ -37,13 +38,10 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-var rootTestBaseContext = testutils.NewRootTestBaseContext()
 
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for closing the store on exit.
@@ -59,7 +57,7 @@ func createTestStore(t *testing.T) (*storage.Store, *stop.Stopper) {
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
 	bootstrap bool, context *storage.StoreContext) (*storage.Store, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
+	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	if context == nil {
 		// make a copy
 		ctx := storage.TestStoreContext
@@ -70,7 +68,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sender := kv.NewTxnCoordSender(lSender, clock, false, nil, stopper)
 	context.Clock = clock
 	var err error
-	if context.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+	if context.DB, err = client.Open("//", client.SenderOpt(sender)); err != nil {
 		t.Fatal(err)
 	}
 	context.Transport = multiraft.NewLocalRPCTransport(stopper)
@@ -136,7 +134,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.clock = hlc.NewClock(m.manualClock.UnixNano)
 	}
 	if m.gossip == nil {
-		rpcContext := rpc.NewContext(rootTestBaseContext, m.clock, nil)
+		rpcContext := rpc.NewContext(&base.Context{}, m.clock, nil)
 		m.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	}
 	if m.clientStopper == nil {
@@ -152,7 +150,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.db == nil {
 		sender := kv.NewTxnCoordSender(m.senders[0], m.clock, false, nil, m.clientStopper)
 		var err error
-		if m.db, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+		if m.db, err = client.Open("//", client.SenderOpt(sender)); err != nil {
 			t.Fatal(err)
 		}
 	}

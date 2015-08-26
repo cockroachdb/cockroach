@@ -30,7 +30,7 @@ import (
 
 // makeDBClient creates a DB client for node 'i' using the cluster certs dir.
 func makeDBClient(t *testing.T, cluster *localcluster.Cluster, node int) *client.DB {
-	return makeDBClientForUser(t, cluster, security.RootUser, node)
+	return makeDBClientForUser(t, cluster, security.NodeUser, node)
 }
 
 // makeDBClientForUser creates a DB client for node 'i' and user 'user'.

@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
@@ -504,8 +503,8 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 		// without starting a new call, which is hard to trace. Plus, the
 		// below depends on default configuration.
 		tmpDB, err := client.Open(
-			fmt.Sprintf("//%s?priority=%d",
-				call.Args.Header().User, call.Args.Header().GetUserPriority()),
+			fmt.Sprintf("//?priority=%d",
+				call.Args.Header().GetUserPriority()),
 			client.SenderOpt(tc))
 		if err != nil {
 			log.Warning(err)
@@ -562,13 +561,9 @@ func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 	// Disallow transaction, user and priority on individual calls, unless
 	// equal.
 	aHeader := args.Header()
-	if aHeader.User != "" && aHeader.User != bHeader.User {
-		return util.Error("conflicting user on call in batch")
-	}
 	if aPrio := aHeader.GetUserPriority(); aPrio != proto.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
 		return util.Error("conflicting user priority on call in batch")
 	}
-	aHeader.User = bHeader.User
 	aHeader.UserPriority = bHeader.UserPriority
 	// Only allow individual transactions on the requests of a batch if
 	// - the batch is non-transactional,
@@ -795,9 +790,8 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 
 	request := &proto.HeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:  txn.Key,
-			User: security.RootUser,
-			Txn:  &txn,
+			Key: txn.Key,
+			Txn: &txn,
 		},
 	}
 

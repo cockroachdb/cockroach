@@ -76,7 +76,7 @@ func (ss *notifyingSender) Send(ctx context.Context, call proto.Call) {
 }
 
 func createTestClient(addr string) *client.DB {
-	return createTestClientFor(addr, security.RootUser)
+	return createTestClientFor(addr, security.NodeUser)
 }
 
 func createTestClientFor(addr, user string) *client.DB {
@@ -90,8 +90,11 @@ func createTestClientFor(addr, user string) *client.DB {
 // createTestNotifyClient creates a new client which connects using an HTTP
 // sender to the server at addr. It contains a waitgroup to allow waiting.
 func createTestNotifyClient(addr string, priority int) (*client.DB, *notifyingSender) {
-	db, err := client.Open(fmt.Sprintf("https://root@%s?certs=%s&priority=%d",
-		addr, security.EmbeddedCertsDir, priority))
+	db, err := client.Open(fmt.Sprintf("https://%s@%s?certs=%s&priority=%d",
+		security.NodeUser,
+		addr,
+		security.EmbeddedCertsDir,
+		priority))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -554,34 +557,35 @@ func TestConcurrentIncrements(t *testing.T) {
 }
 
 // TestClientPermissions verifies permission enforcement.
-// Only root and node users are now allowed to issue kv commands.
 func TestClientPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	test := createTestClientFor(s.ServingAddr(), testUser)
-	root := createTestClientFor(s.ServingAddr(), security.RootUser)
+	// NodeUser certs are required for all KV operations.
+	// RootUser has no KV privileges whatsoever.
+	nodeClient := createTestClientFor(s.ServingAddr(), security.NodeUser)
+	rootClient := createTestClientFor(s.ServingAddr(), security.RootUser)
 
 	testCases := []struct {
 		path    string
 		client  *client.DB
 		success bool
 	}{
-		{"foo", test, false},
-		{"foo", root, true},
+		{"foo", rootClient, false},
+		{"foo", nodeClient, true},
 
-		{testUser + "/foo", test, false},
-		{testUser + "/foo", root, true},
+		{testUser + "/foo", rootClient, false},
+		{testUser + "/foo", nodeClient, true},
 
-		{testUser + "foo", test, false},
-		{testUser + "foo", root, true},
+		{testUser + "foo", rootClient, false},
+		{testUser + "foo", nodeClient, true},
 
-		{testUser, test, false},
-		{testUser, root, true},
+		{testUser, rootClient, false},
+		{testUser, nodeClient, true},
 
-		{"unknown/foo", test, false},
-		{"unknown/foo", root, true},
+		{"unknown/foo", rootClient, false},
+		{"unknown/foo", nodeClient, true},
 	}
 
 	value := []byte("value")
@@ -628,7 +632,8 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 		scheme = "https"
 	}
 
-	db, err := client.Open(scheme + "://root@" + s.ServingAddr() + "?certs=" + s.Ctx.Certs)
+	db, err := client.Open(fmt.Sprintf("%s://%s@%s?certs=%s",
+		scheme, security.NodeUser, s.ServingAddr(), s.Ctx.Certs))
 	if err != nil {
 		b.Fatal(err)
 	}

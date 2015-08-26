@@ -190,7 +190,10 @@ func TestServerNodeEventFeed(t *testing.T) {
 	ner := nodeEventReader{}
 	ner.readEvents(feed)
 
-	db, err := client.Open("https://root@" + s.ServingAddr() + "?certs=" + security.EmbeddedCertsDir)
+	db, err := client.Open(fmt.Sprintf("https://%s@%s?certs=%s",
+		security.NodeUser,
+		s.ServingAddr(),
+		security.EmbeddedCertsDir))
 	if err != nil {
 		t.Fatal(err)
 	}

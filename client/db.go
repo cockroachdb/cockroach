@@ -147,9 +147,6 @@ func (r Result) String() string {
 type DB struct {
 	Sender Sender
 
-	// user is the default user to set on API calls. If User is set to
-	// non-empty in call arguments, this value is ignored.
-	user string
 	// userPriority is the default user priority to set on API calls. If
 	// userPriority is set non-zero in call arguments, this value is
 	// ignored.
@@ -215,7 +212,6 @@ func Open(addr string, opts ...Option) (*DB, error) {
 
 	db := &DB{
 		Sender:          sender,
-		user:            ctx.User,
 		txnRetryOptions: DefaultTxnRetryOptions,
 	}
 
@@ -439,9 +435,6 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 
 	if len(calls) == 1 {
 		c := calls[0]
-		if c.Args.Header().User == "" {
-			c.Args.Header().User = db.user
-		}
 		if c.Args.Header().UserPriority == nil && db.userPriority != 0 {
 			c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
 		}

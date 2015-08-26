@@ -42,7 +42,6 @@ import (
 )
 
 var testContext = NewTestContext()
-var rootTestBaseContext = testutils.NewRootTestBaseContext()
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 
 // TestInitEngine tests whether the data directory string is parsed correctly.
@@ -306,7 +305,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		},
 		Reply: &proto.GetResponse{},
 	}
-	get.Args.Header().User = security.RootUser
 	get.Args.Header().EndKey = writes[len(writes)-1]
 	tds.Send(context.Background(), get)
 	if err := get.Reply.Header().GoError(); err == nil {
@@ -315,7 +313,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	var call proto.Call
 	for i, k := range writes {
 		call = proto.PutCall(k, proto.Value{Bytes: k})
-		call.Args.Header().User = security.RootUser
 		tds.Send(context.Background(), call)
 		if err := call.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
@@ -324,7 +321,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		// The Put ts may have been pushed by tsCache,
 		// so make sure we see their values in our Scan.
 		scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
-		scan.Args.Header().User = security.RootUser
 		tds.Send(context.Background(), scan)
 		if err := scan.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
@@ -340,7 +336,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	del := proto.Call{
 		Args: &proto.DeleteRangeRequest{
 			RequestHeader: proto.RequestHeader{
-				User:      security.RootUser,
 				Key:       writes[0],
 				EndKey:    proto.Key(writes[len(writes)-1]).Next(),
 				Timestamp: call.Reply.Header().Timestamp,
@@ -362,7 +357,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	scan := proto.ScanCall(writes[0], writes[len(writes)-1].Next(), 0)
 	scan.Args.Header().Timestamp = del.Reply.Header().Timestamp
-	scan.Args.Header().User = security.RootUser
 	scan.Args.Header().Txn = &proto.Transaction{Name: "MyTxn"}
 	tds.Send(context.Background(), scan)
 	if err := scan.Reply.Header().GoError(); err != nil {
@@ -405,7 +399,6 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		var call proto.Call
 		for _, k := range tc.keys {
 			call = proto.PutCall(k, proto.Value{Bytes: k})
-			call.Args.Header().User = security.RootUser
 			tds.Send(context.Background(), call)
 			if err := call.Reply.Header().GoError(); err != nil {
 				t.Fatal(err)
@@ -419,7 +412,6 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 				scan := proto.ScanCall(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
 					int64(maxResults))
 				scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
-				scan.Args.Header().User = security.RootUser
 				tds.Send(context.Background(), scan)
 				if err := scan.Reply.Header().GoError(); err != nil {
 					t.Fatal(err)
@@ -442,8 +434,12 @@ func TestSQLServer(t *testing.T) {
 	defer s.Stop()
 	// sendURL sends a request to the server and returns a StatusCode
 	sendURL := func(t *testing.T, command string, body []byte) int {
-		url := fmt.Sprintf("%s://root@%s%s%s?certs=test_certs", testContext.RequestScheme(),
-			s.ServingAddr(), driver.Endpoint, command)
+		url := fmt.Sprintf("%s://%s@%s%s%s?certs=test_certs",
+			testContext.RequestScheme(),
+			security.RootUser,
+			s.ServingAddr(),
+			driver.Endpoint,
+			command)
 		httpClient, _ := testContext.GetHTTPClient()
 		req, _ := http.NewRequest("POST", url, bytes.NewReader(body))
 		req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
@@ -456,6 +452,7 @@ func TestSQLServer(t *testing.T) {
 		defer resp.Body.Close()
 		return resp.StatusCode
 	}
+	// Use the sql administrator (root user).
 	body, _ := gogoproto.Marshal(&driver.Request{RequestHeader: driver.RequestHeader{User: security.RootUser}})
 	testCases := []struct {
 		command       string

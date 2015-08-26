@@ -118,13 +118,13 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = stop.NewStopper()
-	rpcContext := rpc.NewContext(testutils.NewRootTestBaseContext(), ltc.Clock, ltc.Stopper)
+	rpcContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), ltc.Clock, ltc.Stopper)
 	ltc.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)
 	ltc.lSender = newRetryableLocalSender(NewLocalSender())
 	ltc.Sender = NewTxnCoordSender(ltc.lSender, ltc.Clock, false, nil, ltc.Stopper)
 	var err error
-	if ltc.DB, err = client.Open("//root@", client.SenderOpt(ltc.Sender)); err != nil {
+	if ltc.DB, err = client.Open("//", client.SenderOpt(ltc.Sender)); err != nil {
 		t.Fatal(err)
 	}
 	transport := multiraft.NewLocalRPCTransport(ltc.Stopper)

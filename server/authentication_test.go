@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
@@ -55,13 +56,6 @@ func doHTTPReq(t *testing.T, client *http.Client, method, url string, body gogop
 	return client.Do(req)
 }
 
-func kvGetForUser(context *base.Context) gogoproto.Message {
-	ret := &proto.GetRequest{}
-	ret.User = context.User
-	ret.Key = proto.Key("/")
-	return ret
-}
-
 func sqlForUser(context *base.Context) gogoproto.Message {
 	ret := &driver.Request{}
 	ret.User = context.User
@@ -75,16 +69,20 @@ func TestSSLEnforcement(t *testing.T) {
 	defer s.Stop()
 
 	// HTTPS with client certs for "root".
-	certsContext := testutils.NewRootTestBaseContext()
+	rootCertsContext := testutils.NewTestBaseContext(security.RootUser)
+	// HTTPS with client certs for "node".
+	nodeCertsContext := testutils.NewNodeTestBaseContext()
 	// HTTPS with client certs for testuser.
-	testCertsContext := testutils.NewRootTestBaseContext()
-	testCertsContext.User = TestUser
-	// HTTPS without client certs.
-	noCertsContext := testutils.NewRootTestBaseContext()
+	testCertsContext := testutils.NewTestBaseContext(TestUser)
+	// HTTPS without client certs. The user does not matter.
+	noCertsContext := testutils.NewTestBaseContext(TestUser)
 	noCertsContext.Certs = ""
 	// Plain http.
-	insecureContext := testutils.NewRootTestBaseContext()
+	insecureContext := testutils.NewTestBaseContext(TestUser)
 	insecureContext.Insecure = true
+
+	kvGet := &proto.GetRequest{}
+	kvGet.Key = proto.Key("/")
 
 	testCases := []struct {
 		method, key string
@@ -94,47 +92,52 @@ func TestSSLEnforcement(t *testing.T) {
 		code        int  // http response code
 	}{
 		// /ui/: basic file server: no auth.
-		{"GET", "/index.html", nil, certsContext, true, http.StatusOK},
+		{"GET", "/index.html", nil, rootCertsContext, true, http.StatusOK},
+		{"GET", "/index.html", nil, nodeCertsContext, true, http.StatusOK},
 		{"GET", "/index.html", nil, testCertsContext, true, http.StatusOK},
 		{"GET", "/index.html", nil, noCertsContext, true, http.StatusOK},
 		{"GET", "/index.html", nil, insecureContext, false, -1},
 
 		// /_admin/: server.adminServer: no auth.
-		{"GET", healthPath, nil, certsContext, true, http.StatusOK},
+		{"GET", healthPath, nil, rootCertsContext, true, http.StatusOK},
+		{"GET", healthPath, nil, nodeCertsContext, true, http.StatusOK},
 		{"GET", healthPath, nil, testCertsContext, true, http.StatusOK},
 		{"GET", healthPath, nil, noCertsContext, true, http.StatusOK},
 		{"GET", healthPath, nil, insecureContext, false, -1},
 
 		// /debug/: server.adminServer: no auth.
-		{"GET", debugEndpoint + "vars", nil, certsContext, true, http.StatusOK},
+		{"GET", debugEndpoint + "vars", nil, rootCertsContext, true, http.StatusOK},
+		{"GET", debugEndpoint + "vars", nil, nodeCertsContext, true, http.StatusOK},
 		{"GET", debugEndpoint + "vars", nil, testCertsContext, true, http.StatusOK},
 		{"GET", debugEndpoint + "vars", nil, noCertsContext, true, http.StatusOK},
 		{"GET", debugEndpoint + "vars", nil, insecureContext, false, -1},
 
 		// /_status/nodes: server.statusServer: no auth.
-		{"GET", statusNodesPrefix, nil, certsContext, true, http.StatusOK},
+		{"GET", statusNodesPrefix, nil, rootCertsContext, true, http.StatusOK},
+		{"GET", statusNodesPrefix, nil, nodeCertsContext, true, http.StatusOK},
 		{"GET", statusNodesPrefix, nil, testCertsContext, true, http.StatusOK},
 		{"GET", statusNodesPrefix, nil, noCertsContext, true, http.StatusOK},
 		{"GET", statusNodesPrefix, nil, insecureContext, false, -1},
 
 		// /ts/: ts.Server: no auth.
-		{"GET", ts.URLPrefix, nil, certsContext, true, http.StatusNotFound},
+		{"GET", ts.URLPrefix, nil, rootCertsContext, true, http.StatusNotFound},
+		{"GET", ts.URLPrefix, nil, nodeCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, testCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, noCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, insecureContext, false, -1},
 
-		// /kv/db/: kv.DBServer. These are proto reqs. The important field is header.User.
-		{"POST", kv.DBPrefix + "Get", kvGetForUser(certsContext), certsContext,
-			true, http.StatusOK},
-		{"POST", kv.DBPrefix + "Get", kvGetForUser(testCertsContext), testCertsContext,
-			true, http.StatusUnauthorized},
-		{"POST", kv.DBPrefix + "Get", kvGetForUser(noCertsContext), noCertsContext,
-			true, http.StatusUnauthorized},
-		{"POST", kv.DBPrefix + "Get", kvGetForUser(insecureContext), insecureContext, false, -1},
+		// /kv/db/: kv.DBServer. These are proto reqs. Node certs required.
+		{"POST", kv.DBPrefix + "Get", kvGet, rootCertsContext, true, http.StatusUnauthorized},
+		{"POST", kv.DBPrefix + "Get", kvGet, nodeCertsContext, true, http.StatusOK},
+		{"POST", kv.DBPrefix + "Get", kvGet, testCertsContext, true, http.StatusUnauthorized},
+		{"POST", kv.DBPrefix + "Get", kvGet, noCertsContext, true, http.StatusUnauthorized},
+		{"POST", kv.DBPrefix + "Get", kvGet, insecureContext, false, -1},
 
 		// /sql/: sql.Server. These are proto reqs. The important field is header.User.
-		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(certsContext),
-			certsContext, true, http.StatusOK},
+		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(rootCertsContext),
+			rootCertsContext, true, http.StatusOK},
+		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(nodeCertsContext),
+			nodeCertsContext, true, http.StatusOK},
 		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(testCertsContext),
 			testCertsContext, true, http.StatusOK},
 		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(noCertsContext),

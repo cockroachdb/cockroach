@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -32,7 +33,9 @@ import (
 
 func setup() (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(nil)
-	db, err := client.Open("https://root@" + s.ServingAddr() + "?certs=test_certs")
+	db, err := client.Open(fmt.Sprintf("https://%s@%s?certs=test_certs",
+		security.NodeUser,
+		s.ServingAddr()))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -273,7 +276,7 @@ func ExampleDB_Insecure() {
 	log.Infof("Test server listening on %s: %s", s.Ctx.RequestScheme(), s.ServingAddr())
 	defer s.Stop()
 
-	db, err := client.Open("http://root@" + s.ServingAddr())
+	db, err := client.Open("http://foo@" + s.ServingAddr())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -300,7 +303,7 @@ func TestOpenArgs(t *testing.T) {
 		addr      string
 		expectErr bool
 	}{
-		{"https://root@" + s.ServingAddr() + "?certs=test_certs", false},
+		{"https://" + server.TestUser + "@" + s.ServingAddr() + "?certs=test_certs", false},
 		{"https://" + s.ServingAddr() + "?certs=test_certs", false},
 		{"https://" + s.ServingAddr() + "?certs=foo", true},
 		{s.ServingAddr(), true},

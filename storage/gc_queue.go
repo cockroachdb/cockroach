@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -283,7 +282,6 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    now,
 			Key:          txn.Key,
-			User:         security.RootUser,
 			UserPriority: gogoproto.Int32(proto.MaxPriority),
 			Txn:          nil,
 		},
