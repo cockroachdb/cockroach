@@ -244,7 +244,7 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
 func (g *Gossip) AddInfo(key string, val interface{}, ttl time.Duration) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	err := g.is.addInfo(g.is.newInfo(key, val, ttl))
+	err := g.is.addInfo(key, g.is.newInfo(val, ttl))
 	if err == nil {
 		g.checkHasConnected()
 	}
@@ -334,8 +334,8 @@ func (g *Gossip) maxToleratedHops() uint32 {
 	var nodeCount int64
 
 	// will never error because `return nil` below
-	_ = g.is.visitInfos(func(i *info) error {
-		if strings.HasPrefix(i.Key, KeyNodeIDPrefix) {
+	_ = g.is.visitInfos(func(key string, i *info) error {
+		if strings.HasPrefix(key, KeyNodeIDPrefix) {
 			nodeCount++
 		}
 		return nil

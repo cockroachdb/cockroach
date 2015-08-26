@@ -38,7 +38,7 @@ var emptyAddr = util.MakeUnresolvedAddr("test", "<test-addr>")
 func TestZeroDuration(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
-	info := is.newInfo("a", float64(1), 0)
+	info := is.newInfo(float64(1), 0)
 	if info.TTLStamp != math.MaxInt64 {
 		t.Errorf("expected zero duration to get max TTLStamp: %d", info.TTLStamp)
 	}
@@ -48,8 +48,8 @@ func TestZeroDuration(t *testing.T) {
 func TestNewInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
-	info1 := is.newInfo("a", float64(1), time.Second)
-	info2 := is.newInfo("a", float64(1), time.Second)
+	info1 := is.newInfo(float64(1), time.Second)
+	info2 := is.newInfo(float64(1), time.Second)
 	if info1.seq != info2.seq-1 {
 		t.Errorf("sequence numbers should increment %d, %d", info1.seq, info2.seq)
 	}
@@ -60,8 +60,8 @@ func TestNewInfo(t *testing.T) {
 func TestInfoStoreGetInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
-	i := is.newInfo("a", float64(1), time.Second)
-	if err := is.addInfo(i); err != nil {
+	i := is.newInfo(float64(1), time.Second)
+	if err := is.addInfo("a", i); err != nil {
 		t.Error(err)
 	}
 	if infoCount := len(is.Infos); infoCount != 1 {
@@ -82,8 +82,8 @@ func TestInfoStoreGetInfo(t *testing.T) {
 func TestInfoStoreGetInfoTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
-	i := is.newInfo("a", float64(1), time.Nanosecond)
-	if err := is.addInfo(i); err != nil {
+	i := is.newInfo(float64(1), time.Nanosecond)
+	if err := is.addInfo("a", i); err != nil {
 		t.Error(err)
 	}
 	time.Sleep(time.Nanosecond)
@@ -97,17 +97,17 @@ func TestInfoStoreGetInfoTTL(t *testing.T) {
 func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
-	info1 := is.newInfo("a", float64(1), time.Second)
-	if err := is.addInfo(info1); err != nil {
+	info1 := is.newInfo(float64(1), time.Second)
+	if err := is.addInfo("a", info1); err != nil {
 		t.Error(err)
 	}
-	info2 := is.newInfo("a", float64(2), time.Second)
+	info2 := is.newInfo(float64(2), time.Second)
 	info2.Timestamp = info1.Timestamp
-	if err := is.addInfo(info2); err == nil {
+	if err := is.addInfo("a", info2); err == nil {
 		t.Error("able to add info2 with same timestamp")
 	}
 	info2.Timestamp--
-	if err := is.addInfo(info2); err == nil {
+	if err := is.addInfo("a", info2); err == nil {
 		t.Error("able to add info2 with lesser timestamp")
 	}
 	// Verify info2 did not replace info1.
@@ -120,9 +120,9 @@ func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
 func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
-	info1 := is.newInfo("a", float64(1), time.Second)
-	info2 := is.newInfo("a", float64(2), time.Second)
-	if err1, err2 := is.addInfo(info1), is.addInfo(info2); err1 != nil || err2 != nil {
+	info1 := is.newInfo(float64(1), time.Second)
+	info2 := is.newInfo(float64(2), time.Second)
+	if err1, err2 := is.addInfo("a", info1), is.addInfo("a", info2); err1 != nil || err2 != nil {
 		t.Error(err1, err2)
 	}
 }
@@ -132,15 +132,15 @@ func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
 func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
-	info1 := is.newInfo("a", float64(1), time.Second)
+	info1 := is.newInfo(float64(1), time.Second)
 	info1.Hops = 1
-	info2 := is.newInfo("a", float64(2), time.Second)
+	info2 := is.newInfo(float64(2), time.Second)
 	info2.Timestamp = info1.Timestamp
 	info2.Hops = 2
-	if err := is.addInfo(info1); err != nil {
+	if err := is.addInfo("a", info1); err != nil {
 		t.Errorf("failed insert: %s", err)
 	}
-	if err := is.addInfo(info2); err == nil {
+	if err := is.addInfo("a", info2); err == nil {
 		t.Errorf("shouldn't have inserted info 2: %s", err)
 	}
 
@@ -150,8 +150,8 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	}
 
 	// Try yet another info, with lower hops yet (0).
-	info3 := is.newInfo("a", float64(3), time.Second)
-	if err := is.addInfo(info3); err != nil {
+	info3 := is.newInfo(float64(3), time.Second)
+	if err := is.addInfo("a", info3); err != nil {
 		t.Error(err)
 	}
 	i = is.getInfo("a")
@@ -165,18 +165,18 @@ func createTestInfoStore(t *testing.T) *infoStore {
 	is := newInfoStore(1, emptyAddr)
 
 	for i := 0; i < 10; i++ {
-		infoA := is.newInfo(fmt.Sprintf("a.%d", i), float64(i), time.Second)
-		if err := is.addInfo(infoA); err != nil {
+		infoA := is.newInfo(float64(i), time.Second)
+		if err := is.addInfo(fmt.Sprintf("a.%d", i), infoA); err != nil {
 			t.Fatal(err)
 		}
 
-		infoB := is.newInfo(fmt.Sprintf("b.%d", i), float64(i+1), time.Second)
-		if err := is.addInfo(infoB); err != nil {
+		infoB := is.newInfo(float64(i+1), time.Second)
+		if err := is.addInfo(fmt.Sprintf("b.%d", i), infoB); err != nil {
 			t.Fatal(err)
 		}
 
-		infoC := is.newInfo(fmt.Sprintf("c.%d", i), float64(i+2), time.Second)
-		if err := is.addInfo(infoC); err != nil {
+		infoC := is.newInfo(float64(i+2), time.Second)
+		if err := is.addInfo(fmt.Sprintf("c.%d", i), infoC); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -224,10 +224,10 @@ func TestInfoStoreDistant(t *testing.T) {
 	is := newInfoStore(1, emptyAddr)
 	// Add info from each address, with hop count equal to index+1.
 	for i := 0; i < len(nodes); i++ {
-		inf := is.newInfo(fmt.Sprintf("b.%d", i), float64(i), time.Second)
+		inf := is.newInfo(float64(i), time.Second)
 		inf.Hops = uint32(i + 1)
 		inf.NodeID = nodes[i]
-		if err := is.addInfo(inf); err != nil {
+		if err := is.addInfo(fmt.Sprintf("b.%d", i), inf); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -255,9 +255,9 @@ func TestLeastUseful(t *testing.T) {
 		t.Error("not expecting a node from an empty set")
 	}
 
-	inf1 := is.newInfo("a1", float64(1), time.Second)
+	inf1 := is.newInfo(float64(1), time.Second)
 	inf1.peerID = 1
-	if err := is.addInfo(inf1); err != nil {
+	if err := is.addInfo("a1", inf1); err != nil {
 		t.Fatal(err)
 	}
 	if is.leastUseful(set) != 0 {
@@ -269,9 +269,9 @@ func TestLeastUseful(t *testing.T) {
 		t.Error("expecting nodes[0] as least useful")
 	}
 
-	inf2 := is.newInfo("a2", float64(2), time.Second)
+	inf2 := is.newInfo(float64(2), time.Second)
 	inf2.peerID = 1
-	if err := is.addInfo(inf2); err != nil {
+	if err := is.addInfo("a2", inf2); err != nil {
 		t.Fatal(err)
 	}
 	if is.leastUseful(set) != nodes[0] {
@@ -283,9 +283,9 @@ func TestLeastUseful(t *testing.T) {
 		t.Error("expecting nodes[1] as least useful")
 	}
 
-	inf3 := is.newInfo("a3", float64(3), time.Second)
+	inf3 := is.newInfo(float64(3), time.Second)
 	inf3.peerID = 2
-	if err := is.addInfo(inf3); err != nil {
+	if err := is.addInfo("a3", inf3); err != nil {
 		t.Fatal(err)
 	}
 	if is.leastUseful(set) != nodes[1] {
@@ -324,14 +324,14 @@ func TestCallbacks(t *testing.T) {
 	is.registerCallback("key2", cb2.Add)
 	is.registerCallback("key.*", cbAll.Add)
 
-	i1 := is.newInfo("key1", float64(1), time.Second)
-	i2 := is.newInfo("key2", float64(1), time.Second)
-	i3 := is.newInfo("key3", float64(1), time.Second)
+	i1 := is.newInfo(float64(1), time.Second)
+	i2 := is.newInfo(float64(1), time.Second)
+	i3 := is.newInfo(float64(1), time.Second)
 
 	// Add infos twice and verify callbacks aren't called for same timestamps.
 	wg.Add(5)
 	for i := 0; i < 2; i++ {
-		if err := is.addInfo(i1); err != nil {
+		if err := is.addInfo("key1", i1); err != nil {
 			if i == 0 {
 				t.Error(err)
 			}
@@ -340,7 +340,7 @@ func TestCallbacks(t *testing.T) {
 				t.Errorf("expected error on run #%d, but didn't get one", i)
 			}
 		}
-		if err := is.addInfo(i2); err != nil {
+		if err := is.addInfo("key2", i2); err != nil {
 			if i == 0 {
 				t.Error(err)
 			}
@@ -349,7 +349,7 @@ func TestCallbacks(t *testing.T) {
 				t.Errorf("expected error on run #%d, but didn't get one", i)
 			}
 		}
-		if err := is.addInfo(i3); err != nil {
+		if err := is.addInfo("key3", i3); err != nil {
 			if i == 0 {
 				t.Error(err)
 			}
@@ -374,9 +374,9 @@ func TestCallbacks(t *testing.T) {
 	}
 
 	// Update an info.
-	i1 = is.newInfo("key1", float64(2), time.Second)
+	i1 = is.newInfo(float64(2), time.Second)
 	wg.Add(2)
-	if err := is.addInfo(i1); err != nil {
+	if err := is.addInfo("key1", i1); err != nil {
 		t.Error(err)
 	}
 	wg.Wait()
@@ -417,12 +417,12 @@ func TestRegisterCallback(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	cb := callbackRecord{wg: wg}
 
-	i1 := is.newInfo("key1", float64(1), time.Second)
-	i2 := is.newInfo("key2", float64(1), time.Second)
-	if err := is.addInfo(i1); err != nil {
+	i1 := is.newInfo(float64(1), time.Second)
+	i2 := is.newInfo(float64(1), time.Second)
+	if err := is.addInfo("key1", i1); err != nil {
 		t.Fatal(err)
 	}
-	if err := is.addInfo(i2); err != nil {
+	if err := is.addInfo("key2", i2); err != nil {
 		t.Fatal(err)
 	}
 

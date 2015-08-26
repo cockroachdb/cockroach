@@ -22,7 +22,6 @@ import "github.com/cockroachdb/cockroach/proto"
 // info is the basic unit of information traded over the gossip
 // network.
 type info struct {
-	Key       string       // Info key
 	Val       interface{}  // Permitted types are enumerated in init()
 	Timestamp int64        `json:"-"` // Wall time at origination (Unix-nanos)
 	TTLStamp  int64        `json:"-"` // Wall time before info is discarded (Unix-nanos)

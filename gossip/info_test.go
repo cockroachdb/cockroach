@@ -28,7 +28,7 @@ import (
 func TestExpired(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	now := time.Now().UnixNano()
-	i := info{"a", float64(1), now, now + int64(time.Millisecond), 0, 0, 0, 0}
+	i := info{float64(1), now, now + int64(time.Millisecond), 0, 0, 0, 0}
 	if i.expired(now) {
 		t.Error("premature expiration")
 	}
@@ -44,7 +44,7 @@ func TestIsFresh(t *testing.T) {
 	node1 := proto.NodeID(1)
 	node2 := proto.NodeID(2)
 	node3 := proto.NodeID(3)
-	i := info{"a", float64(1), now, now + int64(time.Millisecond), 0, node1, node2, seq}
+	i := info{float64(1), now, now + int64(time.Millisecond), 0, node1, node2, seq}
 	if !i.isFresh(node3, seq-1) {
 		t.Error("info should be fresh:", i)
 	}
