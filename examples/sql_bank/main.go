@@ -38,6 +38,7 @@ var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
 var concurrency = flag.Int("concurrency", 5, "Number of concurrent actors moving money.")
 var aggregate = flag.Bool("aggregate", true, "Use aggregate function to verify conservation of money.")
 var usePostgres = flag.Bool("use-postgres", false, "Use postgres instead of cockroach.")
+var balanceCheckInterval = flag.Duration("balance-check-interval", 1*time.Second, "Interval of balance check.")
 
 var numTransfers uint64
 
@@ -221,7 +222,7 @@ func main() {
 		go moveMoney(db)
 	}
 
-	for range time.NewTicker(time.Second).C {
+	for range time.NewTicker(*balanceCheckInterval).C {
 		now := time.Now()
 		elapsed := time.Since(lastNow)
 		numTransfers := atomic.LoadUint64(&numTransfers)
