@@ -279,6 +279,7 @@ func TestParse(t *testing.T) {
 		{`SET a = 3, 4`},
 		{`SET a = '3'`},
 		{`SET a = 3.0`},
+		{`SET a = $1`},
 
 		// TODO(pmattis): Is this a postgres extension?
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a
