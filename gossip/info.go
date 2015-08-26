@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -58,10 +57,7 @@ func (i *info) less(b *info) bool {
 	case string:
 		return t < b.Val.(string)
 	default:
-		if ord, ok := i.Val.(util.Ordered); ok {
-			return ord.Less(b.Val.(util.Ordered))
-		}
-		log.Fatalf("unhandled info value type: %s", t)
+		log.Fatalf("unhandled info value type: %T", t)
 	}
 	return false
 }

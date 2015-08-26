@@ -128,12 +128,12 @@ func (k EncodedKey) PrefixEnd() EncodedKey {
 	return EncodedKey(bytesPrefixEnd(k))
 }
 
-// Less implements the util.Ordered interface.
+// Less compares two keys.
 func (k Key) Less(l Key) bool {
 	return bytes.Compare(k, l) < 0
 }
 
-// Less implements the util.Ordered interface.
+// Less compares two keys.
 func (k EncodedKey) Less(l EncodedKey) bool {
 	return bytes.Compare(k, l) < 0
 }
@@ -195,8 +195,7 @@ var (
 	ZeroTimestamp = Timestamp{WallTime: 0, Logical: 0}
 )
 
-// Less implements the util.Ordered interface, allowing
-// the comparison of timestamps.
+// Less compares two timestamps.
 func (t Timestamp) Less(s Timestamp) bool {
 	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical < s.Logical)
 }
