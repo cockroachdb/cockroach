@@ -1031,17 +1031,19 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 // updates the range addressing metadata. The handover of responsibility for
 // the reassigned key range is carried out seamlessly through a split trigger
 // carried out as part of the commit of that transaction.
-func (r *Replica) AdminSplit(args proto.AdminSplitRequest) (proto.AdminSplitResponse, error) {
+//
+// The supplied RangeDescriptor is used as a form of optimistic lock. An
+// operation which might split a range should obtain a copy of the range's
+// current descriptor before making the decision to split. If the decision is
+// affirmative the descriptor is passed to AdminSplit, which performs a
+// Conditional Put on the RangeDescriptor to ensure that no other operation has
+// modified the range in the time the decision was being made.
+func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDescriptor) (proto.AdminSplitResponse, error) {
 	var reply proto.AdminSplitResponse
-
-	// Only allow a single split per range at a time.
-	r.metaLock.Lock()
-	defer r.metaLock.Unlock()
 
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
 	// other commands.
-	desc := r.Desc()
 	splitKey := proto.Key(args.SplitKey)
 	if len(splitKey) == 0 {
 		snap := r.rm.NewSnapshot()
@@ -1219,15 +1221,13 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) e
 // the reassigned key range is carried out seamlessly through a merge trigger
 // carried out as part of the commit of that transaction.
 // A merge requires that the two ranges are collocate on the same set of replicas.
-func (r *Replica) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeResponse, error) {
+//
+// The supplied RangeDescriptor is used as a form of optimistic lock. See the
+// comment of "AdminSplit" for more information on this pattern.
+func (r *Replica) AdminMerge(args proto.AdminMergeRequest, desc *proto.RangeDescriptor) (proto.AdminMergeResponse, error) {
 	var reply proto.AdminMergeResponse
 
-	// Only allow a single split/merge per range at a time.
-	r.metaLock.Lock()
-	defer r.metaLock.Unlock()
-
 	// Lookup subsumed range.
-	desc := r.Desc()
 	if desc.EndKey.Equal(proto.KeyMax) {
 		// Noop.
 		return reply, nil
@@ -1373,13 +1373,11 @@ func (r *Replica) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) err
 // ChangeReplicas adds or removes a replica of a range. The change is performed
 // in a distributed transaction and takes effect when that transaction is committed.
 // When removing a replica, only the NodeID and StoreID fields of the Replica are used.
-func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.Replica) error {
-	// Only allow a single change per range at a time.
-	r.metaLock.Lock()
-	defer r.metaLock.Unlock()
-
+//
+// The supplied RangeDescriptor is used as a form of optimistic lock. See the
+// comment of "AdminSplit" for more information on this pattern.
+func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.Replica, desc *proto.RangeDescriptor) error {
 	// Validate the request and prepare the new descriptor.
-	desc := r.Desc()
 	updatedDesc := *desc
 	updatedDesc.Replicas = append([]proto.Replica{}, desc.Replicas...)
 	found := -1       // tracks NodeID && StoreID

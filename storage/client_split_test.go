@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -143,20 +142,17 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
+	splitKey := proto.Key("a")
 	concurrentCount := int32(10)
 	wg := sync.WaitGroup{}
 	wg.Add(int(concurrentCount))
 	failureCount := int32(0)
 	for i := int32(0); i < concurrentCount; i++ {
 		go func() {
-			args := adminSplitArgs(proto.KeyMin, []byte("a"), 1, store.StoreID())
+			args := adminSplitArgs(proto.KeyMin, splitKey, 1, store.StoreID())
 			_, err := store.ExecuteCmd(context.Background(), &args)
 			if err != nil {
-				if strings.Contains(err.Error(), "range is already split at key") {
-					atomic.AddInt32(&failureCount, 1)
-				} else {
-					t.Errorf("unexpected error: %s", err)
-				}
+				atomic.AddInt32(&failureCount, 1)
 			}
 			wg.Done()
 		}()
@@ -164,6 +160,19 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	wg.Wait()
 	if failureCount != concurrentCount-1 {
 		t.Fatalf("concurrent splits succeeded unexpectedly; failureCount=%d", failureCount)
+	}
+
+	// Verify everything ended up as expected.
+	if a, e := store.ReplicaCount(), 2; a != e {
+		t.Fatalf("expected %d stores after concurrent splits; actual count=%d", e, a)
+	}
+	rng := store.LookupReplica(proto.KeyMin, nil)
+	newRng := store.LookupReplica(splitKey, nil)
+	if !bytes.Equal(newRng.Desc().StartKey, splitKey) || !bytes.Equal(splitKey, rng.Desc().EndKey) {
+		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRng.Desc().StartKey, splitKey, rng.Desc().EndKey)
+	}
+	if !bytes.Equal(newRng.Desc().EndKey, proto.KeyMax) || !bytes.Equal(rng.Desc().StartKey, proto.KeyMin) {
+		t.Errorf("new ranges do not cover KeyMin-KeyMax, but only %q-%q", rng.Desc().StartKey, newRng.Desc().EndKey)
 	}
 }
 

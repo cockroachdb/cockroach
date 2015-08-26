@@ -190,8 +190,6 @@ type Replica struct {
 	rm       rangeManager   // Makes some store methods available
 	stats    *rangeStats    // Range statistics
 	maxBytes int64          // Max bytes before split.
-	// Held while a split, merge, or replica change is underway.
-	metaLock sync.Mutex // TODO(bdarnell): Revisit the metaLock.
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
@@ -592,10 +590,10 @@ func (r *Replica) addAdminCmd(ctx context.Context, args proto.Request) (proto.Re
 
 	switch tArgs := args.(type) {
 	case *proto.AdminSplitRequest:
-		resp, err := r.AdminSplit(*tArgs)
+		resp, err := r.AdminSplit(*tArgs, r.Desc())
 		return &resp, err
 	case *proto.AdminMergeRequest:
-		resp, err := r.AdminMerge(*tArgs)
+		resp, err := r.AdminMerge(*tArgs, r.Desc())
 		return &resp, err
 	default:
 		return nil, util.Error("unrecognized admin command")
