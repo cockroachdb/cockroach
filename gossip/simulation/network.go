@@ -99,12 +99,6 @@ func NewNetwork(nodeCount int, networkType string,
 		gossipNode.Start(leftNode.Server, stopper)
 		stopper.AddCloser(leftNode.Server)
 
-		// Node 0 gossips gossip count.
-		if i == 0 {
-			if err := gossipNode.AddInfo(gossip.KeyNodeCount, int64(nodeCount), time.Hour); err != nil {
-				log.Fatal(err)
-			}
-		}
 		leftNode.Gossip = gossipNode
 	}
 
