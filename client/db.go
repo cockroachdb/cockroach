@@ -398,9 +398,9 @@ func (db *DB) Run(b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	if err := db.send(b.calls...); err != nil {
-		return err
-	}
+	// Errors here will be attached to the results, so we will get them
+	// from the call to fillResults.
+	_ = db.send(b.calls...)
 	return b.fillResults()
 }
 

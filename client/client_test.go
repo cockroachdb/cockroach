@@ -387,81 +387,139 @@ func TestClientBatch(t *testing.T) {
 	db := createTestClient(s.ServingAddr())
 
 	keys := []proto.Key{}
-	b := &client.Batch{}
-	for i := 0; i < 10; i++ {
-		key := proto.Key(fmt.Sprintf("%s/key %02d", testUser, i))
-		keys = append(keys, key)
-		b.Inc(key, int64(i))
-	}
+	{
+		b := &client.Batch{}
+		for i := 0; i < 10; i++ {
+			key := proto.Key(fmt.Sprintf("%s/key %02d", testUser, i))
+			keys = append(keys, key)
+			b.Inc(key, int64(i))
+		}
 
-	if err := db.Run(b); err != nil {
-		t.Error(err)
-	}
+		if err := db.Run(b); err != nil {
+			t.Error(err)
+		}
 
-	for i, result := range b.Results {
-		if v := result.Rows[0].ValueInt(); v != int64(i) {
-			t.Errorf("%d: expected %d; got %d", i, i, v)
+		for i, result := range b.Results {
+			if v := result.Rows[0].ValueInt(); v != int64(i) {
+				t.Errorf("%d: expected %d; got %d", i, i, v)
+			}
 		}
 	}
 
 	// Now try 2 scans.
-	b = &client.Batch{}
-	b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
-	b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
-	if err := db.Run(b); err != nil {
-		t.Error(err)
-	}
+	{
+		b := &client.Batch{}
+		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
+		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
+		if err := db.Run(b); err != nil {
+			t.Error(err)
+		}
 
-	scan1 := b.Results[0].Rows
-	scan2 := b.Results[1].Rows
-	if len(scan1) != 5 || len(scan2) != 5 {
-		t.Errorf("expected scan results to include 5 and 5 rows; got %d and %d",
-			len(scan1), len(scan2))
-	}
-	for i := 0; i < 5; i++ {
-		if key := proto.Key(scan1[i].Key); !key.Equal(keys[i]) {
-			t.Errorf("expected scan1 key %d to be %q; got %q", i, keys[i], key)
+		scan1 := b.Results[0].Rows
+		scan2 := b.Results[1].Rows
+		if len(scan1) != 5 || len(scan2) != 5 {
+			t.Errorf("expected scan results to include 5 and 5 rows; got %d and %d",
+				len(scan1), len(scan2))
 		}
-		if val := scan1[i].ValueInt(); val != int64(i) {
-			t.Errorf("expected scan1 result %d to be %d; got %d", i, i, val)
-		}
-		if key := proto.Key(scan2[i].Key); !key.Equal(keys[i+5]) {
-			t.Errorf("expected scan2 key %d to be %q; got %q", i, keys[i+5], key)
-		}
-		if val := scan2[i].ValueInt(); val != int64(i+5) {
-			t.Errorf("expected scan2 result %d to be %d; got %d", i, i+5, val)
+		for i := 0; i < 5; i++ {
+			if key := proto.Key(scan1[i].Key); !key.Equal(keys[i]) {
+				t.Errorf("expected scan1 key %d to be %q; got %q", i, keys[i], key)
+			}
+			if val := scan1[i].ValueInt(); val != int64(i) {
+				t.Errorf("expected scan1 result %d to be %d; got %d", i, i, val)
+			}
+			if key := proto.Key(scan2[i].Key); !key.Equal(keys[i+5]) {
+				t.Errorf("expected scan2 key %d to be %q; got %q", i, keys[i+5], key)
+			}
+			if val := scan2[i].ValueInt(); val != int64(i+5) {
+				t.Errorf("expected scan2 result %d to be %d; got %d", i, i+5, val)
+			}
 		}
 	}
 
 	// Try 2 reverse scans.
-	b = &client.Batch{}
-	b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
-	b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
-	if err := db.Run(b); err != nil {
-		t.Error(err)
+	{
+		b := &client.Batch{}
+		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
+		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
+		if err := db.Run(b); err != nil {
+			t.Error(err)
+		}
+
+		revScan1 := b.Results[0].Rows
+		revScan2 := b.Results[1].Rows
+		expectedCount := 5
+		rev1TopIndex := 4
+		rev2TopIndex := 9
+		if len(revScan1) != expectedCount || len(revScan2) != expectedCount {
+			t.Errorf("expected reverse scan results to include 5 and 5 rows; got %d and %d",
+				len(revScan1), len(revScan2))
+		}
+		for i := 0; i < expectedCount; i++ {
+			if key := proto.Key(revScan1[i].Key); !key.Equal(keys[rev1TopIndex-i]) {
+				t.Errorf("expected revScan1 key %d to be %q; got %q", i, keys[rev1TopIndex-i], key)
+			}
+			if val := revScan1[i].ValueInt(); val != int64(rev1TopIndex-i) {
+				t.Errorf("expected revScan1 result %d to be %d; got %d", i, rev1TopIndex-i, val)
+			}
+			if key := proto.Key(revScan2[i].Key); !key.Equal(keys[rev2TopIndex-i]) {
+				t.Errorf("expected revScan2 key %d to be %q; got %q", i, keys[rev2TopIndex-i], key)
+			}
+			if val := revScan2[i].ValueInt(); val != int64(rev2TopIndex-i) {
+				t.Errorf("expected revScan2 result %d to be %d; got %d", i, rev2TopIndex-i, val)
+			}
+		}
 	}
 
-	revScan1 := b.Results[0].Rows
-	revScan2 := b.Results[1].Rows
-	expectedCount := 5
-	rev1TopIndex := 4
-	rev2TopIndex := 9
-	if len(revScan1) != expectedCount || len(revScan2) != expectedCount {
-		t.Errorf("expected reverse scan results to include 5 and 5 rows; got %d and %d",
-			len(revScan1), len(revScan2))
+	// Induce a non-transactional failure.
+	{
+		key := proto.Key("conditionalPut")
+		if err := db.Put(key, "hello"); err != nil {
+			t.Fatal(err)
+		}
+
+		b := &client.Batch{}
+		b.CPut(key, "goodbyte", nil) // should fail
+		if err := db.Run(b); err == nil {
+			t.Error("unexpected success")
+		} else {
+			var foundError bool
+			for _, result := range b.Results {
+				if result.Err != nil {
+					foundError = true
+					break
+				}
+			}
+			if !foundError {
+				t.Error("results did not contain an error")
+			}
+		}
 	}
-	for i := 0; i < expectedCount; i++ {
-		if key := proto.Key(revScan1[i].Key); !key.Equal(keys[rev1TopIndex-i]) {
-			t.Errorf("expected revScan1 key %d to be %q; got %q", i, keys[rev1TopIndex-i], key)
+
+	// Induce a transactional failure.
+	{
+		key := proto.Key("conditionalPut")
+		if err := db.Put(key, "hello"); err != nil {
+			t.Fatal(err)
 		}
-		if val := revScan1[i].ValueInt(); val != int64(rev1TopIndex-i) {
-			t.Errorf("expected revScan1 result %d to be %d; got %d", i, rev1TopIndex-i, val)
-		}
-		if key := proto.Key(revScan2[i].Key); !key.Equal(keys[rev2TopIndex-i]) {
-			t.Errorf("expected revScan2 key %d to be %q; got %q", i, keys[rev2TopIndex-i], key)
-		}
-		if val := revScan2[i].ValueInt(); val != int64(rev2TopIndex-i) {
-			t.Errorf("expected revScan2 result %d to be %d; got %d", i, rev2TopIndex-i, val)
+
+		b := &client.Batch{}
+		b.CPut(key, "goodbyte", nil) // should fail
+		if err := db.Txn(func(txn *client.Txn) error {
+			return txn.Run(b)
+		}); err == nil {
+			t.Error("unexpected success")
+		} else {
+			var foundError bool
+			for _, result := range b.Results {
+				if result.Err != nil {
+					foundError = true
+					break
+				}
+			}
+			if !foundError {
+				t.Error("results did not contain an error")
+			}
 		}
 	}
 }
