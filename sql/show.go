@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -93,7 +94,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 //          mysql only returns the user's privileges.
 func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 	if n.Targets == nil {
-		return nil, fmt.Errorf("TODO(marc): implement SHOW GRANT with no targets")
+		return nil, util.Errorf("TODO(marc): implement SHOW GRANT with no targets")
 	}
 	descriptor, err := p.getDescriptorFromTargetList(*n.Targets)
 	if err != nil {

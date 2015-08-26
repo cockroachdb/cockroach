@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -143,7 +144,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 
 	if err := p.txn.Run(&b); err != nil {
 		if tErr, ok := err.(*proto.ConditionFailedError); ok {
-			return nil, fmt.Errorf("duplicate key value %q violates unique constraint %s", tErr.ActualValue.Bytes, "TODO(tamird)")
+			return nil, util.Errorf("duplicate key value %q violates unique constraint %s", tErr.ActualValue.Bytes, "TODO(tamird)")
 		}
 		return nil, err
 	}

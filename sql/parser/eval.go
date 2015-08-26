@@ -25,6 +25,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 var errZeroModulus = errors.New("zero modulus")
@@ -745,7 +747,7 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 
 	switch op {
 	case Like, NotLike:
-		return DNull, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
+		return DNull, util.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 
 	return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
