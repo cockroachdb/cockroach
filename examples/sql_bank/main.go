@@ -19,6 +19,7 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
 	"math/rand"
 	"sync/atomic"
@@ -32,23 +33,21 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-const (
-	maxTransfer = 999
-	numAccounts = 999
-	concurrency = 5
-	aggregate   = true
-	usePostgres = false
-)
+var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in one transaction.")
+var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
+var concurrency = flag.Int("concurrency", 5, "Number of concurrent actors moving money.")
+var aggregate = flag.Bool("aggregate", true, "Use aggregate function to verify conservation of money.")
+var usePostgres = flag.Bool("use-postgres", false, "Use postgres instead of cockroach.")
 
 var numTransfers uint64
 
 func moveMoney(db *sql.DB) {
 	for {
-		from, to := rand.Intn(numAccounts), rand.Intn(numAccounts)
+		from, to := rand.Intn(*numAccounts), rand.Intn(*numAccounts)
 		if from == to {
 			continue
 		}
-		amount := rand.Intn(maxTransfer)
+		amount := rand.Intn(*maxTransfer)
 		tx, err := db.Begin()
 		if err != nil {
 			log.Fatal(err)
@@ -127,7 +126,7 @@ func moveMoney(db *sql.DB) {
 
 func verifyBank(db *sql.DB) {
 	var sum int64
-	if aggregate {
+	if *aggregate {
 		if err := db.QueryRow("SELECT SUM(balance) FROM accounts").Scan(&sum); err != nil {
 			log.Fatal(err)
 		}
@@ -160,10 +159,11 @@ func verifyBank(db *sql.DB) {
 }
 
 func main() {
+	flag.Parse()
 	var db *sql.DB
 	var err error
 	var url string
-	if usePostgres {
+	if *usePostgres {
 		if db, err = sql.Open("postgres", "dbname=postgres sslmode=disable"); err != nil {
 			log.Fatal(err)
 		}
@@ -177,14 +177,14 @@ func main() {
 		}
 	}
 	if _, err := db.Exec("CREATE DATABASE bank"); err != nil {
-		if pqErr, ok := err.(*pq.Error); usePostgres && (!ok || pqErr.Code.Name() != "duplicate_database") {
+		if pqErr, ok := err.(*pq.Error); *usePostgres && (!ok || pqErr.Code.Name() != "duplicate_database") {
 			log.Fatal(err)
 		}
 	}
 	db.Close()
 
 	// Open db client with database settings.
-	if usePostgres {
+	if *usePostgres {
 		if db, err = sql.Open("postgres", "dbname=bank sslmode=disable"); err != nil {
 			log.Fatal(err)
 		}
@@ -196,7 +196,7 @@ func main() {
 
 	// concurrency + 1, for this thread and the "concurrency" number of
 	// goroutines that move money
-	db.SetMaxOpenConns(concurrency + 1)
+	db.SetMaxOpenConns(*concurrency + 1)
 
 	if _, err = db.Exec("CREATE TABLE IF NOT EXISTS accounts (id BIGINT PRIMARY KEY, balance BIGINT NOT NULL)"); err != nil {
 		log.Fatal(err)
@@ -206,7 +206,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	for i := 0; i < numAccounts; i++ {
+	for i := 0; i < *numAccounts; i++ {
 		if _, err = db.Exec("INSERT INTO accounts (id, balance) VALUES ($1, $2)", i, 0); err != nil {
 			log.Fatal(err)
 		}
@@ -217,7 +217,7 @@ func main() {
 	var lastNumTransfers uint64
 	lastNow := time.Now()
 
-	for i := 0; i < concurrency; i++ {
+	for i := 0; i < *concurrency; i++ {
 		go moveMoney(db)
 	}
 
