@@ -156,6 +156,7 @@ func (m *RangeKeyMismatchError) GetRange() *RangeDescriptor {
 type ReadWithinUncertaintyIntervalError struct {
 	Timestamp         Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
 	ExistingTimestamp Timestamp `protobuf:"bytes,2,opt,name=existing_timestamp" json:"existing_timestamp"`
+	NodeID            NodeID    `protobuf:"varint,3,opt,name=node_id,casttype=NodeID" json:"node_id"`
 }
 
 func (m *ReadWithinUncertaintyIntervalError) Reset()      { *m = ReadWithinUncertaintyIntervalError{} }
@@ -173,6 +174,13 @@ func (m *ReadWithinUncertaintyIntervalError) GetExistingTimestamp() Timestamp {
 		return m.ExistingTimestamp
 	}
 	return Timestamp{}
+}
+
+func (m *ReadWithinUncertaintyIntervalError) GetNodeID() NodeID {
+	if m != nil {
+		return m.NodeID
+	}
+	return 0
 }
 
 // A TransactionAbortedError indicates that the transaction was
@@ -690,6 +698,9 @@ func (m *ReadWithinUncertaintyIntervalError) MarshalTo(data []byte) (int, error)
 		return 0, err
 	}
 	i += n5
+	data[i] = 0x18
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.NodeID))
 	return i, nil
 }
 
@@ -1244,6 +1255,7 @@ func (m *ReadWithinUncertaintyIntervalError) Size() (n int) {
 	n += 1 + l + sovErrors(uint64(l))
 	l = m.ExistingTimestamp.Size()
 	n += 1 + l + sovErrors(uint64(l))
+	n += 1 + sovErrors(uint64(m.NodeID))
 	return n
 }
 
@@ -1928,6 +1940,22 @@ func (m *ReadWithinUncertaintyIntervalError) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeID", wireType)
+			}
+			m.NodeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.NodeID |= (NodeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {

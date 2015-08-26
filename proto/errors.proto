@@ -67,6 +67,7 @@ message RangeKeyMismatchError {
 message ReadWithinUncertaintyIntervalError {
   optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
+  optional int32 node_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
 }
 
 // A TransactionAbortedError indicates that the transaction was

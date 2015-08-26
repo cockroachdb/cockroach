@@ -264,6 +264,7 @@ func ValidateRangeMetaKey(key proto.Key) error {
 		if body.Less(proto.KeyMax) {
 			return nil
 		}
+		// TODO(tschottdorf): when reverse-scanning [x,KeyMax), this lookup can happen.
 		return NewInvalidRangeMetaKeyError("body of meta2 range lookup is >= KeyMax", key)
 	}
 

@@ -1080,12 +1080,12 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 }
 
-func withoutTxnAutoGC() func() {
+func setTxnAutoGC(to bool) func() {
 	orig := txnAutoGC
 	f := func() {
 		txnAutoGC = orig
 	}
-	txnAutoGC = false
+	txnAutoGC = to
 	return f
 }
 
@@ -1097,7 +1097,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 	// The test relies on being able to commit a Txn without specifying the
 	// intent, while preserving the Txn record. Turn off
 	// automatic cleanup for this to work.
-	defer withoutTxnAutoGC()()
+	defer setTxnAutoGC(false)()
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -1305,7 +1305,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	// This test relies on having a committed Txn record and open intents on
 	// the same Range. This only works with auto-gc turned off; alternatively
 	// the test could move to splitting its underlying Range.
-	defer withoutTxnAutoGC()()
+	defer setTxnAutoGC(false)()
 	var intercept atomic.Value
 	intercept.Store(true)
 	TestingCommandFilter = func(args proto.Request) error {

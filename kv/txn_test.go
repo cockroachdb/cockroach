@@ -471,8 +471,8 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 			return err
 		}
 
-		if !gr1.Exists() && gr2.Exists() {
-			t.Fatalf("Repeat read same key in same txn but get different value gr1 nil gr2 %v", gr2.Value)
+		if gr1.Exists() || gr2.Exists() {
+			t.Fatalf("Repeat read same key in same txn but get different value gr1: %q, gr2 %q", gr1.Value, gr2.Value)
 		}
 		return nil
 	})

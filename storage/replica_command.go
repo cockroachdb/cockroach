@@ -433,6 +433,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 // A range-local intent range is never split: It's returned as either
 // belonging to or outside of the descriptor's key range, and passing an intent
 // which begins range-local but ends non-local results in a panic.
+// TODO(tschottdorf) move to proto, make more gen-purpose.
 func intersectIntent(intent proto.Intent, desc proto.RangeDescriptor) (middle *proto.Intent, outside []proto.Intent) {
 	start, end := desc.StartKey, desc.EndKey
 	if !intent.Key.Less(intent.EndKey) {

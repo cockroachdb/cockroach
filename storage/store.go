@@ -27,6 +27,7 @@ import (
 	"github.com/google/btree"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -45,6 +46,8 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
+
+const TODOtschottdorf = "TODO(tschottdorf): re-enable when we have batch routing in storage"
 
 const (
 	// GCResponseCacheExpiration is the expiration duration for response
@@ -1262,57 +1265,77 @@ func (s *Store) ReplicaCount() int {
 func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto.Response, _ error) {
 	ctx = s.Context(ctx)
 	trace := tracer.FromCtx(ctx)
+	if _, ok := args.(*proto.BatchRequest); !ok {
+		var unwrap func(proto.Response) proto.Response
+		args, unwrap = batch.MaybeWrap(args)
+		defer func() {
+			reply = unwrap(reply)
+		}()
+	}
 	if trace == nil {
 		trace = s.ctx.Tracer.NewTrace(args.Header())
 		ctx = tracer.ToCtx(ctx, trace)
 		defer trace.Finalize()
 	}
-	if batch, isBatch := args.(*proto.BatchRequest); isBatch {
-		// TODO(tschottdorf): provisional batch handling.
-		bReply := &proto.BatchResponse{}
-		var isTxn bool
-		if txn := batch.Txn; txn != nil {
-			bReply.Txn = gogoproto.Clone(txn).(*proto.Transaction) // init response txn
-			isTxn = true
-		}
-		for i, bArg := range batch.Requests {
-			args := bArg.GetValue().(proto.Request)
-			header := args.Header()
-			origHeader := *gogoproto.Clone(header).(*proto.RequestHeader)
-			*header = *gogoproto.Clone(&batch.RequestHeader).(*proto.RequestHeader)
-			header.CmdID = proto.ClientCmdID{} // because response cache
-			// Only Key and EndKey are allowed to diverge from the iterated
-			// Batch header.
-			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
-
-			if isTxn && i > 0 {
-				// Propagate Txn of last reply to current request.
-				*header.Txn = *bReply.Txn
-			}
-			reply, err := s.executeOne(ctx, args)
-			*header = origHeader
-			if reply != nil {
-				bReply.Add(reply)
-				// Use last response header, but keep our Txn
-				prevTxn := bReply.Txn
-				bReply.ResponseHeader, bReply.Txn = *(gogoproto.Clone(reply.Header()).(*proto.ResponseHeader)), prevTxn
-				// TODO(tschottdorf): figure out whether we really want to update
-				// the txn on errors returned.
-				if txn := reply.Header().Txn; txn != nil {
-					bReply.Txn.Update(txn)
-				}
-
-			}
-			if err != nil {
-				return bReply, err
-			}
-		}
-		return bReply, nil
+	bArgs := args.(*proto.BatchRequest)
+	// TODO(tschottdorf): provisional batch handling.
+	bReply := &proto.BatchResponse{}
+	var isTxn bool
+	if txn := bArgs.Txn; txn != nil {
+		bReply.Txn = gogoproto.Clone(txn).(*proto.Transaction) // init response txn
+		isTxn = true
 	}
-	return s.executeOne(ctx, args)
+	for i, bArg := range bArgs.Requests {
+		args := bArg.GetValue().(proto.Request)
+		if args.Method() == proto.Noop {
+			bReply.Add(&proto.NoopResponse{})
+			continue
+		}
+		header := args.Header()
+		origHeader := *gogoproto.Clone(header).(*proto.RequestHeader)
+		*header = *gogoproto.Clone(&bArgs.RequestHeader).(*proto.RequestHeader)
+		if len(bArgs.Requests) > 1 {
+			// TODO(tschottdorf): interim code to keep some tests passing.
+			// Once batches execute atomically, one ID per batch will do.
+			header.CmdID = proto.ClientCmdID{} // because response cache
+		}
+		// Only Key and EndKey are allowed to diverge from the iterated
+		// Batch header.
+		header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
+
+		if isTxn && i > 0 {
+			// Propagate Txn of last reply to current request.
+			*header.Txn = *bReply.Txn
+		}
+		reply, err := s.executeOne(ctx, args)
+		*header = origHeader
+		if reply != nil {
+			bReply.Add(reply)
+			// Use last response header, but keep our Txn
+			prevTxn := bReply.Txn
+			bReply.ResponseHeader, bReply.Txn = *(gogoproto.Clone(reply.Header()).(*proto.ResponseHeader)), prevTxn
+			// TODO(tschottdorf): figure out whether we really want to update
+			// the txn on errors returned.
+			if txn := reply.Header().Txn; txn != nil {
+				bReply.Txn.Update(txn)
+			}
+		}
+		if err != nil {
+			return bReply, err
+		}
+		if isTxn {
+			bReply.Txn.Timestamp.Forward(bReply.Timestamp)
+			// TODO(tschottdorf): remove. This is a failed hack, I think.
+			// if txn := reply.Header().Txn; txn != nil {
+			// 	txn.Timestamp.Forward(bReply.Timestamp)
+			// }
+		}
+	}
+	return bReply, nil
 }
 
 func (s *Store) executeOne(ctx context.Context, args proto.Request) (proto.Response, error) {
+	log.Warningf("EXEC %T @ %s", args, args.Header().Key)
 	trace := tracer.FromCtx(ctx)
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {
@@ -1334,11 +1357,6 @@ func (s *Store) executeOne(ctx context.Context, args proto.Request) (proto.Respo
 		// advances the local node's clock to a high water mark from
 		// amongst all nodes with which it has interacted.
 		s.ctx.Clock.Update(header.Timestamp)
-	} else {
-		// If the request has a zero timestamp, initialize to this node's clock.
-		// TODO(tschottdorf): the above comment was there, but not the line below.
-		// Check if this is done anywhere else.
-		header.Timestamp = s.ctx.Clock.Now()
 	}
 
 	defer trace.Epoch("executing " + args.Method().String())()
@@ -1387,6 +1405,8 @@ func (s *Store) executeOne(ctx context.Context, args proto.Request) (proto.Respo
 		}
 
 		switch t := err.(type) {
+		case *proto.ReadWithinUncertaintyIntervalError:
+			t.NodeID = header.Replica.NodeID
 		case *proto.WriteTooOldError:
 			trace.Event(fmt.Sprintf("error: %T", err))
 			// Update request timestamp and retry immediately.
@@ -1498,7 +1518,9 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		bArgs.Add(pushArgs)
 	}
 	b := &client.Batch{}
-	b.InternalAddCall(proto.Call{Args: bArgs, Reply: bReply})
+	if len(bArgs.Requests) > 0 {
+		b.InternalAddCall(proto.Call{Args: bArgs, Reply: bReply})
+	}
 
 	// Run all pushes in parallel.
 	if pushErr := s.db.Run(b); pushErr != nil {

@@ -88,7 +88,7 @@ var TestingCommandFilter func(proto.Request) error
 // upon EndTransaction if they only have local intents (which can be
 // resolved synchronously with EndTransaction). Certain tests become
 // simpler with this being turned off.
-var txnAutoGC = true
+var txnAutoGC = false // TODO(tschottdorf): disabled since it confuses batches (recreating txns as PENDING -> timeout)
 
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
@@ -560,7 +560,11 @@ func (r *Replica) beginCmd(header *proto.RequestHeader, readOnly bool) interface
 	// clock has been updated to the high water mark of any commands
 	// which might overlap this one in effect.
 	if header.Timestamp.Equal(proto.ZeroTimestamp) {
-		header.Timestamp = r.rm.Clock().Now()
+		if header.Txn != nil {
+			header.Timestamp = header.Txn.Timestamp
+		} else {
+			header.Timestamp = r.rm.Clock().Now()
+		}
 	}
 	return cmdKey
 }
@@ -1259,6 +1263,11 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		// If the intent isn't (completely) local, we'll need to send an external request.
 		// We'll batch them all up and send at the end.
 		if !local {
+			// HACK(tschottdorf): hope that all intents are for the same Txn.
+			// Real fix: don't use RequestHeader.Txn for ResolveIntent, after
+			// all we want to batch up a bunch of different transaction's
+			// intents.
+			bArgs.Txn = &intent.Txn
 			bArgs.Add(resolveArgs)
 			continue
 		}

@@ -564,18 +564,28 @@ class ReadWithinUncertaintyIntervalError : public ::google::protobuf::Message {
   ::cockroach::proto::Timestamp* release_existing_timestamp();
   void set_allocated_existing_timestamp(::cockroach::proto::Timestamp* existing_timestamp);
 
+  // optional int32 node_id = 3;
+  bool has_node_id() const;
+  void clear_node_id();
+  static const int kNodeIdFieldNumber = 3;
+  ::google::protobuf::int32 node_id() const;
+  void set_node_id(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.ReadWithinUncertaintyIntervalError)
  private:
   inline void set_has_timestamp();
   inline void clear_has_timestamp();
   inline void set_has_existing_timestamp();
   inline void clear_has_existing_timestamp();
+  inline void set_has_node_id();
+  inline void clear_has_node_id();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::proto::Timestamp* timestamp_;
   ::cockroach::proto::Timestamp* existing_timestamp_;
+  ::google::protobuf::int32 node_id_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
@@ -2230,6 +2240,30 @@ inline void ReadWithinUncertaintyIntervalError::set_allocated_existing_timestamp
     clear_has_existing_timestamp();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ReadWithinUncertaintyIntervalError.existing_timestamp)
+}
+
+// optional int32 node_id = 3;
+inline bool ReadWithinUncertaintyIntervalError::has_node_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void ReadWithinUncertaintyIntervalError::set_has_node_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void ReadWithinUncertaintyIntervalError::clear_has_node_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void ReadWithinUncertaintyIntervalError::clear_node_id() {
+  node_id_ = 0;
+  clear_has_node_id();
+}
+inline ::google::protobuf::int32 ReadWithinUncertaintyIntervalError::node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ReadWithinUncertaintyIntervalError.node_id)
+  return node_id_;
+}
+inline void ReadWithinUncertaintyIntervalError::set_node_id(::google::protobuf::int32 value) {
+  set_has_node_id();
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.ReadWithinUncertaintyIntervalError.node_id)
 }
 
 // -------------------------------------------------------------------

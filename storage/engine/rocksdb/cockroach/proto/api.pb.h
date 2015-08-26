@@ -79,6 +79,8 @@ class PushTxnResponse;
 class ResolveIntentRequest;
 class ResolveIntentResponse;
 class ResolveIntentRangeRequest;
+class NoopResponse;
+class NoopRequest;
 class ResolveIntentRangeResponse;
 class MergeRequest;
 class MergeResponse;
@@ -3980,6 +3982,188 @@ class ResolveIntentRangeRequest : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class NoopResponse : public ::google::protobuf::Message {
+ public:
+  NoopResponse();
+  virtual ~NoopResponse();
+
+  NoopResponse(const NoopResponse& from);
+
+  inline NoopResponse& operator=(const NoopResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const NoopResponse& default_instance();
+
+  void Swap(NoopResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  inline NoopResponse* New() const { return New(NULL); }
+
+  NoopResponse* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const NoopResponse& from);
+  void MergeFrom(const NoopResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(NoopResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.ResponseHeader header = 1;
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  const ::cockroach::proto::ResponseHeader& header() const;
+  ::cockroach::proto::ResponseHeader* mutable_header();
+  ::cockroach::proto::ResponseHeader* release_header();
+  void set_allocated_header(::cockroach::proto::ResponseHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.NoopResponse)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::ResponseHeader* header_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
+
+  void InitAsDefaultInstance();
+  static NoopResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class NoopRequest : public ::google::protobuf::Message {
+ public:
+  NoopRequest();
+  virtual ~NoopRequest();
+
+  NoopRequest(const NoopRequest& from);
+
+  inline NoopRequest& operator=(const NoopRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const NoopRequest& default_instance();
+
+  void Swap(NoopRequest* other);
+
+  // implements Message ----------------------------------------------
+
+  inline NoopRequest* New() const { return New(NULL); }
+
+  NoopRequest* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const NoopRequest& from);
+  void MergeFrom(const NoopRequest& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(NoopRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.RequestHeader header = 1;
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  const ::cockroach::proto::RequestHeader& header() const;
+  ::cockroach::proto::RequestHeader* mutable_header();
+  ::cockroach::proto::RequestHeader* release_header();
+  void set_allocated_header(::cockroach::proto::RequestHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.NoopRequest)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::RequestHeader* header_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
+
+  void InitAsDefaultInstance();
+  static NoopRequest* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class ResolveIntentRangeResponse : public ::google::protobuf::Message {
  public:
   ResolveIntentRangeResponse();
@@ -4695,6 +4879,7 @@ class RequestUnion : public ::google::protobuf::Message {
     kTruncate = 18,
     kLeaderLease = 19,
     kReverseScan = 20,
+    kNoop = 21,
     VALUE_NOT_SET = 0,
   };
 
@@ -4919,6 +5104,15 @@ class RequestUnion : public ::google::protobuf::Message {
   ::cockroach::proto::ReverseScanRequest* release_reverse_scan();
   void set_allocated_reverse_scan(::cockroach::proto::ReverseScanRequest* reverse_scan);
 
+  // optional .cockroach.proto.NoopRequest noop = 21;
+  bool has_noop() const;
+  void clear_noop();
+  static const int kNoopFieldNumber = 21;
+  const ::cockroach::proto::NoopRequest& noop() const;
+  ::cockroach::proto::NoopRequest* mutable_noop();
+  ::cockroach::proto::NoopRequest* release_noop();
+  void set_allocated_noop(::cockroach::proto::NoopRequest* noop);
+
   ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.RequestUnion)
  private:
@@ -4942,6 +5136,7 @@ class RequestUnion : public ::google::protobuf::Message {
   inline void set_has_truncate();
   inline void set_has_leader_lease();
   inline void set_has_reverse_scan();
+  inline void set_has_noop();
 
   inline bool has_value() const;
   void clear_value();
@@ -4972,6 +5167,7 @@ class RequestUnion : public ::google::protobuf::Message {
     ::cockroach::proto::TruncateLogRequest* truncate_;
     ::cockroach::proto::LeaderLeaseRequest* leader_lease_;
     ::cockroach::proto::ReverseScanRequest* reverse_scan_;
+    ::cockroach::proto::NoopRequest* noop_;
   } value_;
   ::google::protobuf::uint32 _oneof_case_[1];
 
@@ -5028,6 +5224,7 @@ class ResponseUnion : public ::google::protobuf::Message {
     kTruncate = 18,
     kLeaderLease = 19,
     kReverseScan = 20,
+    kNoop = 21,
     VALUE_NOT_SET = 0,
   };
 
@@ -5252,6 +5449,15 @@ class ResponseUnion : public ::google::protobuf::Message {
   ::cockroach::proto::ReverseScanResponse* release_reverse_scan();
   void set_allocated_reverse_scan(::cockroach::proto::ReverseScanResponse* reverse_scan);
 
+  // optional .cockroach.proto.NoopResponse noop = 21;
+  bool has_noop() const;
+  void clear_noop();
+  static const int kNoopFieldNumber = 21;
+  const ::cockroach::proto::NoopResponse& noop() const;
+  ::cockroach::proto::NoopResponse* mutable_noop();
+  ::cockroach::proto::NoopResponse* release_noop();
+  void set_allocated_noop(::cockroach::proto::NoopResponse* noop);
+
   ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.ResponseUnion)
  private:
@@ -5275,6 +5481,7 @@ class ResponseUnion : public ::google::protobuf::Message {
   inline void set_has_truncate();
   inline void set_has_leader_lease();
   inline void set_has_reverse_scan();
+  inline void set_has_noop();
 
   inline bool has_value() const;
   void clear_value();
@@ -5305,6 +5512,7 @@ class ResponseUnion : public ::google::protobuf::Message {
     ::cockroach::proto::TruncateLogResponse* truncate_;
     ::cockroach::proto::LeaderLeaseResponse* leader_lease_;
     ::cockroach::proto::ReverseScanResponse* reverse_scan_;
+    ::cockroach::proto::NoopResponse* noop_;
   } value_;
   ::google::protobuf::uint32 _oneof_case_[1];
 
@@ -8677,6 +8885,100 @@ inline void ResolveIntentRangeRequest::set_allocated_header(::cockroach::proto::
 
 // -------------------------------------------------------------------
 
+// NoopResponse
+
+// optional .cockroach.proto.ResponseHeader header = 1;
+inline bool NoopResponse::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void NoopResponse::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void NoopResponse::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void NoopResponse::clear_header() {
+  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  clear_has_header();
+}
+inline const ::cockroach::proto::ResponseHeader& NoopResponse::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NoopResponse.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::cockroach::proto::ResponseHeader* NoopResponse::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) {
+    header_ = new ::cockroach::proto::ResponseHeader;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.NoopResponse.header)
+  return header_;
+}
+inline ::cockroach::proto::ResponseHeader* NoopResponse::release_header() {
+  clear_has_header();
+  ::cockroach::proto::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void NoopResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NoopResponse.header)
+}
+
+// -------------------------------------------------------------------
+
+// NoopRequest
+
+// optional .cockroach.proto.RequestHeader header = 1;
+inline bool NoopRequest::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void NoopRequest::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void NoopRequest::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void NoopRequest::clear_header() {
+  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  clear_has_header();
+}
+inline const ::cockroach::proto::RequestHeader& NoopRequest::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NoopRequest.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::cockroach::proto::RequestHeader* NoopRequest::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) {
+    header_ = new ::cockroach::proto::RequestHeader;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.NoopRequest.header)
+  return header_;
+}
+inline ::cockroach::proto::RequestHeader* NoopRequest::release_header() {
+  clear_has_header();
+  ::cockroach::proto::RequestHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void NoopRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NoopRequest.header)
+}
+
+// -------------------------------------------------------------------
+
 // ResolveIntentRangeResponse
 
 // optional .cockroach.proto.ResponseHeader header = 1;
@@ -10038,6 +10340,52 @@ inline void RequestUnion::set_allocated_reverse_scan(::cockroach::proto::Reverse
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.reverse_scan)
 }
 
+// optional .cockroach.proto.NoopRequest noop = 21;
+inline bool RequestUnion::has_noop() const {
+  return value_case() == kNoop;
+}
+inline void RequestUnion::set_has_noop() {
+  _oneof_case_[0] = kNoop;
+}
+inline void RequestUnion::clear_noop() {
+  if (has_noop()) {
+    delete value_.noop_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::NoopRequest& RequestUnion::noop() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.noop)
+  return has_noop() ? *value_.noop_
+                      : ::cockroach::proto::NoopRequest::default_instance();
+}
+inline ::cockroach::proto::NoopRequest* RequestUnion::mutable_noop() {
+  if (!has_noop()) {
+    clear_value();
+    set_has_noop();
+    value_.noop_ = new ::cockroach::proto::NoopRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.noop)
+  return value_.noop_;
+}
+inline ::cockroach::proto::NoopRequest* RequestUnion::release_noop() {
+  if (has_noop()) {
+    clear_has_value();
+    ::cockroach::proto::NoopRequest* temp = value_.noop_;
+    value_.noop_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void RequestUnion::set_allocated_noop(::cockroach::proto::NoopRequest* noop) {
+  clear_value();
+  if (noop) {
+    set_has_noop();
+    value_.noop_ = noop;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.noop)
+}
+
 inline bool RequestUnion::has_value() const {
   return value_case() != VALUE_NOT_SET;
 }
@@ -10971,6 +11319,52 @@ inline void ResponseUnion::set_allocated_reverse_scan(::cockroach::proto::Revers
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.reverse_scan)
 }
 
+// optional .cockroach.proto.NoopResponse noop = 21;
+inline bool ResponseUnion::has_noop() const {
+  return value_case() == kNoop;
+}
+inline void ResponseUnion::set_has_noop() {
+  _oneof_case_[0] = kNoop;
+}
+inline void ResponseUnion::clear_noop() {
+  if (has_noop()) {
+    delete value_.noop_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::NoopResponse& ResponseUnion::noop() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ResponseUnion.noop)
+  return has_noop() ? *value_.noop_
+                      : ::cockroach::proto::NoopResponse::default_instance();
+}
+inline ::cockroach::proto::NoopResponse* ResponseUnion::mutable_noop() {
+  if (!has_noop()) {
+    clear_value();
+    set_has_noop();
+    value_.noop_ = new ::cockroach::proto::NoopResponse;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ResponseUnion.noop)
+  return value_.noop_;
+}
+inline ::cockroach::proto::NoopResponse* ResponseUnion::release_noop() {
+  if (has_noop()) {
+    clear_has_value();
+    ::cockroach::proto::NoopResponse* temp = value_.noop_;
+    value_.noop_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void ResponseUnion::set_allocated_noop(::cockroach::proto::NoopResponse* noop) {
+  clear_value();
+  if (noop) {
+    set_has_noop();
+    value_.noop_ = noop;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.noop)
+}
+
 inline bool ResponseUnion::has_value() const {
   return value_case() != VALUE_NOT_SET;
 }
@@ -11135,6 +11529,10 @@ BatchResponse::mutable_responses() {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

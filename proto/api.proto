@@ -487,6 +487,16 @@ message ResolveIntentRangeRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// A NoopResponse is the return value from a no-op operation.
+message NoopResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A NoopRequest is a no-op.
+message NoopRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A ResolveIntentRangeResponse is the return value from the
 // ResolveIntent() method.
 message ResolveIntentRangeResponse {
@@ -562,6 +572,7 @@ message RequestUnion {
     TruncateLogRequest truncate = 18;
     LeaderLeaseRequest leader_lease = 19;
     ReverseScanRequest reverse_scan = 20;
+    NoopRequest noop = 21;
   }
 }
 
@@ -590,6 +601,7 @@ message ResponseUnion {
     TruncateLogResponse truncate = 18;
     LeaderLeaseResponse leader_lease = 19;
     ReverseScanResponse reverse_scan = 20;
+    NoopResponse noop = 21;
   }
 }
 

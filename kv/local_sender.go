@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -125,11 +126,18 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 	var err error
 	var store *storage.Store
 
+	call, unwrap := batch.MaybeWrapCall(call)
+	defer unwrap(call)
+
 	trace := tracer.FromCtx(ctx)
 
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
 	header := call.Args.Header()
+	{
+		br := call.Args.(*proto.BatchRequest)
+		br.Key, br.EndKey = batch.KeyRange(br)
+	}
 	if header.RangeID == 0 || header.Replica.StoreID == 0 {
 		var repl *proto.Replica
 		var rangeID proto.RangeID
@@ -188,6 +196,9 @@ func (ls *LocalSender) lookupReplica(start, end proto.Key) (rangeID proto.RangeI
 	for _, store := range ls.storeMap {
 		rng = store.LookupReplica(start, end)
 		if rng == nil {
+			if tmpRng := store.LookupReplica(start, nil); tmpRng != nil {
+				panic("range not contained in one range")
+			}
 			continue
 		}
 		if replica == nil {

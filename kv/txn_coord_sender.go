@@ -26,6 +26,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -305,21 +306,21 @@ func (tc *TxnCoordSender) Send(ctx context.Context, call proto.Call) {
 	}()
 	ctx = tracer.ToCtx(ctx, trace)
 
-	// Process batch specially; otherwise, send via wrapped sender.
-	switch batchArgs := call.Args.(type) {
-	case *proto.BatchRequest:
-		trace.Event("batch processing")
-		for _, arg := range batchArgs.Requests {
-			if err := updateForBatch(arg.GetValue().(proto.Request), batchArgs.RequestHeader); err != nil {
-				call.Reply.Header().SetGoError(err)
-				return
-			}
-			trace.Event(fmt.Sprintf("%T", arg.GetValue()))
+	// Auto-wrap individual calls in a Batch.
+	{
+		var unwrap func(proto.Call) proto.Call
+		call, unwrap = batch.MaybeWrapCall(call)
+		defer unwrap(call)
+	}
+
+	trace.Event("batch processing")
+	batchArgs := call.Args.(*proto.BatchRequest)
+	for _, arg := range batchArgs.Requests {
+		trace.Event(fmt.Sprintf("%T", arg.GetValue()))
+		if err := batch.UpdateForBatch(arg.GetValue().(proto.Request), batchArgs.RequestHeader); err != nil {
+			call.Reply.Header().SetGoError(err)
+			return
 		}
-		// TODO(tschottdorf): remove.
-		// For now: commented=send batches whole, uncommented=single reqs.
-		tc.sendBatch(ctx, batchArgs, call.Reply.(*proto.BatchResponse))
-		return
 	}
 	tc.sendOne(ctx, call)
 }
@@ -381,6 +382,7 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 		// Set the timestamp to the original timestamp for read-only
 		// commands and to the transaction timestamp for read/write
 		// commands.
+		// TODO(tschottdorf): adapt for Batch.
 		if proto.IsReadOnly(call.Args) {
 			header.Timestamp = header.Txn.OrigTimestamp
 		} else {
@@ -394,7 +396,9 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 			// be linearizable.
 			startNS = tc.clock.PhysicalNow()
 			// EndTransaction must have its key set to that of the txn.
-			header.Key = header.Txn.Key
+			// TODO(tschottdorf): Should remove this here and make sure
+			// the client does it properly.
+			rArgs.Header().Key = header.Txn.Key
 			if len(args.Intents) > 0 {
 				// TODO(tschottdorf): it may be useful to allow this later.
 				// That would be part of a possible plan to allow txns which
@@ -414,7 +418,9 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 			// got to track planned writes before EndTransaction in the cur-
 			// rent batch. This is a hacky way to get that for now.
 			if len(proto.GetIntents(call.Args)) > 0 {
-				// Writes in Batch, so EndTransaction is fine.
+				// Writes in Batch, so EndTransaction is fine. Should add
+				// outstanding intents to EndTransaction, though.
+				args.Intents = append(args.Intents, proto.GetIntents(call.Args)...)
 			} else if !metaOK {
 				// If we don't have the transaction, then this must be a retry
 				// by the client. We can no longer reconstruct a correct
@@ -488,8 +494,8 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						return
 					}
 				}
-				for _, rg := range intents {
-					txnMeta.addKeyRange(rg[0], rg[1])
+				for _, intent := range intents {
+					txnMeta.addKeyRange(intent.Key, intent.EndKey)
 				}
 			}
 			// Update our record of this transaction.
@@ -511,6 +517,9 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 		// If already aborted, cleanup the txn on this TxnCoordSender.
 		tc.cleanupTxn(trace, t.Txn)
 	case *proto.OpRequiresTxnError:
+		if true { // avoid linting error
+			panic("TODO(tschottdorf): range-spanning autowrap currently broken")
+		}
 		// Run a one-off transaction with that single command.
 		if log.V(1) {
 			log.Infof("%s: auto-wrapping in txn and re-executing", call.Method())
@@ -559,70 +568,11 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						time.Sleep(sleepNS)
 					}()
 				}
+				// TODO(tschottdorf): This can move one indent further out.
 				if txn.Status != proto.PENDING {
 					tc.cleanupTxn(trace, *txn)
 				}
-
 			}
-		}
-	}
-}
-
-// updateForBatch updates the first argument (the header of a request contained
-// in a batch) from the second one (the batch header), returning an error when
-// inconsistencies are found.
-// It is checked that the individual call does not have a User, UserPriority
-// or Txn set that differs from the batch's.
-func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
-	// Disallow transaction, user and priority on individual calls, unless
-	// equal.
-	aHeader := args.Header()
-	if aPrio := aHeader.GetUserPriority(); aPrio != proto.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
-		return util.Errorf("conflicting user priority on call in batch")
-	}
-	aHeader.UserPriority = bHeader.UserPriority
-	// Only allow individual transactions on the requests of a batch if
-	// - the batch is non-transactional,
-	// - the individual transaction does not write intents, and
-	// - the individual transaction is initialized.
-	// The main usage of this is to allow mass-resolution of intents, which
-	// entails sending a non-txn batch of transactional InternalResolveIntent.
-	if aHeader.Txn != nil && !aHeader.Txn.Equal(bHeader.Txn) {
-		if len(aHeader.Txn.ID) == 0 || proto.IsTransactionWrite(args) || bHeader.Txn != nil {
-			return util.Errorf("conflicting transaction in transactional batch")
-		}
-	} else {
-		aHeader.Txn = bHeader.Txn
-	}
-	return nil
-}
-
-// sendBatch unrolls a batched command and sends each constituent
-// command in parallel.
-func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.BatchRequest, batchReply *proto.BatchResponse) {
-	// Prepare the calls by unrolling the batch. If the batchReply is
-	// pre-initialized with replies, use those; otherwise create replies
-	// as needed.
-	// TODO(spencer): send calls in parallel.
-	batchReply.Txn = batchArgs.Txn
-	for i := range batchArgs.Requests {
-		args := batchArgs.Requests[i].GetValue().(proto.Request)
-		call := proto.Call{Args: args}
-		// Create a reply from the method type and add to batch response.
-		if i >= len(batchReply.Responses) {
-			call.Reply = args.CreateReply()
-			batchReply.Add(call.Reply)
-		} else {
-			call.Reply = batchReply.Responses[i].GetValue().(proto.Response)
-		}
-		tc.sendOne(ctx, call)
-		// Amalgamate transaction updates and propagate first error, if applicable.
-		if batchReply.Txn != nil {
-			batchReply.Txn.Update(call.Reply.Header().Txn)
-		}
-		if call.Reply.Header().Error != nil {
-			batchReply.Error = call.Reply.Header().Error
-			return
 		}
 	}
 }
@@ -631,6 +581,7 @@ func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.BatchR
 // timestamp and error. The timestamp may have changed upon
 // encountering a newer write or read. Both the timestamp and the
 // priority may change depending on error conditions.
+// TODO(tschottdorf): some of this needs to move to the Store.
 func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, replyHeader *proto.ResponseHeader) {
 	// Move txn timestamp forward to response timestamp if applicable.
 	if replyHeader.Txn.Timestamp.Less(replyHeader.Timestamp) {
@@ -642,7 +593,14 @@ func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, rep
 	case *proto.ReadWithinUncertaintyIntervalError:
 		// Mark the host as certain. See the protobuf comment for
 		// Transaction.CertainNodes for details.
-		replyHeader.Txn.CertainNodes.Add(argsHeader.Replica.NodeID)
+		// TODO(tschottdorf): should mark on any reply, not only error.
+		// Once we've completely switched to Batches, consider adding
+		// and amalgamating the Nodes talked to for a particular batch
+		// request.
+		if t.NodeID == 0 {
+			panic("no replica set in header on uncertainty restart")
+		}
+		replyHeader.Txn.CertainNodes.Add(t.NodeID)
 
 		// If the reader encountered a newer write within the uncertainty
 		// interval, move the timestamp forward, just past that write or
@@ -812,7 +770,9 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	}
 
 	epochEnds := trace.Epoch("heartbeat")
+	call, unwrap := batch.MaybeWrapCall(call)
 	tc.wrapped.Send(ctx, call)
+	unwrap(call)
 	epochEnds()
 	// If the transaction is not in pending state, then we can stop
 	// the heartbeat. It's either aborted or committed, and we resolve

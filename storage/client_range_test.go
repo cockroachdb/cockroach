@@ -323,6 +323,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip(storage.TODOtschottdorf)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 

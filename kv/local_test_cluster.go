@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -44,6 +45,9 @@ import (
 // key mismatches (i.e. splits / merges), but many tests in this
 // package do not create nodes and RPC servers necessary to run a
 // DistSender and instead rely on local sender only.
+// Additionally, again due to the absence of DistSender and thus the
+// ability to subdivide batches intelligently, batch requests are unrolled
+// and send individually.
 type retryableLocalSender struct {
 	*LocalSender
 }
@@ -54,11 +58,21 @@ func newRetryableLocalSender(lSender *LocalSender) *retryableLocalSender {
 	}
 }
 
-// Send implements the client.Sender interface.
+// Send implements the client.Sender interface. TODO(tschottdorf): The plan
+// here is to still use a slim version of DistSender which looks up replicas
+// from the underlying store (which then exposes a RangeDescriptorDB) and wraps
+// through a ChunkingSender.
 func (rls *retryableLocalSender) Send(_ context.Context, call proto.Call) {
 	// Instant retry to handle the case of a range split, which is
 	// exposed here as a RangeKeyMismatchError.
 	retryOpts := retry.Options{}
+
+	{
+		var unwrap func(proto.Call) proto.Call
+		call, unwrap = batch.MaybeWrapCall(call)
+		defer unwrap(call)
+	}
+
 	// In local tests, the RPCs are not actually sent over the wire. We
 	// need to clone the Txn in order to avoid unexpected sharing
 	// between TxnCoordSender and client.Txn.
@@ -68,8 +82,10 @@ func (rls *retryableLocalSender) Send(_ context.Context, call proto.Call) {
 
 	var err error
 	for r := retry.Start(retryOpts); r.Next(); {
-		call.Reply.Header().Error = nil
-		rls.LocalSender.Send(context.TODO(), call)
+		call.Reply.Header().SetGoError(nil)
+		call.Reply.(*proto.BatchResponse).ResetAll()
+		batch.Unroll(context.Background(), rls.LocalSender, call.Args.(*proto.BatchRequest),
+			call.Reply.(*proto.BatchResponse))
 		// Check for range key mismatch error (this could happen if
 		// range was split between lookup and execution). In this case,
 		// reset header.Replica and engage retry loop.
@@ -77,6 +93,9 @@ func (rls *retryableLocalSender) Send(_ context.Context, call proto.Call) {
 			if _, ok := err.(*proto.RangeKeyMismatchError); ok {
 				// Clear request replica.
 				call.Args.Header().Replica = proto.Replica{}
+				for _, args := range call.Args.(*proto.BatchRequest).Requests {
+					args.GetValue().(proto.Request).Header().Replica = proto.Replica{}
+				}
 				log.Warning(err)
 				continue
 			}
