@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	// Import cockroach driver.
 	_ "github.com/cockroachdb/cockroach/sql/driver"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -49,7 +48,7 @@ func makeSQLClient() *sql.DB {
 func runQuery(db *sql.DB, query string, parameters ...interface{}) error {
 	rows, err := db.Query(query, parameters...)
 	if err != nil {
-		return util.Errorf("query error: %s", err)
+		return fmt.Errorf("query error: %s", err)
 	}
 
 	defer rows.Close()
@@ -62,7 +61,7 @@ func runQuery(db *sql.DB, query string, parameters ...interface{}) error {
 func printQueryOutput(rows *sql.Rows) error {
 	cols, err := rows.Columns()
 	if err != nil {
-		return util.Errorf("rows.Columns() error: %s", err)
+		return fmt.Errorf("rows.Columns() error: %s", err)
 	}
 
 	if len(cols) == 0 {
@@ -84,7 +83,7 @@ func printQueryOutput(rows *sql.Rows) error {
 			vals[i] = new(sql.NullString)
 		}
 		if err := rows.Scan(vals...); err != nil {
-			return util.Errorf("scan error: %s", err)
+			return fmt.Errorf("scan error: %s", err)
 		}
 		for i, v := range vals {
 			nullStr := v.(*sql.NullString)
