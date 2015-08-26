@@ -85,14 +85,10 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 	// a random already-being-serviced incoming client as an alternate.
 	if !s.incoming.hasNode(args.NodeID) {
 		if !s.incoming.hasSpace() {
-			idx := rand.Intn(len(s.lAddrMap))
-			count := 0
+			// Map iteration order is random.
 			for _, cInfo := range s.lAddrMap {
-				if count == idx {
-					reply.Alternate = cInfo.addr
-					return reply, nil
-				}
-				count++
+				reply.Alternate = cInfo.addr
+				return reply, nil
 			}
 		}
 		s.incoming.addNode(args.NodeID)
