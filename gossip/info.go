@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // info is the basic unit of information traded over the gossip
@@ -44,22 +43,6 @@ func infoPrefix(key string) string {
 		return key[:index]
 	}
 	return ""
-}
-
-// less returns true if i's value is less than b's value. i's and
-// b's types must match.
-func (i *info) less(b *info) bool {
-	switch t := i.Val.(type) {
-	case int64:
-		return t < b.Val.(int64)
-	case float64:
-		return t < b.Val.(float64)
-	case string:
-		return t < b.Val.(string)
-	default:
-		log.Fatalf("unhandled info value type: %T", t)
-	}
-	return false
 }
 
 // expired returns true if the node's time to live (TTL) has expired.
@@ -85,11 +68,3 @@ func (i *info) isFresh(nodeID proto.NodeID, seq int64) bool {
 
 // infoMap is a map of keys to info object pointers.
 type infoMap map[string]*info
-
-// infoSlice is a slice of Info object pointers.
-type infoSlice []*info
-
-// Implement sort.Interface for infoSlice.
-func (a infoSlice) Len() int           { return len(a) }
-func (a infoSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a infoSlice) Less(i, j int) bool { return a[i].less(a[j]) }

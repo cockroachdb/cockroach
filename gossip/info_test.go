@@ -18,8 +18,6 @@
 package gossip
 
 import (
-	"math"
-	"sort"
 	"testing"
 	"time"
 
@@ -48,37 +46,6 @@ func TestPrefix(t *testing.T) {
 		if p := infoPrefix(pi.Key); p != pi.Prefix {
 			t.Errorf("infoPrefix(%s) = %s != %s", pi.Key, p, pi.Prefix)
 		}
-	}
-}
-
-func TestSort(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	infos := infoSlice{
-		{"a", 3.0, 0, 0, 0, 0, 0, 0},
-		{"b", 1.0, 0, 0, 0, 0, 0, 0},
-		{"c", 2.1, 0, 0, 0, 0, 0, 0},
-		{"d", 2.0, 0, 0, 0, 0, 0, 0},
-		{"e", -1.0, 0, 0, 0, 0, 0, 0},
-	}
-
-	// Verify forward sort.
-	sort.Sort(infos)
-	last := &info{"last", -math.MaxFloat64, 0, 0, 0, 0, 0, 0}
-	for _, i := range infos {
-		if i.less(last) {
-			t.Errorf("info val %v not increasing", i.Val)
-		}
-		last.Val = i.Val
-	}
-
-	// Verify reverse sort.
-	sort.Sort(sort.Reverse(infos))
-	last = &info{"last", math.MaxFloat64, 0, 0, 0, 0, 0, 0}
-	for _, i := range infos {
-		if !i.less(last) {
-			t.Errorf("info val %v not decreasing", i.Val)
-		}
-		last.Val = i.Val
 	}
 }
 
