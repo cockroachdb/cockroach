@@ -32,23 +32,6 @@ func testAddr(str string) util.UnresolvedAddr {
 
 var emptyAddr = testAddr("<test-addr>")
 
-func TestPrefix(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	prefixes := []struct{ Key, Prefix string }{
-		{"a", ""},
-		{"a.b", "a"},
-		{"a.b.c", "a.b"},
-		{"a.b.ccc", "a.b"},
-		{"a.b..ccc", "a.b."},
-	}
-
-	for _, pi := range prefixes {
-		if p := infoPrefix(pi.Key); p != pi.Prefix {
-			t.Errorf("infoPrefix(%s) = %s != %s", pi.Key, p, pi.Prefix)
-		}
-	}
-}
-
 func TestExpired(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	now := time.Now().UnixNano()
