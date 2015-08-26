@@ -22,15 +22,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-func testAddr(str string) util.UnresolvedAddr {
-	return util.MakeUnresolvedAddr("test", str)
-}
-
-var emptyAddr = testAddr("<test-addr>")
 
 func TestExpired(t *testing.T) {
 	defer leaktest.AfterTest(t)

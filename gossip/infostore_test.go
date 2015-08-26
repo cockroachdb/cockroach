@@ -27,10 +27,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-// testAddr and emptyAddr are defined in info_test.go.
+var emptyAddr = util.MakeUnresolvedAddr("test", "<test-addr>")
 
 // TestZeroDuration verifies that specifying a zero duration sets
 // TTLStamp to max int64.
