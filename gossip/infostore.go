@@ -102,8 +102,7 @@ var (
 )
 
 // newInfoStore allocates and returns a new infoStore.
-// "NodeAddr" is the address of the node owning the infostore
-// in "host:port" format.
+// "NodeAddr" is the address of the node owning the infostore.
 func newInfoStore(nodeID proto.NodeID, nodeAddr util.UnresolvedAddr) *infoStore {
 	return &infoStore{
 		Infos:    infoMap{},
