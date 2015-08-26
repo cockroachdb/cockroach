@@ -46,13 +46,6 @@ const (
 	// The suffix is a store ID and the value is proto.StoreDescriptor.
 	KeyStorePrefix = "store"
 
-	// KeyNodeCount is the count of gossip nodes in the
-	// network. The value is an int64 containing the count of nodes in
-	// the cluster.
-	// TODO(spencer): should remove this and instead just count the
-	//   number of node ids being gossiped.
-	KeyNodeCount = "node-count"
-
 	// KeyNodeIDPrefix is the key prefix for gossiping node id
 	// addresses. The actual key is suffixed with the decimal
 	// representation of the node id and the value is the host:port

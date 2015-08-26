@@ -17,16 +17,11 @@
 
 package gossip
 
-import (
-	"strings"
-
-	"github.com/cockroachdb/cockroach/proto"
-)
+import "github.com/cockroachdb/cockroach/proto"
 
 // info is the basic unit of information traded over the gossip
 // network.
 type info struct {
-	Key       string       // Info key
 	Val       interface{}  // Permitted types are enumerated in init()
 	Timestamp int64        `json:"-"` // Wall time at origination (Unix-nanos)
 	TTLStamp  int64        `json:"-"` // Wall time before info is discarded (Unix-nanos)
@@ -34,15 +29,6 @@ type info struct {
 	NodeID    proto.NodeID `json:"-"` // Originating node's ID
 	peerID    proto.NodeID // Proximate peer's ID which passed us the info
 	seq       int64        // Sequence number for incremental updates
-}
-
-// infoPrefix returns the text preceding the last period within
-// the given key.
-func infoPrefix(key string) string {
-	if index := strings.LastIndex(key, "."); index != -1 {
-		return key[:index]
-	}
-	return ""
 }
 
 // expired returns true if the node's time to live (TTL) has expired.

@@ -60,6 +60,7 @@ import (
 	"encoding/json"
 	"math"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,19 +77,18 @@ import (
 const (
 	// MaxPeers is the maximum number of connected gossip peers.
 	MaxPeers = 10
-	// defaultNodeCount is the default number of nodes in the gossip
-	// network. The actual count of nodes in the cluster is gossiped
-	// by the range which contains node statistics.
+	// minNodeCount is the minimum number of nodes in the gossip network
+	// for the purpose of computing the maximum hops allowed for info
+	// transimission. The actual count of nodes in the cluster is
+	// computed by counting the number of node IDs in the infoStore.
 	//
 	// The count of nodes is used to compute the maximum hops allowed
 	// for info transmission given the maxPeers parameter by the
 	// formula: maxHops = ceil(log(numNodes) / log(maxPeers)) + 1.
 	//
-	// This default value helps when establishing the gossip network,
+	// This minimum value helps when establishing the gossip network,
 	// and is set purposefully high to avoid premature tightening.
-	// Once we receive the gossip with actual count, the default count
-	// is replaced.
-	defaultNodeCount = 1000
+	minNodeCount int64 = 1000
 
 	// ttlNodeIDGossip is time-to-live for node ID -> address.
 	ttlNodeIDGossip time.Duration = 0
@@ -244,7 +244,7 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
 func (g *Gossip) AddInfo(key string, val interface{}, ttl time.Duration) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	err := g.is.addInfo(g.is.newInfo(key, val, ttl))
+	err := g.is.addInfo(key, g.is.newInfo(val, ttl))
 	if err == nil {
 		g.checkHasConnected()
 	}
@@ -331,11 +331,20 @@ func (g *Gossip) Start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 // on the level of fanout (MaxPeers) and the count of nodes in the
 // cluster.
 func (g *Gossip) maxToleratedHops() uint32 {
-	// Get info directly as we have mutex held here.
-	var nodeCount = int64(defaultNodeCount)
-	if info := g.is.getInfo(KeyNodeCount); info != nil {
-		nodeCount = info.Val.(int64)
+	var nodeCount int64
+
+	// will never error because `return nil` below
+	_ = g.is.visitInfos(func(key string, i *info) error {
+		if strings.HasPrefix(key, KeyNodeIDPrefix) {
+			nodeCount++
+		}
+		return nil
+	})
+
+	if nodeCount < minNodeCount {
+		nodeCount = minNodeCount
 	}
+
 	return uint32(math.Ceil(math.Log(float64(nodeCount))/math.Log(float64(MaxPeers))))*2 + 1
 }
 

@@ -424,7 +424,7 @@ func (s *Server) sendResponses(codec rpc.ServerCodec, responses <-chan serverRes
 			rpcResp.Error = resp.err.Error()
 		}
 		if err := codec.WriteResponse(&rpcResp, resp.reply); err != nil {
-			log.Warningf("rpc: write response failed")
+			log.Warningf("rpc: write response failed: %s", err)
 			// TODO(bdarnell): what to do at this point? close the connection?
 			// net/rpc just swallows the error.
 		}
