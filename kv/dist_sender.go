@@ -18,7 +18,6 @@
 package kv
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 	"reflect"
@@ -237,57 +236,14 @@ func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
 	return rlReply.Ranges, nil
 }
 
-// getFirstRangeDescriptor returns the RangeDescriptor for the first range on
-// the cluster, which is retrieved from the gossip protocol instead of the
-// datastore.
-func (ds *DistSender) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) {
+// firstRange returns the RangeDescriptor for the first range on the cluster,
+// which is retrieved from the gossip protocol instead of the datastore.
+func (ds *DistSender) firstRange() (*proto.RangeDescriptor, error) {
 	rangeDesc := &proto.RangeDescriptor{}
 	if err := ds.gossip.GetInfoProto(gossip.KeyFirstRangeDescriptor, rangeDesc); err != nil {
 		return nil, firstRangeMissingError{}
 	}
 	return rangeDesc, nil
-}
-
-// getRangeDescriptors returns a sorted slice of RangeDescriptors for a set of
-// consecutive ranges, the first of which must contain the requested key. The
-// additional RangeDescriptors are returned with the intent of pre-caching
-// subsequent ranges which are likely to be requested soon by the current
-// workload.
-func (ds *DistSender) getRangeDescriptors(key proto.Key, options lookupOptions) ([]proto.RangeDescriptor, error) {
-	var (
-		// metadataKey is sent to rangeLookup to find the
-		// RangeDescriptor which contains key.
-		metadataKey = keys.RangeMetaKey(key)
-		// desc is the RangeDescriptor for the range which contains
-		// metadataKey.
-		desc *proto.RangeDescriptor
-		err  error
-	)
-	if bytes.Equal(metadataKey, proto.KeyMin) {
-		// In this case, the requested key is stored in the cluster's first
-		// range. Return the first range, which is always gossiped and not
-		// queried from the datastore.
-		rd, err := ds.getFirstRangeDescriptor()
-		if err != nil {
-			return nil, err
-		}
-		return []proto.RangeDescriptor{*rd}, nil
-	}
-	if bytes.HasPrefix(metadataKey, keys.Meta1Prefix) {
-		// In this case, desc is the cluster's first range.
-		if desc, err = ds.getFirstRangeDescriptor(); err != nil {
-			return nil, err
-		}
-	} else {
-		// Look up desc from the cache, which will recursively call into
-		// ds.getRangeDescriptors if it is not cached.
-		desc, err = ds.rangeCache.LookupRangeDescriptor(metadataKey, options)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return ds.rangeLookup(metadataKey, options, desc)
 }
 
 func (ds *DistSender) optimizeReplicaOrder(replicas replicaSlice) rpc.OrderingPolicy {

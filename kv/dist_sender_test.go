@@ -339,8 +339,19 @@ func TestSendRPCOrder(t *testing.T) {
 
 type mockRangeDescriptorDB func(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
 
-func (mdb mockRangeDescriptorDB) getRangeDescriptors(k proto.Key, lo lookupOptions) ([]proto.RangeDescriptor, error) {
-	return mdb(k, lo)
+func (mdb mockRangeDescriptorDB) rangeLookup(key proto.Key, options lookupOptions, _ *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
+	if len(key) > 0 {
+		return mdb(key[len(keys.Meta1Prefix):], options)
+	}
+	// First range.
+	return mdb(nil, options)
+}
+func (mdb mockRangeDescriptorDB) firstRange() (*proto.RangeDescriptor, error) {
+	rs, err := mdb.rangeLookup(nil, lookupOptions{}, nil)
+	if err != nil || len(rs) == 0 {
+		return nil, err
+	}
+	return &rs[0], nil
 }
 
 // TestRetryOnNotLeaderError verifies that the DistSender correctly updates the
@@ -408,15 +419,18 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 			Message:   "temporary boom",
 			Retryable: true,
 		},
-		nil,
+		nil, nil, // meta2, meta1
 	}
 
 	ctx := &DistSenderContext{
 		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+		rangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 			// Return next error and truncate the prefix of the errors array.
-			err := errors[0]
-			errors = errors[1:]
+			var err error
+			if k != nil {
+				err = errors[0]
+				errors = errors[1:]
+			}
 			return []proto.RangeDescriptor{testRangeDescriptor}, err
 		}),
 	}
@@ -596,7 +610,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	n := simulation.NewNetwork(3, "tcp", gossip.TestInterval)
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
-	if _, err := ds.getFirstRangeDescriptor(); err == nil {
+	if _, err := ds.firstRange(); err == nil {
 		t.Errorf("expected not to find first range descriptor")
 	}
 	expectedDesc := &proto.RangeDescriptor{}
@@ -611,7 +625,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	}
 	maxCycles := 10
 	n.SimulateNetwork(func(cycle int, network *simulation.Network) bool {
-		desc, err := ds.getFirstRangeDescriptor()
+		desc, err := ds.firstRange()
 		if err != nil {
 			if cycle >= maxCycles {
 				t.Errorf("could not get range descriptor after %d cycles", cycle)

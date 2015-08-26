@@ -47,12 +47,12 @@ func (a rangeCacheKey) Compare(b llrb.Comparable) int {
 // underlying datastore. This interface is used by rangeDescriptorCache to
 // initially retrieve information which will be cached.
 type rangeDescriptorDB interface {
-	// getRangeDescriptors returns a sorted slice of RangeDescriptors for a set
-	// of consecutive ranges, the first of which must contain the requested key.
-	// The additional RangeDescriptors are returned with the intent of pre-
-	// caching subsequent ranges which are likely to be requested soon by the
-	// current workload.
-	getRangeDescriptors(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
+	// rangeLookup takes a meta key to look up descriptors for,
+	// for example \x00\x00meta1aa or \x00\x00meta2f.
+	rangeLookup(proto.Key, lookupOptions, *proto.RangeDescriptor) ([]proto.RangeDescriptor, error)
+	// firstRange returns the descriptor for the first Range. This is the
+	// Range containing all \x00\x00meta1 entries.
+	firstRange() (*proto.RangeDescriptor, error)
 }
 
 // rangeDescriptorCache is used to retrieve range descriptors for
@@ -123,7 +123,41 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	} else if log.V(1) {
 		log.Infof("lookup range descriptor: key=%s", key)
 	}
-	rs, err := rdc.db.getRangeDescriptors(key, options)
+	rs, err := func(key proto.Key, options lookupOptions) ([]proto.RangeDescriptor, error) {
+		var (
+			// metadataKey is sent to rangeLookup to find the
+			// RangeDescriptor which contains key.
+			metadataKey = keys.RangeMetaKey(key)
+			// desc is the RangeDescriptor for the range which contains
+			// metadataKey.
+			desc *proto.RangeDescriptor
+			err  error
+		)
+		if bytes.Equal(metadataKey, proto.KeyMin) {
+			// In this case, the requested key is stored in the cluster's first
+			// range. Return the first range, which is always gossiped and not
+			// queried from the datastore.
+			rd, err := rdc.db.firstRange()
+			if err != nil {
+				return nil, err
+			}
+			return []proto.RangeDescriptor{*rd}, nil
+		}
+		if bytes.HasPrefix(metadataKey, keys.Meta1Prefix) {
+			// In this case, desc is the cluster's first range.
+			if desc, err = rdc.db.firstRange(); err != nil {
+				return nil, err
+			}
+		} else {
+			// Look up desc from the cache, which will recursively call into
+			// this function if it is not cached.
+			desc, err = rdc.LookupRangeDescriptor(metadataKey, options)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return rdc.db.rangeLookup(metadataKey, options, desc)
+	}(key, options)
 	if err != nil {
 		return nil, err
 	}
