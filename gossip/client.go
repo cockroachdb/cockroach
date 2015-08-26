@@ -41,7 +41,6 @@ type client struct {
 	rpcClient   *rpc.Client   // RPC client
 	forwardAddr net.Addr      // Set if disconnected with an alternate addr
 	lastFresh   int64         // Last wall time client received fresh info
-	err         error         // Set if client experienced an error
 	closer      chan struct{} // Client shutdown channel
 }
 
@@ -60,23 +59,26 @@ func newClient(addr net.Addr) *client {
 // returns immediately.
 func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
+		var err error
+
 		c.rpcClient = rpc.NewClient(c.addr, context)
 		select {
 		case <-c.rpcClient.Healthy():
-			// Success!
+			// Start gossiping and wait for disconnect or error.
+			c.lastFresh = time.Now().UnixNano()
+			err = c.gossip(g, stopper)
+			if context.DisableCache {
+				c.rpcClient.Close()
+			}
 		case <-c.rpcClient.Closed:
-			c.err = util.Errorf("gossip client was closed")
-			done <- c
-			return
+			err = util.Error("client closed")
 		}
 
-		// Start gossiping and wait for disconnect or error.
-		c.lastFresh = time.Now().UnixNano()
-		c.err = c.gossip(g, stopper)
-		if context.DisableCache {
-			c.rpcClient.Close()
-		}
 		done <- c
+
+		if err != nil {
+			log.Infof("gossip client to %s: %s", c.addr, err)
+		}
 	})
 }
 

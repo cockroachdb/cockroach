@@ -522,9 +522,6 @@ func (g *Gossip) doCheckTimeout(stopper *stop.Stopper) {
 func (g *Gossip) doDisconnected(stopper *stop.Stopper, c *client) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if c.err != nil {
-		log.Infof("client disconnected: %s", c.err)
-	}
 	g.removeClient(c)
 
 	// If the client was disconnected with a forwarding address, connect now.
