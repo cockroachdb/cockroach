@@ -48,7 +48,6 @@ func ExampleNewClock() {
 	t := proto.Timestamp{WallTime: UnixNano()}
 	// The sanity checks below will usually never be triggered.
 
-	// Timestamp implements the util.Ordered interface.
 	if s.Less(t) || !t.Less(s) {
 		log.Fatalf("The later timestamp is smaller than the earlier one")
 	}
