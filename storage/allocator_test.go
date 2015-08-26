@@ -54,22 +54,39 @@ var multiDCConfig = config.ZoneConfig{
 	},
 }
 
-func gossipStores(g *gossip.Gossip, stores []*proto.StoreDescriptor, t *testing.T) {
-	var wg sync.WaitGroup
-	wg.Add(len(stores))
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool, _ []byte) { wg.Done() })
+// storeGossiper allows tests to push storeDescriptors into gossip and
+// synchronize on their callbacks. There can only be one storeGossiper used per
+// gossip instance.
+type storeGossiper struct {
+	g  *gossip.Gossip
+	wg sync.WaitGroup
+	mu sync.Mutex
+}
 
+func newStoreGossiper(g *gossip.Gossip) *storeGossiper {
+	sg := &storeGossiper{
+		g: g,
+	}
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool, _ []byte) { sg.wg.Done() })
+	return sg
+}
+
+func (sg *storeGossiper) gossipStores(stores []*proto.StoreDescriptor, t *testing.T) {
+	sg.mu.Lock()
+	defer sg.mu.Unlock()
+
+	sg.wg.Add(len(stores))
 	for _, s := range stores {
 		keyStoreGossip := gossip.MakeStoreKey(s.StoreID)
 		// Gossip store descriptor.
-		err := g.AddInfoProto(keyStoreGossip, s, 0)
+		err := sg.g.AddInfoProto(keyStoreGossip, s, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Wait for all gossip callbacks to be invoked.
-	wg.Wait()
+	sg.wg.Wait()
 }
 
 var singleStore = []*proto.StoreDescriptor{
@@ -181,7 +198,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	gossipStores(s.Gossip(), singleStore, t)
+	newStoreGossiper(s.Gossip()).gossipStores(singleStore, t)
 	result, err := s.allocator().AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{}, false)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
@@ -208,7 +225,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	gossipStores(s.Gossip(), sameDCStores, t)
+	newStoreGossiper(s.Gossip()).gossipStores(sameDCStores, t)
 	result1, err := s.allocator().AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []proto.Replica{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -245,7 +262,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	gossipStores(s.Gossip(), multiDCStores, t)
+	newStoreGossiper(s.Gossip()).gossipStores(multiDCStores, t)
 	result1, err := s.allocator().AllocateTarget(multiDCConfig.ReplicaAttrs[0], []proto.Replica{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -273,7 +290,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	gossipStores(s.Gossip(), sameDCStores, t)
+	newStoreGossiper(s.Gossip()).gossipStores(sameDCStores, t)
 	result, err := s.allocator().AllocateTarget(multiDisksConfig.ReplicaAttrs[1], []proto.Replica{
 		{
 			NodeID:  2,
@@ -295,7 +312,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	gossipStores(s.Gossip(), multiDCStores, t)
+	newStoreGossiper(s.Gossip()).gossipStores(multiDCStores, t)
 
 	testCases := []struct {
 		required         []string // attribute strings
@@ -366,7 +383,7 @@ func TestAllocatorRandomAllocation(t *testing.T) {
 			Capacity: proto.StoreCapacity{Capacity: 200, Available: 0},
 		},
 	}
-	gossipStores(s.Gossip(), stores, t)
+	newStoreGossiper(s.Gossip()).gossipStores(stores, t)
 
 	// Every allocation will randomly choose 3 of the 4, meaning either
 	// store 1 or store 2 will be chosen, as the least loaded of the
@@ -411,7 +428,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			Capacity: proto.StoreCapacity{Capacity: 100, Available: (100 - int64(100*maxFractionUsedThreshold)) / 2},
 		},
 	}
-	gossipStores(s.Gossip(), stores, t)
+	newStoreGossiper(s.Gossip()).gossipStores(stores, t)
 
 	// Every rebalance target must be either stores 1 or 2.
 	for i := 0; i < 10; i++ {
@@ -462,7 +479,7 @@ func TestAllocatorRebalanceByCapacity(t *testing.T) {
 			Capacity: proto.StoreCapacity{Capacity: 100, Available: 80},
 		},
 	}
-	gossipStores(s.Gossip(), stores, t)
+	newStoreGossiper(s.Gossip()).gossipStores(stores, t)
 
 	// Every rebalance target must be store 4 (if not nil).
 	for i := 0; i < 10; i++ {
@@ -512,7 +529,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			Capacity: proto.StoreCapacity{Capacity: 100, Available: 97, RangeCount: 5},
 		},
 	}
-	gossipStores(s.Gossip(), stores, t)
+	newStoreGossiper(s.Gossip()).gossipStores(stores, t)
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
@@ -528,6 +545,106 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
+	}
+}
+
+// TestAllocatorRemoveTarget verifies that the replica chosen by RemoveTarget is
+// the one with the lowest capacity.
+func TestAllocatorRemoveTarget(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	// List of replicas that will be passed to RemoveTarget
+	replicas := []proto.Replica{
+		{
+			StoreID:   1,
+			NodeID:    1,
+			ReplicaID: 1,
+		},
+		{
+			StoreID:   2,
+			NodeID:    2,
+			ReplicaID: 2,
+		},
+		{
+			StoreID:   3,
+			NodeID:    3,
+			ReplicaID: 3,
+		},
+		{
+			StoreID:   4,
+			NodeID:    4,
+			ReplicaID: 4,
+		},
+	}
+
+	// Setup the stores so that store 3 is the worst candidate.
+	stores := []*proto.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     proto.NodeDescriptor{NodeID: 1},
+			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
+		},
+		{
+			StoreID:  2,
+			Node:     proto.NodeDescriptor{NodeID: 2},
+			Capacity: proto.StoreCapacity{Capacity: 100, Available: 80, RangeCount: 10},
+		},
+		{
+			StoreID:  3,
+			Node:     proto.NodeDescriptor{NodeID: 3},
+			Capacity: proto.StoreCapacity{Capacity: 100, Available: 60, RangeCount: 10},
+		},
+		{
+			StoreID:  4,
+			Node:     proto.NodeDescriptor{NodeID: 4},
+			Capacity: proto.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 5},
+		},
+	}
+	sg := newStoreGossiper(s.Gossip())
+	sg.gossipStores(stores, t)
+
+	targetRepl, err := s.allocator().RemoveTarget(replicas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, e := targetRepl, replicas[2]; a != e {
+		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
+	}
+
+	// Setup the stores again so that store 2 is the worst, but with very low
+	// used capacity to force the range count criteria to be used.
+	stores = []*proto.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     proto.NodeDescriptor{NodeID: 1},
+			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
+		},
+		{
+			StoreID:  2,
+			Node:     proto.NodeDescriptor{NodeID: 2},
+			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 18},
+		},
+		{
+			StoreID:  3,
+			Node:     proto.NodeDescriptor{NodeID: 3},
+			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
+		},
+		{
+			StoreID:  4,
+			Node:     proto.NodeDescriptor{NodeID: 4},
+			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 5},
+		},
+	}
+	sg.gossipStores(stores, t)
+
+	targetRepl, err = s.allocator().RemoveTarget(replicas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, e := targetRepl, replicas[1]; a != e {
+		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
 	}
 }
 
@@ -582,7 +699,7 @@ func TestAllocatorGetStoreList(t *testing.T) {
 		Attrs:   proto.Attributes{},
 	}
 
-	gossipStores(s.Gossip(), []*proto.StoreDescriptor{
+	newStoreGossiper(s.Gossip()).gossipStores([]*proto.StoreDescriptor{
 		&matchingStore,
 		&supersetStore,
 		&unmatchingStore,

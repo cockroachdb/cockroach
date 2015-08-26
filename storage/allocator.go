@@ -238,6 +238,62 @@ func (a *allocator) RebalanceTarget(required proto.Attributes, existing []proto.
 	return s
 }
 
+// RemoveTarget returns a suitable replica to remove from the provided replica
+// set. It attempts to consider which of the provided replicas would be the best
+// candidate for removal.
+//
+// TODO(mrtracy): RemoveTarget eventually needs to accept the attributes from
+// the zone config associated with the provided replicas. This will allow it to
+// make correct decisions in the case of ranges with heterogeneous replica
+// requirements (i.e. multiple data centers).
+func (a *allocator) RemoveTarget(existing []proto.Replica) (proto.Replica, error) {
+	if len(existing) == 0 {
+		return proto.Replica{}, util.Error("must supply at least one replica to allocator.RemoveTarget()")
+	}
+	a.Lock()
+	defer a.Unlock()
+
+	// Retrieve store descriptors for the provided replicas from gossip.
+	type replStore struct {
+		repl  proto.Replica
+		store *proto.StoreDescriptor
+	}
+	replStores := make([]replStore, len(existing))
+	usedStat := stat{}
+	for i := range existing {
+		desc, err := storeDescFromGossip(gossip.MakeStoreKey(existing[i].StoreID), a.gossip)
+		if err != nil {
+			return proto.Replica{}, err
+		}
+		replStores[i] = replStore{
+			repl:  existing[i],
+			store: desc,
+		}
+		usedStat.Update(desc.Capacity.FractionUsed())
+	}
+
+	// Based on store statistics, determine which replica is the "worst" and
+	// thus should be removed.
+	var worst replStore
+	for i, rs := range replStores {
+		if i == 0 {
+			worst = rs
+			continue
+		}
+
+		if usedStat.mean < minFractionUsedThreshold {
+			if rs.store.Capacity.RangeCount > worst.store.Capacity.RangeCount {
+				worst = rs
+			}
+			continue
+		}
+		if rs.store.Capacity.FractionUsed() > worst.store.Capacity.FractionUsed() {
+			worst = rs
+		}
+	}
+	return worst.repl, nil
+}
+
 // ShouldRebalance returns whether the specified store is overweight
 // according to the cluster mean and should rebalance a range.
 func (a *allocator) ShouldRebalance(s *proto.StoreDescriptor) bool {
