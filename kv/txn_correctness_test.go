@@ -41,7 +41,7 @@ import (
 // limit on number of attempts so we don't get stuck behind indefinite
 // backoff/retry loops. If MaxAttempts is reached, transaction will
 // return retry error.
-func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
+func setCorrectnessRetryOptions(lSender *LocalSender) {
 	client.DefaultTxnRetryOptions = retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     50 * time.Millisecond,
@@ -617,7 +617,7 @@ func checkConcurrency(name string, isolations []proto.IsolationType, txns []stri
 	verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
 	s := createTestDB(t)
 	defer s.Stop()
-	setCorrectnessRetryOptions(s.lSender)
+	setCorrectnessRetryOptions(s.localSender)
 	verifier.run(isolations, s.DB, t)
 }
 

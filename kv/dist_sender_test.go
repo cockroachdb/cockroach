@@ -340,7 +340,7 @@ func TestSendRPCOrder(t *testing.T) {
 type mockRangeDescriptorDB func(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
 
 func (mdb mockRangeDescriptorDB) rangeLookup(key proto.Key, options lookupOptions, _ *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
-	if len(key) > 0 {
+	if bytes.HasPrefix(key, keys.Meta1Prefix) {
 		return mdb(key[len(keys.Meta1Prefix):], options)
 	}
 	// First range.
@@ -419,7 +419,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 			Message:   "temporary boom",
 			Retryable: true,
 		},
-		nil, nil, // meta2, meta1
+		nil,
 	}
 
 	ctx := &DistSenderContext{
@@ -530,8 +530,8 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 	for _, rangeLookup := range []bool{true, false} {
 		ctx := &DistSenderContext{
 			rpcSend: testFn,
-			rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
-				if opts.ignoreIntents != rangeLookup {
+			rangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
+				if len(k) > 0 && opts.ignoreIntents != rangeLookup {
 					t.Fatalf("expected ignore intents to be %t", rangeLookup)
 				}
 				return []proto.RangeDescriptor{testRangeDescriptor}, nil
@@ -685,7 +685,7 @@ func TestSendRPCRetry(t *testing.T) {
 			reply.Rows = append([]proto.KeyValue{}, proto.KeyValue{Key: proto.Key("b"), Value: proto.Value{}})
 			return []gogoproto.Message{batchReply}, nil
 		}
-		return nil, util.Errorf("Not expected method %v", method)
+		return nil, util.Errorf("unexpected method %v", method)
 	}
 	ctx := &DistSenderContext{
 		rpcSend: testFn,
@@ -820,8 +820,8 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 
 	ctx := &DistSenderContext{
 		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
-			if !opts.useReverseScan {
+		rangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
+			if len(k) > 0 && !opts.useReverseScan {
 				t.Fatalf("expected useReverseScan to be set")
 			}
 			return []proto.RangeDescriptor{testRangeDescriptor}, nil

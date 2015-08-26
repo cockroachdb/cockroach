@@ -19,6 +19,7 @@ package kv
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -109,7 +110,7 @@ func TestLocalSenderGetStore(t *testing.T) {
 
 func TestLocalSenderLookupReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip(storage.TODOtschottdorf)
+	//t.Skip(storage.TODOtschottdorf)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	ctx := storage.TestStoreContext
@@ -120,11 +121,12 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	// Create two new stores with ranges we care about.
 	var e [2]engine.Engine
 	var s [2]*storage.Store
+	var d [2]*proto.RangeDescriptor
 	ranges := []struct {
 		storeID    proto.StoreID
 		start, end proto.Key
 	}{
-		{2, proto.Key("a"), proto.Key("c")},
+		{2, proto.Key(proto.KeyMin), proto.Key("c")},
 		{3, proto.Key("x"), proto.Key("z")},
 	}
 	for i, rng := range ranges {
@@ -134,13 +136,13 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		s[i] = storage.NewStore(ctx, e[i], &proto.NodeDescriptor{NodeID: 1})
 		s[i].Ident.StoreID = rng.storeID
 
-		desc := &proto.RangeDescriptor{
+		d[i] = &proto.RangeDescriptor{
 			RangeID:  proto.RangeID(i),
 			StartKey: rng.start,
 			EndKey:   rng.end,
 			Replicas: []proto.Replica{{StoreID: rng.storeID}},
 		}
-		newRng, err := storage.NewReplica(desc, s[i])
+		newRng, err := storage.NewReplica(d[i], s[i])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -156,13 +158,18 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	if _, r, err := ls.lookupReplica(proto.Key("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(proto.Key("b"), proto.Key("d")); r != nil || err == nil {
-		t.Errorf("expected store 0 and error got %d", r.StoreID)
-	}
+	// TODO(tschottdorf): re-enable this when the panic assertion in lookupReplica is gone.
+	//if _, r, err := ls.lookupReplica(proto.Key("b"), proto.Key("d")); r != nil || err == nil {
+	//	t.Errorf("expected store 0 and error got %d", r.StoreID)
+	//}
 	if _, r, err := ls.lookupReplica(proto.Key("x"), proto.Key("z")); r.StoreID != s[1].Ident.StoreID {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
 	if _, r, err := ls.lookupReplica(proto.Key("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
+	}
+
+	if desc, err := ls.firstRange(); err != nil || !reflect.DeepEqual(desc, d[0]) {
+		t.Fatalf("first range not as expected: error=%v, desc=%+v", err, desc)
 	}
 }

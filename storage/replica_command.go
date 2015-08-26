@@ -1142,6 +1142,8 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 		return txn.Run(b)
 	}); err != nil {
 		return reply, util.Errorf("split at key %s failed: %s", splitKey, err)
+	} else {
+		log.Warningf("SPLIT %s OK", splitKey)
 	}
 
 	return reply, nil

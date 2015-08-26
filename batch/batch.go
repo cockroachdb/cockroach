@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -93,7 +92,6 @@ func MaybeWrapCall(call proto.Call) (proto.Call, func(proto.Call) proto.Call) {
 			gogoproto.Merge(origReply, unwrap(newCall.Reply))
 			*origReply.Header() = *newCall.Reply.Header()
 			newCall.Reply = origReply
-			assertIntegrity(origReply.Header(), newCall.Reply.Header())
 			return newCall
 		}
 	}(call.Reply)
@@ -101,63 +99,9 @@ func MaybeWrapCall(call proto.Call) (proto.Call, func(proto.Call) proto.Call) {
 	return call, newUnwrap
 }
 
-// Unroll unrolls a batched command and sends the individual requests
-// sequentially. It's for testing code.
-// TODO(tschottdorf): move to according location once it's clear who needs to
-// use this except for retryableLocalSender.
-func Unroll(ctx context.Context, sender client.Sender, batchArgs *proto.BatchRequest, batchReply *proto.BatchResponse) {
-	// Prepare the calls by unrolling the batch. If the batchReply is
-	// pre-initialized with replies, use those; otherwise create replies
-	// as needed.
-	for _, arg := range batchArgs.Requests {
-		if err := UpdateForBatch(arg.GetValue().(proto.Request), batchArgs.RequestHeader); err != nil {
-			batchReply.Header().SetGoError(err)
-			return
-		}
-	}
-
-	batchReply.Txn = batchArgs.Txn
-	for i := range batchArgs.Requests {
-		args := batchArgs.Requests[i].GetValue().(proto.Request)
-		call := proto.Call{Args: args}
-		// Create a reply from the method type and add to batch response.
-		if i >= len(batchReply.Responses) {
-			call.Reply = args.CreateReply()
-			batchReply.Add(call.Reply)
-		} else {
-			call.Reply = batchReply.Responses[i].GetValue().(proto.Response)
-		}
-		sender.Send(ctx, call)
-		// Amalgamate transaction updates and propagate first error, if applicable.
-		if batchReply.Txn != nil {
-			batchReply.Txn.Update(call.Reply.Header().Txn)
-		}
-		if call.Reply.Header().Error != nil {
-			batchReply.Error = call.Reply.Header().Error
-			return
-		}
-	}
-}
-
-func assertIntegrity(iHeader, bHeader *proto.ResponseHeader) {
-	if (iHeader.Txn == nil) != (bHeader.Txn == nil) {
-		panic(fmt.Sprintf("%s != %s", iHeader.Txn, bHeader.Txn))
-	}
-	if iHeader.Txn == nil {
-		// Both are nil.
-		return
-	}
-	if iHeader.Txn.Timestamp != bHeader.Txn.Timestamp {
-		panic(fmt.Sprintf("%s != %s", iHeader.Txn, bHeader.Txn))
-	}
-}
-
 // KeyRange returns a key range which contains all keys in the Batch.
 // In particular, this resolves local addressing.
 func KeyRange(br *proto.BatchRequest) (proto.Key, proto.Key) {
-	if len(br.Requests) == 0 {
-		panic("KeyRange called on empty BatchRequest")
-	}
 	from := proto.KeyMax
 	to := proto.KeyMin
 	for _, arg := range br.Requests {
@@ -198,7 +142,8 @@ func Short(br *proto.BatchRequest) string {
 // Sender is a new incarnation of client.Sender which only supports batches
 // and uses a request-response pattern.
 type Sender interface {
-	Send(context.Context, *proto.BatchRequest) (*proto.BatchResponse, error)
+	// TODO(tschottdorf) rename to Send() when client.Sender is out of the way.
+	SendBatch(context.Context, *proto.BatchRequest) (*proto.BatchResponse, error)
 }
 
 // SenderFn is a function that implements a Sender.
@@ -216,7 +161,7 @@ func NewChunkingSender(f SenderFn) Sender {
 }
 
 // Send implements Sender.
-func (cs *ChunkingSender) Send(ctx context.Context, batchArgs *proto.BatchRequest) (*proto.BatchResponse, error) {
+func (cs *ChunkingSender) SendBatch(ctx context.Context, batchArgs *proto.BatchRequest) (*proto.BatchResponse, error) {
 	var argChunks []*proto.BatchRequest
 	if len(batchArgs.Requests) < 1 {
 		panic("empty batchArgs")

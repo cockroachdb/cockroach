@@ -217,7 +217,7 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key,
 		return
 	}
 
-	for !bytes.Equal(descKey, proto.KeyMin) {
+	for {
 		if log.V(2) {
 			log.Infof("evict cached descriptor: key=%s desc=%s\n%s", descKey, cachedDesc, rdc.stringLocked())
 		} else if log.V(1) {
@@ -230,6 +230,13 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key,
 		// returns KeyMin as its metadata key.
 		descKey = keys.RangeMetaKey(descKey)
 		rngKey, cachedDesc = rdc.getCachedRangeDescriptorLocked(descKey, inclusive)
+		// TODO(tschottdorf): write a test that verifies that the first descriptor
+		// can also be evicted. This is necessary since the initial range
+		// [KeyMin,KeyMax) may turn into [KeyMin, "something"), after which
+		// larger ranges don't fit into it any more.
+		if bytes.Equal(descKey, proto.KeyMin) {
+			break
+		}
 	}
 }
 

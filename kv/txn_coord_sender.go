@@ -455,6 +455,7 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 			// object changes.
 			respHeader.Txn = gogoproto.Clone(header.Txn).(*proto.Transaction)
 		}
+		trace.Event("update response txn")
 		tc.updateResponseTxn(header, respHeader)
 	}
 

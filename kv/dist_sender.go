@@ -239,6 +239,9 @@ func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
 // firstRange returns the RangeDescriptor for the first range on the cluster,
 // which is retrieved from the gossip protocol instead of the datastore.
 func (ds *DistSender) firstRange() (*proto.RangeDescriptor, error) {
+	if ds.gossip == nil {
+		panic("with `nil` Gossip, DistSender must not use itself as rangeDescriptorDB")
+	}
 	rangeDesc := &proto.RangeDescriptor{}
 	if err := ds.gossip.GetInfoProto(gossip.KeyFirstRangeDescriptor, rangeDesc); err != nil {
 		return nil, firstRangeMissingError{}
@@ -279,9 +282,15 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 	if desc := atomic.LoadPointer(&ds.nodeDescriptor); desc != nil {
 		return (*proto.NodeDescriptor)(desc)
 	}
+	if ds.gossip == nil {
+		return nil
+	}
 
 	ownNodeID := ds.gossip.GetNodeID()
 	if ownNodeID > 0 {
+		// TODO(tschottdorf): Consider instead adding the NodeID of the
+		// coordinator to the header, so we can get this from incoming
+		// requests. Just in case we want to mostly eliminate gossip here.
 		nodeDesc := &proto.NodeDescriptor{}
 		if err := ds.gossip.GetInfoProto(gossip.MakeNodeIDKey(ownNodeID), nodeDesc); err == nil {
 			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(nodeDesc))
@@ -303,7 +312,8 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
 	args proto.Request) (proto.Response, error) {
 	if len(replicas) == 0 {
-		return nil, util.Errorf("%s: replicas set is empty", args.Method())
+		// TODO(tschottdorf):
+		// return nil, util.Errorf("%s: replicas set is empty", args.Method())
 	}
 
 	// Build a slice of replica addresses (if gossiped).
@@ -315,7 +325,8 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 		replicaMap[addr.String()] = &replicas[i].Replica
 	}
 	if len(addrs) == 0 {
-		return nil, noNodeAddrsAvailError{}
+		// TODO(tschottdorf):
+		// return nil, noNodeAddrsAvailError{}
 	}
 
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
@@ -334,6 +345,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 	// getArgs clones the arguments on demand for all but the first replica.
 	firstArgs := true
 	getArgs := func(addr net.Addr) gogoproto.Message {
+		log.Warningf("GETARGS %t", firstArgs)
 		var a proto.Request
 		// Use the supplied args proto if this is our first address.
 		if firstArgs {
@@ -343,7 +355,9 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 			// Otherwise, copy the args value and set the replica in the header.
 			a = gogoproto.Clone(args).(proto.Request)
 		}
-		a.Header().Replica = *replicaMap[addr.String()]
+		if addr != nil { // TODO(tschottdorf)
+			a.Header().Replica = *replicaMap[addr.String()]
+		}
 		return a
 	}
 	// RPCs are sent asynchronously and there is no synchronized access to
@@ -498,6 +512,29 @@ func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to prot
 // the result of sending the RPC; a potential error contained in the reply has
 // to be handled separately by the caller.
 func (ds *DistSender) sendAttempt(trace *tracer.Trace, args *proto.BatchRequest, desc *proto.RangeDescriptor) (*proto.BatchResponse, error) {
+	{
+		// TODO(tschottdorf): provisional code to avoid sending noop-only batches.
+		// Make nicer.
+		var proceed bool
+		for _, arg := range args.Requests {
+			if _, noop := arg.GetValue().(*proto.NoopRequest); noop {
+				continue
+			}
+			proceed = true
+		}
+		if !proceed {
+			log.Warningf("SKIP BATCH")
+			br := &proto.BatchResponse{}
+			for _ = range args.Requests {
+				br.Add(&proto.NoopResponse{})
+			}
+			br.Txn = args.Txn
+			return br, nil
+		}
+		if args.Key.Equal(proto.KeyMax) {
+			panic(batch.Short(args))
+		}
+	}
 	defer trace.Epoch("sending RPC")()
 
 	leader := ds.leaderCache.Lookup(proto.RangeID(desc.RangeID))
@@ -557,7 +594,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 		args.Header().Timestamp = ds.clock.Now()
 	}
 
-	batchReply, err := ds.bSender.Send(ctx, call.Args.(*proto.BatchRequest))
+	batchReply, err := ds.bSender.SendBatch(ctx, call.Args.(*proto.BatchRequest))
 	if err != nil {
 		call.Reply.Header().SetGoError(err)
 	} else {
@@ -616,6 +653,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, batchArgs *proto.BatchReque
 			desc, descNext, evictDesc, err = ds.getDescriptors(keys.KeyAddress(from), keys.KeyAddress(to), options)
 			descDone()
 
+			log.Warningf("desc %+v %s", desc, err)
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
 			if err != nil {
@@ -653,9 +691,11 @@ func (ds *DistSender) sendChunk(ctx context.Context, batchArgs *proto.BatchReque
 			}
 
 			{
+				log.Warningf("TRUNCATE to [%s,%s): %s", from, to, batch.Short(batchArgs))
 				batchArgs.Key, batchArgs.EndKey = batch.KeyRange(batchArgs)
 				// Truncate the request to our current key range.
 				untruncate, trErr := truncate(batchArgs, desc, from, to)
+				log.Warningf("TRUNCATED %s", batch.Short(batchArgs))
 				if trErr != nil {
 					untruncate()
 					return nil, trErr
@@ -685,8 +725,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, batchArgs *proto.BatchReque
 				break
 			}
 
-			if log.V(1) {
-				// TODO(tschottdorf): this'll just print "Batch" for everything.
+			if log.V(0) {
 				log.Warningf("failed to invoke %s: %s", batch.Short(batchArgs), err)
 			}
 			// If we're multi-range, possibly we've already collected some

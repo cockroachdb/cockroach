@@ -148,9 +148,11 @@ type pendingCmd struct {
 	done chan proto.ResponseWithError // Used to signal waiting RPC handler
 }
 
-// A rangeManager is an interface satisfied by Store through which ranges
+// A RangeManager is an interface satisfied by Store through which ranges
 // contained in the store can access the methods required for splitting.
-type rangeManager interface {
+// TODO(tschottdorf): consider moving LocalSender to storage, in which
+// case this can be unexported.
+type RangeManager interface {
 	// Accessors for shared state.
 	ClusterID() string
 	StoreID() proto.StoreID
@@ -187,7 +189,7 @@ type rangeManager interface {
 // as appropriate.
 type Replica struct {
 	desc     unsafe.Pointer // Atomic pointer for *proto.RangeDescriptor
-	rm       rangeManager   // Makes some store methods available
+	rm       RangeManager   // Makes some store methods available
 	stats    *rangeStats    // Range statistics
 	maxBytes int64          // Max bytes before split.
 	// Last index persisted to the raft log (not necessarily committed).
@@ -208,7 +210,7 @@ type Replica struct {
 }
 
 // NewReplica initializes the replica using the given metadata.
-func NewReplica(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) {
+func NewReplica(desc *proto.RangeDescriptor, rm RangeManager) (*Replica, error) {
 	r := &Replica{
 		rm:          rm,
 		cmdQ:        NewCommandQueue(),
