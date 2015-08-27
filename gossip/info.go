@@ -21,26 +21,32 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 )
 
+type info struct {
+	Info
+	peerID proto.NodeID
+	seq    int64
+}
+
 // expired returns true if the node's time to live (TTL) has expired.
-func (i *Info) expired(now int64) bool {
+func (i *info) expired(now int64) bool {
 	return i.TTLStamp <= now
 }
 
 // isFresh returns true if the info has a sequence number newer
 // than seq and wasn't either passed directly or originated from
 // the same node.
-func (i *Info) isFresh(nodeID proto.NodeID, seq int64) bool {
-	if i.Seq <= seq {
+func (i *info) isFresh(nodeID proto.NodeID, seq int64) bool {
+	if i.seq <= seq {
 		return false
 	}
 	if nodeID != 0 && i.NodeID == nodeID {
 		return false
 	}
-	if nodeID != 0 && i.PeerID == nodeID {
+	if nodeID != 0 && i.peerID == nodeID {
 		return false
 	}
 	return true
 }
 
 // infoMap is a map of keys to info object pointers.
-type infoMap map[string]*Info
+type infoMap map[string]*info

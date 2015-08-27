@@ -51,8 +51,8 @@ func TestNewInfo(t *testing.T) {
 	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo(nil, time.Second)
 	info2 := is.newInfo(nil, time.Second)
-	if info1.Seq != info2.Seq-1 {
-		t.Errorf("sequence numbers should increment %d, %d", info1.Seq, info2.Seq)
+	if info1.seq != info2.seq-1 {
+		t.Errorf("sequence numbers should increment %d, %d", info1.seq, info2.seq)
 	}
 }
 
@@ -68,7 +68,7 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	if infoCount := len(is.Infos); infoCount != 1 {
 		t.Errorf("infostore count incorrect %d != 1", infoCount)
 	}
-	if is.MaxSeq != i.Seq {
+	if is.MaxSeq != i.seq {
 		t.Error("max seq value wasn't updated")
 	}
 	if is.getInfo("a") != i {
@@ -257,7 +257,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf1 := is.newInfo(nil, time.Second)
-	inf1.PeerID = 1
+	inf1.peerID = 1
 	if err := is.addInfo("a1", inf1); err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf2 := is.newInfo(nil, time.Second)
-	inf2.PeerID = 1
+	inf2.peerID = 1
 	if err := is.addInfo("a2", inf2); err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf3 := is.newInfo(nil, time.Second)
-	inf3.PeerID = 2
+	inf3.peerID = 2
 	if err := is.addInfo("a3", inf3); err != nil {
 		t.Fatal(err)
 	}

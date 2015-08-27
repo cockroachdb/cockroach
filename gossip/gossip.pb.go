@@ -158,9 +158,6 @@ func (m *InfoStoreDelta) GetMaxSeq() int64 {
 
 // Info is the basic unit of information traded over the
 // gossip network.
-// TODO(thschroeter): remove `peer_id` and `seq` that are
-// exposing internals and get overwritten as `Info` is
-// received.
 type Info struct {
 	Value cockroach_proto1.Value `protobuf:"bytes,1,opt,name=value" json:"value"`
 	// Wall time when info is to be discarded (Unix-nanos)
@@ -169,8 +166,6 @@ type Info struct {
 	Hops uint32 `protobuf:"varint,3,opt,name=hops" json:"hops"`
 	// Originating node's ID
 	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,4,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id"`
-	PeerID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,5,opt,name=peer_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"peer_id"`
-	Seq    int64                                         `protobuf:"varint,6,opt,name=seq" json:"seq"`
 }
 
 func (m *Info) Reset()         { *m = Info{} }
@@ -201,20 +196,6 @@ func (m *Info) GetHops() uint32 {
 func (m *Info) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
 	if m != nil {
 		return m.NodeID
-	}
-	return 0
-}
-
-func (m *Info) GetPeerID() github_com_cockroachdb_cockroach_proto.NodeID {
-	if m != nil {
-		return m.PeerID
-	}
-	return 0
-}
-
-func (m *Info) GetSeq() int64 {
-	if m != nil {
-		return m.Seq
 	}
 	return 0
 }
