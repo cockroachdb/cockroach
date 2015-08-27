@@ -18,8 +18,6 @@
 package sql
 
 import (
-	"bytes"
-	"fmt"
 	"math"
 	"sort"
 
@@ -167,12 +165,15 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 	}
 
 	if s.filter != nil {
-		// Analyze the filter expression to compute the qvalue range info.
-		rangeInfo := make(qvalueRangeMap)
-		rangeInfo.analyzeExpr(s.filter)
+		// Analyze the filter expression, simplifying it and splitting it up into
+		// possibly overlapping ranges.
+		exprs := analyzeExpr(s.filter)
+		if log.V(2) {
+			log.Infof("analyzeExpr: %s -> %s", s.filter, exprs)
+		}
 
 		for _, c := range candidates {
-			c.analyzeRanges(rangeInfo)
+			c.analyzeRanges(exprs)
 		}
 	}
 
@@ -204,238 +205,10 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 }
 
 // qvalueInfo contains one end of a value range. Op is required to be either
-// GE, GT, LE or LT.
+// EQ, GE, GT, LE or LT.
 type qvalueInfo struct {
 	datum parser.Datum
 	op    parser.ComparisonOp
-}
-
-func (q *qvalueInfo) assertStartOp() {
-	switch q.op {
-	case parser.GE, parser.GT:
-	default:
-		panic(fmt.Sprintf("unexpected start op: %s", q.op))
-	}
-}
-
-func (q *qvalueInfo) assertEndOp() {
-	switch q.op {
-	case parser.LE, parser.LT:
-	default:
-		panic(fmt.Sprintf("unexpected end op: %s", q.op))
-	}
-}
-
-func (q *qvalueInfo) compare(datum parser.Datum) int {
-	// TODO(pmattis): We should really be comparing the datums directly, but this
-	// is convenient for now.
-	oldKey, err := encodeTableKey(nil, q.datum)
-	if err != nil {
-		panic(err)
-	}
-	newKey, err := encodeTableKey(nil, datum)
-	if err != nil {
-		panic(err)
-	}
-	return bytes.Compare(newKey, oldKey)
-}
-
-// intersect intersects a new value constraint with an existing constraint. The
-// start parameter controls whether we intersect less than or greater than
-// (start == true corresponds to greater than). Some examples:
-//
-//   q: >1  n: >2   out: >2
-//   q: >1  n: >=1  out: >1
-func (q *qvalueInfo) intersect(n qvalueInfo, start bool) {
-	if start {
-		n.assertStartOp()
-	} else {
-		n.assertEndOp()
-	}
-
-	if q.datum == nil {
-		*q = n
-		return
-	}
-
-	cmp := +1
-	if !start {
-		cmp = -1
-	}
-
-	switch q.compare(n.datum) {
-	case cmp:
-		*q = n
-	case 0:
-		if n.op == parser.GT || n.op == parser.LT {
-			q.op = n.op
-		}
-	}
-}
-
-// union unions a new value constraint with an existing constraint. The start
-// parameter controls whether we union less than or greater than (start == true
-// corresponds to greater than). Perhaps best understood with some examples:
-//
-//  q: >1  n: >2   out: >1
-//  q: >1  n: >=1  out: >=1
-func (q *qvalueInfo) union(n qvalueInfo, start bool) {
-	if start {
-		n.assertStartOp()
-	} else {
-		n.assertEndOp()
-	}
-
-	if q.datum == nil {
-		*q = n
-		return
-	}
-
-	cmp := -1
-	if !start {
-		cmp = +1
-	}
-
-	switch q.compare(n.datum) {
-	case cmp:
-		*q = n
-	case 0:
-		if n.op == parser.GE || n.op == parser.LE {
-			q.op = n.op
-		}
-	}
-}
-
-// qvalueRange represents the range of values a qvalue may have. start must be
-// less than end. Note that whether the endpoints are inclusive or exclusive is
-// determined by {start,end}.op.
-type qvalueRange struct {
-	start qvalueInfo
-	end   qvalueInfo
-}
-
-type qvalueRangeMap map[ColumnID]*qvalueRange
-
-// analyzeExpr walks over the specified expression and populates the range map
-// with the value ranges for each qvalue.
-func (m qvalueRangeMap) analyzeExpr(expr parser.Expr) {
-	switch t := expr.(type) {
-	case *parser.NotExpr:
-		// TODO(pmattis): Similar to OR expressions, we can compute the value range
-		// for the expression and then invert the results.
-
-	case *parser.OrExpr:
-		// Conjunctions are handled below (see *parser.AndExpr). Disjunctions are
-		// handled by creating separate range maps for the left and right sides and
-		// then combining them. For example:
-		//
-		//   "x < y OR x < z"   -> "x < MAX(y, z)"
-		//   "x = y OR x = z"   -> "x >= y OR x <= z"
-		//   "x < y OR x > z"   -> "t"
-		left := make(qvalueRangeMap)
-		left.analyzeExpr(t.Left)
-		right := make(qvalueRangeMap)
-		right.analyzeExpr(t.Right)
-
-		for id, lRange := range left {
-			rRange, ok := right[id]
-			if !ok {
-				continue
-			}
-			r := &qvalueRange{}
-			if lRange.start.datum != nil && rRange.start.datum != nil {
-				r.start = lRange.start
-				r.start.union(rRange.start, true)
-			}
-			if lRange.end.datum != nil && rRange.end.datum != nil {
-				r.end = lRange.end
-				r.end.union(rRange.end, false)
-			}
-			if r.start.datum != nil || r.end.datum != nil {
-				m[id] = r
-			}
-		}
-
-	case *parser.AndExpr:
-		m.analyzeExpr(t.Left)
-		m.analyzeExpr(t.Right)
-
-	case *parser.ParenExpr:
-		m.analyzeExpr(t.Expr)
-
-	case *parser.ComparisonExpr:
-		m.analyzeComparisonExpr(t)
-	}
-}
-
-// analyzeComparisonExpr analyzes the comparison expression, restricting the
-// start and end info for any qvalues found within it.
-func (m qvalueRangeMap) analyzeComparisonExpr(node *parser.ComparisonExpr) {
-	op := node.Operator
-	switch op {
-	case parser.EQ, parser.LT, parser.LE, parser.GT, parser.GE:
-		break
-
-	default:
-		// TODO(pmattis): For parser.LIKE we could extract the constant prefix and
-		// treat as a range restriction.
-		return
-	}
-
-	// NormalizeExpr has guaranteed that qvalues will appear on the left side of
-	// comparison expressions.
-	qval, ok := node.Left.(*qvalue)
-	if !ok {
-		return
-	}
-	datum, ok := node.Right.(parser.Datum)
-	if !ok {
-		// qvalue <op> non-constant.
-		return
-	} else if _, ok := datum.(parser.DReference); ok {
-		// qvalue <op> non-constant.
-		return
-	}
-
-	// Ensure the resulting datum matches the column type.
-	if _, err := convertDatum(qval.col, datum); err != nil {
-		// TODO(pmattis): Should we pass the error up the stack?
-		return
-	}
-
-	if log.V(2) {
-		log.Infof("analyzeComparisonExpr: %s %s %s",
-			qval.col.Name, op, datum)
-	}
-
-	r := m.getRange(qval.col.ID)
-
-	// Restrict the start element.
-	switch startOp := op; startOp {
-	case parser.EQ:
-		startOp = parser.GE
-		fallthrough
-	case parser.GE, parser.GT:
-		r.start.intersect(qvalueInfo{datum, startOp}, true)
-	}
-
-	// Restrict the end element.
-	switch endOp := op; endOp {
-	case parser.EQ:
-		endOp = parser.LE
-		fallthrough
-	case parser.LE, parser.LT:
-		r.end.intersect(qvalueInfo{datum, endOp}, false)
-	}
-}
-
-func (m qvalueRangeMap) getRange(colID ColumnID) *qvalueRange {
-	r := m[colID]
-	if r == nil {
-		r = &qvalueRange{}
-		m[colID] = r
-	}
-	return r
 }
 
 type indexInfo struct {
@@ -468,13 +241,13 @@ func (v *indexInfo) init(s *scanNode) {
 
 // analyzeRanges examines the range map to determine the cost of using the
 // index.
-func (v *indexInfo) analyzeRanges(m qvalueRangeMap) {
+func (v *indexInfo) analyzeRanges(exprs []parser.Exprs) {
 	if !v.covering {
 		return
 	}
 
-	v.makeStartInfo(m)
-	v.makeEndInfo(m)
+	v.makeStartInfo(exprs)
+	v.makeEndInfo(exprs)
 
 	// Count the number of elements used to limit the start and end keys. We then
 	// boost the cost by what fraction of the index keys are being used. The
@@ -534,29 +307,69 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 	}
 }
 
-func (v *indexInfo) makeStartInfo(m qvalueRangeMap) {
-	v.start = make([]qvalueInfo, 0, len(v.index.ColumnIDs))
+func (v *indexInfo) makeStartInfo(exprs []parser.Exprs) {
+	if len(exprs) != 1 {
+		return
+	}
+	andExprs := exprs[0]
+
+outer:
 	for _, colID := range v.index.ColumnIDs {
-		if r := m[colID]; r != nil {
-			v.start = append(v.start, r.start)
-			if r.start.op == parser.GE {
-				continue
+		for _, e := range andExprs {
+			if c, ok := e.(*parser.ComparisonExpr); ok {
+				if q, ok := c.Left.(*qvalue); !ok || q.col.ID != colID {
+					continue
+				}
+				d, ok := c.Right.(parser.Datum)
+				if !ok {
+					return
+				}
+				switch op := c.Operator; op {
+				case parser.NE:
+					return
+				case parser.EQ, parser.GE, parser.GT:
+					v.start = append(v.start, qvalueInfo{datum: d, op: op})
+					if op == parser.GT {
+						return
+					}
+					continue outer
+				}
 			}
 		}
-		break
+		return
 	}
 }
 
-func (v *indexInfo) makeEndInfo(m qvalueRangeMap) {
-	v.end = make([]qvalueInfo, 0, len(v.index.ColumnIDs))
+func (v *indexInfo) makeEndInfo(exprs []parser.Exprs) {
+	if len(exprs) != 1 {
+		return
+	}
+	andExprs := exprs[0]
+
+outer:
 	for _, colID := range v.index.ColumnIDs {
-		if r := m[colID]; r != nil {
-			v.end = append(v.end, r.end)
-			if r.end.op == parser.LE {
-				continue
+		for _, e := range andExprs {
+			if c, ok := e.(*parser.ComparisonExpr); ok {
+				if q, ok := c.Left.(*qvalue); !ok || q.col.ID != colID {
+					continue
+				}
+				d, ok := c.Right.(parser.Datum)
+				if !ok {
+					return
+				}
+				switch op := c.Operator; op {
+				case parser.NE:
+					return
+				case parser.EQ, parser.LE, parser.LT:
+					v.end = append(v.end, qvalueInfo{datum: d, op: op})
+					if op == parser.LT {
+						return
+					}
+					continue outer
+				}
 			}
 		}
-		break
+		return
 	}
 }
 
