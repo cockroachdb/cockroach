@@ -17,11 +17,7 @@
 
 package gossip
 
-import (
-	"math/rand"
-
-	"github.com/cockroachdb/cockroach/proto"
-)
+import "github.com/cockroachdb/cockroach/proto"
 
 // A nodeSet keeps a set of nodes and provides simple node-matched
 // management functions. nodeSet is not thread safe.
@@ -62,13 +58,8 @@ func (as *nodeSet) asSlice() []proto.NodeID {
 // selectRandom returns a random node from the set. Returns 0 if
 // there are no nodes to select.
 func (as *nodeSet) selectRandom() proto.NodeID {
-	idx := rand.Intn(len(as.nodes))
-	var count = 0
 	for node := range as.nodes {
-		if count == idx {
-			return node
-		}
-		count++
+		return node
 	}
 	return 0
 }
