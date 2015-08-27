@@ -319,9 +319,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 
 	// Take max of requested timestamp and possibly "pushed" txn
 	// record timestamp as the final commit timestamp.
-	if reply.Txn.Timestamp.Less(args.Timestamp) {
-		reply.Txn.Timestamp = args.Timestamp
-	}
+	reply.Txn.Timestamp.Forward(args.Timestamp)
 
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter.
