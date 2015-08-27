@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func parseAndNormalizeExpr(t *testing.T, sql string) parser.Expr {
@@ -56,6 +57,8 @@ func parseAndNormalizeExpr(t *testing.T, sql string) parser.Expr {
 }
 
 func TestSplitOrExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
 	testData := []struct {
 		expr     string
 		expected string
@@ -75,6 +78,8 @@ func TestSplitOrExpr(t *testing.T) {
 }
 
 func TestSplitAndExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
 	testData := []struct {
 		expr     string
 		expected string
@@ -94,6 +99,8 @@ func TestSplitAndExpr(t *testing.T) {
 }
 
 func TestSimplifyExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
 	testData := []struct {
 		expr     string
 		expected string
@@ -132,6 +139,8 @@ func TestSimplifyExpr(t *testing.T) {
 }
 
 func TestSimplifyNotExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
 	testData := []struct {
 		expr     string
 		expected string
@@ -159,6 +168,8 @@ func TestSimplifyNotExpr(t *testing.T) {
 }
 
 func TestSimplifyAndExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
 	testData := []struct {
 		expr     string
 		expected string
@@ -308,6 +319,8 @@ func TestSimplifyAndExpr(t *testing.T) {
 }
 
 func TestSimplifyOrExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
 	testData := []struct {
 		expr     string
 		expected string
