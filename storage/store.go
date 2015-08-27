@@ -531,7 +531,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// users don't have such a requirement.)
 		s.ctx.Gossip.RegisterCallback(gossip.KeyConfigZone, s.configGossipUpdate)
 
-		// Start a single goroutine in charge of periodically gossipping the
+		// Start a single goroutine in charge of periodically gossiping the
 		// sentinel and first range metadata if we have a first range.
 		// This may wake up ranges and requires everything to be set up and
 		// running.

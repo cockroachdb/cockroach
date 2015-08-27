@@ -70,7 +70,7 @@ func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopp
 			return
 		}
 
-		// Start gossipping and wait for disconnect or error.
+		// Start gossiping and wait for disconnect or error.
 		c.lastFresh = time.Now().UnixNano()
 		c.err = c.gossip(g, stopper)
 		if context.DisableCache {
