@@ -441,11 +441,12 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 
 // gossipStores broadcasts each store to the gossip network.
 func (n *Node) gossipStores() {
-	// will never error because `return nil` below
-	_ = n.lSender.VisitStores(func(s *storage.Store) error {
+	if err := n.lSender.VisitStores(func(s *storage.Store) error {
 		s.GossipStore()
 		return nil
-	})
+	}); err != nil {
+		panic(err)
+	}
 }
 
 // startPublishStatuses starts a loop which periodically instructs each store to

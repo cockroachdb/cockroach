@@ -182,13 +182,14 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 // originator and this node.
 func (is *infoStore) maxHops() uint32 {
 	var maxHops uint32
-	// will never error because `return nil` below
-	_ = is.visitInfos(func(key string, i *Info) error {
+	if err := is.visitInfos(func(key string, i *Info) error {
 		if i.Hops > maxHops {
 			maxHops = i.Hops
 		}
 		return nil
-	})
+	}); err != nil {
+		panic(err)
+	}
 	return maxHops
 }
 
@@ -198,13 +199,14 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 	re := regexp.MustCompile(pattern)
 	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
 	infos := make(infoMap)
-	// will never error because `return nil` below
-	_ = is.visitInfos(func(key string, i *Info) error {
+	if err := is.visitInfos(func(key string, i *Info) error {
 		if re.MatchString(key) {
 			infos[key] = i
 		}
 		return nil
-	})
+	}); err != nil {
+		panic(err)
+	}
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
 		for key, i := range infos {
@@ -293,8 +295,7 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) InfoStoreDelta {
 		delta.Infos = make(map[string]*Info)
 
 		// Compute delta of infos.
-		// will never error because `return nil` below
-		_ = is.visitInfos(func(key string, i *Info) error {
+		if err := is.visitInfos(func(key string, i *Info) error {
 			if i.isFresh(nodeID, seq) {
 				delta.Infos[key] = i
 				if i.Seq > is.MaxSeq {
@@ -302,7 +303,9 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) InfoStoreDelta {
 				}
 			}
 			return nil
-		})
+		}); err != nil {
+			panic(err)
+		}
 	}
 
 	return delta
@@ -312,13 +315,14 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) InfoStoreDelta {
 // with info.Hops > maxHops.
 func (is *infoStore) distant(maxHops uint32) *nodeSet {
 	ns := newNodeSet(0)
-	// will never error because `return nil` below
-	_ = is.visitInfos(func(key string, i *Info) error {
+	if err := is.visitInfos(func(key string, i *Info) error {
 		if i.Hops > maxHops {
 			ns.addNode(i.NodeID)
 		}
 		return nil
-	})
+	}); err != nil {
+		panic(err)
+	}
 	return ns
 }
 
@@ -329,11 +333,12 @@ func (is *infoStore) leastUseful(nodes *nodeSet) proto.NodeID {
 	for node := range nodes.nodes {
 		contrib[node] = 0
 	}
-	// will never error because `return nil` below
-	_ = is.visitInfos(func(key string, i *Info) error {
+	if err := is.visitInfos(func(key string, i *Info) error {
 		contrib[i.PeerID]++
 		return nil
-	})
+	}); err != nil {
+		panic(err)
+	}
 
 	least := math.MaxInt32
 	var leastNode proto.NodeID

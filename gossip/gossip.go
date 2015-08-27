@@ -359,13 +359,14 @@ func (g *Gossip) Start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 func (g *Gossip) maxToleratedHops() uint32 {
 	var nodeCount int64
 
-	// will never error because `return nil` below
-	_ = g.is.visitInfos(func(key string, i *Info) error {
+	if err := g.is.visitInfos(func(key string, i *Info) error {
 		if strings.HasPrefix(key, KeyNodeIDPrefix) {
 			nodeCount++
 		}
 		return nil
-	})
+	}); err != nil {
+		panic(err)
+	}
 
 	if nodeCount < minNodeCount {
 		nodeCount = minNodeCount
