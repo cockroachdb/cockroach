@@ -24,9 +24,10 @@ import "cockroach/proto/metadata.proto";
 import "cockroach/util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 
-// These options generate broken code when using maps.
-// option (gogoproto.sizer_all) = true;
+option (gogoproto.sizer_all) = true;
+// This option generates code that fails at run time.
 // option (gogoproto.marshaler_all) = true;
+// This option generates code that doesn't compile.
 // option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_unrecognized_all) = false;
 

@@ -130,3 +130,80 @@ func (m *Info) GetValue() cockroach_proto1.Value {
 	}
 	return cockroach_proto1.Value{}
 }
+
+func (m *Request) Size() (n int) {
+	var l int
+	_ = l
+	if m.NodeID != 0 {
+		n += 1 + sovGossip(uint64(m.NodeID))
+	}
+	l = m.Addr.Size()
+	n += 1 + l + sovGossip(uint64(l))
+	l = m.LAddr.Size()
+	n += 1 + l + sovGossip(uint64(l))
+	if m.MaxSeq != 0 {
+		n += 1 + sovGossip(uint64(m.MaxSeq))
+	}
+	if len(m.Delta) > 0 {
+		for _, e := range m.Delta {
+			l = e.Size()
+			n += 1 + l + sovGossip(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Response) Size() (n int) {
+	var l int
+	_ = l
+	if m.NodeID != 0 {
+		n += 1 + sovGossip(uint64(m.NodeID))
+	}
+	l = m.Addr.Size()
+	n += 1 + l + sovGossip(uint64(l))
+	if m.Alternate != nil {
+		l = m.Alternate.Size()
+		n += 1 + l + sovGossip(uint64(l))
+	}
+	if m.MaxSeq != 0 {
+		n += 1 + sovGossip(uint64(m.MaxSeq))
+	}
+	if len(m.Delta) > 0 {
+		for _, e := range m.Delta {
+			l = e.Size()
+			n += 1 + l + sovGossip(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Info) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Value.Size()
+	n += 1 + l + sovGossip(uint64(l))
+	if m.TTLStamp != 0 {
+		n += 1 + sovGossip(uint64(m.TTLStamp))
+	}
+	if m.Hops != 0 {
+		n += 1 + sovGossip(uint64(m.Hops))
+	}
+	if m.NodeID != 0 {
+		n += 1 + sovGossip(uint64(m.NodeID))
+	}
+	return n
+}
+
+func sovGossip(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozGossip(x uint64) (n int) {
+	return sovGossip(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
