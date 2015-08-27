@@ -531,36 +531,36 @@ provides two mechanisms to provide linearizability for the vast majority
 of use cases without a mandatory transaction commit wait or an elaborate
 system to minimize clock skew.
 
-1.  Clients provide the highest transaction commit timestamp with
-    > successive transactions. This allows node clocks from previous
-    > transactions to effectively participate in the formulation of the
-    > commit timestamp for the current transaction. This guarantees
-    > linearizability for transactions committed by this client.
-    >
-    > Newly launched clients wait at least 2 \* ε from process start
-    > time before beginning their first transaction. This preserves the
-    > same property even on client restart, and the wait will be
-    > mitigated by process initialization.
-    >
-    > All causally-related events within Cockroach maintain
-    > linearizability.
+1. Clients provide the highest transaction commit timestamp with
+   successive transactions. This allows node clocks from previous
+   transactions to effectively participate in the formulation of the
+   commit timestamp for the current transaction. This guarantees
+   linearizability for transactions committed by this client.
 
-2.  Committed transactions respond with a commit wait parameter which
-    > represents the remaining time in the nominal commit wait. This
-    > will typically be less than the full commit wait as the consensus
-    > write at the coordinator accounts for a portion of it.
-    >
-    > Clients taking any action outside of another Cockroach transaction
-    > (e.g. writing to another distributed system component) can either
-    > choose to wait the remaining interval before proceeding, or
-    > alternatively, pass the wait and/or commit timestamp to the
-    > execution of the outside action for its consideration. This pushes
-    > the burden of linearizability to clients, but is a useful tool in
-    > mitigating commit latencies if the clock skew is potentially
-    > large. This functionality can be used for ordering in the face of
-    > backchannel dependencies as mentioned in the
-    > [AugmentedTime](http://www.cse.buffalo.edu/~demirbas/publications/augmentedTime.pdf)
-    > paper.
+   Newly launched clients wait at least 2 \* ε from process start
+   time before beginning their first transaction. This preserves the
+   same property even on client restart, and the wait will be
+   mitigated by process initialization.
+
+   All causally-related events within Cockroach maintain
+   linearizability.
+
+2. Committed transactions respond with a commit wait parameter which
+   represents the remaining time in the nominal commit wait. This
+   will typically be less than the full commit wait as the consensus
+   write at the coordinator accounts for a portion of it.
+
+   Clients taking any action outside of another Cockroach transaction
+   (e.g. writing to another distributed system component) can either
+   choose to wait the remaining interval before proceeding, or
+   alternatively, pass the wait and/or commit timestamp to the
+   execution of the outside action for its consideration. This pushes
+   the burden of linearizability to clients, but is a useful tool in
+   mitigating commit latencies if the clock skew is potentially
+   large. This functionality can be used for ordering in the face of
+   backchannel dependencies as mentioned in the
+   [AugmentedTime](http://www.cse.buffalo.edu/~demirbas/publications/augmentedTime.pdf)
+   paper.
 
 Using these mechanisms in place of commit wait, Cockroach’s guarantee can be
 formulated as follows: any process which signals the start of transaction
