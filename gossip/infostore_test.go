@@ -192,23 +192,21 @@ func TestInfoStoreDelta(t *testing.T) {
 
 	// Verify deltas with successive sequence numbers.
 	for i := 0; i < 10; i++ {
-		deltaInfoStore := newInfoStoreFromProto(is.delta(2, int64(i*3)))
+		infos := is.delta(2, int64(i*3))
 
 		for j := 0; j < 10-i; j++ {
-			infoC := deltaInfoStore.getInfo(fmt.Sprintf("c.%d", j+i))
-			if infoC == nil {
+			if _, ok := infos[fmt.Sprintf("c.%d", j+i)]; !ok {
 				t.Errorf("unable to fetch info %d", j+i)
 			}
 			if i > 0 {
-				infoC = deltaInfoStore.getInfo(fmt.Sprintf("c.%d", 0))
-				if infoC != nil {
+				if _, ok := infos[fmt.Sprintf("c.%d", 0)]; ok {
 					t.Errorf("erroneously fetched info %d", j+i+1)
 				}
 			}
 		}
 	}
 
-	if deltaInfoStore := is.delta(2, int64(30)); deltaInfoStore.Infos != nil {
+	if infos := is.delta(2, int64(30)); len(infos) != 0 {
 		t.Error("fetching delta of infostore at maximum sequence number should return nil")
 	}
 }

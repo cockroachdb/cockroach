@@ -11,13 +11,11 @@
 	It has these top-level messages:
 		Request
 		Response
-		InfoStoreDelta
 		Info
 */
 package gossip
 
 import proto "github.com/gogo/protobuf/proto"
-import math "math"
 import cockroach_proto1 "github.com/cockroachdb/cockroach/proto"
 
 // discarding unused import cockroach_proto "github.com/cockroachdb/cockroach/proto"
@@ -29,33 +27,25 @@ import github_com_cockroachdb_cockroach_proto "github.com/cockroachdb/cockroach/
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
-var _ = math.Inf
 
 // Request is the request struct passed with the Gossip RPC.
 type Request struct {
 	// Requesting node's ID.
-	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,1,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id"`
+	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,1,opt,name=node_id,proto3,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id,omitempty"`
 	// Address of the requesting client.
 	Addr cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=addr" json:"addr"`
 	// Local address of client on requesting node (this is a kludge to
 	// allow gossip to know when client connections are dropped).
 	LAddr cockroach_util.UnresolvedAddr `protobuf:"bytes,3,opt,name=l_addr" json:"l_addr"`
 	// Maximum sequence number of gossip from this peer.
-	MaxSeq int64 `protobuf:"varint,4,opt,name=max_seq" json:"max_seq"`
-	// Reciprocal delta of new info since last gossip.
-	Delta InfoStoreDelta `protobuf:"bytes,5,opt,name=delta" json:"delta"`
+	MaxSeq int64 `protobuf:"varint,4,opt,name=max_seq,proto3" json:"max_seq,omitempty"`
+	// Delta of new Infos since last gossip.
+	Delta map[string]*Info `protobuf:"bytes,5,rep,name=delta" json:"delta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 }
 
 func (m *Request) Reset()         { *m = Request{} }
 func (m *Request) String() string { return proto.CompactTextString(m) }
 func (*Request) ProtoMessage()    {}
-
-func (m *Request) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
-	if m != nil {
-		return m.NodeID
-	}
-	return 0
-}
 
 func (m *Request) GetAddr() cockroach_util.UnresolvedAddr {
 	if m != nil {
@@ -71,38 +61,37 @@ func (m *Request) GetLAddr() cockroach_util.UnresolvedAddr {
 	return cockroach_util.UnresolvedAddr{}
 }
 
-func (m *Request) GetMaxSeq() int64 {
-	if m != nil {
-		return m.MaxSeq
-	}
-	return 0
-}
-
-func (m *Request) GetDelta() InfoStoreDelta {
+func (m *Request) GetDelta() map[string]*Info {
 	if m != nil {
 		return m.Delta
 	}
-	return InfoStoreDelta{}
+	return nil
 }
 
 // Response is returned from the Gossip.Gossip RPC.
 // Delta will be nil in the event that Alternate is set.
 type Response struct {
-	// Requested delta of server's infostore.
-	Delta InfoStoreDelta `protobuf:"bytes,1,opt,name=delta" json:"delta"`
+	// Responding Node's ID.
+	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,1,opt,name=node_id,proto3,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id,omitempty"`
+	// Address of the responding client.
+	Addr cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=addr" json:"addr"`
 	// Non-nil means client should retry with this address.
-	Alternate *cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=alternate" json:"alternate,omitempty"`
+	Alternate *cockroach_util.UnresolvedAddr `protobuf:"bytes,3,opt,name=alternate" json:"alternate,omitempty"`
+	// Maximum sequence number of gossip from this peer.
+	MaxSeq int64 `protobuf:"varint,4,opt,name=max_seq,proto3" json:"max_seq,omitempty"`
+	// Requested delta of server's infostore.
+	Delta map[string]*Info `protobuf:"bytes,5,rep,name=delta" json:"delta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 }
 
 func (m *Response) Reset()         { *m = Response{} }
 func (m *Response) String() string { return proto.CompactTextString(m) }
 func (*Response) ProtoMessage()    {}
 
-func (m *Response) GetDelta() InfoStoreDelta {
+func (m *Response) GetAddr() cockroach_util.UnresolvedAddr {
 	if m != nil {
-		return m.Delta
+		return m.Addr
 	}
-	return InfoStoreDelta{}
+	return cockroach_util.UnresolvedAddr{}
 }
 
 func (m *Response) GetAlternate() *cockroach_util.UnresolvedAddr {
@@ -112,48 +101,11 @@ func (m *Response) GetAlternate() *cockroach_util.UnresolvedAddr {
 	return nil
 }
 
-// TODO(thschroeter): check if all fields below are required
-type InfoStoreDelta struct {
-	// Map from key to info.
-	Infos map[string]*Info `protobuf:"bytes,1,rep,name=infos" json:"infos,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Owning node's ID
-	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,2,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id"`
-	// Address of node owning this info store.
-	NodeAddr cockroach_util.UnresolvedAddr `protobuf:"bytes,3,opt,name=node_addr" json:"node_addr"`
-	// Maximum sequence number inserted
-	MaxSeq int64 `protobuf:"varint,4,opt,name=max_seq" json:"max_seq"`
-}
-
-func (m *InfoStoreDelta) Reset()         { *m = InfoStoreDelta{} }
-func (m *InfoStoreDelta) String() string { return proto.CompactTextString(m) }
-func (*InfoStoreDelta) ProtoMessage()    {}
-
-func (m *InfoStoreDelta) GetInfos() map[string]*Info {
+func (m *Response) GetDelta() map[string]*Info {
 	if m != nil {
-		return m.Infos
+		return m.Delta
 	}
 	return nil
-}
-
-func (m *InfoStoreDelta) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
-	if m != nil {
-		return m.NodeID
-	}
-	return 0
-}
-
-func (m *InfoStoreDelta) GetNodeAddr() cockroach_util.UnresolvedAddr {
-	if m != nil {
-		return m.NodeAddr
-	}
-	return cockroach_util.UnresolvedAddr{}
-}
-
-func (m *InfoStoreDelta) GetMaxSeq() int64 {
-	if m != nil {
-		return m.MaxSeq
-	}
-	return 0
 }
 
 // Info is the basic unit of information traded over the
@@ -161,11 +113,11 @@ func (m *InfoStoreDelta) GetMaxSeq() int64 {
 type Info struct {
 	Value cockroach_proto1.Value `protobuf:"bytes,1,opt,name=value" json:"value"`
 	// Wall time when info is to be discarded (Unix-nanos)
-	TTLStamp int64 `protobuf:"varint,2,opt,name=ttl_stamp" json:"ttl_stamp"`
+	TTLStamp int64 `protobuf:"varint,2,opt,name=ttl_stamp,proto3" json:"ttl_stamp,omitempty"`
 	// Number of hops from originator
-	Hops uint32 `protobuf:"varint,3,opt,name=hops" json:"hops"`
+	Hops uint32 `protobuf:"varint,3,opt,name=hops,proto3" json:"hops,omitempty"`
 	// Originating node's ID
-	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,4,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id"`
+	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,4,opt,name=node_id,proto3,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id,omitempty"`
 }
 
 func (m *Info) Reset()         { *m = Info{} }
@@ -177,25 +129,4 @@ func (m *Info) GetValue() cockroach_proto1.Value {
 		return m.Value
 	}
 	return cockroach_proto1.Value{}
-}
-
-func (m *Info) GetTTLStamp() int64 {
-	if m != nil {
-		return m.TTLStamp
-	}
-	return 0
-}
-
-func (m *Info) GetHops() uint32 {
-	if m != nil {
-		return m.Hops
-	}
-	return 0
-}
-
-func (m *Info) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
-	if m != nil {
-		return m.NodeID
-	}
-	return 0
 }

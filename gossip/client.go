@@ -97,23 +97,23 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 		// Compute the delta of local node's infostore to send with request.
 		g.mu.Lock()
 		delta := g.is.delta(c.peerID, localMaxSeq)
-		nodeID := g.is.NodeID // needs to be accessed with the lock held
+		nodeID := g.is.NodeID
+		localMaxSeq = g.is.MaxSeq
 		g.mu.Unlock()
 
-		localMaxSeq = delta.MaxSeq
 		addr := g.is.NodeAddr
 		lAddr := c.rpcClient.LocalAddr()
 
 		// Send gossip with timeout.
-		args := &Request{
+		args := Request{
 			NodeID: nodeID,
 			Addr:   util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 			LAddr:  util.MakeUnresolvedAddr(lAddr.Network(), lAddr.String()),
 			MaxSeq: remoteMaxSeq,
 			Delta:  delta,
 		}
-		reply := &Response{}
-		gossipCall := c.rpcClient.Go("Gossip.Gossip", args, reply, nil)
+		reply := Response{}
+		gossipCall := c.rpcClient.Go("Gossip.Gossip", &args, &reply, nil)
 		select {
 		case <-gossipCall.Done:
 			if gossipCall.Error != nil {
@@ -140,22 +140,21 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 
 		now := time.Now().UnixNano()
 		// Combine remote node's infostore delta with ours.
-		respInfoStore := newInfoStoreFromProto(reply.Delta)
-		if infoCount := len(respInfoStore.Infos); infoCount > 0 {
+		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof("gossip: received %s from %s", respInfoStore, c.addr)
+				log.Infof("gossip: received %s from %s", reply.Delta, c.addr)
 			} else {
 				log.Infof("gossip: received %d info(s) from %s", infoCount, c.addr)
 			}
 		}
 		g.mu.Lock()
-		c.peerID = respInfoStore.NodeID
+		c.peerID = reply.NodeID
 		g.outgoing.addNode(c.peerID)
-		freshCount := g.is.combine(respInfoStore)
+		freshCount := g.is.combine(reply.Delta, reply.NodeID)
 		if freshCount > 0 {
 			c.lastFresh = now
 		}
-		remoteMaxSeq = respInfoStore.MaxSeq
+		remoteMaxSeq = reply.MaxSeq
 
 		// If we have the sentinel gossip, we're considered connected.
 		g.checkHasConnected()

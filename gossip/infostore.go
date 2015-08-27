@@ -261,21 +261,21 @@ func (is *infoStore) visitInfos(visitInfo func(string, *info) error) error {
 // store's sequence generator. All hop distances on infos are
 // incremented to indicate they've arrived from an external source.
 // Returns the count of "fresh" infos in the provided delta.
-func (is *infoStore) combine(delta *infoStore) int {
+func (is *infoStore) combine(infos map[string]*Info, nodeID proto.NodeID) int {
 	var freshCount int
-	if err := delta.visitInfos(func(key string, i *info) error {
+	for key, infoProto := range infos {
+		i := &info{
+			Info: *infoProto,
+		}
 		is.seqGen++
 		i.seq = is.seqGen
 		i.Hops++
-		i.peerID = delta.NodeID
+		i.peerID = nodeID
 		// Errors from addInfo here are not a problem; they simply
 		// indicate that the data in *is is newer than in *delta.
 		if err := is.addInfo(key, i); err == nil {
 			freshCount++
 		}
-		return nil
-	}); err != nil {
-		log.Errorf("failed to properly combine infoStores: %s", err)
 	}
 	return freshCount
 }
@@ -286,23 +286,14 @@ func (is *infoStore) combine(delta *infoStore) int {
 // from node requesting delta are ignored.
 //
 // Returns nil if there are no deltas.
-func (is *infoStore) delta(nodeID proto.NodeID, seq int64) InfoStoreDelta {
-	delta := InfoStoreDelta{
-		NodeID:   is.NodeID,
-		NodeAddr: is.NodeAddr,
-		MaxSeq:   is.MaxSeq,
-	}
+func (is *infoStore) delta(nodeID proto.NodeID, seq int64) map[string]*Info {
+	infos := make(map[string]*Info)
 
 	if seq < is.MaxSeq {
-		delta.Infos = make(map[string]*Info)
-
 		// Compute delta of infos.
 		if err := is.visitInfos(func(key string, i *info) error {
 			if i.isFresh(nodeID, seq) {
-				delta.Infos[key] = &i.Info
-				if i.seq > is.MaxSeq {
-					is.MaxSeq = i.seq
-				}
+				infos[key] = &i.Info
 			}
 			return nil
 		}); err != nil {
@@ -310,7 +301,7 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) InfoStoreDelta {
 		}
 	}
 
-	return delta
+	return infos
 }
 
 // distant returns a nodeSet for gossip peers which originated infos
@@ -353,19 +344,4 @@ func (is *infoStore) leastUseful(nodes nodeSet) proto.NodeID {
 		}
 	}
 	return leastNode
-}
-
-func newInfoStoreFromProto(p InfoStoreDelta) *infoStore {
-	infos := make(infoMap)
-
-	for k, v := range p.Infos {
-		infos[k] = &info{Info: *v}
-	}
-
-	return &infoStore{
-		Infos:    infos,
-		NodeID:   p.NodeID,
-		NodeAddr: p.NodeAddr,
-		MaxSeq:   p.MaxSeq,
-	}
 }

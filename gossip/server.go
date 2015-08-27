@@ -79,6 +79,8 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 		return nil, util.Errorf("local addr %s could not be converted to net.Addr: %s", args.LAddr, err)
 	}
 
+	reply.NodeID = s.is.NodeID
+
 	// If there is no more capacity to accept incoming clients, return
 	// a random already-being-serviced incoming client as an alternate.
 	if !s.incoming.hasNode(args.NodeID) {
@@ -97,15 +99,14 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 	}
 
 	// Update infostore with gossiped infos.
-	argsInfoStore := newInfoStoreFromProto(args.Delta)
-	if infoCount := len(argsInfoStore.Infos); infoCount > 0 {
+	if infoCount := len(args.Delta); infoCount > 0 {
 		if log.V(1) {
-			log.Infof("gossip: received %s from %s", argsInfoStore, addr)
+			log.Infof("gossip: received %s from %s", args.Delta, addr)
 		} else {
 			log.Infof("gossip: received %d info(s) from %s", infoCount, addr)
 		}
 	}
-	s.is.combine(argsInfoStore)
+	s.is.combine(args.Delta, args.NodeID)
 
 	// The exit condition for waiting clients.
 	if s.closed {
