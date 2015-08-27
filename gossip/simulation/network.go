@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -154,7 +155,7 @@ func (n *Network) SimulateNetwork(
 		select {
 		case <-time.After(n.GossipInterval):
 			// Node 0 gossips sentinel every cycle.
-			if err := nodes[0].Gossip.AddInfo(gossip.KeySentinel, int64(cycle), time.Hour); err != nil {
+			if err := nodes[0].Gossip.AddInfo(gossip.KeySentinel, encoding.EncodeUint64(nil, uint64(cycle)), time.Hour); err != nil {
 				log.Fatal(err)
 			}
 			if !simCallback(cycle, n) {
@@ -177,7 +178,7 @@ func (n *Network) RunUntilFullyConnected() int {
 	n.SimulateNetwork(func(cycle int, network *Network) bool {
 		// Every node should gossip.
 		for _, node := range network.Nodes {
-			if err := node.Gossip.AddInfo(node.Server.Addr().String(), int64(cycle), time.Hour); err != nil {
+			if err := node.Gossip.AddInfo(node.Server.Addr().String(), encoding.EncodeUint64(nil, uint64(cycle)), time.Hour); err != nil {
 				log.Fatal(err)
 			}
 		}

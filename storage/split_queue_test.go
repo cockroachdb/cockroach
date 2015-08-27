@@ -44,7 +44,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tc.gossip.AddInfo(gossip.KeyConfigZone, zoneMap, 0); err != nil {
+	if err := tc.gossip.AddInfoProto(gossip.KeyConfigZone, zoneMap, 0); err != nil {
 		t.Fatal(err)
 	}
 

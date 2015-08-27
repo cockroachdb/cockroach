@@ -57,12 +57,12 @@ var multiDCConfig = config.ZoneConfig{
 func gossipStores(g *gossip.Gossip, stores []*proto.StoreDescriptor, t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(len(stores))
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool, _ interface{}) { wg.Done() })
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool, _ []byte) { wg.Done() })
 
 	for _, s := range stores {
 		keyStoreGossip := gossip.MakeStoreKey(s.StoreID)
 		// Gossip store descriptor.
-		err := g.AddInfo(keyStoreGossip, *s, 0)
+		err := g.AddInfoProto(keyStoreGossip, s, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -538,9 +538,8 @@ func TestAllocatorCapacityGossipUpdate(t *testing.T) {
 
 	// Order and value of contentsChanged shouldn't matter.
 	key := "testkey"
-	var content interface{}
-	s.allocator().storeGossipUpdate(key, true, content)
-	s.allocator().storeGossipUpdate(key, false, content)
+	s.allocator().storeGossipUpdate(key, true, nil)
+	s.allocator().storeGossipUpdate(key, false, nil)
 
 	expectedKeys := map[string]struct{}{key: {}}
 	s.allocator().Lock()
@@ -666,7 +665,7 @@ func Example_rebalancing() {
 	alloc.deterministic = true
 
 	var wg sync.WaitGroup
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool, _ interface{}) { wg.Done() })
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool, _ []byte) { wg.Done() })
 
 	const generations = 100
 	const nodes = 20
@@ -690,7 +689,7 @@ func Example_rebalancing() {
 				testStores[j].Add(alloc.randGen.Int63n(1 << 20))
 			}
 			key := gossip.MakeStoreKey(proto.StoreID(j))
-			if err := g.AddInfo(key, testStores[j].StoreDescriptor, 0); err != nil {
+			if err := g.AddInfoProto(key, &testStores[j].StoreDescriptor, 0); err != nil {
 				panic(err)
 			}
 		}

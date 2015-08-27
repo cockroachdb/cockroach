@@ -22,17 +22,32 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+func newInfo(val float64) Info {
+	now := time.Now()
+
+	return Info{
+		Value: proto.Value{
+			Bytes: encoding.EncodeFloat(nil, val),
+			Timestamp: &proto.Timestamp{
+				WallTime: now.UnixNano(),
+			},
+		},
+		TTLStamp: now.Add(time.Millisecond).UnixNano(),
+	}
+}
+
 func TestExpired(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	now := time.Now().UnixNano()
-	i := info{float64(1), now, now + int64(time.Millisecond), 0, 0, 0, 0}
-	if i.expired(now) {
+
+	i := newInfo(float64(1))
+	if i.expired(i.Value.Timestamp.WallTime) {
 		t.Error("premature expiration")
 	}
-	if !i.expired(now + int64(time.Millisecond)) {
+	if !i.expired(i.TTLStamp) {
 		t.Error("info should have expired")
 	}
 }
@@ -40,11 +55,14 @@ func TestExpired(t *testing.T) {
 func TestIsFresh(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	const seq = 10
-	now := time.Now().UnixNano()
+
 	node1 := proto.NodeID(1)
 	node2 := proto.NodeID(2)
 	node3 := proto.NodeID(3)
-	i := info{float64(1), now, now + int64(time.Millisecond), 0, node1, node2, seq}
+	i := newInfo(float64(1))
+	i.NodeID = node1
+	i.PeerID = node2
+	i.Seq = seq
 	if !i.isFresh(node3, seq-1) {
 		t.Error("info should be fresh:", i)
 	}

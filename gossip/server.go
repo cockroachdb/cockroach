@@ -18,8 +18,6 @@
 package gossip
 
 import (
-	"bytes"
-	"encoding/gob"
 	"math/rand"
 	"net"
 	"sync"
@@ -45,7 +43,7 @@ type server struct {
 	ready    *sync.Cond    // Broadcasts wakeup to waiting gossip requests
 
 	mu       sync.Mutex            // Protects the fields below
-	is       *infoStore            // The backing infostore
+	is       infoStore             // The backing infostore
 	closed   bool                  // True if server was closed
 	incoming *nodeSet              // Incoming client node IDs
 	lAddrMap map[string]clientInfo // Incoming client's local address -> client's node info
@@ -85,14 +83,10 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 	// a random already-being-serviced incoming client as an alternate.
 	if !s.incoming.hasNode(args.NodeID) {
 		if !s.incoming.hasSpace() {
-			idx := rand.Intn(len(s.lAddrMap))
-			count := 0
+			// Map iteration order is random.
 			for _, cInfo := range s.lAddrMap {
-				if count == idx {
-					reply.Alternate = cInfo.addr
-					return reply, nil
-				}
-				count++
+				reply.Alternate = cInfo.addr
+				return reply, nil
 			}
 		}
 		s.incoming.addNode(args.NodeID)
@@ -103,20 +97,16 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 	}
 
 	// Update infostore with gossiped infos.
-	if args.Delta != nil {
-		delta := &infoStore{}
-		if err := gob.NewDecoder(bytes.NewBuffer(args.Delta)).Decode(delta); err != nil {
-			return nil, util.Errorf("infostore could not be decoded: %s", err)
+	argsInfoStore := newInfoStoreFromProto(args.Delta)
+	if infoCount := len(argsInfoStore.Infos); infoCount > 0 {
+		if log.V(1) {
+			log.Infof("gossip: received %s from %s", argsInfoStore, addr)
+		} else {
+			log.Infof("gossip: received %d info(s) from %s", infoCount, addr)
 		}
-		if infoCount := len(delta.Infos); infoCount > 0 {
-			if log.V(1) {
-				log.Infof("gossip: received %s", delta)
-			} else {
-				log.Infof("gossip: received %d info(s) from %s", infoCount, addr)
-			}
-		}
-		s.is.combine(delta)
 	}
+	s.is.combine(argsInfoStore)
+
 	// The exit condition for waiting clients.
 	if s.closed {
 		return nil, util.Errorf("gossip server shutdown")
@@ -126,14 +116,7 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 		s.ready.Wait()
 	}
 	// Return reciprocal delta.
-	delta := s.is.delta(args.NodeID, args.MaxSeq)
-	if delta != nil {
-		var buf bytes.Buffer
-		if err := gob.NewEncoder(&buf).Encode(delta); err != nil {
-			log.Fatalf("infostore could not be encoded: %s", err)
-		}
-		reply.Delta = buf.Bytes()
-	}
+	reply.Delta = s.is.delta(args.NodeID, args.MaxSeq)
 	return reply, nil
 }
 

@@ -19,7 +19,6 @@
 package storage
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"sort"
@@ -128,21 +127,16 @@ func getUsedNodes(existing []proto.Replica) map[proto.NodeID]struct{} {
 // store gossip key. Returns an error if the gossip doesn't exist
 // or is not a StoreDescriptor.
 func storeDescFromGossip(key string, g *gossip.Gossip) (*proto.StoreDescriptor, error) {
-	info, err := g.GetInfo(key)
-
-	if err != nil {
+	storeDesc := &proto.StoreDescriptor{}
+	if err := g.GetInfoProto(key, storeDesc); err != nil {
 		return nil, err
 	}
-	storeDesc, ok := info.(proto.StoreDescriptor)
-	if !ok {
-		return nil, fmt.Errorf("gossiped info is not a StoreDescriptor: %+v", info)
-	}
-	return &storeDesc, nil
+	return storeDesc, nil
 }
 
 // storeGossipUpdate is a gossip callback triggered whenever store information
 // is gossiped. It just tracks the gossiped keys.
-func (a *allocator) storeGossipUpdate(key string, _ bool, _ interface{}) {
+func (a *allocator) storeGossipUpdate(key string, _ bool, _ []byte) {
 	a.Lock()
 	defer a.Unlock()
 

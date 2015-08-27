@@ -238,12 +238,11 @@ func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
 // the cluster, which is retrieved from the gossip protocol instead of the
 // datastore.
 func (ds *DistSender) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) {
-	infoI, err := ds.gossip.GetInfo(gossip.KeyFirstRangeDescriptor)
-	if err != nil {
+	rangeDesc := &proto.RangeDescriptor{}
+	if err := ds.gossip.GetInfoProto(gossip.KeyFirstRangeDescriptor, rangeDesc); err != nil {
 		return nil, firstRangeMissingError{}
 	}
-	info := infoI.(proto.RangeDescriptor)
-	return &info, nil
+	return rangeDesc, nil
 }
 
 // getRangeDescriptors returns a sorted slice of RangeDescriptors for a set of
@@ -324,11 +323,10 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 
 	ownNodeID := ds.gossip.GetNodeID()
 	if ownNodeID > 0 {
-		nodeDesc, err := ds.gossip.GetInfo(gossip.MakeNodeIDKey(ownNodeID))
-		if err == nil {
-			d := nodeDesc.(*proto.NodeDescriptor)
-			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(d))
-			return d
+		nodeDesc := &proto.NodeDescriptor{}
+		if err := ds.gossip.GetInfoProto(gossip.MakeNodeIDKey(ownNodeID), nodeDesc); err == nil {
+			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(nodeDesc))
+			return nodeDesc
 		}
 	}
 	log.Infof("unable to determine this node's attributes for replica " +
@@ -353,8 +351,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 	var addrs []net.Addr
 	replicaMap := map[string]*proto.Replica{}
 	for i := range replicas {
-		nd := &replicas[i].NodeDesc
-		addr := nd.Address
+		addr := replicas[i].NodeDesc.Address
 		addrs = append(addrs, addr)
 		replicaMap[addr.String()] = &replicas[i].Replica
 	}

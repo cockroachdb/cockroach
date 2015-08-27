@@ -31,6 +31,8 @@ import (
 	"time"
 	"unsafe"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -43,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	gogoproto "github.com/gogo/protobuf/proto"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -983,14 +984,14 @@ func (r *Replica) maybeGossipFirstRange() error {
 
 	ctx := r.context()
 
-	desc := *r.Desc()
+	desc := r.Desc()
 
 	// Gossip the cluster ID from all replicas of the first range.
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.rm.ClusterID(),
 			r.rm.StoreID(), r.Desc().RangeID)
 	}
-	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
+	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, []byte(r.rm.ClusterID()), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
 
@@ -1000,13 +1001,13 @@ func (r *Replica) maybeGossipFirstRange() error {
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.rm.StoreID(), desc.RangeID)
 	}
-	if err := r.rm.Gossip().AddInfo(gossip.KeySentinel, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
+	if err := r.rm.Gossip().AddInfo(gossip.KeySentinel, []byte(r.rm.ClusterID()), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping first range from store %d, range %d", r.rm.StoreID(), desc.RangeID)
 	}
-	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, desc, configGossipTTL); err != nil {
+	if err := r.rm.Gossip().AddInfoProto(gossip.KeyFirstRangeDescriptor, desc, configGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip first range metadata: %s", err)
 	}
 	return nil
@@ -1063,7 +1064,7 @@ func (r *Replica) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bo
 				if log.V(1) {
 					log.Infoc(ctx, "gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RangeID)
 				}
-				if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0); err != nil {
+				if err := r.rm.Gossip().AddInfoProto(cd.gossipKey, configMap, 0); err != nil {
 					log.Errorc(ctx, "failed to gossip %s configMap: %s", cd.gossipKey, err)
 				}
 			}
@@ -1264,7 +1265,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 // loadConfigMap scans the config entries under keyPrefix and
 // instantiates/returns a config map and its sha256 hash. Prefix
 // configuration maps include zones.
-func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI gogoproto.Message) (config.PrefixConfigMap, []byte, error) {
+func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI gogoproto.Message) (*config.PrefixConfigMap, []byte, error) {
 	// TODO(tschottdorf): Currently this does not handle intents well.
 	kvs, _, err := engine.MVCCScan(eng, keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true /* consistent */, nil)
 	if err != nil {

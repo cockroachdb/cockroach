@@ -100,7 +100,7 @@ func TestSendAndReceive(t *testing.T) {
 			}
 
 			addr := server.Addr()
-			if err := g.AddInfo(gossip.MakeNodeIDKey(protoNodeID),
+			if err := g.AddInfoProto(gossip.MakeNodeIDKey(protoNodeID),
 				&proto.NodeDescriptor{
 					Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 				},
@@ -187,7 +187,7 @@ func TestInOrderDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := server.Addr()
-	if err := g.AddInfo(gossip.MakeNodeIDKey(protoNodeID),
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(protoNodeID),
 		&proto.NodeDescriptor{
 			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		},

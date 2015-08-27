@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -306,13 +305,9 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 // and then iterates from most specific to least, returning the first
 // non-nil GC policy.
 func (gcq *gcQueue) lookupGCPolicy(repl *Replica) (config.GCPolicy, error) {
-	info, err := repl.rm.Gossip().GetInfo(gossip.KeyConfigZone)
+	configMap, err := repl.rm.Gossip().GetZoneConfig()
 	if err != nil {
 		return config.GCPolicy{}, util.Errorf("unable to fetch zone config from gossip: %s", err)
-	}
-	configMap, ok := info.(config.PrefixConfigMap)
-	if !ok {
-		return config.GCPolicy{}, util.Errorf("gossiped info is not a prefix configuration map: %+v", info)
 	}
 
 	desc := repl.Desc()

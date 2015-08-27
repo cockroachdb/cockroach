@@ -11,6 +11,7 @@
 	It has these top-level messages:
 		GCPolicy
 		ZoneConfig
+		PrefixConfigMap
 		PrefixConfig
 		ConfigUnion
 */
@@ -96,6 +97,25 @@ func (m *ZoneConfig) GetRangeMaxBytes() int64 {
 func (m *ZoneConfig) GetGC() *GCPolicy {
 	if m != nil {
 		return m.GC
+	}
+	return nil
+}
+
+// PrefixConfigMap contains a slice of prefix configs, sorted by
+// prefix. Along with various accessor methods, the config map
+// also contains additional prefix configs in the slice to
+// account for the ends of prefix ranges.
+type PrefixConfigMap struct {
+	Configs []PrefixConfig `protobuf:"bytes,1,rep,name=configs" json:"configs"`
+}
+
+func (m *PrefixConfigMap) Reset()         { *m = PrefixConfigMap{} }
+func (m *PrefixConfigMap) String() string { return proto.CompactTextString(m) }
+func (*PrefixConfigMap) ProtoMessage()    {}
+
+func (m *PrefixConfigMap) GetConfigs() []PrefixConfig {
+	if m != nil {
+		return m.Configs
 	}
 	return nil
 }
@@ -219,6 +239,36 @@ func (m *ZoneConfig) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *PrefixConfigMap) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *PrefixConfigMap) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Configs) > 0 {
+		for _, msg := range m.Configs {
+			data[i] = 0xa
+			i++
+			i = encodeVarintConfig(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
 func (m *PrefixConfig) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -333,6 +383,18 @@ func (m *ZoneConfig) Size() (n int) {
 	if m.GC != nil {
 		l = m.GC.Size()
 		n += 1 + l + sovConfig(uint64(l))
+	}
+	return n
+}
+
+func (m *PrefixConfigMap) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Configs) > 0 {
+		for _, e := range m.Configs {
+			l = e.Size()
+			n += 1 + l + sovConfig(uint64(l))
+		}
 	}
 	return n
 }
@@ -559,6 +621,79 @@ func (m *ZoneConfig) Unmarshal(data []byte) error {
 				m.GC = &GCPolicy{}
 			}
 			if err := m.GC.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipConfig(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
+func (m *PrefixConfigMap) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Configs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Configs = append(m.Configs, PrefixConfig{})
+			if err := m.Configs[len(m.Configs)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

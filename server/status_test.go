@@ -32,7 +32,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
@@ -147,37 +147,12 @@ func TestStatusGossipJson(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	type prefixedInfo struct {
-		Key string `json:"Key"`
-		Val []struct {
-			config.PrefixConfig
-			// Dirty hacks here because `json` doesn't know how to magically
-			// synthesize the correct type of `proto.Message`.
-			Config interface{}
-		} `json:"Val"`
-	}
-
-	type rangeDescriptorInfo struct {
-		Key string                `json:"Key"`
-		Val proto.RangeDescriptor `json:"Val"`
-	}
-
-	type nodeDescriptorInfo struct {
-		Key string               `json:"Key"`
-		Val proto.NodeDescriptor `json:"Val"`
-	}
-
-	type keyValueStringPair struct {
-		Key string `json:"Key"`
-		Val string `json:"Val"`
-	}
-
 	type infos struct {
 		Infos struct {
-			FirstRange *rangeDescriptorInfo `json:"first-range"`
-			Zones      *prefixedInfo        `json:"zones"`
-			ClusterID  *keyValueStringPair  `json:"cluster-id"`
-			Node1      *nodeDescriptorInfo  `json:"node:1"`
+			FirstRange *gossip.Info `json:"first-range"`
+			Zones      *gossip.Info `json:"zones"`
+			ClusterID  *gossip.Info `json:"cluster-id"`
+			Node1      *gossip.Info `json:"node:1"`
 		} `json:"infos"`
 	}
 

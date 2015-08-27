@@ -49,11 +49,12 @@ func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
 		MaxRetries:     2,
 	}
 
-	// will never error because `return nil` below
-	_ = lSender.VisitStores(func(s *storage.Store) error {
+	if err := lSender.VisitStores(func(s *storage.Store) error {
 		s.SetRangeRetryOptions(client.DefaultTxnRetryOptions)
 		return nil
-	})
+	}); err != nil {
+		panic(err)
+	}
 }
 
 // The following structs and methods provide a mechanism for verifying
