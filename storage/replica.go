@@ -102,18 +102,15 @@ const (
 	DefaultLeaderLeaseDuration = time.Second
 )
 
-// configDescriptor describes administrative configuration maps
-// affecting ranges of the key-value map by key prefix.
-type configDescriptor struct {
+// zoneConfigDescriptor is the zone configuration descriptor.
+var zoneConfigDescriptor = struct {
 	keyPrefix proto.Key         // Range key prefix
 	gossipKey string            // Gossip key
 	configI   gogoproto.Message // Config struct interface
-}
-
-// configDescriptors is an array containing the
-// zone configuration descriptors.
-var configDescriptors = [...]*configDescriptor{
-	{keys.ConfigZonePrefix, gossip.KeyConfigZone, &config.ZoneConfig{}},
+}{
+	keyPrefix: keys.ConfigZonePrefix,
+	gossipKey: gossip.KeyConfigZone,
+	configI:   &config.ZoneConfig{},
 }
 
 // tsCacheMethods specifies the set of methods which affect the
@@ -194,11 +191,11 @@ type Replica struct {
 	// Updated atomically.
 	lastIndex uint64
 	// Last index applied to the state machine. Updated atomically.
-	appliedIndex uint64
-	configHashes map[int][]byte // Config map sha256 hashes @ last gossip
-	lease        unsafe.Pointer // Information for leader lease, updated atomically
-	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
-	respCache    *ResponseCache // Provides idempotence for retries
+	appliedIndex   uint64
+	zoneConfigHash []byte         // sha256 hash of zoneConfig @ last gossip
+	lease          unsafe.Pointer // Information for leader lease, updated atomically
+	llMu           sync.Mutex     // Synchronizes readers' requests for leader lease
+	respCache      *ResponseCache // Provides idempotence for retries
 
 	sync.RWMutex                 // Protects the following fields:
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
@@ -1041,31 +1038,25 @@ func (r *Replica) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bo
 	}
 
 	ctx := r.context()
-	for i, cd := range configDescriptors {
-		if match(cd.keyPrefix) {
-			// Check for a bad range split. This should never happen as ranges
-			// cannot be split mid-config.
-			if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
-				// If we ever implement configs that span multiple ranges,
-				// we must update store.startGossip accordingly. For the
-				// time being, it will only fire the first range.
-				log.Fatalc(ctx, "range splits configuration values for %s", cd.keyPrefix)
-			}
-			configMap, hash, err := loadConfigMap(r.rm.Engine(), cd.keyPrefix, cd.configI)
-			if err != nil {
-				log.Errorc(ctx, "failed loading %s config map: %s", cd.gossipKey, err)
-				continue
-			}
-			if r.configHashes == nil {
-				r.configHashes = map[int][]byte{}
-			}
-			if prevHash, ok := r.configHashes[i]; !ok || !bytes.Equal(prevHash, hash) {
-				r.configHashes[i] = hash
+	if match(zoneConfigDescriptor.keyPrefix) {
+		// Check for a bad range split. This should never happen as ranges
+		// cannot be split mid-config.
+		if !r.ContainsKey(zoneConfigDescriptor.keyPrefix.PrefixEnd()) {
+			// If we ever implement configs that span multiple ranges,
+			// we must update store.startGossip accordingly. For the
+			// time being, it will only fire the first range.
+			log.Fatalc(ctx, "range splits configuration values for %s", zoneConfigDescriptor.keyPrefix)
+		}
+		if configMap, hash, err := loadConfigMap(r.rm.Engine(), zoneConfigDescriptor.keyPrefix, zoneConfigDescriptor.configI); err != nil {
+			log.Errorc(ctx, "failed loading %s config map: %s", zoneConfigDescriptor.gossipKey, err)
+		} else {
+			if !bytes.Equal(hash, r.zoneConfigHash) {
+				r.zoneConfigHash = hash
 				if log.V(1) {
-					log.Infoc(ctx, "gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RangeID)
+					log.Infoc(ctx, "gossiping %s config from store %d, range %d", zoneConfigDescriptor.gossipKey, r.rm.StoreID(), r.Desc().RangeID)
 				}
-				if err := r.rm.Gossip().AddInfoProto(cd.gossipKey, configMap, 0); err != nil {
-					log.Errorc(ctx, "failed to gossip %s configMap: %s", cd.gossipKey, err)
+				if err := r.rm.Gossip().AddInfoProto(zoneConfigDescriptor.gossipKey, configMap, 0); err != nil {
+					log.Errorc(ctx, "failed to gossip %s configMap: %s", zoneConfigDescriptor.gossipKey, err)
 				}
 			}
 		}

@@ -633,12 +633,9 @@ func (s *Store) maybeGossipFirstRange() error {
 // scenario, we activate the very few ranges that hold config maps
 // periodically.
 func (s *Store) maybeGossipConfigs() error {
-	for _, cd := range configDescriptors {
-		rng := s.LookupReplica(cd.keyPrefix, nil)
-		if rng == nil {
-			// This store has no range with this configuration.
-			continue
-		}
+	if rng := s.LookupReplica(zoneConfigDescriptor.keyPrefix, nil); rng != nil {
+		// This store has a range with this configuration.
+
 		// Wake up the replica. If it acquires a fresh lease, it will
 		// gossip. If an unexpected error occurs (i.e. nobody else seems to
 		// have an active lease but we still failed to obtain it), return
@@ -648,6 +645,7 @@ func (s *Store) maybeGossipConfigs() error {
 			return err
 		}
 	}
+
 	return nil
 }
 
