@@ -46,13 +46,11 @@ func (as *nodeSet) len() int {
 
 // asSlice returns the nodes as a slice.
 func (as *nodeSet) asSlice() []proto.NodeID {
-	arr := make([]proto.NodeID, len(as.nodes))
-	var count int
+	slice := make([]proto.NodeID, 0, len(as.nodes))
 	for node := range as.nodes {
-		arr[count] = node
-		count++
+		slice = append(slice, node)
 	}
-	return arr
+	return slice
 }
 
 // selectRandom returns a random node from the set. Returns 0 if
