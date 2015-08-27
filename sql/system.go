@@ -31,7 +31,7 @@ const (
 	// MaxReservedDescID is the maximum reserved descriptor ID.
 	// All objects with ID <= MaxReservedDescID are system object
 	// with special rules.
-	MaxReservedDescID ID = 999
+	MaxReservedDescID ID = keys.MaxReservedDescID
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID ID = 0
 

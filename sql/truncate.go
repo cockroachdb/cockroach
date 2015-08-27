@@ -19,6 +19,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -42,7 +43,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 			return nil, err
 		}
 
-		tablePrefix := MakeTablePrefix(tableDesc.ID)
+		tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 
 		// Delete rows and indexes starting with the table's prefix.
 		tableStartKey := proto.Key(tablePrefix)

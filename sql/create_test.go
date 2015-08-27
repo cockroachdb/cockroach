@@ -68,7 +68,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
-	start := proto.Key(sql.MakeTablePrefix(sql.NamespaceTable.ID))
+	start := proto.Key(keys.MakeTablePrefix(uint32(sql.NamespaceTable.ID)))
 	if kvs, err := kvDB.Scan(start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {

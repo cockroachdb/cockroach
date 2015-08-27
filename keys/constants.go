@@ -169,4 +169,16 @@ var (
 	// occur after the range of common user data prefixes so that tests which use
 	// those prefixes will not see table data.
 	TableDataPrefix = proto.Key("\xff")
+
+	// UserTableDataMin is the start key of user structured data.
+	UserTableDataMin = MakeTablePrefix(MaxReservedDescID + 1)
+)
+
+const (
+	// MaxReservedDescID is the maximum value of the system IDs
+	// under 'TableDataPrefix'.
+	// It is here only so that we may define keys/ranges using it.
+	// NOTE: this is not great, but the alternative is to
+	// move all the ID/keying from sql/ here, or drop ID entirely.
+	MaxReservedDescID = 999
 )

@@ -71,7 +71,7 @@ func equalName(a, b string) bool {
 // specified parentID.
 func MakeNameMetadataKey(parentID ID, name string) proto.Key {
 	name = normalizeName(name)
-	k := MakeTablePrefix(NamespaceTable.ID)
+	k := keys.MakeTablePrefix(uint32(NamespaceTable.ID))
 	k = encoding.EncodeUvarint(k, uint64(NamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarint(k, uint64(parentID))
 	if name != "" {
@@ -83,7 +83,7 @@ func MakeNameMetadataKey(parentID ID, name string) proto.Key {
 
 // MakeDescMetadataKey returns the key for the descriptor.
 func MakeDescMetadataKey(descID ID) proto.Key {
-	k := MakeTablePrefix(DescriptorTable.ID)
+	k := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
 	k = encoding.EncodeUvarint(k, uint64(DescriptorTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarint(k, uint64(descID))
 	k = encoding.EncodeUvarint(k, uint64(DescriptorTable.Columns[1].ID))
@@ -95,14 +95,6 @@ func MakeColumnKey(colID ColumnID, primaryKey []byte) proto.Key {
 	var key []byte
 	key = append(key, primaryKey...)
 	return encoding.EncodeUvarint(key, uint64(colID))
-}
-
-// MakeTablePrefix returns the key prefix used for the table's data.
-func MakeTablePrefix(tableID ID) []byte {
-	var key []byte
-	key = append(key, keys.TableDataPrefix...)
-	key = encoding.EncodeUvarint(key, uint64(tableID))
-	return key
 }
 
 // MakeIndexKeyPrefix returns the key prefix used for the index's data.
