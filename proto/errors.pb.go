@@ -2263,6 +2263,9 @@ func (m *TransactionStatusError) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthErrors
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3202,6 +3205,9 @@ func (m *Error) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthErrors
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}

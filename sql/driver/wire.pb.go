@@ -736,6 +736,9 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -952,6 +955,9 @@ func (m *Datum) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1050,6 +1056,9 @@ func (m *Result) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1245,6 +1254,9 @@ func (m *Request) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}

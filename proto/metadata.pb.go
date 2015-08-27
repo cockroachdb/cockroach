@@ -774,6 +774,9 @@ func (m *Attributes) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthMetadata
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}

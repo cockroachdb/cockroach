@@ -713,6 +713,9 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -735,6 +738,9 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -935,6 +941,9 @@ func (m *TimeSeriesQueryRequest_Query) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1092,6 +1101,9 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1114,6 +1126,9 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}

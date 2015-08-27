@@ -1700,6 +1700,9 @@ func (m *Value) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1960,6 +1963,9 @@ func (m *StoreIdent) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2640,6 +2646,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}

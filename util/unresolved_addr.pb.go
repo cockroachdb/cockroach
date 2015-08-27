@@ -160,6 +160,9 @@ func (m *UnresolvedAddr) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthUnresolvedAddr
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -182,6 +185,9 @@ func (m *UnresolvedAddr) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthUnresolvedAddr
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
