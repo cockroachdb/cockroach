@@ -222,6 +222,9 @@ func (m *UserPrivileges) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthPrivilege
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}

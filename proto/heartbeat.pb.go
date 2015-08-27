@@ -403,6 +403,9 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthHeartbeat
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -452,6 +455,9 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthHeartbeat
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -519,6 +525,9 @@ func (m *PingResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthHeartbeat
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}

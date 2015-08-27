@@ -834,6 +834,9 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -961,6 +964,9 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1016,6 +1022,9 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1117,6 +1126,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1139,6 +1151,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1367,6 +1382,9 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}

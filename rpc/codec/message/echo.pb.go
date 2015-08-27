@@ -182,6 +182,9 @@ func (m *EchoRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthEcho
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -249,6 +252,9 @@ func (m *EchoResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthEcho
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}

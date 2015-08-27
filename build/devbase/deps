@@ -8,6 +8,7 @@ github.com/coreos/etcd/Godeps/_workspace/src/github.com/gogo/protobuf/proto
 github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context
 github.com/coreos/etcd/raft
 github.com/coreos/etcd/raft/raftpb
+github.com/cpuguy83/go-md2man/md2man
 github.com/docker/docker/pkg/units
 github.com/elazarl/go-bindata-assetfs
 github.com/gogo/protobuf/proto
@@ -19,7 +20,9 @@ github.com/lib/pq/oid
 github.com/montanaflynn/stats
 github.com/olekukonko/tablewriter
 github.com/peterh/liner
+github.com/russross/blackfriday
 github.com/samalba/dockerclient
+github.com/shurcooL/sanitized_anchor_name
 github.com/spf13/cobra
 github.com/spf13/pflag
 golang.org/x/crypto/bcrypt

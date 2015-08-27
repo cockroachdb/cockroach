@@ -173,6 +173,9 @@ func (m *Session) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthServer
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}

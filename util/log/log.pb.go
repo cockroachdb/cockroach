@@ -472,6 +472,9 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -510,6 +513,9 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -723,6 +729,9 @@ func (m *LogEntry_Arg) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -745,6 +754,9 @@ func (m *LogEntry_Arg) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
