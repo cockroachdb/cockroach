@@ -1428,6 +1428,59 @@ func TestRaftNodeID(t *testing.T) {
 	}
 }
 
+// TestStoreBadRequests verifies that ExecuteCmd returns errors for
+// bad requests that do not pass key verification.
+//
+// TODO(kkaneda): Add more test cases.
+func TestStoreBadRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	rangeID := proto.RangeID(1)
+	txn := newTransaction("test", proto.Key("a"), 1 /* priority */, proto.SERIALIZABLE, store.ctx.Clock)
+
+	// Start key must be less than KeyMax.
+	args0 := getArgs(proto.KeyMax, rangeID, store.StoreID())
+
+	// End key must not be specified for a non-range operation.
+	args1 := getArgs(proto.Key("a"), rangeID, store.StoreID())
+	args1.EndKey = proto.Key("b")
+
+	// End key must be specified for a range-operation.
+	args2 := scanArgs(proto.Key("a"), nil, rangeID, store.StoreID())
+
+	// End key must be great than start.
+	args3 := scanArgs(proto.Key("a"), proto.Key("a"), rangeID, store.StoreID())
+	args4 := scanArgs(proto.Key("b"), proto.Key("a"), rangeID, store.StoreID())
+
+	// Tests for operations that update transaction keys.
+
+	// Txn must be speficied.
+	tArgs0 := endTxnArgs(txn, false /* commit */, rangeID, store.StoreID())
+	tArgs0.Txn = nil
+	tArgs1 := heartbeatArgs(txn, rangeID, store.StoreID())
+	tArgs1.Txn = nil
+
+	// Txn key must be same as the request key.
+	tArgs2 := endTxnArgs(txn, false /* commit */, rangeID, store.StoreID())
+	tArgs2.Txn.Key = txn.Key.Next()
+	tArgs3 := heartbeatArgs(txn, rangeID, store.StoreID())
+	tArgs3.Txn.Key = txn.Key.Next()
+	tArgs4 := pushTxnArgs(txn, txn, proto.ABORT_TXN, rangeID, store.StoreID())
+	tArgs4.PusheeTxn.Key = txn.Key.Next()
+
+	testCases := append([]proto.Request{}, &args0, &args1, &args2, &args3, &args4,
+		&tArgs0, &tArgs2, &tArgs3, &tArgs4)
+	for i, test := range testCases {
+		if _, err := store.ExecuteCmd(context.Background(), test); err == nil {
+			t.Errorf("%d unexpected success of request %s", i, test)
+		} else {
+			log.Infof("err = %s", err)
+		}
+	}
+}
+
 // fakeRangeQueue implements the rangeQueue interface and
 // records which range is passed to MaybeRemove.
 type fakeRangeQueue struct {
