@@ -111,7 +111,7 @@ type Gossip struct {
 	RPCContext    *rpc.Context        // The context required for RPC
 	bsRPCContext  *rpc.Context        // Context for bootstrap RPCs
 	*server                           // Embedded gossip RPC server
-	outgoing      *nodeSet            // Set of outgoing client node IDs
+	outgoing      nodeSet             // Set of outgoing client node IDs
 	bootstrapping map[string]struct{} // Set of active bootstrap clients
 	clientsMu     sync.Mutex          // Mutex protects the clients slice
 	clients       []*client           // Slice of clients
@@ -131,7 +131,7 @@ func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []reso
 		Connected:     make(chan struct{}),
 		RPCContext:    rpcContext,
 		server:        newServer(gossipInterval),
-		outgoing:      newNodeSet(MaxPeers),
+		outgoing:      makeNodeSet(MaxPeers),
 		bootstrapping: map[string]struct{}{},
 		clients:       []*client{},
 		disconnected:  make(chan *client, MaxPeers),
@@ -386,7 +386,7 @@ func (g *Gossip) hasIncoming(nodeID proto.NodeID) bool {
 // filterExtant removes any nodes from the supplied nodeSet which
 // are already connected to this node, either via outgoing or incoming
 // client connections.
-func (g *Gossip) filterExtant(nodes *nodeSet) *nodeSet {
+func (g *Gossip) filterExtant(nodes nodeSet) nodeSet {
 	return nodes.filter(func(a proto.NodeID) bool {
 		return !g.outgoing.hasNode(a)
 	}).filter(func(a proto.NodeID) bool {

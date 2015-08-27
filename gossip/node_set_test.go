@@ -26,7 +26,7 @@ import (
 
 func TestNodeSetMaxSize(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	nodes := newNodeSet(1)
+	nodes := makeNodeSet(1)
 	if !nodes.hasSpace() {
 		t.Error("set should have space")
 	}
@@ -38,7 +38,7 @@ func TestNodeSetMaxSize(t *testing.T) {
 
 func TestNodeSetHasNode(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	nodes := newNodeSet(2)
+	nodes := makeNodeSet(2)
 	node := proto.NodeID(1)
 	if nodes.hasNode(node) {
 		t.Error("node wasn't added and should not be valid")
@@ -52,7 +52,7 @@ func TestNodeSetHasNode(t *testing.T) {
 
 func TestNodeSetAddAndRemoveNode(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	nodes := newNodeSet(2)
+	nodes := makeNodeSet(2)
 	node0 := proto.NodeID(1)
 	node1 := proto.NodeID(2)
 	nodes.addNode(node0)
@@ -72,13 +72,13 @@ func TestNodeSetAddAndRemoveNode(t *testing.T) {
 
 func TestNodeSetFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	nodes1 := newNodeSet(2)
+	nodes1 := makeNodeSet(2)
 	node0 := proto.NodeID(1)
 	node1 := proto.NodeID(2)
 	nodes1.addNode(node0)
 	nodes1.addNode(node1)
 
-	nodes2 := newNodeSet(1)
+	nodes2 := makeNodeSet(1)
 	nodes2.addNode(node1)
 
 	filtered := nodes1.filter(func(a proto.NodeID) bool {
@@ -91,7 +91,7 @@ func TestNodeSetFilter(t *testing.T) {
 
 func TestNodeSetAsSlice(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	nodes := newNodeSet(2)
+	nodes := makeNodeSet(2)
 	node0 := proto.NodeID(1)
 	node1 := proto.NodeID(2)
 	nodes.addNode(node0)

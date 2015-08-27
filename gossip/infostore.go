@@ -313,8 +313,8 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) InfoStoreDelta {
 
 // distant returns a nodeSet for gossip peers which originated infos
 // with info.Hops > maxHops.
-func (is *infoStore) distant(maxHops uint32) *nodeSet {
-	ns := newNodeSet(0)
+func (is *infoStore) distant(maxHops uint32) nodeSet {
+	ns := makeNodeSet(0)
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if i.Hops > maxHops {
 			ns.addNode(i.NodeID)
@@ -328,7 +328,7 @@ func (is *infoStore) distant(maxHops uint32) *nodeSet {
 
 // leastUseful determines which node ID from amongst the set is
 // currently contributing the least. Returns 0 if nodes is empty.
-func (is *infoStore) leastUseful(nodes *nodeSet) proto.NodeID {
+func (is *infoStore) leastUseful(nodes nodeSet) proto.NodeID {
 	contrib := make(map[proto.NodeID]int, nodes.len())
 	for node := range nodes.nodes {
 		contrib[node] = 0

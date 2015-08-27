@@ -45,7 +45,7 @@ type server struct {
 	mu       sync.Mutex            // Protects the fields below
 	is       infoStore             // The backing infostore
 	closed   bool                  // True if server was closed
-	incoming *nodeSet              // Incoming client node IDs
+	incoming nodeSet               // Incoming client node IDs
 	lAddrMap map[string]clientInfo // Incoming client's local address -> client's node info
 }
 
@@ -54,7 +54,7 @@ func newServer(interval time.Duration) *server {
 	s := &server{
 		is:       newInfoStore(0, util.UnresolvedAddr{}),
 		interval: interval,
-		incoming: newNodeSet(MaxPeers),
+		incoming: makeNodeSet(MaxPeers),
 		lAddrMap: map[string]clientInfo{},
 	}
 	s.ready = sync.NewCond(&s.mu)

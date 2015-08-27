@@ -251,7 +251,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 	is := newInfoStore(1, emptyAddr)
 
-	set := newNodeSet(3)
+	set := makeNodeSet(3)
 	if is.leastUseful(set) != 0 {
 		t.Error("not expecting a node from an empty set")
 	}
