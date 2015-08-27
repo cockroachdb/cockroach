@@ -15,7 +15,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.gossip;
 option go_package = "gossip";
 
@@ -24,70 +24,54 @@ import "cockroach/proto/metadata.proto";
 import "cockroach/util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 
-// These options generate broken code when using maps.
-// option (gogoproto.sizer_all) = true;
+option (gogoproto.sizer_all) = true;
+// This option generates code that fails at run time.
 // option (gogoproto.marshaler_all) = true;
+// This option generates code that doesn't compile.
 // option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_unrecognized_all) = false;
 
 // Request is the request struct passed with the Gossip RPC.
 message Request {
   // Requesting node's ID.
-  optional int32 node_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID",
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
   // Address of the requesting client.
-  optional util.UnresolvedAddr addr = 2 [(gogoproto.nullable) = false];
+  util.UnresolvedAddr addr = 2 [(gogoproto.nullable) = false];
   // Local address of client on requesting node (this is a kludge to
   // allow gossip to know when client connections are dropped).
-  optional util.UnresolvedAddr l_addr = 3 [(gogoproto.nullable) = false];
+  util.UnresolvedAddr l_addr = 3 [(gogoproto.nullable) = false];
   // Maximum sequence number of gossip from this peer.
-  optional int64 max_seq = 4 [(gogoproto.nullable) = false];
-  // Reciprocal delta of new info since last gossip.
-  optional InfoStoreDelta delta = 5 [(gogoproto.nullable) = false];
+  int64 max_seq = 4;
+  // Delta of new Infos since last gossip.
+  map<string, Info> delta = 5;
 }
 
 // Response is returned from the Gossip.Gossip RPC.
 // Delta will be nil in the event that Alternate is set.
 message Response {
-  // Requested delta of server's infostore.
-  optional InfoStoreDelta delta = 1 [(gogoproto.nullable) = false];
-  // Non-nil means client should retry with this address.
-  optional util.UnresolvedAddr alternate = 2;
-}
-
-// TODO(thschroeter): check if all fields below are required
-message InfoStoreDelta {
-  // Map from key to info.
-  map<string, Info> infos = 1;
-  // Owning node's ID
-  optional int32 node_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID",
+  // Responding Node's ID.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
-  // Address of node owning this info store.
-  optional util.UnresolvedAddr node_addr = 3 [(gogoproto.nullable) = false];
-  // Maximum sequence number inserted
-  optional int64 max_seq = 4 [(gogoproto.nullable) = false];
+  // Address of the responding client.
+  util.UnresolvedAddr addr = 2 [(gogoproto.nullable) = false];
+  // Non-nil means client should retry with this address.
+  util.UnresolvedAddr alternate = 3;
+  // Maximum sequence number of gossip from this peer.
+  int64 max_seq = 4;
+  // Requested delta of server's infostore.
+  map<string, Info> delta = 5;
 }
 
 // Info is the basic unit of information traded over the
 // gossip network.
-// TODO(thschroeter): remove `peer_id` and `seq` that are
-// exposing internals and get overwritten as `Info` is
-// received.
 message Info {
-  optional proto.Value value = 1 [(gogoproto.nullable) = false];
+  proto.Value value = 1 [(gogoproto.nullable) = false];
   // Wall time when info is to be discarded (Unix-nanos)
-  optional int64 ttl_stamp = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "TTLStamp"];
+  int64 ttl_stamp = 2 [(gogoproto.customname) = "TTLStamp"];
   // Number of hops from originator
-  optional uint32 hops = 3 [(gogoproto.nullable) = false];
+  uint32 hops = 3;
   // Originating node's ID
-  optional int32 node_id = 4 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID",
+  int32 node_id = 4 [(gogoproto.customname) = "NodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
-  optional int32 peer_id = 5 [(gogoproto.nullable) = false,
-      (gogoproto.customname) =  "PeerID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
-  optional int64 seq = 6 [(gogoproto.nullable) = false];
 }

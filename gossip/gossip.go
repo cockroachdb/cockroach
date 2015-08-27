@@ -111,7 +111,7 @@ type Gossip struct {
 	RPCContext    *rpc.Context        // The context required for RPC
 	bsRPCContext  *rpc.Context        // Context for bootstrap RPCs
 	*server                           // Embedded gossip RPC server
-	outgoing      *nodeSet            // Set of outgoing client node IDs
+	outgoing      nodeSet             // Set of outgoing client node IDs
 	bootstrapping map[string]struct{} // Set of active bootstrap clients
 	clientsMu     sync.Mutex          // Mutex protects the clients slice
 	clients       []*client           // Slice of clients
@@ -131,7 +131,7 @@ func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []reso
 		Connected:     make(chan struct{}),
 		RPCContext:    rpcContext,
 		server:        newServer(gossipInterval),
-		outgoing:      newNodeSet(MaxPeers),
+		outgoing:      makeNodeSet(MaxPeers),
 		bootstrapping: map[string]struct{}{},
 		clients:       []*client{},
 		disconnected:  make(chan *client, MaxPeers),
@@ -297,10 +297,8 @@ func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
 }
 
 // Callback is a callback method to be invoked on gossip update
-// of info denoted by key. The contentsChanged bool indicates whether
-// the info contents were updated. False indicates the info timestamp
-// was refreshed, but its contents remained unchanged.
-type Callback func(key string, contentsChanged bool, content []byte)
+// of info denoted by key.
+type Callback func(key string, content []byte)
 
 // RegisterCallback registers a callback for a key pattern to be
 // invoked whenever new info for a gossip key matching pattern is
@@ -359,7 +357,7 @@ func (g *Gossip) Start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 func (g *Gossip) maxToleratedHops() uint32 {
 	var nodeCount int64
 
-	if err := g.is.visitInfos(func(key string, i *Info) error {
+	if err := g.is.visitInfos(func(key string, i *info) error {
 		if strings.HasPrefix(key, KeyNodeIDPrefix) {
 			nodeCount++
 		}
@@ -386,7 +384,7 @@ func (g *Gossip) hasIncoming(nodeID proto.NodeID) bool {
 // filterExtant removes any nodes from the supplied nodeSet which
 // are already connected to this node, either via outgoing or incoming
 // client connections.
-func (g *Gossip) filterExtant(nodes *nodeSet) *nodeSet {
+func (g *Gossip) filterExtant(nodes nodeSet) nodeSet {
 	return nodes.filter(func(a proto.NodeID) bool {
 		return !g.outgoing.hasNode(a)
 	}).filter(func(a proto.NodeID) bool {
@@ -522,9 +520,6 @@ func (g *Gossip) doCheckTimeout(stopper *stop.Stopper) {
 func (g *Gossip) doDisconnected(stopper *stop.Stopper, c *client) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if c.err != nil {
-		log.Infof("client disconnected: %s", c.err)
-	}
 	g.removeClient(c)
 
 	// If the client was disconnected with a forwarding address, connect now.

@@ -136,7 +136,7 @@ func storeDescFromGossip(key string, g *gossip.Gossip) (*proto.StoreDescriptor, 
 
 // storeGossipUpdate is a gossip callback triggered whenever store information
 // is gossiped. It just tracks the gossiped keys.
-func (a *allocator) storeGossipUpdate(key string, _ bool, _ []byte) {
+func (a *allocator) storeGossipUpdate(key string, _ []byte) {
 	a.Lock()
 	defer a.Unlock()
 

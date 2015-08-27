@@ -84,7 +84,7 @@ func (is *infoStore) String() string {
 
 	prepend := ""
 
-	if err := is.visitInfos(func(key string, i *Info) error {
+	if err := is.visitInfos(func(key string, i *info) error {
 		str := fmt.Sprintf("%sinfo %q: %+v", prepend, key, i.Value)
 		prepend = ", "
 		_, err := buf.WriteString(str)
@@ -111,7 +111,7 @@ func newInfoStore(nodeID proto.NodeID, nodeAddr util.UnresolvedAddr) infoStore {
 
 // newInfo allocates and returns a new info object using specified key,
 // value, and time-to-live.
-func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
+func (is *infoStore) newInfo(val []byte, ttl time.Duration) *info {
 	is.seqGen++
 	now := monotonicUnixNano()
 	ttlStamp := now + int64(ttl)
@@ -119,23 +119,25 @@ func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
 		ttlStamp = math.MaxInt64
 	}
 
-	return &Info{
-		Value: proto.Value{
-			Bytes: val,
-			Timestamp: &proto.Timestamp{
-				WallTime: now,
+	return &info{
+		Info: Info{
+			Value: proto.Value{
+				Bytes: val,
+				Timestamp: &proto.Timestamp{
+					WallTime: now,
+				},
 			},
+			TTLStamp: ttlStamp,
+			NodeID:   is.NodeID,
 		},
-		TTLStamp: ttlStamp,
-		NodeID:   is.NodeID,
-		PeerID:   is.NodeID,
-		Seq:      is.seqGen,
+		peerID: is.NodeID,
+		seq:    is.seqGen,
 	}
 }
 
 // getInfo returns the Info at key. Returns nil when key is not present
 // in the infoStore.
-func (is *infoStore) getInfo(key string) *Info {
+func (is *infoStore) getInfo(key string) *info {
 	if info, ok := is.Infos[key]; ok {
 		// Check TTL and discard if too old.
 		if info.expired(time.Now().UnixNano()) {
@@ -150,30 +152,25 @@ func (is *infoStore) getInfo(key string) *Info {
 // addInfo adds or updates an info in the infos map.
 //
 // Returns nil if info was added; error otherwise.
-func (is *infoStore) addInfo(key string, i *Info) error {
+func (is *infoStore) addInfo(key string, i *info) error {
 	// Only replace an existing info if new timestamp is greater, or if
 	// timestamps are equal, but new hops is smaller.
-	var contentsChanged bool
 	if existingInfo, ok := is.Infos[key]; ok {
 		iNanos := i.Value.Timestamp.WallTime
 		existingNanos := existingInfo.Value.Timestamp.WallTime
 		if iNanos < existingNanos || (iNanos == existingNanos && i.Hops >= existingInfo.Hops) {
 			return util.Errorf("info %+v older than current info %+v", i, existingInfo)
 		}
-		contentsChanged = !bytes.Equal(i.Value.Bytes, existingInfo.Value.Bytes)
-	} else {
-		// No preexisting Info means contentsChanged is true.
-		contentsChanged = true
 	}
 
 	i.Value.InitChecksum([]byte(key))
 
 	// Update info map.
 	is.Infos[key] = i
-	if i.Seq > is.MaxSeq {
-		is.MaxSeq = i.Seq
+	if i.seq > is.MaxSeq {
+		is.MaxSeq = i.seq
 	}
-	is.processCallbacks(key, contentsChanged, i.Value.Bytes)
+	is.processCallbacks(key, i.Value.Bytes)
 	return nil
 }
 
@@ -182,7 +179,7 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 // originator and this node.
 func (is *infoStore) maxHops() uint32 {
 	var maxHops uint32
-	if err := is.visitInfos(func(key string, i *Info) error {
+	if err := is.visitInfos(func(key string, i *info) error {
 		if i.Hops > maxHops {
 			maxHops = i.Hops
 		}
@@ -199,7 +196,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 	re := regexp.MustCompile(pattern)
 	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
 	infos := make(infoMap)
-	if err := is.visitInfos(func(key string, i *Info) error {
+	if err := is.visitInfos(func(key string, i *info) error {
 		if re.MatchString(key) {
 			infos[key] = i
 		}
@@ -210,7 +207,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
 		for key, i := range infos {
-			method(key, true /* contentsChanged */, i.Value.Bytes)
+			method(key, i.Value.Bytes)
 		}
 	}()
 }
@@ -218,7 +215,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 // processCallbacks processes callbacks for the specified key by
 // matching callback regular expression against the key and invoking
 // the corresponding callback method on a match.
-func (is *infoStore) processCallbacks(key string, contentsChanged bool, content []byte) {
+func (is *infoStore) processCallbacks(key string, content []byte) {
 	var matches []callback
 	for _, cb := range is.callbacks {
 		if cb.pattern.MatchString(key) {
@@ -228,7 +225,7 @@ func (is *infoStore) processCallbacks(key string, contentsChanged bool, content 
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
 		for _, cb := range matches {
-			cb.method(key, contentsChanged, content)
+			cb.method(key, content)
 		}
 	}()
 }
@@ -236,7 +233,7 @@ func (is *infoStore) processCallbacks(key string, contentsChanged bool, content 
 // visitInfos implements a visitor pattern to run the visitInfo
 // function against each info in turn. Be sure to skip over any expired
 // infos.
-func (is *infoStore) visitInfos(visitInfo func(string, *Info) error) error {
+func (is *infoStore) visitInfos(visitInfo func(string, *info) error) error {
 	now := time.Now().UnixNano()
 
 	if visitInfo != nil {
@@ -259,21 +256,21 @@ func (is *infoStore) visitInfos(visitInfo func(string, *Info) error) error {
 // store's sequence generator. All hop distances on infos are
 // incremented to indicate they've arrived from an external source.
 // Returns the count of "fresh" infos in the provided delta.
-func (is *infoStore) combine(delta *infoStore) int {
+func (is *infoStore) combine(infos map[string]*Info, nodeID proto.NodeID) int {
 	var freshCount int
-	if err := delta.visitInfos(func(key string, i *Info) error {
+	for key, infoProto := range infos {
+		i := &info{
+			Info: *infoProto,
+		}
 		is.seqGen++
-		i.Seq = is.seqGen
+		i.seq = is.seqGen
 		i.Hops++
-		i.PeerID = delta.NodeID
+		i.peerID = nodeID
 		// Errors from addInfo here are not a problem; they simply
 		// indicate that the data in *is is newer than in *delta.
 		if err := is.addInfo(key, i); err == nil {
 			freshCount++
 		}
-		return nil
-	}); err != nil {
-		log.Errorf("failed to properly combine infoStores: %s", err)
 	}
 	return freshCount
 }
@@ -284,23 +281,14 @@ func (is *infoStore) combine(delta *infoStore) int {
 // from node requesting delta are ignored.
 //
 // Returns nil if there are no deltas.
-func (is *infoStore) delta(nodeID proto.NodeID, seq int64) InfoStoreDelta {
-	delta := InfoStoreDelta{
-		NodeID:   is.NodeID,
-		NodeAddr: is.NodeAddr,
-		MaxSeq:   is.MaxSeq,
-	}
+func (is *infoStore) delta(nodeID proto.NodeID, seq int64) map[string]*Info {
+	infos := make(map[string]*Info)
 
 	if seq < is.MaxSeq {
-		delta.Infos = make(map[string]*Info)
-
 		// Compute delta of infos.
-		if err := is.visitInfos(func(key string, i *Info) error {
+		if err := is.visitInfos(func(key string, i *info) error {
 			if i.isFresh(nodeID, seq) {
-				delta.Infos[key] = i
-				if i.Seq > is.MaxSeq {
-					is.MaxSeq = i.Seq
-				}
+				infos[key] = &i.Info
 			}
 			return nil
 		}); err != nil {
@@ -308,14 +296,14 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) InfoStoreDelta {
 		}
 	}
 
-	return delta
+	return infos
 }
 
 // distant returns a nodeSet for gossip peers which originated infos
 // with info.Hops > maxHops.
-func (is *infoStore) distant(maxHops uint32) *nodeSet {
-	ns := newNodeSet(0)
-	if err := is.visitInfos(func(key string, i *Info) error {
+func (is *infoStore) distant(maxHops uint32) nodeSet {
+	ns := makeNodeSet(0)
+	if err := is.visitInfos(func(key string, i *info) error {
 		if i.Hops > maxHops {
 			ns.addNode(i.NodeID)
 		}
@@ -328,13 +316,13 @@ func (is *infoStore) distant(maxHops uint32) *nodeSet {
 
 // leastUseful determines which node ID from amongst the set is
 // currently contributing the least. Returns 0 if nodes is empty.
-func (is *infoStore) leastUseful(nodes *nodeSet) proto.NodeID {
+func (is *infoStore) leastUseful(nodes nodeSet) proto.NodeID {
 	contrib := make(map[proto.NodeID]int, nodes.len())
 	for node := range nodes.nodes {
 		contrib[node] = 0
 	}
-	if err := is.visitInfos(func(key string, i *Info) error {
-		contrib[i.PeerID]++
+	if err := is.visitInfos(func(key string, i *info) error {
+		contrib[i.peerID]++
 		return nil
 	}); err != nil {
 		panic(err)
@@ -351,13 +339,4 @@ func (is *infoStore) leastUseful(nodes *nodeSet) proto.NodeID {
 		}
 	}
 	return leastNode
-}
-
-func newInfoStoreFromProto(p InfoStoreDelta) *infoStore {
-	return &infoStore{
-		Infos:    p.Infos,
-		NodeID:   p.NodeID,
-		NodeAddr: p.NodeAddr,
-		MaxSeq:   p.MaxSeq,
-	}
 }

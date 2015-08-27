@@ -26,17 +26,19 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func newInfo(val float64) Info {
+func newInfo(val float64) info {
 	now := time.Now()
 
-	return Info{
-		Value: proto.Value{
-			Bytes: encoding.EncodeFloat(nil, val),
-			Timestamp: &proto.Timestamp{
-				WallTime: now.UnixNano(),
+	return info{
+		Info: Info{
+			Value: proto.Value{
+				Bytes: encoding.EncodeFloat(nil, val),
+				Timestamp: &proto.Timestamp{
+					WallTime: now.UnixNano(),
+				},
 			},
+			TTLStamp: now.Add(time.Millisecond).UnixNano(),
 		},
-		TTLStamp: now.Add(time.Millisecond).UnixNano(),
 	}
 }
 
@@ -61,8 +63,8 @@ func TestIsFresh(t *testing.T) {
 	node3 := proto.NodeID(3)
 	i := newInfo(float64(1))
 	i.NodeID = node1
-	i.PeerID = node2
-	i.Seq = seq
+	i.peerID = node2
+	i.seq = seq
 	if !i.isFresh(node3, seq-1) {
 		t.Error("info should be fresh:", i)
 	}

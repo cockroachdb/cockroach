@@ -51,8 +51,8 @@ func TestNewInfo(t *testing.T) {
 	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo(nil, time.Second)
 	info2 := is.newInfo(nil, time.Second)
-	if info1.Seq != info2.Seq-1 {
-		t.Errorf("sequence numbers should increment %d, %d", info1.Seq, info2.Seq)
+	if info1.seq != info2.seq-1 {
+		t.Errorf("sequence numbers should increment %d, %d", info1.seq, info2.seq)
 	}
 }
 
@@ -68,7 +68,7 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	if infoCount := len(is.Infos); infoCount != 1 {
 		t.Errorf("infostore count incorrect %d != 1", infoCount)
 	}
-	if is.MaxSeq != i.Seq {
+	if is.MaxSeq != i.seq {
 		t.Error("max seq value wasn't updated")
 	}
 	if is.getInfo("a") != i {
@@ -192,23 +192,21 @@ func TestInfoStoreDelta(t *testing.T) {
 
 	// Verify deltas with successive sequence numbers.
 	for i := 0; i < 10; i++ {
-		deltaInfoStore := newInfoStoreFromProto(is.delta(2, int64(i*3)))
+		infos := is.delta(2, int64(i*3))
 
 		for j := 0; j < 10-i; j++ {
-			infoC := deltaInfoStore.getInfo(fmt.Sprintf("c.%d", j+i))
-			if infoC == nil {
+			if _, ok := infos[fmt.Sprintf("c.%d", j+i)]; !ok {
 				t.Errorf("unable to fetch info %d", j+i)
 			}
 			if i > 0 {
-				infoC = deltaInfoStore.getInfo(fmt.Sprintf("c.%d", 0))
-				if infoC != nil {
+				if _, ok := infos[fmt.Sprintf("c.%d", 0)]; ok {
 					t.Errorf("erroneously fetched info %d", j+i+1)
 				}
 			}
 		}
 	}
 
-	if deltaInfoStore := is.delta(2, int64(30)); deltaInfoStore.Infos != nil {
+	if infos := is.delta(2, int64(30)); len(infos) != 0 {
 		t.Error("fetching delta of infostore at maximum sequence number should return nil")
 	}
 }
@@ -251,13 +249,13 @@ func TestLeastUseful(t *testing.T) {
 	}
 	is := newInfoStore(1, emptyAddr)
 
-	set := newNodeSet(3)
+	set := makeNodeSet(3)
 	if is.leastUseful(set) != 0 {
 		t.Error("not expecting a node from an empty set")
 	}
 
 	inf1 := is.newInfo(nil, time.Second)
-	inf1.PeerID = 1
+	inf1.peerID = 1
 	if err := is.addInfo("a1", inf1); err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +269,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf2 := is.newInfo(nil, time.Second)
-	inf2.PeerID = 1
+	inf2.peerID = 1
 	if err := is.addInfo("a2", inf2); err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +283,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf3 := is.newInfo(nil, time.Second)
-	inf3.PeerID = 2
+	inf3.peerID = 2
 	if err := is.addInfo("a3", inf3); err != nil {
 		t.Fatal(err)
 	}
@@ -300,10 +298,10 @@ type callbackRecord struct {
 	sync.Mutex
 }
 
-func (cr *callbackRecord) Add(key string, contentsChanged bool, _ []byte) {
+func (cr *callbackRecord) Add(key string, _ []byte) {
 	cr.Lock()
 	defer cr.Unlock()
-	cr.keys = append(cr.keys, fmt.Sprintf("%s-%t", key, contentsChanged))
+	cr.keys = append(cr.keys, key)
 	cr.wg.Done()
 }
 
@@ -361,37 +359,39 @@ func TestCallbacks(t *testing.T) {
 		}
 		wg.Wait()
 
-		if expKeys := []string{"key1-true"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
+		if expKeys := []string{"key1"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, cb1.Keys())
 		}
-		if expKeys := []string{"key2-true"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
+		if expKeys := []string{"key2"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
 		}
 		keys := cbAll.Keys()
 		sort.Strings(keys)
-		if expKeys := []string{"key1-true", "key2-true", "key3-true"}; !reflect.DeepEqual(keys, expKeys) {
+		if expKeys := []string{"key1", "key2", "key3"}; !reflect.DeepEqual(keys, expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, keys)
 		}
 	}
 
 	// Update an info.
-	i1 = is.newInfo([]byte("a"), time.Second)
-	wg.Add(2)
-	if err := is.addInfo("key1", i1); err != nil {
-		t.Error(err)
-	}
-	wg.Wait()
+	{
+		i1 := is.newInfo([]byte("a"), time.Second)
+		wg.Add(2)
+		if err := is.addInfo("key1", i1); err != nil {
+			t.Error(err)
+		}
+		wg.Wait()
 
-	if expKeys := []string{"key1-true", "key1-true"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
-		t.Errorf("expected %v, got %v", expKeys, cb1.Keys())
-	}
-	if expKeys := []string{"key2-true"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
-		t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
-	}
-	keys := cbAll.Keys()
-	sort.Strings(keys)
-	if expKeys := []string{"key1-true", "key1-true", "key2-true", "key3-true"}; !reflect.DeepEqual(keys, expKeys) {
-		t.Errorf("expected %v, got %v", expKeys, keys)
+		if expKeys := []string{"key1", "key1"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
+			t.Errorf("expected %v, got %v", expKeys, cb1.Keys())
+		}
+		if expKeys := []string{"key2"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
+			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
+		}
+		keys := cbAll.Keys()
+		sort.Strings(keys)
+		if expKeys := []string{"key1", "key1", "key2", "key3"}; !reflect.DeepEqual(keys, expKeys) {
+			t.Errorf("expected %v, got %v", expKeys, keys)
+		}
 	}
 
 	// Register another callback with same pattern and verify it is
@@ -400,9 +400,9 @@ func TestCallbacks(t *testing.T) {
 	is.registerCallback("key.*", cbAll.Add)
 	wg.Wait()
 
-	expKeys := []string{"key1-true", "key2-true", "key3-true", "key1-true", "key1-true", "key2-true", "key3-true"}
+	expKeys := []string{"key1", "key2", "key3", "key1", "key1", "key2", "key3"}
 	sort.Strings(expKeys)
-	keys = cbAll.Keys()
+	keys := cbAll.Keys()
 	sort.Strings(keys)
 	if !reflect.DeepEqual(keys, expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, keys)
@@ -432,7 +432,7 @@ func TestRegisterCallback(t *testing.T) {
 	wg.Wait()
 	actKeys := cb.Keys()
 	sort.Strings(actKeys)
-	if expKeys := []string{"key1-true", "key2-true"}; !reflect.DeepEqual(actKeys, expKeys) {
+	if expKeys := []string{"key1", "key2"}; !reflect.DeepEqual(actKeys, expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, cb.Keys())
 	}
 }

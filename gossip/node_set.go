@@ -17,11 +17,7 @@
 
 package gossip
 
-import (
-	"math/rand"
-
-	"github.com/cockroachdb/cockroach/proto"
-)
+import "github.com/cockroachdb/cockroach/proto"
 
 // A nodeSet keeps a set of nodes and provides simple node-matched
 // management functions. nodeSet is not thread safe.
@@ -30,8 +26,8 @@ type nodeSet struct {
 	maxSize int                       // Maximum size of set
 }
 
-func newNodeSet(maxSize int) *nodeSet {
-	return &nodeSet{
+func makeNodeSet(maxSize int) nodeSet {
+	return nodeSet{
 		nodes:   make(map[proto.NodeID]struct{}),
 		maxSize: maxSize,
 	}
@@ -39,36 +35,29 @@ func newNodeSet(maxSize int) *nodeSet {
 
 // hasSpace returns whether there are fewer than maxSize nodes
 // in the nodes slice.
-func (as *nodeSet) hasSpace() bool {
+func (as nodeSet) hasSpace() bool {
 	return len(as.nodes) < as.maxSize
 }
 
 // len returns the number of nodes in the set.
-func (as *nodeSet) len() int {
+func (as nodeSet) len() int {
 	return len(as.nodes)
 }
 
 // asSlice returns the nodes as a slice.
-func (as *nodeSet) asSlice() []proto.NodeID {
-	arr := make([]proto.NodeID, len(as.nodes))
-	var count int
+func (as nodeSet) asSlice() []proto.NodeID {
+	slice := make([]proto.NodeID, 0, len(as.nodes))
 	for node := range as.nodes {
-		arr[count] = node
-		count++
+		slice = append(slice, node)
 	}
-	return arr
+	return slice
 }
 
 // selectRandom returns a random node from the set. Returns 0 if
 // there are no nodes to select.
-func (as *nodeSet) selectRandom() proto.NodeID {
-	idx := rand.Intn(len(as.nodes))
-	var count = 0
+func (as nodeSet) selectRandom() proto.NodeID {
 	for node := range as.nodes {
-		if count == idx {
-			return node
-		}
-		count++
+		return node
 	}
 	return 0
 }
@@ -76,8 +65,8 @@ func (as *nodeSet) selectRandom() proto.NodeID {
 // filter returns an nodeSet of nodes which return true when
 // passed to the supplied filter function filterFn. filterFn should
 // return true to keep an node and false to remove an node.
-func (as *nodeSet) filter(filterFn func(node proto.NodeID) bool) *nodeSet {
-	avail := newNodeSet(as.maxSize)
+func (as nodeSet) filter(filterFn func(node proto.NodeID) bool) nodeSet {
+	avail := makeNodeSet(as.maxSize)
 	for node := range as.nodes {
 		if filterFn(node) {
 			avail.addNode(node)
@@ -88,7 +77,7 @@ func (as *nodeSet) filter(filterFn func(node proto.NodeID) bool) *nodeSet {
 
 // hasNode verifies that the supplied node matches a node
 // in the slice.
-func (as *nodeSet) hasNode(node proto.NodeID) bool {
+func (as nodeSet) hasNode(node proto.NodeID) bool {
 	_, ok := as.nodes[node]
 	return ok
 }
