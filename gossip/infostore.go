@@ -153,29 +153,24 @@ func (is *infoStore) getInfo(key string) *info {
 //
 // Returns nil if info was added; error otherwise.
 func (is *infoStore) addInfo(key string, i *info) error {
-	i.Value.InitChecksum([]byte(key))
-
 	// Only replace an existing info if new timestamp is greater, or if
 	// timestamps are equal, but new hops is smaller.
-	var contentsChanged bool
 	if existingInfo, ok := is.Infos[key]; ok {
 		iNanos := i.Value.Timestamp.WallTime
 		existingNanos := existingInfo.Value.Timestamp.WallTime
 		if iNanos < existingNanos || (iNanos == existingNanos && i.Hops >= existingInfo.Hops) {
 			return util.Errorf("info %+v older than current info %+v", i, existingInfo)
 		}
-		contentsChanged = *i.Value.Checksum != *existingInfo.Value.Checksum
-	} else {
-		// No preexisting Info means contentsChanged is true.
-		contentsChanged = true
 	}
+
+	i.Value.InitChecksum([]byte(key))
 
 	// Update info map.
 	is.Infos[key] = i
 	if i.seq > is.MaxSeq {
 		is.MaxSeq = i.seq
 	}
-	is.processCallbacks(key, contentsChanged, i.Value.Bytes)
+	is.processCallbacks(key, i.Value.Bytes)
 	return nil
 }
 
@@ -212,7 +207,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
 		for key, i := range infos {
-			method(key, true /* contentsChanged */, i.Value.Bytes)
+			method(key, i.Value.Bytes)
 		}
 	}()
 }
@@ -220,7 +215,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 // processCallbacks processes callbacks for the specified key by
 // matching callback regular expression against the key and invoking
 // the corresponding callback method on a match.
-func (is *infoStore) processCallbacks(key string, contentsChanged bool, content []byte) {
+func (is *infoStore) processCallbacks(key string, content []byte) {
 	var matches []callback
 	for _, cb := range is.callbacks {
 		if cb.pattern.MatchString(key) {
@@ -230,7 +225,7 @@ func (is *infoStore) processCallbacks(key string, contentsChanged bool, content 
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
 		for _, cb := range matches {
-			cb.method(key, contentsChanged, content)
+			cb.method(key, content)
 		}
 	}()
 }

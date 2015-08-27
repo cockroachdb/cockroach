@@ -653,13 +653,10 @@ func (s *Store) maybeGossipConfigs() error {
 
 // configGossipUpdate is a callback for gossip updates to
 // configuration maps which affect range split boundaries.
-func (s *Store) configGossipUpdate(key string, contentsChanged bool, content []byte) {
-	if !contentsChanged {
-		return // Skip update if it's just a newer timestamp or fewer hops to info
-	}
-	ctx := s.Context(nil)
+func (s *Store) configGossipUpdate(key string, content []byte) {
 	configMap := &config.PrefixConfigMap{}
 	if err := gogoproto.Unmarshal(content, configMap); err != nil {
+		ctx := s.Context(nil)
 		log.Errorc(ctx, "gossiped info is not a prefix configuration map: %s", err)
 		return
 	}

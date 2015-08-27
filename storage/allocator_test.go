@@ -67,7 +67,7 @@ func newStoreGossiper(g *gossip.Gossip) *storeGossiper {
 	sg := &storeGossiper{
 		g: g,
 	}
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool, _ []byte) { sg.wg.Done() })
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ []byte) { sg.wg.Done() })
 	return sg
 }
 
@@ -655,8 +655,8 @@ func TestAllocatorCapacityGossipUpdate(t *testing.T) {
 
 	// Order and value of contentsChanged shouldn't matter.
 	key := "testkey"
-	s.allocator().storeGossipUpdate(key, true, nil)
-	s.allocator().storeGossipUpdate(key, false, nil)
+	s.allocator().storeGossipUpdate(key, nil)
+	s.allocator().storeGossipUpdate(key, nil)
 
 	expectedKeys := map[string]struct{}{key: {}}
 	s.allocator().Lock()
@@ -782,7 +782,7 @@ func Example_rebalancing() {
 	alloc.deterministic = true
 
 	var wg sync.WaitGroup
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ bool, _ []byte) { wg.Done() })
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ []byte) { wg.Done() })
 
 	const generations = 100
 	const nodes = 20

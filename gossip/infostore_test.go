@@ -298,10 +298,10 @@ type callbackRecord struct {
 	sync.Mutex
 }
 
-func (cr *callbackRecord) Add(key string, contentsChanged bool, _ []byte) {
+func (cr *callbackRecord) Add(key string, _ []byte) {
 	cr.Lock()
 	defer cr.Unlock()
-	cr.keys = append(cr.keys, fmt.Sprintf("%s-%t", key, contentsChanged))
+	cr.keys = append(cr.keys, key)
 	cr.wg.Done()
 }
 
@@ -359,15 +359,15 @@ func TestCallbacks(t *testing.T) {
 		}
 		wg.Wait()
 
-		if expKeys := []string{"key1-true"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
+		if expKeys := []string{"key1"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, cb1.Keys())
 		}
-		if expKeys := []string{"key2-true"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
+		if expKeys := []string{"key2"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
 		}
 		keys := cbAll.Keys()
 		sort.Strings(keys)
-		if expKeys := []string{"key1-true", "key2-true", "key3-true"}; !reflect.DeepEqual(keys, expKeys) {
+		if expKeys := []string{"key1", "key2", "key3"}; !reflect.DeepEqual(keys, expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, keys)
 		}
 	}
@@ -381,37 +381,15 @@ func TestCallbacks(t *testing.T) {
 		}
 		wg.Wait()
 
-		if expKeys := []string{"key1-true", "key1-true"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
+		if expKeys := []string{"key1", "key1"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, cb1.Keys())
 		}
-		if expKeys := []string{"key2-true"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
+		if expKeys := []string{"key2"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
 		}
 		keys := cbAll.Keys()
 		sort.Strings(keys)
-		if expKeys := []string{"key1-true", "key1-true", "key2-true", "key3-true"}; !reflect.DeepEqual(keys, expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, keys)
-		}
-	}
-
-	// Update an info but not its value.
-	{
-		i1 := is.newInfo([]byte("a"), 2*time.Second)
-		wg.Add(2)
-		if err := is.addInfo("key1", i1); err != nil {
-			t.Error(err)
-		}
-		wg.Wait()
-
-		if expKeys := []string{"key1-true", "key1-true", "key1-false"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, cb1.Keys())
-		}
-		if expKeys := []string{"key2-true"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
-		}
-		keys := cbAll.Keys()
-		sort.Strings(keys)
-		if expKeys := []string{"key1-false", "key1-true", "key1-true", "key2-true", "key3-true"}; !reflect.DeepEqual(keys, expKeys) {
+		if expKeys := []string{"key1", "key1", "key2", "key3"}; !reflect.DeepEqual(keys, expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, keys)
 		}
 	}
@@ -422,7 +400,7 @@ func TestCallbacks(t *testing.T) {
 	is.registerCallback("key.*", cbAll.Add)
 	wg.Wait()
 
-	expKeys := []string{"key1-false", "key1-true", "key2-true", "key3-true", "key1-true", "key1-true", "key2-true", "key3-true"}
+	expKeys := []string{"key1", "key2", "key3", "key1", "key1", "key2", "key3"}
 	sort.Strings(expKeys)
 	keys := cbAll.Keys()
 	sort.Strings(keys)
@@ -454,7 +432,7 @@ func TestRegisterCallback(t *testing.T) {
 	wg.Wait()
 	actKeys := cb.Keys()
 	sort.Strings(actKeys)
-	if expKeys := []string{"key1-true", "key2-true"}; !reflect.DeepEqual(actKeys, expKeys) {
+	if expKeys := []string{"key1", "key2"}; !reflect.DeepEqual(actKeys, expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, cb.Keys())
 	}
 }
