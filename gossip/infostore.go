@@ -153,6 +153,8 @@ func (is *infoStore) getInfo(key string) *info {
 //
 // Returns nil if info was added; error otherwise.
 func (is *infoStore) addInfo(key string, i *info) error {
+	i.Value.InitChecksum([]byte(key))
+
 	// Only replace an existing info if new timestamp is greater, or if
 	// timestamps are equal, but new hops is smaller.
 	var contentsChanged bool
@@ -162,13 +164,11 @@ func (is *infoStore) addInfo(key string, i *info) error {
 		if iNanos < existingNanos || (iNanos == existingNanos && i.Hops >= existingInfo.Hops) {
 			return util.Errorf("info %+v older than current info %+v", i, existingInfo)
 		}
-		contentsChanged = !bytes.Equal(i.Value.Bytes, existingInfo.Value.Bytes)
+		contentsChanged = *i.Value.Checksum != *existingInfo.Value.Checksum
 	} else {
 		// No preexisting Info means contentsChanged is true.
 		contentsChanged = true
 	}
-
-	i.Value.InitChecksum([]byte(key))
 
 	// Update info map.
 	is.Infos[key] = i
