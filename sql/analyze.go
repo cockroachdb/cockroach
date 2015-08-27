@@ -164,6 +164,9 @@ func simplifyAndExpr(n *parser.AndExpr) parser.Expr {
 	}
 
 	// Loop over the expressions looking for simplifications.
+	//
+	// TODO(pmattis): This is O(n^2) in the number of expressions. Could be
+	// optimized by sorting the expressions based on the variables they contain.
 outer:
 	for i := len(exprs) - 1; i >= 0; i-- {
 		for j := i - 1; j >= 0; j-- {
@@ -490,6 +493,9 @@ func simplifyOrExpr(n *parser.OrExpr) parser.Expr {
 	}
 
 	// Loop over the expressions looking for simplifications.
+	//
+	// TODO(pmattis): This is O(n^2) in the number of expressions. Could be
+	// optimized by sorting the expressions based on the variables they contain.
 outer:
 	for i := len(exprs) - 1; i >= 0; i-- {
 		for j := i - 1; j >= 0; j-- {
