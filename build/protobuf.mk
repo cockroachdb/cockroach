@@ -57,7 +57,7 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC_PLUGIN)
 	  $(PROTOC) -I.:$(GOGOPROTO_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=import_prefix=github.com/cockroachdb/:$(ORG_ROOT) $$dir/*.proto; \
 	  sed -i.bak 's/import math "github\.com\/cockroachdb\/math"//g' $$dir/*.pb.go; \
 	  sed -i.bak -E 's/github\.com\/cockroachdb\/(gogoproto|github\.com)/\1/g' $$dir/*.pb.go; \
-	  sed -i.bak -E 's/github\.com\/cockroachdb\/(io|fmt)/\1/g' $$dir/*.pb.go; \
+	  sed -i.bak -E 's/github\.com\/cockroachdb\/(errors|fmt|io)/\1/g' $$dir/*.pb.go; \
 	  rm -f $$dir/*.bak; \
 	  gofmt -s -w $$dir/*.pb.go; \
 	done

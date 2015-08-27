@@ -19,7 +19,7 @@ github.com/coreos/etcd 25c87f13fdc678c1f02a34ae8ca0171ff25e764f
 github.com/cpuguy83/go-md2man 71acacd42f85e5e82f70a55327789582a5200a90
 github.com/docker/docker ba019dc0d0a89b3152fc3791495af2ddf18e173d
 github.com/elazarl/go-bindata-assetfs d5cac425555ca5cf00694df246e04f05e6a55150
-github.com/gogo/protobuf bc4045a0c607d84f80555f486c4305db4bd0420f
+github.com/gogo/protobuf 6cab0cc9fec8f660c2cee46e1306ffc727261956
 github.com/golang/lint 7b7f4364ff76043e6c3610281525fabc0d90f0e4
 github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
