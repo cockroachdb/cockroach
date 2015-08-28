@@ -322,6 +322,10 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 	}
 }
 
+// makeStartInfo populates the indexInfo.start slice for the index using the
+// supplied expression. The start info contains the start values for a scan of
+// the index. As such, the construction looks for =, >= and > comparisons of
+// the index columns to literal values.
 func (v *indexInfo) makeStartInfo(exprs []parser.Exprs) {
 	if len(exprs) != 1 {
 		return
@@ -355,6 +359,10 @@ outer:
 	}
 }
 
+// makeEndInfo populates the indexInfo.end slice for the index using the
+// supplied expression. The end info contains the end values for a scan of the
+// index. As such, the construction looks for =, <= and < comparisons of the
+// index columns to literal values.
 func (v *indexInfo) makeEndInfo(exprs []parser.Exprs) {
 	if len(exprs) != 1 {
 		return
