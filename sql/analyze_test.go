@@ -18,6 +18,7 @@
 package sql
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -56,7 +57,7 @@ func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
 	return r, s.qvals
 }
 
-func checkEquivExpr(t *testing.T, a, b parser.Expr, qvals qvalMap) bool {
+func checkEquivExpr(a, b parser.Expr, qvals qvalMap) error {
 	// The expressions above only use the values 1 and 2. Verify that the
 	// simplified expressions evaluate to the same value as the original
 	// expression for interesting values.
@@ -66,20 +67,17 @@ func checkEquivExpr(t *testing.T, a, b parser.Expr, qvals qvalMap) bool {
 		}
 		da, err := parser.EvalExpr(a)
 		if err != nil {
-			t.Errorf("%s: %v", a, err)
-			return false
+			return fmt.Errorf("%s: %v", a, err)
 		}
 		db, err := parser.EvalExpr(b)
 		if err != nil {
-			t.Errorf("%s: %v", b, err)
-			return false
+			return fmt.Errorf("%s: %v", b, err)
 		}
 		if da != db {
-			t.Errorf("%s: %d: expected %s, but found %s", a, v, da, db)
-			return false
+			return fmt.Errorf("%s: %d: expected %s, but found %s", a, v, da, db)
 		}
 	}
-	return true
+	return nil
 }
 
 func TestSplitOrExpr(t *testing.T) {
@@ -147,6 +145,8 @@ func TestSimplifyExpr(t *testing.T) {
 
 		{`a IN (1, 1)`, `a IN (1)`},
 		{`a IN (2, 3, 1)`, `a IN (1, 2, 3)`},
+		{`a IN (1, true)`, `true`},
+		{`a IN (1, NULL)`, `a IN (NULL, 1)`}, // TODO(pmattis): `a IN (1)`
 
 		{`a LIKE '%foo'`, `true`},
 		{`a LIKE 'foo'`, `a = 'foo'`},
@@ -171,9 +171,9 @@ func TestSimplifyNotExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testData := []struct {
-		expr     string
-		expected string
-		check    bool
+		expr       string
+		expected   string
+		checkEquiv bool
 	}{
 		{`NOT a = 1`, `a != 1`, true},
 		{`NOT a != 1`, `a = 1`, true},
@@ -196,8 +196,11 @@ func TestSimplifyNotExpr(t *testing.T) {
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
-		if d.check && !checkEquivExpr(t, expr1, expr2, qvals) {
-			continue
+		if d.checkEquiv {
+			if err := checkEquivExpr(expr1, expr2, qvals); err != nil {
+				t.Error(err)
+				continue
+			}
 		}
 	}
 }
@@ -233,9 +236,9 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testData := []struct {
-		expr     string
-		expected string
-		check    bool
+		expr       string
+		expected   string
+		checkEquiv bool
 	}{
 		{`a = 1 AND a = 1`, `a = 1`, true},
 		{`a = 1 AND a = 2`, `false`, true},
@@ -358,8 +361,11 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 
-		if d.check && !checkEquivExpr(t, expr1, expr2, qvals) {
-			continue
+		if d.checkEquiv {
+			if err := checkEquivExpr(expr1, expr2, qvals); err != nil {
+				t.Error(err)
+				continue
+			}
 		}
 
 		if _, ok := expr2.(*parser.AndExpr); !ok {
@@ -535,7 +541,8 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 			t.Fatalf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 
-		if !checkEquivExpr(t, expr1, expr2, qvals) {
+		if err := checkEquivExpr(expr1, expr2, qvals); err != nil {
+			t.Error(err)
 			continue
 		}
 
