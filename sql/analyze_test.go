@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func parseAndNormalizeExpr(t *testing.T, sql string) parser.Expr {
+func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
 	q, err := parser.ParseTraditional("SELECT " + sql)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
@@ -40,11 +40,11 @@ func parseAndNormalizeExpr(t *testing.T, sql string) parser.Expr {
 	s := &scanNode{}
 	s.desc = &TableDescriptor{
 		Columns: []ColumnDescriptor{
-			{Name: "a", ID: 1},
-			{Name: "b", ID: 2},
-			{Name: "c", ID: 3},
-			{Name: "d", ID: 4},
-			{Name: "e", ID: 5},
+			{Name: "a", ID: 1, Type: ColumnType{Kind: ColumnType_INT}},
+			{Name: "b", ID: 2, Type: ColumnType{Kind: ColumnType_INT}},
+			{Name: "c", ID: 3, Type: ColumnType{Kind: ColumnType_INT}},
+			{Name: "d", ID: 4, Type: ColumnType{Kind: ColumnType_INT}},
+			{Name: "e", ID: 5, Type: ColumnType{Kind: ColumnType_INT}},
 		},
 	}
 	s.visibleCols = s.desc.Columns
@@ -53,7 +53,33 @@ func parseAndNormalizeExpr(t *testing.T, sql string) parser.Expr {
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	return r
+	return r, s.qvals
+}
+
+func checkEquivExpr(t *testing.T, a, b parser.Expr, qvals qvalMap) bool {
+	// The expressions above only use the values 1 and 2. Verify that the
+	// simplified expressions evaluate to the same value as the original
+	// expression for interesting values.
+	for _, v := range []parser.DInt{0, 1, 2, 3} {
+		for _, q := range qvals {
+			q.Expr = v
+		}
+		da, err := parser.EvalExpr(a)
+		if err != nil {
+			t.Errorf("%s: %v", a, err)
+			return false
+		}
+		db, err := parser.EvalExpr(b)
+		if err != nil {
+			t.Errorf("%s: %v", b, err)
+			return false
+		}
+		if da != db {
+			t.Errorf("%s: %d: expected %s, but found %s", a, v, da, db)
+			return false
+		}
+	}
+	return true
 }
 
 func TestSplitOrExpr(t *testing.T) {
@@ -69,7 +95,7 @@ func TestSplitOrExpr(t *testing.T) {
 		{`(a OR b) OR (c OR (d OR e))`, `a, b, c, d, e`},
 	}
 	for _, d := range testData {
-		expr := parseAndNormalizeExpr(t, d.expr)
+		expr, _ := parseAndNormalizeExpr(t, d.expr)
 		exprs := splitOrExpr(expr, nil)
 		if s := exprs.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -90,7 +116,7 @@ func TestSplitAndExpr(t *testing.T) {
 		{`(a AND b) AND (c AND (d AND e))`, `a, b, c, d, e`},
 	}
 	for _, d := range testData {
-		expr := parseAndNormalizeExpr(t, d.expr)
+		expr, _ := parseAndNormalizeExpr(t, d.expr)
 		exprs := splitAndExpr(expr, nil)
 		if s := exprs.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -130,7 +156,7 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a SIMILAR TO '(foo|foobar).*'`, `a >= 'foo' AND a < 'fop'`},
 	}
 	for _, d := range testData {
-		expr := parseAndNormalizeExpr(t, d.expr)
+		expr, _ := parseAndNormalizeExpr(t, d.expr)
 		expr = simplifyExpr(expr)
 		if s := expr.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -159,7 +185,7 @@ func TestSimplifyNotExpr(t *testing.T) {
 		{`NOT (a != 1 OR a <= 1)`, `a = 1`},
 	}
 	for _, d := range testData {
-		expr := parseAndNormalizeExpr(t, d.expr)
+		expr, _ := parseAndNormalizeExpr(t, d.expr)
 		expr = simplifyExpr(expr)
 		if s := expr.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -184,7 +210,23 @@ func TestSimplifyAndExpr(t *testing.T) {
 		{`a = 1 AND a = NULL`, `false`},
 		{`a = 1 AND a != NULL`, `a = 1 AND a != NULL`},
 		{`a = 1 AND b = 1`, `a = 1 AND b = 1`},
+	}
+	for _, d := range testData {
+		expr1, _ := parseAndNormalizeExpr(t, d.expr)
+		expr2 := simplifyExpr(expr1)
+		if s := expr2.String(); d.expected != s {
+			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+	}
+}
 
+func TestSimplifyAndExprCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	testData := []struct {
+		expr     string
+		expected string
+	}{
 		{`a = 1 AND a = 1`, `a = 1`},
 		{`a = 1 AND a = 2`, `false`},
 		{`a = 2 AND a = 1`, `false`},
@@ -300,11 +342,16 @@ func TestSimplifyAndExpr(t *testing.T) {
 		{`a <= 2 AND a <= 1`, `a <= 1`},
 	}
 	for _, d := range testData {
-		expr1 := parseAndNormalizeExpr(t, d.expr)
+		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
 		expr2 := simplifyExpr(expr1)
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
+
+		if !checkEquivExpr(t, expr1, expr2, qvals) {
+			continue
+		}
+
 		if _, ok := expr2.(*parser.AndExpr); !ok {
 			// The result was not an AND expression. Verify that the analysis is
 			// commutative.
@@ -325,9 +372,6 @@ func TestSimplifyOrExpr(t *testing.T) {
 		expr     string
 		expected string
 	}{
-		{`a < 1 OR b < 1 OR a < 2 OR b < 2`, `a < 2 OR b < 2`},
-		{`(a > 2 OR a < 1) OR (a > 3 OR a < 0)`, `a > 2 OR a < 1`},
-
 		{`a = 1 OR a = true`, `a = 1 OR a = true`},
 		{`a = 1 OR a = 1.1`, `a = 1 OR a = 1.1`},
 		{`a = 1 OR a = '1'`, `a = 1 OR a = '1'`},
@@ -335,6 +379,25 @@ func TestSimplifyOrExpr(t *testing.T) {
 		{`a = 1 OR a = NULL`, `a = 1 OR a = NULL`},
 		{`a = 1 OR a != NULL`, `a = 1 OR a != NULL`},
 		{`a = 1 OR b = 1`, `a = 1 OR b = 1`},
+	}
+	for _, d := range testData {
+		expr1, _ := parseAndNormalizeExpr(t, d.expr)
+		expr2 := simplifyExpr(expr1)
+		if s := expr2.String(); d.expected != s {
+			t.Fatalf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+	}
+}
+
+func TestSimplifyOrExprCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	testData := []struct {
+		expr     string
+		expected string
+	}{
+		{`a < 1 OR b < 1 OR a < 2 OR b < 2`, `a < 2 OR b < 2`},
+		{`(a > 2 OR a < 1) OR (a > 3 OR a < 0)`, `a > 2 OR a < 1`},
 
 		{`a = 1 OR a = 1`, `a = 1`},
 		{`a = 1 OR a = 2`, `a = 1 OR a = 2`},
@@ -451,11 +514,16 @@ func TestSimplifyOrExpr(t *testing.T) {
 		{`a <= 2 OR a <= 1`, `a <= 2`},
 	}
 	for _, d := range testData {
-		expr1 := parseAndNormalizeExpr(t, d.expr)
+		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
 		expr2 := simplifyExpr(expr1)
 		if s := expr2.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			t.Fatalf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
+
+		if !checkEquivExpr(t, expr1, expr2, qvals) {
+			continue
+		}
+
 		if _, ok := expr2.(*parser.OrExpr); !ok {
 			// The result was not an OR expression. Verify that the analysis is
 			// commutative.
