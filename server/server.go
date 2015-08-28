@@ -64,6 +64,7 @@ type Server struct {
 	clock         *hlc.Clock
 	rpc           *rpc.Server
 	gossip        *gossip.Gossip
+	storePool     *storage.StorePool
 	db            *client.DB
 	kvDB          *kv.DBServer
 	sqlServer     *sql.Server
@@ -116,6 +117,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.rpc = rpc.NewServer(util.MakeUnresolvedAddr("tcp", addr), rpcContext)
 	s.stopper.AddCloser(s.rpc)
 	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapResolvers)
+	s.storePool = storage.NewStorePool(s.gossip, ctx.TimeUntilStoreDead, stopper)
 
 	feed := util.NewFeed(stopper)
 	tracer := tracer.NewTracer(feed, addr)
@@ -151,6 +153,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		ScanMaxIdleTime: s.ctx.ScanMaxIdleTime,
 		EventFeed:       feed,
 		Tracer:          tracer,
+		StorePool:       s.storePool,
 	}
 	s.node = NewNode(nCtx)
 	s.admin = newAdminServer(s.db, s.stopper)

@@ -317,6 +317,10 @@ type StoreContext struct {
 	// stores.
 	ScanMaxIdleTime time.Duration
 
+	// TimeUntilStoreDead is the time after which if there is no new gossiped
+	// information about a store, it can be considered dead.
+	TimeUntilStoreDead time.Duration
+
 	// EventFeed is a feed to which this store will publish events.
 	EventFeed *util.Feed
 
@@ -363,7 +367,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 		ctx:            ctx,
 		db:             ctx.DB, // TODO(tschottdorf) remove redundancy.
 		engine:         eng,
-		_allocator:     newAllocator(ctx.Gossip),
+		_allocator:     newAllocator(ctx.StorePool),
 		replicas:       map[proto.RangeID]*Replica{},
 		replicasByKey:  btree.New(64 /* degree */),
 		uninitReplicas: map[proto.RangeID]*Replica{},

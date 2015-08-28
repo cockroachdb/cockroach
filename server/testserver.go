@@ -76,6 +76,7 @@ func NewTestContext() *Context {
 	ctx.Addr = "127.0.0.1:0"
 	// Set standard "node" user for intra-cluster traffic.
 	ctx.User = security.NodeUser
+
 	return ctx
 }
 

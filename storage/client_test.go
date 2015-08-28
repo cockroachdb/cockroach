@@ -97,6 +97,7 @@ type multiTestContext struct {
 	manualClock  *hlc.ManualClock
 	clock        *hlc.Clock
 	gossip       *gossip.Gossip
+	storePool    *storage.StorePool
 	transport    multiraft.Transport
 	db           *client.DB
 	feed         *util.Feed
@@ -142,6 +143,9 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 	if m.transport == nil {
 		m.transport = multiraft.NewLocalRPCTransport(m.clientStopper)
+	}
+	if m.storePool == nil {
+		m.storePool = storage.NewStorePool(m.gossip, storage.TestTimeUntilStoreDeadOff, m.clientStopper)
 	}
 
 	// Always create the first sender.
@@ -189,6 +193,7 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	ctx.Clock = m.clocks[i]
 	ctx.DB = m.db
 	ctx.Gossip = m.gossip
+	ctx.StorePool = m.storePool
 	ctx.Transport = m.transport
 	ctx.EventFeed = m.feed
 	return ctx

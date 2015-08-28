@@ -19,6 +19,9 @@ package storage
 
 import (
 	"errors"
+	"fmt"
+	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -52,7 +55,7 @@ func createTestStorePool() (*stop.Stopper, *gossip.Gossip, *StorePool) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
-	storePool := NewStorePool(g, TestTimeUntilStoreDead, stopper)
+	storePool := NewStorePool(g, testTimeUntilStoreDead, stopper)
 	return stopper, g, storePool
 }
 
@@ -84,7 +87,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 
 // waitUntilDead will block until the specified store is marked as dead.
 func waitUntilDead(t *testing.T, sp *StorePool, storeID proto.StoreID) {
-	util.SucceedsWithin(t, 3*TestTimeUntilStoreDead, func() error {
+	util.SucceedsWithin(t, 3*testTimeUntilStoreDead, func() error {
 		sp.mu.RLock()
 		defer sp.mu.RUnlock()
 		store, ok := sp.stores[storeID]
@@ -182,5 +185,94 @@ func TestStorePoolDies(t *testing.T) {
 			t.Errorf("store 2 is in the queue, it shouldn't be")
 		}
 		sp.mu.RUnlock()
+	}
+}
+
+// verifyStoreList ensures that the returned list of stores is correct.
+func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int) error {
+	var actual []int
+	sl := sp.getStoreList(proto.Attributes{Attrs: requiredAttrs}, false)
+	for _, store := range sl.stores {
+		actual = append(actual, int(store.StoreID))
+	}
+	sort.Ints(expected)
+	sort.Ints(actual)
+	if !reflect.DeepEqual(expected, actual) {
+		return fmt.Errorf("expected %+v stores, actual %+v", expected, actual)
+	}
+	return nil
+}
+
+// TestStorePoolGetStoreList ensures that the store list returns only stores
+// that are alive and match the attribute criteria.
+func TestStorePoolGetStoreList(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper, g, sp := createTestStorePool()
+	defer stopper.Stop()
+	sg := newStoreGossiper(g)
+	required := []string{"ssd", "dc"}
+	// Nothing yet.
+	if sl := sp.getStoreList(proto.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
+		t.Errorf("expected no stores, instead %+v", sl.stores)
+	}
+
+	matchingStore := proto.StoreDescriptor{
+		StoreID: 1,
+		Node:    proto.NodeDescriptor{NodeID: 1},
+		Attrs:   proto.Attributes{Attrs: required},
+	}
+	supersetStore := proto.StoreDescriptor{
+		StoreID: 2,
+		Node:    proto.NodeDescriptor{NodeID: 1},
+		Attrs:   proto.Attributes{Attrs: append(required, "db")},
+	}
+	unmatchingStore := proto.StoreDescriptor{
+		StoreID: 3,
+		Node:    proto.NodeDescriptor{NodeID: 1},
+		Attrs:   proto.Attributes{Attrs: []string{"ssd", "otherdc"}},
+	}
+	emptyStore := proto.StoreDescriptor{
+		StoreID: 4,
+		Node:    proto.NodeDescriptor{NodeID: 1},
+		Attrs:   proto.Attributes{},
+	}
+	deadStore := proto.StoreDescriptor{
+		StoreID: 5,
+		Node:    proto.NodeDescriptor{NodeID: 1},
+		Attrs:   proto.Attributes{Attrs: required},
+	}
+
+	sg.gossipStores([]*proto.StoreDescriptor{
+		&matchingStore,
+		&supersetStore,
+		&unmatchingStore,
+		&emptyStore,
+		&deadStore,
+	}, t)
+
+	if err := verifyStoreList(sp, required, []int{
+		int(matchingStore.StoreID),
+		int(supersetStore.StoreID),
+		int(deadStore.StoreID),
+	}); err != nil {
+		t.Error(err)
+	}
+
+	// Timeout all stores, but specifically store 5.
+	waitUntilDead(t, sp, 5)
+
+	// Resurrect all stores except for 5.
+	sg.gossipStores([]*proto.StoreDescriptor{
+		&matchingStore,
+		&supersetStore,
+		&unmatchingStore,
+		&emptyStore,
+	}, t)
+
+	if err := verifyStoreList(sp, required, []int{
+		int(matchingStore.StoreID),
+		int(supersetStore.StoreID),
+	}); err != nil {
+		t.Error(err)
 	}
 }

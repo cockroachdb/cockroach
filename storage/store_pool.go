@@ -19,6 +19,7 @@ package storage
 
 import (
 	"container/heap"
+	"sort"
 	"sync"
 	"time"
 
@@ -31,8 +32,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// TestTimeUntilStoreDead is the default TimeUntilStoreDead for running tests.
-const TestTimeUntilStoreDead = 10 * time.Millisecond
+const (
+	// testTimeUntilStoreDead is the the test value for TimeUntilStoreDead to
+	// quickly mark stores as dead.
+	testTimeUntilStoreDead = 10 * time.Millisecond
+
+	// TestTimeUntilStoreDeadOff is the test value for TimeUntilStoreDead that
+	// prevents the store pool from marking stores as dead.
+	TestTimeUntilStoreDeadOff = 24 * time.Hour
+)
 
 type storeDetail struct {
 	desc            proto.StoreDescriptor
@@ -102,7 +110,7 @@ func (pq storePoolPQ) peek() *storeDetail {
 	if len(pq) == 0 {
 		return nil
 	}
-	return pq[0]
+	return (pq)[0]
 }
 
 // enqueue either adds the detail to the queue or updates its location in the
@@ -208,4 +216,73 @@ func (sp *StorePool) start(stopper *stop.Stopper) {
 			}
 		}
 	})
+}
+
+// GetStoreDescriptor returns the latest store descriptor for the given
+// storeID.
+func (sp *StorePool) getStoreDescriptor(storeID proto.StoreID) *proto.StoreDescriptor {
+	sp.mu.RLock()
+	defer sp.mu.RUnlock()
+
+	detail, ok := sp.stores[storeID]
+	if !ok {
+		return nil
+	}
+	return &detail.desc
+}
+
+// stat provides a running sample size and mean.
+type stat struct {
+	n, mean float64
+}
+
+// Update adds the specified value to the stat, augmenting the sample
+// size & mean.
+func (s *stat) update(x float64) {
+	s.n++
+	s.mean += (x - s.mean) / s.n
+}
+
+// StoreList holds a list of store descriptors and associated count and used
+// stats for those stores.
+type StoreList struct {
+	stores      []*proto.StoreDescriptor
+	count, used stat
+}
+
+// add includes the store descriptor to the list of stores and updates
+// maintained statistics.
+func (sl *StoreList) add(s *proto.StoreDescriptor) {
+	sl.stores = append(sl.stores, s)
+	sl.count.update(float64(s.Capacity.RangeCount))
+	sl.used.update(s.Capacity.FractionUsed())
+}
+
+// GetStoreList returns a storeList that contains all active stores that
+// contain the required attributes and their associated stats.
+// TODO(embark, spencer): consider using a reverse index map from
+// Attr->stores, for efficiency. Ensure that entries in this map still
+// have an opportunity to be garbage collected.
+func (sp *StorePool) getStoreList(required proto.Attributes, deterministic bool) *StoreList {
+	sp.mu.RLock()
+	defer sp.mu.RUnlock()
+
+	// TODO(bram): Consider adding the sort interface to proto.StoreID.
+	var storeIDs []int
+	for storeID := range sp.stores {
+		storeIDs = append(storeIDs, int(storeID))
+	}
+	// Sort the stores by key if deterministic is requested. This is only for
+	// unit testing.
+	if deterministic {
+		sort.Ints(storeIDs)
+	}
+	sl := new(StoreList)
+	for _, storeID := range storeIDs {
+		detail := sp.stores[proto.StoreID(storeID)]
+		if !detail.dead && required.IsSubset(*detail.desc.CombinedAttrs()) {
+			sl.add(&detail.desc)
+		}
+	}
+	return sl
 }
