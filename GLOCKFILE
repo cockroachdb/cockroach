@@ -53,7 +53,8 @@ github.com/spf13/pflag 7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7
 github.com/tebeka/go2xunit fff0d031ea2b81ed06c367293219e4bc005235d0
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 golang.org/x/crypto 3760e016850398b85094c4c99e955b8c3dea5711
-golang.org/x/net c92cdcb05f66ce5b61460e23498d2dc5fcf69aaf
+golang.org/x/net 644ffc06205c045a7d696b9a212191615d30b77b
 golang.org/x/text cf4986612c83df6c55578ba198316d1684a9a287
 golang.org/x/tools ae18226edd6df820ca562ef374e4441e6f8f5145
+google.golang.org/grpc 85d0357baf88a196b49e8130e81eca0e73cc934d
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
