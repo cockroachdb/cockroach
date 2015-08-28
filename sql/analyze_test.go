@@ -25,6 +25,28 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+var testTableDesc = &TableDescriptor{
+	Name: "test",
+	ID:   1000,
+	Columns: []ColumnDescriptor{
+		{Name: "a", Type: ColumnType{Kind: ColumnType_INT}},
+		{Name: "b", Type: ColumnType{Kind: ColumnType_INT}},
+		{Name: "c", Type: ColumnType{Kind: ColumnType_INT}},
+		{Name: "d", Type: ColumnType{Kind: ColumnType_INT}},
+		{Name: "e", Type: ColumnType{Kind: ColumnType_INT}},
+	},
+	PrimaryIndex: IndexDescriptor{
+		Name: "primary", Unique: true, ColumnNames: []string{"a"},
+	},
+	Privileges: NewDefaultPrivilegeDescriptor(),
+}
+
+func init() {
+	if err := testTableDesc.AllocateIDs(); err != nil {
+		panic(err)
+	}
+}
+
 func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
 	q, err := parser.ParseTraditional("SELECT " + sql)
 	if err != nil {
@@ -39,15 +61,7 @@ func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
 	// Perform qualified name resolution because {analyze,simplify}Expr want
 	// expressions containing qvalues.
 	s := &scanNode{}
-	s.desc = &TableDescriptor{
-		Columns: []ColumnDescriptor{
-			{Name: "a", ID: 1, Type: ColumnType{Kind: ColumnType_INT}},
-			{Name: "b", ID: 2, Type: ColumnType{Kind: ColumnType_INT}},
-			{Name: "c", ID: 3, Type: ColumnType{Kind: ColumnType_INT}},
-			{Name: "d", ID: 4, Type: ColumnType{Kind: ColumnType_INT}},
-			{Name: "e", ID: 5, Type: ColumnType{Kind: ColumnType_INT}},
-		},
-	}
+	s.desc = testTableDesc
 	s.visibleCols = s.desc.Columns
 
 	r, err = s.resolveQNames(r)

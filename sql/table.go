@@ -264,31 +264,40 @@ func decodeIndexKey(desc *TableDescriptor,
 // are returned.
 func decodeKeyVals(valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
 	for j := range valTypes {
-		var isNull bool
-		if key, isNull = encoding.DecodeIfNull(key); isNull {
-			vals[j] = parser.DNull
-			continue
-		}
-
-		switch valTypes[j].(type) {
-		case parser.DInt:
-			var i int64
-			key, i = encoding.DecodeVarint(key)
-			vals[j] = parser.DInt(i)
-		case parser.DFloat:
-			var f float64
-			key, f = encoding.DecodeFloat(key, nil)
-			vals[j] = parser.DFloat(f)
-		case parser.DString:
-			var r string
-			key, r = encoding.DecodeString(key, nil)
-			vals[j] = parser.DString(r)
-		default:
-			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", valTypes[j].Type())
+		var err error
+		vals[j], key, err = decodeTableKey(valTypes[j], key)
+		if err != nil {
+			return nil, err
 		}
 	}
-
 	return key, nil
+}
+
+func decodeTableKey(valType parser.Datum, key []byte) (parser.Datum, []byte, error) {
+	var isNull bool
+	if key, isNull = encoding.DecodeIfNull(key); isNull {
+		return parser.DNull, key, nil
+	}
+	switch valType.(type) {
+	case parser.DBool:
+		var i int64
+		key, i = encoding.DecodeVarint(key)
+		return parser.DBool(i != 0), key, nil
+	case parser.DInt:
+		var i int64
+		key, i = encoding.DecodeVarint(key)
+		return parser.DInt(i), key, nil
+	case parser.DFloat:
+		var f float64
+		key, f = encoding.DecodeFloat(key, nil)
+		return parser.DFloat(f), key, nil
+	case parser.DString:
+		var r string
+		key, r = encoding.DecodeString(key, nil)
+		return parser.DString(r), key, nil
+	default:
+		return nil, nil, util.Errorf("TODO(pmattis): decoded index key: %s", valType.Type())
+	}
 }
 
 type indexEntry struct {

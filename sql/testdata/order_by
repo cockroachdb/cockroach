@@ -33,7 +33,7 @@ query ITT
 EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
 0 sort +b
-1 scan t@primary
+1 scan t@primary -
 
 query II
 SELECT a, b FROM t ORDER BY b DESC
@@ -46,7 +46,7 @@ query ITT
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
 0 sort -b
-1 scan t@primary
+1 scan t@primary -
 
 query II
 SELECT a FROM t ORDER BY 1 DESC
@@ -87,7 +87,7 @@ query ITT
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
 0 nosort -a
-1 revscan t@primary
+1 revscan t@primary -
 
 statement ok
 INSERT INTO t VALUES (4, 7), (5, 7)
@@ -185,7 +185,7 @@ EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
 query ITT
 EXPLAIN SELECT * FROM abc ORDER BY a
 ----
-0 scan abc@primary
+0 scan abc@primary -
 
 query ITTB
 EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
@@ -196,7 +196,7 @@ EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
 query ITT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, a
 ----
-0 scan abc@ba
+0 scan abc@ba -
 
 query ITTB
 EXPLAIN (DEBUG) SELECT b, c FROM abc ORDER BY b, c
@@ -221,7 +221,7 @@ EXPLAIN (DEBUG) SELECT a FROM abc ORDER BY a DESC
 query ITT
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
-0 revscan abc@primary
+0 revscan abc@primary -
 
 query I
 SELECT a FROM abc ORDER BY a DESC

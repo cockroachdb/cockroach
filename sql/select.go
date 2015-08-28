@@ -243,18 +243,15 @@ func (c indexConstraints) String() string {
 		if i > 0 {
 			_, _ = buf.WriteString(", ")
 		}
-		_, _ = buf.WriteString("{")
 		if c[i].start != nil {
-			fmt.Fprintf(&buf, "%s, ", c[i].start)
-		} else {
-			_, _ = buf.WriteString("_, ")
+			fmt.Fprintf(&buf, "%s", c[i].start)
 		}
 		if c[i].end != nil && c[i].end != c[i].start {
+			if c[i].start != nil {
+				_, _ = buf.WriteString(", ")
+			}
 			fmt.Fprintf(&buf, "%s", c[i].end)
-		} else {
-			_, _ = buf.WriteString("_")
 		}
-		_, _ = buf.WriteString("}")
 	}
 	_, _ = buf.WriteString("]")
 	return buf.String()
@@ -402,8 +399,13 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 				if !startDone && constraint.start == nil {
 					switch c.Operator {
 					case parser.GT:
-						startDone = true
-						fallthrough
+						// Transform a > constraint into a >= constraint so that we play
+						// nicer with the inclusive nature of the scan start key.
+						constraint.start = &parser.ComparisonExpr{
+							Operator: parser.GE,
+							Left:     c.Left,
+							Right:    nextDatum(c.Right.(parser.Datum)),
+						}
 					case parser.EQ, parser.GE, parser.In:
 						constraint.start = c
 					}
@@ -483,11 +485,15 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 		start: append(proto.Key(nil), prefix...),
 		end:   append(proto.Key(nil), prefix...),
 	}}
-	var lastStartOp parser.ComparisonOp
-	var lastEndOp parser.ComparisonOp
 	var buf [100]byte
 
-	for _, c := range constraints {
+	for i, c := range constraints {
+		// Is this the last end constraint? We perform special processing on the
+		// last end constraint to account for the exclusive nature of the scan end
+		// key.
+		lastEnd := c.end != nil &&
+			(i+1 == len(constraints) || constraints[i+1].end == nil)
+
 		if c.start != nil && c.start.Operator == parser.In {
 			// Special handling of IN exprssions. Such expressions apply to both the
 			// start and end key, but also cause an explosion in the number of spans
@@ -506,23 +512,27 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 			existingSpans := spans
 			spans = make([]span, 0, len(existingSpans)*len(tuple))
 			for _, datum := range tuple {
-				key, err := encodeTableKey(buf[:0], datum)
+				start, err := encodeTableKey(buf[:0], datum)
 				if err != nil {
 					panic(err)
 				}
+
+				end := start
+				if lastEnd {
+					if end, err = encodeTableKey(nil, nextDatum(datum)); err != nil {
+						panic(err)
+					}
+				}
+
 				for _, s := range existingSpans {
 					spans = append(spans, span{
-						start: append(append(proto.Key(nil), s.start...), key...),
-						end:   append(append(proto.Key(nil), s.end...), key...),
+						start: append(append(proto.Key(nil), s.start...), start...),
+						end:   append(append(proto.Key(nil), s.end...), end...),
 					})
 				}
 			}
 
-			lastStartOp = c.start.Operator
-			lastEndOp = c.start.Operator
-			// TODO(pmattis): Technically, we could continue here instead of
-			// breaking. Need to test and verify that continuing works correctly.
-			break
+			continue
 		}
 
 		if c.start != nil {
@@ -536,13 +546,15 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 				for i := range spans {
 					spans[i].start = append(spans[i].start, key...)
 				}
-				lastStartOp = c.start.Operator
 			}
 		}
 
 		if c.end != nil {
 			// We have an end constraint.
 			if datum, ok := c.end.Right.(parser.Datum); ok {
+				if lastEnd && c.end.Operator != parser.LT {
+					datum = nextDatum(datum)
+				}
 				key, err := encodeTableKey(buf[:0], datum)
 				if err != nil {
 					panic(err)
@@ -551,23 +563,45 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 				for i := range spans {
 					spans[i].end = append(spans[i].end, key...)
 				}
-				lastEndOp = c.end.Operator
 			}
 		}
 	}
 
-	if lastStartOp == parser.GT {
-		// "qval > constant": we can skip to the next key.
-		for i := range spans {
-			spans[i].start = spans[i].start.Next()
-		}
-	}
-	if lastEndOp != parser.LT {
-		// "qval <= constant" or "qval = constant": we want the prefix end.
+	if len(constraints) == 0 || constraints[0].end == nil {
 		for i := range spans {
 			spans[i].end = spans[i].end.PrefixEnd()
 		}
 	}
 
 	return spans
+}
+
+// nextDatum returns the next datum according to the datum type. For integers
+// and floats it returns the next higher value. For etrings it appends '\x00'.
+func nextDatum(datum parser.Datum) parser.Datum {
+	switch d := datum.(type) {
+	case parser.DBool:
+		if !d {
+			return parser.DBool(true)
+		}
+		// DBool(false) is encoded as DInt(0), DBool(true) is encoded as DInt(1) so
+		// DInt(2) is the next datum. Note that this will decode ok because we look
+		// for "DInt != 0".
+		return parser.DInt(2)
+	case parser.DInt:
+		// TODO(pmattis): Check for overflow. More precisely, we should simplify
+		// >MaxInt expressions to false.
+		return d + 1
+	case parser.DFloat:
+		// TODO(pmattis): Check for overflow. More precisely, we should simplify
+		// >math.MaxFloat64 expressions to false.
+		return parser.DFloat(math.Nextafter(float64(d), math.Inf(1)))
+	case parser.DString:
+		return parser.DString(proto.Key(d).Next())
+	default:
+		// Note that comparisons to NULL will have been simplified out of
+		// existence. Tuples are currently only handled in IN expressions which
+		// will reduce to non-tuple comparisons.
+		panic(fmt.Sprintf("unsupported nextDatum: %T", datum))
+	}
 }
