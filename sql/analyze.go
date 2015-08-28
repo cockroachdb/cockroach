@@ -874,13 +874,15 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr) {
 }
 
 func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parser.Expr) {
+	if left.Operator != parser.In && right.Operator != parser.In {
+		panic(fmt.Sprintf("IN expression required: %s vs %s", left, right))
+	}
+
 	switch left.Operator {
 	case parser.EQ:
 		switch right.Operator {
 		case parser.In:
 			left, right = right, left
-		default:
-			panic(fmt.Sprintf("unexpected operator: %s", right.Operator))
 		}
 		fallthrough
 
@@ -905,10 +907,17 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 			}
 		}
 
+		if !typeCheckTuple(left.Left, tuple2) {
+			return left, right
+		}
+
 		// We keep the tuples for an in expression in sorted order. So now we just
 		// merge the two sorted lists.
-		left.Right = mergeSorted(tuple, tuple2)
-		return left, nil
+		return &parser.ComparisonExpr{
+			Operator: parser.In,
+			Left:     left.Left,
+			Right:    mergeSorted(tuple, tuple2),
+		}, nil
 	}
 
 	return left, right
@@ -925,6 +934,9 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 		case parser.In, parser.NotIn:
 			tuple, ok := n.Right.(parser.DTuple)
 			if !ok {
+				break
+			}
+			if !typeCheckTuple(n.Left, tuple) {
 				break
 			}
 			sort.Sort(tuple)
@@ -1011,6 +1023,29 @@ func mergeSorted(a, b parser.DTuple) parser.DTuple {
 		}
 	}
 	return r
+}
+
+// typeCheckTuple verifies that the types of all of the values in tuple are
+// either DNull or agree with the arg type.
+//
+// TODO(pmattis): I think we need a TypeCheckExpr which performs this type
+// check as well as others like the CASE type checks.
+func typeCheckTuple(arg parser.Expr, tuple parser.DTuple) bool {
+	qval, ok := arg.(*qvalue)
+	if !ok {
+		return false
+	}
+	argType := reflect.TypeOf(qval.Datum())
+	for _, d := range tuple {
+		if d == parser.DNull {
+			continue
+		}
+		dtype := reflect.TypeOf(d)
+		if argType != dtype {
+			return false
+		}
+	}
+	return true
 }
 
 func isVar(e parser.Expr) bool {
