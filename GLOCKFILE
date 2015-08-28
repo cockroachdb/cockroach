@@ -69,5 +69,6 @@ golang.org/x/crypto 1f22c0103821b9390939b6776727195525381532
 golang.org/x/net 7f88271ea9913b72aca44fa7fc8af919eacc17ce
 golang.org/x/text 2ea5e055772cf5daa0b1478d6e88c8d0c3d4cb79
 golang.org/x/tools 7ed774bdc0d941f843a2755877d6366b3b85cbf5
+google.golang.org/grpc 0631ecafac46db83db609486bedff561525c03e9
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
