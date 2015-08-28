@@ -1119,7 +1119,7 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 		// loop do it, in order to provide a split trigger.
 		b.InternalAddCall(proto.Call{
 			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: args.Key},
+				RequestHeader: proto.RequestHeader{Key: newDesc.StartKey},
 				Commit:        true,
 				InternalCommitTrigger: &proto.InternalCommitTrigger{
 					SplitTrigger: &proto.SplitTrigger{
@@ -1290,7 +1290,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, desc *proto.RangeDesc
 		// loop do it, in order to provide a merge trigger.
 		b.InternalAddCall(proto.Call{
 			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: args.Key},
+				RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
 				Commit:        true,
 				InternalCommitTrigger: &proto.InternalCommitTrigger{
 					MergeTrigger: &proto.MergeTrigger{
