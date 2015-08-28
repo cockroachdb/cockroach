@@ -342,26 +342,3 @@ func TestStartEqualsEndKeyScan(t *testing.T) {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
 }
-
-// TestSplitByMeta2KeyMax check range splitting at key Meta2KeyMax should
-// fail as Meta2KeyMax is not a valid split key.
-func TestSplitByMeta2KeyMax(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	s := server.StartTestServer(t)
-	db := createTestClient(t, s.ServingAddr())
-	defer s.Stop()
-
-	ch := make(chan struct{})
-	go func() {
-		if err := db.AdminSplit(keys.Meta2KeyMax); err == nil {
-			t.Fatalf("range split on Meta2KeyMax should fail")
-		}
-		close(ch)
-	}()
-
-	select {
-	case <-ch:
-	case <-time.After(5 * time.Second):
-		t.Error("range split on Meta2KeyMax timed out")
-	}
-}

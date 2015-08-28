@@ -76,7 +76,9 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		keys.Meta1Prefix,
 		keys.MakeKey(keys.Meta1Prefix, []byte("a")),
 		keys.MakeKey(keys.Meta1Prefix, proto.KeyMax),
+		keys.Meta2KeyMax,
 		keys.MakeKey(keys.ConfigZonePrefix, []byte("a")),
+		keys.MakeTablePrefix(10 /* system descriptor ID */),
 	} {
 		args := adminSplitArgs(proto.KeyMin, key, 1, store.StoreID())
 		_, err := store.ExecuteCmd(context.Background(), &args)

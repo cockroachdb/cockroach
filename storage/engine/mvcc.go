@@ -43,6 +43,23 @@ var (
 	MVCCKeyMax = MVCCEncodeKey(proto.KeyMax)
 )
 
+type encodedSpan struct {
+	start, end proto.EncodedKey
+}
+
+// illegalSplitKeySpans lists spans of keys that should not be split.
+var illegalSplitKeySpans []encodedSpan
+
+func init() {
+	for _, r := range keys.NoSplitSpans {
+		illegalSplitKeySpans = append(illegalSplitKeySpans,
+			encodedSpan{
+				start: MVCCEncodeKey(r.Start),
+				end:   MVCCEncodeKey(r.End),
+			})
+	}
+}
+
 // IsInline returns true if the value is inlined in the metadata.
 func (meta MVCCMetadata) IsInline() bool {
 	return meta.Value != nil
@@ -1419,25 +1436,10 @@ func IsValidSplitKey(key proto.Key) bool {
 	return isValidEncodedSplitKey(MVCCEncodeKey(key))
 }
 
-// illegalSplitKeyRanges detail illegal ranges for split keys,
-// exclusive of start and end.
-var illegalSplitKeyRanges = []struct {
-	start, end proto.EncodedKey
-}{
-	{
-		start: MVCCEncodeKey(proto.KeyMin),
-		end:   MVCCEncodeKey(keys.Meta2Prefix),
-	},
-	{
-		start: MVCCEncodeKey(keys.ConfigZonePrefix),
-		end:   MVCCEncodeKey(keys.ConfigZonePrefix.PrefixEnd()),
-	},
-}
-
 // isValidEncodedSplitKey iterates through the illegal ranges and
 // returns true if the specified key falls within any; false otherwise.
 func isValidEncodedSplitKey(key proto.EncodedKey) bool {
-	for _, rng := range illegalSplitKeyRanges {
+	for _, rng := range illegalSplitKeySpans {
 		if rng.start.Less(key) && key.Less(rng.end) {
 			return false
 		}
@@ -1451,7 +1453,7 @@ func isValidEncodedSplitKey(key proto.EncodedKey) bool {
 // a snapshot engine to safely invoke this method in a goroutine.
 //
 // The split key will never be chosen from the key ranges listed in
-// illegalSplitKeyRanges.
+// illegalSplitKeySpans.
 func MVCCFindSplitKey(engine Engine, rangeID proto.RangeID, key, endKey proto.Key) (proto.Key, error) {
 	if key.Less(keys.LocalMax) {
 		key = keys.LocalMax

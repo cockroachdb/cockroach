@@ -348,14 +348,14 @@ func initScanArgs(args []string) (startKey, endKey proto.Key) {
 		startKey = proto.Key(unquoteArg(args[0], false))
 	} else {
 		// Start with the first key after the system key range.
-		startKey = keys.SystemMax
+		startKey = keys.UserDataSpan.Start
 	}
 	if len(args) >= 2 {
 		endKey = proto.Key(unquoteArg(args[1], false))
 	} else {
 		// Exclude table data keys by default. The user can explicitly request them
 		// by passing \xff\xff for the end key.
-		endKey = keys.TableDataPrefix
+		endKey = keys.UserDataSpan.End
 	}
 	return startKey, endKey
 }

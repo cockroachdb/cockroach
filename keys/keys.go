@@ -314,3 +314,11 @@ func MetaReverseScanBounds(key proto.Key) (proto.Key, proto.Key, error) {
 	// second record (exclusive in MVCCReverseScan), hence key.Next() below.
 	return key[:len(Meta1Prefix)], key.Next(), nil
 }
+
+// MakeTablePrefix returns the key prefix used for the table's data.
+func MakeTablePrefix(tableID uint32) []byte {
+	var key []byte
+	key = append(key, TableDataPrefix...)
+	key = encoding.EncodeUvarint(key, uint64(tableID))
+	return key
+}
