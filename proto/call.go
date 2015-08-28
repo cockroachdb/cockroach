@@ -27,7 +27,6 @@ import (
 type Call struct {
 	Args  Request      // The argument to the command
 	Reply Response     // The reply from the command
-	Err   error        // Error during call creation
 	Post  func() error // Function to be called after successful completion
 }
 
@@ -110,16 +109,6 @@ func ConditionalPutCall(key Key, valueBytes, expValueBytes []byte) Call {
 		},
 		Reply: &ConditionalPutResponse{},
 	}
-}
-
-// PutProtoCall returns a Call object initialized to put the proto message as a
-// byte slice at key.
-func PutProtoCall(key Key, msg gogoproto.Message) Call {
-	data, err := gogoproto.Marshal(msg)
-	if err != nil {
-		return Call{Err: err}
-	}
-	return PutCall(key, Value{Bytes: data})
 }
 
 // DeleteCall returns a Call object initialized to delete the value at key.

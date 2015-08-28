@@ -18,27 +18,11 @@
 package client
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-func TestCallError(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	count := 0
-	db := newDB(newTestSender(func(call proto.Call) {
-		count++
-	}))
-
-	testError := "test error"
-	if err := db.send(proto.Call{Err: errors.New(testError)}); err == nil {
-		t.Fatalf("expected error, but found success")
-	} else if err.Error() != testError {
-		t.Fatalf("expected %s, but got %s", testError, err)
-	}
-}
 
 // TestClientCommandID verifies that client command ID is set
 // on call.
