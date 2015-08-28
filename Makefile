@@ -147,13 +147,6 @@ clean:
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -rf build/deploy/build
 
-# Store all of the dependencies which are not part of the standard
-# library or cockroachdb/cockroach in build/devbase/deps
-.PHONY: storedeps
-storedeps:
-	go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... | sort | uniq | \
-	 grep -E '[^/]+\.[^/]+/' | grep -vF 'github.com/cockroachdb/cockroach' > build/devbase/deps
-
 GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
 .git/hooks/%: githooks/%
 	@echo installing $<

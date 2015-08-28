@@ -23,18 +23,6 @@ fi
 
 ${GOPATH}/bin/glock sync github.com/cockroachdb/cockroach
 
-# We can't just use "go list" here because this script is run during docker
-# container builds before the cockroach code is present. The GLOCKFILE is
-# present, but we can't use it because it deals in repos and not packages (and
-# adding /... to repo paths will match packages that have been downloaded but
-# whose dependencies have not).
-pkgs=$(cat build/devbase/deps)
-
 set -x
-
-# NOTE: "glock sync" downloads the source but does not install libraries
-# into GOPATH/pkg. Install both race and non-race builds here.
-go install ${pkgs}
-go install -race ${pkgs}
 
 (cd ui && npm install)
