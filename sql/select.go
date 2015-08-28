@@ -185,7 +185,7 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 		// expressions we should limit how many indexes we use. We probably should
 		// optimize the common case of "a IN (1, 3)" so that we only perform index
 		// selection once even though we generate multiple scan ranges for the
-		// index. Might want to simplify "a=1 OR a=2 OR a=3" to "a IN (1, 2, 3)".
+		// index.
 
 		for _, c := range candidates {
 			c.analyzeRanges(exprs)

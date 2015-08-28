@@ -236,6 +236,18 @@ func (d DTuple) String() string {
 	return buf.String()
 }
 
+func (d DTuple) Len() int {
+	return len(d)
+}
+
+func (d DTuple) Less(i, j int) bool {
+	return d[i].Compare(d[j]) < 0
+}
+
+func (d DTuple) Swap(i, j int) {
+	d[i], d[j] = d[j], d[i]
+}
+
 type dNull struct{}
 
 // DNull is the NULL Datum.

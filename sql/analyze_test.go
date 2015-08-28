@@ -145,6 +145,9 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a < 1 AND abs(a) > 0`, `a < 1`},
 		{`a < 1 OR abs(a) > 0`, `true`},
 
+		{`a IN (1, 1)`, `a IN (1)`},
+		{`a IN (2, 3, 1)`, `a IN (1, 2, 3)`},
+
 		{`a LIKE '%foo'`, `true`},
 		{`a LIKE 'foo'`, `a = 'foo'`},
 		{`a LIKE 'foo%'`, `a >= 'foo' AND a < 'fop'`},
@@ -403,12 +406,17 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		expr     string
 		expected string
 	}{
+		{`a = 1 OR a = 2 OR a = 3 or a = 4`, `a IN (1, 2, 3, 4)`},
+		{`a = 1 OR a IN (1, 2, 3) OR a = 2 OR a = 3`, `a IN (1, 2, 3)`},
+		{`a > 1 OR a IN (2, 3)`, `a > 1 OR a IN (2, 3)`},
+		// {`(a, b) IN ((2, 1), (1, 2), (1, 2), (2, 1))`, `(a, b) IN ((1, 2), (2, 1)`},
+
 		{`a < 1 OR b < 1 OR a < 2 OR b < 2`, `a < 2 OR b < 2`},
 		{`(a > 2 OR a < 1) OR (a > 3 OR a < 0)`, `a > 2 OR a < 1`},
 
 		{`a = 1 OR a = 1`, `a = 1`},
-		{`a = 1 OR a = 2`, `a = 1 OR a = 2`},
-		{`a = 2 OR a = 1`, `a = 2 OR a = 1`},
+		{`a = 1 OR a = 2`, `a IN (1, 2)`},
+		{`a = 2 OR a = 1`, `a IN (1, 2)`},
 		{`a = 1 OR a != 1`, `true`},
 		{`a = 1 OR a != 2`, `a != 2`},
 		{`a = 2 OR a != 1`, `a != 1`},

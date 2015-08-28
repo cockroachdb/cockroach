@@ -18,8 +18,10 @@
 package sql
 
 import (
+	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -545,6 +547,9 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr) {
 	if !varEqual(lcmp.Left, rcmp.Left) {
 		return left, right
 	}
+	if lcmp.Operator == parser.In || rcmp.Operator == parser.In {
+		return simplifyOneOrInExpr(lcmp, rcmp)
+	}
 
 	if reflect.TypeOf(lcmp.Right) != reflect.TypeOf(rcmp.Right) {
 		// If the types of the left and right datums are different, no
@@ -565,8 +570,15 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr) {
 			if cmp == 0 {
 				// x = y
 				return left, nil
+			} else if cmp == 1 {
+				// x > y
+				ldatum, rdatum = rdatum, ldatum
 			}
-			return left, right
+			return &parser.ComparisonExpr{
+				Operator: parser.In,
+				Left:     lcmp.Left,
+				Right:    parser.DTuple{ldatum, rdatum},
+			}, nil
 		case parser.NE:
 			// a = x OR a != y
 			if cmp == 0 {
@@ -861,14 +873,63 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr) {
 	return parser.DBool(true), nil
 }
 
+func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parser.Expr) {
+	switch left.Operator {
+	case parser.EQ:
+		switch right.Operator {
+		case parser.In:
+			left, right = right, left
+		default:
+			panic(fmt.Sprintf("unexpected operator: %s", right.Operator))
+		}
+		fallthrough
+
+	case parser.In:
+		tuple, ok := left.Right.(parser.DTuple)
+		if !ok {
+			return parser.DBool(true), nil
+		}
+
+		var tuple2 parser.DTuple
+		switch right.Operator {
+		case parser.EQ:
+			rdatum, rok := right.Right.(parser.Datum)
+			if !rok {
+				return parser.DBool(true), nil
+			}
+			tuple2 = parser.DTuple{rdatum}
+		case parser.In:
+			tuple2, ok = right.Right.(parser.DTuple)
+			if !ok {
+				return parser.DBool(true), nil
+			}
+		}
+
+		// We keep the tuples for an in expression in sorted order. So now we just
+		// merge the two sorted lists.
+		left.Right = mergeSorted(tuple, tuple2)
+		return left, nil
+	}
+
+	return left, right
+}
+
 func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 	// NormalizeExpr will have left comparisons in the form "<var> <op>
 	// <datum>" unless they could not be simplified further in which case
 	// simplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
 	if isVar(n.Left) && isDatum(n.Right) {
 		switch n.Operator {
-		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE,
-			parser.In, parser.NotIn:
+		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
+			return n
+		case parser.In, parser.NotIn:
+			tuple, ok := n.Right.(parser.DTuple)
+			if !ok {
+				break
+			}
+			sort.Sort(tuple)
+			tuple = uniqTuple(tuple)
+			n.Right = tuple
 			return n
 		case parser.Like:
 			// a LIKE 'foo%' -> a >= "foo" AND a < "fop"
@@ -914,6 +975,42 @@ func makePrefixRange(prefix parser.DString, datum parser.Expr, complete bool) pa
 			Right:    parser.DString(proto.Key(prefix).PrefixEnd()),
 		},
 	}
+}
+
+func uniqTuple(tuple parser.DTuple) parser.DTuple {
+	n := 1
+	for i := 1; i < len(tuple); i++ {
+		if tuple[n-1].Compare(tuple[i]) < 0 {
+			tuple[n] = tuple[i]
+			n++
+		}
+	}
+	return tuple[:n]
+}
+
+func mergeSorted(a, b parser.DTuple) parser.DTuple {
+	r := make(parser.DTuple, 0, len(a)+len(b))
+	for len(a) > 0 || len(b) > 0 {
+		if len(a) == 0 {
+			return append(r, b...)
+		}
+		if len(b) == 0 {
+			return append(r, a...)
+		}
+		switch a[0].Compare(b[0]) {
+		case -1:
+			r = append(r, a[0])
+			a = a[1:]
+		case 0:
+			r = append(r, a[0])
+			a = a[1:]
+			b = b[1:]
+		case 1:
+			r = append(r, b[0])
+			b = b[1:]
+		}
+	}
+	return r
 }
 
 func isVar(e parser.Expr) bool {

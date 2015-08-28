@@ -25,11 +25,11 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 2
 # TODO(vivek): The following two tests should use "point" lookups
 # to be fixed by https://github.com/cockroachdb/cockroach/issues/2140
 query ITTB
-EXPLAIN (DEBUG) SELECT * FROM t WHERE a IN (2)
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a IN (1, 3)
 ----
-0 /t/dc/'bar'/22/2/'two'    NULL true
-1 /t/dc/'blah'/33/3/'three' NULL false
-2 /t/dc/'foo'/11/1/'one'    NULL false
+0 /t/dc/'bar'/22/2/'two'    NULL false
+1 /t/dc/'blah'/33/3/'three' NULL true
+2 /t/dc/'foo'/11/1/'one'    NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 OR a = 3
