@@ -22,20 +22,29 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 2
 0 /t/primary/2/'two'/c 22    NULL
 0 /t/primary/2/'two'/d 'bar' true
 
-# TODO(vivek): The following two tests should use "point" lookups
-# to be fixed by https://github.com/cockroachdb/cockroach/issues/2140
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a IN (1, 3)
 ----
-0 /t/dc/'bar'/22/2/'two'    NULL false
-1 /t/dc/'blah'/33/3/'three' NULL true
-2 /t/dc/'foo'/11/1/'one'    NULL true
+0 /t/primary/1/'one'     NULL   NULL
+0 /t/primary/1/'one'/c   11     NULL
+0 /t/primary/1/'one'/d   'foo'  true
+1 /t/primary/3/'three'   NULL   NULL
+1 /t/primary/3/'three'/c 33     NULL
+1 /t/primary/3/'three'/d 'blah' true
 
 query ITTB
-EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 OR a = 3
+EXPLAIN (DEBUG) SELECT * FROM t WHERE d = 'foo' OR d = 'bar'
 ----
-0 /t/dc/'bar'/22/2/'two'    NULL false
-1 /t/dc/'blah'/33/3/'three' NULL true
+0 /t/dc/'bar'/22/2/'two' NULL true
+1 /t/dc/'foo'/11/1/'one' NULL true
+
+# TODO(pmattis): This will only read two rows when we add support for
+# multi-column IN expressions.
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE (d, c) IN (('foo', 11), ('bar', 22))
+----
+0 /t/dc/'bar'/22/2/'two'    NULL true
+1 /t/dc/'blah'/33/3/'three' NULL false
 2 /t/dc/'foo'/11/1/'one'    NULL true
 
 query ITTB
@@ -90,6 +99,23 @@ query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND b > 'b'
 ----
 0 /t/primary/1/'c' NULL true
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 0 AND b > 'b'
+----
+0 /t/primary/1/'a' NULL false
+1 /t/primary/1/'b' NULL false
+2 /t/primary/1/'c' NULL true
+
+# TODO(pmattis): This should scan 0 keys, but the way we scan greater
+# than a key is broken. We should really transfer "a > 0" into "a >=
+# 1". This is possible for integer keys.
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 1 AND b > 'b'
+----
+0 /t/primary/1/'a' NULL false
+1 /t/primary/1/'b' NULL false
+2 /t/primary/1/'c' NULL false
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b
@@ -158,9 +184,8 @@ EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a >= 3 OR a > 3
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a = 3 OR a = 5
 ----
-0 /t/ab/1/2 NULL false
-1 /t/ab/3/4 NULL true
-2 /t/ab/5/6 NULL true
+0 /t/ab/3/4 NULL true
+1 /t/ab/5/6 NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 3 OR a > 3

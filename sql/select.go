@@ -18,6 +18,8 @@
 package sql
 
 import (
+	"bytes"
+	"fmt"
 	"math"
 	"sort"
 
@@ -205,8 +207,8 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 
 	if log.V(2) {
 		for i, c := range candidates {
-			log.Infof("%d: selectIndex(%s): %v %s %s: %p",
-				i, c.index.Name, c.cost, c.makeStartKey(), c.makeEndKey(), c)
+			log.Infof("%d: selectIndex(%s): cost=%v constraints=%s",
+				i, c.index.Name, c.cost, c.constraints)
 		}
 	}
 
@@ -215,28 +217,63 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 	c := candidates[0]
 	s.index = c.index
 	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
-	s.startKey = c.makeStartKey()
-	s.endKey = c.makeEndKey()
+	s.spans = makeSpans(c.constraints, c.desc.ID, c.index.ID)
 	s.reverse = c.reverse
 	s.initOrdering()
+
+	if log.V(3) {
+		for i, span := range s.spans {
+			log.Infof("%s/%d: start=%s end=%s", c.index.Name, i, span.start, span.end)
+		}
+	}
 	return s, nil
 }
 
+type indexConstraint struct {
+	start *parser.ComparisonExpr
+	end   *parser.ComparisonExpr
+}
+
+type indexConstraints []indexConstraint
+
+func (c indexConstraints) String() string {
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("[")
+	for i := range c {
+		if i > 0 {
+			_, _ = buf.WriteString(", ")
+		}
+		_, _ = buf.WriteString("{")
+		if c[i].start != nil {
+			fmt.Fprintf(&buf, "%s, ", c[i].start)
+		} else {
+			_, _ = buf.WriteString("_, ")
+		}
+		if c[i].end != nil && c[i].end != c[i].start {
+			fmt.Fprintf(&buf, "%s", c[i].end)
+		} else {
+			_, _ = buf.WriteString("_")
+		}
+		_, _ = buf.WriteString("}")
+	}
+	_, _ = buf.WriteString("]")
+	return buf.String()
+}
+
 type indexInfo struct {
-	desc     *TableDescriptor
-	index    *IndexDescriptor
-	start    []*parser.ComparisonExpr
-	end      []*parser.ComparisonExpr
-	cost     float64
-	covering bool // indicates whether the index covers the required qvalues
-	reverse  bool
+	desc        *TableDescriptor
+	index       *IndexDescriptor
+	constraints indexConstraints
+	cost        float64
+	covering    bool // indicates whether the index covers the required qvalues
+	reverse     bool
 }
 
 func (v *indexInfo) init(s *scanNode) {
 	v.covering = v.isCoveringIndex(s.qvals)
 	if !v.covering {
 		// TODO(pmattis): Support non-coverying indexes.
-		v.cost = math.MaxFloat64
+		v.cost = math.Inf(+1)
 		return
 	}
 
@@ -257,19 +294,17 @@ func (v *indexInfo) analyzeRanges(exprs []parser.Exprs) {
 		return
 	}
 
-	v.makeStartInfo(exprs)
-	v.makeEndInfo(exprs)
+	v.makeConstraints(exprs)
 
 	// Count the number of elements used to limit the start and end keys. We then
 	// boost the cost by what fraction of the index keys are being used. The
 	// higher the fraction, the lower the cost.
-	if len(v.start) == 0 && len(v.end) == 0 {
+	if len(v.constraints) == 0 {
 		// The index isn't being restricted at all, bump the cost significantly to
 		// make any index which does restrict the keys more desirable.
 		v.cost *= 1000
 	} else {
-		v.cost *= float64(len(v.index.ColumnIDs)+len(v.index.ColumnIDs)) /
-			float64(len(v.start)+len(v.end))
+		v.cost *= float64(len(v.index.ColumnIDs)) / float64(len(v.constraints))
 	}
 }
 
@@ -318,126 +353,93 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 	}
 }
 
-// makeStartInfo populates the indexInfo.start slice for the index using the
-// supplied expression. The start info contains the start values for a scan of
-// the index. As such, the construction looks for =, >= and > comparisons of
-// the index columns to literal values.
-func (v *indexInfo) makeStartInfo(exprs []parser.Exprs) {
+// makeConstraints populates the indexInfo.constraints field based on the
+// analyzed expressions. The constraints are a start and end expressions for a
+// prefix of the columns that make up the index. For example, consider an index
+// on the columns (a, b, c). For the expressions "a > 1 AND b > 2" we would
+// have the constraints:
+//
+//   {a: {start: > 1}
+//
+// Why is there no constraint on "b"? Because the start constraint was > and
+// such a constraint does not allow us to consider further columns in the
+// index. What about the expression "a >= 1 AND b > 2":
+//
+//   {a: {start: >= 1}, b: {start: > 2}}
+//
+// Start constraints look for comparison expressions with the operators >, >=,
+// = or IN. End constraints look for comparison expressions with the operators
+// <, <=, = or IN.
+//
+// TODO(pmattis): This needs to be more thoroughly tested.
+func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 	if len(exprs) != 1 {
 		return
 	}
-	andExprs := exprs[0]
 
-outer:
+	andExprs := exprs[0]
+	startDone := false
+	endDone := false
+
 	for _, colID := range v.index.ColumnIDs {
+		constraint := indexConstraint{}
+
 		for _, e := range andExprs {
 			if c, ok := e.(*parser.ComparisonExpr); ok {
 				if q, ok := c.Left.(*qvalue); !ok || q.col.ID != colID {
+					// This expression refers to a column other than the one we're
+					// looking for.
 					continue
 				}
 				if _, ok := c.Right.(parser.Datum); !ok {
 					continue
 				}
-				switch op := c.Operator; op {
-				case parser.NE:
+				if c.Operator == parser.NE {
+					// Give-up when we encounter a != expression.
 					return
-				case parser.EQ, parser.GE, parser.GT:
-					v.start = append(v.start, c)
-					if op == parser.GT {
-						return
+				}
+
+				if !startDone && constraint.start == nil {
+					switch c.Operator {
+					case parser.GT:
+						startDone = true
+						fallthrough
+					case parser.EQ, parser.GE, parser.In:
+						constraint.start = c
 					}
-					continue outer
+				}
+
+				if !endDone && constraint.end == nil {
+					switch c.Operator {
+					case parser.LT:
+						endDone = true
+						fallthrough
+					case parser.EQ, parser.LE, parser.In:
+						constraint.end = c
+					}
+				}
+
+				if (startDone || constraint.start != nil) &&
+					(endDone || constraint.end != nil) {
+					break
 				}
 			}
 		}
-		return
-	}
-}
 
-// makeEndInfo populates the indexInfo.end slice for the index using the
-// supplied expression. The end info contains the end values for a scan of the
-// index. As such, the construction looks for =, <= and < comparisons of the
-// index columns to literal values.
-func (v *indexInfo) makeEndInfo(exprs []parser.Exprs) {
-	if len(exprs) != 1 {
-		return
-	}
-	andExprs := exprs[0]
+		if constraint.start != nil || constraint.end != nil {
+			v.constraints = append(v.constraints, constraint)
+		}
 
-outer:
-	for _, colID := range v.index.ColumnIDs {
-		for _, e := range andExprs {
-			if c, ok := e.(*parser.ComparisonExpr); ok {
-				if q, ok := c.Left.(*qvalue); !ok || q.col.ID != colID {
-					continue
-				}
-				if _, ok := c.Right.(parser.Datum); !ok {
-					continue
-				}
-				switch op := c.Operator; op {
-				case parser.NE:
-					return
-				case parser.EQ, parser.LE, parser.LT:
-					v.end = append(v.end, c)
-					if op == parser.LT {
-						return
-					}
-					continue outer
-				}
-			}
+		if constraint.start == nil {
+			startDone = true
 		}
-		return
-	}
-}
-
-func (v *indexInfo) makeStartKey() proto.Key {
-	key := proto.Key(MakeIndexKeyPrefix(v.desc.ID, v.index.ID))
-	for _, e := range v.start {
-		datum, ok := e.Right.(parser.Datum)
-		if !ok {
-			break
+		if constraint.end == nil {
+			endDone = true
 		}
-		var err error
-		key, err = encodeTableKey(key, datum)
-		if err != nil {
-			panic(err)
-		}
-		if e.Operator == parser.GT {
-			// "qval > constant": we can't use any of the additional elements for
-			// restricting the key further.
-			key = key.Next()
+		if startDone && endDone {
 			break
 		}
 	}
-	return key
-}
-
-func (v *indexInfo) makeEndKey() proto.Key {
-	key := proto.Key(MakeIndexKeyPrefix(v.desc.ID, v.index.ID))
-	isLT := false
-	for _, e := range v.end {
-		datum, ok := e.Right.(parser.Datum)
-		if !ok {
-			break
-		}
-		var err error
-		key, err = encodeTableKey(key, datum)
-		if err != nil {
-			panic(err)
-		}
-		isLT = e.Operator == parser.LT
-		if isLT {
-			// "qval < constant": we can't use any of the additional elements for
-			// restricting the key further.
-			break
-		}
-	}
-	if !isLT {
-		// If the last element was not "qval < constant" then we want the
-		// "prefix-end" for the end key.
-		key = key.PrefixEnd()
-	}
-	return key
 }
 
 // isCoveringIndex returns true if all of the columns referenced by the target
@@ -470,4 +472,102 @@ func (v indexInfoByCost) Less(i, j int) bool {
 
 func (v indexInfoByCost) Swap(i, j int) {
 	v[i], v[j] = v[j], v[i]
+}
+
+// makeSpans constructs the spans for an index given a set of constraints.
+//
+// TODO(pmattis): This needs to be more thoroughly tested.
+func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span {
+	prefix := proto.Key(MakeIndexKeyPrefix(tableID, indexID))
+	spans := []span{{
+		start: append(proto.Key(nil), prefix...),
+		end:   append(proto.Key(nil), prefix...),
+	}}
+	var lastStartOp parser.ComparisonOp
+	var lastEndOp parser.ComparisonOp
+	var buf [100]byte
+
+	for _, c := range constraints {
+		if c.start != nil && c.start.Operator == parser.In {
+			// Special handling of IN exprssions. Such expressions apply to both the
+			// start and end key, but also cause an explosion in the number of spans
+			// searched within an index.
+			//
+			// TODO(pmattis): Handle IN expressions of the form:
+			//
+			//   (a, b, c) IN ((1, 2, 3), (4, 5, 6))
+			tuple, ok := c.start.Right.(parser.DTuple)
+			if !ok {
+				break
+			}
+
+			// For each of the existing spans and for each value in the tuple, create
+			// a new span.
+			existingSpans := spans
+			spans = make([]span, 0, len(existingSpans)*len(tuple))
+			for _, datum := range tuple {
+				key, err := encodeTableKey(buf[:0], datum)
+				if err != nil {
+					panic(err)
+				}
+				for _, s := range existingSpans {
+					spans = append(spans, span{
+						start: append(append(proto.Key(nil), s.start...), key...),
+						end:   append(append(proto.Key(nil), s.end...), key...),
+					})
+				}
+			}
+
+			lastStartOp = c.start.Operator
+			lastEndOp = c.start.Operator
+			// TODO(pmattis): Technically, we could continue here instead of
+			// breaking. Need to test and verify that continuing works correctly.
+			break
+		}
+
+		if c.start != nil {
+			// We have a start constraint.
+			if datum, ok := c.start.Right.(parser.Datum); ok {
+				key, err := encodeTableKey(buf[:0], datum)
+				if err != nil {
+					panic(err)
+				}
+				// Append the constraint to all of the existing spans.
+				for i := range spans {
+					spans[i].start = append(spans[i].start, key...)
+				}
+				lastStartOp = c.start.Operator
+			}
+		}
+
+		if c.end != nil {
+			// We have an end constraint.
+			if datum, ok := c.end.Right.(parser.Datum); ok {
+				key, err := encodeTableKey(buf[:0], datum)
+				if err != nil {
+					panic(err)
+				}
+				// Append the constraint to all of the existing spans.
+				for i := range spans {
+					spans[i].end = append(spans[i].end, key...)
+				}
+				lastEndOp = c.end.Operator
+			}
+		}
+	}
+
+	if lastStartOp == parser.GT {
+		// "qval > constant": we can skip to the next key.
+		for i := range spans {
+			spans[i].start = spans[i].start.Next()
+		}
+	}
+	if lastEndOp != parser.LT {
+		// "qval <= constant" or "qval = constant": we want the prefix end.
+		for i := range spans {
+			spans[i].end = spans[i].end.PrefixEnd()
+		}
+	}
+
+	return spans
 }
