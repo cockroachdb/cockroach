@@ -172,6 +172,21 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 			log.Infof("analyzeExpr: %s -> %s", s.filter, exprs)
 		}
 
+		// TODO(pmattis): If "len(exprs) > 1" then we have multiple disjunctive
+		// expressions. For example, "a=1 OR a=3" will get translated into "[[a=1],
+		// [a=3]]". We need to perform index selection independently for each of
+		// the disjunctive expressions and then take the resulting index info and
+		// determine if we're performing distinct scans in the indexes or if the
+		// scans overlap. If the scans overlap we'll need to union the output
+		// keys. If the scans are distinct (such as in the "a=1 OR a=3" case) then
+		// we can sort the scans by start key.
+		//
+		// There are complexities: if there are a large number of disjunctive
+		// expressions we should limit how many indexes we use. We probably should
+		// optimize the common case of "a IN (1, 3)" so that we only perform index
+		// selection once even though we generate multiple scan ranges for the
+		// index. Might want to simplify "a=1 OR a=2 OR a=3" to "a IN (1, 2, 3)".
+
 		for _, c := range candidates {
 			c.analyzeRanges(exprs)
 		}
