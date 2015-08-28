@@ -25,10 +25,8 @@ import "cockroach/util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 
 option (gogoproto.sizer_all) = true;
-// This option generates code that fails at run time.
-// option (gogoproto.marshaler_all) = true;
-// This option generates code that doesn't compile.
-// option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_unrecognized_all) = false;
 
 // Request is the request struct passed with the Gossip RPC.

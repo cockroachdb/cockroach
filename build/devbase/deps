@@ -12,6 +12,7 @@ github.com/cpuguy83/go-md2man/md2man
 github.com/docker/docker/pkg/units
 github.com/elazarl/go-bindata-assetfs
 github.com/gogo/protobuf/proto
+github.com/gogo/protobuf/sortkeys
 github.com/google/btree
 github.com/inconshreveable/mousetrap
 github.com/julienschmidt/httprouter
