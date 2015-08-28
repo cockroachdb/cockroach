@@ -112,13 +112,17 @@ func simplifyNotExpr(n *parser.NotExpr) parser.Expr {
 		case parser.NE:
 			op = parser.EQ
 		case parser.GT:
-			op = parser.LT
-		case parser.GE:
 			op = parser.LE
+		case parser.GE:
+			op = parser.LT
 		case parser.LT:
-			op = parser.GT
-		case parser.LE:
 			op = parser.GE
+		case parser.LE:
+			op = parser.GT
+		case parser.In:
+			op = parser.NotIn
+		case parser.NotIn:
+			op = parser.In
 		case parser.Like:
 			op = parser.NotLike
 		case parser.NotLike:
@@ -863,7 +867,8 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 	// simplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
 	if isVar(n.Left) && isDatum(n.Right) {
 		switch n.Operator {
-		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
+		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE,
+			parser.In, parser.NotIn:
 			return n
 		case parser.Like:
 			// a LIKE 'foo%' -> a >= "foo" AND a < "fop"
