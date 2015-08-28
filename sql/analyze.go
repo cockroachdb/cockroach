@@ -143,7 +143,7 @@ func simplifyNotExpr(n *parser.NotExpr) parser.Expr {
 		})
 
 	case *parser.AndExpr:
-		// De Morgan's Law: (a AND b) -> (NOT a) OR (NOT b)
+		// De Morgan's Law: NOT (a AND b) -> (NOT a) OR (NOT b)
 		return simplifyExpr(&parser.OrExpr{
 			Left:  &parser.NotExpr{Expr: t.Left},
 			Right: &parser.NotExpr{Expr: t.Right},

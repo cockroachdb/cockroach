@@ -186,6 +186,9 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 		// optimize the common case of "a IN (1, 3)" so that we only perform index
 		// selection once even though we generate multiple scan ranges for the
 		// index.
+		//
+		// Each disjunctive expression might generate multiple ranges of an index
+		// to scan. An examples of this is "a IN (1, 2, 3)".
 
 		for _, c := range candidates {
 			c.analyzeRanges(exprs)
