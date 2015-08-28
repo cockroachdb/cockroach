@@ -222,18 +222,11 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 	return s, nil
 }
 
-// qvalueInfo contains one end of a value range. Op is required to be either
-// EQ, GE, GT, LE or LT.
-type qvalueInfo struct {
-	datum parser.Datum
-	op    parser.ComparisonOp
-}
-
 type indexInfo struct {
 	desc     *TableDescriptor
 	index    *IndexDescriptor
-	start    []qvalueInfo
-	end      []qvalueInfo
+	start    []*parser.ComparisonExpr
+	end      []*parser.ComparisonExpr
 	cost     float64
 	covering bool // indicates whether the index covers the required qvalues
 	reverse  bool
@@ -342,15 +335,14 @@ outer:
 				if q, ok := c.Left.(*qvalue); !ok || q.col.ID != colID {
 					continue
 				}
-				d, ok := c.Right.(parser.Datum)
-				if !ok {
-					return
+				if _, ok := c.Right.(parser.Datum); !ok {
+					continue
 				}
 				switch op := c.Operator; op {
 				case parser.NE:
 					return
 				case parser.EQ, parser.GE, parser.GT:
-					v.start = append(v.start, qvalueInfo{datum: d, op: op})
+					v.start = append(v.start, c)
 					if op == parser.GT {
 						return
 					}
@@ -379,15 +371,14 @@ outer:
 				if q, ok := c.Left.(*qvalue); !ok || q.col.ID != colID {
 					continue
 				}
-				d, ok := c.Right.(parser.Datum)
-				if !ok {
-					return
+				if _, ok := c.Right.(parser.Datum); !ok {
+					continue
 				}
 				switch op := c.Operator; op {
 				case parser.NE:
 					return
 				case parser.EQ, parser.LE, parser.LT:
-					v.end = append(v.end, qvalueInfo{datum: d, op: op})
+					v.end = append(v.end, c)
 					if op == parser.LT {
 						return
 					}
@@ -402,15 +393,16 @@ outer:
 func (v *indexInfo) makeStartKey() proto.Key {
 	key := proto.Key(MakeIndexKeyPrefix(v.desc.ID, v.index.ID))
 	for _, e := range v.start {
-		if e.datum == nil {
+		datum, ok := e.Right.(parser.Datum)
+		if !ok {
 			break
 		}
 		var err error
-		key, err = encodeTableKey(key, e.datum)
+		key, err = encodeTableKey(key, datum)
 		if err != nil {
 			panic(err)
 		}
-		if e.op == parser.GT {
+		if e.Operator == parser.GT {
 			// "qval > constant": we can't use any of the additional elements for
 			// restricting the key further.
 			key = key.Next()
@@ -424,15 +416,16 @@ func (v *indexInfo) makeEndKey() proto.Key {
 	key := proto.Key(MakeIndexKeyPrefix(v.desc.ID, v.index.ID))
 	isLT := false
 	for _, e := range v.end {
-		if e.datum == nil {
+		datum, ok := e.Right.(parser.Datum)
+		if !ok {
 			break
 		}
 		var err error
-		key, err = encodeTableKey(key, e.datum)
+		key, err = encodeTableKey(key, datum)
 		if err != nil {
 			panic(err)
 		}
-		isLT = e.op == parser.LT
+		isLT = e.Operator == parser.LT
 		if isLT {
 			// "qval < constant": we can't use any of the additional elements for
 			// restricting the key further.
