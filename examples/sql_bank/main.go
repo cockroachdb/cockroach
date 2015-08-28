@@ -54,7 +54,6 @@ func moveMoney(db *sql.DB) {
 			log.Fatal(err)
 		}
 		startTime := time.Now()
-		// Query is very slow and will be fixed by https://github.com/cockroachdb/cockroach/issues/2140
 		query := fmt.Sprintf("SELECT id, balance FROM accounts WHERE id IN (%d, %d)", from, to)
 		rows, err := tx.Query(query)
 		elapsed := time.Now().Sub(startTime)

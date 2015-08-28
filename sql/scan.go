@@ -59,14 +59,18 @@ func (q *qvalue) String() string {
 type qvalMap map[ColumnID]*qvalue
 type colKindMap map[ColumnID]ColumnType_Kind
 
+type span struct {
+	start proto.Key
+	end   proto.Key
+}
+
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
 	txn              *client.Txn
 	desc             *TableDescriptor
 	index            *IndexDescriptor
-	startKey         proto.Key
-	endKey           proto.Key
+	spans            []span
 	visibleCols      []ColumnDescriptor
 	isSecondaryIndex bool
 	reverse          bool
@@ -231,20 +235,37 @@ func (n *scanNode) initScan() bool {
 		return true
 	}
 
-	// Retrieve all of the keys that start with our index key prefix.
-	if len(n.startKey) == 0 {
-		n.startKey = proto.Key(MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
+	if len(n.spans) == 0 {
+		// If no spans were specified retrieve all of the keys that start with our
+		// index key prefix.
+		start := proto.Key(MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
+		n.spans = append(n.spans, span{
+			start: start,
+			end:   start.PrefixEnd(),
+		})
 	}
-	if len(n.endKey) == 0 {
-		n.endKey = n.startKey.PrefixEnd()
-	}
+
+	// Retrieve all the spans.
+	b := &client.Batch{}
 	if n.reverse {
-		n.kvs, n.err = n.txn.ReverseScan(n.startKey, n.endKey, 0)
+		for i := len(n.spans) - 1; i >= 0; i-- {
+			b.ReverseScan(n.spans[i].start, n.spans[i].end, 0)
+		}
 	} else {
-		n.kvs, n.err = n.txn.Scan(n.startKey, n.endKey, 0)
+		for i := 0; i < len(n.spans); i++ {
+			b.Scan(n.spans[i].start, n.spans[i].end, 0)
+		}
 	}
-	if n.err != nil {
+	if n.err = n.txn.Run(b); n.err != nil {
 		return false
+	}
+
+	for _, result := range b.Results {
+		if n.kvs == nil {
+			n.kvs = result.Rows
+		} else {
+			n.kvs = append(n.kvs, result.Rows...)
+		}
 	}
 
 	// Prepare our index key vals slice.
