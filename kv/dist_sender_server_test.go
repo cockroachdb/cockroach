@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
@@ -98,6 +99,7 @@ func setupMultipleRanges(t *testing.T, splitAt string) (*server.TestServer, *cli
 	return s, db
 }
 
+// TODO(tschottdorf): provisional code.
 func TestSimpleSingleRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
@@ -114,6 +116,7 @@ func TestSimpleSingleRange(t *testing.T) {
 	}
 }
 
+// TODO(tschottdorf): provisional code.
 func TestSimpleMultiRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setupMultipleRanges(t, "b")
@@ -136,6 +139,7 @@ func TestSimpleMultiRange(t *testing.T) {
 	}
 }
 
+// TODO(tschottdorf): provisional code.
 func TestSimpleTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setupMultipleRanges(t, "b")
@@ -243,7 +247,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	sr := call.Reply.(*proto.ScanResponse)
 	sa := call.Args.(*proto.ScanRequest)
 	sa.ReadConsistency = proto.INCONSISTENT
-	ds.Send(context.Background(), call)
+	batch.SendCallConverted(ds, context.Background(), call)
 	if err := sr.GoError(); err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +263,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	rsr := call.Reply.(*proto.ReverseScanResponse)
 	rsa := call.Args.(*proto.ReverseScanRequest)
 	rsa.ReadConsistency = proto.INCONSISTENT
-	ds.Send(context.Background(), call)
+	batch.SendCallConverted(ds, context.Background(), call)
 	if err := rsr.GoError(); err != nil {
 		t.Fatal(err)
 	}
@@ -319,11 +323,11 @@ func TestSingleRangeReverseScan(t *testing.T) {
 		t.Errorf("expected 10 rows; got %d", l)
 	}
 	// Case 4: Test keys.SystemMax
-	//if rows, err := db.ReverseScan(keys.SystemMax, "b", 0); err != nil {
-	//	t.Fatalf("unexpected error on ReverseScan: %s", err)
-	//} else if l := len(rows); l != 1 {
-	//	t.Errorf("expected 1 row; got %d", l)
-	//}
+	if rows, err := db.ReverseScan(keys.SystemMax, "b", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 1 {
+		t.Errorf("expected 1 row; got %d", l)
+	}
 }
 
 // TestMultiRangeReverseScan verifies that ReverseScan gets the right results

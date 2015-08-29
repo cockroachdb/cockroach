@@ -18,7 +18,6 @@
 package kv
 
 import (
-	"bytes"
 	"fmt"
 	"sync"
 
@@ -31,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // A LocalSender provides methods to access a collection of local stores.
@@ -121,6 +119,7 @@ func (ls *LocalSender) GetStoreIDs() []proto.StoreID {
 	return storeIDs
 }
 
+// SendBatch implements batch.Sender.
 func (ls *LocalSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
 	trace := tracer.FromCtx(ctx)
 	var store *storage.Store
@@ -182,29 +181,8 @@ func (ls *LocalSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*
 // the command is being executed locally, and the replica is
 // determined via lookup through each store's LookupRange method.
 func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
-	call, unwrap := batch.MaybeWrapCall(call)
-	defer unwrap(call)
-
-	{
-		br := call.Args.(*proto.BatchRequest)
-		if len(br.Requests) == 0 {
-			panic(batch.Short(br))
-		}
-		br.Key, br.EndKey = batch.KeyRange(br)
-		if bytes.Equal(br.Key, proto.KeyMax) {
-			panic(batch.Short(br))
-		}
-	}
-
-	reply, err := ls.SendBatch(ctx, call.Args.(*proto.BatchRequest))
-
-	if reply != nil {
-		call.Reply.Reset() // required for BatchRequest (concats response otherwise)
-		gogoproto.Merge(call.Reply, reply)
-	}
-	if err != nil {
-		call.Reply.Header().SetGoError(err)
-	}
+	batch.SendCallConverted(ls, ctx, call)
+	return
 }
 
 // lookupReplica looks up replica by key [range]. Lookups are done
@@ -240,6 +218,8 @@ func (ls *LocalSender) lookupReplica(start, end proto.Key) (rangeID proto.RangeI
 	return rangeID, replica, err
 }
 
+// firstRange implements the rangeDescriptorDB interface. It returns the
+// range descriptor which contains KeyMin.
 func (ls *LocalSender) firstRange() (*proto.RangeDescriptor, error) {
 	_, replica, err := ls.lookupReplica(proto.KeyMin, nil)
 	if err != nil {
@@ -254,10 +234,11 @@ func (ls *LocalSender) firstRange() (*proto.RangeDescriptor, error) {
 	if rpl == nil {
 		panic("firstRange found no first range")
 	}
-	log.Warningf("FIRSTDESC %s", rpl.Desc())
 	return rpl.Desc(), nil
 }
 
+// rangeLookup implements the rangeDescriptorDB interface. It looks up
+// the descriptors for the given (meta) key.
 func (ls *LocalSender) rangeLookup(key proto.Key, options lookupOptions, _ *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
 	ba, unwrap := batch.MaybeWrap(&proto.RangeLookupRequest{
 		RequestHeader: proto.RequestHeader{

@@ -76,7 +76,6 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)
 
 	ltc.localSender = NewLocalSender()
-	//ltc.lSender = newRetryableLocalSender(ltc.localSender)
 	var rpcSend rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message,
 		_ *rpc.Context) ([]gogoproto.Message, error) {
@@ -98,7 +97,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		rangeDescriptorDB:        ltc.localSender, // for descriptor lookup
 	}, ltc.Gossip)
 
-	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false, nil, ltc.Stopper)
+	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, nil /* tracer */, ltc.Stopper)
 
 	var err error
 	if ltc.DB, err = client.Open("//", client.SenderOpt(ltc.Sender)); err != nil {

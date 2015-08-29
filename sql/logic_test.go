@@ -202,11 +202,9 @@ func (t *logicTest) setUser(user string) {
 	t.db = db
 }
 
-// TODO(tschottdorf): some logic tests currently take a long time to run, that's
-// because the Store doesn't yet execute batches atomically; some Txn batches fail,
-// but the coordinator never marks them as having written (because an error comes
-// back), so the client won't send EndTransaction. This leads to pushes which only
-// succeed after the 10s timeout. Should fix itself when Batches are there fully.
+// TODO(tschottdorf): some logic tests currently take a long time to run.
+// Probably a case of heartbeats timing out or many restarts in some tests.
+// Need to investigate when all moving parts are in place.
 func (t *logicTest) run(path string) {
 	defer t.close()
 

@@ -67,9 +67,11 @@ func (nef NodeEventFeed) StartNode(desc proto.NodeDescriptor, startedAt int64) {
 
 // CallComplete is called by a node whenever it completes a request. This will
 // publish an appropriate event to the feed based on the results of the call.
+// TODO(tschottdorf): move to batch, account for multiple methods per batch.
 func (nef NodeEventFeed) CallComplete(args proto.Request, reply proto.Response) {
 	method := args.Method()
 	if bArgs, ok := args.(*proto.BatchRequest); ok {
+		// TODO(tschottdorf): provisional, see above.
 		method = bArgs.Requests[0].GetValue().(proto.Request).Method()
 	}
 	if err := reply.Header().Error; err != nil &&

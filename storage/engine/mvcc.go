@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyrighe 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -883,6 +883,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key proto.Key, timestamp p
 		// had to be retried. This is temporary logic until we execute
 		// Batches atomically: If this is written by our transaction,
 		// and it matches what we wanted to write: fine, let's go ahead.
+		// Provisional code; removed when batches are atomic on the Store.
 	} else if expValue == nil && existVal != nil {
 		return &proto.ConditionFailedError{
 			ActualValue: existVal,

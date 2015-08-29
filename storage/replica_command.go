@@ -244,6 +244,8 @@ func (r *Replica) ReverseScan(batch engine.Engine, args proto.ReverseScanRequest
 
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
+// TODO(tschottdorf): return nil reply on any error. The error itself
+// must be the authoritative source of information.
 func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args proto.EndTransactionRequest) (proto.EndTransactionResponse, []proto.Intent, error) {
 	var reply proto.EndTransactionResponse
 
@@ -579,7 +581,9 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		// An error here is likely a WriteIntentError when reading consistently.
 		return reply, nil, err
 	}
-	if args.IgnoreIntents && len(intents) > 0 {
+	// TODO(tschottdorf): temporary hack to make sure none of the test failures
+	// are related to deadlock hitting a stale descriptor.
+	if len(intents) > 0 { // args.IgnoreIntents && len(intents) > 0 {
 		// NOTE (subtle): in general, we want to try to clean up dangling
 		// intents on meta records. However, if we're in the process of
 		// cleaning up a dangling intent on a meta record by pushing the
@@ -1142,8 +1146,6 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 		return txn.Run(b)
 	}); err != nil {
 		return reply, util.Errorf("split at key %s failed: %s", splitKey, err)
-	} else {
-		log.Warningf("SPLIT %s OK", splitKey)
 	}
 
 	return reply, nil

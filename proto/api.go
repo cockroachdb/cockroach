@@ -55,6 +55,10 @@ const (
 	isReverse              // reverse commands traverse ranges in descending direction
 )
 
+/* TODO(tschottdorf): All of those args.(*BatchRequest) branches in
+* the flag methods are going away soon, when BatchRequest stops being a
+* proto.Request. */
+
 // IsAdmin returns true if the request is an admin request.
 func IsAdmin(args Request) bool {
 	if br, ok := args.(*BatchRequest); ok {
@@ -112,6 +116,12 @@ func IsRange(args Request) bool {
 	}
 	return (args.flags() & isRange) != 0
 }
+
+/* TODO(tschottdorf): all of these are easier to implement when
+* taking the union over the flags of each request.
+* TODO(tschottdorf): won't need all of these Is* methods below on batch,
+* at least not here. Just use those that Spencer has in his WIP.
+ */
 
 // IsAdmin returns true iff the BatchRequest contains an admin request.
 func (br *BatchRequest) IsAdmin() bool {
@@ -185,46 +195,34 @@ func (br *BatchRequest) IsRange() bool {
 // GetArg returns the first request of the given type, if possible.
 func (br *BatchRequest) GetArg(method Method) (Request, bool) {
 	for _, arg := range br.Requests {
-		if r, ok := GetArg(arg.GetValue().(Request), method); ok {
-			return r, ok
+		if req := arg.GetValue().(Request); req.Method() == method {
+			return req, true
 		}
 	}
 	return nil, false
 }
 
+// First returns the first response of the given type, if possible.
+func (br *BatchResponse) First() Response {
+	if len(br.Responses) > 0 {
+		return br.Responses[0].GetValue().(Response)
+	}
+	return nil
+}
+
 // GetIntents returns a slice of key pairs corresponding to transactional writes
 // contained in the batch.
-// TODO(tschottdorf) return Intent, not [2]Key.
 func (br *BatchRequest) GetIntents() []Intent {
 	var intents []Intent
 	for _, arg := range br.Requests {
-		intents = append(intents, GetIntents(arg.GetValue().(Request))...)
+		req := arg.GetValue().(Request)
+		if !IsTransactionWrite(req) {
+			continue
+		}
+		h := req.Header()
+		intents = append(intents, Intent{Key: h.Key, EndKey: h.EndKey})
 	}
 	return intents
-}
-
-// GetArg returns true iff the request is or contains a request of the given
-// type, along with the first match.
-func GetArg(args Request, method Method) (Request, bool) {
-	if br, ok := args.(*BatchRequest); ok {
-		return br.GetArg(method)
-	}
-	if args.Method() == method {
-		return args, true
-	}
-	return nil, false
-}
-
-// GetIntents returns a slice of key pairs corresponding to transactional writes
-// contained in the request.
-func GetIntents(args Request) []Intent {
-	if br, ok := args.(*BatchRequest); ok {
-		return br.GetIntents()
-	}
-	if !IsTransactionWrite(args) {
-		return nil
-	}
-	return []Intent{{Key: args.Header().Key, EndKey: args.Header().EndKey}}
 }
 
 // Request is an interface for RPC requests.
@@ -367,8 +365,8 @@ func (br *BatchResponse) ResetAll() {
 		return
 	}
 	for _, rsp := range br.Responses {
-		// TODO(tschottdorf) `rsp.Reset()` doesn't actually clear it out, I'm
-		// not sure why though.
+		// TODO(tschottdorf) `rsp.Reset()` isn't enough because rsp
+		// isn't a pointer.
 		rsp.GetValue().(Response).Reset()
 	}
 }
@@ -376,6 +374,7 @@ func (br *BatchResponse) ResetAll() {
 // Combine implements the Combinable interface. It combines each slot of the
 // given request into the corresponding slot of the base response. The number
 // of slots must be equal and the respective slots must be combinable.
+// TODO(tschottdorf): write tests.
 func (br *BatchResponse) Combine(c Response) error {
 	otherBatch, ok := c.(*BatchResponse)
 	if !ok {
@@ -395,12 +394,11 @@ func (br *BatchResponse) Combine(c Response) error {
 			}
 			continue
 		}
-		// If our local slot is a NoopResponse, then whatever the other batch
-		// has is the result.
+		// If our slot is a NoopResponse, then whatever the other batch has is
+		// the result. Note that the result can still be a NoopResponse, to be
+		// filled in by a future Combine().
 		if _, ok := valLeft.(*NoopResponse); ok {
 			br.Responses[i] = otherBatch.Responses[i]
-		} else if _, ok := valRight.(*NoopResponse); !ok {
-			return fmt.Errorf("unable to combine batches with incompatible entries %T and %T", valLeft, valRight)
 		}
 	}
 	return nil
@@ -634,6 +632,15 @@ func (*LeaderLeaseRequest) Method() Method { return LeaderLease }
 // Method implements the Request interface.
 func (*BatchRequest) Method() Method { return Batch }
 
+// Methods returns a slice of the contained methods.
+func (br *BatchRequest) Methods() []Method {
+	var res []Method
+	for _, arg := range br.Requests {
+		res = append(res, arg.GetValue().(Request).Method())
+	}
+	return res
+}
+
 // CreateReply implements the Request interface.
 func (*GetRequest) CreateReply() Response { return &GetResponse{} }
 
@@ -700,21 +707,7 @@ func (*TruncateLogRequest) CreateReply() Response { return &TruncateLogResponse{
 func (*LeaderLeaseRequest) CreateReply() Response { return &LeaderLeaseResponse{} }
 
 // CreateReply implements the Request interface.
-func (*BatchRequest) CreateReply() Response {
-	bReply := &BatchResponse{}
-	return bReply
-	// TODO(tschottdorf): remove. It doesn't seem to make sense to pre-allocate
-	// responses because that behaves in a weird way with Merge() and, after all,
-	// we want to move away from the Call pattern.
-	// l := len(bArgs.Requests)
-	// bReply.Responses = make([]ResponseUnion, l, l)
-	// for i, arg := range bArgs.Requests {
-	// 	if !bReply.Responses[i].SetValue(arg.GetValue().(Request).CreateReply()) {
-	// 		panic("illegal value for batch reply")
-	// 	}
-	// }
-	// return bReply
-}
+func (*BatchRequest) CreateReply() Response { return &BatchResponse{} }
 
 func (*GetRequest) flags() int                { return isRead }
 func (*PutRequest) flags() int                { return isWrite | isTxnWrite }

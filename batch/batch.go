@@ -1,6 +1,9 @@
+// Package batch ...
+// TODO(tschottdorf): provisional home for all of the below.
 package batch
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -17,6 +20,7 @@ import (
 // inconsistencies are found.
 // It is checked that the individual call does not have a UserPriority
 // or Txn set that differs from the batch's.
+// TODO(tschottdorf): preliminary code.
 func UpdateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 	// Disallow transaction, user and priority on individual calls, unless
 	// equal.
@@ -25,23 +29,12 @@ func UpdateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 		return util.Errorf("conflicting user priority on call in batch")
 	}
 	aHeader.UserPriority = bHeader.UserPriority
-	// Only allow individual transactions on the requests of a batch if
-	// - the batch is non-transactional,
-	// - the individual transaction does not write intents, and
-	// - the individual transaction is initialized.
-	// The main usage of this is to allow mass-resolution of intents, which
-	// entails sending a non-txn batch of transactional InternalResolveIntent.
-	if aHeader.Txn != nil && !aHeader.Txn.Equal(bHeader.Txn) {
-		if len(aHeader.Txn.ID) == 0 || proto.IsTransactionWrite(args) || bHeader.Txn != nil {
-			return util.Errorf("conflicting transaction in transactional batch")
-		}
-	} else {
-		aHeader.Txn = bHeader.Txn
-	}
+	aHeader.Txn = bHeader.Txn // reqs always take Txn from batch
 	return nil
 }
 
 // MaybeWrap wraps the given argument in a batch, unless it is already one.
+// TODO(tschottdorf): preliminary code.
 func MaybeWrap(args proto.Request) (*proto.BatchRequest, func(proto.Response) proto.Response) {
 	if bArgs, ok := args.(*proto.BatchRequest); ok {
 		return bArgs, func(a proto.Response) proto.Response { return a }
@@ -83,6 +76,7 @@ func MaybeWrap(args proto.Request) (*proto.BatchRequest, func(proto.Response) pr
 
 // MaybeWrapCall returns a new call which wraps the original Args and Reply
 // in a batch, if necessary.
+// TODO(tschottdorf): preliminary code.
 func MaybeWrapCall(call proto.Call) (proto.Call, func(proto.Call) proto.Call) {
 	var unwrap func(proto.Response) proto.Response
 	call.Args, unwrap = MaybeWrap(call.Args)
@@ -101,6 +95,7 @@ func MaybeWrapCall(call proto.Call) (proto.Call, func(proto.Call) proto.Call) {
 
 // KeyRange returns a key range which contains all keys in the Batch.
 // In particular, this resolves local addressing.
+// TODO(tschottdorf): testing.
 func KeyRange(br *proto.BatchRequest) (proto.Key, proto.Key) {
 	from := proto.KeyMax
 	to := proto.KeyMin
@@ -128,6 +123,8 @@ func KeyRange(br *proto.BatchRequest) (proto.Key, proto.Key) {
 }
 
 // Short gives a brief summary of the contained requests and keys in the batch.
+// TODO(tschottdorf): awkward to not have this on BatchRequest, but can't pull
+// `keys` into `proto` (req'd by KeyAddress).
 func Short(br *proto.BatchRequest) string {
 	var str []string
 	for _, arg := range br.Requests {
@@ -141,6 +138,7 @@ func Short(br *proto.BatchRequest) string {
 
 // Sender is a new incarnation of client.Sender which only supports batches
 // and uses a request-response pattern.
+// TODO(tschottdorf): do away with client.Sender.
 type Sender interface {
 	// TODO(tschottdorf) rename to Send() when client.Sender is out of the way.
 	SendBatch(context.Context, *proto.BatchRequest) (*proto.BatchResponse, error)
@@ -149,7 +147,15 @@ type Sender interface {
 // SenderFn is a function that implements a Sender.
 type SenderFn func(context.Context, *proto.BatchRequest) (*proto.BatchResponse, error)
 
+// SendBatch implements batch.Sender.
+func (f SenderFn) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
+	return f(ctx, ba)
+}
+
 // A ChunkingSender sends batches, subdividing them appropriately.
+// TODO(tschottdorf): doesn't actually chunk much yet, only puts EndTransaction
+// into an extra batch. Easy to complete.
+// TODO(tschottdorf): only used by DistSender, but let's be modular.
 type ChunkingSender struct {
 	f SenderFn
 }
@@ -160,35 +166,37 @@ func NewChunkingSender(f SenderFn) Sender {
 	return &ChunkingSender{f: f}
 }
 
-// Send implements Sender.
-func (cs *ChunkingSender) SendBatch(ctx context.Context, batchArgs *proto.BatchRequest) (*proto.BatchResponse, error) {
+// SendBatch implements Sender.
+func (cs *ChunkingSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
 	var argChunks []*proto.BatchRequest
-	if len(batchArgs.Requests) < 1 {
+	if len(ba.Requests) < 1 {
 		panic("empty batchArgs")
 	}
 	// TODO(tschottdorf): only cuts an EndTransaction request off. Also need
 	// to untangle reverse/forward, txn/non-txn, ...
-	// We actually don't want to do this for single-range requests. Whether it
-	// is one or not is unknown right now (you can only find out after you've
-	// sent to the Range/looked up a descriptor that suggests that you're
-	// multi-range. In those cases, should return an error so that we split and
-	// retry once the chunk which contains EndTransaction (i.e. the last one).
-	if etArgs, ok := proto.GetArg(batchArgs, proto.EndTransaction); ok &&
-		len(batchArgs.Requests) > 1 {
-		firstChunk := *batchArgs // shallow copy so that we get to manipulate .Requests
+	// We actually don't want to chop EndTransaction off for single-range
+	// requests. Whether it is one or not is unknown right now (you can only
+	// find out after you've sent to the Range/looked up a descriptor that
+	// suggests that you're multi-range. In those cases, should return an error
+	// so that we split and retry once the chunk which contains EndTransaction
+	// (i.e. the last one).
+	if rArg, ok := ba.GetArg(proto.EndTransaction); ok &&
+		len(ba.Requests) > 1 {
+		et := rArg.(*proto.EndTransactionRequest)
+		firstChunk := *ba // shallow copy so that we get to manipulate .Requests
 		etChunk := &proto.BatchRequest{}
-		etChunk.Add(etArgs)
-		etChunk.RequestHeader = *gogoproto.Clone(&batchArgs.RequestHeader).(*proto.RequestHeader)
-		firstChunk.Requests = batchArgs.Requests[:len(batchArgs.Requests)-1]
+		etChunk.Add(et)
+		etChunk.RequestHeader = *gogoproto.Clone(&ba.RequestHeader).(*proto.RequestHeader)
+		firstChunk.Requests = ba.Requests[:len(ba.Requests)-1]
 		argChunks = append(argChunks, &firstChunk, etChunk)
 	} else {
-		argChunks = append(argChunks, batchArgs)
+		argChunks = append(argChunks, ba)
 	}
 	var rplChunks []*proto.BatchResponse
 	// TODO(tschottdorf): propagate reply header to next request.
 	for len(argChunks) > 0 {
-		batchArgs, argChunks = argChunks[0], argChunks[1:]
-		rpl, err := cs.f(ctx, batchArgs)
+		ba, argChunks = argChunks[0], argChunks[1:]
+		rpl, err := cs.f(ctx, ba)
 		if err != nil {
 			return nil, err
 		}
@@ -197,6 +205,7 @@ func (cs *ChunkingSender) SendBatch(ctx context.Context, batchArgs *proto.BatchR
 	return fuseReplyChunks(rplChunks)
 }
 
+// TODO(tschottdorf): this'll fuse into SendBatch.
 func fuseReplyChunks(rplChunks []*proto.BatchResponse) (*proto.BatchResponse, error) {
 	if len(rplChunks) == 0 {
 		panic("no responses given")
@@ -207,4 +216,36 @@ func fuseReplyChunks(rplChunks []*proto.BatchResponse) (*proto.BatchResponse, er
 	}
 	reply.ResponseHeader = rplChunks[len(rplChunks)-1].ResponseHeader
 	return reply, nil
+}
+
+// SendCallConverted is a wrapped to go from the (ctx,call) interface to the
+// one used by batch.Sender.
+// TODO(tschottdorf): provisional code.
+func SendCallConverted(sender Sender, ctx context.Context, call proto.Call) {
+	call, unwrap := MaybeWrapCall(call)
+	defer unwrap(call)
+
+	{
+		br := call.Args.(*proto.BatchRequest)
+		if len(br.Requests) == 0 {
+			panic(Short(br))
+		}
+		br.Key, br.EndKey = KeyRange(br)
+		if bytes.Equal(br.Key, proto.KeyMax) {
+			panic(Short(br))
+		}
+	}
+
+	reply, err := sender.SendBatch(ctx, call.Args.(*proto.BatchRequest))
+
+	if reply != nil {
+		call.Reply.Reset() // required for BatchRequest (concats response otherwise)
+		gogoproto.Merge(call.Reply, reply)
+	}
+	if call.Reply.Header().GoError() != nil {
+		panic(proto.ErrorUnexpectedlySet)
+	}
+	if err != nil {
+		call.Reply.Header().SetGoError(err)
+	}
 }

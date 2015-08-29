@@ -110,7 +110,6 @@ func TestLocalSenderGetStore(t *testing.T) {
 
 func TestLocalSenderLookupReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	//t.Skip(storage.TODOtschottdorf)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	ctx := storage.TestStoreContext

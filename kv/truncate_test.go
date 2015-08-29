@@ -5,9 +5,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+// TODO(tschottdorf): provisional test stub. Way more testing to be done.
 func TestTruncate(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	testCases := []struct {
 		keys     [][2]proto.Key
 		from, to proto.Key
@@ -15,7 +18,6 @@ func TestTruncate(t *testing.T) {
 		expNoop  []bool
 	}{
 		{
-			// TODO(tschottdorf): add more test cases.
 			keys: [][2]proto.Key{{keys.RangeDescriptorKey(proto.Key("e")), nil}},
 			from: proto.Key("b"), to: proto.Key("g\x00\x00"),
 			desc:    [2]proto.Key{proto.Key("b"), proto.Key("e")},

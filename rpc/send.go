@@ -93,6 +93,11 @@ type SendError struct {
 	canRetry bool
 }
 
+// NewSendError creates a SendError.
+func NewSendError(msg string, canRetry bool) *SendError {
+	return &SendError{errMsg: msg, canRetry: canRetry}
+}
+
 // Error implements the error interface.
 func (s SendError) Error() string {
 	return "failed to send RPC: " + s.errMsg

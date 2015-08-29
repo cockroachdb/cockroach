@@ -28,7 +28,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -70,6 +70,8 @@ func makeTS(walltime int64, logical int32) proto.Timestamp {
 }
 
 func sendCall(coord *TxnCoordSender, call proto.Call) error {
+	call, unwrap := batch.MaybeWrapCall(call)
+	defer unwrap(call)
 	coord.Send(context.TODO(), call)
 	return call.Reply.Header().GoError()
 }
@@ -198,7 +200,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer teardownHeartbeats(s.Sender)
 
 	reply := &proto.PutResponse{}
-	s.Sender.Send(context.Background(), proto.Call{
+	_ = sendCall(s.Sender, proto.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          proto.Key("key"),
@@ -514,25 +516,6 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	}
 }
 
-type testSender struct {
-	handler func(call proto.Call)
-}
-
-var _ client.Sender = &testSender{}
-
-func newTestSender(handler func(proto.Call)) *testSender {
-	return &testSender{
-		handler: handler,
-	}
-}
-
-func (ts *testSender) Send(_ context.Context, call proto.Call) {
-	ts.handler(call)
-}
-
-func (ts *testSender) Close() {
-}
-
 // TestTxnCoordSenderTxnUpdatedOnError verifies that errors adjust the
 // response transaction's timestamp and priority as appropriate.
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
@@ -580,8 +563,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
-		ts := NewTxnCoordSender(newTestSender(func(call proto.Call) {
-			call.Reply.Header().SetGoError(test.err)
+		ts := NewTxnCoordSender(batch.SenderFn(func(_ context.Context, _ *proto.BatchRequest) (*proto.BatchResponse, error) {
+			return nil, test.err
 		}), clock, false, nil, stopper)
 		reply := &proto.PutResponse{}
 		ts.Send(context.Background(), proto.Call{Args: gogoproto.Clone(testPutReq).(proto.Request), Reply: reply})
@@ -618,17 +601,18 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 // one-off transactional calls within a batch under certain circumstances.
 func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(tschottdorf): remove this test; behavior is more transparent now")
+	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	clock := hlc.NewClock(hlc.UnixNano)
 	var called bool
 	var alwaysError = errors.New("success")
-	ts := NewTxnCoordSender(newTestSender(func(call proto.Call) {
+	ts := NewTxnCoordSender(batch.SenderFn(func(_ context.Context, _ *proto.BatchRequest) (*proto.BatchResponse, error) {
 		called = true
 		// Returning this error is an easy way of preventing heartbeats
 		// to be started for otherwise "successful" calls.
-		call.Reply.Header().SetGoError(alwaysError)
-		return
+		return nil, alwaysError
 	}), clock, false, nil, stopper)
 
 	pushArg := &proto.PushTxnRequest{}

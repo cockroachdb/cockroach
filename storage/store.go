@@ -47,6 +47,7 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
+// TODOtschottdorf .
 const TODOtschottdorf = "TODO(tschottdorf): re-enable when we have batch routing in storage"
 
 const (
@@ -1262,6 +1263,10 @@ func (s *Store) ReplicaCount() int {
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
+// TODO(tschottdorf): this is the most provisional part of the code. It
+// unrolls batches and executes them one-by-one, hoping to do more or
+// less the correct updates in each step, but of course it's not atomic.
+// This is where the Store-side of project batch(r) will attach to.
 func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto.Response, _ error) {
 	ctx = s.Context(ctx)
 	trace := tracer.FromCtx(ctx)
@@ -1320,8 +1325,8 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto
 				bReply.Txn.Update(txn)
 			}
 		}
-		log.Warningf("ERR %v", err)
 		if err != nil {
+			log.Warningf("ERR %v", err)
 			return bReply, err
 		}
 		if isTxn {
@@ -1336,7 +1341,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto
 }
 
 func (s *Store) executeOne(ctx context.Context, args proto.Request) (proto.Response, error) {
-	log.Warningf("EXEC %T @ %s", args, args.Header().Key)
+	log.Warningf("EXEC %T @ %s %s", args, args.Header().Key, args.Header().Timestamp)
 	trace := tracer.FromCtx(ctx)
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {

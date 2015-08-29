@@ -88,7 +88,9 @@ var TestingCommandFilter func(proto.Request) error
 // upon EndTransaction if they only have local intents (which can be
 // resolved synchronously with EndTransaction). Certain tests become
 // simpler with this being turned off.
-var txnAutoGC = false // TODO(tschottdorf): disabled since it confuses batches (recreating txns as PENDING -> timeout)
+// TODO(tschottdorf): disabled since it confuses batches (recreating txns as
+// PENDING -> timeout). Re-check after all the other dust settles.
+var txnAutoGC = false
 
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
@@ -1134,11 +1136,6 @@ func (r *Replica) handleSkippedIntents(args proto.Request, intents []proto.Inten
 
 	ctx := r.context()
 	stopper := r.rm.Stopper()
-	// TODO(tschottdorf): There's a chance that #1684 will make a comeback
-	// since intent resolution on commit has since moved to EndTransaction,
-	// which returns (some of) them as skipped intents. If so, need to resolve
-	// synchronously if we're not allowed to do async (or just launch
-	// goroutines).
 	stopper.RunAsyncTask(func() {
 		err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
 			Intents: intents,
@@ -1303,13 +1300,11 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		b := &client.Batch{}
 		b.InternalAddCall(proto.Call{Args: bArgs, Reply: &proto.BatchResponse{}})
 		action := func() {
-			// TODO(tschottdorf): no tracing here yet. Probably useful at some point,
-			// but needs a) the corresponding interface and b) facilities for tracing
-			// multiple tracees at the same time (batch full of possibly individual
-			// txns).
+			// TODO(tschottdorf): no tracing here yet.
 			if err := r.rm.DB().Run(b); err != nil {
-				if log.V(1) {
-					log.Infoc(ctx, "%s", err)
+				if log.V(0) {
+					log.Warningf("unable to resolve: %s", err)
+					panic("TODO(tschottdorf)")
 				}
 			}
 		}

@@ -425,21 +425,24 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 	}
 
 	if len(calls) == 1 {
-		c := calls[0]
-		if c.Args.Header().UserPriority == nil && db.userPriority != 0 {
-			c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
-		}
-		resetClientCmdID(c.Args)
-		db.Sender.Send(context.TODO(), c)
-		err = c.Reply.Header().GoError()
-		if err != nil {
-			if log.V(1) {
-				log.Infof("failed %s: %s", c.Method(), err)
+		// We only send BatchRequest. Everything else needs to go into one.
+		if _, ok := calls[0].Args.(*proto.BatchRequest); ok {
+			c := calls[0]
+			if c.Args.Header().UserPriority == nil && db.userPriority != 0 {
+				c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
 			}
-		} else if c.Post != nil {
-			err = c.Post()
+			resetClientCmdID(c.Args)
+			db.Sender.Send(context.TODO(), c)
+			err = c.Reply.Header().GoError()
+			if err != nil {
+				if log.V(1) {
+					log.Infof("failed %s: %s", c.Method(), err)
+				}
+			} else if c.Post != nil {
+				err = c.Post()
+			}
+			return
 		}
-		return
 	}
 
 	bArgs, bReply := &proto.BatchRequest{}, &proto.BatchResponse{}
