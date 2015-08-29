@@ -928,6 +928,14 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 	// <datum>" unless they could not be simplified further in which case
 	// simplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
 	if isVar(n.Left) && isDatum(n.Right) {
+		// All of the comparison operators have the property that when comparing to
+		// NULL they evaulate to NULL (see evalComparisonOp). NULL is not the same
+		// as false, but in the context of a WHERE clause, NULL is considered
+		// not-true which is the same as false.
+		if n.Right == parser.DNull {
+			return parser.DBool(false)
+		}
+
 		switch n.Operator {
 		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
 			return n
@@ -941,6 +949,9 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 			}
 			sort.Sort(tuple)
 			tuple = uniqTuple(tuple)
+			if len(tuple) == 0 {
+				return parser.DBool(false)
+			}
 			n.Right = tuple
 			return n
 		case parser.Like:
@@ -990,9 +1001,12 @@ func makePrefixRange(prefix parser.DString, datum parser.Expr, complete bool) pa
 }
 
 func uniqTuple(tuple parser.DTuple) parser.DTuple {
-	n := 1
-	for i := 1; i < len(tuple); i++ {
-		if tuple[n-1].Compare(tuple[i]) < 0 {
+	n := 0
+	for i := 0; i < len(tuple); i++ {
+		if tuple[i] == parser.DNull {
+			continue
+		}
+		if n == 0 || tuple[n-1].Compare(tuple[i]) < 0 {
 			tuple[n] = tuple[i]
 			n++
 		}

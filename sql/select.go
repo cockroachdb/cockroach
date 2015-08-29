@@ -401,10 +401,18 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 					case parser.GT:
 						// Transform a > constraint into a >= constraint so that we play
 						// nicer with the inclusive nature of the scan start key.
+						//
+						// TODO(pmattis): It would be more obvious to perform this
+						// transform in simplifyComparisonExpr, but doing so there
+						// eliminates some of the other simplifications. For example, "a <
+						// 1 OR a > 1" currently simplifies to "a != 1", but if we
+						// performed this transform in simpilfyComparisonExpr it would
+						// simplify to "a < 1 OR a >= 2" which is also the same as "a !=
+						// 1", but not so obvious based on comparisons of the constants.
 						constraint.start = &parser.ComparisonExpr{
 							Operator: parser.GE,
 							Left:     c.Left,
-							Right:    nextDatum(c.Right.(parser.Datum)),
+							Right:    c.Right.(parser.Datum).Next(),
 						}
 					case parser.EQ, parser.GE, parser.In:
 						constraint.start = c
@@ -519,7 +527,7 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 
 				end := start
 				if lastEnd {
-					if end, err = encodeTableKey(nil, nextDatum(datum)); err != nil {
+					if end, err = encodeTableKey(nil, datum.Next()); err != nil {
 						panic(err)
 					}
 				}
@@ -553,7 +561,7 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 			// We have an end constraint.
 			if datum, ok := c.end.Right.(parser.Datum); ok {
 				if lastEnd && c.end.Operator != parser.LT {
-					datum = nextDatum(datum)
+					datum = datum.Next()
 				}
 				key, err := encodeTableKey(buf[:0], datum)
 				if err != nil {
@@ -574,34 +582,4 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 	}
 
 	return spans
-}
-
-// nextDatum returns the next datum according to the datum type. For integers
-// and floats it returns the next higher value. For etrings it appends '\x00'.
-func nextDatum(datum parser.Datum) parser.Datum {
-	switch d := datum.(type) {
-	case parser.DBool:
-		if !d {
-			return parser.DBool(true)
-		}
-		// DBool(false) is encoded as DInt(0), DBool(true) is encoded as DInt(1) so
-		// DInt(2) is the next datum. Note that this will decode ok because we look
-		// for "DInt != 0".
-		return parser.DInt(2)
-	case parser.DInt:
-		// TODO(pmattis): Check for overflow. More precisely, we should simplify
-		// >MaxInt expressions to false.
-		return d + 1
-	case parser.DFloat:
-		// TODO(pmattis): Check for overflow. More precisely, we should simplify
-		// >math.MaxFloat64 expressions to false.
-		return parser.DFloat(math.Nextafter(float64(d), math.Inf(1)))
-	case parser.DString:
-		return parser.DString(proto.Key(d).Next())
-	default:
-		// Note that comparisons to NULL will have been simplified out of
-		// existence. Tuples are currently only handled in IN expressions which
-		// will reduce to non-tuple comparisons.
-		panic(fmt.Sprintf("unsupported nextDatum: %T", datum))
-	}
 }

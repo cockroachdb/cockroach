@@ -24,7 +24,7 @@ import (
 )
 
 func makeTestIndex(t *testing.T, columns []string) (*TableDescriptor, *IndexDescriptor) {
-	desc := *testTableDesc
+	desc := testTableDesc()
 	desc.Indexes = append(desc.Indexes, IndexDescriptor{
 		Name:        "foo",
 		ColumnNames: columns,
@@ -32,7 +32,7 @@ func makeTestIndex(t *testing.T, columns []string) (*TableDescriptor, *IndexDesc
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
-	return &desc, &desc.Indexes[len(desc.Indexes)-1]
+	return desc, &desc.Indexes[len(desc.Indexes)-1]
 }
 
 func makeConstraints(t *testing.T, sql string, desc *TableDescriptor,

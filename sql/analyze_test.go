@@ -25,26 +25,25 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-var testTableDesc = &TableDescriptor{
-	Name: "test",
-	ID:   1000,
-	Columns: []ColumnDescriptor{
-		{Name: "a", Type: ColumnType{Kind: ColumnType_INT}},
-		{Name: "b", Type: ColumnType{Kind: ColumnType_INT}},
-		{Name: "c", Type: ColumnType{Kind: ColumnType_INT}},
-		{Name: "d", Type: ColumnType{Kind: ColumnType_INT}},
-		{Name: "e", Type: ColumnType{Kind: ColumnType_INT}},
-	},
-	PrimaryIndex: IndexDescriptor{
-		Name: "primary", Unique: true, ColumnNames: []string{"a"},
-	},
-	Privileges: NewDefaultPrivilegeDescriptor(),
+func testTableDesc() *TableDescriptor {
+	return &TableDescriptor{
+		Name: "test",
+		ID:   1000,
+		Columns: []ColumnDescriptor{
+			{Name: "a", Type: ColumnType{Kind: ColumnType_INT}},
+			{Name: "b", Type: ColumnType{Kind: ColumnType_INT}},
+			{Name: "c", Type: ColumnType{Kind: ColumnType_INT}},
+			{Name: "d", Type: ColumnType{Kind: ColumnType_INT}},
+			{Name: "e", Type: ColumnType{Kind: ColumnType_INT}},
+		},
+		PrimaryIndex: IndexDescriptor{
+			Name: "primary", Unique: true, ColumnNames: []string{"a"},
+		},
+		Privileges: NewDefaultPrivilegeDescriptor(),
+	}
 }
 
 func init() {
-	if err := testTableDesc.AllocateIDs(); err != nil {
-		panic(err)
-	}
 }
 
 func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
@@ -61,8 +60,12 @@ func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
 	// Perform qualified name resolution because {analyze,simplify}Expr want
 	// expressions containing qvalues.
 	s := &scanNode{}
-	s.desc = testTableDesc
+	s.desc = testTableDesc()
 	s.visibleCols = s.desc.Columns
+
+	if err := s.desc.AllocateIDs(); err != nil {
+		t.Fatal(err)
+	}
 
 	r, err = s.resolveQNames(r)
 	if err != nil {
@@ -157,10 +160,19 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a < 1 AND abs(a) > 0`, `a < 1`},
 		{`a < 1 OR abs(a) > 0`, `true`},
 
+		{`a = NULL`, `false`},
+		{`a != NULL`, `false`},
+		{`a > NULL`, `false`},
+		{`a >= NULL`, `false`},
+		{`a < NULL`, `false`},
+		{`a <= NULL`, `false`},
+		{`a IN (NULL)`, `false`},
+
 		{`a IN (1, 1)`, `a IN (1)`},
 		{`a IN (2, 3, 1)`, `a IN (1, 2, 3)`},
 		{`a IN (1, true)`, `true`},
-		{`a IN (1, NULL)`, `a IN (NULL, 1)`}, // TODO(pmattis): `a IN (1)`
+		{`a IN (1, NULL, 2, NULL)`, `a IN (1, 2)`},
+		{`a IN (1, NULL) OR a IN (2, NULL)`, `a IN (1, 2)`},
 
 		{`a LIKE '%foo'`, `true`},
 		{`a LIKE 'foo'`, `a = 'foo'`},
@@ -234,7 +246,7 @@ func TestSimplifyAndExpr(t *testing.T) {
 		{`a = 1 AND a = '1'`, `false`},
 		{`a = 1 AND a = (1, 2)`, `false`},
 		{`a = 1 AND a = NULL`, `false`},
-		{`a = 1 AND a != NULL`, `a = 1 AND a != NULL`},
+		{`a = 1 AND a != NULL`, `false`},
 		{`a = 1 AND b = 1`, `a = 1 AND b = 1`},
 	}
 	for _, d := range testData {
@@ -406,8 +418,8 @@ func TestSimplifyOrExpr(t *testing.T) {
 		{`a = 1 OR a = 1.1`, `a = 1 OR a = 1.1`},
 		{`a = 1 OR a = '1'`, `a = 1 OR a = '1'`},
 		{`a = 1 OR a = (1, 2)`, `a = 1 OR a = (1, 2)`},
-		{`a = 1 OR a = NULL`, `a = 1 OR a = NULL`},
-		{`a = 1 OR a != NULL`, `a = 1 OR a != NULL`},
+		{`a = 1 OR a = NULL`, `a = 1`},
+		{`a = 1 OR a != NULL`, `a = 1`},
 		{`a = 1 OR b = 1`, `a = 1 OR b = 1`},
 	}
 	for _, d := range testData {
