@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -198,7 +197,6 @@ func TestSetupRangeTree(t *testing.T) {
 // performs actual splits and merges.
 func TestTree(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip(storage.TODOtschottdorf)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 	db := store.DB()

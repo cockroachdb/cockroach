@@ -47,9 +47,6 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// TODOtschottdorf .
-const TODOtschottdorf = "TODO(tschottdorf): re-enable when we have batch routing in storage"
-
 const (
 	// GCResponseCacheExpiration is the expiration duration for response
 	// cache entries.
@@ -1331,10 +1328,6 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto
 		}
 		if isTxn {
 			bReply.Txn.Timestamp.Forward(bReply.Timestamp)
-			// TODO(tschottdorf): remove. This is a failed hack, I think.
-			// if txn := reply.Header().Txn; txn != nil {
-			// 	txn.Timestamp.Forward(bReply.Timestamp)
-			// }
 		}
 	}
 	return bReply, nil

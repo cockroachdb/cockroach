@@ -276,8 +276,8 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error) {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error) {
 			return []proto.RangeDescriptor{descriptor}, nil
 		}),
 	}
@@ -380,8 +380,8 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 			return []proto.RangeDescriptor{testRangeDescriptor}, nil
 		}),
 	}
@@ -425,8 +425,8 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 			// Return next error and truncate the prefix of the errors array.
 			var err error
 			if k != nil {
@@ -490,8 +490,8 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 
 		ctx := &DistSenderContext{
-			rpcSend: testFn,
-			rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+			RPCSend: testFn,
+			RangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 				return []proto.RangeDescriptor{testRangeDescriptor}, nil
 			}),
 		}
@@ -528,8 +528,8 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 
 	for _, rangeLookup := range []bool{true, false} {
 		ctx := &DistSenderContext{
-			rpcSend: testFn,
-			rangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
+			RPCSend: testFn,
+			RangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
 				if len(k) > 0 && opts.ignoreIntents != rangeLookup {
 					t.Fatalf("expected ignore intents to be %t", rangeLookup)
 				}
@@ -595,7 +595,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
+		RPCSend: testFn,
 	}
 	ds := NewDistSender(ctx, g)
 	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 0)
@@ -688,8 +688,8 @@ func TestSendRPCRetry(t *testing.T) {
 		return nil, util.Errorf("unexpected method %v", method)
 	}
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 			return []proto.RangeDescriptor{descriptor}, nil
 		}),
 	}
@@ -783,8 +783,8 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		return []gogoproto.Message{batchReply}, nil
 	}
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(key proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(key proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 			if !merged {
 				// Assume a range merge operation happened.
 				merged = true
@@ -819,8 +819,8 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
 			if len(k) > 0 && !opts.useReverseScan {
 				t.Fatalf("expected useReverseScan to be set")
 			}

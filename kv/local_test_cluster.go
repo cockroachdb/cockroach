@@ -93,8 +93,8 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		LeaderCacheSize:          defaultLeaderCacheSize,
 		RPCRetryOptions:          &defaultRPCRetryOptions,
 		nodeDescriptor:           nodeDesc,
-		rpcSend:                  rpcSend,         // defined above
-		rangeDescriptorDB:        ltc.localSender, // for descriptor lookup
+		RPCSend:                  rpcSend,         // defined above
+		RangeDescriptorDB:        ltc.localSender, // for descriptor lookup
 	}, ltc.Gossip)
 
 	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, nil /* tracer */, ltc.Stopper)

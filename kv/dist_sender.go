@@ -112,7 +112,7 @@ type DistSender struct {
 	// leaderCache caches the last known leader replica for range
 	// consensus groups.
 	leaderCache *leaderCache
-	// rpcSend is used to send RPC calls and defaults to rpc.Send
+	// RPCSend is used to send RPC calls and defaults to rpc.Send
 	// outside of tests.
 	rpcSend         rpcSendFn
 	rpcRetryOptions retry.Options
@@ -120,7 +120,7 @@ type DistSender struct {
 
 var _ batch.Sender = &DistSender{}
 
-// rpcSendFn is the function type used to dispatch RPC calls.
+// RPCSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(rpc.Options, string, []net.Addr,
 	func(addr net.Addr) gogoproto.Message, func() gogoproto.Message,
 	*rpc.Context) ([]gogoproto.Message, error)
@@ -141,8 +141,8 @@ type DistSenderContext struct {
 	nodeDescriptor *proto.NodeDescriptor
 	// The RPC dispatcher. Defaults to rpc.Send but can be changed here
 	// for testing purposes.
-	rpcSend           rpcSendFn
-	rangeDescriptorDB rangeDescriptorDB
+	RPCSend           rpcSendFn
+	RangeDescriptorDB rangeDescriptorDB
 }
 
 // NewDistSender returns a batch.Sender instance which connects to the
@@ -168,7 +168,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	if rcSize <= 0 {
 		rcSize = defaultRangeDescriptorCacheSize
 	}
-	rdb := ctx.rangeDescriptorDB
+	rdb := ctx.RangeDescriptorDB
 	if rdb == nil {
 		rdb = ds
 	}
@@ -182,8 +182,8 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	}
 	ds.rpcSend = rpc.Send
-	if ctx.rpcSend != nil {
-		ds.rpcSend = ctx.rpcSend
+	if ctx.RPCSend != nil {
+		ds.rpcSend = ctx.RPCSend
 	}
 	ds.rpcRetryOptions = defaultRPCRetryOptions
 	if ctx.RPCRetryOptions != nil {
@@ -361,7 +361,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 		return a
 	}
 	// RPCs are sent asynchronously and there is no synchronized access to
-	// the reply object, so we don't pass itself to rpcSend.
+	// the reply object, so we don't pass itself to RPCSend.
 	// Otherwise there maybe a race case:
 	// If the RPC call times out using our original reply object,
 	// we must not use it any more; the rpc call might still return

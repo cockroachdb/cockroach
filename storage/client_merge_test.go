@@ -63,7 +63,6 @@ func createSplitRanges(store *storage.Store) (*proto.RangeDescriptor, *proto.Ran
 // together.
 func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip(storage.TODOtschottdorf)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -92,7 +91,6 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 // each containing data.
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip(storage.TODOtschottdorf)
 	content := proto.Key("testing!")
 
 	store, stopper := createTestStore(t)
@@ -210,7 +208,6 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 // that are not on same store.
 func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip(storage.TODOtschottdorf)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
