@@ -23,9 +23,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -39,8 +43,43 @@ func TestMain(m *testing.M) {
 	leaktest.TestMainWithLeakCheck(m)
 }
 
+// checkEndTransactionTrigger verifies that an EndTransactionRequest
+// that includes intents for the SystemDB keys sets the proper trigger.
+func checkEndTransactionTrigger(req proto.Request) error {
+	args, ok := req.(*proto.EndTransactionRequest)
+	if !ok {
+		return nil
+	}
+
+	if !args.Commit {
+		// This is a rollback: skip trigger verification.
+		return nil
+	}
+
+	hasTrigger := args.GetInternalCommitTrigger().GetModifiedSpanTrigger().GetSystemDBSpan()
+
+	var hasSystemKey bool
+	for _, it := range args.Intents {
+		if keys.SystemDBSpan.ContainsKey(it.GetKey()) {
+			hasSystemKey = true
+			break
+		}
+	}
+	if hasSystemKey != hasTrigger {
+		return util.Errorf("EndTransaction hasSystemKey=%t, but hasSystemDBTrigger=%t",
+			hasSystemKey, hasTrigger)
+	}
+
+	return nil
+}
+
+func setupTestServer(t *testing.T) *server.TestServer {
+	storage.TestingCommandFilter = checkEndTransactionTrigger
+	return server.StartTestServer(t)
+}
+
 func setup(t *testing.T) (*server.TestServer, *sql.DB, *client.DB) {
-	s := server.StartTestServer(nil)
+	s := setupTestServer(t)
 	// SQL requests use "root" which has ALL permissions on everything.
 	sqlDB, err := sql.Open("cockroach", fmt.Sprintf("https://%s@%s?certs=test_certs",
 		security.RootUser, s.ServingAddr()))
@@ -57,7 +96,12 @@ func setup(t *testing.T) (*server.TestServer, *sql.DB, *client.DB) {
 	return s, sqlDB, kvDB
 }
 
+func cleanupTestServer(s *server.TestServer) {
+	s.Stop()
+	storage.TestingCommandFilter = nil
+}
+
 func cleanup(s *server.TestServer, db *sql.DB) {
 	_ = db.Close()
-	s.Stop()
+	cleanupTestServer(s)
 }

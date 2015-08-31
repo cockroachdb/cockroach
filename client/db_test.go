@@ -360,6 +360,8 @@ func TestCommonMethods(t *testing.T) {
 		key{txnType, "Run"}:                  {},
 		key{txnType, "SetDebugName"}:         {},
 		key{txnType, "SetSnapshotIsolation"}: {},
+		key{txnType, "SetSystemDBTrigger"}:   {},
+		key{txnType, "SystemDBTrigger"}:      {},
 	}
 
 	for b := range blacklist {

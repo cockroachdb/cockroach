@@ -196,6 +196,7 @@ type Replica struct {
 	// Last index applied to the state machine. Updated atomically.
 	appliedIndex uint64
 	configHashes map[int][]byte // Config map sha256 hashes @ last gossip
+	systemDBHash []byte         // sha256 hash of the system config @ last gossip
 	lease        unsafe.Pointer // Information for leader lease, updated atomically
 	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
 	respCache    *ResponseCache // Provides idempotence for retries
@@ -240,6 +241,9 @@ func NewReplica(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) 
 	r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
 		return r.ContainsKey(configPrefix)
 	})
+	if r.ContainsKey(keys.SystemDBSpan.Start) {
+		r.maybeGossipSystemConfig()
+	}
 
 	if r.stats, err = newRangeStats(desc.RangeID, rm.Engine()); err != nil {
 		return nil, err
@@ -1072,6 +1076,51 @@ func (r *Replica) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bo
 	}
 }
 
+// maybeGossipSystemConfig scans the entire SystemDB span and gossips it.
+// The first call is on NewReplica. Further calls come from the trigger
+// on an EndTransactionRequest.
+//
+// Note that maybeGossipSystemConfig gossips information only when the
+// lease is actually held. The method does not request a leader lease
+// here since LeaderLease and applyRaftCommand call the method and we
+// need to avoid deadlocking in redirectOnOrObtainLeaderLease.
+// TODO(tschottdorf): Can possibly simplify.
+func (r *Replica) maybeGossipSystemConfig() {
+	r.Lock()
+	defer r.Unlock()
+	r.maybeGossipSystemConfigLocked()
+}
+
+func (r *Replica) maybeGossipSystemConfigLocked() {
+	if r.rm.Gossip() == nil || !r.isInitialized() {
+		return
+	}
+
+	if lease := r.getLease(); !lease.OwnedBy(r.rm.RaftNodeID()) || !lease.Covers(r.rm.Clock().Now()) {
+		// Do not gossip when a leader lease is not held.
+		return
+	}
+
+	ctx := r.context()
+	// TODO(marc): check for bad split in the middle of the SystemDB span.
+	systemConfig, hash, err := loadSystemConfig(r.rm.Engine())
+	if err != nil {
+		log.Errorc(ctx, "could not load system config: %s", err)
+		return
+	}
+	if bytes.Equal(r.systemDBHash, hash) {
+		return
+	}
+
+	r.systemDBHash = hash
+	if log.V(1) {
+		log.Infoc(ctx, "gossiping system config from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
+	}
+	if err := r.rm.Gossip().AddInfoProto(gossip.KeySystemDB, systemConfig, 0); err != nil {
+		log.Errorc(ctx, "failed to gossip system config: %s", err)
+	}
+}
+
 func (r *Replica) handleSkippedIntents(args proto.Request, intents []proto.Intent) {
 	if len(intents) == 0 {
 		return
@@ -1285,6 +1334,25 @@ func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI gogoproto.Mes
 	}
 	m, err := config.NewPrefixConfigMap(cfgs)
 	return m, sha.Sum(nil), err
+}
+
+// loadSystemConfig scans the entire SystemDB span and puts the set of key/value
+// pairs in the config, generating a sha256 sum.
+func loadSystemConfig(eng engine.Engine) (*config.SystemConfig, []byte, error) {
+	// TODO(tschottdorf): Currently this does not handle intents well.
+	kvs, _, err := engine.MVCCScan(eng, keys.SystemDBSpan.Start, keys.SystemDBSpan.End,
+		0, proto.MaxTimestamp, true /* consistent */, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	cfg := &config.SystemConfig{
+		Values: kvs,
+	}
+	sha := sha256.New()
+	for _, kv := range kvs {
+		sha.Write(kv.Value.Bytes)
+	}
+	return cfg, sha.Sum(nil), err
 }
 
 // maybeAddToSplitQueue checks whether the current size of the range

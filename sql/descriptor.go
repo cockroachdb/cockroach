@@ -102,6 +102,8 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 	b := client.Batch{}
 	b.CPut(key, descriptor.GetID(), nil)
 	b.CPut(descKey, descriptor, nil)
+	// Mark transaction as operating on the system DB.
+	p.txn.SetSystemDBTrigger()
 	return p.txn.Run(&b)
 }
 

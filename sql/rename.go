@@ -63,6 +63,8 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	b.Put(descKey, dbDesc)
 	b.Del(databaseKey{string(n.Name)}.Key())
 
+	// Mark transaction as operating on the system DB.
+	p.txn.SetSystemDBTrigger()
 	if err := p.txn.Run(&b); err != nil {
 		if _, ok := err.(*proto.ConditionFailedError); ok {
 			return nil, fmt.Errorf("the new database name %s already exists", string(n.NewName))
@@ -148,6 +150,8 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	b.Put(descKey, tableDesc)
 	b.CPut(newTbKey, tableDesc.GetID(), nil)
 	b.Del(tbKey)
+	// Mark transaction as operating on the system DB.
+	p.txn.SetSystemDBTrigger()
 	if err := p.txn.Run(&b); err != nil {
 		if _, ok := err.(*proto.ConditionFailedError); ok {
 			return nil, fmt.Errorf("table name %q already exists", n.NewName.Table())
@@ -209,6 +213,8 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 	if err := p.txn.Put(descKey, tableDesc); err != nil {
 		return nil, err
 	}
+	// Mark transaction as operating on the system DB.
+	p.txn.SetSystemDBTrigger()
 
 	return &valuesNode{}, nil
 }
@@ -288,6 +294,8 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	if err := p.txn.Put(descKey, tableDesc); err != nil {
 		return nil, err
 	}
+	// Mark transaction as operating on the system DB.
+	p.txn.SetSystemDBTrigger()
 
 	return &valuesNode{}, nil
 }

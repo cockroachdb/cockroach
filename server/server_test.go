@@ -25,14 +25,21 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
 	snappy "github.com/cockroachdb/c-snappy"
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -471,5 +478,88 @@ func TestSQLServer(t *testing.T) {
 		if statusCode != test.expStatusCode {
 			t.Fatalf("#%d: Expected status: %d, received status %d", tcNum, test.expStatusCode, statusCode)
 		}
+	}
+}
+
+func TestSystemDBGossip(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	resultChan := make(chan ([]byte))
+	var count int32
+	db := s.db
+	key := sql.MakeDescMetadataKey(keys.MaxReservedDescID)
+	valAt := func(i int) *sql.DatabaseDescriptor {
+		return &sql.DatabaseDescriptor{Name: "foo", ID: sql.ID(i)}
+	}
+
+	// Register a callback for gossip updates.
+	s.Gossip().RegisterCallback(gossip.KeySystemDB, func(_ string, content []byte) {
+		newCount := atomic.AddInt32(&count, 1)
+		if newCount != 2 {
+			// RegisterCallback calls us right away with the contents,
+			// so ignore the very first call.
+			// We also only want the first value of all our writes.
+			return
+		}
+		resultChan <- content
+	})
+
+	// The span only gets gossiped when it first shows up, or when
+	// the EndTransaction trigger is set.
+
+	// Try a plain KV write first.
+	if err := db.Put(key, valAt(0)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now do it as part of a transaction, but without the trigger set.
+	if err := db.Txn(func(txn *client.Txn) error {
+		return txn.Put(key, valAt(1))
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// This time mark the transaction as having a SystemDB trigger.
+	if err := db.Txn(func(txn *client.Txn) error {
+		txn.SetSystemDBTrigger()
+		return txn.Put(key, valAt(2))
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for the callback.
+	var b []byte
+	select {
+	case b = <-resultChan:
+		break
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("did not receive gossip callback")
+	}
+
+	// Now check the gossip callback.
+	var val *proto.Value
+	systemConfig := &config.SystemConfig{}
+	if err := gogoproto.Unmarshal(b, systemConfig); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, kv := range systemConfig.GetValues() {
+		if bytes.Equal(key, kv.GetKey()) {
+			val = &kv.Value
+		}
+	}
+	if val == nil {
+		t.Fatal("key not found in gossiped info")
+	}
+
+	// Make sure the returned value is valAt(2).
+	var got sql.DatabaseDescriptor
+	if err := gogoproto.Unmarshal(val.Bytes, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != 2 {
+		t.Fatalf("mismatch: expected %+v, got %+v", valAt(2), got)
 	}
 }

@@ -32,4 +32,7 @@ message Session {
   optional int32 syntax = 2 [(gogoproto.nullable) = false];
   // Open transaction.
   optional proto.Transaction txn = 3;
+  // Indicates that the above transaction is mutating keys in the
+  // SystemDB span.
+  optional bool mutates_system_db = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "MutatesSystemDB"];
 }

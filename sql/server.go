@@ -118,6 +118,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if planMaker.session.Txn != nil {
 		txn := client.NewTxn(*s.db)
 		txn.Proto = *planMaker.session.Txn
+		if planMaker.session.MutatesSystemDB {
+			txn.SetSystemDBTrigger()
+		}
 		planMaker.txn = txn
 	}
 
@@ -129,8 +132,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Add transaction to session state.
 	if planMaker.txn != nil {
 		planMaker.session.Txn = &planMaker.txn.Proto
+		planMaker.session.MutatesSystemDB = planMaker.txn.SystemDBTrigger()
 	} else {
 		planMaker.session.Txn = nil
+		planMaker.session.MutatesSystemDB = false
 	}
 	bytes, err := gogoproto.Marshal(&planMaker.session)
 	if err != nil {

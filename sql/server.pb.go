@@ -22,6 +22,9 @@ type Session struct {
 	Syntax   int32  `protobuf:"varint,2,opt,name=syntax" json:"syntax"`
 	// Open transaction.
 	Txn *cockroach_proto1.Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
+	// Indicates that the above transaction is mutating keys in the
+	// SystemDB span.
+	MutatesSystemDB bool `protobuf:"varint,4,opt,name=mutates_system_db" json:"mutates_system_db"`
 }
 
 func (m *Session) Reset()         { *m = Session{} }
@@ -47,6 +50,13 @@ func (m *Session) GetTxn() *cockroach_proto1.Transaction {
 		return m.Txn
 	}
 	return nil
+}
+
+func (m *Session) GetMutatesSystemDB() bool {
+	if m != nil {
+		return m.MutatesSystemDB
+	}
+	return false
 }
 
 func (m *Session) Marshal() (data []byte, err error) {
@@ -81,6 +91,14 @@ func (m *Session) MarshalTo(data []byte) (int, error) {
 		}
 		i += n1
 	}
+	data[i] = 0x20
+	i++
+	if m.MutatesSystemDB {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
 	return i, nil
 }
 
@@ -121,6 +139,7 @@ func (m *Session) Size() (n int) {
 		l = m.Txn.Size()
 		n += 1 + l + sovServer(uint64(l))
 	}
+	n += 2
 	return n
 }
 
@@ -227,6 +246,23 @@ func (m *Session) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MutatesSystemDB", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.MutatesSystemDB = bool(v != 0)
 		default:
 			var sizeOfWire int
 			for {

@@ -14,12 +14,14 @@
 		PrefixConfigMap
 		PrefixConfig
 		ConfigUnion
+		SystemConfig
 */
 package config
 
 import proto "github.com/gogo/protobuf/proto"
 import math "math"
 import cockroach_proto "github.com/cockroachdb/cockroach/proto"
+import cockroach_proto1 "github.com/cockroachdb/cockroach/proto"
 
 // discarding unused import gogoproto "gogoproto"
 
@@ -168,6 +170,21 @@ func (*ConfigUnion) ProtoMessage()    {}
 func (m *ConfigUnion) GetZone() *ZoneConfig {
 	if m != nil {
 		return m.Zone
+	}
+	return nil
+}
+
+type SystemConfig struct {
+	Values []cockroach_proto1.KeyValue `protobuf:"bytes,1,rep,name=values" json:"values"`
+}
+
+func (m *SystemConfig) Reset()         { *m = SystemConfig{} }
+func (m *SystemConfig) String() string { return proto.CompactTextString(m) }
+func (*SystemConfig) ProtoMessage()    {}
+
+func (m *SystemConfig) GetValues() []cockroach_proto1.KeyValue {
+	if m != nil {
+		return m.Values
 	}
 	return nil
 }
@@ -335,6 +352,36 @@ func (m *ConfigUnion) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *SystemConfig) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *SystemConfig) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Values) > 0 {
+		for _, msg := range m.Values {
+			data[i] = 0xa
+			i++
+			i = encodeVarintConfig(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
 func encodeFixed64Config(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	data[offset+1] = uint8(v >> 8)
@@ -421,6 +468,18 @@ func (m *ConfigUnion) Size() (n int) {
 	if m.Zone != nil {
 		l = m.Zone.Size()
 		n += 1 + l + sovConfig(uint64(l))
+	}
+	return n
+}
+
+func (m *SystemConfig) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Values) > 0 {
+		for _, e := range m.Values {
+			l = e.Size()
+			n += 1 + l + sovConfig(uint64(l))
+		}
 	}
 	return n
 }
@@ -891,6 +950,79 @@ func (m *ConfigUnion) Unmarshal(data []byte) error {
 				m.Zone = &ZoneConfig{}
 			}
 			if err := m.Zone.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipConfig(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
+func (m *SystemConfig) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Values", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Values = append(m.Values, cockroach_proto1.KeyValue{})
+			if err := m.Values[len(m.Values)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
