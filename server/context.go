@@ -35,13 +35,14 @@ import (
 
 // Context defaults.
 const (
-	defaultAddr             = ":8080"
-	defaultMaxOffset        = 250 * time.Millisecond
-	defaultGossipInterval   = 2 * time.Second
-	defaultCacheSize        = 1 << 30 // GB
-	defaultScanInterval     = 10 * time.Minute
-	defaultScanMaxIdleTime  = 5 * time.Second
-	defaultMetricsFrequency = 10 * time.Second
+	defaultAddr               = ":8080"
+	defaultMaxOffset          = 250 * time.Millisecond
+	defaultGossipInterval     = 2 * time.Second
+	defaultCacheSize          = 1 << 30 // GB
+	defaultScanInterval       = 10 * time.Minute
+	defaultScanMaxIdleTime    = 5 * time.Second
+	defaultMetricsFrequency   = 10 * time.Second
+	defaultTimeUntilStoreDead = 5 * time.Minute
 )
 
 // Context holds parameters needed to setup a server.
@@ -123,18 +124,23 @@ type Context struct {
 	// MetricsFrequency determines the frequency at which the server should
 	// record internal metrics.
 	MetricsFrequency time.Duration
+
+	// TimeUntilStoreDead is the time after which if there is no new gossiped
+	// information about a store, it is considered dead.
+	TimeUntilStoreDead time.Duration
 }
 
 // NewContext returns a Context with default values.
 func NewContext() *Context {
 	ctx := &Context{
-		Addr:             defaultAddr,
-		MaxOffset:        defaultMaxOffset,
-		GossipInterval:   defaultGossipInterval,
-		CacheSize:        defaultCacheSize,
-		ScanInterval:     defaultScanInterval,
-		ScanMaxIdleTime:  defaultScanMaxIdleTime,
-		MetricsFrequency: defaultMetricsFrequency,
+		Addr:               defaultAddr,
+		MaxOffset:          defaultMaxOffset,
+		GossipInterval:     defaultGossipInterval,
+		CacheSize:          defaultCacheSize,
+		ScanInterval:       defaultScanInterval,
+		ScanMaxIdleTime:    defaultScanMaxIdleTime,
+		MetricsFrequency:   defaultMetricsFrequency,
+		TimeUntilStoreDead: defaultTimeUntilStoreDead,
 	}
 	// Initializes base context defaults.
 	ctx.InitDefaults()

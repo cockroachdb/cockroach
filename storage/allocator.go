@@ -21,7 +21,6 @@ package storage
 import (
 	"math"
 	"math/rand"
-	"sort"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/gossip"
@@ -44,33 +43,6 @@ const (
 	rebalanceFromMean = 0.025 // 2.5%
 )
 
-// stat provides a running sample size and mean.
-type stat struct {
-	n, mean float64
-}
-
-// Update adds the specified value to the stat, augmenting the sample
-// size & mean.
-func (s *stat) Update(x float64) {
-	s.n++
-	s.mean += (x - s.mean) / s.n
-}
-
-// storeList keeps a list of store descriptors and associated count
-// and used stats across the stores.
-type storeList struct {
-	stores      []*proto.StoreDescriptor
-	count, used stat
-}
-
-// Add adds the store descriptor to the list of stores and updates
-// maintained statistics.
-func (sl *storeList) Add(s *proto.StoreDescriptor) {
-	sl.stores = append(sl.stores, s)
-	sl.count.Update(float64(s.Capacity.RangeCount))
-	sl.used.Update(s.Capacity.FractionUsed())
-}
-
 // allocator makes allocation decisions based on available capacity
 // in other stores which match the required attributes for a desired
 // range replica.
@@ -91,24 +63,19 @@ func (sl *storeList) Add(s *proto.StoreDescriptor) {
 // amongst the set of stores with fraction of bytes within
 // rebalanceFromMean from the mean.
 type allocator struct {
+	//TODO(bram): can we remove this mutex?
 	sync.Mutex
 	gossip        *gossip.Gossip
+	storePool     *StorePool
 	randGen       *rand.Rand
-	deterministic bool                  // Set deterministic for unittests
-	storeKeys     map[string]struct{}   // Tracks gossip keys used for stores
-	storeLists    map[string]*storeList // Cache from attributes to storeList
+	deterministic bool // Set deterministic for unittests
 }
 
 // newAllocator creates a new allocator using the specified gossip.
-func newAllocator(g *gossip.Gossip) *allocator {
+func newAllocator(storePool *StorePool) *allocator {
 	a := &allocator{
-		gossip:  g,
-		randGen: rand.New(rand.NewSource(rand.Int63())),
-	}
-	// Callback triggers on any store gossip updates.
-	if a.gossip != nil {
-		storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
-		a.gossip.RegisterCallback(storeRegex, a.storeGossipUpdate)
+		storePool: storePool,
+		randGen:   rand.New(rand.NewSource(rand.Int63())),
 	}
 	return a
 }
@@ -121,31 +88,6 @@ func getUsedNodes(existing []proto.Replica) map[proto.NodeID]struct{} {
 		usedNodes[replica.NodeID] = struct{}{}
 	}
 	return usedNodes
-}
-
-// storeDescFromGossip retrieves a StoreDescriptor from the specified
-// store gossip key. Returns an error if the gossip doesn't exist
-// or is not a StoreDescriptor.
-func storeDescFromGossip(key string, g *gossip.Gossip) (*proto.StoreDescriptor, error) {
-	storeDesc := &proto.StoreDescriptor{}
-	if err := g.GetInfoProto(key, storeDesc); err != nil {
-		return nil, err
-	}
-	return storeDesc, nil
-}
-
-// storeGossipUpdate is a gossip callback triggered whenever store information
-// is gossiped. It just tracks the gossiped keys.
-func (a *allocator) storeGossipUpdate(key string, _ []byte) {
-	a.Lock()
-	defer a.Unlock()
-
-	// Clear the cached store lists on new gossip.
-	a.storeLists = nil
-	if a.storeKeys == nil {
-		a.storeKeys = map[string]struct{}{}
-	}
-	a.storeKeys[key] = struct{}{}
 }
 
 // AllocateTarget returns a suitable store for a new allocation with
@@ -261,15 +203,15 @@ func (a *allocator) RemoveTarget(existing []proto.Replica) (proto.Replica, error
 	replStores := make([]replStore, len(existing))
 	usedStat := stat{}
 	for i := range existing {
-		desc, err := storeDescFromGossip(gossip.MakeStoreKey(existing[i].StoreID), a.gossip)
-		if err != nil {
-			return proto.Replica{}, err
+		desc := a.storePool.getStoreDescriptor(existing[i].StoreID)
+		if desc == nil {
+			continue
 		}
 		replStores[i] = replStore{
 			repl:  existing[i],
 			store: desc,
 		}
-		usedStat.Update(desc.Capacity.FractionUsed())
+		usedStat.update(desc.Capacity.FractionUsed())
 	}
 
 	// Based on store statistics, determine which replica is the "worst" and
@@ -299,7 +241,7 @@ func (a *allocator) RemoveTarget(existing []proto.Replica) (proto.Replica, error
 func (a *allocator) ShouldRebalance(s *proto.StoreDescriptor) bool {
 	a.Lock()
 	defer a.Unlock()
-	sl := a.getStoreList(*s.CombinedAttrs())
+	sl := a.storePool.getStoreList(*s.CombinedAttrs(), a.deterministic)
 
 	if sl.used.mean < minFractionUsedThreshold {
 		return s.Capacity.RangeCount > int32(math.Ceil(sl.count.mean))
@@ -312,10 +254,9 @@ func (a *allocator) ShouldRebalance(s *proto.StoreDescriptor) bool {
 // replicas. If the supplied filter is nil, it is ignored. Returns the
 // list of matching descriptors, and the store list matching the
 // required attributes.
-func (a *allocator) selectRandom(count int, required proto.Attributes, existing []proto.Replica) (
-	[]*proto.StoreDescriptor, *storeList) {
+func (a *allocator) selectRandom(count int, required proto.Attributes, existing []proto.Replica) ([]*proto.StoreDescriptor, *StoreList) {
 	var descs []*proto.StoreDescriptor
-	sl := a.getStoreList(required)
+	sl := a.storePool.getStoreList(required, a.deterministic)
 	used := getUsedNodes(existing)
 
 	// Randomly permute available stores matching the required attributes.
@@ -334,53 +275,4 @@ func (a *allocator) selectRandom(count int, required proto.Attributes, existing 
 		return nil, nil
 	}
 	return descs, sl
-}
-
-// getStoreList returns a store list matching the required attributes.
-// Results are cached for performance.
-//
-// If it cannot retrieve a StoreDescriptor from the Store's gossip, it
-// garbage collects the failed key.
-//
-// TODO(embark, spencer): consider using a reverse index map from
-// Attr->stores, for efficiency. Ensure that entries in this map still
-// have an opportunity to be garbage collected.
-func (a *allocator) getStoreList(required proto.Attributes) *storeList {
-	if a.storeLists == nil {
-		a.storeLists = map[string]*storeList{}
-	}
-	key := required.SortedString()
-	if sl, ok := a.storeLists[key]; ok {
-		return sl
-	}
-	sl := &storeList{}
-	a.storeLists[key] = sl
-
-	updateStoreList := func(key string) {
-		storeDesc, err := storeDescFromGossip(key, a.gossip)
-		if err != nil {
-			// We can no longer retrieve this key from the gossip store,
-			// perhaps it expired.
-			delete(a.storeKeys, key)
-		} else if required.IsSubset(*storeDesc.CombinedAttrs()) {
-			sl.Add(storeDesc)
-		}
-	}
-
-	if a.deterministic {
-		var keys []string
-		for key := range a.storeKeys {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			updateStoreList(key)
-		}
-		return sl
-	}
-
-	for key := range a.storeKeys {
-		updateStoreList(key)
-	}
-	return sl
 }
