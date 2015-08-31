@@ -64,6 +64,43 @@ type span struct {
 	end   proto.Key
 }
 
+func prettySpans(spans []span, desc *TableDescriptor, index *IndexDescriptor) string {
+	valTypes, err := makeKeyVals(desc, index.ColumnIDs)
+	if err != nil {
+		return err.Error()
+	}
+	vals := make([]parser.Datum, len(valTypes))
+	prefix := proto.Key(MakeIndexKeyPrefix(desc.ID, index.ID))
+
+	var buf bytes.Buffer
+	for i, span := range spans {
+		if i > 0 {
+			_, _ = buf.WriteString(" ")
+		}
+		for j, key := range []proto.Key{span.start, span.end} {
+			if j == 1 {
+				_, _ = buf.WriteString("-")
+			}
+			if !bytes.HasPrefix(key, prefix) {
+				if j == 1 {
+					continue
+				}
+				return fmt.Sprintf("index key missing index prefix: %q vs %q", prefix, key)
+			}
+			key = key[len(prefix):]
+			k := 0
+			for ; k < len(valTypes) && len(key) > 0; k++ {
+				vals[k], key, err = decodeTableKey(valTypes[k], key)
+				if err != nil {
+					break
+				}
+			}
+			_, _ = buf.WriteString(prettyKeyVals(vals[:k]))
+		}
+	}
+	return buf.String()
+}
+
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
@@ -152,8 +189,8 @@ func (n *scanNode) ExplainPlan() (name, description string, children []planNode)
 	if n.desc == nil {
 		description = "-"
 	} else {
-		// TODO(pmattis): Display the start and end keys used for the scan?
-		description = fmt.Sprintf("%s@%s", n.desc.Name, n.index.Name)
+		description = fmt.Sprintf("%s@%s %s", n.desc.Name, n.index.Name,
+			prettySpans(n.spans, n.desc, n.index))
 	}
 	return name, description, nil
 }
@@ -599,7 +636,7 @@ func (n *scanNode) explainDebug(endOfRow, outputRow bool) {
 	n.row[0] = parser.DInt(n.rowIndex)
 	n.row[1] = parser.DString(n.prettyKey())
 	if n.implicitVals != nil {
-		n.row[2] = parser.DString(n.prettyKeyVals(n.implicitVals))
+		n.row[2] = parser.DString(prettyKeyVals(n.implicitVals))
 	} else {
 		n.row[2] = parser.DString(n.explainValue.String())
 	}
@@ -617,7 +654,7 @@ func (n *scanNode) prettyKey() string {
 		return ""
 	}
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "/%s/%s%s", n.desc.Name, n.index.Name, n.prettyKeyVals(n.vals))
+	fmt.Fprintf(&buf, "/%s/%s%s", n.desc.Name, n.index.Name, prettyKeyVals(n.vals))
 	if n.colID > 0 {
 		// TODO(pmattis): This is inefficient, but does it matter?
 		col, err := n.desc.FindColumnByID(n.colID)
@@ -629,7 +666,7 @@ func (n *scanNode) prettyKey() string {
 	return buf.String()
 }
 
-func (n *scanNode) prettyKeyVals(vals []parser.Datum) string {
+func prettyKeyVals(vals []parser.Datum) string {
 	var buf bytes.Buffer
 	for _, v := range vals {
 		if v == parser.DNull {

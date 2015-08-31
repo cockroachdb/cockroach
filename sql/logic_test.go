@@ -458,14 +458,22 @@ func (t *logicTest) execQuery(query logicQuery) {
 
 		fmt.Fprintf(tw, "%s: expected:\n", query.pos)
 		for i := 0; i < len(query.expectedResults); i += len(cols) {
-			for _, value := range query.expectedResults[i : i+len(cols)] {
+			end := i + len(cols)
+			if end > len(query.expectedResults) {
+				end = len(query.expectedResults)
+			}
+			for _, value := range query.expectedResults[i:end] {
 				fmt.Fprintf(tw, "%q\t", value)
 			}
 			fmt.Fprint(tw, "\n")
 		}
 		fmt.Fprint(tw, "but found:\n")
 		for i := 0; i < len(results); i += len(cols) {
-			for _, value := range results[i : i+len(cols)] {
+			end := i + len(cols)
+			if end > len(results) {
+				end = len(results)
+			}
+			for _, value := range results[i:end] {
 				fmt.Fprintf(tw, "%q\t", value)
 			}
 			fmt.Fprint(tw, "\n")

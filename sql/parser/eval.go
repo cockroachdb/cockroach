@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -46,6 +47,10 @@ type Datum interface {
 	// Compare returns -1 if the receiver is less than other, 0 if receiver is
 	// equal to other and +1 if receiver is greater than other.
 	Compare(other Datum) int
+	// Next returns the next datum. If the receiver is "a" and the returned datum
+	// is "b", then "a < b" and no other datum will compare such that "a < c <
+	// b".
+	Next() Datum
 }
 
 var _ Datum = DBool(false)
@@ -89,6 +94,11 @@ func (d DBool) Compare(other Datum) int {
 	return 0
 }
 
+// Next implements the Datum interface.
+func (d DBool) Next() Datum {
+	return DBool(true)
+}
+
 func (d DBool) String() string {
 	return BoolVal(d).String()
 }
@@ -118,6 +128,11 @@ func (d DInt) Compare(other Datum) int {
 		return 1
 	}
 	return 0
+}
+
+// Next implements the Datum interface.
+func (d DInt) Next() Datum {
+	return d + 1
 }
 
 func (d DInt) String() string {
@@ -151,6 +166,11 @@ func (d DFloat) Compare(other Datum) int {
 	return 0
 }
 
+// Next implements the Datum interface.
+func (d DFloat) Next() Datum {
+	return DFloat(math.Nextafter(float64(d), math.Inf(1)))
+}
+
 func (d DFloat) String() string {
 	return strconv.FormatFloat(float64(d), 'g', -1, 64)
 }
@@ -180,6 +200,11 @@ func (d DString) Compare(other Datum) int {
 		return 1
 	}
 	return 0
+}
+
+// Next implements the Datum interface.
+func (d DString) Next() Datum {
+	return DString(proto.Key(d).Next())
 }
 
 func (d DString) String() string {
@@ -223,6 +248,14 @@ func (d DTuple) Compare(other Datum) int {
 	return 0
 }
 
+// Next implements the Datum interface.
+func (d DTuple) Next() Datum {
+	n := make(DTuple, len(d))
+	copy(n, d)
+	n[len(n)-1] = n[len(n)-1].Next()
+	return n
+}
+
 func (d DTuple) String() string {
 	var buf bytes.Buffer
 	_ = buf.WriteByte('(')
@@ -264,6 +297,11 @@ func (d dNull) Compare(other Datum) int {
 		return 0
 	}
 	return -1
+}
+
+// Next implements the Datum interface.
+func (d dNull) Next() Datum {
+	panic("dNull.Next not supported")
 }
 
 func (d dNull) String() string {

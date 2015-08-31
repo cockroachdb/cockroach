@@ -103,19 +103,11 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND b > 'b'
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 0 AND b > 'b'
 ----
-0 /t/primary/1/'a' NULL false
-1 /t/primary/1/'b' NULL false
-2 /t/primary/1/'c' NULL true
+0 /t/primary/1/'c' NULL true
 
-# TODO(pmattis): This should scan 0 keys, but the way we scan greater
-# than a key is broken. We should really transfer "a > 0" into "a >=
-# 1". This is possible for integer keys.
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 1 AND b > 'b'
 ----
-0 /t/primary/1/'a' NULL false
-1 /t/primary/1/'b' NULL false
-2 /t/primary/1/'c' NULL false
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b
