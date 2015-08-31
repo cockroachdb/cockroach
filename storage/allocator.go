@@ -64,12 +64,11 @@ type allocator struct {
 }
 
 // newAllocator creates a new allocator using the specified StorePool.
-func newAllocator(storePool *StorePool) *allocator {
-	a := &allocator{
+func makeAllocator(storePool *StorePool) allocator {
+	return allocator{
 		storePool: storePool,
 		randGen:   rand.New(rand.NewSource(rand.Int63())),
 	}
-	return a
 }
 
 // getUsedNodes returns a set of node IDs which are already being used
@@ -142,7 +141,7 @@ func (a *allocator) allocateTarget(required proto.Attributes, existing []proto.R
 // is perfectly fine, as other stores in the cluster will also be
 // doing their probabilistic best to rebalance. This helps prevent
 // a stampeding herd targeting an abnormally under-utilized store.
-func (a *allocator) rebalanceTarget(required proto.Attributes, existing []proto.Replica) *proto.StoreDescriptor {
+func (a allocator) rebalanceTarget(required proto.Attributes, existing []proto.Replica) *proto.StoreDescriptor {
 	filter := func(s *proto.StoreDescriptor, count, used *stat) bool {
 		// Use counts instead of capacities if the cluster has mean
 		// fraction used below a threshold level. This is primarily useful
@@ -174,7 +173,7 @@ func (a *allocator) rebalanceTarget(required proto.Attributes, existing []proto.
 // the zone config associated with the provided replicas. This will allow it to
 // make correct decisions in the case of ranges with heterogeneous replica
 // requirements (i.e. multiple data centers).
-func (a *allocator) removeTarget(existing []proto.Replica) (proto.Replica, error) {
+func (a allocator) removeTarget(existing []proto.Replica) (proto.Replica, error) {
 	if len(existing) == 0 {
 		return proto.Replica{}, util.Error("must supply at least one replica to allocator.RemoveTarget()")
 	}
@@ -222,7 +221,7 @@ func (a *allocator) removeTarget(existing []proto.Replica) (proto.Replica, error
 
 // shouldRebalance returns whether the specified store is overweight
 // according to the cluster mean and should rebalance a range.
-func (a *allocator) shouldRebalance(s *proto.StoreDescriptor) bool {
+func (a allocator) shouldRebalance(s *proto.StoreDescriptor) bool {
 	sl := a.storePool.getStoreList(*s.CombinedAttrs(), a.deterministic)
 
 	if sl.used.mean < minFractionUsedThreshold {
@@ -236,7 +235,7 @@ func (a *allocator) shouldRebalance(s *proto.StoreDescriptor) bool {
 // replicas. If the supplied filter is nil, it is ignored. Returns the
 // list of matching descriptors, and the store list matching the
 // required attributes.
-func (a *allocator) selectRandom(count int, required proto.Attributes, existing []proto.Replica) ([]*proto.StoreDescriptor, *StoreList) {
+func (a allocator) selectRandom(count int, required proto.Attributes, existing []proto.Replica) ([]*proto.StoreDescriptor, *StoreList) {
 	var descs []*proto.StoreDescriptor
 	sl := a.storePool.getStoreList(required, a.deterministic)
 	used := getUsedNodes(existing)

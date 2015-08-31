@@ -211,12 +211,12 @@ var multiDCStores = []*proto.StoreDescriptor{
 
 // createTestAllocator creates a stopper, gossip, store pool and allocator for
 // use in tests. Stopper must be stopped by the caller.
-func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, *allocator) {
+func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, allocator) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	storePool := NewStorePool(g, TestTimeUntilStoreDeadOff, stopper)
-	a := newAllocator(storePool)
+	a := makeAllocator(storePool)
 	return stopper, g, storePool, a
 }
 
@@ -700,7 +700,7 @@ func Example_rebalancing() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	sp := NewStorePool(g, TestTimeUntilStoreDeadOff, stopper)
-	alloc := newAllocator(sp)
+	alloc := makeAllocator(sp)
 	alloc.randGen = rand.New(rand.NewSource(0))
 	alloc.deterministic = true
 
