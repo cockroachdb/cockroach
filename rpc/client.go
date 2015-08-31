@@ -212,28 +212,29 @@ func (c *Client) runHeartbeat(retryOpts retry.Options, closer <-chan struct{}) {
 		}
 	}
 
-	connErr := errUnstarted // initial condition
-	var beatErr error
+	var err = errUnstarted // initial condition
 	for {
 		for r := retry.Start(retryOpts); r.Next(); {
-			// Reconnect if connection failed or heartbeat error is not
-			// definitely temporary.
-			if netErr, ok := beatErr.(net.Error); connErr != nil || beatErr != nil && !(ok && netErr.Temporary()) {
-				if connErr = c.connect(); connErr != nil {
-					log.Warning(connErr)
+			// Reconnect on failure.
+			if err != nil {
+				if err = c.connect(); err != nil {
 					setUnhealthy()
+					log.Warning(err)
 					continue
 				}
 			}
 
-			if beatErr = c.heartbeat(); beatErr == nil {
-				setHealthy()
-				break
-			} else {
-				log.Warning(beatErr)
+			// Heartbeat regardless of failure.
+			if err = c.heartbeat(); err != nil {
 				setUnhealthy()
+				log.Warning(err)
+				continue
 			}
+
+			setHealthy()
+			break
 		}
+
 		// Wait after the heartbeat so that the first iteration gets a wait-free
 		// heartbeat attempt.
 		select {
