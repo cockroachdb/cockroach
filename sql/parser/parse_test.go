@@ -18,6 +18,7 @@
 package parser
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/testutils"
@@ -524,5 +525,161 @@ func TestParsePanic(t *testing.T) {
 	expected := `syntax error at or near "EOF"`
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
+	}
+}
+
+func TestParsePrecedence(t *testing.T) {
+	// Precedence levels (highest first):
+	//   0: - ~
+	//   1: * / %
+	//   2: + -
+	//   3: << >>
+	//   4: &
+	//   5: ^
+	//   6: |
+	//   7: = != > >= < <=
+	//   8: NOT
+	//   9: AND
+	//  10: OR
+
+	unary := func(op UnaryOp, expr Expr) Expr {
+		return &UnaryExpr{Operator: op, Expr: expr}
+	}
+	binary := func(op BinaryOp, left, right Expr) Expr {
+		return &BinaryExpr{Operator: op, Left: left, Right: right}
+	}
+	cmp := func(op ComparisonOp, left, right Expr) Expr {
+		return &ComparisonExpr{Operator: op, Left: left, Right: right}
+	}
+	not := func(expr Expr) Expr {
+		return &NotExpr{Expr: expr}
+	}
+	and := func(left, right Expr) Expr {
+		return &AndExpr{Left: left, Right: right}
+	}
+	or := func(left, right Expr) Expr {
+		return &OrExpr{Left: left, Right: right}
+	}
+
+	one := IntVal(1)
+	two := IntVal(2)
+	three := IntVal(3)
+
+	testData := []struct {
+		sql      string
+		expected Expr
+	}{
+		// Unary plus and complement.
+		{`~-1`, unary(UnaryComplement, unary(UnaryMinus, one))},
+		{`-~1`, unary(UnaryMinus, unary(UnaryComplement, one))},
+
+		// Mul, div, mod combined with higher precedence.
+		{`-1*2`, binary(Mult, unary(UnaryMinus, one), two)},
+		{`1*-2`, binary(Mult, one, unary(UnaryMinus, two))},
+		{`-1/2`, binary(Div, unary(UnaryMinus, one), two)},
+		{`1/-2`, binary(Div, one, unary(UnaryMinus, two))},
+		{`-1%2`, binary(Mod, unary(UnaryMinus, one), two)},
+		{`1%-2`, binary(Mod, one, unary(UnaryMinus, two))},
+
+		// Mul, div, mod combined with self (left associative).
+		{`1*2*3`, binary(Mult, binary(Mult, one, two), three)},
+		{`1*2/3`, binary(Div, binary(Mult, one, two), three)},
+		{`1/2*3`, binary(Mult, binary(Div, one, two), three)},
+		{`1*2%3`, binary(Mod, binary(Mult, one, two), three)},
+		{`1%2*3`, binary(Mult, binary(Mod, one, two), three)},
+		{`1/2/3`, binary(Div, binary(Div, one, two), three)},
+		{`1/2*3`, binary(Mult, binary(Div, one, two), three)},
+		{`1/2%3`, binary(Mod, binary(Div, one, two), three)},
+		{`1%2/3`, binary(Div, binary(Mod, one, two), three)},
+		{`1%2%3`, binary(Mod, binary(Mod, one, two), three)},
+
+		// Binary plus and minus combined with higher precedence.
+		{`1*2+3`, binary(Plus, binary(Mult, one, two), three)},
+		{`1+2*3`, binary(Plus, one, binary(Mult, two, three))},
+		{`1*2-3`, binary(Minus, binary(Mult, one, two), three)},
+		{`1-2*3`, binary(Minus, one, binary(Mult, two, three))},
+
+		// Binary plus and minus combined with self (left associative).
+		{`1+2-3`, binary(Minus, binary(Plus, one, two), three)},
+		{`1-2+3`, binary(Plus, binary(Minus, one, two), three)},
+
+		// Left and right shift combined with higher precedence.
+		{`1<<2+3`, binary(LShift, one, binary(Plus, two, three))},
+		{`1+2<<3`, binary(LShift, binary(Plus, one, two), three)},
+		{`1>>2+3`, binary(RShift, one, binary(Plus, two, three))},
+		{`1+2>>3`, binary(RShift, binary(Plus, one, two), three)},
+
+		// Left and right shift combined with self (left associative).
+		{`1<<2<<3`, binary(LShift, binary(LShift, one, two), three)},
+		{`1<<2>>3`, binary(RShift, binary(LShift, one, two), three)},
+		{`1>>2<<3`, binary(LShift, binary(RShift, one, two), three)},
+		{`1>>2>>3`, binary(RShift, binary(RShift, one, two), three)},
+
+		// Bit-and combined with higher precedence.
+		{`1&2<<3`, binary(Bitand, one, binary(LShift, two, three))},
+		{`1<<2&3`, binary(Bitand, binary(LShift, one, two), three)},
+
+		// Bit-and combined with self (left associative)
+		{`1&2&3`, binary(Bitand, binary(Bitand, one, two), three)},
+
+		// Bit-xor combined with higher precedence.
+		{`1^2&3`, binary(Bitxor, one, binary(Bitand, two, three))},
+		{`1&2^3`, binary(Bitxor, binary(Bitand, one, two), three)},
+
+		// Bit-xor combined with self (left associative)
+		{`1^2^3`, binary(Bitxor, binary(Bitxor, one, two), three)},
+
+		// Bit-or combined with higher precedence.
+		{`1|2^3`, binary(Bitor, one, binary(Bitxor, two, three))},
+		{`1^2|3`, binary(Bitor, binary(Bitxor, one, two), three)},
+
+		// Bit-or combined with self (left associative)
+		{`1|2|3`, binary(Bitor, binary(Bitor, one, two), three)},
+
+		// Equals, not-equals, greater-than, greater-than equals, less-than and
+		// less-than equals combined with higher precedence.
+		{`1 = 2|3`, cmp(EQ, one, binary(Bitor, two, three))},
+		{`1|2 = 3`, cmp(EQ, binary(Bitor, one, two), three)},
+		{`1 != 2|3`, cmp(NE, one, binary(Bitor, two, three))},
+		{`1|2 != 3`, cmp(NE, binary(Bitor, one, two), three)},
+		{`1 > 2|3`, cmp(GT, one, binary(Bitor, two, three))},
+		{`1|2 > 3`, cmp(GT, binary(Bitor, one, two), three)},
+		{`1 >= 2|3`, cmp(GE, one, binary(Bitor, two, three))},
+		{`1|2 >= 3`, cmp(GE, binary(Bitor, one, two), three)},
+		{`1 < 2|3`, cmp(LT, one, binary(Bitor, two, three))},
+		{`1|2 < 3`, cmp(LT, binary(Bitor, one, two), three)},
+		{`1 <= 2|3`, cmp(LE, one, binary(Bitor, two, three))},
+		{`1|2 <= 3`, cmp(LE, binary(Bitor, one, two), three)},
+
+		// NOT combined with higher precedence.
+		{`NOT 1 = 2`, not(cmp(EQ, one, two))},
+		{`NOT 1 = NOT 2 = 3`, not(cmp(EQ, one, not(cmp(EQ, two, three))))},
+
+		// NOT combined with self.
+		{`NOT NOT 1 = 2`, not(not(cmp(EQ, one, two)))},
+
+		// AND combined with higher precedence.
+		{`NOT 1 AND 2`, and(not(one), two)},
+		{`1 AND NOT 2`, and(one, not(two))},
+
+		// AND combined with self (left associative).
+		{`1 AND 2 AND 3`, and(and(one, two), three)},
+
+		// OR combined with higher precedence.
+		{`1 AND 2 OR 3`, or(and(one, two), three)},
+		{`1 OR 2 AND 3`, or(one, and(two, three))},
+
+		// OR combined with self (left associative).
+		{`1 OR 2 OR 3`, or(or(one, two), three)},
+	}
+	for _, d := range testData {
+		q, err := ParseTraditional("SELECT " + d.sql)
+		if err != nil {
+			t.Fatalf("%s: %v", d.sql, err)
+		}
+		expr := q[0].(*Select).Exprs[0].Expr
+		if !reflect.DeepEqual(d.expected, expr) {
+			t.Fatalf("%s: expected %s, but found %s", d.sql, d.expected, expr)
+		}
 	}
 }
