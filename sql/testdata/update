@@ -62,7 +62,7 @@ EXPLAIN (DEBUG) SELECT * FROM kv2@a
 2  /kv2/a/'f'  /'e'  true
 3  /kv2/a/'g'  /'f'  true
 
-statement error duplicate key value .* violates unique constraint
+statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
 UPDATE kv2 SET v = 'g' WHERE k IN ('a')
 
 query ITTB

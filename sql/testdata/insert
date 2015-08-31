@@ -66,7 +66,7 @@ EXPLAIN (DEBUG) SELECT * FROM kv@a
 3  /kv/a/'d'  /'c'     true
 4  /kv/a/'f'  /'e'     true
 
-statement error duplicate key value .* violates unique constraint
+statement error duplicate key value \(v\)=\('f'\) violates unique constraint "a"
 INSERT INTO kv VALUES ('e', 'f')
 
 query ITTB
@@ -135,7 +135,7 @@ EXPLAIN (DEBUG) SELECT * FROM kv@a
 4  /kv/a/'f'  /'e'     true
 5  /kv/a/'g'  /'f'     true
 
-statement error duplicate key value .* violates unique constraint
+statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
 INSERT INTO kv VALUES ('h', 'g')
 
 query ITTB
@@ -179,7 +179,7 @@ a    b
 c    d
 e    f
 f    g
-g    
+g
 nil1 NULL
 nil2 NULL
 nil3 NULL
