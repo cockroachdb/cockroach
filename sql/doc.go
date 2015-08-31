@@ -69,8 +69,8 @@ database/table name to ID and from ID to descriptor:
   );
 
   CREATE TABLE system.descriptor (
-    "id"   INT PRIMARY KEY,
-    "desc" BLOB
+    "id"         INT PRIMARY KEY,
+    "descriptor" BLOB
   );
 
 The reserved ID of 0 is used for the "root" of the namespace in which the
@@ -82,7 +82,7 @@ system effectively does a query like:
 And given a database/table ID, the system looks up the descriptor using a query
 like:
 
-  SELECT desc FROM system.descriptor WHERE id = <ID>
+  SELECT descriptor FROM system.descriptor WHERE id = <ID>
 
 Primary Key Addressing
 
