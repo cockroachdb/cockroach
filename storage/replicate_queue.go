@@ -45,23 +45,23 @@ type replicateQueue struct {
 	clock     *hlc.Clock
 }
 
-// newReplicateQueue returns a new instance of replicateQueue.
-func newReplicateQueue(gossip *gossip.Gossip, allocator allocator, clock *hlc.Clock) *replicateQueue {
-	rq := &replicateQueue{
+// makeReplicateQueue returns a new instance of replicateQueue.
+func makeReplicateQueue(gossip *gossip.Gossip, allocator allocator, clock *hlc.Clock) replicateQueue {
+	rq := replicateQueue{
 		gossip:    gossip,
 		allocator: allocator,
 		clock:     clock,
 	}
-	rq.baseQueue = newBaseQueue("replicate", rq, replicateQueueMaxSize)
+	// rq must be a pointer in order to setup the reference cycle.
+	rq.baseQueue = newBaseQueue("replicate", &rq, replicateQueueMaxSize)
 	return rq
 }
 
-func (rq *replicateQueue) needsLeaderLease() bool {
+func (rq replicateQueue) needsLeaderLease() bool {
 	return true
 }
 
-func (rq *replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (
-	shouldQ bool, priority float64) {
+func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (shouldQ bool, priority float64) {
 	// If the replica's range spans multiple zones, ignore it until the split
 	// queue has processed it.
 	if len(computeSplitKeys(rq.gossip, repl)) > 0 {
@@ -78,8 +78,7 @@ func (rq *replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (
 	return rq.needsReplication(zone, repl, repl.Desc())
 }
 
-func (rq *replicateQueue) needsReplication(zone config.ZoneConfig, repl *Replica,
-	desc *proto.RangeDescriptor) (bool, float64) {
+func (rq replicateQueue) needsReplication(zone config.ZoneConfig, repl *Replica, desc *proto.RangeDescriptor) (bool, float64) {
 	// TODO(bdarnell): handle non-empty ReplicaAttrs.
 	need := len(zone.ReplicaAttrs)
 	have := len(desc.Replicas)
@@ -93,7 +92,7 @@ func (rq *replicateQueue) needsReplication(zone config.ZoneConfig, repl *Replica
 	return false, 0
 }
 
-func (rq *replicateQueue) process(now proto.Timestamp, repl *Replica) error {
+func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 	zone, err := lookupZoneConfig(rq.gossip, repl)
 	if err != nil {
 		return err
@@ -121,10 +120,11 @@ func (rq *replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 	}
 
 	// Enqueue this replica again to see if there are more changes to be made.
-	go rq.MaybeAdd(repl, rq.clock.Now())
+	//go rq.MaybeAdd(repl, rq.clock.Now())
+	rq.MaybeAdd(repl, rq.clock.Now())
 	return nil
 }
 
-func (rq *replicateQueue) timer() time.Duration {
+func (rq replicateQueue) timer() time.Duration {
 	return replicateQueueTimerDuration
 }

@@ -262,7 +262,7 @@ type Store struct {
 	gcQueue        *gcQueue        // Garbage collection queue
 	_splitQueue    *splitQueue     // Range splitting queue
 	verifyQueue    *verifyQueue    // Checksum verification queue
-	replicateQueue *replicateQueue // Replication queue
+	replicateQueue replicateQueue  // Replication queue
 	_rangeGCQueue  *rangeGCQueue   // Range GC queue
 	scanner        *replicaScanner // Range scanner
 	feed           StoreEventFeed  // Event Feed
@@ -379,7 +379,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	s.gcQueue = newGCQueue()
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ReplicaCount)
-	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
+	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
 	s._rangeGCQueue = newRangeGCQueue(s.db)
 	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue)
 
