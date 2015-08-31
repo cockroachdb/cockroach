@@ -51,6 +51,12 @@ type Datum interface {
 	// is "b", then "a < b" and no other datum will compare such that "a < c <
 	// b".
 	Next() Datum
+	// IsMax returns true if the datum is equal to the maximum value the datum
+	// type can hold.
+	IsMax() bool
+	// IsMin returns true if the datum is equal to the minimum value the datum
+	// type can hold.
+	IsMin() bool
 }
 
 var _ Datum = DBool(false)
@@ -99,6 +105,16 @@ func (d DBool) Next() Datum {
 	return DBool(true)
 }
 
+// IsMax implements the Datum interface.
+func (d DBool) IsMax() bool {
+	return d == true
+}
+
+// IsMin implements the Datum interface.
+func (d DBool) IsMin() bool {
+	return d == false
+}
+
 func (d DBool) String() string {
 	return BoolVal(d).String()
 }
@@ -133,6 +149,16 @@ func (d DInt) Compare(other Datum) int {
 // Next implements the Datum interface.
 func (d DInt) Next() Datum {
 	return d + 1
+}
+
+// IsMax implements the Datum interface.
+func (d DInt) IsMax() bool {
+	return d == math.MaxInt64
+}
+
+// IsMin implements the Datum interface.
+func (d DInt) IsMin() bool {
+	return d == math.MinInt64
 }
 
 func (d DInt) String() string {
@@ -171,6 +197,18 @@ func (d DFloat) Next() Datum {
 	return DFloat(math.Nextafter(float64(d), math.Inf(1)))
 }
 
+// IsMax implements the Datum interface.
+func (d DFloat) IsMax() bool {
+	// Using >= accounts for +inf as well.
+	return d >= math.MaxFloat64
+}
+
+// IsMin implements the Datum interface.
+func (d DFloat) IsMin() bool {
+	// Using <= accounts for -inf as well.
+	return d <= -math.MaxFloat64
+}
+
 func (d DFloat) String() string {
 	return strconv.FormatFloat(float64(d), 'g', -1, 64)
 }
@@ -205,6 +243,16 @@ func (d DString) Compare(other Datum) int {
 // Next implements the Datum interface.
 func (d DString) Next() Datum {
 	return DString(proto.Key(d).Next())
+}
+
+// IsMax implements the Datum interface.
+func (d DString) IsMax() bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d DString) IsMin() bool {
+	return len(d) == 0
 }
 
 func (d DString) String() string {
@@ -256,6 +304,16 @@ func (d DTuple) Next() Datum {
 	return n
 }
 
+// IsMax implements the Datum interface.
+func (d DTuple) IsMax() bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d DTuple) IsMin() bool {
+	return false
+}
+
 func (d DTuple) String() string {
 	var buf bytes.Buffer
 	_ = buf.WriteByte('(')
@@ -302,6 +360,16 @@ func (d dNull) Compare(other Datum) int {
 // Next implements the Datum interface.
 func (d dNull) Next() Datum {
 	panic("dNull.Next not supported")
+}
+
+// IsMax implements the Datum interface.
+func (d dNull) IsMax() bool {
+	return true
+}
+
+// IsMin implements the Datum interface.
+func (d dNull) IsMin() bool {
+	return true
 }
 
 func (d dNull) String() string {
