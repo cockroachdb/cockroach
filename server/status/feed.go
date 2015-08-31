@@ -68,11 +68,12 @@ func (nef NodeEventFeed) StartNode(desc proto.NodeDescriptor, startedAt int64) {
 // CallComplete is called by a node whenever it completes a request. This will
 // publish an appropriate event to the feed based on the results of the call.
 // TODO(tschottdorf): move to batch, account for multiple methods per batch.
+// In particular, on error want an error position to identify the failed
+// request.
 func (nef NodeEventFeed) CallComplete(args proto.Request, reply proto.Response) {
 	method := args.Method()
-	if bArgs, ok := args.(*proto.BatchRequest); ok {
-		// TODO(tschottdorf): provisional, see above.
-		method = bArgs.Requests[0].GetValue().(proto.Request).Method()
+	if ba, ok := args.(*proto.BatchRequest); ok && len(ba.Requests) > 0 {
+		method = ba.Requests[0].GetValue().(proto.Request).Method()
 	}
 	if err := reply.Header().Error; err != nil &&
 		err.CanRestartTransaction() == proto.TransactionRestart_ABORT {

@@ -1,10 +1,28 @@
-// Package batch ...
+// Copyright 2014 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+//
+// Author: Tobias Schottdorf
+
 // TODO(tschottdorf): provisional home for all of the below.
+
 package batch
 
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/keys"
@@ -20,7 +38,7 @@ import (
 // inconsistencies are found.
 // It is checked that the individual call does not have a UserPriority
 // or Txn set that differs from the batch's.
-// TODO(tschottdorf): preliminary code.
+// TODO(tschottdorf): will go with #2143.
 func UpdateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 	// Disallow transaction, user and priority on individual calls, unless
 	// equal.
@@ -34,20 +52,13 @@ func UpdateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 }
 
 // MaybeWrap wraps the given argument in a batch, unless it is already one.
-// TODO(tschottdorf): preliminary code.
+// TODO(tschottdorf): will go when proto.Call does.
 func MaybeWrap(args proto.Request) (*proto.BatchRequest, func(proto.Response) proto.Response) {
 	if bArgs, ok := args.(*proto.BatchRequest); ok {
 		return bArgs, func(a proto.Response) proto.Response { return a }
 	}
 	bArgs := &proto.BatchRequest{}
 	bArgs.RequestHeader = *(gogoproto.Clone(args.Header()).(*proto.RequestHeader))
-	if !proto.IsRange(args) {
-		// TODO(tschottdorf): this is only here because BatchRequest is
-		// marked as a `range` operation. This has side effects such as
-		// creating unneccessary intents at TxnCoordSender.
-		// TODO(tschottdorf): remove
-		// bArgs.RequestHeader.EndKey = bArgs.RequestHeader.Key.Next()
-	}
 	bArgs.Add(args)
 	return bArgs, func(reply proto.Response) proto.Response {
 		bReply, ok := reply.(*proto.BatchResponse)
@@ -76,7 +87,7 @@ func MaybeWrap(args proto.Request) (*proto.BatchRequest, func(proto.Response) pr
 
 // MaybeWrapCall returns a new call which wraps the original Args and Reply
 // in a batch, if necessary.
-// TODO(tschottdorf): preliminary code.
+// TODO(tschottdorf): will go when proto.Call does.
 func MaybeWrapCall(call proto.Call) (proto.Call, func(proto.Call) proto.Call) {
 	var unwrap func(proto.Response) proto.Response
 	call.Args, unwrap = MaybeWrap(call.Args)
@@ -96,6 +107,7 @@ func MaybeWrapCall(call proto.Call) (proto.Call, func(proto.Call) proto.Call) {
 // KeyRange returns a key range which contains all keys in the Batch.
 // In particular, this resolves local addressing.
 // TODO(tschottdorf): testing.
+// TODO(tschottdorf): ideally method on *BatchRequest. See #2198.
 func KeyRange(br *proto.BatchRequest) (proto.Key, proto.Key) {
 	from := proto.KeyMax
 	to := proto.KeyMin
@@ -124,7 +136,7 @@ func KeyRange(br *proto.BatchRequest) (proto.Key, proto.Key) {
 
 // Short gives a brief summary of the contained requests and keys in the batch.
 // TODO(tschottdorf): awkward to not have this on BatchRequest, but can't pull
-// `keys` into `proto` (req'd by KeyAddress).
+// `keys` into `proto` (req'd by KeyAddress). See #2198.
 func Short(br *proto.BatchRequest) string {
 	var str []string
 	for _, arg := range br.Requests {
@@ -139,8 +151,8 @@ func Short(br *proto.BatchRequest) string {
 // Sender is a new incarnation of client.Sender which only supports batches
 // and uses a request-response pattern.
 // TODO(tschottdorf): do away with client.Sender.
+// TODO(tschottdorf) rename to SendBatch->Send when client.Sender is out of the way.
 type Sender interface {
-	// TODO(tschottdorf) rename to Send() when client.Sender is out of the way.
 	SendBatch(context.Context, *proto.BatchRequest) (*proto.BatchResponse, error)
 }
 
@@ -167,23 +179,42 @@ func NewChunkingSender(f SenderFn) Sender {
 }
 
 // SendBatch implements Sender.
+// TODO(tschottdorf): only cuts an EndTransaction request off. Also need
+// to untangle reverse/forward, txn/non-txn, ...
+// We actually don't want to chop EndTransaction off for single-range
+// requests. Whether it is one or not is unknown right now (you can only
+// find out after you've sent to the Range/looked up a descriptor that
+// suggests that you're multi-range. In those cases, the wrapped sender should
+// return an error so that we split and retry once the chunk which contains
+// EndTransaction (i.e. the last one).
 func (cs *ChunkingSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
 	var argChunks []*proto.BatchRequest
 	if len(ba.Requests) < 1 {
 		panic("empty batchArgs")
 	}
-	// TODO(tschottdorf): only cuts an EndTransaction request off. Also need
-	// to untangle reverse/forward, txn/non-txn, ...
-	// We actually don't want to chop EndTransaction off for single-range
-	// requests. Whether it is one or not is unknown right now (you can only
-	// find out after you've sent to the Range/looked up a descriptor that
-	// suggests that you're multi-range. In those cases, should return an error
-	// so that we split and retry once the chunk which contains EndTransaction
-	// (i.e. the last one).
+
+	// Deterministically create ClientCmdIDs for all parts of the batch if
+	// a CmdID is already set (otherwise, leave them empty).
+	var nextID func() proto.ClientCmdID
+	empty := proto.ClientCmdID{}
+	if empty == ba.CmdID {
+		nextID = func() proto.ClientCmdID {
+			return empty
+		}
+	} else {
+		rng := rand.New(rand.NewSource(ba.CmdID.Random))
+		origID := ba.CmdID
+		nextID = func() proto.ClientCmdID {
+			id := origID
+			origID.Random = rng.Int63()
+			return id
+		}
+	}
+
 	if rArg, ok := ba.GetArg(proto.EndTransaction); ok &&
 		len(ba.Requests) > 1 {
 		et := rArg.(*proto.EndTransactionRequest)
-		firstChunk := *ba // shallow copy so that we get to manipulate .Requests
+		firstChunk := *ba // shallow copy so that we get to manipulate fields
 		etChunk := &proto.BatchRequest{}
 		etChunk.Add(et)
 		etChunk.RequestHeader = *gogoproto.Clone(&ba.RequestHeader).(*proto.RequestHeader)
@@ -196,20 +227,14 @@ func (cs *ChunkingSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 	// TODO(tschottdorf): propagate reply header to next request.
 	for len(argChunks) > 0 {
 		ba, argChunks = argChunks[0], argChunks[1:]
+		ba.CmdID = nextID()
 		rpl, err := cs.f(ctx, ba)
 		if err != nil {
 			return nil, err
 		}
 		rplChunks = append(rplChunks, rpl)
 	}
-	return fuseReplyChunks(rplChunks)
-}
 
-// TODO(tschottdorf): this'll fuse into SendBatch.
-func fuseReplyChunks(rplChunks []*proto.BatchResponse) (*proto.BatchResponse, error) {
-	if len(rplChunks) == 0 {
-		panic("no responses given")
-	}
 	reply := rplChunks[0]
 	for _, rpl := range rplChunks[1:] {
 		reply.Responses = append(reply.Responses, rpl.Responses...)
@@ -220,7 +245,7 @@ func fuseReplyChunks(rplChunks []*proto.BatchResponse) (*proto.BatchResponse, er
 
 // SendCallConverted is a wrapped to go from the (ctx,call) interface to the
 // one used by batch.Sender.
-// TODO(tschottdorf): provisional code.
+// TODO(tschottdorf): remove when new proto.Call is gone.
 func SendCallConverted(sender Sender, ctx context.Context, call proto.Call) {
 	call, unwrap := MaybeWrapCall(call)
 	defer unwrap(call)

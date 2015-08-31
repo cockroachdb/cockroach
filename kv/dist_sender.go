@@ -439,51 +439,45 @@ func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) 
 // Secondly, all requests contained in the batch are "truncated" to
 // the resulting range, inserting NoopRequest appropriately to
 // replace requests which are left without a key range to operate on.
-// The closure returned must be executed to undo the truncation, even
+// The number of non-noop requests after truncation is returned along
+// with a closure which must be executed to undo the truncation, even
 // in case of an error.
-// TODO(tschottdorf): cannot (yet) handle a range-request which does not
-// intersect the current key range. The change should be straightforward.
-// TODO(tschottdorf): we might want to refactor this closure-based undoing
-// stuff after this hits master. It works fine, but maybe it's too much
-// magic.
-func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to proto.Key) (func(), error) {
+func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to proto.Key) (func(), int, error) {
 	if !desc.ContainsKey(keys.KeyAddress(from)) {
 		from = desc.StartKey
 	}
 	if !desc.ContainsKeyRange(desc.StartKey, keys.KeyAddress(to)) || to == nil {
 		to = desc.EndKey
 	}
+	fromAddr := keys.KeyAddress(from)
+	toAddr := keys.KeyAddress(to)
 	truncateOne := func(args proto.Request) (bool, []func(), error) {
 		header := args.Header()
-		// The BatchRequest hack is necessary as long as BatchRequest itself
-		// is a "Request" which is expected to cover a key range.
-		if _, ok := args.(*proto.BatchRequest); !ok && !proto.IsRange(args) {
+		if !proto.IsRange(args) {
 			if len(header.EndKey) > 0 {
 				return false, nil, util.Errorf("%T is not a range command, but EndKey is set", args)
 			}
 			if !desc.ContainsKey(keys.KeyAddress(args.Header().Key)) {
-				// TODO(tschottdorf): erroring here prevents merges to go
-				// through until batches are properly chunked. We can get away
-				// with ignoring this as long as all requests go to the same
-				// store - apparently mostly true in tests which span ranges.
-				//return false, nil, util.Errorf("batch chopping not yet supported: %s on %q outside of [%s,%s)", args.Method(), args.Header().Key, desc.StartKey, desc.EndKey)
 				return true, nil, nil
 			}
 			return false, nil, nil
 		}
 		var undo []func()
-		if key := args.Header().Key; key != nil && keys.KeyAddress(key).Less(keys.KeyAddress(from)) {
+		key, endKey := args.Header().Key, args.Header().EndKey
+		keyAddr, endKeyAddr := keys.KeyAddress(key), keys.KeyAddress(endKey)
+		if keyAddr.Less(fromAddr) {
 			undo = append(undo, func() { args.Header().Key = key })
 			args.Header().Key = from
+			keyAddr = fromAddr
 		}
-		// It is illegal to send EndKey on commands which do not operate on
-		// key ranges, so don't do it in that case.
-		if endKey := args.Header().EndKey; endKey != nil &&
-			!keys.KeyAddress(endKey).Less(keys.KeyAddress(to)) {
+		if !endKeyAddr.Less(toAddr) {
 			undo = append(undo, func() { args.Header().EndKey = endKey })
 			args.Header().EndKey = to
+			endKeyAddr = toAddr
 		}
-		return false, undo, nil
+		// Check whether the truncation has left any keys in the range. If not,
+		// we need to cut it out of the request.
+		return !keyAddr.Less(endKeyAddr), undo, nil
 	}
 
 	var fns []func()
@@ -493,9 +487,11 @@ func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to prot
 		}
 	}
 
+	var numNoop int
 	for pos, arg := range br.Requests {
 		omit, undo, err := truncateOne(arg.GetValue().(proto.Request))
 		if omit {
+			numNoop++
 			nReq := &proto.RequestUnion{}
 			nReq.SetValue(&proto.NoopRequest{})
 			oReq := br.Requests[pos]
@@ -507,42 +503,15 @@ func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to prot
 		}
 		fns = append(fns, undo...)
 		if err != nil {
-			return gUndo, err
+			return gUndo, 0, err
 		}
 	}
-	// TODO(tschottdorf): top-level header shouldn't hold keys any more.
-	_, undo, err := truncateOne(br) // top-level header
-	fns = append(fns, undo...)
-	return gUndo, err
+	return gUndo, len(br.Requests) - numNoop, nil
 }
 
 // sendAttempt temporarily truncates the arguments to match the descriptor,
 // gathers and rearranges the replicas, and makes an RPC call.
 func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba *proto.BatchRequest, desc *proto.RangeDescriptor) (*proto.BatchResponse, error) {
-	{
-		// TODO(tschottdorf): provisional code to avoid sending noop-only batches.
-		// Make nicer.
-		var proceed bool
-		for _, arg := range ba.Requests {
-			if _, noop := arg.GetValue().(*proto.NoopRequest); noop {
-				continue
-			}
-			proceed = true
-		}
-		// Batch may be empty now, and we don't want to send that (it will
-		// break since you can't define the key range).
-		if !proceed {
-			br := &proto.BatchResponse{}
-			for range ba.Requests {
-				br.Add(&proto.NoopResponse{})
-			}
-			br.Txn = ba.Txn
-			return br, nil
-		}
-		if ba.Key.Equal(proto.KeyMax) {
-			panic(batch.Short(ba))
-		}
-	}
 	defer trace.Epoch("sending RPC")()
 
 	leader := ds.leaderCache.Lookup(proto.RangeID(desc.RangeID))
@@ -609,7 +578,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 	// If this is a bounded request, we will change its bound as we receive
 	// replies. This undoes that when we return.
 	// TODO(tschottdorf): unimplemented for batch, so always false here.
-	boundedArgs, argsBounded := proto.Bounded(nil), false // call.Args.(proto.Bounded)
+	boundedArgs, argsBounded := proto.Bounded(nil), false
 	if argsBounded {
 		defer func(bound int64) {
 			boundedArgs.SetBound(bound)
@@ -686,12 +655,21 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 				// not, work towards it.
 				ba.Key, ba.EndKey = batch.KeyRange(ba)
 				// Truncate the request to our current key range.
-				untruncate, trErr := truncate(ba, desc, from, to)
+				untruncate, numActive, trErr := truncate(ba, desc, from, to)
 				if trErr != nil {
 					untruncate()
 					return nil, trErr
 				}
-				curReply, err = ds.sendAttempt(trace, ba, desc)
+				if numActive == 0 {
+					br := &proto.BatchResponse{}
+					for range ba.Requests {
+						br.Add(&proto.NoopResponse{})
+					}
+					br.Txn = gogoproto.Clone(ba.Txn).(*proto.Transaction)
+					curReply, err = br, nil
+				} else {
+					curReply, err = ds.sendAttempt(trace, ba, desc)
+				}
 				untruncate()
 				ba.Key, ba.EndKey = nil, nil
 			}

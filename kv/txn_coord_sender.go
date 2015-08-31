@@ -28,6 +28,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/batch"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -379,6 +380,10 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 				// outstanding intents to EndTransaction, though.
 				// TODO(tschottdorf): possible issues when the batch fails,
 				// but the intents have been added anyways.
+				// TODO(tschottdorf): some of these intents may be covered
+				// by others, for example {[a,b), a}). This can lead to
+				// some extra requests when those are non-local to the txn
+				// record. But it doesn't seem worth optimizing now.
 				et.Intents = append(et.Intents, intents...)
 			} else if !metaOK {
 				// If we don't have the transaction, then this must be a retry
@@ -389,7 +394,8 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 				// we could lookup the transaction and return either nil or
 				// TransactionAbortedError instead of this ambivalent error.
 				return nil, util.Errorf("transaction is already committed or aborted")
-			} else if len(et.Intents) == 0 {
+			}
+			if len(et.Intents) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state in
 				// the client.
@@ -404,6 +410,10 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 	{
 		var err error
 		br, err = tc.wrapped.SendBatch(ctx, ba)
+
+		if _, ok := err.(*proto.OpRequiresTxnError); ok {
+			br, err = tc.resendWithTxn(ba)
+		}
 
 		if err := tc.updateState(ctx, ba, br, err); err != nil {
 			return nil, err
@@ -718,6 +728,9 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba *proto.BatchReques
 		// Update our record of this transaction, even on error.
 		if txnMeta != nil {
 			txnMeta.txn = *newTxn
+			if !txnMeta.txn.Writing {
+				panic("tracking a non-writing txn")
+			}
 			txnMeta.setLastUpdate(tc.clock.PhysicalNow())
 		}
 		tc.Unlock()
@@ -731,4 +744,37 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba *proto.BatchReques
 		}
 	}
 	return err
+}
+
+// TODO(tschottdorf): this method is somewhat awkward but unless we want to
+// give this error back to the client, our options are limited. We'll have to
+// run the whole thing for them, or any restart will still end up at the client
+// which will not be prepared to be handed a Txn.
+func (tc *TxnCoordSender) resendWithTxn(ba *proto.BatchRequest) (*proto.BatchResponse, error) {
+	// Run a one-off transaction with that single command.
+	if log.V(1) {
+		log.Infof("%s: auto-wrapping in txn and re-executing: ", batch.Short(ba))
+	}
+	tmpDB, err := client.Open(
+		fmt.Sprintf("//?priority=%d",
+			ba.GetUserPriority()),
+		client.SenderOpt(tc))
+	if err != nil {
+		return nil, err
+	}
+	br := &proto.BatchResponse{}
+	if err := tmpDB.Txn(func(txn *client.Txn) error {
+		txn.SetDebugName("auto-wrap", 0)
+		b := &client.Batch{}
+		for _, arg := range ba.Requests {
+			req := arg.GetValue().(proto.Request)
+			call := proto.Call{Args: req, Reply: req.CreateReply()}
+			b.InternalAddCall(call)
+			br.Add(call.Reply)
+		}
+		return txn.CommitInBatch(b)
+	}); err != nil {
+		return nil, err
+	}
+	return br, nil
 }

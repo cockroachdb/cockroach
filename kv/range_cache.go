@@ -185,7 +185,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 		rdc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}
 	if len(rs) == 0 {
-		log.Fatalf("no range descriptors returned for %s", key)
+		panic(fmt.Sprintf("no range descriptors returned for %s", key))
 	}
 	rdc.rangeCacheMu.Unlock()
 	return &rs[0], nil

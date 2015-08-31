@@ -332,8 +332,10 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		if err := scan.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
 		}
-		if scan.Reply.Header().Txn == nil {
-			t.Errorf("expected Scan to be wrapped in a Transaction")
+		if scan.Reply.Header().Txn != nil {
+			// This was the other way around at some point in the past.
+			// Same below for Delete, etc.
+			t.Errorf("expected no transaction in response header")
 		}
 		if rows := scan.Reply.(*proto.ScanResponse).Rows; len(rows) != i+1 {
 			t.Fatalf("expected %d rows, but got %d", i+1, len(rows))
@@ -354,8 +356,8 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	if err := del.Reply.Header().GoError(); err != nil {
 		t.Fatal(err)
 	}
-	if del.Reply.Header().Txn == nil {
-		t.Errorf("expected DeleteRange to be wrapped in a Transaction")
+	if del.Reply.Header().Txn != nil {
+		t.Errorf("expected no transaction in response header")
 	}
 	if n := del.Reply.(*proto.DeleteRangeResponse).NumDeleted; n != int64(len(writes)) {
 		t.Errorf("expected %d keys to be deleted, but got %d instead",

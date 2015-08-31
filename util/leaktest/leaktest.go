@@ -105,6 +105,9 @@ func AfterTest(t testing.TB) {
 	if testing.Short() {
 		return
 	}
+	if r := recover(); r != nil {
+		panic(r)
+	}
 	var bad string
 	badSubstring := map[string]string{
 		").readLoop(":                                  "a Transport",

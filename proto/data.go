@@ -502,6 +502,7 @@ func (t *Transaction) Update(o *Transaction) {
 		o.CertainNodes.Nodes...)}
 	t.UpgradePriority(o.Priority)
 	if t.Writing && !o.Writing {
+		// TODO(tschottdorf): false positives; see #2300.
 		panic("r/w status regression")
 	}
 	t.Writing = o.Writing

@@ -326,6 +326,10 @@ func TestSendRPCOrder(t *testing.T) {
 
 		args := tc.args
 		args.Header().RangeID = rangeID // Not used in this test, but why not.
+		args.Header().Key = proto.Key("a")
+		if proto.IsRange(args) {
+			args.Header().EndKey = proto.Key("b")
+		}
 		if !tc.consistent {
 			args.Header().ReadConsistency = proto.INCONSISTENT
 		}

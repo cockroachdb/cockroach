@@ -1323,7 +1323,6 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto
 			}
 		}
 		if err != nil {
-			log.Warningf("ERR %v", err)
 			return bReply, err
 		}
 		if isTxn {
@@ -1334,7 +1333,6 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto
 }
 
 func (s *Store) executeOne(ctx context.Context, args proto.Request) (proto.Response, error) {
-	log.Warningf("EXEC %T @ %s %s", args, args.Header().Key, args.Header().Timestamp)
 	trace := tracer.FromCtx(ctx)
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {

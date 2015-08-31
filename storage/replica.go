@@ -88,9 +88,7 @@ var TestingCommandFilter func(proto.Request) error
 // upon EndTransaction if they only have local intents (which can be
 // resolved synchronously with EndTransaction). Certain tests become
 // simpler with this being turned off.
-// TODO(tschottdorf): disabled since it confuses batches (recreating txns as
-// PENDING -> timeout). Re-check after all the other dust settles.
-var txnAutoGC = false
+var txnAutoGC = true
 
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
@@ -1136,6 +1134,9 @@ func (r *Replica) handleSkippedIntents(args proto.Request, intents []proto.Inten
 
 	ctx := r.context()
 	stopper := r.rm.Stopper()
+	// TODO(tschottdorf): avoid data race related to batch unrolling in ExecuteCmd;
+	// can probably go again when that provisional code there is gone.
+	args = gogoproto.Clone(args).(proto.Request)
 	stopper.RunAsyncTask(func() {
 		err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
 			Intents: intents,

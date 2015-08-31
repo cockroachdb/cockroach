@@ -2630,7 +2630,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 // choice of old or new is returned with no error.
 func TestRangeDanglingMetaIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): re-enable when hack in random intent selection removed")
+	t.Skip("TODO(tschottdorf): disabled; see comment in RangeLookup")
 	// Test RangeLookup with Scan.
 	testRangeDanglingMetaIntent(t, false)
 	// Test RangeLookup with ReverseScan.
@@ -2742,7 +2742,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 // from RangeLookup by using ReverseScan.
 func TestRangeLookupUseReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): re-enable with TestRangeDanglingMetaIntent")
+	t.Skip("TODO(tschottdorf): disabled; see comment in RangeLookup")
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

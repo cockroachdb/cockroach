@@ -533,7 +533,8 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		rangeCount = 1
 	}
 
-	var kvs []proto.KeyValue
+	var kvs []proto.KeyValue        // kv descriptor pairs in scan order
+	var rds []proto.RangeDescriptor // corresponding unmarshaled descriptors
 	var intents []proto.Intent
 	var err error
 	if !args.Reverse {
@@ -555,11 +556,27 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		// less than "f", and so the meta row {"f"->["c", "f")} would be
 		// ignored by MVCCReverseScan. In the second case, the range descriptor
 		// received by MVCCScan will be filtered before results are returned.
+		// Example: ranges ["c", "f") and ["f", "z"), reverse scan on ["d", "f"]
+		// leads to inspecting the descriptor {"z"->["f","z")}, which is
+		// discarded since it's not being asked for.
 		startKey, endKey := keys.MetaScanBounds(args.Key)
 		kvs, intents, err = engine.MVCCScan(batch, startKey, endKey, 1,
 			args.Timestamp, consistent, args.Txn)
 		if err != nil {
 			return reply, nil, err
+		}
+		var firstRD proto.RangeDescriptor
+		if err = gogoproto.Unmarshal(kvs[0].Value.Bytes, &firstRD); err != nil {
+			return reply, nil, err
+		}
+		if keys.RangeMetaKey(firstRD.StartKey).Less(args.Key) {
+			// We actually want this descriptor, so we store it.
+			rds = append(rds, firstRD)
+		} else {
+			// Discard temporary data to preserve assumptions about the
+			// content of these two slices.
+			kvs = nil
+			intents = nil
 		}
 
 		// We want to search for the metadata key just less or equal to
@@ -573,9 +590,14 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		revKvs, revIntents, err := engine.MVCCReverseScan(batch, startKey, endKey, rangeCount,
 			args.Timestamp, consistent, args.Txn)
 
-		// Merge the results, the total ranges may be bigger than rangeCount.
+		// Merge the results, the total ranges may be bigger than rangeCount,
+		// so we fix that next.
 		kvs = append(kvs, revKvs...)
 		intents = append(intents, revIntents...)
+		if int64(len(kvs)) > rangeCount {
+			kvs = kvs[:rangeCount]
+		}
+
 	}
 	if err != nil {
 		// An error here is likely a WriteIntentError when reading consistently.
@@ -583,7 +605,13 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 	}
 	// TODO(tschottdorf): temporary hack to make sure none of the test failures
 	// are related to deadlock hitting a stale descriptor.
-	if len(intents) > 0 { // args.IgnoreIntents && len(intents) > 0 {
+	// TODO(tschottdorf): the original code below appears dramatically worse
+	// with the coordinator-side batch changes. Investigate why more precisely,
+	// but it appears to be due to the fact that the range descriptor caching
+	// is very racy, so if you need the intent but only very few requests have
+	// IgnoreIntents set, it's very unlikely that the push/intent resolution
+	// ever gets to the right range.
+	if len(intents) > 0 { // len(intents) > 0 && args.IgnoreIntents > 0 {
 		// NOTE (subtle): in general, we want to try to clean up dangling
 		// intents on meta records. However, if we're in the process of
 		// cleaning up a dangling intent on a meta record by pushing the
@@ -605,8 +633,12 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		// values. If we guess wrong, the client will try again and get
 		// the other value (within a few tries).
 		//
-		// TODO(tschottdorf): Double-check that randomness is allowed here.
-		if rand.Intn(2) == 0 {
+		// Additionally, if the inconsistent lookup returned no descriptor,
+		// we always return the intent if there is one.
+		//
+		// TODO(tschottdorf): Double-check that randomness is allowed here,
+		// after all this is a replica command.
+		if len(kvs) == 0 || rand.Intn(2) == 0 {
 			key, txn := intents[0].Key, &intents[0].Txn
 			val, _, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
 			if err != nil {
@@ -620,40 +652,21 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 	}
 
 	if len(kvs) == 0 {
-		// No matching results were returned from the scan. This could
-		// indicate a very bad system error, but for now we will just
-		// treat it as a retryable Key Mismatch error.
-		err := proto.NewRangeKeyMismatchError(args.Key, args.EndKey, r.Desc())
-		log.Errorf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s", err)
-		return reply, nil, err
+		// No matching results were returned from the scan. This should
+		// never happen with the above logic.
+		panic(fmt.Sprintf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found"))
 	}
 
 	// Decode all scanned range descriptors, stopping if a range is encountered
 	// which does not have the same metadata prefix as the queried key.
-	rds := make([]proto.RangeDescriptor, len(kvs))
-	for i := range kvs {
+	for i, l := len(rds), len(kvs); i < l; i++ {
+		rds = append(rds, proto.RangeDescriptor{})
 		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
 		if err = gogoproto.Unmarshal(kvs[i].Value.Bytes, &rds[i]); err != nil {
 			return reply, nil, err
 		}
 	}
 
-	// In reverse mode, check the results before return as the first range
-	// descriptor and the total range count may not yet be correct, as
-	// explained above.
-	if args.Reverse {
-		// We had to carry out a single ascending scan above, and if our key
-		// corresponds to an end key we've picked up an extra descriptor
-		// we need to discard now.
-		if !keys.RangeMetaKey(rds[0].StartKey).Less(args.Key) {
-			rds = rds[1:]
-		} else {
-			// Check if we're over max result count.
-			if int64(len(rds)) > rangeCount {
-				rds = rds[:rangeCount]
-			}
-		}
-	}
 	reply.Ranges = rds
 	return reply, intents, nil
 }

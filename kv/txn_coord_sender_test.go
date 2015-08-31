@@ -44,6 +44,9 @@ import (
 // has the associated heartbeat tasks quit. This is useful for tests which
 // don't finish transactions.
 func teardownHeartbeats(tc *TxnCoordSender) {
+	if r := recover(); r != nil {
+		panic(r)
+	}
 	tc.Lock()
 	for _, tm := range tc.txns {
 		if tm.txnEnd != nil {
@@ -131,6 +134,9 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	if !ok {
 		t.Fatal("expected a transaction to be created on coordinator")
 	}
+	if !call.Reply.Header().Txn.Writing {
+		t.Fatal("response Txn is not marked as writing")
+	}
 	ts := atomic.LoadInt64(&txnMeta.lastUpdateNanos)
 
 	// Advance time and send another put request. Lock the coordinator
@@ -138,6 +144,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	s.Sender.Lock()
 	s.Manual.Set(1)
 	s.Sender.Unlock()
+	putReq.Txn.Writing = true
 	call = proto.Call{Args: putReq, Reply: &proto.PutResponse{}}
 	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
@@ -257,6 +264,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		txn.Writing = true // required for all but first req
 	}
 
 	// Verify that the transaction metadata contains only two entries
@@ -316,6 +324,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
+	*initialTxn = *call.Reply.Header().Txn
 
 	// Verify 3 heartbeats.
 	var heartbeatTS proto.Timestamp
@@ -406,7 +415,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 			RequestHeader: proto.RequestHeader{
 				Key:       txn.Key,
 				Timestamp: txn.Timestamp,
-				Txn:       txn,
+				Txn:       pReply.Header().Txn,
 			},
 			Commit: true,
 		},
@@ -435,6 +444,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
+	txn = call.Reply.Header().Txn
 
 	// Push the transaction to abort it.
 	txn2 := newTxn(s.Clock, key)
@@ -694,6 +704,7 @@ func TestTxnDrainingNode(t *testing.T) {
 		if pReply.GoError() != nil {
 			t.Fatal(pReply.GoError())
 		}
+		txn = pReply.Txn
 	}
 	endTxn := func() {
 		etReply := &proto.EndTransactionResponse{}
