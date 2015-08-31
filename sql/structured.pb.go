@@ -27,8 +27,9 @@ const (
 	ColumnType_DECIMAL   ColumnType_Kind = 3
 	ColumnType_DATE      ColumnType_Kind = 4
 	ColumnType_TIMESTAMP ColumnType_Kind = 5
-	ColumnType_STRING    ColumnType_Kind = 6
-	ColumnType_BYTES     ColumnType_Kind = 7
+	ColumnType_INTERVAL  ColumnType_Kind = 6
+	ColumnType_STRING    ColumnType_Kind = 7
+	ColumnType_BYTES     ColumnType_Kind = 8
 )
 
 var ColumnType_Kind_name = map[int32]string{
@@ -38,8 +39,9 @@ var ColumnType_Kind_name = map[int32]string{
 	3: "DECIMAL",
 	4: "DATE",
 	5: "TIMESTAMP",
-	6: "STRING",
-	7: "BYTES",
+	6: "INTERVAL",
+	7: "STRING",
+	8: "BYTES",
 }
 var ColumnType_Kind_value = map[string]int32{
 	"BOOL":      0,
@@ -48,8 +50,9 @@ var ColumnType_Kind_value = map[string]int32{
 	"DECIMAL":   3,
 	"DATE":      4,
 	"TIMESTAMP": 5,
-	"STRING":    6,
-	"BYTES":     7,
+	"INTERVAL":  6,
+	"STRING":    7,
+	"BYTES":     8,
 }
 
 func (x ColumnType_Kind) Enum() *ColumnType_Kind {

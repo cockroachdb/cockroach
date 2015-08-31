@@ -268,6 +268,7 @@ func TestColumnTypeSQLString(t *testing.T) {
 		{sql.ColumnType{Kind: sql.ColumnType_DECIMAL, Precision: 7, Width: 8}, "DECIMAL(7,8)"},
 		{sql.ColumnType{Kind: sql.ColumnType_DATE}, "DATE"},
 		{sql.ColumnType{Kind: sql.ColumnType_TIMESTAMP}, "TIMESTAMP"},
+		{sql.ColumnType{Kind: sql.ColumnType_INTERVAL}, "INTERVAL"},
 		{sql.ColumnType{Kind: sql.ColumnType_STRING}, "STRING"},
 		{sql.ColumnType{Kind: sql.ColumnType_STRING, Width: 10}, "STRING(10)"},
 		{sql.ColumnType{Kind: sql.ColumnType_BYTES}, "BYTES"},

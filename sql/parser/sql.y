@@ -245,7 +245,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <colType> character_base
 %type <empty> extract_arg
 %type <empty> opt_charset
-%type <empty> opt_varying opt_timezone opt_no_inherit
+%type <empty> opt_varying opt_no_inherit
 
 %type <ival>  signed_iconst
 %type <expr>  opt_boolean_or_string
@@ -2542,32 +2542,17 @@ opt_charset:
 const_datetime:
   DATE
   {
-    $$ = &DateType{Name: "DATE"}
+    $$ = &DateType{}
   }
-| TIMESTAMP '(' ICONST ')' opt_timezone
+| TIMESTAMP
   {
     $$ = &TimestampType{}
-  }
-| TIMESTAMP opt_timezone
-  {
-    $$ = &TimestampType{}
-  }
-| TIME '(' ICONST ')' opt_timezone
-  {
-    $$ = &DateType{Name: "TIME"}
-  }
-| TIME opt_timezone
-  {
-    $$ = &DateType{Name: "TIME"}
   }
 
 const_interval:
-  INTERVAL {}
-
-opt_timezone:
-  WITH_LA TIME ZONE {}
-| WITHOUT TIME ZONE {}
-| /* EMPTY */ {}
+  INTERVAL {
+    $$ = &IntervalType{}
+  }
 
 opt_interval:
   YEAR {}

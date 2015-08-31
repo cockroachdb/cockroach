@@ -290,6 +290,15 @@ func (s *Server) execStmt(stmt parser.Statement, req driver.Request, planMaker *
 					row.Values = append(row.Values, driver.Datum{FloatVal: (*float64)(&vt)})
 				case parser.DString:
 					row.Values = append(row.Values, driver.Datum{StringVal: (*string)(&vt)})
+				case parser.DDate:
+					s := vt.String()
+					row.Values = append(row.Values, driver.Datum{StringVal: &s})
+				case parser.DTimestamp:
+					s := vt.String()
+					row.Values = append(row.Values, driver.Datum{StringVal: &s})
+				case parser.DInterval:
+					s := vt.String()
+					row.Values = append(row.Values, driver.Datum{StringVal: &s})
 				default:
 					return result, util.Errorf("unsupported datum: %T", val)
 				}

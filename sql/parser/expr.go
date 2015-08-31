@@ -59,6 +59,9 @@ func (DBool) expr()           {}
 func (DInt) expr()            {}
 func (DFloat) expr()          {}
 func (DString) expr()         {}
+func (DDate) expr()           {}
+func (DTimestamp) expr()      {}
+func (DInterval) expr()       {}
 func (DTuple) expr()          {}
 func (dNull) expr()           {}
 

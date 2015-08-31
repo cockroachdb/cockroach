@@ -676,10 +676,9 @@ func TestEncodeDecodeTime(t *testing.T) {
 		"0",
 	}
 
-	// Append all the positive values
-	length := len(testCases) - 1
-	for i := range testCases[:length] {
-		testCases = append(testCases, testCases[length-i-1][1:])
+	// Append all the positive values in ascending order, excluding zero.
+	for i := len(testCases) - 2; i >= 0; i-- {
+		testCases = append(testCases, testCases[i][1:])
 	}
 
 	var last time.Time
@@ -707,7 +706,7 @@ func TestEncodeDecodeTime(t *testing.T) {
 
 	// Check that the encoding hasn't changed.
 	if a, e := lastEncoded, []byte("\x0e\x01 \xbc\x0e\xae\r\r\xf2\x8e\x80"); !bytes.Equal(a, e) {
-		t.Fatalf("encoding has changed\nexpected %q\nactual %q", a, e)
+		t.Errorf("encoding has changed:\nexpected %q\nactual %q", e, a)
 	}
 }
 

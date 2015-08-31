@@ -444,10 +444,26 @@ func typeCheckCastExpr(expr *CastExpr) (Datum, error) {
 			return DummyString, nil
 		}
 
+	case *DateType:
+		switch dummyExpr {
+		case DummyString, DummyTimestamp:
+			return DummyDate, nil
+		}
+
+	case *TimestampType:
+		switch dummyExpr {
+		case DummyString, DummyDate:
+			return DummyTimestamp, nil
+		}
+
+	case *IntervalType:
+		switch dummyExpr {
+		case DummyString:
+			return DummyInterval, nil
+		}
+
 	// TODO(pmattis): unimplemented.
 	case *DecimalType:
-	case *DateType:
-	case *TimestampType:
 	}
 
 	return nil, fmt.Errorf("invalid cast: %s -> %s", dummyExpr.Type(), expr.Type)

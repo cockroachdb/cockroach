@@ -34,6 +34,7 @@ func (*FloatType) columnType()     {}
 func (*DecimalType) columnType()   {}
 func (*DateType) columnType()      {}
 func (*TimestampType) columnType() {}
+func (*IntervalType) columnType()  {}
 func (*StringType) columnType()    {}
 func (*BytesType) columnType()     {}
 
@@ -98,11 +99,10 @@ func (node *DecimalType) String() string {
 
 // DateType represents a DATE type.
 type DateType struct {
-	Name string
 }
 
 func (node *DateType) String() string {
-	return node.Name
+	return "DATE"
 }
 
 // TimestampType represents a TIMESTAMP type.
@@ -111,6 +111,14 @@ type TimestampType struct {
 
 func (node *TimestampType) String() string {
 	return "TIMESTAMP"
+}
+
+// IntervalType represents a INTERVAL type
+type IntervalType struct {
+}
+
+func (node *IntervalType) String() string {
+	return "INTERVAL"
 }
 
 // StringType represents a STRING, CHAR or VARCHAR type.
