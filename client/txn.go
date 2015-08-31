@@ -271,9 +271,9 @@ func (txn *Txn) Run(b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	if err := txn.send(b.calls...); err != nil {
-		return err
-	}
+	// Errors here will be attached to the results, so we will get them
+	// from the call to fillResults.
+	_ = txn.send(b.calls...)
 	return b.fillResults()
 }
 

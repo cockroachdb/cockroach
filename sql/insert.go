@@ -19,14 +19,46 @@ package sql
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
+
+// TOOD(tamird): instead of tracking every write, use the failed CPut's
+// key to decode the index and values.
+type writePair struct {
+	tableDesc *TableDescriptor
+	columnID  ColumnID
+	val       parser.Datum
+}
+
+type writePairs []writePair
+
+func (wp writePairs) String() string {
+	cols := make([]string, 0, len(wp))
+	vals := make([]string, 0, len(wp))
+
+	for _, pair := range wp {
+		colDesc, err := pair.tableDesc.FindColumnByID(pair.columnID)
+		if err != nil {
+			panic(err)
+		}
+
+		cols = append(cols, colDesc.Name)
+		vals = append(vals, pair.val.String())
+	}
+
+	return fmt.Sprintf("(%s)=(%s)", strings.Join(cols, ","), strings.Join(vals, ","))
+}
+
+type write struct {
+	constraint *IndexDescriptor
+	values     writePairs
+}
 
 // Insert inserts rows into the database.
 // Privileges: INSERT on table
@@ -74,40 +106,55 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	primaryIndex := tableDesc.PrimaryIndex
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
-	b := client.Batch{}
-
+	var b client.Batch
+	var writes []write
 	for rows.Next() {
-		values := rows.Values()
-		for range cols[len(values):] {
-			values = append(values, parser.DNull)
+		rowVals := rows.Values()
+		for range cols[len(rowVals):] {
+			rowVals = append(rowVals, parser.DNull)
 		}
 
 		for _, col := range tableDesc.Columns {
 			if !col.Nullable {
-				if i, ok := colIDtoRowIndex[col.ID]; !ok || values[i] == parser.DNull {
+				if i, ok := colIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
 					return nil, fmt.Errorf("null value in column %q violates not-null constraint", col.Name)
 				}
 			}
 		}
 
 		primaryIndexKey, _, err := encodeIndexKey(
-			primaryIndex.ColumnIDs, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
 
 		// Write the secondary indexes.
 		secondaryIndexEntries, err := encodeSecondaryIndexes(
-			tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, values)
+			tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, rowVals)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, secondaryIndexEntry := range secondaryIndexEntries {
+		for i, secondaryIndexEntry := range secondaryIndexEntries {
 			if log.V(2) {
 				log.Infof("CPut %q -> %v", secondaryIndexEntry.key, secondaryIndexEntry.value)
 			}
 			b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+
+			var w write
+
+			indexDesc := &tableDesc.Indexes[i]
+			for _, columnID := range indexDesc.ColumnIDs {
+				w.values = append(w.values, writePair{
+					tableDesc: tableDesc,
+					columnID:  columnID,
+					val:       rowVals[colIDtoRowIndex[columnID]],
+				})
+			}
+
+			w.constraint = indexDesc
+
+			writes = append(writes, w)
 		}
 
 		// Write the row sentinel.
@@ -116,8 +163,23 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		}
 		b.CPut(primaryIndexKey, nil, nil)
 
+		var w write
+
+		indexDesc := &tableDesc.PrimaryIndex
+		for _, columnID := range indexDesc.ColumnIDs {
+			w.values = append(w.values, writePair{
+				tableDesc: tableDesc,
+				columnID:  columnID,
+				val:       rowVals[colIDtoRowIndex[columnID]],
+			})
+		}
+
+		w.constraint = indexDesc
+
+		writes = append(writes, w)
+
 		// Write the row columns.
-		for i, val := range values {
+		for i, val := range rowVals {
 			col := cols[i]
 
 			// Make sure the value can be written to the column before proceeding.
@@ -144,6 +206,8 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 				}
 
 				b.CPut(key, primitive, nil)
+
+				writes = append(writes, write{})
 			}
 		}
 	}
@@ -151,8 +215,12 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		return nil, err
 	}
 	if err := p.txn.Run(&b); err != nil {
-		if tErr, ok := err.(*proto.ConditionFailedError); ok {
-			return nil, util.Errorf("duplicate key value %q violates unique constraint %s", tErr.ActualValue.Bytes, "TODO(tamird)")
+		for i, result := range b.Results {
+			if _, ok := result.Err.(*proto.ConditionFailedError); ok {
+				w := writes[i]
+
+				return nil, fmt.Errorf("duplicate key value %s violates unique constraint %q", w.values, w.constraint.Name)
+			}
 		}
 		return nil, err
 	}
