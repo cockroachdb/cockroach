@@ -612,7 +612,10 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 			if err != nil {
 				return reply, nil, err
 			}
-			kvs = []proto.KeyValue{{Key: key, Value: *val}}
+			// If the intent is not a deletion, return its value.
+			if val != nil {
+				kvs = []proto.KeyValue{{Key: key, Value: *val}}
+			}
 		}
 	}
 
