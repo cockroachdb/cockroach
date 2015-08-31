@@ -25,13 +25,19 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func init() {
-	// Setting the heartbeat interval in individual tests
-	// triggers the race detector, so this is better for now.
+	// Setting these in individual tests triggers the race detector, so
+	// this is better for now.
+	// TODO(tamird): stop doing this.
 	heartbeatInterval = 10 * time.Millisecond
+	clientRetryOptions = retry.Options{
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     1 * time.Millisecond,
+	}
 }
 
 func TestClientHeartbeat(t *testing.T) {
