@@ -440,10 +440,12 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %nonassoc  UNBOUNDED         // ideally should have same precedence as IDENT
 %nonassoc  IDENT NULL PARTITION RANGE ROWS PRECEDING FOLLOWING CUBE ROLLUP
 %left      CONCAT       // multi-character ops
+%left      '|'
+%left      '^' '#'
+%left      '&'
+%left      LSHIFT RSHIFT
 %left      '+' '-'
 %left      '*' '/' '%'
-%left      LSHIFT RSHIFT
-%left      '&' '|' '^' '#'
 // Unary Operators
 %left      AT                // sets precedence for AT TIME ZONE
 %left      COLLATE
