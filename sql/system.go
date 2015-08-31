@@ -45,22 +45,22 @@ const (
 	// TODO(marc): wouldn't it be better to use a pre-parsed version?
 	namespaceTableSchema = `
 CREATE TABLE system.namespace (
-  "parentID" INT,
-  "name"     CHAR,
-  "id"       INT,
+  parentID INT,
+  name     CHAR,
+  id       INT,
   PRIMARY KEY (parentID, name)
 );`
 
 	descriptorTableSchema = `
 CREATE TABLE system.descriptor (
-  "id"   INT PRIMARY KEY,
-  "desc" BLOB
+  id         INT PRIMARY KEY,
+  descriptor BLOB
 );`
 
 	usersTableSchema = `
 CREATE TABLE system.users (
-  "username"       CHAR PRIMARY KEY,
-  "hashedPassword" BLOB
+  username       CHAR PRIMARY KEY,
+  hashedPassword BLOB
 );`
 )
 

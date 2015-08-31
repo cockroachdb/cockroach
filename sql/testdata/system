@@ -38,6 +38,27 @@ SELECT id FROM system.descriptor
 4
 1000
 
+# Verify format of system tables.
+query TTT
+SHOW COLUMNS FROM system.namespace;
+----
+parentID INT    true
+name     STRING true
+id       INT    true
+
+query TTT
+SHOW COLUMNS FROM system.descriptor;
+----
+id         INT   true
+descriptor BYTES true
+
+query TTT
+SHOW COLUMNS FROM system.users;
+----
+username       STRING true
+hashedPassword BYTES  true
+
+# Verify default privileges on system tables.
 query TTT
 SHOW GRANTS ON DATABASE system
 ----
