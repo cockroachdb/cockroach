@@ -140,7 +140,7 @@ func unmarshalValue(src *proto.Value, dest reflect.Value) error {
 		panic("TODO(pmattis): unimplemented")
 
 	case *encoding.BinaryUnmarshaler:
-		panic("TODO(pmattis): unimplemented")
+		return (*d).UnmarshalBinary(src.Bytes)
 	}
 
 	switch dest.Kind() {
