@@ -257,12 +257,12 @@ type Store struct {
 	ctx            StoreContext
 	db             *client.DB
 	engine         engine.Engine   // The underlying key-value store
-	_allocator     *allocator      // Makes allocation decisions
+	_allocator     allocator       // Makes allocation decisions
 	rangeIDAlloc   *idAllocator    // Range ID allocator
 	gcQueue        *gcQueue        // Garbage collection queue
 	_splitQueue    *splitQueue     // Range splitting queue
 	verifyQueue    *verifyQueue    // Checksum verification queue
-	replicateQueue *replicateQueue // Replication queue
+	replicateQueue replicateQueue  // Replication queue
 	_rangeGCQueue  *rangeGCQueue   // Range GC queue
 	scanner        *replicaScanner // Range scanner
 	feed           StoreEventFeed  // Event Feed
@@ -367,7 +367,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 		ctx:            ctx,
 		db:             ctx.DB, // TODO(tschottdorf) remove redundancy.
 		engine:         eng,
-		_allocator:     newAllocator(ctx.StorePool),
+		_allocator:     makeAllocator(ctx.StorePool),
 		replicas:       map[proto.RangeID]*Replica{},
 		replicasByKey:  btree.New(64 /* degree */),
 		uninitReplicas: map[proto.RangeID]*Replica{},
@@ -379,7 +379,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	s.gcQueue = newGCQueue()
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ReplicaCount)
-	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
+	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
 	s._rangeGCQueue = newRangeGCQueue(s.db)
 	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue)
 
@@ -948,7 +948,7 @@ func (s *Store) Engine() engine.Engine { return s.engine }
 func (s *Store) DB() *client.DB { return s.ctx.DB }
 
 // Allocator accessor.
-func (s *Store) allocator() *allocator { return s._allocator }
+func (s *Store) allocator() allocator { return s._allocator }
 
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
