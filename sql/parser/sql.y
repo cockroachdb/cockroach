@@ -3509,7 +3509,6 @@ a_expr_const:
   }
 | SCONST
   {
-    // TODO(pmattis): string literal
     $$ = StrVal($1)
   }
 | BCONST

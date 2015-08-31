@@ -17,7 +17,11 @@
 
 package parser
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/testutils"
+)
 
 func TestNormalizeExpr(t *testing.T) {
 	testData := []struct {
@@ -68,6 +72,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`1=a/2`, `a = 2`},
 		{`a=lower('FOO')`, `a = 'foo'`},
 		{`lower(a)='foo'`, `lower(a) = 'foo'`},
+		{`-9223372036854775808`, `-9223372036854775808`},
 	}
 	for _, d := range testData {
 		q, err := ParseTraditional("SELECT " + d.expr)
@@ -81,6 +86,25 @@ func TestNormalizeExpr(t *testing.T) {
 		}
 		if s := r.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+	}
+}
+
+func TestNormalizeExprError(t *testing.T) {
+	testData := []struct {
+		expr     string
+		expected string
+	}{
+		{`9223372036854775808`, `integer value out of range`},
+	}
+	for _, d := range testData {
+		q, err := ParseTraditional("SELECT " + d.expr)
+		if err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
+		expr := q[0].(*Select).Exprs[0].Expr
+		if _, err := NormalizeExpr(expr); !testutils.IsError(err, d.expected) {
+			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}
 }
