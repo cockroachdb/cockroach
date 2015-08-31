@@ -87,7 +87,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 
 // waitUntilDead will block until the specified store is marked as dead.
 func waitUntilDead(t *testing.T, sp *StorePool, storeID proto.StoreID) {
-	util.SucceedsWithin(t, 3*testTimeUntilStoreDead, func() error {
+	util.SucceedsWithin(t, 10*testTimeUntilStoreDead, func() error {
 		sp.mu.RLock()
 		defer sp.mu.RUnlock()
 		store, ok := sp.stores[storeID]
