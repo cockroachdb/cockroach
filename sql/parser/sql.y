@@ -3530,7 +3530,7 @@ a_expr_const:
   }
 | NULL
   {
-    $$ = NullVal{}
+    $$ = DNull
   }
 
 signed_iconst:

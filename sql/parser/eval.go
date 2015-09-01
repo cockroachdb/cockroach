@@ -648,9 +648,6 @@ func EvalExpr(expr Expr) (Datum, error) {
 	case ValArg:
 		// Placeholders should have been replaced before expression evaluation.
 
-	case NullVal:
-		return DNull, nil
-
 	case *QualifiedName:
 		return DNull, fmt.Errorf("qualified name \"%s\" not found", t)
 
