@@ -727,7 +727,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba *proto.BatchReques
 		}
 		// Update our record of this transaction, even on error.
 		if txnMeta != nil {
-			txnMeta.txn = *newTxn
+			txnMeta.txn.Update(newTxn) // better to replace after #2300
 			if !txnMeta.txn.Writing {
 				panic("tracking a non-writing txn")
 			}
