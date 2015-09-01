@@ -41,7 +41,7 @@ func TestEvalExpr(t *testing.T) {
 		{`5 % 3`, `2`},
 		// Division is always done on floats.
 		{`4 / 5`, `0.8`},
-		{`1 / 0`, `+Inf`},
+		{`1.0 / 0.0`, `+Inf`},
 		{`-1.0 * (1.0 / 0.0)`, `-Inf`},
 		// Grouping
 		{`1 + 2 + (3 * 4)`, `15`},
@@ -202,10 +202,11 @@ func TestEvalExprError(t *testing.T) {
 		expected string
 	}{
 		{`1 % 0`, `zero modulus`},
+		{`1 / 0`, `division by zero`},
 		{`'1' + '2'`, `unsupported binary operator:`},
 		{`'a' + 0`, `unsupported binary operator:`},
 		{`1.1 # 3.1`, `unsupported binary operator:`},
-		{`1/0.0`, `unsupported binary operator:`},
+		{`1 / 0.0`, `unsupported binary operator:`},
 		{`~0.1`, `unsupported unary operator:`},
 		{`'10' > 2`, `unsupported comparison operator:`},
 		{`1 IN ('a', 'b')`, `unsupported comparison operator:`},

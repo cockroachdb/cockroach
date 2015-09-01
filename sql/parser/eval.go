@@ -31,6 +31,7 @@ import (
 )
 
 var errZeroModulus = errors.New("zero modulus")
+var errDivByZero = errors.New("division by zero")
 
 // TODO(pmattis):
 //
@@ -471,7 +472,11 @@ var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
 	},
 
 	binArgs{Div, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return DFloat(left.(DInt)) / DFloat(right.(DInt)), nil
+		rInt := right.(DInt)
+		if rInt == 0 {
+			return nil, errDivByZero
+		}
+		return DFloat(left.(DInt)) / DFloat(rInt), nil
 	},
 	binArgs{Div, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
 		return left.(DFloat) / right.(DFloat), nil
