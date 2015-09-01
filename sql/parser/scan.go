@@ -549,8 +549,8 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 	if err == nil && uval > 1<<63 {
 		err = fmt.Errorf("integer value out of range: %d", uval)
 	}
-	// uval is now in the range [0, 1<<63]. Casting to an int64 will give us the
-	// range [0, 1<<63 - 1] + -1<<63.
+	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
+	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
 	lval.ival = int64(uval)
 	if err != nil {
 		lval.id = ERROR
@@ -572,8 +572,8 @@ func (s *scanner) scanParam(lval *sqlSymType) {
 	if err == nil && uval > 1<<63 {
 		err = fmt.Errorf("integer value out of range: %d", uval)
 	}
-	// uval is now in the range [0, 1<<63]. Casting to an int64 will give us the
-	// range [0, 1<<63 - 1] + -1<<63.
+	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
+	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
 	lval.ival = int64(uval)
 	if err != nil {
 		lval.id = ERROR
