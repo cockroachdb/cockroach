@@ -72,7 +72,7 @@ func (e *Error) Transaction() *Transaction {
 	return nil
 }
 
-// SetResponseGoError sets Error using err
+// SetResponseGoError sets Error using err.
 func (e *Error) SetResponseGoError(err error) {
 	e.Message = err.Error()
 	if r, ok := err.(retry.Retryable); ok {
