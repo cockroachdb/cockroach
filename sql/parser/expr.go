@@ -20,6 +20,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 )
@@ -211,6 +212,13 @@ func (node BytesVal) String() string {
 type IntVal int64
 
 func (node IntVal) String() string {
+	// Note that IntVal uses math.MinInt64 to represent uint64(1 << 63). This
+	// implies that IntVal cannot represent math.MinInt64, but that is ok because
+	// it is only used to store signed integers in grammar rules which do not
+	// require that range.
+	if node == math.MinInt64 {
+		return strconv.FormatUint(uint64(node), 10)
+	}
 	return strconv.FormatInt(int64(node), 10)
 }
 

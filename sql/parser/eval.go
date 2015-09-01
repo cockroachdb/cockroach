@@ -625,6 +625,9 @@ func EvalExpr(expr Expr) (Datum, error) {
 		return DString(t), nil
 
 	case IntVal:
+		if t < 0 {
+			return DNull, fmt.Errorf("integer value out of range: %s", t)
+		}
 		return DInt(t), nil
 
 	case NumVal:

@@ -17,7 +17,10 @@
 
 package parser
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 // NormalizeExpr normalizes an expression, simplifying where possible, but
 // guaranteeing that the result of evaluating the expression is
@@ -58,6 +61,25 @@ func (v *normalizeVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 
 		case *RangeCond:
 			return v.Visit(v.normalizeRangeCond(t), true)
+
+		case *UnaryExpr:
+			// Ugliness: when we see a UnaryMinus, check to see if the expression
+			// being negated is math.MinInt64. This IntVal is only possible if we
+			// parsed "9223372036854775808" as a signed int and is the only negative
+			// IntVal that can be output from the scanner.
+			//
+			// TODO(pmattis): Seems like this should happen in EvalExpr, yet if we
+			// put it there we blow up during normalization when we try to
+			// EvalExpr("9223372036854775808") a few lines down from here before
+			// doing EvalExpr("- 9223372036854775808"). Perhaps we can move
+			// expression evaluation during normalization to the downward
+			// traversal. Or do it during the downward traversal for const
+			// UnaryExprs.
+			if t.Operator == UnaryMinus {
+				if d, ok := t.Expr.(IntVal); ok && d == math.MinInt64 {
+					return v, DInt(math.MinInt64)
+				}
+			}
 		}
 
 		return v, expr

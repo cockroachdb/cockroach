@@ -535,16 +535,23 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 	// We explicitly parse only decimal and hexadecimal literals here. We could
 	// parse octal as well, but have decided for the present time not to.
 	var err error
+	var uval uint64
 	if isHex {
 		if s.pos == start+2 {
 			lval.id = ERROR
 			lval.str = "invalid hexadecimal literal"
 			return
 		}
-		lval.ival, err = strconv.ParseInt(lval.str[2:], 16, 64)
+		uval, err = strconv.ParseUint(lval.str[2:], 16, 64)
 	} else {
-		lval.ival, err = strconv.ParseInt(lval.str, 10, 64)
+		uval, err = strconv.ParseUint(lval.str, 10, 64)
 	}
+	if err == nil && uval > 1<<63 {
+		err = fmt.Errorf("integer value out of range: %d", uval)
+	}
+	// uval is now in the range [0, 1<<63]. Casting to an int64 will give us the
+	// range [0, 1<<63 - 1] + -1<<63.
+	lval.ival = int64(uval)
 	if err != nil {
 		lval.id = ERROR
 		lval.str = err.Error()
@@ -561,8 +568,13 @@ func (s *scanner) scanParam(lval *sqlSymType) {
 	}
 	lval.str = s.in[start:s.pos]
 
-	var err error
-	lval.ival, err = strconv.ParseInt(lval.str, 10, 64)
+	uval, err := strconv.ParseUint(lval.str, 10, 64)
+	if err == nil && uval > 1<<63 {
+		err = fmt.Errorf("integer value out of range: %d", uval)
+	}
+	// uval is now in the range [0, 1<<63]. Casting to an int64 will give us the
+	// range [0, 1<<63 - 1] + -1<<63.
+	lval.ival = int64(uval)
 	if err != nil {
 		lval.id = ERROR
 		lval.str = err.Error()
