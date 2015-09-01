@@ -4,6 +4,7 @@ cmd github.com/gogo/protobuf/protoc-gen-gogo
 cmd github.com/golang/lint/golint
 cmd github.com/jteeuwen/go-bindata/go-bindata
 cmd github.com/kisielk/errcheck
+cmd github.com/opennota/check/cmd/varcheck
 cmd github.com/robfig/glock
 cmd github.com/tebeka/go2xunit
 cmd golang.org/x/tools/cmd/goimports
@@ -30,6 +31,7 @@ github.com/kisielk/gotool 14d7ad1074a71860533c4e9695129461abfc2937
 github.com/lib/pq b269bd035a727d6c1081f76e7a239a1b00674c40
 github.com/montanaflynn/stats b29c7dc0aff48386203e2508b144a3630c2d726c
 github.com/olekukonko/tablewriter b9346ac189c55dd419f85c7ad2cd56f810bf19d6
+github.com/opennota/check 4a0b01eee5c662c6041ac1e5c6246de1d498edf9
 github.com/peterh/liner c754da6f2d91ef30ddb6c975d2dbe7696eec4fbc
 github.com/robfig/glock cb3c3ec56de988289cab7bbd284eddc04dfee6c9
 github.com/russross/blackfriday 8cec3a854e68dba10faabbe31c089abf4a3e57a6
