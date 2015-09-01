@@ -940,11 +940,11 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 		case parser.EQ, parser.NE, parser.GE, parser.LE:
 			return n
 		case parser.GT:
-			// Note that if the variable is NULL, this would evaluate to NULL which
-			// would equivalent to false for a boolean expression. This
-			// simplification is necessary so that subsequent transformation of >
-			// constraint to >= can use Datum.Next without concern about whether a
-			// next value exists.
+			// This simplification is necessary so that subsequent transformation of
+			// > constraint to >= can use Datum.Next without concern about whether a
+			// next value exists. Note that if the variable (n.Left) is NULL, this
+			// comparison would evaluate to NULL which is equivalent to false for a
+			// boolean expression.
 			if n.Right.(parser.Datum).IsMax() {
 				return parser.DBool(false)
 			}
