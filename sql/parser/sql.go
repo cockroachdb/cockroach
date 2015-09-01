@@ -10581,7 +10581,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3532
 		{
-			sqlVAL.expr = NullVal{}
+			sqlVAL.expr = DNull
 		}
 	case 876:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]

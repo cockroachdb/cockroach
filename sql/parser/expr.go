@@ -45,7 +45,6 @@ func (IntVal) expr()          {}
 func (NumVal) expr()          {}
 func (BoolVal) expr()         {}
 func (ValArg) expr()          {}
-func (NullVal) expr()         {}
 func (*QualifiedName) expr()  {}
 func (Tuple) expr()           {}
 func (Row) expr()             {}
@@ -238,13 +237,6 @@ type ValArg string
 
 func (node ValArg) String() string {
 	return fmt.Sprintf("$%s", string(node))
-}
-
-// NullVal represents a NULL value.
-type NullVal struct{}
-
-func (NullVal) String() string {
-	return fmt.Sprintf("NULL")
 }
 
 type nameType int
