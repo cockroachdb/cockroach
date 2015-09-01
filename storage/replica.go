@@ -201,10 +201,11 @@ type Replica struct {
 	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
 	respCache    *ResponseCache // Provides idempotence for retries
 
-	sync.RWMutex                 // Protects the following fields:
-	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
-	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
-	pendingCmds  map[cmdIDKey]*pendingCmd
+	sync.RWMutex                   // Protects the following fields:
+	cmdQ           *CommandQueue   // Enforce at most one command is running per key(s)
+	tsCache        *TimestampCache // Most recent timestamps for keys / key ranges
+	pendingCmds    map[cmdIDKey]*pendingCmd
+	truncatedState unsafe.Pointer // *proto.RaftTruancatedState
 }
 
 // NewReplica initializes the replica using the given metadata.
@@ -444,6 +445,17 @@ func (r *Replica) setDesc(desc *proto.RangeDescriptor) error {
 // processRangeDescriptorUpdate.
 func (r *Replica) setDescWithoutProcessUpdate(desc *proto.RangeDescriptor) {
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
+}
+
+// getCachedTruncatedState atomically returns the range's cached truncated
+// state.
+func (r *Replica) getCachedTruncatedState() *proto.RaftTruncatedState {
+	return (*proto.RaftTruncatedState)(atomic.LoadPointer(&r.truncatedState))
+}
+
+// setCachedTruncatedState atomically sets the range's truncated state.
+func (r *Replica) setCachedTruncatedState(state *proto.RaftTruncatedState) {
+	atomic.StorePointer(&r.truncatedState, unsafe.Pointer(state))
 }
 
 // GetReplica returns the replica for this range from the range descriptor.
@@ -845,6 +857,11 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode
 	} else {
 		// Update cached appliedIndex if we were able to set the applied index on disk.
 		atomic.StoreUint64(&r.appliedIndex, index)
+		// Invalidate the cache and let raftTruncatedState() read the value the next
+		// time it's required.
+		if args.Method() == proto.TruncateLog {
+			r.setCachedTruncatedState(nil)
+		}
 	}
 
 	// On successful write commands, flush to event feed, and handle other
