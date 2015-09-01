@@ -20,6 +20,7 @@ package sql
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
@@ -49,6 +50,35 @@ func validateName(name, typ string) error {
 	}
 	// TODO(pmattis): Do we want to be more restrictive than this?
 	return nil
+}
+
+// allocateName sets desc.Name to a value that is not equalName to any
+// of tableDesc's indexes. allocateName roughly follows PostgreSQL's
+// convention for automatically-named indexes.
+func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
+	segments := make([]string, 0, len(desc.ColumnIDs)+2)
+	segments = append(segments, tableDesc.Name)
+	for _, columnName := range desc.ColumnNames {
+		segments = append(segments, columnName)
+	}
+	if desc.Unique {
+		segments = append(segments, "key")
+	} else {
+		segments = append(segments, "idx")
+	}
+
+	baseName := strings.Join(segments, "_")
+	name := baseName
+
+	exists := func(name string) bool {
+		idx, _ := tableDesc.FindIndexByName(name)
+		return idx != nil
+	}
+	for i := 1; exists(name); i++ {
+		name = fmt.Sprintf("%s%d", baseName, i)
+	}
+
+	desc.Name = name
 }
 
 // containsColumnID returns true if the index descriptor contains the specified
@@ -117,12 +147,26 @@ func (desc *TableDescriptor) AllocateIDs() error {
 		desc.Columns[i].ID = columnID
 	}
 
+	// Keep track of unnamed indexes.
+	anonymousIndexes := make([]*IndexDescriptor, 0, len(desc.Indexes))
+
 	// Create a slice of modifiable index descriptors.
-	var indexes []*IndexDescriptor
+	indexes := make([]*IndexDescriptor, 0, len(desc.Indexes)+1)
 	indexes = append(indexes, &desc.PrimaryIndex)
 	for i := range desc.Indexes {
-		indexes = append(indexes, &desc.Indexes[i])
+		index := &desc.Indexes[i]
+
+		if len(index.Name) == 0 {
+			anonymousIndexes = append(anonymousIndexes, index)
+		}
+
+		indexes = append(indexes, index)
 	}
+
+	for _, index := range anonymousIndexes {
+		index.allocateName(desc)
+	}
+
 	// Populate IDs
 	for _, index := range indexes {
 		if index.ID == 0 {

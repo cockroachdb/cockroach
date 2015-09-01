@@ -29,7 +29,23 @@ statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
 
 statement ok
-CREATE TABLE c (id INT PRIMARY KEY)
+CREATE TABLE c (
+  id INT PRIMARY KEY,
+  foo INT,
+  bar INT,
+  CONSTRAINT c_foo_idx INDEX (foo),
+  INDEX (foo),
+  UNIQUE (bar)
+)
+
+query TTTTT colnames
+SHOW INDEX FROM c
+----
+Table Name       Unique Seq Column
+c     primary    true   1   id
+c     c_foo_idx  false  1   foo
+c     c_foo_idx1 false  1   foo
+c     c_bar_key  true   1   bar
 
 query T
 SHOW TABLES FROM test
