@@ -214,13 +214,14 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 			return nil, err
 		}
 		switch col.Type.Kind {
-		// TODO(pmattis): ColumnType_BOOL.
+		case ColumnType_BOOL:
+			vals[i] = parser.DummyBool
 		case ColumnType_INT:
-			vals[i] = parser.DInt(0)
+			vals[i] = parser.DummyInt
 		case ColumnType_FLOAT:
-			vals[i] = parser.DFloat(0)
+			vals[i] = parser.DummyFloat
 		case ColumnType_STRING, ColumnType_BYTES:
-			vals[i] = parser.DString("")
+			vals[i] = parser.DummyString
 		default:
 			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
 		}

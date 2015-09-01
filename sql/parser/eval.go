@@ -24,7 +24,6 @@ import (
 	"math"
 	"reflect"
 	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -60,12 +59,27 @@ type Datum interface {
 	IsMin() bool
 }
 
-var _ Datum = DBool(false)
-var _ Datum = DInt(0)
-var _ Datum = DFloat(0)
-var _ Datum = DString("")
-var _ Datum = DTuple{}
-var _ Datum = dNull{}
+var (
+	// DummyBool is a placeholder DBool value.
+	DummyBool = DBool(false)
+	// DummyInt is a placeholder DInt value.
+	DummyInt = DInt(0)
+	// DummyFloat is a placeholder DFloat value.
+	DummyFloat = DFloat(0)
+	// DummyString is a placeholder DString value.
+	DummyString = DString("")
+	// DummyTuple is a placeholder DTuple value.
+	DummyTuple = DTuple{}
+	// DNull is the NULL Datum.
+	DNull = dNull{}
+
+	_ Datum = DummyBool
+	_ Datum = DummyInt
+	_ Datum = DummyFloat
+	_ Datum = DummyString
+	_ Datum = DummyTuple
+	_ Datum = DNull
+)
 
 // DBool is the boolean Datum.
 type DBool bool
@@ -348,9 +362,6 @@ func (d DTuple) Swap(i, j int) {
 
 type dNull struct{}
 
-// DNull is the NULL Datum.
-var DNull = dNull{}
-
 // Type implements the Datum interface.
 func (d dNull) Type() string {
 	return "NULL"
@@ -390,12 +401,18 @@ type DReference interface {
 }
 
 var (
-	boolType   = reflect.TypeOf(DBool(false))
-	intType    = reflect.TypeOf(DInt(0))
-	floatType  = reflect.TypeOf(DFloat(0))
-	stringType = reflect.TypeOf(DString(""))
-	tupleType  = reflect.TypeOf(DTuple{})
+	boolType   = reflect.TypeOf(DummyBool)
+	intType    = reflect.TypeOf(DummyInt)
+	floatType  = reflect.TypeOf(DummyFloat)
+	stringType = reflect.TypeOf(DummyString)
+	tupleType  = reflect.TypeOf(DummyTuple)
+	nullType   = reflect.TypeOf(DNull)
 )
+
+type unaryOp struct {
+	returnType Datum
+	fn         func(Datum) (Datum, error)
+}
 
 type unaryArgs struct {
 	op      UnaryOp
@@ -404,24 +421,44 @@ type unaryArgs struct {
 
 // unaryOps contains the unary operations indexed by operation type and
 // argument type.
-var unaryOps = map[unaryArgs]func(Datum) (Datum, error){
-	unaryArgs{UnaryPlus, intType}: func(d Datum) (Datum, error) {
-		return d, nil
+var unaryOps = map[unaryArgs]unaryOp{
+	unaryArgs{UnaryPlus, intType}: {
+		returnType: DummyInt,
+		fn: func(d Datum) (Datum, error) {
+			return d, nil
+		},
 	},
-	unaryArgs{UnaryPlus, floatType}: func(d Datum) (Datum, error) {
-		return d, nil
+	unaryArgs{UnaryPlus, floatType}: {
+		returnType: DummyFloat,
+		fn: func(d Datum) (Datum, error) {
+			return d, nil
+		},
 	},
 
-	unaryArgs{UnaryMinus, intType}: func(d Datum) (Datum, error) {
-		return -d.(DInt), nil
+	unaryArgs{UnaryMinus, intType}: {
+		returnType: DummyInt,
+		fn: func(d Datum) (Datum, error) {
+			return -d.(DInt), nil
+		},
 	},
-	unaryArgs{UnaryMinus, floatType}: func(d Datum) (Datum, error) {
-		return -d.(DFloat), nil
+	unaryArgs{UnaryMinus, floatType}: {
+		returnType: DummyFloat,
+		fn: func(d Datum) (Datum, error) {
+			return -d.(DFloat), nil
+		},
 	},
 
-	unaryArgs{UnaryComplement, intType}: func(d Datum) (Datum, error) {
-		return ^d.(DInt), nil
+	unaryArgs{UnaryComplement, intType}: {
+		returnType: DummyInt,
+		fn: func(d Datum) (Datum, error) {
+			return ^d.(DInt), nil
+		},
 	},
+}
+
+type binOp struct {
+	returnType Datum
+	fn         func(Datum, Datum) (Datum, error)
 }
 
 type binArgs struct {
@@ -432,17 +469,26 @@ type binArgs struct {
 
 // binOps contains the binary operations indexed by operation type and argument
 // types.
-var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
-	binArgs{Bitand, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DInt) & right.(DInt), nil
+var binOps = map[binArgs]binOp{
+	binArgs{Bitand, intType, intType}: {
+		returnType: DummyInt,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DInt) & right.(DInt), nil
+		},
 	},
 
-	binArgs{Bitor, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DInt) | right.(DInt), nil
+	binArgs{Bitor, intType, intType}: {
+		returnType: DummyInt,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DInt) | right.(DInt), nil
+		},
 	},
 
-	binArgs{Bitxor, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DInt) ^ right.(DInt), nil
+	binArgs{Bitxor, intType, intType}: {
+		returnType: DummyInt,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DInt) ^ right.(DInt), nil
+		},
 	},
 
 	// TODO(pmattis): Overflow/underflow checks?
@@ -450,77 +496,135 @@ var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
 	// TODO(pmattis): Should we allow the implicit conversion from int to float
 	// below. Once we have cast operators we could remove them. See #1626.
 
-	binArgs{Plus, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DInt) + right.(DInt), nil
+	binArgs{Plus, intType, intType}: {
+		returnType: DummyInt,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DInt) + right.(DInt), nil
+		},
 	},
-	binArgs{Plus, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DFloat) + right.(DFloat), nil
-	},
-
-	binArgs{Minus, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DInt) - right.(DInt), nil
-	},
-	binArgs{Minus, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DFloat) - right.(DFloat), nil
-	},
-
-	binArgs{Mult, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DInt) * right.(DInt), nil
-	},
-	binArgs{Mult, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DFloat) * right.(DFloat), nil
+	binArgs{Plus, floatType, floatType}: {
+		returnType: DummyFloat,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DFloat) + right.(DFloat), nil
+		},
 	},
 
-	binArgs{Div, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		rInt := right.(DInt)
-		if rInt == 0 {
-			return nil, errDivByZero
-		}
-		return DFloat(left.(DInt)) / DFloat(rInt), nil
+	binArgs{Minus, intType, intType}: {
+		returnType: DummyInt,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DInt) - right.(DInt), nil
+		},
 	},
-	binArgs{Div, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DFloat) / right.(DFloat), nil
-	},
-
-	binArgs{Mod, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		r := right.(DInt)
-		if r == 0 {
-			return nil, errZeroModulus
-		}
-		return left.(DInt) % r, nil
-	},
-	binArgs{Mod, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return DFloat(math.Mod(float64(left.(DFloat)), float64(right.(DFloat)))), nil
+	binArgs{Minus, floatType, floatType}: {
+		returnType: DummyFloat,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DFloat) - right.(DFloat), nil
+		},
 	},
 
-	binArgs{Concat, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DString) + right.(DString), nil
+	binArgs{Mult, intType, intType}: {
+		returnType: DummyInt,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DInt) * right.(DInt), nil
+		},
 	},
-	binArgs{Concat, boolType, stringType}: func(left Datum, right Datum) (Datum, error) {
-		return DString(left.String()) + right.(DString), nil
+	binArgs{Mult, floatType, floatType}: {
+		returnType: DummyFloat,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DFloat) * right.(DFloat), nil
+		},
 	},
-	binArgs{Concat, stringType, boolType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DString) + DString(right.String()), nil
+
+	binArgs{Div, intType, intType}: {
+		returnType: DummyFloat,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			rInt := right.(DInt)
+			if rInt == 0 {
+				return nil, errDivByZero
+			}
+			return DFloat(left.(DInt)) / DFloat(rInt), nil
+		},
 	},
-	binArgs{Concat, intType, stringType}: func(left Datum, right Datum) (Datum, error) {
-		return DString(left.String()) + right.(DString), nil
+
+	binArgs{Div, floatType, floatType}: {
+		returnType: DummyFloat,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DFloat) / right.(DFloat), nil
+		},
 	},
-	binArgs{Concat, stringType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DString) + DString(right.String()), nil
+
+	binArgs{Mod, intType, intType}: {
+		returnType: DummyInt,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			r := right.(DInt)
+			if r == 0 {
+				return nil, errZeroModulus
+			}
+			return left.(DInt) % r, nil
+		},
 	},
-	binArgs{Concat, floatType, stringType}: func(left Datum, right Datum) (Datum, error) {
-		return DString(left.String()) + right.(DString), nil
+	binArgs{Mod, floatType, floatType}: {
+		returnType: DummyFloat,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DFloat(math.Mod(float64(left.(DFloat)), float64(right.(DFloat)))), nil
+		},
 	},
-	binArgs{Concat, stringType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DString) + DString(right.String()), nil
+
+	binArgs{Concat, stringType, stringType}: {
+		returnType: DummyString,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DString) + right.(DString), nil
+		},
+	},
+	binArgs{Concat, boolType, stringType}: {
+		returnType: DummyString,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DString(left.String()) + right.(DString), nil
+		},
+	},
+	binArgs{Concat, stringType, boolType}: {
+		returnType: DummyString,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DString) + DString(right.String()), nil
+		},
+	},
+	binArgs{Concat, intType, stringType}: {
+		returnType: DummyString,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DString(left.String()) + right.(DString), nil
+		},
+	},
+	binArgs{Concat, stringType, intType}: {
+		returnType: DummyString,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DString) + DString(right.String()), nil
+		},
+	},
+	binArgs{Concat, floatType, stringType}: {
+		returnType: DummyString,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DString(left.String()) + right.(DString), nil
+		},
+	},
+	binArgs{Concat, stringType, floatType}: {
+		returnType: DummyString,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DString) + DString(right.String()), nil
+		},
 	},
 
 	// TODO(pmattis): Check that the shift is valid.
-	binArgs{LShift, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DInt) << uint(right.(DInt)), nil
+	binArgs{LShift, intType, intType}: {
+		returnType: DummyInt,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DInt) << uint(right.(DInt)), nil
+		},
 	},
-	binArgs{RShift, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DInt) >> uint(right.(DInt)), nil
+	binArgs{RShift, intType, intType}: {
+		returnType: DummyInt,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DInt) >> uint(right.(DInt)), nil
+		},
 	},
 }
 
@@ -530,45 +634,47 @@ type cmpArgs struct {
 	rightType reflect.Type
 }
 
+var cmpOpResultType = reflect.New(reflect.TypeOf(cmpOps).Elem().Out(0)).Elem().Interface().(DBool)
+
 // cmpOps contains the comparison operations indexed by operation type and
 // argument types.
-var cmpOps = map[cmpArgs]func(Datum, Datum) (Datum, error){
-	cmpArgs{EQ, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
+var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
+	cmpArgs{EQ, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DString) == right.(DString)), nil
 	},
-	cmpArgs{EQ, boolType, boolType}: func(left Datum, right Datum) (Datum, error) {
+	cmpArgs{EQ, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DBool) == right.(DBool)), nil
 	},
-	cmpArgs{EQ, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+	cmpArgs{EQ, intType, intType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DInt) == right.(DInt)), nil
 	},
-	cmpArgs{EQ, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
+	cmpArgs{EQ, floatType, floatType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DFloat) == right.(DFloat)), nil
 	},
 
-	cmpArgs{LT, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
+	cmpArgs{LT, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DString) < right.(DString)), nil
 	},
-	cmpArgs{LT, boolType, boolType}: func(left Datum, right Datum) (Datum, error) {
+	cmpArgs{LT, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(!left.(DBool) && right.(DBool)), nil
 	},
-	cmpArgs{LT, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+	cmpArgs{LT, intType, intType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DInt) < right.(DInt)), nil
 	},
-	cmpArgs{LT, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
+	cmpArgs{LT, floatType, floatType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DFloat) < right.(DFloat)), nil
 	},
 
-	cmpArgs{LE, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
+	cmpArgs{LE, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DString) <= right.(DString)), nil
 	},
-	cmpArgs{LE, boolType, boolType}: func(left Datum, right Datum) (Datum, error) {
+	cmpArgs{LE, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(!left.(DBool) || right.(DBool)), nil
 	},
-	cmpArgs{LE, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+	cmpArgs{LE, intType, intType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DInt) <= right.(DInt)), nil
 	},
-	cmpArgs{LE, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
+	cmpArgs{LE, floatType, floatType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DFloat) <= right.(DFloat)), nil
 	},
 }
@@ -596,13 +702,6 @@ func init() {
 // the client.
 func EvalExpr(expr Expr) (Datum, error) {
 	switch t := expr.(type) {
-	case Row:
-		// Row and Tuple are synonymous: convert Row to Tuple to simplify logic
-		// below.
-		expr = Tuple(t)
-	}
-
-	switch t := expr.(type) {
 	case *AndExpr:
 		return evalAndExpr(t)
 
@@ -612,14 +711,17 @@ func EvalExpr(expr Expr) (Datum, error) {
 	case *NotExpr:
 		return evalNotExpr(t)
 
+	case Row:
+		// NormalizeExpr transforms this into Tuple.
+
 	case *ParenExpr:
-		return EvalExpr(t.Expr)
+		// NormalizeExpr unwraps this.
 
 	case *ComparisonExpr:
 		return evalComparisonExpr(t)
 
 	case *RangeCond:
-		return evalRangeCond(t)
+		// NormalizeExpr transforms this into an AndExpr.
 
 	case *NullCheck:
 		return evalNullCheck(t)
@@ -693,10 +795,10 @@ func EvalExpr(expr Expr) (Datum, error) {
 		return evalCastExpr(t)
 
 	default:
-		panic(fmt.Sprintf("eval: unsupported expression type: %T", expr))
+		return DNull, util.Errorf("eval: unsupported expression: %T", expr)
 	}
 
-	return DNull, fmt.Errorf("eval: unexpected expression: %T", expr)
+	return DNull, util.Errorf("eval: unexpected expression: %T", expr)
 }
 
 func evalAndExpr(expr *AndExpr) (Datum, error) {
@@ -771,47 +873,6 @@ func evalNotExpr(expr *NotExpr) (Datum, error) {
 	return !v, nil
 }
 
-func evalRangeCond(expr *RangeCond) (Datum, error) {
-	// A range such as "left BETWEEN from AND to" is equivalent to "left >= from
-	// AND left <= to". The only tricky part is that we evaluate "left" only
-	// once.
-
-	left, err := EvalExpr(expr.Left)
-	if err != nil {
-		return DNull, err
-	}
-
-	limits := [2]struct {
-		op   ComparisonOp
-		expr Expr
-	}{
-		{GE, expr.From},
-		{LE, expr.To},
-	}
-
-	var v DBool
-	for _, l := range limits {
-		arg, err := EvalExpr(l.expr)
-		if err != nil {
-			return DNull, err
-		}
-		cmp, err := evalComparisonOp(l.op, left, arg)
-		if err != nil {
-			return DNull, err
-		}
-		if v, err = getBool(cmp); err != nil {
-			return DNull, err
-		} else if !v {
-			break
-		}
-	}
-
-	if expr.Not {
-		return !v, nil
-	}
-	return v, nil
-}
-
 func evalNullCheck(expr *NullCheck) (Datum, error) {
 	d, err := EvalExpr(expr.Expr)
 	if err != nil {
@@ -864,17 +925,16 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 
 	// TODO(pmattis): Memoize the cmpOps lookup as we've done for unaryOps and
 	// binOps.
-	f := cmpOps[cmpArgs{op, reflect.TypeOf(left), reflect.TypeOf(right)}]
-	if f != nil {
+	if f, ok := cmpOps[cmpArgs{op, reflect.TypeOf(left), reflect.TypeOf(right)}]; ok {
 		d, err := f(left, right)
 		if err == nil && not {
-			return !d.(DBool), nil
+			return !d, nil
 		}
 		return d, err
 	}
 
 	switch op {
-	case Like, NotLike:
+	case Like, NotLike, SimilarTo, NotSimilarTo:
 		return DNull, util.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 
@@ -891,25 +951,21 @@ func evalBinaryExpr(expr *BinaryExpr) (Datum, error) {
 	if err != nil {
 		return DNull, err
 	}
-	ltype := reflect.TypeOf(left)
-	rtype := reflect.TypeOf(right)
-	if expr.fn == nil {
-		expr.fn = binOps[binArgs{expr.Operator, ltype, rtype}]
-		expr.ltype = ltype
-		expr.rtype = rtype
+
+	if expr.fn.fn == nil {
+		if _, err := typeCheckBinaryExpr(expr); err != nil {
+			return DNull, err
+		}
 	}
-	if expr.fn == nil {
-		return DNull, fmt.Errorf("unsupported binary operator: <%s> %s <%s>",
-			left.Type(), expr.Operator, right.Type())
-	}
-	if expr.ltype != ltype || expr.rtype != rtype {
+
+	if expr.ltype != reflect.TypeOf(left) || expr.rtype != reflect.TypeOf(right) {
 		// The argument types no longer match the memoized function. This happens
 		// when a non-NULL argument becomes NULL. For example, "SELECT col+1 FROM
 		// table" where col is nullable. The SELECT does not error, but returns a
 		// NULL value for that select expression.
 		return DNull, nil
 	}
-	return expr.fn(left, right)
+	return expr.fn.fn(left, right)
 }
 
 func evalUnaryExpr(expr *UnaryExpr) (Datum, error) {
@@ -917,23 +973,19 @@ func evalUnaryExpr(expr *UnaryExpr) (Datum, error) {
 	if err != nil {
 		return DNull, err
 	}
-	dtype := reflect.TypeOf(d)
-	if expr.fn == nil {
-		expr.fn = unaryOps[unaryArgs{expr.Operator, dtype}]
-		expr.dtype = dtype
+	if expr.fn.fn == nil {
+		if _, err := typeCheckUnaryExpr(expr); err != nil {
+			return DNull, err
+		}
 	}
-	if expr.fn == nil {
-		return DNull, fmt.Errorf("unsupported unary operator: %s <%s>",
-			expr.Operator, d.Type())
-	}
-	if expr.dtype != dtype {
+	if expr.dtype != reflect.TypeOf(d) {
 		// The argument type no longer match the memoized function. This happens
 		// when a non-NULL argument becomes NULL. For example, "SELECT -col FROM
 		// table" where col is nullable. The SELECT does not error, but returns a
 		// NULL value for that select expression.
 		return DNull, nil
 	}
-	return expr.fn(d)
+	return expr.fn.fn(d)
 }
 
 func evalFuncExpr(expr *FuncExpr) (Datum, error) {
@@ -949,32 +1001,9 @@ func evalFuncExpr(expr *FuncExpr) (Datum, error) {
 	}
 
 	if expr.fn.fn == nil {
-		if len(expr.Name.Indirect) > 0 {
-			// We don't support qualified function names (yet).
-			return DNull, fmt.Errorf("unknown function: %s", expr.Name)
+		if _, err := typeCheckFuncExpr(expr); err != nil {
+			return DNull, err
 		}
-
-		name := string(expr.Name.Base)
-		candidates, ok := builtins[strings.ToLower(name)]
-		if !ok {
-			return DNull, fmt.Errorf("unknown function: %s", name)
-		}
-
-		for _, candidate := range candidates {
-			if candidate.match(types) {
-				expr.fn = candidate
-				break
-			}
-		}
-	}
-
-	if expr.fn.fn == nil {
-		typeNames := make([]string, 0, len(args))
-		for _, arg := range args {
-			typeNames = append(typeNames, arg.Type())
-		}
-		return DNull, fmt.Errorf("unknown signature for %s: %s(%s)",
-			expr.Name, expr.Name, strings.Join(typeNames, ", "))
 	}
 
 	if !expr.fn.match(types) {
@@ -994,45 +1023,6 @@ func evalFuncExpr(expr *FuncExpr) (Datum, error) {
 }
 
 func evalCaseExpr(expr *CaseExpr) (Datum, error) {
-	whenVals := make([]Datum, 0, len(expr.Whens))
-	var condType, valType reflect.Type
-	for _, when := range expr.Whens {
-		cond, err := EvalExpr(when.Cond)
-		if err != nil {
-			return DNull, err
-		}
-		if condType == nil {
-			condType = reflect.TypeOf(cond)
-		} else if cond != DNull && reflect.TypeOf(cond) != condType {
-			return DNull, fmt.Errorf("incompatible condition type %s", cond.Type())
-		}
-
-		val, err := EvalExpr(when.Val)
-		if err != nil {
-			return DNull, err
-		}
-
-		if valType == nil {
-			valType = reflect.TypeOf(val)
-		} else if val != DNull && reflect.TypeOf(val) != valType {
-			return DNull, fmt.Errorf("incompatible value type %s", val.Type())
-		}
-
-		whenVals = append(whenVals, val)
-	}
-
-	var elseVal Datum
-	if expr.Else != nil {
-		val, err := EvalExpr(expr.Else)
-		if err != nil {
-			return DNull, err
-		}
-		if val != DNull && reflect.TypeOf(val) != valType {
-			return DNull, fmt.Errorf("incompatible value type %s", val.Type())
-		}
-		elseVal = val
-	}
-
 	if expr.Expr != nil {
 		// CASE <val> WHEN <expr> THEN ...
 		//
@@ -1042,7 +1032,7 @@ func evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			return DNull, err
 		}
 
-		for i, when := range expr.Whens {
+		for _, when := range expr.Whens {
 			arg, err := EvalExpr(when.Cond)
 			if err != nil {
 				return DNull, err
@@ -1054,12 +1044,12 @@ func evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			if v, err := getBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return whenVals[i], nil
+				return EvalExpr(when.Val)
 			}
 		}
 	} else {
 		// CASE WHEN <bool-expr> THEN ...
-		for i, when := range expr.Whens {
+		for _, when := range expr.Whens {
 			d, err := EvalExpr(when.Cond)
 			if err != nil {
 				return DNull, err
@@ -1067,18 +1057,18 @@ func evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			if v, err := getBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return whenVals[i], nil
+				return EvalExpr(when.Val)
 			}
 		}
 	}
 
-	if elseVal != nil {
-		return elseVal, nil
+	if expr.Else != nil {
+		return EvalExpr(expr.Else)
 	}
 	return DNull, nil
 }
 
-func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
+func evalTupleEQ(ldatum, rdatum Datum) (DBool, error) {
 	left := ldatum.(DTuple)
 	right := rdatum.(DTuple)
 	if len(left) != len(right) {
@@ -1087,10 +1077,10 @@ func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
 	for i := range left {
 		d, err := evalComparisonOp(EQ, left[i], right[i])
 		if err != nil {
-			return DNull, err
+			return DummyBool, err
 		}
 		if v, err := getBool(d); err != nil {
-			return DNull, err
+			return DummyBool, err
 		} else if !v {
 			return v, nil
 		}
@@ -1098,7 +1088,7 @@ func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
 	return DBool(true), nil
 }
 
-func evalTupleIN(arg, values Datum) (Datum, error) {
+func evalTupleIN(arg, values Datum) (DBool, error) {
 	if arg == DNull {
 		return DBool(false), nil
 	}
@@ -1117,7 +1107,7 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 		m := make(map[Datum]struct{}, len(vtuple))
 		for _, val := range vtuple {
 			if reflect.TypeOf(arg) != reflect.TypeOf(val) {
-				return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+				return DummyBool, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
 					arg.Type(), EQ, val.Type())
 			}
 			m[val] = struct{}{}
@@ -1126,15 +1116,13 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 			return DBool(true), nil
 		}
 	} else {
-		// TODO(pmattis): We should probably first check that all of the values are
-		// type compatible with the arg.
 		for _, val := range vtuple {
 			d, err := evalComparisonOp(EQ, arg, val)
 			if err != nil {
-				return DNull, err
+				return DummyBool, err
 			}
 			if v, err := getBool(d); err != nil {
-				return DNull, err
+				return DummyBool, err
 			} else if v {
 				return v, nil
 			}
@@ -1224,10 +1212,10 @@ func evalCastExpr(expr *CastExpr) (Datum, error) {
 		}
 		return s, nil
 
-		// TODO(pmattis): unimplemented.
-		// case *DecimalType:
-		// case *DateType:
-		// case *TimestampType:
+	// TODO(pmattis): unimplemented.
+	case *DecimalType:
+	case *DateType:
+	case *TimestampType:
 	}
 
 	return DNull, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)

@@ -135,14 +135,9 @@ SELECT a FROM t ORDER BY (((a)))
 4
 5
 
-query error incompatible value type bool
+query error incompatible value types bool, int
 SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
 ----
-1
-2
-3
-4
-5
 
 query error invalid ORDER BY index: 0 not in range \[1, 3\]
 SELECT * FROM t ORDER BY 0
