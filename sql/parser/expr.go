@@ -157,12 +157,6 @@ type RangeCond struct {
 	From, To Expr
 }
 
-// RangeCond.Operator
-const (
-	astBetween    = "BETWEEN"
-	astNotBetween = "NOT BETWEEN"
-)
-
 func (node *RangeCond) String() string {
 	if node.Not {
 		return fmt.Sprintf("%s NOT BETWEEN %s AND %s", node.Left, node.From, node.To)
@@ -256,7 +250,7 @@ func (NullVal) String() string {
 type nameType int
 
 const (
-	unknownName nameType = iota
+	_ nameType = iota
 	tableName
 	columnName
 )

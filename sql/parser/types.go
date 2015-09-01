@@ -22,18 +22,6 @@ import (
 	"fmt"
 )
 
-const (
-	astInt      = "INT"
-	astInteger  = "INTEGER"
-	astSmallInt = "SMALLINT"
-	astBigInt   = "BIGINT"
-	astReal     = "REAL"
-	astDouble   = "DOUBLE PRECISION"
-	astFloat    = "FLOAT"
-	astDecimal  = "DECIMAL"
-	astNumeric  = "NUMERIC"
-)
-
 // ColumnType represents a type in a column definition.
 type ColumnType interface {
 	fmt.Stringer

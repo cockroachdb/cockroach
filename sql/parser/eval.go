@@ -394,7 +394,6 @@ var (
 	floatType  = reflect.TypeOf(DFloat(0))
 	stringType = reflect.TypeOf(DString(""))
 	tupleType  = reflect.TypeOf(DTuple{})
-	nullType   = reflect.TypeOf(DNull)
 )
 
 type unaryArgs struct {

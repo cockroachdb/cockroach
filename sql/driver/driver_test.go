@@ -23,12 +23,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
-
-var isError = testutils.IsError
 
 func setup(t *testing.T) (*server.TestServer, *sql.DB) {
 	s := server.StartTestServer(nil)

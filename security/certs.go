@@ -28,11 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-const (
-	serverCertFile = "node.server.crt"
-	serverKeyFile  = "node.server.key"
-)
-
 func clientCertFile(username string) string {
 	return username + ".client.crt"
 }

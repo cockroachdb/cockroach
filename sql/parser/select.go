@@ -67,12 +67,6 @@ const (
 	astDistinct = " DISTINCT"
 )
 
-// Select.Lock
-const (
-	astForUpdate = " FOR UPDATE"
-	astShareMode = " LOCK IN SHARE MODE"
-)
-
 func (node *Select) String() string {
 	if node.tableSelect && len(node.From) == 1 {
 		return fmt.Sprintf("TABLE %s", node.From[0])

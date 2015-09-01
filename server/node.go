@@ -45,15 +45,11 @@ import (
 )
 
 const (
-	// gossipGroupLimit is the size limit for gossip groups with storage
-	// topics.
-	gossipGroupLimit = 100
 	// gossipInterval is the interval for gossiping storage-related info.
 	gossipInterval = 1 * time.Minute
 	// publishStatusInterval is the interval for publishing periodic statistics
 	// from stores to the internal event feed.
 	publishStatusInterval = 10 * time.Second
-	mb                    = 1 << 20
 )
 
 // A Node manages a map of stores (by store ID) for which it serves

@@ -78,16 +78,10 @@ var (
 	}
 )
 
-var (
-	changeTypeRaftToInternal = map[raftpb.ConfChangeType]proto.ReplicaChangeType{
-		raftpb.ConfChangeAddNode:    proto.ADD_REPLICA,
-		raftpb.ConfChangeRemoveNode: proto.REMOVE_REPLICA,
-	}
-	changeTypeInternalToRaft = map[proto.ReplicaChangeType]raftpb.ConfChangeType{
-		proto.ADD_REPLICA:    raftpb.ConfChangeAddNode,
-		proto.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
-	}
-)
+var changeTypeInternalToRaft = map[proto.ReplicaChangeType]raftpb.ConfChangeType{
+	proto.ADD_REPLICA:    raftpb.ConfChangeAddNode,
+	proto.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
+}
 
 // verifyKeyLength verifies key length. Extra key length is allowed for
 // the local key prefix (for example, a transaction record), and also for
