@@ -79,19 +79,7 @@ func data(i int) string {
 
 // The various event types.
 const (
-	EventCreate     = "create"
-	EventDestroy    = "destroy"
-	EventDie        = "die"
-	EventExecCreate = "exec_create"
-	EventExecStart  = "exec_start"
-	EventExport     = "export"
-	EventKill       = "kill"
-	EventOom        = "oom"
-	EventPause      = "pause"
-	EventRestart    = "restart"
-	EventStart      = "start"
-	EventStop       = "stop"
-	EventUnpause    = "unpause"
+	eventDie = "die"
 )
 
 // Event for a node containing a node index and the type of event.
@@ -356,7 +344,7 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan 
 	if e.Error != nil {
 		log.Errorf("monitoring error: %s", e.Error)
 		if l.Events != nil {
-			l.Events <- Event{NodeIndex: -1, Status: EventDie}
+			l.Events <- Event{NodeIndex: -1, Status: eventDie}
 		}
 		return false
 	}

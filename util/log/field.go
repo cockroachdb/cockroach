@@ -27,7 +27,6 @@ const (
 	StoreID               // the ID of the store
 	RangeID               // the ID of the range
 	Method                // the method being executed
-	Client                // TODO: client on whose behalf we're acting
 	Key                   // a proto.Key related to an event.
 	maxField              // internal field bounding the range of allocated fields
 )

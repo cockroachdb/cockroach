@@ -22,7 +22,6 @@ import "runtime"
 var (
 	// These variables are initialized via the linker -X flag in the
 	// top-level Makefile when compiling release binaries.
-	buildVers string // Go Version
 	buildTag  string // Tag of this build (git describe)
 	buildTime string // Build time in UTC (year/month/day hour:min:sec)
 	buildDeps string // Git SHAs of dependencies

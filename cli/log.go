@@ -56,7 +56,3 @@ func runLog(cmd *cobra.Command, args []string) {
 		reader.Close()
 	}
 }
-
-var logCmds = []*cobra.Command{
-	logCmd,
-}

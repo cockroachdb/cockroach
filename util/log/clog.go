@@ -713,8 +713,6 @@ func (l *loggingT) putBuffer(b *buffer) {
 	l.freeListMu.Unlock()
 }
 
-var timeNow = time.Now // Stubbed out for testing.
-
 func (l *loggingT) print(s Severity, args ...interface{}) {
 	file, line, _ := caller.Lookup(1)
 	entry := LogEntry{}

@@ -14,8 +14,6 @@
 // for names of contributors.
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
-//
-//go:generate stringer -type=Kind
 
 package privilege
 
@@ -24,6 +22,8 @@ import (
 	"strings"
 )
 
+//go:generate stringer -type=Kind
+
 // Kind defines a privilege. This is output by the parser,
 // and used to generate the privilege bitfields in the PrivilegeDescriptor.
 type Kind uint32
@@ -31,8 +31,8 @@ type Kind uint32
 // List of privileges. ALL is specifically encoded so that it will automatically
 // pick up new privileges.
 const (
-	_        = iota
-	ALL Kind = iota
+	_ Kind = iota
+	ALL
 	CREATE
 	DROP
 	GRANT
@@ -45,7 +45,6 @@ const (
 // Predefined sets of privileges.
 var (
 	ReadData      = List{GRANT, SELECT}
-	WriteData     = List{INSERT, DELETE, UPDATE}
 	ReadWriteData = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
 )
 
