@@ -306,11 +306,17 @@ func (d DTuple) Next() Datum {
 
 // IsMax implements the Datum interface.
 func (d DTuple) IsMax() bool {
+	// Unimplemented for DTuple. Seems possible to provide an implementation
+	// which called IsMax for each of the elements, but currently this isn't
+	// needed.
 	return false
 }
 
 // IsMin implements the Datum interface.
 func (d DTuple) IsMin() bool {
+	// Unimplemented for DTuple. Seems possible to provide an implementation
+	// which called IsMin for each of the elements, but currently this isn't
+	// needed.
 	return false
 }
 
