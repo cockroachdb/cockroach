@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// TOOD(tamird): instead of tracking every write, use the failed CPut's
+// TODO(tamird): instead of tracking every write, use the failed CPut's
 // key to decode the index and values.
 type writePair struct {
 	col string
