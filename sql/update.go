@@ -158,11 +158,10 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				var w write
 
 				indexDesc := &tableDesc.Indexes[i]
-				for _, columnID := range indexDesc.ColumnIDs {
+				for i, columnID := range indexDesc.ColumnIDs {
 					w.values = append(w.values, writePair{
-						tableDesc: tableDesc,
-						columnID:  columnID,
-						val:       rowVals[colIDtoRowIndex[columnID]],
+						col: indexDesc.ColumnNames[i],
+						val: rowVals[colIDtoRowIndex[columnID]],
 					})
 				}
 

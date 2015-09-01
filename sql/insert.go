@@ -31,9 +31,8 @@ import (
 // TOOD(tamird): instead of tracking every write, use the failed CPut's
 // key to decode the index and values.
 type writePair struct {
-	tableDesc *TableDescriptor
-	columnID  ColumnID
-	val       parser.Datum
+	col string
+	val parser.Datum
 }
 
 type writePairs []writePair
@@ -43,12 +42,7 @@ func (wp writePairs) String() string {
 	vals := make([]string, 0, len(wp))
 
 	for _, pair := range wp {
-		colDesc, err := pair.tableDesc.FindColumnByID(pair.columnID)
-		if err != nil {
-			panic(err)
-		}
-
-		cols = append(cols, colDesc.Name)
+		cols = append(cols, pair.col)
 		vals = append(vals, pair.val.String())
 	}
 
@@ -144,11 +138,10 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			var w write
 
 			indexDesc := &tableDesc.Indexes[i]
-			for _, columnID := range indexDesc.ColumnIDs {
+			for i, columnID := range indexDesc.ColumnIDs {
 				w.values = append(w.values, writePair{
-					tableDesc: tableDesc,
-					columnID:  columnID,
-					val:       rowVals[colIDtoRowIndex[columnID]],
+					col: indexDesc.ColumnNames[i],
+					val: rowVals[colIDtoRowIndex[columnID]],
 				})
 			}
 
@@ -166,11 +159,10 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		var w write
 
 		indexDesc := &tableDesc.PrimaryIndex
-		for _, columnID := range indexDesc.ColumnIDs {
+		for i, columnID := range indexDesc.ColumnIDs {
 			w.values = append(w.values, writePair{
-				tableDesc: tableDesc,
-				columnID:  columnID,
-				val:       rowVals[colIDtoRowIndex[columnID]],
+				col: indexDesc.ColumnNames[i],
+				val: rowVals[colIDtoRowIndex[columnID]],
 			})
 		}
 
