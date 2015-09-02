@@ -161,9 +161,8 @@ func TestSimplifyExpr(t *testing.T) {
 		{`(a < 1 OR a > 1) AND a >= 1`, `a > 1`},
 		{`a < 1 AND (a > 2 AND a < 1)`, `false`},
 		{`a < 1 OR (a > 1 OR a < 2)`, `true`},
-		// TODO(pmattis): unknown function: abs
-		// {`a < 1 AND abs(a) > 0`, `a < 1`},
-		// {`a < 1 OR abs(a) > 0`, `true`},
+		{`a < 1 AND length(i) > 0`, `a < 1`},
+		{`a < 1 OR length(i) > 0`, `true`},
 
 		{`a = NULL`, `false`},
 		{`a != NULL`, `false`},
@@ -192,6 +191,12 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a IN (2, 3, 1)`, `a IN (1, 2, 3)`},
 		{`a IN (1, NULL, 2, NULL)`, `a IN (1, 2)`},
 		{`a IN (1, NULL) OR a IN (2, NULL)`, `a IN (1, 2)`},
+
+		{`(a, b) IN ((1, 2))`, `(a, b) IN ((1, 2))`},
+		{`(a, b) IN ((1, 2), (1, 2))`, `(a, b) IN ((1, 2))`},
+		{`(a, b) IN ((1, 2)) OR (a, b) IN ((3, 4))`, `(a, b) IN ((1, 2), (3, 4))`},
+		{`(a, b) = (1, 2) OR (a, b) = (3, 4)`, `(a, b) IN ((1, 2), (3, 4))`},
+		{`(a, b) IN ((2, 1), (1, 2), (1, 2), (2, 1))`, `(a, b) IN ((1, 2), (2, 1))`},
 
 		// TODO(pmattis): unsupported comparison operator: LIKE
 		// {`i LIKE '%foo'`, `true`},
@@ -458,7 +463,6 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a = 1 OR a = 2 OR a = 3 or a = 4`, `a IN (1, 2, 3, 4)`},
 		{`a = 1 OR a IN (1, 2, 3) OR a = 2 OR a = 3`, `a IN (1, 2, 3)`},
 		{`a > 1 OR a IN (2, 3)`, `a > 1 OR a IN (2, 3)`},
-		// {`(a, b) IN ((2, 1), (1, 2), (1, 2), (2, 1))`, `(a, b) IN ((1, 2), (2, 1)`},
 
 		{`a < 1 OR b < 1 OR a < 2 OR b < 2`, `a < 2 OR b < 2`},
 		{`(a > 2 OR a < 1) OR (a > 3 OR a < 0)`, `a > 2 OR a < 1`},

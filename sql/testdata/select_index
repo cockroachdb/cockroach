@@ -38,14 +38,11 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE d = 'foo' OR d = 'bar'
 0 /t/dc/'bar'/22/2/'two' NULL true
 1 /t/dc/'foo'/11/1/'one' NULL true
 
-# TODO(pmattis): This will only read two rows when we add support for
-# multi-column IN expressions.
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE (d, c) IN (('foo', 11), ('bar', 22))
 ----
-0 /t/dc/'bar'/22/2/'two'    NULL true
-1 /t/dc/'blah'/33/3/'three' NULL false
-2 /t/dc/'foo'/11/1/'one'    NULL true
+0 /t/dc/'bar'/22/2/'two' NULL true
+1 /t/dc/'foo'/11/1/'one' NULL true
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a < 2

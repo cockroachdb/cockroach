@@ -1037,24 +1037,63 @@ func mergeSorted(a, b parser.DTuple) parser.DTuple {
 	return r
 }
 
-func isVar(e parser.Expr) bool {
-	switch e.(type) {
-	case *qvalue:
-		return true
-	}
-	return false
-}
-
 func isDatum(e parser.Expr) bool {
 	_, ok := e.(parser.Datum)
 	return ok
 }
 
+// isVar returns true if the expression is a qvalue or a tuple composed of
+// qvalues.
+func isVar(e parser.Expr) bool {
+	switch t := e.(type) {
+	case *qvalue:
+		return true
+
+	case parser.Tuple:
+		for _, v := range t {
+			if !isVar(v) {
+				return false
+			}
+		}
+		return true
+	}
+
+	return false
+}
+
+// varEqual returns true if the two expressions are both qvalues pointing to
+// the same column or are both tuples composed of qvalues pointing at the same
+// columns.
 func varEqual(a, b parser.Expr) bool {
-	if qa, ok := a.(*qvalue); ok {
-		if qb, ok := b.(*qvalue); ok {
-			return qa.col.ID == qb.col.ID
+	switch ta := a.(type) {
+	case *qvalue:
+		switch tb := b.(type) {
+		case *qvalue:
+			return ta.col.ID == tb.col.ID
+		}
+
+	case parser.Tuple:
+		switch tb := b.(type) {
+		case parser.Tuple:
+			if len(ta) == len(tb) {
+				for i := range ta {
+					if !varEqual(ta[i], tb[i]) {
+						return false
+					}
+				}
+				return true
+			}
 		}
 	}
+
 	return false
+}
+
+func findColumnInTuple(tuple parser.Tuple, colID ColumnID) int {
+	for i, v := range tuple {
+		if q, ok := v.(*qvalue); ok && q.col.ID == colID {
+			return i
+		}
+	}
+	return -1
 }
