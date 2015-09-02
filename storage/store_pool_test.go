@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -51,11 +52,11 @@ var uniqueStore = []*proto.StoreDescriptor{
 
 // createTestStorePool creates a stopper, gossip and storePool for use in
 // tests. Stopper must be stopped by the caller.
-func createTestStorePool() (*stop.Stopper, *gossip.Gossip, *StorePool) {
+func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *gossip.Gossip, *StorePool) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
-	storePool := NewStorePool(g, testTimeUntilStoreDead, stopper)
+	storePool := NewStorePool(g, timeUntilStoreDead, stopper)
 	return stopper, g, storePool
 }
 
@@ -63,7 +64,7 @@ func createTestStorePool() (*stop.Stopper, *gossip.Gossip, *StorePool) {
 // correctly updates a store's details.
 func TestStorePoolGossipUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper, g, sp := createTestStorePool()
+	stopper, g, sp := createTestStorePool(testTimeUntilStoreDead)
 	defer stopper.Stop()
 	sg := newStoreGossiper(g)
 
@@ -107,7 +108,7 @@ func waitUntilDead(t *testing.T, sp *StorePool, storeID proto.StoreID) {
 // times out and that it will be revived after a new update is received.
 func TestStorePoolDies(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper, g, sp := createTestStorePool()
+	stopper, g, sp := createTestStorePool(testTimeUntilStoreDead)
 	defer stopper.Stop()
 	sg := newStoreGossiper(g)
 	sg.gossipStores(uniqueStore, t)
@@ -207,7 +208,7 @@ func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int) erro
 // that are alive and match the attribute criteria.
 func TestStorePoolGetStoreList(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper, g, sp := createTestStorePool()
+	stopper, g, sp := createTestStorePool(testTimeUntilStoreDead)
 	defer stopper.Stop()
 	sg := newStoreGossiper(g)
 	required := []string{"ssd", "dc"}
@@ -274,5 +275,21 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		int(supersetStore.StoreID),
 	}); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestStorePoolGetStoreDetails(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper, g, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
+	defer stopper.Stop()
+	sg := newStoreGossiper(g)
+	sg.gossipStores(uniqueStore, t)
+
+	if detail := sp.getStoreDetail(proto.StoreID(1)); detail.dead {
+		t.Errorf("Present storeDetail came back as dead, expected it to be alive. %+v", detail)
+	}
+
+	if detail := sp.getStoreDetail(proto.StoreID(2)); detail.dead {
+		t.Errorf("Absent storeDetail came back as dead, expected it to be alive. %+v", detail)
 	}
 }

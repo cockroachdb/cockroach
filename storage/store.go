@@ -257,6 +257,7 @@ type Store struct {
 	_splitQueue       *splitQueue     // Range splitting queue
 	verifyQueue       *verifyQueue    // Checksum verification queue
 	replicateQueue    replicateQueue  // Replication queue
+	repairQueue       repairQueue     // Recovery Queue
 	_rangeGCQueue     *rangeGCQueue   // Range GC queue
 	scanner           *replicaScanner // Range scanner
 	feed              StoreEventFeed  // Event Feed
@@ -267,12 +268,11 @@ type Store struct {
 	stopper           *stop.Stopper
 	startedAt         int64
 	nodeDesc          *proto.NodeDescriptor
-	initComplete      sync.WaitGroup // Signaled by async init tasks
-
-	mu             sync.RWMutex               // Protects variables below...
-	replicas       map[proto.RangeID]*Replica // Map of replicas by Range ID
-	replicasByKey  *btree.BTree               // btree keyed by ranges end keys.
-	uninitReplicas map[proto.RangeID]*Replica // Map of uninitialized replicas by Range ID
+	initComplete      sync.WaitGroup             // Signaled by async init tasks
+	mu                sync.RWMutex               // Protects variables below...
+	replicas          map[proto.RangeID]*Replica // Map of replicas by Range ID
+	replicasByKey     *btree.BTree               // btree keyed by ranges end keys.
+	uninitReplicas    map[proto.RangeID]*Replica // Map of uninitialized replicas by Range ID
 }
 
 var _ multiraft.Storage = &Store{}
@@ -378,6 +378,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ReplicaCount)
 	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
+	s.repairQueue = makeRepairQueue(s.ctx.StorePool, &s.replicateQueue, s.ctx.Clock)
 	s._rangeGCQueue = newRangeGCQueue(s.db)
 	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue)
 
