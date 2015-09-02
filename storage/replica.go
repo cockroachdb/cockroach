@@ -313,7 +313,7 @@ func (r *Replica) getLease() *proto.Lease {
 	return (*proto.Lease)(atomic.LoadPointer(&r.lease))
 }
 
-// newNotLeaderError returns a NotLeaderError intialized with the
+// newNotLeaderError returns a NotLeaderError initialized with the
 // replica for the holder (if any) of the given lease.
 func (r *Replica) newNotLeaderError(l *proto.Lease, originNode proto.RaftNodeID) error {
 	err := &proto.NotLeaderError{}
