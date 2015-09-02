@@ -107,7 +107,7 @@ type baseQueue struct {
 	name       string
 	impl       queueImpl
 	maxSize    int                            // Maximum number of replicas to queue
-	incoming   chan struct{}                  // Channel signalled when a new replica is added to the queue.
+	incoming   chan struct{}                  // Channel signaled when a new replica is added to the queue.
 	sync.Mutex                                // Mutex protects priorityQ and replicas
 	priorityQ  priorityQueue                  // The priority queue
 	replicas   map[proto.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)

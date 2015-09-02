@@ -273,7 +273,7 @@ func TestStoreRangeSplit(t *testing.T) {
 		t.Errorf("response cache not copied correctly to new range, expected %d but got %d", rIncArgs.Increment, rIncReply.NewValue)
 	}
 
-	// Compare stats of split ranges to ensure they are non ero and
+	// Compare stats of split ranges to ensure they are non zero and
 	// exceed the original range when summed.
 	var left, right engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(store.Engine(), rangeID, &left); err != nil {

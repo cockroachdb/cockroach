@@ -104,7 +104,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 		return nil
 	}
 
-	// TODO(bdarnell): handle non-homogenous ReplicaAttrs.
+	// TODO(bdarnell): handle non-homogeneous ReplicaAttrs.
 	// Allow constraints to be relaxed if necessary.
 	newReplica, err := rq.allocator.allocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true, nil)
 	if err != nil {

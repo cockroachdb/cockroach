@@ -1165,8 +1165,8 @@ func TestStoreReadInconsistent(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Now, get from both keys and verify. Wether we can push or not,
-		// we will be able to read with INCONSISTENT.
+		// Now, get from both keys and verify. Whether we can push or not, we
+		// will be able to read with INCONSISTENT.
 		gArgs := getArgs(keyA, 1, store.StoreID())
 
 		gArgs.Timestamp = store.ctx.Clock.Now()
