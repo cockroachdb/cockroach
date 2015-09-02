@@ -261,10 +261,11 @@ func ValidateRangeMetaKey(key proto.Key) error {
 	prefix, body := proto.Key(key[:len(Meta1Prefix)]), proto.Key(key[len(Meta1Prefix):])
 
 	if prefix.Equal(Meta2Prefix) {
-		if body.Less(proto.KeyMax) {
-			return nil
+		// TODO(tschottdorf): chengwei is refactoring this in #2298.
+		if proto.KeyMax.Less(body) {
+			return NewInvalidRangeMetaKeyError("body of meta2 range lookup is > KeyMax", key)
 		}
-		return NewInvalidRangeMetaKeyError("body of meta2 range lookup is >= KeyMax", key)
+		return nil
 	}
 
 	if prefix.Equal(Meta1Prefix) {

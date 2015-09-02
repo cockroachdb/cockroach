@@ -546,37 +546,43 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		kvs, intents, err = engine.MVCCScan(batch, startKey, endKey, rangeCount,
 			args.Timestamp, consistent, args.Txn)
 	} else {
-		// Use MVCCScan to get the first range. There are two cases:
+		// Use MVCCScan to get the first range. There are three cases:
 		// 1. args.Key is not an endpoint of the range, and
-		// 2. The args.Key is the start/end key of the range.
+		// 2a. The args.Key is the start/end key of the range.
+		// 2b. Even worse, the body of args.Key is proto.KeyMax.
 		// In the first case, we need use the MVCCScan() to get the first range
 		// descriptor because ReverseScan can't do the work: If we have ranges
 		// ["a","c") and ["c","f"), and the reverse scan request's key range is
 		// ["b","d"), then "d".Next() is less than "f", and so the meta row
-		// {"f"->["c", "f")} would be ignored by MVCCReverseScan. In the second
-		// case, the range descriptor received by MVCCScan will be filtered
-		// before results are returned: With ranges ["c", "f") and ["f","z"),
-		// reverse scan on ["d", "f") leads to inspecting the descriptor
-		// {"z"->["f","z")}, which is discarded since it's not being asked for.
-		startKey, endKey := keys.MetaScanBounds(args.Key)
-		kvs, intents, err = engine.MVCCScan(batch, startKey, endKey, 1,
-			args.Timestamp, consistent, args.Txn)
-		if err != nil {
-			return reply, nil, err
-		}
-		var firstRD proto.RangeDescriptor
-		if err = gogoproto.Unmarshal(kvs[0].Value.Bytes, &firstRD); err != nil {
-			return reply, nil, err
-		}
-		if keys.RangeMetaKey(firstRD.StartKey).Less(args.Key) {
-			// We actually want this descriptor. It would be unmarshaled
-			// below, but we already did it, so let's put it in right away.
-			rds = append(rds, firstRD)
-		} else {
-			// Discard temporary data to preserve assumptions about the
-			// content of these two slices.
-			kvs = nil
-			intents = nil
+		// {"f"->["c", "f")} would be ignored by MVCCReverseScan. In case 2a,
+		// the range descriptor received by MVCCScan will be filtered before
+		// results are returned: With ranges ["c", "f") and ["f","z"), reverse
+		// scan on ["d", "f") receives the descriptor {"z"->["f","z")}, which
+		// is discarded below since it's not being asked for. Finally, in case
+		// 2b, we don't even attempt the forward scan because it's neither
+		// defined nor required.
+		// TODO(tschottdorf): unit testing coverage.
+		if args.Key[len(keys.Meta2Prefix):].Less(proto.KeyMax) {
+			startKey, endKey := keys.MetaScanBounds(args.Key)
+			kvs, intents, err = engine.MVCCScan(batch, startKey, endKey, 1,
+				args.Timestamp, consistent, args.Txn)
+			if err != nil {
+				return reply, nil, err
+			}
+			var firstRD proto.RangeDescriptor
+			if err = gogoproto.Unmarshal(kvs[0].Value.Bytes, &firstRD); err != nil {
+				return reply, nil, err
+			}
+			if keys.RangeMetaKey(firstRD.StartKey).Less(args.Key) {
+				// We actually want this descriptor. It would be unmarshaled
+				// below, but we already did it, so let's put it in right away.
+				rds = append(rds, firstRD)
+			} else {
+				// Discard temporary data to preserve assumptions about the
+				// content of these two slices.
+				kvs = nil
+				intents = nil
+			}
 		}
 
 		// We want to search for the metadata key just less or equal to
@@ -649,12 +655,6 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		}
 	}
 
-	if len(kvs) == 0 {
-		// No matching results were returned from the scan. This should
-		// never happen with the above logic.
-		panic(fmt.Sprintf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %s", args.Key))
-	}
-
 	// Decode all scanned range descriptors which haven't been unmarshaled yet.
 	for i, l := len(rds), len(kvs); i < l; i++ {
 		rds = append(rds, proto.RangeDescriptor{})
@@ -662,6 +662,12 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		if err = gogoproto.Unmarshal(kvs[i].Value.Bytes, &rds[i]); err != nil {
 			return reply, nil, err
 		}
+	}
+
+	if len(rds) == 0 {
+		// No matching results were returned from the scan. This should
+		// never happen with the above logic.
+		panic(fmt.Sprintf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %s", args.Key))
 	}
 
 	reply.Ranges = rds
