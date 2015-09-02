@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
@@ -110,6 +109,9 @@ var builtins = map[string][]builtin{
 			fn: func(args DTuple) (Datum, error) {
 				var buffer bytes.Buffer
 				for _, d := range args {
+					if d == DNull {
+						continue
+					}
 					ds, err := datumToRawString(d)
 					if err != nil {
 						return DNull, err
@@ -457,26 +459,9 @@ func stringBuiltin3(f func(string, string, string) (Datum, error), returnType Da
 }
 
 func datumToRawString(datum Datum) (string, error) {
-	switch d := datum.(type) {
-	case DString:
-		return string(d), nil
-
-	case DInt:
-		return strconv.FormatInt(int64(d), 10), nil
-
-	case DFloat:
-		return strconv.FormatFloat(float64(d), 'f', -1, 64), nil
-
-	case DBool:
-		if bool(d) {
-			return "t", nil
-		}
-		return "f", nil
-
-	case dNull:
-		return "", nil
-
-	default:
-		return "", fmt.Errorf("argument type unsupported: %s", datum.Type())
+	if dString, ok := datum.(DString); ok {
+		return string(dString), nil
 	}
+
+	return "", fmt.Errorf("argument type unsupported: %s", datum.Type())
 }
