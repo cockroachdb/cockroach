@@ -860,6 +860,50 @@ already leading), though some care should be taken that Range leadership is
 relatively stable and long-lived to avoid a large number of Raft leadership
 transitions.
 
+## Command Execution Flow
+
+This subsection describes how a leader replica processes a read/write
+command in more details. Each command specifies (1) a key (or a range
+of keys) that the command accesses and (2) the ID of a range which the
+key(s) belongs to. When receiving a command, a RoachNode looks up a
+range by the specified Range ID and checks if the range is still
+responsible for the supplied keys. If any of the keys do not belong to the
+range, the RoachNode returns an error so that the client will retry
+and send a request to a correct range.
+
+When all the keys belong to the range, the RoachNode attempts to
+process the command. If the command is an inconsistent read-only
+command, it is processed immediately. If the command is a consistent
+read or a write, the command is executed when both of the following
+conditions hold:
+
+- The range replica has a leader lease.
+- There are no other running commands whose keys overlap with
+the submitted command and cause read/write conflict.
+
+When the first condition is not met, the replica attempts to acquire
+a lease or returns an error so that the client will redirect the
+command to the current leader. The second condition guarantees that
+consistent read/write commands for a given key are sequentially
+executed.
+
+When the above two conditions are met, the leader replica processes the
+command. Consistent reads are processed on the leader immediately.
+Write commands are commited into the Raft log so that every replica
+will execute the same commands. All commands produce deterministic
+results so that the range replicas keep consistent states among them.
+
+When a write command completes, all the replica updates their response
+cache to ensure idempotency. When a read command completes, the leader
+replica updates its timestamp cache to keep track of the latest read
+for a given key.
+
+There is a chance that a leader lease gets expired while a command is
+executed. Before executing a command, each replica checks if a replica
+proposing the command has a still lease. When the lease has been
+expired, the command will be rejected by the replica.
+
+
 # Splitting / Merging Ranges
 
 RoachNodes split or merge ranges based on whether they exceed maximum or
