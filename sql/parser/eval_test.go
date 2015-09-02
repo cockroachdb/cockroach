@@ -55,7 +55,7 @@ func TestEvalExpr(t *testing.T) {
 		{`0xa`, `10`},
 		// String concatenation.
 		{`'a' || 'b'`, `'ab'`},
-		{`'a' || (1 + 2)`, `'a3'`},
+		{`'a' || (1 + 2)::char`, `'a3'`},
 		// Bit shift operators.
 		{`1 << 2`, `4`},
 		{`4 >> 2`, `1`},
@@ -128,14 +128,14 @@ func TestEvalExpr(t *testing.T) {
 		{`ROW(1) = ROW(1)`, `true`},
 		{`ROW(1, true) = (1, NOT false)`, `true`},
 		{`(1, 'a') = (1, 'a')`, `true`},
-		{`(1, 'a' || 1) = (1, 'a1')`, `true`},
+		{`(1, 'a' || 1::char) = (1, 'a1')`, `true`},
 		{`(1+1, (2+2, (3+3))) = (2, (4, (6)))`, `true`},
 		{`(1, 'a') != (1, 'a')`, `false`},
 		{`(1, 'a') != (1, 'b')`, `true`},
 		// IN and NOT IN expressions.
 		{`1 NOT IN (2, 3, 4)`, `true`},
 		{`1+1 IN (2, 3, 4)`, `true`},
-		{`'a0' IN ('a'||0, 'b'||1, 'c'||2)`, `true`},
+		{`'a0' IN ('a'||0::char, 'b'||1::char, 'c'||2::char)`, `true`},
 		{`(1,2) IN ((0+1,1+1), (3,4), (5,6))`, `true`},
 		// Func expressions.
 		{`length('hel'||'lo')`, `5`},

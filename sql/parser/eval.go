@@ -576,42 +576,6 @@ var binOps = map[binArgs]binOp{
 			return left.(DString) + right.(DString), nil
 		},
 	},
-	binArgs{Concat, boolType, stringType}: {
-		returnType: DummyString,
-		fn: func(left Datum, right Datum) (Datum, error) {
-			return DString(left.String()) + right.(DString), nil
-		},
-	},
-	binArgs{Concat, stringType, boolType}: {
-		returnType: DummyString,
-		fn: func(left Datum, right Datum) (Datum, error) {
-			return left.(DString) + DString(right.String()), nil
-		},
-	},
-	binArgs{Concat, intType, stringType}: {
-		returnType: DummyString,
-		fn: func(left Datum, right Datum) (Datum, error) {
-			return DString(left.String()) + right.(DString), nil
-		},
-	},
-	binArgs{Concat, stringType, intType}: {
-		returnType: DummyString,
-		fn: func(left Datum, right Datum) (Datum, error) {
-			return left.(DString) + DString(right.String()), nil
-		},
-	},
-	binArgs{Concat, floatType, stringType}: {
-		returnType: DummyString,
-		fn: func(left Datum, right Datum) (Datum, error) {
-			return DString(left.String()) + right.(DString), nil
-		},
-	},
-	binArgs{Concat, stringType, floatType}: {
-		returnType: DummyString,
-		fn: func(left Datum, right Datum) (Datum, error) {
-			return left.(DString) + DString(right.String()), nil
-		},
-	},
 
 	// TODO(pmattis): Check that the shift is valid.
 	binArgs{LShift, intType, intType}: {
