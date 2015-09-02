@@ -383,9 +383,7 @@ func (m *RaftCommand) GetCmd() RaftCommandUnion {
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec. Unlike most of the requests defined in this file
 // and api.proto, this one is implemented in a separate service defined in
-// server/transport.go.
-//
-// This is the equivalent of the non-protobuf multiraft.RaftMessageRequest.
+// server/raft_transport.go.
 type RaftMessageRequest struct {
 	GroupID RangeID `protobuf:"varint,1,opt,name=group_id,casttype=RangeID" json:"group_id"`
 	// The raft payload, an encoded raftpb.Message. We transmit the message as
@@ -412,7 +410,8 @@ func (m *RaftMessageRequest) GetMsg() []byte {
 	return nil
 }
 
-// RaftMessageResponse is an empty message returned by raft RPCs.
+// RaftMessageResponse is an empty message returned by raft RPCs. If a
+// response is needed it will be sent as a separate message).
 type RaftMessageResponse struct {
 }
 

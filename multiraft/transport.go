@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/coreos/etcd/raft/raftpb"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -48,30 +47,17 @@ type Transport interface {
 	Stop(id proto.RaftNodeID)
 
 	// Send a message to the node specified in the request's To field.
-	Send(req *RaftMessageRequest) error
+	Send(req *proto.RaftMessageRequest) error
 
 	// Close all associated connections.
 	Close()
 }
 
-// RaftMessageRequest wraps a raft message.
-type RaftMessageRequest struct {
-	GroupID proto.RangeID
-	Message raftpb.Message
-}
-
-// RaftMessageResponse is empty (raft uses a one-way messaging model; if a response
-// is needed it will be sent as a separate message).
-type RaftMessageResponse struct {
-}
-
 // ServerInterface is the methods we expose for use by net/rpc.
 // TODO(bdarnell): This interface is now out of step with cockroach/rpc's
-// async interface. Consider refactoring (and embracing a dependency on
-// cockroach/proto to avoid conversions duplicated here and in
-// the 'real' transport).
+// async interface. Consider refactoring.
 type ServerInterface interface {
-	RaftMessage(req *RaftMessageRequest, resp *RaftMessageResponse) error
+	RaftMessage(req *proto.RaftMessageRequest, resp *proto.RaftMessageResponse) error
 }
 
 var (
@@ -113,14 +99,8 @@ func (lt *localRPCTransport) Listen(id proto.RaftNodeID, server ServerInterface)
 	})
 	err := rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
 		func(argsI gogoproto.Message, callback func(gogoproto.Message, error)) {
-			protoArgs := argsI.(*proto.RaftMessageRequest)
-			args := RaftMessageRequest{
-				GroupID: protoArgs.GroupID,
-			}
-			if err := args.Message.Unmarshal(protoArgs.Msg); err != nil {
-				callback(nil, err)
-			}
-			err := server.RaftMessage(&args, &RaftMessageResponse{})
+			args := argsI.(*proto.RaftMessageRequest)
+			err := server.RaftMessage(args, &proto.RaftMessageResponse{})
 			callback(&proto.RaftMessageResponse{}, err)
 		}, &proto.RaftMessageRequest{})
 	if err != nil {
@@ -179,21 +159,17 @@ func (lt *localRPCTransport) getClient(id proto.RaftNodeID) (*netrpc.Client, err
 	return client, err
 }
 
-func (lt *localRPCTransport) Send(req *RaftMessageRequest) error {
-	msg, err := req.Message.Marshal()
+func (lt *localRPCTransport) Send(req *proto.RaftMessageRequest) error {
+	msg, err := req.UnmarshalMsg()
 	if err != nil {
 		return err
-	}
-	protoReq := &proto.RaftMessageRequest{
-		GroupID: req.GroupID,
-		Msg:     msg,
 	}
 
-	client, err := lt.getClient(proto.RaftNodeID(req.Message.To))
+	client, err := lt.getClient(proto.RaftNodeID(msg.To))
 	if err != nil {
 		return err
 	}
-	call := client.Go(raftMessageName, protoReq, &proto.RaftMessageResponse{}, nil)
+	call := client.Go(raftMessageName, req, &proto.RaftMessageResponse{}, nil)
 	select {
 	case <-call.Done:
 		// If the call failed synchronously, report an error.

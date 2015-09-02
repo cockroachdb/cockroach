@@ -104,7 +104,7 @@ type MultiRaft struct {
 	multiNode       raft.MultiNode
 	Events          chan interface{}
 	nodeID          proto.RaftNodeID
-	reqChan         chan *RaftMessageRequest
+	reqChan         chan *proto.RaftMessageRequest
 	createGroupChan chan *createGroupOp
 	removeGroupChan chan *removeGroupOp
 	proposalChan    chan *proposal
@@ -153,7 +153,7 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *stop.Stopper
 		Events: make(chan interface{}, config.EventBufferSize),
 
 		// Input channels.
-		reqChan:         make(chan *RaftMessageRequest, reqBufferSize),
+		reqChan:         make(chan *proto.RaftMessageRequest, reqBufferSize),
 		createGroupChan: make(chan *createGroupOp),
 		removeGroupChan: make(chan *removeGroupOp),
 		proposalChan:    make(chan *proposal),
@@ -175,8 +175,8 @@ func (m *MultiRaft) Start() {
 // RaftMessage implements ServerInterface; this method is called by net/rpc
 // when we receive a message. It returns as soon as the request has been
 // enqueued without waiting for it to be processed.
-func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest,
-	resp *RaftMessageResponse) error {
+func (ms *multiraftServer) RaftMessage(req *proto.RaftMessageRequest,
+	resp *proto.RaftMessageResponse) error {
 	select {
 	case ms.reqChan <- req:
 		return nil
@@ -194,10 +194,10 @@ func (m *MultiRaft) sendEvent(event interface{}) {
 
 // fanoutHeartbeat sends the given heartbeat to all groups which believe that
 // their leader resides on the sending node.
-func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
+func (s *state) fanoutHeartbeat(msg *raftpb.Message) {
 	// A heartbeat message is expanded into a heartbeat for each group
 	// that the remote node is a part of.
-	fromID := proto.RaftNodeID(req.Message.From)
+	fromID := proto.RaftNodeID(msg.From)
 	groupCount := 0
 	followerCount := 0
 	if originNode, ok := s.nodes[fromID]; ok {
@@ -208,15 +208,15 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 			if s.groups[groupID].leader != fromID || fromID == s.nodeID {
 				if log.V(8) {
 					log.Infof("node %v: not fanning out heartbeat to %v, msg is from %d and leader is %d",
-						s.nodeID, req.Message.To, fromID, s.groups[groupID].leader)
+						s.nodeID, msg.To, fromID, s.groups[groupID].leader)
 				}
 				continue
 			}
 			followerCount++
-			if err := s.multiNode.Step(context.Background(), uint64(groupID), req.Message); err != nil {
+			if err := s.multiNode.Step(context.Background(), uint64(groupID), *msg); err != nil {
 				if log.V(4) {
 					log.Infof("node %v: coalesced heartbeat step to group %v failed for message %s", s.nodeID, groupID,
-						raft.DescribeMessage(req.Message, s.EntryFormatter))
+						raft.DescribeMessage(*msg, s.EntryFormatter))
 				}
 			}
 		}
@@ -230,7 +230,7 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 	s.sendMessage(nil,
 		raftpb.Message{
 			From: uint64(s.nodeID),
-			To:   req.Message.From,
+			To:   msg.From,
 			Type: raftpb.MsgHeartbeatResp,
 		})
 	if log.V(7) {
@@ -489,15 +489,20 @@ func (s *state) start() {
 				return
 
 			case req := <-s.reqChan:
+				msg, err := req.UnmarshalMsg()
+				if err != nil {
+					panic(fmt.Sprintf("failed to unmarshal message: %s", err))
+				}
 				if log.V(5) {
 					log.Infof("node %v: group %v got message %.200s", s.nodeID, req.GroupID,
-						raft.DescribeMessage(req.Message, s.EntryFormatter))
+						raft.DescribeMessage(*msg, s.EntryFormatter))
 				}
-				switch req.Message.Type {
+
+				switch msg.Type {
 				case raftpb.MsgHeartbeat:
-					s.fanoutHeartbeat(req)
+					s.fanoutHeartbeat(msg)
 				case raftpb.MsgHeartbeatResp:
-					s.fanoutHeartbeatResponse(proto.RaftNodeID(req.Message.From))
+					s.fanoutHeartbeatResponse(proto.RaftNodeID(msg.From))
 				default:
 					// We only want to lazily create the group if it's not heartbeat-related;
 					// our heartbeats are coalesced and contain a dummy GroupID.
@@ -513,10 +518,10 @@ func (s *state) start() {
 						}
 					}
 
-					if err := s.multiNode.Step(context.Background(), uint64(req.GroupID), req.Message); err != nil {
+					if err := s.multiNode.Step(context.Background(), uint64(req.GroupID), *msg); err != nil {
 						if log.V(4) {
 							log.Infof("node %v: multinode step to group %v failed for message %.200s", s.nodeID, req.GroupID,
-								raft.DescribeMessage(req.Message, s.EntryFormatter))
+								raft.DescribeMessage(*msg, s.EntryFormatter))
 						}
 					}
 				}
@@ -957,7 +962,11 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 				s.nodeID, groupID, nodeID, err)
 		}
 	}
-	err := s.Transport.Send(&RaftMessageRequest{groupID, msg})
+	req, err := proto.NewRaftMessageRequest(groupID, msg)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create a new request: %s", err))
+	}
+	err = s.Transport.Send(req)
 	snapStatus := raft.SnapshotFinish
 	if err != nil {
 		log.Warningf("node %v failed to send message to %v: %s", s.nodeID, nodeID, err)

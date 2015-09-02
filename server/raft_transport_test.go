@@ -34,19 +34,19 @@ import (
 )
 
 type channelServer struct {
-	ch       chan *multiraft.RaftMessageRequest
+	ch       chan *proto.RaftMessageRequest
 	maxSleep time.Duration
 }
 
 func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
 	return channelServer{
-		ch:       make(chan *multiraft.RaftMessageRequest, bufSize),
+		ch:       make(chan *proto.RaftMessageRequest, bufSize),
 		maxSleep: maxSleep,
 	}
 }
 
-func (s channelServer) RaftMessage(req *multiraft.RaftMessageRequest,
-	resp *multiraft.RaftMessageResponse) error {
+func (s channelServer) RaftMessage(req *proto.RaftMessageRequest,
+	resp *proto.RaftMessageResponse) error {
 	if s.maxSleep != 0 {
 		// maxSleep simulates goroutine scheduling delays that could
 		// result in messages being processed out of order (in previous
@@ -119,15 +119,16 @@ func TestSendAndReceive(t *testing.T) {
 	// Each store sends one message to each store.
 	for from := 0; from < numStores; from++ {
 		for to := 0; to < numStores; to++ {
-			req := &multiraft.RaftMessageRequest{
-				GroupID: 1,
-				Message: raftpb.Message{
+			req, err := proto.NewRaftMessageRequest(
+				1,
+				raftpb.Message{
 					From: uint64(nodeIDs[from]),
 					To:   uint64(nodeIDs[to]),
 					Type: raftpb.MsgHeartbeat,
-				},
+				})
+			if err != nil {
+				t.Fatal(err)
 			}
-
 			if err := transports[from].Send(req); err != nil {
 				t.Errorf("Unable to send message from %d to %d: %s", nodeIDs[from], nodeIDs[to], err)
 			}
@@ -142,7 +143,11 @@ func TestSendAndReceive(t *testing.T) {
 		for from := 0; from < numStores; from++ {
 			select {
 			case req := <-channels[to].ch:
-				if req.Message.To != uint64(nodeIDs[to]) {
+				msg, err := req.UnmarshalMsg()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if msg.To != uint64(nodeIDs[to]) {
 					t.Errorf("invalid message received on channel %d (expected from %d): %+v",
 						nodeIDs[to], nodeIDs[from], req)
 				}
@@ -203,14 +208,17 @@ func TestInOrderDelivery(t *testing.T) {
 	defer clientTransport.Close()
 
 	for i := 0; i < numMessages; i++ {
-		req := &multiraft.RaftMessageRequest{
-			GroupID: 1,
-			Message: raftpb.Message{
+		req, err := proto.NewRaftMessageRequest(
+			1,
+			raftpb.Message{
 				To:     uint64(raftNodeID),
 				From:   uint64(clientNodeID),
 				Commit: uint64(i),
-			},
+			})
+		if err != nil {
+			t.Fatal(err)
 		}
+
 		if err := clientTransport.Send(req); err != nil {
 			t.Errorf("failed to send message %d: %s", i, err)
 		}
@@ -218,8 +226,12 @@ func TestInOrderDelivery(t *testing.T) {
 
 	for i := 0; i < numMessages; i++ {
 		req := <-serverChannel.ch
-		if req.Message.Commit != uint64(i) {
-			t.Errorf("messages out of order: got %d while expecting %d", req.Message.Commit, i)
+		msg, err := req.UnmarshalMsg()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if msg.Commit != uint64(i) {
+			t.Errorf("messages out of order: got %d while expecting %d", msg.Commit, i)
 		}
 	}
 }

@@ -28,7 +28,7 @@ import (
 type localInterceptableTransport struct {
 	mu        sync.Mutex
 	listeners map[proto.RaftNodeID]ServerInterface
-	messages  chan *RaftMessageRequest
+	messages  chan *proto.RaftMessageRequest
 	Events    chan *interceptMessage
 	stopper   *stop.Stopper
 }
@@ -40,7 +40,7 @@ type localInterceptableTransport struct {
 func NewLocalInterceptableTransport(stopper *stop.Stopper) Transport {
 	lt := &localInterceptableTransport{
 		listeners: make(map[proto.RaftNodeID]ServerInterface),
-		messages:  make(chan *RaftMessageRequest, 100),
+		messages:  make(chan *proto.RaftMessageRequest, 100),
 		Events:    make(chan *interceptMessage),
 		stopper:   stopper,
 	}
@@ -64,10 +64,10 @@ func (lt *localInterceptableTransport) start() {
 	})
 }
 
-func (lt *localInterceptableTransport) handleMessage(msg *RaftMessageRequest) {
+func (lt *localInterceptableTransport) handleMessage(req *proto.RaftMessageRequest) {
 	ack := make(chan struct{})
 	iMsg := &interceptMessage{
-		args: msg,
+		args: req,
 		ack:  ack,
 	}
 	// The following channel ops are not protected by a select with
@@ -76,13 +76,19 @@ func (lt *localInterceptableTransport) handleMessage(msg *RaftMessageRequest) {
 	// from shutting down cleanly.
 	lt.Events <- iMsg
 	<-ack
+
+	msg, err := req.UnmarshalMsg()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	lt.mu.Lock()
-	srv, ok := lt.listeners[proto.RaftNodeID(msg.Message.To)]
+	srv, ok := lt.listeners[proto.RaftNodeID(msg.To)]
 	lt.mu.Unlock()
 	if !ok {
 		return
 	}
-	err := srv.RaftMessage(msg, nil)
+	err = srv.RaftMessage(req, nil)
 	if err == ErrStopped {
 		return
 	} else if err != nil {
@@ -103,7 +109,7 @@ func (lt *localInterceptableTransport) Stop(id proto.RaftNodeID) {
 	lt.mu.Unlock()
 }
 
-func (lt *localInterceptableTransport) Send(req *RaftMessageRequest) error {
+func (lt *localInterceptableTransport) Send(req *proto.RaftMessageRequest) error {
 	select {
 	case lt.messages <- req:
 	case <-lt.stopper.ShouldStop():

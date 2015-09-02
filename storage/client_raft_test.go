@@ -30,7 +30,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -912,13 +911,17 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		return util.Errorf("range still exists")
 	})
 
-	if err := mtc.transport.Send(&multiraft.RaftMessageRequest{
-		GroupID: proto.RangeID(0),
-		Message: raftpb.Message{
+	req, err := proto.NewRaftMessageRequest(
+		proto.RangeID(0),
+		raftpb.Message{
 			From: uint64(mtc.stores[2].RaftNodeID()),
 			To:   uint64(mtc.stores[1].RaftNodeID()),
 			Type: raftpb.MsgHeartbeat,
-		}}); err != nil {
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mtc.transport.Send(req); err != nil {
 		t.Fatal(err)
 	}
 	// Execute another replica change to ensure that MultiRaft has processed the heartbeat just sent.

@@ -33,7 +33,7 @@ import (
 // processEventsUntil reads and acknowledges messages from the given channel
 // until either the given conditional returns true, the channel is closed or a
 // read on the channel times out.
-func processEventsUntil(ch <-chan *interceptMessage, stopper *stop.Stopper, f func(*RaftMessageRequest) bool) {
+func processEventsUntil(ch <-chan *interceptMessage, stopper *stop.Stopper, f func(*proto.RaftMessageRequest) bool) {
 	for {
 		select {
 		case e, ok := <-ch:
@@ -41,7 +41,7 @@ func processEventsUntil(ch <-chan *interceptMessage, stopper *stop.Stopper, f fu
 				return
 			}
 			e.ack <- struct{}{}
-			if f(e.args.(*RaftMessageRequest)) {
+			if f(e.args.(*proto.RaftMessageRequest)) {
 				return
 			}
 		case <-stopper.ShouldStop():
@@ -53,9 +53,9 @@ func processEventsUntil(ch <-chan *interceptMessage, stopper *stop.Stopper, f fu
 // a heartbeatCondition is invoked when determining whether the intercepted
 // stream should be let go. The heartbeatCountMap reflects the heartbeats
 // intercepted up to and including the given *RaftMessageRequest.
-type heartbeatCondition func(*RaftMessageRequest, heartbeatCountMap) bool
+type heartbeatCondition func(*proto.RaftMessageRequest, heartbeatCountMap) bool
 
-func alwaysFalse(r *RaftMessageRequest) bool {
+func alwaysFalse(r *proto.RaftMessageRequest) bool {
 	return false
 }
 
@@ -103,13 +103,17 @@ func (hc heartbeatCount) String() string {
 // heartbeatCountMap will contain the count of heartbeat requests and responses
 // for each nodeID observed in the message stream.
 func countHeartbeats(ch <-chan *interceptMessage,
-	cond heartbeatCondition) heartbeatCountMap {
+	cond heartbeatCondition, t *testing.T) heartbeatCountMap {
 
 	cnt := make(heartbeatCountMap)
-	processEventsUntil(ch, nil, func(req *RaftMessageRequest) bool {
-		from := cnt[req.Message.From]
-		to := cnt[req.Message.To]
-		switch req.Message.Type {
+	processEventsUntil(ch, nil, func(req *proto.RaftMessageRequest) bool {
+		msg, err := req.UnmarshalMsg()
+		if err != nil {
+			t.Fatal(err)
+		}
+		from := cnt[msg.From]
+		to := cnt[msg.To]
+		switch msg.Type {
 		case raftpb.MsgHeartbeat:
 			from.reqOut++
 			to.reqIn++
@@ -121,8 +125,8 @@ func countHeartbeats(ch <-chan *interceptMessage,
 			// not a heartbeat.
 			return false
 		}
-		cnt[req.Message.From] = from
-		cnt[req.Message.To] = to
+		cnt[msg.From] = from
+		cnt[msg.To] = to
 		return cond(req, cnt)
 	})
 	return cnt
@@ -200,7 +204,7 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 
 	// The main message processing loop.
 	actCnt := countHeartbeats(transport.Events,
-		func(req *RaftMessageRequest, cnt heartbeatCountMap) bool {
+		func(req *proto.RaftMessageRequest, cnt heartbeatCountMap) bool {
 			// Whenever all followers have sent responses for all of the ticks,
 			// we can send the next tick. The only reason for this fairly
 			// complicated setup is to guarantee that no responses are
@@ -216,7 +220,7 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 				readyForTick <- struct{}{}
 			}
 			return cnt.Sum() >= expCnt.Sum()
-		})
+		}, t)
 	// Once done counting, simply process messages.
 	stopper.RunWorker(func() {
 		processEventsUntil(transport.Events, stopper, alwaysFalse)

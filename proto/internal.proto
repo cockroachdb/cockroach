@@ -98,9 +98,7 @@ message RaftCommand {
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec. Unlike most of the requests defined in this file
 // and api.proto, this one is implemented in a separate service defined in
-// server/transport.go.
-//
-// This is the equivalent of the non-protobuf multiraft.RaftMessageRequest.
+// server/raft_transport.go.
 message RaftMessageRequest {
   optional uint64 group_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "GroupID", (gogoproto.casttype) = "RangeID"];
@@ -111,7 +109,8 @@ message RaftMessageRequest {
   optional bytes msg = 2;
 }
 
-// RaftMessageResponse is an empty message returned by raft RPCs.
+// RaftMessageResponse is an empty message returned by raft RPCs. If a
+// response is needed it will be sent as a separate message).
 message RaftMessageResponse {
 }
 

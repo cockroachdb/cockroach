@@ -21,6 +21,7 @@ package proto
 import (
 	"fmt"
 
+	"github.com/coreos/etcd/raft/raftpb"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -81,4 +82,24 @@ func (samp *InternalTimeSeriesSample) Minimum() float64 {
 func (m *RaftMessageRequest) GetUser() string {
 	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
 	return "node"
+}
+
+// NewRaftMessageRequest returns a new RaftMessageRequest.
+func NewRaftMessageRequest(groupID RangeID, msg raftpb.Message) (*RaftMessageRequest, error) {
+	m := &RaftMessageRequest{GroupID: groupID}
+	var err error
+	m.Msg, err = msg.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// UnmarshalMsg unmarshals the raft payload.
+func (m *RaftMessageRequest) UnmarshalMsg() (*raftpb.Message, error) {
+	var msg raftpb.Message
+	if err := msg.Unmarshal(m.Msg); err != nil {
+		return nil, err
+	}
+	return &msg, nil
 }
