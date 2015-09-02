@@ -227,7 +227,7 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 	// heartbeat. If we get a heartbeat from a node we don't know, it
 	// must think we are a follower of some group, so we need to respond
 	// so it can activate the recovery process.
-	s.sendMessage(noGroup,
+	s.sendMessage(nil,
 		raftpb.Message{
 			From: uint64(s.nodeID),
 			To:   req.Message.From,
@@ -371,6 +371,8 @@ type proposal struct {
 
 // group represents the state of a consensus group.
 type group struct {
+	id proto.RangeID
+
 	// committedTerm is the term of the most recently committed entry.
 	committedTerm uint64
 
@@ -604,7 +606,7 @@ func (s *state) coalescedHeartbeat() {
 		if log.V(6) {
 			log.Infof("node %v: triggering coalesced heartbeat to node %v", s.nodeID, nodeID)
 		}
-		s.sendMessage(noGroup,
+		s.sendMessage(nil,
 			raftpb.Message{
 				From: uint64(s.nodeID),
 				To:   uint64(nodeID),
@@ -621,19 +623,9 @@ func (s *state) stop() {
 	s.MultiRaft.Transport.Stop(s.nodeID)
 }
 
-// addNode creates a node and registers the given groupIDs for that
-// node. If the node already exists and possible some of the groups
-// are already registered, only the missing groups will be added in.
-func (s *state) addNode(nodeID proto.RaftNodeID, groupIDs ...proto.RangeID) error {
-	for _, groupID := range groupIDs {
-		if groupID == noGroup {
-			panic(fmt.Sprintf("attempt to add dummy group to node %d", nodeID))
-		}
-		if _, ok := s.groups[groupID]; !ok {
-			return util.Errorf("can not add invalid group %d to node %d",
-				groupID, nodeID)
-		}
-	}
+// addNode creates a node and registers the given group (if not nil)
+// for that node.
+func (s *state) addNode(nodeID proto.RaftNodeID, g *group) error {
 	newNode, ok := s.nodes[nodeID]
 	if !ok {
 		s.nodes[nodeID] = &node{
@@ -643,21 +635,21 @@ func (s *state) addNode(nodeID proto.RaftNodeID, groupIDs ...proto.RangeID) erro
 		}
 		newNode = s.nodes[nodeID]
 	}
-	for _, groupID := range groupIDs {
-		newNode.registerGroup(groupID)
-		g := s.groups[groupID]
+
+	if g != nil {
+		newNode.registerGroup(g.id)
 		g.nodeIDs = append(g.nodeIDs, nodeID)
 	}
 	return nil
 }
 
 // removeNode removes a node from a group.
-func (s *state) removeNode(nodeID proto.RaftNodeID, groupID proto.RangeID) error {
+func (s *state) removeNode(nodeID proto.RaftNodeID, g *group) error {
 	node, ok := s.nodes[nodeID]
 	if !ok {
 		return util.Errorf("cannot remove unknown node %s", nodeID)
 	}
-	g := s.groups[groupID]
+
 	for i := range g.nodeIDs {
 		if g.nodeIDs[i] == nodeID {
 			g.nodeIDs[i] = g.nodeIDs[len(g.nodeIDs)-1]
@@ -666,7 +658,7 @@ func (s *state) removeNode(nodeID proto.RaftNodeID, groupID proto.RangeID) error
 		}
 	}
 	// TODO(bdarnell): when a node has no more groups, remove it.
-	node.unregisterGroup(groupID)
+	node.unregisterGroup(g.id)
 
 	// Cancel any outstanding proposals.
 	if nodeID == s.nodeID {
@@ -713,12 +705,14 @@ func (s *state) createGroup(groupID proto.RangeID) error {
 	if err := s.multiNode.CreateGroup(uint64(groupID), raftCfg, nil); err != nil {
 		return err
 	}
-	s.groups[groupID] = &group{
+	g := &group{
+		id:      groupID,
 		pending: map[string]*proposal{},
 	}
+	s.groups[groupID] = g
 
 	for _, nodeID := range cs.Nodes {
-		if err := s.addNode(proto.RaftNodeID(nodeID), groupID); err != nil {
+		if err := s.addNode(proto.RaftNodeID(nodeID), g); err != nil {
 			return err
 		}
 	}
@@ -909,9 +903,9 @@ func (s *state) processCommittedEntry(groupID proto.RangeID, g *group, entry raf
 						// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
 						switch cc.Type {
 						case raftpb.ConfChangeAddNode:
-							err = s.addNode(proto.RaftNodeID(cc.NodeID), proto.RangeID(groupID))
+							err = s.addNode(proto.RaftNodeID(cc.NodeID), g)
 						case raftpb.ConfChangeRemoveNode:
-							err = s.removeNode(proto.RaftNodeID(cc.NodeID), proto.RangeID(groupID))
+							err = s.removeNode(proto.RaftNodeID(cc.NodeID), g)
 						case raftpb.ConfChangeUpdateNode:
 							// Updates don't concern multiraft, they are simply passed through.
 						}
@@ -944,23 +938,21 @@ func (s *state) processCommittedEntry(groupID proto.RangeID, g *group, entry raf
 
 // sendMessage sends a raft message on the given group. Coalesced heartbeats
 // address nodes, not groups; they will use the noGroup constant as groupID.
-func (s *state) sendMessage(groupID proto.RangeID, msg raftpb.Message) {
+func (s *state) sendMessage(g *group, msg raftpb.Message) {
 	if log.V(6) {
 		log.Infof("node %v sending message %.200s to %v", s.nodeID,
 			raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
 	}
 	nodeID := proto.RaftNodeID(msg.To)
+	groupID := noGroup
+	if g != nil {
+		groupID = g.id
+	}
 	if _, ok := s.nodes[nodeID]; !ok {
 		if log.V(4) {
 			log.Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
 		}
-		var err error
-		if groupID != noGroup {
-			err = s.addNode(nodeID, groupID)
-		} else {
-			err = s.addNode(nodeID)
-		}
-		if err != nil {
+		if err := s.addNode(nodeID, g); err != nil {
 			log.Errorf("node %v: error adding group %v to node %v: %v",
 				s.nodeID, groupID, nodeID, err)
 		}
@@ -1053,7 +1045,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			for _, nodeID := range ready.Snapshot.Metadata.ConfState.Nodes {
 				// TODO(bdarnell): if we had any information that predated this snapshot
 				// we must remove those nodes.
-				if err := s.addNode(proto.RaftNodeID(nodeID), raftGroupID); err != nil {
+				if err := s.addNode(proto.RaftNodeID(nodeID), g); err != nil {
 					log.Errorf("node %v: error adding node %v", s.nodeID, nodeID)
 				}
 			}
@@ -1076,7 +1068,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 						s.nodeID, msg.To)
 				}
 			default:
-				s.sendMessage(raftGroupID, msg)
+				s.sendMessage(g, msg)
 			}
 		}
 	}
