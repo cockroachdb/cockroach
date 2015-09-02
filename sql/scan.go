@@ -336,7 +336,7 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	if n.err == nil {
 		// Normalize the expression (this will also evaluate any branches that are
 		// constant).
-		n.filter, n.err = parser.NormalizeExpr(n.filter)
+		n.filter, n.err = parser.NormalizeAndTypeCheckExpr(n.filter)
 	}
 	return n.err
 }
@@ -447,11 +447,12 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	if resolved, n.err = n.resolveQNames(target.Expr); n.err != nil {
 		return n.err
 	}
-	// Evaluate the expression once to memoize operators and functions.
-	if _, n.err = parser.EvalExpr(resolved); n.err != nil {
+	// Type check the expression to memoize operators and functions.
+	var normalized parser.Expr
+	if normalized, n.err = parser.NormalizeAndTypeCheckExpr(resolved); n.err != nil {
 		return n.err
 	}
-	n.render = append(n.render, resolved)
+	n.render = append(n.render, normalized)
 
 	if target.As == "" {
 		switch t := target.Expr.(type) {
@@ -723,13 +724,13 @@ func (n *scanNode) getQVal(col ColumnDescriptor) *qvalue {
 		// needs to take that into consideration, but how to surface that info?
 		switch col.Type.Kind {
 		case ColumnType_INT:
-			qval.datum = parser.DInt(0)
+			qval.datum = parser.DummyInt
 		case ColumnType_BOOL:
-			qval.datum = parser.DBool(true)
+			qval.datum = parser.DummyBool
 		case ColumnType_FLOAT:
-			qval.datum = parser.DFloat(0)
+			qval.datum = parser.DummyFloat
 		case ColumnType_STRING, ColumnType_BYTES:
-			qval.datum = parser.DString("")
+			qval.datum = parser.DummyString
 		default:
 			panic(fmt.Sprintf("unsupported column type: %s", col.Type.Kind))
 		}

@@ -281,6 +281,8 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 				} else {
 					left.Operator = Mult
 				}
+				// Clear the function cache now that we've changed the operator.
+				left.fn.fn = nil
 				n.Right, v.err = EvalExpr(left)
 				if v.err != nil {
 					return nil, nil

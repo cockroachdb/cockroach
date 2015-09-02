@@ -550,7 +550,7 @@ func (i BinaryOp) String() string {
 type BinaryExpr struct {
 	Operator    BinaryOp
 	Left, Right Expr
-	fn          func(Datum, Datum) (Datum, error)
+	fn          binOp
 	ltype       reflect.Type
 	rtype       reflect.Type
 }
@@ -586,7 +586,7 @@ func (i UnaryOp) String() string {
 type UnaryExpr struct {
 	Operator UnaryOp
 	Expr     Expr
-	fn       func(Datum) (Datum, error)
+	fn       unaryOp
 	dtype    reflect.Type
 }
 

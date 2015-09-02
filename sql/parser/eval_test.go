@@ -41,7 +41,7 @@ func TestEvalExpr(t *testing.T) {
 		{`5 % 3`, `2`},
 		// Division is always done on floats.
 		{`4 / 5`, `0.8`},
-		{`1 / 0`, `+Inf`},
+		{`1.0 / 0.0`, `+Inf`},
 		{`-1.0 * (1.0 / 0.0)`, `-Inf`},
 		// Grouping
 		{`1 + 2 + (3 * 4)`, `15`},
@@ -186,6 +186,9 @@ func TestEvalExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		expr := q[0].(*Select).Exprs[0].Expr
+		if expr, err = NormalizeExpr(expr); err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
 		r, err := EvalExpr(expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
@@ -202,10 +205,11 @@ func TestEvalExprError(t *testing.T) {
 		expected string
 	}{
 		{`1 % 0`, `zero modulus`},
+		{`1 / 0`, `division by zero`},
 		{`'1' + '2'`, `unsupported binary operator:`},
 		{`'a' + 0`, `unsupported binary operator:`},
 		{`1.1 # 3.1`, `unsupported binary operator:`},
-		{`1/0.0`, `unsupported binary operator:`},
+		{`1 / 0.0`, `unsupported binary operator:`},
 		{`~0.1`, `unsupported unary operator:`},
 		{`'10' > 2`, `unsupported comparison operator:`},
 		{`1 IN ('a', 'b')`, `unsupported comparison operator:`},
@@ -221,9 +225,6 @@ func TestEvalExprError(t *testing.T) {
 		{`1::date`, `invalid cast: int -> DATE`},
 		{`1::time`, `invalid cast: int -> TIME`},
 		{`1::timestamp`, `invalid cast: int -> TIMESTAMP`},
-		{`CASE 'one' WHEN 1 THEN 1 WHEN 'two' THEN 2 END`, `incompatible condition type`},
-		{`CASE 1 WHEN 1 THEN 'one' WHEN 2 THEN 2 END`, `incompatible value type`},
-		{`CASE 1 WHEN 1 THEN 'one' ELSE 2 END`, `incompatible value type`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`},
 	}
