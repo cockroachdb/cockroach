@@ -67,7 +67,7 @@ func (sd *storeDetail) markAlive(foundAliveOn time.Time, storeDesc proto.StoreDe
 	sd.lastUpdatedTime = foundAliveOn
 }
 
-// storePoolPQ implements the heap.Interface (which includes  sort.Interface)
+// storePoolPQ implements the heap.Interface (which includes sort.Interface)
 // and holds storeDetail. storePoolPQ is not threadsafe.
 type storePoolPQ []*storeDetail
 

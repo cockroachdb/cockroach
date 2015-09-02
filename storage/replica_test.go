@@ -230,9 +230,9 @@ func newTransaction(name string, baseKey proto.Key, userPriority int32,
 		isolation, clock.Now(), clock.MaxOffset().Nanoseconds())
 }
 
-// CreateReplicaSets creates new proto.Replica protos based on an array of integers
-// to aid in testing. Note that this does not actualy produce any actual replicas, it
-// just creates the proto.
+// CreateReplicaSets creates new proto.Replica protos based on an array of
+// StoreIDs to aid in testing. Note that this does not actually produce any
+// replicas, it just creates the proto.
 func createReplicaSets(replicaNumbers []proto.StoreID) []proto.Replica {
 	result := []proto.Replica{}
 	for _, replicaNumber := range replicaNumbers {
