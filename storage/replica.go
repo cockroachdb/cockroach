@@ -88,7 +88,9 @@ var TestingCommandFilter func(proto.Request) error
 // upon EndTransaction if they only have local intents (which can be
 // resolved synchronously with EndTransaction). Certain tests become
 // simpler with this being turned off.
-var txnAutoGC = true
+// TODO(tschottdorf): currently disabled since missing batch atomicity on Store
+// can lay down intents which are never tracked by the coordinator.
+var txnAutoGC = false
 
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
@@ -804,13 +806,17 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto
 		ctx = r.context()
 	}
 
-	execDone := tracer.FromCtx(ctx).Epoch(fmt.Sprintf("applying %s", args.Method()))
+	trace := tracer.FromCtx(ctx)
+	execDone := trace.Epoch(fmt.Sprintf("applying %s", args.Method()))
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
 	reply, err := r.applyRaftCommand(ctx, index, proto.RaftNodeID(raftCmd.OriginNodeID), args)
 	err = r.maybeSetCorrupt(err)
 	execDone()
+	if err != nil {
+		trace.Event(fmt.Sprintf("error: %T", err))
+	}
 
 	if cmd != nil {
 		cmd.done <- proto.ResponseWithError{Reply: reply, Err: err}
@@ -1281,8 +1287,13 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		action := func() {
 			// Trace this under the ID of the intent owner.
 			ctx := tracer.ToCtx(ctx, r.rm.Tracer().NewTrace(resolveArgs.Header().Txn))
-			if _, err := r.addWriteCmd(ctx, resolveArgs, &wg); err != nil && log.V(1) {
-				log.Warningc(ctx, "resolve for key %s failed: %s", intent.Key, err)
+			if _, err := r.addWriteCmd(ctx, resolveArgs, &wg); err != nil {
+				if log.V(1) {
+					log.Warningc(ctx, "resolve for key %s failed: %s", intent.Key, err)
+				}
+				if _, ok := err.(*proto.RangeKeyMismatchError); !ok {
+					panic("intent resolution failed") // TODO(tschottdorf)
+				}
 			}
 		}
 		if !r.rm.Stopper().RunAsyncTask(action) {

@@ -1,4 +1,4 @@
-// Copyrighe 2015 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1213,7 +1213,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 	}
 	// For cases where there's no write intent to resolve, or one exists
 	// which we can't resolve, this is a noop.
-	if !ok || meta.Txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID) {
+	if !ok || !txn.Equal(meta.Txn) {
 		return nil
 	}
 	origAgeSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9

@@ -124,6 +124,11 @@ func (t *Trace) Finalize() {
 	if t == nil || len(t.Content) == 0 {
 		return
 	}
+	if r := recover(); r != nil {
+		t.Epoch(fmt.Sprintf("panic: %v", r))
+		log.Println(t)
+		panic(r)
+	}
 	if t.depth != 0 {
 		panic("attempt to finalize unbalanced trace:\n" + t.String())
 	}

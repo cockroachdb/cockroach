@@ -504,8 +504,9 @@ func (t *Transaction) Update(o *Transaction) {
 	if t.Writing && !o.Writing {
 		// TODO(tschottdorf): false positives; see #2300.
 		// panic("r/w status regression")
+	} else {
+		t.Writing = o.Writing
 	}
-	t.Writing = o.Writing
 }
 
 // UpgradePriority sets transaction priority to the maximum of current

@@ -161,6 +161,9 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	if err != nil {
 		return nil, err
 	}
+	if len(rs) == 0 {
+		panic(fmt.Sprintf("no range descriptors returned for %s", key))
+	}
 	// TODO(tamird): there is a race here; multiple readers may experience cache
 	// misses and concurrently attempt to refresh the cache, duplicating work.
 	// Locking over the getRangeDescriptors call is even worse though, because
@@ -183,9 +186,6 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 		}
 		rdc.clearOverlappingCachedRangeDescriptors(rs[i].EndKey, rangeKey, &rs[i])
 		rdc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
-	}
-	if len(rs) == 0 {
-		panic(fmt.Sprintf("no range descriptors returned for %s", key))
 	}
 	rdc.rangeCacheMu.Unlock()
 	return &rs[0], nil

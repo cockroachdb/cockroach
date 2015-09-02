@@ -120,7 +120,7 @@ type DistSender struct {
 
 var _ batch.Sender = &DistSender{}
 
-// RPCSendFn is the function type used to dispatch RPC calls.
+// rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(rpc.Options, string, []net.Addr,
 	func(addr net.Addr) gogoproto.Message, func() gogoproto.Message,
 	*rpc.Context) ([]gogoproto.Message, error)
@@ -382,14 +382,14 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 // getDescriptors looks up the range descriptor to use for a query over the
 // key range [from,to), with the given lookupOptions. The range descriptor
 // which contains the range in which the request should start its query is
-// returned first; a second one is optionally returned in case the given
-// range reaches outside the first descriptor.
+// returned first; the returned bool is true in case the given range reaches
+// outside the first descriptor.
 // In case either of the descriptors is discovered stale, the returned closure
 // should be called; it evicts the cache appropriately.
 // Note that `from` and `to` are not necessarily Key and EndKey from a
 // RequestHeader; it's assumed that they've been translated to key addresses
 // already (via KeyAddress).
-func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) (*proto.RangeDescriptor, *proto.RangeDescriptor, func(), error) {
+func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) (*proto.RangeDescriptor, bool, func(), error) {
 	var desc *proto.RangeDescriptor
 	var err error
 	var descKey proto.Key
@@ -401,34 +401,21 @@ func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) 
 	desc, err = ds.rangeCache.LookupRangeDescriptor(descKey, options)
 
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, false, nil, err
 	}
 
-	// Checks whether need to get next range descriptor. If so, returns true
-	// and the key to look up, depending on whether we're in reverse mode.
-	needAnother := func(desc *proto.RangeDescriptor, isReverse bool) (proto.Key, bool) {
+	// Checks whether need to get next range descriptor. If so, returns true.
+	needAnother := func(desc *proto.RangeDescriptor, isReverse bool) bool {
 		if isReverse {
-			return desc.StartKey, from.Less(desc.StartKey)
+			return from.Less(desc.StartKey)
 		}
-		return desc.EndKey, desc.EndKey.Less(to)
+		return desc.EndKey.Less(to)
 	}
 
-	var descNext *proto.RangeDescriptor
-	// If the request accesses keys beyond the end of this range,
-	// get the descriptor of the adjacent range to address next.
-	if nextKey, ok := needAnother(desc, options.useReverseScan); ok {
-		// This next lookup is likely for free since we've read the
-		// previous descriptor and range lookups use cache
-		// prefetching.
-		descNext, err = ds.rangeCache.LookupRangeDescriptor(nextKey, options)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-	}
 	evict := func() {
 		ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, options.useReverseScan)
 	}
-	return desc, descNext, evict, nil
+	return desc, needAnother(desc, options.useReverseScan), evict, nil
 }
 
 // truncate restricts all contained requests to the given key range.
@@ -442,6 +429,9 @@ func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) 
 // The number of non-noop requests after truncation is returned along
 // with a closure which must be executed to undo the truncation, even
 // in case of an error.
+// TODO(tschottdorf): Consider returning a new BatchRequest, which has more
+// overhead in the common case of a batch which never needs truncation but is
+// less magical.
 func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to proto.Key) (func(), int, error) {
 	if !desc.ContainsKey(keys.KeyAddress(from)) {
 		from = desc.StartKey
@@ -594,7 +584,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 	// Send the request to one range per iteration.
 	for {
 		var curReply *proto.BatchResponse
-		var desc, descNext *proto.RangeDescriptor
+		var desc *proto.RangeDescriptor
+		var needAnother bool
 		var err error
 		for r := retry.Start(ds.rpcRetryOptions); r.Next(); {
 			// Get range descriptor (or, when spanning range, descriptors). Our
@@ -614,7 +605,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 			if isReverse {
 				options.useReverseScan = true
 			}
-			desc, descNext, evictDesc, err = ds.getDescriptors(from, to, options)
+			desc, needAnother, evictDesc, err = ds.getDescriptors(from, to, options)
 			descDone()
 
 			// getDescriptors may fail retryably if the first range isn't
@@ -633,7 +624,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 			// re-run as part of a transaction for consistency. The
 			// case where we don't need to re-run is if the read
 			// consistency is not required.
-			if descNext != nil && ba.Txn == nil && ba.IsRange() &&
+			if needAnother && ba.Txn == nil && ba.IsRange() &&
 				ba.ReadConsistency != proto.INCONSISTENT {
 				return nil, &proto.OpRequiresTxnError{}
 			}
@@ -667,6 +658,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 					}
 					br.Txn = gogoproto.Clone(ba.Txn).(*proto.Transaction)
 					curReply, err = br, nil
+					trace.Event("no active requests for range")
 				} else {
 					curReply, err = ds.sendAttempt(trace, ba, desc)
 				}
@@ -778,7 +770,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 							}(prevBound)
 							boundedArg.SetBound(nextBound)
 						} else {
-							descNext = nil
+							needAnother = false
 						}
 					}
 				}
@@ -786,10 +778,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 		}
 
 		// If this was the last range accessed by this call, exit loop.
-		if descNext == nil {
+		if !needAnother {
 			return br, nil
 		}
 
+		// TODO(tschottdorf): can sometimes skip a lot of ranges, but that
+		// requires a pass through the batch and finding the next relevant
+		// request. Could be a good optimization in the future.
 		if isReverse {
 			// In next iteration, query previous range.
 			// We use the StartKey of the current descriptor as opposed to the

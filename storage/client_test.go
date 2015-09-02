@@ -82,6 +82,15 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 		return []gogoproto.Message{call.Reply}, call.Reply.Header().GoError()
 	}
 
+	// Mostly makes sure that we don't see a warning per request.
+	{
+		if err := sCtx.Gossip.AddInfoProto(gossip.MakeNodeIDKey(nodeDesc.NodeID), nodeDesc, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+		if err := sCtx.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
+			t.Fatal(err)
+		}
+	}
 	distSender := kv.NewDistSender(&kv.DistSenderContext{
 		Clock:             clock,
 		RPCSend:           rpcSend,     // defined above

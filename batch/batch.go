@@ -81,6 +81,9 @@ func MaybeWrap(args proto.Request) (*proto.BatchRequest, func(proto.Response) pr
 		// from TxnCoordSender - it will only need to act on retries/aborts
 		// in the future.
 		unwrappedReply.Header().Txn = bReply.Txn
+		if unwrappedReply.Header().Error == nil {
+			unwrappedReply.Header().Error = bReply.Error
+		}
 		return unwrappedReply
 	}
 }
@@ -203,11 +206,11 @@ func (cs *ChunkingSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 		}
 	} else {
 		rng := rand.New(rand.NewSource(ba.CmdID.Random))
-		origID := ba.CmdID
+		id := ba.CmdID
 		nextID = func() proto.ClientCmdID {
-			id := origID
-			origID.Random = rng.Int63()
-			return id
+			curID := id             // copy
+			id.Random = rng.Int63() // adjust for next call
+			return curID
 		}
 	}
 
@@ -224,13 +227,16 @@ func (cs *ChunkingSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 		argChunks = append(argChunks, ba)
 	}
 	var rplChunks []*proto.BatchResponse
-	// TODO(tschottdorf): propagate reply header to next request.
 	for len(argChunks) > 0 {
 		ba, argChunks = argChunks[0], argChunks[1:]
 		ba.CmdID = nextID()
 		rpl, err := cs.f(ctx, ba)
 		if err != nil {
 			return nil, err
+		}
+		// Propagate transaction from last reply to next request.
+		if len(argChunks) > 0 {
+			argChunks[0].Header().Txn.Update(rpl.Header().Txn)
 		}
 		rplChunks = append(rplChunks, rpl)
 	}

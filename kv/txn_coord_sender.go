@@ -291,7 +291,7 @@ func (tc *TxnCoordSender) startStats() {
 // Send implements the client.Sender interface. If the call is part
 // of a transaction, the coordinator will initialize the transaction
 // if it's not nil but has an empty ID.
-// TODO(tschottdorf): move to batch.Sender interface.
+// TODO(tschottdorf): remove in favor of SendBatch.
 func (tc *TxnCoordSender) Send(ctx context.Context, call proto.Call) {
 	batch.SendCallConverted(tc, ctx, call)
 }
@@ -400,6 +400,10 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 				// transaction to end. Read-only txns have all of their state in
 				// the client.
 				return nil, util.Errorf("cannot commit a read-only transaction")
+			}
+			// TODO(tschottdorf): V(1)
+			for _, intent := range et.Intents {
+				trace.Event(fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
 			}
 		}
 	}
@@ -681,7 +685,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba *proto.BatchReques
 	}
 	// TODO(tschottdorf): temporary assertion.
 	if txnErr, ok := err.(proto.TransactionRestartError); ok && txnErr.Transaction() != nil && !reflect.DeepEqual(txnErr.Transaction(), newTxn) {
-		log.Warningf("\n%s\n%s\n", txnErr.Transaction(), newTxn)
 		panic(fmt.Sprintf("%T did not have the latest transaction updates", txnErr))
 	}
 

@@ -1442,6 +1442,7 @@ func (s *Store) executeOne(ctx context.Context, args proto.Request) (proto.Respo
 	// By default, retries are indefinite. However, some unittests set a
 	// maximum retry count; return txn retry error for transactional cases
 	// and the original error otherwise.
+	trace.Event("store retry limit exceeded") // good to check for if tests fail
 	if header.Txn != nil {
 		return nil, proto.NewTransactionRetryError(header.Txn)
 	}
