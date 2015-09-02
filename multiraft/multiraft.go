@@ -651,6 +651,33 @@ func (s *state) addNode(nodeID proto.RaftNodeID, groupIDs ...proto.RangeID) erro
 	return nil
 }
 
+// removeNode removes a node from a group.
+func (s *state) removeNode(nodeID proto.RaftNodeID, groupID proto.RangeID) error {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		return util.Errorf("cannot remove unknown node %s", nodeID)
+	}
+	g := s.groups[groupID]
+	for i := range g.nodeIDs {
+		if g.nodeIDs[i] == nodeID {
+			g.nodeIDs[i] = g.nodeIDs[len(g.nodeIDs)-1]
+			g.nodeIDs = g.nodeIDs[:len(g.nodeIDs)-1]
+			break
+		}
+	}
+	// TODO(bdarnell): when a node has no more groups, remove it.
+	node.unregisterGroup(groupID)
+
+	// Cancel any outstanding proposals.
+	if nodeID == s.nodeID {
+		for _, prop := range g.pending {
+			s.removePending(g, prop, ErrGroupDeleted)
+		}
+	}
+
+	return nil
+}
+
 func (s *state) createGroup(groupID proto.RangeID) error {
 	if _, ok := s.groups[groupID]; ok {
 		return nil
@@ -758,6 +785,20 @@ func (s *state) propose(p *proposal) {
 		s.removePending(nil /* group */, p, ErrGroupDeleted)
 		return
 	}
+
+	found := false
+	for _, nodeID := range g.nodeIDs {
+		if nodeID == s.nodeID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		// If we are not a member of the group, don't allow any proposals.
+		s.removePending(nil, p, ErrGroupDeleted)
+		return
+	}
+
 	if log.V(3) {
 		log.Infof("group %d: new proposal %x", p.groupID, p.commandID)
 	}
@@ -870,7 +911,7 @@ func (s *state) processCommittedEntry(groupID proto.RangeID, g *group, entry raf
 						case raftpb.ConfChangeAddNode:
 							err = s.addNode(proto.RaftNodeID(cc.NodeID), proto.RangeID(groupID))
 						case raftpb.ConfChangeRemoveNode:
-							// TODO(bdarnell): support removing nodes; fix double-application of initial entries
+							err = s.removeNode(proto.RaftNodeID(cc.NodeID), proto.RangeID(groupID))
 						case raftpb.ConfChangeUpdateNode:
 							// Updates don't concern multiraft, they are simply passed through.
 						}
