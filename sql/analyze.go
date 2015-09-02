@@ -887,28 +887,15 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 		fallthrough
 
 	case parser.In:
-		tuple, ok := left.Right.(parser.DTuple)
-		if !ok {
-			return parser.DBool(true), nil
-		}
+		tuple := left.Right.(parser.DTuple)
 
 		var tuple2 parser.DTuple
 		switch right.Operator {
 		case parser.EQ:
-			rdatum, rok := right.Right.(parser.Datum)
-			if !rok {
-				return parser.DBool(true), nil
-			}
+			rdatum := right.Right.(parser.Datum)
 			tuple2 = parser.DTuple{rdatum}
 		case parser.In:
-			tuple2, ok = right.Right.(parser.DTuple)
-			if !ok {
-				return parser.DBool(true), nil
-			}
-		}
-
-		if !typeCheckTuple(left.Left, tuple2) {
-			return left, right
+			tuple2 = right.Right.(parser.DTuple)
 		}
 
 		// We keep the tuples for an in expression in sorted order. So now we just
@@ -957,13 +944,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 			}
 			return n
 		case parser.In, parser.NotIn:
-			tuple, ok := n.Right.(parser.DTuple)
-			if !ok {
-				break
-			}
-			if !typeCheckTuple(n.Left, tuple) {
-				break
-			}
+			tuple := n.Right.(parser.DTuple)
 			sort.Sort(tuple)
 			tuple = uniqTuple(tuple)
 			if len(tuple) == 0 {
@@ -1054,29 +1035,6 @@ func mergeSorted(a, b parser.DTuple) parser.DTuple {
 		}
 	}
 	return r
-}
-
-// typeCheckTuple verifies that the types of all of the values in tuple are
-// either DNull or agree with the arg type.
-//
-// TODO(pmattis): I think we need a TypeCheckExpr which performs this type
-// check as well as others like the CASE type checks.
-func typeCheckTuple(arg parser.Expr, tuple parser.DTuple) bool {
-	qval, ok := arg.(*qvalue)
-	if !ok {
-		return false
-	}
-	argType := reflect.TypeOf(qval.Datum())
-	for _, d := range tuple {
-		if d == parser.DNull {
-			continue
-		}
-		dtype := reflect.TypeOf(d)
-		if argType != dtype {
-			return false
-		}
-	}
-	return true
 }
 
 func isVar(e parser.Expr) bool {
