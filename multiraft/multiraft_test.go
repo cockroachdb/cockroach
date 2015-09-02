@@ -432,7 +432,7 @@ func TestRemoveLeader(t *testing.T) {
 				return
 			case <-ticker.C:
 				for _, t := range cluster.tickers {
-					t.Tick()
+					t.NonBlockingTick()
 				}
 			}
 		}
