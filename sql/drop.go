@@ -79,6 +79,8 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		b := &client.Batch{}
 		b.Del(descKey)
 		b.Del(nameKey)
+		// Mark transaction as operating on the system DB.
+		p.txn.SetSystemDBTrigger()
 		err = p.txn.Run(b)
 		if err != nil {
 			return nil, err
@@ -138,6 +140,8 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	b := &client.Batch{}
 	b.Del(descKey)
 	b.Del(nameKey)
+	// Mark transaction as operating on the system DB.
+	p.txn.SetSystemDBTrigger()
 	if err := p.txn.Run(b); err != nil {
 		return nil, err
 	}

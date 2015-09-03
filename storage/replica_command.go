@@ -412,6 +412,12 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 				if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
 					return reply, nil, err
 				}
+			} else if ct.ModifiedSpanTrigger != nil {
+				if ct.ModifiedSpanTrigger.GetSystemDBSpan() {
+					// Check if we need to gossip the system config, but do it in a separate
+					// goroutine, and after the batch has been committed.
+					batch.Defer(func() { go r.maybeGossipSystemConfig() })
+				}
 			}
 		}
 	}

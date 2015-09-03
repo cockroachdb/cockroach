@@ -76,6 +76,9 @@ type Txn struct {
 	// is (still) unset.
 	haveTxnWrite bool
 	haveEndTxn   bool // True if there was an explicit EndTransaction
+	// systemDBTrigger is set to true when modifying keys from the
+	// SystemDB span. This sets the SystemDBTrigger on EndTransactionRequest.
+	systemDBTrigger bool
 }
 
 // NewTxn returns a new txn.
@@ -125,6 +128,17 @@ func (txn *Txn) InternalSetPriority(priority int32) {
 	// The negative user priority is translated on the server into a positive,
 	// non-randomized, priority for the transaction.
 	txn.db.userPriority = -priority
+}
+
+// SetSystemDBTrigger sets the system db trigger to true on this transaction.
+// This will impact the EndTransactionRequest.
+func (txn *Txn) SetSystemDBTrigger() {
+	txn.systemDBTrigger = true
+}
+
+// SystemDBTrigger returns the systemDBTrigger flag.
+func (txn *Txn) SystemDBTrigger() bool {
+	return txn.systemDBTrigger
 }
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
@@ -282,7 +296,7 @@ func (txn *Txn) Run(b *Batch) error {
 // optional, but more efficient than relying on the implicit commit
 // performed when the transaction function returns without error.
 func (txn *Txn) CommitInBatch(b *Batch) error {
-	b.calls = append(b.calls, endTxnCall(true /* commit */))
+	b.calls = append(b.calls, endTxnCall(true /* commit */, txn.systemDBTrigger))
 	b.initResult(1, 0, nil)
 	return txn.Run(b)
 }
@@ -308,12 +322,23 @@ func (txn *Txn) Rollback() error {
 }
 
 func (txn *Txn) sendEndTxnCall(commit bool) error {
-	return txn.send(endTxnCall(commit))
+	return txn.send(endTxnCall(commit, txn.systemDBTrigger))
 }
 
-func endTxnCall(commit bool) proto.Call {
+func endTxnCall(commit bool, hasTrigger bool) proto.Call {
+	var trigger *proto.InternalCommitTrigger
+	if hasTrigger {
+		trigger = &proto.InternalCommitTrigger{
+			ModifiedSpanTrigger: &proto.ModifiedSpanTrigger{
+				SystemDBSpan: true,
+			},
+		}
+	}
 	return proto.Call{
-		Args:  &proto.EndTransactionRequest{Commit: commit},
+		Args: &proto.EndTransactionRequest{
+			Commit:                commit,
+			InternalCommitTrigger: trigger,
+		},
 		Reply: &proto.EndTransactionResponse{},
 	}
 }

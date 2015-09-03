@@ -142,6 +142,8 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		return nil, err
 	}
 
+	// Mark transaction as operating on the system DB.
+	p.txn.SetSystemDBTrigger()
 	if err := p.txn.Run(&b); err != nil {
 		if tErr, ok := err.(*proto.ConditionFailedError); ok {
 			return nil, util.Errorf("duplicate key value %q violates unique constraint %s", tErr.ActualValue.Bytes, "TODO(tamird)")

@@ -17,12 +17,22 @@
 
 package keys
 
-import "github.com/cockroachdb/cockroach/proto"
+import (
+	"bytes"
+
+	"github.com/cockroachdb/cockroach/proto"
+)
 
 // Span describes a span of keys: [start,end).
 // This will correspond to one or more range.
 type Span struct {
 	Start, End proto.Key
+}
+
+// ContainsKey returns true if the span contains 'key'.
+func (s *Span) ContainsKey(key proto.Key) bool {
+	addr := KeyAddress(key)
+	return bytes.Compare(addr, s.Start) >= 0 && bytes.Compare(addr, s.End) < 0
 }
 
 var (

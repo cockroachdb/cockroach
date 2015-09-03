@@ -571,7 +571,7 @@ func (s *Store) startGossip() {
 	ctx := s.Context(nil)
 	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
 	// of their first iteration.
-	s.initComplete.Add(2)
+	s.initComplete.Add(3)
 	s.stopper.RunWorker(func() {
 		// Run the first time without waiting for the Ticker and signal the WaitGroup.
 		if err := s.maybeGossipFirstRange(); err != nil {
@@ -604,6 +604,25 @@ func (s *Store) startGossip() {
 			case <-ticker.C:
 				if err := s.maybeGossipConfigs(); err != nil {
 					log.Warningc(ctx, "error gossiping configs: %s", err)
+				}
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+
+	s.stopper.RunWorker(func() {
+		if err := s.maybeGossipSystemConfig(); err != nil {
+			log.Warningc(ctx, "error gossiping system config: %s", err)
+		}
+		s.initComplete.Done()
+		ticker := time.NewTicker(configGossipInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := s.maybeGossipSystemConfig(); err != nil {
+					log.Warningc(ctx, "error gossiping system config: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
 				return
@@ -648,6 +667,22 @@ func (s *Store) maybeGossipConfigs() error {
 		}
 	}
 	return nil
+}
+
+// maybeGossipSystemConfig looks for the range containing SystemDB keys and
+// lets that range gossip them.
+func (s *Store) maybeGossipSystemConfig() error {
+	rng := s.LookupReplica(keys.SystemDBSpan.Start, nil)
+	if rng == nil {
+		// This store has no range with this configuration.
+		return nil
+	}
+	// Wake up the replica. If it acquires a fresh lease, it will
+	// gossip. If an unexpected error occurs (i.e. nobody else seems to
+	// have an active lease but we still failed to obtain it), return
+	// that error.
+	_, err := rng.getLeaseForGossip(s.Context(nil))
+	return err
 }
 
 // configGossipUpdate is a callback for gossip updates to

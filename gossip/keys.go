@@ -63,6 +63,9 @@ const (
 	// level of the bi-level key addressing scheme. The value is a slice
 	// of storage.Replica structs.
 	KeyFirstRangeDescriptor = "first-range"
+
+	// KeySystemDB is the gossip key for the system DB span.
+	KeySystemDB = "system-db"
 )
 
 // MakeKey creates a canonical key under which to gossip a piece of

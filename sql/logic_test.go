@@ -158,7 +158,7 @@ type logicTest struct {
 
 func (t *logicTest) close() {
 	if t.srv != nil {
-		t.srv.Stop()
+		cleanupTestServer(t.srv)
 		t.srv = nil
 	}
 	if t.clients != nil {
@@ -215,7 +215,7 @@ func (t *logicTest) run(path string) {
 
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
-	t.srv = server.StartTestServer(t)
+	t.srv = setupTestServer(t.T)
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().

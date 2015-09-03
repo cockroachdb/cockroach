@@ -45,6 +45,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* ChangeReplicasTrigger_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   ChangeReplicasTrigger_reflection_ = NULL;
+const ::google::protobuf::Descriptor* ModifiedSpanTrigger_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  ModifiedSpanTrigger_reflection_ = NULL;
 const ::google::protobuf::Descriptor* InternalCommitTrigger_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   InternalCommitTrigger_reflection_ = NULL;
@@ -211,11 +214,27 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       sizeof(ChangeReplicasTrigger),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, _internal_metadata_),
       -1);
-  InternalCommitTrigger_descriptor_ = file->message_type(8);
-  static const int InternalCommitTrigger_offsets_[3] = {
+  ModifiedSpanTrigger_descriptor_ = file->message_type(8);
+  static const int ModifiedSpanTrigger_offsets_[1] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ModifiedSpanTrigger, system_db_span_),
+  };
+  ModifiedSpanTrigger_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      ModifiedSpanTrigger_descriptor_,
+      ModifiedSpanTrigger::default_instance_,
+      ModifiedSpanTrigger_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ModifiedSpanTrigger, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(ModifiedSpanTrigger),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ModifiedSpanTrigger, _internal_metadata_),
+      -1);
+  InternalCommitTrigger_descriptor_ = file->message_type(9);
+  static const int InternalCommitTrigger_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalCommitTrigger, split_trigger_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalCommitTrigger, merge_trigger_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalCommitTrigger, change_replicas_trigger_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalCommitTrigger, modified_span_trigger_),
   };
   InternalCommitTrigger_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -228,7 +247,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       sizeof(InternalCommitTrigger),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalCommitTrigger, _internal_metadata_),
       -1);
-  NodeList_descriptor_ = file->message_type(9);
+  NodeList_descriptor_ = file->message_type(10);
   static const int NodeList_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeList, nodes_),
   };
@@ -243,7 +262,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       sizeof(NodeList),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeList, _internal_metadata_),
       -1);
-  Transaction_descriptor_ = file->message_type(10);
+  Transaction_descriptor_ = file->message_type(11);
   static const int Transaction_offsets_[13] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, name_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, key_),
@@ -270,7 +289,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       sizeof(Transaction),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, _internal_metadata_),
       -1);
-  Lease_descriptor_ = file->message_type(11);
+  Lease_descriptor_ = file->message_type(12);
   static const int Lease_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, start_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, expiration_),
@@ -287,7 +306,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       sizeof(Lease),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, _internal_metadata_),
       -1);
-  Intent_descriptor_ = file->message_type(12);
+  Intent_descriptor_ = file->message_type(13);
   static const int Intent_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Intent, key_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Intent, end_key_),
@@ -304,7 +323,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       sizeof(Intent),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Intent, _internal_metadata_),
       -1);
-  GCMetadata_descriptor_ = file->message_type(13);
+  GCMetadata_descriptor_ = file->message_type(14);
   static const int GCMetadata_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, last_scan_nanos_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, oldest_intent_nanos_),
@@ -352,6 +371,8 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       ChangeReplicasTrigger_descriptor_, &ChangeReplicasTrigger::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      ModifiedSpanTrigger_descriptor_, &ModifiedSpanTrigger::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       InternalCommitTrigger_descriptor_, &InternalCommitTrigger::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       NodeList_descriptor_, &NodeList::default_instance());
@@ -384,6 +405,8 @@ void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto() {
   delete MergeTrigger_reflection_;
   delete ChangeReplicasTrigger::default_instance_;
   delete ChangeReplicasTrigger_reflection_;
+  delete ModifiedSpanTrigger::default_instance_;
+  delete ModifiedSpanTrigger_reflection_;
   delete InternalCommitTrigger::default_instance_;
   delete InternalCommitTrigger_reflection_;
   delete NodeList::default_instance_;
@@ -436,41 +459,44 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "o.ReplicaB\004\310\336\037\000\0228\n\020updated_replicas\030\005 \003("
     "\0132\030.cockroach.proto.ReplicaB\004\310\336\037\000\022;\n\017nex"
     "t_replica_id\030\006 \001(\005B\"\310\336\037\000\342\336\037\rNextReplicaI"
-    "D\372\336\037\tReplicaID\"\314\001\n\025InternalCommitTrigger"
-    "\0224\n\rsplit_trigger\030\001 \001(\0132\035.cockroach.prot"
-    "o.SplitTrigger\0224\n\rmerge_trigger\030\002 \001(\0132\035."
-    "cockroach.proto.MergeTrigger\022G\n\027change_r"
-    "eplicas_trigger\030\003 \001(\0132&.cockroach.proto."
-    "ChangeReplicasTrigger\"\035\n\010NodeList\022\021\n\005nod"
-    "es\030\001 \003(\005B\002\020\001\"\234\004\n\013Transaction\022\022\n\004name\030\001 \001"
-    "(\tB\004\310\336\037\000\022\024\n\003key\030\002 \001(\014B\007\372\336\037\003Key\022\022\n\002id\030\003 \001"
-    "(\014B\006\342\336\037\002ID\022\026\n\010priority\030\004 \001(\005B\004\310\336\037\000\0227\n\tis"
-    "olation\030\005 \001(\0162\036.cockroach.proto.Isolatio"
-    "nTypeB\004\310\336\037\000\0228\n\006status\030\006 \001(\0162\".cockroach."
-    "proto.TransactionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007"
-    " \001(\005B\004\310\336\037\000\0222\n\016last_heartbeat\030\010 \001(\0132\032.coc"
-    "kroach.proto.Timestamp\0223\n\ttimestamp\030\t \001("
-    "\0132\032.cockroach.proto.TimestampB\004\310\336\037\000\0228\n\016o"
-    "rig_timestamp\030\n \001(\0132\032.cockroach.proto.Ti"
-    "mestampB\004\310\336\037\000\0227\n\rmax_timestamp\030\013 \001(\0132\032.c"
-    "ockroach.proto.TimestampB\004\310\336\037\000\0226\n\rcertai"
-    "n_nodes\030\014 \001(\0132\031.cockroach.proto.NodeList"
-    "B\004\310\336\037\000\022\025\n\007Writing\030\r \001(\010B\004\310\336\037\000:\004\230\240\037\000\"\254\001\n\005"
-    "Lease\022/\n\005start\030\001 \001(\0132\032.cockroach.proto.T"
-    "imestampB\004\310\336\037\000\0224\n\nexpiration\030\002 \001(\0132\032.coc"
-    "kroach.proto.TimestampB\004\310\336\037\000\0226\n\014raft_nod"
-    "e_id\030\003 \001(\004B \310\336\037\000\342\336\037\nRaftNodeID\372\336\037\nRaftNo"
-    "deID:\004\230\240\037\000\"i\n\006Intent\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003K"
-    "ey\022\030\n\007end_key\030\002 \001(\014B\007\372\336\037\003Key\022/\n\003txn\030\003 \001("
-    "\0132\034.cockroach.proto.TransactionB\004\310\336\037\000\"H\n"
-    "\nGCMetadata\022\035\n\017last_scan_nanos\030\001 \001(\003B\004\310\336"
-    "\037\000\022\033\n\023oldest_intent_nanos\030\002 \001(\003*>\n\021Repli"
-    "caChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_"
-    "REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERI"
-    "ALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Transa"
-    "ctionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022"
-    "\013\n\007ABORTED\020\002\032\004\210\243\036\000B\027Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001\220"
-    "\343\036\000", 2523);
+    "D\372\336\037\tReplicaID\"C\n\023ModifiedSpanTrigger\022,\n"
+    "\016system_db_span\030\001 \001(\010B\024\310\336\037\000\342\336\037\014SystemDBS"
+    "pan\"\221\002\n\025InternalCommitTrigger\0224\n\rsplit_t"
+    "rigger\030\001 \001(\0132\035.cockroach.proto.SplitTrig"
+    "ger\0224\n\rmerge_trigger\030\002 \001(\0132\035.cockroach.p"
+    "roto.MergeTrigger\022G\n\027change_replicas_tri"
+    "gger\030\003 \001(\0132&.cockroach.proto.ChangeRepli"
+    "casTrigger\022C\n\025modified_span_trigger\030\004 \001("
+    "\0132$.cockroach.proto.ModifiedSpanTrigger\""
+    "\035\n\010NodeList\022\021\n\005nodes\030\001 \003(\005B\002\020\001\"\234\004\n\013Trans"
+    "action\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022\024\n\003key\030\002 \001(\014B"
+    "\007\372\336\037\003Key\022\022\n\002id\030\003 \001(\014B\006\342\336\037\002ID\022\026\n\010priority"
+    "\030\004 \001(\005B\004\310\336\037\000\0227\n\tisolation\030\005 \001(\0162\036.cockro"
+    "ach.proto.IsolationTypeB\004\310\336\037\000\0228\n\006status\030"
+    "\006 \001(\0162\".cockroach.proto.TransactionStatu"
+    "sB\004\310\336\037\000\022\023\n\005epoch\030\007 \001(\005B\004\310\336\037\000\0222\n\016last_hea"
+    "rtbeat\030\010 \001(\0132\032.cockroach.proto.Timestamp"
+    "\0223\n\ttimestamp\030\t \001(\0132\032.cockroach.proto.Ti"
+    "mestampB\004\310\336\037\000\0228\n\016orig_timestamp\030\n \001(\0132\032."
+    "cockroach.proto.TimestampB\004\310\336\037\000\0227\n\rmax_t"
+    "imestamp\030\013 \001(\0132\032.cockroach.proto.Timesta"
+    "mpB\004\310\336\037\000\0226\n\rcertain_nodes\030\014 \001(\0132\031.cockro"
+    "ach.proto.NodeListB\004\310\336\037\000\022\025\n\007Writing\030\r \001("
+    "\010B\004\310\336\037\000:\004\230\240\037\000\"\254\001\n\005Lease\022/\n\005start\030\001 \001(\0132\032"
+    ".cockroach.proto.TimestampB\004\310\336\037\000\0224\n\nexpi"
+    "ration\030\002 \001(\0132\032.cockroach.proto.Timestamp"
+    "B\004\310\336\037\000\0226\n\014raft_node_id\030\003 \001(\004B \310\336\037\000\342\336\037\nRa"
+    "ftNodeID\372\336\037\nRaftNodeID:\004\230\240\037\000\"i\n\006Intent\022\024"
+    "\n\003key\030\001 \001(\014B\007\372\336\037\003Key\022\030\n\007end_key\030\002 \001(\014B\007\372"
+    "\336\037\003Key\022/\n\003txn\030\003 \001(\0132\034.cockroach.proto.Tr"
+    "ansactionB\004\310\336\037\000\"H\n\nGCMetadata\022\035\n\017last_sc"
+    "an_nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_na"
+    "nos\030\002 \001(\003*>\n\021ReplicaChangeType\022\017\n\013ADD_RE"
+    "PLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIso"
+    "lationType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT"
+    "\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDING"
+    "\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\027Z\005"
+    "proto\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 2661);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -481,6 +507,7 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
   SplitTrigger::default_instance_ = new SplitTrigger();
   MergeTrigger::default_instance_ = new MergeTrigger();
   ChangeReplicasTrigger::default_instance_ = new ChangeReplicasTrigger();
+  ModifiedSpanTrigger::default_instance_ = new ModifiedSpanTrigger();
   InternalCommitTrigger::default_instance_ = new InternalCommitTrigger();
   NodeList::default_instance_ = new NodeList();
   Transaction::default_instance_ = new Transaction();
@@ -495,6 +522,7 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
   SplitTrigger::default_instance_->InitAsDefaultInstance();
   MergeTrigger::default_instance_->InitAsDefaultInstance();
   ChangeReplicasTrigger::default_instance_->InitAsDefaultInstance();
+  ModifiedSpanTrigger::default_instance_->InitAsDefaultInstance();
   InternalCommitTrigger::default_instance_->InitAsDefaultInstance();
   NodeList::default_instance_->InitAsDefaultInstance();
   Transaction::default_instance_->InitAsDefaultInstance();
@@ -4036,9 +4064,267 @@ void ChangeReplicasTrigger::clear_next_replica_id() {
 // ===================================================================
 
 #ifndef _MSC_VER
+const int ModifiedSpanTrigger::kSystemDbSpanFieldNumber;
+#endif  // !_MSC_VER
+
+ModifiedSpanTrigger::ModifiedSpanTrigger()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.proto.ModifiedSpanTrigger)
+}
+
+void ModifiedSpanTrigger::InitAsDefaultInstance() {
+}
+
+ModifiedSpanTrigger::ModifiedSpanTrigger(const ModifiedSpanTrigger& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.ModifiedSpanTrigger)
+}
+
+void ModifiedSpanTrigger::SharedCtor() {
+  _cached_size_ = 0;
+  system_db_span_ = false;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+ModifiedSpanTrigger::~ModifiedSpanTrigger() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.ModifiedSpanTrigger)
+  SharedDtor();
+}
+
+void ModifiedSpanTrigger::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void ModifiedSpanTrigger::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* ModifiedSpanTrigger::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return ModifiedSpanTrigger_descriptor_;
+}
+
+const ModifiedSpanTrigger& ModifiedSpanTrigger::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
+  return *default_instance_;
+}
+
+ModifiedSpanTrigger* ModifiedSpanTrigger::default_instance_ = NULL;
+
+ModifiedSpanTrigger* ModifiedSpanTrigger::New(::google::protobuf::Arena* arena) const {
+  ModifiedSpanTrigger* n = new ModifiedSpanTrigger;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void ModifiedSpanTrigger::Clear() {
+  system_db_span_ = false;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool ModifiedSpanTrigger::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.proto.ModifiedSpanTrigger)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional bool system_db_span = 1;
+      case 1: {
+        if (tag == 8) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &system_db_span_)));
+          set_has_system_db_span();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.proto.ModifiedSpanTrigger)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.ModifiedSpanTrigger)
+  return false;
+#undef DO_
+}
+
+void ModifiedSpanTrigger::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.ModifiedSpanTrigger)
+  // optional bool system_db_span = 1;
+  if (has_system_db_span()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(1, this->system_db_span(), output);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.ModifiedSpanTrigger)
+}
+
+::google::protobuf::uint8* ModifiedSpanTrigger::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.ModifiedSpanTrigger)
+  // optional bool system_db_span = 1;
+  if (has_system_db_span()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(1, this->system_db_span(), target);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.ModifiedSpanTrigger)
+  return target;
+}
+
+int ModifiedSpanTrigger::ByteSize() const {
+  int total_size = 0;
+
+  // optional bool system_db_span = 1;
+  if (has_system_db_span()) {
+    total_size += 1 + 1;
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void ModifiedSpanTrigger::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const ModifiedSpanTrigger* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const ModifiedSpanTrigger>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void ModifiedSpanTrigger::MergeFrom(const ModifiedSpanTrigger& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_system_db_span()) {
+      set_system_db_span(from.system_db_span());
+    }
+  }
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void ModifiedSpanTrigger::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void ModifiedSpanTrigger::CopyFrom(const ModifiedSpanTrigger& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool ModifiedSpanTrigger::IsInitialized() const {
+
+  return true;
+}
+
+void ModifiedSpanTrigger::Swap(ModifiedSpanTrigger* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void ModifiedSpanTrigger::InternalSwap(ModifiedSpanTrigger* other) {
+  std::swap(system_db_span_, other->system_db_span_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata ModifiedSpanTrigger::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = ModifiedSpanTrigger_descriptor_;
+  metadata.reflection = ModifiedSpanTrigger_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// ModifiedSpanTrigger
+
+// optional bool system_db_span = 1;
+bool ModifiedSpanTrigger::has_system_db_span() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void ModifiedSpanTrigger::set_has_system_db_span() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void ModifiedSpanTrigger::clear_has_system_db_span() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void ModifiedSpanTrigger::clear_system_db_span() {
+  system_db_span_ = false;
+  clear_has_system_db_span();
+}
+ bool ModifiedSpanTrigger::system_db_span() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ModifiedSpanTrigger.system_db_span)
+  return system_db_span_;
+}
+ void ModifiedSpanTrigger::set_system_db_span(bool value) {
+  set_has_system_db_span();
+  system_db_span_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.ModifiedSpanTrigger.system_db_span)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#ifndef _MSC_VER
 const int InternalCommitTrigger::kSplitTriggerFieldNumber;
 const int InternalCommitTrigger::kMergeTriggerFieldNumber;
 const int InternalCommitTrigger::kChangeReplicasTriggerFieldNumber;
+const int InternalCommitTrigger::kModifiedSpanTriggerFieldNumber;
 #endif  // !_MSC_VER
 
 InternalCommitTrigger::InternalCommitTrigger()
@@ -4051,6 +4337,7 @@ void InternalCommitTrigger::InitAsDefaultInstance() {
   split_trigger_ = const_cast< ::cockroach::proto::SplitTrigger*>(&::cockroach::proto::SplitTrigger::default_instance());
   merge_trigger_ = const_cast< ::cockroach::proto::MergeTrigger*>(&::cockroach::proto::MergeTrigger::default_instance());
   change_replicas_trigger_ = const_cast< ::cockroach::proto::ChangeReplicasTrigger*>(&::cockroach::proto::ChangeReplicasTrigger::default_instance());
+  modified_span_trigger_ = const_cast< ::cockroach::proto::ModifiedSpanTrigger*>(&::cockroach::proto::ModifiedSpanTrigger::default_instance());
 }
 
 InternalCommitTrigger::InternalCommitTrigger(const InternalCommitTrigger& from)
@@ -4066,6 +4353,7 @@ void InternalCommitTrigger::SharedCtor() {
   split_trigger_ = NULL;
   merge_trigger_ = NULL;
   change_replicas_trigger_ = NULL;
+  modified_span_trigger_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -4079,6 +4367,7 @@ void InternalCommitTrigger::SharedDtor() {
     delete split_trigger_;
     delete merge_trigger_;
     delete change_replicas_trigger_;
+    delete modified_span_trigger_;
   }
 }
 
@@ -4108,7 +4397,7 @@ InternalCommitTrigger* InternalCommitTrigger::New(::google::protobuf::Arena* are
 }
 
 void InternalCommitTrigger::Clear() {
-  if (_has_bits_[0 / 32] & 7u) {
+  if (_has_bits_[0 / 32] & 15u) {
     if (has_split_trigger()) {
       if (split_trigger_ != NULL) split_trigger_->::cockroach::proto::SplitTrigger::Clear();
     }
@@ -4117,6 +4406,9 @@ void InternalCommitTrigger::Clear() {
     }
     if (has_change_replicas_trigger()) {
       if (change_replicas_trigger_ != NULL) change_replicas_trigger_->::cockroach::proto::ChangeReplicasTrigger::Clear();
+    }
+    if (has_modified_span_trigger()) {
+      if (modified_span_trigger_ != NULL) modified_span_trigger_->::cockroach::proto::ModifiedSpanTrigger::Clear();
     }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -4169,6 +4461,19 @@ bool InternalCommitTrigger::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(34)) goto parse_modified_span_trigger;
+        break;
+      }
+
+      // optional .cockroach.proto.ModifiedSpanTrigger modified_span_trigger = 4;
+      case 4: {
+        if (tag == 34) {
+         parse_modified_span_trigger:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_modified_span_trigger()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -4216,6 +4521,12 @@ void InternalCommitTrigger::SerializeWithCachedSizes(
       3, *this->change_replicas_trigger_, output);
   }
 
+  // optional .cockroach.proto.ModifiedSpanTrigger modified_span_trigger = 4;
+  if (has_modified_span_trigger()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      4, *this->modified_span_trigger_, output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -4247,6 +4558,13 @@ void InternalCommitTrigger::SerializeWithCachedSizes(
         3, *this->change_replicas_trigger_, target);
   }
 
+  // optional .cockroach.proto.ModifiedSpanTrigger modified_span_trigger = 4;
+  if (has_modified_span_trigger()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        4, *this->modified_span_trigger_, target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -4258,7 +4576,7 @@ void InternalCommitTrigger::SerializeWithCachedSizes(
 int InternalCommitTrigger::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 15) {
     // optional .cockroach.proto.SplitTrigger split_trigger = 1;
     if (has_split_trigger()) {
       total_size += 1 +
@@ -4278,6 +4596,13 @@ int InternalCommitTrigger::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->change_replicas_trigger_);
+    }
+
+    // optional .cockroach.proto.ModifiedSpanTrigger modified_span_trigger = 4;
+    if (has_modified_span_trigger()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->modified_span_trigger_);
     }
 
   }
@@ -4316,6 +4641,9 @@ void InternalCommitTrigger::MergeFrom(const InternalCommitTrigger& from) {
     if (from.has_change_replicas_trigger()) {
       mutable_change_replicas_trigger()->::cockroach::proto::ChangeReplicasTrigger::MergeFrom(from.change_replicas_trigger());
     }
+    if (from.has_modified_span_trigger()) {
+      mutable_modified_span_trigger()->::cockroach::proto::ModifiedSpanTrigger::MergeFrom(from.modified_span_trigger());
+    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -4347,6 +4675,7 @@ void InternalCommitTrigger::InternalSwap(InternalCommitTrigger* other) {
   std::swap(split_trigger_, other->split_trigger_);
   std::swap(merge_trigger_, other->merge_trigger_);
   std::swap(change_replicas_trigger_, other->change_replicas_trigger_);
+  std::swap(modified_span_trigger_, other->modified_span_trigger_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -4490,6 +4819,49 @@ void InternalCommitTrigger::clear_change_replicas_trigger() {
     clear_has_change_replicas_trigger();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalCommitTrigger.change_replicas_trigger)
+}
+
+// optional .cockroach.proto.ModifiedSpanTrigger modified_span_trigger = 4;
+bool InternalCommitTrigger::has_modified_span_trigger() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+void InternalCommitTrigger::set_has_modified_span_trigger() {
+  _has_bits_[0] |= 0x00000008u;
+}
+void InternalCommitTrigger::clear_has_modified_span_trigger() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+void InternalCommitTrigger::clear_modified_span_trigger() {
+  if (modified_span_trigger_ != NULL) modified_span_trigger_->::cockroach::proto::ModifiedSpanTrigger::Clear();
+  clear_has_modified_span_trigger();
+}
+ const ::cockroach::proto::ModifiedSpanTrigger& InternalCommitTrigger::modified_span_trigger() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalCommitTrigger.modified_span_trigger)
+  return modified_span_trigger_ != NULL ? *modified_span_trigger_ : *default_instance_->modified_span_trigger_;
+}
+ ::cockroach::proto::ModifiedSpanTrigger* InternalCommitTrigger::mutable_modified_span_trigger() {
+  set_has_modified_span_trigger();
+  if (modified_span_trigger_ == NULL) {
+    modified_span_trigger_ = new ::cockroach::proto::ModifiedSpanTrigger;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.InternalCommitTrigger.modified_span_trigger)
+  return modified_span_trigger_;
+}
+ ::cockroach::proto::ModifiedSpanTrigger* InternalCommitTrigger::release_modified_span_trigger() {
+  clear_has_modified_span_trigger();
+  ::cockroach::proto::ModifiedSpanTrigger* temp = modified_span_trigger_;
+  modified_span_trigger_ = NULL;
+  return temp;
+}
+ void InternalCommitTrigger::set_allocated_modified_span_trigger(::cockroach::proto::ModifiedSpanTrigger* modified_span_trigger) {
+  delete modified_span_trigger_;
+  modified_span_trigger_ = modified_span_trigger;
+  if (modified_span_trigger) {
+    set_has_modified_span_trigger();
+  } else {
+    clear_has_modified_span_trigger();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalCommitTrigger.modified_span_trigger)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

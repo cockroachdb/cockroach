@@ -20,6 +20,7 @@ package cockroach.storage.config;
 option go_package = "config";
 
 import "cockroach/proto/metadata.proto";
+import "cockroach/proto/data.proto";
 import "gogoproto/gogo.proto";
 
 option (gogoproto.sizer_all) = true;
@@ -81,4 +82,8 @@ message ConfigUnion {
   oneof value {
     ZoneConfig zone = 1;
   }
+}
+
+message SystemConfig {
+  repeated proto.KeyValue values = 1 [(gogoproto.nullable) = false];
 }

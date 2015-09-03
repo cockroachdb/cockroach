@@ -414,11 +414,30 @@ func (m *ChangeReplicasTrigger) GetNextReplicaID() ReplicaID {
 	return 0
 }
 
+// ModifiedSpanTrigger indicates that a specific span has been modified.
+// This can be used to trigger scan-and-gossip for the given span.
+type ModifiedSpanTrigger struct {
+	SystemDBSpan bool `protobuf:"varint,1,opt,name=system_db_span" json:"system_db_span"`
+}
+
+func (m *ModifiedSpanTrigger) Reset()         { *m = ModifiedSpanTrigger{} }
+func (m *ModifiedSpanTrigger) String() string { return proto1.CompactTextString(m) }
+func (*ModifiedSpanTrigger) ProtoMessage()    {}
+
+func (m *ModifiedSpanTrigger) GetSystemDBSpan() bool {
+	if m != nil {
+		return m.SystemDBSpan
+	}
+	return false
+}
+
 // CommitTrigger encapsulates all of the internal-only commit triggers.
+// Only one may be set.
 type InternalCommitTrigger struct {
 	SplitTrigger          *SplitTrigger          `protobuf:"bytes,1,opt,name=split_trigger" json:"split_trigger,omitempty"`
 	MergeTrigger          *MergeTrigger          `protobuf:"bytes,2,opt,name=merge_trigger" json:"merge_trigger,omitempty"`
 	ChangeReplicasTrigger *ChangeReplicasTrigger `protobuf:"bytes,3,opt,name=change_replicas_trigger" json:"change_replicas_trigger,omitempty"`
+	ModifiedSpanTrigger   *ModifiedSpanTrigger   `protobuf:"bytes,4,opt,name=modified_span_trigger" json:"modified_span_trigger,omitempty"`
 }
 
 func (m *InternalCommitTrigger) Reset()         { *m = InternalCommitTrigger{} }
@@ -442,6 +461,13 @@ func (m *InternalCommitTrigger) GetMergeTrigger() *MergeTrigger {
 func (m *InternalCommitTrigger) GetChangeReplicasTrigger() *ChangeReplicasTrigger {
 	if m != nil {
 		return m.ChangeReplicasTrigger
+	}
+	return nil
+}
+
+func (m *InternalCommitTrigger) GetModifiedSpanTrigger() *ModifiedSpanTrigger {
+	if m != nil {
+		return m.ModifiedSpanTrigger
 	}
 	return nil
 }
@@ -994,6 +1020,32 @@ func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *ModifiedSpanTrigger) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ModifiedSpanTrigger) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	if m.SystemDBSpan {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	return i, nil
+}
+
 func (m *InternalCommitTrigger) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -1039,6 +1091,16 @@ func (m *InternalCommitTrigger) MarshalTo(data []byte) (int, error) {
 		}
 		i += n9
 	}
+	if m.ModifiedSpanTrigger != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintData(data, i, uint64(m.ModifiedSpanTrigger.Size()))
+		n10, err := m.ModifiedSpanTrigger.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n10
+	}
 	return i, nil
 }
 
@@ -1058,22 +1120,22 @@ func (m *NodeList) MarshalTo(data []byte) (int, error) {
 	var l int
 	_ = l
 	if len(m.Nodes) > 0 {
-		data11 := make([]byte, len(m.Nodes)*10)
-		var j10 int
+		data12 := make([]byte, len(m.Nodes)*10)
+		var j11 int
 		for _, num1 := range m.Nodes {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				data11[j10] = uint8(uint64(num)&0x7f | 0x80)
+				data12[j11] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j10++
+				j11++
 			}
-			data11[j10] = uint8(num)
-			j10++
+			data12[j11] = uint8(num)
+			j11++
 		}
 		data[i] = 0xa
 		i++
-		i = encodeVarintData(data, i, uint64(j10))
-		i += copy(data[i:], data11[:j10])
+		i = encodeVarintData(data, i, uint64(j11))
+		i += copy(data[i:], data12[:j11])
 	}
 	return i, nil
 }
@@ -1125,44 +1187,44 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x42
 		i++
 		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
-		n12, err := m.LastHeartbeat.MarshalTo(data[i:])
+		n13, err := m.LastHeartbeat.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n12
+		i += n13
 	}
 	data[i] = 0x4a
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n13, err := m.Timestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n13
-	data[i] = 0x52
-	i++
-	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
-	n14, err := m.OrigTimestamp.MarshalTo(data[i:])
+	n14, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n14
-	data[i] = 0x5a
+	data[i] = 0x52
 	i++
-	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
-	n15, err := m.MaxTimestamp.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
+	n15, err := m.OrigTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n15
-	data[i] = 0x62
+	data[i] = 0x5a
 	i++
-	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
-	n16, err := m.CertainNodes.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
+	n16, err := m.MaxTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n16
+	data[i] = 0x62
+	i++
+	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
+	n17, err := m.CertainNodes.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n17
 	data[i] = 0x68
 	i++
 	if m.Writing {
@@ -1192,19 +1254,19 @@ func (m *Lease) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Start.Size()))
-	n17, err := m.Start.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n17
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
-	n18, err := m.Expiration.MarshalTo(data[i:])
+	n18, err := m.Start.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n18
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
+	n19, err := m.Expiration.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n19
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.RaftNodeID))
@@ -1241,11 +1303,11 @@ func (m *Intent) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x1a
 	i++
 	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-	n19, err := m.Txn.MarshalTo(data[i:])
+	n20, err := m.Txn.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n19
+	i += n20
 	return i, nil
 }
 
@@ -1404,6 +1466,13 @@ func (m *ChangeReplicasTrigger) Size() (n int) {
 	return n
 }
 
+func (m *ModifiedSpanTrigger) Size() (n int) {
+	var l int
+	_ = l
+	n += 2
+	return n
+}
+
 func (m *InternalCommitTrigger) Size() (n int) {
 	var l int
 	_ = l
@@ -1417,6 +1486,10 @@ func (m *InternalCommitTrigger) Size() (n int) {
 	}
 	if m.ChangeReplicasTrigger != nil {
 		l = m.ChangeReplicasTrigger.Size()
+		n += 1 + l + sovData(uint64(l))
+	}
+	if m.ModifiedSpanTrigger != nil {
+		l = m.ModifiedSpanTrigger.Size()
 		n += 1 + l + sovData(uint64(l))
 	}
 	return n
@@ -2380,6 +2453,68 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 
 	return nil
 }
+func (m *ModifiedSpanTrigger) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SystemDBSpan", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.SystemDBSpan = bool(v != 0)
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipData(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthData
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
 func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -2486,6 +2621,36 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 				m.ChangeReplicasTrigger = &ChangeReplicasTrigger{}
 			}
 			if err := m.ChangeReplicasTrigger.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ModifiedSpanTrigger", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthData
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ModifiedSpanTrigger == nil {
+				m.ModifiedSpanTrigger = &ModifiedSpanTrigger{}
+			}
+			if err := m.ModifiedSpanTrigger.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

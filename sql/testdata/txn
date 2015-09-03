@@ -1,3 +1,7 @@
+# Transaction involving schema changes.
+statement ok
+BEGIN TRANSACTION
+
 statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
@@ -11,6 +15,9 @@ query TT
 SELECT * FROM kv
 ----
 a b
+
+statement ok
+COMMIT TRANSACTION
 
 # A transaction to update kv.
 
