@@ -187,7 +187,7 @@ func (tc *treeContext) getUncle(node *proto.RangeTreeNode) (*proto.RangeTreeNode
 func (tc *treeContext) replaceNode(oldNode, newNode *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
 	if oldNode.ParentKey == nil {
 		if newNode == nil {
-			return nil, util.Error("cannot replace the root node with nil")
+			return nil, util.Errorf("cannot replace the root node with nil")
 		}
 		// Update the root key if this was the root.
 		tc.setRootKey(newNode.Key)

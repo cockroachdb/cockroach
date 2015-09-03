@@ -175,7 +175,7 @@ func (a allocator) rebalanceTarget(required proto.Attributes, existing []proto.R
 // requirements (i.e. multiple data centers).
 func (a allocator) removeTarget(existing []proto.Replica) (proto.Replica, error) {
 	if len(existing) == 0 {
-		return proto.Replica{}, util.Error("must supply at least one replica to allocator.RemoveTarget()")
+		return proto.Replica{}, util.Errorf("must supply at least one replica to allocator.RemoveTarget()")
 	}
 
 	// Retrieve store descriptors for the provided replicas from the StorePool.

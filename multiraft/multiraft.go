@@ -82,16 +82,16 @@ type Config struct {
 // Called automatically by NewMultiRaft.
 func (c *Config) validate() error {
 	if c.Transport == nil {
-		return util.Error("Transport is required")
+		return util.Errorf("Transport is required")
 	}
 	if c.ElectionTimeoutTicks == 0 {
-		return util.Error("ElectionTimeoutTicks must be non-zero")
+		return util.Errorf("ElectionTimeoutTicks must be non-zero")
 	}
 	if c.HeartbeatIntervalTicks == 0 {
-		return util.Error("HeartbeatIntervalTicks must be non-zero")
+		return util.Errorf("HeartbeatIntervalTicks must be non-zero")
 	}
 	if c.TickInterval == 0 {
-		return util.Error("TickInterval must be non-zero")
+		return util.Errorf("TickInterval must be non-zero")
 	}
 	return nil
 }
@@ -119,7 +119,7 @@ type multiraftServer MultiRaft
 // NewMultiRaft creates a MultiRaft object.
 func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *stop.Stopper) (*MultiRaft, error) {
 	if nodeID == 0 {
-		return nil, util.Error("Invalid RaftNodeID")
+		return nil, util.Errorf("Invalid RaftNodeID")
 	}
 	if err := config.validate(); err != nil {
 		return nil, err

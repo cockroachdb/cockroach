@@ -145,7 +145,7 @@ type BrokenResponse struct {
 }
 
 func (*BrokenResponse) Verify() error {
-	return util.Error("boom")
+	return util.Errorf("boom")
 }
 
 // TestUnretryableError verifies that Send returns an unretryable

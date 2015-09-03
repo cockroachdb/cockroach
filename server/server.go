@@ -81,7 +81,7 @@ type Server struct {
 // NewServer creates a Server from a server.Context.
 func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	if ctx == nil {
-		return nil, util.Error("ctx must not be null")
+		return nil, util.Errorf("ctx must not be null")
 	}
 
 	addr := ctx.Addr

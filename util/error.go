@@ -47,19 +47,3 @@ func Errorf(format string, a ...interface{}) error {
 func ErrorfSkipFrames(skip int, format string, a ...interface{}) error {
 	return fmt.Errorf(getPrefix(defaultSkip+skip, errorPrefixFormat)+format, a...)
 }
-
-// Error is a passthrough to fmt.Error, with an additional prefix
-// containing the filename and line number.
-func Error(a ...interface{}) error {
-	return ErrorSkipFrames(1, a...)
-}
-
-// ErrorSkipFrames allows the skip count for stack frames to be
-// specified. See the comments for ErrorfSkip.
-func ErrorSkipFrames(skip int, a ...interface{}) error {
-	prefix := getPrefix(defaultSkip+skip, errorPrefixFormat)
-	if prefix != "" {
-		a = append([]interface{}{prefix}, a...)
-	}
-	return fmt.Errorf("%s", fmt.Sprint(a...))
-}

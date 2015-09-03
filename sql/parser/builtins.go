@@ -22,11 +22,14 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"math/rand"
 	"reflect"
 	"strings"
 )
+
+var errEmptyInputString = errors.New("the input string should not be empty")
 
 type typeList []reflect.Type
 
@@ -158,7 +161,7 @@ var builtins = map[string][]builtin{
 				field := int(args[2].(DInt))
 
 				if field <= 0 {
-					return DNull, fmt.Errorf("field position must be greater than zero")
+					return DNull, fmt.Errorf("field position %d must be greater than zero", field)
 				}
 
 				splits := strings.Split(text, sep)
@@ -189,7 +192,7 @@ var builtins = map[string][]builtin{
 		for _, ch := range s {
 			return DInt(ch), nil
 		}
-		return nil, fmt.Errorf("the input string should not be empty")
+		return nil, errEmptyInputString
 	}, DummyInt)},
 
 	"md5": {stringBuiltin1(func(s string) (Datum, error) {

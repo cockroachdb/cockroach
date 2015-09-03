@@ -41,8 +41,8 @@ const (
 	PrimaryKeyIndexName = "primary"
 )
 
-// ErrMissingPrimaryKey exported to the sql package.
-var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
+var errMissingColumns = errors.New("table must contain at least 1 column")
+var errMissingPrimaryKey = errors.New("table must contain a primary key")
 
 func validateName(name, typ string) error {
 	if len(name) == 0 {
@@ -213,11 +213,11 @@ func (desc *TableDescriptor) Validate() error {
 		return err
 	}
 	if desc.ID == 0 {
-		return fmt.Errorf("invalid table ID 0")
+		return fmt.Errorf("invalid table ID %d", desc.ID)
 	}
 
 	if len(desc.Columns) == 0 {
-		return fmt.Errorf("table must contain at least 1 column")
+		return errMissingColumns
 	}
 
 	columnNames := map[string]ColumnID{}
@@ -227,7 +227,7 @@ func (desc *TableDescriptor) Validate() error {
 			return err
 		}
 		if column.ID == 0 {
-			return fmt.Errorf("invalid column ID 0")
+			return fmt.Errorf("invalid column ID %d", column.ID)
 		}
 
 		if _, ok := columnNames[column.Name]; ok {
@@ -250,7 +250,7 @@ func (desc *TableDescriptor) Validate() error {
 	// TODO(pmattis): Check that the indexes are unique. That is, no 2 indexes
 	// should contain identical sets of columns.
 	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
-		return ErrMissingPrimaryKey
+		return errMissingPrimaryKey
 	}
 
 	indexNames := map[string]struct{}{}
@@ -260,7 +260,7 @@ func (desc *TableDescriptor) Validate() error {
 			return err
 		}
 		if index.ID == 0 {
-			return fmt.Errorf("invalid index ID 0")
+			return fmt.Errorf("invalid index ID %d", index.ID)
 		}
 
 		if _, ok := indexNames[index.Name]; ok {
@@ -378,7 +378,7 @@ func (desc *DatabaseDescriptor) Validate() error {
 		return err
 	}
 	if desc.ID == 0 {
-		return fmt.Errorf("invalid database ID 0")
+		return fmt.Errorf("invalid database ID %d", desc.ID)
 	}
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())

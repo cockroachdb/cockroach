@@ -562,7 +562,7 @@ func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 	// equal.
 	aHeader := args.Header()
 	if aPrio := aHeader.GetUserPriority(); aPrio != proto.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
-		return util.Error("conflicting user priority on call in batch")
+		return util.Errorf("conflicting user priority on call in batch")
 	}
 	aHeader.UserPriority = bHeader.UserPriority
 	// Only allow individual transactions on the requests of a batch if
@@ -573,7 +573,7 @@ func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 	// entails sending a non-txn batch of transactional InternalResolveIntent.
 	if aHeader.Txn != nil && !aHeader.Txn.Equal(bHeader.Txn) {
 		if len(aHeader.Txn.ID) == 0 || proto.IsTransactionWrite(args) || bHeader.Txn != nil {
-			return util.Error("conflicting transaction in transactional batch")
+			return util.Errorf("conflicting transaction in transactional batch")
 		}
 	} else {
 		aHeader.Txn = bHeader.Txn

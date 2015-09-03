@@ -143,10 +143,6 @@ func (p *planner) getDescriptorFromTargetList(targets parser.TargetList) (descri
 		return descriptor, nil
 	}
 
-	if targets.Tables == nil {
-		return nil, fmt.Errorf("no targets specified")
-	}
-
 	if len(targets.Tables) == 0 {
 		return nil, errNoTable
 	} else if len(targets.Tables) != 1 {

@@ -226,7 +226,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := desc.AllocateIDs(); err != ErrMissingPrimaryKey {
+	if err := desc.AllocateIDs(); err != errMissingPrimaryKey {
 		t.Fatal(err)
 	}
 }

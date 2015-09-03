@@ -71,7 +71,7 @@ func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopp
 				c.rpcClient.Close()
 			}
 		case <-c.rpcClient.Closed:
-			err = util.Error("client closed")
+			err = util.Errorf("client closed")
 		}
 
 		done <- c
@@ -120,7 +120,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 				return gossipCall.Error
 			}
 		case <-c.rpcClient.Closed:
-			return util.Error("client closed")
+			return util.Errorf("client closed")
 		case <-c.closer:
 			return nil
 		case <-stopper.ShouldStop():

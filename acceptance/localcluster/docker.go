@@ -122,7 +122,7 @@ func dockerIP() net.IP {
 	if runtime.GOOS == "linux" {
 		return net.IPv4zero
 	}
-	panic(fmt.Errorf("unable to determine docker ip address"))
+	panic("unable to determine docker ip address")
 }
 
 // Container provides the programmatic interface for a single docker

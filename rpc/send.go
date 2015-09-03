@@ -196,7 +196,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 							call.Error = err
 						}
 					} else {
-						call.Error = util.Error("response to proto request must be a proto")
+						call.Error = util.Errorf("response to proto request must be a proto")
 					}
 				}
 			}
