@@ -37,8 +37,9 @@ message ColumnType {
     DECIMAL = 3;    // DECIMAL(precision, width /* scale */)
     DATE = 4;
     TIMESTAMP = 5;
-    STRING = 6;     // STRING(width)
-    BYTES = 7;
+    INTERVAL = 6;
+    STRING = 7;     // STRING(width)
+    BYTES = 8;
   }
 
   optional Kind kind = 1 [(gogoproto.nullable) = false];

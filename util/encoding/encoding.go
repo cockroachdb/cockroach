@@ -26,6 +26,7 @@ import (
 	"math"
 	"reflect"
 	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -593,4 +594,27 @@ func DecodeIfNull(b []byte) ([]byte, bool) {
 		return b[2:], true
 	}
 	return b, false
+}
+
+// EncodeTime encodes a time value, appends it to the supplied buffer,
+// and returns the final buffer. The encoding is guaranteed to be ordered
+// Such that if t1.Before(t2) then after EncodeTime(b1, t1), and
+// EncodeTime(b2, t1), Compare(b1, b2) < 0. The time zone offset not
+// included in the encoding.
+func EncodeTime(b []byte, t time.Time) []byte {
+	// Read the unix absolute time. This is the absolute time and is
+	// not time zone offset dependent.
+	sec := t.Unix()
+	nsec := t.Nanosecond()
+	b = EncodeVarint(b, sec)
+	b = EncodeVarint(b, int64(nsec))
+	return b
+}
+
+// DecodeTime converts an encoded time into a UTC time.Time type and
+// returns the rest of the buffer.
+func DecodeTime(b []byte) ([]byte, time.Time) {
+	b, sec := DecodeVarint(b)
+	b, nsec := DecodeVarint(b)
+	return b, time.Unix(sec, nsec).UTC()
 }

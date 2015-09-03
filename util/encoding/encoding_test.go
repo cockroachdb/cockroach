@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
@@ -640,6 +641,72 @@ func TestEncodeDecodeNull(t *testing.T) {
 		t.Fatalf("expected isNull=true, but found isNull=%v", isNull)
 	} else if hello != string(remaining) {
 		t.Fatalf("expected %q, but found %q", hello, remaining)
+	}
+}
+
+func TestEncodeDecodeTime(t *testing.T) {
+	zeroTime := time.Unix(0, 0).UTC()
+
+	// test cases are negative, increasing, duration offsets from the
+	// zeroTime. The positive, increasing, duration offsets are automatically
+	// genarated below.
+	testCases := []string{
+		"-1345600h45m34s234ms",
+		"-600h45m34s234ms",
+		"-590h47m34s234ms",
+		"-310h45m34s234ms",
+		"-310h45m34s233ms",
+		"-25h45m34s234ms",
+		"-23h45m35s",
+		"-23h45m34s999999999ns",
+		"-23h45m34s234ms",
+		"-23h45m34s101ms",
+		"-23h45m34s1ns",
+		"-23h45m34s",
+		"-23h45m33s901ms",
+		"-23h45m",
+		"-23h",
+		"-23612ms",
+		"-345ms",
+		"-1ms",
+		"-201us",
+		"-1us",
+		"-201ns",
+		"-1ns",
+		"0",
+	}
+
+	// Append all the positive values in ascending order, excluding zero.
+	for i := len(testCases) - 2; i >= 0; i-- {
+		testCases = append(testCases, testCases[i][1:])
+	}
+
+	var last time.Time
+	var lastEncoded []byte
+	for i := range testCases {
+		d, err := time.ParseDuration(testCases[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		current := zeroTime.Add(d)
+		var b []byte
+		if !last.IsZero() {
+			b = EncodeTime(b, current)
+			_, decodedCurrent := DecodeTime(b)
+			if !decodedCurrent.Equal(current) {
+				t.Fatalf("lossy transport: before (%v) vs after (%v)", current, decodedCurrent)
+			}
+			if bytes.Compare(lastEncoded, b) >= 0 {
+				t.Fatalf("encodings %s, %s not increasing", testCases[i-1], testCases[i])
+			}
+		}
+		last = current
+		lastEncoded = b
+	}
+
+	// Check that the encoding hasn't changed.
+	if a, e := lastEncoded, []byte("\x0e\x01 \xbc\x0e\xae\r\r\xf2\x8e\x80"); !bytes.Equal(a, e) {
+		t.Errorf("encoding has changed:\nexpected %q\nactual %q", e, a)
 	}
 }
 

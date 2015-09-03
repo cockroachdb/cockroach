@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
@@ -670,20 +671,7 @@ func (n *scanNode) prettyKey() string {
 func prettyKeyVals(vals []parser.Datum) string {
 	var buf bytes.Buffer
 	for _, v := range vals {
-		if v == parser.DNull {
-			fmt.Fprintf(&buf, "/NULL")
-			continue
-		}
-		switch t := v.(type) {
-		case parser.DBool:
-			fmt.Fprintf(&buf, "/%v", t)
-		case parser.DInt:
-			fmt.Fprintf(&buf, "/%v", t)
-		case parser.DFloat:
-			fmt.Fprintf(&buf, "/%v", t)
-		case parser.DString:
-			fmt.Fprintf(&buf, "/%v", t)
-		}
+		fmt.Fprintf(&buf, "/%v", v)
 	}
 	return buf.String()
 }
@@ -704,6 +692,20 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 			return parser.DFloat(math.Float64frombits(uint64(kv.ValueInt()))), true
 		case ColumnType_STRING, ColumnType_BYTES:
 			return parser.DString(kv.ValueBytes()), true
+		case ColumnType_DATE:
+			var t time.Time
+			if err := t.UnmarshalBinary(kv.ValueBytes()); err != nil {
+				return nil, false
+			}
+			return parser.DDate{Time: t}, true
+		case ColumnType_TIMESTAMP:
+			var t time.Time
+			if err := t.UnmarshalBinary(kv.ValueBytes()); err != nil {
+				return nil, false
+			}
+			return parser.DTimestamp{Time: t}, true
+		case ColumnType_INTERVAL:
+			return parser.DInterval{Duration: time.Duration(kv.ValueInt())}, true
 		}
 	}
 	return parser.DNull, true
@@ -731,6 +733,12 @@ func (n *scanNode) getQVal(col ColumnDescriptor) *qvalue {
 			qval.datum = parser.DummyFloat
 		case ColumnType_STRING, ColumnType_BYTES:
 			qval.datum = parser.DummyString
+		case ColumnType_DATE:
+			qval.datum = parser.DummyDate
+		case ColumnType_TIMESTAMP:
+			qval.datum = parser.DummyTimestamp
+		case ColumnType_INTERVAL:
+			qval.datum = parser.DummyInterval
 		default:
 			panic(fmt.Sprintf("unsupported column type: %s", col.Type.Kind))
 		}

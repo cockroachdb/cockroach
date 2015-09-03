@@ -24,6 +24,7 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -68,8 +69,15 @@ var (
 	DummyFloat = DFloat(0)
 	// DummyString is a placeholder DString value.
 	DummyString = DString("")
+	// DummyDate is a placeholder DDate value.
+	DummyDate = DDate{}
+	// DummyTimestamp is a placeholder DTimestamp value.
+	DummyTimestamp = DTimestamp{}
+	// DummyInterval is a placeholder DInterval value.
+	DummyInterval = DInterval{}
 	// DummyTuple is a placeholder DTuple value.
 	DummyTuple = DTuple{}
+
 	// DNull is the NULL Datum.
 	DNull = dNull{}
 
@@ -77,6 +85,9 @@ var (
 	_ Datum = DummyInt
 	_ Datum = DummyFloat
 	_ Datum = DummyString
+	_ Datum = DummyDate
+	_ Datum = DummyTimestamp
+	_ Datum = DummyInterval
 	_ Datum = DummyTuple
 	_ Datum = DNull
 )
@@ -274,6 +285,151 @@ func (d DString) String() string {
 	return StrVal(d).String()
 }
 
+// DDate is the date Datum.
+type DDate struct {
+	time.Time
+}
+
+// Type implements the Datum interface.
+func (d DDate) Type() string {
+	return "date"
+}
+
+// Compare implements the Datum interface.
+func (d DDate) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(DDate)
+	if !ok {
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+	}
+	if d.Before(v.Time) {
+		return -1
+	}
+	if v.Before(d.Time) {
+		return 1
+	}
+	return 0
+}
+
+// Next implements the Datum interface.
+func (d DDate) Next() Datum {
+	return DDate{Time: d.AddDate(0, 0, 1)}
+}
+
+// IsMax implements the Datum interface.
+func (d DDate) IsMax() bool {
+	// Adding a day overflows to a smaller value.
+	return d.After(d.Next().(DDate).Time)
+}
+
+// IsMin implements the Datum interface.
+func (d DDate) IsMin() bool {
+	// Subtracting a day underflows to a larger value.
+	return d.Before(d.AddDate(0, 0, -1))
+}
+
+func (d DDate) String() string {
+	return d.Format(dateFormat)
+}
+
+// DTimestamp is the timestamp Datum.
+type DTimestamp struct {
+	time.Time
+}
+
+// Type implements the Datum interface.
+func (d DTimestamp) Type() string {
+	return "timestamp"
+}
+
+// Compare implements the Datum interface.
+func (d DTimestamp) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(DTimestamp)
+	if !ok {
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+	}
+	if d.Before(v.Time) {
+		return -1
+	}
+	if v.Before(d.Time) {
+		return 1
+	}
+	return 0
+}
+
+// Next implements the Datum interface.
+func (d DTimestamp) Next() Datum {
+	return DTimestamp{Time: d.Add(1)}
+}
+
+// IsMax implements the Datum interface.
+func (d DTimestamp) IsMax() bool {
+	// Adding 1 overflows to a smaller value
+	return d.After(d.Next().(DTimestamp).Time)
+}
+
+// IsMin implements the Datum interface.
+func (d DTimestamp) IsMin() bool {
+	// Subtracting 1 underflows to a larger value.
+	return d.Before(d.Add(-1))
+}
+
+// TODO:(vivek) implement SET TIME ZONE to improve presentation.
+func (d DTimestamp) String() string {
+	return d.Format(timestampWithOffsetZoneFormat)
+}
+
+// DInterval is the interval Datum.
+type DInterval struct {
+	time.Duration
+}
+
+// Type implements the Datum interface.
+func (d DInterval) Type() string {
+	return "interval"
+}
+
+// Compare implements the Datum interface.
+func (d DInterval) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(DInterval)
+	if !ok {
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+	}
+	if d.Duration < v.Duration {
+		return -1
+	}
+	if v.Duration < d.Duration {
+		return 1
+	}
+	return 0
+}
+
+// Next implements the Datum interface.
+func (d DInterval) Next() Datum {
+	return DInterval{Duration: d.Duration + 1}
+}
+
+// IsMax implements the Datum interface.
+func (d DInterval) IsMax() bool {
+	return d.Duration == math.MaxInt64
+}
+
+// IsMin implements the Datum interface.
+func (d DInterval) IsMin() bool {
+	return d.Duration == math.MinInt64
+}
+
 // DTuple is the tuple Datum.
 type DTuple []Datum
 
@@ -401,12 +557,15 @@ type DReference interface {
 }
 
 var (
-	boolType   = reflect.TypeOf(DummyBool)
-	intType    = reflect.TypeOf(DummyInt)
-	floatType  = reflect.TypeOf(DummyFloat)
-	stringType = reflect.TypeOf(DummyString)
-	tupleType  = reflect.TypeOf(DummyTuple)
-	nullType   = reflect.TypeOf(DNull)
+	boolType      = reflect.TypeOf(DummyBool)
+	intType       = reflect.TypeOf(DummyInt)
+	floatType     = reflect.TypeOf(DummyFloat)
+	stringType    = reflect.TypeOf(DummyString)
+	dateType      = reflect.TypeOf(DummyDate)
+	timestampType = reflect.TypeOf(DummyTimestamp)
+	intervalType  = reflect.TypeOf(DummyInterval)
+	tupleType     = reflect.TypeOf(DummyTuple)
+	nullType      = reflect.TypeOf(DNull)
 )
 
 type unaryOp struct {
@@ -493,9 +652,6 @@ var binOps = map[binArgs]binOp{
 
 	// TODO(pmattis): Overflow/underflow checks?
 
-	// TODO(pmattis): Should we allow the implicit conversion from int to float
-	// below. Once we have cast operators we could remove them. See #1626.
-
 	binArgs{Plus, intType, intType}: {
 		returnType: DummyInt,
 		fn: func(left Datum, right Datum) (Datum, error) {
@@ -506,6 +662,36 @@ var binOps = map[binArgs]binOp{
 		returnType: DummyFloat,
 		fn: func(left Datum, right Datum) (Datum, error) {
 			return left.(DFloat) + right.(DFloat), nil
+		},
+	},
+	binArgs{Plus, dateType, intervalType}: {
+		returnType: DummyTimestamp,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DTimestamp{Time: left.(DDate).Add(right.(DInterval).Duration)}, nil
+		},
+	},
+	binArgs{Plus, intervalType, dateType}: {
+		returnType: DummyTimestamp,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DTimestamp{Time: right.(DDate).Add(left.(DInterval).Duration)}, nil
+		},
+	},
+	binArgs{Plus, timestampType, intervalType}: {
+		returnType: DummyTimestamp,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DTimestamp{Time: left.(DTimestamp).Add(right.(DInterval).Duration)}, nil
+		},
+	},
+	binArgs{Plus, intervalType, timestampType}: {
+		returnType: DummyTimestamp,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DTimestamp{Time: right.(DTimestamp).Add(left.(DInterval).Duration)}, nil
+		},
+	},
+	binArgs{Plus, intervalType, intervalType}: {
+		returnType: DummyInterval,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DInterval{Duration: left.(DInterval).Duration + right.(DInterval).Duration}, nil
 		},
 	},
 
@@ -521,6 +707,48 @@ var binOps = map[binArgs]binOp{
 			return left.(DFloat) - right.(DFloat), nil
 		},
 	},
+	binArgs{Minus, dateType, intervalType}: {
+		returnType: DummyTimestamp,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DTimestamp{Time: left.(DDate).Add(-right.(DInterval).Duration)}, nil
+		},
+	},
+	binArgs{Minus, dateType, dateType}: {
+		returnType: DummyInterval,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DInterval{Duration: left.(DDate).Sub(right.(DDate).Time)}, nil
+		},
+	},
+	binArgs{Minus, timestampType, timestampType}: {
+		returnType: DummyInterval,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DInterval{Duration: left.(DTimestamp).Sub(right.(DTimestamp).Time)}, nil
+		},
+	},
+	binArgs{Minus, timestampType, dateType}: {
+		returnType: DummyInterval,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DInterval{Duration: left.(DTimestamp).Sub(right.(DDate).Time)}, nil
+		},
+	},
+	binArgs{Minus, dateType, timestampType}: {
+		returnType: DummyInterval,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DInterval{Duration: left.(DDate).Sub(right.(DTimestamp).Time)}, nil
+		},
+	},
+	binArgs{Minus, timestampType, intervalType}: {
+		returnType: DummyTimestamp,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DTimestamp{Time: left.(DTimestamp).Add(-right.(DInterval).Duration)}, nil
+		},
+	},
+	binArgs{Minus, intervalType, intervalType}: {
+		returnType: DummyInterval,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DInterval{Duration: left.(DInterval).Duration - right.(DInterval).Duration}, nil
+		},
+	},
 
 	binArgs{Mult, intType, intType}: {
 		returnType: DummyInt,
@@ -534,6 +762,18 @@ var binOps = map[binArgs]binOp{
 			return left.(DFloat) * right.(DFloat), nil
 		},
 	},
+	binArgs{Mult, intType, intervalType}: {
+		returnType: DummyInterval,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DInterval{Duration: time.Duration(left.(DInt)) * right.(DInterval).Duration}, nil
+		},
+	},
+	binArgs{Mult, intervalType, intType}: {
+		returnType: DummyInterval,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return DInterval{Duration: left.(DInterval).Duration * time.Duration(right.(DInt))}, nil
+		},
+	},
 
 	binArgs{Div, intType, intType}: {
 		returnType: DummyFloat,
@@ -545,11 +785,20 @@ var binOps = map[binArgs]binOp{
 			return DFloat(left.(DInt)) / DFloat(rInt), nil
 		},
 	},
-
 	binArgs{Div, floatType, floatType}: {
 		returnType: DummyFloat,
 		fn: func(left Datum, right Datum) (Datum, error) {
 			return left.(DFloat) / right.(DFloat), nil
+		},
+	},
+	binArgs{Div, intervalType, intType}: {
+		returnType: DummyInterval,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			rInt := right.(DInt)
+			if rInt == 0 {
+				return nil, errDivByZero
+			}
+			return DInterval{Duration: left.(DInterval).Duration / time.Duration(rInt)}, nil
 		},
 	},
 
@@ -651,6 +900,15 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 	cmpArgs{EQ, floatType, floatType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DFloat) == right.(DFloat)), nil
 	},
+	cmpArgs{EQ, dateType, dateType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DDate).Equal(right.(DDate).Time)), nil
+	},
+	cmpArgs{EQ, timestampType, timestampType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DTimestamp).Equal(right.(DTimestamp).Time)), nil
+	},
+	cmpArgs{EQ, intervalType, intervalType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DInterval) == right.(DInterval)), nil
+	},
 
 	cmpArgs{LT, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DString) < right.(DString)), nil
@@ -664,6 +922,15 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 	cmpArgs{LT, floatType, floatType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DFloat) < right.(DFloat)), nil
 	},
+	cmpArgs{LT, dateType, dateType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DDate).Before(right.(DDate).Time)), nil
+	},
+	cmpArgs{LT, timestampType, timestampType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DTimestamp).Before(right.(DTimestamp).Time)), nil
+	},
+	cmpArgs{LT, intervalType, intervalType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DInterval).Duration < right.(DInterval).Duration), nil
+	},
 
 	cmpArgs{LE, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DString) <= right.(DString)), nil
@@ -676,6 +943,15 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 	},
 	cmpArgs{LE, floatType, floatType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DFloat) <= right.(DFloat)), nil
+	},
+	cmpArgs{LE, dateType, dateType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(right.(DDate).Before(left.(DDate).Time)), nil
+	},
+	cmpArgs{LE, timestampType, timestampType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(right.(DTimestamp).Before(left.(DTimestamp).Time)), nil
+	},
+	cmpArgs{LE, intervalType, intervalType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DInterval).Duration <= right.(DInterval).Duration), nil
 	},
 }
 
@@ -1212,11 +1488,79 @@ func evalCastExpr(expr *CastExpr) (Datum, error) {
 		}
 		return s, nil
 
-	// TODO(pmattis): unimplemented.
-	case *DecimalType:
 	case *DateType:
+		switch d := d.(type) {
+		case DString:
+			return ParseDate(d)
+		case DTimestamp:
+			return DDate{Time: d.Truncate(24 * time.Hour)}, nil
+		}
+
 	case *TimestampType:
+		switch d := d.(type) {
+		case DString:
+			return ParseTimestamp(d)
+		case DDate:
+			return DTimestamp{Time: d.Time}, nil
+		}
+
+	case *IntervalType:
+		switch d.(type) {
+		case DString:
+			// We use the Golang format for specifying duration.
+			// TODO(vivek): we might consider using the postgres format as well.
+			d, err := time.ParseDuration(string(d.(DString)))
+			return DInterval{Duration: d}, err
+		}
+		// TODO(pmattis): unimplemented.
+		// case *DecimalType:
 	}
 
 	return DNull, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)
+}
+
+const (
+	dateFormat                    = "2006-01-02"
+	timestampFormat               = "2006-01-02 15:04:05.999999999"
+	timestampWithOffsetZoneFormat = "2006-01-02 15:04:05.999999999-07:00"
+	timestampWithNamedZoneFormat  = "2006-01-02 15:04:05.999999999 MST"
+)
+
+// ParseDate parses a date.
+func ParseDate(s DString) (DDate, error) {
+	str := string(s)
+	t, err := time.Parse(dateFormat, str)
+	if err == nil {
+		return DDate{Time: t}, nil
+	}
+	// Parse other formats in the future
+	return DummyDate, err
+}
+
+// ParseTimestamp parses the timestamp.
+func ParseTimestamp(s DString) (DTimestamp, error) {
+	str := string(s)
+	t, err := time.Parse(timestampFormat, str)
+	if err == nil {
+		t = t.UTC()
+		return DTimestamp{Time: t}, nil
+	}
+	t, err = time.Parse(timestampWithOffsetZoneFormat, str)
+	if err == nil {
+		t = t.UTC()
+		return DTimestamp{Time: t}, nil
+	}
+	t, err = time.Parse(timestampWithNamedZoneFormat, str)
+	if err == nil {
+		// Parsing using a named time zone is imperfect for two reasons:
+		// 1. Some named time zones are ambiguous (PST can be US PST and
+		// phillipines PST), and 2. The code needs to have access to the entire
+		// database of named timed zones in order to get some time offset,
+		// and it's not clear what are the memory requirements for that.
+		// TODO(vivek): Implement SET TIME ZONE to set a time zone and use
+		// time.ParseInLocation()
+		return DummyTimestamp, util.Error("TODO(vivek): named time zone input not supported")
+	}
+	// Parse other formats in the future.
+	return DummyTimestamp, err
 }

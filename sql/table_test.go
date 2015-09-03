@@ -64,13 +64,13 @@ func TestMakeTableDescColumns(t *testing.T) {
 			true,
 		},
 		{
-			"TIME",
-			ColumnType{Kind: ColumnType_DATE},
+			"TIMESTAMP",
+			ColumnType{Kind: ColumnType_TIMESTAMP},
 			true,
 		},
 		{
-			"TIMESTAMP",
-			ColumnType{Kind: ColumnType_TIMESTAMP},
+			"INTERVAL",
+			ColumnType{Kind: ColumnType_INTERVAL},
 			true,
 		},
 		{

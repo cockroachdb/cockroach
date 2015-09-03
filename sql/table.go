@@ -20,6 +20,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -73,6 +74,8 @@ func makeTableDesc(p *parser.CreateTable) (TableDescriptor, error) {
 				col.Type.Kind = ColumnType_DATE
 			case *parser.TimestampType:
 				col.Type.Kind = ColumnType_TIMESTAMP
+			case *parser.IntervalType:
+				col.Type.Kind = ColumnType_INTERVAL
 			case *parser.StringType:
 				col.Type.Kind = ColumnType_STRING
 				col.Type.Width = int32(t.N)
@@ -202,6 +205,12 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 		return encoding.EncodeFloat(b, float64(t)), nil
 	case parser.DString:
 		return encoding.EncodeString(b, string(t)), nil
+	case parser.DDate:
+		return encoding.EncodeTime(b, t.Time), nil
+	case parser.DTimestamp:
+		return encoding.EncodeTime(b, t.Time), nil
+	case parser.DInterval:
+		return encoding.EncodeVarint(b, int64(t.Duration)), nil
 	}
 	return nil, fmt.Errorf("unable to encode table key: %T", val)
 }
@@ -222,6 +231,12 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 			vals[i] = parser.DummyFloat
 		case ColumnType_STRING, ColumnType_BYTES:
 			vals[i] = parser.DummyString
+		case ColumnType_DATE:
+			vals[i] = parser.DummyDate
+		case ColumnType_TIMESTAMP:
+			vals[i] = parser.DummyTimestamp
+		case ColumnType_INTERVAL:
+			vals[i] = parser.DummyInterval
 		default:
 			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
 		}
@@ -296,6 +311,18 @@ func decodeTableKey(valType parser.Datum, key []byte) (parser.Datum, []byte, err
 		var r string
 		key, r = encoding.DecodeString(key, nil)
 		return parser.DString(r), key, nil
+	case parser.DDate:
+		var t time.Time
+		key, t = encoding.DecodeTime(key)
+		return parser.DDate{Time: t}, key, nil
+	case parser.DTimestamp:
+		var t time.Time
+		key, t = encoding.DecodeTime(key)
+		return parser.DTimestamp{Time: t}, key, nil
+	case parser.DInterval:
+		var d int64
+		key, d = encoding.DecodeVarint(key)
+		return parser.DInterval{Duration: time.Duration(d)}, key, nil
 	default:
 		return nil, nil, util.Errorf("TODO(pmattis): decoded index key: %s", valType.Type())
 	}
@@ -365,13 +392,23 @@ func convertDatum(col ColumnDescriptor, val parser.Datum) (interface{}, error) {
 		if v, ok := val.(parser.DFloat); ok {
 			return float64(v), nil
 		}
-	// case ColumnType_DECIMAL:
-	// case ColumnType_DATE:
-	// case ColumnType_TIMESTAMP:
 	case ColumnType_STRING, ColumnType_BYTES:
 		if v, ok := val.(parser.DString); ok {
 			return string(v), nil
 		}
+	case ColumnType_DATE:
+		if v, ok := val.(parser.DDate); ok {
+			return v.Time, nil
+		}
+	case ColumnType_TIMESTAMP:
+		if v, ok := val.(parser.DTimestamp); ok {
+			return v.Time, nil
+		}
+	case ColumnType_INTERVAL:
+		if v, ok := val.(parser.DInterval); ok {
+			return v.Duration, nil
+		}
+		// case ColumnType_DECIMAL:
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", val.Type())
 	}

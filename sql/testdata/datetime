@@ -1,0 +1,64 @@
+statement ok
+CREATE TABLE t (
+  a TIMESTAMP PRIMARY KEY,
+  b DATE,
+  c INTERVAL,
+  UNIQUE (b),
+  UNIQUE (c)
+)
+
+# TODO(vivek) replace timestamp/date/interval type casting in this file.
+statement ok
+INSERT INTO t VALUES
+  ('2015-08-30 03:34:45.34567'::timestamp, '2015-08-30'::date, '34h2s'::interval),
+  ('2015-08-25 04:45:45.53453'::timestamp, '2015-08-25'::date, '2h45m2s234ms'::interval),
+  ('2015-08-29 23:10:09.98763'::timestamp, '2015-08-29'::date, '234h45m2s234ms'::interval)
+
+query TTT
+SELECT * FROM t WHERE a = '2015-08-25 05:45:45.53453+01:00'::timestamp
+----
+2015-08-25 04:45:45.53453+00:00 2015-08-25 2h45m2.234s
+
+query ITTTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a = '2015-08-25 06:45:45.53453+02:00'::timestamp
+----
+0 /t/primary/2015-08-25 04:45:45.53453+00:00   NULL        NULL
+0 /t/primary/2015-08-25 04:45:45.53453+00:00/b 2015-08-25  NULL
+0 /t/primary/2015-08-25 04:45:45.53453+00:00/c 2h45m2.234s true
+
+query ITTTB
+EXPLAIN (DEBUG) SELECT b FROM t WHERE b < '2015-08-29'::date
+----
+0 /t/t_b_key/2015-08-25 /2015-08-25 04:45:45.53453+00:00 true
+
+query ITTTB
+EXPLAIN (DEBUG) SELECT c FROM t WHERE c < '234h45m2s234ms'::interval
+----
+0 /t/t_c_key/2h45m2.234s /2015-08-25 04:45:45.53453+00:00 true
+1 /t/t_c_key/34h0m2s     /2015-08-30 03:34:45.34567+00:00 true
+
+# insert duplicate value with different time zone offset
+statement error duplicate key value \(a\)=\(2015-08-30 03:34:45\.34567\+00:00\) violates unique constraint "primary"
+INSERT INTO t VALUES
+  ('2015-08-29 20:34:45.34567-07:00'::timestamp, '2015-08-31'::date, '35h2s'::interval)
+
+# Check that time/date/interval representations outside of the index are okay.
+statement ok
+CREATE TABLE u (
+  a BIGINT PRIMARY KEY,
+  b TIMESTAMP,
+  c DATE,
+  d INTERVAL
+)
+
+# TODO(vivek) replace type casting in this file.
+statement ok
+INSERT INTO u VALUES
+  (123, '2015-08-30 03:34:45.34567'::timestamp, '2015-08-30'::date, '34h2s'::interval),
+  (234, '2015-08-25 04:45:45.53453'::timestamp, '2015-08-25'::date, '2h45m2s234ms'::interval),
+  (456, '2015-08-29 23:10:09.98763'::timestamp, '2015-08-29'::date, '234h45m2s234ms'::interval)
+
+query TTT
+SELECT * FROM u WHERE a = 234
+----
+234 2015-08-25 04:45:45.53453+00:00 2015-08-25 2h45m2.234s
