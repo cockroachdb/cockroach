@@ -247,25 +247,26 @@ func (rs *storeRangeSet) EstimatedCount() int {
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	Ident          proto.StoreIdent
-	ctx            StoreContext
-	db             *client.DB
-	engine         engine.Engine   // The underlying key-value store
-	_allocator     allocator       // Makes allocation decisions
-	rangeIDAlloc   *idAllocator    // Range ID allocator
-	gcQueue        *gcQueue        // Garbage collection queue
-	_splitQueue    *splitQueue     // Range splitting queue
-	verifyQueue    *verifyQueue    // Checksum verification queue
-	replicateQueue replicateQueue  // Replication queue
-	_rangeGCQueue  *rangeGCQueue   // Range GC queue
-	scanner        *replicaScanner // Range scanner
-	feed           StoreEventFeed  // Event Feed
-	multiraft      *multiraft.MultiRaft
-	started        int32
-	stopper        *stop.Stopper
-	startedAt      int64
-	nodeDesc       *proto.NodeDescriptor
-	initComplete   sync.WaitGroup // Signaled by async init tasks
+	Ident             proto.StoreIdent
+	ctx               StoreContext
+	db                *client.DB
+	engine            engine.Engine   // The underlying key-value store
+	_allocator        allocator       // Makes allocation decisions
+	rangeIDAlloc      *idAllocator    // Range ID allocator
+	gcQueue           *gcQueue        // Garbage collection queue
+	_splitQueue       *splitQueue     // Range splitting queue
+	verifyQueue       *verifyQueue    // Checksum verification queue
+	replicateQueue    replicateQueue  // Replication queue
+	_rangeGCQueue     *rangeGCQueue   // Range GC queue
+	scanner           *replicaScanner // Range scanner
+	feed              StoreEventFeed  // Event Feed
+	removeReplicaChan chan removeReplicaOp
+	multiraft         *multiraft.MultiRaft
+	started           int32
+	stopper           *stop.Stopper
+	startedAt         int64
+	nodeDesc          *proto.NodeDescriptor
+	initComplete      sync.WaitGroup // Signaled by async init tasks
 
 	mu             sync.RWMutex               // Protects variables below...
 	replicas       map[proto.RangeID]*Replica // Map of replicas by Range ID
@@ -358,14 +359,15 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	}
 
 	s := &Store{
-		ctx:            ctx,
-		db:             ctx.DB, // TODO(tschottdorf) remove redundancy.
-		engine:         eng,
-		_allocator:     makeAllocator(ctx.StorePool),
-		replicas:       map[proto.RangeID]*Replica{},
-		replicasByKey:  btree.New(64 /* degree */),
-		uninitReplicas: map[proto.RangeID]*Replica{},
-		nodeDesc:       nodeDesc,
+		ctx:               ctx,
+		db:                ctx.DB, // TODO(tschottdorf) remove redundancy.
+		engine:            eng,
+		_allocator:        makeAllocator(ctx.StorePool),
+		replicas:          map[proto.RangeID]*Replica{},
+		replicasByKey:     btree.New(64 /* degree */),
+		uninitReplicas:    map[proto.RangeID]*Replica{},
+		nodeDesc:          nodeDesc,
+		removeReplicaChan: make(chan removeReplicaOp),
 	}
 
 	// Add range scanner and configure with queues.
@@ -1060,7 +1062,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 
 // MergeRange expands the subsuming range to absorb the subsumed range.
 // This merge operation will fail if the two ranges are not collocated
-// on the same store.
+// on the same store. Must be called from the processRaft goroutine.
 func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRangeID proto.RangeID) error {
 	subsumingDesc := subsumingRng.Desc()
 
@@ -1080,8 +1082,9 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsu
 			subsumedDesc.Replicas, subsumingDesc.Replicas)
 	}
 
-	// Remove and destroy the subsumed range.
-	if err = s.RemoveReplica(subsumedRng); err != nil {
+	// Remove and destroy the subsumed range. Note that we are on the
+	// processRaft goroutine so we can call removeReplicaImpl directly.
+	if err = s.removeReplicaImpl(subsumedRng); err != nil {
 		return util.Errorf("cannot remove range %s", err)
 	}
 
@@ -1145,13 +1148,29 @@ func (s *Store) addReplicaToRangeMap(rng *Replica) error {
 	return nil
 }
 
+type removeReplicaOp struct {
+	rep *Replica
+	ch  chan<- error
+}
+
 // RemoveReplica removes the replica from the store's replica map and from
 // the sorted replicasByKey btree.
-func (s *Store) RemoveReplica(rng *Replica) error {
-	rangeID := rng.Desc().RangeID
+func (s *Store) RemoveReplica(rep *Replica) error {
+
+	ch := make(chan error)
+	s.removeReplicaChan <- removeReplicaOp{rep, ch}
+	return <-ch
+}
+
+// removeReplicaImpl runs on the processRaft goroutine.
+func (s *Store) removeReplicaImpl(rep *Replica) error {
+	rangeID := rep.Desc().RangeID
 
 	// RemoveGroup needs to access the storage, which in turn needs the
-	// lock. Some care is needed to avoid deadlocks.
+	// lock. Some care is needed to avoid deadlocks. We remove the group
+	// from multiraft outside the scope of s.mu; this is effectively
+	// synchronized by the fact that this method runs on the processRaft
+	// goroutine.
 	if err := s.multiraft.RemoveGroup(rangeID); err != nil {
 		return err
 	}
@@ -1159,10 +1178,10 @@ func (s *Store) RemoveReplica(rng *Replica) error {
 	defer s.mu.Unlock()
 
 	delete(s.replicas, rangeID)
-	if s.replicasByKey.Delete(rng) == nil {
-		return util.Errorf("couldn't find range in rangesByKey btree")
+	if s.replicasByKey.Delete(rep) == nil {
+		return util.Errorf("couldn't find range in replicasByKey btree")
 	}
-	s.scanner.RemoveReplica(rng)
+	s.scanner.RemoveReplica(rep)
 	return nil
 }
 
@@ -1566,6 +1585,9 @@ func (s *Store) processRaft() {
 				if callback != nil {
 					callback(err)
 				}
+
+			case op := <-s.removeReplicaChan:
+				op.ch <- s.removeReplicaImpl(op.rep)
 
 			case <-s.stopper.ShouldStop():
 				return
