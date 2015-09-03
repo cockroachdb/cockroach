@@ -447,8 +447,14 @@ func TestSQLServer(t *testing.T) {
 			s.ServingAddr(),
 			driver.Endpoint,
 			command)
-		httpClient, _ := testContext.GetHTTPClient()
-		req, _ := http.NewRequest("POST", url, bytes.NewReader(body))
+		httpClient, err := testContext.GetHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+		req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
 		req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
 		req.Header.Add(util.AcceptHeader, util.ProtoContentType)
 		req.Header.Add(util.AcceptEncodingHeader, util.SnappyEncoding)
@@ -460,7 +466,10 @@ func TestSQLServer(t *testing.T) {
 		return resp.StatusCode
 	}
 	// Use the sql administrator (root user).
-	body, _ := gogoproto.Marshal(&driver.Request{RequestHeader: driver.RequestHeader{User: security.RootUser}})
+	body, err := gogoproto.Marshal(&driver.Request{User: security.RootUser})
+	if err != nil {
+		t.Fatal(err)
+	}
 	testCases := []struct {
 		command       string
 		body          []byte
