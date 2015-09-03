@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -652,6 +653,5 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 // GetUser implements userRequest.
 // Gossip messages are always sent by the node user.
 func (m *Request) GetUser() string {
-	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
-	return "node"
+	return security.NodeUser
 }

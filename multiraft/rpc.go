@@ -17,9 +17,10 @@
 
 package multiraft
 
+import "github.com/cockroachdb/cockroach/security"
+
 // GetUser implements userRequest.
 // Raft messages are always sent by the node user.
 func (m *RaftMessageRequest) GetUser() string {
-	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
-	return "node"
+	return security.NodeUser
 }
