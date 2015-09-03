@@ -138,7 +138,7 @@ func (r *RocksDB) Attrs() proto.Attributes {
 }
 
 func emptyKeyError() error {
-	return util.ErrorSkipFrames(1, "attempted access to empty key")
+	return util.ErrorfSkipFrames(1, "attempted access to empty key")
 }
 
 // Put sets the given key to the value provided.

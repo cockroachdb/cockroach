@@ -48,17 +48,3 @@ func TestErrorfSkipFrames(t *testing.T) {
 		t.Errorf("expected %s, got %s", expected, err.Error())
 	}
 }
-
-// TestErrorSkipFrames verifies ErrorSkipFrames with an additional
-// stack frame.
-func TestErrorSkipFrames(t *testing.T) {
-	var err error
-	func() {
-		err = ErrorSkipFrames(1, "foo ", 1, 3.14)
-	}()
-	file, line, _ := caller.Lookup(0)
-	expected := fmt.Sprintf("%sfoo 1 3.14", fmt.Sprintf(errorPrefixFormat, file, line-1))
-	if expected != err.Error() {
-		t.Errorf("expected %s, got %s", expected, err.Error())
-	}
-}
