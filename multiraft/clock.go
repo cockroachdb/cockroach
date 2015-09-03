@@ -61,8 +61,21 @@ func (m *manualTicker) Chan() <-chan time.Time {
 	return m.ch
 }
 
+// Tick sends a tick to MultiRaft, blocking until MultiRaft is ready
+// to receive it. Use this when it is important to send a specific
+// number of ticks.
 func (m *manualTicker) Tick() {
 	m.ch <- time.Time{}
+}
+
+// NonBlockingTick tries to send a tick to MultiRaft, silently
+// dropping it if MultiRaft is not listening. Use this when sending
+// ticks from a background thread that may race with shutdown.
+func (m *manualTicker) NonBlockingTick() {
+	select {
+	case m.ch <- time.Time{}:
+	default:
+	}
 }
 
 func (m *manualTicker) Close() { /* do nothing */ }

@@ -392,6 +392,78 @@ func TestMembershipChange(t *testing.T) {
 		}*/
 }
 
+// TestRemoveLeader ensures that a group will recover if a node is
+// removed from the group while it is leader. Since visibility into
+// the raft state is limited, we create a three-node group in a
+// six-node cluster. This group is migrated one node at a time from
+// the first three nodes to the last three. In the process the initial
+// leader must have removed itself.
+func TestRemoveLeader(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	const clusterSize = 6
+	const groupSize = 3
+	cluster := newTestCluster(nil, clusterSize, stopper, t)
+	defer stopper.Stop()
+
+	// Consume and apply the membership change events.
+	for i := 0; i < clusterSize; i++ {
+		go func(i int) {
+			for {
+				if e, ok := <-cluster.events[i].MembershipChangeCommitted; ok {
+					e.Callback(nil)
+				} else {
+					return
+				}
+			}
+		}(i)
+	}
+
+	// Tick all the clocks in the background to ensure that all the
+	// necessary elections are triggered.
+	// TODO(bdarnell): newTestCluster should have an option to use a
+	// real clock instead of a manual one.
+	stopper.RunWorker(func() {
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopper.ShouldStop():
+				return
+			case <-ticker.C:
+				for _, t := range cluster.tickers {
+					t.NonBlockingTick()
+				}
+			}
+		}
+	})
+
+	// Create a group with three members.
+	groupID := proto.RangeID(1)
+	cluster.createGroup(groupID, 0, groupSize)
+
+	// Move the group one node at a time from the first three nodes to
+	// the last three. In the process, we necessarily remove the leader
+	// and trigger at least one new election among the new nodes.
+	for i := 0; i < groupSize; i++ {
+		log.Infof("adding node %d", i+groupSize)
+		ch := cluster.nodes[i].ChangeGroupMembership(groupID, makeCommandID(),
+			raftpb.ConfChangeAddNode,
+			cluster.nodes[i+groupSize].nodeID, nil)
+		if err := <-ch; err != nil {
+			t.Fatal(err)
+		}
+
+		log.Infof("removing node %d", i)
+		ch = cluster.nodes[i].ChangeGroupMembership(groupID, makeCommandID(),
+			raftpb.ConfChangeRemoveNode,
+			cluster.nodes[i].nodeID, nil)
+		if err := <-ch; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestRapidMembershipChange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
