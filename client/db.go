@@ -145,7 +145,7 @@ func (r Result) String() string {
 // DB is a database handle to a single cockroach cluster. A DB is safe for
 // concurrent use by multiple goroutines.
 type DB struct {
-	Sender Sender
+	sender Sender
 
 	// userPriority is the default user priority to set on API calls. If
 	// userPriority is set non-zero in call arguments, this value is
@@ -154,13 +154,27 @@ type DB struct {
 	txnRetryOptions retry.Options
 }
 
+// GetSender returns the underlying Sender. Only exported for tests.
+func (db *DB) GetSender() Sender {
+	return db.sender
+}
+
+// NewDBWithPriority returns a new DB.
+func NewDBWithPriority(sender Sender, userPriority int32) *DB {
+	return &DB{
+		sender:          sender,
+		userPriority:    userPriority,
+		txnRetryOptions: DefaultTxnRetryOptions,
+	}
+}
+
 // Option is the signature for a function which applies an option to a DB.
 type Option func(*DB)
 
 // SenderOpt sets the sender for a DB.
 func SenderOpt(sender Sender) Option {
 	return func(db *DB) {
-		db.Sender = sender
+		db.sender = sender
 	}
 }
 
@@ -211,7 +225,7 @@ func Open(addr string, opts ...Option) (*DB, error) {
 	}
 
 	db := &DB{
-		Sender:          sender,
+		sender:          sender,
 		txnRetryOptions: DefaultTxnRetryOptions,
 	}
 
@@ -227,7 +241,7 @@ func Open(addr string, opts ...Option) (*DB, error) {
 		opt(db)
 	}
 
-	if db.Sender == nil {
+	if db.sender == nil {
 		return nil, fmt.Errorf("\"%s\" no sender specified", addr)
 	}
 	return db, nil
@@ -430,7 +444,7 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 			c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
 		}
 		resetClientCmdID(c.Args)
-		db.Sender.Send(context.TODO(), c)
+		db.sender.Send(context.TODO(), c)
 		err = c.Reply.Header().GoError()
 		if err != nil {
 			if log.V(1) {

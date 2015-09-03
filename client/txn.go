@@ -85,9 +85,9 @@ type Txn struct {
 func NewTxn(db DB) *Txn {
 	txn := &Txn{
 		db:      db,
-		wrapped: db.Sender,
+		wrapped: db.sender,
 	}
-	txn.db.Sender = (*txnSender)(txn)
+	txn.db.sender = (*txnSender)(txn)
 	return txn
 }
 

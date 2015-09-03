@@ -351,6 +351,7 @@ func TestCommonMethods(t *testing.T) {
 		key{dbType, "NewBatch"}:              {},
 		key{dbType, "Run"}:                   {},
 		key{dbType, "Txn"}:                   {},
+		key{dbType, "GetSender"}:             {},
 		key{txnType, "CommitInBatch"}:        {},
 		key{txnType, "Commit"}:               {},
 		key{txnType, "Rollback"}:             {},

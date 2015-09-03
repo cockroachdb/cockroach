@@ -33,7 +33,7 @@ import (
 
 func newDB(sender Sender) *DB {
 	return &DB{
-		Sender:          sender,
+		sender:          sender,
 		txnRetryOptions: DefaultTxnRetryOptions,
 	}
 }
@@ -106,7 +106,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	txn := NewTxn(*db)
 
 	for testIdx = range testCases {
-		txn.db.Sender.Send(context.Background(),
+		txn.db.sender.Send(context.Background(),
 			proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 	}
 }
@@ -120,7 +120,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	}))
 
 	txn := NewTxn(*db)
-	txn.db.Sender.Send(context.Background(),
+	txn.db.sender.Send(context.Background(),
 		proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 
 	if len(txn.Proto.ID) != 0 {

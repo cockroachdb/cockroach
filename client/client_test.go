@@ -89,18 +89,20 @@ func createTestClientFor(addr, user string) *client.DB {
 
 // createTestNotifyClient creates a new client which connects using an HTTP
 // sender to the server at addr. It contains a waitgroup to allow waiting.
-func createTestNotifyClient(addr string, priority int) (*client.DB, *notifyingSender) {
-	db, err := client.Open(fmt.Sprintf("https://%s@%s?certs=%s&priority=%d",
-		security.NodeUser,
-		addr,
-		security.EmbeddedCertsDir,
-		priority))
+func createTestNotifyClient(addr string, priority int32) (*client.DB, *notifyingSender) {
+	db, err := client.Open(
+		fmt.Sprintf("https://%s@%s?certs=%s",
+			security.NodeUser,
+			addr,
+			security.EmbeddedCertsDir,
+		),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
-	sender := &notifyingSender{wrapped: db.Sender}
-	db.Sender = sender
-	return db, sender
+
+	sender := &notifyingSender{wrapped: db.GetSender()}
+	return client.NewDBWithPriority(sender, priority), sender
 }
 
 // TestClientRetryNonTxn verifies that non-transactional client will
@@ -140,8 +142,8 @@ func TestClientRetryNonTxn(t *testing.T) {
 	// intent to be pushed and once with priorities which will not.
 	for i, test := range testCases {
 		key := proto.Key(fmt.Sprintf("key-%d", i))
-		txnPri := 1
-		clientPri := 1
+		var txnPri int32 = 1
+		var clientPri int32 = 1
 		if test.canPush {
 			clientPri = 2
 		} else {
