@@ -59,7 +59,7 @@ const (
 	aaRemoveDead
 )
 
-// allocator makes allocation decisions based on available capacity
+// Allocator makes allocation decisions based on available capacity
 // in other stores which match the required attributes for a desired
 // range replica.
 //
