@@ -41,12 +41,12 @@ const (
 type replicateQueue struct {
 	*baseQueue
 	gossip    *gossip.Gossip
-	allocator allocator
+	allocator Allocator
 	clock     *hlc.Clock
 }
 
 // makeReplicateQueue returns a new instance of replicateQueue.
-func makeReplicateQueue(gossip *gossip.Gossip, allocator allocator, clock *hlc.Clock) replicateQueue {
+func makeReplicateQueue(gossip *gossip.Gossip, allocator Allocator, clock *hlc.Clock) replicateQueue {
 	rq := replicateQueue{
 		gossip:    gossip,
 		allocator: allocator,
@@ -75,7 +75,7 @@ func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (should
 		return
 	}
 
-	action, priority := rq.allocator.computeAction(zone, repl.Desc())
+	action, priority := rq.allocator.ComputeAction(zone, repl.Desc())
 	if action == aaNoop {
 		return false, 0
 	}
@@ -89,7 +89,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 	}
 
 	desc := repl.Desc()
-	action, _ := rq.allocator.computeAction(zone, desc)
+	action, _ := rq.allocator.ComputeAction(zone, desc)
 	if action == aaNoop {
 		// No action to take, return without re-queueing.
 		return nil
@@ -106,7 +106,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 
 	switch action {
 	case aaAdd:
-		newStore, err := rq.allocator.allocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true, nil)
+		newStore, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true, nil)
 		if err != nil {
 			return err
 		}
@@ -118,7 +118,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 			return err
 		}
 	case aaRemove:
-		removeReplica, err := rq.allocator.removeTarget(desc.Replicas)
+		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas)
 		if err != nil {
 			return err
 		}

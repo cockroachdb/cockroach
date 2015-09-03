@@ -251,7 +251,7 @@ type Store struct {
 	ctx               StoreContext
 	db                *client.DB
 	engine            engine.Engine   // The underlying key-value store
-	_allocator        allocator       // Makes allocation decisions
+	_allocator        Allocator       // Makes allocation decisions
 	rangeIDAlloc      *idAllocator    // Range ID allocator
 	gcQueue           *gcQueue        // Garbage collection queue
 	_splitQueue       *splitQueue     // Range splitting queue
@@ -362,7 +362,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 		ctx:               ctx,
 		db:                ctx.DB, // TODO(tschottdorf) remove redundancy.
 		engine:            eng,
-		_allocator:        makeAllocator(ctx.StorePool),
+		_allocator:        MakeAllocator(ctx.StorePool),
 		replicas:          map[proto.RangeID]*Replica{},
 		replicasByKey:     btree.New(64 /* degree */),
 		uninitReplicas:    map[proto.RangeID]*Replica{},
@@ -980,7 +980,7 @@ func (s *Store) Engine() engine.Engine { return s.engine }
 func (s *Store) DB() *client.DB { return s.ctx.DB }
 
 // Allocator accessor.
-func (s *Store) allocator() allocator { return s._allocator }
+func (s *Store) allocator() Allocator { return s._allocator }
 
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
