@@ -9,8 +9,6 @@
 		cockroach/sql/driver/wire.proto
 
 	It has these top-level messages:
-		RequestHeader
-		ResponseHeader
 		Datum
 		Result
 		Request
@@ -30,51 +28,6 @@ import fmt "fmt"
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
 var _ = math.Inf
-
-// RequestHeader is supplied with every Request.
-type RequestHeader struct {
-	// User is the originating user.
-	User string `protobuf:"bytes,5,opt,name=user" json:"user"`
-	// Session settings that were returned in the last response that
-	// contained them, being reflected back to the server.
-	Session []byte `protobuf:"bytes,1,opt,name=session" json:"session,omitempty"`
-}
-
-func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
-func (m *RequestHeader) String() string { return proto.CompactTextString(m) }
-func (*RequestHeader) ProtoMessage()    {}
-
-func (m *RequestHeader) GetUser() string {
-	if m != nil {
-		return m.User
-	}
-	return ""
-}
-
-func (m *RequestHeader) GetSession() []byte {
-	if m != nil {
-		return m.Session
-	}
-	return nil
-}
-
-// ResponseHeader is returned with every Response.
-type ResponseHeader struct {
-	// Setting that should be reflected back in all subsequent requests.
-	// When not set, future requests should continue to use existing settings.
-	Session []byte `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
-}
-
-func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
-func (m *ResponseHeader) String() string { return proto.CompactTextString(m) }
-func (*ResponseHeader) ProtoMessage()    {}
-
-func (m *ResponseHeader) GetSession() []byte {
-	if m != nil {
-		return m.Session
-	}
-	return nil
-}
 
 type Datum struct {
 	BoolVal   *bool    `protobuf:"varint,1,opt,name=bool_val" json:"bool_val,omitempty"`
@@ -178,18 +131,35 @@ func (m *Result_Row) GetValues() []Datum {
 // An SQL request to cockroach. A transaction can consist of multiple
 // requests.
 type Request struct {
-	// Request header.
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// User is the originating user.
+	User string `protobuf:"bytes,1,opt,name=user" json:"user"`
+	// Session settings that were returned in the last response that
+	// contained them, being reflected back to the server.
+	Session []byte `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
 	// SQL statement(s) to be serially executed by the server. Multiple
 	// statements are passed as a single string separated by semicolons.
-	Sql string `protobuf:"bytes,2,opt,name=sql" json:"sql"`
+	Sql string `protobuf:"bytes,3,opt,name=sql" json:"sql"`
 	// Parameters referred to in the above SQL statement(s) using "?".
-	Params []Datum `protobuf:"bytes,3,rep,name=params" json:"params"`
+	Params []Datum `protobuf:"bytes,4,rep,name=params" json:"params"`
 }
 
 func (m *Request) Reset()         { *m = Request{} }
 func (m *Request) String() string { return proto.CompactTextString(m) }
 func (*Request) ProtoMessage()    {}
+
+func (m *Request) GetUser() string {
+	if m != nil {
+		return m.User
+	}
+	return ""
+}
+
+func (m *Request) GetSession() []byte {
+	if m != nil {
+		return m.Session
+	}
+	return nil
+}
 
 func (m *Request) GetSql() string {
 	if m != nil {
@@ -206,7 +176,9 @@ func (m *Request) GetParams() []Datum {
 }
 
 type Response struct {
-	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// Setting that should be reflected back in all subsequent requests.
+	// When not set, future requests should continue to use existing settings.
+	Session []byte `protobuf:"bytes,1,opt,name=session" json:"session,omitempty"`
 	// The list of results. There is one result object per SQL statement in the
 	// request.
 	Results []Result `protobuf:"bytes,2,rep,name=results" json:"results"`
@@ -216,63 +188,18 @@ func (m *Response) Reset()         { *m = Response{} }
 func (m *Response) String() string { return proto.CompactTextString(m) }
 func (*Response) ProtoMessage()    {}
 
+func (m *Response) GetSession() []byte {
+	if m != nil {
+		return m.Session
+	}
+	return nil
+}
+
 func (m *Response) GetResults() []Result {
 	if m != nil {
 		return m.Results
 	}
 	return nil
-}
-
-func (m *RequestHeader) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Session != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintWire(data, i, uint64(len(m.Session)))
-		i += copy(data[i:], m.Session)
-	}
-	data[i] = 0x2a
-	i++
-	i = encodeVarintWire(data, i, uint64(len(m.User)))
-	i += copy(data[i:], m.User)
-	return i, nil
-}
-
-func (m *ResponseHeader) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ResponseHeader) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Session != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintWire(data, i, uint64(len(m.Session)))
-		i += copy(data[i:], m.Session)
-	}
-	return i, nil
 }
 
 func (m *Datum) Marshal() (data []byte, err error) {
@@ -427,19 +354,21 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintWire(data, i, uint64(m.RequestHeader.Size()))
-	n2, err := m.RequestHeader.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	i = encodeVarintWire(data, i, uint64(len(m.User)))
+	i += copy(data[i:], m.User)
+	if m.Session != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintWire(data, i, uint64(len(m.Session)))
+		i += copy(data[i:], m.Session)
 	}
-	i += n2
-	data[i] = 0x12
+	data[i] = 0x1a
 	i++
 	i = encodeVarintWire(data, i, uint64(len(m.Sql)))
 	i += copy(data[i:], m.Sql)
 	if len(m.Params) > 0 {
 		for _, msg := range m.Params {
-			data[i] = 0x1a
+			data[i] = 0x22
 			i++
 			i = encodeVarintWire(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -467,14 +396,12 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintWire(data, i, uint64(m.ResponseHeader.Size()))
-	n3, err := m.ResponseHeader.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.Session != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintWire(data, i, uint64(len(m.Session)))
+		i += copy(data[i:], m.Session)
 	}
-	i += n3
 	if len(m.Results) > 0 {
 		for _, msg := range m.Results {
 			data[i] = 0x12
@@ -517,28 +444,6 @@ func encodeVarintWire(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	return offset + 1
 }
-func (m *RequestHeader) Size() (n int) {
-	var l int
-	_ = l
-	if m.Session != nil {
-		l = len(m.Session)
-		n += 1 + l + sovWire(uint64(l))
-	}
-	l = len(m.User)
-	n += 1 + l + sovWire(uint64(l))
-	return n
-}
-
-func (m *ResponseHeader) Size() (n int) {
-	var l int
-	_ = l
-	if m.Session != nil {
-		l = len(m.Session)
-		n += 1 + l + sovWire(uint64(l))
-	}
-	return n
-}
-
 func (m *Datum) Size() (n int) {
 	var l int
 	_ = l
@@ -599,8 +504,12 @@ func (m *Result_Row) Size() (n int) {
 func (m *Request) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = len(m.User)
 	n += 1 + l + sovWire(uint64(l))
+	if m.Session != nil {
+		l = len(m.Session)
+		n += 1 + l + sovWire(uint64(l))
+	}
 	l = len(m.Sql)
 	n += 1 + l + sovWire(uint64(l))
 	if len(m.Params) > 0 {
@@ -615,8 +524,10 @@ func (m *Request) Size() (n int) {
 func (m *Response) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
-	n += 1 + l + sovWire(uint64(l))
+	if m.Session != nil {
+		l = len(m.Session)
+		n += 1 + l + sovWire(uint64(l))
+	}
 	if len(m.Results) > 0 {
 		for _, e := range m.Results {
 			l = e.Size()
@@ -674,171 +585,6 @@ func (this *Datum) SetValue(value interface{}) bool {
 		return false
 	}
 	return true
-}
-func (m *RequestHeader) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Session", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthWire
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Session = append([]byte{}, data[iNdEx:postIndex]...)
-			iNdEx = postIndex
-		case 5:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + int(stringLen)
-			if stringLen < 0 {
-				return ErrInvalidLengthWire
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.User = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipWire(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthWire
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	return nil
-}
-func (m *ResponseHeader) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Session", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthWire
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Session = append([]byte{}, data[iNdEx:postIndex]...)
-			iNdEx = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipWire(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthWire
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	return nil
 }
 func (m *Datum) Unmarshal(data []byte) error {
 	l := len(data)
@@ -1212,32 +958,55 @@ func (m *Request) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
 			}
-			var msglen int
+			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			postIndex := iNdEx + msglen
-			if msglen < 0 {
+			postIndex := iNdEx + int(stringLen)
+			if stringLen < 0 {
 				return ErrInvalidLengthWire
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
+			m.User = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Session", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Session = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Sql", wireType)
 			}
@@ -1262,7 +1031,7 @@ func (m *Request) Unmarshal(data []byte) error {
 			}
 			m.Sql = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 3:
+		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Params", wireType)
 			}
@@ -1337,30 +1106,28 @@ func (m *Response) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Session", wireType)
 			}
-			var msglen int
+			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			postIndex := iNdEx + msglen
-			if msglen < 0 {
+			if byteLen < 0 {
 				return ErrInvalidLengthWire
 			}
+			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
+			m.Session = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {

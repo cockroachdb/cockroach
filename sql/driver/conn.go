@@ -88,9 +88,9 @@ func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
 	session := c.session
 	c.session = nil
 	return c.send(Request{
-		RequestHeader: RequestHeader{Session: session},
-		Sql:           stmt,
-		Params:        params,
+		Session: session,
+		Sql:     stmt,
+		Params:  params,
 	})
 }
 

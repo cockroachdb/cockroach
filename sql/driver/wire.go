@@ -17,7 +17,10 @@
 
 package driver
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+)
 
 const (
 	// Endpoint is the URL path prefix which accepts incoming
@@ -26,43 +29,34 @@ const (
 )
 
 func (d Datum) String() string {
-	if d.BoolVal != nil {
-		if *d.BoolVal {
-			return "true"
-		}
-		return "false"
-	}
-	if d.IntVal != nil {
-		return strconv.FormatInt(*d.IntVal, 10)
-	}
-	if d.FloatVal != nil {
-		return strconv.FormatFloat(*d.FloatVal, 'g', -1, 64)
-	}
-	if d.BytesVal != nil {
-		return string(d.BytesVal)
-	}
-	if d.StringVal != nil {
-		return *d.StringVal
-	}
-	return "NULL"
-}
+	val := d.GetValue()
 
-// Header returns the request header.
-func (r *RequestHeader) Header() *RequestHeader {
-	return r
+	if val == nil {
+		return "NULL"
+	}
+
+	switch t := val.(type) {
+	case *bool:
+		return strconv.FormatBool(*t)
+	case *int64:
+		return strconv.FormatInt(*t, 10)
+	case *float64:
+		return strconv.FormatFloat(*t, 'g', -1, 64)
+	case []byte:
+		return string(t)
+	case *string:
+		return *t
+	default:
+		panic(fmt.Sprintf("unexpected type %T", t))
+	}
 }
 
 // Method returns the method.
-func (*Request) Method() Method {
+func (Request) Method() Method {
 	return Execute
 }
 
 // CreateReply creates an empty response for the request.
-func (*Request) CreateReply() *Response {
-	return &Response{}
-}
-
-// Header returns the response header.
-func (r *ResponseHeader) Header() *ResponseHeader {
-	return r
+func (Request) CreateReply() Response {
+	return Response{}
 }
