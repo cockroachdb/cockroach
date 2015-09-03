@@ -67,7 +67,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	p.txn.SetSystemDBTrigger()
 	if err := p.txn.Run(&b); err != nil {
 		if _, ok := err.(*proto.ConditionFailedError); ok {
-			return nil, fmt.Errorf("the new database name %s already exists", string(n.NewName))
+			return nil, fmt.Errorf("the new database name %q already exists", string(n.NewName))
 		}
 		return nil, err
 	}

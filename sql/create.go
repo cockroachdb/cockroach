@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -72,19 +71,19 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		return nil, err
 	}
 
-	index := IndexDescriptor{
+	indexDesc := IndexDescriptor{
 		Name:        string(n.Name),
 		Unique:      n.Unique,
 		ColumnNames: n.Columns,
 	}
-	tableDesc.Indexes = append(tableDesc.Indexes, index)
+	tableDesc.Indexes = append(tableDesc.Indexes, indexDesc)
 
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, err
 	}
 
-	// `index` changed on us when we called `tableDesc.AllocateIDs()`.
-	index = tableDesc.Indexes[len(tableDesc.Indexes)-1]
+	// `indexDesc` changed on us when we called `tableDesc.AllocateIDs()`.
+	indexDesc = tableDesc.Indexes[len(tableDesc.Indexes)-1]
 
 	// Get all the rows affected.
 	// TODO(vivek): Avoid going through Select.
@@ -121,11 +120,17 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	var b client.Batch
 	b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
 
+	// We need a dummy element in this slice to account for the `Put`
+	// above; the `Put` won't fail, but if we don't add an entry for it,
+	// we'll end up with out-of-bounds error when we iterate over the
+	// writes in the error case.
+	writes := []write{{}}
+
 	for row.Next() {
 		rowVals := row.Values()
 
 		secondaryIndexEntries, err := encodeSecondaryIndexes(
-			tableDesc.ID, []IndexDescriptor{index}, colIDtoRowIndex, rowVals)
+			tableDesc.ID, []IndexDescriptor{indexDesc}, colIDtoRowIndex, rowVals)
 		if err != nil {
 			return nil, err
 		}
@@ -135,6 +140,19 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 				log.Infof("CPut %q -> %v", secondaryIndexEntry.key, secondaryIndexEntry.value)
 			}
 			b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+
+			var w write
+
+			for i, columnID := range indexDesc.ColumnIDs {
+				w.values = append(w.values, writePair{
+					col: indexDesc.ColumnNames[i],
+					val: rowVals[colIDtoRowIndex[columnID]],
+				})
+			}
+
+			w.constraint = &indexDesc
+
+			writes = append(writes, w)
 		}
 	}
 
@@ -145,8 +163,12 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	// Mark transaction as operating on the system DB.
 	p.txn.SetSystemDBTrigger()
 	if err := p.txn.Run(&b); err != nil {
-		if tErr, ok := err.(*proto.ConditionFailedError); ok {
-			return nil, util.Errorf("duplicate key value %q violates unique constraint %s", tErr.ActualValue.Bytes, "TODO(tamird)")
+		for i, result := range b.Results {
+			if _, ok := result.Err.(*proto.ConditionFailedError); ok {
+				w := writes[i]
+
+				return nil, fmt.Errorf("duplicate key value %s violates unique constraint %q", w.values, w.constraint.Name)
+			}
 		}
 		return nil, err
 	}
