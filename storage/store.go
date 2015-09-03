@@ -261,6 +261,7 @@ type Store struct {
 	scanner           *replicaScanner // Range scanner
 	feed              StoreEventFeed  // Event Feed
 	removeReplicaChan chan removeReplicaOp
+	proposeChan       chan proposeOp
 	multiraft         *multiraft.MultiRaft
 	started           int32
 	stopper           *stop.Stopper
@@ -368,6 +369,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 		uninitReplicas:    map[proto.RangeID]*Replica{},
 		nodeDesc:          nodeDesc,
 		removeReplicaChan: make(chan removeReplicaOp),
+		proposeChan:       make(chan proposeOp),
 	}
 
 	// Add range scanner and configure with queues.
@@ -1489,11 +1491,24 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	return wiErr
 }
 
+type proposeOp struct {
+	idKey cmdIDKey
+	cmd   proto.RaftCommand
+	ch    chan<- <-chan error
+}
+
 // ProposeRaftCommand submits a command to raft. The command is processed
 // asynchronously and an error or nil will be written to the returned
 // channel when it is committed or aborted (but note that committed does
 // mean that it has been applied to the range yet).
 func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.RaftCommand) <-chan error {
+	ch := make(chan (<-chan error))
+	s.proposeChan <- proposeOp{idKey, cmd, ch}
+	return <-ch
+}
+
+// proposeRaftCommandImpl runs on the processRaft goroutine.
+func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd proto.RaftCommand) <-chan error {
 	value := cmd.Cmd.GetValue()
 	if value == nil {
 		panic("proposed a nil command")
@@ -1588,6 +1603,9 @@ func (s *Store) processRaft() {
 
 			case op := <-s.removeReplicaChan:
 				op.ch <- s.removeReplicaImpl(op.rep)
+
+			case op := <-s.proposeChan:
+				op.ch <- s.proposeRaftCommandImpl(op.idKey, op.cmd)
 
 			case <-s.stopper.ShouldStop():
 				return
