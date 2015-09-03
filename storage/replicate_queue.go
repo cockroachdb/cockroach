@@ -75,21 +75,35 @@ func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (should
 		return
 	}
 
-	return rq.needsReplication(zone, repl, repl.Desc())
+	delta := rq.replicaDelta(zone, repl, repl.Desc())
+	if delta == 0 {
+		if log.V(1) {
+			log.Infof("%s has the correct number of nodes", repl)
+		}
+		return false, 0
+	}
+	if delta > 0 {
+		if log.V(1) {
+			log.Infof("%s needs to add %d nodes", repl, delta)
+		}
+		// For ranges which need additional replicas, increase the priority
+		return true, float64(delta + 10)
+	}
+	if log.V(1) {
+		log.Infof("%s needs to remove %d nodes", repl, 0-delta)
+	}
+	// For ranges which have too many replicas, priority is absolute value of
+	// the delta.
+	return true, float64(0 - delta)
 }
 
-func (rq replicateQueue) needsReplication(zone config.ZoneConfig, repl *Replica, desc *proto.RangeDescriptor) (bool, float64) {
+func (rq *replicateQueue) replicaDelta(zone config.ZoneConfig, repl *Replica,
+	desc *proto.RangeDescriptor) int {
 	// TODO(bdarnell): handle non-empty ReplicaAttrs.
 	need := len(zone.ReplicaAttrs)
 	have := len(desc.Replicas)
-	if need > have {
-		if log.V(1) {
-			log.Infof("%s needs %d nodes; has %d", repl, need, have)
-		}
-		return true, float64(need - have)
-	}
 
-	return false, 0
+	return need - have
 }
 
 func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
@@ -99,28 +113,45 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 	}
 
 	desc := repl.Desc()
-	if needs, _ := rq.needsReplication(zone, repl, desc); !needs {
+	delta := rq.replicaDelta(zone, repl, desc)
+	if delta == 0 {
 		// Something changed between shouldQueue and process.
 		return nil
 	}
 
-	// TODO(bdarnell): handle non-homogeneous ReplicaAttrs.
-	// Allow constraints to be relaxed if necessary.
-	newReplica, err := rq.allocator.allocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true, nil)
-	if err != nil {
-		return err
-	}
+	// TODO(bdarnell): handle non-homogenous ReplicaAttrs.
+	if delta > 0 {
+		// Allow constraints to be relaxed if necessary.
+		newReplica, err := rq.allocator.allocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true, nil)
+		if err != nil {
+			return err
+		}
 
-	replica := proto.Replica{
-		NodeID:  newReplica.Node.NodeID,
-		StoreID: newReplica.StoreID,
-	}
-	if err = repl.ChangeReplicas(proto.ADD_REPLICA, replica, desc); err != nil {
-		return err
+		replica := proto.Replica{
+			NodeID:  newReplica.Node.NodeID,
+			StoreID: newReplica.StoreID,
+		}
+		if err = repl.ChangeReplicas(proto.ADD_REPLICA, replica, desc); err != nil {
+			return err
+		}
+	} else {
+		removeReplica, err := rq.allocator.removeTarget(desc.Replicas)
+		if err != nil {
+			return err
+		}
+		if log.V(1) {
+			log.Infof("Remove replica %s", removeReplica)
+		}
+
+		if err = repl.ChangeReplicas(proto.REMOVE_REPLICA, removeReplica, desc); err != nil {
+			if log.V(1) {
+				log.Infof("Error removing replica %s", err)
+			}
+			return err
+		}
 	}
 
 	// Enqueue this replica again to see if there are more changes to be made.
-	//go rq.MaybeAdd(repl, rq.clock.Now())
 	rq.MaybeAdd(repl, rq.clock.Now())
 	return nil
 }

@@ -28,6 +28,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -507,9 +508,9 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	}
 }
 
-// TestStoreRangeReplicate verifies that the replication queue will notice
+// TestStoreRangeUpReplicate verifies that the replication queue will notice
 // under-replicated ranges and replicate them.
-func TestStoreRangeReplicate(t *testing.T) {
+func TestStoreRangeUpReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
@@ -539,6 +540,163 @@ func TestStoreRangeReplicate(t *testing.T) {
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestStoreRangeDownReplicate verifies that the replication queue will notice
+// over-replicated ranges and remove replicas from them.
+func TestStoreRangeDownReplicate(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := startMultiTestContext(t, 5)
+	defer mtc.Stop()
+	store0 := mtc.stores[0]
+
+	// Split off a range from the initial range for testing; there are
+	// complications if the metadata ranges are removed from store 1, this
+	// simplifies the test.
+	splitKey := proto.Key("m")
+	rightKey := proto.Key("z")
+	{
+		replica := store0.LookupReplica(proto.KeyMin, nil)
+		mtc.replicateRange(replica.Desc().RangeID, 0, 1, 2)
+		desc := replica.Desc()
+		splitArgs := adminSplitArgs(splitKey, splitKey, desc.RangeID, store0.StoreID())
+		if _, err := replica.AdminSplit(splitArgs, desc); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Replicate the new range to all five stores.
+	replica := store0.LookupReplica(rightKey, nil)
+	desc := replica.Desc()
+	mtc.replicateRange(desc.RangeID, 0, 3, 4)
+
+	// Initialize the gossip network.
+	var wg sync.WaitGroup
+	wg.Add(len(mtc.stores))
+	key := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
+	mtc.stores[0].Gossip().RegisterCallback(key, func(_ string, _ []byte) { wg.Done() })
+	for _, s := range mtc.stores {
+		s.GossipStore()
+	}
+	wg.Wait()
+
+	// storeIDset is used to compare the replica sets from different views (i.e.
+	// local range descriptors)
+	type storeIDset map[proto.StoreID]struct{}
+	makeStoreIDset := func(replicas []proto.Replica) storeIDset {
+		idSet := make(storeIDset)
+		for _, r := range replicas {
+			idSet[r.StoreID] = struct{}{}
+		}
+		return idSet
+	}
+
+	// Function to get the current range descriptor for the target range.
+	getRangeMetadata := func() proto.RangeDescriptor {
+		// Calls to RangeLookup typically use inconsistent reads, but we
+		// want to do a consistent read here. This is important when we are
+		// considering one of the metadata ranges: we must not do an
+		// inconsistent lookup in our own copy of the range.
+		reply := proto.RangeLookupResponse{}
+		b := &client.Batch{}
+		b.InternalAddCall(proto.Call{
+			Args: &proto.RangeLookupRequest{
+				RequestHeader: proto.RequestHeader{
+					Key: keys.RangeMetaKey(rightKey),
+				},
+				MaxRanges: 1,
+			},
+			Reply: &reply,
+		})
+		if err := mtc.db.Run(b); err != nil {
+			t.Fatalf("error getting range metadata: %s", err.Error())
+		}
+
+		if len(reply.Ranges) != 1 {
+			t.Fatalf("expected 1 range descriptor, go %d", len(reply.Ranges))
+		}
+
+		return reply.Ranges[0]
+	}
+
+	// Function to see if the replication level of the new range has reached the
+	// expected equilibrium. If equilibrium has not been reached, this function
+	// returns the list of stores that *should* have a replica for the range.
+	checkReplication := func() (bool, storeIDset) {
+		// Query each store for a replica of the range, generating a real map of
+		// the replicas.
+		foundIDset := make(storeIDset)
+		foundLocalRangeDescs := make([]*proto.RangeDescriptor, 0, len(mtc.stores))
+		for _, s := range mtc.stores {
+			r := s.LookupReplica(splitKey, nil)
+			if r != nil {
+				foundLocalRangeDescs = append(foundLocalRangeDescs, r.Desc())
+				foundIDset[s.StoreID()] = struct{}{}
+			}
+		}
+
+		// Fail immediately if there are less than three replicas.
+		replicaCount := len(foundIDset)
+		if replicaCount < 3 {
+			t.Fatalf("Removed too many replicas; expected at least three replicas, found %d", replicaCount)
+		}
+
+		// Look up the official range descriptor, make sure it agrees with the
+		// found replicas.
+		realRangeDesc := getRangeMetadata()
+		realIDset := makeStoreIDset(realRangeDesc.Replicas)
+		if !reflect.DeepEqual(realIDset, foundIDset) {
+			return false, realIDset
+		}
+
+		// Ensure the local range descriptors everywhere agree with reality.
+		for _, desc := range foundLocalRangeDescs {
+			localIDset := makeStoreIDset(desc.Replicas)
+			if !reflect.DeepEqual(localIDset, foundIDset) {
+				return false, realIDset
+			}
+		}
+
+		// If we have only three replicas, exit the loop.
+		if replicaCount == 3 {
+			return true, nil
+		}
+		return false, foundIDset
+	}
+
+	maxTimeout := time.After(5 * time.Second)
+	succeeded := false
+	for !succeeded {
+		select {
+		case <-maxTimeout:
+			t.Fatalf("Failed to achieve proper replication within 5 seconds")
+		case <-time.After(10 * time.Millisecond):
+			mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration))
+			// If our replication level matches the target, we have succeeded.
+			var idSet storeIDset
+			succeeded, idSet = checkReplication()
+			if succeeded {
+				break
+			}
+
+			// Kick off a manual RangeGC Scan on any store which is not part of the
+			// current replica set. Kick off a Replication scan on *one* store which
+			// is part of the replica set.
+			kickedOffReplicationQueue := false
+			for _, store := range mtc.stores {
+				if _, ok := idSet[store.StoreID()]; !ok {
+					store.ForceRangeGCScan(t)
+				} else if !kickedOffReplicationQueue {
+					store.ForceReplicationScan(t)
+					kickedOffReplicationQueue = true
+				}
+			}
+		}
+	}
+
+	// Increment the manual clock one more time, so that any remaining intent
+	// resolutions can get a leader lease.
+	mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration))
 }
 
 // TestChangeReplicasDuplicateError tests that a replica change aborts if
