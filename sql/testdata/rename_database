@@ -48,7 +48,7 @@ SHOW GRANTS ON DATABASE u
 ----
 u        root      ALL
 
-statement ok	
+statement ok
 SET DATABASE = u
 
 query II
@@ -71,7 +71,7 @@ ALTER DATABASE u RENAME TO u
 statement ok
 CREATE DATABASE t
 
-statement error the new database name .* already exists
+statement error the new database name "u" already exists
 ALTER DATABASE t RENAME TO u
 
 statement ok
