@@ -51,7 +51,7 @@ type rpcTransport struct {
 	rpcContext *rpc.Context
 	mu         sync.Mutex
 	servers    map[proto.RaftNodeID]multiraft.ServerInterface
-	queues     map[proto.RaftNodeID]chan *proto.RaftMessageRequest
+	queues     map[proto.RaftNodeID]chan *multiraft.RaftMessageRequest
 }
 
 // newRPCTransport creates a new rpcTransport with specified gossip and rpc server.
@@ -62,12 +62,12 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 		rpcServer:  rpcServer,
 		rpcContext: rpcContext,
 		servers:    make(map[proto.RaftNodeID]multiraft.ServerInterface),
-		queues:     make(map[proto.RaftNodeID]chan *proto.RaftMessageRequest),
+		queues:     make(map[proto.RaftNodeID]chan *multiraft.RaftMessageRequest),
 	}
 
 	if t.rpcServer != nil {
 		if err := t.rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
-			t.RaftMessage, &proto.RaftMessageRequest{}); err != nil {
+			t.RaftMessage, &multiraft.RaftMessageRequest{}); err != nil {
 			return nil, err
 		}
 	}
@@ -77,19 +77,14 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 
 // RaftMessage proxies the incoming request to the listening server interface.
 func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogoproto.Message, error)) {
-	req := args.(*proto.RaftMessageRequest)
-	msg, err := req.UnmarshalMsg()
-	if err != nil {
-		callback(nil, err)
-		return
-	}
+	req := args.(*multiraft.RaftMessageRequest)
 
 	t.mu.Lock()
-	server, ok := t.servers[proto.RaftNodeID(msg.To)]
+	server, ok := t.servers[proto.RaftNodeID(req.Message.To)]
 	t.mu.Unlock()
 
 	if !ok {
-		callback(nil, util.Errorf("Unable to proxy message to node: %d", msg.To))
+		callback(nil, util.Errorf("Unable to proxy message to node: %d", req.Message.To))
 		return
 	}
 
@@ -100,8 +95,8 @@ func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogopro
 	// (ab)using the async handler mechanism to get this (synchronous)
 	// handler called in the RPC server's goroutine so we can preserve
 	// order of incoming messages.
-	err = server.RaftMessage(req, &proto.RaftMessageResponse{})
-	callback(&proto.RaftMessageResponse{}, err)
+	err := server.RaftMessage(req, &multiraft.RaftMessageResponse{})
+	callback(&multiraft.RaftMessageResponse{}, err)
 }
 
 // Listen implements the multiraft.Transport interface by registering a ServerInterface
@@ -162,8 +157,8 @@ func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 	}
 
 	done := make(chan *gorpc.Call, cap(ch))
-	var req *proto.RaftMessageRequest
-	protoResp := &proto.RaftMessageResponse{}
+	var req *multiraft.RaftMessageRequest
+	protoResp := &multiraft.RaftMessageResponse{}
 	for {
 		select {
 		case <-t.rpcContext.Stopper.ShouldStop():
@@ -187,21 +182,20 @@ func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 			return
 		}
 
-		client.Go(raftMessageName, req, protoResp, done)
+		client.Go(raftMessageName, &multiraft.RaftMessageRequest{
+			GroupID: req.GroupID,
+			Message: req.Message,
+		}, protoResp, done)
 	}
 }
 
 // Send a message to the recipient specified in the request.
-func (t *rpcTransport) Send(req *proto.RaftMessageRequest) error {
-	msg, err := req.UnmarshalMsg()
-	if err != nil {
-		return err
-	}
-	raftNodeID := proto.RaftNodeID(msg.To)
+func (t *rpcTransport) Send(req *multiraft.RaftMessageRequest) error {
+	raftNodeID := proto.RaftNodeID(req.Message.To)
 	t.mu.Lock()
 	ch, ok := t.queues[raftNodeID]
 	if !ok {
-		ch = make(chan *proto.RaftMessageRequest, raftSendBufferSize)
+		ch = make(chan *multiraft.RaftMessageRequest, raftSendBufferSize)
 		t.queues[raftNodeID] = ch
 		go t.processQueue(raftNodeID)
 	}
@@ -210,7 +204,7 @@ func (t *rpcTransport) Send(req *proto.RaftMessageRequest) error {
 	select {
 	case ch <- req:
 	default:
-		return util.Errorf("queue for node %d is full", msg.To)
+		return util.Errorf("queue for node %d is full", req.Message.To)
 	}
 	return nil
 }

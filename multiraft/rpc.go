@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,30 +13,13 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Kathy Spradlin (kathyspradlin@gmail.com)
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Tamir Duberstein (tamird@gmail.com)
 
-package proto
-
-import (
-	"fmt"
-	"time"
-)
-
-// Equal is a equality comparison between remote offsets.
-func (r RemoteOffset) Equal(o RemoteOffset) bool {
-	return r.Offset == o.Offset && r.Uncertainty == o.Uncertainty && r.MeasuredAt == o.MeasuredAt
-}
-
-// String formats the RemoteOffset for human readability.
-func (r RemoteOffset) String() string {
-	t := time.Unix(r.MeasuredAt/1E9, 0).UTC()
-	return fmt.Sprintf("off=%.9fs, err=%.9fs, at=%s", float64(r.Offset)/1E9, float64(r.Uncertainty)/1E9, t)
-}
+package multiraft
 
 // GetUser implements userRequest.
-// Heartbeat messages are always sent by the node user.
-func (m *PingRequest) GetUser() string {
+// Raft messages are always sent by the node user.
+func (m *RaftMessageRequest) GetUser() string {
 	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
 	return "node"
 }

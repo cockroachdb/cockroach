@@ -106,7 +106,7 @@ func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
 			GetUser() string
 		}
 
-		// UserRequest must be implemented.
+		// userRequest must be implemented.
 		requestWithUser, ok := request.(userRequest)
 		if !ok {
 			return util.Errorf("unknown request type: %T", request)

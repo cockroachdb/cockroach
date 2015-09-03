@@ -116,7 +116,7 @@ type Combinable interface {
 	Combine(Response)
 }
 
-// GetUser implements UserRequest.
+// GetUser implements userRequest.
 // KV messages are always sent by the node user.
 func (rh *RequestHeader) GetUser() string {
 	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
