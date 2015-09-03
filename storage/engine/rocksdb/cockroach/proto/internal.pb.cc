@@ -68,12 +68,6 @@ struct RaftCommandUnionOneofInstance {
 const ::google::protobuf::Descriptor* RaftCommand_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   RaftCommand_reflection_ = NULL;
-const ::google::protobuf::Descriptor* RaftMessageRequest_descriptor_ = NULL;
-const ::google::protobuf::internal::GeneratedMessageReflection*
-  RaftMessageRequest_reflection_ = NULL;
-const ::google::protobuf::Descriptor* RaftMessageResponse_descriptor_ = NULL;
-const ::google::protobuf::internal::GeneratedMessageReflection*
-  RaftMessageResponse_reflection_ = NULL;
 const ::google::protobuf::Descriptor* InternalTimeSeriesData_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   InternalTimeSeriesData_reflection_ = NULL;
@@ -185,37 +179,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
       sizeof(RaftCommand),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftCommand, _internal_metadata_),
       -1);
-  RaftMessageRequest_descriptor_ = file->message_type(3);
-  static const int RaftMessageRequest_offsets_[2] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftMessageRequest, group_id_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftMessageRequest, msg_),
-  };
-  RaftMessageRequest_reflection_ =
-    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
-      RaftMessageRequest_descriptor_,
-      RaftMessageRequest::default_instance_,
-      RaftMessageRequest_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftMessageRequest, _has_bits_[0]),
-      -1,
-      -1,
-      sizeof(RaftMessageRequest),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftMessageRequest, _internal_metadata_),
-      -1);
-  RaftMessageResponse_descriptor_ = file->message_type(4);
-  static const int RaftMessageResponse_offsets_[1] = {
-  };
-  RaftMessageResponse_reflection_ =
-    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
-      RaftMessageResponse_descriptor_,
-      RaftMessageResponse::default_instance_,
-      RaftMessageResponse_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftMessageResponse, _has_bits_[0]),
-      -1,
-      -1,
-      sizeof(RaftMessageResponse),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftMessageResponse, _internal_metadata_),
-      -1);
-  InternalTimeSeriesData_descriptor_ = file->message_type(5);
+  InternalTimeSeriesData_descriptor_ = file->message_type(3);
   static const int InternalTimeSeriesData_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesData, start_timestamp_nanos_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesData, sample_duration_nanos_),
@@ -232,7 +196,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
       sizeof(InternalTimeSeriesData),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesData, _internal_metadata_),
       -1);
-  InternalTimeSeriesSample_descriptor_ = file->message_type(6);
+  InternalTimeSeriesSample_descriptor_ = file->message_type(4);
   static const int InternalTimeSeriesSample_offsets_[5] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, offset_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, count_),
@@ -251,7 +215,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
       sizeof(InternalTimeSeriesSample),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, _internal_metadata_),
       -1);
-  RaftTruncatedState_descriptor_ = file->message_type(7);
+  RaftTruncatedState_descriptor_ = file->message_type(5);
   static const int RaftTruncatedState_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftTruncatedState, index_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftTruncatedState, term_),
@@ -267,7 +231,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
       sizeof(RaftTruncatedState),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftTruncatedState, _internal_metadata_),
       -1);
-  RaftSnapshotData_descriptor_ = file->message_type(8);
+  RaftSnapshotData_descriptor_ = file->message_type(6);
   static const int RaftSnapshotData_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData, range_descriptor_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData, kv_),
@@ -319,10 +283,6 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       RaftCommand_descriptor_, &RaftCommand::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-      RaftMessageRequest_descriptor_, &RaftMessageRequest::default_instance());
-  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-      RaftMessageResponse_descriptor_, &RaftMessageResponse::default_instance());
-  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       InternalTimeSeriesData_descriptor_, &InternalTimeSeriesData::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       InternalTimeSeriesSample_descriptor_, &InternalTimeSeriesSample::default_instance());
@@ -345,10 +305,6 @@ void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto() {
   delete RaftCommandUnion_reflection_;
   delete RaftCommand::default_instance_;
   delete RaftCommand_reflection_;
-  delete RaftMessageRequest::default_instance_;
-  delete RaftMessageRequest_reflection_;
-  delete RaftMessageResponse::default_instance_;
-  delete RaftMessageResponse_reflection_;
   delete InternalTimeSeriesData::default_instance_;
   delete InternalTimeSeriesData_reflection_;
   delete InternalTimeSeriesSample::default_instance_;
@@ -429,24 +385,22 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007RangeID\022:\n\016origin_no"
     "de_id\030\002 \001(\004B\"\310\336\037\000\342\336\037\014OriginNodeID\372\336\037\nRaf"
     "tNodeID\0224\n\003cmd\030\003 \001(\0132!.cockroach.proto.R"
-    "aftCommandUnionB\004\310\336\037\000\"O\n\022RaftMessageRequ"
-    "est\022,\n\010group_id\030\001 \001(\004B\032\310\336\037\000\342\336\037\007GroupID\372\336"
-    "\037\007RangeID\022\013\n\003msg\030\002 \001(\014\"\025\n\023RaftMessageRes"
-    "ponse\"\236\001\n\026InternalTimeSeriesData\022#\n\025star"
-    "t_timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022#\n\025sample_"
-    "duration_nanos\030\002 \001(\003B\004\310\336\037\000\022:\n\007samples\030\003 "
-    "\003(\0132).cockroach.proto.InternalTimeSeries"
-    "Sample\"r\n\030InternalTimeSeriesSample\022\024\n\006of"
-    "fset\030\001 \001(\005B\004\310\336\037\000\022\023\n\005count\030\006 \001(\rB\004\310\336\037\000\022\021\n"
-    "\003sum\030\007 \001(\001B\004\310\336\037\000\022\013\n\003max\030\010 \001(\001\022\013\n\003min\030\t \001"
-    "(\001\"=\n\022RaftTruncatedState\022\023\n\005index\030\001 \001(\004B"
-    "\004\310\336\037\000\022\022\n\004term\030\002 \001(\004B\004\310\336\037\000\"\274\001\n\020RaftSnapsh"
-    "otData\022@\n\020range_descriptor\030\001 \001(\0132 .cockr"
-    "oach.proto.RangeDescriptorB\004\310\336\037\000\022>\n\002KV\030\002"
-    " \003(\0132*.cockroach.proto.RaftSnapshotData."
-    "KeyValueB\006\342\336\037\002KV\032&\n\010KeyValue\022\013\n\003key\030\001 \001("
-    "\014\022\r\n\005value\030\002 \001(\014*%\n\021InternalValueType\022\n\n"
-    "\006_CR_TS\020\001\032\004\210\243\036\000B\027Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 3040);
+    "aftCommandUnionB\004\310\336\037\000\"\236\001\n\026InternalTimeSe"
+    "riesData\022#\n\025start_timestamp_nanos\030\001 \001(\003B"
+    "\004\310\336\037\000\022#\n\025sample_duration_nanos\030\002 \001(\003B\004\310\336"
+    "\037\000\022:\n\007samples\030\003 \003(\0132).cockroach.proto.In"
+    "ternalTimeSeriesSample\"r\n\030InternalTimeSe"
+    "riesSample\022\024\n\006offset\030\001 \001(\005B\004\310\336\037\000\022\023\n\005coun"
+    "t\030\006 \001(\rB\004\310\336\037\000\022\021\n\003sum\030\007 \001(\001B\004\310\336\037\000\022\013\n\003max\030"
+    "\010 \001(\001\022\013\n\003min\030\t \001(\001\"=\n\022RaftTruncatedState"
+    "\022\023\n\005index\030\001 \001(\004B\004\310\336\037\000\022\022\n\004term\030\002 \001(\004B\004\310\336\037"
+    "\000\"\274\001\n\020RaftSnapshotData\022@\n\020range_descript"
+    "or\030\001 \001(\0132 .cockroach.proto.RangeDescript"
+    "orB\004\310\336\037\000\022>\n\002KV\030\002 \003(\0132*.cockroach.proto.R"
+    "aftSnapshotData.KeyValueB\006\342\336\037\002KV\032&\n\010KeyV"
+    "alue\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001(\014*%\n\021Inte"
+    "rnalValueType\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000B\027Z\005proto"
+    "\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 2936);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/internal.proto", &protobuf_RegisterTypes);
   ResponseCacheEntry::default_instance_ = new ResponseCacheEntry();
@@ -454,8 +408,6 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
   RaftCommandUnion::default_instance_ = new RaftCommandUnion();
   RaftCommandUnion_default_oneof_instance_ = new RaftCommandUnionOneofInstance();
   RaftCommand::default_instance_ = new RaftCommand();
-  RaftMessageRequest::default_instance_ = new RaftMessageRequest();
-  RaftMessageResponse::default_instance_ = new RaftMessageResponse();
   InternalTimeSeriesData::default_instance_ = new InternalTimeSeriesData();
   InternalTimeSeriesSample::default_instance_ = new InternalTimeSeriesSample();
   RaftTruncatedState::default_instance_ = new RaftTruncatedState();
@@ -464,8 +416,6 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
   ResponseCacheEntry::default_instance_->InitAsDefaultInstance();
   RaftCommandUnion::default_instance_->InitAsDefaultInstance();
   RaftCommand::default_instance_->InitAsDefaultInstance();
-  RaftMessageRequest::default_instance_->InitAsDefaultInstance();
-  RaftMessageResponse::default_instance_->InitAsDefaultInstance();
   InternalTimeSeriesData::default_instance_->InitAsDefaultInstance();
   InternalTimeSeriesSample::default_instance_->InitAsDefaultInstance();
   RaftTruncatedState::default_instance_->InitAsDefaultInstance();
@@ -4411,556 +4361,6 @@ void RaftCommand::clear_cmd() {
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftCommand.cmd)
 }
-
-#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
-
-// ===================================================================
-
-#ifndef _MSC_VER
-const int RaftMessageRequest::kGroupIdFieldNumber;
-const int RaftMessageRequest::kMsgFieldNumber;
-#endif  // !_MSC_VER
-
-RaftMessageRequest::RaftMessageRequest()
-  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.proto.RaftMessageRequest)
-}
-
-void RaftMessageRequest::InitAsDefaultInstance() {
-}
-
-RaftMessageRequest::RaftMessageRequest(const RaftMessageRequest& from)
-  : ::google::protobuf::Message(),
-    _internal_metadata_(NULL) {
-  SharedCtor();
-  MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.proto.RaftMessageRequest)
-}
-
-void RaftMessageRequest::SharedCtor() {
-  ::google::protobuf::internal::GetEmptyString();
-  _cached_size_ = 0;
-  group_id_ = GOOGLE_ULONGLONG(0);
-  msg_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-}
-
-RaftMessageRequest::~RaftMessageRequest() {
-  // @@protoc_insertion_point(destructor:cockroach.proto.RaftMessageRequest)
-  SharedDtor();
-}
-
-void RaftMessageRequest::SharedDtor() {
-  msg_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (this != default_instance_) {
-  }
-}
-
-void RaftMessageRequest::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-}
-const ::google::protobuf::Descriptor* RaftMessageRequest::descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return RaftMessageRequest_descriptor_;
-}
-
-const RaftMessageRequest& RaftMessageRequest::default_instance() {
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
-  return *default_instance_;
-}
-
-RaftMessageRequest* RaftMessageRequest::default_instance_ = NULL;
-
-RaftMessageRequest* RaftMessageRequest::New(::google::protobuf::Arena* arena) const {
-  RaftMessageRequest* n = new RaftMessageRequest;
-  if (arena != NULL) {
-    arena->Own(n);
-  }
-  return n;
-}
-
-void RaftMessageRequest::Clear() {
-  if (_has_bits_[0 / 32] & 3u) {
-    group_id_ = GOOGLE_ULONGLONG(0);
-    if (has_msg()) {
-      msg_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    }
-  }
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-  if (_internal_metadata_.have_unknown_fields()) {
-    mutable_unknown_fields()->Clear();
-  }
-}
-
-bool RaftMessageRequest::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.proto.RaftMessageRequest)
-  for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional uint64 group_id = 1;
-      case 1: {
-        if (tag == 8) {
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
-                 input, &group_id_)));
-          set_has_group_id();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(18)) goto parse_msg;
-        break;
-      }
-
-      // optional bytes msg = 2;
-      case 2: {
-        if (tag == 18) {
-         parse_msg:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
-                input, this->mutable_msg()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectAtEnd()) goto success;
-        break;
-      }
-
-      default: {
-      handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
-          goto success;
-        }
-        DO_(::google::protobuf::internal::WireFormat::SkipField(
-              input, tag, mutable_unknown_fields()));
-        break;
-      }
-    }
-  }
-success:
-  // @@protoc_insertion_point(parse_success:cockroach.proto.RaftMessageRequest)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.proto.RaftMessageRequest)
-  return false;
-#undef DO_
-}
-
-void RaftMessageRequest::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.proto.RaftMessageRequest)
-  // optional uint64 group_id = 1;
-  if (has_group_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->group_id(), output);
-  }
-
-  // optional bytes msg = 2;
-  if (has_msg()) {
-    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
-      2, this->msg(), output);
-  }
-
-  if (_internal_metadata_.have_unknown_fields()) {
-    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
-        unknown_fields(), output);
-  }
-  // @@protoc_insertion_point(serialize_end:cockroach.proto.RaftMessageRequest)
-}
-
-::google::protobuf::uint8* RaftMessageRequest::SerializeWithCachedSizesToArray(
-    ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RaftMessageRequest)
-  // optional uint64 group_id = 1;
-  if (has_group_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->group_id(), target);
-  }
-
-  // optional bytes msg = 2;
-  if (has_msg()) {
-    target =
-      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
-        2, this->msg(), target);
-  }
-
-  if (_internal_metadata_.have_unknown_fields()) {
-    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
-        unknown_fields(), target);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.RaftMessageRequest)
-  return target;
-}
-
-int RaftMessageRequest::ByteSize() const {
-  int total_size = 0;
-
-  if (_has_bits_[0 / 32] & 3) {
-    // optional uint64 group_id = 1;
-    if (has_group_id()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::UInt64Size(
-          this->group_id());
-    }
-
-    // optional bytes msg = 2;
-    if (has_msg()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::BytesSize(
-          this->msg());
-    }
-
-  }
-  if (_internal_metadata_.have_unknown_fields()) {
-    total_size +=
-      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
-        unknown_fields());
-  }
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-  return total_size;
-}
-
-void RaftMessageRequest::MergeFrom(const ::google::protobuf::Message& from) {
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
-  const RaftMessageRequest* source = 
-      ::google::protobuf::internal::DynamicCastToGenerated<const RaftMessageRequest>(
-          &from);
-  if (source == NULL) {
-    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
-  } else {
-    MergeFrom(*source);
-  }
-}
-
-void RaftMessageRequest::MergeFrom(const RaftMessageRequest& from) {
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
-  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_group_id()) {
-      set_group_id(from.group_id());
-    }
-    if (from.has_msg()) {
-      set_has_msg();
-      msg_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.msg_);
-    }
-  }
-  if (from._internal_metadata_.have_unknown_fields()) {
-    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
-  }
-}
-
-void RaftMessageRequest::CopyFrom(const ::google::protobuf::Message& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-void RaftMessageRequest::CopyFrom(const RaftMessageRequest& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool RaftMessageRequest::IsInitialized() const {
-
-  return true;
-}
-
-void RaftMessageRequest::Swap(RaftMessageRequest* other) {
-  if (other == this) return;
-  InternalSwap(other);
-}
-void RaftMessageRequest::InternalSwap(RaftMessageRequest* other) {
-  std::swap(group_id_, other->group_id_);
-  msg_.Swap(&other->msg_);
-  std::swap(_has_bits_[0], other->_has_bits_[0]);
-  _internal_metadata_.Swap(&other->_internal_metadata_);
-  std::swap(_cached_size_, other->_cached_size_);
-}
-
-::google::protobuf::Metadata RaftMessageRequest::GetMetadata() const {
-  protobuf_AssignDescriptorsOnce();
-  ::google::protobuf::Metadata metadata;
-  metadata.descriptor = RaftMessageRequest_descriptor_;
-  metadata.reflection = RaftMessageRequest_reflection_;
-  return metadata;
-}
-
-#if PROTOBUF_INLINE_NOT_IN_HEADERS
-// RaftMessageRequest
-
-// optional uint64 group_id = 1;
-bool RaftMessageRequest::has_group_id() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-void RaftMessageRequest::set_has_group_id() {
-  _has_bits_[0] |= 0x00000001u;
-}
-void RaftMessageRequest::clear_has_group_id() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-void RaftMessageRequest::clear_group_id() {
-  group_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_group_id();
-}
- ::google::protobuf::uint64 RaftMessageRequest::group_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RaftMessageRequest.group_id)
-  return group_id_;
-}
- void RaftMessageRequest::set_group_id(::google::protobuf::uint64 value) {
-  set_has_group_id();
-  group_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.RaftMessageRequest.group_id)
-}
-
-// optional bytes msg = 2;
-bool RaftMessageRequest::has_msg() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-void RaftMessageRequest::set_has_msg() {
-  _has_bits_[0] |= 0x00000002u;
-}
-void RaftMessageRequest::clear_has_msg() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-void RaftMessageRequest::clear_msg() {
-  msg_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_msg();
-}
- const ::std::string& RaftMessageRequest::msg() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RaftMessageRequest.msg)
-  return msg_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
- void RaftMessageRequest::set_msg(const ::std::string& value) {
-  set_has_msg();
-  msg_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.proto.RaftMessageRequest.msg)
-}
- void RaftMessageRequest::set_msg(const char* value) {
-  set_has_msg();
-  msg_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.proto.RaftMessageRequest.msg)
-}
- void RaftMessageRequest::set_msg(const void* value, size_t size) {
-  set_has_msg();
-  msg_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.RaftMessageRequest.msg)
-}
- ::std::string* RaftMessageRequest::mutable_msg() {
-  set_has_msg();
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftMessageRequest.msg)
-  return msg_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
- ::std::string* RaftMessageRequest::release_msg() {
-  clear_has_msg();
-  return msg_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
- void RaftMessageRequest::set_allocated_msg(::std::string* msg) {
-  if (msg != NULL) {
-    set_has_msg();
-  } else {
-    clear_has_msg();
-  }
-  msg_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), msg);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftMessageRequest.msg)
-}
-
-#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
-
-// ===================================================================
-
-#ifndef _MSC_VER
-#endif  // !_MSC_VER
-
-RaftMessageResponse::RaftMessageResponse()
-  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.proto.RaftMessageResponse)
-}
-
-void RaftMessageResponse::InitAsDefaultInstance() {
-}
-
-RaftMessageResponse::RaftMessageResponse(const RaftMessageResponse& from)
-  : ::google::protobuf::Message(),
-    _internal_metadata_(NULL) {
-  SharedCtor();
-  MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.proto.RaftMessageResponse)
-}
-
-void RaftMessageResponse::SharedCtor() {
-  _cached_size_ = 0;
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-}
-
-RaftMessageResponse::~RaftMessageResponse() {
-  // @@protoc_insertion_point(destructor:cockroach.proto.RaftMessageResponse)
-  SharedDtor();
-}
-
-void RaftMessageResponse::SharedDtor() {
-  if (this != default_instance_) {
-  }
-}
-
-void RaftMessageResponse::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-}
-const ::google::protobuf::Descriptor* RaftMessageResponse::descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return RaftMessageResponse_descriptor_;
-}
-
-const RaftMessageResponse& RaftMessageResponse::default_instance() {
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
-  return *default_instance_;
-}
-
-RaftMessageResponse* RaftMessageResponse::default_instance_ = NULL;
-
-RaftMessageResponse* RaftMessageResponse::New(::google::protobuf::Arena* arena) const {
-  RaftMessageResponse* n = new RaftMessageResponse;
-  if (arena != NULL) {
-    arena->Own(n);
-  }
-  return n;
-}
-
-void RaftMessageResponse::Clear() {
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-  if (_internal_metadata_.have_unknown_fields()) {
-    mutable_unknown_fields()->Clear();
-  }
-}
-
-bool RaftMessageResponse::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.proto.RaftMessageResponse)
-  for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-  handle_unusual:
-    if (tag == 0 ||
-        ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-        ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
-      goto success;
-    }
-    DO_(::google::protobuf::internal::WireFormat::SkipField(
-          input, tag, mutable_unknown_fields()));
-  }
-success:
-  // @@protoc_insertion_point(parse_success:cockroach.proto.RaftMessageResponse)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.proto.RaftMessageResponse)
-  return false;
-#undef DO_
-}
-
-void RaftMessageResponse::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.proto.RaftMessageResponse)
-  if (_internal_metadata_.have_unknown_fields()) {
-    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
-        unknown_fields(), output);
-  }
-  // @@protoc_insertion_point(serialize_end:cockroach.proto.RaftMessageResponse)
-}
-
-::google::protobuf::uint8* RaftMessageResponse::SerializeWithCachedSizesToArray(
-    ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RaftMessageResponse)
-  if (_internal_metadata_.have_unknown_fields()) {
-    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
-        unknown_fields(), target);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.RaftMessageResponse)
-  return target;
-}
-
-int RaftMessageResponse::ByteSize() const {
-  int total_size = 0;
-
-  if (_internal_metadata_.have_unknown_fields()) {
-    total_size +=
-      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
-        unknown_fields());
-  }
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-  return total_size;
-}
-
-void RaftMessageResponse::MergeFrom(const ::google::protobuf::Message& from) {
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
-  const RaftMessageResponse* source = 
-      ::google::protobuf::internal::DynamicCastToGenerated<const RaftMessageResponse>(
-          &from);
-  if (source == NULL) {
-    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
-  } else {
-    MergeFrom(*source);
-  }
-}
-
-void RaftMessageResponse::MergeFrom(const RaftMessageResponse& from) {
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
-  if (from._internal_metadata_.have_unknown_fields()) {
-    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
-  }
-}
-
-void RaftMessageResponse::CopyFrom(const ::google::protobuf::Message& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-void RaftMessageResponse::CopyFrom(const RaftMessageResponse& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool RaftMessageResponse::IsInitialized() const {
-
-  return true;
-}
-
-void RaftMessageResponse::Swap(RaftMessageResponse* other) {
-  if (other == this) return;
-  InternalSwap(other);
-}
-void RaftMessageResponse::InternalSwap(RaftMessageResponse* other) {
-  _internal_metadata_.Swap(&other->_internal_metadata_);
-  std::swap(_cached_size_, other->_cached_size_);
-}
-
-::google::protobuf::Metadata RaftMessageResponse::GetMetadata() const {
-  protobuf_AssignDescriptorsOnce();
-  ::google::protobuf::Metadata metadata;
-  metadata.descriptor = RaftMessageResponse_descriptor_;
-  metadata.reflection = RaftMessageResponse_reflection_;
-  return metadata;
-}
-
-#if PROTOBUF_INLINE_NOT_IN_HEADERS
-// RaftMessageResponse
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 

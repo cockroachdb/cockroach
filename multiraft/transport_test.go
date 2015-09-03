@@ -82,7 +82,7 @@ func (lt *localInterceptableTransport) handleMessage(msg *RaftMessageRequest) {
 	if !ok {
 		return
 	}
-	err := srv.RaftMessage(msg, nil)
+	_, err := srv.RaftMessage(msg)
 	if err == ErrStopped {
 		return
 	} else if err != nil {

@@ -18,7 +18,7 @@ import math "math"
 import cockroach_proto "github.com/cockroachdb/cockroach/proto"
 import cockroach_storage_engine "github.com/cockroachdb/cockroach/storage/engine"
 
-// discarding unused import gogoproto "gogoproto"
+// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
 import github_com_cockroachdb_cockroach_proto "github.com/cockroachdb/cockroach/proto"
 
@@ -265,10 +265,10 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			postIndex := iNdEx + msglen
 			if msglen < 0 {
 				return ErrInvalidLengthStatus
 			}
+			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -357,10 +357,10 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			postIndex := iNdEx + msglen
 			if msglen < 0 {
 				return ErrInvalidLengthStatus
 			}
+			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}

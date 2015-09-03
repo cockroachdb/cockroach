@@ -37,6 +37,8 @@ PROTOC_PLUGIN   := $(GOPATH_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
 GOGOPROTO_PROTO := $(GOGOPROTO_ROOT)/gogoproto/gogo.proto
 GOGOPROTO_PATH  := $(GOGOPROTO_ROOT):$(GOGOPROTO_ROOT)/protobuf
 
+COREOS_PATH := $(GITHUB_ROOT)/coreos
+
 GO_PROTOS  := $(sort $(shell find $(REPO_ROOT) -not -path '*/.*' -name *.proto -type f))
 GO_SOURCES  := $(GO_PROTOS:%.proto=%.pb.go)
 
@@ -51,13 +53,16 @@ ENGINE_CPP_SOURCES := $(ENGINE_CPP_PROTOS:%.proto=%.pb.cc)
 .PHONY: protos
 protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES)
 
+REPO_NAME := cockroachdb
+IMPORT_PREFIX := github.com/$(REPO_NAME)/
+
 $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC_PLUGIN)
 	find $(REPO_ROOT) -not -path '*/.*' -name *.pb.go | xargs rm
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
-	  $(PROTOC) -I.:$(GOGOPROTO_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=import_prefix=github.com/cockroachdb/:$(ORG_ROOT) $$dir/*.proto; \
-	  sed -i.bak 's/import math "github\.com\/cockroachdb\/math"//g' $$dir/*.pb.go; \
-	  sed -i.bak -E 's/github\.com\/cockroachdb\/(gogoproto|github\.com)/\1/g' $$dir/*.pb.go; \
-	  sed -i.bak -E 's/github\.com\/cockroachdb\/(errors|fmt|io)/\1/g' $$dir/*.pb.go; \
+	  $(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
+	  sed -i.bak 's!import math "$(IMPORT_PREFIX)math"! !g' $$dir/*.pb.go; \
+	  sed -i.bak -E 's!$(IMPORT_PREFIX)(errors|fmt|io|github\.com)!\1!g' $$dir/*.pb.go; \
+	  sed -i.bak -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $$dir/*.pb.go; \
 	  rm -f $$dir/*.bak; \
 	  gofmt -s -w $$dir/*.pb.go; \
 	done

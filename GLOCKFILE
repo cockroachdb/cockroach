@@ -16,11 +16,11 @@ github.com/cockroachdb/c-protobuf 6a18bfcdd5169966cd1235edb71d749c950216e8
 github.com/cockroachdb/c-rocksdb 7fc876fe79b96de0e25069c9ae27e6444637bd54
 github.com/cockroachdb/c-snappy 618733f9e5bab8463b9049117a335a7a1bfc9fd5
 github.com/cockroachdb/yacc ebd0d590252fe4f6d9b5053511875810dd1f91a1
-github.com/coreos/etcd a94118893c184cf902122d4034defa40f0f8b324
+github.com/coreos/etcd ae2b43b588fa39fb99598d03a7a554549595bddd
 github.com/cpuguy83/go-md2man 71acacd42f85e5e82f70a55327789582a5200a90
 github.com/docker/docker ba019dc0d0a89b3152fc3791495af2ddf18e173d
 github.com/elazarl/go-bindata-assetfs d5cac425555ca5cf00694df246e04f05e6a55150
-github.com/gogo/protobuf 6cab0cc9fec8f660c2cee46e1306ffc727261956
+github.com/gogo/protobuf 932b70afa8b0bf4a8e167fdf0c3367cebba45903
 github.com/golang/lint 7b7f4364ff76043e6c3610281525fabc0d90f0e4
 github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75

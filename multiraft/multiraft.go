@@ -175,13 +175,12 @@ func (m *MultiRaft) Start() {
 // RaftMessage implements ServerInterface; this method is called by net/rpc
 // when we receive a message. It returns as soon as the request has been
 // enqueued without waiting for it to be processed.
-func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest,
-	resp *RaftMessageResponse) error {
+func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest) (*RaftMessageResponse, error) {
 	select {
 	case ms.reqChan <- req:
-		return nil
+		return nil, nil
 	case <-ms.stopper.ShouldStop():
-		return ErrStopped
+		return nil, ErrStopped
 	}
 }
 

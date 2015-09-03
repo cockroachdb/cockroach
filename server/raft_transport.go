@@ -67,7 +67,7 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 
 	if t.rpcServer != nil {
 		if err := t.rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
-			t.RaftMessage, &proto.RaftMessageRequest{}); err != nil {
+			t.RaftMessage, &multiraft.RaftMessageRequest{}); err != nil {
 			return nil, err
 		}
 	}
@@ -77,13 +77,7 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 
 // RaftMessage proxies the incoming request to the listening server interface.
 func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogoproto.Message, error)) {
-	protoReq := args.(*proto.RaftMessageRequest)
-	// Convert from proto to internal formats.
-	req := &multiraft.RaftMessageRequest{GroupID: protoReq.GroupID}
-	if err := req.Message.Unmarshal(protoReq.Msg); err != nil {
-		callback(nil, err)
-		return
-	}
+	req := args.(*multiraft.RaftMessageRequest)
 
 	t.mu.Lock()
 	server, ok := t.servers[proto.RaftNodeID(req.Message.To)]
@@ -101,8 +95,8 @@ func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogopro
 	// (ab)using the async handler mechanism to get this (synchronous)
 	// handler called in the RPC server's goroutine so we can preserve
 	// order of incoming messages.
-	err := server.RaftMessage(req, &multiraft.RaftMessageResponse{})
-	callback(&proto.RaftMessageResponse{}, err)
+	resp, err := server.RaftMessage(req)
+	callback(resp, err)
 }
 
 // Listen implements the multiraft.Transport interface by registering a ServerInterface
@@ -164,7 +158,7 @@ func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 
 	done := make(chan *gorpc.Call, cap(ch))
 	var req *multiraft.RaftMessageRequest
-	protoResp := &proto.RaftMessageResponse{}
+	protoResp := &multiraft.RaftMessageResponse{}
 	for {
 		select {
 		case <-t.rpcContext.Stopper.ShouldStop():
@@ -188,16 +182,9 @@ func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 			return
 		}
 
-		// Convert to proto format.
-		msg, err := req.Message.Marshal()
-		if err != nil {
-			log.Errorf("could not marshal message: %s", err)
-			continue
-		}
-
-		client.Go(raftMessageName, &proto.RaftMessageRequest{
+		client.Go(raftMessageName, &multiraft.RaftMessageRequest{
 			GroupID: req.GroupID,
-			Msg:     msg,
+			Message: req.Message,
 		}, protoResp, done)
 	}
 }

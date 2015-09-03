@@ -21,7 +21,7 @@ import cockroach_proto1 "github.com/cockroachdb/cockroach/proto"
 // discarding unused import cockroach_proto "github.com/cockroachdb/cockroach/proto"
 import cockroach_util "github.com/cockroachdb/cockroach/util"
 
-// discarding unused import gogoproto "gogoproto"
+// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
 import github_com_cockroachdb_cockroach_proto "github.com/cockroachdb/cockroach/proto"
 
@@ -494,10 +494,10 @@ func (m *Request) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			postIndex := iNdEx + msglen
 			if msglen < 0 {
 				return ErrInvalidLengthGossip
 			}
+			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -521,10 +521,10 @@ func (m *Request) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			postIndex := iNdEx + msglen
 			if msglen < 0 {
 				return ErrInvalidLengthGossip
 			}
+			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -564,10 +564,10 @@ func (m *Request) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			postIndex := iNdEx + msglen
 			if msglen < 0 {
 				return ErrInvalidLengthGossip
 			}
+			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -595,10 +595,11 @@ func (m *Request) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			if stringLenmapkey < 0 {
+			intStringLenmapkey := int(stringLenmapkey)
+			if intStringLenmapkey < 0 {
 				return ErrInvalidLengthGossip
 			}
-			postStringIndexmapkey := iNdEx + int(stringLenmapkey)
+			postStringIndexmapkey := iNdEx + intStringLenmapkey
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -627,6 +628,9 @@ func (m *Request) Unmarshal(data []byte) error {
 				if b < 0x80 {
 					break
 				}
+			}
+			if mapmsglen < 0 {
+				return ErrInvalidLengthGossip
 			}
 			postmsgIndex := iNdEx + mapmsglen
 			if mapmsglen < 0 {
@@ -722,10 +726,10 @@ func (m *Response) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			postIndex := iNdEx + msglen
 			if msglen < 0 {
 				return ErrInvalidLengthGossip
 			}
+			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -749,10 +753,10 @@ func (m *Response) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			postIndex := iNdEx + msglen
 			if msglen < 0 {
 				return ErrInvalidLengthGossip
 			}
+			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -795,10 +799,10 @@ func (m *Response) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			postIndex := iNdEx + msglen
 			if msglen < 0 {
 				return ErrInvalidLengthGossip
 			}
+			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -826,10 +830,11 @@ func (m *Response) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			if stringLenmapkey < 0 {
+			intStringLenmapkey := int(stringLenmapkey)
+			if intStringLenmapkey < 0 {
 				return ErrInvalidLengthGossip
 			}
-			postStringIndexmapkey := iNdEx + int(stringLenmapkey)
+			postStringIndexmapkey := iNdEx + intStringLenmapkey
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -858,6 +863,9 @@ func (m *Response) Unmarshal(data []byte) error {
 				if b < 0x80 {
 					break
 				}
+			}
+			if mapmsglen < 0 {
+				return ErrInvalidLengthGossip
 			}
 			postmsgIndex := iNdEx + mapmsglen
 			if mapmsglen < 0 {
@@ -937,10 +945,10 @@ func (m *Info) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			postIndex := iNdEx + msglen
 			if msglen < 0 {
 				return ErrInvalidLengthGossip
 			}
+			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
