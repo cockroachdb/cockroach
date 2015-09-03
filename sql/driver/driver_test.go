@@ -258,7 +258,6 @@ func TestInsecure(t *testing.T) {
 	if err := s.Start(); err != nil {
 		t.Fatalf("Could not start server: %v", err)
 	}
-	t.Logf("Test server listening on %s: %s", s.Ctx.RequestScheme(), s.ServingAddr())
 	defer s.Stop()
 
 	// We can't attempt a connection through HTTPS since the client just retries forever.

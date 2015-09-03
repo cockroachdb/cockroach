@@ -34,6 +34,7 @@ var defaultRetryOptions = retry.Options{
 	InitialBackoff: 50 * time.Millisecond,
 	MaxBackoff:     5 * time.Second,
 	Multiplier:     2,
+	MaxRetries:     2,
 }
 
 // Sender is an interface for sending a request to a SQL database backend.

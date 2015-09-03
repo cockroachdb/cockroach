@@ -21,9 +21,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -153,7 +153,7 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// Endpoint that enforces client auth (see: server/authentication_test.go)
-	req, err = http.NewRequest("GET", "https://"+s.ServingAddr()+kv.DBPrefix+"Get", nil)
+	req, err = http.NewRequest("GET", "https://"+s.ServingAddr()+driver.Endpoint, nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}

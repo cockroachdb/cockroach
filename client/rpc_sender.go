@@ -18,6 +18,7 @@
 package client
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 
@@ -29,12 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func init() {
-	f := func(u *url.URL, ctx *base.Context, retryOpts retry.Options) (Sender, error) {
+	f := func(u *url.URL, ctx *base.Context, stopper *stop.Stopper, retryOpts retry.Options) (Sender, error) {
 		ctx.Insecure = (u.Scheme != "rpcs")
-		return newRPCSender(u.Host, ctx, retryOpts)
+		return newRPCSender(u.Host, ctx, stopper, retryOpts)
 	}
 	RegisterSender("rpc", f)
 	RegisterSender("rpcs", f)
@@ -50,7 +52,7 @@ type rpcSender struct {
 }
 
 // newRPCSender returns a new instance of rpcSender.
-func newRPCSender(server string, context *base.Context, retryOpts retry.Options) (*rpcSender, error) {
+func newRPCSender(server string, context *base.Context, stopper *stop.Stopper, retryOpts retry.Options) (*rpcSender, error) {
 	addr, err := net.ResolveTCPAddr("tcp", server)
 	if err != nil {
 		return nil, err
@@ -58,8 +60,13 @@ func newRPCSender(server string, context *base.Context, retryOpts retry.Options)
 
 	if context.Insecure {
 		log.Warning("running in insecure mode, this is strongly discouraged. See --insecure and --certs.")
+	} else {
+		if _, err := context.GetClientTLSConfig(); err != nil {
+			return nil, err
+		}
 	}
-	ctx := rpc.NewContext(context, hlc.NewClock(hlc.UnixNano), nil)
+
+	ctx := rpc.NewContext(context, hlc.NewClock(hlc.UnixNano), stopper)
 	client := rpc.NewClient(addr, ctx)
 	return &rpcSender{
 		client:    client,
@@ -74,17 +81,19 @@ func newRPCSender(server string, context *base.Context, retryOpts retry.Options)
 // through and been executed successfully. We retry here to eventually get
 // through with the same client command ID and be given the cached response.
 func (s *rpcSender) Send(_ context.Context, call proto.Call) {
+	method := fmt.Sprintf("Server.%s", call.Args.Method())
+
 	var err error
 	for r := retry.Start(s.retryOpts); r.Next(); {
 		select {
 		case <-s.client.Healthy():
 		default:
-			log.Warningf("client %s is unhealthy; retrying", s.client)
+			err = fmt.Errorf("failed to send RPC request %s: client is unhealthy", method)
+			log.Warning(err)
 			continue
 		}
 
-		method := call.Args.Method().String()
-		if err = s.client.Call("Server."+method, call.Args, call.Reply); err != nil {
+		if err = s.client.Call(method, call.Args, call.Reply); err != nil {
 			// Assume all errors sending request are retryable. The actual
 			// number of things that could go wrong is vast, but we don't
 			// want to miss any which should in theory be retried with the
@@ -92,14 +101,13 @@ func (s *rpcSender) Send(_ context.Context, call proto.Call) {
 			// there's visiblity that this is happening. Some of the errors
 			// we'll sweep up in this net shouldn't be retried, but we can't
 			// really know for sure which.
-			log.Warningf("failed to send RPC request %s: %v", method, err)
+			log.Warningf("failed to send RPC request %s: %s", method, err)
 			continue
 		}
 
 		// On successful post, we're done with retry loop.
 		break
 	}
-
 	if err != nil {
 		call.Reply.Header().SetGoError(err)
 	}

@@ -154,7 +154,7 @@ func TestHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
-	url := testContext.RequestScheme() + "://" + s.ServingAddr() + healthPath
+	url := testContext.HTTPRequestScheme() + "://" + s.ServingAddr() + healthPath
 	httpClient, err := testContext.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -190,10 +190,10 @@ func TestPlainHTTPServer(t *testing.T) {
 	defer s.Stop()
 
 	// Get a plain http client using the same context.
-	if ctx.RequestScheme() != "http" {
-		t.Fatalf("expected context.RequestScheme == \"http\", got: %s", ctx.RequestScheme())
+	if ctx.HTTPRequestScheme() != "http" {
+		t.Fatalf("expected context.HTTPRequestScheme == \"http\", got: %s", ctx.HTTPRequestScheme())
 	}
-	url := ctx.RequestScheme() + "://" + s.ServingAddr() + healthPath
+	url := ctx.HTTPRequestScheme() + "://" + s.ServingAddr() + healthPath
 	httpClient, err := ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -213,10 +213,10 @@ func TestPlainHTTPServer(t *testing.T) {
 	}
 
 	// Try again with a https client (testContext is one)
-	if testContext.RequestScheme() != "https" {
-		t.Fatalf("expected context.RequestScheme == \"http\", got: %s", testContext.RequestScheme())
+	if testContext.HTTPRequestScheme() != "https" {
+		t.Fatalf("expected context.HTTPRequestScheme == \"http\", got: %s", testContext.HTTPRequestScheme())
 	}
-	url = testContext.RequestScheme() + "://" + s.ServingAddr() + healthPath
+	url = testContext.HTTPRequestScheme() + "://" + s.ServingAddr() + healthPath
 	httpClient, err = ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -264,7 +264,7 @@ func TestAcceptEncoding(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+s.ServingAddr()+healthPath, nil)
+		req, err := http.NewRequest("GET", testContext.HTTPRequestScheme()+"://"+s.ServingAddr()+healthPath, nil)
 		if err != nil {
 			t.Fatalf("could not create request: %s", err)
 		}
@@ -439,11 +439,11 @@ func TestSQLServer(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
+
 	// sendURL sends a request to the server and returns a StatusCode
 	sendURL := func(t *testing.T, command string, body []byte) int {
-		url := fmt.Sprintf("%s://%s@%s%s%s?certs=test_certs",
-			testContext.RequestScheme(),
-			security.RootUser,
+		url := fmt.Sprintf("%s://%s%s%s?certs=test_certs",
+			testContext.HTTPRequestScheme(),
 			s.ServingAddr(),
 			driver.Endpoint,
 			command)

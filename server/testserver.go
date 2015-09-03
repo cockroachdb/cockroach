@@ -49,7 +49,6 @@ func StartTestServer(t util.Tester) *TestServer {
 		}
 	}
 
-	log.Infof("Test server listening on %s: %s", s.Ctx.RequestScheme(), s.ServingAddr())
 	return s
 }
 
@@ -93,6 +92,11 @@ type TestServer struct {
 	// server is the embedded Cockroach server struct.
 	*Server
 	StoresPerNode int
+}
+
+// Stopper returns the embedded server's Stopper.
+func (ts *TestServer) Stopper() *stop.Stopper {
+	return ts.stopper
 }
 
 // Gossip returns the gossip instance used by the TestServer.

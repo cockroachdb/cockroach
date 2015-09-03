@@ -33,6 +33,7 @@ import (
 	roachencoding "github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -198,7 +199,7 @@ func NewDBWithPriority(sender Sender, userPriority int32) *DB {
 //
 // The priority parameter can be used to override the default priority for
 // operations.
-func Open(addr string) (*DB, error) {
+func Open(stopper *stop.Stopper, addr string) (*DB, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
@@ -214,7 +215,7 @@ func Open(addr string) (*DB, error) {
 		ctx.Certs = dir[0]
 	}
 
-	sender, err := newSender(u, ctx)
+	sender, err := newSender(u, ctx, stopper)
 	if err != nil {
 		return nil, err
 	}

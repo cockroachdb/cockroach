@@ -38,7 +38,8 @@ func TestPut(t *testing.T) {
 	l.Start()
 	defer l.Stop()
 
-	db := makeDBClient(t, l, 0)
+	db, dbStopper := makeDBClient(t, l, 0)
+	defer dbStopper.Stop()
 	if err := configutil.SetDefaultRangeMaxBytes(db, *rangeMaxBytes); err != nil {
 		t.Fatal(err)
 	}

@@ -33,8 +33,10 @@ const (
 	defaultInsecure = false
 	defaultCertsDir = "certs"
 	defaultUser     = security.RootUser
-	plainScheme     = "http"
-	sslScheme       = "https"
+	rpcScheme       = "rpc"
+	rpcsScheme      = "rpcs"
+	httpScheme      = "http"
+	httpsScheme     = "https"
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
@@ -77,12 +79,20 @@ func (ctx *Context) InitDefaults() {
 	ctx.User = defaultUser
 }
 
-// RequestScheme returns "http" or "https" based on the value of Insecure.
-func (ctx *Context) RequestScheme() string {
+// RPCRequestScheme returns "rpc" or "rpcs" based on the value of Insecure.
+func (ctx *Context) RPCRequestScheme() string {
 	if ctx.Insecure {
-		return plainScheme
+		return rpcScheme
 	}
-	return sslScheme
+	return rpcsScheme
+}
+
+// HTTPRequestScheme returns "http" or "https" based on the value of Insecure.
+func (ctx *Context) HTTPRequestScheme() string {
+	if ctx.Insecure {
+		return httpScheme
+	}
+	return httpsScheme
 }
 
 // GetClientTLSConfig returns the context client TLS config, initializing it if needed.

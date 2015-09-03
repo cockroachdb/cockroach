@@ -70,7 +70,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	jI, err := getJSON(s.Ctx.RequestScheme() + "://" + s.ServingAddr() + debugEndpoint + "vars")
+	jI, err := getJSON(s.Ctx.HTTPRequestScheme() + "://" + s.ServingAddr() + debugEndpoint + "vars")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestAdminDebugPprof(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	body, err := getText(s.Ctx.RequestScheme() + "://" + s.ServingAddr() + debugEndpoint + "pprof/block")
+	body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.ServingAddr() + debugEndpoint + "pprof/block")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ range_max_bytes: 67108864
 	}
 	for i, test := range testData {
 		re := regexp.MustCompile(test.expErr)
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", s.Ctx.RequestScheme(), s.ServingAddr(), zonePathPrefix, "foo"), strings.NewReader(test.zone))
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", s.Ctx.HTTPRequestScheme(), s.ServingAddr(), zonePathPrefix, "foo"), strings.NewReader(test.zone))
 		if err != nil {
 			t.Fatal(err)
 		}

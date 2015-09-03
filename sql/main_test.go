@@ -87,7 +87,7 @@ func setup(t *testing.T) (*server.TestServer, *sql.DB, *client.DB) {
 		t.Fatal(err)
 	}
 	// All KV requests need "node" certs.
-	kvDB, err := client.Open(fmt.Sprintf("https://%s@%s?certs=test_certs",
+	kvDB, err := client.Open(s.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=test_certs",
 		security.NodeUser, s.ServingAddr()))
 	if err != nil {
 		t.Fatal(err)

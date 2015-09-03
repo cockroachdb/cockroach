@@ -16,7 +16,7 @@
 // Author: Spencer Kimball (spencer@cockroachlabs.com)
 //         Vivek Menezes (vivek@cockroachlabs.com)
 
-package client
+package driver
 
 import (
 	"bytes"
@@ -34,15 +34,21 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// PostContext is the context passed into the Post function
-type PostContext struct {
+const (
+	// StatusTooManyRequests indicates client should retry due to
+	// server having too many requests.
+	StatusTooManyRequests = 429
+)
+
+// postContext is the context passed into the Post function
+type postContext struct {
 	Server    string // The host:port address of the Cockroach gateway node
 	Endpoint  string
 	Context   *base.Context // The base context: needed for client setup.
 	RetryOpts retry.Options
 }
 
-// HTTPPost posts the req using the HTTP client. The call's method is
+// httpPost posts the req using the HTTP client. The call's method is
 // appended to the endpoint and set as the URL path. The call's arguments
 // are protobuf-serialized and written as the POST body. The content
 // type is set to application/x-protobuf.
@@ -55,7 +61,7 @@ type PostContext struct {
 // failure when in fact the command may go through and execute successfully. We
 // retry here to eventually get through with the same client command ID and be
 // given the cached response.
-func HTTPPost(c PostContext, request, response gogoproto.Message, method fmt.Stringer) error {
+func httpPost(c postContext, request, response gogoproto.Message, method fmt.Stringer) error {
 	// Marshal the args into a request body.
 	body, err := gogoproto.Marshal(request)
 	if err != nil {
@@ -67,7 +73,7 @@ func HTTPPost(c PostContext, request, response gogoproto.Message, method fmt.Str
 		return err
 	}
 
-	url := c.Context.RequestScheme() + "://" + c.Server + c.Endpoint + method.String()
+	url := c.Context.HTTPRequestScheme() + "://" + c.Server + c.Endpoint + method.String()
 
 	var (
 		req  *http.Request

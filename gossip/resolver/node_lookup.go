@@ -76,7 +76,7 @@ func (nl *nodeLookupResolver) GetAddress() (net.Addr, error) {
 
 	nl.exhausted = true
 	// TODO(marc): put common URIs in base and reuse everywhere.
-	url := fmt.Sprintf("%s://%s/_status/details/local", nl.context.RequestScheme(), nl.addr)
+	url := fmt.Sprintf("%s://%s/_status/details/local", nl.context.HTTPRequestScheme(), nl.addr)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err

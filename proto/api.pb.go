@@ -640,8 +640,8 @@ type EndTransactionRequest struct {
 	// False to abort and rollback.
 	Commit bool `protobuf:"varint,2,opt,name=commit" json:"commit"`
 	// Optional commit triggers. Note that commit triggers are for
-	// internal use only and will be ignored if requested through the
-	// public-facing KV API.
+	// internal use only and will cause an error if requested through the
+	// external-facing KV API.
 	InternalCommitTrigger *InternalCommitTrigger `protobuf:"bytes,3,opt,name=internal_commit_trigger" json:"internal_commit_trigger,omitempty"`
 	// List of intents written by the transaction.
 	Intents []Intent `protobuf:"bytes,4,rep,name=intents" json:"intents"`

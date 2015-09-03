@@ -32,7 +32,7 @@ func makeSQLClient() *sql.DB {
 	// TODO(marc): allow passing on the commandline.
 	db, err := sql.Open("cockroach",
 		fmt.Sprintf("%s://%s@%s?certs=%s",
-			context.RequestScheme(),
+			context.HTTPRequestScheme(),
 			security.RootUser,
 			context.Addr,
 			context.Certs))

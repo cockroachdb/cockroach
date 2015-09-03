@@ -22,7 +22,6 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
@@ -39,7 +38,7 @@ func init() {
 // SQL database provided by a Cockroach cluster by connecting
 // via HTTP to a Cockroach node.
 type httpSender struct {
-	ctx client.PostContext
+	ctx postContext
 }
 
 // newHTTPSender returns a new instance of httpSender.
@@ -50,7 +49,7 @@ func newHTTPSender(server string, ctx *base.Context, retryOpts retry.Options) (*
 	}
 
 	return &httpSender{
-		ctx: client.PostContext{
+		ctx: postContext{
 			Server:    server,
 			Endpoint:  Endpoint,
 			Context:   ctx,
@@ -68,5 +67,5 @@ func (s *httpSender) Send(args Request) (Response, error) {
 		args.User = s.ctx.Context.User
 	}
 	reply := args.CreateReply()
-	return reply, client.HTTPPost(s.ctx, &args, &reply, args.Method())
+	return reply, httpPost(s.ctx, &args, &reply, args.Method())
 }

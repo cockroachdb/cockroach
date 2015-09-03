@@ -27,15 +27,19 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util/stop"
 
 	"github.com/spf13/cobra"
 )
 
-func makeDBClient() *client.DB {
+func makeDBClient() (*client.DB, *stop.Stopper) {
+	stopper := stop.NewStopper()
+
 	// TODO(marc): KV endpoints are now restricted to node users.
 	// This should probably be made more explicit.
-	db, err := client.Open(fmt.Sprintf("%s://%s@%s?certs=%s",
-		context.RequestScheme(),
+	db, err := client.Open(stopper, fmt.Sprintf(
+		"%s://%s@%s?certs=%s",
+		context.RPCRequestScheme(),
 		security.NodeUser,
 		context.Addr,
 		context.Certs))
@@ -43,7 +47,7 @@ func makeDBClient() *client.DB {
 		fmt.Fprintf(osStderr, "failed to initialize KV client: %s\n", err)
 		osExit(1)
 	}
-	return db
+	return db, stopper
 }
 
 // unquoteArg unquotes the provided argument using Go double-quoted
@@ -76,10 +80,9 @@ func runGet(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	kvDB := makeDBClient()
-	if kvDB == nil {
-		return
-	}
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
+
 	key := proto.Key(unquoteArg(args[0], false))
 	r, err := kvDB.Get(key)
 	if err != nil {
@@ -120,10 +123,8 @@ func runPut(cmd *cobra.Command, args []string) {
 		)
 	}
 
-	kvDB := makeDBClient()
-	if kvDB == nil {
-		return
-	}
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
 
 	if err := kvDB.Run(&b); err != nil {
 		fmt.Fprintf(osStderr, "put failed: %s\n", err)
@@ -150,10 +151,8 @@ func runCPut(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	kvDB := makeDBClient()
-	if kvDB == nil {
-		return
-	}
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
 
 	key := unquoteArg(args[0], true /* disallow system keys */)
 	value := unquoteArg(args[1], false)
@@ -189,10 +188,9 @@ func runInc(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	kvDB := makeDBClient()
-	if kvDB == nil {
-		return
-	}
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
+
 	amount := 1
 	if len(args) >= 2 {
 		var err error
@@ -233,10 +231,8 @@ func runDel(cmd *cobra.Command, args []string) {
 		b.Del(unquoteArg(arg, true /* disallow system keys */))
 	}
 
-	kvDB := makeDBClient()
-	if kvDB == nil {
-		return
-	}
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
 
 	if err := kvDB.Run(&b); err != nil {
 		fmt.Fprintf(osStderr, "delete failed: %s\n", err)
@@ -262,10 +258,8 @@ func runDelRange(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	kvDB := makeDBClient()
-	if kvDB == nil {
-		return
-	}
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
 
 	if err := kvDB.DelRange(
 		unquoteArg(args[0], true /* disallow system keys */),
@@ -297,10 +291,9 @@ func runScan(cmd *cobra.Command, args []string) {
 	}
 	startKey, endKey := initScanArgs(args)
 
-	kvDB := makeDBClient()
-	if kvDB == nil {
-		return
-	}
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
+
 	rows, err := kvDB.Scan(startKey, endKey, maxResults)
 	if err != nil {
 		fmt.Fprintf(osStderr, "scan failed: %s\n", err)
@@ -330,10 +323,9 @@ func runReverseScan(cmd *cobra.Command, args []string) {
 		return
 	}
 	startKey, endKey := initScanArgs(args)
-	kvDB := makeDBClient()
-	if kvDB == nil {
-		return
-	}
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
+
 	rows, err := kvDB.ReverseScan(startKey, endKey, maxResults)
 	if err != nil {
 		fmt.Fprintf(osStderr, "reverse scan failed: %s\n", err)

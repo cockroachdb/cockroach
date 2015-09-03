@@ -54,7 +54,7 @@ func NewAdminClient(ctx *base.Context, address, configType string) AdminClient {
 
 // adminURI builds a base URI for the embedded 'configType'
 func (a *AdminClient) adminURI() string {
-	return fmt.Sprintf("%s://%s/_admin/%s", a.context.RequestScheme(),
+	return fmt.Sprintf("%s://%s/_admin/%s", a.context.HTTPRequestScheme(),
 		a.address, a.configType)
 }
 
@@ -144,7 +144,7 @@ func (a *AdminClient) do(method, url, contentType, acceptContentType string,
 	client, err := a.context.GetHTTPClient()
 	if err != nil {
 		return nil, util.Errorf("failed to initialize %s client: %s",
-			a.context.RequestScheme(), err)
+			a.context.HTTPRequestScheme(), err)
 	}
 
 	req, err := http.NewRequest(method, url, body)

@@ -50,8 +50,8 @@ func TestClientSSLSettings(t *testing.T) {
 
 	for tcNum, tc := range testCases {
 		ctx := &base.Context{Insecure: tc.insecure, Certs: tc.certs, User: tc.user}
-		if ctx.RequestScheme() != tc.requestScheme {
-			t.Fatalf("#%d: expected RequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.RequestScheme())
+		if ctx.HTTPRequestScheme() != tc.requestScheme {
+			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.HTTPRequestScheme())
 		}
 		tlsConfig, err := ctx.GetClientTLSConfig()
 		if (err == nil) != tc.configSuccess {
@@ -93,8 +93,8 @@ func TestServerSSLSettings(t *testing.T) {
 
 	for tcNum, tc := range testCases {
 		ctx := &base.Context{Insecure: tc.insecure, Certs: tc.certs, User: security.NodeUser}
-		if ctx.RequestScheme() != tc.requestScheme {
-			t.Fatalf("#%d: expected RequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.RequestScheme())
+		if ctx.HTTPRequestScheme() != tc.requestScheme {
+			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.HTTPRequestScheme())
 		}
 		tlsConfig, err := ctx.GetServerTLSConfig()
 		if (err == nil) != tc.configSuccess {

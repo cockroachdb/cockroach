@@ -33,7 +33,7 @@ import (
 
 func setup() (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(nil)
-	db, err := client.Open(fmt.Sprintf("https://%s@%s?certs=test_certs",
+	db, err := client.Open(s.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=test_certs",
 		security.NodeUser,
 		s.ServingAddr()))
 	if err != nil {
@@ -273,10 +273,9 @@ func ExampleDB_Insecure() {
 	if err := s.Start(); err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}
-	log.Infof("Test server listening on %s: %s", s.Ctx.RequestScheme(), s.ServingAddr())
 	defer s.Stop()
 
-	db, err := client.Open("http://foo@" + s.ServingAddr())
+	db, err := client.Open(s.Stopper(), "rpc://foo@"+s.ServingAddr())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -303,14 +302,14 @@ func TestOpenArgs(t *testing.T) {
 		addr      string
 		expectErr bool
 	}{
-		{"https://" + server.TestUser + "@" + s.ServingAddr() + "?certs=test_certs", false},
-		{"https://" + s.ServingAddr() + "?certs=test_certs", false},
-		{"https://" + s.ServingAddr() + "?certs=foo", true},
+		{"rpcs://" + server.TestUser + "@" + s.ServingAddr() + "?certs=test_certs", false},
+		{"rpcs://" + s.ServingAddr() + "?certs=test_certs", false},
+		{"rpcs://" + s.ServingAddr() + "?certs=foo", true},
 		{s.ServingAddr(), true},
 	}
 
 	for _, test := range testCases {
-		_, err := client.Open(test.addr)
+		_, err := client.Open(s.Stopper(), test.addr)
 		if test.expectErr && err == nil {
 			t.Errorf("Open(%q): expected an error; got %v", test.addr, err)
 		} else if !test.expectErr && err != nil {

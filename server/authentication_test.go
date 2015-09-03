@@ -25,7 +25,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/driver"
@@ -126,13 +125,6 @@ func TestSSLEnforcement(t *testing.T) {
 		{"GET", ts.URLPrefix, nil, noCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, insecureContext, false, -1},
 
-		// /kv/db/: kv.DBServer. These are proto reqs. Node certs required.
-		{"POST", kv.DBPrefix + "Get", kvGet, rootCertsContext, true, http.StatusUnauthorized},
-		{"POST", kv.DBPrefix + "Get", kvGet, nodeCertsContext, true, http.StatusOK},
-		{"POST", kv.DBPrefix + "Get", kvGet, testCertsContext, true, http.StatusUnauthorized},
-		{"POST", kv.DBPrefix + "Get", kvGet, noCertsContext, true, http.StatusUnauthorized},
-		{"POST", kv.DBPrefix + "Get", kvGet, insecureContext, false, -1},
-
 		// /sql/: sql.Server. These are proto reqs. The important field is header.User.
 		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(rootCertsContext),
 			rootCertsContext, true, http.StatusOK},
@@ -152,7 +144,7 @@ func TestSSLEnforcement(t *testing.T) {
 			t.Fatalf("[%d]: failed to get http client: %v", tcNum, err)
 		}
 		resp, err := doHTTPReq(t, client, tc.method,
-			fmt.Sprintf("%s://%s%s", tc.ctx.RequestScheme(), s.ServingAddr(), tc.key),
+			fmt.Sprintf("%s://%s%s", tc.ctx.HTTPRequestScheme(), s.ServingAddr(), tc.key),
 			tc.body)
 		if (err == nil) != tc.success {
 			t.Fatalf("[%d]: expected success=%t, got err=%v", tcNum, tc.success, err)
