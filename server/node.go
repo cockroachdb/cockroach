@@ -286,7 +286,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 	bootstraps := list.New()
 
 	if len(engines) == 0 {
-		return util.Error("no engines")
+		return util.Errorf("no engines")
 	}
 	for _, e := range engines {
 		s := storage.NewStore(n.ctx, e, &n.Descriptor)

@@ -476,7 +476,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	util.SucceedsWithin(t, time.Second, func() error {
 		newRng := store.LookupReplica(proto.Key("db1"), nil)
 		if newRng.Desc().RangeID == origRng.Desc().RangeID {
-			return util.Error("expected new range created by split")
+			return util.Errorf("expected new range created by split")
 		}
 		if newRng.GetMaxBytes() != maxBytes {
 			return util.Errorf("expected %d max bytes for the new range, but got %d",

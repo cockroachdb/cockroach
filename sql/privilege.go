@@ -186,9 +186,6 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 // it belongs to a system descriptor, in which case the maximum
 // set of allowed privileges is looked up and applied.
 func (p *PrivilegeDescriptor) Validate(id ID) error {
-	if p == nil {
-		return fmt.Errorf("missing privilege descriptor")
-	}
 	userPriv, ok := p.findUser(security.RootUser)
 	if !ok {
 		return fmt.Errorf("user %s does not have privileges", security.RootUser)

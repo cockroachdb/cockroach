@@ -29,7 +29,7 @@ func NewPseudoSeed() int64 {
 	var seed int64
 	err := binary.Read(crypto_rand.Reader, binary.LittleEndian, &seed)
 	if err != nil {
-		panic(fmt.Errorf("could not read from crypto/rand: %s", err))
+		panic(fmt.Sprintf("could not read from crypto/rand: %s", err))
 	}
 	return seed
 }

@@ -1523,7 +1523,7 @@ func ParseTimestamp(s DString) (DTimestamp, error) {
 		// and it's not clear what are the memory requirements for that.
 		// TODO(vivek): Implement SET TIME ZONE to set a time zone and use
 		// time.ParseInLocation()
-		return DummyTimestamp, util.Error("TODO(vivek): named time zone input not supported")
+		return DummyTimestamp, util.Errorf("TODO(vivek): named time zone input not supported")
 	}
 	// Parse other formats in the future.
 	return DummyTimestamp, err

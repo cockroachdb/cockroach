@@ -1194,7 +1194,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 		return emptyKeyError()
 	}
 	if txn == nil {
-		return util.Error("no txn specified")
+		return util.Errorf("no txn specified")
 	}
 
 	metaKey := MVCCEncodeKey(key)
@@ -1327,7 +1327,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 // txns. Specify max=0 for unbounded resolves.
 func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey proto.Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) (int64, error) {
 	if txn == nil {
-		return 0, util.Error("no txn specified")
+		return 0, util.Errorf("no txn specified")
 	}
 
 	encKey := MVCCEncodeKey(key)

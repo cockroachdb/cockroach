@@ -88,7 +88,7 @@ func (ds *dataSpan) addData(data *proto.InternalTimeSeriesData) error {
 	if len(ds.datas) > 0 {
 		last := ds.datas[len(ds.datas)-1]
 		if rd.offsetAt(0) <= last.offsetAt(len(last.Samples)-1) {
-			return util.Error("data must be added to dataSpan in chronological order")
+			return util.Errorf("data must be added to dataSpan in chronological order")
 		}
 	}
 

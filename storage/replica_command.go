@@ -831,7 +831,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
 	}
 	if args.Now.Equal(proto.ZeroTimestamp) {
-		return reply, util.Error("the field Now must be provided")
+		return reply, util.Errorf("the field Now must be provided")
 	}
 	// Compute heartbeat expiration (all replicas must see the same result).
 	expiry := args.Now
@@ -1261,7 +1261,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, desc *proto.RangeDesc
 	// Ensure that both ranges are collocate by intersecting the store ids from
 	// their replicas.
 	if !replicaSetsEqual(subsumedDesc.GetReplicas(), desc.GetReplicas()) {
-		return reply, util.Error("The two ranges replicas are not collocate")
+		return reply, util.Errorf("The two ranges replicas are not collocate")
 	}
 
 	// Init updated version of existing range descriptor.

@@ -447,7 +447,7 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 	// get the descriptor of the adjacent range to address next.
 	if nextKey, ok := needAnother(desc, isReverseScan); ok {
 		if _, ok := call.Reply.(proto.Combinable); !ok {
-			return nil, nil, util.Error("illegal cross-range operation")
+			return nil, nil, util.Errorf("illegal cross-range operation")
 		}
 		// If there's no transaction and op spans ranges, possibly
 		// re-run as part of a transaction for consistency. The

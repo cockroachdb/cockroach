@@ -600,7 +600,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, args proto.Request) (proto.Re
 		resp, err := r.AdminMerge(*tArgs, r.Desc())
 		return &resp, err
 	default:
-		return nil, util.Error("unrecognized admin command")
+		return nil, util.Errorf("unrecognized admin command")
 	}
 }
 
@@ -618,7 +618,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto
 	if header.ReadConsistency == proto.INCONSISTENT {
 		// But disallow any inconsistent reads within txns.
 		if header.Txn != nil {
-			return nil, util.Error("cannot allow inconsistent reads within a transaction")
+			return nil, util.Errorf("cannot allow inconsistent reads within a transaction")
 		}
 		if header.Timestamp.Equal(proto.ZeroTimestamp) {
 			header.Timestamp = r.rm.Clock().Now()
@@ -627,7 +627,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto
 		r.handleSkippedIntents(args, intents) // even on error
 		return reply, err
 	} else if header.ReadConsistency == proto.CONSENSUS {
-		return nil, util.Error("consensus reads not implemented")
+		return nil, util.Errorf("consensus reads not implemented")
 	}
 
 	// Add the read to the command queue to gate subsequent

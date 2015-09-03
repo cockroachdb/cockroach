@@ -158,7 +158,7 @@ func floatMandE(b []byte, f float64) (int, []byte) {
 	if len(b) < 4 {
 		// The formatted float must be at least 4 bytes ("1e+0") or something
 		// unexpected has occurred.
-		panic(fmt.Errorf("malformed float: %v -> %s", f, b))
+		panic(fmt.Sprintf("malformed float: %v -> %s", f, b))
 	}
 
 	// Parse the exponent.
@@ -172,7 +172,7 @@ func floatMandE(b []byte, f float64) (int, []byte) {
 		e10 = -e10
 	case '+':
 	default:
-		panic(fmt.Errorf("malformed float: %v -> %s", f, b))
+		panic(fmt.Sprintf("malformed float: %v -> %s", f, b))
 	}
 
 	// Strip off the exponent.
