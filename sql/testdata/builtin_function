@@ -46,14 +46,13 @@ SELECT CONCAT() || 'empty'
 empty
 
 query T
-SELECT CONCAT('RoacH', null, 73, 64.532)
+SELECT CONCAT('RoacH', NULL)
 ----
-RoacH7364.532
+RoacH
 
-query T
+statement error CONCAT: argument type unsupported: bool
 SELECT CONCAT('RoacH', false, 64.532, TRUE)
 ----
-RoacHf64.532t
 
 query T
 SELECT SUBSTR('RoacH', 2, 3)
@@ -94,9 +93,18 @@ statement error SUBSTR: negative substring length -1 not allowed
 SELECT SUBSTR('12345', 2, -1)
 
 query T
-SELECT concat_ws(',', 'abcde', 2, NULL, 22)
+SELECT CONCAT_WS(',', 'abcde', NULL)
 ----
-abcde,2,22
+abcde
+
+query T
+SELECT CONCAT_WS(',', 'abcde', '2')
+----
+abcde,2
+
+statement error CONCAT_WS: argument type unsupported: int
+SELECT CONCAT_WS(',', 'abcde', 2, NULL, 22)
+----
 
 query T
 SELECT split_part('abc~@~def~@~ghi', '~@~', 2)
