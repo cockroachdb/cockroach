@@ -45,8 +45,7 @@ func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
 	}
 }
 
-func (s channelServer) RaftMessage(req *multiraft.RaftMessageRequest,
-	resp *multiraft.RaftMessageResponse) error {
+func (s channelServer) RaftMessage(req *multiraft.RaftMessageRequest) (*multiraft.RaftMessageResponse, error) {
 	if s.maxSleep != 0 {
 		// maxSleep simulates goroutine scheduling delays that could
 		// result in messages being processed out of order (in previous
@@ -54,7 +53,7 @@ func (s channelServer) RaftMessage(req *multiraft.RaftMessageRequest,
 		time.Sleep(time.Duration(rand.Int63n(int64(s.maxSleep))))
 	}
 	s.ch <- req
-	return nil
+	return nil, nil
 }
 
 func TestSendAndReceive(t *testing.T) {

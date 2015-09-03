@@ -95,8 +95,8 @@ func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogopro
 	// (ab)using the async handler mechanism to get this (synchronous)
 	// handler called in the RPC server's goroutine so we can preserve
 	// order of incoming messages.
-	err := server.RaftMessage(req, &multiraft.RaftMessageResponse{})
-	callback(&multiraft.RaftMessageResponse{}, err)
+	resp, err := server.RaftMessage(req)
+	callback(resp, err)
 }
 
 // Listen implements the multiraft.Transport interface by registering a ServerInterface

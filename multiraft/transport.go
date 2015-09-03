@@ -54,10 +54,8 @@ type Transport interface {
 }
 
 // ServerInterface is the methods we expose for use by net/rpc.
-// TODO(bdarnell): This interface is now out of step with cockroach/rpc's
-// async interface. Consider refactoring.
 type ServerInterface interface {
-	RaftMessage(req *RaftMessageRequest, resp *RaftMessageResponse) error
+	RaftMessage(req *RaftMessageRequest) (*RaftMessageResponse, error)
 }
 
 var (
@@ -100,8 +98,8 @@ func (lt *localRPCTransport) Listen(id proto.RaftNodeID, server ServerInterface)
 	err := rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
 		func(argsI gogoproto.Message, callback func(gogoproto.Message, error)) {
 			args := argsI.(*RaftMessageRequest)
-			err := server.RaftMessage(args, &RaftMessageResponse{})
-			callback(&RaftMessageResponse{}, err)
+			resp, err := server.RaftMessage(args)
+			callback(resp, err)
 		}, &RaftMessageRequest{})
 	if err != nil {
 		return err
