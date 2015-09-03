@@ -146,10 +146,7 @@ func (tc *testContext) Start(t testing.TB) {
 		// circular dependency between the test sender and the store. The actual
 		// store will be passed to the sender after it is created and bootstrapped.
 		sender := &testSender{}
-		var err error
-		if ctx.DB, err = client.Open("//", client.SenderOpt(sender)); err != nil {
-			t.Fatal(err)
-		}
+		ctx.DB = client.NewDB(sender)
 		tc.store = NewStore(ctx, tc.engine, &proto.NodeDescriptor{NodeID: 1})
 		if err := tc.store.Bootstrap(proto.StoreIdent{
 			ClusterID: "test",

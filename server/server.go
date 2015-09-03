@@ -85,8 +85,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	addr := ctx.Addr
-	_, err := net.ResolveTCPAddr("tcp", addr)
-	if err != nil {
+	if _, err := net.ResolveTCPAddr("tcp", addr); err != nil {
 		return nil, util.Errorf("unable to resolve RPC address %q: %v", addr, err)
 	}
 
@@ -124,10 +123,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper)
-	if s.db, err = client.Open("//", client.SenderOpt(sender)); err != nil {
-		return nil, err
-	}
+	s.db = client.NewDB(sender)
 
+	var err error
 	s.raftTransport, err = newRPCTransport(s.gossip, s.rpc, rpcContext)
 	if err != nil {
 		return nil, err
@@ -136,7 +134,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender)
 	if s.ctx.ExperimentalRPCServer {
-		if err = s.kvDB.RegisterRPC(s.rpc); err != nil {
+		if err := s.kvDB.RegisterRPC(s.rpc); err != nil {
 			return nil, err
 		}
 	}

@@ -49,7 +49,6 @@ import (
 // not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, *hlc.Clock, *Node, *stop.Stopper) {
-	var err error
 	ctx := storage.StoreContext{}
 
 	stopper := stop.NewStopper()
@@ -71,9 +70,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	}
 	ctx.Gossip = g
 	sender := kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock}, g)
-	if ctx.DB, err = client.Open("//", client.SenderOpt(sender)); err != nil {
-		t.Fatal(err)
-	}
+	ctx.DB = client.NewDB(sender)
 	// TODO(bdarnell): arrange to have the transport closed.
 	// (or attach LocalRPCTransport.Close to the stopper)
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)

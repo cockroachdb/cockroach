@@ -159,23 +159,19 @@ func (db *DB) GetSender() Sender {
 	return db.sender
 }
 
-// NewDBWithPriority returns a new DB.
-func NewDBWithPriority(sender Sender, userPriority int32) *DB {
+// NewDB returns a new DB.
+func NewDB(sender Sender) *DB {
 	return &DB{
 		sender:          sender,
-		userPriority:    userPriority,
 		txnRetryOptions: DefaultTxnRetryOptions,
 	}
 }
 
-// Option is the signature for a function which applies an option to a DB.
-type Option func(*DB)
-
-// SenderOpt sets the sender for a DB.
-func SenderOpt(sender Sender) Option {
-	return func(db *DB) {
-		db.sender = sender
-	}
+// NewDBWithPriority returns a new DB.
+func NewDBWithPriority(sender Sender, userPriority int32) *DB {
+	db := NewDB(sender)
+	db.userPriority = userPriority
+	return db
 }
 
 // TODO(pmattis): Allow setting the sender/txn retry options.
@@ -192,8 +188,7 @@ func SenderOpt(sender Sender) Option {
 // efficient than http. The decision between the encrypted (https, rpcs) and
 // unencrypted senders (http, rpc) depends on the settings of the cluster. A
 // given cluster supports either encrypted or unencrypted traffic, but not
-// both. The <sender> can be left unspecified in the URL and set by passing
-// client.SenderOpt.
+// both.
 //
 // If not specified, the <user> field defaults to "root".
 //
@@ -203,7 +198,7 @@ func SenderOpt(sender Sender) Option {
 //
 // The priority parameter can be used to override the default priority for
 // operations.
-func Open(addr string, opts ...Option) (*DB, error) {
+func Open(addr string) (*DB, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
@@ -223,6 +218,9 @@ func Open(addr string, opts ...Option) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	if sender == nil {
+		return nil, fmt.Errorf("\"%s\" no sender specified", addr)
+	}
 
 	db := &DB{
 		sender:          sender,
@@ -237,13 +235,6 @@ func Open(addr string, opts ...Option) (*DB, error) {
 		db.userPriority = int32(p)
 	}
 
-	for _, opt := range opts {
-		opt(db)
-	}
-
-	if db.sender == nil {
-		return nil, fmt.Errorf("\"%s\" no sender specified", addr)
-	}
 	return db, nil
 }
 
