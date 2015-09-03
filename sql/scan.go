@@ -337,7 +337,16 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	if n.err == nil {
 		// Normalize the expression (this will also evaluate any branches that are
 		// constant).
-		n.filter, n.err = parser.NormalizeAndTypeCheckExpr(n.filter)
+		n.filter, n.err = parser.NormalizeExpr(n.filter)
+	}
+	if n.err == nil {
+		var whereType parser.Datum
+		whereType, n.err = parser.TypeCheckExpr(n.filter)
+		if n.err == nil {
+			if !(whereType == parser.DummyBool || whereType == parser.DNull) {
+				n.err = fmt.Errorf("argument of WHERE must be type %s, not type %s", parser.DummyBool.Type(), whereType.Type())
+			}
+		}
 	}
 	return n.err
 }
@@ -603,12 +612,7 @@ func (n *scanNode) filterRow() bool {
 		return false
 	}
 
-	v, ok := d.(parser.DBool)
-	if !ok {
-		n.err = fmt.Errorf("WHERE clause did not evaluate to a boolean")
-		return false
-	}
-	return bool(v)
+	return d != parser.DNull && bool(d.(parser.DBool))
 }
 
 // renderRow renders the row by evaluating the render expressions. May set

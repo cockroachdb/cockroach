@@ -16,6 +16,10 @@ two four
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 
+query error argument of WHERE must be type bool, not type string
+SELECT * FROM abc WHERE 'hello'
+----
+
 statement ok
 INSERT INTO abc VALUES (1, 2, 3)
 
@@ -24,6 +28,16 @@ SELECT * FROM abc
 ----
 a b c
 1 2 3
+
+query III colnames
+SELECT * FROM abc WHERE NULL
+----
+a b c
+
+query III colnames
+SELECT * FROM abc WHERE a = NULL
+----
+a b c
 
 query IIIIII colnames
 SELECT *,* FROM abc
