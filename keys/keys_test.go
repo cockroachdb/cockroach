@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -120,7 +121,7 @@ func TestRangeMetaKey(t *testing.T) {
 }
 
 // TestMetaPrefixLen asserts that both levels of meta keys have the same prefix length,
-// as MetaScanBounds and ValidateRangeMetaKey depend on this fact.
+// as MetaScanBounds, MetaReverseScanBounds and validateRangeMetaKey depend on this fact.
 func TestMetaPrefixLen(t *testing.T) {
 	if len(Meta1Prefix) != len(Meta2Prefix) {
 		t.Fatalf("Meta1Prefix %q and Meta2Prefix %q are not of equal length!", Meta1Prefix, Meta2Prefix)
@@ -132,25 +133,60 @@ func TestMetaScanBounds(t *testing.T) {
 
 	testCases := []struct {
 		key, expStart, expEnd proto.Key
+		expError              string
 	}{
 		{
 			key:      proto.Key{},
 			expStart: Meta1Prefix,
 			expEnd:   Meta1Prefix.PrefixEnd(),
+			expError: "",
 		},
 		{
-			key:      proto.Key("foo"),
-			expStart: proto.Key("foo").Next(),
-			expEnd:   proto.Key("foo")[:len(Meta1Prefix)].PrefixEnd(),
+			key:      proto.MakeKey(Meta2Prefix, proto.Key("foo")),
+			expStart: proto.MakeKey(Meta2Prefix, proto.Key("foo\x00")),
+			expEnd:   Meta2Prefix.PrefixEnd(),
+			expError: "",
+		},
+		{
+			key:      proto.MakeKey(Meta1Prefix, proto.Key("foo")),
+			expStart: proto.MakeKey(Meta1Prefix, proto.Key("foo\x00")),
+			expEnd:   Meta1Prefix.PrefixEnd(),
+			expError: "",
 		},
 		{
 			key:      proto.MakeKey(Meta1Prefix, proto.KeyMax),
 			expStart: proto.MakeKey(Meta1Prefix, proto.KeyMax),
 			expEnd:   Meta1Prefix.PrefixEnd(),
+			expError: "",
+		},
+		{
+			key:      Meta2KeyMax,
+			expStart: nil,
+			expEnd:   nil,
+			expError: "Meta2KeyMax can't be used as the key of scan",
+		},
+		{
+			key:      Meta2KeyMax.Next(),
+			expStart: nil,
+			expEnd:   nil,
+			expError: "body of meta key range lookup is",
+		},
+		{
+			key:      Meta1KeyMax.Next(),
+			expStart: nil,
+			expEnd:   nil,
+			expError: "body of meta key range lookup is",
 		},
 	}
 	for i, test := range testCases {
-		resStart, resEnd := MetaScanBounds(test.key)
+		resStart, resEnd, err := MetaScanBounds(test.key)
+
+		if err != nil && !testutils.IsError(err, test.expError) {
+			t.Errorf("expected error: %s ; got %s", test.expError, err)
+		} else if err == nil && test.expError != "" {
+			t.Errorf("expected error: %s", test.expError)
+		}
+
 		if !resStart.Equal(test.expStart) || !resEnd.Equal(test.expEnd) {
 			t.Errorf("%d: range bounds %q-%q don't match expected bounds %q-%q for key %q", i, resStart, resEnd, test.expStart, test.expEnd, test.key)
 		}
@@ -162,35 +198,66 @@ func TestMetaReverseScanBounds(t *testing.T) {
 
 	testCases := []struct {
 		key, expStart, expEnd proto.Key
+		expError              string
 	}{
 		{
 			key:      proto.Key{},
 			expStart: nil,
 			expEnd:   nil,
+			expError: "KeyMin and Meta1Prefix can't be used as the key of reverse scan",
 		},
 		{
 			key:      Meta1Prefix,
 			expStart: nil,
 			expEnd:   nil,
+			expError: "KeyMin and Meta1Prefix can't be used as the key of reverse scan",
+		},
+		{
+			key:      Meta2KeyMax.Next(),
+			expStart: nil,
+			expEnd:   nil,
+			expError: "body of meta key range lookup is",
+		},
+		{
+			key:      Meta1KeyMax.Next(),
+			expStart: nil,
+			expEnd:   nil,
+			expError: "body of meta key range lookup is",
 		},
 		{
 			key:      proto.MakeKey(Meta2Prefix, proto.Key("foo")),
 			expStart: Meta2Prefix,
 			expEnd:   proto.MakeKey(Meta2Prefix, proto.Key("foo\x00")),
+			expError: "",
 		},
 		{
 			key:      proto.MakeKey(Meta1Prefix, proto.Key("foo")),
 			expStart: Meta1Prefix,
 			expEnd:   proto.MakeKey(Meta1Prefix, proto.Key("foo\x00")),
+			expError: "",
 		},
 		{
 			key:      Meta2Prefix,
 			expStart: Meta1Prefix,
 			expEnd:   Meta2Prefix.Next(),
+			expError: "",
+		},
+		{
+			key:      Meta2KeyMax,
+			expStart: Meta2Prefix,
+			expEnd:   Meta2KeyMax.Next(),
+			expError: "",
 		},
 	}
 	for i, test := range testCases {
-		resStart, resEnd, _ := MetaReverseScanBounds(test.key)
+		resStart, resEnd, err := MetaReverseScanBounds(test.key)
+
+		if err != nil && !testutils.IsError(err, test.expError) {
+			t.Errorf("expected error: %s ; got %s", test.expError, err)
+		} else if err == nil && test.expError != "" {
+			t.Errorf("expected error: %s", test.expError)
+		}
+
 		if !resStart.Equal(test.expStart) || !resEnd.Equal(test.expEnd) {
 			t.Errorf("%d: range bounds %q-%q don't match expected bounds %q-%q for key %q", i, resStart, resEnd, test.expStart, test.expEnd, test.key)
 		}
@@ -208,11 +275,11 @@ func TestValidateRangeMetaKey(t *testing.T) {
 		{Meta1Prefix[:len(Meta1Prefix)-1], true},
 		{Meta1Prefix, false},
 		{proto.MakeKey(Meta1Prefix, proto.KeyMax), false},
-		{proto.MakeKey(Meta2Prefix, proto.KeyMax), true},
+		{proto.MakeKey(Meta2Prefix, proto.KeyMax), false},
 		{proto.MakeKey(Meta2Prefix, proto.KeyMax.Next()), true},
 	}
 	for i, test := range testCases {
-		err := ValidateRangeMetaKey(test.key)
+		err := validateRangeMetaKey(test.key)
 		if err != nil != test.expErr {
 			t.Errorf("%d: expected error? %t: %s", i, test.expErr, err)
 		}
