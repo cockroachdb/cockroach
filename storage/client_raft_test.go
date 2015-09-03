@@ -924,3 +924,23 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	// Execute another replica change to ensure that MultiRaft has processed the heartbeat just sent.
 	mtc.replicateRange(proto.RangeID(1), 0, 1)
 }
+
+// TestRaftRemoveRace adds and removes a replica repeatedly in an
+// attempt to reproduce a race
+// (https://github.com/cockroachdb/cockroach/issues/1911). Note that
+// 10 repetitions is not enough to reliably reproduce the problem, but
+// it's better than any other tests we have for this (increasing the
+// number of repetitions adds an unacceptable amount of test runtime).
+func TestRaftRemoveRace(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	rangeID := proto.RangeID(1)
+	mtc.replicateRange(rangeID, 0, 1, 2)
+
+	for i := 0; i < 10; i++ {
+		mtc.unreplicateRange(rangeID, 0, 2)
+		mtc.replicateRange(rangeID, 0, 2)
+	}
+}
