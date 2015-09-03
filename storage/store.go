@@ -1470,6 +1470,12 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.RaftCommand) <-chan
 	return s.multiraft.SubmitCommand(cmd.RangeID, string(idKey), data)
 }
 
+// coincideRaftLeader try to make raft leader located in the node which
+// range leader located.
+func (s *Store) coincideRaftLeader(rangeID proto.RangeID) error {
+	return s.multiraft.CoincideRaftLeader(rangeID)
+}
+
 // processRaft processes read/write commands that have been committed
 // by the raft consensus algorithm, dispatching them to the
 // appropriate range. This method starts a goroutine to process Raft

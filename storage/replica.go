@@ -177,6 +177,7 @@ type rangeManager interface {
 	Tracer() *tracer.Tracer
 	SplitRange(origRng, newRng *Replica) error
 	processRangeDescriptorUpdate(rng *Replica) error
+	coincideRaftLeader(rangeID proto.RangeID) error
 }
 
 // A Replica is a contiguous keyspace with writes managed via an
@@ -399,6 +400,9 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 		if lease := r.getLease(); lease.Covers(timestamp) {
 			return r.newNotLeaderError(lease, raftNodeID)
 		}
+	}
+	if err == nil {
+		_ = r.rm.coincideRaftLeader(r.Desc().RangeID)
 	}
 	return err
 }

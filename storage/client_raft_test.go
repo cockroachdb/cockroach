@@ -924,3 +924,50 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	// Execute another replica change to ensure that MultiRaft has processed the heartbeat just sent.
 	mtc.replicateRange(proto.RangeID(1), 0, 1)
 }
+
+// TestCoinRaftLeaderWithRangeLeader verifies that after range leader changed,
+// raft leader also change to match the node which range leader located.
+func TestCoincideRaftLeaderWithRangeLeader(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := startMultiTestContext(t, 2)
+	defer mtc.Stop()
+
+	raftID := proto.RangeID(1)
+	mtc.replicateRange(raftID, 0, 1)
+
+	key := proto.Key("z")
+	store0 := mtc.stores[0]
+	store1 := mtc.stores[1]
+	// Issue an increment for later check.
+	incArgs := incrementArgs(key, 11, raftID, store0.StoreID())
+	if _, err := store0.ExecuteCmd(context.Background(), &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	status := store0.RaftStatus(raftID)
+	if status.Lead != uint64(store0.RaftNodeID()) {
+		t.Fatalf("expect raft leader at %v but at %x", store0.RaftNodeID(), status.Lead)
+	}
+
+	// Expire current leader lease.
+	store0.Clock().Update(store0.Clock().Now().Add(int64(storage.DefaultLeaderLeaseDuration), 0))
+	// Issue an increment to request leader lease changing from store0 to store1.
+	incArgs = incrementArgs(key, 11, raftID, store1.StoreID())
+	if _, err := store1.ExecuteCmd(context.Background(), &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	status = store0.RaftStatus(raftID)
+	if status.Lead != uint64(store1.RaftNodeID()) {
+		t.Fatalf("expect raft leader at %v but at %x", store1.RaftNodeID(), status.Lead)
+	}
+
+	// Read command can be executed on the new range leader.
+	getArgs := getArgs(key, raftID, mtc.stores[1].StoreID())
+	reply, err := mtc.stores[1].ExecuteCmd(context.Background(), &getArgs)
+	if err != nil {
+		t.Fatalf("cannot execute get on range leader, err %v", err)
+	}
+	if getResp := reply.(*proto.GetResponse); mustGetInteger(getResp.Value) != 22 {
+		t.Fatalf("expect get value 22, but got %d", mustGetInteger(getResp.Value))
+	}
+}
