@@ -448,11 +448,12 @@ func TestSQLServer(t *testing.T) {
 
 	// sendURL sends a request to the server and returns a StatusCode
 	sendURL := func(t *testing.T, command string, body []byte) int {
-		url := fmt.Sprintf("%s://%s%s%s?certs=test_certs",
+		url := fmt.Sprintf("%s://%s%s%s?certs=%s",
 			testContext.HTTPRequestScheme(),
 			s.ServingAddr(),
 			driver.Endpoint,
-			command)
+			command,
+			testContext.Certs)
 		httpClient, err := testContext.GetHTTPClient()
 		if err != nil {
 			t.Fatal(err)
@@ -471,7 +472,9 @@ func TestSQLServer(t *testing.T) {
 		defer resp.Body.Close()
 		return resp.StatusCode
 	}
-	// Use the sql administrator (root user).
+	// Use the sql administrator (root user). Note that the certificates
+	// used here will indicate the node user, but that's OK because node
+	// is allowed to act on behalf of all users.
 	body, err := gogoproto.Marshal(&driver.Request{User: security.RootUser})
 	if err != nil {
 		t.Fatal(err)

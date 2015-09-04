@@ -128,10 +128,13 @@ func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
 			return nil
 		}
 
-		// The client certificate user must either be "node", or match the requested used.
-		if certUser == NodeUser || certUser == requestedUser {
-			return nil
+		// The client certificate user must match the requested user,
+		// except if the certificate user is NodeUser, which is allowed to
+		// act on behalf of all other users.
+		if !(certUser == NodeUser || certUser == requestedUser) {
+			return util.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUser)
 		}
-		return util.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUser)
+
+		return nil
 	}, nil
 }
