@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -86,6 +88,10 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 		t.Fatal(err)
 	}
 	return store, stopper
+}
+
+type multiStoreSender struct {
+	*multiTestContext
 }
 
 type multiTestContext struct {
@@ -149,7 +155,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.senders = append(m.senders, kv.NewLocalSender())
 
 	if m.db == nil {
-		sender := kv.NewTxnCoordSender(m.senders[0], m.clock, false, nil, m.clientStopper)
+		sender := kv.NewTxnCoordSender(m, m.clock, false, nil, m.clientStopper)
 		m.db = client.NewDB(sender)
 	}
 
@@ -174,6 +180,29 @@ func (m *multiTestContext) Stop() {
 	// Remove the extra engine refcounts.
 	for _, e := range m.engines {
 		e.Close()
+	}
+}
+
+// Send implements the client.Sender interface. This implementation of "Send" is
+// used to multiplex calls between many local senders in a simple way; It sends
+// the request to each localSender of a multiTestContext in order, stopping if
+// the request succeeds or any error other than RangeKeyMismatch is returned.
+///
+// TODO(mrtracy): remove once #2141 is merged and multiTestContext begins using
+// DistSender. This simple implementation will likely be incorrect in some
+// untested cases and is a temporary measure until DistSender is hooked up.
+func (m *multiTestContext) Send(ctx context.Context, call proto.Call) {
+	for _, ls := range m.senders {
+		ls.Send(ctx, call)
+		if err := call.Reply.Header().GoError(); err != nil {
+			// Try the next localSender if this localSender did not have the
+			// requested range.
+			if _, ok := err.(*proto.RangeKeyMismatchError); ok {
+				call.Reply.Header().SetGoError(nil)
+				continue
+			}
+		}
+		break
 	}
 }
 
