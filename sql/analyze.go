@@ -218,6 +218,9 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr) {
 	if !varEqual(lcmp.Left, rcmp.Left) {
 		return left, right
 	}
+	if lcmp.Operator == parser.In || rcmp.Operator == parser.In {
+		return simplifyOneAndInExpr(lcmp, rcmp)
+	}
 
 	if reflect.TypeOf(lcmp.Right) != reflect.TypeOf(rcmp.Right) {
 		switch lcmp.Operator {
@@ -486,6 +489,115 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr) {
 	}
 
 	return parser.DBool(true), nil
+}
+
+func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parser.Expr) {
+	if left.Operator != parser.In && right.Operator != parser.In {
+		panic(fmt.Sprintf("IN expression required: %s vs %s", left, right))
+	}
+
+	switch left.Operator {
+	case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE:
+		switch right.Operator {
+		case parser.In:
+			left, right = right, left
+		}
+		fallthrough
+
+	case parser.In:
+		ltuple := left.Right.(parser.DTuple)
+		switch right.Operator {
+		case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE:
+			// Our tuple will be sorted (see simplifyComparisonExpr). Binary search
+			// for the right datum.
+			datum := right.Right.(parser.Datum)
+			i := sort.Search(len(ltuple), func(i int) bool {
+				return ltuple[i].(parser.Datum).Compare(datum) >= 0
+			})
+
+			switch right.Operator {
+			case parser.EQ:
+				if i < len(ltuple) && ltuple[i].Compare(datum) == 0 {
+					return right, nil
+				}
+				return parser.DBool(false), nil
+
+			case parser.GT:
+				if i < len(ltuple) {
+					if ltuple[i].Compare(datum) == 0 {
+						ltuple = ltuple[i+1:]
+					} else {
+						ltuple = ltuple[i:]
+					}
+					if len(ltuple) > 0 {
+						return &parser.ComparisonExpr{
+							Operator: parser.In,
+							Left:     left.Left,
+							Right:    ltuple,
+						}, nil
+					}
+				}
+				return parser.DBool(false), nil
+
+			case parser.GE:
+				if i < len(ltuple) {
+					ltuple = ltuple[i:]
+					if len(ltuple) > 0 {
+						return &parser.ComparisonExpr{
+							Operator: parser.In,
+							Left:     left.Left,
+							Right:    ltuple,
+						}, nil
+					}
+				}
+				return parser.DBool(false), nil
+
+			case parser.LT:
+				if i < len(ltuple) {
+					if i == 0 {
+						return parser.DBool(false), nil
+					}
+					return &parser.ComparisonExpr{
+						Operator: parser.In,
+						Left:     left.Left,
+						Right:    ltuple[:i],
+					}, nil
+				}
+				return left, nil
+
+			case parser.LE:
+				if i < len(ltuple) {
+					if ltuple[i].Compare(datum) == 0 {
+						i++
+					}
+					if i == 0 {
+						return parser.DBool(false), nil
+					}
+					return &parser.ComparisonExpr{
+						Operator: parser.In,
+						Left:     left.Left,
+						Right:    ltuple[:i],
+					}, nil
+				}
+				return left, nil
+			}
+
+		case parser.In:
+			// Both of our tuples are sorted. Interesect the lists.
+			rtuple := right.Right.(parser.DTuple)
+			intersection := intersectSorted(ltuple, rtuple)
+			if len(intersection) == 0 {
+				return parser.DBool(false), nil
+			}
+			return &parser.ComparisonExpr{
+				Operator: parser.In,
+				Left:     left.Left,
+				Right:    intersection,
+			}, nil
+		}
+	}
+
+	return left, right
 }
 
 func simplifyOrExpr(n *parser.OrExpr) parser.Expr {
@@ -1031,6 +1143,27 @@ func mergeSorted(a, b parser.DTuple) parser.DTuple {
 			b = b[1:]
 		case 1:
 			r = append(r, b[0])
+			b = b[1:]
+		}
+	}
+	return r
+}
+
+func intersectSorted(a, b parser.DTuple) parser.DTuple {
+	n := len(a)
+	if n > len(b) {
+		n = len(b)
+	}
+	r := make(parser.DTuple, 0, n)
+	for len(a) > 0 && len(b) > 0 {
+		switch a[0].Compare(b[0]) {
+		case -1:
+			a = a[1:]
+		case 0:
+			r = append(r, a[0])
+			a = a[1:]
+			b = b[1:]
+		case 1:
 			b = b[1:]
 		}
 	}

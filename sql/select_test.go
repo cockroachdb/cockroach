@@ -69,17 +69,10 @@ func TestMakeConstraints(t *testing.T) {
 		{`a IN (1,2,3) AND b = 1`, []string{"a", "b"}, `[a IN (1, 2, 3), b = 1]`},
 		{`a = 1 AND b IN (1,2,3)`, []string{"a", "b"}, `[a = 1, b IN (1, 2, 3)]`},
 
-		// Prefer IN over >, <, >= and <=.
-		{`a > 1 AND a IN (1, 2)`, []string{"a"}, `[a IN (1, 2)]`},
-		{`a >= 1 AND a IN (1, 2)`, []string{"a"}, `[a IN (1, 2)]`},
-		{`a < 1 AND a IN (1, 2)`, []string{"a"}, `[a IN (1, 2)]`},
-		{`a <= 1 AND a IN (1, 2)`, []string{"a"}, `[a IN (1, 2)]`},
-		{`a IN (1, 2) AND a > 1`, []string{"a"}, `[a IN (1, 2)]`},
-		{`a IN (1, 2) AND a >= 1`, []string{"a"}, `[a IN (1, 2)]`},
-		{`a IN (1, 2) AND a < 1`, []string{"a"}, `[a IN (1, 2)]`},
-		{`a IN (1, 2) AND a <= 1`, []string{"a"}, `[a IN (1, 2)]`},
-
 		// Prefer EQ over IN.
+		//
+		// TODO(pmattis): We could conceivably propagate the "a = 1" down to the IN
+		// expression and simplify. Doesn't seem worth it at this time.
 		{`a = 1 AND (a, b) IN ((1, 2))`, []string{"a", "b"}, `[a = 1]`},
 		{`(a, b) IN ((1, 2)) AND a = 1`, []string{"a", "b"}, `[a = 1]`},
 
