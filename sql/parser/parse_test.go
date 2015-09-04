@@ -327,6 +327,15 @@ func TestParse2(t *testing.T) {
 	}{
 		{`CREATE INDEX ON a (b ASC, c DESC)`, `CREATE INDEX ON a (b, c)`},
 
+		{`SELECT BOOL 'foo'`, `SELECT CAST('foo' AS BOOL)`},
+		{`SELECT INT 'foo'`, `SELECT CAST('foo' AS INT)`},
+		{`SELECT REAL 'foo'`, `SELECT CAST('foo' AS REAL)`},
+		{`SELECT DECIMAL 'foo'`, `SELECT CAST('foo' AS DECIMAL)`},
+		{`SELECT DATE 'foo'`, `SELECT CAST('foo' AS DATE)`},
+		{`SELECT TIMESTAMP 'foo'`, `SELECT CAST('foo' AS TIMESTAMP)`},
+		{`SELECT INTERVAL 'foo'`, `SELECT CAST('foo' AS INTERVAL)`},
+		{`SELECT CHAR 'foo'`, `SELECT CAST('foo' AS CHAR)`},
+
 		{`SELECT 0xf0 FROM t`, `SELECT 240 FROM t`},
 		{`SELECT 0xF0 FROM t`, `SELECT 240 FROM t`},
 		// Escaped string literals are not always escaped the same because
