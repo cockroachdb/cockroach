@@ -309,6 +309,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a = 1 AND a <= 1`, `a = 1`, true},
 		{`a = 1 AND a <= 2`, `a = 1`, true},
 		{`a = 2 AND a <= 1`, `false`, true},
+		{`a = 1 AND a IN (1)`, `a = 1`, true},
+		{`a = 1 AND a IN (2)`, `false`, true},
+		{`a = 2 AND a IN (1)`, `false`, true},
+		{`a = 2 AND a IN (0, 1, 2, 3, 4)`, `a = 2`, true},
 
 		{`a != 1 AND a = 1`, `false`, true},
 		{`a != 1 AND a = 2`, `a = 2`, true},
@@ -347,6 +351,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a > 1 AND a <= 1`, `false`, true},
 		{`a > 1 AND a <= 2`, `a > 1 AND a <= 2`, true},
 		{`a > 2 AND a <= 1`, `false`, true},
+		{`a > 1 AND a IN (1)`, `false`, true},
+		{`a > 1 AND a IN (2)`, `a IN (2)`, true},
+		{`a > 2 AND a IN (1)`, `false`, true},
+		{`a > 2 AND a IN (0, 1, 2, 3, 4)`, `a IN (3, 4)`, true},
 
 		{`a >= 1 AND a = 1`, `a = 1`, true},
 		{`a >= 1 AND a = 2`, `a = 2`, true},
@@ -366,6 +374,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a >= 1 AND a <= 1`, `a = 1`, true},
 		{`a >= 1 AND a <= 2`, `a >= 1 AND a <= 2`, true},
 		{`a >= 2 AND a <= 1`, `false`, true},
+		{`a >= 1 AND a IN (1)`, `a IN (1)`, true},
+		{`a >= 1 AND a IN (2)`, `a IN (2)`, true},
+		{`a >= 2 AND a IN (1)`, `false`, true},
+		{`a >= 2 AND a IN (0, 1, 2, 3, 4)`, `a IN (2, 3, 4)`, true},
 
 		{`a < 1 AND a = 1`, `false`, true},
 		{`a < 1 AND a = 2`, `false`, true},
@@ -385,6 +397,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a < 1 AND a <= 1`, `a < 1`, true},
 		{`a < 1 AND a <= 2`, `a < 1`, true},
 		{`a < 2 AND a <= 1`, `a <= 1`, true},
+		{`a < 1 AND a IN (1)`, `false`, true},
+		{`a < 1 AND a IN (2)`, `false`, true},
+		{`a < 2 AND a IN (1)`, `a IN (1)`, true},
+		{`a < 2 AND a IN (0, 1, 2, 3, 4)`, `a IN (0, 1)`, true},
 
 		{`a <= 1 AND a = 1`, `a = 1`, true},
 		{`a <= 1 AND a = 2`, `false`, true},
@@ -404,6 +420,17 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a <= 1 AND a <= 1`, `a <= 1`, true},
 		{`a <= 1 AND a <= 2`, `a <= 1`, true},
 		{`a <= 2 AND a <= 1`, `a <= 1`, true},
+		{`a <= 1 AND a IN (1)`, `a IN (1)`, true},
+		{`a <= 1 AND a IN (2)`, `false`, true},
+		{`a <= 2 AND a IN (1)`, `a IN (1)`, true},
+		{`a <= 2 AND a IN (0, 1, 2, 3, 4)`, `a IN (0, 1, 2)`, true},
+
+		{`a IN (1) AND a IN (1)`, `a IN (1)`, true},
+		{`a IN (1) AND a IN (2)`, `false`, true},
+		{`a IN (2) AND a IN (1)`, `false`, true},
+		{`a IN (1) AND a IN (1, 2, 3, 4, 5)`, `a IN (1)`, true},
+		{`a IN (2, 4) AND a IN (1, 2, 3, 4, 5)`, `a IN (2, 4)`, true},
+		{`a IN (4, 2) AND a IN (5, 4, 3, 2, 1)`, `a IN (2, 4)`, true},
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
