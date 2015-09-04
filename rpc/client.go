@@ -20,6 +20,7 @@ package rpc
 import (
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"net/rpc"
 	"sync"
@@ -45,8 +46,8 @@ const (
 )
 
 var (
-	clientMu          sync.Mutex                      // Protects access to the client cache.
-	clients           map[util.UnresolvedAddr]*Client // Cache of RPC clients by server address.
+	clientMu          sync.Mutex         // Protects access to the client cache.
+	clients           map[string]*Client // Cache of RPC clients.
 	heartbeatInterval = defaultHeartbeatInterval
 	// TODO(tschottdorf) err{Closed,Unstarted} are candidates for NodeUnavailableError.
 	errClosed    = errors.New("client is closed")
@@ -65,7 +66,7 @@ var clientRetryOptions = retry.Options{
 
 // init creates a new client RPC cache.
 func init() {
-	clients = map[util.UnresolvedAddr]*Client{}
+	clients = map[string]*Client{}
 }
 
 type internalConn struct {
@@ -75,6 +76,7 @@ type internalConn struct {
 
 // Client is a Cockroach-specific RPC client.
 type Client struct {
+	key       string // cache key for later removal from cache
 	addr      util.UnresolvedAddr
 	Closed    chan struct{}
 	conn      unsafe.Pointer // holds a `internalConn`
@@ -100,7 +102,9 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	clientMu.Lock()
 	defer clientMu.Unlock()
 
-	key := util.MakeUnresolvedAddr(addr.Network(), addr.String())
+	unresolvedAddr := util.MakeUnresolvedAddr(addr.Network(), addr.String())
+
+	key := fmt.Sprintf("%s@%s", context.User, unresolvedAddr)
 
 	if !context.DisableCache {
 		if c, ok := clients[key]; ok {
@@ -115,7 +119,8 @@ func NewClient(addr net.Addr, context *Context) *Client {
 
 	c := &Client{
 		Closed:       make(chan struct{}),
-		addr:         key,
+		key:          key,
+		addr:         unresolvedAddr,
 		tlsConfig:    tlsConfig,
 		clock:        context.localClock,
 		remoteClocks: context.RemoteClocks,
@@ -188,7 +193,7 @@ func (c *Client) Close() {
 	case <-c.Closed:
 		return
 	default:
-		delete(clients, c.addr)
+		delete(clients, c.key)
 		close(c.Closed)
 	}
 }
