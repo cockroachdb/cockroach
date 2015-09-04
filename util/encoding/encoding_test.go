@@ -651,7 +651,7 @@ func TestEncodeDecodeTime(t *testing.T) {
 	// zeroTime. The positive, increasing, duration offsets are automatically
 	// genarated below.
 	testCases := []string{
-		"-1345600h45m34s234ms",
+		"-134560h45m34s234ms0ns",
 		"-600h45m34s234ms",
 		"-590h47m34s234ms",
 		"-310h45m34s234ms",
@@ -705,7 +705,7 @@ func TestEncodeDecodeTime(t *testing.T) {
 	}
 
 	// Check that the encoding hasn't changed.
-	if a, e := lastEncoded, []byte("\x0e\x01 \xbc\x0e\xae\r\r\xf2\x8e\x80"); !bytes.Equal(a, e) {
+	if a, e := lastEncoded, []byte("\r\x1cߤ\xae\r\r\xf2\x8e\x80"); !bytes.Equal(a, e) {
 		t.Errorf("encoding has changed:\nexpected %q\nactual %q", e, a)
 	}
 }
