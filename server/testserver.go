@@ -18,12 +18,12 @@
 package server
 
 import (
+	configutil "github.com/cockroachdb/cockroach/config/util"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -164,7 +164,7 @@ func (ts *TestServer) Start() error {
 		return err
 	}
 
-	if err := testutils.SetDefaultRangeReplicaNum(ts.db, 1); err != nil {
+	if err := configutil.SetDefaultRangeReplicaNum(ts.db, 1); err != nil {
 		return err
 	}
 

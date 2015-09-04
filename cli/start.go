@@ -26,10 +26,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	configutil "github.com/cockroachdb/cockroach/config/util"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -146,7 +146,7 @@ func runStart(cmd *cobra.Command, args []string) {
 	if context.EphemeralSingleNode {
 		// TODO(tamird): pass this to BootstrapRange rather than doing it
 		// at runtime. This was quicker, though.
-		if err := testutils.SetDefaultRangeReplicaNum(makeDBClient(), 1); err != nil {
+		if err := configutil.SetDefaultRangeReplicaNum(makeDBClient(), 1); err != nil {
 			log.Errorf("failed to set default replica number: %s", err)
 		}
 	}
