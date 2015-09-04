@@ -383,6 +383,23 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 	return err
 }
 
+// sendAndFill is a helper which sends the given batch and fills its results,
+// returning the appropriate error which is either from the first failing call,
+// or an "internal" error.
+func sendAndFill(send func(...proto.Call) error, b *Batch) error {
+	// Errors here will be attached to the results, so we will get them from
+	// the call to fillResults in the regular case in which an individual call
+	// fails. But send() also returns its own errors, so there's some dancing
+	// here to do because we want to run fillResults() so that the individual
+	// result gets initialized with an error from the corresponding call.
+	err1 := send(b.calls...)
+	err2 := b.fillResults()
+	if err2 != nil {
+		return err2
+	}
+	return err1
+}
+
 // Run executes the operations queued up within a batch. Before executing any
 // of the operations the batch is first checked to see if there were any errors
 // during its construction (e.g. failure to marshal a proto message).
@@ -398,10 +415,7 @@ func (db *DB) Run(b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	// Errors here will be attached to the results, so we will get them
-	// from the call to fillResults.
-	_ = db.send(b.calls...)
-	return b.fillResults()
+	return sendAndFill(db.send, b)
 }
 
 // Txn executes retryable in the context of a distributed transaction. The
@@ -425,21 +439,24 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 	}
 
 	if len(calls) == 1 {
-		c := calls[0]
-		if c.Args.Header().UserPriority == nil && db.userPriority != 0 {
-			c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
-		}
-		resetClientCmdID(c.Args)
-		db.Sender.Send(context.TODO(), c)
-		err = c.Reply.Header().GoError()
-		if err != nil {
-			if log.V(1) {
-				log.Infof("failed %s: %s", c.Method(), err)
+		// We only send BatchRequest. Everything else needs to go into one.
+		if _, ok := calls[0].Args.(*proto.BatchRequest); ok {
+			c := calls[0]
+			if c.Args.Header().UserPriority == nil && db.userPriority != 0 {
+				c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
 			}
-		} else if c.Post != nil {
-			err = c.Post()
+			resetClientCmdID(c.Args)
+			db.Sender.Send(context.TODO(), c)
+			err = c.Reply.Header().GoError()
+			if err != nil {
+				if log.V(1) {
+					log.Infof("failed %s: %s", c.Method(), err)
+				}
+			} else if c.Post != nil {
+				err = c.Post()
+			}
+			return
 		}
-		return
 	}
 
 	bArgs, bReply := &proto.BatchRequest{}, &proto.BatchResponse{}

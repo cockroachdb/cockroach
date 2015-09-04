@@ -50,15 +50,25 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 	// Send call through wrapped sender.
 	call.Args.Header().Txn = &ts.Proto
 	ts.wrapped.Send(ctx, call)
-	ts.Proto.Update(call.Reply.Header().Txn)
 
-	if err, ok := call.Reply.Header().GoError().(*proto.TransactionAbortedError); ok {
+	err := call.Reply.Header().GoError()
+	// Only successful requests can carry an updated Txn in their response
+	// header. Any error (e.g. a restart) can have a Txn attached to them as
+	// well; those update our local state in the same way for the next attempt.
+	// The exception is if our transaction was aborted and needs to restart
+	// from scratch, in which case we do just that.
+	if err == nil {
+		ts.Proto.Update(call.Reply.Header().Txn)
+	} else if abrtErr, ok := err.(*proto.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
 		ts.Proto = proto.Transaction{
 			Name:      ts.Proto.Name,
 			Isolation: ts.Proto.Isolation,
-			Priority:  err.Txn.Priority, // acts as a minimum priority on restart
+			// Acts as a minimum priority on restart.
+			Priority: abrtErr.Transaction().GetPriority(),
 		}
+	} else if txnErr, ok := err.(proto.TransactionRestartError); ok {
+		ts.Proto.Update(txnErr.Transaction())
 	}
 }
 
@@ -285,10 +295,7 @@ func (txn *Txn) Run(b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	// Errors here will be attached to the results, so we will get them
-	// from the call to fillResults.
-	_ = txn.send(b.calls...)
-	return b.fillResults()
+	return sendAndFill(txn.send, b)
 }
 
 // CommitInBatch executes the operations queued up within a batch and

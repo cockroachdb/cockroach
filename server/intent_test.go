@@ -49,20 +49,22 @@ func TestIntentResolution(t *testing.T) {
 			exp:    []string{"s", "x"},
 		},
 		{
-			// h is local, y is covered by the Range below and z is an explicit
-			// end point.
+			// h is local, y is covered by the Range below but still gets an
+			// explicit request since we do it all in the same batch (didn't
+			// seem worth optimizing), and z is an explicit end point.
 			keys:   []string{"h", "y", "z"},
 			ranges: [][2]string{{"g", "z"}},
-			exp:    []string{`"s"-"z"`, "z"},
+			exp:    []string{`"s"-"z"`, "z" /* optimizable: */, "y"},
 		},
 		{
-			// This test demonstrates a redundancy. Two overlapping key ranges
-			// aren't reduced to a wider range intent for the non-local part,
-			// though the contained range s "a"-"u" and "t"-"u" are.
-			// Might make sense to optimize this away at some point.
+			// This test demonstrates another redundancy. Two overlapping key
+			// ranges aren't reduced to a wider range intent for the non-local
+			// part, though the contained ranges "a"-"u" and "t"-"u" are.
+			// Might make sense to optimize this away at some point, along with
+			// "s" which is also already covered by the range intents.
 			keys:   []string{"q", "s"},
 			ranges: [][2]string{{"a", "w"}, {"b", "x"}, {"t", "u"}},
-			exp:    []string{`"s"-"w"`, `"s"-"x"`},
+			exp:    []string{`"s"-"w"`, `"s"-"x"` /* optimizable: */, `"t"-"u"`, "s"},
 		},
 	}
 
@@ -71,7 +73,7 @@ func TestIntentResolution(t *testing.T) {
 	for i, tc := range testCases {
 		var result []string
 		var mu sync.Mutex
-		closer := make(chan struct{})
+		closer := make(chan struct{}, 2)
 		storage.TestingCommandFilter = func(args proto.Request) error {
 			mu.Lock()
 			defer mu.Unlock()
@@ -98,10 +100,8 @@ func TestIntentResolution(t *testing.T) {
 				case <-s.Server.stopper.ShouldStop():
 					return
 				}
-				select {
-				case closer <- struct{}{}:
-					t.Logf("timeout")
-				}
+				t.Logf("timeout")
+				closer <- struct{}{}
 			}()
 
 			// Split the Range. This should not have any asynchronous intents.

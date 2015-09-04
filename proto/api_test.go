@@ -106,8 +106,12 @@ func TestCombinable(t *testing.T) {
 		Rows:           append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
 	}
 
-	sr1.Combine(sr2)
-	sr1.Combine(&ScanResponse{})
+	if err := sr1.Combine(sr2); err != nil {
+		t.Fatal(err)
+	}
+	if err := sr1.Combine(&ScanResponse{}); err != nil {
+		t.Fatal(err)
+	}
 
 	if !reflect.DeepEqual(sr1, wantedSR) {
 		t.Errorf("wanted %v, got %v", wantedSR, sr1)
@@ -132,8 +136,12 @@ func TestCombinable(t *testing.T) {
 		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 111}},
 		NumDeleted:     20,
 	}
-	dr2.Combine(dr3)
-	dr1.Combine(dr2)
+	if err := dr2.Combine(dr3); err != nil {
+		t.Fatal(err)
+	}
+	if err := dr1.Combine(dr2); err != nil {
+		t.Fatal(err)
+	}
 
 	if !reflect.DeepEqual(dr1, wantedDR) {
 		t.Errorf("wanted %v, got %v", wantedDR, dr1)
