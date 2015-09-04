@@ -15,7 +15,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package testutils
+package util
 
 import (
 	"reflect"
