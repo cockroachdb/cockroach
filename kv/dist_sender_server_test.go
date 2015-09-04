@@ -48,7 +48,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	db := createTestClient(t, s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
@@ -88,7 +88,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 // closing the client.
 func setupMultipleRanges(t *testing.T, splitAt string) (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(t)
-	db := createTestClient(t, s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	// Split the keyspace at the given key.
 	if err := db.AdminSplit(splitAt); err != nil {
@@ -216,7 +216,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 
 func initReverseScanTestEvn(t *testing.T) (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(t)
-	db := createTestClient(t, s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	// Set up multiple ranges:
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
@@ -326,7 +326,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 func TestStartEqualsEndKeyScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
-	db := createTestClient(t, s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 	defer s.Stop()
 
 	// Write key "a".

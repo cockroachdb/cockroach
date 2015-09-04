@@ -327,7 +327,7 @@ func TestTransactionString(t *testing.T) {
 	}
 }
 
-// TestNodeList verifies that its public methods Add() and Contain()
+// TestNodeList verifies that its exported methods Add() and Contain()
 // operate as expected.
 func TestNodeList(t *testing.T) {
 	sn := NodeList{}

@@ -146,9 +146,13 @@ func runStart(cmd *cobra.Command, args []string) {
 	if context.EphemeralSingleNode {
 		// TODO(tamird): pass this to BootstrapRange rather than doing it
 		// at runtime. This was quicker, though.
-		if err := configutil.SetDefaultRangeReplicaNum(makeDBClient(), 1); err != nil {
+		db, clientStopper := makeDBClient()
+
+		if err := configutil.SetDefaultRangeReplicaNum(db, 1); err != nil {
 			log.Errorf("failed to set default replica number: %s", err)
 		}
+
+		clientStopper.Stop()
 	}
 
 	signalCh := make(chan os.Signal, 1)

@@ -49,10 +49,8 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 		startKey = keys.Meta2Prefix
 	}
 
-	kvDB := makeDBClient()
-	if kvDB == nil {
-		return
-	}
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
 	rows, err := kvDB.Scan(startKey, keys.Meta2Prefix.PrefixEnd(), maxResults)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
@@ -92,10 +90,8 @@ func runSplitRange(cmd *cobra.Command, args []string) {
 	}
 
 	key := proto.Key(args[0])
-	kvDB := makeDBClient()
-	if kvDB == nil {
-		return
-	}
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
 	if err := kvDB.AdminSplit(key); err != nil {
 		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
 		osExit(1)
@@ -118,10 +114,8 @@ func runMergeRange(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	kvDB := makeDBClient()
-	if kvDB == nil {
-		return
-	}
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
 	if err := kvDB.AdminMerge(args[0]); err != nil {
 		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)
 		osExit(1)

@@ -356,7 +356,7 @@ func (s *Server) readRequests(codec rpc.ServerCodec, authHook func(proto.Message
 	}()
 
 	for {
-		req, meth, args, err := s.readRequest(codec, authHook)
+		req, meth, args, err := s.readRequest(codec)
 		if err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF || isClosedConnection(err) {
 				return
@@ -373,6 +373,16 @@ func (s *Server) readRequests(codec rpc.ServerCodec, authHook func(proto.Message
 			continue
 		}
 
+		if err := authHook(args, meth.public); err != nil {
+			responses <- serverResponse{
+				req: req,
+				err: err,
+			}
+			// We got an unauthorized request. For now, leave the connection
+			// open. We may want to close it in the future because security.
+			continue
+		}
+
 		wg.Add(1)
 		meth.handler(args, func(reply proto.Message, err error) {
 			responses <- serverResponse{
@@ -386,7 +396,7 @@ func (s *Server) readRequests(codec rpc.ServerCodec, authHook func(proto.Message
 }
 
 // readRequest reads a single request from a connection.
-func (s *Server) readRequest(codec rpc.ServerCodec, authHook func(proto.Message, bool) error) (rpc.Request, method, proto.Message, error) {
+func (s *Server) readRequest(codec rpc.ServerCodec) (rpc.Request, method, proto.Message, error) {
 	var req rpc.Request
 	if err := codec.ReadRequestHeader(&req); err != nil {
 		return req, method{}, nil, err
@@ -401,11 +411,7 @@ func (s *Server) readRequest(codec rpc.ServerCodec, authHook func(proto.Message,
 	if ok {
 		args := reflect.New(m.reqType.Elem()).Interface().(proto.Message)
 
-		if err := codec.ReadRequestBody(args); err != nil {
-			return req, m, args, err
-		}
-
-		return req, m, args, authHook(args, m.public)
+		return req, m, args, codec.ReadRequestBody(args)
 	}
 
 	// If not, consume and discard the input by passing nil to ReadRequestBody.

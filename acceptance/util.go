@@ -26,24 +26,28 @@ import (
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // makeDBClient creates a DB client for node 'i' using the cluster certs dir.
-func makeDBClient(t *testing.T, cluster *localcluster.Cluster, node int) *client.DB {
+func makeDBClient(t *testing.T, cluster *localcluster.Cluster, node int) (*client.DB, *stop.Stopper) {
 	return makeDBClientForUser(t, cluster, security.NodeUser, node)
 }
 
 // makeDBClientForUser creates a DB client for node 'i' and user 'user'.
-func makeDBClientForUser(t *testing.T, cluster *localcluster.Cluster, user string, node int) *client.DB {
+func makeDBClientForUser(t *testing.T, cluster *localcluster.Cluster, user string, node int) (*client.DB, *stop.Stopper) {
+	stopper := stop.NewStopper()
+
 	// We need to run with "InsecureSkipVerify" (set when Certs="" inside the http sender).
 	// This is due to the fact that we're running outside docker, so we cannot use a fixed hostname
 	// to reach the cluster. This in turn means that we do not have a verified server name in the certs.
-	db, err := client.Open("https://" + user + "@" +
-		cluster.Nodes[node].Addr("").String() +
-		"?certs=" + cluster.CertsDir)
+	db, err := client.Open(stopper, "rpcs://"+user+"@"+
+		cluster.Nodes[node].Addr("").String()+
+		"?certs="+cluster.CertsDir)
 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return db
+
+	return db, stopper
 }

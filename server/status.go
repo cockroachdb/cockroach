@@ -176,7 +176,7 @@ func (s *statusServer) proxyRequest(nodeID proto.NodeID, w http.ResponseWriter, 
 	// Create a call to the other node. We might want to consider moving this
 	// to an RPC instead of just proxying it.
 	// Generate the redirect url and copy all the parameters to it.
-	requestURL := fmt.Sprintf("%s://%s%s?%s", s.ctx.RequestScheme(), addr, r.URL.Path, r.URL.RawQuery)
+	requestURL := fmt.Sprintf("%s://%s%s?%s", s.ctx.HTTPRequestScheme(), addr, r.URL.Path, r.URL.RawQuery)
 	req, err := http.NewRequest("GET", requestURL, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

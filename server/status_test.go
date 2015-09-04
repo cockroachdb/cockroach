@@ -50,7 +50,7 @@ func TestStatusLocalStacks(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	body, err := getText(testContext.RequestScheme() + "://" + s.ServingAddr() + "/_status/stacks/local")
+	body, err := getText(testContext.HTTPRequestScheme() + "://" + s.ServingAddr() + "/_status/stacks/local")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestStatusLocalStacks(t *testing.T) {
 		t.Errorf("expected %s to match %s", body, re)
 	}
 
-	body, err = getText(testContext.RequestScheme() + "://" + s.ServingAddr() + "/_status/stacks/1")
+	body, err = getText(testContext.HTTPRequestScheme() + "://" + s.ServingAddr() + "/_status/stacks/1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestStatusJson(t *testing.T) {
 	for _, spec := range testCases {
 		contentTypes := []string{util.JSONContentType, util.ProtoContentType, util.YAMLContentType}
 		for _, contentType := range contentTypes {
-			req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+s.ServingAddr()+spec.keyPrefix, nil)
+			req, err := http.NewRequest("GET", testContext.HTTPRequestScheme()+"://"+s.ServingAddr()+spec.keyPrefix, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -162,7 +162,7 @@ func TestStatusGossipJson(t *testing.T) {
 	}
 	contentTypes := []string{util.JSONContentType, util.ProtoContentType, util.YAMLContentType}
 	for _, contentType := range contentTypes {
-		req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+s.ServingAddr()+"/_status/gossip/local", nil)
+		req, err := http.NewRequest("GET", testContext.HTTPRequestScheme()+"://"+s.ServingAddr()+"/_status/gossip/local", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -217,7 +217,7 @@ func getRequest(t *testing.T, ts TestServer, path string) []byte {
 		t.Fatal(err)
 	}
 
-	url := testContext.RequestScheme() + "://" + ts.ServingAddr() + path
+	url := testContext.HTTPRequestScheme() + "://" + ts.ServingAddr() + path
 	// TODO(bram) #1940: Remove retry logic.
 	for r := retry.Start(retryOptions); r.Next(); {
 		req, err := http.NewRequest("GET", url, nil)

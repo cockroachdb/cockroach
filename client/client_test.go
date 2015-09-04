@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -75,12 +76,12 @@ func (ss *notifyingSender) Send(ctx context.Context, call proto.Call) {
 	}
 }
 
-func createTestClient(addr string) *client.DB {
-	return createTestClientFor(addr, security.NodeUser)
+func createTestClient(stopper *stop.Stopper, addr string) *client.DB {
+	return createTestClientFor(stopper, addr, security.NodeUser)
 }
 
-func createTestClientFor(addr, user string) *client.DB {
-	db, err := client.Open("https://" + user + "@" + addr + "?certs=" + security.EmbeddedCertsDir)
+func createTestClientFor(stopper *stop.Stopper, addr, user string) *client.DB {
+	db, err := client.Open(stopper, "rpcs://"+user+"@"+addr+"?certs="+security.EmbeddedCertsDir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -89,18 +90,17 @@ func createTestClientFor(addr, user string) *client.DB {
 
 // createTestNotifyClient creates a new client which connects using an HTTP
 // sender to the server at addr. It contains a waitgroup to allow waiting.
-func createTestNotifyClient(addr string, priority int) (*client.DB, *notifyingSender) {
-	db, err := client.Open(fmt.Sprintf("https://%s@%s?certs=%s&priority=%d",
+func createTestNotifyClient(stopper *stop.Stopper, addr string, priority int32) (*client.DB, *notifyingSender) {
+	db, err := client.Open(stopper, fmt.Sprintf("rpcs://%s@%s?certs=%s",
 		security.NodeUser,
 		addr,
-		security.EmbeddedCertsDir,
-		priority))
+		security.EmbeddedCertsDir))
 	if err != nil {
 		log.Fatal(err)
 	}
-	sender := &notifyingSender{wrapped: db.Sender}
-	db.Sender = sender
-	return db, sender
+
+	sender := &notifyingSender{wrapped: db.GetSender()}
+	return client.NewDBWithPriority(sender, priority), sender
 }
 
 // TestClientRetryNonTxn verifies that non-transactional client will
@@ -140,15 +140,15 @@ func TestClientRetryNonTxn(t *testing.T) {
 	// intent to be pushed and once with priorities which will not.
 	for i, test := range testCases {
 		key := proto.Key(fmt.Sprintf("key-%d", i))
-		txnPri := 1
-		clientPri := 1
+		var txnPri int32 = 1
+		var clientPri int32 = 1
 		if test.canPush {
 			clientPri = 2
 		} else {
 			txnPri = 2
 		}
 
-		db, sender := createTestNotifyClient(s.ServingAddr(), -clientPri)
+		db, sender := createTestNotifyClient(s.Stopper(), s.ServingAddr(), -clientPri)
 
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan struct{})
@@ -238,7 +238,7 @@ func TestClientRunTransaction(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	defer setTxnRetryBackoff(1 * time.Millisecond)()
-	db := createTestClient(s.ServingAddr())
+	db := createTestClient(s.Stopper(), s.ServingAddr())
 
 	for _, commit := range []bool{true, false} {
 		value := []byte("value")
@@ -296,7 +296,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	db := createTestClient(s.ServingAddr())
+	db := createTestClient(s.Stopper(), s.ServingAddr())
 
 	zoneConfig := &config.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
@@ -327,7 +327,7 @@ func TestClientGetAndPut(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	db := createTestClient(s.ServingAddr())
+	db := createTestClient(s.Stopper(), s.ServingAddr())
 
 	value := []byte("value")
 	if err := db.Put(testUser+"/key", value); err != nil {
@@ -355,7 +355,7 @@ func TestClientEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	db := createTestClient(s.ServingAddr())
+	db := createTestClient(s.Stopper(), s.ServingAddr())
 
 	if err := db.Put(testUser+"/a", []byte{}); err != nil {
 		t.Error(err)
@@ -384,7 +384,7 @@ func TestClientBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	db := createTestClient(s.ServingAddr())
+	db := createTestClient(s.Stopper(), s.ServingAddr())
 
 	keys := []proto.Key{}
 	{
@@ -602,7 +602,7 @@ func TestConcurrentIncrements(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	db := createTestClient(s.ServingAddr())
+	db := createTestClient(s.Stopper(), s.ServingAddr())
 
 	// Convenience loop: Crank up this number for testing this
 	// more often. It'll increase test duration though.
@@ -622,8 +622,8 @@ func TestClientPermissions(t *testing.T) {
 
 	// NodeUser certs are required for all KV operations.
 	// RootUser has no KV privileges whatsoever.
-	nodeClient := createTestClientFor(s.ServingAddr(), security.NodeUser)
-	rootClient := createTestClientFor(s.ServingAddr(), security.RootUser)
+	nodeClient := createTestClientFor(s.Stopper(), s.ServingAddr(), security.NodeUser)
+	rootClient := createTestClientFor(s.Stopper(), s.ServingAddr(), security.RootUser)
 
 	testCases := []struct {
 		path    string
@@ -661,7 +661,7 @@ func TestClientPermissions(t *testing.T) {
 
 const valueSize = 1 << 10
 
-func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *testing.B) (
+func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 	*server.TestServer, *client.DB) {
 	const cacheSize = 8 << 30 // 8 GB
 	loc := fmt.Sprintf("client_bench_%d_%d", numVersions, numKeys)
@@ -673,7 +673,6 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 
 	s := &server.TestServer{}
 	s.Ctx = server.NewTestContext()
-	s.Ctx.ExperimentalRPCServer = true
 	s.SkipBootstrap = exists
 	if !useSSL {
 		s.Ctx.Insecure = true
@@ -683,15 +682,8 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 		b.Fatal(err)
 	}
 
-	var scheme string
-	if useRPC {
-		scheme = "rpcs"
-	} else {
-		scheme = "https"
-	}
-
-	db, err := client.Open(fmt.Sprintf("%s://%s@%s?certs=%s",
-		scheme, security.NodeUser, s.ServingAddr(), s.Ctx.Certs))
+	db, err := client.Open(s.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=%s",
+		security.NodeUser, s.ServingAddr(), s.Ctx.Certs))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -740,10 +732,10 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 // timer). It then performs b.N client scans in increments of numRows
 // keys over all of the data, restarting at the beginning of the
 // keyspace, as many times as necessary.
-func runClientScan(useRPC, useSSL bool, numRows, numVersions int, b *testing.B) {
+func runClientScan(useSSL bool, numRows, numVersions int, b *testing.B) {
 	const numKeys = 100000
 
-	s, db := setupClientBenchData(useRPC, useSSL, numVersions, numKeys, b)
+	s, db := setupClientBenchData(useSSL, numVersions, numKeys, b)
 	defer s.Stop()
 
 	b.SetBytes(int64(numRows * valueSize))
@@ -771,65 +763,33 @@ func runClientScan(useRPC, useSSL bool, numRows, numVersions int, b *testing.B) 
 }
 
 func BenchmarkRPCSSLClientScan1Version1Row(b *testing.B) {
-	runClientScan(true /* RPC */, true /* SSL */, 1, 1, b)
+	runClientScan(true /* SSL */, 1, 1, b)
 }
 
 func BenchmarkRPCSSLClientScan1Version10Rows(b *testing.B) {
-	runClientScan(true /* RPC */, true /* SSL */, 10, 1, b)
+	runClientScan(true /* SSL */, 10, 1, b)
 }
 
 func BenchmarkRPCSSLClientScan1Version100Rows(b *testing.B) {
-	runClientScan(true /* RPC */, true /* SSL */, 100, 1, b)
+	runClientScan(true /* SSL */, 100, 1, b)
 }
 
 func BenchmarkRPCSSLClientScan1Version1000Rows(b *testing.B) {
-	runClientScan(true /* RPC */, true /* SSL */, 1000, 1, b)
-}
-
-func BenchmarkHTTPSSLClientScan1Version1Row(b *testing.B) {
-	runClientScan(false /* HTTP */, true /* SSL */, 1, 1, b)
-}
-
-func BenchmarkHTTPSSLClientScan1Version10Rows(b *testing.B) {
-	runClientScan(false /* HTTP */, true /* SSL */, 10, 1, b)
-}
-
-func BenchmarkHTTPSSLClientScan1Version100Rows(b *testing.B) {
-	runClientScan(false /* HTTP */, true /* SSL */, 100, 1, b)
-}
-
-func BenchmarkHTTPSSLClientScan1Version1000Rows(b *testing.B) {
-	runClientScan(false /* HTTP */, true /* SSL */, 1000, 1, b)
+	runClientScan(true /* SSL */, 1000, 1, b)
 }
 
 func BenchmarkRPCNoSSLClientScan1Version1Row(b *testing.B) {
-	runClientScan(true /* RPC */, false /* NoSSL */, 1, 1, b)
+	runClientScan(false /* NoSSL */, 1, 1, b)
 }
 
 func BenchmarkRPCNoSSLClientScan1Version10Rows(b *testing.B) {
-	runClientScan(true /* RPC */, false /* NoSSL */, 10, 1, b)
+	runClientScan(false /* NoSSL */, 10, 1, b)
 }
 
 func BenchmarkRPCNoSSLClientScan1Version100Rows(b *testing.B) {
-	runClientScan(true /* RPC */, false /* NoSSL */, 100, 1, b)
+	runClientScan(false /* NoSSL */, 100, 1, b)
 }
 
 func BenchmarkRPCNoSSLClientScan1Version1000Rows(b *testing.B) {
-	runClientScan(true /* RPC */, false /* NoSSL */, 1000, 1, b)
-}
-
-func BenchmarkHTTPNoSSLClientScan1Version1Row(b *testing.B) {
-	runClientScan(false /* HTTP */, false /* NoSSL */, 1, 1, b)
-}
-
-func BenchmarkHTTPNoSSLClientScan1Version10Rows(b *testing.B) {
-	runClientScan(false /* HTTP */, false /* NoSSL */, 10, 1, b)
-}
-
-func BenchmarkHTTPNoSSLClientScan1Version100Rows(b *testing.B) {
-	runClientScan(false /* HTTP */, false /* NoSSL */, 100, 1, b)
-}
-
-func BenchmarkHTTPNoSSLClientScan1Version1000Rows(b *testing.B) {
-	runClientScan(false /* HTTP */, false /* NoSSL */, 1000, 1, b)
+	runClientScan(false /* NoSSL */, 1000, 1, b)
 }

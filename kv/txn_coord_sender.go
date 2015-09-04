@@ -502,14 +502,7 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 		// TODO(tschottdorf): this part is awkward. Consider resending here
 		// without starting a new call, which is hard to trace. Plus, the
 		// below depends on default configuration.
-		tmpDB, err := client.Open(
-			fmt.Sprintf("//?priority=%d",
-				call.Args.Header().GetUserPriority()),
-			client.SenderOpt(tc))
-		if err != nil {
-			log.Warning(err)
-			return
-		}
+		tmpDB := client.NewDBWithPriority(tc, call.Args.Header().GetUserPriority())
 		call.Reply.Reset()
 		if err := tmpDB.Txn(func(txn *client.Txn) error {
 			txn.SetDebugName("auto-wrap", 0)

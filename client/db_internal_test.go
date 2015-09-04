@@ -29,7 +29,7 @@ import (
 func TestClientCommandID(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	count := 0
-	db := newDB(newTestSender(func(call proto.Call) {
+	db := NewDB(newTestSender(func(call proto.Call) {
 		count++
 		if call.Args.Header().CmdID.WallTime == 0 {
 			t.Errorf("expected client command ID to be initialized")

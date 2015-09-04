@@ -85,9 +85,9 @@ type Txn struct {
 func NewTxn(db DB) *Txn {
 	txn := &Txn{
 		db:      db,
-		wrapped: db.Sender,
+		wrapped: db.sender,
 	}
-	txn.db.Sender = (*txnSender)(txn)
+	txn.db.sender = (*txnSender)(txn)
 	return txn
 }
 
@@ -285,10 +285,7 @@ func (txn *Txn) Run(b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	// Errors here will be attached to the results, so we will get them
-	// from the call to fillResults.
-	_ = txn.send(b.calls...)
-	return b.fillResults()
+	return sendAndFill(txn.send, b)
 }
 
 // CommitInBatch executes the operations queued up within a batch and

@@ -33,6 +33,7 @@ import (
 	roachencoding "github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -145,7 +146,7 @@ func (r Result) String() string {
 // DB is a database handle to a single cockroach cluster. A DB is safe for
 // concurrent use by multiple goroutines.
 type DB struct {
-	Sender Sender
+	sender Sender
 
 	// userPriority is the default user priority to set on API calls. If
 	// userPriority is set non-zero in call arguments, this value is
@@ -154,14 +155,24 @@ type DB struct {
 	txnRetryOptions retry.Options
 }
 
-// Option is the signature for a function which applies an option to a DB.
-type Option func(*DB)
+// GetSender returns the underlying Sender. Only exported for tests.
+func (db *DB) GetSender() Sender {
+	return db.sender
+}
 
-// SenderOpt sets the sender for a DB.
-func SenderOpt(sender Sender) Option {
-	return func(db *DB) {
-		db.Sender = sender
+// NewDB returns a new DB.
+func NewDB(sender Sender) *DB {
+	return &DB{
+		sender:          sender,
+		txnRetryOptions: DefaultTxnRetryOptions,
 	}
+}
+
+// NewDBWithPriority returns a new DB.
+func NewDBWithPriority(sender Sender, userPriority int32) *DB {
+	db := NewDB(sender)
+	db.userPriority = userPriority
+	return db
 }
 
 // TODO(pmattis): Allow setting the sender/txn retry options.
@@ -178,8 +189,7 @@ func SenderOpt(sender Sender) Option {
 // efficient than http. The decision between the encrypted (https, rpcs) and
 // unencrypted senders (http, rpc) depends on the settings of the cluster. A
 // given cluster supports either encrypted or unencrypted traffic, but not
-// both. The <sender> can be left unspecified in the URL and set by passing
-// client.SenderOpt.
+// both.
 //
 // If not specified, the <user> field defaults to "root".
 //
@@ -189,7 +199,7 @@ func SenderOpt(sender Sender) Option {
 //
 // The priority parameter can be used to override the default priority for
 // operations.
-func Open(addr string, opts ...Option) (*DB, error) {
+func Open(stopper *stop.Stopper, addr string) (*DB, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
@@ -205,13 +215,16 @@ func Open(addr string, opts ...Option) (*DB, error) {
 		ctx.Certs = dir[0]
 	}
 
-	sender, err := newSender(u, ctx)
+	sender, err := newSender(u, ctx, stopper)
 	if err != nil {
 		return nil, err
 	}
+	if sender == nil {
+		return nil, fmt.Errorf("\"%s\" no sender specified", addr)
+	}
 
 	db := &DB{
-		Sender:          sender,
+		sender:          sender,
 		txnRetryOptions: DefaultTxnRetryOptions,
 	}
 
@@ -223,13 +236,6 @@ func Open(addr string, opts ...Option) (*DB, error) {
 		db.userPriority = int32(p)
 	}
 
-	for _, opt := range opts {
-		opt(db)
-	}
-
-	if db.Sender == nil {
-		return nil, fmt.Errorf("\"%s\" no sender specified", addr)
-	}
 	return db, nil
 }
 
@@ -383,6 +389,23 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 	return err
 }
 
+// sendAndFill is a helper which sends the given batch and fills its results,
+// returning the appropriate error which is either from the first failing call,
+// or an "internal" error.
+func sendAndFill(send func(...proto.Call) error, b *Batch) error {
+	// Errors here will be attached to the results, so we will get them from
+	// the call to fillResults in the regular case in which an individual call
+	// fails. But send() also returns its own errors, so there's some dancing
+	// here to do because we want to run fillResults() so that the individual
+	// result gets initialized with an error from the corresponding call.
+	err1 := send(b.calls...)
+	err2 := b.fillResults()
+	if err1 != nil {
+		return err1
+	}
+	return err2
+}
+
 // Run executes the operations queued up within a batch. Before executing any
 // of the operations the batch is first checked to see if there were any errors
 // during its construction (e.g. failure to marshal a proto message).
@@ -398,10 +421,7 @@ func (db *DB) Run(b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	// Errors here will be attached to the results, so we will get them
-	// from the call to fillResults.
-	_ = db.send(b.calls...)
-	return b.fillResults()
+	return sendAndFill(db.send, b)
 }
 
 // Txn executes retryable in the context of a distributed transaction. The
@@ -430,7 +450,7 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 			c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
 		}
 		resetClientCmdID(c.Args)
-		db.Sender.Send(context.TODO(), c)
+		db.sender.Send(context.TODO(), c)
 		err = c.Reply.Header().GoError()
 		if err != nil {
 			if log.V(1) {

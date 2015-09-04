@@ -29,7 +29,7 @@ The simplest way to use the client is through the Run method. Run synchronously
 invokes the call, fills in the the reply and returns an error. The example
 below shows a get and a put.
 
-	db, err := client.Open("https://root@localhost:8080")
+	db, err := client.Open("rpcs://root@localhost:8080")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,7 +49,7 @@ are not guaranteed to have atomic semantics. A transaction must be used to
 guarantee atomicity. A simple example of using a Batch which does two scans in
 parallel and then sends a sequence of puts in parallel:
 
-	db, err := client.Open("https://root@localhost:8080")
+	db, err := client.Open("rpcs://root@localhost:8080")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -91,7 +91,7 @@ invocations are transparently given necessary transactional details, and
 conflicts are handled with backoff/retry loops and transaction restarts as
 necessary. An example of using transactions with parallel writes:
 
-	db, err := client.Open("https://root@localhost:8080")
+	db, err := client.Open("rpcs://root@localhost:8080")
 	if err != nil {
 		log.Fatal(err)
 	}

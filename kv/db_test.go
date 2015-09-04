@@ -28,14 +28,15 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-func createTestClient(t *testing.T, addr string) *client.DB {
-	return createTestClientForUser(t, addr, security.NodeUser)
+func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.DB {
+	return createTestClientForUser(t, stopper, addr, security.NodeUser)
 }
 
-func createTestClientForUser(t *testing.T, addr, user string) *client.DB {
-	db, err := client.Open(fmt.Sprintf("https://%s@%s?certs=%s",
+func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user string) *client.DB {
+	db, err := client.Open(stopper, fmt.Sprintf("rpcs://%s@%s?certs=%s",
 		user, addr, security.EmbeddedCertsDir))
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +51,7 @@ func TestKVDBCoverage(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	db := createTestClient(t, s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 	key := proto.Key("a")
 	value1 := []byte("value1")
 	value2 := []byte("value2")
@@ -145,46 +146,43 @@ func TestKVDBInternalMethods(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	testCases := []struct {
-		args  proto.Request
-		reply proto.Response
-	}{
-		{&proto.HeartbeatTxnRequest{}, &proto.HeartbeatTxnResponse{}},
-		{&proto.GCRequest{}, &proto.GCResponse{}},
-		{&proto.PushTxnRequest{}, &proto.PushTxnResponse{}},
-		{&proto.RangeLookupRequest{}, &proto.RangeLookupResponse{}},
-		{&proto.ResolveIntentRequest{}, &proto.ResolveIntentResponse{}},
-		{&proto.ResolveIntentRangeRequest{}, &proto.ResolveIntentRangeResponse{}},
-		{&proto.MergeRequest{}, &proto.MergeResponse{}},
-		{&proto.TruncateLogRequest{}, &proto.TruncateLogResponse{}},
-		{&proto.LeaderLeaseRequest{}, &proto.LeaderLeaseResponse{}},
+	testCases := []proto.Request{
+		&proto.HeartbeatTxnRequest{},
+		&proto.GCRequest{},
+		&proto.PushTxnRequest{},
+		&proto.RangeLookupRequest{},
+		&proto.ResolveIntentRequest{},
+		&proto.ResolveIntentRangeRequest{},
+		&proto.MergeRequest{},
+		&proto.TruncateLogRequest{},
+		&proto.LeaderLeaseRequest{},
 	}
-	// Verify non-public methods experience bad request errors.
-	db := createTestClient(t, s.ServingAddr())
-	for i, test := range testCases {
-		test.args.Header().Key = proto.Key("a")
-		if proto.IsRange(test.args) {
-			test.args.Header().EndKey = test.args.Header().Key.Next()
+	// Verify internal methods experience bad request errors.
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	for i, args := range testCases {
+		args.Header().Key = proto.Key("a")
+		if proto.IsRange(args) {
+			args.Header().EndKey = args.Header().Key.Next()
 		}
 		b := &client.Batch{}
-		b.InternalAddCall(proto.Call{Args: test.args, Reply: test.reply})
+		b.InternalAddCall(proto.Call{Args: args, Reply: args.CreateReply()})
 		err := db.Run(b)
 		if err == nil {
-			t.Errorf("%d: unexpected success calling %s", i, test.args.Method())
-		} else if !strings.Contains(err.Error(), "404 Not Found") {
-			t.Errorf("%d: expected 404; got %s", i, err)
+			t.Errorf("%d: unexpected success calling %s", i, args.Method())
+		} else if !strings.Contains(err.Error(), "couldn't find method") {
+			t.Errorf("%d: expected missing method %s; got %s", i, args.Method(), err)
 		}
 
 		// Verify same but within a Batch request.
 		bArgs := &proto.BatchRequest{}
-		bArgs.Add(test.args)
+		bArgs.Add(args)
 		b = &client.Batch{}
 		b.InternalAddCall(proto.Call{Args: bArgs, Reply: &proto.BatchResponse{}})
-		err = db.Run(b)
-		if err == nil {
-			t.Errorf("%d: unexpected success calling %s", i, test.args.Method())
-		} else if !strings.Contains(err.Error(), "400 Bad Request") {
-			t.Errorf("%d: expected 400; got %s", i, err)
+
+		if err := db.Run(b); err == nil {
+			t.Errorf("%d: unexpected success calling %s", i, args.Method())
+		} else if !strings.Contains(err.Error(), "contains an internal request") {
+			t.Errorf("%d: expected disallowed method %s; got %s", i, args.Method(), err)
 		}
 	}
 }
@@ -196,7 +194,7 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	db := createTestClient(t, s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 	err := db.Txn(func(txn *client.Txn) error {
 		// Make an EndTransaction request which would fail if not
 		// stripped. In this case, we set the start key to "bar" for a
@@ -229,7 +227,7 @@ func TestKVDBTransaction(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	db := createTestClient(t, s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	key := proto.Key("db-txn-test")
 	value := []byte("value")
@@ -268,34 +266,29 @@ func TestKVDBTransaction(t *testing.T) {
 	}
 }
 
-// TestHTTPAuthentication tests authentication for the KV http endpoint.
-func TestHTTPAuthentication(t *testing.T) {
+// TestAuthentication tests authentication for the KV endpoint.
+func TestAuthentication(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	// createTestClient creates a "node" client.
-	db := createTestClient(t, s.ServingAddr())
-
-	// We call Run() on the client which lets us build our own request,
-	// specifying the user.
 	arg := &proto.PutRequest{}
 	arg.Header().Key = proto.Key("a")
 	reply := &proto.PutResponse{}
 	b := &client.Batch{}
 	b.InternalAddCall(proto.Call{Args: arg, Reply: reply})
-	err := db.Run(b)
-	if err != nil {
+
+	// Create a "node" client and call Run() on it which lets us build
+	// our own request, specifying the user.
+	db1 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
+	if err := db1.Run(b); err != nil {
 		t.Fatal(err)
 	}
 
 	// Try again, but this time with certs for a non-node user (even the root
 	// user has no KV permissions).
-	db2 := createTestClientForUser(t, s.ServingAddr(), security.RootUser)
-	b = &client.Batch{}
-	b.InternalAddCall(proto.Call{Args: arg, Reply: reply})
-	err = db2.Run(b)
-	if err == nil {
+	db2 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
+	if err := db2.Run(b); err == nil {
 		t.Fatal("Expected error!")
 	}
 }

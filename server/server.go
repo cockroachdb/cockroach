@@ -85,8 +85,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	addr := ctx.Addr
-	_, err := net.ResolveTCPAddr("tcp", addr)
-	if err != nil {
+	if _, err := net.ResolveTCPAddr("tcp", addr); err != nil {
 		return nil, util.Errorf("unable to resolve RPC address %q: %v", addr, err)
 	}
 
@@ -124,10 +123,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper)
-	if s.db, err = client.Open("//", client.SenderOpt(sender)); err != nil {
-		return nil, err
-	}
+	s.db = client.NewDB(sender)
 
+	var err error
 	s.raftTransport, err = newRPCTransport(s.gossip, s.rpc, rpcContext)
 	if err != nil {
 		return nil, err
@@ -135,10 +133,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.stopper.AddCloser(s.raftTransport)
 
 	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender)
-	if s.ctx.ExperimentalRPCServer {
-		if err = s.kvDB.RegisterRPC(s.rpc); err != nil {
-			return nil, err
-		}
+	if err := s.kvDB.RegisterRPC(s.rpc); err != nil {
+		return nil, err
 	}
 
 	s.sqlServer = sql.MakeHTTPServer(&s.ctx.Context, *s.db)
@@ -197,7 +193,7 @@ func (s *Server) Start(selfBootstrap bool) error {
 	// Begin recording status summaries.
 	s.startWriteSummaries()
 
-	log.Infof("starting %s server at %s", s.ctx.RequestScheme(), s.rpc.Addr())
+	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), s.rpc.Addr())
 	// TODO(spencer): go1.5 is supposed to allow shutdown of running http server.
 	s.initHTTP()
 	s.rpc.Serve(s)
@@ -217,9 +213,6 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(statusPrefix, s.status)
 	s.mux.Handle(ts.URLPrefix, s.tsServer)
 
-	// KV handles its own authentication, verifying user certificates against
-	// the requested user.
-	s.mux.Handle(kv.DBPrefix, s.kvDB)
 	// The SQL endpoints handles its own authentication, verifying user
 	// credentials against the requested user.
 	s.mux.Handle(driver.Endpoint, s.sqlServer)

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 var dbName = flag.String("db-name", "", "Name/URL of the distributed database backend.")
@@ -241,6 +242,9 @@ func (bank *Bank) periodicallyReportStats() {
 }
 
 func main() {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
 	fmt.Printf("A simple program that keeps moving money between bank accounts.\n\n")
 	flag.Parse()
 	if *numAccounts < 2 {
@@ -263,11 +267,11 @@ func main() {
 		security.SetReadFileFn(securitytest.Asset)
 		serv := server.StartTestServer(nil)
 		defer serv.Stop()
-		*dbName = fmt.Sprintf("https://%s@%s?certs=test_certs",
+		*dbName = fmt.Sprintf("rpcs://%s@%s?certs=test_certs",
 			security.NodeUser, serv.ServingAddr())
 	}
 	// Create a database handle.
-	db, err := client.Open(*dbName)
+	db, err := client.Open(stopper, *dbName)
 	if err != nil {
 		log.Fatal(err)
 	}

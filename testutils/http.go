@@ -54,7 +54,7 @@ func NewTestHTTPSession(t util.Tester, ctx *base.Context, baseURL string) *TestH
 	return &TestHTTPSession{
 		t:       t,
 		client:  client,
-		baseURL: ctx.RequestScheme() + "://" + baseURL,
+		baseURL: ctx.HTTPRequestScheme() + "://" + baseURL,
 	}
 }
 

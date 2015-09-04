@@ -62,7 +62,8 @@ func TestSingleKey(t *testing.T) {
 
 	// Initialize the value for our test key to zero.
 	const key = "test-key"
-	db := makeDBClient(t, l, 0)
+	db, initDBStopper := makeDBClient(t, l, 0)
+	defer initDBStopper.Stop()
 	if err := db.Put(key, testVal(0)); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +82,8 @@ func TestSingleKey(t *testing.T) {
 	// key. Each worker is configured to talk to a different node in the
 	// cluster.
 	for i := 0; i < *numNodes; i++ {
-		db := makeDBClient(t, l, i)
+		db, dbStopper := makeDBClient(t, l, i)
+		defer dbStopper.Stop()
 		go func() {
 			var r result
 			for time.Now().Before(deadline) {

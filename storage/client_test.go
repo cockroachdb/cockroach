@@ -67,10 +67,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	lSender := kv.NewLocalSender()
 	sender := kv.NewTxnCoordSender(lSender, clock, false, nil, stopper)
 	context.Clock = clock
-	var err error
-	if context.DB, err = client.Open("//", client.SenderOpt(sender)); err != nil {
-		t.Fatal(err)
-	}
+	context.DB = client.NewDB(sender)
 	context.Transport = multiraft.NewLocalRPCTransport(stopper)
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(*context, eng, &proto.NodeDescriptor{NodeID: 1})
@@ -153,10 +150,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 
 	if m.db == nil {
 		sender := kv.NewTxnCoordSender(m.senders[0], m.clock, false, nil, m.clientStopper)
-		var err error
-		if m.db, err = client.Open("//", client.SenderOpt(sender)); err != nil {
-			t.Fatal(err)
-		}
+		m.db = client.NewDB(sender)
 	}
 
 	for i := 0; i < numStores; i++ {
