@@ -3502,9 +3502,20 @@ a_expr_const:
     $$ = StrVal($1)
   }
 | func_name '(' expr_list opt_sort_clause ')' SCONST {}
-| const_typename SCONST {}
-| const_interval SCONST opt_interval {}
-| const_interval '(' ICONST ')' SCONST {}
+| const_typename SCONST
+  {
+    $$ = &CastExpr{Expr: StrVal($2), Type: $1}
+  }
+| const_interval SCONST opt_interval
+  {
+    // TODO(pmattis): support opt_interval?
+    $$ = &CastExpr{Expr: StrVal($2), Type: $1}
+  }
+| const_interval '(' ICONST ')' SCONST
+  {
+    // TODO(pmattis): Support the precision specification?
+    $$ = &CastExpr{Expr: StrVal($5), Type: $1}
+  }
 | TRUE
   {
     $$ = BoolVal(true)
