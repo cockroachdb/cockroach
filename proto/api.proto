@@ -338,12 +338,17 @@ message AdminMergeResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A RangeLookupRequest is arguments to the RangeLookup() method. It
-// specifies the key for which the containing range is being
-// requested, and the maximum number of range descriptors that should
-// be returned, if there are additional consecutive addressable
-// ranges. Specify max_ranges > 1 to pre-fill the range descriptor
-// cache.
+// A RangeLookupRequest is arguments to the RangeLookup() method. A
+// forward lookup request returns a range containing the requested
+// key. A reverse lookup request returns a range containing the
+// previous key of the requested key (e.g., if a requested key is the
+// end key of range R, the reverse lookup request returns R).
+//
+// RangeLookupRequest also specifies the maximum number of range
+// descriptors that should be returned, if there are additional
+// consecutive addressable ranges. Specify max_ranges > 1 to pre-fill the
+// range descriptor cache. The additional ranges are scanned in the same
+// direction as lookup (forward v.s. reverse).
 message RangeLookupRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
