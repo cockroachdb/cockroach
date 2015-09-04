@@ -458,7 +458,7 @@ func typeCheckCastExpr(expr *CastExpr) (Datum, error) {
 
 	case *IntervalType:
 		switch dummyExpr {
-		case DummyString:
+		case DummyString, DummyInt:
 			return DummyInterval, nil
 		}
 

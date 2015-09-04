@@ -20,14 +20,15 @@ package driver
 import (
 	"fmt"
 	"strconv"
-
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"time"
 )
 
 const (
 	// Endpoint is the URL path prefix which accepts incoming
 	// HTTP requests for the SQL API.
 	Endpoint = "/sql/"
+
+	timestampWithOffsetZoneFormat = "2006-01-02 15:04:05.999999999-07:00"
 )
 
 func (d Datum) String() string {
@@ -48,6 +49,8 @@ func (d Datum) String() string {
 		return string(t)
 	case *string:
 		return *t
+	case *Datum_Timestamp:
+		return time.Unix((*t).Sec, int64((*t).Nsec)).UTC().Format(timestampWithOffsetZoneFormat)
 	default:
 		panic(fmt.Sprintf("unexpected type %T", t))
 	}
@@ -61,51 +64,4 @@ func (Request) Method() Method {
 // CreateReply creates an empty response for the request.
 func (Request) CreateReply() Response {
 	return Response{}
-}
-
-// GetParameters returns the Params slice as a `parameters`.
-func (r Request) GetParameters() Parameters {
-	return Parameters(r.Params)
-}
-
-// Parameters implements the parser.Args interface.
-type Parameters []Datum
-
-// Arg implements the parser.Args interface.
-func (p Parameters) Arg(name string) (parser.Datum, bool) {
-	if len(name) == 0 {
-		// This shouldn't happen unless the parser let through an invalid parameter
-		// specification.
-		panic(fmt.Sprintf("invalid empty parameter name"))
-	}
-	if ch := name[0]; ch < '0' || ch > '9' {
-		// TODO(pmattis): Add support for named parameters (vs the numbered
-		// parameter support below).
-		return nil, false
-	}
-	i, err := strconv.ParseInt(name, 10, 0)
-	if err != nil {
-		return nil, false
-	}
-	if i < 1 || int(i) > len(p) {
-		return nil, false
-	}
-	arg := p[i-1].GetValue()
-	if arg == nil {
-		return parser.DNull, true
-	}
-	switch t := arg.(type) {
-	case *bool:
-		return parser.DBool(*t), true
-	case *int64:
-		return parser.DInt(*t), true
-	case *float64:
-		return parser.DFloat(*t), true
-	case []byte:
-		return parser.DString(t), true
-	case *string:
-		return parser.DString(*t), true
-	default:
-		panic(fmt.Sprintf("unexpected type %T", t))
-	}
 }

@@ -136,6 +136,9 @@ func TestEvalExpr(t *testing.T) {
 		{`1 NOT IN (2, 3, 4)`, `true`},
 		{`1+1 IN (2, 3, 4)`, `true`},
 		{`'a0' IN ('a'||0::char, 'b'||1::char, 'c'||2::char)`, `true`},
+		{`'2012-09-21'::date IN ('2012-09-21'::date)`, `true`},
+		{`'2010-09-28 12:00:00.1'::timestamp IN ('2010-09-28 12:00:00.1'::timestamp)`, `true`},
+		{`'34h'::interval IN ('34h'::interval)`, `true`},
 		{`(1,2) IN ((0+1,1+1), (3,4), (5,6))`, `true`},
 		// Func expressions.
 		{`length('hel'||'lo')`, `5`},
@@ -187,6 +190,7 @@ func TestEvalExpr(t *testing.T) {
 		{`'2010-09-28 12:00:00.1-07:00'::timestamp`, `2010-09-28 19:00:00.1+00:00`},
 		{`('2010-09-28'::date)::timestamp`, `2010-09-28 00:00:00+00:00`},
 		{`'12h2m1s23ms'::interval`, `12h2m1.023s`},
+		{`1::interval`, `1ns`},
 		{`'2010-09-28'::date + '12h2m'::interval`, `2010-09-28 12:02:00+00:00`},
 		{`'12h2m'::interval + '2010-09-28'::date`, `2010-09-28 12:02:00+00:00`},
 		{`'2010-09-28'::date - '12h2m'::interval`, `2010-09-27 11:58:00+00:00`},

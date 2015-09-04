@@ -30,11 +30,12 @@ var _ = proto.Marshal
 var _ = math.Inf
 
 type Datum struct {
-	BoolVal   *bool    `protobuf:"varint,1,opt,name=bool_val" json:"bool_val,omitempty"`
-	IntVal    *int64   `protobuf:"varint,2,opt,name=int_val" json:"int_val,omitempty"`
-	FloatVal  *float64 `protobuf:"fixed64,3,opt,name=float_val" json:"float_val,omitempty"`
-	BytesVal  []byte   `protobuf:"bytes,4,opt,name=bytes_val" json:"bytes_val,omitempty"`
-	StringVal *string  `protobuf:"bytes,5,opt,name=string_val" json:"string_val,omitempty"`
+	BoolVal   *bool            `protobuf:"varint,1,opt,name=bool_val" json:"bool_val,omitempty"`
+	IntVal    *int64           `protobuf:"varint,2,opt,name=int_val" json:"int_val,omitempty"`
+	FloatVal  *float64         `protobuf:"fixed64,3,opt,name=float_val" json:"float_val,omitempty"`
+	BytesVal  []byte           `protobuf:"bytes,4,opt,name=bytes_val" json:"bytes_val,omitempty"`
+	StringVal *string          `protobuf:"bytes,5,opt,name=string_val" json:"string_val,omitempty"`
+	TimeVal   *Datum_Timestamp `protobuf:"bytes,6,opt,name=time_val" json:"time_val,omitempty"`
 }
 
 func (m *Datum) Reset()      { *m = Datum{} }
@@ -73,6 +74,40 @@ func (m *Datum) GetStringVal() string {
 		return *m.StringVal
 	}
 	return ""
+}
+
+func (m *Datum) GetTimeVal() *Datum_Timestamp {
+	if m != nil {
+		return m.TimeVal
+	}
+	return nil
+}
+
+// Timestamp represents an absolute timestamp devoid of time-zone.
+type Datum_Timestamp struct {
+	// The time in seconds since, January 1, 1970 UTC (Unix time).
+	Sec int64 `protobuf:"varint,1,opt,name=sec" json:"sec"`
+	// nsec specifies a non-negative nanosecond offset within sec.
+	// It must be in the range [0, 999999999].
+	Nsec uint32 `protobuf:"varint,2,opt,name=nsec" json:"nsec"`
+}
+
+func (m *Datum_Timestamp) Reset()         { *m = Datum_Timestamp{} }
+func (m *Datum_Timestamp) String() string { return proto.CompactTextString(m) }
+func (*Datum_Timestamp) ProtoMessage()    {}
+
+func (m *Datum_Timestamp) GetSec() int64 {
+	if m != nil {
+		return m.Sec
+	}
+	return 0
+}
+
+func (m *Datum_Timestamp) GetNsec() uint32 {
+	if m != nil {
+		return m.Nsec
+	}
+	return 0
 }
 
 // A Result is a collection of rows.
@@ -249,6 +284,40 @@ func (m *Datum) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintWire(data, i, uint64(len(*m.StringVal)))
 		i += copy(data[i:], *m.StringVal)
 	}
+	if m.TimeVal != nil {
+		data[i] = 0x32
+		i++
+		i = encodeVarintWire(data, i, uint64(m.TimeVal.Size()))
+		n1, err := m.TimeVal.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n1
+	}
+	return i, nil
+}
+
+func (m *Datum_Timestamp) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Datum_Timestamp) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintWire(data, i, uint64(m.Sec))
+	data[i] = 0x10
+	i++
+	i = encodeVarintWire(data, i, uint64(m.Nsec))
 	return i, nil
 }
 
@@ -271,11 +340,11 @@ func (m *Result) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintWire(data, i, uint64(m.Error.Size()))
-		n1, err := m.Error.MarshalTo(data[i:])
+		n2, err := m.Error.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n1
+		i += n2
 	}
 	if len(m.Columns) > 0 {
 		for _, s := range m.Columns {
@@ -464,6 +533,18 @@ func (m *Datum) Size() (n int) {
 		l = len(*m.StringVal)
 		n += 1 + l + sovWire(uint64(l))
 	}
+	if m.TimeVal != nil {
+		l = m.TimeVal.Size()
+		n += 1 + l + sovWire(uint64(l))
+	}
+	return n
+}
+
+func (m *Datum_Timestamp) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovWire(uint64(m.Sec))
+	n += 1 + sovWire(uint64(m.Nsec))
 	return n
 }
 
@@ -566,6 +647,9 @@ func (this *Datum) GetValue() interface{} {
 	if this.StringVal != nil {
 		return this.StringVal
 	}
+	if this.TimeVal != nil {
+		return this.TimeVal
+	}
 	return nil
 }
 
@@ -581,6 +665,8 @@ func (this *Datum) SetValue(value interface{}) bool {
 		this.BytesVal = vt
 	case *string:
 		this.StringVal = vt
+	case *Datum_Timestamp:
+		this.TimeVal = vt
 	default:
 		return false
 	}
@@ -711,6 +797,113 @@ func (m *Datum) Unmarshal(data []byte) error {
 			s := string(data[iNdEx:postIndex])
 			m.StringVal = &s
 			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TimeVal", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.TimeVal == nil {
+				m.TimeVal = &Datum_Timestamp{}
+			}
+			if err := m.TimeVal.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipWire(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
+func (m *Datum_Timestamp) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sec", wireType)
+			}
+			m.Sec = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Sec |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nsec", wireType)
+			}
+			m.Nsec = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Nsec |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {

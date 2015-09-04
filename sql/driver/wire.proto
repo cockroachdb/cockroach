@@ -29,6 +29,15 @@ option (gogoproto.goproto_unrecognized_all) = false;
 
 message Datum {
   option (gogoproto.goproto_stringer) = false;
+  
+  // Timestamp represents an absolute timestamp devoid of time-zone.
+  message Timestamp {
+    // The time in seconds since, January 1, 1970 UTC (Unix time).
+    optional int64 sec = 1 [(gogoproto.nullable) = false];
+    // nsec specifies a non-negative nanosecond offset within sec.
+    // It must be in the range [0, 999999999].
+    optional uint32 nsec = 2 [(gogoproto.nullable) = false];
+  }
 
   // Using explicit proto types provides convenient access when using json. If
   // we used a Kind+Bytes approach the json interface would involve base64
@@ -40,6 +49,10 @@ message Datum {
     double float_val = 3;
     bytes bytes_val = 4;
     string string_val = 5;
+    Timestamp time_val = 6;
+    // TODO(vivek): Add additional types like Date and Interval that are
+    // supported by Cockroach but not supported by the Go sql driver. These
+    // will be useful for drivers in other languages.
   }
 
   // TODO(pmattis): How to add end-to-end checksumming? Just adding a checksum

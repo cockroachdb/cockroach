@@ -20,7 +20,9 @@ package driver_test
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -64,7 +66,11 @@ func asResultSlice(src [][]string) resultSlice {
 	for i, subSlice := range src {
 		result[i] = make([]*string, len(subSlice))
 		for j := range subSlice {
-			result[i][j] = &subSlice[j]
+			if subSlice[j] == "<NULL>" {
+				result[i][j] = nil
+			} else {
+				result[i][j] = &subSlice[j]
+			}
 		}
 	}
 	return result
@@ -137,52 +143,24 @@ func TestPlaceholders(t *testing.T) {
 	s, db := setup(t)
 	defer cleanup(s, db)
 
+	timeVal := time.Date(2015, time.August, 30, 3, 34, 45, 345670000, time.UTC)
+	intervalVal, err := time.ParseDuration("34h2s")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE t.alltypes (a BIGINT PRIMARY KEY, b FLOAT, c TEXT, d BOOLEAN, e TIMESTAMP, f DATE, g INTERVAL)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO t.kv VALUES ($1, $2), ($3, $4)`, "a", "b", "c", nil); err != nil {
+	// Insert values for all the different types.
+	if _, err := db.Exec(`INSERT INTO t.alltypes (a, b, c, d, e, f, g) VALUES ($1, $2, $3, $4, $5, $5::DATE, $6::INTERVAL)`, 123, 3.4, "blah", true, timeVal, intervalVal); err != nil {
 		t.Fatal(err)
 	}
-
-	if rows, err := db.Query("SELECT * FROM t.kv"); err != nil {
-		t.Fatal(err)
-	} else {
-		results := readAll(t, rows)
-		expectedResults := asResultSlice([][]string{
-			{"k", "v"},
-			{"a", "b"},
-			{"c", ""},
-		})
-		expectedResults[2][1] = nil
-		if err := verifyResults(expectedResults, results); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if _, err := db.Exec(`DELETE FROM t.kv WHERE k IN ($1)`, "c"); err != nil {
-		t.Fatal(err)
-	}
-
-	if rows, err := db.Query("SELECT * FROM t.kv"); err != nil {
-		t.Fatal(err)
-	} else {
-		results := readAll(t, rows)
-		expectedResults := asResultSlice([][]string{
-			{"k", "v"},
-			{"a", "b"},
-		})
-		if err := verifyResults(expectedResults, results); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if _, err := db.Exec(`CREATE TABLE t.alltypes (a BIGINT PRIMARY KEY, b FLOAT, c TEXT, d BOOLEAN)`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO t.alltypes (a, b, c, d) VALUES ($1, $2, $3, $4)`, 123, 3.4, "blah", true); err != nil {
+	// Insert a row with NULL values
+	if _, err := db.Exec(`INSERT INTO t.alltypes (a, b, c, d, e, f, g) VALUES ($1, $2, $3, $4, $5, $6, $7)`, 456, nil, nil, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE a IN ($1)", 123); err != nil {
@@ -197,9 +175,47 @@ func TestPlaceholders(t *testing.T) {
 	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE d IN ($1)", true); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE e IN ($1)", timeVal); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE f IN ($1::DATE)", timeVal); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE g IN ($1::INTERVAL)", intervalVal); err != nil {
+		t.Fatal(err)
+	}
+	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
+		t.Fatal(err)
+	} else {
+		results := readAll(t, rows)
+		expectedResults := asResultSlice([][]string{
+			{"a", "b", "c", "d", "e", "f", "g"},
+			{"123", "3.4", "blah", "true", "2015-08-30 03:34:45.34567+00:00", "2015-08-30", "34h0m2s"},
+			{"456", "<NULL>", "<NULL>", "<NULL>", "<NULL>", "<NULL>", "<NULL>"},
+		})
+		if err := verifyResults(expectedResults, results); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Delete a row using a placeholder param.
+	if _, err := db.Exec(`DELETE FROM t.alltypes WHERE a IN ($1)`, 123); err != nil {
+		t.Fatal(err)
+	}
+	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
+		t.Fatal(err)
+	} else {
+		results := readAll(t, rows)
+		expectedResults := asResultSlice([][]string{
+			{"a", "b", "c", "d", "e", "f", "g"},
+			{"456", "<NULL>", "<NULL>", "<NULL>", "<NULL>", "<NULL>", "<NULL>"},
+		})
+		if err := verifyResults(expectedResults, results); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
-func TestinConnectionSettings(t *testing.T) {
+func TestConnectionSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(nil)
 	url := "https://root@" + s.ServingAddr() + "?certs=test_certs"

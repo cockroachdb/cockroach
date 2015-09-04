@@ -19,7 +19,10 @@ package sql
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
@@ -53,7 +56,7 @@ func (s server) execute(args driver.Request) (driver.Response, int, error) {
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	reply := s.execStmts(args.Sql, args.GetParameters(), &planMaker)
+	reply := s.execStmts(args.Sql, parameters(args.Params), &planMaker)
 
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
@@ -75,7 +78,7 @@ func (s server) execute(args driver.Request) (driver.Response, int, error) {
 
 // exec executes the request. Any error encountered is returned; it is
 // the caller's responsibility to update the response.
-func (s server) execStmts(sql string, params driver.Parameters, planMaker *planner) driver.Response {
+func (s server) execStmts(sql string, params parameters, planMaker *planner) driver.Response {
 	var resp driver.Response
 	stmts, err := parser.Parse(sql, parser.Syntax(planMaker.session.Syntax))
 	if err != nil {
@@ -94,7 +97,7 @@ func (s server) execStmts(sql string, params driver.Parameters, planMaker *plann
 	return resp
 }
 
-func (s server) execStmt(stmt parser.Statement, params driver.Parameters, planMaker *planner) (driver.Result, error) {
+func (s server) execStmt(stmt parser.Statement, params parameters, planMaker *planner) (driver.Result, error) {
 	var result driver.Result
 	if planMaker.txn == nil {
 		if _, ok := stmt.(*parser.BeginTransaction); ok {
@@ -191,4 +194,48 @@ func rollbackTxnAndReturnResultWithError(planMaker *planner, err error) driver.R
 	var errProto proto.Error
 	errProto.SetResponseGoError(err)
 	return driver.Result{Error: &errProto}
+}
+
+// parameters implements the parser.Args interface.
+type parameters []driver.Datum
+
+// Arg implements the parser.Args interface.
+func (p parameters) Arg(name string) (parser.Datum, bool) {
+	if len(name) == 0 {
+		// This shouldn't happen unless the parser let through an invalid parameter
+		// specification.
+		panic(fmt.Sprintf("invalid empty parameter name"))
+	}
+	if ch := name[0]; ch < '0' || ch > '9' {
+		// TODO(pmattis): Add support for named parameters (vs the numbered
+		// parameter support below).
+		return nil, false
+	}
+	i, err := strconv.ParseInt(name, 10, 0)
+	if err != nil {
+		return nil, false
+	}
+	if i < 1 || int(i) > len(p) {
+		return nil, false
+	}
+	arg := p[i-1].GetValue()
+	if arg == nil {
+		return parser.DNull, true
+	}
+	switch t := arg.(type) {
+	case *bool:
+		return parser.DBool(*t), true
+	case *int64:
+		return parser.DInt(*t), true
+	case *float64:
+		return parser.DFloat(*t), true
+	case []byte:
+		return parser.DString(t), true
+	case *string:
+		return parser.DString(*t), true
+	case *driver.Datum_Timestamp:
+		return parser.DTimestamp{Time: time.Unix((*t).Sec, int64((*t).Nsec)).UTC()}, true
+	default:
+		panic(fmt.Sprintf("unexpected type %T", t))
+	}
 }
