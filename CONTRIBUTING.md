@@ -7,7 +7,7 @@
    --install` will get you started). The compiler must support C++11
    (GCC 4.9+ and clang 3.6+ are known to work).
  * [Go environment](http://golang.org/doc/code.html). Currently a
-   64-bit version of go is required.
+   64-bit version of go 1.5 is required.
  * Git 1.8+ and Mercurial (for retrieving dependencies).
 
 If you're on Mac OS X, [homebrew](http://brew.sh/) can be very helpful to fulfill these dependencies.
