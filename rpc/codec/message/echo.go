@@ -17,7 +17,11 @@
 
 package message
 
-// GetUser implements the userRequest interface used by authentication.
-func (e *EchoRequest) GetUser() string {
+import "github.com/cockroachdb/cockroach/security"
+
+var _ security.RequestWithUser = &EchoRequest{}
+
+// GetUser implements security.RequestWithUser.
+func (*EchoRequest) GetUser() string {
 	return "test"
 }

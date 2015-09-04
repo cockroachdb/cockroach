@@ -17,7 +17,11 @@
 
 package message
 
-// GetUser implements the userRequest interface used by authentication.
-func (a *ArithRequest) GetUser() string {
+import "github.com/cockroachdb/cockroach/security"
+
+var _ security.RequestWithUser = &ArithRequest{}
+
+// GetUser implements security.RequestWithUser.
+func (*ArithRequest) GetUser() string {
 	return "test"
 }

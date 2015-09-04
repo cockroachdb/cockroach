@@ -240,9 +240,13 @@ type Combinable interface {
 	Combine(Response) error
 }
 
-// GetUser implements userRequest.
+// TODO(marc): we should assert
+// var _ security.RequestWithUser = &RequestHeader{}
+// here, but we need to break cycles first.
+
+// GetUser implements security.RequestWithUser.
 // KV messages are always sent by the node user.
-func (rh *RequestHeader) GetUser() string {
+func (*RequestHeader) GetUser() string {
 	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
 	return "node"
 }

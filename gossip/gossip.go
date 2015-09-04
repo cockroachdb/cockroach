@@ -706,8 +706,10 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 	return nil
 }
 
-// GetUser implements userRequest.
+var _ security.RequestWithUser = &Request{}
+
+// GetUser implements security.RequestWithUser.
 // Gossip messages are always sent by the node user.
-func (m *Request) GetUser() string {
+func (*Request) GetUser() string {
 	return security.NodeUser
 }

@@ -34,9 +34,13 @@ func (r RemoteOffset) String() string {
 	return fmt.Sprintf("off=%.9fs, err=%.9fs, at=%s", float64(r.Offset)/1E9, float64(r.Uncertainty)/1E9, t)
 }
 
-// GetUser implements userRequest.
+// TODO(marc): we should assert
+// var _ security.RequestWithUser = &PingRequest{}
+// here, but we need to break cycles first.
+
+// GetUser implements security.RequestWithUser.
 // Heartbeat messages are always sent by the node user.
-func (m *PingRequest) GetUser() string {
+func (*PingRequest) GetUser() string {
 	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
 	return "node"
 }
