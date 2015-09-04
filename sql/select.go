@@ -232,6 +232,14 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 type indexConstraint struct {
 	start *parser.ComparisonExpr
 	end   *parser.ComparisonExpr
+	// tupleMap is an ordering of the tuples within a tuple comparison such that
+	// they match the ordering within the index. For example, an index on the
+	// columns (a, b) and a tuple comparison "(b, a) = (1, 2)" would have a
+	// tupleMap of {1, 0} indicating that the first column to be encoded is the
+	// second element of the tuple. The tuple map may be shorter than the length
+	// of the tuple. For example, if the index was only on (a), then the tupleMap
+	// would be {1}.
+	tupleMap []int
 }
 
 type indexConstraints []indexConstraint
@@ -367,8 +375,6 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 // Start constraints look for comparison expressions with the operators >, >=,
 // = or IN. End constraints look for comparison expressions with the operators
 // <, <=, = or IN.
-//
-// TODO(pmattis): This needs to be more thoroughly tested.
 func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 	if len(exprs) != 1 {
 		return
@@ -378,16 +384,43 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 	startDone := false
 	endDone := false
 
-	for _, colID := range v.index.ColumnIDs {
-		constraint := indexConstraint{}
+	for i := 0; i < len(v.index.ColumnIDs); i++ {
+		colID := v.index.ColumnIDs[i]
+		var constraint indexConstraint
 
 		for _, e := range andExprs {
 			if c, ok := e.(*parser.ComparisonExpr); ok {
-				if q, ok := c.Left.(*qvalue); !ok || q.col.ID != colID {
-					// This expression refers to a column other than the one we're
-					// looking for.
-					continue
+				var tupleMap []int
+				switch t := c.Left.(type) {
+				case *qvalue:
+					if t.col.ID != colID {
+						// This expression refers to a column other than the one we're
+						// looking for.
+						continue
+					}
+
+				case parser.Tuple:
+					// If we have a tuple comparison we need to rearrange the comparison
+					// so that the order of the columns in the tuple matches the order in
+					// the index. For example, for an index on (a, b), the tuple
+					// comparison "(b, a) = (1, 2)" would be rewritten as "(a, b) = (2,
+					// 1)". Note that we don't actually need to rewrite the comparison,
+					// but simply provide a mapping from the order in the tuple to the
+					// order in the index.
+					for _, colID := range v.index.ColumnIDs[i:] {
+						idx := findColumnInTuple(t, colID)
+						if idx == -1 {
+							break
+						}
+						tupleMap = append(tupleMap, idx)
+					}
+					if len(tupleMap) == 0 {
+						// This tuple does not contain the column we're looking for.
+						continue
+					}
+					i += (len(tupleMap) - 1)
 				}
+
 				if _, ok := c.Right.(parser.Datum); !ok {
 					continue
 				}
@@ -396,44 +429,54 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 					return
 				}
 
-				if !startDone && constraint.start == nil {
-					switch c.Operator {
-					case parser.GT:
-						// Transform a > constraint into a >= constraint so that we play
-						// nicer with the inclusive nature of the scan start key.
-						//
-						// TODO(pmattis): It would be more obvious to perform this
-						// transform in simplifyComparisonExpr, but doing so there
-						// eliminates some of the other simplifications. For example, "a <
-						// 1 OR a > 1" currently simplifies to "a != 1", but if we
-						// performed this transform in simpilfyComparisonExpr it would
-						// simplify to "a < 1 OR a >= 2" which is also the same as "a !=
-						// 1", but not so obvious based on comparisons of the constants.
-						constraint.start = &parser.ComparisonExpr{
-							Operator: parser.GE,
-							Left:     c.Left,
-							Right:    c.Right.(parser.Datum).Next(),
-						}
-					case parser.EQ, parser.GE, parser.In:
+				switch c.Operator {
+				case parser.EQ:
+					if !startDone {
 						constraint.start = c
 					}
-				}
-
-				if !endDone && constraint.end == nil {
-					switch c.Operator {
-					case parser.LT:
-						endDone = true
-						fallthrough
-					case parser.EQ, parser.LE, parser.In:
+					if !endDone {
+						constraint.end = c
+					}
+				case parser.In:
+					if !startDone && (constraint.start == nil || constraint.start.Operator != parser.EQ) {
+						constraint.start = c
+						constraint.tupleMap = tupleMap
+					}
+					if !endDone && (constraint.end == nil || constraint.end.Operator != parser.EQ) {
+						constraint.end = c
+						constraint.tupleMap = tupleMap
+					}
+				case parser.GT, parser.GE:
+					if !startDone && constraint.start == nil {
+						constraint.start = c
+					}
+				case parser.LT, parser.LE:
+					if !endDone && constraint.end == nil {
 						constraint.end = c
 					}
 				}
-
-				if (startDone || constraint.start != nil) &&
-					(endDone || constraint.end != nil) {
-					break
-				}
 			}
+		}
+
+		if constraint.start != nil && constraint.start.Operator == parser.GT {
+			// Transform a > constraint into a >= constraint so that we play
+			// nicer with the inclusive nature of the scan start key.
+			//
+			// TODO(pmattis): It would be more obvious to perform this
+			// transform in simplifyComparisonExpr, but doing so there
+			// eliminates some of the other simplifications. For example, "a <
+			// 1 OR a > 1" currently simplifies to "a != 1", but if we
+			// performed this transform in simpilfyComparisonExpr it would
+			// simplify to "a < 1 OR a >= 2" which is also the same as "a !=
+			// 1", but not so obvious based on comparisons of the constants.
+			constraint.start = &parser.ComparisonExpr{
+				Operator: parser.GE,
+				Left:     constraint.start.Left,
+				Right:    constraint.start.Right.(parser.Datum).Next(),
+			}
+		}
+		if constraint.end != nil && constraint.end.Operator == parser.LT {
+			endDone = true
 		}
 
 		if constraint.start != nil || constraint.end != nil {
@@ -485,8 +528,6 @@ func (v indexInfoByCost) Swap(i, j int) {
 }
 
 // makeSpans constructs the spans for an index given a set of constraints.
-//
-// TODO(pmattis): This needs to be more thoroughly tested.
 func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span {
 	prefix := proto.Key(MakeIndexKeyPrefix(tableID, indexID))
 	spans := []span{{
@@ -502,7 +543,19 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 		lastEnd := c.end != nil &&
 			(i+1 == len(constraints) || constraints[i+1].end == nil)
 
-		if c.start != nil && c.start.Operator == parser.In {
+		// TODO(pmattis): The end constraint might also be an IN operator.
+		//
+		// TODO(pmattis): For tuple comparisons use the index constraint mapping
+		// from tuple order to index order.
+		if (c.start != nil && c.start.Operator == parser.In) ||
+			(c.end != nil && c.end.Operator == parser.In) {
+			var e *parser.ComparisonExpr
+			if c.start != nil && c.start.Operator == parser.In {
+				e = c.start
+			} else {
+				e = c.end
+			}
+
 			// Special handling of IN exprssions. Such expressions apply to both the
 			// start and end key, but also cause an explosion in the number of spans
 			// searched within an index.
@@ -510,7 +563,7 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 			// TODO(pmattis): Handle IN expressions of the form:
 			//
 			//   (a, b, c) IN ((1, 2, 3), (4, 5, 6))
-			tuple, ok := c.start.Right.(parser.DTuple)
+			tuple, ok := e.Right.(parser.DTuple)
 			if !ok {
 				break
 			}
@@ -520,23 +573,56 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 			existingSpans := spans
 			spans = make([]span, 0, len(existingSpans)*len(tuple))
 			for _, datum := range tuple {
-				start, err := encodeTableKey(buf[:0], datum)
-				if err != nil {
-					panic(err)
-				}
+				var start, end []byte
 
-				end := start
-				if lastEnd {
-					if end, err = encodeTableKey(nil, datum.Next()); err != nil {
+				switch t := datum.(type) {
+				case parser.DTuple:
+					start = buf[:0]
+					for _, i := range c.tupleMap {
+						var err error
+						if start, err = encodeTableKey(start, t[i]); err != nil {
+							panic(err)
+						}
+					}
+
+					end = start
+					if lastEnd {
+						end = nil
+						for i := range c.tupleMap {
+							d := t[c.tupleMap[i]]
+							if i+1 == len(c.tupleMap) {
+								d = d.Next()
+							}
+							var err error
+							if end, err = encodeTableKey(end, d); err != nil {
+								panic(err)
+							}
+						}
+					}
+
+				default:
+					var err error
+					if start, err = encodeTableKey(buf[:0], datum); err != nil {
 						panic(err)
+					}
+
+					end = start
+					if lastEnd {
+						var err error
+						if end, err = encodeTableKey(nil, datum.Next()); err != nil {
+							panic(err)
+						}
 					}
 				}
 
 				for _, s := range existingSpans {
-					spans = append(spans, span{
-						start: append(append(proto.Key(nil), s.start...), start...),
-						end:   append(append(proto.Key(nil), s.end...), end...),
-					})
+					if c.start != nil {
+						s.start = append(append(proto.Key(nil), s.start...), start...)
+					}
+					if c.end != nil {
+						s.end = append(append(proto.Key(nil), s.end...), end...)
+					}
+					spans = append(spans, s)
 				}
 			}
 

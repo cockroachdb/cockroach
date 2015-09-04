@@ -69,6 +69,20 @@ func TestMakeConstraints(t *testing.T) {
 		{`a IN (1,2,3) AND b = 1`, []string{"a", "b"}, `[a IN (1, 2, 3), b = 1]`},
 		{`a = 1 AND b IN (1,2,3)`, []string{"a", "b"}, `[a = 1, b IN (1, 2, 3)]`},
 
+		// Prefer IN over >, <, >= and <=.
+		{`a > 1 AND a IN (1, 2)`, []string{"a"}, `[a IN (1, 2)]`},
+		{`a >= 1 AND a IN (1, 2)`, []string{"a"}, `[a IN (1, 2)]`},
+		{`a < 1 AND a IN (1, 2)`, []string{"a"}, `[a IN (1, 2)]`},
+		{`a <= 1 AND a IN (1, 2)`, []string{"a"}, `[a IN (1, 2)]`},
+		{`a IN (1, 2) AND a > 1`, []string{"a"}, `[a IN (1, 2)]`},
+		{`a IN (1, 2) AND a >= 1`, []string{"a"}, `[a IN (1, 2)]`},
+		{`a IN (1, 2) AND a < 1`, []string{"a"}, `[a IN (1, 2)]`},
+		{`a IN (1, 2) AND a <= 1`, []string{"a"}, `[a IN (1, 2)]`},
+
+		// Prefer EQ over IN.
+		{`a = 1 AND (a, b) IN ((1, 2))`, []string{"a", "b"}, `[a = 1]`},
+		{`(a, b) IN ((1, 2)) AND a = 1`, []string{"a", "b"}, `[a = 1]`},
+
 		{`a = 1 AND b = 1`, []string{"a", "b"}, `[a = 1, b = 1]`},
 		{`a = 1 AND b != 1`, []string{"a", "b"}, `[a = 1]`},
 		{`a = 1 AND b > 1`, []string{"a", "b"}, `[a = 1, b >= 2]`},
@@ -117,6 +131,9 @@ func TestMakeConstraints(t *testing.T) {
 		{`a IN (1) AND b >= 1`, []string{"a", "b"}, `[a IN (1), b >= 1]`},
 		{`a IN (1) AND b < 1`, []string{"a", "b"}, `[a IN (1), b < 1]`},
 		{`a IN (1) AND b <= 1`, []string{"a", "b"}, `[a IN (1), b <= 1]`},
+
+		{`(a, b) IN ((1, 2))`, []string{"a", "b"}, `[(a, b) IN ((1, 2))]`},
+		{`(b, a) IN ((1, 2))`, []string{"a", "b"}, `[(b, a) IN ((1, 2))]`},
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndex(t, d.columns)
@@ -145,6 +162,11 @@ func TestMakeSpans(t *testing.T) {
 		{`a IN (1,2,3)`, []string{"a"}, `/1-/2 /2-/3 /3-/4`},
 		{`a IN (1,2,3) AND b = 1`, []string{"a", "b"}, `/1/1-/1/2 /2/1-/2/2 /3/1-/3/2`},
 		{`a = 1 AND b IN (1,2,3)`, []string{"a", "b"}, `/1/1-/1/2 /1/2-/1/3 /1/3-/1/4`},
+		{`a >= 1 AND b IN (1,2,3)`, []string{"a", "b"}, `/1/1- /1/2- /1/3-`},
+		{`a <= 1 AND b IN (1,2,3)`, []string{"a", "b"}, `-/1/2 -/1/3 -/1/4`},
+		{`(a, b) IN ((1, 2), (3, 4))`, []string{"a", "b"}, `/1/2-/1/3 /3/4-/3/5`},
+		{`(b, a) IN ((1, 2), (3, 4))`, []string{"a", "b"}, `/2/1-/2/2 /4/3-/4/4`},
+		{`(a, b) IN ((1, 2), (3, 4))`, []string{"b"}, `/2-/3 /4-/5`},
 
 		{`a = 1 AND b = 1`, []string{"a", "b"}, `/1/1-/1/2`},
 		{`a = 1 AND b != 1`, []string{"a", "b"}, `/1-/2`},
