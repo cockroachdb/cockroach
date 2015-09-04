@@ -781,12 +781,17 @@ func (m *AdminMergeResponse) Reset()         { *m = AdminMergeResponse{} }
 func (m *AdminMergeResponse) String() string { return proto1.CompactTextString(m) }
 func (*AdminMergeResponse) ProtoMessage()    {}
 
-// A RangeLookupRequest is arguments to the RangeLookup() method. It
-// specifies the key for which the containing range is being
-// requested, and the maximum number of range descriptors that should
-// be returned, if there are additional consecutive addressable
-// ranges. Specify max_ranges > 1 to pre-fill the range descriptor
-// cache.
+// A RangeLookupRequest is arguments to the RangeLookup() method. A
+// forward lookup request returns a range containing the requested
+// key. A reverse lookup request returns a range containing the
+// previous key of the requested key (e.g., if a requested key is the
+// end key of range R, the reverse lookup request returns R).
+//
+// RangeLookupRequest also specifies the maximum number of range
+// descriptors that should be returned, if there are additional
+// consecutive addressable ranges. Specify max_ranges > 1 to pre-fill the
+// range descriptor cache. The additional ranges are scanned in the same
+// direction as lookup (forward v.s. reverse).
 type RangeLookupRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	MaxRanges     int32 `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
