@@ -208,6 +208,7 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 // that are not on same store.
 func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(bdarnell): fix this flaky test")
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
