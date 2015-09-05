@@ -99,9 +99,9 @@ func newWriteRequest() *writeRequest {
 }
 
 // groupWriteResponse represents the final state of a persistent group.
-// metadata may be nil and lastIndex and lastTerm may be -1 if the respective
-// state was not changed (which may be because there were no changes in the request
-// or due to an error)
+// lastIndex and lastTerm may be -1 if the respective state was not
+// changed (which may be because there were no changes in the request
+// or due to an error).
 type groupWriteResponse struct {
 	state     raftpb.HardState
 	lastIndex int
