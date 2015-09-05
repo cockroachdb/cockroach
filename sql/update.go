@@ -120,11 +120,11 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Compute the new secondary index key:value pairs for this row.
-		//
-		// Update the row values. Our updated value expressions occur immediately
-		// after the plain columns in the output.
+
+		// Our updated value expressions occur immediately after the plain
+		// columns in the output.
 		newVals := rowVals[len(tableDesc.Columns):]
+		// Update the row values.
 		for i, col := range cols {
 			val := newVals[i]
 			if !col.Nullable && val == parser.DNull {
@@ -132,6 +132,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			}
 			rowVals[colIDtoRowIndex[col.ID]] = val
 		}
+		// Compute the new secondary index key:value pairs for this row.
 		newSecondaryIndexEntries, err := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
 		if err != nil {
