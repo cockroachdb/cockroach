@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func setup(t *testing.T) (*server.TestServer, *sql.DB) {
@@ -271,93 +270,5 @@ func TestInsecure(t *testing.T) {
 	}()
 	if _, err := db.Exec(`SELECT 1`); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// Start a transaction to update a row. After updating the row and
-// before committing the transaction, start another transaction in
-// another thread to update the same row. The other transaction succeeds,
-// resulting in the first transaction failing.
-func TestOverlappingTransactions(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	s, db := setup(t)
-	defer cleanup(s, db)
-
-	// Prepare DB
-	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`CREATE TABLE t.kv (k CHAR PRIMARY KEY, v char)`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO t.kv VALUES ($1, $2)`, "a", "b"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Start two transactions.
-	txn1, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	txn2, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := txn1.Exec(`UPDATE t.kv SET v = $2 WHERE k IN ($1)`, "a", "c"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Complete txn2
-	if rows, err := txn2.Query(`SELECT v FROM t.kv WHERE k IN ($1)`, "a"); err != nil {
-		t.Fatal(err)
-	} else {
-		results := readAll(t, rows)
-		expectedResults := asResultSlice([][]string{
-			{"v"},
-			{"b"},
-		})
-		if err := verifyResults(expectedResults, results); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := txn2.Exec(`UPDATE t.kv SET v = $2 WHERE k IN ($1)`, "a", "d"); err != nil {
-		log.Fatal(err)
-	}
-	if err := txn2.Commit(); err != nil {
-		log.Fatal(err)
-	}
-
-	// Continue with txn1
-	if rows, err := txn1.Query(`SELECT v FROM t.kv WHERE k IN ($1)`, "a"); err != nil {
-		log.Fatal(err)
-	} else {
-		results := readAll(t, rows)
-		// The first update is not visible!
-		expectedResults := asResultSlice([][]string{
-			{"v"},
-			{"b"},
-		})
-		if err := verifyResults(expectedResults, results); err != nil {
-			log.Fatal(err)
-		}
-	}
-	// The commit fails.
-	if err := txn1.Commit(); err == nil {
-		log.Fatal("transaction cannot commit successfully")
-	}
-
-	// txn2's update succeeded.
-	if rows, err := db.Query(`SELECT v FROM t.kv WHERE k IN ($1)`, "a"); err != nil {
-		t.Fatal(err)
-	} else {
-		results := readAll(t, rows)
-		expectedResults := asResultSlice([][]string{
-			{"v"},
-			{"d"},
-		})
-		if err := verifyResults(expectedResults, results); err != nil {
-			t.Fatal(err)
-		}
 	}
 }
