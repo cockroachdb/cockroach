@@ -368,3 +368,51 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestAbortTransactionOnCommitErrors verifies that non-exec transactions are
+// aborted on the correct errors.
+func TestAbortTransactionOnCommitErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	testCases := []struct {
+		err   error
+		abort bool
+	}{
+		{&proto.ReadWithinUncertaintyIntervalError{}, true},
+		{&proto.TransactionAbortedError{}, false},
+		{&proto.TransactionPushError{}, true},
+		{&proto.TransactionRetryError{}, true},
+		{&proto.Error{}, true},
+		{&proto.RangeNotFoundError{}, true},
+		{&proto.RangeKeyMismatchError{}, true},
+		{&proto.TransactionStatusError{}, true},
+	}
+
+	for _, test := range testCases {
+		var commit, abort bool
+		db := NewDB(newTestSender(func(call proto.Call) {
+			switch t := call.Args.(type) {
+			case *proto.EndTransactionRequest:
+				if t.Commit {
+					commit = true
+					call.Reply.Header().SetGoError(test.err)
+				} else {
+					abort = true
+				}
+			}
+		}))
+
+		txn := NewTxn(*db)
+		_ = txn.Put("a", "b")
+		_ = txn.Commit()
+
+		if !commit {
+			t.Fatalf("%T: failed to find commit", test.err)
+		}
+		if test.abort && !abort {
+			t.Fatalf("%T: failed to find abort", test.err)
+		} else if !test.abort && abort {
+			t.Fatalf("%T: found unexpected abort", test.err)
+		}
+	}
+}
