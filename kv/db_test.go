@@ -20,13 +20,13 @@ package kv_test
 import (
 	"bytes"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -156,6 +156,10 @@ func TestKVDBInternalMethods(t *testing.T) {
 		&proto.MergeRequest{},
 		&proto.TruncateLogRequest{},
 		&proto.LeaderLeaseRequest{},
+
+		&proto.EndTransactionRequest{
+			InternalCommitTrigger: &proto.InternalCommitTrigger{},
+		},
 	}
 	// Verify internal methods experience bad request errors.
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -169,7 +173,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		err := db.Run(b)
 		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())
-		} else if !strings.Contains(err.Error(), "couldn't find method") {
+		} else if !testutils.IsError(err, "(couldn't find method|contains commit trigger)") {
 			t.Errorf("%d: expected missing method %s; got %s", i, args.Method(), err)
 		}
 
@@ -181,42 +185,9 @@ func TestKVDBInternalMethods(t *testing.T) {
 
 		if err := db.Run(b); err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())
-		} else if !strings.Contains(err.Error(), "contains an internal request") {
-			t.Errorf("%d: expected disallowed method %s; got %s", i, args.Method(), err)
+		} else if !testutils.IsError(err, "(contains an internal request|contains commit trigger)") {
+			t.Errorf("%d: expected disallowed method error %s; got %s", i, args.Method(), err)
 		}
-	}
-}
-
-// TestKVDBEndTransactionWithTriggers verifies that triggers are
-// disallowed on call to EndTransaction.
-func TestKVDBEndTransactionWithTriggers(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	s := server.StartTestServer(t)
-	defer s.Stop()
-
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
-	err := db.Txn(func(txn *client.Txn) error {
-		// Make an EndTransaction request which would fail if not
-		// stripped. In this case, we set the start key to "bar" for a
-		// split of the default range; start key must be "" in this case.
-		b := &client.Batch{}
-		b.Put("foo", "only here to make this a rw transaction")
-		b.InternalAddCall(proto.Call{
-			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: proto.Key("foo")},
-				Commit:        true,
-				InternalCommitTrigger: &proto.InternalCommitTrigger{
-					SplitTrigger: &proto.SplitTrigger{
-						UpdatedDesc: proto.RangeDescriptor{StartKey: proto.Key("bar")},
-					},
-				},
-			},
-			Reply: &proto.EndTransactionResponse{},
-		})
-		return txn.Run(b)
-	})
-	if err == nil {
-		t.Errorf("expected 400 bad request error on commit")
 	}
 }
 

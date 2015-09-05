@@ -1550,6 +1550,38 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	}
 }
 
+// TestEndTransactionWithMalformedSplitTrigger verifies an
+// EndTransaction call with a malformed commit trigger fails.
+func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	key := proto.Key("foo")
+	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+	pArgs := putArgs(key, []byte("only here to make this a rw transaction"), tc.rng.Desc().RangeID, tc.store.StoreID())
+	pArgs.Txn = txn
+	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	args := endTxnArgs(txn, true /* commit */, 1, tc.store.StoreID())
+	args.Timestamp = txn.Timestamp
+	// Make an EndTransaction request which would fail if not
+	// stripped. In this case, we set the start key to "bar" for a
+	// split of the default range; start key must be "" in this case.
+	args.InternalCommitTrigger = &proto.InternalCommitTrigger{
+		SplitTrigger: &proto.SplitTrigger{
+			UpdatedDesc: proto.RangeDescriptor{StartKey: proto.Key("bar")},
+		},
+	}
+
+	if _, err := tc.rng.AddCmd(tc.rng.context(), &args); !testutils.IsError(err, "range does not match splits") {
+		t.Errorf("expected range does not match splits error; got %s", err)
+	}
+}
+
 // TestEndTransactionBeforeHeartbeat verifies that a transaction
 // can be committed/aborted before being heartbeat.
 func TestEndTransactionBeforeHeartbeat(t *testing.T) {
