@@ -64,10 +64,18 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		}
 	}
 
+	// Generate the list of select targets. We need to select all of the columns
+	// plus we select all of the update expressions in case those expressions
+	// reference columns (e.g. "UPDATE t SET v = v + 1").
+	targets := make(parser.SelectExprs, 0, len(n.Exprs)+1)
+	targets = append(targets, parser.StarSelectExpr())
+	for _, expr := range n.Exprs {
+		targets = append(targets, parser.SelectExpr{Expr: expr.Expr})
+	}
+
 	// Query the rows that need updating.
-	// TODO(vivek): Avoid going through Select.
-	row, err := p.Select(&parser.Select{
-		Exprs: parser.SelectExprs{parser.StarSelectExpr()},
+	rows, err := p.Select(&parser.Select{
+		Exprs: targets,
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,
 	})
@@ -78,26 +86,12 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
 	colIDtoRowIndex := map[ColumnID]int{}
-	for i, name := range row.Columns() {
-		c, err := tableDesc.FindColumnByName(name)
-		if err != nil {
-			return nil, err
-		}
-		colIDtoRowIndex[c.ID] = i
+	for i, col := range tableDesc.Columns {
+		colIDtoRowIndex[col.ID] = i
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
-
-	// Evaluate all the column value expressions.
-	vals := make([]parser.Datum, 0, 10)
-	for _, expr := range n.Exprs {
-		val, err := parser.EvalExpr(expr.Expr)
-		if err != nil {
-			return nil, err
-		}
-		vals = append(vals, val)
-	}
 
 	// Secondary indexes needing updating.
 	var indexes []IndexDescriptor
@@ -113,8 +107,8 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	// Update all the rows.
 	var b client.Batch
 	var writes []write
-	for row.Next() {
-		rowVals := row.Values()
+	for rows.Next() {
+		rowVals := rows.Values()
 		primaryIndexKey, _, err := encodeIndexKey(
 			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
 		if err != nil {
@@ -128,10 +122,11 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		}
 		// Compute the new secondary index key:value pairs for this row.
 		//
-		// Update the row values.
+		// Update the row values. Our updated value expressions occur immediately
+		// after the plain columns in the output.
+		newVals := rowVals[len(tableDesc.Columns):]
 		for i, col := range cols {
-			val := vals[i]
-
+			val := newVals[i]
 			if !col.Nullable && val == parser.DNull {
 				return nil, fmt.Errorf("null value in column %q violates not-null constraint", col.Name)
 			}
@@ -172,7 +167,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		}
 
 		// Add the new values.
-		for i, val := range vals {
+		for i, val := range newVals {
 			col := cols[i]
 
 			primitive, err := convertDatum(col, val)
@@ -204,7 +199,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		}
 	}
 
-	if err := row.Err(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
