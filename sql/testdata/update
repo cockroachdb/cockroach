@@ -18,6 +18,17 @@ SELECT * FROM kv
 5 6
 7 8
 
+statement ok
+UPDATE kv SET v = k + v
+
+query II
+SELECT * FROM kv
+----
+1 10
+3 12
+5 11
+7 15
+
 statement error column "m" does not exist
 UPDATE kv SET m = 9 WHERE k IN (1, 3)
 
