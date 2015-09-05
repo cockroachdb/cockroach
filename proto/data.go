@@ -177,14 +177,6 @@ func (k EncodedKey) Format(f fmt.State, verb rune) {
 	fmt.Fprint(f, strconv.Quote(string(k)))
 }
 
-// UnmarshalJSON implements the json Unmarshaler interface. This is required to
-// unmarshal a json proto.Key. As of right now, this is only used in a single
-// test server/status_test/TestStatusGossipJson().
-func (k *Key) UnmarshalJSON(bytes []byte) error {
-	*k = Key(append([]byte(nil), bytes...))
-	return nil
-}
-
 // Timestamp constant values.
 var (
 	// MaxTimestamp is the max value allowed for Timestamp.
