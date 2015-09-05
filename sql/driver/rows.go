@@ -22,26 +22,12 @@ import (
 	"io"
 )
 
-type row []driver.Value
+var _ driver.Rows = &rows{}
 
 type rows struct {
 	columns []string
-	rows    []row
+	rows    [][]driver.Value
 	pos     int // Next iteration index into rows.
-}
-
-// newSingleColumnRows returns a rows structure initialized with a single
-// column of values using the specified column name and values. This is a
-// convenience routine used by operations which return only a single column.
-func newSingleColumnRows(column string, vals []string) *rows {
-	r := make([]row, len(vals))
-	for i, v := range vals {
-		r[i] = row{v}
-	}
-	return &rows{
-		columns: []string{column},
-		rows:    r,
-	}
 }
 
 func (r *rows) Columns() []string {

@@ -19,24 +19,26 @@ package driver
 
 import "database/sql/driver"
 
+var _ driver.Stmt = stmt{}
+
 type stmt struct {
 	conn *conn
 	stmt string
 }
 
-func (s *stmt) Close() error {
+func (stmt) Close() error {
 	return nil
 }
 
-func (s *stmt) NumInput() int {
+func (stmt) NumInput() int {
 	// TODO(pmattis): Count the number of parameters.
 	return -1
 }
 
-func (s *stmt) Exec(args []driver.Value) (driver.Result, error) {
+func (s stmt) Exec(args []driver.Value) (driver.Result, error) {
 	return s.conn.Exec(s.stmt, args)
 }
 
-func (s *stmt) Query(args []driver.Value) (driver.Rows, error) {
+func (s stmt) Query(args []driver.Value) (driver.Rows, error) {
 	return s.conn.Query(s.stmt, args)
 }

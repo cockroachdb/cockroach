@@ -17,11 +17,11 @@
 
 package driver
 
-import (
-	"database/sql/driver"
-	"fmt"
-	"time"
-)
+import "database/sql/driver"
+
+var _ driver.Conn = &conn{}
+var _ driver.Queryer = &conn{}
+var _ driver.Execer = &conn{}
 
 // conn implements the sql/driver.Conn interface. Note that conn is assumed to
 // be stateful and is not used concurrently by multiple goroutines; See
@@ -46,52 +46,66 @@ func (c *conn) Begin() (driver.Tx, error) {
 }
 
 func (c *conn) Exec(stmt string, args []driver.Value) (driver.Result, error) {
-	rows, err := c.Query(stmt, args)
+	result, err := c.internalQuery(stmt, args)
 	if err != nil {
 		return nil, err
 	}
-	return driver.RowsAffected(len(rows.rows)), nil
+	return driver.RowsAffected(len(result.Rows)), nil
 }
 
-func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
+func (c *conn) Query(stmt string, args []driver.Value) (driver.Rows, error) {
+	result, err := c.internalQuery(stmt, args)
+	if err != nil {
+		return nil, err
+	}
+
+	resultRows := &rows{
+		columns: result.Columns,
+		rows:    make([][]driver.Value, 0, len(result.Rows)),
+	}
+	for _, row := range result.Rows {
+		values := make([]driver.Value, 0, len(row.Values))
+		for _, datum := range row.Values {
+			val, err := datum.Value()
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, val)
+		}
+		resultRows.rows = append(resultRows.rows, values)
+	}
+
+	return resultRows, nil
+}
+
+func (c *conn) internalQuery(stmt string, args []driver.Value) (*Result, error) {
 	if c.beginTransaction {
 		stmt = "BEGIN TRANSACTION; " + stmt
 		c.beginTransaction = false
 	}
-	params := make([]Datum, 0, len(args))
+	dArgs := make([]Datum, 0, len(args))
 	for _, arg := range args {
-		var param Datum
-		switch value := arg.(type) {
-		case int64:
-			param.IntVal = &value
-		case float64:
-			param.FloatVal = &value
-		case bool:
-			param.BoolVal = &value
-		case []byte:
-			param.BytesVal = value
-		case string:
-			param.StringVal = &value
-		case time.Time:
-			// Send absolute time devoid of time-zone.
-			t := Datum_Timestamp{Sec: value.Unix(), Nsec: uint32(value.Nanosecond())}
-			param.TimeVal = &t
+		datum, err := makeDatum(arg)
+		if err != nil {
+			return nil, err
 		}
-		params = append(params, param)
+		dArgs = append(dArgs, datum)
+	}
+
+	return c.send(stmt, dArgs)
+}
+
+// send sends the statement to the server.
+func (c *conn) send(stmt string, dArgs []Datum) (*Result, error) {
+	args := Request{
+		Session: c.session,
+		Sql:     stmt,
+		Params:  dArgs,
 	}
 	// Forget the session state, and use the one provided in the server
 	// response for the next request.
-	session := c.session
 	c.session = nil
-	return c.send(Request{
-		Session: session,
-		Sql:     stmt,
-		Params:  params,
-	})
-}
 
-// send sends the call to the server.
-func (c *conn) send(args Request) (*rows, error) {
 	resp, err := c.sender.Send(args)
 	if err != nil {
 		return nil, err
@@ -99,17 +113,8 @@ func (c *conn) send(args Request) (*rows, error) {
 	// Set the session state even if the server returns an application error.
 	// The server is responsible for constructing the correct session state
 	// and sending it back.
-	if c.session != nil {
-		panic("connection has lingering session state")
-	}
 	c.session = resp.Session
-	// Translate into rows
-	r := &rows{}
-	// Only use the last result to populate the response
-	index := len(resp.Results) - 1
-	if index < 0 {
-		return r, nil
-	}
+
 	// Check for any application errors.
 	// TODO(vivek): We might want to bunch all errors found here into
 	// a single error.
@@ -118,35 +123,12 @@ func (c *conn) send(args Request) (*rows, error) {
 			return nil, result.Error
 		}
 	}
-	result := resp.Results[index]
-	r.columns = make([]string, len(result.Columns))
-	for i, column := range result.Columns {
-		r.columns[i] = column
+
+	// Only use the last result.
+	if index := len(resp.Results); index != 0 {
+		return &resp.Results[index-1], nil
 	}
-	r.rows = make([]row, len(result.Rows))
-	for i, p := range result.Rows {
-		t := make(row, len(p.Values))
-		for j, datum := range p.Values {
-			if datum.BoolVal != nil {
-				t[j] = *datum.BoolVal
-			} else if datum.IntVal != nil {
-				t[j] = *datum.IntVal
-			} else if datum.FloatVal != nil {
-				t[j] = *datum.FloatVal
-			} else if datum.BytesVal != nil {
-				t[j] = datum.BytesVal
-			} else if datum.StringVal != nil {
-				t[j] = []byte(*datum.StringVal)
-			} else if datum.TimeVal != nil {
-				t[j] = time.Unix((*datum.TimeVal).Sec, int64((*datum.TimeVal).Nsec)).UTC()
-			}
-			if !driver.IsScanValue(t[j]) {
-				panic(fmt.Sprintf("unsupported type %T returned by database", t[j]))
-			}
-		}
-		r.rows[i] = t
-	}
-	return r, nil
+	return nil, nil
 }
 
 // Execute all the URL settings against the db to create

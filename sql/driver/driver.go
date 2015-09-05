@@ -26,17 +26,17 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
+var _ driver.Driver = roachDriver{}
+
 func init() {
-	sql.Register("cockroach", &roachDriver{})
+	sql.Register("cockroach", roachDriver{})
 }
 
 // roachDriver implements the database/sql/driver.Driver interface. Named
 // roachDriver so as not to conflict with the "driver" package name.
 type roachDriver struct{}
 
-var _ driver.Driver = &roachDriver{}
-
-func (d *roachDriver) Open(dsn string) (driver.Conn, error) {
+func (roachDriver) Open(dsn string) (driver.Conn, error) {
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return nil, err
