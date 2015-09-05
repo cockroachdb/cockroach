@@ -28,8 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-type Key proto.Key
-
 // loadNodes fetches a node and recursively all of its children.
 func loadNodes(t *testing.T, db *client.DB, key proto.Key, nodes map[string]proto.RangeTreeNode) {
 	node := new(proto.RangeTreeNode)
