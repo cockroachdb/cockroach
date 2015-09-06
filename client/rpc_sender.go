@@ -34,9 +34,9 @@ import (
 )
 
 func init() {
-	f := func(u *url.URL, ctx *base.Context, stopper *stop.Stopper, retryOpts retry.Options) (Sender, error) {
+	f := func(u *url.URL, ctx *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (Sender, error) {
 		ctx.Insecure = (u.Scheme != "rpcs")
-		return newRPCSender(u.Host, ctx, stopper, retryOpts)
+		return newRPCSender(u.Host, ctx, retryOpts, stopper)
 	}
 	RegisterSender("rpc", f)
 	RegisterSender("rpcs", f)
@@ -52,7 +52,7 @@ type rpcSender struct {
 }
 
 // newRPCSender returns a new instance of rpcSender.
-func newRPCSender(server string, context *base.Context, stopper *stop.Stopper, retryOpts retry.Options) (*rpcSender, error) {
+func newRPCSender(server string, context *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (*rpcSender, error) {
 	addr, err := net.ResolveTCPAddr("tcp", server)
 	if err != nil {
 		return nil, err

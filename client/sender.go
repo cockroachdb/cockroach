@@ -59,7 +59,7 @@ func (f SenderFunc) Send(ctx context.Context, c proto.Call) {
 }
 
 // NewSenderFunc creates a new sender for the registered scheme.
-type NewSenderFunc func(u *url.URL, ctx *base.Context, stopper *stop.Stopper, retryOpts retry.Options) (Sender, error)
+type NewSenderFunc func(u *url.URL, ctx *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (Sender, error)
 
 var sendersMu sync.Mutex
 var senders = map[string]NewSenderFunc{}
@@ -78,12 +78,12 @@ func RegisterSender(scheme string, f NewSenderFunc) {
 	senders[scheme] = f
 }
 
-func newSender(u *url.URL, ctx *base.Context, stopper *stop.Stopper) (Sender, error) {
+func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stopper *stop.Stopper) (Sender, error) {
 	sendersMu.Lock()
 	defer sendersMu.Unlock()
 	f := senders[u.Scheme]
 	if f == nil {
 		return nil, fmt.Errorf("no sender registered for \"%s\"", u.Scheme)
 	}
-	return f(u, ctx, stopper, defaultRetryOptions)
+	return f(u, ctx, retryOptions, stopper)
 }
