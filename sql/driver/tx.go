@@ -17,16 +17,20 @@
 
 package driver
 
+import "database/sql/driver"
+
+var _ driver.Tx = tx{}
+
 type tx struct {
 	conn *conn
 }
 
-func (t *tx) Commit() error {
+func (t tx) Commit() error {
 	_, err := t.conn.Exec("COMMIT TRANSACTION", nil)
 	return err
 }
 
-func (t *tx) Rollback() error {
+func (t tx) Rollback() error {
 	_, err := t.conn.Exec("ROLLBACK TRANSACTION", nil)
 	return err
 }

@@ -18,42 +18,92 @@
 package driver
 
 import (
+	"database/sql/driver"
 	"fmt"
-	"strconv"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util"
 )
+
+var _ driver.Valuer = Datum{}
 
 const (
 	// Endpoint is the URL path prefix which accepts incoming
 	// HTTP requests for the SQL API.
 	Endpoint = "/sql/"
-
-	timestampWithOffsetZoneFormat = "2006-01-02 15:04:05.999999999-07:00"
 )
 
-func (d Datum) String() string {
-	val := d.GetValue()
+func makeDatum(val driver.Value) (Datum, error) {
+	var datum Datum
 
 	if val == nil {
-		return "NULL"
+		return datum, nil
 	}
 
 	switch t := val.(type) {
-	case *bool:
-		return strconv.FormatBool(*t)
-	case *int64:
-		return strconv.FormatInt(*t, 10)
-	case *float64:
-		return strconv.FormatFloat(*t, 'g', -1, 64)
+	case int64:
+		datum.IntVal = &t
+	case float64:
+		datum.FloatVal = &t
+	case bool:
+		datum.BoolVal = &t
 	case []byte:
-		return string(t)
-	case *string:
-		return *t
-	case *Datum_Timestamp:
-		return time.Unix((*t).Sec, int64((*t).Nsec)).UTC().Format(timestampWithOffsetZoneFormat)
+		datum.BytesVal = t
+	case string:
+		datum.StringVal = &t
+	case time.Time:
+		// Send absolute time devoid of time-zone.
+		datum.TimeVal = &Datum_Timestamp{
+			Sec:  t.Unix(),
+			Nsec: uint32(t.Nanosecond()),
+		}
 	default:
-		panic(fmt.Sprintf("unexpected type %T", t))
+		return datum, util.Errorf("unsupported type %T", t)
 	}
+
+	return datum, nil
+}
+
+// Value implements the driver.Valuer interface.
+func (d Datum) Value() (driver.Value, error) {
+	val := d.GetValue()
+
+	switch t := val.(type) {
+	case *bool:
+		val = *t
+	case *int64:
+		val = *t
+	case *float64:
+		val = *t
+	case []byte:
+		val = t
+	case *string:
+		val = *t
+	case *Datum_Timestamp:
+		val = time.Unix((*t).Sec, int64((*t).Nsec)).UTC()
+	}
+
+	if driver.IsValue(val) {
+		return val, nil
+	}
+	return nil, util.Errorf("unsupported type %T", val)
+}
+
+func (d Datum) String() string {
+	v, err := d.Value()
+	if err != nil {
+		panic(err)
+	}
+
+	if v == nil {
+		return "NULL"
+	}
+
+	if bytes, ok := v.([]byte); ok {
+		return string(bytes)
+	}
+
+	return fmt.Sprint(v)
 }
 
 // Method returns the method.

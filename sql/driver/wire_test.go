@@ -19,47 +19,33 @@ package driver
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-func dBool(v bool) Datum {
-	return Datum{BoolVal: &v}
-}
-
-func dInt(v int64) Datum {
-	return Datum{IntVal: &v}
-}
-
-func dFloat(v float64) Datum {
-	return Datum{FloatVal: &v}
-}
-
-func dBytes(v []byte) Datum {
-	return Datum{BytesVal: v}
-}
-
-func dString(v string) Datum {
-	return Datum{StringVal: &v}
-}
 
 func TestDatumString(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testData := []struct {
-		datum    Datum
+		value    interface{}
 		expected string
 	}{
-		{Datum{}, "NULL"},
-		{dBool(false), "false"},
-		{dBool(true), "true"},
-		{dInt(-2), "-2"},
-		{dFloat(4.5), "4.5"},
-		{dBytes([]byte("6")), "6"},
-		{dString("hello"), "hello"},
+		{nil, "NULL"},
+		{false, "false"},
+		{true, "true"},
+		{int64(-2), "-2"},
+		{float64(4.5), "4.5"},
+		{[]byte("6"), "6"},
+		{"hello", "hello"},
+		{time.Date(2015, 9, 6, 2, 19, 36, 342, time.UTC), "2015-09-06 02:19:36.000000342 +0000 UTC"},
 	}
 	for i, d := range testData {
-		s := d.datum.String()
+		datum, err := makeDatum(d.value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := datum.String()
 		if d.expected != s {
 			t.Errorf("%d: expected %s, but got %s", i, d.expected, s)
 		}

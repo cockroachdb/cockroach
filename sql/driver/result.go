@@ -17,6 +17,10 @@
 
 package driver
 
+import "database/sql/driver"
+
+var _ driver.Result = result{}
+
 // TODO(pmattis): Currently unused, but will be needed when we support
 // LastInsertId.
 type result struct {
@@ -24,10 +28,10 @@ type result struct {
 	rowsAffected int64
 }
 
-func (r *result) LastInsertId() (int64, error) {
+func (r result) LastInsertId() (int64, error) {
 	return r.lastInsertID, nil
 }
 
-func (r *result) RowsAffected() (int64, error) {
+func (r result) RowsAffected() (int64, error) {
 	return r.rowsAffected, nil
 }
