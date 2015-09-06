@@ -76,14 +76,15 @@ func (ss *notifyingSender) Send(ctx context.Context, call proto.Call) {
 	}
 }
 
-func createTestClient(stopper *stop.Stopper, addr string) *client.DB {
-	return createTestClientFor(stopper, addr, security.NodeUser)
+func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.DB {
+	return createTestClientForUser(t, stopper, addr, security.NodeUser)
 }
 
-func createTestClientFor(stopper *stop.Stopper, addr, user string) *client.DB {
-	db, err := client.Open(stopper, "rpcs://"+user+"@"+addr+"?certs="+security.EmbeddedCertsDir)
+func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user string) *client.DB {
+	db, err := client.Open(stopper, fmt.Sprintf("rpcs://%s@%s?certs=%s&failfast=1",
+		user, addr, security.EmbeddedCertsDir))
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	return db
 }
@@ -238,7 +239,7 @@ func TestClientRunTransaction(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	defer setTxnRetryBackoff(1 * time.Millisecond)()
-	db := createTestClient(s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	for _, commit := range []bool{true, false} {
 		value := []byte("value")
@@ -296,7 +297,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	db := createTestClient(s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	zoneConfig := &config.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
@@ -327,7 +328,7 @@ func TestClientGetAndPut(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	db := createTestClient(s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	value := []byte("value")
 	if err := db.Put(testUser+"/key", value); err != nil {
@@ -355,7 +356,7 @@ func TestClientEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	db := createTestClient(s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	if err := db.Put(testUser+"/a", []byte{}); err != nil {
 		t.Error(err)
@@ -384,7 +385,7 @@ func TestClientBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	db := createTestClient(s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	keys := []proto.Key{}
 	{
@@ -602,7 +603,7 @@ func TestConcurrentIncrements(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	db := createTestClient(s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	// Convenience loop: Crank up this number for testing this
 	// more often. It'll increase test duration though.
@@ -622,8 +623,8 @@ func TestClientPermissions(t *testing.T) {
 
 	// NodeUser certs are required for all KV operations.
 	// RootUser has no KV privileges whatsoever.
-	nodeClient := createTestClientFor(s.Stopper(), s.ServingAddr(), security.NodeUser)
-	rootClient := createTestClientFor(s.Stopper(), s.ServingAddr(), security.RootUser)
+	nodeClient := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
+	rootClient := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
 
 	testCases := []struct {
 		path    string
