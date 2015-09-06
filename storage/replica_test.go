@@ -2898,30 +2898,45 @@ func TestRangeLookup(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	for _, key := range []proto.Key{
+
+	expected := []proto.RangeDescriptor{*tc.rng.Desc()}
+	testCases := []struct {
+		key      proto.Key
+		reverse  bool
+		expected []proto.RangeDescriptor
+	}{
+
 		// Test with the first range (StartKey==KeyMin). Normally we look
 		// up this range in gossip instead of executing the RPC, but
 		// RangeLookup is still used when up-to-date information is
 		// required.
-		proto.KeyMin,
+		{key: proto.KeyMin, reverse: false, expected: expected},
 		// Test with the last key in a meta prefix. This is an edge case in the
 		// implementation.
-		proto.MakeKey(keys.Meta1Prefix, proto.KeyMax),
-	} {
+		{key: keys.Meta1KeyMax, reverse: false, expected: expected},
+		{key: keys.Meta2KeyMax, reverse: false, expected: nil},
+		{key: keys.Meta1KeyMax, reverse: true, expected: expected},
+		{key: keys.Meta2KeyMax, reverse: true, expected: expected},
+	}
+
+	for _, c := range testCases {
 		resp, err := tc.store.ExecuteCmd(context.Background(), &proto.RangeLookupRequest{
 			RequestHeader: proto.RequestHeader{
 				RangeID: 1,
-				Key:     key,
+				Key:     c.key,
 			},
 			MaxRanges: 1,
+			Reverse:   c.reverse,
 		})
 		if err != nil {
-			t.Fatal(err)
-		}
-		reply := resp.(*proto.RangeLookupResponse)
-		expected := []proto.RangeDescriptor{*tc.rng.Desc()}
-		if !reflect.DeepEqual(reply.Ranges, expected) {
-			t.Fatalf("expected %+v, got %+v", expected, reply.Ranges)
+			if c.expected != nil {
+				t.Fatal(err)
+			}
+		} else {
+			reply := resp.(*proto.RangeLookupResponse)
+			if !reflect.DeepEqual(reply.Ranges, c.expected) {
+				t.Fatalf("expected %+v, got %+v", c.expected, reply.Ranges)
+			}
 		}
 	}
 }

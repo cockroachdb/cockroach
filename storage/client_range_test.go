@@ -28,14 +28,13 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-
-	"github.com/cockroachdb/cockroach/keys"
 )
 
 // TestRangeCommandClockUpdate verifies that followers update their
@@ -327,13 +326,12 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	defer stopper.Stop()
 
 	// Init test ranges:
-	// ["1","a"), ["a","c"), ["c","e"), ["e","g") and ["g","\xff\xff").
+	// ["","a"), ["a","c"), ["c","e"), ["e","g") and ["g","\xff\xff").
 	splits := []proto.AdminSplitRequest{
 		adminSplitArgs(proto.Key("g"), proto.Key("g"), 1, store.StoreID()),
 		adminSplitArgs(proto.Key("e"), proto.Key("e"), 1, store.StoreID()),
 		adminSplitArgs(proto.Key("c"), proto.Key("c"), 1, store.StoreID()),
 		adminSplitArgs(proto.Key("a"), proto.Key("a"), 1, store.StoreID()),
-		adminSplitArgs(proto.Key("1"), proto.Key("1"), 1, store.StoreID()),
 	}
 
 	for _, split := range splits {
@@ -343,6 +341,34 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		}
 	}
 
+	// Resolve the intents.
+	scanArgs := proto.ScanRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     proto.KeyMin,
+			EndKey:  keys.RangeMetaKey(proto.KeyMax),
+			RangeID: 1,
+			Replica: proto.Replica{StoreID: store.StoreID()},
+		},
+	}
+	util.SucceedsWithin(t, time.Second, func() error {
+		_, err := store.ExecuteCmd(context.Background(), &scanArgs)
+		return err
+	})
+
+	revScanArgs := func(key []byte, maxResults int32) *proto.RangeLookupRequest {
+		return &proto.RangeLookupRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:             key,
+				RangeID:         1,
+				Replica:         proto.Replica{StoreID: store.StoreID()},
+				ReadConsistency: proto.INCONSISTENT,
+			},
+			MaxRanges: maxResults,
+			Reverse:   true,
+		}
+
+	}
+
 	// Test cases.
 	testCases := []struct {
 		request  *proto.RangeLookupRequest
@@ -350,16 +376,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}{
 		// Test key in the middle of the range.
 		{
-			request: &proto.RangeLookupRequest{
-				RequestHeader: proto.RequestHeader{
-					Key:             keys.RangeMetaKey(proto.Key("f")),
-					RangeID:         1,
-					Replica:         proto.Replica{StoreID: store.StoreID()},
-					ReadConsistency: proto.INCONSISTENT,
-				},
-				MaxRanges: 2,
-				Reverse:   true,
-			},
+			request: revScanArgs(keys.RangeMetaKey(proto.Key("f")), 2),
 			// ["e","g") and ["c","e").
 			expected: []proto.RangeDescriptor{
 				{StartKey: proto.Key("e"), EndKey: proto.Key("g")},
@@ -368,21 +385,37 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		},
 		// Test key in the end key of the range.
 		{
-			request: &proto.RangeLookupRequest{
-				RequestHeader: proto.RequestHeader{
-					Key:             keys.RangeMetaKey(proto.Key("g")),
-					RangeID:         1,
-					Replica:         proto.Replica{StoreID: store.StoreID()},
-					ReadConsistency: proto.INCONSISTENT,
-				},
-				MaxRanges: 3,
-				Reverse:   true,
-			},
+			request: revScanArgs(keys.RangeMetaKey(proto.Key("g")), 3),
 			// ["e","g"), ["c","e") and ["a","c").
 			expected: []proto.RangeDescriptor{
 				{StartKey: proto.Key("e"), EndKey: proto.Key("g")},
 				{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
 				{StartKey: proto.Key("a"), EndKey: proto.Key("c")},
+			},
+		},
+		{
+			request: revScanArgs(keys.RangeMetaKey(proto.Key("e")), 2),
+			// ["c","e") and ["a","c").
+			expected: []proto.RangeDescriptor{
+				{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
+				{StartKey: proto.Key("a"), EndKey: proto.Key("c")},
+			},
+		},
+		// Test Meta2KeyMax.
+		{
+			request: revScanArgs(keys.Meta2KeyMax, 2),
+			// ["e","g") and ["g","\xff\xff")
+			expected: []proto.RangeDescriptor{
+				{StartKey: proto.Key("g"), EndKey: proto.Key("\xff\xff")},
+				{StartKey: proto.Key("e"), EndKey: proto.Key("g")},
+			},
+		},
+		// Test Meta1KeyMax.
+		{
+			request: revScanArgs(keys.Meta1KeyMax, 1),
+			// ["","a")
+			expected: []proto.RangeDescriptor{
+				{StartKey: proto.KeyMin, EndKey: proto.Key("a")},
 			},
 		},
 	}
