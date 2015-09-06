@@ -73,13 +73,9 @@ func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
 		case string:
 			param.StringVal = &value
 		case time.Time:
-			// TODO(vivek): pass in time as an input that can be interpreted
-			// by the server.
-			time, err := value.MarshalBinary()
-			if err != nil {
-				return nil, err
-			}
-			param.BytesVal = time
+			// Send absolute time devoid of time-zone.
+			t := Datum_Timestamp{Sec: value.Unix(), Nsec: uint32(value.Nanosecond())}
+			param.TimeVal = &t
 		}
 		params = append(params, param)
 	}
@@ -141,6 +137,8 @@ func (c *conn) send(args Request) (*rows, error) {
 				t[j] = datum.BytesVal
 			} else if datum.StringVal != nil {
 				t[j] = []byte(*datum.StringVal)
+			} else if datum.TimeVal != nil {
+				t[j] = time.Unix((*datum.TimeVal).Sec, int64((*datum.TimeVal).Nsec)).UTC()
 			}
 			if !driver.IsScanValue(t[j]) {
 				panic(fmt.Sprintf("unsupported type %T returned by database", t[j]))

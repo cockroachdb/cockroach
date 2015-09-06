@@ -65,7 +65,6 @@ func TestTypeCheckExprError(t *testing.T) {
 		{`1::decimal`, `invalid cast: int -> DECIMAL`},
 		{`1::date`, `invalid cast: int -> DATE`},
 		{`1::timestamp`, `invalid cast: int -> TIMESTAMP`},
-		{`1::interval`, `invalid cast: int -> INTERVAL`},
 		{`CASE 'one' WHEN 1 THEN 1 WHEN 'two' THEN 2 END`, `incompatible condition type`},
 		{`CASE 1 WHEN 1 THEN 'one' WHEN 2 THEN 2 END`, `incompatible value type`},
 		{`CASE 1 WHEN 1 THEN 'one' ELSE 2 END`, `incompatible value type`},

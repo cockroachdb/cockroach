@@ -929,6 +929,9 @@ func init() {
 	cmpOps[cmpArgs{In, intType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, floatType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, stringType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, dateType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, timestampType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, intervalType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, tupleType, tupleType}] = evalTupleIN
 }
 
@@ -1475,6 +1478,10 @@ func evalCastExpr(expr *CastExpr) (Datum, error) {
 			// TODO(vivek): we might consider using the postgres format as well.
 			d, err := time.ParseDuration(string(d.(DString)))
 			return DInterval{Duration: d}, err
+
+		case DInt:
+			// An integer duration represents a duration in nanoseconds.
+			return DInterval{Duration: time.Duration(d.(DInt))}, nil
 		}
 		// TODO(pmattis): unimplemented.
 		// case *DecimalType:
