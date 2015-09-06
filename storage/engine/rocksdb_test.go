@@ -40,14 +40,17 @@ const testCacheSize = 1 << 30 // GB.
 // encodePutResponse creates a put response using the specified
 // timestamp and encodes it using gogoprotobuf.
 func encodePutResponse(timestamp proto.Timestamp, t *testing.T) []byte {
-	rcEntry := &proto.ResponseCacheEntry{
-		Put: &proto.PutResponse{
-			ResponseHeader: proto.ResponseHeader{
-				Timestamp: timestamp,
-			},
+	batch := &proto.BatchResponse{
+		ResponseHeader: proto.ResponseHeader{
+			Timestamp: timestamp,
 		},
 	}
-	data, err := gogoproto.Marshal(rcEntry)
+	batch.Add(&proto.PutResponse{
+		ResponseHeader: proto.ResponseHeader{
+			Timestamp: timestamp,
+		},
+	})
+	data, err := gogoproto.Marshal(batch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,8 +113,7 @@ func TestRocksDBCompaction(t *testing.T) {
 
 	// Compact range and scan remaining values to compare.
 	rocksdb.CompactRange(nil, nil)
-	actualKVs, _, err := MVCCScan(rocksdb, proto.KeyMin, proto.KeyMax,
-		0, proto.ZeroTimestamp, true, nil)
+	actualKVs, _, err := MVCCScan(rocksdb, proto.KeyMin, proto.KeyMax, 0, proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		t.Fatalf("could not run scan: %v", err)
 	}

@@ -124,43 +124,6 @@ rocksdb::ReadOptions MakeReadOptions(DBSnapshot* snap) {
   return options;
 }
 
-// GetResponseHeader extracts the response header for each type of
-// response in the ResponseCacheEntry union.
-const cockroach::proto::ResponseHeader* GetResponseHeader(const cockroach::proto::ResponseCacheEntry& rcEntry) {
-  if (rcEntry.has_put()) {
-    return &rcEntry.put().header();
-  } else if (rcEntry.has_conditional_put()) {
-    return &rcEntry.conditional_put().header();
-  } else if (rcEntry.has_increment()) {
-    return &rcEntry.increment().header();
-  } else if (rcEntry.has_delete_()) {
-    return &rcEntry.delete_().header();
-  } else if (rcEntry.has_delete_range()) {
-    return &rcEntry.delete_range().header();
-  } else if (rcEntry.has_end_transaction()) {
-    return &rcEntry.end_transaction().header();
-  } else if (rcEntry.has_heartbeat_txn()) {
-    return &rcEntry.heartbeat_txn().header();
-  } else if (rcEntry.has_gc()) {
-    return &rcEntry.gc().header();
-  } else if (rcEntry.has_push_txn()) {
-    return &rcEntry.push_txn().header();
-  } else if (rcEntry.has_resolve_intent()) {
-    return &rcEntry.resolve_intent().header();
-  } else if (rcEntry.has_resolve_intent_range()) {
-    return &rcEntry.resolve_intent_range().header();
-  } else if (rcEntry.has_merge()) {
-    return &rcEntry.merge().header();
-  } else if (rcEntry.has_truncate_log()) {
-    return &rcEntry.truncate_log().header();
-  } else if (rcEntry.has_leader_lease()) {
-    return &rcEntry.leader_lease().header();
-  } else if (rcEntry.has_batch()) {
-    return &rcEntry.batch().header();
-  }
-  return NULL;
-}
-
 // DBCompactionFilter implements our garbage collection policy for
 // key/value pairs which can be considered in isolation. This
 // includes:
@@ -266,17 +229,12 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
     // Response cache rows are GC'd if their timestamp is older than the
     // response cache GC timeout.
     if (is_rcache) {
-      cockroach::proto::ResponseCacheEntry rcEntry;
-      if (!rcEntry.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
+      cockroach::proto::BatchResponse b_reply;
+      if (!b_reply.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
         // *error_msg = (char*)"failed to parse response cache entry";
         return false;
       }
-      const cockroach::proto::ResponseHeader* header = GetResponseHeader(rcEntry);
-      if (header == NULL) {
-        // *error_msg = (char*)"failed to parse response cache header";
-        return false;
-      }
-      if (header->timestamp().wall_time() <= min_rcache_ts_) {
+      if (b_reply.header().timestamp().wall_time() <= min_rcache_ts_) {
         return true;
       }
     } else if (is_txn) {

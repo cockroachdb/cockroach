@@ -1025,16 +1025,25 @@ func (m *PushTxnResponse) GetPusheeTxn() *Transaction {
 }
 
 // A ResolveIntentRequest is arguments to the ResolveIntent()
-// method. It is sent by transaction coordinators and after success
-// calling PushTxn to clean up write intents: either to remove them or
-// commit them.
+// method. It is sent by transaction coordinators after success
+// calling PushTxn to clean up write intents: either to remove, commit
+// or move them forward in time.
 type ResolveIntentRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// The transaction whose intent is being resolved.
+	IntentTxn Transaction `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
 }
 
 func (m *ResolveIntentRequest) Reset()         { *m = ResolveIntentRequest{} }
 func (m *ResolveIntentRequest) String() string { return proto1.CompactTextString(m) }
 func (*ResolveIntentRequest) ProtoMessage()    {}
+
+func (m *ResolveIntentRequest) GetIntentTxn() Transaction {
+	if m != nil {
+		return m.IntentTxn
+	}
+	return Transaction{}
+}
 
 // A ResolveIntentResponse is the return value from the
 // ResolveIntent() method.
@@ -1046,16 +1055,26 @@ func (m *ResolveIntentResponse) Reset()         { *m = ResolveIntentResponse{} }
 func (m *ResolveIntentResponse) String() string { return proto1.CompactTextString(m) }
 func (*ResolveIntentResponse) ProtoMessage()    {}
 
-// A ResolveIntentRangeRequest is arguments to the
-// ResolveIntentRange() method. This clear write intents for a range
-// of keys to resolve intents created by range ops.
+// A ResolveIntentRangeRequest is arguments to the ResolveIntentRange() method.
+// It is sent by transaction coordinators after success calling PushTxn to
+// clean up write intents: either to remove, commit or move them forward in
+// time.
 type ResolveIntentRangeRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// The transaction whose intents are being resolved.
+	IntentTxn Transaction `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
 }
 
 func (m *ResolveIntentRangeRequest) Reset()         { *m = ResolveIntentRangeRequest{} }
 func (m *ResolveIntentRangeRequest) String() string { return proto1.CompactTextString(m) }
 func (*ResolveIntentRangeRequest) ProtoMessage()    {}
+
+func (m *ResolveIntentRangeRequest) GetIntentTxn() Transaction {
+	if m != nil {
+		return m.IntentTxn
+	}
+	return Transaction{}
+}
 
 // A ResolveIntentRangeResponse is the return value from the
 // ResolveIntent() method.
@@ -1165,19 +1184,17 @@ type RequestUnion struct {
 	Delete             *DeleteRequest             `protobuf:"bytes,5,opt,name=delete" json:"delete,omitempty"`
 	DeleteRange        *DeleteRangeRequest        `protobuf:"bytes,6,opt,name=delete_range" json:"delete_range,omitempty"`
 	Scan               *ScanRequest               `protobuf:"bytes,7,opt,name=scan" json:"scan,omitempty"`
-	EndTransaction     *EndTransactionRequest     `protobuf:"bytes,8,opt,name=end_transaction" json:"end_transaction,omitempty"`
-	AdminSplit         *AdminSplitRequest         `protobuf:"bytes,9,opt,name=admin_split" json:"admin_split,omitempty"`
-	AdminMerge         *AdminMergeRequest         `protobuf:"bytes,10,opt,name=admin_merge" json:"admin_merge,omitempty"`
-	HeartbeatTxn       *HeartbeatTxnRequest       `protobuf:"bytes,11,opt,name=heartbeat_txn" json:"heartbeat_txn,omitempty"`
-	Gc                 *GCRequest                 `protobuf:"bytes,12,opt,name=gc" json:"gc,omitempty"`
-	PushTxn            *PushTxnRequest            `protobuf:"bytes,13,opt,name=push_txn" json:"push_txn,omitempty"`
-	RangeLookup        *RangeLookupRequest        `protobuf:"bytes,14,opt,name=range_lookup" json:"range_lookup,omitempty"`
-	ResolveIntent      *ResolveIntentRequest      `protobuf:"bytes,15,opt,name=resolve_intent" json:"resolve_intent,omitempty"`
-	ResolveIntentRange *ResolveIntentRangeRequest `protobuf:"bytes,16,opt,name=resolve_intent_range" json:"resolve_intent_range,omitempty"`
-	Merge              *MergeRequest              `protobuf:"bytes,17,opt,name=merge" json:"merge,omitempty"`
-	Truncate           *TruncateLogRequest        `protobuf:"bytes,18,opt,name=truncate" json:"truncate,omitempty"`
-	LeaderLease        *LeaderLeaseRequest        `protobuf:"bytes,19,opt,name=leader_lease" json:"leader_lease,omitempty"`
-	ReverseScan        *ReverseScanRequest        `protobuf:"bytes,20,opt,name=reverse_scan" json:"reverse_scan,omitempty"`
+	ReverseScan        *ReverseScanRequest        `protobuf:"bytes,8,opt,name=reverse_scan" json:"reverse_scan,omitempty"`
+	EndTransaction     *EndTransactionRequest     `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
+	HeartbeatTxn       *HeartbeatTxnRequest       `protobuf:"bytes,10,opt,name=heartbeat_txn" json:"heartbeat_txn,omitempty"`
+	Gc                 *GCRequest                 `protobuf:"bytes,11,opt,name=gc" json:"gc,omitempty"`
+	PushTxn            *PushTxnRequest            `protobuf:"bytes,12,opt,name=push_txn" json:"push_txn,omitempty"`
+	RangeLookup        *RangeLookupRequest        `protobuf:"bytes,13,opt,name=range_lookup" json:"range_lookup,omitempty"`
+	ResolveIntent      *ResolveIntentRequest      `protobuf:"bytes,14,opt,name=resolve_intent" json:"resolve_intent,omitempty"`
+	ResolveIntentRange *ResolveIntentRangeRequest `protobuf:"bytes,15,opt,name=resolve_intent_range" json:"resolve_intent_range,omitempty"`
+	Merge              *MergeRequest              `protobuf:"bytes,16,opt,name=merge" json:"merge,omitempty"`
+	Truncate           *TruncateLogRequest        `protobuf:"bytes,17,opt,name=truncate" json:"truncate,omitempty"`
+	LeaderLease        *LeaderLeaseRequest        `protobuf:"bytes,18,opt,name=leader_lease" json:"leader_lease,omitempty"`
 }
 
 func (m *RequestUnion) Reset()         { *m = RequestUnion{} }
@@ -1233,23 +1250,16 @@ func (m *RequestUnion) GetScan() *ScanRequest {
 	return nil
 }
 
+func (m *RequestUnion) GetReverseScan() *ReverseScanRequest {
+	if m != nil {
+		return m.ReverseScan
+	}
+	return nil
+}
+
 func (m *RequestUnion) GetEndTransaction() *EndTransactionRequest {
 	if m != nil {
 		return m.EndTransaction
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetAdminSplit() *AdminSplitRequest {
-	if m != nil {
-		return m.AdminSplit
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetAdminMerge() *AdminMergeRequest {
-	if m != nil {
-		return m.AdminMerge
 	}
 	return nil
 }
@@ -1317,13 +1327,6 @@ func (m *RequestUnion) GetLeaderLease() *LeaderLeaseRequest {
 	return nil
 }
 
-func (m *RequestUnion) GetReverseScan() *ReverseScanRequest {
-	if m != nil {
-		return m.ReverseScan
-	}
-	return nil
-}
-
 // A ResponseUnion contains exactly one of the optional responses.
 // The values added here must match those in RequestUnion.
 type ResponseUnion struct {
@@ -1334,19 +1337,17 @@ type ResponseUnion struct {
 	Delete             *DeleteResponse             `protobuf:"bytes,5,opt,name=delete" json:"delete,omitempty"`
 	DeleteRange        *DeleteRangeResponse        `protobuf:"bytes,6,opt,name=delete_range" json:"delete_range,omitempty"`
 	Scan               *ScanResponse               `protobuf:"bytes,7,opt,name=scan" json:"scan,omitempty"`
-	EndTransaction     *EndTransactionResponse     `protobuf:"bytes,8,opt,name=end_transaction" json:"end_transaction,omitempty"`
-	AdminSplit         *AdminSplitResponse         `protobuf:"bytes,9,opt,name=admin_split" json:"admin_split,omitempty"`
-	AdminMerge         *AdminMergeResponse         `protobuf:"bytes,10,opt,name=admin_merge" json:"admin_merge,omitempty"`
-	HeartbeatTxn       *HeartbeatTxnResponse       `protobuf:"bytes,11,opt,name=heartbeat_txn" json:"heartbeat_txn,omitempty"`
-	Gc                 *GCResponse                 `protobuf:"bytes,12,opt,name=gc" json:"gc,omitempty"`
-	PushTxn            *PushTxnResponse            `protobuf:"bytes,13,opt,name=push_txn" json:"push_txn,omitempty"`
-	RangeLookup        *RangeLookupResponse        `protobuf:"bytes,14,opt,name=range_lookup" json:"range_lookup,omitempty"`
-	ResolveIntent      *ResolveIntentResponse      `protobuf:"bytes,15,opt,name=resolve_intent" json:"resolve_intent,omitempty"`
-	ResolveIntentRange *ResolveIntentRangeResponse `protobuf:"bytes,16,opt,name=resolve_intent_range" json:"resolve_intent_range,omitempty"`
-	Merge              *MergeResponse              `protobuf:"bytes,17,opt,name=merge" json:"merge,omitempty"`
-	Truncate           *TruncateLogResponse        `protobuf:"bytes,18,opt,name=truncate" json:"truncate,omitempty"`
-	LeaderLease        *LeaderLeaseResponse        `protobuf:"bytes,19,opt,name=leader_lease" json:"leader_lease,omitempty"`
-	ReverseScan        *ReverseScanResponse        `protobuf:"bytes,20,opt,name=reverse_scan" json:"reverse_scan,omitempty"`
+	ReverseScan        *ReverseScanResponse        `protobuf:"bytes,8,opt,name=reverse_scan" json:"reverse_scan,omitempty"`
+	EndTransaction     *EndTransactionResponse     `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
+	HeartbeatTxn       *HeartbeatTxnResponse       `protobuf:"bytes,10,opt,name=heartbeat_txn" json:"heartbeat_txn,omitempty"`
+	Gc                 *GCResponse                 `protobuf:"bytes,11,opt,name=gc" json:"gc,omitempty"`
+	PushTxn            *PushTxnResponse            `protobuf:"bytes,12,opt,name=push_txn" json:"push_txn,omitempty"`
+	RangeLookup        *RangeLookupResponse        `protobuf:"bytes,13,opt,name=range_lookup" json:"range_lookup,omitempty"`
+	ResolveIntent      *ResolveIntentResponse      `protobuf:"bytes,14,opt,name=resolve_intent" json:"resolve_intent,omitempty"`
+	ResolveIntentRange *ResolveIntentRangeResponse `protobuf:"bytes,15,opt,name=resolve_intent_range" json:"resolve_intent_range,omitempty"`
+	Merge              *MergeResponse              `protobuf:"bytes,16,opt,name=merge" json:"merge,omitempty"`
+	Truncate           *TruncateLogResponse        `protobuf:"bytes,17,opt,name=truncate" json:"truncate,omitempty"`
+	LeaderLease        *LeaderLeaseResponse        `protobuf:"bytes,18,opt,name=leader_lease" json:"leader_lease,omitempty"`
 }
 
 func (m *ResponseUnion) Reset()         { *m = ResponseUnion{} }
@@ -1402,23 +1403,16 @@ func (m *ResponseUnion) GetScan() *ScanResponse {
 	return nil
 }
 
+func (m *ResponseUnion) GetReverseScan() *ReverseScanResponse {
+	if m != nil {
+		return m.ReverseScan
+	}
+	return nil
+}
+
 func (m *ResponseUnion) GetEndTransaction() *EndTransactionResponse {
 	if m != nil {
 		return m.EndTransaction
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetAdminSplit() *AdminSplitResponse {
-	if m != nil {
-		return m.AdminSplit
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetAdminMerge() *AdminMergeResponse {
-	if m != nil {
-		return m.AdminMerge
 	}
 	return nil
 }
@@ -1482,13 +1476,6 @@ func (m *ResponseUnion) GetTruncate() *TruncateLogResponse {
 func (m *ResponseUnion) GetLeaderLease() *LeaderLeaseResponse {
 	if m != nil {
 		return m.LeaderLease
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetReverseScan() *ReverseScanResponse {
-	if m != nil {
-		return m.ReverseScan
 	}
 	return nil
 }
@@ -2734,6 +2721,14 @@ func (m *ResolveIntentRequest) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n48
+	data[i] = 0x12
+	i++
+	i = encodeVarintApi(data, i, uint64(m.IntentTxn.Size()))
+	n49, err := m.IntentTxn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n49
 	return i, nil
 }
 
@@ -2755,11 +2750,11 @@ func (m *ResolveIntentResponse) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n49, err := m.ResponseHeader.MarshalTo(data[i:])
+	n50, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n49
+	i += n50
 	return i, nil
 }
 
@@ -2781,11 +2776,19 @@ func (m *ResolveIntentRangeRequest) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n50, err := m.RequestHeader.MarshalTo(data[i:])
+	n51, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n50
+	i += n51
+	data[i] = 0x12
+	i++
+	i = encodeVarintApi(data, i, uint64(m.IntentTxn.Size()))
+	n52, err := m.IntentTxn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n52
 	return i, nil
 }
 
@@ -2807,11 +2810,11 @@ func (m *ResolveIntentRangeResponse) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n51, err := m.ResponseHeader.MarshalTo(data[i:])
+	n53, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n51
+	i += n53
 	return i, nil
 }
 
@@ -2833,19 +2836,19 @@ func (m *MergeRequest) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n52, err := m.RequestHeader.MarshalTo(data[i:])
+	n54, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n52
+	i += n54
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Value.Size()))
-	n53, err := m.Value.MarshalTo(data[i:])
+	n55, err := m.Value.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n53
+	i += n55
 	return i, nil
 }
 
@@ -2867,11 +2870,11 @@ func (m *MergeResponse) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n54, err := m.ResponseHeader.MarshalTo(data[i:])
+	n56, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n54
+	i += n56
 	return i, nil
 }
 
@@ -2893,11 +2896,11 @@ func (m *TruncateLogRequest) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n55, err := m.RequestHeader.MarshalTo(data[i:])
+	n57, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n55
+	i += n57
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Index))
@@ -2922,11 +2925,11 @@ func (m *TruncateLogResponse) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n56, err := m.ResponseHeader.MarshalTo(data[i:])
+	n58, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n56
+	i += n58
 	return i, nil
 }
 
@@ -2948,19 +2951,19 @@ func (m *LeaderLeaseRequest) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n57, err := m.RequestHeader.MarshalTo(data[i:])
+	n59, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n57
+	i += n59
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Lease.Size()))
-	n58, err := m.Lease.MarshalTo(data[i:])
+	n60, err := m.Lease.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n58
+	i += n60
 	return i, nil
 }
 
@@ -2982,11 +2985,11 @@ func (m *LeaderLeaseResponse) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n59, err := m.ResponseHeader.MarshalTo(data[i:])
+	n61, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n59
+	i += n61
 	return i, nil
 }
 
@@ -3009,207 +3012,183 @@ func (m *RequestUnion) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Get.Size()))
-		n60, err := m.Get.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n60
-	}
-	if m.Put != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
-		n61, err := m.Put.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n61
-	}
-	if m.ConditionalPut != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
-		n62, err := m.ConditionalPut.MarshalTo(data[i:])
+		n62, err := m.Get.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n62
 	}
-	if m.Increment != nil {
-		data[i] = 0x22
+	if m.Put != nil {
+		data[i] = 0x12
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
-		n63, err := m.Increment.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
+		n63, err := m.Put.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n63
 	}
-	if m.Delete != nil {
-		data[i] = 0x2a
+	if m.ConditionalPut != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
-		n64, err := m.Delete.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
+		n64, err := m.ConditionalPut.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n64
 	}
-	if m.DeleteRange != nil {
-		data[i] = 0x32
+	if m.Increment != nil {
+		data[i] = 0x22
 		i++
-		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
-		n65, err := m.DeleteRange.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
+		n65, err := m.Increment.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n65
 	}
-	if m.Scan != nil {
-		data[i] = 0x3a
+	if m.Delete != nil {
+		data[i] = 0x2a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
-		n66, err := m.Scan.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
+		n66, err := m.Delete.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n66
 	}
-	if m.EndTransaction != nil {
-		data[i] = 0x42
+	if m.DeleteRange != nil {
+		data[i] = 0x32
 		i++
-		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
-		n67, err := m.EndTransaction.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
+		n67, err := m.DeleteRange.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n67
 	}
-	if m.AdminSplit != nil {
-		data[i] = 0x4a
+	if m.Scan != nil {
+		data[i] = 0x3a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.AdminSplit.Size()))
-		n68, err := m.AdminSplit.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
+		n68, err := m.Scan.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n68
 	}
-	if m.AdminMerge != nil {
-		data[i] = 0x52
+	if m.ReverseScan != nil {
+		data[i] = 0x42
 		i++
-		i = encodeVarintApi(data, i, uint64(m.AdminMerge.Size()))
-		n69, err := m.AdminMerge.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.ReverseScan.Size()))
+		n69, err := m.ReverseScan.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n69
 	}
-	if m.HeartbeatTxn != nil {
-		data[i] = 0x5a
+	if m.EndTransaction != nil {
+		data[i] = 0x4a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.HeartbeatTxn.Size()))
-		n70, err := m.HeartbeatTxn.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
+		n70, err := m.EndTransaction.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n70
 	}
-	if m.Gc != nil {
-		data[i] = 0x62
+	if m.HeartbeatTxn != nil {
+		data[i] = 0x52
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Gc.Size()))
-		n71, err := m.Gc.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.HeartbeatTxn.Size()))
+		n71, err := m.HeartbeatTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n71
 	}
-	if m.PushTxn != nil {
-		data[i] = 0x6a
+	if m.Gc != nil {
+		data[i] = 0x5a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.PushTxn.Size()))
-		n72, err := m.PushTxn.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Gc.Size()))
+		n72, err := m.Gc.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n72
 	}
-	if m.RangeLookup != nil {
-		data[i] = 0x72
+	if m.PushTxn != nil {
+		data[i] = 0x62
 		i++
-		i = encodeVarintApi(data, i, uint64(m.RangeLookup.Size()))
-		n73, err := m.RangeLookup.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.PushTxn.Size()))
+		n73, err := m.PushTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n73
 	}
-	if m.ResolveIntent != nil {
-		data[i] = 0x7a
+	if m.RangeLookup != nil {
+		data[i] = 0x6a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.ResolveIntent.Size()))
-		n74, err := m.ResolveIntent.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.RangeLookup.Size()))
+		n74, err := m.RangeLookup.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n74
 	}
-	if m.ResolveIntentRange != nil {
-		data[i] = 0x82
+	if m.ResolveIntent != nil {
+		data[i] = 0x72
 		i++
-		data[i] = 0x1
-		i++
-		i = encodeVarintApi(data, i, uint64(m.ResolveIntentRange.Size()))
-		n75, err := m.ResolveIntentRange.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.ResolveIntent.Size()))
+		n75, err := m.ResolveIntent.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n75
 	}
-	if m.Merge != nil {
-		data[i] = 0x8a
+	if m.ResolveIntentRange != nil {
+		data[i] = 0x7a
 		i++
-		data[i] = 0x1
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Merge.Size()))
-		n76, err := m.Merge.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.ResolveIntentRange.Size()))
+		n76, err := m.ResolveIntentRange.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n76
 	}
-	if m.Truncate != nil {
-		data[i] = 0x92
+	if m.Merge != nil {
+		data[i] = 0x82
 		i++
 		data[i] = 0x1
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Truncate.Size()))
-		n77, err := m.Truncate.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Merge.Size()))
+		n77, err := m.Merge.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n77
 	}
-	if m.LeaderLease != nil {
-		data[i] = 0x9a
+	if m.Truncate != nil {
+		data[i] = 0x8a
 		i++
 		data[i] = 0x1
 		i++
-		i = encodeVarintApi(data, i, uint64(m.LeaderLease.Size()))
-		n78, err := m.LeaderLease.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Truncate.Size()))
+		n78, err := m.Truncate.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n78
 	}
-	if m.ReverseScan != nil {
-		data[i] = 0xa2
+	if m.LeaderLease != nil {
+		data[i] = 0x92
 		i++
 		data[i] = 0x1
 		i++
-		i = encodeVarintApi(data, i, uint64(m.ReverseScan.Size()))
-		n79, err := m.ReverseScan.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.LeaderLease.Size()))
+		n79, err := m.LeaderLease.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -3303,145 +3282,121 @@ func (m *ResponseUnion) MarshalTo(data []byte) (int, error) {
 		}
 		i += n86
 	}
-	if m.EndTransaction != nil {
+	if m.ReverseScan != nil {
 		data[i] = 0x42
 		i++
-		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
-		n87, err := m.EndTransaction.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.ReverseScan.Size()))
+		n87, err := m.ReverseScan.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n87
 	}
-	if m.AdminSplit != nil {
+	if m.EndTransaction != nil {
 		data[i] = 0x4a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.AdminSplit.Size()))
-		n88, err := m.AdminSplit.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
+		n88, err := m.EndTransaction.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n88
 	}
-	if m.AdminMerge != nil {
+	if m.HeartbeatTxn != nil {
 		data[i] = 0x52
 		i++
-		i = encodeVarintApi(data, i, uint64(m.AdminMerge.Size()))
-		n89, err := m.AdminMerge.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.HeartbeatTxn.Size()))
+		n89, err := m.HeartbeatTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n89
 	}
-	if m.HeartbeatTxn != nil {
+	if m.Gc != nil {
 		data[i] = 0x5a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.HeartbeatTxn.Size()))
-		n90, err := m.HeartbeatTxn.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Gc.Size()))
+		n90, err := m.Gc.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n90
 	}
-	if m.Gc != nil {
+	if m.PushTxn != nil {
 		data[i] = 0x62
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Gc.Size()))
-		n91, err := m.Gc.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.PushTxn.Size()))
+		n91, err := m.PushTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n91
 	}
-	if m.PushTxn != nil {
+	if m.RangeLookup != nil {
 		data[i] = 0x6a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.PushTxn.Size()))
-		n92, err := m.PushTxn.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.RangeLookup.Size()))
+		n92, err := m.RangeLookup.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n92
 	}
-	if m.RangeLookup != nil {
+	if m.ResolveIntent != nil {
 		data[i] = 0x72
 		i++
-		i = encodeVarintApi(data, i, uint64(m.RangeLookup.Size()))
-		n93, err := m.RangeLookup.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.ResolveIntent.Size()))
+		n93, err := m.ResolveIntent.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n93
 	}
-	if m.ResolveIntent != nil {
+	if m.ResolveIntentRange != nil {
 		data[i] = 0x7a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.ResolveIntent.Size()))
-		n94, err := m.ResolveIntent.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.ResolveIntentRange.Size()))
+		n94, err := m.ResolveIntentRange.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n94
 	}
-	if m.ResolveIntentRange != nil {
+	if m.Merge != nil {
 		data[i] = 0x82
 		i++
 		data[i] = 0x1
 		i++
-		i = encodeVarintApi(data, i, uint64(m.ResolveIntentRange.Size()))
-		n95, err := m.ResolveIntentRange.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Merge.Size()))
+		n95, err := m.Merge.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n95
 	}
-	if m.Merge != nil {
+	if m.Truncate != nil {
 		data[i] = 0x8a
 		i++
 		data[i] = 0x1
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Merge.Size()))
-		n96, err := m.Merge.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Truncate.Size()))
+		n96, err := m.Truncate.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n96
 	}
-	if m.Truncate != nil {
+	if m.LeaderLease != nil {
 		data[i] = 0x92
 		i++
 		data[i] = 0x1
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Truncate.Size()))
-		n97, err := m.Truncate.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.LeaderLease.Size()))
+		n97, err := m.LeaderLease.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n97
-	}
-	if m.LeaderLease != nil {
-		data[i] = 0x9a
-		i++
-		data[i] = 0x1
-		i++
-		i = encodeVarintApi(data, i, uint64(m.LeaderLease.Size()))
-		n98, err := m.LeaderLease.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n98
-	}
-	if m.ReverseScan != nil {
-		data[i] = 0xa2
-		i++
-		data[i] = 0x1
-		i++
-		i = encodeVarintApi(data, i, uint64(m.ReverseScan.Size()))
-		n99, err := m.ReverseScan.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n99
 	}
 	return i, nil
 }
@@ -3464,11 +3419,11 @@ func (m *BatchRequest) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n100, err := m.RequestHeader.MarshalTo(data[i:])
+	n98, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n100
+	i += n98
 	if len(m.Requests) > 0 {
 		for _, msg := range m.Requests {
 			data[i] = 0x12
@@ -3502,11 +3457,11 @@ func (m *BatchResponse) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n101, err := m.ResponseHeader.MarshalTo(data[i:])
+	n99, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n101
+	i += n99
 	if len(m.Responses) > 0 {
 		for _, msg := range m.Responses {
 			data[i] = 0x12
@@ -3938,6 +3893,8 @@ func (m *ResolveIntentRequest) Size() (n int) {
 	_ = l
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
+	l = m.IntentTxn.Size()
+	n += 1 + l + sovApi(uint64(l))
 	return n
 }
 
@@ -3953,6 +3910,8 @@ func (m *ResolveIntentRangeRequest) Size() (n int) {
 	var l int
 	_ = l
 	l = m.RequestHeader.Size()
+	n += 1 + l + sovApi(uint64(l))
+	l = m.IntentTxn.Size()
 	n += 1 + l + sovApi(uint64(l))
 	return n
 }
@@ -4049,16 +4008,12 @@ func (m *RequestUnion) Size() (n int) {
 		l = m.Scan.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
+	if m.ReverseScan != nil {
+		l = m.ReverseScan.Size()
+		n += 1 + l + sovApi(uint64(l))
+	}
 	if m.EndTransaction != nil {
 		l = m.EndTransaction.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.AdminSplit != nil {
-		l = m.AdminSplit.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.AdminMerge != nil {
-		l = m.AdminMerge.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
 	if m.HeartbeatTxn != nil {
@@ -4083,7 +4038,7 @@ func (m *RequestUnion) Size() (n int) {
 	}
 	if m.ResolveIntentRange != nil {
 		l = m.ResolveIntentRange.Size()
-		n += 2 + l + sovApi(uint64(l))
+		n += 1 + l + sovApi(uint64(l))
 	}
 	if m.Merge != nil {
 		l = m.Merge.Size()
@@ -4095,10 +4050,6 @@ func (m *RequestUnion) Size() (n int) {
 	}
 	if m.LeaderLease != nil {
 		l = m.LeaderLease.Size()
-		n += 2 + l + sovApi(uint64(l))
-	}
-	if m.ReverseScan != nil {
-		l = m.ReverseScan.Size()
 		n += 2 + l + sovApi(uint64(l))
 	}
 	return n
@@ -4135,16 +4086,12 @@ func (m *ResponseUnion) Size() (n int) {
 		l = m.Scan.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
+	if m.ReverseScan != nil {
+		l = m.ReverseScan.Size()
+		n += 1 + l + sovApi(uint64(l))
+	}
 	if m.EndTransaction != nil {
 		l = m.EndTransaction.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.AdminSplit != nil {
-		l = m.AdminSplit.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.AdminMerge != nil {
-		l = m.AdminMerge.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
 	if m.HeartbeatTxn != nil {
@@ -4169,7 +4116,7 @@ func (m *ResponseUnion) Size() (n int) {
 	}
 	if m.ResolveIntentRange != nil {
 		l = m.ResolveIntentRange.Size()
-		n += 2 + l + sovApi(uint64(l))
+		n += 1 + l + sovApi(uint64(l))
 	}
 	if m.Merge != nil {
 		l = m.Merge.Size()
@@ -4181,10 +4128,6 @@ func (m *ResponseUnion) Size() (n int) {
 	}
 	if m.LeaderLease != nil {
 		l = m.LeaderLease.Size()
-		n += 2 + l + sovApi(uint64(l))
-	}
-	if m.ReverseScan != nil {
-		l = m.ReverseScan.Size()
 		n += 2 + l + sovApi(uint64(l))
 	}
 	return n
@@ -4253,14 +4196,11 @@ func (this *RequestUnion) GetValue() interface{} {
 	if this.Scan != nil {
 		return this.Scan
 	}
+	if this.ReverseScan != nil {
+		return this.ReverseScan
+	}
 	if this.EndTransaction != nil {
 		return this.EndTransaction
-	}
-	if this.AdminSplit != nil {
-		return this.AdminSplit
-	}
-	if this.AdminMerge != nil {
-		return this.AdminMerge
 	}
 	if this.HeartbeatTxn != nil {
 		return this.HeartbeatTxn
@@ -4289,9 +4229,6 @@ func (this *RequestUnion) GetValue() interface{} {
 	if this.LeaderLease != nil {
 		return this.LeaderLease
 	}
-	if this.ReverseScan != nil {
-		return this.ReverseScan
-	}
 	return nil
 }
 
@@ -4311,12 +4248,10 @@ func (this *RequestUnion) SetValue(value interface{}) bool {
 		this.DeleteRange = vt
 	case *ScanRequest:
 		this.Scan = vt
+	case *ReverseScanRequest:
+		this.ReverseScan = vt
 	case *EndTransactionRequest:
 		this.EndTransaction = vt
-	case *AdminSplitRequest:
-		this.AdminSplit = vt
-	case *AdminMergeRequest:
-		this.AdminMerge = vt
 	case *HeartbeatTxnRequest:
 		this.HeartbeatTxn = vt
 	case *GCRequest:
@@ -4335,8 +4270,6 @@ func (this *RequestUnion) SetValue(value interface{}) bool {
 		this.Truncate = vt
 	case *LeaderLeaseRequest:
 		this.LeaderLease = vt
-	case *ReverseScanRequest:
-		this.ReverseScan = vt
 	default:
 		return false
 	}
@@ -4364,14 +4297,11 @@ func (this *ResponseUnion) GetValue() interface{} {
 	if this.Scan != nil {
 		return this.Scan
 	}
+	if this.ReverseScan != nil {
+		return this.ReverseScan
+	}
 	if this.EndTransaction != nil {
 		return this.EndTransaction
-	}
-	if this.AdminSplit != nil {
-		return this.AdminSplit
-	}
-	if this.AdminMerge != nil {
-		return this.AdminMerge
 	}
 	if this.HeartbeatTxn != nil {
 		return this.HeartbeatTxn
@@ -4400,9 +4330,6 @@ func (this *ResponseUnion) GetValue() interface{} {
 	if this.LeaderLease != nil {
 		return this.LeaderLease
 	}
-	if this.ReverseScan != nil {
-		return this.ReverseScan
-	}
 	return nil
 }
 
@@ -4422,12 +4349,10 @@ func (this *ResponseUnion) SetValue(value interface{}) bool {
 		this.DeleteRange = vt
 	case *ScanResponse:
 		this.Scan = vt
+	case *ReverseScanResponse:
+		this.ReverseScan = vt
 	case *EndTransactionResponse:
 		this.EndTransaction = vt
-	case *AdminSplitResponse:
-		this.AdminSplit = vt
-	case *AdminMergeResponse:
-		this.AdminMerge = vt
 	case *HeartbeatTxnResponse:
 		this.HeartbeatTxn = vt
 	case *GCResponse:
@@ -4446,8 +4371,6 @@ func (this *ResponseUnion) SetValue(value interface{}) bool {
 		this.Truncate = vt
 	case *LeaderLeaseResponse:
 		this.LeaderLease = vt
-	case *ReverseScanResponse:
-		this.ReverseScan = vt
 	default:
 		return false
 	}
@@ -7878,6 +7801,33 @@ func (m *ResolveIntentRequest) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IntentTxn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.IntentTxn.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -8019,6 +7969,33 @@ func (m *ResolveIntentRangeRequest) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IntentTxn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.IntentTxn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -8853,6 +8830,36 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 8:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReverseScan", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ReverseScan == nil {
+				m.ReverseScan = &ReverseScanRequest{}
+			}
+			if err := m.ReverseScan.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 9:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field EndTransaction", wireType)
 			}
 			var msglen int
@@ -8881,67 +8888,7 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 9:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AdminSplit", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.AdminSplit == nil {
-				m.AdminSplit = &AdminSplitRequest{}
-			}
-			if err := m.AdminSplit.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
 		case 10:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AdminMerge", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.AdminMerge == nil {
-				m.AdminMerge = &AdminMergeRequest{}
-			}
-			if err := m.AdminMerge.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 11:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field HeartbeatTxn", wireType)
 			}
@@ -8971,7 +8918,7 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 12:
+		case 11:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Gc", wireType)
 			}
@@ -9001,7 +8948,7 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 13:
+		case 12:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PushTxn", wireType)
 			}
@@ -9031,7 +8978,7 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 14:
+		case 13:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RangeLookup", wireType)
 			}
@@ -9061,7 +9008,7 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 15:
+		case 14:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ResolveIntent", wireType)
 			}
@@ -9091,7 +9038,7 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 16:
+		case 15:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ResolveIntentRange", wireType)
 			}
@@ -9121,7 +9068,7 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 17:
+		case 16:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Merge", wireType)
 			}
@@ -9151,7 +9098,7 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 18:
+		case 17:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Truncate", wireType)
 			}
@@ -9181,7 +9128,7 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 19:
+		case 18:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LeaderLease", wireType)
 			}
@@ -9208,36 +9155,6 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				m.LeaderLease = &LeaderLeaseRequest{}
 			}
 			if err := m.LeaderLease.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 20:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ReverseScan", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.ReverseScan == nil {
-				m.ReverseScan = &ReverseScanRequest{}
-			}
-			if err := m.ReverseScan.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -9498,6 +9415,36 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 8:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReverseScan", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ReverseScan == nil {
+				m.ReverseScan = &ReverseScanResponse{}
+			}
+			if err := m.ReverseScan.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 9:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field EndTransaction", wireType)
 			}
 			var msglen int
@@ -9526,67 +9473,7 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 9:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AdminSplit", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.AdminSplit == nil {
-				m.AdminSplit = &AdminSplitResponse{}
-			}
-			if err := m.AdminSplit.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
 		case 10:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AdminMerge", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.AdminMerge == nil {
-				m.AdminMerge = &AdminMergeResponse{}
-			}
-			if err := m.AdminMerge.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 11:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field HeartbeatTxn", wireType)
 			}
@@ -9616,7 +9503,7 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 12:
+		case 11:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Gc", wireType)
 			}
@@ -9646,7 +9533,7 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 13:
+		case 12:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PushTxn", wireType)
 			}
@@ -9676,7 +9563,7 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 14:
+		case 13:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RangeLookup", wireType)
 			}
@@ -9706,7 +9593,7 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 15:
+		case 14:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ResolveIntent", wireType)
 			}
@@ -9736,7 +9623,7 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 16:
+		case 15:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ResolveIntentRange", wireType)
 			}
@@ -9766,7 +9653,7 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 17:
+		case 16:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Merge", wireType)
 			}
@@ -9796,7 +9683,7 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 18:
+		case 17:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Truncate", wireType)
 			}
@@ -9826,7 +9713,7 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 19:
+		case 18:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LeaderLease", wireType)
 			}
@@ -9853,36 +9740,6 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 				m.LeaderLease = &LeaderLeaseResponse{}
 			}
 			if err := m.LeaderLease.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 20:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ReverseScan", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.ReverseScan == nil {
-				m.ReverseScan = &ReverseScanResponse{}
-			}
-			if err := m.ReverseScan.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

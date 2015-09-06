@@ -467,11 +467,13 @@ message PushTxnResponse {
 }
 
 // A ResolveIntentRequest is arguments to the ResolveIntent()
-// method. It is sent by transaction coordinators and after success
-// calling PushTxn to clean up write intents: either to remove them or
-// commit them.
+// method. It is sent by transaction coordinators after success
+// calling PushTxn to clean up write intents: either to remove, commit
+// or move them forward in time.
 message ResolveIntentRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The transaction whose intent is being resolved.
+  optional Transaction intent_txn = 2 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentResponse is the return value from the
@@ -480,11 +482,14 @@ message ResolveIntentResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A ResolveIntentRangeRequest is arguments to the
-// ResolveIntentRange() method. This clear write intents for a range
-// of keys to resolve intents created by range ops.
+// A ResolveIntentRangeRequest is arguments to the ResolveIntentRange() method.
+// It is sent by transaction coordinators after success calling PushTxn to
+// clean up write intents: either to remove, commit or move them forward in
+// time.
 message ResolveIntentRangeRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The transaction whose intents are being resolved.
+  optional Transaction intent_txn = 2 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentRangeResponse is the return value from the
@@ -549,19 +554,17 @@ message RequestUnion {
     DeleteRequest delete = 5;
     DeleteRangeRequest delete_range = 6;
     ScanRequest scan = 7;
-    EndTransactionRequest end_transaction = 8;
-    AdminSplitRequest admin_split = 9;
-    AdminMergeRequest admin_merge = 10;
-    HeartbeatTxnRequest heartbeat_txn = 11;
-    GCRequest gc = 12;
-    PushTxnRequest push_txn = 13;
-    RangeLookupRequest range_lookup = 14;
-    ResolveIntentRequest resolve_intent = 15;
-    ResolveIntentRangeRequest resolve_intent_range = 16;
-    MergeRequest merge = 17;
-    TruncateLogRequest truncate = 18;
-    LeaderLeaseRequest leader_lease = 19;
-    ReverseScanRequest reverse_scan = 20;
+    ReverseScanRequest reverse_scan = 8;
+    EndTransactionRequest end_transaction = 9;
+    HeartbeatTxnRequest heartbeat_txn = 10;
+    GCRequest gc = 11;
+    PushTxnRequest push_txn = 12;
+    RangeLookupRequest range_lookup = 13;
+    ResolveIntentRequest resolve_intent = 14;
+    ResolveIntentRangeRequest resolve_intent_range = 15;
+    MergeRequest merge = 16;
+    TruncateLogRequest truncate = 17;
+    LeaderLeaseRequest leader_lease = 18;
   }
 }
 
@@ -577,19 +580,17 @@ message ResponseUnion {
     DeleteResponse delete = 5;
     DeleteRangeResponse delete_range = 6;
     ScanResponse scan = 7;
-    EndTransactionResponse end_transaction = 8;
-    AdminSplitResponse admin_split = 9;
-    AdminMergeResponse admin_merge = 10;
-    HeartbeatTxnResponse heartbeat_txn = 11;
-    GCResponse gc = 12;
-    PushTxnResponse push_txn = 13;
-    RangeLookupResponse range_lookup = 14;
-    ResolveIntentResponse resolve_intent = 15;
-    ResolveIntentRangeResponse resolve_intent_range = 16;
-    MergeResponse merge = 17;
-    TruncateLogResponse truncate = 18;
-    LeaderLeaseResponse leader_lease = 19;
-    ReverseScanResponse reverse_scan = 20;
+    ReverseScanResponse reverse_scan = 8;
+    EndTransactionResponse end_transaction = 9;
+    HeartbeatTxnResponse heartbeat_txn = 10;
+    GCResponse gc = 11;
+    PushTxnResponse push_txn = 12;
+    RangeLookupResponse range_lookup = 13;
+    ResolveIntentResponse resolve_intent = 14;
+    ResolveIntentRangeResponse resolve_intent_range = 15;
+    MergeResponse merge = 16;
+    TruncateLogResponse truncate = 17;
+    LeaderLeaseResponse leader_lease = 18;
   }
 }
 
