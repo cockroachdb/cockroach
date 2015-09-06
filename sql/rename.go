@@ -18,6 +18,7 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -25,6 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+)
+
+var (
+	errEmptyColumnName = errors.New("empty column name")
+	errEmptyIndexName  = errors.New("empty index name")
+	errEmptyTableName  = errors.New("empty table name")
 )
 
 // RenameDatabase renames the database.

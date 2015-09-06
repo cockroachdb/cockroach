@@ -18,6 +18,7 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -27,6 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
+)
+
+var (
+	errEmptyDatabaseName = errors.New("empty database name")
+	errNoDatabase        = errors.New("no database specified")
+	errNoTable           = errors.New("no table specified")
 )
 
 var _ descriptorProto = &DatabaseDescriptor{}

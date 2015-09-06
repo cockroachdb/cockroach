@@ -19,7 +19,6 @@
 package sql
 
 import (
-	"errors"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -31,15 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-var (
-	allowedEncodings     = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
-	errNoDatabase        = errors.New("no database specified")
-	errNoTable           = errors.New("no table specified")
-	errEmptyDatabaseName = errors.New("empty database name")
-	errEmptyTableName    = errors.New("empty table name")
-	errEmptyIndexName    = errors.New("empty index name")
-	errEmptyColumnName   = errors.New("empty column name")
-)
+var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
 
 // An HTTPServer provides an HTTP server endpoint serving the SQL API.
 // It accepts either JSON or serialized protobuf content types.

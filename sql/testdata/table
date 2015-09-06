@@ -4,6 +4,9 @@ SET DATABASE = ""
 statement error no database specified
 CREATE TABLE a (id INT PRIMARY KEY)
 
+statement error empty table name
+CREATE TABLE test."" (id INT PRIMARY KEY)
+
 statement ok
 CREATE TABLE test.a (id INT PRIMARY KEY)
 
@@ -12,6 +15,9 @@ CREATE TABLE test.a (id INT PRIMARY KEY)
 
 statement ok
 SET DATABASE = test
+
+statement error empty table name
+CREATE TABLE "" (id INT PRIMARY KEY)
 
 statement error table "a" already exists
 CREATE TABLE a (id INT PRIMARY KEY)
