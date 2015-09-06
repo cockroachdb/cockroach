@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -279,4 +279,56 @@ func SendCallConverted(sender Sender, ctx context.Context, call proto.Call) {
 	if err != nil {
 		call.Reply.Header().SetGoError(err)
 	}
+}
+
+// Prev gives the right boundary of the union of all requests which don't
+// affect keys larger than the given key.
+func Prev(ba *proto.BatchRequest, k proto.Key) proto.Key {
+	candidate := proto.KeyMin
+	for _, union := range ba.Requests {
+		h := union.GetValue().(proto.Request).Header()
+		addr := keys.KeyAddress(h.Key)
+		eAddr := keys.KeyAddress(h.EndKey)
+		if len(eAddr) == 0 {
+			// Can probably avoid having to compute Next() here if
+			// we're in the mood for some more complexity.
+			eAddr = addr.Next()
+		}
+		if !eAddr.Less(k) {
+			if !k.Less(addr) {
+				// Range contains k, so won't be able to go lower.
+				return k
+			}
+			// Range is disjoint from [KeyMin,k).
+			continue
+		}
+		// We want the largest surviving candidate.
+		if candidate.Less(addr) {
+			candidate = addr
+		}
+	}
+	return candidate
+}
+
+// Next gives the left boundary of the union of all requests which don't
+// affect keys less than the given key.
+func Next(ba *proto.BatchRequest, k proto.Key) proto.Key {
+	candidate := proto.KeyMax
+	for _, union := range ba.Requests {
+		h := union.GetValue().(proto.Request).Header()
+		addr := keys.KeyAddress(h.Key)
+		if addr.Less(k) {
+			if eAddr := keys.KeyAddress(h.EndKey); k.Less(eAddr) {
+				// Starts below k, but continues beyond. Need to stay at k.
+				return k
+			}
+			// Affects only [KeyMin,k).
+			continue
+		}
+		// We want the smallest of the surviving candidates.
+		if addr.Less(candidate) {
+			candidate = addr
+		}
+	}
+	return candidate
 }

@@ -652,16 +652,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 					return nil, trErr
 				}
 				if numActive == 0 {
-					br := &proto.BatchResponse{}
-					for range ba.Requests {
-						br.Add(&proto.NoopResponse{})
-					}
-					br.Txn = gogoproto.Clone(ba.Txn).(*proto.Transaction)
-					curReply, err = br, nil
-					trace.Event("no active requests for range")
-				} else {
-					curReply, err = ds.sendAttempt(trace, ba, desc)
+					panic(fmt.Sprintf("truncation resulted in empty batch on [%s,%s): %s",
+						from, to, batch.Short(ba)))
 				}
+				curReply, err = ds.sendAttempt(trace, ba, desc)
 				untruncate()
 				ba.Key, ba.EndKey = nil, nil
 			}
@@ -790,7 +784,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 			// We use the StartKey of the current descriptor as opposed to the
 			// EndKey of the previous one since that doesn't have bugs when
 			// stale descriptors come into play.
-			to = desc.StartKey
+			to = batch.Prev(ba, desc.StartKey)
 		} else {
 			// In next iteration, query next range.
 			// It's important that we use the EndKey of the current descriptor
@@ -799,7 +793,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 			// one, and unless both descriptors are stale, the next descriptor's
 			// StartKey would move us to the beginning of the current range,
 			// resulting in a duplicate scan.
-			from = desc.EndKey
+			from = batch.Next(ba, desc.EndKey)
 		}
 		trace.Event("querying next range")
 	}
