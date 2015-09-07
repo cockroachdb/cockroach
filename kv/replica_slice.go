@@ -19,6 +19,8 @@
 package kv
 
 import (
+	"math/rand"
+
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -105,7 +107,9 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 	topIndex := len(rs) - 1
 	for bucket := 0; bucket < len(attrs); bucket++ {
 		firstNotOrdered := 0
+		rs.SortRandomOrder(firstNotOrdered)
 		for i := 0; i <= topIndex; i++ {
+
 			if bucket < len(rs[i].attrs()) && rs[i].attrs()[bucket] == attrs[bucket] {
 				// Move replica which matches this attribute to an earlier
 				// place in the array, just behind the last matching replica.
@@ -134,4 +138,22 @@ func (rs replicaSlice) MoveToFront(i int) {
 	// Move the first i-1 elements to the right
 	copy(rs[1:i+1], rs[0:i])
 	rs[0] = front
+}
+
+func (rs replicaSlice) SortRandomOrder(i int) {
+	l := len(rs) - 1
+	if i > l {
+		log.Infof("out of bound index")
+	}
+
+	firstNotInOrder := i
+	rndLen := l - i
+	rndOrder := rand.Perm(rndLen)
+	rsRand := rs
+
+	for i := 0; i < firstNotInOrder-1; i++ {
+		rndOrder[i] = rndOrder[i] + firstNotInOrder - 1
+		rsRand[i] = rsRand[rndOrder[i]]
+	}
+	copy(rs[firstNotInOrder:l], rsRand[0:rndLen])
 }
