@@ -107,6 +107,11 @@ UPDATE kv SET v = 'b' WHERE k in ('a')
 statement ok
 ROLLBACK
 
+query TT
+SELECT * FROM kv
+----
+a c
+
 # Abort transaction with a problematic statment, and ignore statements until the end of the transaction block
 
 statement ok
