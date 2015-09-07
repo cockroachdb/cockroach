@@ -764,6 +764,16 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 	}
 
 	switch t := expr.(type) {
+	case *qvalue:
+		// We will encounter a qvalue in the expression during retry of an
+		// auto-transaction. When that happens, we've already gone through
+		// qualified name normalization and lookup, we just need to hook the qvalue
+		// up to the scanNode.
+		//
+		// TODO(pmattis): Should we be more careful about ensuring that the various
+		// statement implementations do not modify the AST nodes they are passed?
+		return v, v.getQVal(t.col)
+
 	case *parser.QualifiedName:
 		qname := t
 

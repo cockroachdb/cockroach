@@ -92,62 +92,17 @@ CREATE TABLE IF NOT EXISTS bank.accounts (
 
 			amount := rand.Intn(*maxTransfer)
 
-			tx, err := db.Begin()
-			if err != nil {
-				b.Fatal(err)
-			}
-
-			query := `SELECT id, balance FROM bank.accounts WHERE id IN ($1, $2)`
-			rows, err := tx.Query(query, from, to)
-			if err != nil {
+			update := `
+UPDATE bank.accounts
+  SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
+  WHERE id IN ($1, $2)
+`
+			if _, err = db.Exec(update, from, to, amount); err != nil {
 				if log.V(1) {
 					log.Warning(err)
 				}
-				if err = tx.Rollback(); err != nil {
-					b.Fatal(err)
-				}
 				continue
 			}
-			var fromBalance, toBalance int
-			for rows.Next() {
-				var id, balance int
-				if err = rows.Scan(&id, &balance); err != nil {
-					b.Fatal(err)
-				}
-				switch id {
-				case from:
-					fromBalance = balance
-				case to:
-					toBalance = balance
-				default:
-					panic(fmt.Sprintf("encountered unexpected account: %d", id))
-				}
-			}
-
-			fromBalance -= amount
-			update := `UPDATE bank.accounts SET balance=$1 WHERE id=$2`
-			if _, err = tx.Exec(update, fromBalance, from); err != nil {
-				if log.V(1) {
-					log.Warning(err)
-				}
-				if err := tx.Rollback(); err != nil {
-					b.Fatal(err)
-				}
-				continue
-			}
-
-			toBalance += amount
-			if _, err = tx.Exec(update, toBalance, to); err != nil {
-				if log.V(1) {
-					log.Warning(err)
-				}
-				if err := tx.Rollback(); err != nil {
-					b.Fatal(err)
-				}
-				continue
-			}
-
-			_ = tx.Commit()
 		}
 	})
 	b.StopTimer()

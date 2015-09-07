@@ -116,72 +116,80 @@ func (s server) execStmt(stmt parser.Statement, params parameters, planMaker *pl
 			return result, errTransactionAborted
 		}
 	}
+
 	// Bind all the placeholder variables in the stmt to actual values.
 	if err := parser.FillArgs(stmt, params); err != nil {
 		return result, err
 	}
-	var plan planNode
-	// If there is a pending transaction.
-	if planMaker.txn != nil {
-		// Run in transaction planMaker.txn
-		var err error
-		if plan, err = planMaker.makePlan(stmt); err != nil {
-			return result, err
-		}
-	} else {
-		// No transaction. Run the command as a retryable block in an
-		// auto-transaction.
-		if err := s.db.Txn(func(txn *client.Txn) error {
-			planMaker.txn = txn
-			var err error
-			plan, err = planMaker.makePlan(stmt)
-			planMaker.txn = nil
+
+	// Create a function which both makes and executes the plan, populating
+	// result.
+	//
+	// TODO(pmattis): Should this be a separate function? Perhaps we should move
+	// some of the common code back out into execStmts and have execStmt contain
+	// only the body of this closure.
+	f := func() error {
+		plan, err := planMaker.makePlan(stmt)
+		if err != nil {
 			return err
-		}); err != nil {
-			return result, err
 		}
-	}
-	result.Columns = plan.Columns()
-	for plan.Next() {
-		values := plan.Values()
-		row := driver.Result_Row{Values: make([]driver.Datum, 0, len(values))}
-		for _, val := range values {
-			if val == parser.DNull {
-				row.Values = append(row.Values, driver.Datum{})
-			} else {
-				switch vt := val.(type) {
-				case parser.DBool:
-					row.Values = append(row.Values, driver.Datum{BoolVal: (*bool)(&vt)})
-				case parser.DInt:
-					row.Values = append(row.Values, driver.Datum{IntVal: (*int64)(&vt)})
-				case parser.DFloat:
-					row.Values = append(row.Values, driver.Datum{FloatVal: (*float64)(&vt)})
-				case parser.DString:
-					row.Values = append(row.Values, driver.Datum{StringVal: (*string)(&vt)})
-				case parser.DDate:
-					row.Values = append(row.Values, driver.Datum{TimeVal: &driver.Datum_Timestamp{
-						Sec:  vt.Unix(),
-						Nsec: uint32(vt.Nanosecond()),
-					}})
-				case parser.DTimestamp:
-					row.Values = append(row.Values, driver.Datum{TimeVal: &driver.Datum_Timestamp{
-						Sec:  vt.Unix(),
-						Nsec: uint32(vt.Nanosecond()),
-					}})
-				case parser.DInterval:
-					s := vt.String()
-					row.Values = append(row.Values, driver.Datum{StringVal: &s})
-				default:
-					return result, util.Errorf("unsupported datum: %T", val)
+
+		result.Columns = plan.Columns()
+		for plan.Next() {
+			values := plan.Values()
+			row := driver.Result_Row{Values: make([]driver.Datum, 0, len(values))}
+			for _, val := range values {
+				if val == parser.DNull {
+					row.Values = append(row.Values, driver.Datum{})
+				} else {
+					switch vt := val.(type) {
+					case parser.DBool:
+						row.Values = append(row.Values, driver.Datum{BoolVal: (*bool)(&vt)})
+					case parser.DInt:
+						row.Values = append(row.Values, driver.Datum{IntVal: (*int64)(&vt)})
+					case parser.DFloat:
+						row.Values = append(row.Values, driver.Datum{FloatVal: (*float64)(&vt)})
+					case parser.DString:
+						row.Values = append(row.Values, driver.Datum{StringVal: (*string)(&vt)})
+					case parser.DDate:
+						row.Values = append(row.Values, driver.Datum{TimeVal: &driver.Datum_Timestamp{
+							Sec:  vt.Unix(),
+							Nsec: uint32(vt.Nanosecond()),
+						}})
+					case parser.DTimestamp:
+						row.Values = append(row.Values, driver.Datum{TimeVal: &driver.Datum_Timestamp{
+							Sec:  vt.Unix(),
+							Nsec: uint32(vt.Nanosecond()),
+						}})
+					case parser.DInterval:
+						s := vt.String()
+						row.Values = append(row.Values, driver.Datum{StringVal: &s})
+					default:
+						return util.Errorf("unsupported datum: %T", val)
+					}
 				}
 			}
+			result.Rows = append(result.Rows, row)
 		}
-		result.Rows = append(result.Rows, row)
+
+		return plan.Err()
 	}
-	if err := plan.Err(); err != nil {
+
+	// If there is a pending transaction.
+	if planMaker.txn != nil {
+		err := f()
 		return result, err
 	}
-	return result, nil
+
+	// No transaction. Run the command as a retryable block in an
+	// auto-transaction.
+	err := s.db.Txn(func(txn *client.Txn) error {
+		planMaker.txn = txn
+		err := f()
+		planMaker.txn = nil
+		return err
+	})
+	return result, err
 }
 
 // If we hit an error and there is a pending transaction, rollback
