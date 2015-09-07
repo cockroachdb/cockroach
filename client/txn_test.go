@@ -71,7 +71,7 @@ func newTestSender(pre, post func(proto.Call)) SenderFunc {
 		}
 
 		var writing bool
-		var status proto.TransactionStatus
+		status := proto.PENDING
 		if _, ok := call.Args.(*proto.BatchRequest).GetArg(proto.Put); ok {
 			call.Reply.(*proto.BatchResponse).Add(gogoproto.Clone(testPutResp).(proto.Response))
 			writing = true

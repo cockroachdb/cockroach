@@ -470,11 +470,11 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 		}
 	}
 
-	bArgs, bReply := &proto.BatchRequest{}, &proto.BatchResponse{}
+	ba, br := &proto.BatchRequest{}, &proto.BatchResponse{}
 	for _, call := range calls {
-		bArgs.Add(call.Args)
+		ba.Add(call.Args)
 	}
-	err = db.send(proto.Call{Args: bArgs, Reply: bReply})
+	err = db.send(proto.Call{Args: ba, Reply: br})
 
 	// Recover from protobuf merge panics.
 	defer func() {
@@ -490,7 +490,7 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 	}()
 
 	// Transfer individual responses from batch response to prepared replies.
-	for i, reply := range bReply.Responses {
+	for i, reply := range br.Responses {
 		c := calls[i]
 		gogoproto.Merge(c.Reply, reply.GetValue().(gogoproto.Message))
 		if c.Post != nil {

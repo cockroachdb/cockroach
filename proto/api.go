@@ -53,6 +53,7 @@ const (
 	isTxnWrite             // txn write cmds start heartbeat and are marked for intent resolution
 	isRange                // range commands may span multiple keys
 	isReverse              // reverse commands traverse ranges in descending direction
+	isAlone                // requests which must be alone in a batch
 )
 
 // IsAdmin returns true if the request is an admin request.
@@ -98,8 +99,8 @@ func IsRange(args Request) bool {
 }
 
 // IsAdmin returns true iff the BatchRequest contains an admin request.
-func (br *BatchRequest) IsAdmin() bool {
-	for _, arg := range br.Requests {
+func (ba *BatchRequest) IsAdmin() bool {
+	for _, arg := range ba.Requests {
 		if IsAdmin(arg.GetValue().(Request)) {
 			return true
 		}
@@ -108,9 +109,9 @@ func (br *BatchRequest) IsAdmin() bool {
 }
 
 // IsRead returns true if all requests within are flagged as reading data.
-func (br *BatchRequest) IsRead() bool {
-	for i := range br.Requests {
-		if !IsRead(br.Requests[i].GetValue().(Request)) {
+func (ba *BatchRequest) IsRead() bool {
+	for i := range ba.Requests {
+		if !IsRead(ba.Requests[i].GetValue().(Request)) {
 			return false
 		}
 	}
@@ -118,8 +119,8 @@ func (br *BatchRequest) IsRead() bool {
 }
 
 // IsWrite returns true iff the BatchRequest contains a write.
-func (br *BatchRequest) IsWrite() bool {
-	for _, arg := range br.Requests {
+func (ba *BatchRequest) IsWrite() bool {
+	for _, arg := range ba.Requests {
 		if IsWrite(arg.GetValue().(Request)) {
 			return true
 		}
@@ -128,9 +129,9 @@ func (br *BatchRequest) IsWrite() bool {
 }
 
 // IsReadOnly returns true if all requests within are read-only.
-func (br *BatchRequest) IsReadOnly() bool {
-	for i := range br.Requests {
-		if !IsReadOnly(br.Requests[i].GetValue().(Request)) {
+func (ba *BatchRequest) IsReadOnly() bool {
+	for i := range ba.Requests {
+		if !IsReadOnly(ba.Requests[i].GetValue().(Request)) {
 			return false
 		}
 	}
@@ -138,12 +139,12 @@ func (br *BatchRequest) IsReadOnly() bool {
 }
 
 // IsReverse returns true iff the BatchRequest contains a reverse request.
-func (br *BatchRequest) IsReverse() bool {
-	if len(br.Requests) == 0 {
+func (ba *BatchRequest) IsReverse() bool {
+	if len(ba.Requests) == 0 {
 		panic("empty batch")
 	}
-	reverse := IsReverse(br.Requests[0].GetValue().(Request))
-	for _, arg := range br.Requests[1:] {
+	reverse := IsReverse(ba.Requests[0].GetValue().(Request))
+	for _, arg := range ba.Requests[1:] {
 		if req := arg.GetValue().(Request); IsReverse(req) != reverse {
 			panic(fmt.Sprintf("argument mixes reverse and non-reverse: %T", req))
 		}
@@ -152,8 +153,8 @@ func (br *BatchRequest) IsReverse() bool {
 }
 
 // IsTransactionWrite returns true iff the BatchRequest contains a txn write.
-func (br *BatchRequest) IsTransactionWrite() bool {
-	for _, arg := range br.Requests {
+func (ba *BatchRequest) IsTransactionWrite() bool {
+	for _, arg := range ba.Requests {
 		if IsTransactionWrite(arg.GetValue().(Request)) {
 			return true
 		}
@@ -162,8 +163,8 @@ func (br *BatchRequest) IsTransactionWrite() bool {
 }
 
 // IsRange returns true iff the BatchRequest contains a range request.
-func (br *BatchRequest) IsRange() bool {
-	return (br.flags() & isRange) != 0
+func (ba *BatchRequest) IsRange() bool {
+	return (ba.flags() & isRange) != 0
 }
 
 // CanBatch returns true if the request type can be part of a batch request.
@@ -175,8 +176,8 @@ func CanBatch(args Request) bool {
 }
 
 // GetArg returns the first request of the given type, if possible.
-func (br *BatchRequest) GetArg(method Method) (Request, bool) {
-	for _, arg := range br.Requests {
+func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
+	for _, arg := range ba.Requests {
 		if req := arg.GetValue().(Request); req.Method() == method {
 			return req, true
 		}
@@ -185,9 +186,9 @@ func (br *BatchRequest) GetArg(method Method) (Request, bool) {
 }
 
 // First returns the first response of the given type, if possible.
-func (br *BatchResponse) First() Response {
-	if len(br.Responses) > 0 {
-		return br.Responses[0].GetValue().(Response)
+func (ba *BatchResponse) First() Response {
+	if len(ba.Responses) > 0 {
+		return ba.Responses[0].GetValue().(Response)
 	}
 	return nil
 }
@@ -197,9 +198,9 @@ func (br *BatchResponse) First() Response {
 // TODO(tschottdorf): use keys.Span here instead of []Intent. Actually
 // Intent should be Intents = {Txn, []Span} so that a []Span can
 // be turned into Intents easily by just adding a Txn.
-func (br *BatchRequest) GetIntents() []Intent {
+func (ba *BatchRequest) GetIntents() []Intent {
 	var intents []Intent
-	for _, arg := range br.Requests {
+	for _, arg := range ba.Requests {
 		req := arg.GetValue().(Request)
 		if !IsTransactionWrite(req) {
 			continue
@@ -345,11 +346,11 @@ func (rr *ResolveIntentRangeResponse) Combine(c Response) error {
 }
 
 // ResetAll resets all the contained requests to their original state.
-func (br *BatchResponse) ResetAll() {
-	if br == nil {
+func (ba *BatchResponse) ResetAll() {
+	if ba == nil {
 		return
 	}
-	for _, rsp := range br.Responses {
+	for _, rsp := range ba.Responses {
 		// TODO(tschottdorf) `rsp.Reset()` isn't enough because rsp
 		// isn't a pointer.
 		rsp.GetValue().(Response).Reset()
@@ -360,16 +361,16 @@ func (br *BatchResponse) ResetAll() {
 // given request into the corresponding slot of the base response. The number
 // of slots must be equal and the respective slots must be combinable.
 // TODO(tschottdorf): write tests.
-func (br *BatchResponse) Combine(c Response) error {
+func (ba *BatchResponse) Combine(c Response) error {
 	otherBatch, ok := c.(*BatchResponse)
 	if !ok {
-		return combineError(br, c)
+		return combineError(ba, c)
 	}
-	if len(otherBatch.Responses) != len(br.Responses) {
+	if len(otherBatch.Responses) != len(ba.Responses) {
 		return errors.New("unable to combine batch responses of different length")
 	}
-	for i, l := 0, len(br.Responses); i < l; i++ {
-		valLeft := br.Responses[i].GetValue()
+	for i, l := 0, len(ba.Responses); i < l; i++ {
+		valLeft := ba.Responses[i].GetValue()
 		valRight := otherBatch.Responses[i].GetValue()
 		args, lOK := valLeft.(Combinable)
 		reply, rOK := valRight.(Combinable)
@@ -383,7 +384,7 @@ func (br *BatchResponse) Combine(c Response) error {
 		// the result. Note that the result can still be a NoopResponse, to be
 		// filled in by a future Combine().
 		if _, ok := valLeft.(*NoopResponse); ok {
-			br.Responses[i] = otherBatch.Responses[i]
+			ba.Responses[i] = otherBatch.Responses[i]
 		}
 	}
 	return nil
@@ -482,31 +483,31 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 
 // Add adds a request to the batch request. The batch key range is
 // expanded to include the key ranges of all requests which it comprises.
-func (br *BatchRequest) Add(args Request) {
+func (ba *BatchRequest) Add(args Request) {
 	union := RequestUnion{}
 	if !union.SetValue(args) {
 		panic(fmt.Sprintf("unable to add %T to batch request", args))
 	}
 	h := args.Header()
-	if br.Key == nil || !br.Key.Less(h.Key) {
-		br.Key = h.Key
-	} else if br.EndKey.Less(h.Key) && !br.Key.Equal(h.Key) {
-		br.EndKey = h.Key
+	if ba.Key == nil || !ba.Key.Less(h.Key) {
+		ba.Key = h.Key
+	} else if ba.EndKey.Less(h.Key) && !ba.Key.Equal(h.Key) {
+		ba.EndKey = h.Key
 	}
-	if br.EndKey == nil || (h.EndKey != nil && br.EndKey.Less(h.EndKey)) {
-		br.EndKey = h.EndKey
+	if ba.EndKey == nil || (h.EndKey != nil && ba.EndKey.Less(h.EndKey)) {
+		ba.EndKey = h.EndKey
 	}
-	br.Requests = append(br.Requests, union)
+	ba.Requests = append(ba.Requests, union)
 }
 
 // Add adds a response to the batch response.
-func (br *BatchResponse) Add(reply Response) {
+func (ba *BatchResponse) Add(reply Response) {
 	union := ResponseUnion{}
 	if !union.SetValue(reply) {
 		// TODO(tschottdorf) evaluate whether this should return an error.
 		panic(fmt.Sprintf("unable to add %T to batch response", reply))
 	}
-	br.Responses = append(br.Responses, union)
+	ba.Responses = append(ba.Responses, union)
 }
 
 // Bounded is implemented by request types which have a bounded number of
@@ -619,9 +620,9 @@ func (*LeaderLeaseRequest) Method() Method { return LeaderLease }
 func (*BatchRequest) Method() Method { return Batch }
 
 // Methods returns a slice of the contained methods.
-func (br *BatchRequest) Methods() []Method {
+func (ba *BatchRequest) Methods() []Method {
 	var res []Method
-	for _, arg := range br.Requests {
+	for _, arg := range ba.Requests {
 		res = append(res, arg.GetValue().(Request).Method())
 	}
 	return res
@@ -703,9 +704,9 @@ func (*DeleteRequest) flags() int             { return isWrite | isTxnWrite }
 func (*DeleteRangeRequest) flags() int        { return isWrite | isTxnWrite | isRange }
 func (*ScanRequest) flags() int               { return isRead | isRange }
 func (*ReverseScanRequest) flags() int        { return isRead | isRange | isReverse }
-func (*EndTransactionRequest) flags() int     { return isWrite }
-func (*AdminSplitRequest) flags() int         { return isAdmin }
-func (*AdminMergeRequest) flags() int         { return isAdmin }
+func (*EndTransactionRequest) flags() int     { return isWrite | isAlone }
+func (*AdminSplitRequest) flags() int         { return isAdmin | isAlone }
+func (*AdminMergeRequest) flags() int         { return isAdmin | isAlone }
 func (*HeartbeatTxnRequest) flags() int       { return isWrite }
 func (*GCRequest) flags() int                 { return isWrite | isRange }
 func (*PushTxnRequest) flags() int            { return isWrite }
@@ -717,10 +718,50 @@ func (*MergeRequest) flags() int              { return isWrite }
 func (*TruncateLogRequest) flags() int        { return isWrite }
 func (*LeaderLeaseRequest) flags() int        { return isWrite }
 
-func (br *BatchRequest) flags() int {
+func (ba *BatchRequest) flags() int {
 	var flags int
-	for _, union := range br.Requests {
+	for _, union := range ba.Requests {
 		flags |= union.GetValue().(Request).flags()
 	}
 	return flags
+}
+
+// Split separate the requests contained in a batch so that each subset of
+// requests can be executed by a Store (without changing order). In particular,
+// Admin and EndTransaction requests are always singled out and mutating
+// requests separated from reads.
+func (ba BatchRequest) Split() [][]RequestUnion {
+	compatible := func(exFlags, newFlags int) bool {
+		// If no flags are set so far, everything goes.
+		if exFlags == 0 {
+			return true
+		}
+		if (newFlags & isAlone) != 0 {
+			return false
+		}
+		// Otherwise, the flags below must remain the same
+		// with the new request added.
+		// Note that we're not checking isRead: The invariants we're
+		// enforcing are that a batch can't mix non-writes with writes.
+		// Checking isRead would ConditionalPut and Put to conflict,
+		// which is not what we want.
+		const mask = isWrite | isAdmin | isReverse
+		return (mask & exFlags) == (mask & newFlags)
+	}
+	var parts [][]RequestUnion
+	for len(ba.Requests) > 0 {
+		part := ba.Requests
+		var gFlags int
+		for i, union := range ba.Requests {
+			flags := union.GetValue().(Request).flags()
+			if !compatible(gFlags, flags) {
+				part = ba.Requests[:i]
+				break
+			}
+			gFlags |= flags
+		}
+		parts = append(parts, part)
+		ba.Requests = ba.Requests[len(part):]
+	}
+	return parts
 }

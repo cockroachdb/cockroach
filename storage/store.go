@@ -27,7 +27,6 @@ import (
 	"github.com/google/btree"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -1155,80 +1154,10 @@ func (s *Store) ReplicaCount() int {
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-// TODO(tschottdorf): this is the most provisional part of the code. It
-// unrolls batches and executes them one-by-one, hoping to do more or
-// less the correct updates in each step, but of course it's not atomic.
-// This is where the Store-side of project batch(r) will attach to.
-func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (reply proto.Response, _ error) {
+func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
 	ctx = s.Context(ctx)
 	trace := tracer.FromCtx(ctx)
-	if _, ok := args.(*proto.BatchRequest); !ok {
-		var unwrap func(proto.Response) proto.Response
-		args, unwrap = batch.MaybeWrap(args)
-		defer func() {
-			reply = unwrap(reply)
-		}()
-	}
-	if trace == nil {
-		trace = s.ctx.Tracer.NewTrace(args.Header())
-		ctx = tracer.ToCtx(ctx, trace)
-		defer trace.Finalize()
-	}
-	bArgs := args.(*proto.BatchRequest)
-	// TODO(tschottdorf): provisional batch handling.
-	bReply := &proto.BatchResponse{}
-	var isTxn bool
-	if txn := bArgs.Txn; txn != nil {
-		bReply.Txn = gogoproto.Clone(txn).(*proto.Transaction) // init response txn
-		isTxn = true
-	}
-	for i, bArg := range bArgs.Requests {
-		args := bArg.GetValue().(proto.Request)
-		if args.Method() == proto.Noop {
-			bReply.Add(&proto.NoopResponse{})
-			continue
-		}
-		header := args.Header()
-		origHeader := *gogoproto.Clone(header).(*proto.RequestHeader)
-		*header = *gogoproto.Clone(&bArgs.RequestHeader).(*proto.RequestHeader)
-		if len(bArgs.Requests) > 1 {
-			// TODO(tschottdorf): interim code to keep some tests passing.
-			// Once batches execute atomically, one ID per batch will do.
-			header.CmdID = proto.ClientCmdID{} // because response cache
-		}
-		// Only Key and EndKey are allowed to diverge from the iterated
-		// Batch header.
-		header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
-
-		if isTxn && i > 0 {
-			// Propagate Txn of last reply to current request.
-			*header.Txn = *bReply.Txn
-		}
-		reply, err := s.executeOne(ctx, args)
-		*header = origHeader
-		if reply != nil {
-			bReply.Add(reply)
-			// Use last response header, but keep our Txn
-			prevTxn := bReply.Txn
-			bReply.ResponseHeader, bReply.Txn = *(gogoproto.Clone(reply.Header()).(*proto.ResponseHeader)), prevTxn
-			// TODO(tschottdorf): figure out whether we really want to update
-			// the txn on errors returned.
-			if txn := reply.Header().Txn; txn != nil {
-				bReply.Txn.Update(txn)
-			}
-		}
-		if err != nil {
-			return bReply, err
-		}
-		if isTxn {
-			bReply.Txn.Timestamp.Forward(bReply.Timestamp)
-		}
-	}
-	return bReply, nil
-}
-
-func (s *Store) executeOne(ctx context.Context, args proto.Request) (proto.Response, error) {
-	trace := tracer.FromCtx(ctx)
+	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
 	// TODO(tschottdorf): remove this first branch when we only have batches here.
 	if args.Method() != proto.Batch {
@@ -1342,7 +1271,7 @@ func (s *Store) executeOne(ctx context.Context, args proto.Request) (proto.Respo
 			}
 			continue
 		}
-		return reply, err
+		return nil, err
 	}
 
 	// By default, retries are indefinite. However, some unittests set a
@@ -1396,13 +1325,13 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	now := s.Clock().Now()
 	header := args.Header()
-	bArgs := &proto.BatchRequest{
+	ba := &proto.BatchRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    header.Timestamp,
 			UserPriority: header.UserPriority,
 		},
 	}
-	bReply := &proto.BatchResponse{}
+	br := &proto.BatchResponse{}
 	for _, intent := range pushIntents {
 		pushArgs := &proto.PushTxnRequest{
 			RequestHeader: proto.RequestHeader{
@@ -1419,11 +1348,11 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			PushType:    pushType,
 			RangeLookup: args.Method() == proto.RangeLookup,
 		}
-		bArgs.Add(pushArgs)
+		ba.Add(pushArgs)
 	}
 	b := &client.Batch{}
-	if len(bArgs.Requests) > 0 {
-		b.InternalAddCall(proto.Call{Args: bArgs, Reply: bReply})
+	if len(ba.Requests) > 0 {
+		b.InternalAddCall(proto.Call{Args: ba, Reply: br})
 	}
 
 	// Run all pushes in parallel.
@@ -1447,7 +1376,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	wiErr.Resolved = true // success!
 
 	for i, intent := range pushIntents {
-		intent.Txn = *(bReply.Responses[i].PushTxn.PusheeTxn)
+		intent.Txn = *(br.Responses[i].PushTxn.PusheeTxn)
 		resolveIntents = append(resolveIntents, intent)
 	}
 

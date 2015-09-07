@@ -233,9 +233,9 @@ func TestResponseCacheShouldCache(t *testing.T) {
 	reply := proto.PutResponse{}
 
 	for i, test := range testCases {
-		bReply := &proto.BatchResponse{}
-		bReply.Add(&reply)
-		if shouldCache := rc.shouldCacheResponse(proto.ResponseWithError{Reply: bReply, Err: test.err}); shouldCache != test.shouldCache {
+		br := &proto.BatchResponse{}
+		br.Add(&reply)
+		if shouldCache := rc.shouldCacheResponse(proto.ResponseWithError{Reply: br, Err: test.err}); shouldCache != test.shouldCache {
 			t.Errorf("%d: expected cache? %t; got %t", i, test.shouldCache, shouldCache)
 		}
 	}

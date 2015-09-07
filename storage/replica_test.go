@@ -337,12 +337,12 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	bArgs := proto.BatchRequest{}
-	bArgs.Timestamp = tc.clock.Now()
+	ba := proto.BatchRequest{}
+	ba.Timestamp = tc.clock.Now()
 	pArgs := putArgs(proto.Key("a"), []byte("asd"),
 		tc.rng.Desc().RangeID, tc.store.StoreID())
-	pArgs.Timestamp = bArgs.Timestamp
-	bArgs.Add(&pArgs)
+	pArgs.Timestamp = ba.Timestamp
+	ba.Add(&pArgs)
 
 	// Lose the lease.
 	start := tc.rng.getLease().Expiration.Add(1, 0)
@@ -354,7 +354,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	})
 
 	// Submit a proposal to Raft.
-	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), &bArgs)
+	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), &ba)
 	if err := <-errChan; err != nil {
 		t.Fatal(err)
 	}
@@ -1394,12 +1394,12 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	cmdID := proto.ClientCmdID{WallTime: 1, Random: 1}
 	// Write an error into the response cache.
 	incReply := proto.IncrementResponse{}
-	bReply := proto.BatchResponse{}
-	bReply.Add(&incReply)
+	br := proto.BatchResponse{}
+	br.Add(&incReply)
 	pastError := errors.New("boom")
 	var expError error = &proto.Error{Message: pastError.Error()}
 	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID,
-		proto.ResponseWithError{Reply: &bReply, Err: pastError})
+		proto.ResponseWithError{Reply: &br, Err: pastError})
 
 	args := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 	args.CmdID = cmdID
@@ -1478,15 +1478,15 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 
 		// Try a heartbeat to the already-committed transaction; should get
 		// committed txn back, but without last heartbeat timestamp set.
-		hbArgs := heartbeatArgs(txn, 1, tc.store.StoreID())
+		hBA := heartbeatArgs(txn, 1, tc.store.StoreID())
 
-		resp, err = tc.rng.AddCmd(tc.rng.context(), &hbArgs)
+		resp, err = tc.rng.AddCmd(tc.rng.context(), &hBA)
 		if err != nil {
 			t.Error(err)
 		}
-		hbReply := resp.(*proto.HeartbeatTxnResponse)
-		if hbReply.Txn.Status != expStatus || hbReply.Txn.LastHeartbeat != nil {
-			t.Errorf("unexpected heartbeat reply contents: %+v", hbReply)
+		hBR := resp.(*proto.HeartbeatTxnResponse)
+		if hBR.Txn.Status != expStatus || hBR.Txn.LastHeartbeat != nil {
+			t.Errorf("unexpected heartbeat reply contents: %+v", hBR)
 		}
 	}
 }
@@ -1504,16 +1504,16 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 
 		// Start out with a heartbeat to the transaction.
-		hbArgs := heartbeatArgs(txn, 1, tc.store.StoreID())
-		hbArgs.Timestamp = txn.Timestamp
+		hBA := heartbeatArgs(txn, 1, tc.store.StoreID())
+		hBA.Timestamp = txn.Timestamp
 
-		resp, err := tc.rng.AddCmd(tc.rng.context(), &hbArgs)
+		resp, err := tc.rng.AddCmd(tc.rng.context(), &hBA)
 		if err != nil {
 			t.Error(err)
 		}
-		hbReply := resp.(*proto.HeartbeatTxnResponse)
-		if hbReply.Txn.Status != proto.PENDING || hbReply.Txn.LastHeartbeat == nil {
-			t.Errorf("unexpected heartbeat reply contents: %+v", hbReply)
+		hBR := resp.(*proto.HeartbeatTxnResponse)
+		if hBR.Txn.Status != proto.PENDING || hBR.Txn.LastHeartbeat == nil {
+			t.Errorf("unexpected heartbeat reply contents: %+v", hBR)
 		}
 
 		args := endTxnArgs(txn, commit, 1, tc.store.StoreID())
@@ -1531,9 +1531,9 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		if reply.Txn.Status != expStatus {
 			t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
 		}
-		if reply.Txn.LastHeartbeat == nil || !reply.Txn.LastHeartbeat.Equal(*hbReply.Txn.LastHeartbeat) {
+		if reply.Txn.LastHeartbeat == nil || !reply.Txn.LastHeartbeat.Equal(*hBR.Txn.LastHeartbeat) {
 			t.Errorf("expected heartbeats to remain equal: %+v != %+v",
-				reply.Txn.LastHeartbeat, hbReply.Txn.LastHeartbeat)
+				reply.Txn.LastHeartbeat, hBR.Txn.LastHeartbeat)
 		}
 	}
 }
@@ -1603,10 +1603,10 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 
 	// Start out with a heartbeat to the transaction.
-	hbArgs := heartbeatArgs(txn, 1, tc.store.StoreID())
-	hbArgs.Timestamp = txn.Timestamp
+	hBA := heartbeatArgs(txn, 1, tc.store.StoreID())
+	hBA.Timestamp = txn.Timestamp
 
-	_, err := tc.rng.AddCmd(tc.rng.context(), &hbArgs)
+	_, err := tc.rng.AddCmd(tc.rng.context(), &hBA)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1874,10 +1874,10 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		// First, establish "start" of existing pushee's txn via heartbeat.
 		pushee.Epoch = test.startEpoch
 		pushee.Timestamp = test.startTS
-		hbArgs := heartbeatArgs(pushee, 1, tc.store.StoreID())
-		hbArgs.Timestamp = pushee.Timestamp
+		hBA := heartbeatArgs(pushee, 1, tc.store.StoreID())
+		hBA.Timestamp = pushee.Timestamp
 
-		if _, err := tc.rng.AddCmd(tc.rng.context(), &hbArgs); err != nil {
+		if _, err := tc.rng.AddCmd(tc.rng.context(), &hBA); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1950,10 +1950,10 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// First, establish "start" of existing pushee's txn via heartbeat.
 		if test.heartbeat != nil {
-			hbArgs := heartbeatArgs(pushee, 1, tc.store.StoreID())
-			hbArgs.Timestamp = *test.heartbeat
+			hBA := heartbeatArgs(pushee, 1, tc.store.StoreID())
+			hBA.Timestamp = *test.heartbeat
 
-			if _, err := tc.rng.AddCmd(tc.rng.context(), &hbArgs); err != nil {
+			if _, err := tc.rng.AddCmd(tc.rng.context(), &hBA); err != nil {
 				t.Fatal(err)
 			}
 		}

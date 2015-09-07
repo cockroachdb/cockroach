@@ -499,8 +499,7 @@ func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to prot
 	return gUndo, len(br.Requests) - numNoop, nil
 }
 
-// sendAttempt temporarily truncates the arguments to match the descriptor,
-// gathers and rearranges the replicas, and makes an RPC call.
+// sendAttempt gathers and rearranges the replicas, and makes an RPC call.
 func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba *proto.BatchRequest, desc *proto.RangeDescriptor) (*proto.BatchResponse, error) {
 	defer trace.Epoch("sending RPC")()
 
@@ -642,30 +641,32 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 			}
 
 			{
+				// Truncate the request to our current key range.
+				untruncate, numActive, trErr := truncate(ba, desc, from, to)
 				// TODO(tschottdorf): check if this is already obsolete. If
 				// not, work towards it.
 				ba.Key, ba.EndKey = batch.KeyRange(ba)
-				// Truncate the request to our current key range.
-				untruncate, numActive, trErr := truncate(ba, desc, from, to)
 				if trErr != nil {
 					untruncate()
 					return nil, trErr
 				}
 				if numActive == 0 {
+					untruncate()
 					panic(fmt.Sprintf("truncation resulted in empty batch on [%s,%s): %s",
 						from, to, batch.Short(ba)))
 				}
 				curReply, err = ds.sendAttempt(trace, ba, desc)
-				untruncate()
 				ba.Key, ba.EndKey = nil, nil
-			}
 
-			if err == nil {
-				break
-			}
-
-			if log.V(0) {
-				log.Warningf("failed to invoke %s: %s", batch.Short(ba), err)
+				if err != nil {
+					if log.V(0) {
+						log.Warningf("failed to invoke %s: %s", batch.Short(ba), err)
+					}
+					untruncate()
+				} else {
+					untruncate()
+					break // when no error, we're done
+				}
 			}
 
 			// If retryable, allow retry. For range not found or range

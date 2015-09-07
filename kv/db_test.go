@@ -179,10 +179,10 @@ func TestKVDBInternalMethods(t *testing.T) {
 		}
 
 		// Verify same but within a Batch request.
-		bArgs := &proto.BatchRequest{}
-		bArgs.Add(args)
+		ba := &proto.BatchRequest{}
+		ba.Add(args)
 		b = &client.Batch{}
-		b.InternalAddCall(proto.Call{Args: bArgs, Reply: &proto.BatchResponse{}})
+		b.InternalAddCall(proto.Call{Args: ba, Reply: &proto.BatchResponse{}})
 
 		if err := db.Run(b); err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())

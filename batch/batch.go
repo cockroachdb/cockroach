@@ -54,23 +54,23 @@ func UpdateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 // MaybeWrap wraps the given argument in a batch, unless it is already one.
 // TODO(tschottdorf): will go when proto.Call does.
 func MaybeWrap(args proto.Request) (*proto.BatchRequest, func(proto.Response) proto.Response) {
-	if bArgs, ok := args.(*proto.BatchRequest); ok {
-		return bArgs, func(a proto.Response) proto.Response { return a }
+	if ba, ok := args.(*proto.BatchRequest); ok {
+		return ba, func(a proto.Response) proto.Response { return a }
 	}
-	bArgs := &proto.BatchRequest{}
-	bArgs.RequestHeader = *(gogoproto.Clone(args.Header()).(*proto.RequestHeader))
-	bArgs.Add(args)
-	return bArgs, func(reply proto.Response) proto.Response {
-		bReply, ok := reply.(*proto.BatchResponse)
+	ba := &proto.BatchRequest{}
+	ba.RequestHeader = *(gogoproto.Clone(args.Header()).(*proto.RequestHeader))
+	ba.Add(args)
+	return ba, func(reply proto.Response) proto.Response {
+		br, ok := reply.(*proto.BatchResponse)
 		if !ok {
 			// Request likely never sent, but caught a local error.
 			return reply
 		}
 		var unwrappedReply proto.Response
-		if len(bReply.Responses) == 0 {
+		if len(br.Responses) == 0 {
 			unwrappedReply = args.CreateReply()
 		} else {
-			unwrappedReply = bReply.Responses[0].GetValue().(proto.Response)
+			unwrappedReply = br.Responses[0].GetValue().(proto.Response)
 		}
 		// The ReplyTxn is propagated from one response to the next request,
 		// and we adopt the mechanism that whenever the Txn changes, it needs
@@ -80,9 +80,9 @@ func MaybeWrap(args proto.Request) (*proto.BatchRequest, func(proto.Response) pr
 		// so it makes some sense to take the burden of updating the Txn
 		// from TxnCoordSender - it will only need to act on retries/aborts
 		// in the future.
-		unwrappedReply.Header().Txn = bReply.Txn
+		unwrappedReply.Header().Txn = br.Txn
 		if unwrappedReply.Header().Error == nil {
-			unwrappedReply.Header().Error = bReply.Error
+			unwrappedReply.Header().Error = br.Error
 		}
 		return unwrappedReply
 	}
@@ -191,9 +191,8 @@ func NewChunkingSender(f SenderFn) Sender {
 // return an error so that we split and retry once the chunk which contains
 // EndTransaction (i.e. the last one).
 func (cs *ChunkingSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
-	var argChunks []*proto.BatchRequest
 	if len(ba.Requests) < 1 {
-		panic("empty batchArgs")
+		panic("empty batch")
 	}
 
 	// Deterministically create ClientCmdIDs for all parts of the batch if
@@ -214,30 +213,22 @@ func (cs *ChunkingSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 		}
 	}
 
-	if rArg, ok := ba.GetArg(proto.EndTransaction); ok &&
-		len(ba.Requests) > 1 {
-		et := rArg.(*proto.EndTransactionRequest)
-		firstChunk := *ba // shallow copy so that we get to manipulate fields
-		etChunk := &proto.BatchRequest{}
-		etChunk.Add(et)
-		etChunk.RequestHeader = *gogoproto.Clone(&ba.RequestHeader).(*proto.RequestHeader)
-		firstChunk.Requests = ba.Requests[:len(ba.Requests)-1]
-		argChunks = append(argChunks, &firstChunk, etChunk)
-	} else {
-		argChunks = append(argChunks, ba)
-	}
+	parts := ba.Split()
 	var rplChunks []*proto.BatchResponse
-	for len(argChunks) > 0 {
-		ba, argChunks = argChunks[0], argChunks[1:]
+	var part []proto.RequestUnion
+	for len(parts) > 0 {
+		part, parts = parts[0], parts[1:]
+		ba.Requests = part
 		ba.CmdID = nextID()
 		rpl, err := cs.f(ctx, ba)
 		if err != nil {
 			return nil, err
 		}
 		// Propagate transaction from last reply to next request.
-		if len(argChunks) > 0 {
-			argChunks[0].Header().Txn.Update(rpl.Header().Txn)
+		if len(parts) > 0 {
+			ba.Txn.Update(rpl.Header().Txn)
 		}
+
 		rplChunks = append(rplChunks, rpl)
 	}
 

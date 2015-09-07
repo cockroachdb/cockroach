@@ -45,6 +45,10 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args pro
 	// or merge activity.
 	header := args.Header()
 
+	if _, ok := args.(*proto.NoopRequest); ok {
+		return &proto.NoopResponse{}, nil, nil
+	}
+
 	if err := r.checkCmdHeader(header); err != nil {
 		return nil, nil, err
 	}
@@ -132,8 +136,6 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args pro
 		var resp proto.LeaderLeaseResponse
 		resp, err = r.LeaderLease(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.NoopRequest:
-		reply = &proto.NoopResponse{}
 	default:
 		err = util.Errorf("unrecognized command %s", args.Method())
 	}
@@ -618,7 +620,12 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		}
 	}
 
-	if args.IgnoreIntents && len(intents) > 0 {
+	// TODO(tschottdorf): IgnoreIntents is only set on a Push, but there are
+	// infinite loops because ResolveIntent doesn't get routed the right way;
+	// I think it needs the same special treatment.
+	// TestRangeSplitsWithConcurrentTxns demonstrates this when removing 'true'
+	// below.
+	if (true || args.IgnoreIntents) && len(intents) > 0 {
 		// NOTE (subtle): in general, we want to try to clean up dangling
 		// intents on meta records. However, if we're in the process of
 		// cleaning up a dangling intent on a meta record by pushing the

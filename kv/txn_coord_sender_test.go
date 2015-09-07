@@ -655,20 +655,20 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 	for i, tc := range testCases {
 		called = false
 		tc.req.Reset()
-		bArgs := &proto.BatchRequest{}
-		bReply := &proto.BatchResponse{}
+		ba := &proto.BatchRequest{}
+		br := &proto.BatchResponse{}
 
 		if tc.arg {
 			tc.req.Header().Txn = txn1
 		}
-		bArgs.Add(tc.req)
+		ba.Add(tc.req)
 		if tc.batch {
-			bArgs.Txn = txn2
+			ba.Txn = txn2
 		}
 		called = false
-		ts.Send(context.Background(), proto.Call{Args: bArgs, Reply: bReply})
-		if !tc.ok && bReply.GoError() == alwaysError {
-			t.Fatalf("%d: expected error%s", i, bReply.GoError())
+		ts.Send(context.Background(), proto.Call{Args: ba, Reply: br})
+		if !tc.ok && br.GoError() == alwaysError {
+			t.Fatalf("%d: expected error%s", i, br.GoError())
 		} else if tc.ok != called {
 			t.Fatalf("%d: wanted call: %t, got call: %t", i, tc.ok, called)
 		}

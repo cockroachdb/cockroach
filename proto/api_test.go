@@ -206,3 +206,42 @@ func TestBatchKeyRange(t *testing.T) {
 	})
 	verify(br, Key("A"), Key("d1"))
 }
+
+func TestBatchSplit(t *testing.T) {
+	get := &GetRequest{}
+	scan := &ScanRequest{}
+	put := &PutRequest{}
+	spl := &AdminSplitRequest{}
+	dr := &DeleteRangeRequest{}
+	et := &EndTransactionRequest{}
+	rv := &ReverseScanRequest{}
+	testCases := []struct {
+		reqs  []Request
+		sizes []int
+	}{
+		{[]Request{get, put}, []int{1, 1}},
+		{[]Request{get, get, get, put, put, get, get}, []int{3, 2, 2}},
+		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 1, 1}},
+		{[]Request{spl, get, scan, spl, get}, []int{1, 2, 1, 1}},
+		{[]Request{spl, spl, get, spl}, []int{1, 1, 1, 1}},
+	}
+
+	for i, test := range testCases {
+		ba := BatchRequest{}
+		for _, args := range test.reqs {
+			ba.Add(args)
+		}
+		var partLen []int
+		var recombined []RequestUnion
+		for _, part := range ba.Split() {
+			recombined = append(recombined, part...)
+			partLen = append(partLen, len(part))
+		}
+		if !reflect.DeepEqual(partLen, test.sizes) {
+			t.Errorf("%d: expected chunks %v, got %v", i, test.sizes, partLen)
+		}
+		if !reflect.DeepEqual(recombined, ba.Requests) {
+			t.Errorf("%d: started with:\n%+v\ngot back:\n%+v", i, ba.Requests, recombined)
+		}
+	}
+}
