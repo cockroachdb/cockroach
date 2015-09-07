@@ -76,6 +76,7 @@ type Txn struct {
 	// is (still) unset.
 	haveTxnWrite bool
 	haveEndTxn   bool // True if there was an explicit EndTransaction
+	execing      bool // True if the txn is run in the exec() loop
 	// systemDBTrigger is set to true when modifying keys from the
 	// SystemDB span. This sets the SystemDBTrigger on EndTransactionRequest.
 	systemDBTrigger bool
@@ -300,18 +301,30 @@ func (txn *Txn) CommitInBatch(b *Batch) error {
 
 // Commit sends an EndTransactionRequest with Commit=true.
 func (txn *Txn) Commit() error {
-	if txn.Proto.Writing {
-		return txn.sendEndTxnCall(true /* commit */)
+	err := txn.sendEndTxnCall(true /* commit */)
+	if err == nil {
+		return nil
 	}
-	return nil
+	if !txn.execing {
+		// If this transaction is not part of the auto-retry loop we need to
+		// cleanup the transaction on commit failures.
+		//
+		// Always allow the transaction abort request to be sent, even if we have
+		// already sent/queued an EndTransaction request.
+		txn.haveEndTxn = false
+		if replyErr := txn.Rollback(); replyErr != nil {
+			// Log the error only if it is not a TransactionAbortedError.
+			if _, ok := replyErr.(*proto.TransactionAbortedError); !ok {
+				log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+			}
+		}
+	}
+	return err
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
 func (txn *Txn) Rollback() error {
-	var err error
-	if txn.Proto.Writing {
-		err = txn.sendEndTxnCall(false /* commit */)
-	}
+	err := txn.sendEndTxnCall(false /* commit */)
 	// Explicitly set the status as ABORTED so that higher layers
 	// know that this transaction has ended.
 	txn.Proto.Status = proto.ABORTED
@@ -319,7 +332,10 @@ func (txn *Txn) Rollback() error {
 }
 
 func (txn *Txn) sendEndTxnCall(commit bool) error {
-	return txn.send(endTxnCall(commit, txn.systemDBTrigger))
+	if txn.Proto.Writing {
+		return txn.send(endTxnCall(commit, txn.systemDBTrigger))
+	}
+	return nil
 }
 
 func endTxnCall(commit bool, hasTrigger bool) proto.Call {
@@ -343,6 +359,7 @@ func endTxnCall(commit bool, hasTrigger bool) proto.Call {
 func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
+	txn.execing = true
 	for r := retry.Start(txn.db.txnRetryOptions); r.Next(); {
 		txn.haveTxnWrite, txn.haveEndTxn = false, false // always reset before [re]starting txn
 		if err = retryable(txn); err == nil {
