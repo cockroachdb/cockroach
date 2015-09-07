@@ -18,29 +18,27 @@
 package client
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
+	gogoproto "github.com/gogo/protobuf/proto"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
-	gogoproto "github.com/gogo/protobuf/proto"
-	"golang.org/x/net/context"
 )
 
-var (
-	// DefaultTxnRetryOptions are the standard retry options used
-	// for transactions.
-	// This is exported for testing purposes only.
-	DefaultTxnRetryOptions = retry.Options{
-		InitialBackoff: 50 * time.Millisecond,
-		MaxBackoff:     5 * time.Second,
-		Multiplier:     2,
-	}
-	errMultipleEndTxn = errors.New("cannot end transaction multiple times")
-)
+// DefaultTxnRetryOptions are the standard retry options used
+// for transactions.
+// This is exported for testing purposes only.
+var DefaultTxnRetryOptions = retry.Options{
+	InitialBackoff: 50 * time.Millisecond,
+	MaxBackoff:     5 * time.Second,
+	Multiplier:     2,
+}
 
 // txnSender implements the Sender interface and is used to keep the Send
 // method out of the Txn method set.
@@ -65,18 +63,10 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 // Txn is an in-progress distributed database transaction. A Txn is not safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	db      DB
-	wrapped Sender
-	Proto   proto.Transaction
-	// haveTxnWrite is true as soon as the current attempt contains a write
-	// (prior to sending). This is in contrast to txn.Writing, which is set
-	// by the coordinator when the first intent has been created, and which
-	// does not reset in-between retries. As such, haveTxnWrite helps deter-
-	// mine whether it makes sense to add an EndTransaction when txn.Writing
-	// is (still) unset.
-	haveTxnWrite bool
-	haveEndTxn   bool // True if there was an explicit EndTransaction
-	execing      bool // True if the txn is run in the exec() loop
+	db         DB
+	wrapped    Sender
+	Proto      proto.Transaction
+	finishedOK bool // true when successfully committed or rolled back.
 	// systemDBTrigger is set to true when modifying keys from the
 	// SystemDB span. This sets the SystemDBTrigger on EndTransactionRequest.
 	systemDBTrigger bool
@@ -289,6 +279,26 @@ func (txn *Txn) Run(b *Batch) error {
 	return sendAndFill(txn.send, b)
 }
 
+func (txn *Txn) commit() error {
+	return txn.sendEndTxnCall(true /* commit */)
+}
+
+// Cleanup cleans up the transaction as appropriate based on err.
+func (txn *Txn) Cleanup(err error) {
+	if err != nil {
+		if replyErr := txn.Rollback(); replyErr != nil {
+			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+		}
+	}
+}
+
+// CommitNoCleanup is the same as Commit but will not attempt to clean
+// up on failure. It is exposed only for use in txn_correctness_test.go
+// because those tests manipulate transaction state at a low level.
+func (txn *Txn) CommitNoCleanup() error {
+	return txn.commit()
+}
+
 // CommitInBatch executes the operations queued up within a batch and
 // commits the transaction. Explicitly committing a transaction is
 // optional, but more efficient than relying on the implicit commit
@@ -301,24 +311,8 @@ func (txn *Txn) CommitInBatch(b *Batch) error {
 
 // Commit sends an EndTransactionRequest with Commit=true.
 func (txn *Txn) Commit() error {
-	err := txn.sendEndTxnCall(true /* commit */)
-	if err == nil {
-		return nil
-	}
-	if !txn.execing {
-		// If this transaction is not part of the auto-retry loop we need to
-		// cleanup the transaction on commit failures.
-		//
-		// Always allow the transaction abort request to be sent, even if we have
-		// already sent/queued an EndTransaction request.
-		txn.haveEndTxn = false
-		if replyErr := txn.Rollback(); replyErr != nil {
-			// Log the error only if it is not a TransactionAbortedError.
-			if _, ok := replyErr.(*proto.TransactionAbortedError); !ok {
-				log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
-			}
-		}
-	}
+	err := txn.commit()
+	txn.Cleanup(err)
 	return err
 }
 
@@ -356,99 +350,81 @@ func endTxnCall(commit bool, hasTrigger bool) proto.Call {
 	}
 }
 
-func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
+func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-	txn.execing = true
+	var err error
 	for r := retry.Start(txn.db.txnRetryOptions); r.Next(); {
-		txn.haveTxnWrite, txn.haveEndTxn = false, false // always reset before [re]starting txn
 		if err = retryable(txn); err == nil {
-			if !txn.haveEndTxn {
-				// If there were no errors running retryable, commit the txn. This
-				// may block waiting for outstanding writes to complete in case
-				// retryable didn't -- we need the most recent of all response
-				// timestamps in order to commit.
-				err = txn.Commit()
-			}
+			err = txn.commit()
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
 			if log.V(2) {
 				log.Warning(err)
 			}
-			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
+			switch restartErr.CanRestartTransaction() {
+			case proto.TransactionRestart_IMMEDIATE:
 				r.Reset()
 				continue
-			} else if restartErr.CanRestartTransaction() == proto.TransactionRestart_BACKOFF {
+			case proto.TransactionRestart_BACKOFF:
 				continue
 			}
 			// By default, fall through and break.
 		}
 		break
 	}
-	if err != nil {
-		// If the retry logic gave up and haveEndTxn is true, then even if we
-		// tried to run EndTransaction, it must have failed (or was never run;
-		// after all, it's always the last call to be executed). So we pretend
-		// we never sent one (this is necessary to send another one).
-		txn.haveEndTxn = false // if we sent one, it didn't succeed
-		if replyErr := txn.Rollback(); replyErr != nil {
-			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
-		}
-	}
-	return
+	txn.Cleanup(err)
+	return err
 }
 
 // send runs the specified calls synchronously in a single batch and
-// returns any errors. If the transaction is read-only, a potential
-// EndTransaction call at the end is trimmed.
+// returns any errors. If the transaction is read-only or has already
+// been successfully committed or aborted, a potential trailing
+// EndTransaction call is silently dropped, allowing the caller to
+// always commit or clean-up explicitly even when that may not be
+// required (or even erroneous).
 func (txn *Txn) send(calls ...proto.Call) error {
-	if len(calls) == 0 {
+	lastIndex := len(calls) - 1
+	if lastIndex < 0 {
 		return nil
 	}
-	if err := txn.updateState(calls); err != nil {
-		return err
+
+	// haveTxnWrite tracks intention to write. This is in contrast to
+	// txn.Proto.Writing, which is set by the coordinator when the first
+	// intent has been created, and which lives for the life of the
+	// transaction.
+	var haveTxnWrite bool
+	var haveEndTxn bool
+
+	for i, call := range calls {
+		request := call.Args
+
+		if !haveTxnWrite {
+			haveTxnWrite = proto.IsTransactionWrite(request)
+		}
+
+		if req, ok := request.(*proto.EndTransactionRequest); ok {
+			if i != lastIndex {
+				return util.Errorf("%s sent as non-terminal call", req.Method())
+			}
+			haveEndTxn = true
+		}
 	}
 
 	// If the transaction record indicates that the coordinator never wrote
 	// an intent (and the client doesn't have one lined up), then there's no
 	// need to send EndTransaction. If there is one anyways, cut it off.
-	if txn.haveEndTxn && !(txn.Proto.Writing || txn.haveTxnWrite) {
-		// There's always a call if we get here.
-		lastIndex := len(calls) - 1
-		if calls[lastIndex].Method() != proto.EndTransaction {
-			panic("EndTransaction not sent as last call")
-		}
-		calls = calls[0:lastIndex]
+	if haveEndTxn && (txn.finishedOK || !(txn.Proto.Writing || haveTxnWrite)) {
+		calls = calls[:lastIndex]
 	}
-	return txn.db.send(calls...)
-}
 
-func (txn *Txn) updateState(calls []proto.Call) error {
-	for _, c := range calls {
-		if b, ok := c.Args.(*proto.BatchRequest); ok {
-			for _, br := range b.Requests {
-				if err := txn.updateStateForRequest(br.GetValue().(proto.Request)); err != nil {
-					return err
-				}
-			}
-			continue
-		}
-		if err := txn.updateStateForRequest(c.Args); err != nil {
-			return err
-		}
+	if err := txn.db.send(calls...); err != nil {
+		return err
 	}
-	return nil
-}
 
-func (txn *Txn) updateStateForRequest(r proto.Request) error {
-	if !txn.haveTxnWrite {
-		txn.haveTxnWrite = proto.IsTransactionWrite(r)
-	}
-	if _, ok := r.(*proto.EndTransactionRequest); ok {
-		if txn.haveEndTxn {
-			return errMultipleEndTxn
-		}
-		txn.haveEndTxn = true
+	if haveEndTxn {
+		// We sent an EndTransaction and it succeeded.
+		txn.finishedOK = true
 	}
 	return nil
 }
