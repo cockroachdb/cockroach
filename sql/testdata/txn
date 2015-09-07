@@ -131,7 +131,7 @@ SELECT * FROM kv
 ----
 a c
 
-# Ignore BEGIN in the middle of a transaction.
+# BEGIN in the middle of a transaction is an error.
 
 statement ok
 BEGIN TRANSACTION
@@ -139,16 +139,15 @@ BEGIN TRANSACTION
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
-statement ok
+statement error there is already a transaction in progress
 BEGIN TRANSACTION
 
-query TT
+statment error current transaction is aborted, commands ignored until end of transaction block
 SELECT * FROM kv
 ----
-a b
 
 statement ok
-COMMIT TRANSACTION
+ROLLBACK TRANSACTION
 
 # An empty transaction is allowed.
 
