@@ -38,6 +38,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -405,7 +406,7 @@ func (t *logicTest) execQuery(query logicQuery) {
 	}
 	vals := make([]interface{}, len(cols))
 	for i := range vals {
-		vals[i] = new(sql.NullString)
+		vals[i] = new(driver.NullString)
 	}
 
 	var results []string
@@ -417,15 +418,10 @@ func (t *logicTest) execQuery(query logicQuery) {
 			t.Fatal(err)
 		}
 		for _, v := range vals {
-			nullStr := v.(*sql.NullString)
-			if nullStr.Valid {
-				// We split string results on whitespace and append a separate result
-				// for each string. A bit unusual, but otherwise we can't match strings
-				// containing whitespace.
-				results = append(results, strings.Fields(nullStr.String)...)
-			} else {
-				results = append(results, "NULL")
-			}
+			// We split string results on whitespace and append a separate result
+			// for each string. A bit unusual, but otherwise we can't match strings
+			// containing whitespace.
+			results = append(results, strings.Fields(fmt.Sprint(v))...)
 		}
 	}
 	if err := rows.Err(); err != nil {
