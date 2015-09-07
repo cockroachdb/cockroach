@@ -185,11 +185,7 @@ func (s server) execStmt(stmt parser.Statement, params parameters, planMaker *pl
 // deal with cleaning up transaction state.
 func rollbackTxnAndReturnResultWithError(planMaker *planner, err error) driver.Result {
 	if planMaker.txn != nil {
-		// What do we do with a rollback error? This is an internally
-		// initiated rollback that the client is unaware of. Reporting it
-		// will only cause confusion. Not reporting it could leave a transaction
-		// pending, but that will get GCed eventually.
-		_ = planMaker.txn.Rollback()
+		planMaker.txn.Cleanup(err)
 	}
 	var errProto proto.Error
 	errProto.SetResponseGoError(err)

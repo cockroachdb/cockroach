@@ -355,6 +355,7 @@ func TestCommonMethods(t *testing.T) {
 		key{txnType, "CommitInBatch"}:        {},
 		key{txnType, "CommitNoCleanup"}:      {},
 		key{txnType, "Rollback"}:             {},
+		key{txnType, "Cleanup"}:              {},
 		key{txnType, "DebugName"}:            {},
 		key{txnType, "InternalSetPriority"}:  {},
 		key{txnType, "NewBatch"}:             {},

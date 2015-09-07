@@ -283,7 +283,8 @@ func (txn *Txn) commit() error {
 	return txn.sendEndTxnCall(true /* commit */)
 }
 
-func (txn *Txn) cleanup(err error) {
+// Cleanup cleans up the transaction as appropriate based on err.
+func (txn *Txn) Cleanup(err error) {
 	if err != nil {
 		if replyErr := txn.Rollback(); replyErr != nil {
 			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
@@ -311,7 +312,7 @@ func (txn *Txn) CommitInBatch(b *Batch) error {
 // Commit sends an EndTransactionRequest with Commit=true.
 func (txn *Txn) Commit() error {
 	err := txn.commit()
-	txn.cleanup(err)
+	txn.Cleanup(err)
 	return err
 }
 
@@ -372,7 +373,7 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 		}
 		break
 	}
-	txn.cleanup(err)
+	txn.Cleanup(err)
 	return err
 }
 
