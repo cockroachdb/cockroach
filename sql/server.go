@@ -84,13 +84,13 @@ func (s server) execStmts(sql string, params parameters, planMaker *planner) dri
 	if err != nil {
 		// A parse error occured: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
-		resp.Results = append(resp.Results, rollbackTxnAndReturnResultWithError(planMaker, err))
+		resp.Results = append(resp.Results, makeResultFromError(planMaker, err))
 		return resp
 	}
 	for _, stmt := range stmts {
 		result, err := s.execStmt(stmt, params, planMaker)
 		if err != nil {
-			result = rollbackTxnAndReturnResultWithError(planMaker, err)
+			result = makeResultFromError(planMaker, err)
 		}
 		resp.Results = append(resp.Results, result)
 	}
@@ -183,9 +183,26 @@ func (s server) execStmt(stmt parser.Statement, params parameters, planMaker *pl
 // If we hit an error and there is a pending transaction, rollback
 // the transaction before returning. The client does not have to
 // deal with cleaning up transaction state.
-func rollbackTxnAndReturnResultWithError(planMaker *planner, err error) driver.Result {
+func makeResultFromError(planMaker *planner, err error) driver.Result {
 	if planMaker.txn != nil {
-		planMaker.txn.Cleanup(err)
+		if err != errTransactionAborted {
+			planMaker.txn.Cleanup(err)
+		}
+		// This transaction will normally get marked aborted as part of
+		// Cleanup above, but we do it explicitly here because edge cases
+		// exist:
+		// (1)
+		// BEGIN
+		// <some operation which is implemented using CPut, which fails>
+		// (2)
+		// BEGIN
+		// <syntax error>
+		// Both cases will not write any intents, and so client.Txn will
+		// not actually send an EndTransaction, and rightly so.
+		// Unfortunately, we depend on txn.Proto.Status being equivalent to
+		// our SQL transaction's status, and in these cases, our SQL
+		// transaction is aborted.
+		planMaker.txn.Proto.Status = proto.ABORTED
 	}
 	var errProto proto.Error
 	errProto.SetResponseGoError(err)

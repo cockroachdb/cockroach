@@ -17,12 +17,15 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/sql/parser"
+import (
+	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
+)
 
 // BeginTransaction starts a new transaction.
 func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error) {
 	if p.txn == nil {
-		panic("the server should have already created a transaction")
+		return nil, util.Errorf("the server should have already created a transaction")
 	}
 	return &valuesNode{}, nil
 }
