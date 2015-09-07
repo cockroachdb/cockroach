@@ -19,8 +19,7 @@ package driver_test
 
 import (
 	"database/sql"
-	"fmt"
-	"log"
+	"reflect"
 	"testing"
 	"time"
 
@@ -42,100 +41,40 @@ func cleanup(s *server.TestServer, db *sql.DB) {
 	s.Stop()
 }
 
-type resultSlice [][]*string
-
-func (r resultSlice) String() string {
-	results := make([][]string, len(r))
-
-	for i, subSlice := range r {
-		results[i] = make([]string, len(subSlice))
-		for j, str := range subSlice {
-			if str == nil {
-				results[i][j] = "<NULL>"
-			} else {
-				results[i][j] = *str
-			}
-		}
-	}
-
-	return fmt.Sprintf("%s", results)
-}
-
-func asResultSlice(src [][]string) resultSlice {
-	result := make(resultSlice, len(src))
-	for i, subSlice := range src {
-		result[i] = make([]*string, len(subSlice))
-		for j := range subSlice {
-			if subSlice[j] == "<NULL>" {
-				result[i][j] = nil
-			} else {
-				result[i][j] = &subSlice[j]
-			}
-		}
-	}
-	return result
-}
-
-func readAll(t *testing.T, rows *sql.Rows) resultSlice {
+func readAll(rows *sql.Rows) ([][]string, error) {
 	defer rows.Close()
 
 	cols, err := rows.Columns()
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
-	colStrs := make([]*string, len(cols))
-	for i := range cols {
-		colStrs[i] = &cols[i]
+	vals := make([]interface{}, len(cols))
+	for i := range vals {
+		vals[i] = new(sql.NullString)
 	}
-
-	results := resultSlice{colStrs}
-
+	var results [][]string
 	for rows.Next() {
-		strs := make([]*string, len(cols))
-		vals := make([]interface{}, len(cols))
-		for i := range vals {
-			vals[i] = &strs[i]
-		}
 		if err := rows.Scan(vals...); err != nil {
-			t.Fatal(err)
+			return nil, err
 		}
-		results = append(results, strs)
+		rowStrings := make([]string, 0, len(cols))
+		for _, v := range vals {
+			nullStr := v.(*sql.NullString)
+			if nullStr.Valid {
+				rowStrings = append(rowStrings, nullStr.String)
+			} else {
+				rowStrings = append(rowStrings, "NULL")
+			}
+		}
+		results = append(results, rowStrings)
 	}
 
 	if err := rows.Err(); err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
-	return results
-}
-
-func verifyResults(expectedResults resultSlice, actualResults resultSlice) error {
-	errMismatch := fmt.Errorf("expected: %s\nactual: %s\n", expectedResults, actualResults)
-
-	if len(expectedResults) != len(actualResults) {
-		return errMismatch
-	}
-
-	for i := 0; i < len(expectedResults); i++ {
-		if len(expectedResults[i]) != len(actualResults[i]) {
-			return errMismatch
-		}
-
-		for j := 0; j < len(expectedResults[i]); j++ {
-			if expectedResults[i][j] == nil && actualResults[i][j] == nil {
-				continue
-			}
-			if !(expectedResults[i][j] != nil && actualResults[i][j] != nil) {
-				return errMismatch
-			}
-			if *expectedResults[i][j] != *actualResults[i][j] {
-				return errMismatch
-			}
-		}
-	}
-
-	return nil
+	return results, nil
 }
 
 func TestPlaceholders(t *testing.T) {
@@ -146,7 +85,7 @@ func TestPlaceholders(t *testing.T) {
 	timeVal := time.Date(2015, time.August, 30, 3, 34, 45, 345670000, time.UTC)
 	intervalVal, err := time.ParseDuration("34h2s")
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
@@ -155,6 +94,21 @@ func TestPlaceholders(t *testing.T) {
 	if _, err := db.Exec(`CREATE TABLE t.alltypes (a BIGINT PRIMARY KEY, b FLOAT, c TEXT, d BOOLEAN, e TIMESTAMP, f DATE, g INTERVAL)`); err != nil {
 		t.Fatal(err)
 	}
+	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
+		t.Fatal(err)
+	} else {
+		defer rows.Close()
+
+		cols, err := rows.Columns()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if expected := []string{"a", "b", "c", "d", "e", "f", "g"}; !reflect.DeepEqual(cols, expected) {
+			t.Errorf("got unexpected columns:\n%s\nexpected:\n%s", cols, expected)
+		}
+	}
+
 	// Insert values for all the different types.
 	if _, err := db.Exec(`INSERT INTO t.alltypes (a, b, c, d, e, f, g) VALUES ($1, $2, $3, $4, $5, $5::DATE, $6::INTERVAL)`, 123, 3.4, "blah", true, timeVal, intervalVal); err != nil {
 		t.Fatal(err)
@@ -187,14 +141,16 @@ func TestPlaceholders(t *testing.T) {
 	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
 		t.Fatal(err)
 	} else {
-		results := readAll(t, rows)
-		expectedResults := asResultSlice([][]string{
-			{"a", "b", "c", "d", "e", "f", "g"},
-			{"123", "3.4", "blah", "true", "2015-08-30 03:34:45.34567+00:00", "2015-08-30", "34h0m2s"},
-			{"456", "<NULL>", "<NULL>", "<NULL>", "<NULL>", "<NULL>", "<NULL>"},
-		})
-		if err := verifyResults(expectedResults, results); err != nil {
+		if results, err := readAll(rows); err != nil {
 			t.Fatal(err)
+		} else {
+			expected := [][]string{
+				{"123", "3.4", "blah", "true", "2015-08-30 03:34:45.34567+00:00", "2015-08-30", "34h0m2s"},
+				{"456", "NULL", "NULL", "NULL", "NULL", "NULL", "NULL"},
+			}
+			if !reflect.DeepEqual(results, expected) {
+				t.Errorf("got unexpected results:\n%s\nexpected:\n%s", results, expected)
+			}
 		}
 	}
 	// Delete a row using a placeholder param.
@@ -204,13 +160,15 @@ func TestPlaceholders(t *testing.T) {
 	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
 		t.Fatal(err)
 	} else {
-		results := readAll(t, rows)
-		expectedResults := asResultSlice([][]string{
-			{"a", "b", "c", "d", "e", "f", "g"},
-			{"456", "<NULL>", "<NULL>", "<NULL>", "<NULL>", "<NULL>", "<NULL>"},
-		})
-		if err := verifyResults(expectedResults, results); err != nil {
+		if results, err := readAll(rows); err != nil {
 			t.Fatal(err)
+		} else {
+			expected := [][]string{
+				{"456", "NULL", "NULL", "NULL", "NULL", "NULL", "NULL"},
+			}
+			if !reflect.DeepEqual(results, expected) {
+				t.Errorf("got unexpected results:\n%s\nexpected:\n%s", results, expected)
+			}
 		}
 	}
 }
