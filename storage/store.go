@@ -812,6 +812,7 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 	if err != nil {
 		return nil, util.Errorf("Could not find the subsumed range: %d", subsumedRaftID)
 	}
+	subsumedKey := keys.RangeDescriptorKey(subsumedRng.Desc().StartKey)
 
 	if !ReplicaSetsEqual(subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas()) {
 		return nil, util.Errorf("Ranges are not on the same replicas sets: %+v=%+v",
@@ -823,7 +824,18 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 		return nil, util.Errorf("cannot remove range %s", err)
 	}
 
-	// TODO(bram): The removed range needs to have all of its metadata removed.
+	var readTxn proto.Transaction
+	found, err := engine.MVCCGetProto(s.engine, subsumedKey, s.Clock().Now(), true, nil, &readTxn)
+	if !found || err != nil {
+		return util.Errorf("failed to resolve %s", subsumedKey)
+	}
+	if found {
+		ms := subsumedRng.GetMVCCStats()
+		err = engine.MVCCDelete(s.engine, &ms, subsumedKey, s.Clock().Now(), &readTxn)
+		if err != nil {
+			return util.Errorf("cannot delete key %s", subsumedKey)
+		}
+	}
 
 	// Update the end key of the subsuming range.
 	copy := *subsumingRng.Desc()
