@@ -92,6 +92,21 @@ SELECT * FROM kv
 ----
 a c
 
+# Abort transaction with a syntax error, and ignore statements until the end of the transaction block
+
+statement ok
+BEGIN
+
+query error syntax error at or near ","
+SELECT COUNT(*, 1) FROM kv
+----
+
+statement error current transaction is aborted, commands ignored until end of transaction block
+UPDATE kv SET v = 'b' WHERE k in ('a')
+
+statement ok
+ROLLBACK
+
 # Abort transaction with a problematic statment, and ignore statements until the end of the transaction block
 
 statement ok

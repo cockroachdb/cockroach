@@ -63,10 +63,9 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 // Txn is an in-progress distributed database transaction. A Txn is not safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	db         DB
-	wrapped    Sender
-	Proto      proto.Transaction
-	finishedOK bool // true when successfully committed or rolled back.
+	db      DB
+	wrapped Sender
+	Proto   proto.Transaction
 	// systemDBTrigger is set to true when modifying keys from the
 	// SystemDB span. This sets the SystemDBTrigger on EndTransactionRequest.
 	systemDBTrigger bool
@@ -318,18 +317,11 @@ func (txn *Txn) Commit() error {
 
 // Rollback sends an EndTransactionRequest with Commit=false.
 func (txn *Txn) Rollback() error {
-	err := txn.sendEndTxnCall(false /* commit */)
-	// Explicitly set the status as ABORTED so that higher layers
-	// know that this transaction has ended.
-	txn.Proto.Status = proto.ABORTED
-	return err
+	return txn.sendEndTxnCall(false /* commit */)
 }
 
 func (txn *Txn) sendEndTxnCall(commit bool) error {
-	if txn.Proto.Writing {
-		return txn.send(endTxnCall(commit, txn.systemDBTrigger))
-	}
-	return nil
+	return txn.send(endTxnCall(commit, txn.systemDBTrigger))
 }
 
 func endTxnCall(commit bool, hasTrigger bool) proto.Call {
@@ -355,7 +347,9 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 	// error condition this loop isn't capable of handling.
 	var err error
 	for r := retry.Start(txn.db.txnRetryOptions); r.Next(); {
-		if err = retryable(txn); err == nil {
+		err = retryable(txn)
+		if err == nil && txn.Proto.Status == proto.PENDING {
+			// retryable succeeded, but didn't commit.
 			err = txn.commit()
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
@@ -384,47 +378,40 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous).
 func (txn *Txn) send(calls ...proto.Call) error {
+	if txn.Proto.Status != proto.PENDING {
+		return util.Errorf("attempting to use %s transaction", txn.Proto.Status)
+	}
+
 	lastIndex := len(calls) - 1
 	if lastIndex < 0 {
 		return nil
 	}
 
+	lastReq := calls[lastIndex].Args
 	// haveTxnWrite tracks intention to write. This is in contrast to
 	// txn.Proto.Writing, which is set by the coordinator when the first
 	// intent has been created, and which lives for the life of the
 	// transaction.
-	var haveTxnWrite bool
-	var haveEndTxn bool
+	haveTxnWrite := proto.IsTransactionWrite(lastReq)
 
-	for i, call := range calls {
+	for _, call := range calls[:lastIndex] {
 		request := call.Args
+
+		if req, ok := request.(*proto.EndTransactionRequest); ok {
+			return util.Errorf("%s sent as non-terminal call", req.Method())
+		}
 
 		if !haveTxnWrite {
 			haveTxnWrite = proto.IsTransactionWrite(request)
 		}
-
-		if req, ok := request.(*proto.EndTransactionRequest); ok {
-			if i != lastIndex {
-				return util.Errorf("%s sent as non-terminal call", req.Method())
-			}
-			haveEndTxn = true
-		}
 	}
 
-	// If the transaction record indicates that the coordinator never wrote
-	// an intent (and the client doesn't have one lined up), then there's no
-	// need to send EndTransaction. If there is one anyways, cut it off.
-	if haveEndTxn && (txn.finishedOK || !(txn.Proto.Writing || haveTxnWrite)) {
+	_, haveEndTxn := lastReq.(*proto.EndTransactionRequest)
+	needEndTxn := txn.Proto.Writing || haveTxnWrite
+
+	if haveEndTxn && !needEndTxn {
 		calls = calls[:lastIndex]
 	}
 
-	if err := txn.db.send(calls...); err != nil {
-		return err
-	}
-
-	if haveEndTxn {
-		// We sent an EndTransaction and it succeeded.
-		txn.finishedOK = true
-	}
-	return nil
+	return txn.db.send(calls...)
 }
