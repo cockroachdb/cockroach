@@ -1090,8 +1090,6 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsu
 		return util.Errorf("cannot remove range %s", err)
 	}
 
-	// TODO(bram): The removed range needs to have all of its metadata removed.
-
 	// Update the end key of the subsuming range.
 	copy := *subsumingDesc
 	copy.EndKey = updatedEndKey
