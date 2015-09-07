@@ -19,11 +19,13 @@ package driver_test
 
 import (
 	"database/sql"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -51,7 +53,7 @@ func readAll(rows *sql.Rows) ([][]string, error) {
 
 	vals := make([]interface{}, len(cols))
 	for i := range vals {
-		vals[i] = new(sql.NullString)
+		vals[i] = new(driver.NullString)
 	}
 	var results [][]string
 	for rows.Next() {
@@ -60,12 +62,7 @@ func readAll(rows *sql.Rows) ([][]string, error) {
 		}
 		rowStrings := make([]string, 0, len(cols))
 		for _, v := range vals {
-			nullStr := v.(*sql.NullString)
-			if nullStr.Valid {
-				rowStrings = append(rowStrings, nullStr.String)
-			} else {
-				rowStrings = append(rowStrings, "NULL")
-			}
+			rowStrings = append(rowStrings, fmt.Sprint(v))
 		}
 		results = append(results, rowStrings)
 	}
@@ -82,7 +79,9 @@ func TestPlaceholders(t *testing.T) {
 	s, db := setup(t)
 	defer cleanup(s, db)
 
-	timeVal := time.Date(2015, time.August, 30, 3, 34, 45, 345670000, time.UTC)
+	year, month, day := 2015, time.August, 30
+	timeVal := time.Date(year, month, day, 3, 34, 45, 345670000, time.UTC)
+	dateVal := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 	intervalVal, err := time.ParseDuration("34h2s")
 	if err != nil {
 		t.Fatal(err)
@@ -141,16 +140,29 @@ func TestPlaceholders(t *testing.T) {
 	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
 		t.Fatal(err)
 	} else {
-		if results, err := readAll(rows); err != nil {
+		defer rows.Close()
+
+		var (
+			a int64
+			b float64
+			c string
+			d bool
+			e time.Time
+			f time.Time
+			g string // TODO(tamird): g is a time.Duration; can we do better?
+		)
+
+		rows.Next()
+		if err := rows.Scan(&a, &b, &c, &d, &e, &f, &g); err != nil {
 			t.Fatal(err)
-		} else {
-			expected := [][]string{
-				{"123", "3.4", "blah", "true", "2015-08-30 03:34:45.34567+00:00", "2015-08-30", "34h0m2s"},
-				{"456", "NULL", "NULL", "NULL", "NULL", "NULL", "NULL"},
-			}
-			if !reflect.DeepEqual(results, expected) {
-				t.Errorf("got unexpected results:\n%s\nexpected:\n%s", results, expected)
-			}
+		}
+
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+
+		if !(a == 123 && b == 3.4 && c == "blah" && d && e.Equal(timeVal) && f.Equal(dateVal) && g == intervalVal.String()) {
+			t.Errorf("got unexpected results: %v", []interface{}{a, b, c, d, e, f, g})
 		}
 	}
 	// Delete a row using a placeholder param.

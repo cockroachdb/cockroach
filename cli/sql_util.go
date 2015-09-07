@@ -21,10 +21,10 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/security"
-	// Import cockroach driver.
-	_ "github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/olekukonko/tablewriter"
+
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql/driver"
 )
 
 func makeSQLClient() *sql.DB {
@@ -80,18 +80,13 @@ func printQueryOutput(rows *sql.Rows) error {
 	rowStrings := make([]string, len(cols))
 	for rows.Next() {
 		for i := range vals {
-			vals[i] = new(sql.NullString)
+			vals[i] = new(driver.NullString)
 		}
 		if err := rows.Scan(vals...); err != nil {
 			return fmt.Errorf("scan error: %s", err)
 		}
 		for i, v := range vals {
-			nullStr := v.(*sql.NullString)
-			if nullStr.Valid {
-				rowStrings[i] = nullStr.String
-			} else {
-				rowStrings[i] = "NULL"
-			}
+			rowStrings[i] = fmt.Sprint(v)
 		}
 		if err := table.Append(rowStrings); err != nil {
 			return err

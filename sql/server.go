@@ -159,11 +159,15 @@ func (s server) execStmt(stmt parser.Statement, params parameters, planMaker *pl
 				case parser.DString:
 					row.Values = append(row.Values, driver.Datum{StringVal: (*string)(&vt)})
 				case parser.DDate:
-					s := vt.String()
-					row.Values = append(row.Values, driver.Datum{StringVal: &s})
+					row.Values = append(row.Values, driver.Datum{TimeVal: &driver.Datum_Timestamp{
+						Sec:  vt.Unix(),
+						Nsec: uint32(vt.Nanosecond()),
+					}})
 				case parser.DTimestamp:
-					s := vt.String()
-					row.Values = append(row.Values, driver.Datum{StringVal: &s})
+					row.Values = append(row.Values, driver.Datum{TimeVal: &driver.Datum_Timestamp{
+						Sec:  vt.Unix(),
+						Nsec: uint32(vt.Nanosecond()),
+					}})
 				case parser.DInterval:
 					s := vt.String()
 					row.Values = append(row.Values, driver.Datum{StringVal: &s})
