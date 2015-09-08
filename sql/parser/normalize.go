@@ -240,7 +240,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 	for {
 		if isConst(n.Left) {
 			switch n.Right.(type) {
-			case *BinaryExpr, DReference, *ExistsExpr, *QualifiedName, *Subquery, ValArg:
+			case *BinaryExpr, DReference, *QualifiedName, ValArg:
 				break
 			default:
 				return v, n
@@ -378,7 +378,7 @@ func isConst(expr Expr) bool {
 
 func isVar(expr Expr) bool {
 	switch expr.(type) {
-	case DReference, *ExistsExpr, *QualifiedName, *Subquery, ValArg:
+	case DReference, *QualifiedName, ValArg:
 		return true
 	}
 	return false

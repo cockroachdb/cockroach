@@ -23,15 +23,15 @@ SELECT (1, 2, 3) != (SELECT 1, 2, 3)
 ----
 false
 
-query error subquery must return only one column
+query error subquery must return only one column, found 2
 SELECT (SELECT 1, 2)
 ----
 
-query error subquery must return only one column
+query error subquery must return only one column, found 2
 SELECT 1 IN (SELECT 1, 2)
 ----
 
-query error subquery must return 2 columns
+query error subquery must return 2 columns, found 1
 SELECT (1, 2) IN (SELECT 1)
 ----
 

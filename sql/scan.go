@@ -105,6 +105,7 @@ func prettySpans(spans []span, desc *TableDescriptor, index *IndexDescriptor) st
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
+	planner          *planner
 	txn              *client.Txn
 	desc             *TableDescriptor
 	index            *IndexDescriptor
@@ -348,6 +349,9 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 			}
 		}
 	}
+	if n.err == nil {
+		n.filter, n.err = n.planner.expandSubqueries(n.filter)
+	}
 	return n.err
 }
 
@@ -460,6 +464,9 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	// Type check the expression to memoize operators and functions.
 	var normalized parser.Expr
 	if normalized, n.err = parser.NormalizeAndTypeCheckExpr(resolved); n.err != nil {
+		return n.err
+	}
+	if normalized, n.err = n.planner.expandSubqueries(normalized); n.err != nil {
 		return n.err
 	}
 	n.render = append(n.render, normalized)
@@ -840,6 +847,10 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 		}
 		t.Exprs[0] = v.getQVal(*col)
 		return v, expr
+
+	case *parser.Subquery:
+		// Do not recurse into subqueries.
+		return nil, expr
 	}
 
 	return v, expr

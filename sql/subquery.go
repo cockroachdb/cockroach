@@ -23,10 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
-func (p *planner) expandSubqueries(stmt parser.Statement) error {
+func (p *planner) expandSubqueries(expr parser.Expr) (parser.Expr, error) {
 	v := subqueryVisitor{planner: p}
-	parser.WalkStmt(&v, stmt)
-	return v.err
+	expr = parser.WalkExpr(&v, expr)
+	return expr, v.err
 }
 
 type subqueryVisitor struct {
@@ -58,12 +58,12 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 	}
 
 	columns, multipleRows := v.getSubqueryContext()
-	if columns != len(plan.Columns()) {
+	if n := len(plan.Columns()); columns != n {
 		switch columns {
 		case 1:
-			v.err = fmt.Errorf("subquery must return only one column")
+			v.err = fmt.Errorf("subquery must return only one column, found %d", n)
 		default:
-			v.err = fmt.Errorf("subquery must return %d columns", columns)
+			v.err = fmt.Errorf("subquery must return %d columns, found %d", columns, n)
 		}
 		return nil, expr
 	}
@@ -75,11 +75,10 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 			values := plan.Values()
 			switch len(values) {
 			case 1:
-				// This seems hokey, but if we don't do this then the subquery expands to
-				// a tuple of tuples instead of a tuple of values and an expression like
-				// "k IN (SELECT foo FROM bar)" will fail because we're comparing a
-				// single value against a tuple. Perhaps comparison of a single value
-				// against a tuple should succeed if the tuple is one element in length.
+				// This seems hokey, but if we don't do this then the subquery expands
+				// to a tuple of tuples instead of a tuple of values and an expression
+				// like "k IN (SELECT foo FROM bar)" will fail because we're comparing
+				// a single value against a tuple.
 				rows = append(rows, values[0])
 			default:
 				// The result from plan.Values() is only valid until the next call to
@@ -128,27 +127,21 @@ func (v *subqueryVisitor) getSubqueryContext() (columns int, multipleRows bool) 
 			// can support:
 			//
 			//   SELECT (SELECT 1, 2) = (SELECT 1, 2)
-			//
-			// TODO(pmattis): Subquery expansion currently happens before expression
-			// normalization. This seems wrong. Should perform subquery expansion
-			// after qnames are resolved, normalization and type checking.
 			columns = 1
 			switch t := e.Left.(type) {
-			case parser.Row:
-				columns = len(t)
 			case parser.Tuple:
 				columns = len(t)
 			case parser.DTuple:
 				columns = len(t)
 			}
 
+			multipleRows = false
 			switch e.Operator {
 			case parser.In, parser.NotIn:
-				// The IN and NOT IN operators allow multipleRows.
-				return columns, true
+				multipleRows = true
 			}
 
-			return columns, false
+			return columns, multipleRows
 		}
 	}
 	return 1, false

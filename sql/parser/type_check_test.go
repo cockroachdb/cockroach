@@ -30,6 +30,7 @@ func TestTypeCheckExpr(t *testing.T) {
 		`1 = NULL`,
 		`true AND NULL`,
 		`NULL OR false`,
+		`1 IN (SELECT 1)`,
 	}
 	for _, d := range testData {
 		q, err := ParseTraditional("SELECT " + d)

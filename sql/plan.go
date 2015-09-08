@@ -37,13 +37,6 @@ type planner struct {
 // plan needs to be iterated over using planNode.Next() and planNode.Values()
 // in order to retrieve matching rows.
 func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
-	// TODO(pmattis): It is somewhat premature to expand subqueries here as we
-	// should make sure the statement is otherwise valid first. But it is
-	// correct.
-	if err := p.expandSubqueries(stmt); err != nil {
-		return nil, err
-	}
-
 	switch n := stmt.(type) {
 	case *parser.BeginTransaction:
 		return p.BeginTransaction(n)
