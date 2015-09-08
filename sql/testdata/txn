@@ -61,14 +61,6 @@ SELECT * FROM kv
 ----
 a c
 
-statement ok
-COMMIT TRANSACTION
-
-query TT
-SELECT * FROM kv
-----
-a c
-
 # Statement execution should not depend on request boundaries.
 
 statement ok
@@ -154,10 +146,10 @@ ROLLBACK TRANSACTION
 statement ok
 BEGIN; COMMIT
 
-# Commit/ROLLBACK is ignored when no transaction is in progress.
+# COMMIT/ROLLBACK without a transaction are errors.
 
-statement ok
+statement error there is no transaction in progress
 COMMIT TRANSACTION
 
-statement ok
+statement error there is no transaction in progress
 ROLLBACK TRANSACTION

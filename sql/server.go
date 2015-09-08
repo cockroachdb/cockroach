@@ -32,6 +32,7 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
+var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionAborted = errors.New("current transaction is aborted, commands ignored until end of transaction block")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -110,10 +111,14 @@ func (s server) execStmt(stmt parser.Statement, params parameters, planMaker *pl
 		planMaker.txn = client.NewTxn(s.db)
 		planMaker.txn.SetDebugName("sql", 0)
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
-		if planMaker.txn != nil && planMaker.txn.Proto.Status == proto.ABORTED {
-			// Reset to allow starting a new transaction.
-			planMaker.txn = nil
-			return result, nil
+		if planMaker.txn != nil {
+			if planMaker.txn.Proto.Status == proto.ABORTED {
+				// Reset to allow starting a new transaction.
+				planMaker.txn = nil
+				return result, nil
+			}
+		} else {
+			return result, errNoTransactionInProgress
 		}
 	default:
 		if planMaker.txn != nil && planMaker.txn.Proto.Status == proto.ABORTED {
