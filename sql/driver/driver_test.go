@@ -20,6 +20,7 @@ package driver_test
 import (
 	"database/sql"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -218,7 +219,7 @@ func TestConnectionSettings(t *testing.T) {
 	}
 	for _, tx := range txs {
 		// Settings work!
-		if _, err := tx.Exec(`SELECT * from kv`); err != nil {
+		if _, err := tx.Query(`SELECT * from kv`); err != nil {
 			t.Fatal(err)
 		}
 		if err := tx.Commit(); err != nil {
@@ -249,5 +250,104 @@ func TestInsecure(t *testing.T) {
 	}()
 	if _, err := db.Exec(`SELECT 1`); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// concurrentIncrements starts two Goroutines in parallel, both of which
+// read the integer stored at the other's key, increment and update their own.
+// It checks that the outcome is serializable, i.e. exactly one of the
+// two Goroutines (the later write) sees the previous write by the other.
+func concurrentIncrements(db *sql.DB, t *testing.T) {
+	// Start with a clean slate.
+	if _, err := db.Exec(`TRUNCATE TABLE t.kv`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO t.kv (k, v) VALUES (0,0),(1,0)`); err != nil {
+		t.Fatal(err)
+	}
+	var wgStartWrite, wgEnd sync.WaitGroup
+	wgEnd.Add(2)
+	wgStartWrite.Add(2)
+	for i := 0; i < 2; i++ {
+		go func(i int) {
+			defer wgEnd.Done()
+			doneWaiting := false
+			// Loop until success.
+			for {
+				txn, err := db.Begin()
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Although the SELECT and the UPDATE below can be combined into a
+				// single statement, we prefer them being separate to ensure that
+				// this transaction is truly a multi-statement transaction, providing
+				// plenty of opportunity to mess up serializability.
+				var value int64
+				if err := txn.QueryRow(`SELECT v FROM t.kv WHERE k = $1`, (i+1)%2).Scan(&value); err != nil {
+					if err := txn.Rollback(); err != nil {
+						t.Fatal(err)
+					}
+					continue
+				}
+				value++
+				if !doneWaiting {
+					wgStartWrite.Done()
+					wgStartWrite.Wait()
+					doneWaiting = true
+				}
+				if _, err := txn.Exec(`UPDATE t.kv SET v = $2 WHERE k = $1`, i, value); err != nil {
+					if err := txn.Rollback(); err != nil {
+						t.Fatal(err)
+					}
+					continue
+				}
+				if err := txn.Commit(); err != nil {
+					continue
+				}
+				// Success.
+				break
+			}
+		}(i)
+	}
+	// Wait for the goroutines to finish.
+	wgEnd.Wait()
+	var min, max, sum int64
+	if err := db.QueryRow(`SELECT MIN(v), MAX(v), SUM(v) FROM t.kv`).Scan(&min, &max, &sum); err != nil {
+		t.Fatal(err)
+	}
+	if min != 1 {
+		t.Errorf("unexpected min: %d", min)
+	}
+	if max != 2 {
+		t.Errorf("unexpected max: %d", max)
+	}
+	if sum != 3 {
+		t.Errorf("unexpected sum: %d", sum)
+	}
+
+}
+
+// TestConcurrentIncrements is a simple explicit test for serializability
+// for the concrete situation described in:
+// https://groups.google.com/forum/#!topic/cockroach-db/LdrC5_T0VNw
+// This test is a copy of the test in client/... which runs the same
+// test for the KV layer. This Belt and Suspenders test is mostly
+// documentation and adds another layer of confidence that transactions
+// are serializable and performant even at the SQL layer.
+func TestConcurrentIncrements(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup(t)
+	defer cleanup(s, db)
+
+	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE t.kv (k INT PRIMARY KEY, v INT)`); err != nil {
+		t.Fatal(err)
+	}
+	// Convenience loop: Crank up this number for testing this
+	// more often. It'll increase test duration though.
+	for k := 0; k < 5; k++ {
+		concurrentIncrements(db, t)
 	}
 }
