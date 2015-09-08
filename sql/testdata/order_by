@@ -167,7 +167,13 @@ CREATE TABLE abc (
 )
 
 statement ok
-INSERT INTO abc VALUES (1, 2, 3, 'one'), (4, 5, 6, 'two')
+INSERT INTO abc VALUES (1, 2, 3, 'one'), (4, 5, 6, 'Two')
+
+query T
+SELECT d FROM abc ORDER BY LOWER(d)
+----
+one
+Two
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
@@ -175,7 +181,7 @@ EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
 0 /abc/primary/1/2/3   NULL  NULL
 0 /abc/primary/1/2/3/d 'one' true
 1 /abc/primary/4/5/6   NULL  NULL
-1 /abc/primary/4/5/6/d 'two' true
+1 /abc/primary/4/5/6/d 'Two' true
 
 query ITT
 EXPLAIN SELECT * FROM abc ORDER BY a
@@ -208,7 +214,7 @@ EXPLAIN (DEBUG) SELECT a, b, c FROM abc ORDER BY b
 query ITTB
 EXPLAIN (DEBUG) SELECT a FROM abc ORDER BY a DESC
 ----
-0 /abc/primary/4/5/6/d 'two' NULL
+0 /abc/primary/4/5/6/d 'Two' NULL
 0 /abc/primary/4/5/6   NULL  true
 1 /abc/primary/1/2/3/d 'one' NULL
 1 /abc/primary/1/2/3   NULL  true

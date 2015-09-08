@@ -35,8 +35,9 @@ type typeList []reflect.Type
 
 type builtin struct {
 	types      typeList
-	fn         func(DTuple) (Datum, error)
 	returnType Datum
+	impure     bool
+	fn         func(DTuple) (Datum, error)
 }
 
 func (b builtin) match(types typeList) bool {
@@ -311,6 +312,7 @@ var builtins = map[string][]builtin{
 		builtin{
 			types:      typeList{},
 			returnType: DummyFloat,
+			impure:     true,
 			fn: func(args DTuple) (Datum, error) {
 				return DFloat(rand.Float64()), nil
 			},
