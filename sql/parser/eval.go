@@ -383,7 +383,7 @@ func (d DTimestamp) IsMin() bool {
 
 // TODO:(vivek) implement SET TIME ZONE to improve presentation.
 func (d DTimestamp) String() string {
-	return d.Format(timestampWithOffsetZoneFormat)
+	return d.Format(TimestampWithOffsetZoneFormat)
 }
 
 // DInterval is the interval Datum.
@@ -1490,10 +1490,11 @@ func evalCastExpr(expr *CastExpr) (Datum, error) {
 	return DNull, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)
 }
 
+// time.Time formats.
 const (
 	dateFormat                    = "2006-01-02"
 	timestampFormat               = "2006-01-02 15:04:05.999999999"
-	timestampWithOffsetZoneFormat = "2006-01-02 15:04:05.999999999-07:00"
+	TimestampWithOffsetZoneFormat = "2006-01-02 15:04:05.999999999-07:00"
 	timestampWithNamedZoneFormat  = "2006-01-02 15:04:05.999999999 MST"
 )
 
@@ -1516,7 +1517,7 @@ func ParseTimestamp(s DString) (DTimestamp, error) {
 		t = t.UTC()
 		return DTimestamp{Time: t}, nil
 	}
-	t, err = time.Parse(timestampWithOffsetZoneFormat, str)
+	t, err = time.Parse(TimestampWithOffsetZoneFormat, str)
 	if err == nil {
 		t = t.UTC()
 		return DTimestamp{Time: t}, nil

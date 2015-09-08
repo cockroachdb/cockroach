@@ -19,13 +19,11 @@ package driver_test
 
 import (
 	"database/sql"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -41,37 +39,6 @@ func setup(t *testing.T) (*server.TestServer, *sql.DB) {
 func cleanup(s *server.TestServer, db *sql.DB) {
 	_ = db.Close()
 	s.Stop()
-}
-
-func readAll(rows *sql.Rows) ([][]string, error) {
-	defer rows.Close()
-
-	cols, err := rows.Columns()
-	if err != nil {
-		return nil, err
-	}
-
-	vals := make([]interface{}, len(cols))
-	for i := range vals {
-		vals[i] = new(driver.NullString)
-	}
-	var results [][]string
-	for rows.Next() {
-		if err := rows.Scan(vals...); err != nil {
-			return nil, err
-		}
-		rowStrings := make([]string, 0, len(cols))
-		for _, v := range vals {
-			rowStrings = append(rowStrings, fmt.Sprint(v))
-		}
-		results = append(results, rowStrings)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return results, nil
 }
 
 func TestPlaceholders(t *testing.T) {
@@ -93,6 +60,17 @@ func TestPlaceholders(t *testing.T) {
 	if _, err := db.Exec(`CREATE TABLE t.alltypes (a BIGINT PRIMARY KEY, b FLOAT, c TEXT, d BOOLEAN, e TIMESTAMP, f DATE, g INTERVAL)`); err != nil {
 		t.Fatal(err)
 	}
+
+	var (
+		a int64
+		b sql.NullFloat64
+		c sql.NullString
+		d sql.NullBool
+		e *time.Time
+		f *time.Time
+		g sql.NullString // TODO(tamird): g is a time.Duration; can we do better?
+	)
+
 	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
 		t.Fatal(err)
 	} else {
@@ -142,15 +120,18 @@ func TestPlaceholders(t *testing.T) {
 	} else {
 		defer rows.Close()
 
-		var (
-			a int64
-			b float64
-			c string
-			d bool
-			e time.Time
-			f time.Time
-			g string // TODO(tamird): g is a time.Duration; can we do better?
-		)
+		rows.Next()
+		if err := rows.Scan(&a, &b, &c, &d, &e, &f, &g); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+
+		if !(a == 123 && b.Float64 == 3.4 && c.String == "blah" && d.Bool && e.Equal(timeVal) && f.Equal(dateVal) && g.String == intervalVal.String()) {
+			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g})
+		}
 
 		rows.Next()
 		if err := rows.Scan(&a, &b, &c, &d, &e, &f, &g); err != nil {
@@ -161,8 +142,12 @@ func TestPlaceholders(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !(a == 123 && b == 3.4 && c == "blah" && d && e.Equal(timeVal) && f.Equal(dateVal) && g == intervalVal.String()) {
-			t.Errorf("got unexpected results: %v", []interface{}{a, b, c, d, e, f, g})
+		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && e == nil && f == nil && !g.Valid) {
+			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g})
+		}
+
+		if rows.Next() {
+			t.Error("expected rows to be complete")
 		}
 	}
 	// Delete a row using a placeholder param.
@@ -172,15 +157,23 @@ func TestPlaceholders(t *testing.T) {
 	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
 		t.Fatal(err)
 	} else {
-		if results, err := readAll(rows); err != nil {
+		defer rows.Close()
+
+		rows.Next()
+		if err := rows.Scan(&a, &b, &c, &d, &e, &f, &g); err != nil {
 			t.Fatal(err)
-		} else {
-			expected := [][]string{
-				{"456", "NULL", "NULL", "NULL", "NULL", "NULL", "NULL"},
-			}
-			if !reflect.DeepEqual(results, expected) {
-				t.Errorf("got unexpected results:\n%s\nexpected:\n%s", results, expected)
-			}
+		}
+
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+
+		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && e == nil && f == nil && !g.Valid) {
+			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g})
+		}
+
+		if rows.Next() {
+			t.Error("expected rows to be complete")
 		}
 	}
 }
