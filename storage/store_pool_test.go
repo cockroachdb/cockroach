@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -66,7 +67,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, sp := createTestStorePool(testTimeUntilStoreDead)
 	defer stopper.Stop()
-	sg := newStoreGossiper(g)
+	sg := gossiputil.NewStoreGossiper(g)
 
 	sp.mu.RLock()
 	if _, ok := sp.stores[2]; ok {
@@ -74,7 +75,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	}
 	sp.mu.RUnlock()
 
-	sg.gossipStores(uniqueStore, t)
+	sg.GossipStores(uniqueStore, t)
 
 	sp.mu.RLock()
 	if _, ok := sp.stores[2]; !ok {
@@ -110,8 +111,8 @@ func TestStorePoolDies(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, sp := createTestStorePool(testTimeUntilStoreDead)
 	defer stopper.Stop()
-	sg := newStoreGossiper(g)
-	sg.gossipStores(uniqueStore, t)
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(uniqueStore, t)
 
 	{
 		sp.mu.RLock()
@@ -151,7 +152,7 @@ func TestStorePoolDies(t *testing.T) {
 		sp.mu.RUnlock()
 	}
 
-	sg.gossipStores(uniqueStore, t)
+	sg.GossipStores(uniqueStore, t)
 
 	{
 		sp.mu.RLock()
@@ -210,7 +211,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, sp := createTestStorePool(testTimeUntilStoreDead)
 	defer stopper.Stop()
-	sg := newStoreGossiper(g)
+	sg := gossiputil.NewStoreGossiper(g)
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
 	if sl := sp.getStoreList(proto.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
@@ -243,7 +244,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		Attrs:   proto.Attributes{Attrs: required},
 	}
 
-	sg.gossipStores([]*proto.StoreDescriptor{
+	sg.GossipStores([]*proto.StoreDescriptor{
 		&matchingStore,
 		&supersetStore,
 		&unmatchingStore,
@@ -263,7 +264,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	waitUntilDead(t, sp, 5)
 
 	// Resurrect all stores except for 5.
-	sg.gossipStores([]*proto.StoreDescriptor{
+	sg.GossipStores([]*proto.StoreDescriptor{
 		&matchingStore,
 		&supersetStore,
 		&unmatchingStore,
@@ -282,8 +283,8 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()
-	sg := newStoreGossiper(g)
-	sg.gossipStores(uniqueStore, t)
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(uniqueStore, t)
 
 	if detail := sp.getStoreDetail(proto.StoreID(1)); detail.dead {
 		t.Errorf("Present storeDetail came back as dead, expected it to be alive. %+v", detail)
