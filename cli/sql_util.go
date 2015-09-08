@@ -20,11 +20,12 @@ package cli
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/olekukonko/tablewriter"
 
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/driver"
+	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
 func makeSQLClient() *sql.DB {
@@ -77,16 +78,16 @@ func printQueryOutput(rows *sql.Rows) error {
 
 	// Stringify all data and append rows to tablewriter.
 	vals := make([]interface{}, len(cols))
+	for i := range vals {
+		vals[i] = new(interface{})
+	}
 	rowStrings := make([]string, len(cols))
 	for rows.Next() {
-		for i := range vals {
-			vals[i] = new(driver.NullString)
-		}
 		if err := rows.Scan(vals...); err != nil {
 			return fmt.Errorf("scan error: %s", err)
 		}
 		for i, v := range vals {
-			rowStrings[i] = fmt.Sprint(v)
+			rowStrings[i] = formatVal(*v.(*interface{}))
 		}
 		if err := table.Append(rowStrings); err != nil {
 			return err
@@ -95,4 +96,14 @@ func printQueryOutput(rows *sql.Rows) error {
 
 	table.Render()
 	return nil
+}
+
+func formatVal(val interface{}) string {
+	switch t := val.(type) {
+	case time.Time:
+		return t.Format(parser.TimestampWithOffsetZoneFormat)
+	}
+	// Note that this prints a Go-syntax representation of the value.
+	// This is to ensure that binary protobufs print escaped.
+	return fmt.Sprintf("%#v", val)
 }

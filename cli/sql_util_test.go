@@ -59,10 +59,11 @@ func TestRunQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expected := `OK
+	expected := `
+OK
 `
-	if b.String() != expected {
-		t.Fatalf("expected output: %q, got %q", expected, b.String())
+	if a, e := b.String(), expected[1:]; a != e {
+		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
 	}
 	b.Reset()
 
@@ -71,16 +72,18 @@ func TestRunQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expected = `+----------+--------+------+
-|  Field   |  Type  | Null |
-+----------+--------+------+
-| parentID | INT    | true |
-| name     | STRING | true |
-| id       | INT    | true |
-+----------+--------+------+
+	expected = `
++------------+----------+------+
+|   Field    |   Type   | Null |
++------------+----------+------+
+| "parentID" | "INT"    | true |
+| "name"     | "STRING" | true |
+| "id"       | "INT"    | true |
++------------+----------+------+
 `
-	if b.String() != expected {
-		t.Fatalf("expected output: %q, got %q", expected, b.String())
+
+	if a, e := b.String(), expected[1:]; a != e {
+		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
 	}
 	b.Reset()
 
@@ -89,14 +92,15 @@ func TestRunQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expected = `+----------+------------+----+
-| parentID |    name    | id |
-+----------+------------+----+
-| 1        | descriptor | 3  |
-+----------+------------+----+
+	expected = `
++----------+--------------+----+
+| parentID |     name     | id |
++----------+--------------+----+
+| 1        | "descriptor" | 3  |
++----------+--------------+----+
 `
-	if b.String() != expected {
-		t.Fatalf("expected output: %q, got %q", expected, b.String())
+	if a, e := b.String(), expected[1:]; a != e {
+		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
 	}
 	b.Reset()
 }
