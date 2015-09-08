@@ -146,6 +146,12 @@ func TestEncodeFloat(t *testing.T) {
 			t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
 		}
 	}
+
+	// Test that appending the float to an existing buffer works.
+	enc := EncodeFloat([]byte("hello"), 1.23)
+	if _, dec := DecodeFloat(enc[5:], nil); dec != 1.23 {
+		t.Errorf("unexpected mismatch for %v. got %v", 1.23, dec)
+	}
 }
 
 func BenchmarkEncodeFloat(b *testing.B) {
