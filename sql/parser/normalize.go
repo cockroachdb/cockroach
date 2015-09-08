@@ -353,10 +353,12 @@ var _ Visitor = &isConstVisitor{}
 
 func (v *isConstVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 	if pre && v.isConst {
-		switch t := expr.(type) {
-		case DReference, *ExistsExpr, *QualifiedName, *Subquery, ValArg:
+		if isVar(expr) {
 			v.isConst = false
 			return nil, expr
+		}
+
+		switch t := expr.(type) {
 		case *FuncExpr:
 			// typeCheckFuncExpr populates t.fn.impure.
 			if _, err := typeCheckFuncExpr(t); err != nil || t.fn.impure {
@@ -382,4 +384,27 @@ func isVar(expr Expr) bool {
 		return true
 	}
 	return false
+}
+
+type containsVarsVisitor struct {
+	containsVars bool
+}
+
+var _ Visitor = &containsVarsVisitor{}
+
+func (v *containsVarsVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
+	if pre && !v.containsVars {
+		if isVar(expr) {
+			v.containsVars = true
+			return nil, expr
+		}
+	}
+	return v, expr
+}
+
+// ContainsVars returns true if the expression contains any variables.
+func ContainsVars(expr Expr) bool {
+	v := containsVarsVisitor{containsVars: false}
+	expr = WalkExpr(&v, expr)
+	return v.containsVars
 }

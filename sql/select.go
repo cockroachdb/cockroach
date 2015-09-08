@@ -70,7 +70,11 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sort.wrap(group.wrap(plan)), nil
+	limit, err := p.limit(n, sort.wrap(group.wrap(plan)))
+	if err != nil {
+		return nil, err
+	}
+	return limit, nil
 }
 
 type subqueryVisitor struct {

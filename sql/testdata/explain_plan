@@ -30,3 +30,10 @@ EXPLAIN VALUES (1)
 ----
 Level  Type    Description
 0      values  1 column, 1 row
+
+query ITT colnames
+EXPLAIN SELECT * FROM t LIMIT 1 OFFSET 1
+----
+Level  Type  Description
+0      limit count: 1, offset:  1
+1      scan  t@primary
