@@ -41,9 +41,14 @@ const (
 	namespaceTableID  ID = 2
 	descriptorTableID ID = 3
 	usersTableID      ID = 4
+	zonesTableID      ID = 5
+
+	// NumUsedSystemIDs is only used in tests that need to know the
+	// number of system objects created at initialization.
+	// Make sure it is always set to the number of used system IDs.
+	NumUsedSystemIDs = 5
 
 	// sql CREATE commands and full schema for each system table.
-	// TODO(marc): wouldn't it be better to use a pre-parsed version?
 	namespaceTableSchema = `
 CREATE TABLE system.namespace (
   parentID INT,
@@ -62,6 +67,13 @@ CREATE TABLE system.descriptor (
 CREATE TABLE system.users (
   username       CHAR PRIMARY KEY,
   hashedPassword BLOB
+);`
+
+	// Zone settings per DB/Table.
+	zonesTableSchema = `
+CREATE TABLE system.zones (
+  id INT PRIMARY KEY,
+  config BLOB
 );`
 )
 
@@ -84,6 +96,9 @@ var (
 	// UsersTable is the descriptor for the users table.
 	UsersTable = createSystemTable(usersTableID, usersTableSchema)
 
+	// ZonesTable is the descriptor for the zones table.
+	ZonesTable = createSystemTable(zonesTableID, zonesTableSchema)
+
 	// SystemAllowedPrivileges describes the privileges allowed for each
 	// system object. No user may have more than those privileges, and
 	// the root user must have exactly those privileges.
@@ -93,6 +108,7 @@ var (
 		namespaceTableID:  privilege.ReadData,
 		descriptorTableID: privilege.ReadData,
 		usersTableID:      privilege.ReadWriteData,
+		zonesTableID:      privilege.ReadWriteData,
 	}
 )
 
@@ -130,13 +146,17 @@ func GetInitialSystemValues() []proto.KeyValue {
 		{SystemDB.ID, &NamespaceTable},
 		{SystemDB.ID, &DescriptorTable},
 		{SystemDB.ID, &UsersTable},
+		{SystemDB.ID, &ZonesTable},
 	}
 
+	// Initial kv pairs:
+	// - ID generator
+	// - 2 per table
 	numEntries := 1 + len(systemData)*2
 	ret := make([]proto.KeyValue, numEntries, numEntries)
 	i := 0
 
-	// We reserve the system IDs.
+	// Descriptor ID generator.
 	value := proto.Value{}
 	value.SetInteger(int64(MaxReservedDescID + 1))
 	ret[i] = proto.KeyValue{
