@@ -174,6 +174,16 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 			log.Infof("analyzeExpr: %s -> %s", s.filter, exprs)
 		}
 
+		// Check to see if the filter simplified to a constant.
+		if len(exprs) == 1 && len(exprs[0]) == 1 {
+			if d, ok := exprs[0][0].(parser.DBool); ok && bool(!d) {
+				// The expression simplified to false.
+				s.desc = nil
+				s.index = nil
+				return s, nil
+			}
+		}
+
 		// TODO(pmattis): If "len(exprs) > 1" then we have multiple disjunctive
 		// expressions. For example, "a=1 OR a=3" will get translated into "[[a=1],
 		// [a=3]]". We need to perform index selection independently for each of

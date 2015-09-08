@@ -53,17 +53,10 @@ func moveMoney(db *sql.DB) {
 
 		switch *transferStyle {
 		case "single-stmt":
-			// TODO(pmattis): Need to add a sub-SELECT here so that we don't create
-			// negative balances:
-			//
-			//   WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank.accounts WHERE id = $1)
-			//
-			// This doesn't currently work as we don't expand placeholders in
-			// sub-SELECTs correctly.
 			update := `
 UPDATE bank.accounts
   SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
-  WHERE id IN ($1, $2)
+  WHERE id IN ($1, $2) AND true IN (SELECT balance >= $3 FROM bank.accounts WHERE id = $1)
 `
 			if _, err := db.Exec(update, from, to, amount); err != nil {
 				if log.V(1) {
@@ -71,6 +64,8 @@ UPDATE bank.accounts
 				}
 				continue
 			}
+			// TODO(pmattis): We should only be updating numTransfers when rows were
+			// actually updated. See #2377.
 			atomic.AddUint64(&numTransfers, 1)
 
 		case "txn":

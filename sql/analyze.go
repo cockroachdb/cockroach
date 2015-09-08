@@ -96,7 +96,7 @@ func simplifyExpr(e parser.Expr) parser.Expr {
 		return simplifyOrExpr(t)
 	case *parser.ComparisonExpr:
 		return simplifyComparisonExpr(t)
-	case *qvalue:
+	case *qvalue, parser.DBool:
 		return e
 	}
 	// We don't know how to simplify expressions that fall through to here, so

@@ -67,7 +67,7 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 		t.Expr = WalkExpr(v, t.Expr)
 
 	case *ExistsExpr:
-		// TODO(pmattis): Should we recurse into the Subquery?
+		WalkStmt(v, t.Subquery.Select)
 
 	case BytesVal:
 		// Terminal node: nothing to do.
@@ -112,7 +112,7 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 		// Terminal node: nothing to do.
 
 	case *Subquery:
-		// TODO(pmattis): Should we recurse into the Subquery?
+		WalkStmt(v, t.Select)
 
 	case *BinaryExpr:
 		t.Left = WalkExpr(v, t.Left)

@@ -150,6 +150,9 @@ func TestSimplifyExpr(t *testing.T) {
 		expr     string
 		expected string
 	}{
+		{`true`, `true`},
+		{`false`, `false`},
+
 		{`f`, `f`},
 		{`f AND g`, `f AND g`},
 		{`f OR g`, `f OR g`},
