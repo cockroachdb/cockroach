@@ -32,7 +32,9 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
+var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionAborted = errors.New("current transaction is aborted, commands ignored until end of transaction block")
+var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
 type server struct {
 	db client.DB
@@ -99,20 +101,27 @@ func (s server) execStmts(sql string, params parameters, planMaker *planner) dri
 
 func (s server) execStmt(stmt parser.Statement, params parameters, planMaker *planner) (driver.Result, error) {
 	var result driver.Result
-	if planMaker.txn == nil {
-		if _, ok := stmt.(*parser.BeginTransaction); ok {
-			// Start a transaction here and not in planMaker to prevent begin
-			// transaction from being called within an auto-transaction below.
-			planMaker.txn = client.NewTxn(s.db)
-			planMaker.txn.SetDebugName("sql", 0)
+	switch stmt.(type) {
+	case *parser.BeginTransaction:
+		if planMaker.txn != nil {
+			return result, errTransactionInProgress
 		}
-	} else if planMaker.txn.Proto.Status == proto.ABORTED {
-		switch stmt.(type) {
-		case *parser.CommitTransaction, *parser.RollbackTransaction:
-			// Reset to allow starting a new transaction.
-			planMaker.txn = nil
-			return result, nil
-		default:
+		// Start a transaction here and not in planMaker to prevent begin
+		// transaction from being called within an auto-transaction below.
+		planMaker.txn = client.NewTxn(s.db)
+		planMaker.txn.SetDebugName("sql", 0)
+	case *parser.CommitTransaction, *parser.RollbackTransaction:
+		if planMaker.txn != nil {
+			if planMaker.txn.Proto.Status == proto.ABORTED {
+				// Reset to allow starting a new transaction.
+				planMaker.txn = nil
+				return result, nil
+			}
+		} else {
+			return result, errNoTransactionInProgress
+		}
+	default:
+		if planMaker.txn != nil && planMaker.txn.Proto.Status == proto.ABORTED {
 			return result, errTransactionAborted
 		}
 	}
