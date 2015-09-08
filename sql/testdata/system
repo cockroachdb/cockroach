@@ -10,6 +10,7 @@ SHOW TABLES FROM system
 descriptor
 namespace
 users
+zones
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM system.namespace
@@ -19,6 +20,7 @@ EXPLAIN (DEBUG) SELECT * FROM system.namespace
 2 /namespace/primary/1/'descriptor'/id 3    true
 3 /namespace/primary/1/'namespace'/id  2    true
 4 /namespace/primary/1/'users'/id      4    true
+5 /namespace/primary/1/'zones'/id      5    true
 
 query ITI
 SELECT * FROM system.namespace
@@ -28,6 +30,7 @@ SELECT * FROM system.namespace
 1 descriptor 3
 1 namespace  2
 1 users      4
+1 zones      5
 
 query I
 SELECT id FROM system.descriptor
@@ -36,6 +39,7 @@ SELECT id FROM system.descriptor
 2
 3
 4
+5
 1000
 
 # Verify format of system tables.
@@ -58,6 +62,12 @@ SHOW COLUMNS FROM system.users;
 username       STRING true
 hashedPassword BYTES  true
 
+query TTT
+SHOW COLUMNS FROM system.zones;
+----
+id     INT   true
+config BYTES true
+
 # Verify default privileges on system tables.
 query TTT
 SHOW GRANTS ON DATABASE system
@@ -78,6 +88,11 @@ query TTT
 SHOW GRANTS ON system.users
 ----
 users root DELETE,GRANT,INSERT,SELECT,UPDATE
+
+query TTT
+SHOW GRANTS ON system.zones
+----
+zones root DELETE,GRANT,INSERT,SELECT,UPDATE
 
 # Non-root users can have privileges on system objects, but limited to GRANT, SELECT.
 statement error user testuser must not have ALL privileges on system objects
