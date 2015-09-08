@@ -18,7 +18,7 @@
 
 ## What is CockroachDB
 
-CockroachDB is a distributed SQL database built on top of a key:value datastore, with support for ACID transactional semantics and versioned values as first-class features. The primary design goal is global consistency and survivability, hence the name. CockroachDB aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention. CockroachDB nodes (RoachNodes) are symmetric; a design goal is homogenous deployment (one binary) with minimal configuration.
+CockroachDB is a distributed SQL database built on top of a key:value datastore. It was designed to support ACID transactional semantics and versioned values as first-class features. The primary design goal is global consistency and survivability, hence the name. CockroachDB aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention. CockroachDB nodes (RoachNodes) are symmetric; a design goal is homogenous deployment (one binary) with minimal configuration.
 
 ## Status
 
@@ -153,14 +153,11 @@ Once that's done, take a look at our [open issues](https://github.com/cockroachd
 
 This is an overview. For an in depth discussion of the design, see the [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 
-For a quick design overview, see the [CockroachDB tech talk slides](https://docs.google.com/presentation/d/1e3TOxImRg6_nyMZspXvzb2u43D6gnS5422vAIN7J1n8/edit?usp=sharing)
+For a quick design overview, see the [CockroachDB tech talk slides](https://docs.google.com/presentation/d/1tPPhnpJ3UwyYMe4MT8jhqCrE9ZNrUMqsvXAbd97DZ2E/edit#slide=id.p)
 or watch a [presentation](#talks).
 
 
-CockroachDB is a distributed key/value datastore which supports ACID
-transactional semantics and versioned values as first-class
-features. The primary design goal is global consistency and
-survivability, hence the name. CockroachDB aims to tolerate disk,
+CockroachDB is a distributed SQL database built on top of a key:value datastore. It was designed to support ACID transactional semantics and versioned values as first-class features. The primary design goal is global consistency and survivability, hence the name. CockroachDB aims to tolerate disk,
 machine, rack, and even datacenter failures with minimal latency
 disruption and no manual intervention. RoachNodes are symmetric;
 a design goal is one binary with minimal configuration and no required
