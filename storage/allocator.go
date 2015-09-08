@@ -15,6 +15,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 // Author: Kathy Spradlin (kathyspradlin@gmail.com)
+// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package storage
 
@@ -22,6 +23,7 @@ import (
 	"math"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -39,6 +41,22 @@ const (
 	// is within rebalanceFromMean of the mean, it is considered a
 	// viable target to rebalance to.
 	rebalanceFromMean = 0.025 // 2.5%
+
+	// priorities for various repair operations.
+	removeDeadReplicaPriority  float64 = 10000
+	addMissingReplicaPriority  float64 = 1000
+	removeExtraReplicaPriority float64 = 100
+)
+
+// allocatorAction enumerates the various replication adjustments that may be
+// recommended by the allocator.
+type allocatorAction int
+
+const (
+	aaNoop allocatorAction = iota
+	aaRemove
+	aaAdd
+	aaRemoveDead
 )
 
 // allocator makes allocation decisions based on available capacity
@@ -79,6 +97,58 @@ func getUsedNodes(existing []proto.Replica) map[proto.NodeID]struct{} {
 		usedNodes[replica.NodeID] = struct{}{}
 	}
 	return usedNodes
+}
+
+// findDeadReplicas returns a list of any replicas in the given RangeDescriptor
+// which are located on a dead store.
+func (a *allocator) findDeadReplicas(desc *proto.RangeDescriptor) []proto.Replica {
+	var deadReplicas []proto.Replica
+	// TODO(mrtracy): Pull in Bram's storePool changes to support this.
+	/*
+		for _, repl := range desc.Replicas {
+			if a.storePool.getStoreDetail(repl.StoreID).dead {
+				deadReplicas = append(deadReplicas, repl)
+			}
+		}
+		return deadReplicas
+	*/
+	return deadReplicas
+}
+
+// computeRepair determines the exact operation needed to repair the supplied
+// range, as governed by the supplied zone configuration. It returns the
+// required action that should be taken and a replica on which the action should
+// be performed.
+func (a *allocator) computeAction(zone config.ZoneConfig, desc *proto.RangeDescriptor) (
+	allocatorAction, float64) {
+	deadReplicas := a.findDeadReplicas(desc)
+	if len(deadReplicas) > 0 {
+		// The range has dead replicas, which should be removed immediately.
+		// Adjust the priority by the number of dead replicas the range has.
+		quorum := computeQuorum(len(desc.Replicas))
+		liveReplicas := len(desc.Replicas) - len(deadReplicas)
+		return aaRemoveDead, removeDeadReplicaPriority + float64(quorum-liveReplicas)
+	}
+
+	// TODO(mrtracy): Handle non-homogenous and mismatched attribute sets.
+	need := len(zone.ReplicaAttrs)
+	have := len(desc.Replicas)
+	if have < need {
+		// Range is under-replicated, and should add an additional replica.
+		// Priority is adjusted by the difference between the current replica
+		// count and the quorum of the desired replica count.
+		neededQuorum := computeQuorum(need)
+		return aaAdd, addMissingReplicaPriority + float64(neededQuorum-have)
+	}
+	if have > need {
+		// Range is over-replicated, and should remove a replica.
+		// Ranges with an even number of replicas get extra priority because
+		// they have a more fragile quorum.
+		return aaRemove, removeExtraReplicaPriority - float64(have%2)
+	}
+
+	// Nothing to do.
+	return aaNoop, 0
 }
 
 // allocateTarget returns a suitable store for a new allocation with the
@@ -256,4 +326,9 @@ func (a allocator) selectRandom(count int, required proto.Attributes, existing [
 		return nil, nil
 	}
 	return descs, sl
+}
+
+// computeQuorum computes the quorum value for the given number of nodes.
+func computeQuorum(nodes int) int {
+	return (nodes / 2) + 1
 }

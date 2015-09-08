@@ -20,9 +20,9 @@ package storage
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -75,35 +75,11 @@ func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (should
 		return
 	}
 
-	delta := rq.replicaDelta(zone, repl, repl.Desc())
-	if delta == 0 {
-		if log.V(3) {
-			log.Infof("%s has the correct number of nodes", repl)
-		}
+	action, priority := rq.allocator.computeAction(zone, repl.Desc())
+	if action == aaNoop {
 		return false, 0
 	}
-	if delta > 0 {
-		if log.V(3) {
-			log.Infof("%s needs to add %d nodes", repl, delta)
-		}
-		// For ranges which need additional replicas, increase the priority
-		return true, float64(delta + 10)
-	}
-	if log.V(3) {
-		log.Infof("%s needs to remove %d nodes", repl, 0-delta)
-	}
-	// For ranges which have too many replicas, priority is absolute value of
-	// the delta.
-	return true, float64(0 - delta)
-}
-
-func (rq *replicateQueue) replicaDelta(zone config.ZoneConfig, repl *Replica,
-	desc *proto.RangeDescriptor) int {
-	// TODO(bdarnell): handle non-empty ReplicaAttrs.
-	need := len(zone.ReplicaAttrs)
-	have := len(desc.Replicas)
-
-	return need - have
+	return true, priority
 }
 
 func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
@@ -113,40 +89,50 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 	}
 
 	desc := repl.Desc()
-	delta := rq.replicaDelta(zone, repl, desc)
-	if delta == 0 {
-		// Something changed between shouldQueue and process.
+	action, _ := rq.allocator.computeAction(zone, desc)
+	if action == aaNoop {
+		// No action to take, return without re-queueing.
 		return nil
 	}
 
-	// TODO(bdarnell): handle non-homogenous ReplicaAttrs.
-	if delta > 0 {
-		// Allow constraints to be relaxed if necessary.
-		newReplica, err := rq.allocator.allocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true, nil)
+	// Avoid taking action if the range has too many dead replicas to make
+	// quorum.
+	deadReplicas := rq.allocator.findDeadReplicas(desc)
+	quorum := computeQuorum(len(desc.Replicas))
+	liveReplicaCount := len(desc.Replicas) - len(deadReplicas)
+	if liveReplicaCount < quorum {
+		return util.Errorf("range requires a replication change, but lacks a quorum of live nodes.")
+	}
+
+	switch action {
+	case aaAdd:
+		newStore, err := rq.allocator.allocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true, nil)
 		if err != nil {
 			return err
 		}
-
-		replica := proto.Replica{
-			NodeID:  newReplica.Node.NodeID,
-			StoreID: newReplica.StoreID,
+		newReplica := proto.Replica{
+			NodeID:  newStore.Node.NodeID,
+			StoreID: newStore.StoreID,
 		}
-		if err = repl.ChangeReplicas(proto.ADD_REPLICA, replica, desc); err != nil {
+		if err = repl.ChangeReplicas(proto.ADD_REPLICA, newReplica, desc); err != nil {
 			return err
 		}
-	} else {
+	case aaRemove:
 		removeReplica, err := rq.allocator.removeTarget(desc.Replicas)
 		if err != nil {
 			return err
 		}
-		if log.V(3) {
-			log.Infof("Remove replica %s", removeReplica)
-		}
-
 		if err = repl.ChangeReplicas(proto.REMOVE_REPLICA, removeReplica, desc); err != nil {
-			if log.V(3) {
-				log.Infof("Error removing replica %s", err)
+			return err
+		}
+	case aaRemoveDead:
+		if len(deadReplicas) == 0 {
+			if log.V(1) {
+				log.Warningf("Range of replica %s was identified as having dead replicas, but no dead replicas were found.", repl)
 			}
+			break
+		}
+		if err = repl.ChangeReplicas(proto.REMOVE_REPLICA, deadReplicas[0], desc); err != nil {
 			return err
 		}
 	}
