@@ -1121,10 +1121,9 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *pr
 	br := &proto.BatchResponse{}
 	br.Timestamp = ba.Timestamp
 	var intents []intentsWithArg
+	// If transactional, we use ba.Txn for each individual command and
+	// accumulate updates to it.
 	isTxn := ba.Txn != nil
-	if isTxn {
-		br.Txn = gogoproto.Clone(ba.Txn).(*proto.Transaction) // init response txn
-	}
 
 	// TODO(tschottdorf): provisionals ahead. This loop needs to execute each
 	// command and propagate txn and timestamp to the next (and, eventually,
@@ -1133,50 +1132,57 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *pr
 	// so the code is fairly clumsy and tries to overwrite as much as it can
 	// from the batch. There'll certainly be some more iterations to stream-
 	// line the code in this loop.
-	for i, union := range ba.Requests {
+	for _, union := range ba.Requests {
 		// Execute the command.
 		args := union.GetValue().(proto.Request)
 
 		header := args.Header()
 
-		// Temporary code to scrub the headers. Specifically, always
-		// use almost everything from the batch. We're trying to simulate
-		// the situation in which the individual requests contain nothing
-		// but the key (range) in their headers.
-		origHeader := *gogoproto.Clone(header).(*proto.RequestHeader)
-		*header = *gogoproto.Clone(&ba.RequestHeader).(*proto.RequestHeader)
-		// Only Key and EndKey are allowed to diverge from the iterated
-		// Batch header.
-		header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
-		// TODO(tschottdorf): Special exception because of pending self-overlap discussion.
-		header.Timestamp = origHeader.Timestamp
-
-		if isTxn && i > 0 {
-			// Propagate Txn of last reply to current request.
-			*header.Txn = *br.Txn
+		// Scrub the headers. Specifically, always use almost everything from
+		// the batch. We're trying to simulate the situation in which the
+		// individual requests contain nothing but the key (range) in their
+		// headers.
+		{
+			origHeader := *gogoproto.Clone(header).(*proto.RequestHeader)
+			*header = *gogoproto.Clone(&ba.RequestHeader).(*proto.RequestHeader)
+			// Only Key and EndKey are allowed to diverge from the iterated
+			// Batch header.
+			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
+			// TODO(tschottdorf): Special exception because of pending self-overlap discussion.
+			header.Timestamp = origHeader.Timestamp
+			header.Txn = ba.Txn // use latest Txn
 		}
 
 		reply, curIntents, err := r.executeCmd(batch, ms, args)
 
-		*header = origHeader
-		// Handle any intents which were skipped over the course of execution.
+		// Collect intents skipped over the course of execution.
 		if len(curIntents) > 0 {
 			intents = append(intents, intentsWithArg{args: args, intents: curIntents})
 		}
 
-		// Add the response to the batch.
 		if err != nil {
 			return nil, intents, err
 		}
 
-		reply.Header().Timestamp = args.Header().Timestamp
+		// Add the response to the batch, updating the timestamp.
+		br.Timestamp.Forward(header.Timestamp)
 		br.Add(reply)
-		// Use last response header, but keep our Txn
-		prevTxn := br.Txn
-		br.ResponseHeader, br.Txn = *(gogoproto.Clone(reply.Header()).(*proto.ResponseHeader)), prevTxn
-		if txn := reply.Header().Txn; txn != nil {
-			br.Txn.Update(txn)
+		if isTxn {
+			if txn := reply.Header().Txn; txn != nil {
+				ba.Txn.Update(txn)
+			}
+			// The transaction timestamp can't lag behind the actual timestamps
+			// we're operating at.
+			// TODO(tschottdorf): without this, TestSingleKey fails (since the Txn
+			// will commit with its original timestamp). We should have a
+			// non-acceptance test verifying this as well.
+			// TODO(tschottdorf): wasn't there another place that did this?
+			ba.Txn.Timestamp.Forward(br.Timestamp)
 		}
+	}
+	// If transactional, send out the final transaction entry with the reply.
+	if isTxn {
+		br.Txn = ba.Txn
 	}
 	return br, intents, nil
 }

@@ -640,6 +640,9 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba *proto.BatchReques
 	case nil:
 		newTxn.Update(br.GetTxn())
 		// Move txn timestamp forward to response timestamp if applicable.
+		// TODO(tschottdorf): see (*Replica).executeBatch and comments within.
+		// Looks like this isn't necessary any more, nor did it prevent a bug
+		// referenced in a TODO there.
 		newTxn.Timestamp.Forward(br.Timestamp)
 	case *proto.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or

@@ -224,10 +224,9 @@ func (cs *ChunkingSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 		if err != nil {
 			return nil, err
 		}
-		// Propagate transaction from last reply to next request.
-		if len(parts) > 0 {
-			ba.Txn.Update(rpl.Header().Txn)
-		}
+		// Propagate transaction from last reply to next request. The final
+		// update is taken and put into the response's main header.
+		ba.Txn.Update(rpl.Header().Txn)
 
 		rplChunks = append(rplChunks, rpl)
 	}
@@ -237,6 +236,7 @@ func (cs *ChunkingSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 		reply.Responses = append(reply.Responses, rpl.Responses...)
 	}
 	reply.ResponseHeader = rplChunks[len(rplChunks)-1].ResponseHeader
+	reply.Txn = ba.Txn
 	return reply, nil
 }
 

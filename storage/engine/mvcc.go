@@ -1214,6 +1214,11 @@ func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Time
 // committed in the event the transaction succeeds (all those with
 // epoch matching the commit epoch), and which intents get aborted,
 // even if the transaction succeeds.
+//
+// TODO(tschottdorf): encountered a bug in which a Txn committed with
+// its original timestamp after laying down intents at higher timestamps.
+// Doesn't look like this code here caught that. Shouldn't resolve intents
+// when they're not at the timestamp the Txn mandates them to be.
 func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction) error {
 	if len(key) == 0 {
 		return emptyKeyError()
