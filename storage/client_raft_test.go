@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -542,6 +543,33 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	}
 }
 
+// getRangeMetadata retrieves the current range descriptor for the target
+// range.
+func getRangeMetadata(key proto.Key, mtc *multiTestContext, t *testing.T) proto.RangeDescriptor {
+	// Calls to RangeLookup typically use inconsistent reads, but we
+	// want to do a consistent read here. This is important when we are
+	// considering one of the metadata ranges: we must not do an
+	// inconsistent lookup in our own copy of the range.
+	reply := proto.RangeLookupResponse{}
+	b := &client.Batch{}
+	b.InternalAddCall(proto.Call{
+		Args: &proto.RangeLookupRequest{
+			RequestHeader: proto.RequestHeader{
+				Key: keys.RangeMetaKey(key),
+			},
+			MaxRanges: 1,
+		},
+		Reply: &reply,
+	})
+	if err := mtc.db.Run(b); err != nil {
+		t.Fatalf("error getting range metadata: %s", err)
+	}
+	if a, e := len(reply.Ranges), 1; a != e {
+		t.Fatalf("expected %d range descriptor, got %d", e, a)
+	}
+	return reply.Ranges[0]
+}
+
 // TestStoreRangeDownReplicate verifies that the replication queue will notice
 // over-replicated ranges and remove replicas from them.
 func TestStoreRangeDownReplicate(t *testing.T) {
@@ -591,34 +619,6 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 		return idSet
 	}
 
-	// Function to get the current range descriptor for the target range.
-	getRangeMetadata := func() proto.RangeDescriptor {
-		// Calls to RangeLookup typically use inconsistent reads, but we
-		// want to do a consistent read here. This is important when we are
-		// considering one of the metadata ranges: we must not do an
-		// inconsistent lookup in our own copy of the range.
-		reply := proto.RangeLookupResponse{}
-		b := &client.Batch{}
-		b.InternalAddCall(proto.Call{
-			Args: &proto.RangeLookupRequest{
-				RequestHeader: proto.RequestHeader{
-					Key: keys.RangeMetaKey(rightKey),
-				},
-				MaxRanges: 1,
-			},
-			Reply: &reply,
-		})
-		if err := mtc.db.Run(b); err != nil {
-			t.Fatalf("error getting range metadata: %s", err.Error())
-		}
-
-		if len(reply.Ranges) != 1 {
-			t.Fatalf("expected 1 range descriptor, go %d", len(reply.Ranges))
-		}
-
-		return reply.Ranges[0]
-	}
-
 	// Function to see if the replication level of the new range has reached the
 	// expected equilibrium. If equilibrium has not been reached, this function
 	// returns the list of stores that *should* have a replica for the range.
@@ -643,7 +643,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 
 		// Look up the official range descriptor, make sure it agrees with the
 		// found replicas.
-		realRangeDesc := getRangeMetadata()
+		realRangeDesc := getRangeMetadata(rightKey, mtc, t)
 		realIDset := makeStoreIDset(realRangeDesc.Replicas)
 		if !reflect.DeepEqual(realIDset, foundIDset) {
 			return false, realIDset
@@ -1101,4 +1101,67 @@ func TestRaftRemoveRace(t *testing.T) {
 		mtc.unreplicateRange(rangeID, 0, 2)
 		mtc.replicateRange(rangeID, 0, 2)
 	}
+}
+
+// TestStoreRangeRepair verifies that if a store becomes dead, the repair queue
+// will notice and remove any replicas on it.
+func TestStoreRangeRepair(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := &multiTestContext{}
+	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+
+	sg := gossiputil.NewStoreGossiper(mtc.gossip)
+
+	// Replicate the range to all stores.
+	replica := mtc.stores[0].LookupReplica(proto.KeyMin, nil)
+	mtc.replicateRange(replica.Desc().RangeID, 0, 1, 2)
+
+	// Initialize the gossip network.
+	var storeIDs []proto.StoreID
+	for _, s := range mtc.stores {
+		storeIDs = append(storeIDs, s.StoreID())
+	}
+	sg.GossipWithFunction(storeIDs, func() {
+		for _, s := range mtc.stores {
+			s.GossipStore()
+		}
+	})
+
+	aliveStoreIDs := []proto.StoreID{
+		mtc.stores[0].StoreID(),
+		mtc.stores[1].StoreID(),
+	}
+
+	rangeDesc := getRangeMetadata(proto.KeyMin, mtc, t)
+	if e, a := 3, len(rangeDesc.Replicas); e != a {
+		t.Fatalf("expected %d replicas, only found %d, rangeDesc: %+v", e, a, rangeDesc)
+	}
+
+	// This can't use SucceedsWithin as using the backoff mechanic won't work
+	// as it requires a specific cadence of re-gossiping the alive stores to
+	// maintain their alive status.
+	ticker := time.NewTicker(storage.TestTimeUntilStoreDead / 2)
+	defer ticker.Stop()
+
+	maxTime := 5 * time.Second
+	maxTimeout := time.After(maxTime)
+
+	for len(getRangeMetadata(proto.KeyMin, mtc, t).Replicas) > 2 {
+		select {
+		case <-maxTimeout:
+			t.Fatalf("Failed to remove the dead replica within %s", maxTime)
+		case <-ticker.C:
+			// Keep gossiping the alive stores.
+			sg.GossipWithFunction(aliveStoreIDs, func() {
+				mtc.stores[0].GossipStore()
+				mtc.stores[1].GossipStore()
+			})
+			// Force the repair queues on all alive stores to run.
+			mtc.stores[0].ForceRepairScan(t)
+			mtc.stores[1].ForceRepairScan(t)
+		}
+	}
+	ticker.Stop()
 }

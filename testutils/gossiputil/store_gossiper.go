@@ -73,3 +73,23 @@ func (sg *StoreGossiper) GossipStores(stores []*proto.StoreDescriptor, t *testin
 	// Wait for all gossip callbacks to be invoked.
 	sg.wg.Wait()
 }
+
+// GossipWithFunction is similar to GossipStores but instead of gossiping the
+// store descriptors directly, call the passed in function to do so.
+func (sg *StoreGossiper) GossipWithFunction(stores []proto.StoreID, gossiper func()) {
+	sg.mu.Lock()
+	sg.storeKeyMap = make(map[string]struct{})
+	sg.wg.Add(len(stores))
+	for _, s := range stores {
+		storeKey := gossip.MakeStoreKey(s)
+		sg.storeKeyMap[storeKey] = struct{}{}
+	}
+
+	// Gossip the stores via the passed in function.
+	gossiper()
+
+	sg.mu.Unlock()
+
+	// Wait for all gossip callbacks to be invoked.
+	sg.wg.Wait()
+}
