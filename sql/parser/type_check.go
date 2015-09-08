@@ -257,6 +257,11 @@ func typeCheckUnaryExpr(expr *UnaryExpr) (Datum, error) {
 }
 
 func typeCheckFuncExpr(expr *FuncExpr) (Datum, error) {
+	// Cache is warm and `fn` encodes its return type.
+	if expr.fn.returnType != nil {
+		return expr.fn.returnType, nil
+	}
+
 	dummyArgs := make(DTuple, 0, len(expr.Exprs))
 	types := make(typeList, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
@@ -268,39 +273,44 @@ func typeCheckFuncExpr(expr *FuncExpr) (Datum, error) {
 		types = append(types, reflect.TypeOf(dummyArg))
 	}
 
-	if len(expr.Name.Indirect) > 0 {
-		// We don't support qualified function names (yet).
-		return nil, fmt.Errorf("unknown function: %s", expr.Name)
-	}
-
-	name := string(expr.Name.Base)
-	candidates, ok := builtins[strings.ToLower(name)]
-	if !ok {
-		return nil, fmt.Errorf("unknown function: %s", name)
-	}
-
-	for _, candidate := range candidates {
-		if candidate.match(types) {
-			expr.fn = candidate
-			break
-		}
-	}
-
+	// Cache is cold, do the lookup.
 	if expr.fn.fn == nil {
-		typeNames := make([]string, 0, len(dummyArgs))
-		for _, dummyArg := range dummyArgs {
-			typeNames = append(typeNames, dummyArg.Type())
+		if len(expr.Name.Indirect) > 0 {
+			// We don't support qualified function names (yet).
+			return nil, fmt.Errorf("unknown function: %s", expr.Name)
 		}
-		return nil, fmt.Errorf("unknown signature for %s: %s(%s)",
-			expr.Name, expr.Name, strings.Join(typeNames, ", "))
+
+		name := string(expr.Name.Base)
+		candidates, ok := builtins[strings.ToLower(name)]
+		if !ok {
+			return nil, fmt.Errorf("unknown function: %s", name)
+		}
+
+		for _, candidate := range candidates {
+			if candidate.match(types) {
+				expr.fn = candidate
+				break
+			}
+		}
+
+		// Function lookup failed.
+		if expr.fn.fn == nil {
+			typeNames := make([]string, 0, len(dummyArgs))
+			for _, dummyArg := range dummyArgs {
+				typeNames = append(typeNames, dummyArg.Type())
+			}
+			return nil, fmt.Errorf("unknown signature for %s: %s(%s)",
+				expr.Name, expr.Name, strings.Join(typeNames, ", "))
+		}
 	}
 
+	// Function lookup succeeded and `fn` encodes its return type.
 	if expr.fn.returnType != nil {
 		return expr.fn.returnType, nil
 	}
 
-	// If the function doesn't encode its return type, we're gonna have
-	// to call it.
+	// Function lookup succeeded but `fn` doesn't encode its return type.
+	// We need to call the function with dummy arguments.
 	res, err := expr.fn.fn(dummyArgs)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v", expr.Name, err)

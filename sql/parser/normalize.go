@@ -353,10 +353,16 @@ var _ Visitor = &isConstVisitor{}
 
 func (v *isConstVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 	if pre && v.isConst {
-		switch expr.(type) {
+		switch t := expr.(type) {
 		case DReference, *ExistsExpr, *QualifiedName, *Subquery, ValArg:
 			v.isConst = false
 			return nil, expr
+		case *FuncExpr:
+			// typeCheckFuncExpr populates t.fn.impure.
+			if _, err := typeCheckFuncExpr(t); err != nil || t.fn.impure {
+				v.isConst = false
+				return nil, expr
+			}
 		}
 	}
 	return v, expr

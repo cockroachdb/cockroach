@@ -72,6 +72,8 @@ func TestNormalizeExpr(t *testing.T) {
 		{`1=a/2`, `a = 2`},
 		{`a=lower('FOO')`, `a = 'foo'`},
 		{`lower(a)='foo'`, `lower(a) = 'foo'`},
+		{`random()`, `random()`},
+		{`notARealMethod()`, `notARealMethod()`},
 		{`-9223372036854775808`, `-9223372036854775808`},
 	}
 	for _, d := range testData {
