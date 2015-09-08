@@ -65,7 +65,7 @@ func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *goss
 // correctly updates a store's details.
 func TestStorePoolGossipUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper, g, sp := createTestStorePool(testTimeUntilStoreDead)
+	stopper, g, sp := createTestStorePool(TestTimeUntilStoreDead)
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
 
@@ -89,7 +89,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 
 // waitUntilDead will block until the specified store is marked as dead.
 func waitUntilDead(t *testing.T, sp *StorePool, storeID proto.StoreID) {
-	util.SucceedsWithin(t, 10*testTimeUntilStoreDead, func() error {
+	util.SucceedsWithin(t, 10*TestTimeUntilStoreDead, func() error {
 		sp.mu.RLock()
 		defer sp.mu.RUnlock()
 		store, ok := sp.stores[storeID]
@@ -109,7 +109,7 @@ func waitUntilDead(t *testing.T, sp *StorePool, storeID proto.StoreID) {
 // times out and that it will be revived after a new update is received.
 func TestStorePoolDies(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper, g, sp := createTestStorePool(testTimeUntilStoreDead)
+	stopper, g, sp := createTestStorePool(TestTimeUntilStoreDead)
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
@@ -209,7 +209,7 @@ func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int) erro
 // that are alive and match the attribute criteria.
 func TestStorePoolGetStoreList(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper, g, sp := createTestStorePool(testTimeUntilStoreDead)
+	stopper, g, sp := createTestStorePool(TestTimeUntilStoreDead)
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
 	required := []string{"ssd", "dc"}

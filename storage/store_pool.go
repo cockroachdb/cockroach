@@ -33,9 +33,9 @@ import (
 )
 
 const (
-	// testTimeUntilStoreDead is the the test value for TimeUntilStoreDead to
+	// TestTimeUntilStoreDead is the the test value for TimeUntilStoreDead to
 	// quickly mark stores as dead.
-	testTimeUntilStoreDead = 5 * time.Millisecond
+	TestTimeUntilStoreDead = 5 * time.Millisecond
 
 	// TestTimeUntilStoreDeadOff is the test value for TimeUntilStoreDead that
 	// prevents the store pool from marking stores as dead.
