@@ -119,7 +119,7 @@ func DecodeFloat(buf []byte, tmp []byte) ([]byte, float64) {
 		e, m := decodeLargeNumber(false, buf[:idx+1], tmp)
 		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp)
 	case buf[0] >= 0x17 && buf[0] < 0x22:
-		// Positive large.
+		// Positive medium.
 		e, m := decodeMediumNumber(false, buf[:idx+1], tmp)
 		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp)
 	case buf[0] == 0x16:
@@ -154,7 +154,7 @@ func floatMandE(b []byte, f float64) (int, []byte) {
 	// Use strconv.FormatFloat to handle the intricacies of determining how much
 	// precision is necessary to precisely represent f. The 'e' format is
 	// d.dddde±dd.
-	b = strconv.AppendFloat(b, f, 'e', -1, 64)
+	b = strconv.AppendFloat(b[len(b):], f, 'e', -1, 64)
 	if len(b) < 4 {
 		// The formatted float must be at least 4 bytes ("1e+0") or something
 		// unexpected has occurred.
