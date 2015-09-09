@@ -2829,12 +2829,12 @@ class RangeLookupRequest : public ::google::protobuf::Message {
   ::google::protobuf::int32 max_ranges() const;
   void set_max_ranges(::google::protobuf::int32 value);
 
-  // optional bool ignore_intents = 3;
-  bool has_ignore_intents() const;
-  void clear_ignore_intents();
-  static const int kIgnoreIntentsFieldNumber = 3;
-  bool ignore_intents() const;
-  void set_ignore_intents(bool value);
+  // optional bool consider_intents = 3;
+  bool has_consider_intents() const;
+  void clear_consider_intents();
+  static const int kConsiderIntentsFieldNumber = 3;
+  bool consider_intents() const;
+  void set_consider_intents(bool value);
 
   // optional bool reverse = 4;
   bool has_reverse() const;
@@ -2849,8 +2849,8 @@ class RangeLookupRequest : public ::google::protobuf::Message {
   inline void clear_has_header();
   inline void set_has_max_ranges();
   inline void clear_has_max_ranges();
-  inline void set_has_ignore_intents();
-  inline void clear_has_ignore_intents();
+  inline void set_has_consider_intents();
+  inline void clear_has_consider_intents();
   inline void set_has_reverse();
   inline void clear_has_reverse();
 
@@ -2859,7 +2859,7 @@ class RangeLookupRequest : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::RequestHeader* header_;
   ::google::protobuf::int32 max_ranges_;
-  bool ignore_intents_;
+  bool consider_intents_;
   bool reverse_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
@@ -8020,28 +8020,28 @@ inline void RangeLookupRequest::set_max_ranges(::google::protobuf::int32 value) 
   // @@protoc_insertion_point(field_set:cockroach.proto.RangeLookupRequest.max_ranges)
 }
 
-// optional bool ignore_intents = 3;
-inline bool RangeLookupRequest::has_ignore_intents() const {
+// optional bool consider_intents = 3;
+inline bool RangeLookupRequest::has_consider_intents() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void RangeLookupRequest::set_has_ignore_intents() {
+inline void RangeLookupRequest::set_has_consider_intents() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void RangeLookupRequest::clear_has_ignore_intents() {
+inline void RangeLookupRequest::clear_has_consider_intents() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline void RangeLookupRequest::clear_ignore_intents() {
-  ignore_intents_ = false;
-  clear_has_ignore_intents();
+inline void RangeLookupRequest::clear_consider_intents() {
+  consider_intents_ = false;
+  clear_has_consider_intents();
 }
-inline bool RangeLookupRequest::ignore_intents() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RangeLookupRequest.ignore_intents)
-  return ignore_intents_;
+inline bool RangeLookupRequest::consider_intents() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeLookupRequest.consider_intents)
+  return consider_intents_;
 }
-inline void RangeLookupRequest::set_ignore_intents(bool value) {
-  set_has_ignore_intents();
-  ignore_intents_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.RangeLookupRequest.ignore_intents)
+inline void RangeLookupRequest::set_consider_intents(bool value) {
+  set_has_consider_intents();
+  consider_intents_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeLookupRequest.consider_intents)
 }
 
 // optional bool reverse = 4;

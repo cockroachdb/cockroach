@@ -195,8 +195,8 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 
 // lookupOptions capture additional options to pass to RangeLookup.
 type lookupOptions struct {
-	ignoreIntents  bool
-	useReverseScan bool
+	considerIntents bool
+	useReverseScan  bool
 }
 
 // rangeLookup dispatches an RangeLookup request for the given
@@ -215,9 +215,9 @@ func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
 			Key:             key,
 			ReadConsistency: proto.INCONSISTENT,
 		},
-		MaxRanges:     ds.rangeLookupMaxRanges,
-		IgnoreIntents: options.ignoreIntents,
-		Reverse:       options.useReverseScan,
+		MaxRanges:       ds.rangeLookupMaxRanges,
+		ConsiderIntents: options.considerIntents,
+		Reverse:         options.useReverseScan,
 	})
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
@@ -592,13 +592,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 			descDone := trace.Epoch("meta descriptor lookup")
 			var evictDesc func()
 
-			// If the call contains a PushTxn, set ignoreIntents option as
+			// If the call contains a PushTxn, set considerIntents option as
 			// necessary. This prevents a potential infinite loop; see the
 			// comments in proto.RangeLookupRequest.
 			options := lookupOptions{}
 			// TODO(tschottdorf): awkward linear scan through the batch.
 			if arg, ok := ba.GetArg(proto.PushTxn); ok {
-				options.ignoreIntents = arg.(*proto.PushTxnRequest).RangeLookup
+				options.considerIntents = arg.(*proto.PushTxnRequest).RangeLookup
 			}
 			if isReverse {
 				options.useReverseScan = true
@@ -658,7 +658,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 				ba.Key, ba.EndKey = nil, nil
 
 				if err != nil {
-					if log.V(0) {
+					if log.V(0 /* TODO(tschottdorf): 1 */) {
 						log.Warningf("failed to invoke %s: %s", batch.Short(ba), err)
 					}
 				}

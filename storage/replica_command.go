@@ -523,10 +523,10 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		return reply, nil, util.Errorf("Range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
 	consistent := args.ReadConsistency != proto.INCONSISTENT
-	if consistent && args.IgnoreIntents {
+	if consistent && args.ConsiderIntents {
 		return reply, nil, util.Errorf("can not read consistently and special-case intents")
 	}
-	if args.IgnoreIntents {
+	if args.ConsiderIntents {
 		// Disable prefetching; the caller only cares about a single intent,
 		// and the code below simplifies considerably.
 		rangeCount = 1
@@ -637,7 +637,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 	// I think it needs the same special treatment.
 	// TestRangeSplitsWithConcurrentTxns demonstrates this when removing !consistent
 	// below.
-	if (!consistent || args.IgnoreIntents) && len(intents) > 0 && rand.Intn(2) == 0 {
+	if (!consistent || args.ConsiderIntents) && len(intents) > 0 && rand.Intn(2) == 0 {
 		// NOTE (subtle): in general, we want to try to clean up dangling
 		// intents on meta records. However, if we're in the process of
 		// cleaning up a dangling intent on a meta record by pushing the

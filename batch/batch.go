@@ -154,7 +154,8 @@ func Short(br *proto.BatchRequest) string {
 // Sender is a new incarnation of client.Sender which only supports batches
 // and uses a request-response pattern.
 // TODO(tschottdorf): do away with client.Sender.
-// TODO(tschottdorf) rename to SendBatch->Send when client.Sender is out of the way.
+// TODO(tschottdorf) rename {batch->client}.{SendBatch->Send} when
+// client.Sender is out of the way.
 type Sender interface {
 	SendBatch(context.Context, *proto.BatchRequest) (*proto.BatchResponse, error)
 }
@@ -182,11 +183,9 @@ func NewChunkingSender(f SenderFn) Sender {
 }
 
 // SendBatch implements Sender.
-// TODO(tschottdorf): only cuts an EndTransaction request off. Also need
-// to untangle reverse/forward, txn/non-txn, ...
-// We actually don't want to chop EndTransaction off for single-range
-// requests. Whether it is one or not is unknown right now (you can only
-// find out after you've sent to the Range/looked up a descriptor that
+// TODO(tschottdorf): We actually don't want to chop EndTransaction off for
+// single-range requests. Whether it is one or not is unknown right now (you
+// can only find out after you've sent to the Range/looked up a descriptor that
 // suggests that you're multi-range. In those cases, the wrapped sender should
 // return an error so that we split and retry once the chunk which contains
 // EndTransaction (i.e. the last one).
@@ -274,6 +273,8 @@ func SendCallConverted(sender Sender, ctx context.Context, call proto.Call) {
 
 // Prev gives the right boundary of the union of all requests which don't
 // affect keys larger than the given key.
+// TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
+// 'keys' into 'proto'.
 func Prev(ba *proto.BatchRequest, k proto.Key) proto.Key {
 	candidate := proto.KeyMin
 	for _, union := range ba.Requests {
@@ -303,6 +304,8 @@ func Prev(ba *proto.BatchRequest, k proto.Key) proto.Key {
 
 // Next gives the left boundary of the union of all requests which don't
 // affect keys less than the given key.
+// TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
+// 'keys' into 'proto'.
 func Next(ba *proto.BatchRequest, k proto.Key) proto.Key {
 	candidate := proto.KeyMax
 	for _, union := range ba.Requests {

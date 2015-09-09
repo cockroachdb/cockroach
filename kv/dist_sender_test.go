@@ -534,7 +534,7 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 		ctx := &DistSenderContext{
 			RPCSend: testFn,
 			RangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
-				if len(k) > 0 && opts.ignoreIntents != rangeLookup {
+				if len(k) > 0 && opts.considerIntents != rangeLookup {
 					t.Fatalf("expected ignore intents to be %t", rangeLookup)
 				}
 				return []proto.RangeDescriptor{testRangeDescriptor}, nil

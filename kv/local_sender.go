@@ -245,9 +245,9 @@ func (ls *LocalSender) rangeLookup(key proto.Key, options lookupOptions, _ *prot
 			Key:             key,
 			ReadConsistency: proto.INCONSISTENT,
 		},
-		MaxRanges:     1,
-		IgnoreIntents: options.ignoreIntents,
-		Reverse:       options.useReverseScan,
+		MaxRanges:       1,
+		ConsiderIntents: options.considerIntents,
+		Reverse:         options.useReverseScan,
 	})
 	br, err := ls.SendBatch(context.Background(), ba)
 	if err != nil {

@@ -797,12 +797,12 @@ func (*AdminMergeResponse) ProtoMessage()    {}
 type RangeLookupRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	MaxRanges     int32 `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
-	// Ignore intents indicates whether or not intents encountered
+	// ConsiderIntents indicates whether or not intents encountered
 	// while looking up the range info should be resolved. This should
 	// be false in general, except for the case where the lookup is
 	// already in service of pushing intents on meta records. Attempting
 	// to resolve intents in this case would lead to infinite recursion.
-	IgnoreIntents bool `protobuf:"varint,3,opt,name=ignore_intents" json:"ignore_intents"`
+	ConsiderIntents bool `protobuf:"varint,3,opt,name=consider_intents" json:"consider_intents"`
 	// Use a reverse scan to pre-fill the range descriptor cache instead
 	// of an ascending scan.
 	Reverse bool `protobuf:"varint,4,opt,name=reverse" json:"reverse"`
@@ -819,9 +819,9 @@ func (m *RangeLookupRequest) GetMaxRanges() int32 {
 	return 0
 }
 
-func (m *RangeLookupRequest) GetIgnoreIntents() bool {
+func (m *RangeLookupRequest) GetConsiderIntents() bool {
 	if m != nil {
-		return m.IgnoreIntents
+		return m.ConsiderIntents
 	}
 	return false
 }
@@ -2481,7 +2481,7 @@ func (m *RangeLookupRequest) MarshalTo(data []byte) (int, error) {
 	i = encodeVarintApi(data, i, uint64(m.MaxRanges))
 	data[i] = 0x18
 	i++
-	if m.IgnoreIntents {
+	if m.ConsiderIntents {
 		data[i] = 1
 	} else {
 		data[i] = 0
@@ -7187,7 +7187,7 @@ func (m *RangeLookupRequest) Unmarshal(data []byte) error {
 			}
 		case 3:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IgnoreIntents", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ConsiderIntents", wireType)
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
@@ -7201,7 +7201,7 @@ func (m *RangeLookupRequest) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			m.IgnoreIntents = bool(v != 0)
+			m.ConsiderIntents = bool(v != 0)
 		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Reverse", wireType)

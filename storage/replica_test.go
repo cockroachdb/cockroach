@@ -2597,7 +2597,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	// Try 100 lookups with IgnoreIntents. Expect to see each descriptor at least once.
 	// First, try this consistently, which should not be allowed.
-	rlArgs.IgnoreIntents = true
+	rlArgs.ConsiderIntents = true
 	_, err = tc.rng.AddCmd(tc.rng.context(), rlArgs)
 	if !testutils.IsError(err, "can not read consistently and skip intents") {
 		t.Fatalf("wanted specific error, not %s", err)
