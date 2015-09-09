@@ -1444,8 +1444,6 @@ func TestStoreBadRequests(t *testing.T) {
 	for i, test := range testCases {
 		if _, err := store.ExecuteCmd(context.Background(), test); err == nil {
 			t.Errorf("%d unexpected success of request %s", i, test)
-		} else {
-			log.Infof("err = %s", err)
 		}
 	}
 }
