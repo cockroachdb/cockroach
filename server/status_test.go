@@ -256,35 +256,35 @@ func getRequest(t *testing.T, ts TestServer, path string) []byte {
 // the scan to complete, and return the server. The caller is
 // responsible for stopping the server.
 // TODO(bram): Add more nodes.
-func startServer(t *testing.T, keyPrefix string) TestServer {
+func startServer() (TestServer, error) {
 	var ts TestServer
 	ts.Ctx = NewTestContext()
 	ts.Ctx.ScanInterval = time.Duration(5 * time.Millisecond)
 	ts.StoresPerNode = 3
 	if err := ts.Start(); err != nil {
-		t.Fatal(err)
+		return ts, err
 	}
 
 	// Make sure the range is spun up with an arbitrary read command. We do not
 	// expect a specific response.
 	if _, err := ts.db.Get("a"); err != nil {
-		t.Fatal(err)
+		return ts, err
 	}
 
 	// Make sure the node status is available. This is done by forcing stores to
 	// publish their status, synchronizing to the event feed with a canary
 	// event, and then forcing the server to write summaries immediately.
 	if err := ts.node.publishStoreStatuses(); err != nil {
-		t.Fatalf("error publishing store statuses: %s", err)
+		return ts, util.Errorf("error publishing store statuses: %s", err)
 	}
 
 	ts.EventFeed().Flush()
 
 	if err := ts.writeSummaries(); err != nil {
-		t.Fatalf("error writing summaries: %s", err)
+		return ts, util.Errorf("error writing summaries: %s", err)
 	}
 
-	return ts
+	return ts, nil
 }
 
 // TestStatusLocalLogs checks to ensure that local/logfiles,
@@ -304,7 +304,10 @@ func TestStatusLocalLogs(t *testing.T) {
 		}
 	}()
 
-	ts := startServer(t, "/_status/logfiles/local")
+	ts, err := startServer()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer ts.Stop()
 
 	// Log an error which we expect to show up on every log file.
@@ -458,7 +461,10 @@ func TestStatusLocalLogs(t *testing.T) {
 // results.
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ts := startServer(t, statusNodesPrefix)
+	ts, err := startServer()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer ts.Stop()
 
 	body := getRequest(t, ts, statusNodesPrefix)
@@ -498,7 +504,10 @@ func TestNodeStatusResponse(t *testing.T) {
 // results.
 func TestStoreStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ts := startServer(t, statusStoresPrefix)
+	ts, err := startServer()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer ts.Stop()
 
 	body := getRequest(t, ts, statusStoresPrefix)
