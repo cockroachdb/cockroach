@@ -166,6 +166,37 @@ CREATE TABLE xyz (
 statement ok
 INSERT INTO xyz VALUES (4, 5, 6), (1, 2, 3);
 
+query error argument of LIMIT must not contain variables
+SELECT * FROM xyz LIMIT a
+----
+
+query error argument of OFFSET must not contain variables
+SELECT * FROM xyz OFFSET a
+----
+
+query error unsupported binary operator: <int> \+ <float>
+SELECT * FROM xyz OFFSET 1 + 0.0
+----
+
+query III
+SELECT * FROM xyz LIMIT 0
+----
+
+query III
+SELECT * FROM xyz LIMIT 1
+----
+1 2 3
+
+query III
+SELECT * FROM xyz LIMIT 1 OFFSET 1
+----
+4 5 6
+
+# Multiplying by zero so the result is deterministic.
+query III
+SELECT * FROM xyz LIMIT (RANDOM() * 0.0)::int OFFSET (RANDOM() * 0.0)::int
+----
+
 query II
 SELECT * FROM xyz@foo
 ----

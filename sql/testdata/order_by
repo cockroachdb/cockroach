@@ -229,3 +229,13 @@ SELECT a FROM abc ORDER BY a DESC
 ----
 4
 1
+
+query I
+SELECT a FROM abc ORDER BY a DESC LIMIT 1
+----
+4
+
+query I
+SELECT a FROM abc ORDER BY a DESC OFFSET 1
+----
+1

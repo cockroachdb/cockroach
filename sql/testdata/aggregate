@@ -36,6 +36,16 @@ SELECT COUNT((k, v)) FROM kv
 3
 
 query I
+SELECT COUNT((k, v)) FROM kv LIMIT 1
+----
+3
+
+query I
+SELECT COUNT((k, v)) FROM kv OFFSET 1
+----
+
+
+query I
 SELECT COUNT(k)+COUNT(kv.v) FROM kv
 ----
 5
