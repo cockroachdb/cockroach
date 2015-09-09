@@ -812,7 +812,6 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 	if err != nil {
 		return nil, util.Errorf("Could not find the subsumed range: %d", subsumedRaftID)
 	}
-	subsumedKey := keys.RangeDescriptorKey(subsumedRng.Desc().StartKey)
 
 	if !ReplicaSetsEqual(subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas()) {
 		return nil, util.Errorf("Ranges are not on the same replicas sets: %+v=%+v",
@@ -824,17 +823,8 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 		return nil, util.Errorf("cannot remove range %s", err)
 	}
 
-	var readTxn proto.Transaction
-	found, err := engine.MVCCGetProto(s.engine, subsumedKey, s.Clock().Now(), true, nil, &readTxn)
-	if !found || err != nil {
-		return util.Errorf("failed to resolve %s", subsumedKey)
-	}
-	if found {
-		ms := subsumedRng.GetMVCCStats()
-		err = engine.MVCCDelete(s.engine, &ms, subsumedKey, s.Clock().Now(), &readTxn)
-		if err != nil {
-			return util.Errorf("cannot delete key %s", subsumedKey)
-		}
+	if err = s.removeAllMetadata(subsumedRng); err != nil {
+		return util.Errorf("cannot remove its metadata %s", err)
 	}
 
 	// Update the end key of the subsuming range.
@@ -843,6 +833,78 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 	subsumingRng.SetDesc(&copy)
 
 	return subsumedRng, nil
+}
+
+func (s *Store) removeAllMetadata(rep *Replica) error {
+	rangeID := rep.Desc().RangeID
+
+	if err := engine.MVCCDelete(s.engine, nil, keys.RangeGCMetadataKey(rangeID), 
+		s.Clock().Now(), nil); err != nil{
+		return util.Errorf("cannot delete gdmeta %s", keys.RangeGCMetadataKey(rangeID))
+	}
+
+	if err := engine.MVCCDelete(s.engine, nil, keys.RangeLastVerificationTimestampKey(rangeID), 
+		s.Clock().Now(), nil); err != nil {
+		return util.Errorf("cannot delete last ts %s", keys.RangeLastVerificationTimestampKey(rangeID))
+	}
+
+	// RaftLogKey 
+	lastIndex, err := rep.LastIndex()
+	if err != nil {
+		return err
+	}
+	// Delete any previously appended log entries which never committed.
+	for i := uint64(0); i <= lastIndex; i++ {
+		if err := engine.MVCCDelete(s.engine, nil, keys.RaftLogKey(rangeID, i), s.Clock().Now(), nil); err != nil {
+			return util.Errorf("cannot delete log %s", keys.RaftLogKey(rangeID, i))
+		}
+	}
+
+	// ResponseCacheKey
+	if err = engine.MVCCDelete(s.engine, nil, keys.ResponseCacheKey(rangeID, nil), s.Clock().Now(), nil); err != nil {
+		return util.Errorf("cannot delete cache %s", keys.ResponseCacheKey(rangeID, nil))
+	}
+
+	// RaftLogPrefix 
+	if err := engine.MVCCDelete(s.engine, nil, keys.RaftLogPrefix(rangeID), s.Clock().Now(), nil); err != nil {
+		return util.Errorf("cannot delete logprefix %s", keys.RaftLogPrefix(rangeID))
+	}
+
+	// RaftHardStateKey 
+	if err := engine.MVCCDelete(s.engine, nil, keys.RaftHardStateKey(rangeID), s.Clock().Now(), nil); err != nil {
+		return util.Errorf("cannot delete hs key %s", keys.RaftHardStateKey(rangeID))
+	}
+
+	// RaftTruncatedStateKey
+	if err := engine.MVCCDelete(s.engine, nil, keys.RaftTruncatedStateKey(rangeID), s.Clock().Now(), nil); err != nil {
+		return util.Errorf("cannot delete ts key %s", keys.RaftTruncatedStateKey(rangeID))
+	}
+
+	// RaftAppliedIndexKey
+	if err := engine.MVCCDelete(s.engine, nil, keys.RaftAppliedIndexKey(rangeID), s.Clock().Now(), nil); err != nil {
+		return util.Errorf("cannot delete app id key %s", keys.RaftAppliedIndexKey(rangeID))
+	}
+
+	// RaftLeaderLeaseKey
+	if err := engine.MVCCDelete(s.engine, nil, keys.RaftLeaderLeaseKey(rangeID), s.Clock().Now(), nil); err != nil {
+		return util.Errorf("cannot delete lease key %s", keys.RaftLeaderLeaseKey(rangeID))
+	}
+
+	// RaftLastIndexKey
+	if err := engine.MVCCDelete(s.engine, nil, keys.RaftLastIndexKey(rangeID), s.Clock().Now(), nil); err != nil {
+		return util.Errorf("cannot delete last index key %s", keys.RaftLastIndexKey(rangeID))
+	}
+
+	// RangeStatsKey
+	if err := engine.MVCCDelete(s.engine, nil, keys.RangeStatsKey(rangeID), s.Clock().Now(), nil); err != nil {
+		return util.Errorf("cannot delete stats key %s", keys.RangeStatsKey(rangeID))
+	}
+
+	// delete range desc key
+	if err := engine.MVCCDelete(s.engine, nil, keys.RangeDescriptorKey(rep.Desc().StartKey), s.Clock().Now(), nil); err != nil {
+		return util.Errorf("cannot delete range desc %s", keys.RangeDescriptorKey(rep.Desc().StartKey))
+	}
+	return nil
 }
 
 // AddRange adds the range to the store's range map and to the sorted
