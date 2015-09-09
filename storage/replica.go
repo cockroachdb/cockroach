@@ -86,9 +86,7 @@ var TestingCommandFilter func(proto.Request) error
 // upon EndTransaction if they only have local intents (which can be
 // resolved synchronously with EndTransaction). Certain tests become
 // simpler with this being turned off.
-// TODO(tschottdorf): currently disabled since missing batch atomicity on Store
-// can lay down intents which are never tracked by the coordinator.
-var txnAutoGC = false
+var txnAutoGC = true
 
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
@@ -555,13 +553,12 @@ func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.R
 	}
 	args = nil // TODO(tschottdorf): make sure we don't use this by accident
 
-	if ba != nil { // TODO(tschottdorf): always
-		// Fiddle with the timestamps to make sure that writes can overlap
-		// within this batch.
-		// TODO(tschottdorf): provisional feature to get back to passing tests.
-		// Have to discuss how we go about it.
-		setBatchTimestamps(ba)
-	}
+	// Fiddle with the timestamps to make sure that writes can overlap
+	// within this batch.
+	// TODO(tschottdorf): provisional feature to get back to passing tests.
+	// Have to discuss how we go about it.
+	setBatchTimestamps(ba)
+
 	// TODO(tschottdorf) Some (internal) requests go here directly, so they
 	// won't be traced.
 	trace := tracer.FromCtx(ctx)
