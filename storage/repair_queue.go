@@ -118,7 +118,7 @@ func (rq repairQueue) process(now proto.Timestamp, repl *Replica) error {
 	if len(deadReplicas) < 1 {
 		return util.Errorf("no dead replicas, this shouldn't happen.")
 	}
-	log.Warningf("The replica %+v is being removed from its dead store.", deadReplicas[0])
+	log.Warningf("The replica %s is being removed from its dead store.", deadReplicas[0])
 	if err := repl.ChangeReplicas(proto.REMOVE_REPLICA, deadReplicas[0], repl.Desc()); err != nil {
 		return err
 	}
