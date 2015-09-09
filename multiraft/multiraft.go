@@ -262,8 +262,8 @@ func (s *state) fanoutHeartbeatResponse(fromID proto.RaftNodeID) {
 		// If we don't think that the local node is leader, don't propagate.
 		if s.groups[groupID].leader != s.nodeID || fromID == s.nodeID {
 			if log.V(8) {
-				log.Infof("node %v: not fanning out heartbeat response to %v, leader is %v",
-					s.nodeID, fromID, s.groups[groupID].leader)
+				log.Infof("node %v: not fanning out heartbeat response to %v, msg is from %v and leader is %v",
+					s.nodeID, groupID, fromID, s.groups[groupID].leader)
 			}
 			continue
 		}
