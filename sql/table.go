@@ -53,77 +53,78 @@ func makeTableDesc(p *parser.CreateTable) (TableDescriptor, error) {
 	for _, def := range p.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
-			col := ColumnDescriptor{
-				Name:     string(d.Name),
-				Nullable: (d.Nullable != parser.NotNull),
+			col, idx, err := makeColumnDefDescs(d)
+			if err != nil {
+				return desc, err
 			}
-			switch t := d.Type.(type) {
-			case *parser.BoolType:
-				col.Type.Kind = ColumnType_BOOL
-			case *parser.IntType:
-				col.Type.Kind = ColumnType_INT
-				col.Type.Width = int32(t.N)
-			case *parser.FloatType:
-				col.Type.Kind = ColumnType_FLOAT
-				col.Type.Precision = int32(t.Prec)
-			case *parser.DecimalType:
-				col.Type.Kind = ColumnType_DECIMAL
-				col.Type.Width = int32(t.Scale)
-				col.Type.Precision = int32(t.Prec)
-			case *parser.DateType:
-				col.Type.Kind = ColumnType_DATE
-			case *parser.TimestampType:
-				col.Type.Kind = ColumnType_TIMESTAMP
-			case *parser.IntervalType:
-				col.Type.Kind = ColumnType_INTERVAL
-			case *parser.StringType:
-				col.Type.Kind = ColumnType_STRING
-				col.Type.Width = int32(t.N)
-			case *parser.BytesType:
-				col.Type.Kind = ColumnType_BYTES
-			default:
-				panic(fmt.Sprintf("unexpected type %T", t))
-			}
-			desc.Columns = append(desc.Columns, col)
-
-			// Create any associated index.
-			if d.PrimaryKey || d.Unique {
-				index := IndexDescriptor{
-					Unique:      true,
-					ColumnNames: []string{string(d.Name)},
-				}
-				if d.PrimaryKey {
-					index.Name = PrimaryKeyIndexName
-					desc.PrimaryIndex = index
-				} else {
-					desc.Indexes = append(desc.Indexes, index)
+			desc.AddColumn(*col)
+			if idx != nil {
+				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
+					return desc, err
 				}
 			}
 		case *parser.IndexTableDef:
-			index := IndexDescriptor{
+			idx := IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           d.Unique,
 				ColumnNames:      d.Columns,
 				StoreColumnNames: d.Storing,
 			}
-			if d.PrimaryKey {
-				// Only override the index name if it hasn't been set by the user.
-				if index.Name == "" {
-					index.Name = PrimaryKeyIndexName
-				}
-				desc.PrimaryIndex = index
-			} else {
-				desc.Indexes = append(desc.Indexes, index)
+			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
+				return desc, err
 			}
 		default:
-			return desc, fmt.Errorf("unsupported table def: %T", def)
+			return desc, util.Errorf("unsupported table def: %T", def)
 		}
 	}
 	return desc, nil
 }
 
-func (p *planner) getTableDesc(qname *parser.QualifiedName) (
-	*TableDescriptor, error) {
+func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, error) {
+	col := &ColumnDescriptor{
+		Name:     string(d.Name),
+		Nullable: (d.Nullable != parser.NotNull),
+	}
+	switch t := d.Type.(type) {
+	case *parser.BoolType:
+		col.Type.Kind = ColumnType_BOOL
+	case *parser.IntType:
+		col.Type.Kind = ColumnType_INT
+		col.Type.Width = int32(t.N)
+	case *parser.FloatType:
+		col.Type.Kind = ColumnType_FLOAT
+		col.Type.Precision = int32(t.Prec)
+	case *parser.DecimalType:
+		col.Type.Kind = ColumnType_DECIMAL
+		col.Type.Width = int32(t.Scale)
+		col.Type.Precision = int32(t.Prec)
+	case *parser.DateType:
+		col.Type.Kind = ColumnType_DATE
+	case *parser.TimestampType:
+		col.Type.Kind = ColumnType_TIMESTAMP
+	case *parser.IntervalType:
+		col.Type.Kind = ColumnType_INTERVAL
+	case *parser.StringType:
+		col.Type.Kind = ColumnType_STRING
+		col.Type.Width = int32(t.N)
+	case *parser.BytesType:
+		col.Type.Kind = ColumnType_BYTES
+	default:
+		return nil, nil, util.Errorf("unexpected type %T", t)
+	}
+
+	var idx *IndexDescriptor
+	if d.PrimaryKey || d.Unique {
+		idx = &IndexDescriptor{
+			Unique:      true,
+			ColumnNames: []string{string(d.Name)},
+		}
+	}
+
+	return col, idx, nil
+}
+
+func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, err
 	}

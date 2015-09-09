@@ -319,6 +319,30 @@ func (desc *TableDescriptor) Validate() error {
 	return desc.Privileges.Validate(desc.GetID())
 }
 
+// AddColumn adds a column to the table.
+func (desc *TableDescriptor) AddColumn(col ColumnDescriptor) {
+	desc.Columns = append(desc.Columns, col)
+}
+
+// AddIndex adds an index to the table.
+func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
+	if primary {
+		// PrimaryIndex is unset.
+		if desc.PrimaryIndex.Name == "" {
+			if idx.Name == "" {
+				// Only override the index name if it hasn't been set by the user.
+				idx.Name = PrimaryKeyIndexName
+			}
+			desc.PrimaryIndex = idx
+		} else {
+			return fmt.Errorf("multiple primary keys for table %q are not allowed", desc.Name)
+		}
+	} else {
+		desc.Indexes = append(desc.Indexes, idx)
+	}
+	return nil
+}
+
 // FindColumnByName finds the column with specified name.
 func (desc *TableDescriptor) FindColumnByName(name string) (*ColumnDescriptor, error) {
 	for i, c := range desc.Columns {
