@@ -25,7 +25,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -484,7 +483,7 @@ func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
 	defer trace.Epoch("node")()
 	ctx := tracer.ToCtx((*Node)(n).context(), trace)
 
-	ba, unwrap := batch.MaybeWrap(args)
+	ba, unwrap := client.MaybeWrap(args)
 	br, err := n.lSender.SendBatch(ctx, ba)
 	if err != nil {
 		br = &proto.BatchResponse{}

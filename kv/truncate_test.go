@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -118,7 +117,7 @@ func TestTruncate(t *testing.T) {
 		undo()
 		if !reflect.DeepEqual(ba, original) {
 			t.Errorf("%d: undoing truncation failed:\nexpected: %s\nactual: %s",
-				i, batch.Short(original), batch.Short(ba))
+				i, original, ba)
 		}
 	}
 }

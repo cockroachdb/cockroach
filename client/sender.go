@@ -41,6 +41,14 @@ var defaultRetryOptions = retry.Options{
 	MaxRetries:     5,
 }
 
+// BatchSender is a new incarnation of client.Sender which only supports batches
+// and uses a request-response pattern.
+// TODO(tschottdorf): do away with client.Sender.
+// TODO(tschottdorf) s/Batch// when client.Sender is out of the way.
+type BatchSender interface {
+	SendBatch(context.Context, *proto.BatchRequest) (*proto.BatchResponse, error)
+}
+
 // Sender is an interface for sending a request to a Key-Value
 // database backend.
 type Sender interface {

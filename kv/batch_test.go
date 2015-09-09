@@ -15,7 +15,7 @@
 //
 // Author: Tobias Schottdorf
 
-package batch
+package kv
 
 import (
 	"bytes"
@@ -23,10 +23,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // TestBatchPrevNext tests batch.{Prev,Next}.
 func TestBatchPrevNext(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	span := func(strs ...string) []keys.Span {
 		var r []keys.Span
 		for i, str := range strs {
@@ -61,10 +63,10 @@ func TestBatchPrevNext(t *testing.T) {
 			args.Key, args.EndKey = span.Start, span.End
 			ba.Add(args)
 		}
-		if next := Next(&ba, proto.Key(test.key)); !bytes.Equal(next, proto.Key(test.expFW)) {
+		if next := next(&ba, proto.Key(test.key)); !bytes.Equal(next, proto.Key(test.expFW)) {
 			t.Errorf("%d: next: expected %q, got %q", i, test.expFW, next)
 		}
-		if prev := Prev(&ba, proto.Key(test.key)); !bytes.Equal(prev, proto.Key(test.expBW)) {
+		if prev := prev(&ba, proto.Key(test.key)); !bytes.Equal(prev, proto.Key(test.expBW)) {
 			t.Errorf("%d: prev: expected %q, got %q", i, test.expBW, prev)
 		}
 	}

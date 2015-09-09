@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -165,14 +166,6 @@ func (ba *BatchRequest) IsTransactionWrite() bool {
 // IsRange returns true iff the BatchRequest contains a range request.
 func (ba *BatchRequest) IsRange() bool {
 	return (ba.flags() & isRange) != 0
-}
-
-// CanBatch returns true if the request type can be part of a batch request.
-// TODO(tschottdorf): everything should be batchable. Those requests which
-// currently are !CanBatch should simply have to be alone in their batch.
-// That is easier since only BatchRequest must be supported.
-func CanBatch(args Request) bool {
-	return IsRead(args) || IsWrite(args)
 }
 
 // GetArg returns the first request of the given type, if possible.
@@ -764,4 +757,17 @@ func (ba BatchRequest) Split() [][]RequestUnion {
 		ba.Requests = ba.Requests[len(part):]
 	}
 	return parts
+}
+
+// String gives a brief summary of the contained requests and keys in the batch.
+// TODO(tschottdorf): the key range is useful information, but requires `keys`.
+// See #2198.
+func String(br *BatchRequest) string {
+	var str []string
+	for _, arg := range br.Requests {
+		req := arg.GetValue().(Request)
+		h := req.Header()
+		str = append(str, fmt.Sprintf("%T [%s,%s)", req, h.Key, h.EndKey))
+	}
+	return strings.Join(str, ", ")
 }

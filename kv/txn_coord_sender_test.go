@@ -28,7 +28,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/batch"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -73,7 +73,7 @@ func makeTS(walltime int64, logical int32) proto.Timestamp {
 }
 
 func sendCall(coord *TxnCoordSender, call proto.Call) error {
-	call, unwrap := batch.MaybeWrapCall(call)
+	call, unwrap := client.MaybeWrapCall(call)
 	defer unwrap(call)
 	coord.Send(context.TODO(), call)
 	return call.Reply.Header().GoError()
@@ -573,7 +573,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
-		ts := NewTxnCoordSender(batch.SenderFn(func(_ context.Context, _ *proto.BatchRequest) (*proto.BatchResponse, error) {
+		ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ *proto.BatchRequest) (*proto.BatchResponse, error) {
 			return nil, test.err
 		}), clock, false, nil, stopper)
 		reply := &proto.PutResponse{}
@@ -618,7 +618,7 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano)
 	var called bool
 	var alwaysError = errors.New("success")
-	ts := NewTxnCoordSender(batch.SenderFn(func(_ context.Context, _ *proto.BatchRequest) (*proto.BatchResponse, error) {
+	ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ *proto.BatchRequest) (*proto.BatchResponse, error) {
 		called = true
 		// Returning this error is an easy way of preventing heartbeats
 		// to be started for otherwise "successful" calls.

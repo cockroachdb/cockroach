@@ -26,7 +26,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/batch"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -118,7 +118,7 @@ type DistSender struct {
 	rpcRetryOptions retry.Options
 }
 
-var _ batch.Sender = &DistSender{}
+var _ client.BatchSender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(rpc.Options, string, []net.Addr,
@@ -210,7 +210,7 @@ type lookupOptions struct {
 // single inconsistent read only.
 func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
 	desc *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
-	args, unwrap := batch.MaybeWrap(&proto.RangeLookupRequest{
+	args, unwrap := client.MaybeWrap(&proto.RangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:             key,
 			ReadConsistency: proto.INCONSISTENT,
@@ -419,85 +419,6 @@ func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) 
 	return desc, needAnother(desc, options.useReverseScan), evict, nil
 }
 
-// truncate restricts all contained requests to the given key range.
-// Even on error, the returned closure must be executed; it undoes any
-// truncations performed.
-// First, the boundaries of the truncation are obtained: This is the
-// intersection between [from,to) and the descriptor's range.
-// Secondly, all requests contained in the batch are "truncated" to
-// the resulting range, inserting NoopRequest appropriately to
-// replace requests which are left without a key range to operate on.
-// The number of non-noop requests after truncation is returned along
-// with a closure which must be executed to undo the truncation, even
-// in case of an error.
-// TODO(tschottdorf): Consider returning a new BatchRequest, which has more
-// overhead in the common case of a batch which never needs truncation but is
-// less magical.
-func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to proto.Key) (func(), int, error) {
-	if !desc.ContainsKey(from) {
-		from = desc.StartKey
-	}
-	if !desc.ContainsKeyRange(desc.StartKey, to) || to == nil {
-		to = desc.EndKey
-	}
-	truncateOne := func(args proto.Request) (bool, []func(), error) {
-		header := args.Header()
-		if !proto.IsRange(args) {
-			if len(header.EndKey) > 0 {
-				return false, nil, util.Errorf("%T is not a range command, but EndKey is set", args)
-			}
-			if !desc.ContainsKey(keys.KeyAddress(header.Key)) {
-				return true, nil, nil
-			}
-			return false, nil, nil
-		}
-		var undo []func()
-		key, endKey := header.Key, header.EndKey
-		keyAddr, endKeyAddr := keys.KeyAddress(key), keys.KeyAddress(endKey)
-		if keyAddr.Less(from) {
-			undo = append(undo, func() { header.Key = key })
-			header.Key = from
-			keyAddr = from
-		}
-		if !endKeyAddr.Less(to) {
-			undo = append(undo, func() { header.EndKey = endKey })
-			header.EndKey = to
-			endKeyAddr = to
-		}
-		// Check whether the truncation has left any keys in the range. If not,
-		// we need to cut it out of the request.
-		return !keyAddr.Less(endKeyAddr), undo, nil
-	}
-
-	var fns []func()
-	gUndo := func() {
-		for _, f := range fns {
-			f()
-		}
-	}
-
-	var numNoop int
-	for pos, arg := range br.Requests {
-		omit, undo, err := truncateOne(arg.GetValue().(proto.Request))
-		if omit {
-			numNoop++
-			nReq := &proto.RequestUnion{}
-			nReq.SetValue(&proto.NoopRequest{})
-			oReq := br.Requests[pos]
-			br.Requests[pos] = *nReq
-			posCpy := pos // for closure
-			undo = append(undo, func() {
-				br.Requests[posCpy] = oReq
-			})
-		}
-		fns = append(fns, undo...)
-		if err != nil {
-			return gUndo, 0, err
-		}
-	}
-	return gUndo, len(br.Requests) - numNoop, nil
-}
-
 // sendAttempt gathers and rearranges the replicas, and makes an RPC call.
 func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba *proto.BatchRequest, desc *proto.RangeDescriptor) (*proto.BatchResponse, error) {
 	defer trace.Epoch("sending RPC")()
@@ -550,7 +471,7 @@ func (ds *DistSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*p
 	}
 
 	// TODO(tschottdorf): provisional instantiation.
-	return batch.NewChunkingSender(ds.sendChunk).SendBatch(ctx, ba)
+	return newChunkingSender(ds.sendChunk).SendBatch(ctx, ba)
 }
 
 // sendChunk is in charge of sending an "admissible" piece of batch, i.e. one
@@ -579,7 +500,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 	// Local addressing has already been resolved.
 	// TODO(tschottdorf): consider rudimentary validation of the batch here
 	// (for example, non-range requests with EndKey, or empty key ranges).
-	from, to := batch.KeyRange(ba)
+	from, to := keys.Range(ba)
 	var br *proto.BatchResponse
 	// Send the request to one range per iteration.
 	for {
@@ -647,7 +568,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 					// This shouldn't happen in the wild, but some tests
 					// exercise it.
 					return nil, util.Errorf("truncation resulted in empty batch on [%s,%s): %s",
-						from, to, batch.Short(ba))
+						from, to, ba)
 				}
 				defer untruncate()
 				if trErr != nil {
@@ -655,13 +576,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 				}
 				// TODO(tschottdorf): make key range on batch redundant. The
 				// requests within dictate it anyways.
-				ba.Key, ba.EndKey = batch.KeyRange(ba)
+				ba.Key, ba.EndKey = keys.Range(ba)
 				reply, err := ds.sendAttempt(trace, ba, desc)
 				ba.Key, ba.EndKey = nil, nil
 
 				if err != nil {
 					if log.V(0 /* TODO(tschottdorf): 1 */) {
-						log.Warningf("failed to invoke %s: %s", batch.Short(ba), err)
+						log.Warningf("failed to invoke %s: %s", ba, err)
 					}
 				}
 				return reply, err
@@ -785,7 +706,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 			// We use the StartKey of the current descriptor as opposed to the
 			// EndKey of the previous one since that doesn't have bugs when
 			// stale descriptors come into play.
-			to = batch.Prev(ba, desc.StartKey)
+			to = prev(ba, desc.StartKey)
 		} else {
 			// In next iteration, query next range.
 			// It's important that we use the EndKey of the current descriptor
@@ -794,7 +715,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 			// one, and unless both descriptors are stale, the next descriptor's
 			// StartKey would move us to the beginning of the current range,
 			// resulting in a duplicate scan.
-			from = batch.Next(ba, desc.EndKey)
+			from = next(ba, desc.EndKey) // TODO next
 		}
 		trace.Event("querying next range")
 	}

@@ -27,7 +27,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -173,7 +172,7 @@ type txnCoordStats struct {
 // transaction. When the transaction is committed or aborted, it
 // clears accumulated write intents for the transaction.
 type TxnCoordSender struct {
-	wrapped           batch.Sender
+	wrapped           client.BatchSender
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	clientTimeout     time.Duration
@@ -185,11 +184,11 @@ type TxnCoordSender struct {
 	stopper           *stop.Stopper
 }
 
-var _ batch.Sender = &TxnCoordSender{}
+var _ client.BatchSender = &TxnCoordSender{}
 
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
 // distributed DB instance.
-func NewTxnCoordSender(wrapped batch.Sender, clock *hlc.Clock, linearizable bool, tracer *tracer.Tracer, stopper *stop.Stopper) *TxnCoordSender {
+func NewTxnCoordSender(wrapped client.BatchSender, clock *hlc.Clock, linearizable bool, tracer *tracer.Tracer, stopper *stop.Stopper) *TxnCoordSender {
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
 		clock:             clock,
@@ -293,7 +292,25 @@ func (tc *TxnCoordSender) startStats() {
 // if it's not nil but has an empty ID.
 // TODO(tschottdorf): remove in favor of SendBatch.
 func (tc *TxnCoordSender) Send(ctx context.Context, call proto.Call) {
-	batch.SendCallConverted(tc, ctx, call)
+	client.SendCallConverted(tc, ctx, call)
+}
+
+// UpdateForBatch updates the first argument (the header of a request contained
+// in a batch) from the second one (the batch header), returning an error when
+// inconsistencies are found.
+// It is checked that the individual call does not have a UserPriority
+// or Txn set that differs from the batch's.
+// TODO(tschottdorf): will go with #2143.
+func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
+	// Disallow transaction, user and priority on individual calls, unless
+	// equal.
+	aHeader := args.Header()
+	if aPrio := aHeader.GetUserPriority(); aPrio != proto.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
+		return util.Errorf("conflicting user priority on call in batch")
+	}
+	aHeader.UserPriority = bHeader.UserPriority
+	aHeader.Txn = bHeader.Txn // reqs always take Txn from batch
+	return nil
 }
 
 // SendBatch implements the batch.Sender interface. If the request is
@@ -323,7 +340,7 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 	// we've eliminated all the redundancies.
 	for _, arg := range ba.Requests {
 		trace.Event(fmt.Sprintf("%T", arg.GetValue()))
-		if err := batch.UpdateForBatch(arg.GetValue().(proto.Request), ba.RequestHeader); err != nil {
+		if err := updateForBatch(arg.GetValue().(proto.Request), ba.RequestHeader); err != nil {
 			return nil, err
 		}
 	}
@@ -759,7 +776,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba *proto.BatchReques
 func (tc *TxnCoordSender) resendWithTxn(ba *proto.BatchRequest) (*proto.BatchResponse, error) {
 	// Run a one-off transaction with that single command.
 	if log.V(1) {
-		log.Infof("%s: auto-wrapping in txn and re-executing: ", batch.Short(ba))
+		log.Infof("%s: auto-wrapping in txn and re-executing: ", ba)
 	}
 	tmpDB := client.NewDBWithPriority(tc, ba.GetUserPriority())
 	br := &proto.BatchResponse{}

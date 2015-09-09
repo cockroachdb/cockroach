@@ -328,3 +328,37 @@ func MakeTablePrefix(tableID uint32) []byte {
 	key = encoding.EncodeUvarint(key, uint64(tableID))
 	return key
 }
+
+// Range returns a key range encompassing all the keys in the Batch.
+// In particular, this resolves local addressing.
+// TODO(tschottdorf): testing.
+// TODO(tschottdorf): figure out where we can pin down requests which span
+// from range-local into range-global space. Those will currently slip
+// through the cracks.
+// TODO(tschottdorf): ideally method on *BatchRequest. See #2198.
+// TODO(tschottdorf): return a keys.Span?
+func Range(br *proto.BatchRequest) (proto.Key, proto.Key) {
+	from := proto.KeyMax
+	to := proto.KeyMin
+	for _, arg := range br.Requests {
+		req := arg.GetValue().(proto.Request)
+		if req.Method() == proto.Noop {
+			continue
+		}
+		h := req.Header()
+		key := KeyAddress(h.Key)
+		if key.Less(KeyAddress(from)) {
+			// Key is smaller than `from`.
+			from = key
+		}
+		if KeyAddress(to).Less(key) {
+			// Key is larger than `to`.
+			to = key.Next()
+		}
+		if endKey := KeyAddress(h.EndKey); KeyAddress(to).Less(endKey) {
+			// EndKey is larger than `to`.
+			to = endKey
+		}
+	}
+	return from, to
+}

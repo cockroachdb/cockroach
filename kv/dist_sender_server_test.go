@@ -23,7 +23,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
@@ -215,7 +214,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	sr := call.Reply.(*proto.ScanResponse)
 	sa := call.Args.(*proto.ScanRequest)
 	sa.ReadConsistency = proto.INCONSISTENT
-	batch.SendCallConverted(ds, context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := sr.GoError(); err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +230,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	rsr := call.Reply.(*proto.ReverseScanResponse)
 	rsa := call.Args.(*proto.ReverseScanRequest)
 	rsa.ReadConsistency = proto.INCONSISTENT
-	batch.SendCallConverted(ds, context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := rsr.GoError(); err != nil {
 		t.Fatal(err)
 	}

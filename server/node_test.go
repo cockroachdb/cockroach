@@ -28,7 +28,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -50,7 +49,7 @@ import (
 type callDistSender kv.DistSender
 
 func (cds *callDistSender) Send(ctx context.Context, call proto.Call) {
-	batch.SendCallConverted((*kv.DistSender)(cds), ctx, call)
+	client.SendCallConverted((*kv.DistSender)(cds), ctx, call)
 }
 
 // createTestNode creates an rpc server using the specified address,

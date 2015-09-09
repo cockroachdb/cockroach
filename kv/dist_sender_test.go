@@ -28,7 +28,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/batch"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/keys"
@@ -336,7 +336,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
 		call := proto.Call{Args: args, Reply: args.CreateReply()}
-		batch.SendCallConverted(ds, context.Background(), call)
+		client.SendCallConverted(ds, context.Background(), call)
 		if err := call.Reply.Header().GoError(); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
@@ -392,7 +392,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
 	reply := call.Reply.(*proto.PutResponse)
-	batch.SendCallConverted(ds, context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := reply.GoError(); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
@@ -444,12 +444,12 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
 	reply := call.Reply.(*proto.PutResponse)
 	// Fatal error on descriptor lookup, propagated to reply.
-	batch.SendCallConverted(ds, context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := reply.Header().Error; err.GetMessage() != "fatal boom" {
 		t.Errorf("unexpected error: %s", err)
 	}
 	// Retryable error on descriptor lookup, second attempt successful.
-	batch.SendCallConverted(ds, context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := reply.GoError(); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -504,7 +504,7 @@ func TestEvictCacheOnError(t *testing.T) {
 
 		call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
 		reply := call.Reply.(*proto.PutResponse)
-		batch.SendCallConverted(ds, context.Background(), call)
+		client.SendCallConverted(ds, context.Background(), call)
 		if err := reply.GoError(); err != nil && !testutils.IsError(err, "boom") {
 			t.Errorf("put encountered unexpected error: %s", err)
 		}
@@ -548,7 +548,7 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 			},
 			Reply: &proto.PushTxnResponse{},
 		}
-		batch.SendCallConverted(ds, context.Background(), call)
+		client.SendCallConverted(ds, context.Background(), call)
 	}
 }
 
@@ -604,7 +604,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 0)
 	sr := call.Reply.(*proto.ScanResponse)
-	batch.SendCallConverted(ds, context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := sr.GoError(); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
@@ -700,7 +700,7 @@ func TestSendRPCRetry(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 1)
 	sr := call.Reply.(*proto.ScanResponse)
-	batch.SendCallConverted(ds, context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := sr.GoError(); err != nil {
 		t.Fatal(err)
 	}
@@ -802,7 +802,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	call.Args.Header().Txn = &proto.Transaction{}
 	reply := call.Reply.(*proto.ScanResponse)
-	batch.SendCallConverted(ds, context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := reply.GoError(); err != nil {
 		t.Fatalf("scan encountered error: %s", err)
 	}
@@ -838,5 +838,5 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 		},
 		Reply: &proto.ReverseScanResponse{},
 	}
-	batch.SendCallConverted(ds, context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 }

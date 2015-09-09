@@ -32,7 +32,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -622,7 +621,7 @@ func (r *Replica) checkBatchRequest(ba *proto.BatchRequest) error {
 		//	return util.Errorf("conflicting timestamp %s on call in batch at %s", header.Timestamp, ba.Timestamp)
 		//}
 		if header.Txn != nil && !header.Txn.Equal(ba.Txn) {
-			return util.Errorf("conflicting transaction on call in transactional batch at position %d: %s", i, batch.Short(ba))
+			return util.Errorf("conflicting transaction on call in transactional batch at position %d: %s", i, ba)
 		}
 		if proto.IsReadOnly(args) {
 			if header.ReadConsistency == proto.INCONSISTENT && header.Txn != nil {
@@ -1042,7 +1041,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 				// was present in the cached entry (if any).
 				return btch, replyWithErr.Reply, replyWithErr.Err
 			}
-			log.Warningf("TODO(tschottdorf): manifestation of #2297: %s hit cache for: %+v", batch.Short(ba), replyWithErr.Reply)
+			log.Warningf("TODO(tschottdorf): manifestation of #2297: %s hit cache for: %+v", ba, replyWithErr.Reply)
 		}
 	}
 

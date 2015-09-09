@@ -25,7 +25,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/batch"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -40,7 +39,7 @@ var (
 )
 
 func sendCall(sender Sender, call proto.Call) error {
-	call, unwrap := batch.MaybeWrapCall(call)
+	call, unwrap := MaybeWrapCall(call)
 	defer unwrap(call)
 	sender.Send(context.Background(), call)
 	return call.Reply.Header().GoError()
