@@ -116,9 +116,10 @@ type multiTestContext struct {
 	// test individually. clientStopper is for 'db', transportStopper is
 	// for 'transport', and the 'stoppers' slice corresponds to the
 	// 'stores'.
-	clientStopper    *stop.Stopper
-	stoppers         []*stop.Stopper
-	transportStopper *stop.Stopper
+	clientStopper      *stop.Stopper
+	stoppers           []*stop.Stopper
+	transportStopper   *stop.Stopper
+	timeUntilStoreDead time.Duration
 }
 
 // startMultiTestContext is a convenience function to create, start, and return
@@ -148,7 +149,10 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.transport = multiraft.NewLocalRPCTransport(m.clientStopper)
 	}
 	if m.storePool == nil {
-		m.storePool = storage.NewStorePool(m.gossip, storage.TestTimeUntilStoreDeadOff, m.clientStopper)
+		if m.timeUntilStoreDead == 0 {
+			m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
+		}
+		m.storePool = storage.NewStorePool(m.gossip, m.timeUntilStoreDead, m.clientStopper)
 	}
 
 	// Always create the first sender.

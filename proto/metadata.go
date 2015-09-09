@@ -164,11 +164,6 @@ func (r *RangeDescriptor) Validate() error {
 	return nil
 }
 
-// Stringer implementation for replica.
-func (r *Replica) String() string {
-	return fmt.Sprintf("%d:%d", r.NodeID, r.StoreID)
-}
-
 // FractionUsed computes the fraction of storage capacity that is in use.
 func (sc StoreCapacity) FractionUsed() float64 {
 	if sc.Capacity == 0 {
