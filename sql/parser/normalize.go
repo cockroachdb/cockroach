@@ -359,6 +359,9 @@ func (v *isConstVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 		}
 
 		switch t := expr.(type) {
+		case *Subquery:
+			v.isConst = false
+			return nil, expr
 		case *FuncExpr:
 			// typeCheckFuncExpr populates t.fn.impure.
 			if _, err := typeCheckFuncExpr(t); err != nil || t.fn.impure {
