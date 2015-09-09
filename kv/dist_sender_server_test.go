@@ -102,23 +102,6 @@ func setupMultipleRanges(t *testing.T, splitAt ...string) (*server.TestServer, *
 	return s, db
 }
 
-// TODO(tschottdorf): provisional code.
-func TestSimpleSingleRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	s := server.StartTestServer(t)
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
-	defer s.Stop()
-
-	if err := db.Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
-		b.Put("a", 1)
-		b.Put("z", 2)
-		return txn.CommitInBatch(b)
-	}); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // TestMultiRangeEmptyAfterTruncate exercises a code path in which a
 // multi-range requests deals with a range without any active requests after
 // truncation. In that case, the request is skipped.
@@ -137,24 +120,6 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 		// using KeyMin here currently fails miserably because it plows through
 		// internal data. See #2198.
 		// b.DelRange("aaa", proto.KeyMax)
-		return txn.CommitInBatch(b)
-	}); err != nil {
-		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
-	}
-}
-
-// TODO(tschottdorf): provisional code.
-func TestSimpleTruncate(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	s, db := setupMultipleRanges(t, "c")
-	defer s.Stop()
-
-	// Delete the keys within a transaction. Implicitly, the intents are
-	// resolved via ResolveIntentRange upon completion.
-	if err := db.Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
-		b.DelRange("a", "b")
-		b.Put("b", "b")
 		return txn.CommitInBatch(b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
@@ -390,7 +355,6 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 // Scan/ReverseScan results in an error.
 func TestStartEqualsEndKeyScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): truncation needs to verify key ranges or treat empty key ranges correctly without assuming that (EndKey == nil) || (Key < EndKey)")
 	s := server.StartTestServer(t)
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 	defer s.Stop()
@@ -400,11 +364,11 @@ func TestStartEqualsEndKeyScan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Scan("a", "a", 0); !testutils.IsError(err, "must be greater") {
+	if _, err := db.Scan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on scan with startkey == endkey: %v", err)
 	}
 
-	if _, err := db.ReverseScan("a", "a", 0); !testutils.IsError(err, "must be greater") {
+	if _, err := db.ReverseScan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
 }

@@ -172,7 +172,7 @@ func (ls *LocalSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*
 	}
 	// TODO(tschottdorf): Later error needs to be associated to an index
 	// and ideally individual requests don't even have an error in their
-	// header.
+	// header. See #1891.
 	return br, err
 }
 
@@ -198,7 +198,6 @@ func (ls *LocalSender) lookupReplica(start, end proto.Key) (rangeID proto.RangeI
 		rng = store.LookupReplica(start, end)
 		if rng == nil {
 			if tmpRng := store.LookupReplica(start, nil); tmpRng != nil {
-				// TODO
 				log.Warningf(fmt.Sprintf("range not contained in one range: [%s,%s), but have [%s,%s)", start, end, tmpRng.Desc().StartKey, tmpRng.Desc().EndKey))
 			}
 			continue

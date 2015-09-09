@@ -157,10 +157,9 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	if _, r, err := ls.lookupReplica(proto.Key("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	// TODO(tschottdorf): re-enable this when the panic assertion in lookupReplica is gone.
-	//if _, r, err := ls.lookupReplica(proto.Key("b"), proto.Key("d")); r != nil || err == nil {
-	//	t.Errorf("expected store 0 and error got %d", r.StoreID)
-	//}
+	if _, r, err := ls.lookupReplica(proto.Key("b"), proto.Key("d")); r != nil || err == nil {
+		t.Errorf("expected store 0 and error got %d", r.StoreID)
+	}
 	if _, r, err := ls.lookupReplica(proto.Key("x"), proto.Key("z")); r.StoreID != s[1].Ident.StoreID {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}

@@ -577,6 +577,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 
 	// The minimal key range encompassing all requests contained within.
 	// Local addressing has already been resolved.
+	// TODO(tschottdorf): consider rudimentary validation of the batch here
+	// (for example, non-range requests with EndKey, or empty key ranges).
 	from, to := batch.KeyRange(ba)
 	var br *proto.BatchResponse
 	// Send the request to one range per iteration.
@@ -778,9 +780,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 			return br, nil
 		}
 
-		// TODO(tschottdorf): can sometimes skip a lot of ranges, but that
-		// requires a pass through the batch and finding the next relevant
-		// request. Could be a good optimization in the future.
 		if isReverse {
 			// In next iteration, query previous range.
 			// We use the StartKey of the current descriptor as opposed to the
