@@ -22,6 +22,7 @@ package storage
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"crypto/sha256"
 	"fmt"
 	"math/rand"
@@ -74,6 +75,11 @@ const (
 	// to gossip after performing an update to the map.
 	configGossipInterval = 1 * time.Minute
 )
+
+// SystemConfigBuilder is a function that takes the SystemDB span as a
+// a sorted list of KV pairs and returns a built SystemConfig object.
+// TODO(marc): we set this up as a callback to avoid a dependency on sql.
+var SystemConfigBuilder func([]proto.KeyValue) (*config.SystemConfig, error)
 
 // TestingCommandFilter may be set in tests to intercept the handling
 // of commands and artificially generate errors. Return nil to continue
@@ -202,7 +208,7 @@ type Replica struct {
 	// Last index applied to the state machine. Updated atomically.
 	appliedIndex uint64
 	configHashes map[int][]byte // Config map sha256 hashes @ last gossip
-	systemDBHash []byte         // sha256 hash of the system config @ last gossip
+	systemDBHash []byte         // sha1 hash of the system config @ last gossip
 	lease        unsafe.Pointer // Information for leader lease, updated atomically
 	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
 	respCache    *ResponseCache // Provides idempotence for retries
@@ -1298,12 +1304,22 @@ func (r *Replica) maybeGossipSystemConfigLocked() {
 
 	ctx := r.context()
 	// TODO(marc): check for bad split in the middle of the SystemDB span.
-	systemConfig, hash, err := loadSystemConfig(r.rm.Engine())
+	kvs, hash, err := loadSystemDBSpan(r.rm.Engine())
 	if err != nil {
-		log.Errorc(ctx, "could not load system config: %s", err)
+		log.Errorc(ctx, "could not load SystemDB span: %s", err)
 		return
 	}
 	if bytes.Equal(r.systemDBHash, hash) {
+		return
+	}
+
+	if SystemConfigBuilder == nil {
+		log.Errorc(ctx, " missing system config builder")
+		return
+	}
+	cfg, err := SystemConfigBuilder(kvs)
+	if err != nil {
+		log.Errorc(ctx, "failed to build system config: %s", err)
 		return
 	}
 
@@ -1311,7 +1327,7 @@ func (r *Replica) maybeGossipSystemConfigLocked() {
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping system config from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
 	}
-	if err := r.rm.Gossip().AddInfoProto(gossip.KeySystemDB, systemConfig, 0); err != nil {
+	if err := r.rm.Gossip().AddInfoProto(gossip.KeySystemDB, cfg, 0); err != nil {
 		log.Errorc(ctx, "failed to gossip system config: %s", err)
 	}
 }
@@ -1534,23 +1550,21 @@ func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI gogoproto.Mes
 	return m, sha.Sum(nil), err
 }
 
-// loadSystemConfig scans the entire SystemDB span and puts the set of key/value
-// pairs in the config, generating a sha256 sum.
-func loadSystemConfig(eng engine.Engine) (*config.SystemConfig, []byte, error) {
+// loadSystemDBSpan scans the entire SystemDB span and returns the full list of
+// key/value pairs along with the sha1 checksum of the contents (key and value).
+func loadSystemDBSpan(eng engine.Engine) ([]proto.KeyValue, []byte, error) {
 	// TODO(tschottdorf): Currently this does not handle intents well.
 	kvs, _, err := engine.MVCCScan(eng, keys.SystemDBSpan.Start, keys.SystemDBSpan.End,
 		0, proto.MaxTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	cfg := &config.SystemConfig{
-		Values: kvs,
-	}
-	sha := sha256.New()
+	sha := sha1.New()
 	for _, kv := range kvs {
+		sha.Write(kv.Key)
 		sha.Write(kv.Value.Bytes)
 	}
-	return cfg, sha.Sum(nil), err
+	return kvs, sha.Sum(nil), err
 }
 
 // maybeAddToSplitQueue checks whether the current size of the range

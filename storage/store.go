@@ -919,18 +919,7 @@ func (s *Store) BootstrapRange(initialValues []proto.KeyValue) error {
 		return err
 	}
 	// Zone config.
-	zoneConfig := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{},
-			{},
-			{},
-		},
-		RangeMinBytes: 1048576,
-		RangeMaxBytes: 67108864,
-		GC: &config.GCPolicy{
-			TTLSeconds: 24 * 60 * 60, // 1 day
-		},
-	}
+	zoneConfig := config.DefaultZoneConfig
 	if err := engine.MVCCPutProto(batch, ms, keys.ConfigZonePrefix, now, nil, zoneConfig); err != nil {
 		return err
 	}
