@@ -841,7 +841,7 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.
 	}
 
 	// Check for overflow and underflow.
-	if encoding.WillOverflow(int64Val, inc) {
+	if willOverflow(int64Val, inc) {
 		return 0, util.Errorf("key %s with value %d incremented by %d results in overflow", key, int64Val, inc)
 	}
 
@@ -1641,4 +1641,20 @@ func MVCCDecodeKey(encodedKey proto.EncodedKey) (proto.Key, proto.Timestamp, boo
 	tsBytes, walltime = encoding.DecodeUint64Decreasing(tsBytes)
 	tsBytes, logical = encoding.DecodeUint32Decreasing(tsBytes)
 	return key, proto.Timestamp{WallTime: int64(walltime), Logical: int32(logical)}, true
+}
+
+// willOverflow returns true iff adding both inputs would under- or overflow
+// the 64 bit integer range.
+func willOverflow(a, b int64) bool {
+	// Morally MinInt64 < a+b < MaxInt64, but without overflows.
+	// First make sure that a <= b. If not, swap them.
+	if a > b {
+		a, b = b, a
+	}
+	// Now b is the larger of the numbers, and we compare sizes
+	// in a way that can never over- or underflow.
+	if b > 0 {
+		return a > math.MaxInt64-b
+	}
+	return math.MinInt64-b > a
 }

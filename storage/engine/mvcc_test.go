@@ -2491,6 +2491,30 @@ func TestResovleIntentWithLowerEpoch(t *testing.T) {
 	}
 }
 
+func TestWillOverflow(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	testCases := []struct {
+		a, b     int64
+		overflow bool // will a+b over- or underflow?
+	}{
+		{0, 0, false},
+		{math.MaxInt64, 0, false},
+		{math.MaxInt64, 1, true},
+		{math.MaxInt64, math.MinInt64, false},
+		{math.MinInt64, 0, false},
+		{math.MinInt64, -1, true},
+		{math.MinInt64, math.MinInt64, true},
+	}
+
+	for i, c := range testCases {
+		if willOverflow(c.a, c.b) != c.overflow ||
+			willOverflow(c.b, c.a) != c.overflow {
+			t.Errorf("%d: overflow recognition error", i)
+		}
+	}
+}
+
 // BenchmarkMVCCStats set MVCCStats values.
 func BenchmarkMVCCStats(b *testing.B) {
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
