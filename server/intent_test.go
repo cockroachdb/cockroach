@@ -98,10 +98,7 @@ func TestIntentResolution(t *testing.T) {
 				case <-s.Server.stopper.ShouldStop():
 					return
 				}
-				select {
-				case closer <- struct{}{}:
-					t.Logf("timeout")
-				}
+				closer <- struct{}{}
 			}()
 
 			// Split the Range. This should not have any asynchronous intents.
