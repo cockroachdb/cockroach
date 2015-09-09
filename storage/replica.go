@@ -76,6 +76,11 @@ const (
 	configGossipInterval = 1 * time.Minute
 )
 
+// SystemConfigBuilder is a function that takes the SystemDB span as a
+// a sorted list of KV pairs and returns a built SystemConfig object.
+// TODO(marc): we set this up as a callback to avoid a dependency on sql.
+var SystemConfigBuilder func([]proto.KeyValue) (*config.SystemConfig, error)
+
 // TestingCommandFilter may be set in tests to intercept the handling
 // of commands and artificially generate errors. Return nil to continue
 // with regular processing or non-nil to terminate processing with the
@@ -1308,7 +1313,15 @@ func (r *Replica) maybeGossipSystemConfigLocked() {
 		return
 	}
 
-	cfg := &config.SystemConfig{Values: kvs}
+	if SystemConfigBuilder == nil {
+		log.Errorc(ctx, " missing system config builder")
+		return
+	}
+	cfg, err := SystemConfigBuilder(kvs)
+	if err != nil {
+		log.Errorc(ctx, "failed to build system config: %s", err)
+		return
+	}
 
 	r.systemDBHash = hash
 	if log.V(1) {

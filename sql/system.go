@@ -20,6 +20,7 @@ package sql
 import (
 	"log"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
@@ -171,4 +172,10 @@ func GetInitialSystemValues() []proto.KeyValue {
 // IsSystemID returns true if this ID is reserved for system objects.
 func IsSystemID(id ID) bool {
 	return id > 0 && id <= MaxReservedDescID
+}
+
+// BuildSystemConfig takes a full system span as a sorted list of
+// key/value pairs and returns a SystemConfig.
+func BuildSystemConfig(kvs []proto.KeyValue) (*config.SystemConfig, error) {
+	return &config.SystemConfig{Values: kvs}, nil
 }

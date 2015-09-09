@@ -49,6 +49,12 @@ import (
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 )
 
+func init() {
+	// Hook up sql to storage.SystemConfigBuilder.
+	// TODO(marc): this is to avoid a dependency between storage and sql.
+	storage.SystemConfigBuilder = sql.BuildSystemConfig
+}
+
 var (
 	// Allocation pool for gzip writers.
 	gzipWriterPool sync.Pool
