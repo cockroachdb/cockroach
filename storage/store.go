@@ -1090,6 +1090,10 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsu
 		return util.Errorf("cannot remove range %s", err)
 	}
 
+	if err = s.removeAllMetadata(subsumedRng); err != nil {
+		return util.Errorf("cannot remove its metadata %s", err)
+	}
+
 	// Update the end key of the subsuming range.
 	copy := *subsumingDesc
 	copy.EndKey = updatedEndKey
@@ -1098,6 +1102,49 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsu
 	}
 
 	s.feed.mergeRange(subsumingRng, subsumedRng)
+	return nil
+}
+
+func (s *Store) removeAllMetadata(rep *Replica) error {
+	rangeID := rep.Desc().RangeID
+
+	now := s.Clock().Now()
+	metadata := []struct{
+	  name string
+	  key    proto.Key
+	}{
+	  {"cache", keys.ResponseCacheKey(rangeID, nil)},
+	  {"logprefix", keys.RaftLogPrefix(rangeID)},
+	  {"hardstate", keys.RaftHardStateKey(rangeID)},
+	  {"gcmeta", keys.RangeGCMetadataKey(rangeID)},
+	  {"verifytimestamp", keys.RangeLastVerificationTimestampKey(rangeID)},
+	  {"truncatestate", keys.RaftTruncatedStateKey(rangeID)},
+	  {"appliedindex", keys.RaftAppliedIndexKey(rangeID)},
+	  {"leaderlease", keys.RaftLeaderLeaseKey(rangeID)},
+	  {"lastindex", keys.RaftLastIndexKey(rangeID)},
+	  {"stats", keys.RangeStatsKey(rangeID)},
+	}
+	for _, metadatum := range metadata {
+	  if err := engine.MVCCDelete(s.engine, nil, metadatum.key, now, nil); err != nil {
+	    return util.Errorf("cannot delete %s key %s: %s", metadatum.name, metadatum.key, err)
+	  }
+	}
+
+	// RaftLogKey 
+	lastIndex, err := rep.LastIndex()
+	if err != nil {
+		return err
+	}
+	// Delete any previously appended log entries which never committed.
+	for i := uint64(0); i <= lastIndex; i++ {
+		if err := engine.MVCCDelete(s.engine, nil, keys.RaftLogKey(rangeID, i), s.Clock().Now(), nil); err != nil {
+			return util.Errorf("cannot delete log %s", keys.RaftLogKey(rangeID, i))
+		}
+	}
+	// delete range desc key
+	if err := engine.MVCCDelete(s.engine, nil, keys.RangeDescriptorKey(rep.Desc().StartKey), s.Clock().Now(), nil); err != nil {
+		return util.Errorf("cannot delete range desc %s", keys.RangeDescriptorKey(rep.Desc().StartKey))
+	}
 	return nil
 }
 
