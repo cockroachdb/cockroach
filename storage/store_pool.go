@@ -255,7 +255,8 @@ func (sp *StorePool) getStoreDescriptor(storeID proto.StoreID) *proto.StoreDescr
 		return nil
 	}
 
-	return &detail.desc
+	desc := detail.desc
+	return &desc
 }
 
 // stat provides a running sample size and mean.
@@ -308,7 +309,8 @@ func (sp *StorePool) getStoreList(required proto.Attributes, deterministic bool)
 	for _, storeID := range storeIDs {
 		detail := sp.stores[proto.StoreID(storeID)]
 		if !detail.dead && required.IsSubset(*detail.desc.CombinedAttrs()) {
-			sl.add(&detail.desc)
+			desc := detail.desc
+			sl.add(&desc)
 		}
 	}
 	return sl
