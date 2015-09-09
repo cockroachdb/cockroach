@@ -1239,54 +1239,49 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) e
 	return nil
 }
 
-// AdminMerge extends the range to subsume the range that comes next in
-// the key space. The range being subsumed is provided in args.SubsumedRange.
-// The EndKey of the subsuming range must equal the start key of the
-// range being subsumed. The merge is performed inside of a distributed
+// AdminMerge extends this range to subsume the range that comes next in
+// the key space. The merge is performed inside of a distributed
 // transaction which writes the updated range descriptor for the subsuming range
 // and deletes the range descriptor for the subsumed one. It also updates the
 // range addressing metadata. The handover of responsibility for
 // the reassigned key range is carried out seamlessly through a merge trigger
 // carried out as part of the commit of that transaction.
-// A merge requires that the two ranges are collocate on the same set of replicas.
+// A merge requires that the two ranges are collocated on the same set of replicas.
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
-func (r *Replica) AdminMerge(args proto.AdminMergeRequest, desc *proto.RangeDescriptor) (proto.AdminMergeResponse, error) {
+func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.RangeDescriptor) (proto.AdminMergeResponse, error) {
 	var reply proto.AdminMergeResponse
 
-	if desc.EndKey.Equal(proto.KeyMax) {
+	if origLeftDesc.EndKey.Equal(proto.KeyMax) {
 		// Merging the final range doesn't make sense.
 		return reply, util.Errorf("cannot merge final range")
 	}
 
-	// Lookup subsumed range. This really belongs inside the transaction
-	// for consistency, but it is important (for transaction record placement)
-	// that the first action inside the transaction is the conditional put
-	// to change the left descriptor's end key. We look up the descriptor
-	// here only to get the new end key and then repeat the lookup inside the
-	// transaction.
-	var newEndKey proto.Key
+	updatedLeftDesc := *origLeftDesc
+
+	// Lookup subsumed (right) range. This really belongs inside the
+	// transaction for consistency, but it is important (for transaction
+	// record placement) that the first action inside the transaction is
+	// the conditional put to change the left descriptor's end key. We
+	// look up the descriptor here only to get the new end key and then
+	// repeat the lookup inside the transaction.
 	{
-		subsumedRng := r.rm.LookupReplica(desc.EndKey, nil)
-		if subsumedRng == nil {
+		rightRng := r.rm.LookupReplica(origLeftDesc.EndKey, nil)
+		if rightRng == nil {
 			return reply, util.Errorf("ranges not collocated")
 		}
 
-		newEndKey = subsumedRng.Desc().EndKey
-		log.Infof("initiating a merge of %s into %s", subsumedRng, r)
+		updatedLeftDesc.EndKey = rightRng.Desc().EndKey
+		log.Infof("initiating a merge of %s into %s", rightRng, r)
 	}
-
-	// Init updated version of existing range descriptor.
-	updatedDesc := *desc
-	updatedDesc.EndKey = newEndKey
 
 	if err := r.rm.DB().Txn(func(txn *client.Txn) error {
 		// Update the range descriptor for the receiving range.
 		{
 			b := &client.Batch{}
-			desc1Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
-			if err := updateRangeDescriptor(b, desc1Key, desc, &updatedDesc); err != nil {
+			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
+			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, &updatedLeftDesc); err != nil {
 				return err
 			}
 			// Commit this batch on its own to ensure that the transaction record
@@ -1297,33 +1292,36 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, desc *proto.RangeDesc
 		}
 
 		// Do a consistent read of the second range descriptor.
-		desc2Key := keys.RangeDescriptorKey(desc.EndKey)
-		var desc2 proto.RangeDescriptor
-		if err := txn.GetProto(desc2Key, &desc2); err != nil {
+		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
+		var rightDesc proto.RangeDescriptor
+		if err := txn.GetProto(rightDescKey, &rightDesc); err != nil {
 			return err
 		}
 
 		// Verify that the two ranges are mergeable.
-		if !bytes.Equal(desc.EndKey, desc2.StartKey) {
-			return util.Errorf("ranges are not adjacent; %s != %s", desc.EndKey, desc2.StartKey)
+		if !bytes.Equal(origLeftDesc.EndKey, rightDesc.StartKey) {
+			// Should never happen, but just in case.
+			return util.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
 		}
-		if !bytes.Equal(desc2.EndKey, newEndKey) {
-			return util.Errorf("range changed during merge; %s != %s", desc2.EndKey, newEndKey)
+		if !bytes.Equal(rightDesc.EndKey, updatedLeftDesc.EndKey) {
+			// This merge raced with a split of the right-hand range.
+			// TODO(bdarnell): needs a test.
+			return util.Errorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
 		}
-		if !replicaSetsEqual(desc.GetReplicas(), desc2.GetReplicas()) {
+		if !replicaSetsEqual(origLeftDesc.GetReplicas(), rightDesc.GetReplicas()) {
 			return util.Errorf("ranges not collocated")
 		}
 
 		// Remove the range descriptor for the deleted range.
 		b := &client.Batch{}
-		b.Del(desc2Key)
+		b.Del(rightDescKey)
 
-		if err := mergeRangeAddressing(b, desc, &updatedDesc); err != nil {
+		if err := mergeRangeAddressing(b, origLeftDesc, &updatedLeftDesc); err != nil {
 			return err
 		}
 
 		// Update the RangeTree.
-		if err := DeleteRange(txn, b, desc2.StartKey); err != nil {
+		if err := DeleteRange(txn, b, rightDesc.StartKey); err != nil {
 			return err
 		}
 
@@ -1331,12 +1329,12 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, desc *proto.RangeDesc
 		// loop do it, in order to provide a merge trigger.
 		b.InternalAddCall(proto.Call{
 			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
+				RequestHeader: proto.RequestHeader{Key: updatedLeftDesc.StartKey},
 				Commit:        true,
 				InternalCommitTrigger: &proto.InternalCommitTrigger{
 					MergeTrigger: &proto.MergeTrigger{
-						UpdatedDesc:     updatedDesc,
-						SubsumedRangeID: desc2.RangeID,
+						UpdatedDesc:     updatedLeftDesc,
+						SubsumedRangeID: rightDesc.RangeID,
 					},
 				},
 			},
@@ -1344,7 +1342,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, desc *proto.RangeDesc
 		})
 		return txn.Run(b)
 	}); err != nil {
-		return reply, util.Errorf("merge of range into %d failed: %s", desc.RangeID, err)
+		return reply, util.Errorf("merge of range into %d failed: %s", origLeftDesc.RangeID, err)
 	}
 
 	return reply, nil
