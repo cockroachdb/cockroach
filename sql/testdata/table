@@ -39,7 +39,7 @@ CREATE TABLE c (
   id INT PRIMARY KEY,
   foo INT,
   bar INT,
-  CONSTRAINT c_foo_idx INDEX (foo),
+  INDEX c_foo_idx (foo),
   INDEX (foo),
   UNIQUE (bar)
 )
@@ -92,8 +92,8 @@ CREATE TABLE test.users (
   id    INT PRIMARY KEY,
   name  VARCHAR NOT NULL,
   title VARCHAR,
-  CONSTRAINT foo INDEX (name),
-  CONSTRAINT bar UNIQUE (id, name)
+  INDEX foo (name),
+  UNIQUE INDEX bar (id, name)
 )
 
 query TTT colnames

@@ -4,8 +4,8 @@ CREATE TABLE abc (
   b TEXT,
   c FLOAT,
   PRIMARY KEY (a, b),
-  CONSTRAINT foo UNIQUE (b),
-  CONSTRAINT bar INDEX (a)
+  UNIQUE INDEX foo (b),
+  INDEX bar (a)
 )
 
 query ITTB colnames

@@ -2,8 +2,8 @@ statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
   v INT,
-  CONSTRAINT foo UNIQUE (v),
-  CONSTRAINT bar INDEX (k, v)
+  UNIQUE INDEX foo (v),
+  INDEX bar (k, v)
 )
 
 statement ok

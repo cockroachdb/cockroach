@@ -178,6 +178,12 @@ type UniqueConstraint struct{}
 
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
+//
+// TODO(pmattis): This should be broken up into IndexTableDef,
+// UniqueConstraintTableDef and
+// PrimaryKeyConstraintTableDef. {Unique,PrimaryKey}ConstraintTableDef would
+// embed an IndexTableDef. Eventually we might have a CheckConstraintTableDef
+// and ForeignKeyConstraintTableDef.
 type IndexTableDef struct {
 	Name       Name
 	PrimaryKey bool
@@ -187,15 +193,21 @@ type IndexTableDef struct {
 
 func (node *IndexTableDef) String() string {
 	var buf bytes.Buffer
-	if node.Name != "" {
-		fmt.Fprintf(&buf, "CONSTRAINT %s ", node.Name)
-	}
 	if node.PrimaryKey {
+		if node.Name != "" {
+			fmt.Fprintf(&buf, "CONSTRAINT %s ", node.Name)
+		}
 		_, _ = buf.WriteString("PRIMARY KEY ")
 	} else if node.Unique {
+		if node.Name != "" {
+			fmt.Fprintf(&buf, "CONSTRAINT %s ", node.Name)
+		}
 		_, _ = buf.WriteString("UNIQUE ")
 	} else {
 		_, _ = buf.WriteString("INDEX ")
+		if node.Name != "" {
+			fmt.Fprintf(&buf, "%s ", node.Name)
+		}
 	}
 	fmt.Fprintf(&buf, "(%s)", node.Columns)
 	return buf.String()
