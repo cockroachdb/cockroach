@@ -219,3 +219,123 @@ query T
 SELECT right('abcde', 2)
 ----
 de
+
+# TIMESTAMP/DATE builtins.
+
+query T
+SELECT age(timestamp '2001-04-10 22:06:45', timestamp '1957-06-13')
+----
+384190h6m45s
+
+query T
+SELECT age(timestamp '1957-06-13') - age(now(), timestamp '1957-06-13') < interval '10s'
+----
+true
+
+query T
+SELECT now() - timestamp '2015-06-13' > interval '100h'
+----
+true
+
+query T
+SELECT now() - current_date::timestamp < interval '24h10s'
+----
+true
+
+query error syntax error at or near "\("
+SELECT current_date()
+----
+
+query T
+SELECT now() - current_timestamp < interval '10s'
+----
+true
+
+query error syntax error at or near "\("
+SELECT current_timestamp()
+----
+
+query T
+SELECT extract(year from timestamp '2001-04-10 12:04:59')
+----
+2001
+
+query T
+SELECT extract(quarter from timestamp '2001-04-10 12:04:59')
+----
+2
+
+query T
+SELECT extract(month from timestamp '2001-04-10 12:04:59')
+----
+4
+
+query T
+SELECT extract(week from timestamp '2001-04-10 12:04:59')
+----
+15
+
+query T
+SELECT extract(day from timestamp '2001-04-10 12:04:59')
+----
+10
+
+query T
+SELECT extract(dayofweek from timestamp '2001-04-10 12:04:59')
+----
+2
+
+query T
+SELECT extract(dow from timestamp '2001-04-12 12:04:59')
+----
+4
+
+query T
+SELECT extract(dayofyear from timestamp '2001-04-10 12:04:59')
+----
+100
+
+query T
+SELECT extract(doy from timestamp '2001-04-12 12:04:59')
+----
+102
+
+query T
+SELECT extract(epoch from timestamp '2001-04-10 12:04:59')
+----
+986904299
+
+query T
+SELECT extract(hour from timestamp '2001-04-10 12:04:59')
+----
+12
+
+query T
+SELECT extract(minute from timestamp '2001-04-10 12:04:59')
+----
+4
+
+query T
+SELECT extract(second from timestamp '2001-04-10 12:04:59.234')
+----
+59
+
+query T
+SELECT extract(millisecond from timestamp '2001-04-10 12:04:59.234567')
+----
+234
+
+query T
+SELECT extract(microsecond from timestamp '2001-04-10 12:04:59.34565423')
+----
+345654
+
+query T
+SELECT extract(nanosecond from timestamp '2001-04-10 12:04:59.34565423')
+----
+345654230
+
+query error extract: unsupported timespan: nansecond
+SELECT extract(nansecond from timestamp '2001-04-10 12:04:59.34565423')
+----
+

@@ -140,7 +140,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <qname> any_name
 %type <qnames> any_name_list
 %type <empty> any_operator
-%type <exprs> expr_list
+%type <exprs> expr_list extract_list
 %type <indirect> attrs
 %type <selExprs> target_list opt_target_list
 %type <updateExprs> set_clause_list
@@ -174,7 +174,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <joinCond> join_qual
 %type <str> join_type
 
-%type <empty> extract_list overlay_list position_list
+%type <empty> overlay_list position_list
 %type <empty> substr_list trim_list
 %type <empty> opt_interval interval_second
 %type <empty> overlay_placing substr_from substr_for
@@ -243,7 +243,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <colType> const_datetime const_interval
 %type <colType> bit const_bit bit_with_length bit_without_length
 %type <colType> character_base
-%type <empty> extract_arg
+%type <str> extract_arg
 %type <empty> opt_charset
 %type <empty> opt_varying opt_no_inherit
 
@@ -2986,15 +2986,14 @@ func_expr_windowless:
 // Special expressions that are considered to be functions.
 func_expr_common_subexpr:
   COLLATION FOR '(' a_expr ')' {}
-| CURRENT_DATE {}
-| CURRENT_TIME {}
-| CURRENT_TIME '(' ICONST ')' {}
-| CURRENT_TIMESTAMP {}
-| CURRENT_TIMESTAMP '(' ICONST ')' {}
-| LOCALTIME {}
-| LOCALTIME '(' ICONST ')' {}
-| LOCALTIMESTAMP {}
-| LOCALTIMESTAMP '(' ICONST ')' {}
+| CURRENT_DATE
+  {
+    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+  }
+| CURRENT_TIMESTAMP
+  {
+    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+  }
 | CURRENT_ROLE {}
 | CURRENT_USER {}
 | SESSION_USER {}
@@ -3003,7 +3002,10 @@ func_expr_common_subexpr:
   {
     $$ = &CastExpr{Expr: $3, Type: $5}
   }
-| EXTRACT '(' extract_list ')' {}
+| EXTRACT '(' extract_list ')'
+  {
+    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+  }
 | OVERLAY '(' overlay_list ')' {}
 | POSITION '(' position_list ')' {}
 | SUBSTRING '(' substr_list ')' {}
@@ -3198,20 +3200,21 @@ array_expr_list:
   }
 
 extract_list:
-  extract_arg FROM a_expr {}
-| /* EMPTY */ {}
+  extract_arg FROM a_expr
+  {
+    $$ = Exprs{StrVal($1), $3}
+  }
 
-// Allow delimited string SCONST in extract_arg as an SQL extension.
-// - thomas 2001-04-12
+// TODO(vivek): Narrow down to just IDENT once the other
+// terms are not keywords.
 extract_arg:
-  IDENT {}
-| YEAR {}
-| MONTH {}
-| DAY {}
-| HOUR {}
-| MINUTE {}
-| SECOND {}
-| SCONST {}
+  IDENT
+| YEAR
+| MONTH
+| DAY
+| HOUR
+| MINUTE
+| SECOND
 
 // OVERLAY() arguments
 // SQL99 defines the OVERLAY() function:
