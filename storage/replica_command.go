@@ -524,7 +524,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 	}
 	consistent := args.ReadConsistency != proto.INCONSISTENT
 	if consistent && args.IgnoreIntents {
-		return reply, nil, util.Errorf("can not read consistently and skip intents")
+		return reply, nil, util.Errorf("can not read consistently and special-case intents")
 	}
 	if args.IgnoreIntents {
 		// Disable prefetching; the caller only cares about a single intent,
@@ -532,10 +532,21 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		rangeCount = 1
 	}
 
-	var kvs []proto.KeyValue        // kv descriptor pairs in scan order
-	var rds []proto.RangeDescriptor // corresponding unmarshaled descriptors
+	var checkAndUnmarshal func(b []byte) (*proto.RangeDescriptor, error)
+
+	var kvs []proto.KeyValue // kv descriptor pairs in scan order
 	var intents []proto.Intent
 	if !args.Reverse {
+		// If scanning forward, there's no special "checking": Just decode the
+		// descriptor and return it.
+		checkAndUnmarshal = func(b []byte) (*proto.RangeDescriptor, error) {
+			var rd proto.RangeDescriptor
+			if err := gogoproto.Unmarshal(b, &rd); err != nil {
+				return nil, err
+			}
+			return &rd, nil
+		}
+
 		// We want to search for the metadata key greater than
 		// args.Key. Scan for both the requested key and the keys immediately
 		// afterwards, up to MaxRanges.
@@ -570,6 +581,23 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		// Note that Meta1KeyMax is admissible: it means we're looking for
 		// the range descriptor that houses Meta2KeyMax, and a forward scan
 		// handles it correctly.
+		// In this case, checkAndUnmarshal is more complicated: It needs
+		// to weed out descriptors from the forward scan above, which could
+		// return a result or an intent we're not supposed to return.
+		checkAndUnmarshal = func(b []byte) (*proto.RangeDescriptor, error) {
+			var r proto.RangeDescriptor
+			if err := gogoproto.Unmarshal(b, &r); err != nil {
+				return nil, err
+			}
+			if !keys.RangeMetaKey(r.StartKey).Less(args.Key) {
+				// This is the case in which we've picked up an extra descriptor
+				// we don't want.
+				return nil, nil
+			}
+			// We actually want this descriptor.
+			return &r, nil
+		}
+
 		if args.Key.Less(keys.Meta2KeyMax) {
 			startKey, endKey, err := keys.MetaScanBounds(args.Key)
 			if err != nil {
@@ -581,20 +609,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 			if err != nil {
 				return reply, nil, err
 			}
-			var firstRD proto.RangeDescriptor
-			if err := gogoproto.Unmarshal(kvs[0].Value.Bytes, &firstRD); err != nil {
-				return reply, nil, err
-			}
-			if keys.RangeMetaKey(firstRD.StartKey).Less(args.Key) {
-				// We actually want this descriptor. It would be unmarshaled
-				// below, but we already did it, so let's put it in right away.
-				rds = append(rds, firstRD)
-			} else {
-				// Discard temporary data to preserve assumptions about the
-				// content of these two slices.
-				kvs = nil
-				intents = nil
-			}
+
 		}
 		// We want to search for the metadata key just less or equal to
 		// args.Key. Scan in reverse order for both the requested key and the
@@ -614,18 +629,15 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		// Merge the results, the total ranges may be bigger than rangeCount.
 		kvs = append(kvs, revKvs...)
 		intents = append(intents, revIntents...)
-
-		if int64(len(kvs)) > rangeCount {
-			kvs = kvs[:rangeCount]
-		}
 	}
 
+	var rds []proto.RangeDescriptor // corresponding unmarshaled descriptors
 	// TODO(tschottdorf): IgnoreIntents is only set on a Push, but there are
 	// infinite loops because ResolveIntent doesn't get routed the right way;
 	// I think it needs the same special treatment.
-	// TestRangeSplitsWithConcurrentTxns demonstrates this when removing 'true'
+	// TestRangeSplitsWithConcurrentTxns demonstrates this when removing !consistent
 	// below.
-	if (true || args.IgnoreIntents) && len(intents) > 0 {
+	if (!consistent || args.IgnoreIntents) && len(intents) > 0 && rand.Intn(2) == 0 {
 		// NOTE (subtle): in general, we want to try to clean up dangling
 		// intents on meta records. However, if we're in the process of
 		// cleaning up a dangling intent on a meta record by pushing the
@@ -646,36 +658,53 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		// we choose randomly between the pre- and post- transaction
 		// values. If we guess wrong, the client will try again and get
 		// the other value (within a few tries).
-		if rand.Intn(2) == 0 {
-			key, txn := intents[0].Key, &intents[0].Txn
+		for _, intent := range intents {
+			key, txn := intent.Key, &intent.Txn
 			val, _, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
 			if err != nil {
 				return reply, nil, err
 			}
 
-			// If the intent is not a deletion, return its value.
-			if val != nil {
+			if val == nil {
+				// Intent is a deletion.
+				continue
+			}
+			rd, err := checkAndUnmarshal(val.Bytes)
+			if err != nil {
+				return reply, nil, err
+			}
+			// If this is a descriptor we're allowed to return,
+			// do just that and call it a day.
+			if rd != nil {
 				kvs = []proto.KeyValue{{Key: key, Value: *val}}
-				rds = nil
+				rds = []proto.RangeDescriptor{*rd}
+				break
 			}
 		}
 	}
 
 	// Decode all scanned range descriptors which haven't been unmarshaled yet.
 	for _, kv := range kvs[len(rds):] {
-		var rd proto.RangeDescriptor
 		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
-		if err := gogoproto.Unmarshal(kv.Value.Bytes, &rd); err != nil {
+		rd, err := checkAndUnmarshal(kv.Value.Bytes)
+		if err != nil {
 			return reply, nil, err
 		}
-		rds = append(rds, rd)
+		if rd != nil {
+			rds = append(rds, *rd)
+		}
 	}
 
-	if len(rds) == 0 {
+	if count := int64(len(rds)); count == 0 {
 		// No matching results were returned from the scan. This should
 		// never happen with the above logic.
 		panic(fmt.Sprintf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %s", args.Key))
+	} else if count > rangeCount {
+		// We've possibly picked up an extra descriptor if we're in reverse
+		// mode due to the initial forward scan.
+		rds = rds[:rangeCount]
 	}
+
 	reply.Ranges = rds
 	return reply, intents, nil
 }

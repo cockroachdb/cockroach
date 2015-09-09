@@ -415,6 +415,7 @@ func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) 
 	evict := func() {
 		ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, options.useReverseScan)
 	}
+
 	return desc, needAnother(desc, options.useReverseScan), evict, nil
 }
 
@@ -433,37 +434,35 @@ func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) 
 // overhead in the common case of a batch which never needs truncation but is
 // less magical.
 func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to proto.Key) (func(), int, error) {
-	if !desc.ContainsKey(keys.KeyAddress(from)) {
+	if !desc.ContainsKey(from) {
 		from = desc.StartKey
 	}
-	if !desc.ContainsKeyRange(desc.StartKey, keys.KeyAddress(to)) || to == nil {
+	if !desc.ContainsKeyRange(desc.StartKey, to) || to == nil {
 		to = desc.EndKey
 	}
-	fromAddr := keys.KeyAddress(from)
-	toAddr := keys.KeyAddress(to)
 	truncateOne := func(args proto.Request) (bool, []func(), error) {
 		header := args.Header()
 		if !proto.IsRange(args) {
 			if len(header.EndKey) > 0 {
 				return false, nil, util.Errorf("%T is not a range command, but EndKey is set", args)
 			}
-			if !desc.ContainsKey(keys.KeyAddress(args.Header().Key)) {
+			if !desc.ContainsKey(keys.KeyAddress(header.Key)) {
 				return true, nil, nil
 			}
 			return false, nil, nil
 		}
 		var undo []func()
-		key, endKey := args.Header().Key, args.Header().EndKey
+		key, endKey := header.Key, header.EndKey
 		keyAddr, endKeyAddr := keys.KeyAddress(key), keys.KeyAddress(endKey)
-		if keyAddr.Less(fromAddr) {
-			undo = append(undo, func() { args.Header().Key = key })
-			args.Header().Key = from
-			keyAddr = fromAddr
+		if keyAddr.Less(from) {
+			undo = append(undo, func() { header.Key = key })
+			header.Key = from
+			keyAddr = from
 		}
-		if !endKeyAddr.Less(toAddr) {
-			undo = append(undo, func() { args.Header().EndKey = endKey })
-			args.Header().EndKey = to
-			endKeyAddr = toAddr
+		if !endKeyAddr.Less(to) {
+			undo = append(undo, func() { header.EndKey = endKey })
+			header.EndKey = to
+			endKeyAddr = to
 		}
 		// Check whether the truncation has left any keys in the range. If not,
 		// we need to cut it out of the request.
@@ -628,47 +627,49 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 				return nil, &proto.OpRequiresTxnError{}
 			}
 
-			// TODO(tschottdorf): hacky way to prevent the following: A range-
-			// spanning request hits a stale descriptor so that it misses parts
-			// of the keys it's supposed to scan after it's truncated to match
-			// the descriptor. Example revscan [a,g), first desc lookup for "g"
+			// It's possible that the returned descriptor misses parts of the
+			// keys it's supposed to scan after it's truncated to match the
+			// descriptor. Example revscan [a,g), first desc lookup for "g"
 			// returns descriptor [c,d) -> [d,g) is never scanned.
-			// This didn't happen prior to the refactor because the truncation
-			// was more ad-hoc.
-			if (isReverse && !desc.ContainsKeyRange(keys.KeyAddress(desc.StartKey), keys.KeyAddress(to))) || (!isReverse && !desc.ContainsKeyRange(keys.KeyAddress(from), keys.KeyAddress(desc.EndKey))) {
+			// We evict and retry in such a case.
+			if (isReverse && !desc.ContainsKeyRange(desc.StartKey, to)) || (!isReverse && !desc.ContainsKeyRange(from, desc.EndKey)) {
 				evictDesc()
 				continue
 			}
 
-			{
+			curReply, err = func() (*proto.BatchResponse, error) {
 				// Truncate the request to our current key range.
 				untruncate, numActive, trErr := truncate(ba, desc, from, to)
-				// TODO(tschottdorf): check if this is already obsolete. If
-				// not, work towards it.
-				ba.Key, ba.EndKey = batch.KeyRange(ba)
-				if trErr != nil {
-					untruncate()
-					return nil, trErr
-				}
 				if numActive == 0 {
 					untruncate()
-					panic(fmt.Sprintf("truncation resulted in empty batch on [%s,%s): %s",
-						from, to, batch.Short(ba)))
+					// This shouldn't happen in the wild, but some tests
+					// exercise it.
+					return nil, util.Errorf("truncation resulted in empty batch on [%s,%s): %s",
+						from, to, batch.Short(ba))
 				}
-				curReply, err = ds.sendAttempt(trace, ba, desc)
+				defer untruncate()
+				if trErr != nil {
+					return nil, trErr
+				}
+				// TODO(tschottdorf): make key range on batch redundant. The
+				// requests within dictate it anyways.
+				ba.Key, ba.EndKey = batch.KeyRange(ba)
+				reply, err := ds.sendAttempt(trace, ba, desc)
 				ba.Key, ba.EndKey = nil, nil
 
 				if err != nil {
 					if log.V(0) {
 						log.Warningf("failed to invoke %s: %s", batch.Short(ba), err)
 					}
-					untruncate()
-				} else {
-					untruncate()
-					break // when no error, we're done
 				}
+				return reply, err
+			}()
+			// If sending succeeded, break this loop.
+			if err == nil {
+				break
 			}
 
+			// Error handling below.
 			// If retryable, allow retry. For range not found or range
 			// key mismatch errors, we don't backoff on the retry,
 			// but reset the backoff loop so we can retry immediately.

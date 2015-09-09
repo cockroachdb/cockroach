@@ -2518,6 +2518,9 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 // appropriately. Normally, the old value and a write intent error
 // should be returned. If IgnoreIntents is specified, then a random
 // choice of old or new is returned with no error.
+// TODO(tschottdorf): add a test in which there is a dangling intent on a
+// descriptor we would've otherwise discarded in a reverse scan; verify that
+// we don't erroneously return that descriptor (recently fixed bug) if the
 func TestRangeDanglingMetaIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	t.Skip("TODO(tschottdorf): disabled; see comment in RangeLookup")

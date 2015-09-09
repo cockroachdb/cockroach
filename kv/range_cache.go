@@ -276,7 +276,7 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key, i
 	rd := v.(*proto.RangeDescriptor)
 
 	// Check that key actually belongs to the range.
-	if !rd.ContainsKey(keys.KeyAddress(key)) {
+	if !rd.ContainsKey(key) {
 		// The key is the EndKey and we're inclusive, so just return the range descriptor.
 		if inclusive && key.Equal(rd.EndKey) {
 			return metaEndKey, rd
@@ -304,8 +304,7 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, met
 	k, v, ok := rdc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if ok {
 		descriptor := v.(*proto.RangeDescriptor)
-		addrKey := keys.KeyAddress(key)
-		if !addrKey.Less(descriptor.StartKey) && !descriptor.EndKey.Less(addrKey) {
+		if !key.Less(descriptor.StartKey) && !descriptor.EndKey.Less(key) {
 			if log.V(1) {
 				log.Infof("clearing overlapping descriptor: key=%s desc=%s", k, descriptor)
 			}
