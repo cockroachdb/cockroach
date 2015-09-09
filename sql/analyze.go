@@ -496,6 +496,8 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, pars
 		panic(fmt.Sprintf("IN expression required: %s vs %s", left, right))
 	}
 
+	origLeft, origRight := left, right
+
 	switch left.Operator {
 	case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE:
 		switch right.Operator {
@@ -597,7 +599,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, pars
 		}
 	}
 
-	return left, right
+	return origLeft, origRight
 }
 
 func simplifyOrExpr(n *parser.OrExpr) parser.Expr {
@@ -990,8 +992,10 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 		panic(fmt.Sprintf("IN expression required: %s vs %s", left, right))
 	}
 
+	origLeft, origRight := left, right
+
 	switch left.Operator {
-	case parser.EQ:
+	case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE:
 		switch right.Operator {
 		case parser.In:
 			left, right = right, left
@@ -1001,25 +1005,77 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 	case parser.In:
 		tuple := left.Right.(parser.DTuple)
 
-		var tuple2 parser.DTuple
 		switch right.Operator {
 		case parser.EQ:
-			rdatum := right.Right.(parser.Datum)
-			tuple2 = parser.DTuple{rdatum}
-		case parser.In:
-			tuple2 = right.Right.(parser.DTuple)
-		}
+			datum := right.Right.(parser.Datum)
+			// We keep the tuples for an IN expression in sorted order. So now we just
+			// merge the two sorted lists.
+			return &parser.ComparisonExpr{
+				Operator: parser.In,
+				Left:     left.Left,
+				Right:    mergeSorted(tuple, parser.DTuple{datum}),
+			}, nil
 
-		// We keep the tuples for an in expression in sorted order. So now we just
-		// merge the two sorted lists.
-		return &parser.ComparisonExpr{
-			Operator: parser.In,
-			Left:     left.Left,
-			Right:    mergeSorted(tuple, tuple2),
-		}, nil
+		case parser.In:
+			// We keep the tuples for an IN expression in sorted order. So now we
+			// just merge the two sorted lists.
+			return &parser.ComparisonExpr{
+				Operator: parser.In,
+				Left:     left.Left,
+				Right:    mergeSorted(tuple, right.Right.(parser.DTuple)),
+			}, nil
+
+		case parser.GT, parser.GE, parser.LT, parser.LE:
+			datum := right.Right.(parser.Datum)
+			i := sort.Search(len(tuple), func(i int) bool {
+				return tuple[i].(parser.Datum).Compare(datum) >= 0
+			})
+
+			switch right.Operator {
+			case parser.GT:
+				if i == 0 {
+					// datum >= tuple[0]
+					if tuple[i].Compare(datum) == 0 {
+						// datum = tuple[0]
+						return &parser.ComparisonExpr{
+							Operator: parser.GE,
+							Left:     left.Left,
+							Right:    datum,
+						}, nil
+					}
+					return right, nil
+				}
+			case parser.GE:
+				if i == 0 {
+					// datum >= tuple[0]
+					return right, nil
+				}
+			case parser.LT:
+				if i == len(tuple) {
+					// datum > tuple[len(tuple)-1]
+					return right, nil
+				} else if i == len(tuple)-1 {
+					// datum >= tuple[len(tuple)-1]
+					if tuple[i].Compare(datum) == 0 {
+						// datum == tuple[len(tuple)-1]
+						return &parser.ComparisonExpr{
+							Operator: parser.LE,
+							Left:     left.Left,
+							Right:    datum,
+						}, nil
+					}
+				}
+			case parser.LE:
+				if i == len(tuple) ||
+					(i == len(tuple)-1 && tuple[i].Compare(datum) == 0) {
+					// datum >= tuple[len(tuple)-1]
+					return right, nil
+				}
+			}
+		}
 	}
 
-	return left, right
+	return origLeft, origRight
 }
 
 func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {

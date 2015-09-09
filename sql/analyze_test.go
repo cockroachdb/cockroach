@@ -492,7 +492,7 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 	}{
 		{`a = 1 OR a = 2 OR a = 3 or a = 4`, `a IN (1, 2, 3, 4)`},
 		{`a = 1 OR a IN (1, 2, 3) OR a = 2 OR a = 3`, `a IN (1, 2, 3)`},
-		{`a > 1 OR a IN (2, 3)`, `a > 1 OR a IN (2, 3)`},
+		{`a > 1 OR a IN (2, 3)`, `a > 1`},
 
 		{`a < 1 OR b < 1 OR a < 2 OR b < 2`, `a < 2 OR b < 2`},
 		{`(a > 2 OR a < 1) OR (a > 3 OR a < 0)`, `a > 2 OR a < 1`},
@@ -515,6 +515,9 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a = 1 OR a <= 1`, `a <= 1`},
 		{`a = 1 OR a <= 2`, `a <= 2`},
 		{`a = 2 OR a <= 1`, `a = 2 OR a <= 1`},
+		{`a = 1 OR a IN (1)`, `a IN (1)`},
+		{`a = 1 OR a IN (2)`, `a IN (1, 2)`},
+		{`a = 2 OR a IN (1)`, `a IN (1, 2)`},
 
 		{`a != 1 OR a = 1`, `true`},
 		{`a != 1 OR a = 2`, `a != 1`},
@@ -553,6 +556,9 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a > 1 OR a <= 1`, `true`},
 		{`a > 1 OR a <= 2`, `true`},
 		{`a > 2 OR a <= 1`, `a > 2 OR a <= 1`},
+		{`a > 1 OR a IN (1)`, `a >= 1`},
+		{`a > 1 OR a IN (2)`, `a > 1`},
+		{`a > 2 OR a IN (1)`, `a > 2 OR a IN (1)`},
 
 		{`a >= 1 OR a = 1`, `a >= 1`},
 		{`a >= 1 OR a = 2`, `a >= 1`},
@@ -572,6 +578,9 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a >= 1 OR a <= 1`, `true`},
 		{`a >= 1 OR a <= 2`, `true`},
 		{`a >= 2 OR a <= 1`, `a >= 2 OR a <= 1`},
+		{`a >= 1 OR a IN (1)`, `a >= 1`},
+		{`a >= 1 OR a IN (2)`, `a >= 1`},
+		{`a >= 2 OR a IN (1)`, `a >= 2 OR a IN (1)`},
 
 		{`a < 1 OR a = 1`, `a <= 1`},
 		{`a < 1 OR a = 2`, `a < 1 OR a = 2`},
@@ -591,6 +600,9 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a < 1 OR a <= 1`, `a <= 1`},
 		{`a < 1 OR a <= 2`, `a <= 2`},
 		{`a < 2 OR a <= 1`, `a < 2`},
+		{`a < 1 OR a IN (1)`, `a <= 1`},
+		{`a < 1 OR a IN (2)`, `a < 1 OR a IN (2)`},
+		{`a < 2 OR a IN (1)`, `a < 2`},
 
 		{`a <= 1 OR a = 1`, `a <= 1`},
 		{`a <= 1 OR a = 2`, `a <= 1 OR a = 2`},
@@ -610,6 +622,9 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a <= 1 OR a <= 1`, `a <= 1`},
 		{`a <= 1 OR a <= 2`, `a <= 2`},
 		{`a <= 2 OR a <= 1`, `a <= 2`},
+		{`a <= 1 OR a IN (1)`, `a <= 1`},
+		{`a <= 1 OR a IN (2)`, `a <= 1 OR a IN (2)`},
+		{`a <= 2 OR a IN (1)`, `a <= 2`},
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
