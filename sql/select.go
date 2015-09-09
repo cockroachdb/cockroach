@@ -39,7 +39,7 @@ import (
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
 func (p *planner) Select(n *parser.Select) (planNode, error) {
-	scan := &scanNode{txn: p.txn}
+	scan := &scanNode{planner: p, txn: p.txn}
 	if err := scan.initFrom(p, n.From); err != nil {
 		return nil, err
 	}
@@ -75,58 +75,6 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		return nil, err
 	}
 	return limit, nil
-}
-
-type subqueryVisitor struct {
-	*planner
-	err error
-}
-
-var _ parser.Visitor = &subqueryVisitor{}
-
-func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre || v.err != nil {
-		return nil, expr
-	}
-	subquery, ok := expr.(*parser.Subquery)
-	if !ok {
-		return v, expr
-	}
-	var plan planNode
-	if plan, v.err = v.makePlan(subquery.Select); v.err != nil {
-		return nil, expr
-	}
-	var rows parser.DTuple
-	for plan.Next() {
-		values := plan.Values()
-		switch len(values) {
-		case 1:
-			// TODO(pmattis): This seems hokey, but if we don't do this then the
-			// subquery expands to a tuple of tuples instead of a tuple of values and
-			// an expression like "k IN (SELECT foo FROM bar)" will fail because
-			// we're comparing a single value against a tuple. Perhaps comparison of
-			// a single value against a tuple should succeed if the tuple is one
-			// element in length.
-			rows = append(rows, values[0])
-		default:
-			// The result from plan.Values() is only valid until the next call to
-			// plan.Next(), so make a copy.
-			valuesCopy := make(parser.DTuple, len(values))
-			copy(valuesCopy, values)
-			rows = append(rows, valuesCopy)
-		}
-	}
-	v.err = plan.Err()
-	if v.err != nil {
-		return nil, expr
-	}
-	return v, rows
-}
-
-func (p *planner) expandSubqueries(stmt parser.Statement) error {
-	v := subqueryVisitor{planner: p}
-	parser.WalkStmt(&v, stmt)
-	return v.err
 }
 
 // selectIndex analyzes the scanNode to determine if there is an index

@@ -74,8 +74,7 @@ func TypeCheckExpr(expr Expr) (Datum, error) {
 		return DummyBool, nil
 
 	case *ExistsExpr:
-		// The subquery within the exists should have been executed before
-		// expression evaluation and the exists nodes replaced with the result.
+		return TypeCheckExpr(t.Subquery)
 
 	case BytesVal, StrVal:
 		return DummyString, nil
@@ -113,8 +112,9 @@ func TypeCheckExpr(expr Expr) (Datum, error) {
 		return t, nil
 
 	case *Subquery:
-		// The subquery should have been executed before expression evaluation and
-		// the result placed into the expression tree.
+		// Avoid type checking subqueries. We need the subquery to be expanded in
+		// order to do so properly.
+		return DNull, nil
 
 	case *BinaryExpr:
 		return typeCheckBinaryExpr(t)

@@ -56,7 +56,7 @@ func moveMoney(db *sql.DB) {
 			update := `
 UPDATE bank.accounts
   SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
-  WHERE id IN ($1, $2) AND true IN (SELECT balance >= $3 FROM bank.accounts WHERE id = $1)
+  WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank.accounts WHERE id = $1)
 `
 			if _, err := db.Exec(update, from, to, amount); err != nil {
 				if log.V(1) {

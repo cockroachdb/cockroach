@@ -75,6 +75,9 @@ func TestNormalizeExpr(t *testing.T) {
 		{`random()`, `random()`},
 		{`notARealMethod()`, `notARealMethod()`},
 		{`-9223372036854775808`, `-9223372036854775808`},
+		{`(SELECT 1)`, `(SELECT 1)`},
+		{`(1, 2, 3) = (SELECT 1, 2, 3)`, `(1, 2, 3) = (SELECT 1, 2, 3)`},
+		{`(1, 2, 3) IN (SELECT 1, 2, 3)`, `(1, 2, 3) IN (SELECT 1, 2, 3)`},
 	}
 	for _, d := range testData {
 		q, err := ParseTraditional("SELECT " + d.expr)
