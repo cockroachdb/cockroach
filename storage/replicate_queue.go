@@ -77,19 +77,19 @@ func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (should
 
 	delta := rq.replicaDelta(zone, repl, repl.Desc())
 	if delta == 0 {
-		if log.V(1) {
+		if log.V(3) {
 			log.Infof("%s has the correct number of nodes", repl)
 		}
 		return false, 0
 	}
 	if delta > 0 {
-		if log.V(1) {
+		if log.V(3) {
 			log.Infof("%s needs to add %d nodes", repl, delta)
 		}
 		// For ranges which need additional replicas, increase the priority
 		return true, float64(delta + 10)
 	}
-	if log.V(1) {
+	if log.V(3) {
 		log.Infof("%s needs to remove %d nodes", repl, 0-delta)
 	}
 	// For ranges which have too many replicas, priority is absolute value of
@@ -139,12 +139,12 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 		if err != nil {
 			return err
 		}
-		if log.V(1) {
+		if log.V(3) {
 			log.Infof("Remove replica %s", removeReplica)
 		}
 
 		if err = repl.ChangeReplicas(proto.REMOVE_REPLICA, removeReplica, desc); err != nil {
-			if log.V(1) {
+			if log.V(3) {
 				log.Infof("Error removing replica %s", err)
 			}
 			return err

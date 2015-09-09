@@ -173,7 +173,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now proto.Timestamp) {
 	bq.Lock()
 	defer bq.Unlock()
 	should, priority := bq.impl.shouldQueue(now, repl)
-	if err := bq.addInternal(repl, should, priority); err != nil && log.V(1) {
+	if err := bq.addInternal(repl, should, priority); err != nil && log.V(3) {
 		log.Infof("couldn't add %s to queue %s: %s", repl, bq.name, err)
 	}
 }
@@ -201,7 +201,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 		return nil
 	}
 
-	if log.V(1) {
+	if log.V(3) {
 		log.Infof("adding replica %s to %s queue", repl, bq.name)
 	}
 	item = &replicaItem{value: repl, priority: priority}
@@ -227,7 +227,7 @@ func (bq *baseQueue) MaybeRemove(repl *Replica) {
 	bq.Lock()
 	defer bq.Unlock()
 	if item, ok := bq.replicas[repl.Desc().RangeID]; ok {
-		if log.V(1) {
+		if log.V(3) {
 			log.Infof("removing replica %s from %s queue", item.value, bq.name)
 		}
 		bq.remove(item.index)
@@ -291,7 +291,7 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 	bq.Unlock()
 	if repl != nil {
 		now := clock.Now()
-		if log.V(1) {
+		if log.V(3) {
 			log.Infof("processing replica %s from %s queue...", repl, bq.name)
 		}
 		// If the queue requires a replica to have the range leader lease in
@@ -301,7 +301,7 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 			// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 			args := &proto.GetRequest{RequestHeader: proto.RequestHeader{Timestamp: now}}
 			if err := repl.redirectOnOrAcquireLeaderLease(nil /* Trace */, args.Header().Timestamp); err != nil {
-				if log.V(1) {
+				if log.V(3) {
 					log.Infof("this replica of %s could not acquire leader lease; skipping...", repl)
 				}
 				return
