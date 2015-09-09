@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -542,4 +543,66 @@ func TestRapidMembershipChange(t *testing.T) {
 	// otherwise subject to concurrent access from our goroutine and the go
 	// testing machinery.
 	wg.Wait()
+}
+
+// TestConfigValidation verifies that the validation of a Config returns
+// an error if tick-related config has a non-positive value.
+func TestConfigValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	transport := NewLocalRPCTransport(stopper)
+	validConfig := Config{
+		Transport:              transport,
+		Storage:                nil,
+		Ticker:                 nil,
+		ElectionTimeoutTicks:   1,
+		HeartbeatIntervalTicks: 2,
+		TickInterval:           time.Hour,
+	}
+	if err := validConfig.validate(); err != nil {
+		t.Error(err)
+	}
+
+	config := validConfig
+	config.ElectionTimeoutTicks = -1
+	if err := config.validate(); !testutils.IsError(err,
+		"ElectionTimeoutTicks must be greater than zero") {
+		t.Errorf("Unexpected error of validate: %s", err)
+	}
+
+	config = validConfig
+	config.ElectionTimeoutTicks = 0
+	if err := config.validate(); !testutils.IsError(err,
+		"ElectionTimeoutTicks must be greater than zero") {
+		t.Errorf("Unexpected error of validate: %s", err)
+	}
+
+	config = validConfig
+	config.HeartbeatIntervalTicks = -1
+	if err := config.validate(); !testutils.IsError(err,
+		"HeartbeatIntervalTicks must be greater than zero") {
+		t.Errorf("Unexpected error of validate: %s", err)
+	}
+
+	config = validConfig
+	config.HeartbeatIntervalTicks = 0
+	if err := config.validate(); !testutils.IsError(err,
+		"HeartbeatIntervalTicks must be greater than zero") {
+		t.Errorf("Unexpected error of validate: %s", err)
+	}
+
+	config = validConfig
+	config.TickInterval = -1 * time.Hour
+	if err := config.validate(); !testutils.IsError(err,
+		"TickInterval must be greater than zero") {
+		t.Errorf("Unexpected error of validate: %s", err)
+	}
+
+	config = validConfig
+	config.TickInterval = 0
+	if err := config.validate(); !testutils.IsError(err,
+		"TickInterval must be greater than zero") {
+		t.Errorf("Unexpected error of validate: %s", err)
+	}
 }

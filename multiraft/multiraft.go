@@ -84,14 +84,14 @@ func (c *Config) validate() error {
 	if c.Transport == nil {
 		return util.Errorf("Transport is required")
 	}
-	if c.ElectionTimeoutTicks == 0 {
-		return util.Errorf("ElectionTimeoutTicks must be non-zero")
+	if c.ElectionTimeoutTicks <= 0 {
+		return util.Errorf("ElectionTimeoutTicks must be greater than zero")
 	}
-	if c.HeartbeatIntervalTicks == 0 {
-		return util.Errorf("HeartbeatIntervalTicks must be non-zero")
+	if c.HeartbeatIntervalTicks <= 0 {
+		return util.Errorf("HeartbeatIntervalTicks must be greater than zero")
 	}
-	if c.TickInterval == 0 {
-		return util.Errorf("TickInterval must be non-zero")
+	if c.TickInterval <= 0 {
+		return util.Errorf("TickInterval must be greater than zero")
 	}
 	return nil
 }
