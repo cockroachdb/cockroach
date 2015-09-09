@@ -191,7 +191,8 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 }
 
-// TestStoreRangeMergeLastRange verifies that merging the last range is a noop.
+// TestStoreRangeMergeLastRange verifies that merging the last range
+// fails.
 func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
@@ -199,18 +200,19 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 
 	// Merge last range.
 	args := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
-	if _, err := store.ExecuteCmd(context.Background(), &args); err != nil {
-		t.Fatalf("merge of last range should be a noop: %s", err)
+	if _, err := store.ExecuteCmd(context.Background(), &args); !testutils.IsError(err, "cannot merge final range") {
+		t.Fatalf("expected 'cannot merge final range' error; got %s", err)
 	}
 }
 
-// TestStoreRangeMergeNonConsecutive attempts to merge two ranges
-// that are not on same store.
-func TestStoreRangeMergeNonConsecutive(t *testing.T) {
+// TestStoreRangeMergeNonCollocated attempts to merge two ranges
+// that are not on the same stores.
+func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(bdarnell): fix this flaky test")
-	store, stopper := createTestStore(t)
-	defer stopper.Stop()
+	mtc := startMultiTestContext(t, 4)
+	defer mtc.Stop()
+
+	store := mtc.stores[0]
 
 	// Split into 3 ranges
 	argsSplit := adminSplitArgs(proto.KeyMin, []byte("d"), 1, store.StoreID())
@@ -236,37 +238,16 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc().StartKey, rangeC.Desc().StartKey)
 	}
 
-	// Read all of the system keys touched by the split transactions to
-	// resolve intents.  If intents are left unresolved then the
-	// asynchronous resolution may happen after the call to RemoveRange
-	// below, reviving the range and breaking the test.
-	if _, err := store.DB().Scan(keys.LocalMax, keys.SystemMax, 1000); err != nil {
-		t.Fatal(err)
-	}
+	// Replicate the ranges to different sets of stores. Ranges A and C
+	// are collocated, but B is different.
+	mtc.replicateRange(rangeA.Desc().RangeID, 0, 1, 2)
+	mtc.replicateRange(rangeB.Desc().RangeID, 0, 1, 3)
+	mtc.replicateRange(rangeC.Desc().RangeID, 0, 1, 2)
 
-	// Remove range B from store and attempt to merge. This is a bit of a hack and leaves some
-	// internals in an inconsistent state, so we must re-add the range later.
-	// This is sufficient for now to generate the "ranges not collocated" error; if this changes
-	// in the future we could make this test more realistic by using a multiTestContext
-	// and ChangeReplicas to arrange two ranges onto different stores/nodes.
-	//
-	// Wait for the leader lease to ensure things are quiescent before removing the range.
-	// See #702 and TestStoreExecuteCmdOutOfRange.
-	// TODO(bdarnell): refactor this test to rebalance the range onto a separate node
-	// when this is supported.
-	rangeB.WaitForLeaderLease(t)
-	if err := store.RemoveReplica(rangeB); err != nil {
-		t.Fatal(err)
-	}
-
+	// Attempt to merge.
 	desc := rangeA.Desc()
 	argsMerge := adminMergeArgs(desc.StartKey, 1, store.StoreID())
 	if _, err := rangeA.AdminMerge(argsMerge, desc); !testutils.IsError(err, "ranges not collocated") {
 		t.Fatalf("did not got expected error; got %s", err)
-	}
-
-	// Re-add the range. This is necessary for a clean shutdown.
-	if err := store.AddReplicaTest(rangeB); err != nil {
-		t.Fatal(err)
 	}
 }

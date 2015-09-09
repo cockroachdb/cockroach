@@ -311,7 +311,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 	// Case 2: encounter with range merge .
 	// Merge the range ["e", "g") and ["g", "\xff\xff") .
-	if err := db.AdminMerge("g"); err != nil {
+	if err := db.AdminMerge("e"); err != nil {
 		t.Fatal(err)
 	}
 	if rows, err := db.ReverseScan("d", "g", 0); err != nil {
