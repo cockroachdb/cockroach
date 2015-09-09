@@ -1576,9 +1576,8 @@ type BatchRequest struct {
 	Requests      []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
 }
 
-func (m *BatchRequest) Reset()         { *m = BatchRequest{} }
-func (m *BatchRequest) String() string { return proto1.CompactTextString(m) }
-func (*BatchRequest) ProtoMessage()    {}
+func (m *BatchRequest) Reset()      { *m = BatchRequest{} }
+func (*BatchRequest) ProtoMessage() {}
 
 func (m *BatchRequest) GetRequests() []RequestUnion {
 	if m != nil {

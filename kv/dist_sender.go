@@ -420,7 +420,7 @@ func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) 
 }
 
 // sendAttempt gathers and rearranges the replicas, and makes an RPC call.
-func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba *proto.BatchRequest, desc *proto.RangeDescriptor) (*proto.BatchResponse, error) {
+func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba proto.BatchRequest, desc *proto.RangeDescriptor) (*proto.BatchResponse, error) {
 	defer trace.Epoch("sending RPC")()
 
 	leader := ds.leaderCache.Lookup(proto.RangeID(desc.RangeID))
@@ -435,7 +435,7 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba *proto.BatchRequest, d
 
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front.
-	if !(proto.IsReadOnly(ba) && ba.Header().ReadConsistency == proto.INCONSISTENT) &&
+	if !(proto.IsReadOnly(&ba) && ba.ReadConsistency == proto.INCONSISTENT) &&
 		leader.StoreID > 0 {
 		if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 			replicas.MoveToFront(i)
@@ -443,7 +443,8 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba *proto.BatchRequest, d
 		}
 	}
 
-	resp, err := ds.sendRPC(trace, desc.RangeID, replicas, order, ba)
+	// TODO(tschottdorf) &ba -> ba
+	resp, err := ds.sendRPC(trace, desc.RangeID, replicas, order, &ba)
 	if err != nil {
 		return nil, err
 	}
@@ -458,7 +459,7 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba *proto.BatchRequest, d
 // the Batch into batches admissible for sending (preventing certain
 // illegal mixtures of requests), executes each individual part
 // (which may span multiple ranges), and recombines the response.
-func (ds *DistSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
+func (ds *DistSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
 	// TODO(tschottdorf): right place for this?
@@ -477,7 +478,7 @@ func (ds *DistSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*p
 // sendChunk is in charge of sending an "admissible" piece of batch, i.e. one
 // which doesn't need to be subdivided further before going to a range (so no
 // mixing of forward and reverse scans, etc).
-func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
+func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
 	// TODO(tschottdorf): prepare for removing Key and EndKey from BatchRequest,
 	// making sure that anything that relies on them goes bust.
 	ba.Key, ba.EndKey = nil, nil
@@ -562,7 +563,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 
 			curReply, err = func() (*proto.BatchResponse, error) {
 				// Truncate the request to our current key range.
-				untruncate, numActive, trErr := truncate(ba, desc, from, to)
+				untruncate, numActive, trErr := truncate(&ba, desc, from, to)
 				if numActive == 0 {
 					untruncate()
 					// This shouldn't happen in the wild, but some tests
@@ -715,7 +716,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba *proto.BatchRequest) (*p
 			// one, and unless both descriptors are stale, the next descriptor's
 			// StartKey would move us to the beginning of the current range,
 			// resulting in a duplicate scan.
-			from = next(ba, desc.EndKey) // TODO next
+			from = next(ba, desc.EndKey)
 		}
 		trace.Event("querying next range")
 	}

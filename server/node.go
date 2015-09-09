@@ -484,7 +484,7 @@ func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
 	ctx := tracer.ToCtx((*Node)(n).context(), trace)
 
 	ba, unwrap := client.MaybeWrap(args)
-	br, err := n.lSender.SendBatch(ctx, ba)
+	br, err := n.lSender.SendBatch(ctx, *ba)
 	if err != nil {
 		br = &proto.BatchResponse{}
 		trace.Event(fmt.Sprintf("error: %T", err))

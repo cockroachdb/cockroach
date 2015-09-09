@@ -107,10 +107,10 @@ func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to prot
 }
 
 // SenderFn is a function that implements a Sender.
-type senderFn func(context.Context, *proto.BatchRequest) (*proto.BatchResponse, error)
+type senderFn func(context.Context, proto.BatchRequest) (*proto.BatchResponse, error)
 
 // SendBatch implements batch.Sender.
-func (f senderFn) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
+func (f senderFn) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
 	return f(ctx, ba)
 }
 
@@ -132,7 +132,7 @@ func newChunkingSender(f senderFn) client.BatchSender {
 // suggests that you're multi-range. In those cases, the wrapped sender should
 // return an error so that we split and retry once the chunk which contains
 // EndTransaction (i.e. the last one).
-func (cs *chunkingSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
+func (cs *chunkingSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
 	if len(ba.Requests) < 1 {
 		panic("empty batch")
 	}
@@ -182,11 +182,11 @@ func (cs *chunkingSender) SendBatch(ctx context.Context, ba *proto.BatchRequest)
 	return reply, nil
 }
 
-// Prev gives the right boundary of the union of all requests which don't
+// prev gives the right boundary of the union of all requests which don't
 // affect keys larger than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func prev(ba *proto.BatchRequest, k proto.Key) proto.Key {
+func prev(ba proto.BatchRequest, k proto.Key) proto.Key {
 	candidate := proto.KeyMin
 	for _, union := range ba.Requests {
 		h := union.GetValue().(proto.Request).Header()
@@ -213,11 +213,11 @@ func prev(ba *proto.BatchRequest, k proto.Key) proto.Key {
 	return candidate
 }
 
-// Next gives the left boundary of the union of all requests which don't
+// next gives the left boundary of the union of all requests which don't
 // affect keys less than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func next(ba *proto.BatchRequest, k proto.Key) proto.Key {
+func next(ba proto.BatchRequest, k proto.Key) proto.Key {
 	candidate := proto.KeyMax
 	for _, union := range ba.Requests {
 		h := union.GetValue().(proto.Request).Header()

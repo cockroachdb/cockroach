@@ -573,7 +573,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
-		ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ *proto.BatchRequest) (*proto.BatchResponse, error) {
+		ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ proto.BatchRequest) (*proto.BatchResponse, error) {
 			return nil, test.err
 		}), clock, false, nil, stopper)
 		reply := &proto.PutResponse{}
@@ -618,7 +618,7 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano)
 	var called bool
 	var alwaysError = errors.New("success")
-	ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ *proto.BatchRequest) (*proto.BatchResponse, error) {
+	ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ proto.BatchRequest) (*proto.BatchResponse, error) {
 		called = true
 		// Returning this error is an easy way of preventing heartbeats
 		// to be started for otherwise "successful" calls.

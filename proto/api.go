@@ -130,6 +130,7 @@ func (ba *BatchRequest) IsWrite() bool {
 }
 
 // IsReadOnly returns true if all requests within are read-only.
+// TODO(tschottdorf): unify with proto.IsReadOnly
 func (ba *BatchRequest) IsReadOnly() bool {
 	for i := range ba.Requests {
 		if !IsReadOnly(ba.Requests[i].GetValue().(Request)) {
@@ -762,9 +763,9 @@ func (ba BatchRequest) Split() [][]RequestUnion {
 // String gives a brief summary of the contained requests and keys in the batch.
 // TODO(tschottdorf): the key range is useful information, but requires `keys`.
 // See #2198.
-func String(br *BatchRequest) string {
+func (ba BatchRequest) String() string {
 	var str []string
-	for _, arg := range br.Requests {
+	for _, arg := range ba.Requests {
 		req := arg.GetValue().(Request)
 		h := req.Header()
 		str = append(str, fmt.Sprintf("%T [%s,%s)", req, h.Key, h.EndKey))

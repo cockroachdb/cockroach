@@ -119,7 +119,7 @@ func (ls *LocalSender) GetStoreIDs() []proto.StoreID {
 }
 
 // SendBatch implements batch.Sender.
-func (ls *LocalSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
+func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
 	trace := tracer.FromCtx(ctx)
 	var store *storage.Store
 	var err error
@@ -159,7 +159,8 @@ func (ls *LocalSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*
 		}
 		{
 			var tmpR proto.Response
-			tmpR, err = store.ExecuteCmd(ctx, ba)
+			// TODO(tschottdorf): &ba -> ba
+			tmpR, err = store.ExecuteCmd(ctx, &ba)
 			// TODO(tschottdorf): remove this dance once BatchResponse is returned.
 			if tmpR != nil {
 				br = tmpR.(*proto.BatchResponse)
@@ -247,7 +248,7 @@ func (ls *LocalSender) rangeLookup(key proto.Key, options lookupOptions, _ *prot
 		ConsiderIntents: options.considerIntents,
 		Reverse:         options.useReverseScan,
 	})
-	br, err := ls.SendBatch(context.Background(), ba)
+	br, err := ls.SendBatch(context.Background(), *ba)
 	if err != nil {
 		return nil, err
 	}

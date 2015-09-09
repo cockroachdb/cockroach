@@ -323,14 +323,14 @@ func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 // key ranges for eventual cleanup via resolved write intents; they're
 // tagged to an outgoing EndTransaction request, with the receiving
 // replica in charge of resolving them.
-func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
-	tc.maybeBeginTxn(ba)
+func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
+	tc.maybeBeginTxn(&ba)
 	ba.CmdID = ba.GetOrCreateCmdID(tc.clock.PhysicalNow())
 	var startNS int64
 
 	// This is the earliest point at which the request has a ClientCmdID and/or
 	// TxnID (if applicable). Begin a Trace which follows this request.
-	trace := tc.tracer.NewTrace(ba)
+	trace := tc.tracer.NewTrace(&ba)
 	defer trace.Finalize()
 	// TODO(tschottdorf): always "Batch"
 	defer trace.Epoch(fmt.Sprintf("sending %s", ba.Method()))()
@@ -618,7 +618,7 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 
 	hb := &proto.HeartbeatTxnRequest{}
 	hb.Key = txn.Key
-	ba := &proto.BatchRequest{}
+	ba := proto.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
 	ba.Key = txn.Key
 	ba.Txn = &txn
@@ -649,7 +649,7 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 // error cases, applying those updates to the corresponding txnMeta
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
-func (tc *TxnCoordSender) updateState(ctx context.Context, ba *proto.BatchRequest, br *proto.BatchResponse, err error) error {
+func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest, br *proto.BatchResponse, err error) error {
 	trace := tracer.FromCtx(ctx)
 	newTxn := &proto.Transaction{}
 	newTxn.Update(ba.GetTxn())
@@ -773,7 +773,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba *proto.BatchReques
 // give this error back to the client, our options are limited. We'll have to
 // run the whole thing for them, or any restart will still end up at the client
 // which will not be prepared to be handed a Txn.
-func (tc *TxnCoordSender) resendWithTxn(ba *proto.BatchRequest) (*proto.BatchResponse, error) {
+func (tc *TxnCoordSender) resendWithTxn(ba proto.BatchRequest) (*proto.BatchResponse, error) {
 	// Run a one-off transaction with that single command.
 	if log.V(1) {
 		log.Infof("%s: auto-wrapping in txn and re-executing: ", ba)

@@ -35,7 +35,7 @@ func SendCallConverted(sender BatchSender, ctx context.Context, call proto.Call)
 	defer unwrap(call)
 
 	{
-		br := call.Args.(*proto.BatchRequest)
+		br := *call.Args.(*proto.BatchRequest)
 		if len(br.Requests) == 0 {
 			panic(br)
 		}
@@ -45,7 +45,7 @@ func SendCallConverted(sender BatchSender, ctx context.Context, call proto.Call)
 		}
 	}
 
-	reply, err := sender.SendBatch(ctx, call.Args.(*proto.BatchRequest))
+	reply, err := sender.SendBatch(ctx, *call.Args.(*proto.BatchRequest))
 
 	if reply != nil {
 		call.Reply.Reset() // required for BatchRequest (concats response otherwise)

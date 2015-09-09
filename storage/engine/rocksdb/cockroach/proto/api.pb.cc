@@ -1509,18 +1509,19 @@ void protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto() {
     "oach.proto.LeaderLeaseResponseH\000\022<\n\014reve"
     "rse_scan\030\024 \001(\0132$.cockroach.proto.Reverse"
     "ScanResponseH\000\022-\n\004noop\030\025 \001(\0132\035.cockroach"
-    ".proto.NoopResponseH\000:\004\310\240\037\001B\007\n\005value\"\177\n\014"
-    "BatchRequest\0228\n\006header\030\001 \001(\0132\036.cockroach"
-    ".proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\0225\n\010reques"
-    "ts\030\002 \003(\0132\035.cockroach.proto.RequestUnionB"
-    "\004\310\336\037\000\"\203\001\n\rBatchResponse\0229\n\006header\030\001 \001(\0132"
-    "\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336"
-    "\037\001\0227\n\tresponses\030\002 \003(\0132\036.cockroach.proto."
-    "ResponseUnionB\004\310\336\037\000*L\n\023ReadConsistencyTy"
-    "pe\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INC"
-    "ONSISTENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n\016PUSH"
-    "_TIMESTAMP\020\000\022\r\n\tABORT_TXN\020\001\022\017\n\013CLEANUP_T"
-    "XN\020\002\032\004\210\243\036\000B\027Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 8515);
+    ".proto.NoopResponseH\000:\004\310\240\037\001B\007\n\005value\"\205\001\n"
+    "\014BatchRequest\0228\n\006header\030\001 \001(\0132\036.cockroac"
+    "h.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\0225\n\010reque"
+    "sts\030\002 \003(\0132\035.cockroach.proto.RequestUnion"
+    "B\004\310\336\037\000:\004\230\240\037\000\"\203\001\n\rBatchResponse\0229\n\006header"
+    "\030\001 \001(\0132\037.cockroach.proto.ResponseHeaderB"
+    "\010\310\336\037\000\320\336\037\001\0227\n\tresponses\030\002 \003(\0132\036.cockroach"
+    ".proto.ResponseUnionB\004\310\336\037\000*L\n\023ReadConsis"
+    "tencyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001"
+    "\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022"
+    "\022\n\016PUSH_TIMESTAMP\020\000\022\r\n\tABORT_TXN\020\001\022\017\n\013CL"
+    "EANUP_TXN\020\002\032\004\210\243\036\000B\027Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001\220\343"
+    "\036\000", 8522);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/api.proto", &protobuf_RegisterTypes);
   ClientCmdID::default_instance_ = new ClientCmdID();

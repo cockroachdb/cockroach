@@ -63,10 +63,10 @@ func TestBatchPrevNext(t *testing.T) {
 			args.Key, args.EndKey = span.Start, span.End
 			ba.Add(args)
 		}
-		if next := next(&ba, proto.Key(test.key)); !bytes.Equal(next, proto.Key(test.expFW)) {
+		if next := next(ba, proto.Key(test.key)); !bytes.Equal(next, proto.Key(test.expFW)) {
 			t.Errorf("%d: next: expected %q, got %q", i, test.expFW, next)
 		}
-		if prev := prev(&ba, proto.Key(test.key)); !bytes.Equal(prev, proto.Key(test.expBW)) {
+		if prev := prev(ba, proto.Key(test.key)); !bytes.Equal(prev, proto.Key(test.expBW)) {
 			t.Errorf("%d: prev: expected %q, got %q", i, test.expBW, prev)
 		}
 	}

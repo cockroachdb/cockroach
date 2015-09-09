@@ -627,6 +627,7 @@ message ResponseUnion {
 // calls must not have transactions specified. The same applies to
 // the User and UserPriority fields.
 message BatchRequest {
+  option (gogoproto.goproto_stringer) = false;
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
 }

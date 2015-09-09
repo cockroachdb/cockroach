@@ -337,7 +337,7 @@ func MakeTablePrefix(tableID uint32) []byte {
 // through the cracks.
 // TODO(tschottdorf): ideally method on *BatchRequest. See #2198.
 // TODO(tschottdorf): return a keys.Span?
-func Range(br *proto.BatchRequest) (proto.Key, proto.Key) {
+func Range(br proto.BatchRequest) (proto.Key, proto.Key) {
 	from := proto.KeyMax
 	to := proto.KeyMin
 	for _, arg := range br.Requests {
