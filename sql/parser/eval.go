@@ -1512,7 +1512,11 @@ func ParseDate(s DString) (DDate, error) {
 // ParseTimestamp parses the timestamp.
 func ParseTimestamp(s DString) (DTimestamp, error) {
 	str := string(s)
-	t, err := time.Parse(timestampFormat, str)
+	t, err := time.Parse(dateFormat, str)
+	if err == nil {
+		return DTimestamp{Time: t}, nil
+	}
+	t, err = time.Parse(timestampFormat, str)
 	if err == nil {
 		t = t.UTC()
 		return DTimestamp{Time: t}, nil
