@@ -20,6 +20,8 @@ package sql_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -28,11 +30,12 @@ import (
 // a rename operation.
 func TestRenameTable(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	config.TestingDisableTableSplits = true
+	defer func() { config.TestingDisableTableSplits = false }()
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)
 
-	// The first `MaxReservedDescID` (as well as 0) are set aside.
-	counter := int64(sql.MaxReservedDescID + 1)
+	counter := int64(keys.MaxReservedDescID + 1)
 
 	// Table creation should fail, and nothing should have been written.
 	oldDBID := sql.ID(counter)

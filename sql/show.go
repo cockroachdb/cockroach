@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -76,7 +77,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	//
 	//   SELECT id FROM system.namespace WHERE parentID = 0
 
-	prefix := MakeNameMetadataKey(RootNamespaceID, "")
+	prefix := MakeNameMetadataKey(keys.RootNamespaceID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err

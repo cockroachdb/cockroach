@@ -23,10 +23,8 @@ package storage
 import (
 	"bytes"
 	"crypto/sha1"
-	"crypto/sha256"
 	"fmt"
 	"math/rand"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -102,20 +99,6 @@ const (
 	// DefaultLeaderLeaseDuration is the default duration of the leader lease.
 	DefaultLeaderLeaseDuration = time.Second
 )
-
-// configDescriptor describes administrative configuration maps
-// affecting ranges of the key-value map by key prefix.
-type configDescriptor struct {
-	keyPrefix proto.Key         // Range key prefix
-	gossipKey string            // Gossip key
-	configI   gogoproto.Message // Config struct interface
-}
-
-// configDescriptors is an array containing the
-// zone configuration descriptors.
-var configDescriptors = [...]*configDescriptor{
-	{keys.ConfigZonePrefix, gossip.KeyConfigZone, &config.ZoneConfig{}},
-}
 
 // tsCacheMethods specifies the set of methods which affect the
 // timestamp cache. This syntax creates a sparse array with maximum
@@ -202,7 +185,6 @@ type Replica struct {
 	lastIndex uint64
 	// Last index applied to the state machine. Updated atomically.
 	appliedIndex uint64
-	configHashes map[int][]byte // Config map sha256 hashes @ last gossip
 	systemDBHash []byte         // sha1 hash of the system config @ last gossip
 	lease        unsafe.Pointer // Information for leader lease, updated atomically
 	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
@@ -243,11 +225,6 @@ func NewReplica(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) 
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
 
-	// Gossip configs as they might not be gossiped until configs
-	// are updated or a leader lease is acquired/extended.
-	r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
-		return r.ContainsKey(configPrefix)
-	})
 	if r.ContainsKey(keys.SystemDBSpan.Start) {
 		r.maybeGossipSystemConfig()
 	}
@@ -1026,15 +1003,6 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode
 		r.rm.EventFeed().updateRange(r, bArgs.Method(), &ms)
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
-		// Maybe update gossip configs if the command is not part of a transaction.
-		// If the command is part of an uncommitted transaction, we rely on the
-		// periodic configGossipInterval loop since we will not see the update
-		// until the transaction is committed.
-		if key := bArgs.Key; key.Less(keys.SystemMax) && bArgs.Txn == nil {
-			r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
-				return bytes.HasPrefix(key, configPrefix)
-			})
-		}
 	}
 
 	return bReply, rErr
@@ -1213,65 +1181,6 @@ func (r *Replica) maybeGossipFirstRange() error {
 	return nil
 }
 
-// maybeGossipConfigs gossips those configuration maps for which the supplied
-// function returns true and whose contents are marked dirty. Configuration
-// maps include zones. The store is in charge of
-// the initial update, and the range itself re-triggers updates following
-// writes that may have altered any of the maps.
-//
-// Note that maybeGossipConfigs gossips information only when the
-// lease is actually held. The method does not request a leader lease
-// here since LeaderLease and applyRaftCommand call the method and we
-// need to avoid deadlocking in redirectOnOrObtainLeaderLease.
-// TODO(tschottdorf): Can possibly simplify.
-func (r *Replica) maybeGossipConfigs(match func(proto.Key) bool) {
-	r.Lock()
-	defer r.Unlock()
-	r.maybeGossipConfigsLocked(match)
-}
-
-func (r *Replica) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool) {
-	if r.rm.Gossip() == nil || !r.isInitialized() {
-		return
-	}
-
-	if lease := r.getLease(); !lease.OwnedBy(r.rm.RaftNodeID()) || !lease.Covers(r.rm.Clock().Now()) {
-		// Do not gossip when a leader lease is not held.
-		return
-	}
-
-	ctx := r.context()
-	for i, cd := range configDescriptors {
-		if match(cd.keyPrefix) {
-			// Check for a bad range split. This should never happen as ranges
-			// cannot be split mid-config.
-			if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
-				// If we ever implement configs that span multiple ranges,
-				// we must update store.startGossip accordingly. For the
-				// time being, it will only fire the first range.
-				log.Fatalc(ctx, "range splits configuration values for %s", cd.keyPrefix)
-			}
-			configMap, hash, err := loadConfigMap(r.rm.Engine(), cd.keyPrefix, cd.configI)
-			if err != nil {
-				log.Errorc(ctx, "failed loading %s config map: %s", cd.gossipKey, err)
-				continue
-			}
-			if r.configHashes == nil {
-				r.configHashes = map[int][]byte{}
-			}
-			if prevHash, ok := r.configHashes[i]; !ok || !bytes.Equal(prevHash, hash) {
-				r.configHashes[i] = hash
-				if log.V(1) {
-					log.Infoc(ctx, "gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RangeID)
-				}
-				if err := r.rm.Gossip().AddInfoProto(cd.gossipKey, configMap, 0); err != nil {
-					log.Errorc(ctx, "failed to gossip %s configMap: %s", cd.gossipKey, err)
-				}
-			}
-		}
-	}
-}
-
 // maybeGossipSystemConfig scans the entire SystemDB span and gossips it.
 // The first call is on NewReplica. Further calls come from the trigger
 // on an EndTransactionRequest.
@@ -1308,15 +1217,18 @@ func (r *Replica) maybeGossipSystemConfigLocked() {
 		return
 	}
 
-	cfg := &config.SystemConfig{Values: kvs}
-
-	r.systemDBHash = hash
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping system config from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
 	}
-	if err := r.rm.Gossip().AddInfoProto(gossip.KeySystemDB, cfg, 0); err != nil {
+
+	cfg := &config.SystemConfig{Values: kvs}
+	if err := r.rm.Gossip().AddInfoProto(gossip.KeySystemConfig, cfg, 0); err != nil {
 		log.Errorc(ctx, "failed to gossip system config: %s", err)
+		return
 	}
+
+	// Successfully gossiped. Update tracking hash.
+	r.systemDBHash = hash
 }
 
 func (r *Replica) handleSkippedIntents(args proto.Request, intents []proto.Intent) {
@@ -1510,31 +1422,6 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 	// Wait until the local ResolveIntents batch has been submitted to
 	// raft. No-op if all were non-local.
 	wg.Wait()
-}
-
-// loadConfigMap scans the config entries under keyPrefix and
-// instantiates/returns a config map and its sha256 hash. Prefix
-// configuration maps include zones.
-func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI gogoproto.Message) (*config.PrefixConfigMap, []byte, error) {
-	// TODO(tschottdorf): Currently this does not handle intents well.
-	kvs, _, err := engine.MVCCScan(eng, keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true /* consistent */, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	var cfgs []config.PrefixConfig
-	sha := sha256.New()
-	for _, kv := range kvs {
-		// Instantiate an instance of the config type by unmarshalling
-		// proto encoded config from the Value into a new instance of configI.
-		cfg := reflect.New(reflect.TypeOf(configI).Elem()).Interface().(gogoproto.Message)
-		if err := gogoproto.Unmarshal(kv.Value.Bytes, cfg); err != nil {
-			return nil, nil, util.Errorf("unable to unmarshal config key %s: %s", string(kv.Key), err)
-		}
-		cfgs = append(cfgs, config.MakePrefixConfig(bytes.TrimPrefix(kv.Key, keyPrefix), nil, cfg))
-		sha.Write(kv.Value.Bytes)
-	}
-	m, err := config.NewPrefixConfigMap(cfgs)
-	return m, sha.Sum(nil), err
 }
 
 // loadSystemDBSpan scans the entire SystemDB span and returns the full list of

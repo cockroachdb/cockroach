@@ -168,23 +168,16 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	// Override default zone config.
+	previousMaxBytes := config.DefaultZoneConfig.RangeMaxBytes
+	config.DefaultZoneConfig.RangeMaxBytes = 1 << 18
+	defer func() { config.DefaultZoneConfig.RangeMaxBytes = previousMaxBytes }()
+
 	s := createTestDB(t)
+	// This is purely to silence log spam.
+	config.TestingSetupZoneConfigHook(s.Stopper)
 	defer s.Stop()
 	setTestRetryOptions()
-
-	// Rewrite a zone config with low max bytes.
-	zoneConfig := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{},
-			{},
-			{},
-		},
-		RangeMinBytes: 1 << 8,
-		RangeMaxBytes: 1 << 18,
-	}
-	if err := s.DB.Put(keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin), zoneConfig); err != nil {
-		t.Fatal(err)
-	}
 
 	// Start test writer write about a 32K/key so there aren't too many writes necessary to split 64K range.
 	done := make(chan struct{})

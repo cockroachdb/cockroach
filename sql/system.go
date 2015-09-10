@@ -28,20 +28,6 @@ import (
 )
 
 const (
-	// MaxReservedDescID is the maximum reserved descriptor ID.
-	// All objects with ID <= MaxReservedDescID are system object
-	// with special rules.
-	MaxReservedDescID ID = keys.MaxReservedDescID
-	// RootNamespaceID is the ID of the root namespace.
-	RootNamespaceID ID = 0
-
-	// System IDs should remain <= MaxReservedDescID.
-	systemDatabaseID  ID = 1
-	namespaceTableID  ID = 2
-	descriptorTableID ID = 3
-	usersTableID      ID = 4
-	zonesTableID      ID = 5
-
 	// sql CREATE commands and full schema for each system table.
 	namespaceTableSchema = `
 CREATE TABLE system.namespace (
@@ -75,34 +61,34 @@ var (
 	// SystemDB is the descriptor for the system database.
 	SystemDB = DatabaseDescriptor{
 		Name: "system",
-		ID:   systemDatabaseID,
+		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
 		Privileges: NewPrivilegeDescriptor(security.RootUser,
-			SystemAllowedPrivileges[systemDatabaseID]),
+			SystemAllowedPrivileges[keys.SystemDatabaseID]),
 	}
 
 	// NamespaceTable is the descriptor for the namespace table.
-	NamespaceTable = createSystemTable(namespaceTableID, namespaceTableSchema)
+	NamespaceTable = createSystemTable(keys.NamespaceTableID, namespaceTableSchema)
 
 	// DescriptorTable is the descriptor for the descriptor table.
-	DescriptorTable = createSystemTable(descriptorTableID, descriptorTableSchema)
+	DescriptorTable = createSystemTable(keys.DescriptorTableID, descriptorTableSchema)
 
 	// UsersTable is the descriptor for the users table.
-	UsersTable = createSystemTable(usersTableID, usersTableSchema)
+	UsersTable = createSystemTable(keys.UsersTableID, usersTableSchema)
 
 	// ZonesTable is the descriptor for the zones table.
-	ZonesTable = createSystemTable(zonesTableID, zonesTableSchema)
+	ZonesTable = createSystemTable(keys.ZonesTableID, zonesTableSchema)
 
 	// SystemAllowedPrivileges describes the privileges allowed for each
 	// system object. No user may have more than those privileges, and
 	// the root user must have exactly those privileges.
 	// CREATE|DROP|ALL should always be denied.
 	SystemAllowedPrivileges = map[ID]privilege.List{
-		systemDatabaseID:  privilege.ReadData,
-		namespaceTableID:  privilege.ReadData,
-		descriptorTableID: privilege.ReadData,
-		usersTableID:      privilege.ReadWriteData,
-		zonesTableID:      privilege.ReadWriteData,
+		keys.SystemDatabaseID:  privilege.ReadData,
+		keys.NamespaceTableID:  privilege.ReadData,
+		keys.DescriptorTableID: privilege.ReadData,
+		keys.UsersTableID:      privilege.ReadWriteData,
+		keys.ZonesTableID:      privilege.ReadWriteData,
 	}
 
 	// NumUsedSystemIDs is only used in tests that need to know the
@@ -118,7 +104,7 @@ func createSystemTable(id ID, cmd string) TableDescriptor {
 		log.Fatal(err)
 	}
 
-	desc, err := makeTableDesc(stmts[0].(*parser.CreateTable), systemDatabaseID)
+	desc, err := makeTableDesc(stmts[0].(*parser.CreateTable), keys.SystemDatabaseID)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -143,7 +129,7 @@ func GetInitialSystemValues() []proto.KeyValue {
 		parentID ID
 		desc     descriptorProto
 	}{
-		{RootNamespaceID, &SystemDB},
+		{keys.RootNamespaceID, &SystemDB},
 		{SystemDB.ID, &NamespaceTable},
 		{SystemDB.ID, &DescriptorTable},
 		{SystemDB.ID, &UsersTable},
@@ -159,7 +145,7 @@ func GetInitialSystemValues() []proto.KeyValue {
 
 	// Descriptor ID generator.
 	value := proto.Value{}
-	value.SetInteger(int64(MaxReservedDescID + 1))
+	value.SetInteger(int64(keys.MaxReservedDescID + 1))
 	ret[i] = proto.KeyValue{
 		Key:   keys.DescIDGenerator,
 		Value: value,
@@ -192,5 +178,5 @@ func GetInitialSystemValues() []proto.KeyValue {
 
 // IsSystemID returns true if this ID is reserved for system objects.
 func IsSystemID(id ID) bool {
-	return id > 0 && id <= MaxReservedDescID
+	return id > 0 && id <= keys.MaxReservedDescID
 }

@@ -62,20 +62,27 @@ func (rq replicateQueue) needsLeaderLease() bool {
 }
 
 func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (shouldQ bool, priority float64) {
-	// If the replica's range spans multiple zones, ignore it until the split
-	// queue has processed it.
-	if len(computeSplitKeys(rq.gossip, repl)) > 0 {
-		return
-	}
-
-	// Load the zone config to find the desired replica attributes.
-	zone, err := lookupZoneConfig(rq.gossip, repl)
+	// Load the system config.
+	cfg, err := rq.gossip.GetSystemConfig()
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	action, priority := rq.allocator.ComputeAction(zone, repl.Desc())
+	desc := repl.Desc()
+	if len(cfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
+		// If the replica's range needs splitting, wait until done.
+		return
+	}
+
+	// Find the zone config for this range.
+	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	action, priority := rq.allocator.ComputeAction(*zone, repl.Desc())
 	if action == aaNoop {
 		return false, 0
 	}
@@ -83,13 +90,22 @@ func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (should
 }
 
 func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
-	zone, err := lookupZoneConfig(rq.gossip, repl)
+	// Load the system config.
+	cfg, err := rq.gossip.GetSystemConfig()
 	if err != nil {
 		return err
 	}
 
+	// TODO(marc): shouldn't we be checking whether the range needs to be split?
+
 	desc := repl.Desc()
-	action, _ := rq.allocator.ComputeAction(zone, desc)
+	// Find the zone config for this range.
+	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+	if err != nil {
+		return err
+	}
+
+	action, _ := rq.allocator.ComputeAction(*zone, desc)
 	if action == aaNoop {
 		// No action to take, return without re-queueing.
 		return nil

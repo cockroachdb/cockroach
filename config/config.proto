@@ -54,36 +54,6 @@ message ZoneConfig {
   optional GCPolicy gc = 4 [(gogoproto.customname) = "GC", (gogoproto.moretags) = "yaml:\"gc,omitempty\""];
 }
 
-// PrefixConfigMap contains a slice of prefix configs, sorted by
-// prefix. Along with various accessor methods, the config map
-// also contains additional prefix configs in the slice to
-// account for the ends of prefix ranges.
-message PrefixConfigMap {
-  repeated PrefixConfig configs = 1 [(gogoproto.nullable) = false];
-}
-
-// PrefixConfig relates a prefix key to a config object. PrefixConfig
-// objects are the constituents of PrefixConfigMap objects. In order to
-// support binary searches of hierarchical PrefixConfig objects,
-// end-of-prefix PrefixConfig objects are added to a PrefixConfigMap to
-// demarcate the end of a prefix range. Such end-of-range sentinels
-// need to refer back to their parent prefix.
-// The Canonical key refers to this parent PrefixConfig by its prefix.
-message PrefixConfig {
-  option (gogoproto.goproto_stringer) = false;
-
-  optional bytes prefix = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.Key"];
-  optional bytes canonical = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.Key"];
-  optional ConfigUnion config = 3 [(gogoproto.nullable) = false];
-}
-
-message ConfigUnion {
-  option (gogoproto.onlyone) = true;
-  oneof value {
-    ZoneConfig zone = 1;
-  }
-}
-
 message SystemConfig {
   repeated proto.KeyValue values = 1 [(gogoproto.nullable) = false];
 }

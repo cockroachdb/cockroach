@@ -18,7 +18,7 @@
 package server
 
 import (
-	configutil "github.com/cockroachdb/cockroach/config/util"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
@@ -168,10 +168,9 @@ func (ts *TestServer) Start() error {
 		return err
 	}
 
-	if err := configutil.SetDefaultRangeReplicaNum(ts.db, 1); err != nil {
-		return err
-	}
-
+	// TODO(marc): set this in the zones table when we have an entry
+	// for the default cluster-wide zone config.
+	config.DefaultZoneConfig.ReplicaAttrs = []proto.Attributes{{}}
 	return nil
 }
 

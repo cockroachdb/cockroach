@@ -20,13 +20,14 @@ package storage
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -304,6 +305,18 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	const now int64 = 48 * 60 * 60 * 1E9 // 2d past the epoch
 	tc.manualClock.Set(now)
 
+	// TODO: why is this needed to trigger intent resolution?
+	key := proto.Key("foo")
+	timestamp := proto.MinTimestamp.Next()
+	if err := engine.MVCCPutProto(tc.engine, nil, key, timestamp, nil, &config.ZoneConfig{}); err != nil {
+		t.Fatal(err)
+	}
+
+	timestamp = timestamp.Next()
+	if err := engine.MVCCPutProto(tc.engine, nil, key, timestamp, nil, &config.ZoneConfig{}); err != nil {
+		t.Fatal(err)
+	}
+
 	txns := []*proto.Transaction{
 		newTransaction("txn1", proto.Key("0-00000"), 1, proto.SERIALIZABLE, tc.clock),
 		newTransaction("txn2", proto.Key("1-00000"), 1, proto.SERIALIZABLE, tc.clock),
@@ -352,12 +365,15 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 }
 
-// TestGCQueueLookupGCPolicy verifies the hierarchical lookup of GC
-// policy in the event that the longest matching key prefix does not
-// have a zone configured.
+// TestGCQueueLookupGCPolicy verifies gc policy lookups.
 func TestGCQueueLookupGCPolicy(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	zoneConfig1 := config.ZoneConfig{
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	zoneDefault := config.DefaultZoneConfig
+	zoneTable1000 := &config.ZoneConfig{
 		ReplicaAttrs:  []proto.Attributes{},
 		RangeMinBytes: 1 << 10,
 		RangeMaxBytes: 1 << 18,
@@ -365,45 +381,53 @@ func TestGCQueueLookupGCPolicy(t *testing.T) {
 			TTLSeconds: 60 * 60, // 1 hour only
 		},
 	}
-	zoneConfig2 := config.ZoneConfig{
+	zoneTable1002 := &config.ZoneConfig{
 		ReplicaAttrs:  []proto.Attributes{},
 		RangeMinBytes: 1 << 10,
 		RangeMaxBytes: 1 << 18,
 		// Note that there is no GC set here, so we should select the
 		// hierarchical parent's GC policy; in this case, zoneConfig1.
 	}
-	configs := []config.PrefixConfig{
-		config.MakePrefixConfig(proto.KeyMin, nil, &zoneConfig1),
-		config.MakePrefixConfig(proto.Key("/db1"), nil, &zoneConfig2),
-	}
-	pcc, err := config.NewPrefixConfigMap(configs)
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	// Setup test context and add new zone config map. This would normally
-	// start a split, but splits are disabled in this testing configuration
-	// because the mock DB does not support splits.
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-	if err := tc.rng.rm.Gossip().AddInfoProto(gossip.KeyConfigZone, pcc, 0); err != nil {
-		t.Fatal(err)
-	}
+	// Add configs to testing helper.
+	config.TestingSetZoneConfig(1000, zoneTable1000)
+	config.TestingSetZoneConfig(1002, zoneTable1002)
 
-	// Create a new range within "/db1" and verify that lookup of
-	// zone config results in the
-	rng2 := createRange(tc.store, 2, proto.Key("/db1/a"), proto.Key("/db1/b"))
-	if err := tc.store.AddReplicaTest(rng2); err != nil {
-		t.Fatal(err)
+	testCases := []struct {
+		start, end proto.Key
+		zoneConfig *config.ZoneConfig
+		errStr     string
+	}{
+		{proto.KeyMin, proto.KeyMax, nil, "spans multiple ranges"},
+		{keys.MakeTablePrefix(1000), keys.MakeTablePrefix(10002), nil, "spans multiple ranges"},
+		{proto.KeyMin, proto.Key("a"), zoneDefault, ""},
+		{keys.MakeTablePrefix(1000), keys.MakeTablePrefix(1001), zoneTable1000, ""},
+		{keys.MakeTablePrefix(1001), keys.MakeTablePrefix(1002), zoneDefault, ""},
+		{keys.MakeTablePrefix(1002), keys.MakeTablePrefix(1010), zoneTable1002, ""},
+		{keys.MakeTablePrefix(1002), proto.KeyMax, zoneTable1002, ""},
+		{keys.MakeTablePrefix(9999), proto.KeyMax, zoneDefault, ""},
 	}
 
 	gcQ := newGCQueue()
-	gcPolicy, err := gcQ.lookupGCPolicy(rng2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ttl := gcPolicy.TTLSeconds; ttl != 60*60 {
-		t.Errorf("expected TTL=%d; got %d", 60*60, ttl)
+	for testNum, testCase := range testCases {
+		rng := createRange(tc.store, proto.RangeID(testNum+1), testCase.start, testCase.end)
+
+		gcPolicy, err := gcQ.lookupGCPolicy(rng)
+		if testCase.errStr == "" {
+			if err != nil {
+				t.Errorf("#%d: error: %v", testNum, err)
+				continue
+			}
+		} else if !testutils.IsError(err, testCase.errStr) {
+			t.Errorf("#%d: expected err=%s, got %v", testNum, testCase.errStr, err)
+			continue
+		}
+		if testCase.zoneConfig == nil {
+			continue
+		}
+		if !reflect.DeepEqual(gcPolicy, testCase.zoneConfig.GC) {
+			t.Errorf("#%d: mismatching GCPolicy, got: %+v, expected: %+v",
+				testNum, gcPolicy, testCase.zoneConfig.GC)
+		}
 	}
 }

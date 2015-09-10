@@ -33,6 +33,14 @@ type Closer interface {
 	Close()
 }
 
+// CloserFn is type that allows any function to be a Closer.
+type CloserFn func()
+
+// Close implements the Closer interface.
+func (f CloserFn) Close() {
+	f()
+}
+
 // A Stopper provides a channel-based mechanism to stop an arbitrary
 // array of workers. Each worker is registered with the stopper via
 // the RunWorker() method. The system further allows execution of functions

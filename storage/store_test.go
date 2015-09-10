@@ -130,6 +130,8 @@ func (db *testSender) Send(_ context.Context, call proto.Call) {
 // responsible for stopping the stopper upon completion.
 func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.Stopper) {
 	stopper := stop.NewStopper()
+	// Setup fake zone config handler.
+	config.TestingSetupZoneConfigHook(stopper)
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	ctx := TestStoreContext
 	ctx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
@@ -158,6 +160,11 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.
 // upon completion.
 func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *stop.Stopper) {
 	store, manual, stopper := createTestStoreWithoutStart(t)
+	// Put an empty system config into gossip.
+	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig,
+		&config.SystemConfig{}, 0); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.Start(stopper); err != nil {
 		t.Fatal(err)
 	}
@@ -713,26 +720,22 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		rng         *Replica
 		expMaxBytes int64
 	}{
-		{store.LookupReplica(proto.KeyMin, nil), 64 << 20},
-		{splitTestRange(store, proto.KeyMin, proto.Key("a"), t), 1 << 20},
-		{splitTestRange(store, proto.Key("a"), proto.Key("aa"), t), 1 << 20},
-		{splitTestRange(store, proto.Key("aa"), proto.Key("b"), t), 64 << 20},
+		{store.LookupReplica(proto.KeyMin, nil),
+			config.DefaultZoneConfig.RangeMaxBytes},
+		{splitTestRange(store, proto.KeyMin, keys.MakeTablePrefix(1000), t),
+			1 << 20},
+		{splitTestRange(store, keys.MakeTablePrefix(1000), keys.MakeTablePrefix(1001), t),
+			config.DefaultZoneConfig.RangeMaxBytes},
+		{splitTestRange(store, keys.MakeTablePrefix(1001), keys.MakeTablePrefix(1002), t),
+			2 << 20},
 	}
 
-	// Now set a new zone config for the prefix "a" with a different max bytes.
-	zoneConfig := &config.ZoneConfig{
-		ReplicaAttrs:  []proto.Attributes{{}, {}, {}},
-		RangeMinBytes: 1 << 8,
-		RangeMaxBytes: 1 << 20,
-	}
-	data, err := gogoproto.Marshal(zoneConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("a"))
-	pArgs := putArgs(key, data, 1, store.StoreID())
-	pArgs.Timestamp = store.ctx.Clock.Now()
-	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
+	// Set zone configs.
+	config.TestingSetZoneConfig(1000, &config.ZoneConfig{RangeMaxBytes: 1 << 20})
+	config.TestingSetZoneConfig(1002, &config.ZoneConfig{RangeMaxBytes: 2 << 20})
+
+	// Despite faking the zone configs, we still need to have a gossip entry.
+	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
 		t.Fatal(err)
 	}
 

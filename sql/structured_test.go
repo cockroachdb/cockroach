@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -30,8 +31,8 @@ func TestAllocateIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	desc := sql.TableDescriptor{
-		ID:       sql.MaxReservedDescID + 2,
-		ParentID: sql.MaxReservedDescID + 1,
+		ID:       keys.MaxReservedDescID + 2,
+		ParentID: keys.MaxReservedDescID + 1,
 		Name:     "foo",
 		Columns: []sql.ColumnDescriptor{
 			{Name: "a"},
@@ -50,8 +51,8 @@ func TestAllocateIDs(t *testing.T) {
 	}
 
 	expected := sql.TableDescriptor{
-		ID:       sql.MaxReservedDescID + 2,
-		ParentID: sql.MaxReservedDescID + 1,
+		ID:       keys.MaxReservedDescID + 2,
+		ParentID: keys.MaxReservedDescID + 1,
 		Name:     "foo",
 		Columns: []sql.ColumnDescriptor{
 			{ID: 1, Name: "a"},

@@ -125,7 +125,6 @@ func TestBootstrapCluster(t *testing.T) {
 		proto.Key("\x00node-idgen"),
 		proto.Key("\x00range-tree-root"),
 		proto.Key("\x00store-idgen"),
-		proto.Key("\x00zone"),
 	}
 	// Add the initial keys for sql.
 	for _, kv := range sql.GetInitialSystemValues() {

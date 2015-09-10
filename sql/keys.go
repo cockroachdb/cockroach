@@ -90,6 +90,15 @@ func MakeDescMetadataKey(descID ID) proto.Key {
 	return k
 }
 
+// MakeZoneKey returns the key for 'id's entry in the system.zones table.
+func MakeZoneKey(id ID) proto.Key {
+	k := keys.MakeTablePrefix(uint32(ZonesTable.ID))
+	k = encoding.EncodeUvarint(k, uint64(ZonesTable.PrimaryIndex.ID))
+	k = encoding.EncodeUvarint(k, uint64(id))
+	k = encoding.EncodeUvarint(k, uint64(ZonesTable.Columns[1].ID))
+	return k
+}
+
 // MakeColumnKey returns the key for the column in the given row.
 func MakeColumnKey(colID ColumnID, primaryKey []byte) proto.Key {
 	var key []byte

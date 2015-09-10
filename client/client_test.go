@@ -423,7 +423,7 @@ func TestClientBatch(t *testing.T) {
 		scan1 := b.Results[0].Rows
 		scan2 := b.Results[1].Rows
 		if len(scan1) != 5 || len(scan2) != 5 {
-			t.Errorf("expected scan results to include 5 and 5 rows; got %d and %d",
+			t.Fatalf("expected scan results to include 5 and 5 rows; got %d and %d",
 				len(scan1), len(scan2))
 		}
 		for i := 0; i < 5; i++ {

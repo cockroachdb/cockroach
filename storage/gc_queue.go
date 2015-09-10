@@ -78,7 +78,6 @@ func (gcq *gcQueue) needsLeaderLease() bool {
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (gcq *gcQueue) shouldQueue(now proto.Timestamp, repl *Replica) (shouldQ bool, priority float64) {
-	// Lookup GC policy for this replica.
 	policy, err := gcq.lookupGCPolicy(repl)
 	if err != nil {
 		log.Errorf("GC policy: %s", err)
@@ -121,7 +120,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 	}
 
 	gcMeta := proto.NewGCMetadata(now.WallTime)
-	gc := engine.NewGarbageCollector(now, policy)
+	gc := engine.NewGarbageCollector(now, *policy)
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now
@@ -300,45 +299,26 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 	*txn = *pushReply.PusheeTxn
 }
 
-// lookupGCPolicy queries the gossip prefix config map based on the
-// supplied replica's start key. It queries all matching config prefixes
-// and then iterates from most specific to least, returning the first
-// non-nil GC policy.
-func (gcq *gcQueue) lookupGCPolicy(repl *Replica) (config.GCPolicy, error) {
-	configMap, err := repl.rm.Gossip().GetZoneConfig()
+// lookupGCPolicy finds the GC policy for 'repl'.
+// If the range needs to be split, aborts.
+func (gcq *gcQueue) lookupGCPolicy(repl *Replica) (*config.GCPolicy, error) {
+	// Load the system config.
+	cfg, err := repl.rm.Gossip().GetSystemConfig()
 	if err != nil {
-		return config.GCPolicy{}, util.Errorf("unable to fetch zone config from gossip: %s", err)
+		return nil, err
 	}
 
 	desc := repl.Desc()
-
-	// Verify that the replica's range doesn't cross over the zone config
-	// prefix.  This could be the case if the zone config is new and the range
-	// hasn't been split yet along the new boundary.
-	var gc *config.GCPolicy
-	if err = configMap.VisitPrefixesHierarchically(desc.StartKey, func(start, end proto.Key, cfg config.ConfigUnion) (bool, error) {
-		zone := cfg.GetValue().(*config.ZoneConfig)
-		if zone.GC != nil {
-			repl.RLock()
-			isCovered := !end.Less(desc.EndKey)
-			repl.RUnlock()
-			if !isCovered {
-				return false, util.Errorf("replica is only partially covered by zone %s (%q-%q); must wait for range split", cfg, start, end)
-			}
-			gc = zone.GC
-			return true, nil
-		}
-		if log.V(1) {
-			log.Infof("skipping zone config %+v, because no GC policy is set", zone)
-		}
-		return false, nil
-	}); err != nil {
-		return config.GCPolicy{}, err
+	if len(cfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
+		// If the replica's range needs splitting, error out.
+		return nil, util.Errorf("%v spans multiple ranges, must be split first", desc)
 	}
 
-	// We should always match _at least_ the default GC.
-	if gc == nil {
-		return config.GCPolicy{}, util.Errorf("no zone for range with start key %q", desc.StartKey)
+	// Find the zone config for this range.
+	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+	if err != nil {
+		return nil, err
 	}
-	return *gc, nil
+
+	return zone.GC, nil
 }

@@ -32,8 +32,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)
 
-	// The first `MaxReservedDescID` (plus 0) are set aside.
-	expectedCounter := int64(sql.MaxReservedDescID + 1)
+	expectedCounter := int64(keys.MaxReservedDescID + 1)
 
 	// Test values before creating the database.
 	// descriptor ID counter.
@@ -44,7 +43,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Database name.
-	nameKey := sql.MakeNameMetadataKey(sql.RootNamespaceID, "test")
+	nameKey := sql.MakeNameMetadataKey(keys.RootNamespaceID, "test")
 	if gr, err := kvDB.Get(nameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
