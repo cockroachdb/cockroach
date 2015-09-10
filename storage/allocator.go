@@ -99,29 +99,13 @@ func getUsedNodes(existing []proto.Replica) map[proto.NodeID]struct{} {
 	return usedNodes
 }
 
-// findDeadReplicas returns a list of any replicas in the given RangeDescriptor
-// which are located on a dead store.
-func (a *allocator) findDeadReplicas(desc *proto.RangeDescriptor) []proto.Replica {
-	var deadReplicas []proto.Replica
-	// TODO(mrtracy): Pull in Bram's storePool changes to support this.
-	/*
-		for _, repl := range desc.Replicas {
-			if a.storePool.getStoreDetail(repl.StoreID).dead {
-				deadReplicas = append(deadReplicas, repl)
-			}
-		}
-		return deadReplicas
-	*/
-	return deadReplicas
-}
-
 // computeRepair determines the exact operation needed to repair the supplied
 // range, as governed by the supplied zone configuration. It returns the
 // required action that should be taken and a replica on which the action should
 // be performed.
 func (a *allocator) computeAction(zone config.ZoneConfig, desc *proto.RangeDescriptor) (
 	allocatorAction, float64) {
-	deadReplicas := a.findDeadReplicas(desc)
+	deadReplicas := a.storePool.deadReplicas(desc.Replicas)
 	if len(deadReplicas) > 0 {
 		// The range has dead replicas, which should be removed immediately.
 		// Adjust the priority by the number of dead replicas the range has.

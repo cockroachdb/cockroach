@@ -140,6 +140,8 @@ type StorePool struct {
 	clock              *hlc.Clock
 	timeUntilStoreDead time.Duration
 
+	// Each storeDetail is contained in both a map and a priorityQueue; pointers
+	// are used so that data can be kept in sync.
 	mu     sync.RWMutex // Protects stores and queue.
 	stores map[proto.StoreID]*storeDetail
 	queue  storePoolPQ
@@ -257,6 +259,18 @@ func (sp *StorePool) getStoreDescriptor(storeID proto.StoreID) *proto.StoreDescr
 
 	desc := detail.desc
 	return &desc
+}
+
+// findDeadReplicas returns any replicas from the supplied slice that are
+// located on dead stores.
+func (sp *StorePool) deadReplicas(repls []proto.Replica) []proto.Replica {
+	var deadReplicas []proto.Replica
+	for _, repl := range repls {
+		if sp.getStoreDetail(repl.StoreID).dead {
+			deadReplicas = append(deadReplicas, repl)
+		}
+	}
+	return deadReplicas
 }
 
 // stat provides a running sample size and mean.
