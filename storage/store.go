@@ -315,6 +315,10 @@ type StoreContext struct {
 	// information about a store, it can be considered dead.
 	TimeUntilStoreDead time.Duration
 
+	// RebalancingOptions configures how the store will attempt to rebalance its
+	// replicas to other stores.
+	RebalancingOptions RebalancingOptions
+
 	// EventFeed is a feed to which this store will publish events.
 	EventFeed *util.Feed
 
@@ -361,7 +365,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 		ctx:               ctx,
 		db:                ctx.DB, // TODO(tschottdorf) remove redundancy.
 		engine:            eng,
-		_allocator:        MakeAllocator(ctx.StorePool),
+		_allocator:        MakeAllocator(ctx.StorePool, ctx.RebalancingOptions),
 		replicas:          map[proto.RangeID]*Replica{},
 		replicasByKey:     btree.New(64 /* degree */),
 		uninitReplicas:    map[proto.RangeID]*Replica{},
@@ -375,7 +379,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	s.gcQueue = newGCQueue(s.ctx.Gossip)
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
-	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
+	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock, s.ctx.RebalancingOptions)
 	s._rangeGCQueue = newRangeGCQueue(s.db, s.ctx.Gossip)
 	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue)
 

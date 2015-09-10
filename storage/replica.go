@@ -1462,7 +1462,8 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 					log.Warningc(ctx, "batch resolve failed: %s", err)
 				}
 				if _, ok := err.(*proto.RangeKeyMismatchError); !ok {
-					panic("intent resolution failed") // TODO(tschottdorf)
+					// TODO(tschottdorf)
+					panic(fmt.Sprintf("intent resolution failed, error: %s", err.Error()))
 				}
 			}
 		}

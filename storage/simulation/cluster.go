@@ -64,7 +64,7 @@ func createCluster(stopper *stop.Stopper, nodeCount int) *Cluster {
 		rpc:           rpcContext,
 		gossip:        g,
 		storePool:     storePool,
-		allocator:     storage.MakeAllocator(storePool),
+		allocator:     storage.MakeAllocator(storePool, storage.RebalancingOptions{}),
 		storeGossiper: gossiputil.NewStoreGossiper(g),
 		nodes:         make(map[proto.NodeID]*Node),
 		stores:        make(map[proto.StoreID]*Store),
