@@ -173,6 +173,27 @@ func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, allocator
 	return stopper, g, storePool, a
 }
 
+// mockStorePool sets up a collection of a alive and dead stores in the
+// store pool for testing purposes.
+func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []proto.StoreID) {
+	storePool.mu.Lock()
+	defer storePool.mu.Unlock()
+
+	storePool.stores = make(map[proto.StoreID]*storeDetail)
+	for _, storeID := range aliveStoreIDs {
+		storePool.stores[storeID] = &storeDetail{
+			dead: false,
+			desc: proto.StoreDescriptor{StoreID: storeID},
+		}
+	}
+	for _, storeID := range deadStoreIDs {
+		storePool.stores[storeID] = &storeDetail{
+			dead: true,
+			desc: proto.StoreDescriptor{StoreID: storeID},
+		}
+	}
+}
+
 func TestAllocatorSimpleRetrieval(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, a := createTestAllocator()
@@ -629,8 +650,11 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 
 func TestAllocatorComputeAction(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper, _, _, a := createTestAllocator()
+	stopper, _, sp, a := createTestAllocator()
 	defer stopper.Stop()
+
+	// Set up seven stores. Stores six and seven are marked as dead.
+	mockStorePool(sp, []proto.StoreID{1, 2, 3, 4, 5}, []proto.StoreID{6, 7})
 
 	// Each test case should describe a repair situation which has a lower
 	// priority than the previous test case.
@@ -639,6 +663,130 @@ func TestAllocatorComputeAction(t *testing.T) {
 		desc           proto.RangeDescriptor
 		expectedAction allocatorAction
 	}{
+		// Needs Three replicas, two are on dead stores.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   7,
+						NodeID:    7,
+						ReplicaID: 7,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
+				},
+			},
+			expectedAction: aaRemoveDead,
+		},
+		// Needs Three replicas, one is on a dead store.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
+				},
+			},
+			expectedAction: aaRemoveDead,
+		},
+		// Needs five replicas, one is on a dead store.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
+				},
+			},
+			expectedAction: aaRemoveDead,
+		},
 		// Needs Three replicas, have two
 		{
 			zone: config.ZoneConfig{
@@ -812,6 +960,44 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: aaRemove,
 		},
+		// Three replicas have three, none of the replicas in the store pool.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   10,
+						NodeID:    10,
+						ReplicaID: 10,
+					},
+					{
+						StoreID:   20,
+						NodeID:    20,
+						ReplicaID: 20,
+					},
+					{
+						StoreID:   30,
+						NodeID:    30,
+						ReplicaID: 30,
+					},
+				},
+			},
+			expectedAction: aaNoop,
+		},
 		// Three replicas have three.
 		{
 			zone: config.ZoneConfig{
@@ -859,7 +1045,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 			continue
 		}
-		if priority >= lastPriority {
+		if tcase.expectedAction != aaNoop && priority >= lastPriority {
 			t.Errorf("Test cases should have descending priority. Case %d had priority %f, previous case had priority %f", i, priority, lastPriority)
 		}
 		lastPriority = priority

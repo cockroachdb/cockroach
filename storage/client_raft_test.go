@@ -1103,9 +1103,9 @@ func TestRaftRemoveRace(t *testing.T) {
 	}
 }
 
-// TestStoreRangeRepair verifies that if a store becomes dead, the repair queue
-// will notice and remove any replicas on it.
-func TestStoreRangeRepair(t *testing.T) {
+// TestStoreRangeRemoveDead verifies that if a store becomes dead, the
+// ReplicateQueue will notice and remove any replicas on it.
+func TestStoreRangeRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	mtc := &multiTestContext{}
 	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
@@ -1159,8 +1159,8 @@ func TestStoreRangeRepair(t *testing.T) {
 				mtc.stores[1].GossipStore()
 			})
 			// Force the repair queues on all alive stores to run.
-			mtc.stores[0].ForceRepairScan(t)
-			mtc.stores[1].ForceRepairScan(t)
+			mtc.stores[0].ForceReplicationScan(t)
+			mtc.stores[1].ForceReplicationScan(t)
 		}
 	}
 	ticker.Stop()

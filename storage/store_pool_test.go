@@ -294,3 +294,78 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 		t.Errorf("Absent storeDetail came back as dead, expected it to be alive. %+v", detail)
 	}
 }
+
+func TestStorePoolFindDeadReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper, g, sp := createTestStorePool(TestTimeUntilStoreDead)
+	defer stopper.Stop()
+	sg := gossiputil.NewStoreGossiper(g)
+
+	stores := []*proto.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node:    proto.NodeDescriptor{NodeID: 1},
+		},
+		{
+			StoreID: 2,
+			Node:    proto.NodeDescriptor{NodeID: 2},
+		},
+		{
+			StoreID: 3,
+			Node:    proto.NodeDescriptor{NodeID: 3},
+		},
+		{
+			StoreID: 4,
+			Node:    proto.NodeDescriptor{NodeID: 4},
+		},
+		{
+			StoreID: 5,
+			Node:    proto.NodeDescriptor{NodeID: 5},
+		},
+	}
+
+	replicas := []proto.Replica{
+		{
+			NodeID:    1,
+			StoreID:   1,
+			ReplicaID: 1,
+		},
+		{
+			NodeID:    2,
+			StoreID:   2,
+			ReplicaID: 2,
+		},
+		{
+			NodeID:    3,
+			StoreID:   3,
+			ReplicaID: 4,
+		},
+		{
+			NodeID:    4,
+			StoreID:   5,
+			ReplicaID: 4,
+		},
+		{
+			NodeID:    5,
+			StoreID:   5,
+			ReplicaID: 5,
+		},
+	}
+
+	sg.GossipStores(stores, t)
+
+	deadReplicas := sp.deadReplicas(replicas)
+	if len(deadReplicas) > 0 {
+		t.Fatalf("expected no dead replicas initially, found %d (%v)", len(deadReplicas), deadReplicas)
+	}
+	// Timeout all stores, but specifically store 5.
+	waitUntilDead(t, sp, 5)
+
+	// Resurrect all stores except for 4 and 5.
+	sg.GossipStores(stores[:3], t)
+
+	deadReplicas = sp.deadReplicas(replicas)
+	if a, e := deadReplicas, replicas[3:]; !reflect.DeepEqual(a, e) {
+		t.Fatalf("findDeadReplicas did not return expected values; got \n%v, expected \n%v", a, e)
+	}
+}

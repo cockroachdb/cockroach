@@ -257,7 +257,6 @@ type Store struct {
 	_splitQueue       *splitQueue     // Range splitting queue
 	verifyQueue       *verifyQueue    // Checksum verification queue
 	replicateQueue    replicateQueue  // Replication queue
-	repairQueue       repairQueue     // Recovery Queue
 	_rangeGCQueue     *rangeGCQueue   // Range GC queue
 	scanner           *replicaScanner // Range scanner
 	feed              StoreEventFeed  // Event Feed
@@ -378,9 +377,8 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ReplicaCount)
 	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
-	s.repairQueue = makeRepairQueue(s.ctx.StorePool, &s.replicateQueue, s.ctx.Clock)
 	s._rangeGCQueue = newRangeGCQueue(s.db)
-	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue, s.repairQueue)
+	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue)
 
 	return s
 }
@@ -771,17 +769,6 @@ func (s *Store) ForceRangeGCScan(t util.Tester) {
 
 	for _, r := range s.replicas {
 		s._rangeGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-}
-
-// ForceRepairScan iterates over all ranges and enqueues any that need to be
-// repaired. Exposed only for testing.
-func (s *Store) ForceRepairScan(_ util.Tester) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, r := range s.replicas {
-		s.repairQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
 }
 

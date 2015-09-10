@@ -97,7 +97,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
-	deadReplicas := rq.allocator.findDeadReplicas(desc)
+	deadReplicas := rq.allocator.storePool.deadReplicas(desc.Replicas)
 	quorum := computeQuorum(len(desc.Replicas))
 	liveReplicaCount := len(desc.Replicas) - len(deadReplicas)
 	if liveReplicaCount < quorum {
