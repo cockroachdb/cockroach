@@ -459,6 +459,7 @@ func TestStatusLocalLogs(t *testing.T) {
 // results.
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(bram): disabled until #2440 is fixed")
 	ts := startServer(t)
 	defer ts.Stop()
 
