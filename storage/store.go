@@ -1119,6 +1119,13 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsu
 
 func (s *Store) removeAllMetadata(rep *Replica) error {
 	rangeID := rep.Desc().RangeID
+	rangeStart := rep.Desc().StartKey
+	rangeEnd := rep.Desc().EndKey
+	
+	lastIndex, err := rep.LastIndex()
+	if err != nil {
+		return err
+	}
 
 	now := s.Clock().Now()
 	metadata := []struct{
@@ -1135,27 +1142,28 @@ func (s *Store) removeAllMetadata(rep *Replica) error {
 	  {"leaderlease", keys.RaftLeaderLeaseKey(rangeID)},
 	  {"lastindex", keys.RaftLastIndexKey(rangeID)},
 	  {"stats", keys.RangeStatsKey(rangeID)},
+	  {"rangedescriptor", keys.RangeDescriptorKey(rangeStart)},
 	}
+
 	for _, metadatum := range metadata {
-	  if err := engine.MVCCDelete(s.engine, nil, metadatum.key, now, nil); err != nil {
-	    return util.Errorf("cannot delete %s key %s: %s", metadatum.name, metadatum.key, err)
-	  }
+		switch metadatum.name {
+			default:
+				if err := engine.MVCCDelete(s.engine, nil, metadatum.key, now, nil); err != nil {
+		    	return util.Errorf("cannot delete %s key %s: %s", metadatum.name, metadatum.key, err)
+		  	}
+			case "logprefix":
+				_, err := engine.MVCCDeleteRange(s.engine, nil, rangeStart, rangeEnd, 0, now, nil)
+				if err != nil {
+		    	return util.Errorf("cannot delete %s key %s: %s", metadatum.name, metadatum.key, err)
+		  	}
+		}
 	}
 
 	// RaftLogKey 
-	lastIndex, err := rep.LastIndex()
-	if err != nil {
-		return err
-	}
-	// Delete any previously appended log entries which never committed.
 	for i := uint64(0); i <= lastIndex; i++ {
 		if err := engine.MVCCDelete(s.engine, nil, keys.RaftLogKey(rangeID, i), s.Clock().Now(), nil); err != nil {
 			return util.Errorf("cannot delete log %s", keys.RaftLogKey(rangeID, i))
 		}
-	}
-	// delete range desc key
-	if err := engine.MVCCDelete(s.engine, nil, keys.RangeDescriptorKey(rep.Desc().StartKey), s.Clock().Now(), nil); err != nil {
-		return util.Errorf("cannot delete range desc %s", keys.RangeDescriptorKey(rep.Desc().StartKey))
 	}
 	return nil
 }
