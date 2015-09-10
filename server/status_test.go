@@ -292,6 +292,7 @@ func startServer(t *testing.T) TestServer {
 // correctly.
 func TestStatusLocalLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(bram): disabled until #2440 is fixed")
 	dir, err := ioutil.TempDir("", "local_log_test")
 	if err != nil {
 		t.Fatal(err)
