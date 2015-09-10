@@ -65,27 +65,21 @@ SET DATABASE = ""
 
 query error no database specified
 SHOW COLUMNS FROM users
-----
 
 query error database "foo" does not exist
 SHOW COLUMNS FROM foo.users
-----
 
 query error table "users" does not exist
 SHOW COLUMNS FROM test.users
-----
 
 query error no database specified
 SHOW INDEX FROM users
-----
 
 query error database "foo" does not exist
 SHOW INDEX FROM foo.users
-----
 
 query error table "users" does not exist
 SHOW INDEX FROM test.users
-----
 
 statement ok
 CREATE TABLE test.users (

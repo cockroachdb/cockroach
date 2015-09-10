@@ -299,40 +299,49 @@ SET DATABASE = test;
 					query.label = fields[3]
 				}
 			}
+
 			var buf bytes.Buffer
 			for s.Scan() {
 				line := s.Text()
 				if line == "----" {
+					if query.expectErr != "" {
+						t.Fatalf("%s: invalid ---- delimiter after a query expecting an error: %s", query.pos, query.expectErr)
+					}
+					break
+				}
+				if strings.TrimSpace(s.Text()) == "" {
 					break
 				}
 				fmt.Fprintln(&buf, line)
 			}
 			query.sql = strings.TrimSpace(buf.String())
 
-			// Query results are either a space separated list of values up to a
-			// blank line or a line of the form "xx values hashing to yyy". The
-			// latter format is used by sqllogictest when a large number of results
-			// match the query.
-			if s.Scan() {
-				if m := resultsRE.FindStringSubmatch(s.Text()); m != nil {
-					var err error
-					query.expectedValues, err = strconv.Atoi(m[1])
-					if err != nil {
-						t.Fatal(err)
-					}
-					query.expectedHash = m[2]
-				} else {
-					for {
-						results := strings.Fields(s.Text())
-						if len(results) == 0 {
-							break
+			if query.expectErr == "" {
+				// Query results are either a space separated list of values up to a
+				// blank line or a line of the form "xx values hashing to yyy". The
+				// latter format is used by sqllogictest when a large number of results
+				// match the query.
+				if s.Scan() {
+					if m := resultsRE.FindStringSubmatch(s.Text()); m != nil {
+						var err error
+						query.expectedValues, err = strconv.Atoi(m[1])
+						if err != nil {
+							t.Fatal(err)
 						}
-						query.expectedResults = append(query.expectedResults, results...)
-						if !s.Scan() {
-							break
+						query.expectedHash = m[2]
+					} else {
+						for {
+							results := strings.Fields(s.Text())
+							if len(results) == 0 {
+								break
+							}
+							query.expectedResults = append(query.expectedResults, results...)
+							if !s.Scan() {
+								break
+							}
 						}
+						query.expectedValues = len(query.expectedResults)
 					}
-					query.expectedValues = len(query.expectedResults)
 				}
 			}
 

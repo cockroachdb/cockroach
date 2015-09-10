@@ -7,4 +7,3 @@ column1 column2 column3
 
 query error VALUES lists must all be the same length
 VALUES (1), (2, 3)
-----

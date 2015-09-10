@@ -18,7 +18,6 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 
 query error argument of WHERE must be type bool, not type string
 SELECT * FROM abc WHERE 'hello'
-----
 
 statement ok
 INSERT INTO abc VALUES (1, 2, 3)
@@ -116,19 +115,15 @@ a NULL
 
 query error table "foo" not found
 SELECT foo.* FROM kv
-----
 
 query error "*" with no tables specified is not valid
 SELECT *
-----
 
 query error "kv.*" cannot be aliased
 SELECT kv.* AS foo FROM kv
-----
 
 query error invalid column name: bar.kv.*
 SELECT bar.kv.* FROM kv
-----
 
 query T colnames
 SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
@@ -184,12 +179,9 @@ SELECT foo.y FROM test.xyz@foo WHERE z = 3
 
 query error table "unknown" does not exist
 SELECT z FROM test.unknown@foo WHERE y = 5
-----
 
 query error index "unknown" not found
 SELECT z FROM test.xyz@unknown WHERE y = 5
-----
 
 query error qualified name "foo.x" not found
 SELECT x FROM test.xyz@foo WHERE y = 5
-----

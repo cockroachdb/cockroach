@@ -99,7 +99,6 @@ BEGIN
 
 query error syntax error at or near ","
 SELECT COUNT(*, 1) FROM kv
-----
 
 statement error current transaction is aborted, commands ignored until end of transaction block
 UPDATE kv SET v = 'b' WHERE k in ('a')
