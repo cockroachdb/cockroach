@@ -164,14 +164,14 @@ func unimplemented() {
 %type <empty> opt_interval interval_second
 %type <empty> overlay_placing substr_from substr_for
 
-%type <boolVal> opt_unique
+%type <boolVal> opt_unique opt_column
 
-%type <empty> opt_column opt_set_data
+%type <empty> opt_set_data
 
 %type <limit> limit_clause offset_clause
 %type <expr>  select_limit_value
 // %type <empty> opt_select_fetch_first_value
-%type <empty> row_or_rows 
+%type <empty> row_or_rows
 // %type <empty> first_or_next
 
 %type <stmt>  insert_rest
@@ -532,9 +532,15 @@ alter_table_cmd:
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
 | ALTER opt_column name SET NOT NULL { unimplemented() }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
-| DROP opt_column IF EXISTS name opt_drop_behavior { unimplemented() }
+| DROP opt_column IF EXISTS name opt_drop_behavior
+  {
+    $$ = &AlterTableDropColumn{columnKeyword: $2, IfExists: true, Column: $5}
+  }
   // ALTER TABLE <name> DROP [COLUMN] <colname> [RESTRICT|CASCADE]
-| DROP opt_column name opt_drop_behavior { unimplemented() }
+| DROP opt_column name opt_drop_behavior
+  {
+    $$ = &AlterTableDropColumn{columnKeyword: $2, IfExists: false, Column: $3}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> [SET DATA] TYPE <typename>
   //     [ USING <expression> ]
 | ALTER opt_column name opt_set_data TYPE typename opt_collate_clause alter_using {}
@@ -548,9 +554,15 @@ alter_table_cmd:
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
 | VALIDATE CONSTRAINT name { unimplemented() }
   // ALTER TABLE <name> DROP CONSTRAINT IF EXISTS <name> [RESTRICT|CASCADE]
-| DROP CONSTRAINT IF EXISTS name opt_drop_behavior { unimplemented() }
+| DROP CONSTRAINT IF EXISTS name opt_drop_behavior
+  {
+    $$ = &AlterTableDropConstraint{IfExists: true, Constraint: $5}
+  }
   // ALTER TABLE <name> DROP CONSTRAINT <name> [RESTRICT|CASCADE]
-| DROP CONSTRAINT name opt_drop_behavior { unimplemented() }
+| DROP CONSTRAINT name opt_drop_behavior
+  {
+    $$ = &AlterTableDropConstraint{IfExists: false, Constraint: $3}
+  }
 
 alter_column_default:
   SET DEFAULT a_expr { unimplemented() }
@@ -1333,8 +1345,14 @@ rename_stmt:
   }
 
 opt_column:
-  COLUMN {}
-| /* EMPTY */ {}
+  COLUMN
+  {
+    $$ = true
+  }
+| /* EMPTY */
+  {
+    $$ = false
+  }
 
 opt_set_data:
   SET DATA {}

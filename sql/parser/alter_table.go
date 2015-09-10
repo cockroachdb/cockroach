@@ -59,8 +59,10 @@ type AlterTableCmd interface {
 	alterTableCmd()
 }
 
-func (*AlterTableAddColumn) alterTableCmd()     {}
-func (*AlterTableAddConstraint) alterTableCmd() {}
+func (*AlterTableAddColumn) alterTableCmd()      {}
+func (*AlterTableAddConstraint) alterTableCmd()  {}
+func (*AlterTableDropColumn) alterTableCmd()     {}
+func (*AlterTableDropConstraint) alterTableCmd() {}
 
 // AlterTableAddColumn represents an ADD COLUMN command.
 type AlterTableAddColumn struct {
@@ -89,4 +91,34 @@ type AlterTableAddConstraint struct {
 
 func (node *AlterTableAddConstraint) String() string {
 	return fmt.Sprintf("ADD %s", node.ConstraintDef)
+}
+
+// AlterTableDropColumn represents a DROP COLUMN command.
+type AlterTableDropColumn struct {
+	columnKeyword bool
+	IfExists      bool
+	Column        string
+}
+
+func (node *AlterTableDropColumn) String() string {
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("DROP")
+	if node.columnKeyword {
+		_, _ = buf.WriteString(" COLUMN")
+	}
+	if node.IfExists {
+		_, _ = buf.WriteString(" IF EXISTS")
+	}
+	fmt.Fprintf(&buf, " %s", node.Column)
+	return buf.String()
+}
+
+// AlterTableDropConstraint represents a DROP CONSTRAINT command.
+type AlterTableDropConstraint struct {
+	IfExists   bool
+	Constraint string
+}
+
+func (node *AlterTableDropConstraint) String() string {
+	return fmt.Sprintf("DROP CONSTRAINT %s", node.Constraint)
 }
