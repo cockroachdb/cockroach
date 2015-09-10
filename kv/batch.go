@@ -49,6 +49,9 @@ func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to prot
 		to = desc.EndKey
 	}
 	truncateOne := func(args proto.Request) (bool, []func(), error) {
+		if _, ok := args.(*proto.NoopRequest); ok {
+			return true, nil, nil
+		}
 		header := args.Header()
 		if !proto.IsRange(args) {
 			if len(header.EndKey) > 0 {

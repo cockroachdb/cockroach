@@ -18,6 +18,7 @@
 package kv_test
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -99,6 +100,45 @@ func setupMultipleRanges(t *testing.T, splitAt ...string) (*server.TestServer, *
 	}
 
 	return s, db
+}
+
+func TestMultiRangeBatchBounded(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setupMultipleRanges(t, "a", "b", "c", "d", "e", "f")
+	defer s.Stop()
+	for _, key := range []string{"a", "aa", "aaa", "b", "bb", "cc", "d", "dd", "ff"} {
+		if err := db.Put(key, "value"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	expResults := [][]string{
+		{"aaa", "b", "bb"},
+		{"a", "aa"},
+		{"cc", "d", "dd"},
+	}
+
+	b := db.NewBatch()
+	b.Scan("aaa", "dd", 3)
+	b.Scan("a", "z", 2)
+	b.Scan("cc", "ff", 3)
+	if err := db.Run(b); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(expResults) != len(b.Results) {
+		t.Fatalf("only got %d results, wanted %d", len(expResults), len(b.Results))
+	}
+	for i, res := range b.Results {
+		expRes := expResults[i]
+		var actRes []string
+		for _, k := range res.Rows {
+			actRes = append(actRes, string(k.Key))
+		}
+		if !reflect.DeepEqual(actRes, expRes) {
+			t.Errorf("%d: got %v, wanted %v", i, actRes, expRes)
+		}
+	}
 }
 
 // TestMultiRangeEmptyAfterTruncate exercises a code path in which a

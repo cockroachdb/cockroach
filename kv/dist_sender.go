@@ -485,16 +485,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 
 	isReverse := ba.IsReverse()
 
-	// If this is a bounded request, we will change its bound as we receive
-	// replies. This undoes that when we return.
-	// TODO(tschottdorf): unimplemented for batch, so always false here.
-	boundedArgs, argsBounded := proto.Bounded(nil), false
-	if argsBounded {
-		defer func(bound int64) {
-			boundedArgs.SetBound(bound)
-		}(boundedArgs.GetBound())
-	}
-
 	trace := tracer.FromCtx(ctx)
 
 	// The minimal key range encompassing all requests contained within.
@@ -661,7 +651,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 			return nil, err
 		}
 
-		if br == nil {
+		first := br == nil
+		if first {
 			// First response from a Range.
 			br = curReply
 		} else {
@@ -673,27 +664,63 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 			}
 		}
 
-		// If this request has a bound, such as MaxResults in
-		// ScanRequest, check whether enough rows have been retrieved.
-		// TODO(tschottdorf): un-hackify this.
-		if curReply.Header().GoError() == nil &&
-			len(curReply.Responses) == len(ba.Requests) {
-			for i, l := 0, len(ba.Requests); i < l; i++ {
-				if boundedArg, ok := ba.Requests[i].GetValue().(proto.Bounded); ok {
-					prevBound := boundedArg.GetBound()
-					if cReply, ok := curReply.Responses[i].GetValue().(proto.Countable); ok && prevBound > 0 {
-						if nextBound := prevBound - cReply.Count(); nextBound > 0 {
-							defer func(c int64) {
-								// Dirty way of undoing. The defers will pile up,
-								// and execute so that the last one works.
-								boundedArg.SetBound(c)
-							}(prevBound)
-							boundedArg.SetBound(nextBound)
-						} else {
-							needAnother = false
-						}
-					}
+		// If this request has a bound (such as MaxResults in
+		// ScanRequest) and we are going to query at least one more range,
+		// check whether enough rows have been retrieved.
+		// TODO(tschottdorf): need tests for executing a multi-range batch
+		// with various bounded requests which saturate at different times.
+		if needAnother {
+			// Start with the assumption that all requests are saturated.
+			// Below, we look at each and decide whether that's true.
+			// Everything that is indeed saturated is "masked out" from the
+			// batch request; only if that's all requests does needAnother
+			// remain false.
+			needAnother = false
+			if first {
+				// Clone ba.Requests. This is because we're multi-range, and
+				// some requests may be bounded, which could lead to them being
+				// masked out once they're saturated. We don't want to risk
+				// removing requests that way in the "master copy" since that
+				// could lead to omitting requests in certain retry scenarios.
+				ba.Requests = append([]proto.RequestUnion(nil), ba.Requests...)
+			}
+			for i, union := range ba.Requests {
+				args := union.GetValue()
+				if _, ok := args.(*proto.NoopRequest); ok {
+					// NoopRequests are skipped.
+					continue
 				}
+				boundedArg, ok := args.(proto.Bounded)
+				if !ok {
+					// Non-bounded request. We will have to query all ranges.
+					needAnother = true
+					continue
+				}
+				prevBound := boundedArg.GetBound()
+				cReply, ok := curReply.Responses[i].GetValue().(proto.Countable)
+				if !ok || prevBound <= 0 {
+					// Request bounded, but without max results. Again, will
+					// need to query everything we can. The case in which the reply
+					// isn't countable occurs when the request wasn't active for
+					// that range (since it didn't apply to it), so the response
+					// is a NoopResponse.
+					needAnother = true
+					continue
+				}
+				nextBound := prevBound - cReply.Count()
+				if nextBound <= 0 {
+					// We've hit max results for this piece of the batch. Mask
+					// it out (we've copied the requests slice above, so this
+					// is kosher).
+					ba.Requests[i].Reset() // necessary (no one-of?)
+					if !ba.Requests[i].SetValue(&proto.NoopRequest{}) {
+						panic("RequestUnion excludes NoopRequest")
+					}
+					continue
+				}
+				// The request isn't saturated yet.
+				needAnother = true
+				boundedArg.SetBound(nextBound)
 			}
 		}
 

@@ -245,6 +245,7 @@ func Open(stopper *stop.Stopper, addr string) (*DB, error) {
 }
 
 // NewBatch creates and returns a new empty batch object for use with the DB.
+// TODO(tschottdorf): it appears this can be unexported.
 func (db *DB) NewBatch() *Batch {
 	return &Batch{DB: db}
 }
