@@ -22,7 +22,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -106,7 +105,6 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 
 	// Update all the rows.
 	var b client.Batch
-	var writes []write
 	for rows.Next() {
 		rowVals := rows.Values()
 		primaryIndexKey, _, err := encodeIndexKey(
@@ -150,20 +148,6 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 					log.Infof("Del %q", secondaryIndexEntry.key)
 				}
 				b.Del(secondaryIndexEntry.key)
-
-				var w write
-
-				indexDesc := &tableDesc.Indexes[i]
-				for i, columnID := range indexDesc.ColumnIDs {
-					w.values = append(w.values, writePair{
-						col: indexDesc.ColumnNames[i],
-						val: rowVals[colIDtoRowIndex[columnID]],
-					})
-				}
-
-				w.constraint = indexDesc
-
-				writes = append(writes, w)
 			}
 		}
 
@@ -186,8 +170,6 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				}
 
 				b.Put(key, primitive)
-
-				writes = append(writes, write{})
 			} else {
 				// The column might have already existed but is being set to NULL, so
 				// delete it.
@@ -203,15 +185,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-
-	if err := p.txn.Run(&b); err != nil {
-		for i, result := range b.Results {
-			if _, ok := result.Err.(*proto.ConditionFailedError); ok {
-				w := writes[i]
-
-				return nil, fmt.Errorf("duplicate key value %s violates unique constraint %q", w.values, w.constraint.Name)
-			}
-		}
+	if err := runBatchWithErrorConversion(tableDesc, p.txn.Run, b); err != nil {
 		return nil, err
 	}
 

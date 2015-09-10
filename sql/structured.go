@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
@@ -310,7 +312,7 @@ func (desc *TableDescriptor) FindColumnByName(name string) (*ColumnDescriptor, e
 			return &desc.Columns[i], nil
 		}
 	}
-	return nil, fmt.Errorf("column \"%s\" does not exist", name)
+	return nil, util.Errorf("column %q does not exist", name)
 }
 
 // FindColumnByID finds the column with specified ID.
@@ -320,7 +322,7 @@ func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, err
 			return &desc.Columns[i], nil
 		}
 	}
-	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+	return nil, util.Errorf("column-id \"%d\" does not exist", id)
 }
 
 // FindIndexByName finds the index with specified name.
@@ -330,7 +332,19 @@ func (desc *TableDescriptor) FindIndexByName(name string) (*IndexDescriptor, err
 			return &desc.Indexes[i], nil
 		}
 	}
-	return nil, fmt.Errorf("index \"%s\" does not exist", name)
+	return nil, util.Errorf("index %q does not exist", name)
+}
+
+// FindIndexByID finds the index with specified ID.
+func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error) {
+	indexes := append(desc.Indexes, desc.PrimaryIndex)
+
+	for i, c := range indexes {
+		if c.ID == id {
+			return &indexes[i], nil
+		}
+	}
+	return nil, util.Errorf("index-id \"%d\" does not exist", id)
 }
 
 // SQLString returns the SQL string corresponding to the type.

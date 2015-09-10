@@ -244,31 +244,40 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 	return vals, nil
 }
 
+func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, error) {
+	var tableID, indexID uint64
+
+	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
+		return IndexID(indexID), nil, util.Errorf("%s: invalid key prefix: %q", desc.Name, key)
+	}
+
+	key = bytes.TrimPrefix(key, keys.TableDataPrefix)
+	key, tableID = encoding.DecodeUvarint(key)
+	key, indexID = encoding.DecodeUvarint(key)
+
+	if ID(tableID) != desc.ID {
+		return IndexID(indexID), nil, util.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
+	}
+
+	return IndexID(indexID), key, nil
+}
+
 // decodeIndexKey decodes the values that are a part of the specified index
 // key. ValTypes is a slice returned from makeKeyVals. The remaining bytes in the
 // index key are returned which will either be an encoded column ID for the
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
-func decodeIndexKey(desc *TableDescriptor,
-	index IndexDescriptor, valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
-	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
-		return nil, fmt.Errorf("%s: invalid key prefix: %q", desc.Name, key)
-	}
-	key = bytes.TrimPrefix(key, keys.TableDataPrefix)
-
-	var tableID uint64
-	key, tableID = encoding.DecodeUvarint(key)
-	if ID(tableID) != desc.ID {
-		return nil, fmt.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
+func decodeIndexKey(desc *TableDescriptor, index IndexDescriptor, valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
+	indexID, remaining, err := decodeIndexKeyPrefix(desc, key)
+	if err != nil {
+		return nil, err
 	}
 
-	var indexID uint64
-	key, indexID = encoding.DecodeUvarint(key)
-	if IndexID(indexID) != index.ID {
-		return nil, fmt.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
+	if indexID != index.ID {
+		return nil, util.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
 	}
 
-	return decodeKeyVals(valTypes, vals, key)
+	return decodeKeyVals(valTypes, vals, remaining)
 }
 
 // decodeKeyVals decodes the values that are part of the key. ValTypes is a
