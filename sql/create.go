@@ -143,8 +143,9 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 
 	// Mark transaction as operating on the system DB.
 	p.txn.SetSystemDBTrigger()
-	if err := runBatchWithErrorConversion(tableDesc, p.txn.Run, b); err != nil {
-		return nil, err
+
+	if err := p.txn.Run(&b); err != nil {
+		return nil, convertBatchError(tableDesc, b, err)
 	}
 
 	return &valuesNode{}, nil
