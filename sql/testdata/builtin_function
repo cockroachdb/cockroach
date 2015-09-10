@@ -241,7 +241,6 @@ true
 
 query error syntax error at or near "\("
 SELECT current_date()
-----
 
 query T
 SELECT now() - current_timestamp < interval '10s'
@@ -250,7 +249,6 @@ true
 
 query error syntax error at or near "\("
 SELECT current_timestamp()
-----
 
 query T
 SELECT extract(year from timestamp '2001-04-10 12:04:59')
@@ -334,5 +332,3 @@ SELECT extract(nanosecond from timestamp '2001-04-10 12:04:59.34565423')
 
 query error extract: unsupported timespan: nansecond
 SELECT extract(nansecond from timestamp '2001-04-10 12:04:59.34565423')
-----
-
