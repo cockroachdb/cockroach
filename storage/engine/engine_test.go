@@ -37,9 +37,7 @@ func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byt
 	if len(keyvals) != len(sortedKeys) {
 		t.Errorf("length mismatch. expected %s, got %s", sortedKeys, keyvals)
 	}
-	t.Log("---")
 	for i, kv := range keyvals {
-		t.Logf("index: %d\tk: %q\tv: %q\n", i, kv.Key, kv.Value)
 		if sortedKeys[i] != string(kv.Key) {
 			t.Errorf("key mismatch at index %d: expected %q, got %q", i, sortedKeys[i], kv.Key)
 		}

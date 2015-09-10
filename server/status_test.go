@@ -227,25 +227,25 @@ func getRequest(t *testing.T, ts TestServer, path string) []byte {
 		req.Header.Set(util.AcceptHeader, util.JSONContentType)
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			t.Logf("could not GET %s - %s", url, err)
+			log.Infof("could not GET %s - %s", url, err)
 			continue
 		}
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			t.Logf("could not ready body for %s - %s", url, err)
+			log.Infof("could not ready body for %s - %s", url, err)
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			t.Logf("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
+			log.Infof("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 			continue
 		}
 		returnedContentType := resp.Header.Get(util.ContentTypeHeader)
 		if returnedContentType != util.JSONContentType {
-			t.Logf("unexpected content type: %v", returnedContentType)
+			log.Infof("unexpected content type: %v", returnedContentType)
 			continue
 		}
-		t.Logf("OK response from %s", url)
+		log.Infof("OK response from %s", url)
 		return body
 	}
 	t.Fatalf("There was an error retrieving %s", url)

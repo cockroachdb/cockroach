@@ -306,8 +306,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 		},
 	}
 	if a, e := ser.perStoreFeeds, expected; !checkMatch(e, a) {
-		t.Errorf("event feed did not match expected value. Actual values have been printed to compare with above expectation.\n")
-		t.Logf("Event feed information:\n%s", ser.eventFeedString())
+		t.Errorf("event feed did not match expected value. Got:\n%s", ser.eventFeedString())
 	}
 
 	// Expected count of update events on a per-method basis.
@@ -338,7 +337,6 @@ func TestMultiStoreEventFeed(t *testing.T) {
 		},
 	}
 	if a, e := ser.perStoreUpdateCount, expectedUpdateCount; !reflect.DeepEqual(a, e) {
-		t.Errorf("update counts did not match expected value. Actual values have been printed to compare with above expectation.\n")
-		t.Logf("Update count information:\n%s", ser.updateCountString())
+		t.Errorf("update counts did not match expected value. Got:\n%s", ser.updateCountString())
 	}
 }

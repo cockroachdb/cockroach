@@ -18,6 +18,8 @@
 package ts
 
 import (
+	"bytes"
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
@@ -102,23 +104,24 @@ func (tm *testModel) assertModelCorrect() {
 		// model. This is done by comparing individual keys, and printing human
 		// readable information about any keys which differ in value between the
 		// two data sets.
-		tm.t.Log("Differences in model data and actual data:")
+		var buf bytes.Buffer
+		_, _ = buf.WriteString("Found unexpected differences in model data and actual data:\n")
 		for k, vActual := range actualData {
 			n, s, r, ts := DecodeDataKey([]byte(k))
 			if vModel, ok := tm.modelData[k]; !ok {
-				tm.t.Logf("\tKey %s/%s@%d, r:%d from actual data was not found in model", n, s, ts, r)
+				fmt.Fprintf(&buf, "\tKey %s/%s@%d, r:%d from actual data was not found in model", n, s, ts, r)
 			} else {
 				if !gogoproto.Equal(vActual, vModel) {
-					tm.t.Logf("\tKey %s/%s@%d, r:%d differs between model and actual:", n, s, ts, r)
+					fmt.Fprintf(&buf, "\tKey %s/%s@%d, r:%d differs between model and actual:", n, s, ts, r)
 					if its, err := proto.InternalTimeSeriesDataFromValue(vActual); err != nil {
-						tm.t.Logf("\tActual value is not a valid time series: %v", vActual)
+						fmt.Fprintf(&buf, "\tActual value is not a valid time series: %v", vActual)
 					} else {
-						tm.t.Logf("\tActual value: %v", its)
+						fmt.Fprintf(&buf, "\tActual value: %v", its)
 					}
 					if its, err := proto.InternalTimeSeriesDataFromValue(vModel); err != nil {
-						tm.t.Logf("\tModel value is not a valid time series: %v", vModel)
+						fmt.Fprintf(&buf, "\tModel value is not a valid time series: %v", vModel)
 					} else {
-						tm.t.Logf("\tModel value: %v", its)
+						fmt.Fprintf(&buf, "\tModel value: %v", its)
 					}
 				}
 			}
@@ -128,11 +131,11 @@ func (tm *testModel) assertModelCorrect() {
 		for k := range tm.modelData {
 			n, s, r, ts := DecodeDataKey([]byte(k))
 			if _, ok := actualData[k]; !ok {
-				tm.t.Logf("Key %s/%s@%d, r:%d from model was not found in actual data", n, s, ts, r)
+				fmt.Fprintf(&buf, "Key %s/%s@%d, r:%d from model was not found in actual data", n, s, ts, r)
 			}
 		}
 
-		tm.t.Fatalf("Failing because model data was not equal to actual data.")
+		tm.t.Fatal(buf.String())
 	}
 }
 

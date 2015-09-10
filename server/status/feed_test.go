@@ -240,7 +240,7 @@ func TestServerNodeEventFeed(t *testing.T) {
 	/*
 	   if a, e := ner.perNodeFeeds, expectedNodeEvents; !reflect.DeepEqual(a, e) {
 	       t.Errorf("node feed did not match expected value. Actual values have been printed to compare with above expectation.\n")
-	       t.Logf("Event feed information:\n%s", ner.eventFeedString())
+	       log.Infof("Event feed information:\n%s", ner.eventFeedString())
 	   }
 	*/
 
