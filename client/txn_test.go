@@ -38,7 +38,7 @@ var (
 	testPutResp = &proto.PutResponse{ResponseHeader: proto.ResponseHeader{Timestamp: testTS}}
 )
 
-func newTestSender(handler func(proto.Call)) SenderFunc {
+func newTestSender(pre, post func(proto.Call)) SenderFunc {
 	txnKey := proto.Key("test-txn")
 	txnID := []byte(uuid.NewUUID4())
 
@@ -50,23 +50,35 @@ func newTestSender(handler func(proto.Call)) SenderFunc {
 			header.Txn.ID = txnID
 		}
 		call.Reply.Reset()
+
+		if pre != nil {
+			pre(call)
+		}
+
 		var writing bool
-		switch call.Args.(type) {
+		var status proto.TransactionStatus
+		switch t := call.Args.(type) {
 		case *proto.PutRequest:
 			gogoproto.Merge(call.Reply, testPutResp)
 			writing = true
 		case *proto.EndTransactionRequest:
 			writing = true
+			if t.Commit {
+				status = proto.COMMITTED
+			} else {
+				status = proto.ABORTED
+			}
 		default:
 			// Do nothing.
 		}
 		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
-		if txn := call.Reply.Header().Txn; txn != nil {
+		if txn := call.Reply.Header().Txn; txn != nil && call.Reply.Header().GoError() == nil {
 			txn.Writing = writing
+			txn.Status = status
 		}
 
-		if handler != nil {
-			handler(call)
+		if post != nil {
+			post(call)
 		}
 	}
 }
@@ -95,7 +107,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	}
 
 	var testIdx int
-	db := NewDB(newTestSender(func(call proto.Call) {
+	db := NewDB(newTestSender(nil, func(call proto.Call) {
 		test := testCases[testIdx]
 		if !test.expRequestTS.Equal(call.Args.Header().Txn.Timestamp) {
 			t.Errorf("%d: expected ts %s got %s", testIdx, test.expRequestTS, call.Args.Header().Txn.Timestamp)
@@ -117,7 +129,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	db := NewDB(newTestSender(func(call proto.Call) {
 		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
 		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{})
-	}))
+	}, nil))
 
 	txn := NewTxn(*db)
 	txn.db.sender.Send(context.Background(),
@@ -134,7 +146,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 // transactional client.
 func TestTransactionConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	db := NewDB(newTestSender(func(call proto.Call) {}))
+	db := NewDB(newTestSender(func(call proto.Call) {}, nil))
 	db.userPriority = 101
 	if err := db.Txn(func(txn *Txn) error {
 		if txn.db.userPriority != db.userPriority {
@@ -154,7 +166,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 	var calls []proto.Method
 	db := NewDB(newTestSender(func(call proto.Call) {
 		calls = append(calls, call.Method())
-	}))
+	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		_, err := txn.Get("a")
 		return err
@@ -176,7 +188,7 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 		var calls []proto.Method
 		db := NewDB(newTestSender(func(call proto.Call) {
 			calls = append(calls, call.Method())
-		}))
+		}, nil))
 		if err := db.Txn(func(txn *Txn) error {
 			b := &Batch{}
 			if withGet {
@@ -206,7 +218,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && !et.Commit {
 			t.Errorf("expected commit to be true; got %t", et.Commit)
 		}
-	}))
+	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		return txn.Put("a", "b")
 	}); err != nil {
@@ -226,7 +238,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 	count := 0
 	db := NewDB(newTestSender(func(call proto.Call) {
 		count++
-	}))
+	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		b := &Batch{}
 		b.Put("z", "adding a write exposed a bug in #1882")
@@ -247,7 +259,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
 			t.Errorf("did not expect EndTransaction")
 		}
-	}))
+	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		return errors.New("foo")
 	}); err == nil {
@@ -267,7 +279,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		var calls []proto.Method
 		db := NewDB(newTestSender(func(call proto.Call) {
 			calls = append(calls, call.Method())
-		}))
+		}, nil))
 		ok := false
 		if err := db.Txn(func(txn *Txn) error {
 			if !ok {
@@ -303,7 +315,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && et.Commit {
 			t.Errorf("expected commit to be false; got %t", et.Commit)
 		}
-	}))
+	}, nil))
 
 	if err := db.Txn(func(txn *Txn) error {
 		if err := txn.Put("a", "b"); err != nil {
@@ -346,7 +358,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 					call.Reply.Header().SetGoError(test.err)
 				}
 			}
-		}))
+		}, nil))
 		db.txnRetryOptions.InitialBackoff = 1 * time.Millisecond
 		err := db.Txn(func(txn *Txn) error {
 			return txn.Put("a", "b")
@@ -400,19 +412,56 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 					abort = true
 				}
 			}
-		}))
+		}, nil))
 
 		txn := NewTxn(*db)
 		_ = txn.Put("a", "b")
 		_ = txn.Commit()
 
 		if !commit {
-			t.Fatalf("%T: failed to find commit", test.err)
+			t.Errorf("%T: failed to find commit", test.err)
 		}
 		if test.abort && !abort {
-			t.Fatalf("%T: failed to find abort", test.err)
+			t.Errorf("%T: failed to find abort", test.err)
 		} else if !test.abort && abort {
-			t.Fatalf("%T: found unexpected abort", test.err)
+			t.Errorf("%T: found unexpected abort", test.err)
+		}
+	}
+}
+
+// TestTransactionStatus verifies that transactions always have their
+// status updated correctly.
+func TestTransactionStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	db := NewDB(newTestSender(nil, nil))
+	for _, write := range []bool{true, false} {
+		for _, commit := range []bool{true, false} {
+			txn := NewTxn(*db)
+
+			if _, err := txn.Get("a"); err != nil {
+				t.Fatal(err)
+			}
+			if write {
+				if err := txn.Put("a", "b"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if commit {
+				if err := txn.Commit(); err != nil {
+					t.Fatal(err)
+				}
+				if a, e := txn.Proto.Status, proto.COMMITTED; a != e {
+					t.Errorf("write: %t, commit: %t transaction expected to have status %q but had %q", write, commit, e, a)
+				}
+			} else {
+				if err := txn.Rollback(); err != nil {
+					t.Fatal(err)
+				}
+				if a, e := txn.Proto.Status, proto.ABORTED; a != e {
+					t.Errorf("write: %t, commit: %t transaction expected to have status %q but had %q", write, commit, e, a)
+				}
+			}
 		}
 	}
 }

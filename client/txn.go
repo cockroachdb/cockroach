@@ -406,12 +406,25 @@ func (txn *Txn) send(calls ...proto.Call) error {
 		}
 	}
 
-	_, haveEndTxn := lastReq.(*proto.EndTransactionRequest)
+	endTxnRequest, haveEndTxn := lastReq.(*proto.EndTransactionRequest)
 	needEndTxn := txn.Proto.Writing || haveTxnWrite
+	elideEndTxn := haveEndTxn && !needEndTxn
 
-	if haveEndTxn && !needEndTxn {
+	if elideEndTxn {
 		calls = calls[:lastIndex]
 	}
 
-	return txn.db.send(calls...)
+	err := txn.db.send(calls...)
+	if elideEndTxn && err == nil {
+		// This normally happens on the server and sent back in response
+		// headers, but this transaction was optimized away. The caller may
+		// still inspect the transaction struct, so we manually update it
+		// here to emulate a true transaction.
+		if endTxnRequest.Commit {
+			txn.Proto.Status = proto.COMMITTED
+		} else {
+			txn.Proto.Status = proto.ABORTED
+		}
+	}
+	return err
 }

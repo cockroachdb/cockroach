@@ -217,21 +217,6 @@ func makeResultFromError(planMaker *planner, err error) driver.Result {
 		if err != errTransactionAborted {
 			planMaker.txn.Cleanup(err)
 		}
-		// This transaction will normally get marked aborted as part of
-		// Cleanup above, but we do it explicitly here because edge cases
-		// exist:
-		// (1)
-		// BEGIN
-		// <some operation which is implemented using CPut, which fails>
-		// (2)
-		// BEGIN
-		// <syntax error>
-		// Both cases will not write any intents, and so client.Txn will
-		// not actually send an EndTransaction, and rightly so.
-		// Unfortunately, we depend on txn.Proto.Status being equivalent to
-		// our SQL transaction's status, and in these cases, our SQL
-		// transaction is aborted.
-		planMaker.txn.Proto.Status = proto.ABORTED
 	}
 	var errProto proto.Error
 	errProto.SetResponseGoError(err)
