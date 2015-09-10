@@ -36,12 +36,12 @@ var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding
 // It accepts either JSON or serialized protobuf content types.
 type HTTPServer struct {
 	context *base.Context
-	server
+	Executor
 }
 
 // MakeHTTPServer creates an HTTPServer.
 func MakeHTTPServer(ctx *base.Context, db client.DB) HTTPServer {
-	return HTTPServer{context: ctx, server: server{db: db}}
+	return HTTPServer{context: ctx, Executor: NewExecutor(db)}
 }
 
 // ServeHTTP serves the SQL API by treating the request URL path
@@ -92,7 +92,7 @@ func (s HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reply, code, err := s.execute(args)
+	reply, code, err := s.Execute(args)
 	if err != nil {
 		http.Error(w, err.Error(), code)
 	}
