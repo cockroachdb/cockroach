@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -255,11 +256,12 @@ func TestSingleRangeReverseScan(t *testing.T) {
 		t.Errorf("expected 2 rows; got %d", l)
 	}
 	// Case 3: Test proto.KeyMax
-	// TODO(marc): this depends on the sql system objects.
+	// This span covers the system DB keys.
+	wanted := 1 + len(sql.GetInitialSystemValues())
 	if rows, err := db.ReverseScan("g", proto.KeyMax, 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
-	} else if l := len(rows); l != 10 {
-		t.Errorf("expected 10 rows; got %d", l)
+	} else if l := len(rows); l != wanted {
+		t.Errorf("expected %d rows; got %d", wanted, l)
 	}
 	// Case 4: Test keys.SystemMax
 	if rows, err := db.ReverseScan(keys.SystemMax, "b", 0); err != nil {
