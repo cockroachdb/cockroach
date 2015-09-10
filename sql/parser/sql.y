@@ -197,6 +197,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> set_reset_clause
 
 %type <tblDef> table_elem column_def constraint_elem
+%type <strs> opt_storing
 %type <empty> typed_table_elem table_func_elem
 %type <empty> column_options
 %type <empty> reloption_elem
@@ -265,7 +266,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <colConstraints> col_qual_list
 %type <colConstraint> col_constraint col_constraint_elem
 %type <empty> key_actions key_delete key_match key_update key_action
-%type <empty> existing_index
 
 %type <expr>  func_application func_expr_common_subexpr
 %type <expr>  func_expr func_expr_windowless
@@ -317,7 +317,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLOSE
 %token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str>   COMMITTED CONCAT CONCURRENTLY CONFIGURATION CONFLICT CONNECTION CONSTRAINT
-%token <str>   CONSTRAINTS CONTENT CONTINUE CONVERSION COPY COST CREATE
+%token <str>   CONSTRAINTS CONTENT CONTINUE CONVERSION COPY COST COVERING CREATE
 %token <str>   CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
 %token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str>   CURRENT_USER CURSOR CYCLE
@@ -372,7 +372,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   SAVEPOINT SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
 %token <str>   SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
 %token <str>   SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL STABLE STANDALONE START
-%token <str>   STATEMENT STATISTICS STDIN STDOUT STRICT STRING STRIP SUBSTRING
+%token <str>   STATEMENT STATISTICS STDIN STDOUT STRICT STRING STRIP STORING SUBSTRING
 %token <str>   SYMMETRIC SYSID SYSTEM
 
 %token <str>   TABLE TABLES TEXT THEN
@@ -1163,13 +1163,14 @@ table_like_option:
 | ALL {}
 
 index_def:
-  INDEX opt_name '(' name_list ')'
+  opt_unique INDEX opt_name '(' name_list ')' opt_storing
   {
-    $$ = &IndexTableDef{Name: Name($2), Columns: NameList($4)}
-  }
-| UNIQUE INDEX name '(' name_list ')'
-  {
-    $$ = &IndexTableDef{Name: Name($3), Unique: true, Columns: NameList($5)}
+    $$ = &IndexTableDef{
+      Name:    Name($3),
+      Unique:  $1,
+      Columns: NameList($5),
+      Storing: $7,
+    }
   }
 
 // constraint_elem specifies constraint syntax which is not embedded into a
@@ -1190,20 +1191,41 @@ table_constraint:
 
 constraint_elem:
   CHECK '(' a_expr ')' {}
-| UNIQUE '(' name_list ')'
+| UNIQUE '(' name_list ')' opt_storing
   {
-    $$ = &IndexTableDef{Unique: true, Columns: NameList($3)}
+    $$ = &IndexTableDef{Unique: true, Columns: NameList($3), Storing: $5}
   }
-| UNIQUE existing_index {}
 | PRIMARY KEY '(' name_list ')'
   {
     $$ = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: NameList($4)}
   }
-| PRIMARY KEY existing_index {}
 | EXCLUDE '(' exclusion_constraint_list ')'
     exclusion_where_clause {}
 | FOREIGN KEY '(' name_list ')' REFERENCES qualified_name
     opt_column_list key_match key_actions {}
+
+storing:
+  COVERING
+| STORING
+
+// TODO(pmattis): It would be nice to support a syntax like STORING
+// ALL or STORING (*). The syntax addition is straightforward, but we
+// need to be careful with the rest of the implementation. In
+// particular, columns stored at indexes are currently encoded in such
+// a way that adding a new column would require rewriting the existing
+// index values. We will need to change the storage format so that it
+// is a list of <columnID, value> pairs which will allow both adding
+// and dropping columns without rewriting indexes that are storing the
+// adjusted column.
+opt_storing:
+  storing '(' name_list ')'
+  {
+    $$ = $3
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 opt_no_inherit:
   NO INHERIT {}
@@ -1274,9 +1296,6 @@ on_commit_option:
 | ON COMMIT PRESERVE ROWS {}
 | /* EMPTY */ {}
 
-existing_index:
-  USING INDEX name {}
-
 // CREATE TABLE relname AS select_stmt [ WITH [NO] DATA ]
 create_table_as_stmt:
   CREATE TABLE create_as_target AS select_stmt opt_with_data
@@ -1332,16 +1351,17 @@ opt_restart_seqs:
 
 // CREATE INDEX
 create_index_stmt:
-  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')'
+  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing
   {
     $$ = &CreateIndex{
       Name:    Name($4),
       Table:   $6,
       Unique:  $2,
       Columns: $8,
+      Storing: $10,
     }
   }
-| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')'
+| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')' opt_storing
   {
     $$ = &CreateIndex{
       Name:        Name($7),
@@ -1349,6 +1369,7 @@ create_index_stmt:
       Unique:      $2,
       IfNotExists: true,
       Columns:     $11,
+      Storing:     $13,
     }
   }
 

@@ -151,57 +151,58 @@ from from from
 # SELECT from index.
 
 statement ok
-CREATE TABLE xyz (
+CREATE TABLE xyzw (
   x INT PRIMARY KEY,
   y INT,
   z INT,
+  w INT,
   INDEX foo (z, y)
 )
 
 statement ok
-INSERT INTO xyz VALUES (4, 5, 6), (1, 2, 3);
+INSERT INTO xyzw VALUES (4, 5, 6, 7), (1, 2, 3, 4);
 
 query error argument of LIMIT must not contain variables
-SELECT * FROM xyz LIMIT a
+SELECT * FROM xyzw LIMIT a
 
 query error argument of OFFSET must not contain variables
-SELECT * FROM xyz OFFSET a
+SELECT * FROM xyzw OFFSET a
 
 query error unsupported binary operator: <int> \+ <float>
-SELECT * FROM xyz OFFSET 1 + 0.0
+SELECT * FROM xyzw OFFSET 1 + 0.0
 
 query III
-SELECT * FROM xyz LIMIT 0
+SELECT * FROM xyzw LIMIT 0
 ----
 
 query III
-SELECT * FROM xyz LIMIT 1
+SELECT * FROM xyzw LIMIT 1
 ----
-1 2 3
+1 2 3 4
 
 query III
-SELECT * FROM xyz LIMIT 1 OFFSET 1
+SELECT * FROM xyzw LIMIT 1 OFFSET 1
 ----
-4 5 6
+4 5 6 7
 
 # Multiplying by zero so the result is deterministic.
 query III
-SELECT * FROM xyz LIMIT (RANDOM() * 0.0)::int OFFSET (RANDOM() * 0.0)::int
+SELECT * FROM xyzw LIMIT (RANDOM() * 0.0)::int OFFSET (RANDOM() * 0.0)::int
 ----
 
 query II
-SELECT * FROM xyz@foo
+SELECT * FROM xyzw@foo
 ----
 3 2
 6 5
 
 query I
-SELECT z FROM test.xyz@foo WHERE y = 5
+SELECT z FROM test.xyzw@foo WHERE y = 5
 ----
 6
 
 query I
-SELECT foo.y FROM test.xyz@foo WHERE z = 3
+SELECT foo.y FROM test.xyzw@foo WHERE z = 3
 ----
 2
 
@@ -209,7 +210,7 @@ query error table "unknown" does not exist
 SELECT z FROM test.unknown@foo WHERE y = 5
 
 query error index "unknown" not found
-SELECT z FROM test.xyz@unknown WHERE y = 5
+SELECT z FROM test.xyzw@unknown WHERE y = 5
 
-query error qualified name "foo.x" not found
-SELECT x FROM test.xyz@foo WHERE y = 5
+query error qualified name "foo.w" not found
+SELECT w FROM test.xyzw@foo WHERE y = 5

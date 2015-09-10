@@ -143,7 +143,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 			columnID = desc.NextColumnID
 			desc.NextColumnID++
 		}
-		columnNames[desc.Columns[i].Name] = columnID
+		columnNames[normalizeName(desc.Columns[i].Name)] = columnID
 		desc.Columns[i].ID = columnID
 	}
 
@@ -167,7 +167,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 		index.allocateName(desc)
 	}
 
-	// Populate IDs
+	// Populate IDs.
 	for _, index := range indexes {
 		if index.ID == 0 {
 			index.ID = desc.NextIndexID
@@ -178,7 +178,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 				index.ColumnIDs = append(index.ColumnIDs, 0)
 			}
 			if index.ColumnIDs[j] == 0 {
-				index.ColumnIDs[j] = columnNames[colName]
+				index.ColumnIDs[j] = columnNames[normalizeName(colName)]
 			}
 		}
 		if index != &desc.PrimaryIndex {
@@ -189,6 +189,20 @@ func (desc *TableDescriptor) AllocateIDs() error {
 				}
 			}
 			index.ImplicitColumnIDs = extraColumnIDs
+
+			for _, colName := range index.StoreColumnNames {
+				col, err := desc.FindColumnByName(colName)
+				if err != nil {
+					return err
+				}
+				if desc.PrimaryIndex.containsColumnID(col.ID) {
+					continue
+				}
+				if index.containsColumnID(col.ID) {
+					return fmt.Errorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
+				}
+				index.ImplicitColumnIDs = append(index.ImplicitColumnIDs, col.ID)
+			}
 		}
 	}
 
@@ -230,10 +244,10 @@ func (desc *TableDescriptor) Validate() error {
 			return fmt.Errorf("invalid column ID %d", column.ID)
 		}
 
-		if _, ok := columnNames[column.Name]; ok {
+		if _, ok := columnNames[normalizeName(column.Name)]; ok {
 			return fmt.Errorf("duplicate column name: \"%s\"", column.Name)
 		}
-		columnNames[column.Name] = column.ID
+		columnNames[normalizeName(column.Name)] = column.ID
 
 		if other, ok := columnIDs[column.ID]; ok {
 			return fmt.Errorf("column \"%s\" duplicate ID of column \"%s\": %d",
@@ -263,10 +277,10 @@ func (desc *TableDescriptor) Validate() error {
 			return fmt.Errorf("invalid index ID %d", index.ID)
 		}
 
-		if _, ok := indexNames[index.Name]; ok {
+		if _, ok := indexNames[normalizeName(index.Name)]; ok {
 			return fmt.Errorf("duplicate index name: \"%s\"", index.Name)
 		}
-		indexNames[index.Name] = struct{}{}
+		indexNames[normalizeName(index.Name)] = struct{}{}
 
 		if other, ok := indexIDs[index.ID]; ok {
 			return fmt.Errorf("index \"%s\" duplicate ID of index \"%s\": %d",
@@ -289,7 +303,7 @@ func (desc *TableDescriptor) Validate() error {
 		}
 
 		for i, name := range index.ColumnNames {
-			colID, ok := columnNames[name]
+			colID, ok := columnNames[normalizeName(name)]
 			if !ok {
 				return fmt.Errorf("index \"%s\" contains unknown column \"%s\"", index.Name, name)
 			}

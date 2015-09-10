@@ -44,7 +44,9 @@ func TestParse(t *testing.T) {
 		{`CREATE INDEX a ON b (c)`},
 		{`CREATE INDEX a ON b.c (d)`},
 		{`CREATE INDEX ON a (b)`},
+		{`CREATE INDEX ON a (b) STORING (c)`},
 		{`CREATE UNIQUE INDEX a ON b (c)`},
+		{`CREATE UNIQUE INDEX a ON b (c) STORING (d)`},
 		{`CREATE UNIQUE INDEX a ON b.c (d)`},
 
 		{`CREATE TABLE a ()`},
@@ -64,6 +66,9 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT, c TEXT, INDEX d (b, c))`},
 		{`CREATE TABLE a (b INT, c TEXT, CONSTRAINT d UNIQUE (b, c))`},
 		{`CREATE TABLE a (b INT, UNIQUE (b))`},
+		{`CREATE TABLE a (b INT, UNIQUE (b) STORING (c))`},
+		{`CREATE TABLE a (b INT, INDEX (b))`},
+		{`CREATE TABLE a (b INT, INDEX (b) STORING (c))`},
 		{`CREATE TABLE a.b (b INT)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
 
@@ -329,6 +334,7 @@ func TestParse2(t *testing.T) {
 		{`CREATE INDEX ON a (b ASC, c DESC)`, `CREATE INDEX ON a (b, c)`},
 		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b))`,
 			`CREATE TABLE a (b INT, CONSTRAINT foo UNIQUE (b))`},
+		{`CREATE INDEX ON a (b) COVERING (c)`, `CREATE INDEX ON a (b) STORING (c)`},
 
 		{`SELECT BOOL 'foo'`, `SELECT CAST('foo' AS BOOL)`},
 		{`SELECT INT 'foo'`, `SELECT CAST('foo' AS INT)`},
@@ -488,6 +494,11 @@ CREATE DATABASE a b
 			`syntax error at or near "b"
 CREATE DATABASE a b c
                   ^
+`},
+		{`CREATE INDEX ON a (b) STORING ()`,
+			`syntax error at or near ")"
+CREATE INDEX ON a (b) STORING ()
+                               ^
 `},
 		{"SELECT 1e-\n-1",
 			`invalid floating point literal

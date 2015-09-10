@@ -1,0 +1,61 @@
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX b_idx (b) STORING (c, d),
+  UNIQUE INDEX c_idx (c) STORING (a, b, d)
+)
+
+query TTTTT colnames
+SHOW INDEX FROM t
+----
+Table Name    Unique Seq Column Storing
+t     primary true   1   a      false
+t     b_idx   false  1   b      false
+t     b_idx   false  2   c      true
+t     b_idx   false  3   d      true
+t     c_idx   true   1   c      false
+t     c_idx   true   2   a      true
+t     c_idx   true   3   b      true
+t     c_idx   true   4   d      true
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3, 4)
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@b_idx
+----
+0 /t/b_idx/2/1/3/4 NULL true
+
+query IIII
+SELECT a, b, c, d FROM t@b_idx
+----
+1 2 3 4
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@c_idx
+----
+0 /t/c_idx/3 /1/2/4 true
+
+query IIII
+SELECT a, b, c, d FROM t@c_idx
+----
+1 2 3 4
+
+statement ok
+CREATE INDEX d_idx ON t (d) STORING (a, b)
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t@d_idx
+----
+0 /t/d_idx/4/1/2 NULL true
+
+query III
+SELECT a, b, d FROM t@d_idx
+----
+1 2 4
+
+statement error index "error" already contains column "d"
+CREATE INDEX error ON t (d) STORING (d)

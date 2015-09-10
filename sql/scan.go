@@ -239,6 +239,9 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 			for _, colID := range n.index.ColumnIDs {
 				indexColIDs[colID] = struct{}{}
 			}
+			for _, colID := range n.index.ImplicitColumnIDs {
+				indexColIDs[colID] = struct{}{}
+			}
 			for _, col := range n.desc.Columns {
 				if _, ok := indexColIDs[col.ID]; !ok {
 					continue
