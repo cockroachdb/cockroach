@@ -1,10 +1,8 @@
 query error unknown function: foo.bar
 SELECT foo.bar()
-----
 
 query error unknown function: defaults
 SELECT defaults()
-----
 
 query I colnames
 SELECT LENGTH('roach7')
@@ -133,7 +131,6 @@ select ascii('禅');
 
 query error ascii: the input string should not be empty
 select ascii('');
-----
 
 query T
 SELECT md5('abc')

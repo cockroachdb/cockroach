@@ -36,4 +36,3 @@ SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
 
 query error qualified name "kv.nonexistent" not found
 SELECT * FROM kv WHERE nonexistent = 1
-----
