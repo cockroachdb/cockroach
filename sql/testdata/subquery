@@ -25,15 +25,12 @@ false
 
 query error subquery must return only one column, found 2
 SELECT (SELECT 1, 2)
-----
 
 query error subquery must return only one column, found 2
 SELECT 1 IN (SELECT 1, 2)
-----
 
 query error subquery must return 2 columns, found 1
 SELECT (1, 2) IN (SELECT 1)
-----
 
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
@@ -43,7 +40,6 @@ INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 
 query error subquery must return 2 columns
 SELECT (1, 2) IN (SELECT * FROM abc)
-----
 
 query B
 SELECT (1, 2) IN (SELECT a, b FROM abc)
@@ -57,11 +53,9 @@ false
 
 query error subquery must return only one column
 SELECT (SELECT * FROM abc)
-----
 
 query error more than one row returned by a subquery used as an expression
 SELECT (SELECT a FROM abc)
-----
 
 query I
 SELECT (SELECT a FROM abc WHERE false)
