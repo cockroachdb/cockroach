@@ -627,6 +627,245 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	}
 }
 
+func TestAllocatorComputeAction(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper, _, _, a := createTestAllocator()
+	defer stopper.Stop()
+
+	// Each test case should describe a repair situation which has a lower
+	// priority than the previous test case.
+	testCases := []struct {
+		zone           config.ZoneConfig
+		desc           proto.RangeDescriptor
+		expectedAction allocatorAction
+	}{
+		// Needs Three replicas, have two
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+				},
+			},
+			expectedAction: aaAdd,
+		},
+		// Needs Five replicas, have four.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction: aaAdd,
+		},
+		// Need three replicas, have four.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction: aaRemove,
+		},
+		// Need three replicas, have five.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+					{
+						StoreID:   5,
+						NodeID:    5,
+						ReplicaID: 5,
+					},
+				},
+			},
+			expectedAction: aaRemove,
+		},
+		// Three replicas have three.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction: aaNoop,
+		},
+	}
+
+	lastPriority := float64(999999999)
+	for i, tcase := range testCases {
+		action, priority := a.computeAction(tcase.zone, &tcase.desc)
+		if tcase.expectedAction != action {
+			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+			continue
+		}
+		if priority >= lastPriority {
+			t.Errorf("Test cases should have descending priority. Case %d had priority %f, previous case had priority %f", i, priority, lastPriority)
+		}
+		lastPriority = priority
+	}
+}
+
 type testStore struct {
 	proto.StoreDescriptor
 }
