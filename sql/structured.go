@@ -216,6 +216,12 @@ func (desc *TableDescriptor) Validate() error {
 		return fmt.Errorf("invalid table ID %d", desc.ID)
 	}
 
+	// ParentID is the ID of the database holding this table.
+	// It is often < ID, except when a table gets moved across databases.
+	if desc.ParentID == 0 {
+		return fmt.Errorf("invalid parent ID %d", desc.ParentID)
+	}
+
 	if len(desc.Columns) == 0 {
 		return errMissingColumns
 	}

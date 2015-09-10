@@ -193,7 +193,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	desc, err := makeTableDesc(n)
+	desc, err := makeTableDesc(n, dbDesc.ID)
 	if err != nil {
 		return nil, err
 	}

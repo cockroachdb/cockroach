@@ -101,7 +101,7 @@ func createSystemTable(id ID, cmd string) TableDescriptor {
 		log.Fatal(err)
 	}
 
-	desc, err := makeTableDesc(stmts[0].(*parser.CreateTable))
+	desc, err := makeTableDesc(stmts[0].(*parser.CreateTable), systemDatabaseID)
 	if err != nil {
 		log.Fatal(err)
 	}
