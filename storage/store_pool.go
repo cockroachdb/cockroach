@@ -140,6 +140,8 @@ type StorePool struct {
 	clock              *hlc.Clock
 	timeUntilStoreDead time.Duration
 
+	// Each storeDetail is contained in both a map and a priorityQueue; pointers
+	// are used so that data can be kept in sync.
 	mu     sync.RWMutex // Protects stores and queue.
 	stores map[proto.StoreID]*storeDetail
 	queue  storePoolPQ
