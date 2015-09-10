@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
@@ -50,20 +51,20 @@ func get(t *testing.T, node *localcluster.Container, path string) []byte {
 	for r := retry.Start(retryOptions); r.Next(); {
 		resp, err := localcluster.HTTPClient.Get(url)
 		if err != nil {
-			t.Logf("could not GET %s - %s", url, err)
+			log.Infof("could not GET %s - %s", url, err)
 			continue
 		}
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			t.Logf("could not read body for %s - %s", url, err)
+			log.Infof("could not read body for %s - %s", url, err)
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			t.Logf("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
+			log.Infof("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 			continue
 		}
-		t.Logf("OK response from %s", url)
+		log.Infof("OK response from %s", url)
 		return body
 	}
 	t.Fatalf("There was an error retrieving %s", url)

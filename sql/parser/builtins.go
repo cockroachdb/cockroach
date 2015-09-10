@@ -27,6 +27,7 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
+	"time"
 )
 
 var errEmptyInputString = errors.New("the input string should not be empty")
@@ -36,8 +37,10 @@ type typeList []reflect.Type
 type builtin struct {
 	types      typeList
 	returnType Datum
-	impure     bool
-	fn         func(DTuple) (Datum, error)
+	// Set to true when a function returns a different value when called with
+	// the same parameters. e.g.: random(), now().
+	impure bool
+	fn     func(DTuple) (Datum, error)
 }
 
 func (b builtin) match(types typeList) bool {
@@ -319,6 +322,99 @@ var builtins = map[string][]builtin{
 		},
 	},
 
+	// Timestamp/Date functions.
+
+	"age": {
+		builtin{
+			types:      typeList{timestampType},
+			returnType: DummyInterval,
+			impure:     true,
+			fn: func(args DTuple) (Datum, error) {
+				return DInterval{Duration: time.Now().Sub(args[0].(DTimestamp).Time)}, nil
+			},
+		},
+		builtin{
+			types:      typeList{timestampType, timestampType},
+			returnType: DummyInterval,
+			fn: func(args DTuple) (Datum, error) {
+				return DInterval{Duration: args[0].(DTimestamp).Sub(args[1].(DTimestamp).Time)}, nil
+			},
+		},
+	},
+
+	"current_date": {
+		builtin{
+			types:      typeList{},
+			returnType: DummyDate,
+			impure:     true,
+			fn: func(args DTuple) (Datum, error) {
+				return DDate{Time: time.Now().Truncate(24 * time.Hour)}, nil
+			},
+		},
+	},
+
+	"current_timestamp": {nowImpl},
+	"now":               {nowImpl},
+
+	"extract": {
+		builtin{
+			types:      typeList{stringType, timestampType},
+			returnType: DummyInt,
+			fn: func(args DTuple) (Datum, error) {
+				// extract timeSpan fromTime.
+				fromTime := args[1].(DTimestamp)
+				timeSpan := strings.ToLower(string(args[0].(DString)))
+				switch timeSpan {
+				case "year":
+					return DInt(fromTime.Year()), nil
+
+				case "quarter":
+					return DInt(fromTime.Month()/4 + 1), nil
+
+				case "month":
+					return DInt(fromTime.Month()), nil
+
+				case "week":
+					_, week := fromTime.ISOWeek()
+					return DInt(week), nil
+
+				case "day":
+					return DInt(fromTime.Day()), nil
+
+				case "dayofweek", "dow":
+					return DInt(fromTime.Weekday()), nil
+
+				case "dayofyear", "doy":
+					return DInt(fromTime.YearDay()), nil
+
+				case "hour":
+					return DInt(fromTime.Hour()), nil
+
+				case "minute":
+					return DInt(fromTime.Minute()), nil
+
+				case "second":
+					return DInt(fromTime.Second()), nil
+
+				case "millisecond":
+					return DInt(fromTime.Nanosecond() / int(time.Millisecond)), nil
+
+				case "microsecond":
+					return DInt(fromTime.Nanosecond() / int(time.Microsecond)), nil
+
+				case "nanosecond":
+					return DInt(fromTime.Nanosecond()), nil
+
+				case "epoch":
+					return DInt(fromTime.Unix()), nil
+
+				default:
+					return DNull, fmt.Errorf("unsupported timespan: %s", timeSpan)
+				}
+			},
+		},
+	},
+
 	// Aggregate functions.
 
 	"avg": {
@@ -430,6 +526,15 @@ var substringImpls = []builtin{
 
 			return str[start:end], nil
 		},
+	},
+}
+
+var nowImpl = builtin{
+	types:      typeList{},
+	returnType: DummyTimestamp,
+	impure:     true,
+	fn: func(args DTuple) (Datum, error) {
+		return DTimestamp{Time: time.Now()}, nil
 	},
 }
 

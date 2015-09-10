@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -54,54 +55,6 @@ var multiDCConfig = config.ZoneConfig{
 		{Attrs: []string{"a", "ssd"}},
 		{Attrs: []string{"b", "ssd"}},
 	},
-}
-
-// storeGossiper allows tests to push storeDescriptors into gossip and
-// synchronize on their callbacks. There can only be one storeGossiper used per
-// gossip instance.
-type storeGossiper struct {
-	g           *gossip.Gossip
-	wg          sync.WaitGroup
-	mu          sync.Mutex
-	storeKeyMap map[string]struct{}
-}
-
-// newStoreGossiper creates a store gossiper for use by tests. It adds the
-// callback to gossip.
-func newStoreGossiper(g *gossip.Gossip) *storeGossiper {
-	sg := &storeGossiper{
-		g:           g,
-		storeKeyMap: make(map[string]struct{}),
-	}
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(key string, _ []byte) {
-		sg.mu.Lock()
-		defer sg.mu.Unlock()
-		if _, ok := sg.storeKeyMap[key]; ok {
-			sg.wg.Done()
-		}
-	})
-	return sg
-}
-
-// gossipStores queues up a list of stores to gossip and blocks until each one
-// is gossiped before returning.
-func (sg *storeGossiper) gossipStores(stores []*proto.StoreDescriptor, t *testing.T) {
-	sg.mu.Lock()
-	sg.storeKeyMap = make(map[string]struct{})
-	sg.wg.Add(len(stores))
-	for _, s := range stores {
-		storeKey := gossip.MakeStoreKey(s.StoreID)
-		sg.storeKeyMap[storeKey] = struct{}{}
-		// Gossip store descriptor.
-		err := sg.g.AddInfoProto(storeKey, s, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	sg.mu.Unlock()
-
-	// Wait for all gossip callbacks to be invoked.
-	sg.wg.Wait()
 }
 
 var singleStore = []*proto.StoreDescriptor{
@@ -224,7 +177,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
-	newStoreGossiper(g).gossipStores(singleStore, t)
+	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
 	result, err := a.allocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
@@ -251,7 +204,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
-	newStoreGossiper(g).gossipStores(sameDCStores, t)
+	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 	result1, err := a.allocateTarget(multiDisksConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -288,7 +241,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
-	newStoreGossiper(g).gossipStores(multiDCStores, t)
+	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
 	result1, err := a.allocateTarget(multiDCConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -316,7 +269,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
-	newStoreGossiper(g).gossipStores(sameDCStores, t)
+	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 	result, err := a.allocateTarget(multiDisksConfig.ReplicaAttrs[1], []proto.Replica{
 		{
 			NodeID:  2,
@@ -338,7 +291,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
-	newStoreGossiper(g).gossipStores(multiDCStores, t)
+	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
 
 	testCases := []struct {
 		required         []string // attribute strings
@@ -409,7 +362,7 @@ func TestAllocatorRandomAllocation(t *testing.T) {
 			Capacity: proto.StoreCapacity{Capacity: 200, Available: 0},
 		},
 	}
-	newStoreGossiper(g).gossipStores(stores, t)
+	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
 	// Every allocation will randomly choose 3 of the 4, meaning either
 	// store 1 or store 2 will be chosen, as the least loaded of the
@@ -454,7 +407,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			Capacity: proto.StoreCapacity{Capacity: 100, Available: (100 - int64(100*maxFractionUsedThreshold)) / 2},
 		},
 	}
-	newStoreGossiper(g).gossipStores(stores, t)
+	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
 	// Every rebalance target must be either stores 1 or 2.
 	for i := 0; i < 10; i++ {
@@ -505,7 +458,7 @@ func TestAllocatorRebalanceByCapacity(t *testing.T) {
 			Capacity: proto.StoreCapacity{Capacity: 100, Available: 80},
 		},
 	}
-	newStoreGossiper(g).gossipStores(stores, t)
+	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
 	// Every rebalance target must be store 4 (if not nil).
 	for i := 0; i < 10; i++ {
@@ -555,7 +508,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			Capacity: proto.StoreCapacity{Capacity: 100, Available: 97, RangeCount: 5},
 		},
 	}
-	newStoreGossiper(g).gossipStores(stores, t)
+	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
@@ -628,8 +581,8 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 			Capacity: proto.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 5},
 		},
 	}
-	sg := newStoreGossiper(g)
-	sg.gossipStores(stores, t)
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
 
 	targetRepl, err := a.removeTarget(replicas)
 	if err != nil {
@@ -663,7 +616,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 5},
 		},
 	}
-	sg.gossipStores(stores, t)
+	sg.GossipStores(stores, t)
 
 	targetRepl, err = a.removeTarget(replicas)
 	if err != nil {

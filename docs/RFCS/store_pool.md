@@ -1,7 +1,7 @@
 - Feature Name: Store Pool
-- Status: draft
+- Status: Completed
 - Start Date: 2015-08-20
-- RFC PR:
+- RFC PR: #2286 #2336
 - Cockroach Issue: #2149 and #620
 
 # Summary

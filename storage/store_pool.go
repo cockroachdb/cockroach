@@ -33,9 +33,9 @@ import (
 )
 
 const (
-	// testTimeUntilStoreDead is the the test value for TimeUntilStoreDead to
+	// TestTimeUntilStoreDead is the the test value for TimeUntilStoreDead to
 	// quickly mark stores as dead.
-	testTimeUntilStoreDead = 5 * time.Millisecond
+	TestTimeUntilStoreDead = 5 * time.Millisecond
 
 	// TestTimeUntilStoreDeadOff is the test value for TimeUntilStoreDead that
 	// prevents the store pool from marking stores as dead.
@@ -45,6 +45,7 @@ const (
 type storeDetail struct {
 	desc            proto.StoreDescriptor
 	dead            bool
+	gossiped        bool // Was this store updated via gossip?
 	timesDied       int
 	foundDeadOn     time.Time
 	lastUpdatedTime time.Time // This is also the priority for the queue.
@@ -61,9 +62,10 @@ func (sd *storeDetail) markDead(foundDeadOn time.Time) {
 
 // markAlive sets the storeDetail to alive(active) and saves the updated time
 // and descriptor.
-func (sd *storeDetail) markAlive(foundAliveOn time.Time, storeDesc proto.StoreDescriptor) {
+func (sd *storeDetail) markAlive(foundAliveOn time.Time, storeDesc proto.StoreDescriptor, gossiped bool) {
 	sd.desc = storeDesc
 	sd.dead = false
+	sd.gossiped = gossiped
 	sd.lastUpdatedTime = foundAliveOn
 }
 
@@ -177,7 +179,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content []byte) {
 		detail = &storeDetail{index: -1}
 		sp.stores[storeDesc.StoreID] = detail
 	}
-	detail.markAlive(time.Now(), storeDesc)
+	detail.markAlive(time.Now(), storeDesc, true)
 	sp.queue.enqueue(detail)
 }
 
@@ -218,6 +220,25 @@ func (sp *StorePool) start(stopper *stop.Stopper) {
 	})
 }
 
+// GetStoreDescriptor returns the store detail for the given storeID.
+func (sp *StorePool) getStoreDetail(storeID proto.StoreID) storeDetail {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+
+	detail, ok := sp.stores[storeID]
+	if !ok {
+		// We don't seem to have that store yet, create a new detail and add
+		// it to the queue. This will give it the full timeout before it is
+		// considered dead.
+		detail = &storeDetail{index: -1}
+		sp.stores[storeID] = detail
+		detail.markAlive(time.Now(), proto.StoreDescriptor{StoreID: storeID}, false)
+		sp.queue.enqueue(detail)
+	}
+
+	return *detail
+}
+
 // GetStoreDescriptor returns the latest store descriptor for the given
 // storeID.
 func (sp *StorePool) getStoreDescriptor(storeID proto.StoreID) *proto.StoreDescriptor {
@@ -228,7 +249,14 @@ func (sp *StorePool) getStoreDescriptor(storeID proto.StoreID) *proto.StoreDescr
 	if !ok {
 		return nil
 	}
-	return &detail.desc
+
+	// Only return gossiped stores.
+	if !detail.gossiped {
+		return nil
+	}
+
+	desc := detail.desc
+	return &desc
 }
 
 // stat provides a running sample size and mean.
@@ -281,7 +309,8 @@ func (sp *StorePool) getStoreList(required proto.Attributes, deterministic bool)
 	for _, storeID := range storeIDs {
 		detail := sp.stores[proto.StoreID(storeID)]
 		if !detail.dead && required.IsSubset(*detail.desc.CombinedAttrs()) {
-			sl.add(&detail.desc)
+			desc := detail.desc
+			sl.add(&desc)
 		}
 	}
 	return sl

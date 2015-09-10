@@ -19,7 +19,6 @@ package encoding
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"hash"
 	"hash/crc32"
@@ -47,100 +46,6 @@ func NewCRC32Checksum(b []byte) hash.Hash32 {
 func ReleaseCRC32Checksum(crc hash.Hash32) {
 	crc.Reset()
 	crc32Pool.Put(crc)
-}
-
-// unwrapChecksum assumes that the input byte slice b ends with a checksum, splits
-// the slice accordingly and checks the embedded checksum which should match that
-// of k prepended to b.
-// Returns the slice with the checksum removed in case of success and an error
-// otherwise.
-// TODO(petermattis) remove this: the only use is in Encode/Decode.
-func unwrapChecksum(k []byte, b []byte) ([]byte, error) {
-	// Compute the first part of the expected checksum.
-	c := NewCRC32Checksum(k)
-	size := c.Size()
-	if size > len(b) {
-		return nil, fmt.Errorf("not enough bytes for %d character checksum", size)
-	}
-	// Add the second part.
-	c.Write(b[:len(b)-size])
-	// Get the reference checksum.
-	bWanted := c.Sum(nil)
-	// Grab the actual checksum from the end of b.
-	bActual := b[len(b)-size:]
-
-	if !bytes.Equal(bWanted, bActual) {
-		return nil, fmt.Errorf("CRC integrity error: %v != %v", bActual, bWanted)
-	}
-	return b[:len(b)-size], nil
-}
-
-// wrapChecksum computes the checksum of the byte slice b appended to k.
-// The output is b with the checksum appended.
-// TODO(petermattis) remove this: the only use is in Encode/Decode.
-func wrapChecksum(k []byte, b []byte) []byte {
-	chk := NewCRC32Checksum(k)
-	chk.Write(b)
-	return chk.Sum(b)
-}
-
-// Encode translates the given value into a byte representation used to store
-// it in the underlying key-value store. It typically applies to user-level
-// keys, but not to keys operated on internally, such as zone keys.
-// It returns a byte slice containing, in order, the internal representation
-// of v and a checksum of (k+v).
-// TODO(petermattis) remove this: the only use is in storage/engine.go:Increment.
-func Encode(k []byte, v interface{}) ([]byte, error) {
-	result := []byte(nil)
-	switch value := v.(type) {
-	case int64:
-		// int64 are encoded as varint.
-		encoded := make([]byte, binary.MaxVarintLen64)
-		numBytes := binary.PutVarint(encoded, value)
-		result = encoded[:numBytes]
-	case []byte:
-		result = value
-	default:
-		panic(fmt.Sprintf("unable to encode type '%T' of value '%s'", v, v))
-	}
-	return wrapChecksum(k, result), nil
-}
-
-// Decode decodes a Go datatype from a value stored in the key-value store. It returns
-// either an error or a variable of the decoded value.
-// TODO(petermattis) remove this: the only use is in storage/engine.go:Increment.
-func Decode(k []byte, wrappedValue []byte) (interface{}, error) {
-	v, err := unwrapChecksum(k, wrappedValue)
-	if err != nil {
-		return nil, fmt.Errorf("integrity error: %v", err)
-	}
-
-	// TODO(Tobias): This is highly provisional, interpreting everything as a
-	// varint until we have decided upon and implemented the actual encoding.
-	// If the value exists, attempt to decode it as a varint.
-	int64Val, numBytes := binary.Varint(v)
-	if numBytes == 0 {
-		return nil, fmt.Errorf("%v cannot be decoded; not varint-encoded", v)
-	} else if numBytes < 0 {
-		return nil, fmt.Errorf("%v cannot be decoded; integer overflow", v)
-	}
-	return int64Val, nil
-}
-
-// WillOverflow returns true if and only if adding both inputs
-// would under- or overflow the 64 bit integer range.
-func WillOverflow(a, b int64) bool {
-	// Morally MinInt64 < a+b < MaxInt64, but without overflows.
-	// First make sure that a <= b. If not, swap them.
-	if a > b {
-		a, b = b, a
-	}
-	// Now b is the larger of the numbers, and we compare sizes
-	// in a way that can never over- or underflow.
-	if b > 0 {
-		return a > math.MaxInt64-b
-	}
-	return math.MinInt64-b > a
 }
 
 // EncodeUint32 encodes the uint32 value using a big-endian 8 byte

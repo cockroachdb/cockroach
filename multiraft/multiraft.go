@@ -406,7 +406,6 @@ type removeGroupOp struct {
 // node represents a connection to a remote node.
 type node struct {
 	nodeID   proto.RaftNodeID
-	refCount int
 	groupIDs map[proto.RangeID]struct{}
 }
 
@@ -629,7 +628,6 @@ func (s *state) addNode(nodeID proto.RaftNodeID, g *group) error {
 	if !ok {
 		s.nodes[nodeID] = &node{
 			nodeID:   nodeID,
-			refCount: 1,
 			groupIDs: make(map[proto.RangeID]struct{}),
 		}
 		newNode = s.nodes[nodeID]

@@ -23,8 +23,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -172,48 +170,6 @@ func PutProto(engine Engine, key proto.EncodedKey, msg gogoproto.Message) (keyBy
 
 	bufferPool.Put(buf)
 	return
-}
-
-// Increment fetches the varint encoded int64 value specified by key
-// and adds "inc" to it then re-encodes as varint. The newly incremented
-// value is returned.
-func Increment(engine Engine, key proto.EncodedKey, inc int64) (int64, error) {
-	// First retrieve existing value.
-	val, err := engine.Get(key)
-	if err != nil {
-		return 0, err
-	}
-	var int64Val int64
-	// If the value exists, attempt to decode it as a varint.
-	if len(val) != 0 {
-		decoded, err := encoding.Decode(key, val)
-		if err != nil {
-			return 0, err
-		}
-		if _, ok := decoded.(int64); !ok {
-			return 0, util.Errorf("received value of wrong type %T", decoded)
-		}
-		int64Val = decoded.(int64)
-	}
-
-	// Check for overflow and underflow.
-	if encoding.WillOverflow(int64Val, inc) {
-		return 0, util.Errorf("key %q with value %d incremented by %d results in overflow", key, int64Val, inc)
-	}
-
-	if inc == 0 {
-		return int64Val, nil
-	}
-
-	r := int64Val + inc
-	encoded, err := encoding.Encode(key, r)
-	if err != nil {
-		return 0, util.Errorf("error encoding %d", r)
-	}
-	if err = engine.Put(key, encoded); err != nil {
-		return 0, err
-	}
-	return r, nil
 }
 
 // Scan returns up to max key/value objects starting from

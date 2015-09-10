@@ -21,7 +21,6 @@ package engine
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -38,9 +37,7 @@ func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byt
 	if len(keyvals) != len(sortedKeys) {
 		t.Errorf("length mismatch. expected %s, got %s", sortedKeys, keyvals)
 	}
-	t.Log("---")
 	for i, kv := range keyvals {
-		t.Logf("index: %d\tk: %q\tv: %q\n", i, kv.Key, kv.Value)
 		if sortedKeys[i] != string(kv.Key) {
 			t.Errorf("key mismatch at index %d: expected %q, got %q", i, sortedKeys[i], kv.Key)
 		}
@@ -433,51 +430,6 @@ func TestEngineScan1(t *testing.T) {
 				t.Fatalf("could not run scan: %v", err)
 			}
 			ensureRangeEqual(t, sortedKeys, keyMap, keyvals)
-		}
-	}, t)
-}
-
-func TestEngineIncrement(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		// Start with increment of an empty key.
-		val, err := Increment(engine, proto.EncodedKey("a"), 1)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if val != 1 {
-			t.Errorf("expected increment to be %d; got %d", 1, val)
-		}
-		// Increment same key by 1.
-		if val, err = Increment(engine, proto.EncodedKey("a"), 1); err != nil {
-			t.Fatal(err)
-		}
-		if val != 2 {
-			t.Errorf("expected increment to be %d; got %d", 2, val)
-		}
-		// Increment same key by 2.
-		if val, err = Increment(engine, proto.EncodedKey("a"), 2); err != nil {
-			t.Fatal(err)
-		}
-		if val != 4 {
-			t.Errorf("expected increment to be %d; got %d", 4, val)
-		}
-		// Decrement same key by -1.
-		if val, err = Increment(engine, proto.EncodedKey("a"), -1); err != nil {
-			t.Fatal(err)
-		}
-		if val != 3 {
-			t.Errorf("expected increment to be %d; got %d", 3, val)
-		}
-		// Increment same key by max int64 value to cause overflow; should return error.
-		if val, err = Increment(engine, proto.EncodedKey("a"), math.MaxInt64); err == nil {
-			t.Error("expected an overflow error")
-		}
-		if val, err = Increment(engine, proto.EncodedKey("a"), 0); err != nil {
-			t.Fatal(err)
-		}
-		if val != 3 {
-			t.Errorf("expected increment to be %d; got %d", 3, val)
 		}
 	}, t)
 }

@@ -45,8 +45,9 @@ type Replica struct {
 	ReplicaID ReplicaID `protobuf:"varint,3,opt,name=replica_id,casttype=ReplicaID" json:"replica_id"`
 }
 
-func (m *Replica) Reset()      { *m = Replica{} }
-func (*Replica) ProtoMessage() {}
+func (m *Replica) Reset()         { *m = Replica{} }
+func (m *Replica) String() string { return proto1.CompactTextString(m) }
+func (*Replica) ProtoMessage()    {}
 
 func (m *Replica) GetNodeID() NodeID {
 	if m != nil {
