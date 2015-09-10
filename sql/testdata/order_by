@@ -162,8 +162,8 @@ CREATE TABLE abc (
   c INT,
   d CHAR,
   PRIMARY KEY (a, b, c),
-  CONSTRAINT bc UNIQUE (b, c),
-  CONSTRAINT ba INDEX (b, a)
+  UNIQUE INDEX bc (b, c),
+  INDEX ba (b, a)
 )
 
 statement ok

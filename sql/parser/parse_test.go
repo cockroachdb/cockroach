@@ -61,7 +61,8 @@ func TestParse(t *testing.T) {
 		// "0" lost quotes previously.
 		{`CREATE TABLE a (b INT, c TEXT, PRIMARY KEY (b, c, "0"))`},
 		{`CREATE TABLE a (b INT, c TEXT, INDEX (b, c))`},
-		{`CREATE TABLE a (b INT, c TEXT, CONSTRAINT d INDEX (b, c))`},
+		{`CREATE TABLE a (b INT, c TEXT, INDEX d (b, c))`},
+		{`CREATE TABLE a (b INT, c TEXT, CONSTRAINT d UNIQUE (b, c))`},
 		{`CREATE TABLE a (b INT, UNIQUE (b))`},
 		{`CREATE TABLE a.b (b INT)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
@@ -326,6 +327,8 @@ func TestParse2(t *testing.T) {
 		expected string
 	}{
 		{`CREATE INDEX ON a (b ASC, c DESC)`, `CREATE INDEX ON a (b, c)`},
+		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b))`,
+			`CREATE TABLE a (b INT, CONSTRAINT foo UNIQUE (b))`},
 
 		{`SELECT BOOL 'foo'`, `SELECT CAST('foo' AS BOOL)`},
 		{`SELECT INT 'foo'`, `SELECT CAST('foo' AS INT)`},
@@ -470,11 +473,11 @@ SELECT '1
        ^
 `},
 		{`CREATE TABLE test (
-  INDEX foo (bar)
-)`, `syntax error at or near "foo"
+  CONSTRAINT foo INDEX (bar)
+)`, `syntax error at or near "INDEX"
 CREATE TABLE test (
-  INDEX foo (bar)
-        ^
+  CONSTRAINT foo INDEX (bar)
+                 ^
 `},
 		{`CREATE DATABASE a b`,
 			`syntax error at or near "b"

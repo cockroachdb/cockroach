@@ -160,7 +160,7 @@ CREATE TABLE xyz (
   x INT PRIMARY KEY,
   y INT,
   z INT,
-  CONSTRAINT foo INDEX (z, y)
+  INDEX foo (z, y)
 )
 
 statement ok

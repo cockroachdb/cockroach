@@ -3,8 +3,8 @@ CREATE TABLE users (
   id    INT PRIMARY KEY,
   name  VARCHAR NOT NULL,
   title VARCHAR,
-  CONSTRAINT foo INDEX (name),
-  CONSTRAINT bar UNIQUE (id, name)
+  INDEX foo (name),
+  UNIQUE INDEX bar (id, name)
 )
 
 statement ok

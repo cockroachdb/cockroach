@@ -39,7 +39,7 @@ statement ok
 CREATE TABLE kv2 (
   k CHAR PRIMARY KEY,
   v CHAR,
-  CONSTRAINT a UNIQUE (v)
+  UNIQUE INDEX a (v)
 )
 
 statement ok

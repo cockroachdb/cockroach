@@ -260,7 +260,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <str>   unreserved_keyword type_func_name_keyword
 %type <str>   col_name_keyword reserved_keyword
 
-%type <tblDef> table_constraint table_like_clause
+%type <tblDef> index_def table_constraint table_like_clause
 %type <empty> table_like_option_list table_like_option
 %type <colConstraints> col_qual_list
 %type <colConstraint> col_constraint col_constraint_elem
@@ -1078,6 +1078,7 @@ typed_table_elem_list:
 
 table_elem:
   column_def
+| index_def
 | table_like_clause {}
 | table_constraint
 
@@ -1161,6 +1162,16 @@ table_like_option:
 | COMMENTS {}
 | ALL {}
 
+index_def:
+  INDEX opt_name '(' name_list ')'
+  {
+    $$ = &IndexTableDef{Name: Name($2), Columns: NameList($4)}
+  }
+| UNIQUE INDEX name '(' name_list ')'
+  {
+    $$ = &IndexTableDef{Name: Name($3), Unique: true, Columns: NameList($5)}
+  }
+
 // constraint_elem specifies constraint syntax which is not embedded into a
 // column definition. col_constraint_elem specifies the embedded form.
 // - thomas 1997-12-03
@@ -1184,10 +1195,6 @@ constraint_elem:
     $$ = &IndexTableDef{Unique: true, Columns: NameList($3)}
   }
 | UNIQUE existing_index {}
-| INDEX '(' name_list ')'
-  {
-    $$ = &IndexTableDef{Columns: NameList($3)}
-  }
 | PRIMARY KEY '(' name_list ')'
   {
     $$ = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: NameList($4)}
@@ -3702,7 +3709,6 @@ unreserved_keyword:
 | IMPORT
 | INCLUDING
 | INCREMENT
-| INDEX
 | INDEXES
 | INHERIT
 | INHERITS
@@ -3984,6 +3990,7 @@ reserved_keyword:
 | GROUP
 | HAVING
 | IN
+| INDEX
 | INITIALLY
 | INTERSECT
 | INTO
