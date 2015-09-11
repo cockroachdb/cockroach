@@ -66,7 +66,16 @@ func makeTableDesc(p *parser.CreateTable) (TableDescriptor, error) {
 		case *parser.IndexTableDef:
 			idx := IndexDescriptor{
 				Name:             string(d.Name),
-				Unique:           d.Unique,
+				ColumnNames:      d.Columns,
+				StoreColumnNames: d.Storing,
+			}
+			if err := desc.AddIndex(idx, false); err != nil {
+				return desc, err
+			}
+		case *parser.UniqueConstraintTableDef:
+			idx := IndexDescriptor{
+				Name:             string(d.Name),
+				Unique:           true,
 				ColumnNames:      d.Columns,
 				StoreColumnNames: d.Storing,
 			}

@@ -80,6 +80,7 @@ type TableDef interface {
 	// Placeholder function to ensure that only desired types (*TableDef) conform
 	// to the TableDef interface.
 	tableDef()
+	setName(name Name)
 }
 
 func (*ColumnTableDef) tableDef() {}
@@ -141,6 +142,10 @@ func newColumnTableDef(name Name, typ ColumnType,
 	return d
 }
 
+func (node *ColumnTableDef) setName(name Name) {
+	node.Name = name
+}
+
 func (node *ColumnTableDef) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s %s", node.Name, node.Type)
@@ -182,37 +187,56 @@ type UniqueConstraint struct{}
 
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
-//
-// TODO(pmattis): This should be broken up into IndexTableDef,
-// UniqueConstraintTableDef and
-// PrimaryKeyConstraintTableDef. {Unique,PrimaryKey}ConstraintTableDef would
-// embed an IndexTableDef. Eventually we might have a CheckConstraintTableDef
-// and ForeignKeyConstraintTableDef.
 type IndexTableDef struct {
-	Name       Name
-	PrimaryKey bool
-	Unique     bool
-	Columns    NameList
-	Storing    NameList
+	Name    Name
+	Columns NameList
+	Storing NameList
+}
+
+func (node *IndexTableDef) setName(name Name) {
+	node.Name = name
 }
 
 func (node *IndexTableDef) String() string {
 	var buf bytes.Buffer
+	_, _ = buf.WriteString("INDEX ")
+	if node.Name != "" {
+		fmt.Fprintf(&buf, "%s ", node.Name)
+	}
+	fmt.Fprintf(&buf, "(%s)", node.Columns)
+	if node.Storing != nil {
+		fmt.Fprintf(&buf, " STORING (%s)", node.Storing)
+	}
+	return buf.String()
+}
+
+// ConstraintTableDef represents a constraint definition within a CREATE TABLE
+// statement.
+type ConstraintTableDef interface {
+	TableDef
+	// Placeholder function to ensure that only desired types
+	// (*ConstraintTableDef) conform to the ConstraintTableDef interface.
+	constraintTableDef()
+}
+
+func (*UniqueConstraintTableDef) constraintTableDef() {}
+
+// UniqueConstraintTableDef represents a unique constraint within a CREATE
+// TABLE statement.
+type UniqueConstraintTableDef struct {
+	IndexTableDef
+	PrimaryKey bool
+}
+
+func (node *UniqueConstraintTableDef) String() string {
+	var buf bytes.Buffer
+	if node.Name != "" {
+		fmt.Fprintf(&buf, "CONSTRAINT %s ", node.Name)
+	}
 	if node.PrimaryKey {
-		if node.Name != "" {
-			fmt.Fprintf(&buf, "CONSTRAINT %s ", node.Name)
-		}
 		_, _ = buf.WriteString("PRIMARY KEY ")
-	} else if node.Unique {
-		if node.Name != "" {
-			fmt.Fprintf(&buf, "CONSTRAINT %s ", node.Name)
-		}
-		_, _ = buf.WriteString("UNIQUE ")
 	} else {
-		_, _ = buf.WriteString("INDEX ")
-		if node.Name != "" {
-			fmt.Fprintf(&buf, "%s ", node.Name)
-		}
+		_, _ = buf.WriteString("UNIQUE ")
 	}
 	fmt.Fprintf(&buf, "(%s)", node.Columns)
 	if node.Storing != nil {

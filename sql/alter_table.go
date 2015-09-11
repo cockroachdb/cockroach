@@ -79,17 +79,23 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 					return nil, err
 				}
 			}
+
 		case *parser.AlterTableAddConstraint:
-			d := t.ConstraintDef
-			idx := IndexDescriptor{
-				Name:             string(d.Name),
-				Unique:           d.Unique,
-				ColumnNames:      d.Columns,
-				StoreColumnNames: d.Storing,
+			switch d := t.ConstraintDef.(type) {
+			case *parser.UniqueConstraintTableDef:
+				idx := IndexDescriptor{
+					Name:             string(d.Name),
+					Unique:           true,
+					ColumnNames:      d.Columns,
+					StoreColumnNames: d.Storing,
+				}
+				if err := tableDesc.AddIndex(idx, d.PrimaryKey); err != nil {
+					return nil, err
+				}
+			default:
+				return nil, util.Errorf("unsupported constraint: %T", t.ConstraintDef)
 			}
-			if err := tableDesc.AddIndex(idx, d.PrimaryKey); err != nil {
-				return nil, err
-			}
+
 		default:
 			return nil, util.Errorf("unsupported alter cmd: %T", cmd)
 		}
