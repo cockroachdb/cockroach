@@ -27,8 +27,9 @@ import (
 
 func testTableDesc() *TableDescriptor {
 	return &TableDescriptor{
-		Name: "test",
-		ID:   1000,
+		Name:     "test",
+		ID:       1001,
+		ParentID: 1000,
 		Columns: []ColumnDescriptor{
 			{Name: "a", Type: ColumnType{Kind: ColumnType_INT}},
 			{Name: "b", Type: ColumnType{Kind: ColumnType_INT}},

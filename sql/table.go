@@ -43,12 +43,13 @@ func (tk tableKey) Name() string {
 	return tk.name
 }
 
-func makeTableDesc(p *parser.CreateTable) (TableDescriptor, error) {
+func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) {
 	desc := TableDescriptor{}
 	if err := p.Table.NormalizeTableName(""); err != nil {
 		return desc, err
 	}
 	desc.Name = p.Table.Table()
+	desc.ParentID = parentID
 
 	for _, def := range p.Defs {
 		switch d := def.(type) {
