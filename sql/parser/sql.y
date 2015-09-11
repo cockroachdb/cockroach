@@ -37,6 +37,8 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   indirect       Indirection
   stmt           Statement
   stmts          []Statement
+  colDef         *ColumnTableDef
+  constraintDef  *IndexTableDef
   tblDef         TableDef
   tblDefs        []TableDef
   colConstraint  ColumnConstraint
@@ -62,6 +64,8 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   orders         []*Order
   order          *Order
   dir            Direction
+  alterTableCmd  AlterTableCmd
+  alterTableCmds AlterTableCmds
 }
 
 %type <stmts> stmt_block
@@ -99,8 +103,10 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> alter_column_default alter_using
 %type <dir> opt_asc_desc
 
-%type <empty> alter_table_cmd opt_collate_clause
-%type <empty> alter_table_cmds
+%type <alterTableCmd> alter_table_cmd
+%type <alterTableCmds> alter_table_cmds
+
+%type <empty> opt_collate_clause
 
 %type <empty> opt_drop_behavior
 
@@ -196,8 +202,9 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <stmt>  generic_set set_rest set_rest_more
 %type <empty> set_reset_clause
 
-%type <tblDef> table_elem column_def constraint_elem
 %type <strs> opt_storing
+%type <colDef> column_def
+%type <tblDef> table_elem
 %type <empty> typed_table_elem table_func_elem
 %type <empty> column_options
 %type <empty> reloption_elem
@@ -261,7 +268,8 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <str>   unreserved_keyword type_func_name_keyword
 %type <str>   col_name_keyword reserved_keyword
 
-%type <tblDef> index_def table_constraint table_like_clause
+%type <constraintDef> table_constraint constraint_elem
+%type <tblDef> index_def table_like_clause
 %type <empty> table_like_option_list table_like_option
 %type <colConstraints> col_qual_list
 %type <colConstraint> col_constraint col_constraint_elem
@@ -536,22 +544,44 @@ alter_index_stmt:
 alter_table_stmt:
   ALTER TABLE relation_expr alter_table_cmds
   {
-    $$ = nil
+    $$ = &AlterTable{Table: $3, IfExists: false, Cmds: $4}
   }
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
-    $$ = nil
+    $$ = &AlterTable{Table: $5, IfExists: true, Cmds: $6}
   }
 
 alter_table_cmds:
   alter_table_cmd
+  {
+    $$ = AlterTableCmds{$1}
+  }
 | alter_table_cmds ',' alter_table_cmd
+  {
+    $$ = append($1, $3)
+  }
 
 alter_table_cmd:
   // ALTER TABLE <name> ADD <coldef>
-  ADD column_def {}
+  ADD column_def
+  {
+    $$ = &AlterTableAddColumn{columnKeyword: false, IfNotExists: false, ColumnDef: $2}
+  }
+  // ALTER TABLE <name> ADD IF NOT EXISTS <coldef>
+| ADD IF NOT EXISTS column_def
+  {
+    $$ = &AlterTableAddColumn{columnKeyword: false, IfNotExists: true, ColumnDef: $5}
+  }
   // ALTER TABLE <name> ADD COLUMN <coldef>
-| ADD COLUMN column_def {}
+| ADD COLUMN column_def
+  {
+    $$ = &AlterTableAddColumn{columnKeyword: true, IfNotExists: false, ColumnDef: $3}
+  }
+  // ALTER TABLE <name> ADD COLUMN IF NOT EXISTS <coldef>
+| ADD COLUMN IF NOT EXISTS column_def
+  {
+    $$ = &AlterTableAddColumn{columnKeyword: true, IfNotExists: true, ColumnDef: $6}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> {SET DEFAULT <expr>|DROP DEFAULT}
 | ALTER opt_column name alter_column_default {}
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
@@ -572,7 +602,10 @@ alter_table_cmd:
   //     [ USING <expression> ]
 | ALTER opt_column name opt_set_data TYPE typename opt_collate_clause alter_using {}
   // ALTER TABLE <name> ADD CONSTRAINT ...
-| ADD table_constraint {}
+| ADD table_constraint
+  {
+    $$ = &AlterTableAddConstraint{ConstraintDef: $2}
+  }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
 | ALTER CONSTRAINT name {}
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
@@ -1078,9 +1111,15 @@ typed_table_elem_list:
 
 table_elem:
   column_def
+  {
+    $$ = $1
+  }
 | index_def
 | table_like_clause {}
 | table_constraint
+  {
+    $$ = $1
+  }
 
 typed_table_elem:
   column_options {}
@@ -1180,9 +1219,7 @@ table_constraint:
   CONSTRAINT name constraint_elem
   {
     $$ = $3
-    if i, ok := $$.(*IndexTableDef); ok {
-      i.Name = Name($2)
-    }
+    $$.Name = Name($2)
   }
 | constraint_elem
   {

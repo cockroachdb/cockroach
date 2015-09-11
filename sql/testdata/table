@@ -22,6 +22,12 @@ CREATE TABLE "" (id INT PRIMARY KEY)
 statement error table "a" already exists
 CREATE TABLE a (id INT PRIMARY KEY)
 
+statement error duplicate column name: "id"
+CREATE TABLE a (id INT PRIMARY KEY, id INT)
+
+multiple primary keys for table "b" are not allowed
+CREATE TABLE b (id INT PRIMARY KEY, id2 INT PRIMARY KEY)
+
 statement ok
 CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 
