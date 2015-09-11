@@ -335,7 +335,6 @@ var keywords = map[string]int{
 	"SESSION":           SESSION,
 	"SESSION_USER":      SESSION_USER,
 	"SET":               SET,
-	"SETOF":             SETOF,
 	"SETS":              SETS,
 	"SHARE":             SHARE,
 	"SHOW":              SHOW,

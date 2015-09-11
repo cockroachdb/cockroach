@@ -355,7 +355,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   ROW ROWS RSHIFT RULE
 
 %token <str>   SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
-%token <str>   SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
+%token <str>   SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SHARE SHOW
 %token <str>   SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL STABLE STANDALONE
 %token <str>   STATEMENT STATISTICS STDIN STDOUT STRICT STRING STRIP STORING SUBSTRING
 %token <str>   SYMMETRIC SYSID SYSTEM
@@ -2162,12 +2162,9 @@ typename:
   {
     $$ = $1
   }
-| SETOF simple_typename opt_array_bounds {}
   // SQL standard syntax, currently only one-dimensional
 | simple_typename ARRAY '[' ICONST ']' {}
-| SETOF simple_typename ARRAY '[' ICONST ']' {}
 | simple_typename ARRAY {}
-| SETOF simple_typename ARRAY {}
 
 opt_array_bounds:
   opt_array_bounds '[' ']' {}
@@ -3720,7 +3717,6 @@ col_name_keyword:
 | PRECISION
 | REAL
 | ROW
-| SETOF
 | SMALLINT
 | STRING
 | SUBSTRING
