@@ -114,7 +114,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 
 %type <empty> subquery_op
 %type <qname> func_name
-%type <empty> opt_class
 %type <empty> opt_collate
 
 %type <qname> qualified_name
@@ -1245,23 +1244,18 @@ index_params:
 // expressions in parens. For backwards-compatibility reasons, we allow an
 // expression that's just a function call to be written without parens.
 index_elem:
-  name opt_collate opt_class opt_asc_desc
+  name opt_collate opt_asc_desc
   {
     // TODO(pmattis): Support opt_asc_desc.
     $$ = $1
   }
-| func_expr_windowless opt_collate opt_class opt_asc_desc
+| func_expr_windowless opt_collate opt_asc_desc
   {}
-| '(' a_expr ')' opt_collate opt_class opt_asc_desc
+| '(' a_expr ')' opt_collate opt_asc_desc
   {}
 
 opt_collate:
   COLLATE any_name {}
-| /* EMPTY */ {}
-
-opt_class:
-  any_name {}
-| USING any_name {}
 | /* EMPTY */ {}
 
 opt_asc_desc:
