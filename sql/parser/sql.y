@@ -108,8 +108,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 
 %type <empty> opt_drop_behavior
 
-%type <empty> transaction_mode_list
-%type <empty> transaction_mode_item
+%type <empty> opt_transaction_iso_level transaction_iso_level
 
 %type <empty> opt_nowait_or_skip
 
@@ -149,7 +148,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <exprs> ctext_expr_list ctext_row
 %type <empty> group_clause
 %type <limit> select_limit opt_select_limit
-%type <empty> transaction_mode_list_or_empty
 %type <empty> table_func_elem_list
 %type <qnames> relation_expr_list
 
@@ -297,7 +295,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 // "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str>   ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER
+%token <str>   ABSOLUTE ACCESS ACTION ADD ADMIN AFTER
 %token <str>   AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
 %token <str>   ASSERTION ASSIGNMENT ASYMMETRIC AT ATTRIBUTE AUTHORIZATION
 
@@ -360,9 +358,9 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   RESTRICT RETURNING RETURNS REVOKE RIGHT ROLLBACK ROLLUP
 %token <str>   ROW ROWS RSHIFT RULE
 
-%token <str>   SAVEPOINT SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
+%token <str>   SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
 %token <str>   SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
-%token <str>   SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL STABLE STANDALONE START
+%token <str>   SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL STABLE STANDALONE
 %token <str>   STATEMENT STATISTICS STDIN STDOUT STRICT STRING STRIP STORING SUBSTRING
 %token <str>   SYMMETRIC SYSID SYSTEM
 
@@ -376,7 +374,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   VACUUM VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VARYING
 %token <str>   VERBOSE VERSION
 
-%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRAPPER WRITE
+%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WRAPPER WRITE
 
 %token <str>   YEAR YES
 
@@ -810,8 +808,7 @@ set_stmt:
   }
 
 set_rest:
-  TRANSACTION transaction_mode_list {}
-| SESSION CHARACTERISTICS AS TRANSACTION transaction_mode_list {}
+  TRANSACTION transaction_iso_level {}
 | set_rest_more {}
 
 generic_set:
@@ -1379,84 +1376,29 @@ opt_set_data:
 
 // BEGIN / COMMIT / ROLLBACK / ...
 transaction_stmt:
-  ABORT opt_transaction
-  {
-    $$ = nil
-  }
-| BEGIN opt_transaction transaction_mode_list_or_empty
+  BEGIN opt_transaction opt_transaction_iso_level
   {
     $$ = &BeginTransaction{}
-  }
-| START TRANSACTION transaction_mode_list_or_empty
-  {
-    $$ = nil
   }
 | COMMIT opt_transaction
   {
     $$ = &CommitTransaction{}
   }
-| END opt_transaction
-  {
-    $$ = nil
-  }
 | ROLLBACK opt_transaction
   {
     $$ = &RollbackTransaction{}
   }
-| SAVEPOINT name
-  {
-    $$ = nil
-  }
-| RELEASE SAVEPOINT name
-  {
-    $$ = nil
-  }
-| RELEASE name
-  {
-    $$ = nil
-  }
-| ROLLBACK opt_transaction TO SAVEPOINT name
-  {
-    $$ = nil
-  }
-| ROLLBACK opt_transaction TO name
-  {
-    $$ = nil
-  }
-| PREPARE TRANSACTION SCONST
-  {
-    $$ = nil
-  }
-| COMMIT PREPARED SCONST
-  {
-    $$ = nil
-  }
-| ROLLBACK PREPARED SCONST
-  {
-    $$ = nil
-  }
 
 opt_transaction:
-  WORK {}
-| TRANSACTION {}
+  TRANSACTION {}
 | /* EMPTY */ {}
 
-transaction_mode_item:
+opt_transaction_iso_level:
+  transaction_iso_level {}
+| /* EMPTY */ {}
+
+transaction_iso_level:
   ISOLATION LEVEL iso_level {}
-| READ ONLY {}
-| READ WRITE {}
-| DEFERRABLE {}
-| NOT DEFERRABLE {}
-
-// Syntax with commas is SQL-spec, without commas is Postgres historical.
-transaction_mode_list:
-  transaction_mode_item {}
-| transaction_mode_list ',' transaction_mode_item {}
-| transaction_mode_list transaction_mode_item {}
-
-transaction_mode_list_or_empty:
-  transaction_mode_list {}
-| /* EMPTY */ {}
 
 create_database_stmt:
   CREATE DATABASE name
@@ -3508,8 +3450,7 @@ col_label:
 //
 // "Unreserved" keywords --- available for use as any kind of name.
 unreserved_keyword:
-  ABORT
-| ABSOLUTE
+  ABSOLUTE
 | ACCESS
 | ACTION
 | ADD
@@ -3701,7 +3642,6 @@ unreserved_keyword:
 | ROLLUP
 | ROWS
 | RULE
-| SAVEPOINT
 | SCROLL
 | SEARCH
 | SECOND
@@ -3721,7 +3661,6 @@ unreserved_keyword:
 | SQL
 | STABLE
 | STANDALONE
-| START
 | STATEMENT
 | STATISTICS
 | STDIN
@@ -3755,7 +3694,6 @@ unreserved_keyword:
 | VERSION
 | WITHIN
 | WITHOUT
-| WORK
 | WRAPPER
 | WRITE
 | YEAR
