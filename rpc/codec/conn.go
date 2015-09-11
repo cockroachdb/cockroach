@@ -101,11 +101,7 @@ func (c *baseConn) recvProto(m proto.Message,
 		if err := decompressor(data, uncompressedSize, m); err != nil {
 			return err
 		}
-		// TODO(pmattis): This is a hack to advance the bufio pointer by
-		// reading into the same slice that bufio.Reader.Peek
-		// returned. In Go 1.5 we'll be able to use
-		// bufio.Reader.Discard.
-		_, err = io.ReadFull(c.r, data)
+		_, err = c.r.Discard(int(size))
 		return err
 	}
 
