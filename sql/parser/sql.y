@@ -108,8 +108,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 
 %type <empty> opt_transaction_iso_level transaction_iso_level
 
-%type <empty> opt_nowait_or_skip
-
 %type <str>   name opt_name
 
 %type <empty> subquery_op
@@ -143,17 +141,13 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <indirect> indirection
 %type <exprs> ctext_expr_list ctext_row
 %type <empty> group_clause
-%type <limit> select_limit opt_select_limit
+%type <limit> select_limit
 %type <empty> table_func_elem_list
 %type <qnames> relation_expr_list
 
 %type <empty> group_by_list
 %type <empty> group_by_item empty_grouping_set
 
-%type <empty> for_locking_strength
-%type <empty> for_locking_item
-%type <empty> for_locking_clause opt_for_locking_clause for_locking_items
-%type <empty> locked_rels_list
 %type <empty> all_or_distinct
 
 %type <empty> join_outer
@@ -1501,15 +1495,7 @@ select_no_parens:
       s.OrderBy = $2
     }
   }
-| select_clause opt_sort_clause for_locking_clause opt_select_limit
-  {
-    $$ = $1
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $2
-      s.Limit = $4
-    }
-  }
-| select_clause opt_sort_clause select_limit opt_for_locking_clause
+| select_clause opt_sort_clause select_limit
   {
     $$ = $1
     if s, ok := $$.(*Select); ok {
@@ -1528,15 +1514,7 @@ select_no_parens:
       s.OrderBy = $3
     }
   }
-| with_clause select_clause opt_sort_clause for_locking_clause opt_select_limit
-  {
-    $$ = $2
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $3
-      s.Limit = $5
-    }
-  }
-| with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause
+| with_clause select_clause opt_sort_clause select_limit
   {
     $$ = $2
     if s, ok := $$.(*Select); ok {
@@ -1736,13 +1714,6 @@ select_limit:
 | limit_clause
 | offset_clause
 
-opt_select_limit:
-  select_limit
-| /* EMPTY */
-  {
-    $$ = nil
-  }
-
 limit_clause:
   LIMIT select_limit_value
   {
@@ -1834,36 +1805,6 @@ having_clause:
   {
     $$ = nil
   }
-
-for_locking_clause:
-  for_locking_items {}
-| FOR READ ONLY {}
-
-opt_for_locking_clause:
-  for_locking_clause {}
-| /* EMPTY */ {}
-
-for_locking_items:
-  for_locking_item {}
-| for_locking_items for_locking_item {}
-
-for_locking_item:
-  for_locking_strength locked_rels_list opt_nowait_or_skip {}
-
-opt_nowait_or_skip:
- NOWAIT {}
-| SKIP LOCKED {}
-| /* EMPTY */ {}
-
-for_locking_strength:
-  FOR UPDATE {}
-| FOR NO KEY UPDATE {}
-| FOR SHARE {}
-| FOR KEY SHARE {}
-
-locked_rels_list:
-  OF qualified_name_list {}
-| /* EMPTY */ {}
 
 values_clause:
   VALUES ctext_row
