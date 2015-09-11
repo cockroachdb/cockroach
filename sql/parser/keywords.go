@@ -19,7 +19,6 @@ package parser
 
 // name -> id
 var keywords = map[string]int{
-	"ABORT":             ABORT,
 	"ABSOLUTE":          ABSOLUTE,
 	"ACCESS":            ACCESS,
 	"ACTION":            ACTION,
@@ -141,8 +140,6 @@ var keywords = map[string]int{
 	"ENUM":              ENUM,
 	"EVENT":             EVENT,
 	"EXCEPT":            EXCEPT,
-	"EXCLUDE":           EXCLUDE,
-	"EXCLUDING":         EXCLUDING,
 	"EXCLUSIVE":         EXCLUSIVE,
 	"EXECUTE":           EXECUTE,
 	"EXISTS":            EXISTS,
@@ -324,7 +321,6 @@ var keywords = map[string]int{
 	"ROW":               ROW,
 	"ROWS":              ROWS,
 	"RULE":              RULE,
-	"SAVEPOINT":         SAVEPOINT,
 	"SCROLL":            SCROLL,
 	"SEARCH":            SEARCH,
 	"SECOND":            SECOND,
@@ -337,7 +333,6 @@ var keywords = map[string]int{
 	"SESSION":           SESSION,
 	"SESSION_USER":      SESSION_USER,
 	"SET":               SET,
-	"SETOF":             SETOF,
 	"SETS":              SETS,
 	"SHARE":             SHARE,
 	"SHOW":              SHOW,
@@ -350,7 +345,6 @@ var keywords = map[string]int{
 	"SQL":               SQL,
 	"STABLE":            STABLE,
 	"STANDALONE":        STANDALONE,
-	"START":             START,
 	"STATEMENT":         STATEMENT,
 	"STATISTICS":        STATISTICS,
 	"STORING":           STORING,
@@ -409,7 +403,6 @@ var keywords = map[string]int{
 	"WITH":              WITH,
 	"WITHIN":            WITHIN,
 	"WITHOUT":           WITHOUT,
-	"WORK":              WORK,
 	"WRAPPER":           WRAPPER,
 	"WRITE":             WRITE,
 	"YEAR":              YEAR,

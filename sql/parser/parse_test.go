@@ -438,10 +438,6 @@ func TestParseSyntax(t *testing.T) {
 		sql string
 	}{
 		{`SELECT '\0' FROM a`},
-		{`SELECT 1 FROM t FOR READ ONLY`},
-		{`SELECT 1 FROM t FOR UPDATE`},
-		{`SELECT 1 FROM t FOR SHARE`},
-		{`SELECT 1 FROM t FOR KEY SHARE`},
 		{`SELECT ((1)) FROM t WHERE ((a)) IN (((1))) AND ((a, b)) IN ((((1, 1))), ((2, 2)))`},
 		{`SELECT e'\'\"\b\n\r\t\\' FROM t`},
 		{`SELECT '\x' FROM t`},
