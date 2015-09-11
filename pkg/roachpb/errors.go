@@ -51,7 +51,7 @@ func (e *Error) GetDetail() ErrorDetailInterface {
 		return (*internalError)(e)
 	}
 
-	if err, ok := e.Detail.GetValue().(ErrorDetailInterface); ok {
+	if err, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
 		return err
 	}
 	// Unknown error detail; return the generic error.
@@ -154,7 +154,7 @@ func (e *Error) setGoError(err error) {
 	}
 	// If the specific error type exists in the detail union, set it.
 	detail := &ErrorDetail{}
-	if detail.SetValue(err) {
+	if detail.SetInner(err) {
 		e.Detail = detail
 	} else if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
 		panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
@@ -171,7 +171,7 @@ func (e *Error) SetTxn(txn *Transaction) {
 		e.UnexposedTxn = &txnClone
 	}
 	if e.Detail != nil {
-		if sErr, ok := e.Detail.GetValue().(ErrorDetailInterface); ok {
+		if sErr, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
 			// Refresh the message as the txn is updated.
 			e.Message = sErr.message(e)
 		}
