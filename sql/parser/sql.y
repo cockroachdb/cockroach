@@ -230,7 +230,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <colType> bit const_bit bit_with_length bit_without_length
 %type <colType> character_base
 %type <str> extract_arg
-%type <empty> opt_varying opt_no_inherit
+%type <empty> opt_varying
 
 %type <ival>  signed_iconst
 %type <expr>  opt_boolean_or_string
@@ -1055,7 +1055,7 @@ col_constraint_elem:
   {
     $$ = PrimaryKeyConstraint{}
   }
-| CHECK '(' a_expr ')' opt_no_inherit {}
+| CHECK '(' a_expr ')' {}
 | DEFAULT b_expr {}
 | REFERENCES qualified_name opt_column_list key_match key_actions {}
 
@@ -1140,10 +1140,6 @@ opt_storing:
   {
     $$ = nil
   }
-
-opt_no_inherit:
-  NO INHERIT {}
-| /* EMPTY */ {}
 
 opt_column_list:
   '(' name_list ')'
