@@ -38,7 +38,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   stmt           Statement
   stmts          []Statement
   colDef         *ColumnTableDef
-  constraintDef  *IndexTableDef
+  constraintDef  ConstraintTableDef
   tblDef         TableDef
   tblDefs        []TableDef
   colConstraint  ColumnConstraint
@@ -1202,13 +1202,22 @@ table_like_option:
 | ALL {}
 
 index_def:
-  opt_unique INDEX opt_name '(' name_list ')' opt_storing
+  INDEX opt_name '(' name_list ')' opt_storing
   {
     $$ = &IndexTableDef{
-      Name:    Name($3),
-      Unique:  $1,
-      Columns: NameList($5),
-      Storing: $7,
+      Name:    Name($2),
+      Columns: NameList($4),
+      Storing: $6,
+    }
+  }
+| UNIQUE INDEX opt_name '(' name_list ')' opt_storing
+  {
+    $$ = &UniqueConstraintTableDef{
+      IndexTableDef: IndexTableDef {
+        Name:    Name($3),
+        Columns: NameList($5),
+        Storing: $7,
+      },
     }
   }
 
@@ -1219,7 +1228,7 @@ table_constraint:
   CONSTRAINT name constraint_elem
   {
     $$ = $3
-    $$.Name = Name($2)
+    $$.setName(Name($2))
   }
 | constraint_elem
   {
@@ -1230,11 +1239,21 @@ constraint_elem:
   CHECK '(' a_expr ')' {}
 | UNIQUE '(' name_list ')' opt_storing
   {
-    $$ = &IndexTableDef{Unique: true, Columns: NameList($3), Storing: $5}
+    $$ = &UniqueConstraintTableDef{
+      IndexTableDef: IndexTableDef{
+        Columns: NameList($3),
+        Storing: $5,
+      },
+    }
   }
 | PRIMARY KEY '(' name_list ')'
   {
-    $$ = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: NameList($4)}
+    $$ = &UniqueConstraintTableDef{
+      IndexTableDef: IndexTableDef{
+        Columns: NameList($4),
+      },
+      PrimaryKey:    true,
+    }
   }
 | EXCLUDE '(' exclusion_constraint_list ')'
     exclusion_where_clause {}

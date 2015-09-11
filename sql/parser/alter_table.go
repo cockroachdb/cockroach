@@ -84,7 +84,7 @@ func (node *AlterTableAddColumn) String() string {
 
 // AlterTableAddConstraint represents an ADD CONSTRAINT command.
 type AlterTableAddConstraint struct {
-	ConstraintDef *IndexTableDef
+	ConstraintDef ConstraintTableDef
 }
 
 func (node *AlterTableAddConstraint) String() string {
