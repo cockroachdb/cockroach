@@ -687,7 +687,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 				ba.Requests = append([]proto.RequestUnion(nil), ba.Requests...)
 			}
 			for i, union := range ba.Requests {
-				args := union.GetValue()
+				args := union.GetInner()
 				if _, ok := args.(*proto.NoopRequest); ok {
 					// NoopRequests are skipped.
 					continue
@@ -699,7 +699,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 					continue
 				}
 				prevBound := boundedArg.GetBound()
-				cReply, ok := curReply.Responses[i].GetValue().(proto.Countable)
+				cReply, ok := curReply.Responses[i].GetInner().(proto.Countable)
 				if !ok || prevBound <= 0 {
 					// Request bounded, but without max results. Again, will
 					// need to query everything we can. The case in which the reply

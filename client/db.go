@@ -493,7 +493,7 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 	// Transfer individual responses from batch response to prepared replies.
 	for i, reply := range br.Responses {
 		c := calls[i]
-		gogoproto.Merge(c.Reply, reply.GetValue().(gogoproto.Message))
+		gogoproto.Merge(c.Reply, reply.GetInner())
 		if c.Post != nil {
 			if e := c.Post(); e != nil && err != nil {
 				err = e

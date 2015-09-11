@@ -112,7 +112,7 @@ func ObjectIDForKey(key proto.Key) (uint32, bool) {
 func (s *SystemConfig) Get(key proto.Key) ([]byte, bool) {
 	l := len(s.Values)
 	index := sort.Search(l, func(i int) bool {
-		return bytes.Compare(s.Values[i].Key, key) >= 0
+		return !s.Values[i].Key.Less(key)
 	})
 	if index == l || !key.Equal(s.Values[index].Key) {
 		return nil, false
@@ -139,9 +139,9 @@ func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
 	// Search for the first key after the descriptor table.
 	// We can't use Get as we don't mind if there is nothing after
 	// the descriptor table.
-	key := keys.MakeTablePrefix(keys.DescriptorTableID + 1)
+	key := proto.Key(keys.MakeTablePrefix(keys.DescriptorTableID + 1))
 	index := sort.Search(len(s.Values), func(i int) bool {
-		return bytes.Compare(s.Values[i].Key, key) >= 0
+		return !s.Values[i].Key.Less(key)
 	})
 
 	if index == 0 {

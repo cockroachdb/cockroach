@@ -420,20 +420,17 @@ Available Commands:
   zone        get, set, list and remove zones
 
   version     output version information
-  help        Help about any command
 
 Flags:
       --alsologtostderr=false: log to standard error as well as files
       --color="auto": colorize standard error output according to severity
-  -h, --help[=false]: help for cockroach
       --log-backtrace-at=:0: when logging hits line file:N, emit a stack trace
       --log-dir="": if non-empty, write log files in this directory
       --logtostderr=true: log to standard error instead of files
       --verbosity=0: log level for V logs
       --vmodule=: comma-separated list of file=N settings for file-filtered logging
 
-Use "cockroach help [command]" for more information about a command.
-
+Use "cockroach [command] --help" for more information about a command.
 `
 
 	if got != expected {

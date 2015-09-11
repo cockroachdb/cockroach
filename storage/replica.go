@@ -514,7 +514,7 @@ func setBatchTimestamps(ba *proto.BatchRequest) {
 		// the same Txn for different intents will push the pushee in
 		// iteration, bumping up its priority. Unfortunately PushTxn is flagged
 		// as a write command (is it really?). Interim solution.
-		if args := union.GetValue().(proto.Request); args.Method() != proto.PushTxn {
+		if args := union.GetInner(); args.Method() != proto.PushTxn {
 			args.Header().Timestamp.Forward(ba.Timestamp.Add(0, int32(i)))
 		}
 	}
@@ -544,10 +544,13 @@ func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.R
 		defer func() {
 			if err == nil {
 				br, ok := reply.(*proto.BatchResponse)
-				if !ok || len(br.Responses) != 1 {
-					panic("expected a BatchResponse with a single wrapped response")
+				if !ok {
+					panic(fmt.Sprintf("expected a BatchResponse, got a %T", reply))
 				}
-				reply = br.Responses[0].GetValue().(proto.Response)
+				if len(br.Responses) != 1 {
+					panic(fmt.Sprintf("expected a BatchResponse with a single wrapped response, got one with %d", len(br.Responses)))
+				}
+				reply = br.Responses[0].GetInner()
 			} else {
 				reply = argsCpy.CreateReply()
 			}
@@ -567,7 +570,7 @@ func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.R
 	// Differentiate between admin, read-only and write.
 	if proto.IsAdmin(ba) {
 		defer trace.Epoch("admin path")()
-		args := ba.Requests[0].GetValue().(proto.Request)
+		args := ba.Requests[0].GetInner()
 		var iReply proto.Response
 		iReply, err = r.addAdminCmd(ctx, args)
 		if err == nil {
@@ -607,7 +610,7 @@ func (r *Replica) checkCmdHeader(header *proto.RequestHeader) error {
 // read-only, or none.
 func (r *Replica) checkBatchRequest(ba *proto.BatchRequest) error {
 	for i := range ba.Requests {
-		args := ba.Requests[i].GetValue().(proto.Request)
+		args := ba.Requests[i].GetInner()
 		header := args.Header()
 		if args.Method() == proto.EndTransaction && len(ba.Requests) != 1 {
 			return util.Errorf("cannot mix EndTransaction with other operations in a batch")
@@ -652,7 +655,7 @@ func (r *Replica) beginCmds(ba *proto.BatchRequest) ([]interface{}, error) {
 		var spans []keys.Span
 		readOnly := proto.IsReadOnly(ba)
 		for _, union := range ba.Requests {
-			h := union.GetValue().(proto.Request).Header()
+			h := union.GetInner().Header()
 			spans = append(spans, keys.Span{Start: h.Key, End: h.EndKey})
 		}
 		r.cmdQ.GetWait(readOnly, &wg, spans...)
@@ -675,7 +678,7 @@ func (r *Replica) beginCmds(ba *proto.BatchRequest) ([]interface{}, error) {
 	}
 
 	for _, union := range ba.Requests {
-		args := union.GetValue().(proto.Request)
+		args := union.GetInner()
 		header := args.Header()
 		if header.Timestamp.Equal(proto.ZeroTimestamp) {
 			header.Timestamp = ba.Timestamp
@@ -692,7 +695,7 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *proto.BatchRequest, err err
 	// Only update the timestamp cache if the command succeeded.
 	if err == nil {
 		for _, union := range ba.Requests {
-			args := union.GetValue().(proto.Request)
+			args := union.GetInner()
 			if usesTimestampCache(args) {
 				header := args.Header()
 				r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.GetID(), proto.IsReadOnly(args))
@@ -838,7 +841,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *proto.BatchRequest, wg *s
 	// the batch and then apply that to all requests.
 	r.Lock()
 	for _, union := range ba.Requests {
-		args := union.GetValue().(proto.Request)
+		args := union.GetInner()
 		header := args.Header()
 		if usesTimestampCache(args) {
 			rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, header.Txn.GetID())
@@ -866,7 +869,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *proto.BatchRequest, wg *s
 	// TODO(tschottdorf): Forward() is provisional, depending on the outcome
 	// of the self-overlap discussion. See setBatchTimestamps.
 	for _, union := range ba.Requests {
-		args := union.GetValue().(proto.Request)
+		args := union.GetInner()
 		args.Header().Timestamp.Forward(ba.Timestamp)
 	}
 	r.Unlock()
@@ -1033,8 +1036,8 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 					if !ok {
 						break
 					}
-					args := ba.Requests[i].GetValue().(proto.Request)
-					reply := union.GetValue().(proto.Response)
+					args := ba.Requests[i].GetInner()
+					reply := union.GetInner()
 					ok = fmt.Sprintf("%T", args.CreateReply()) == fmt.Sprintf("%T", reply)
 				}
 			}
@@ -1051,7 +1054,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	}
 
 	for _, union := range ba.Requests {
-		args := union.GetValue().(proto.Request)
+		args := union.GetInner()
 
 		// TODO(tschottdorf): shouldn't be in the loop. Currently is because
 		// we haven't cleaned up the timestamp handling fully.
@@ -1132,7 +1135,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *pr
 	// line the code in this loop.
 	for _, union := range ba.Requests {
 		// Execute the command.
-		args := union.GetValue().(proto.Request)
+		args := union.GetInner()
 
 		header := args.Header()
 

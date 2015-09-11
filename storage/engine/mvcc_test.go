@@ -845,8 +845,8 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	found, err = MVCCGetProto(engine, testKey3, makeTS(1, 0), false, nil, val)
 	if err == nil {
 		t.Errorf("expected error reading malformed data")
-	} else if !strings.Contains(err.Error(), "unexpected EOF") {
-		t.Errorf("expected EOF error, got %s", err)
+	} else if !strings.HasPrefix(err.Error(), "proto: ") {
+		t.Errorf("expected proto error, got %s", err)
 	}
 	if !found {
 		t.Errorf("expected to find result with malformed data")

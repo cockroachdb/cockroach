@@ -102,7 +102,7 @@ func IsRange(args Request) bool {
 // IsAdmin returns true iff the BatchRequest contains an admin request.
 func (ba *BatchRequest) IsAdmin() bool {
 	for _, arg := range ba.Requests {
-		if IsAdmin(arg.GetValue().(Request)) {
+		if IsAdmin(arg.GetInner()) {
 			return true
 		}
 	}
@@ -112,7 +112,7 @@ func (ba *BatchRequest) IsAdmin() bool {
 // IsRead returns true if all requests within are flagged as reading data.
 func (ba *BatchRequest) IsRead() bool {
 	for i := range ba.Requests {
-		if !IsRead(ba.Requests[i].GetValue().(Request)) {
+		if !IsRead(ba.Requests[i].GetInner()) {
 			return false
 		}
 	}
@@ -122,7 +122,7 @@ func (ba *BatchRequest) IsRead() bool {
 // IsWrite returns true iff the BatchRequest contains a write.
 func (ba *BatchRequest) IsWrite() bool {
 	for _, arg := range ba.Requests {
-		if IsWrite(arg.GetValue().(Request)) {
+		if IsWrite(arg.GetInner()) {
 			return true
 		}
 	}
@@ -133,7 +133,7 @@ func (ba *BatchRequest) IsWrite() bool {
 // TODO(tschottdorf): unify with proto.IsReadOnly
 func (ba *BatchRequest) IsReadOnly() bool {
 	for i := range ba.Requests {
-		if !IsReadOnly(ba.Requests[i].GetValue().(Request)) {
+		if !IsReadOnly(ba.Requests[i].GetInner()) {
 			return false
 		}
 	}
@@ -145,9 +145,9 @@ func (ba *BatchRequest) IsReverse() bool {
 	if len(ba.Requests) == 0 {
 		panic("empty batch")
 	}
-	reverse := IsReverse(ba.Requests[0].GetValue().(Request))
+	reverse := IsReverse(ba.Requests[0].GetInner())
 	for _, arg := range ba.Requests[1:] {
-		if req := arg.GetValue().(Request); IsReverse(req) != reverse {
+		if req := arg.GetInner(); IsReverse(req) != reverse {
 			panic(fmt.Sprintf("argument mixes reverse and non-reverse: %T", req))
 		}
 	}
@@ -157,7 +157,7 @@ func (ba *BatchRequest) IsReverse() bool {
 // IsTransactionWrite returns true iff the BatchRequest contains a txn write.
 func (ba *BatchRequest) IsTransactionWrite() bool {
 	for _, arg := range ba.Requests {
-		if IsTransactionWrite(arg.GetValue().(Request)) {
+		if IsTransactionWrite(arg.GetInner()) {
 			return true
 		}
 	}
@@ -172,7 +172,7 @@ func (ba *BatchRequest) IsRange() bool {
 // GetArg returns the first request of the given type, if possible.
 func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
 	for _, arg := range ba.Requests {
-		if req := arg.GetValue().(Request); req.Method() == method {
+		if req := arg.GetInner(); req.Method() == method {
 			return req, true
 		}
 	}
@@ -182,7 +182,7 @@ func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
 // First returns the first response of the given type, if possible.
 func (ba *BatchResponse) First() Response {
 	if len(ba.Responses) > 0 {
-		return ba.Responses[0].GetValue().(Response)
+		return ba.Responses[0].GetInner()
 	}
 	return nil
 }
@@ -195,7 +195,7 @@ func (ba *BatchResponse) First() Response {
 func (ba *BatchRequest) GetIntents() []Intent {
 	var intents []Intent
 	for _, arg := range ba.Requests {
-		req := arg.GetValue().(Request)
+		req := arg.GetInner()
 		if !IsTransactionWrite(req) {
 			continue
 		}
@@ -347,7 +347,7 @@ func (ba *BatchResponse) ResetAll() {
 	for _, rsp := range ba.Responses {
 		// TODO(tschottdorf) `rsp.Reset()` isn't enough because rsp
 		// isn't a pointer.
-		rsp.GetValue().(Response).Reset()
+		rsp.GetInner().Reset()
 	}
 }
 
@@ -364,8 +364,8 @@ func (ba *BatchResponse) Combine(c Response) error {
 		return errors.New("unable to combine batch responses of different length")
 	}
 	for i, l := 0, len(ba.Responses); i < l; i++ {
-		valLeft := ba.Responses[i].GetValue()
-		valRight := otherBatch.Responses[i].GetValue()
+		valLeft := ba.Responses[i].GetInner()
+		valRight := otherBatch.Responses[i].GetInner()
 		args, lOK := valLeft.(Combinable)
 		reply, rOK := valRight.(Combinable)
 		if lOK && rOK {
@@ -409,12 +409,11 @@ func (rh *ResponseHeader) GoError() error {
 	if rh.Error.Detail == nil {
 		return rh.Error
 	}
-	errVal := rh.Error.Detail.GetValue()
-	if errVal == nil {
+	err := rh.Error.getDetail()
+	if err == nil {
 		// Unknown error detail; return the generic error.
 		return rh.Error
 	}
-	err := errVal.(error)
 	// Make sure that the flags in the generic portion of the error
 	// match the methods of the specific error type.
 	if rh.Error.Retryable {
@@ -475,6 +474,16 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 	return nil
 }
 
+// GetInner returns the Request contained in the union.
+func (ru RequestUnion) GetInner() Request {
+	return ru.GetValue().(Request)
+}
+
+// GetInner returns the Response contained in the union.
+func (ru ResponseUnion) GetInner() Response {
+	return ru.GetValue().(Response)
+}
+
 // Add adds a request to the batch request. The batch key range is
 // expanded to include the key ranges of all requests which it comprises.
 func (ba *BatchRequest) Add(args Request) {
@@ -482,6 +491,7 @@ func (ba *BatchRequest) Add(args Request) {
 	if !union.SetValue(args) {
 		panic(fmt.Sprintf("unable to add %T to batch request", args))
 	}
+
 	h := args.Header()
 	if ba.Key == nil || !ba.Key.Less(h.Key) {
 		ba.Key = h.Key
@@ -617,7 +627,7 @@ func (*BatchRequest) Method() Method { return Batch }
 func (ba *BatchRequest) Methods() []Method {
 	var res []Method
 	for _, arg := range ba.Requests {
-		res = append(res, arg.GetValue().(Request).Method())
+		res = append(res, arg.GetInner().Method())
 	}
 	return res
 }
@@ -715,7 +725,7 @@ func (*LeaderLeaseRequest) flags() int        { return isWrite }
 func (ba *BatchRequest) flags() int {
 	var flags int
 	for _, union := range ba.Requests {
-		flags |= union.GetValue().(Request).flags()
+		flags |= union.GetInner().flags()
 	}
 	return flags
 }
@@ -747,7 +757,7 @@ func (ba BatchRequest) Split() [][]RequestUnion {
 		part := ba.Requests
 		var gFlags int
 		for i, union := range ba.Requests {
-			flags := union.GetValue().(Request).flags()
+			flags := union.GetInner().flags()
 			if !compatible(gFlags, flags) {
 				part = ba.Requests[:i]
 				break
@@ -766,7 +776,7 @@ func (ba BatchRequest) Split() [][]RequestUnion {
 func (ba BatchRequest) String() string {
 	var str []string
 	for _, arg := range ba.Requests {
-		req := arg.GetValue().(Request)
+		req := arg.GetInner()
 		h := req.Header()
 		str = append(str, fmt.Sprintf("%T [%s,%s)", req, h.Key, h.EndKey))
 	}

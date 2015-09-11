@@ -559,58 +559,56 @@ message LeaderLeaseResponse{
 // The values added here must match those in ResponseUnion.
 message RequestUnion {
   option (gogoproto.onlyone) = true;
-  oneof value {
-    GetRequest get = 1;
-    PutRequest put = 2;
-    ConditionalPutRequest conditional_put = 3;
-    IncrementRequest increment = 4;
-    DeleteRequest delete = 5;
-    DeleteRangeRequest delete_range = 6;
-    ScanRequest scan = 7;
-    EndTransactionRequest end_transaction = 8;
-    AdminSplitRequest admin_split = 9;
-    AdminMergeRequest admin_merge = 10;
-    HeartbeatTxnRequest heartbeat_txn = 11;
-    GCRequest gc = 12;
-    PushTxnRequest push_txn = 13;
-    RangeLookupRequest range_lookup = 14;
-    ResolveIntentRequest resolve_intent = 15;
-    ResolveIntentRangeRequest resolve_intent_range = 16;
-    MergeRequest merge = 17;
-    TruncateLogRequest truncate = 18;
-    LeaderLeaseRequest leader_lease = 19;
-    ReverseScanRequest reverse_scan = 20;
-    NoopRequest noop = 21;
-  }
+
+  optional GetRequest get = 1;
+  optional PutRequest put = 2;
+  optional ConditionalPutRequest conditional_put = 3;
+  optional IncrementRequest increment = 4;
+  optional DeleteRequest delete = 5;
+  optional DeleteRangeRequest delete_range = 6;
+  optional ScanRequest scan = 7;
+  optional EndTransactionRequest end_transaction = 8;
+  optional AdminSplitRequest admin_split = 9;
+  optional AdminMergeRequest admin_merge = 10;
+  optional HeartbeatTxnRequest heartbeat_txn = 11;
+  optional GCRequest gc = 12;
+  optional PushTxnRequest push_txn = 13;
+  optional RangeLookupRequest range_lookup = 14;
+  optional ResolveIntentRequest resolve_intent = 15;
+  optional ResolveIntentRangeRequest resolve_intent_range = 16;
+  optional MergeRequest merge = 17;
+  optional TruncateLogRequest truncate_log = 18;
+  optional LeaderLeaseRequest leader_lease = 19;
+  optional ReverseScanRequest reverse_scan = 20;
+  optional NoopRequest noop = 21;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
 // The values added here must match those in RequestUnion.
 message ResponseUnion {
   option (gogoproto.onlyone) = true;
-  oneof value {
-    GetResponse get = 1;
-    PutResponse put = 2;
-    ConditionalPutResponse conditional_put = 3;
-    IncrementResponse increment = 4;
-    DeleteResponse delete = 5;
-    DeleteRangeResponse delete_range = 6;
-    ScanResponse scan = 7;
-    EndTransactionResponse end_transaction = 8;
-    AdminSplitResponse admin_split = 9;
-    AdminMergeResponse admin_merge = 10;
-    HeartbeatTxnResponse heartbeat_txn = 11;
-    GCResponse gc = 12;
-    PushTxnResponse push_txn = 13;
-    RangeLookupResponse range_lookup = 14;
-    ResolveIntentResponse resolve_intent = 15;
-    ResolveIntentRangeResponse resolve_intent_range = 16;
-    MergeResponse merge = 17;
-    TruncateLogResponse truncate = 18;
-    LeaderLeaseResponse leader_lease = 19;
-    ReverseScanResponse reverse_scan = 20;
-    NoopResponse noop = 21;
-  }
+
+  optional GetResponse get = 1;
+  optional PutResponse put = 2;
+  optional ConditionalPutResponse conditional_put = 3;
+  optional IncrementResponse increment = 4;
+  optional DeleteResponse delete = 5;
+  optional DeleteRangeResponse delete_range = 6;
+  optional ScanResponse scan = 7;
+  optional EndTransactionResponse end_transaction = 8;
+  optional AdminSplitResponse admin_split = 9;
+  optional AdminMergeResponse admin_merge = 10;
+  optional HeartbeatTxnResponse heartbeat_txn = 11;
+  optional GCResponse gc = 12;
+  optional PushTxnResponse push_txn = 13;
+  optional RangeLookupResponse range_lookup = 14;
+  optional ResolveIntentResponse resolve_intent = 15;
+  optional ResolveIntentRangeResponse resolve_intent_range = 16;
+  optional MergeResponse merge = 17;
+  optional TruncateLogResponse truncate_log = 18;
+  optional LeaderLeaseResponse leader_lease = 19;
+  optional ReverseScanResponse reverse_scan = 20;
+  optional NoopResponse noop = 21;
 }
 
 // A BatchRequest contains one or more requests to be executed in

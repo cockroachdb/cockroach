@@ -340,7 +340,7 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) 
 	// we've eliminated all the redundancies.
 	for _, arg := range ba.Requests {
 		trace.Event(fmt.Sprintf("%T", arg.GetValue()))
-		if err := updateForBatch(arg.GetValue().(proto.Request), ba.RequestHeader); err != nil {
+		if err := updateForBatch(arg.GetInner(), ba.RequestHeader); err != nil {
 			return nil, err
 		}
 	}
@@ -488,7 +488,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *proto.BatchRequest) {
 	}
 	if len(ba.Txn.ID) == 0 {
 		// TODO(tschottdorf): should really choose the first txn write here.
-		firstKey := ba.Requests[0].GetValue().(proto.Request).Header().Key
+		firstKey := ba.Requests[0].GetInner().Header().Key
 		newTxn := proto.NewTransaction(ba.Txn.Name, keys.KeyAddress(firstKey), ba.GetUserPriority(),
 			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
 		// Use existing priority as a minimum. This is used on transaction
@@ -784,7 +784,7 @@ func (tc *TxnCoordSender) resendWithTxn(ba proto.BatchRequest) (*proto.BatchResp
 		txn.SetDebugName("auto-wrap", 0)
 		b := &client.Batch{}
 		for _, arg := range ba.Requests {
-			req := arg.GetValue().(proto.Request)
+			req := arg.GetInner()
 			call := proto.Call{Args: req, Reply: req.CreateReply()}
 			b.InternalAddCall(call)
 			br.Add(call.Reply)

@@ -89,11 +89,13 @@ func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to prot
 
 	var numNoop int
 	for pos, arg := range br.Requests {
-		omit, undo, err := truncateOne(arg.GetValue().(proto.Request))
+		omit, undo, err := truncateOne(arg.GetInner())
 		if omit {
 			numNoop++
 			nReq := &proto.RequestUnion{}
-			nReq.SetValue(&proto.NoopRequest{})
+			if !nReq.SetValue(&proto.NoopRequest{}) {
+				panic("RequestUnion excludes NoopRequest")
+			}
 			oReq := br.Requests[pos]
 			br.Requests[pos] = *nReq
 			posCpy := pos // for closure
@@ -191,7 +193,7 @@ func (cs *chunkingSender) SendBatch(ctx context.Context, ba proto.BatchRequest) 
 func prev(ba proto.BatchRequest, k proto.Key) proto.Key {
 	candidate := proto.KeyMin
 	for _, union := range ba.Requests {
-		h := union.GetValue().(proto.Request).Header()
+		h := union.GetInner().Header()
 		addr := keys.KeyAddress(h.Key)
 		eAddr := keys.KeyAddress(h.EndKey)
 		if len(eAddr) == 0 {
@@ -222,7 +224,7 @@ func prev(ba proto.BatchRequest, k proto.Key) proto.Key {
 func next(ba proto.BatchRequest, k proto.Key) proto.Key {
 	candidate := proto.KeyMax
 	for _, union := range ba.Requests {
-		h := union.GetValue().(proto.Request).Header()
+		h := union.GetInner().Header()
 		addr := keys.KeyAddress(h.Key)
 		if addr.Less(k) {
 			if eAddr := keys.KeyAddress(h.EndKey); k.Less(eAddr) {

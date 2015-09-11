@@ -46,6 +46,14 @@ type TransactionRestartError interface {
 	Transaction() *Transaction
 }
 
+func (e Error) getDetail() error {
+	if e.Detail == nil {
+		return nil
+	}
+
+	return e.Detail.GetValue().(error)
+}
+
 // Error implements the Go error interface.
 func (e *Error) Error() string {
 	return e.Message
@@ -63,11 +71,8 @@ func (e *Error) CanRestartTransaction() TransactionRestart {
 
 // Transaction implements the TransactionRestartError interface.
 func (e *Error) Transaction() *Transaction {
-	detail := e.GetDetail()
-	if detail != nil {
-		if txnErr, ok := detail.GetValue().(TransactionRestartError); ok {
-			return txnErr.Transaction()
-		}
+	if txnErr, ok := e.getDetail().(TransactionRestartError); ok {
+		return txnErr.Transaction()
 	}
 	return nil
 }

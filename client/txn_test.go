@@ -420,7 +420,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	for _, test := range testCases {
 		var commit, abort bool
 		db := NewDB(newTestSender(func(call proto.Call) {
-			switch t := call.Args.(*proto.BatchRequest).Requests[0].GetValue().(type) {
+			switch t := call.Args.(*proto.BatchRequest).Requests[0].GetInner().(type) {
 			case *proto.EndTransactionRequest:
 				if t.Commit {
 					commit = true

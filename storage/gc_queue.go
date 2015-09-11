@@ -320,5 +320,5 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 		return
 	}
 	// Update the supplied txn on successful push.
-	*txn = *br.Responses[0].GetValue().(*proto.PushTxnResponse).PusheeTxn
+	*txn = *br.Responses[0].GetInner().(*proto.PushTxnResponse).PusheeTxn
 }
