@@ -136,7 +136,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <qnames> qualified_name_list
 %type <qname> any_name
 %type <qnames> any_name_list
-%type <empty> any_operator
 %type <exprs> expr_list extract_list
 %type <indirect> attrs
 %type <selExprs> target_list opt_target_list
@@ -194,10 +193,8 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <expr>  having_clause
 %type <empty> func_table
 %type <expr>  array_expr
-%type <empty> exclusion_where_clause
 %type <empty> rowsfrom_item rowsfrom_list opt_col_def_list
 %type <empty> opt_ordinality
-%type <empty> exclusion_constraint_list exclusion_constraint_elem
 %type <empty> type_list
 %type <exprs> array_expr_list
 %type <expr>  row explicit_row implicit_row
@@ -311,7 +308,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   DICTIONARY DISABLE DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str>   EACH ELSE ENABLE ENCODING ENCRYPTED END ENUM ESCAPE EVENT EXCEPT
-%token <str>   EXCLUDE EXCLUDING EXCLUSIVE EXECUTE EXISTS EXPLAIN EXTENSION EXTERNAL EXTRACT
+%token <str>   EXCLUSIVE EXECUTE EXISTS EXPLAIN EXTENSION EXTERNAL EXTRACT
 
 %token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FOLLOWING FOR
 %token <str>   FORCE FOREIGN FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
@@ -1113,8 +1110,6 @@ constraint_elem:
       PrimaryKey:    true,
     }
   }
-| EXCLUDE '(' exclusion_constraint_list ')'
-    exclusion_where_clause {}
 | FOREIGN KEY '(' name_list ')' REFERENCES qualified_name
     opt_column_list key_match key_actions {}
 
@@ -1155,17 +1150,6 @@ key_match:
   MATCH FULL {}
 | MATCH PARTIAL {}
 | MATCH SIMPLE {}
-| /* EMPTY */ {}
-
-exclusion_constraint_list:
-  exclusion_constraint_elem {}
-| exclusion_constraint_list ',' exclusion_constraint_elem {}
-
-exclusion_constraint_elem:
-  index_elem WITH any_operator {}
-
-exclusion_where_clause:
-  WHERE '(' a_expr ')' {}
 | /* EMPTY */ {}
 
 // We combine the update and delete actions into one value temporarily for
@@ -1293,10 +1277,6 @@ opt_asc_desc:
   {
     $$ = DefaultDirection
   }
-
-any_operator:
-  math_op {}
-| name '.' any_operator {}
 
 // ALTER THING name RENAME TO newname
 rename_stmt:
@@ -3485,8 +3465,6 @@ unreserved_keyword:
 | ENCRYPTED
 | ENUM
 | EVENT
-| EXCLUDE
-| EXCLUDING
 | EXCLUSIVE
 | EXECUTE
 | EXPLAIN

@@ -140,8 +140,6 @@ var keywords = map[string]int{
 	"ENUM":              ENUM,
 	"EVENT":             EVENT,
 	"EXCEPT":            EXCEPT,
-	"EXCLUDE":           EXCLUDE,
-	"EXCLUDING":         EXCLUDING,
 	"EXCLUSIVE":         EXCLUSIVE,
 	"EXECUTE":           EXECUTE,
 	"EXISTS":            EXISTS,
