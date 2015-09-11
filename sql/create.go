@@ -71,9 +71,10 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	}
 
 	indexDesc := IndexDescriptor{
-		Name:        string(n.Name),
-		Unique:      n.Unique,
-		ColumnNames: n.Columns,
+		Name:             string(n.Name),
+		Unique:           n.Unique,
+		ColumnNames:      n.Columns,
+		StoreColumnNames: n.Storing,
 	}
 	tableDesc.Indexes = append(tableDesc.Indexes, indexDesc)
 

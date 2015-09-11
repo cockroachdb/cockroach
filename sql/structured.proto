@@ -67,16 +67,19 @@ message IndexDescriptor {
   // names here proves to be prohibitive, we could clear this field before
   // saving and reconstruct it after loading.
   repeated string column_names = 4;
+  // An ordered list of column names which the index stores in
+  // addition to the columns which are explicitly part of the index.
+  repeated string store_column_names = 5;
   // An ordered list of column ids of which the index is comprised. This list
   // parallels the column_names list.
-  repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
+  repeated uint32 column_ids = 6 [(gogoproto.customname) = "ColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
   // An ordered list of implicit column ids associated with the index. For
   // non-unique indexes, these columns will be appended to the key. For unique
   // indexes these columns will be stored in the value. The extra column IDs is
   // computed as PrimaryIndex.column_ids - column_ids. For the primary index
   // the list will be empty.
-  repeated uint32 implicit_column_ids = 6 [(gogoproto.customname) = "ImplicitColumnIDs",
+  repeated uint32 implicit_column_ids = 7 [(gogoproto.customname) = "ImplicitColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
 }
 

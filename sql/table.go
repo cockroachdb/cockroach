@@ -101,9 +101,10 @@ func makeTableDesc(p *parser.CreateTable) (TableDescriptor, error) {
 			}
 		case *parser.IndexTableDef:
 			index := IndexDescriptor{
-				Name:        string(d.Name),
-				Unique:      d.Unique,
-				ColumnNames: d.Columns,
+				Name:             string(d.Name),
+				Unique:           d.Unique,
+				ColumnNames:      d.Columns,
+				StoreColumnNames: d.Storing,
 			}
 			if d.PrimaryKey {
 				// Only override the index name if it hasn't been set by the user.

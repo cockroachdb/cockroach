@@ -51,6 +51,7 @@ type CreateIndex struct {
 	Unique      bool
 	IfNotExists bool
 	Columns     NameList
+	Storing     NameList
 }
 
 func (node *CreateIndex) String() string {
@@ -67,6 +68,9 @@ func (node *CreateIndex) String() string {
 		fmt.Fprintf(&buf, "%s ", node.Name)
 	}
 	fmt.Fprintf(&buf, "ON %s (%s)", node.Table, node.Columns)
+	if node.Storing != nil {
+		fmt.Fprintf(&buf, " STORING (%s)", node.Storing)
+	}
 	return buf.String()
 }
 
@@ -189,6 +193,7 @@ type IndexTableDef struct {
 	PrimaryKey bool
 	Unique     bool
 	Columns    NameList
+	Storing    NameList
 }
 
 func (node *IndexTableDef) String() string {
@@ -210,6 +215,9 @@ func (node *IndexTableDef) String() string {
 		}
 	}
 	fmt.Fprintf(&buf, "(%s)", node.Columns)
+	if node.Storing != nil {
+		fmt.Fprintf(&buf, " STORING (%s)", node.Storing)
+	}
 	return buf.String()
 }
 

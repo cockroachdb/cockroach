@@ -153,15 +153,18 @@ type IndexDescriptor struct {
 	// names here proves to be prohibitive, we could clear this field before
 	// saving and reconstruct it after loading.
 	ColumnNames []string `protobuf:"bytes,4,rep,name=column_names" json:"column_names,omitempty"`
+	// An ordered list of column names which the index stores in
+	// addition to the columns which are explicitly part of the index.
+	StoreColumnNames []string `protobuf:"bytes,5,rep,name=store_column_names" json:"store_column_names,omitempty"`
 	// An ordered list of column ids of which the index is comprised. This list
 	// parallels the column_names list.
-	ColumnIDs []ColumnID `protobuf:"varint,5,rep,name=column_ids,casttype=ColumnID" json:"column_ids,omitempty"`
+	ColumnIDs []ColumnID `protobuf:"varint,6,rep,name=column_ids,casttype=ColumnID" json:"column_ids,omitempty"`
 	// An ordered list of implicit column ids associated with the index. For
 	// non-unique indexes, these columns will be appended to the key. For unique
 	// indexes these columns will be stored in the value. The extra column IDs is
 	// computed as PrimaryIndex.column_ids - column_ids. For the primary index
 	// the list will be empty.
-	ImplicitColumnIDs []ColumnID `protobuf:"varint,6,rep,name=implicit_column_ids,casttype=ColumnID" json:"implicit_column_ids,omitempty"`
+	ImplicitColumnIDs []ColumnID `protobuf:"varint,7,rep,name=implicit_column_ids,casttype=ColumnID" json:"implicit_column_ids,omitempty"`
 }
 
 func (m *IndexDescriptor) Reset()         { *m = IndexDescriptor{} }
@@ -192,6 +195,13 @@ func (m *IndexDescriptor) GetUnique() bool {
 func (m *IndexDescriptor) GetColumnNames() []string {
 	if m != nil {
 		return m.ColumnNames
+	}
+	return nil
+}
+
+func (m *IndexDescriptor) GetStoreColumnNames() []string {
+	if m != nil {
+		return m.StoreColumnNames
 	}
 	return nil
 }
@@ -448,16 +458,31 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (int, error) {
 			i += copy(data[i:], s)
 		}
 	}
+	if len(m.StoreColumnNames) > 0 {
+		for _, s := range m.StoreColumnNames {
+			data[i] = 0x2a
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
 	if len(m.ColumnIDs) > 0 {
 		for _, num := range m.ColumnIDs {
-			data[i] = 0x28
+			data[i] = 0x30
 			i++
 			i = encodeVarintStructured(data, i, uint64(num))
 		}
 	}
 	if len(m.ImplicitColumnIDs) > 0 {
 		for _, num := range m.ImplicitColumnIDs {
-			data[i] = 0x30
+			data[i] = 0x38
 			i++
 			i = encodeVarintStructured(data, i, uint64(num))
 		}
@@ -634,6 +659,12 @@ func (m *IndexDescriptor) Size() (n int) {
 	n += 2
 	if len(m.ColumnNames) > 0 {
 		for _, s := range m.ColumnNames {
+			l = len(s)
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if len(m.StoreColumnNames) > 0 {
+		for _, s := range m.StoreColumnNames {
 			l = len(s)
 			n += 1 + l + sovStructured(uint64(l))
 		}
@@ -1037,6 +1068,32 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			m.ColumnNames = append(m.ColumnNames, string(data[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreColumnNames", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.StoreColumnNames = append(m.StoreColumnNames, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 6:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ColumnIDs", wireType)
 			}
@@ -1053,7 +1110,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			m.ColumnIDs = append(m.ColumnIDs, v)
-		case 6:
+		case 7:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ImplicitColumnIDs", wireType)
 			}
