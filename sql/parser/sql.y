@@ -230,7 +230,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <colType> bit const_bit bit_with_length bit_without_length
 %type <colType> character_base
 %type <str> extract_arg
-%type <empty> opt_charset
 %type <empty> opt_varying opt_no_inherit
 
 %type <ival>  signed_iconst
@@ -2327,14 +2326,14 @@ const_character:
 | character_without_length
 
 character_with_length:
-  character_base '(' ICONST ')' opt_charset
+  character_base '(' ICONST ')'
   {
     $$ = $1
     $$.(*StringType).N = int($3)
   }
 
 character_without_length:
-  character_base opt_charset
+  character_base
   {
     $$ = $1
   }
@@ -2355,10 +2354,6 @@ character_base:
 
 opt_varying:
   VARYING {}
-| /* EMPTY */ {}
-
-opt_charset:
-  CHARACTER SET name {}
 | /* EMPTY */ {}
 
 // SQL date/time types
