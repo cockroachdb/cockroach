@@ -154,8 +154,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> group_by_list
 %type <empty> group_by_item empty_grouping_set
 
-%type <empty> opt_restart_seqs
-
 %type <empty> for_locking_strength
 %type <empty> for_locking_item
 %type <empty> for_locking_clause opt_for_locking_clause for_locking_items
@@ -496,7 +494,7 @@ stmt:
     $$ = nil
   }
 
-// ALTER [DATABASE|INDEX|TABLE]
+// ALTER [INDEX|TABLE]
 alter_stmt:
   alter_index_stmt
 | alter_table_stmt
@@ -1232,15 +1230,10 @@ numeric_only:
 
 // TRUNCATE table relname1, relname2, ...
 truncate_stmt:
-  TRUNCATE opt_table relation_expr_list opt_restart_seqs opt_drop_behavior
+  TRUNCATE opt_table relation_expr_list opt_drop_behavior
   {
     $$ = &Truncate{Tables: $3}
   }
-
-opt_restart_seqs:
-  CONTINUE IDENTITY {}
-| RESTART IDENTITY {}
-| /* EMPTY */ {}
 
 // CREATE INDEX
 create_index_stmt:
