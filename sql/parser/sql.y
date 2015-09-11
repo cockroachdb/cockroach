@@ -72,8 +72,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <stmts> stmt_list
 %type <stmt> stmt
 
-%type <stmt> alter_stmt
-%type <stmt> alter_index_stmt
 %type <stmt> alter_table_stmt
 %type <stmt> create_stmt
 %type <stmt> create_database_stmt
@@ -474,7 +472,7 @@ stmt_list:
   }
 
 stmt:
-  alter_stmt
+  alter_table_stmt
 | create_stmt
 | delete_stmt
 | drop_stmt
@@ -490,21 +488,6 @@ stmt:
 | truncate_stmt
 | update_stmt
 | /* EMPTY */
-  {
-    $$ = nil
-  }
-
-// ALTER [INDEX|TABLE]
-alter_stmt:
-  alter_index_stmt
-| alter_table_stmt
-
-alter_index_stmt:
-  ALTER INDEX qualified_name alter_table_cmds
-  {
-    $$ = nil
-  }
-| ALTER INDEX IF EXISTS qualified_name alter_table_cmds
   {
     $$ = nil
   }
