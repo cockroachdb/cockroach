@@ -34,7 +34,7 @@ func TestClientCommandID(t *testing.T) {
 		if call.Args.Header().CmdID.WallTime == 0 {
 			t.Errorf("expected client command ID to be initialized")
 		}
-	}))
+	}, nil))
 	if err := db.Put("a", "b"); err != nil {
 		t.Error(err)
 	}
