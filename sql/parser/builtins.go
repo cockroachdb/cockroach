@@ -24,6 +24,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"strings"
@@ -31,10 +32,13 @@ import (
 )
 
 var errEmptyInputString = errors.New("the input string should not be empty")
+var errAbsOfMinInt64 = errors.New("abs of min integer value (-9223372036854775808) not defined")
 
 type typeList []reflect.Type
 
 type builtin struct {
+	// Set to typeList{} for nullary functions and to nil for varidic
+	// functions.
 	types      typeList
 	returnType Datum
 	// Set to true when a function returns a different value when called with
@@ -60,37 +64,6 @@ func (b builtin) match(types typeList) bool {
 
 // The map from function name to function data. Keep the list of functions
 // sorted please.
-//
-// TODO(pmattis): Need to flesh out the supported functions. For example, these
-// are the math functions postgres supports:
-//
-//   - abs
-//   - acos
-//   - asin
-//   - atan
-//   - atan2
-//   - ceil/ceiling
-//   - cos
-//   - degrees
-//   - div
-//   - exp
-//   - floor
-//   - ln
-//   - log
-//   - mod
-//   - pi
-//   - pow/power
-//   - radians
-//   - round
-//   - sign
-//   - sin
-//   - sqrt
-//   - tan
-//   - trunc
-//
-// Need to figure out if there is a standard set of functions or if we can
-// customize this to our liking. Would be good to support type conversion
-// functions.
 var builtins = map[string][]builtin{
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
 	"length": {stringBuiltin1(func(s string) (Datum, error) {
@@ -443,6 +416,190 @@ var builtins = map[string][]builtin{
 	"max": aggregateImpls(boolType, intType, floatType, stringType),
 	"min": aggregateImpls(boolType, intType, floatType, stringType),
 	"sum": aggregateImpls(intType, floatType),
+
+	// Math functions
+
+	"abs": {
+		builtin{
+			returnType: DummyFloat,
+			types:      typeList{floatType},
+			fn: func(args DTuple) (Datum, error) {
+				return DFloat(math.Abs(float64(args[0].(DFloat)))), nil
+			},
+		},
+		builtin{
+			returnType: DummyInt,
+			types:      typeList{intType},
+			fn: func(args DTuple) (Datum, error) {
+				x := args[0].(DInt)
+				switch {
+				case x == math.MinInt64:
+					return DNull, errAbsOfMinInt64
+				case x < 0:
+					return -x, nil
+				}
+				return x, nil
+			},
+		},
+	},
+
+	"acos": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Acos(x)), nil
+		}),
+	},
+
+	"asin": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Asin(x)), nil
+		}),
+	},
+
+	"atan": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Atan(x)), nil
+		}),
+	},
+
+	"atan2": {
+		floatBuiltin2(func(x, y float64) (Datum, error) {
+			return DFloat(math.Atan2(x, y)), nil
+		}),
+	},
+
+	"ceil":    {ceilImpl},
+	"ceiling": {ceilImpl},
+
+	"cos": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Cos(x)), nil
+		}),
+	},
+
+	"degrees": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(180.0 * x / math.Pi), nil
+		}),
+	},
+
+	"div": {
+		floatBuiltin2(func(x, y float64) (Datum, error) {
+			return DFloat(x / y), nil
+		}),
+	},
+
+	"exp": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Exp(x)), nil
+		}),
+	},
+
+	"floor": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Floor(x)), nil
+		}),
+	},
+
+	"ln": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Log(x)), nil
+		}),
+	},
+
+	"log": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Log10(x)), nil
+		}),
+	},
+
+	"mod": {
+		floatBuiltin2(func(x, y float64) (Datum, error) {
+			return DFloat(math.Mod(x, y)), nil
+		}),
+		builtin{
+			returnType: DummyInt,
+			types:      typeList{intType, intType},
+			fn: func(args DTuple) (Datum, error) {
+				y := args[1].(DInt)
+				if y == 0 {
+					return DNull, errZeroModulus
+				}
+				x := args[0].(DInt)
+				return DInt(x % y), nil
+			},
+		},
+	},
+
+	"pi": {
+		builtin{
+			returnType: DummyFloat,
+			types:      typeList{},
+			fn: func(args DTuple) (Datum, error) {
+				return DFloat(math.Pi), nil
+			},
+		},
+	},
+
+	"pow":   {powImpl},
+	"power": {powImpl},
+
+	"radians": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(x * math.Pi / 180.0), nil
+		}),
+	},
+
+	// TODO(thschroeter): implement round
+
+	"sin": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Sin(x)), nil
+		}),
+	},
+
+	"sign": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			switch {
+			case x < 0:
+				return DFloat(-1), nil
+			case x == 0:
+				return DFloat(0), nil
+			}
+			return DFloat(1), nil
+		}),
+		builtin{
+			returnType: DummyInt,
+			types:      typeList{intType},
+			fn: func(args DTuple) (Datum, error) {
+				x := args[0].(DInt)
+				switch {
+				case x < 0:
+					return DInt(-1), nil
+				case x == 0:
+					return DInt(0), nil
+				}
+				return DInt(1), nil
+			},
+		},
+	},
+
+	"sqrt": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Sqrt(x)), nil
+		}),
+	},
+
+	"tan": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Tan(x)), nil
+		}),
+	},
+
+	"trunc": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Trunc(x)), nil
+		}),
+	},
 }
 
 // The aggregate functions all just return their first argument. We don't
@@ -529,6 +686,10 @@ var substringImpls = []builtin{
 	},
 }
 
+var ceilImpl = floatBuiltin1(func(x float64) (Datum, error) {
+	return DFloat(math.Ceil(x)), nil
+})
+
 var nowImpl = builtin{
 	types:      typeList{},
 	returnType: DummyTimestamp,
@@ -536,6 +697,31 @@ var nowImpl = builtin{
 	fn: func(args DTuple) (Datum, error) {
 		return DTimestamp{Time: time.Now()}, nil
 	},
+}
+
+var powImpl = floatBuiltin2(func(x, y float64) (Datum, error) {
+	return DFloat(math.Pow(x, y)), nil
+})
+
+func floatBuiltin1(f func(float64) (Datum, error)) builtin {
+	return builtin{
+		types:      typeList{floatType},
+		returnType: DummyFloat,
+		fn: func(args DTuple) (Datum, error) {
+			return f(float64(args[0].(DFloat)))
+		},
+	}
+}
+
+func floatBuiltin2(f func(float64, float64) (Datum, error)) builtin {
+	return builtin{
+		types:      typeList{floatType, floatType},
+		returnType: DummyFloat,
+		fn: func(args DTuple) (Datum, error) {
+			return f(float64(args[0].(DFloat)),
+				float64(args[1].(DFloat)))
+		},
+	}
 }
 
 func stringBuiltin1(f func(string) (Datum, error), returnType Datum) builtin {
