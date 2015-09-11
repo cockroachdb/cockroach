@@ -73,14 +73,12 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <stmt> stmt
 
 %type <stmt> alter_stmt
-%type <stmt> alter_database_stmt
 %type <stmt> alter_index_stmt
 %type <stmt> alter_table_stmt
 %type <stmt> create_stmt
 %type <stmt> create_database_stmt
 %type <stmt> create_index_stmt
 %type <stmt> create_table_stmt
-%type <stmt> create_table_as_stmt
 %type <stmt> delete_stmt
 %type <stmt> drop_stmt
 %type <stmt> explain_stmt
@@ -113,7 +111,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> transaction_mode_list
 %type <empty> transaction_mode_item
 
-%type <empty> opt_with_data
 %type <empty> opt_nowait_or_skip
 
 %type <str>   name opt_name
@@ -131,10 +128,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> iso_level opt_encoding
 
 %type <tblDefs> opt_table_elem_list table_elem_list
-%type <empty> opt_inherit
-%type <empty> opt_typed_table_elem_list typed_table_elem_list
-%type <empty> reloptions
-%type <empty> opt_with distinct_clause opt_all_clause
+%type <empty> distinct_clause opt_all_clause
 %type <strs> opt_column_list
 %type <orderBy> sort_clause opt_sort_clause
 %type <orders> sortby_list
@@ -153,22 +147,16 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <updateExpr> set_clause multiple_set_clause
 %type <indirect> indirection
 %type <exprs> ctext_expr_list ctext_row
-%type <empty> reloption_list group_clause
+%type <empty> group_clause
 %type <limit> select_limit opt_select_limit
 %type <empty> transaction_mode_list_or_empty
 %type <empty> table_func_elem_list
-%type <empty> returning_clause
 %type <qnames> relation_expr_list
 
 %type <empty> group_by_list
 %type <empty> group_by_item empty_grouping_set
 
-%type <empty> create_as_target
-
-%type <empty> func_type
-
 %type <empty> opt_restart_seqs
-%type <empty> on_commit_option
 
 %type <empty> for_locking_strength
 %type <empty> for_locking_item
@@ -200,15 +188,11 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> opt_on_conflict
 
 %type <stmt>  generic_set set_rest set_rest_more
-%type <empty> set_reset_clause
 
 %type <strs> opt_storing
 %type <colDef> column_def
 %type <tblDef> table_elem
-%type <empty> typed_table_elem table_func_elem
-%type <empty> column_options
-%type <empty> reloption_elem
-%type <empty> def_arg
+%type <empty> table_func_elem
 %type <expr>  where_clause
 %type <indirectElem> indirection_elem
 %type <expr>  a_expr b_expr c_expr a_expr_const
@@ -269,8 +253,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <str>   col_name_keyword reserved_keyword
 
 %type <constraintDef> table_constraint constraint_elem
-%type <tblDef> index_def table_like_clause
-%type <empty> table_like_option_list table_like_option
+%type <tblDef> index_def
 %type <colConstraints> col_qual_list
 %type <colConstraint> col_constraint col_constraint_elem
 %type <empty> key_actions key_delete key_match key_update key_action
@@ -517,19 +500,8 @@ stmt:
 
 // ALTER [DATABASE|INDEX|TABLE]
 alter_stmt:
-  alter_database_stmt
-| alter_index_stmt
+  alter_index_stmt
 | alter_table_stmt
-
-alter_database_stmt:
-  ALTER DATABASE name
-  {
-    $$ = nil
-  }
-| ALTER DATABASE name set_reset_clause
-  {
-    $$ = nil
-  }
 
 alter_index_stmt:
   ALTER INDEX qualified_name alter_table_cmds
@@ -588,12 +560,6 @@ alter_table_cmd:
 | ALTER opt_column name DROP NOT NULL {}
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
 | ALTER opt_column name SET NOT NULL {}
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET STATISTICS <signed_iconst>
-| ALTER opt_column name SET STATISTICS signed_iconst {}
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET ( column_parameter = value [, ... ] )
-| ALTER opt_column name SET reloptions {}
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET ( column_parameter = value [, ... ] )
-| ALTER opt_column name RESET reloptions {}
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS name opt_drop_behavior {}
   // ALTER TABLE <name> DROP [COLUMN] <colname> [RESTRICT|CASCADE]
@@ -614,22 +580,6 @@ alter_table_cmd:
 | DROP CONSTRAINT IF EXISTS name opt_drop_behavior {}
   // ALTER TABLE <name> DROP CONSTRAINT <name> [RESTRICT|CASCADE]
 | DROP CONSTRAINT name opt_drop_behavior {}
-  // ALTER TABLE <name> SET LOGGED
-| SET LOGGED {}
-  // ALTER TABLE <name> SET UNLOGGED
-| SET UNLOGGED {}
-  // ALTER TABLE <name> INHERIT <parent>
-| INHERIT qualified_name {}
-  // ALTER TABLE <name> NO INHERIT <parent>
-| NO INHERIT qualified_name {}
-  // ALTER TABLE <name> OF <type_name>
-| OF any_name {}
-  // ALTER TABLE <name> NOT OF
-| NOT OF {}
-  // ALTER TABLE <name> SET (...)
-| SET reloptions {}
-  // ALTER TABLE <name> RESET (...)
-| RESET reloptions {}
 
 alter_column_default:
   SET DEFAULT a_expr {}
@@ -648,34 +598,15 @@ alter_using:
   USING a_expr {}
 | /* EMPTY */ {}
 
-reloptions:
-  '(' reloption_list ')'
-  {
-    $$ = $2
-  }
-
-reloption_list:
-  reloption_elem {}
-| reloption_list ',' reloption_elem {}
-
-// This should match def_elem and also allow qualified names.
-reloption_elem:
-  col_label '=' def_arg {}
-| col_label {}
-| col_label '.' col_label '=' def_arg {}
-| col_label '.' col_label {}
-
 // CREATE [DATABASE|INDEX|TABLE|TABLE AS]
 create_stmt:
   create_database_stmt
 | create_index_stmt
 | create_table_stmt
-| create_table_as_stmt
 
 // DELETE FROM query
 delete_stmt:
-  opt_with_clause DELETE FROM relation_expr_opt_alias
-    where_clause returning_clause
+  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause
   {
     $$ = &Delete{Table: $4, Where: newWhere(astWhere, $5)}
   }
@@ -756,7 +687,6 @@ explainable_stmt:
 | insert_stmt
 | update_stmt
 | delete_stmt
-| create_table_as_stmt
 
 explain_option_list:
   explain_option_name
@@ -858,7 +788,7 @@ grantee_list:
   {
     $$ = []string{$1}
   }
-  | grantee_list ',' name
+| grantee_list ',' name
   {
     $$ = append($1, $3)
   }
@@ -986,9 +916,6 @@ non_reserved_word_or_sconst:
     $$ = StrVal($1)
   }
 
-set_reset_clause:
-  SET set_rest {}
-
 show_stmt:
   SHOW IDENT
   {
@@ -1061,24 +988,12 @@ for_grantee_clause:
 // CREATE TABLE relname
 create_table_stmt:
   CREATE TABLE any_name '(' opt_table_elem_list ')'
-    opt_inherit opt_with on_commit_option
   {
     $$ = &CreateTable{Table: $3, IfNotExists: false, Defs: $5}
   }
 | CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')'
-    opt_inherit opt_with on_commit_option
   {
     $$ = &CreateTable{Table: $6, IfNotExists: true, Defs: $8}
-  }
-| CREATE TABLE any_name OF any_name
-    opt_typed_table_elem_list opt_with on_commit_option
-  {
-    $$ = nil
-  }
-| CREATE TABLE IF NOT EXISTS any_name OF any_name
-    opt_typed_table_elem_list opt_with on_commit_option
-  {
-    $$ = nil
   }
 
 opt_table_elem_list:
@@ -1087,13 +1002,6 @@ opt_table_elem_list:
   {
     $$ = nil
   }
-
-opt_typed_table_elem_list:
-  '(' typed_table_elem_list ')'
-  {
-    $$ = $2
-  }
-| /* EMPTY */ {}
 
 table_elem_list:
   table_elem
@@ -1105,34 +1013,22 @@ table_elem_list:
     $$ = append($1, $3)
   }
 
-typed_table_elem_list:
-  typed_table_elem {}
-| typed_table_elem_list ',' typed_table_elem {}
-
 table_elem:
   column_def
   {
     $$ = $1
   }
 | index_def
-| table_like_clause {}
 | table_constraint
   {
     $$ = $1
   }
-
-typed_table_elem:
-  column_options {}
-| table_constraint {}
 
 column_def:
   name typename col_qual_list
   {
     $$ = newColumnTableDef(Name($1), $2, $3)
   }
-
-column_options:
-  name WITH OPTIONS col_qual_list {}
 
 col_qual_list:
   col_qual_list col_constraint
@@ -1185,21 +1081,6 @@ col_constraint_elem:
 | CHECK '(' a_expr ')' opt_no_inherit {}
 | DEFAULT b_expr {}
 | REFERENCES qualified_name opt_column_list key_match key_actions {}
-
-table_like_clause:
-  LIKE qualified_name table_like_option_list {}
-
-table_like_option_list:
-  table_like_option_list INCLUDING table_like_option {}
-| table_like_option_list EXCLUDING table_like_option {}
-| /* EMPTY */ {}
-
-table_like_option:
-  DEFAULTS {}
-| CONSTRAINTS {}
-| INDEXES {}
-| COMMENTS {}
-| ALL {}
 
 index_def:
   INDEX opt_name '(' name_list ')' opt_storing
@@ -1338,39 +1219,6 @@ key_action:
 | SET NULL {}
 | SET DEFAULT {}
 
-opt_inherit:
-  INHERITS '(' qualified_name_list ')' {}
-| /* EMPTY */ {}
-
-opt_with:
-  WITH reloptions {}
-| /* EMPTY */ {}
-
-on_commit_option:
-  ON COMMIT DROP {}
-| ON COMMIT DELETE ROWS {}
-| ON COMMIT PRESERVE ROWS {}
-| /* EMPTY */ {}
-
-// CREATE TABLE relname AS select_stmt [ WITH [NO] DATA ]
-create_table_as_stmt:
-  CREATE TABLE create_as_target AS select_stmt opt_with_data
-  {
-    $$ = nil
-  }
-| CREATE TABLE IF NOT EXISTS create_as_target AS select_stmt opt_with_data
-  {
-    $$ = nil
-  }
-
-create_as_target:
-  any_name opt_column_list opt_with on_commit_option {}
-
-opt_with_data:
-  WITH DATA {}
-| WITH NO DATA {}
-| /* EMPTY */ {}
-
 numeric_only:
   FCONST
   {
@@ -1384,14 +1232,6 @@ numeric_only:
   {
     $$ = IntVal($1)
   }
-
-// Note: any simple identifier will be returned as a type name!
-def_arg:
-  func_type {}
-| reserved_keyword {}
-| math_op {}
-| numeric_only {}
-| SCONST {}
 
 // TRUNCATE table relname1, relname2, ...
 truncate_stmt:
@@ -1485,14 +1325,6 @@ opt_asc_desc:
   {
     $$ = DefaultDirection
   }
-
-// We would like to make the %TYPE productions here be name attrs etc, but
-// that causes reduce/reduce conflicts. type_function_name is next best
-// choice.
-func_type:
-  typename {}
-| type_function_name attrs '%' TYPE {}
-| SETOF type_function_name attrs '%' TYPE {}
 
 any_operator:
   math_op {}
@@ -1637,8 +1469,7 @@ create_database_stmt:
   }
 
 insert_stmt:
-  opt_with_clause INSERT INTO insert_target insert_rest
-    opt_on_conflict returning_clause
+  opt_with_clause INSERT INTO insert_target insert_rest opt_on_conflict
   {
     $$ = $5
     $$.(*Insert).Table = $4
@@ -1677,16 +1508,9 @@ opt_conf_expr:
 | ON CONSTRAINT name {}
 | /* EMPTY */ {}
 
-returning_clause:
-  RETURNING target_list {}
-| /* EMPTY */ {}
-
 update_stmt:
   opt_with_clause UPDATE relation_expr_opt_alias
-    SET set_clause_list
-    from_clause
-    where_clause
-    returning_clause
+    SET set_clause_list from_clause where_clause
   {
     $$ = &Update{Table: $3, Exprs: $5, Where: newWhere(astWhere, $7)}
   }
