@@ -310,9 +310,6 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 
 // Add adds a request to the batch request. The batch key range is
 // expanded to include the key ranges of all requests which it comprises.
-//
-// TODO(spencer): batches should include a list of key ranges
-//   representing the constituent requests.
 func (br *BatchRequest) Add(args Request) {
 	union := RequestUnion{}
 	if !union.SetValue(args) {

@@ -441,9 +441,9 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	pushArgs := &proto.PushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: txn.Key,
-			Txn: txn2,
 		},
 		Now:       s.Clock.Now(),
+		PusherTxn: txn2,
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}
