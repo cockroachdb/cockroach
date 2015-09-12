@@ -259,7 +259,6 @@ func getRequest(t *testing.T, ts TestServer, path string) []byte {
 func startServer(t *testing.T) TestServer {
 	var ts TestServer
 	ts.Ctx = NewTestContext()
-	ts.Ctx.ScanInterval = time.Duration(5 * time.Millisecond)
 	ts.StoresPerNode = 3
 	if err := ts.Start(); err != nil {
 		t.Fatal(err)
@@ -292,7 +291,6 @@ func startServer(t *testing.T) TestServer {
 // correctly.
 func TestStatusLocalLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(bram): disabled until #2440 is fixed")
 	dir, err := ioutil.TempDir("", "local_log_test")
 	if err != nil {
 		t.Fatal(err)
@@ -459,7 +457,6 @@ func TestStatusLocalLogs(t *testing.T) {
 // results.
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(bram): disabled until #2440 is fixed")
 	ts := startServer(t)
 	defer ts.Stop()
 
@@ -500,7 +497,6 @@ func TestNodeStatusResponse(t *testing.T) {
 // results.
 func TestStoreStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(bram): disabled until #2440 is fixed")
 	ts := startServer(t)
 	defer ts.Stop()
 
