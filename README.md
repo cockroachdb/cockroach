@@ -51,12 +51,13 @@ FATA[0000] Post http:///var/run/docker.sock/v1.17/images/create?fromImage=cockro
 ```
 On OSX:
 ```bash
-# Setup Boot2Docker. This should only need to be done once.
-boot2docker init
-# Start Boot2Docker. This will need to be run once per reboot.
-boot2docker start
-# Setup environment variables. This will need to be run once per shell.
-$(boot2docker shellinit)
+# After installing [Docker Toolbox](https://www.docker.com/toolbox), start the VM (docker host):
+$ docker-machine start default
+# then fire the following command to setup docker environment variables:
+$ eval $(docker-machine env default)
+# The previous command sets "default" as the active docker host VM.
+# To list the VMs (and check out which one is marked as Active):
+$ docker-machine ls
 ```
 Other operating systems will have a similar set of commands. Please check Docker's documentation for more info.
 
