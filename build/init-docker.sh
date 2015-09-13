@@ -3,12 +3,12 @@
 set -eu
 
 if [ "${DOCKER_HOST-}" = "" -a "$(uname)" = "Darwin" ]; then
-  if ! type -P "boot2docker" >& /dev/null; then
-    echo "boot2docker not found!"
+  if ! type -P "docker-machine" >& /dev/null; then
+    echo "docker-machine not found!"
     exit 1
   fi
-  echo "boot2docker shellinit # initializing DOCKER_* env variables"
-  eval $(boot2docker shellinit 2>/dev/null)
+  echo "docker-machine env # initializing DOCKER_* env variables"
+  eval $(docker-machine env default)
 fi
 
 # Verify that Docker is installed.
