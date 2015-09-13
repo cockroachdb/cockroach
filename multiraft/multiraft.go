@@ -528,7 +528,7 @@ func (s *state) start() {
 				if log.V(6) {
 					log.Infof("node %v: got op %#v", s.nodeID, op)
 				}
-				s.removeGroup(op, readyGroups)
+				op.ch <- s.removeGroup(op.groupID, readyGroups)
 
 			case prop := <-s.proposalChan:
 				s.propose(prop)
@@ -736,15 +736,14 @@ func (s *state) createGroup(groupID proto.RangeID) error {
 	return nil
 }
 
-func (s *state) removeGroup(op *removeGroupOp, readyGroups map[uint64]raft.Ready) {
+func (s *state) removeGroup(groupID proto.RangeID, readyGroups map[uint64]raft.Ready) error {
 	// Group creation is lazy and idempotent; so is removal.
-	g, ok := s.groups[op.groupID]
+	g, ok := s.groups[groupID]
 	if !ok {
-		op.ch <- nil
-		return
+		return nil
 	}
 	if log.V(3) {
-		log.Infof("node %v removing group %v", s.nodeID, op.groupID)
+		log.Infof("node %v removing group %v", s.nodeID, groupID)
 	}
 
 	// Cancel commands which are still in transit.
@@ -752,22 +751,21 @@ func (s *state) removeGroup(op *removeGroupOp, readyGroups map[uint64]raft.Ready
 		s.removePending(g, prop, ErrGroupDeleted)
 	}
 
-	if err := s.multiNode.RemoveGroup(uint64(op.groupID)); err != nil {
-		op.ch <- err
-		return
+	if err := s.multiNode.RemoveGroup(uint64(groupID)); err != nil {
+		return err
 	}
 
 	for _, nodeID := range g.nodeIDs {
-		s.nodes[nodeID].unregisterGroup(op.groupID)
+		s.nodes[nodeID].unregisterGroup(groupID)
 	}
 
 	// Delete any entries for this group in readyGroups.
 	if readyGroups != nil {
-		delete(readyGroups, uint64(op.groupID))
+		delete(readyGroups, uint64(groupID))
 	}
 
-	delete(s.groups, op.groupID)
-	op.ch <- nil
+	delete(s.groups, groupID)
+	return nil
 }
 
 func (s *state) propose(p *proposal) {
