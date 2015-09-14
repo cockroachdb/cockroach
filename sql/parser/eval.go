@@ -966,8 +966,11 @@ func EvalExpr(expr Expr) (Datum, error) {
 	case *RangeCond:
 		// NormalizeExpr transforms this into an AndExpr.
 
-	case *NullCheck:
-		return evalNullCheck(t)
+	case *IsExpr:
+		return evalIsExpr(t)
+
+	case *IsOfTypeExpr:
+		return evalIsOfTypeExpr(t)
 
 	case *ExistsExpr:
 		// The subquery within the exists should have been executed before
@@ -1116,16 +1119,95 @@ func evalNotExpr(expr *NotExpr) (Datum, error) {
 	return !v, nil
 }
 
-func evalNullCheck(expr *NullCheck) (Datum, error) {
+func evalIsExpr(expr *IsExpr) (Datum, error) {
 	d, err := EvalExpr(expr.Expr)
 	if err != nil {
 		return DNull, err
 	}
-	v := d == DNull
-	if expr.Not {
-		v = !v
+	switch expr.Operator {
+	case IsNull, IsUnknown:
+		return DBool(d == DNull), nil
+	case IsNotNull, IsNotUnknown:
+		return DBool(d != DNull), nil
+	case IsTrue:
+		return DBool(d == DBool(true)), nil
+	case IsNotTrue:
+		return DBool(d != DBool(true)), nil
+	case IsFalse:
+		return DBool(d == DBool(false)), nil
+	case IsNotFalse:
+		return DBool(d != DBool(false)), nil
+	default:
+		return DNull, util.Errorf("eval: unsupported IS operator: %d", expr.Operator)
 	}
-	return DBool(v), nil
+}
+
+func evalIsOfTypeExpr(expr *IsOfTypeExpr) (Datum, error) {
+	d, err := EvalExpr(expr.Expr)
+	if err != nil {
+		return DNull, err
+	}
+
+	result := DBool(true)
+	if expr.Not {
+		result = !result
+	}
+
+	switch d.(type) {
+	case DBool:
+		for _, t := range expr.Types {
+			if _, ok := t.(*BoolType); ok {
+				return result, nil
+			}
+		}
+
+	case DInt:
+		for _, t := range expr.Types {
+			if _, ok := t.(*IntType); ok {
+				return result, nil
+			}
+		}
+
+	case DFloat:
+		for _, t := range expr.Types {
+			if _, ok := t.(*FloatType); ok {
+				return result, nil
+			}
+		}
+
+	case DString:
+		for _, t := range expr.Types {
+			if _, ok := t.(*StringType); ok {
+				return result, nil
+			}
+			if _, ok := t.(*BytesType); ok {
+				return result, nil
+			}
+		}
+
+	case DDate:
+		for _, t := range expr.Types {
+			if _, ok := t.(*DateType); ok {
+				return result, nil
+			}
+		}
+
+	case DTimestamp:
+		for _, t := range expr.Types {
+			if _, ok := t.(*TimestampType); ok {
+				return result, nil
+			}
+		}
+
+	case DInterval:
+		for _, t := range expr.Types {
+			if _, ok := t.(*IntervalType); ok {
+				return result, nil
+			}
+		}
+	}
+
+	return !result, nil
 }
 
 func evalComparisonExpr(expr *ComparisonExpr) (Datum, error) {
@@ -1143,6 +1225,12 @@ func evalComparisonExpr(expr *ComparisonExpr) (Datum, error) {
 
 func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 	if left == DNull || right == DNull {
+		switch op {
+		case IsDistinctFrom:
+			return !DBool(left == DNull && right == DNull), nil
+		case IsNotDistinctFrom:
+			return DBool(left == DNull && right == DNull), nil
+		}
 		return DNull, nil
 	}
 
@@ -1164,6 +1252,17 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 		// NotIn(left, right) is implemented as !IN(left, right)
 		not = true
 		op = In
+	case IsDistinctFrom:
+		// IsDistinctFrom(left, right) is implemented as !EQ(left, right)
+		//
+		// Note the special handling of NULLs and IS DISTINCT FROM above.
+		not = true
+		op = EQ
+	case IsNotDistinctFrom:
+		// IsNotDistinctFrom(left, right) is implemented as EQ(left, right)
+		//
+		// Note the special handling of NULLs and IS NOT DISTINCT FROM above.
+		op = EQ
 	}
 
 	// TODO(pmattis): Memoize the cmpOps lookup as we've done for unaryOps and

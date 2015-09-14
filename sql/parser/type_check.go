@@ -67,7 +67,13 @@ func TypeCheckExpr(expr Expr) (Datum, error) {
 	case *RangeCond:
 		// NormalizeExpr transforms this into an AndExpr.
 
-	case *NullCheck:
+	case *IsExpr:
+		if _, err := TypeCheckExpr(t.Expr); err != nil {
+			return nil, err
+		}
+		return DummyBool, nil
+
+	case *IsOfTypeExpr:
 		if _, err := TypeCheckExpr(t.Expr); err != nil {
 			return nil, err
 		}
