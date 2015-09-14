@@ -1430,7 +1430,6 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	bArgs := &proto.BatchRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    header.Timestamp,
-			Txn:          header.Txn,
 			UserPriority: header.UserPriority,
 		},
 	}
@@ -1440,23 +1439,13 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			RequestHeader: proto.RequestHeader{
 				Timestamp: header.Timestamp,
 				Key:       intent.Txn.Key,
-				// TODO(tschottdorf):
-				// The following fields should not be supplied here, but store
-				// tests (for example TestStoreResolveWriteIntent) which do not
-				// go through TxnCoordSender rely on them being specified on
-				// the individual calls (and TxnCoordSender is in charge of
-				// filling them in here later).
-				Txn: header.Txn,
-				// This is here only for legacy reasons: testSender in the
-				// storage tests duplicates batch processing and isn't as
-				// smart as TxnCoordSender. A test that relies on this is
-				// TestStoreResolveWriteIntentNoTxn.
-				// This should disappear naturally when batches which address
-				// the same Range get sent to that Range wholesale:
-				// testSender then simply sends batches as any other call,
-				// which should be enough for the few tests that need them.
+				// TODO(tschottdorf): the following field is set here because
+				// in a batch, it must agree with the batch user priority. The
+				// TxnCoordSender is smart enough to fill these in, but some
+				// tests in this package do not go through the TxnCoordSender.
 				UserPriority: header.UserPriority,
 			},
+			PusherTxn: header.Txn,
 			PusheeTxn: intent.Txn,
 			// The timestamp is used by PushTxn for figuring out whether the
 			// transaction is abandoned. If we used the argument's timestamp

@@ -3542,35 +3542,44 @@ class PushTxnRequest : public ::google::protobuf::Message {
   ::cockroach::proto::RequestHeader* release_header();
   void set_allocated_header(::cockroach::proto::RequestHeader* header);
 
-  // optional .cockroach.proto.Transaction pushee_txn = 2;
+  // optional .cockroach.proto.Transaction pusher_txn = 2;
+  bool has_pusher_txn() const;
+  void clear_pusher_txn();
+  static const int kPusherTxnFieldNumber = 2;
+  const ::cockroach::proto::Transaction& pusher_txn() const;
+  ::cockroach::proto::Transaction* mutable_pusher_txn();
+  ::cockroach::proto::Transaction* release_pusher_txn();
+  void set_allocated_pusher_txn(::cockroach::proto::Transaction* pusher_txn);
+
+  // optional .cockroach.proto.Transaction pushee_txn = 3;
   bool has_pushee_txn() const;
   void clear_pushee_txn();
-  static const int kPusheeTxnFieldNumber = 2;
+  static const int kPusheeTxnFieldNumber = 3;
   const ::cockroach::proto::Transaction& pushee_txn() const;
   ::cockroach::proto::Transaction* mutable_pushee_txn();
   ::cockroach::proto::Transaction* release_pushee_txn();
   void set_allocated_pushee_txn(::cockroach::proto::Transaction* pushee_txn);
 
-  // optional .cockroach.proto.Timestamp now = 3;
+  // optional .cockroach.proto.Timestamp now = 4;
   bool has_now() const;
   void clear_now();
-  static const int kNowFieldNumber = 3;
+  static const int kNowFieldNumber = 4;
   const ::cockroach::proto::Timestamp& now() const;
   ::cockroach::proto::Timestamp* mutable_now();
   ::cockroach::proto::Timestamp* release_now();
   void set_allocated_now(::cockroach::proto::Timestamp* now);
 
-  // optional .cockroach.proto.PushTxnType push_type = 4;
+  // optional .cockroach.proto.PushTxnType push_type = 5;
   bool has_push_type() const;
   void clear_push_type();
-  static const int kPushTypeFieldNumber = 4;
+  static const int kPushTypeFieldNumber = 5;
   ::cockroach::proto::PushTxnType push_type() const;
   void set_push_type(::cockroach::proto::PushTxnType value);
 
-  // optional bool range_lookup = 5;
+  // optional bool range_lookup = 6;
   bool has_range_lookup() const;
   void clear_range_lookup();
-  static const int kRangeLookupFieldNumber = 5;
+  static const int kRangeLookupFieldNumber = 6;
   bool range_lookup() const;
   void set_range_lookup(bool value);
 
@@ -3578,6 +3587,8 @@ class PushTxnRequest : public ::google::protobuf::Message {
  private:
   inline void set_has_header();
   inline void clear_has_header();
+  inline void set_has_pusher_txn();
+  inline void clear_has_pusher_txn();
   inline void set_has_pushee_txn();
   inline void clear_has_pushee_txn();
   inline void set_has_now();
@@ -3591,6 +3602,7 @@ class PushTxnRequest : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::proto::RequestHeader* header_;
+  ::cockroach::proto::Transaction* pusher_txn_;
   ::cockroach::proto::Transaction* pushee_txn_;
   ::cockroach::proto::Timestamp* now_;
   int push_type_;
@@ -8285,15 +8297,58 @@ inline void PushTxnRequest::set_allocated_header(::cockroach::proto::RequestHead
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PushTxnRequest.header)
 }
 
-// optional .cockroach.proto.Transaction pushee_txn = 2;
-inline bool PushTxnRequest::has_pushee_txn() const {
+// optional .cockroach.proto.Transaction pusher_txn = 2;
+inline bool PushTxnRequest::has_pusher_txn() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void PushTxnRequest::set_has_pushee_txn() {
+inline void PushTxnRequest::set_has_pusher_txn() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void PushTxnRequest::clear_has_pushee_txn() {
+inline void PushTxnRequest::clear_has_pusher_txn() {
   _has_bits_[0] &= ~0x00000002u;
+}
+inline void PushTxnRequest::clear_pusher_txn() {
+  if (pusher_txn_ != NULL) pusher_txn_->::cockroach::proto::Transaction::Clear();
+  clear_has_pusher_txn();
+}
+inline const ::cockroach::proto::Transaction& PushTxnRequest::pusher_txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.PushTxnRequest.pusher_txn)
+  return pusher_txn_ != NULL ? *pusher_txn_ : *default_instance_->pusher_txn_;
+}
+inline ::cockroach::proto::Transaction* PushTxnRequest::mutable_pusher_txn() {
+  set_has_pusher_txn();
+  if (pusher_txn_ == NULL) {
+    pusher_txn_ = new ::cockroach::proto::Transaction;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.PushTxnRequest.pusher_txn)
+  return pusher_txn_;
+}
+inline ::cockroach::proto::Transaction* PushTxnRequest::release_pusher_txn() {
+  clear_has_pusher_txn();
+  ::cockroach::proto::Transaction* temp = pusher_txn_;
+  pusher_txn_ = NULL;
+  return temp;
+}
+inline void PushTxnRequest::set_allocated_pusher_txn(::cockroach::proto::Transaction* pusher_txn) {
+  delete pusher_txn_;
+  pusher_txn_ = pusher_txn;
+  if (pusher_txn) {
+    set_has_pusher_txn();
+  } else {
+    clear_has_pusher_txn();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PushTxnRequest.pusher_txn)
+}
+
+// optional .cockroach.proto.Transaction pushee_txn = 3;
+inline bool PushTxnRequest::has_pushee_txn() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void PushTxnRequest::set_has_pushee_txn() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void PushTxnRequest::clear_has_pushee_txn() {
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void PushTxnRequest::clear_pushee_txn() {
   if (pushee_txn_ != NULL) pushee_txn_->::cockroach::proto::Transaction::Clear();
@@ -8328,15 +8383,15 @@ inline void PushTxnRequest::set_allocated_pushee_txn(::cockroach::proto::Transac
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PushTxnRequest.pushee_txn)
 }
 
-// optional .cockroach.proto.Timestamp now = 3;
+// optional .cockroach.proto.Timestamp now = 4;
 inline bool PushTxnRequest::has_now() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void PushTxnRequest::set_has_now() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void PushTxnRequest::clear_has_now() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void PushTxnRequest::clear_now() {
   if (now_ != NULL) now_->::cockroach::proto::Timestamp::Clear();
@@ -8371,15 +8426,15 @@ inline void PushTxnRequest::set_allocated_now(::cockroach::proto::Timestamp* now
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PushTxnRequest.now)
 }
 
-// optional .cockroach.proto.PushTxnType push_type = 4;
+// optional .cockroach.proto.PushTxnType push_type = 5;
 inline bool PushTxnRequest::has_push_type() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void PushTxnRequest::set_has_push_type() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void PushTxnRequest::clear_has_push_type() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void PushTxnRequest::clear_push_type() {
   push_type_ = 0;
@@ -8396,15 +8451,15 @@ inline void PushTxnRequest::set_push_type(::cockroach::proto::PushTxnType value)
   // @@protoc_insertion_point(field_set:cockroach.proto.PushTxnRequest.push_type)
 }
 
-// optional bool range_lookup = 5;
+// optional bool range_lookup = 6;
 inline bool PushTxnRequest::has_range_lookup() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void PushTxnRequest::set_has_range_lookup() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void PushTxnRequest::clear_has_range_lookup() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void PushTxnRequest::clear_range_lookup() {
   range_lookup_ = false;

@@ -838,8 +838,8 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	// We make a random priority, biased by specified
 	// args.Header().UserPriority in this case.
 	var priority int32
-	if args.Txn != nil {
-		priority = args.Txn.Priority
+	if args.PusherTxn != nil {
+		priority = args.PusherTxn.Priority
 	} else {
 		// Make sure we have a deterministic random number when generating
 		// a priority for this txn-less request, so all replicas see same priority.
@@ -873,8 +873,8 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 		// If just attempting to cleanup old or already-committed txns, don't push.
 		pusherWins = false
 	} else if reply.PusheeTxn.Priority < priority ||
-		(reply.PusheeTxn.Priority == priority && args.Txn != nil &&
-			args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
+		(reply.PusheeTxn.Priority == priority && args.PusherTxn != nil &&
+			args.PusherTxn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
 		// Pusher wins based on priority; if priorities are equal, order
 		// by lower txn timestamp.
 		if log.V(1) {
@@ -884,7 +884,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	}
 
 	if !pusherWins {
-		err := proto.NewTransactionPushError(args.Txn, reply.PusheeTxn)
+		err := proto.NewTransactionPushError(args.PusherTxn, reply.PusheeTxn)
 		if log.V(1) {
 			log.Info(err)
 		}

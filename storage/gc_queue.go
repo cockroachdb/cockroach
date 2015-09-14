@@ -282,9 +282,9 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 			Timestamp:    now,
 			Key:          txn.Key,
 			UserPriority: gogoproto.Int32(proto.MaxPriority),
-			Txn:          nil,
 		},
 		Now:       now,
+		PusherTxn: nil,
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}

@@ -424,8 +424,8 @@ enum PushTxnType {
 // readers or writers which have encountered an "intent" laid down by
 // another transaction. The goal is to resolve the conflict. Note that
 // args.Key should be set to the txn ID of args.PusheeTxn, not
-// args.Txn, as is usual. This RPC is addressed to the range which
-// owns the pushee's txn record.
+// args.PusherTxn (which might be nil in any case). This RPC is
+// addressed to the range which owns the pushee's txn record.
 //
 // Resolution is trivial if the txn which owns the intent has either
 // been committed or aborted already. Otherwise, the existing txn can
@@ -435,23 +435,31 @@ enum PushTxnType {
 // the owning txn's status and priority.
 message PushTxnRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+  // Transaction which encountered the intent, if applicable. For a
+  // non-transactional operation, pusher_txn will be nil. Used to
+  // compare priorities and timestamps if priorities are equal.
+  optional Transaction pusher_txn = 2;
+  // Transaction to be pushed, as specified at the intent which led to
+  // the push transaction request. Note that this may not be the most
+  // up-to-date value of the transaction record, but will be set or
+  // merged as appropriate.
+  optional Transaction pushee_txn = 3 [(gogoproto.nullable) = false];
   // Now holds the timestamp used to compare the last heartbeat of the pushee
   // against. This is necessary since the request header's timestamp does not
   // necessarily advance with the node clock across retries and hence cannot
   // detect abandoned transactions.
-  optional Timestamp now = 3 [(gogoproto.nullable) = false];
+  optional Timestamp now = 4 [(gogoproto.nullable) = false];
   // Readers set this to PUSH_TIMESTAMP to move PusheeTxn's commit
   // timestamp forward. Writers set this to ABORT_TXN to request that
   // the PushTxn be aborted if possible. This is done in the event of
   // a writer conflicting with PusheeTxn. Inconsistent readers set
   // this to CLEANUP_TXN to determine whether dangling intents
   // may be resolved.
-  optional PushTxnType push_type = 4 [(gogoproto.nullable) = false];
+  optional PushTxnType push_type = 5 [(gogoproto.nullable) = false];
   // Range lookup indicates whether we're pushing a txn because of an
   // intent encountered while servicing an internal range lookup
   // request. See notes in RangeLookupRequest.
-  optional bool range_lookup = 5 [(gogoproto.nullable) = false];
+  optional bool range_lookup = 6 [(gogoproto.nullable) = false];
 }
 
 // A PushTxnResponse is the return value from the PushTxn() method. It
