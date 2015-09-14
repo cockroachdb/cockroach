@@ -55,10 +55,15 @@ func (node UpdateExprs) String() string {
 
 // UpdateExpr represents an update expression.
 type UpdateExpr struct {
-	Name *QualifiedName
-	Expr Expr
+	Tuple bool
+	Names QualifiedNames
+	Expr  Expr
 }
 
 func (node *UpdateExpr) String() string {
-	return fmt.Sprintf("%s = %s", node.Name, node.Expr)
+	open, close := "", ""
+	if node.Tuple {
+		open, close = "(", ")"
+	}
+	return fmt.Sprintf("%s%s%s = %s", open, node.Names, close, node.Expr)
 }

@@ -353,7 +353,7 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 		}
 	}
 	if n.err == nil {
-		n.filter, n.err = n.planner.expandSubqueries(n.filter)
+		n.filter, n.err = n.planner.expandSubqueries(n.filter, 1)
 	}
 	return n.err
 }
@@ -469,7 +469,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	if normalized, n.err = parser.NormalizeAndTypeCheckExpr(resolved); n.err != nil {
 		return n.err
 	}
-	if normalized, n.err = n.planner.expandSubqueries(normalized); n.err != nil {
+	if normalized, n.err = n.planner.expandSubqueries(normalized, 1); n.err != nil {
 		return n.err
 	}
 	n.render = append(n.render, normalized)

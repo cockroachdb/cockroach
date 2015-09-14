@@ -37,6 +37,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   indirect       Indirection
   stmt           Statement
   stmts          []Statement
+  selectStmt     SelectStatement
   colDef         *ColumnTableDef
   constraintDef  ConstraintTableDef
   tblDef         TableDef
@@ -87,15 +88,15 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <stmt> preparable_stmt
 %type <stmt> rename_stmt
 %type <stmt> revoke_stmt
-%type <stmt> select_stmt
+%type <selectStmt> select_stmt
 %type <stmt> set_stmt
 %type <stmt> show_stmt
 %type <stmt> transaction_stmt
 %type <stmt> truncate_stmt
 %type <stmt> update_stmt
 
-%type <stmt> select_no_parens select_with_parens select_clause
-%type <stmt> simple_select values_clause
+%type <selectStmt> select_no_parens select_with_parens select_clause
+%type <selectStmt> simple_select values_clause
 
 %type <empty> alter_column_default alter_using
 %type <dir> opt_asc_desc
@@ -472,6 +473,9 @@ stmt:
 | rename_stmt
 | revoke_stmt
 | select_stmt
+  {
+    $$ = $1
+  }
 | set_stmt
 | show_stmt
 | transaction_stmt
@@ -653,6 +657,9 @@ explain_stmt:
 
 explainable_stmt:
   select_stmt
+  {
+    $$ = $1
+  }
 | insert_stmt
 | update_stmt
 | delete_stmt
@@ -1369,11 +1376,11 @@ insert_target:
 insert_rest:
   select_stmt
   {
-    $$ = &Insert{Rows: $1.(SelectStatement)}
+    $$ = &Insert{Rows: $1}
   }
 | '(' qualified_name_list ')' select_stmt
   {
-    $$ = &Insert{Columns: $2, Rows: $4.(SelectStatement)}
+    $$ = &Insert{Columns: $2, Rows: $4}
   }
 | DEFAULT VALUES
   {
@@ -1414,7 +1421,7 @@ set_clause:
 single_set_clause:
   qualified_name '=' ctext_expr
   {
-    $$ = &UpdateExpr{Name: $1, Expr: $3}
+    $$ = &UpdateExpr{Names: QualifiedNames{$1}, Expr: $3}
   }
 
 // Ideally, we'd accept any row-valued a_expr as RHS of a multiple_set_clause.
@@ -1424,8 +1431,14 @@ single_set_clause:
 // moment, the planner/executor only support a subquery as a multiassignment
 // source anyhow, so we need only accept ctext_row and subqueries here.
 multiple_set_clause:
-  '(' qualified_name_list ')' '=' ctext_row {}
-| '(' qualified_name_list ')' '=' select_with_parens {}
+  '(' qualified_name_list ')' '=' ctext_row
+  {
+    $$ = &UpdateExpr{Tuple: true, Names: $2, Expr: Tuple($5)}
+  }
+| '(' qualified_name_list ')' '=' select_with_parens
+  {
+    $$ = &UpdateExpr{Tuple: true, Names: $2, Expr: &Subquery{Select: $5}}
+  }
 
 // A complete SELECT statement looks like this.
 //
@@ -1471,11 +1484,11 @@ select_stmt:
 select_with_parens:
   '(' select_no_parens ')'
   {
-    $$ = &ParenSelect{Select: $2.(SelectStatement)}
+    $$ = &ParenSelect{Select: $2}
   }
 | '(' select_with_parens ')'
   {
-    $$ = &ParenSelect{Select: $2.(SelectStatement)}
+    $$ = &ParenSelect{Select: $2}
   }
 
 // This rule parses the equivalent of the standard's <query expression>. The
@@ -1589,8 +1602,8 @@ simple_select:
     // TODO(pmattis): Support all/distinct
     $$ = &Union{
       Type:  astUnion,
-      Left:  $1.(SelectStatement),
-      Right: $4.(SelectStatement),
+      Left:  $1,
+      Right: $4,
     }
   }
 | select_clause INTERSECT all_or_distinct select_clause
@@ -1598,8 +1611,8 @@ simple_select:
     // TODO(pmattis): Support all/distinct
     $$ = &Union{
       Type:  astIntersect,
-      Left:  $1.(SelectStatement),
-      Right: $4.(SelectStatement),
+      Left:  $1,
+      Right: $4,
     }
   }
 | select_clause EXCEPT all_or_distinct select_clause
@@ -1607,8 +1620,8 @@ simple_select:
     // TODO(pmattis): Support all/distinct
     $$ = &Union{
       Type:  astExcept,
-      Left:  $1.(SelectStatement),
-      Right: $4.(SelectStatement),
+      Left:  $1,
+      Right: $4,
     }
   }
 
@@ -1634,6 +1647,9 @@ common_table_expr:
 
 preparable_stmt:
   select_stmt
+  {
+    $$ = $1
+  }
 | insert_stmt
 | update_stmt
 | delete_stmt
@@ -1851,7 +1867,7 @@ table_ref:
 | LATERAL func_table func_alias_clause {}
 | select_with_parens opt_alias_clause
   {
-    $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1.(SelectStatement)}, As: Name($2)}
+    $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1}, As: Name($2)}
   }
 | LATERAL select_with_parens opt_alias_clause {}
 | joined_table
@@ -2672,15 +2688,15 @@ c_expr:
 | func_expr
 | select_with_parens %prec UMINUS
   {
-    $$ = &Subquery{Select: $1.(SelectStatement)}
+    $$ = &Subquery{Select: $1}
   }
 | select_with_parens indirection
   {
-    $$ = &Subquery{Select: $1.(SelectStatement)}
+    $$ = &Subquery{Select: $1}
   }
 | EXISTS select_with_parens
   {
-    $$ = &ExistsExpr{Subquery: &Subquery{Select: $2.(SelectStatement)}}
+    $$ = &ExistsExpr{Subquery: &Subquery{Select: $2}}
   }
 // TODO(pmattis): Support this notation?
 // | ARRAY select_with_parens {}
@@ -3047,7 +3063,7 @@ trim_list:
 in_expr:
   select_with_parens
   {
-    $$ = &Subquery{Select: $1.(SelectStatement)}
+    $$ = &Subquery{Select: $1}
   }
 | '(' expr_list ')'
   {

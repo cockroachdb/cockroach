@@ -23,16 +23,17 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
-func (p *planner) expandSubqueries(expr parser.Expr) (parser.Expr, error) {
-	v := subqueryVisitor{planner: p}
+func (p *planner) expandSubqueries(expr parser.Expr, columns int) (parser.Expr, error) {
+	v := subqueryVisitor{planner: p, columns: columns}
 	expr = parser.WalkExpr(&v, expr)
 	return expr, v.err
 }
 
 type subqueryVisitor struct {
 	*planner
-	path []parser.Expr // parent expressions
-	err  error
+	columns int
+	path    []parser.Expr // parent expressions
+	err     error
 }
 
 var _ parser.Visitor = &subqueryVisitor{}
@@ -144,5 +145,5 @@ func (v *subqueryVisitor) getSubqueryContext() (columns int, multipleRows bool) 
 			return columns, multipleRows
 		}
 	}
-	return 1, false
+	return v.columns, false
 }

@@ -161,6 +161,7 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 	}
 
 	cols := make([]ColumnDescriptor, len(node))
+	colIDSet := make(map[ColumnID]struct{}, len(node))
 	for i, n := range node {
 		// TODO(pmattis): If the name is qualified, verify the table name matches
 		// tableDesc.Name.
@@ -171,6 +172,10 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 		if err != nil {
 			return nil, err
 		}
+		if _, ok := colIDSet[col.ID]; ok {
+			return nil, fmt.Errorf("multiple assignments to same column \"%s\"", n.Column())
+		}
+		colIDSet[col.ID] = struct{}{}
 		cols[i] = *col
 	}
 
