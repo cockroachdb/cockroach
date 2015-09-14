@@ -18,7 +18,7 @@
 
 ## What is CockroachDB
 
-CockroachDB is a distributed SQL database built on top of a key:value datastore. It was designed to support ACID transactional semantics and versioned values as first-class features. The primary design goal is global consistency and survivability, hence the name. CockroachDB aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention. CockroachDB nodes (RoachNodes) are symmetric; a design goal is homogenous deployment (one binary) with minimal configuration.
+CockroachDB is a distributed SQL database built on top of a transactional and consistent key:value store. The primary design goals are support for ACID transactions, horizontal scalability, and survivability, hence the name. CockroachDB implements a Raft consensus algorithm for consistency. It aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention. CockroachDB nodes (RoachNodes) are symmetric; a design goal is homogenous deployment (one binary) with minimal configuration.
 
 ## Status
 
@@ -37,7 +37,7 @@ If you don't want to use Docker,
 
 #### Bootstrap and talk to a single node
 
-Getting a RoachNode node up and running is easy. If you have the `cockroach` binary, skip over the next shell session. Most users however will want to run the following:
+Getting a RoachNode up and running is easy. If you have the `cockroach` binary, skip over the next shell session. Most users however will want to run the following:
 
 ```bash
 # Get the latest image from the registry. Skip if you already have an image
@@ -157,11 +157,7 @@ For a quick design overview, see the [CockroachDB tech talk slides](https://docs
 or watch a [presentation](#talks).
 
 
-CockroachDB is a distributed SQL database built on top of a key:value datastore. It was designed to support ACID transactional semantics and versioned values as first-class features. The primary design goal is global consistency and survivability, hence the name. CockroachDB aims to tolerate disk,
-machine, rack, and even datacenter failures with minimal latency
-disruption and no manual intervention. RoachNodes are symmetric;
-a design goal is one binary with minimal configuration and no required
-auxiliary services.
+CockroachDB is a distributed SQL database built on top of a transactional and consistent key:value store. The primary design goals are support for ACID transactions, horizontal scalability and survivability, hence the name. CockroachDB implements a Raft consensus algorithm for consistency. It aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention. CockroachDB nodes (RoachNodes) are symmetric; a design goal is homogenous deployment (one binary) with minimal configuration.
 
 CockroachDB implements a single, monolithic sorted map from key to value
 where both keys and values are byte strings (not unicode). CockroachDB
@@ -288,7 +284,7 @@ write-optimized (HBase, Cassandra, SQLite3/LSM, CockroachDB).
 
 CockroachDB implements a layered architecture, with various
 subdirectories implementing layers as appropriate. The highest level of
-abstraction is the [SQL layer][5], which is currently in development and depends
+abstraction is the [SQL layer][5], which depends
 directly on the structured data API. The structured
 data API provides familiar relational concepts such as schemas,
 tables, columns, and indexes. The structured data API in turn depends
@@ -312,8 +308,7 @@ replicas.
 
 ## Client Architecture
 
-RoachNodes serve client traffic using a fully-featured key/value
-DB API which accepts requests as either application/x-protobuf or
+RoachNodes serve client traffic using a fully-featured SQL API which accepts requests as either application/x-protobuf or
 application/json. Client implementations consist of an HTTP sender
 (transport) and a transactional sender which implements a simple
 exponential backoff / retry protocol, depending on CockroachDB error
