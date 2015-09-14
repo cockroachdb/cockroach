@@ -44,6 +44,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   colConstraint  ColumnConstraint
   colConstraints []ColumnConstraint
   colType        ColumnType
+  colTypes       []ColumnType
   expr           Expr
   exprs          Exprs
   selExpr        SelectExpr
@@ -188,7 +189,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <expr>  array_expr
 %type <empty> rowsfrom_item rowsfrom_list opt_col_def_list
 %type <empty> opt_ordinality
-%type <empty> type_list
+%type <colTypes> type_list
 %type <exprs> array_expr_list
 %type <expr>  row explicit_row implicit_row
 %type <expr>  case_expr case_arg case_default
@@ -2455,23 +2456,56 @@ a_expr:
   }
 | a_expr IS NULL %prec IS
   {
-    $$ = &NullCheck{Expr: $1}
+    $$ = &IsExpr{Operator: IsNull, Expr: $1}
   }
 | a_expr IS NOT NULL %prec IS
   {
-    $$ = &NullCheck{Not: true, Expr: $1}
+    $$ = &IsExpr{Operator: IsNotNull, Expr: $1}
   }
-| row OVERLAPS row {}
-| a_expr IS TRUE %prec IS {}
-| a_expr IS NOT TRUE %prec IS {}
-| a_expr IS FALSE %prec IS {}
-| a_expr IS NOT FALSE %prec IS {}
-| a_expr IS UNKNOWN %prec IS {}
-| a_expr IS NOT UNKNOWN %prec IS {}
-| a_expr IS DISTINCT FROM a_expr %prec IS {}
-| a_expr IS NOT DISTINCT FROM a_expr %prec IS {}
-| a_expr IS OF '(' type_list ')' %prec IS {}
-| a_expr IS NOT OF '(' type_list ')' %prec IS {}
+| row OVERLAPS row
+  {
+    panic("TODO(pmattis): unimplemented)")
+  }
+| a_expr IS TRUE %prec IS
+  {
+    $$ = &IsExpr{Operator: IsTrue, Expr: $1}
+  }
+| a_expr IS NOT TRUE %prec IS
+  {
+    $$ = &IsExpr{Operator: IsNotTrue, Expr: $1}
+  }
+| a_expr IS FALSE %prec IS
+  {
+    $$ = &IsExpr{Operator: IsFalse, Expr: $1}
+  }
+| a_expr IS NOT FALSE %prec IS
+  {
+    $$ = &IsExpr{Operator: IsNotFalse, Expr: $1}
+  }
+| a_expr IS UNKNOWN %prec IS
+  {
+    $$ = &IsExpr{Operator: IsUnknown, Expr: $1}
+  }
+| a_expr IS NOT UNKNOWN %prec IS
+  {
+    $$ = &IsExpr{Operator: IsNotUnknown, Expr: $1}
+  }
+| a_expr IS DISTINCT FROM a_expr %prec IS
+  {
+    $$ = &ComparisonExpr{Operator: IsDistinctFrom, Left: $1, Right: $5}
+  }
+| a_expr IS NOT DISTINCT FROM a_expr %prec IS
+  {
+    $$ = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1, Right: $6}
+  }
+| a_expr IS OF '(' type_list ')' %prec IS
+  {
+    $$ = &IsOfTypeExpr{Expr: $1, Types: $5}
+  }
+| a_expr IS NOT OF '(' type_list ')' %prec IS
+  {
+    $$ = &IsOfTypeExpr{Not: true, Expr: $1, Types: $6}
+  }
 | a_expr BETWEEN opt_asymmetric b_expr AND a_expr %prec BETWEEN
   {
     $$ = &RangeCond{Left: $1, From: $4, To: $6}
@@ -2597,10 +2631,22 @@ b_expr:
   {
     $$ = &ComparisonExpr{Operator: NE, Left: $1, Right: $3}
   }
-| b_expr IS DISTINCT FROM b_expr %prec IS {}
-| b_expr IS NOT DISTINCT FROM b_expr %prec IS {}
-| b_expr IS OF '(' type_list ')' %prec IS {}
-| b_expr IS NOT OF '(' type_list ')' %prec IS {}
+| b_expr IS DISTINCT FROM b_expr %prec IS
+  {
+    $$ = &ComparisonExpr{Operator: IsDistinctFrom, Left: $1, Right: $5}
+  }
+| b_expr IS NOT DISTINCT FROM b_expr %prec IS
+  {
+    $$ = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1, Right: $6}
+  }
+| b_expr IS OF '(' type_list ')' %prec IS
+  {
+    $$ = &IsOfTypeExpr{Expr: $1, Types: $5}
+  }
+| b_expr IS NOT OF '(' type_list ')' %prec IS
+  {
+    $$ = &IsOfTypeExpr{Not: true, Expr: $1, Types: $6}
+  }
 
 // Productions that can be used in both a_expr and b_expr.
 //
@@ -2901,8 +2947,14 @@ expr_list:
   }
 
 type_list:
-  typename {}
-| type_list ',' typename {}
+  typename
+  {
+    $$ = []ColumnType{$1}
+  }
+| type_list ',' typename
+  {
+    $$ = append($1, $3)
+  }
 
 array_expr:
   '[' expr_list ']'
