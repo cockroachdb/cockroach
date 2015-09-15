@@ -549,7 +549,29 @@ var builtins = map[string][]builtin{
 		}),
 	},
 
-	// TODO(thschroeter): implement round
+	"round": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(roundDigits(x, 0)), nil
+		}),
+		// TODO(thschroeter):
+		//
+		// Should we go through `FormatFloat` and `ParseFloat`
+		// instead, as CPython prefers?
+		//
+		// Need to figure out what the bounds for number of digits
+		// should be. Also, we need to decide if we want to support
+		// rounding in front of the decimal point for negative number
+		// of digits as Postges does, e.g. round(42, -1) is 40.
+		builtin{
+			returnType: DummyFloat,
+			types:      typeList{floatType, intType},
+			fn: func(args DTuple) (Datum, error) {
+				n := args[1].(DInt)
+				x := args[0].(DFloat)
+				return DFloat(roundDigits(float64(x), int64(n))), nil
+			},
+		},
+	},
 
 	"sin": {
 		floatBuiltin1(func(x float64) (Datum, error) {
@@ -760,4 +782,64 @@ func datumToRawString(datum Datum) (string, error) {
 	}
 
 	return "", fmt.Errorf("argument type unsupported: %s", datum.Type())
+}
+
+// Round rounds x to n digits.
+// Directly taken from CPython's `double_round` at
+// https://hg.python.org/cpython/file/v3.5.0/Objects/floatobject.c#l863
+//
+// TODO(thschroeter):
+// - test overflow scenarios
+// - determine the domain (what are the boundaries of valid input)
+func roundDigits(x float64, n int64) float64 {
+	var pow1, pow2, y, z float64
+	ndigits := float64(n)
+
+	if ndigits >= 0 {
+		if ndigits > 22 {
+			/* pow1 and pow2 are each safe from overflow, but
+			   pow1*pow2 ~= pow(10.0, ndigits) might overflow */
+			pow1 = math.Pow(10, ndigits-22)
+			pow2 = 1e22
+		} else {
+			pow1 = math.Pow(10, ndigits)
+			pow2 = 1.0
+		}
+		y = (x * pow1) * pow2
+		/* if y overflows, then rounded value is exactly x */
+		if math.IsInf(y, 0) {
+			return x
+		}
+	} else {
+		pow1 = math.Pow(10, ndigits)
+		y = x / pow1
+	}
+
+	z = round(y)
+	if math.Abs(y-z) == 0.5 {
+		/* halfway between two integers; use round-half-even */
+		z = 2.0 * round(y/2.0)
+	}
+
+	if ndigits >= 0 {
+		z = (z / pow2) / pow1
+	} else {
+		z *= pow1
+	}
+
+	/* if computation resulted in overflow, raise OverflowError */
+	if math.IsInf(z, 0) {
+		return math.NaN()
+	}
+
+	return z
+}
+
+func round(x float64) float64 {
+	absx := math.Abs(x)
+	y := math.Floor(absx)
+	if absx-y >= 0.5 {
+		y += 1.0
+	}
+	return math.Copysign(y, x)
 }
