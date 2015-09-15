@@ -181,6 +181,9 @@ func (ts *TestServer) ServingAddr() string {
 
 // Stop stops the TestServer.
 func (ts *TestServer) Stop() {
+	if r := recover(); r != nil {
+		panic(r)
+	}
 	ts.Server.Stop()
 }
 

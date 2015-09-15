@@ -154,8 +154,10 @@ func (m *RangeKeyMismatchError) GetRange() *RangeDescriptor {
 // interval of the reader.
 // The read should be retried at existing_timestamp+1.
 type ReadWithinUncertaintyIntervalError struct {
-	Timestamp         Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
-	ExistingTimestamp Timestamp `protobuf:"bytes,2,opt,name=existing_timestamp" json:"existing_timestamp"`
+	Timestamp         Timestamp   `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
+	ExistingTimestamp Timestamp   `protobuf:"bytes,2,opt,name=existing_timestamp" json:"existing_timestamp"`
+	NodeID            NodeID      `protobuf:"varint,3,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	Txn               Transaction `protobuf:"bytes,4,opt,name=txn" json:"txn"`
 }
 
 func (m *ReadWithinUncertaintyIntervalError) Reset()      { *m = ReadWithinUncertaintyIntervalError{} }
@@ -173,6 +175,20 @@ func (m *ReadWithinUncertaintyIntervalError) GetExistingTimestamp() Timestamp {
 		return m.ExistingTimestamp
 	}
 	return Timestamp{}
+}
+
+func (m *ReadWithinUncertaintyIntervalError) GetNodeID() NodeID {
+	if m != nil {
+		return m.NodeID
+	}
+	return 0
+}
+
+func (m *ReadWithinUncertaintyIntervalError) GetTxn() Transaction {
+	if m != nil {
+		return m.Txn
+	}
+	return Transaction{}
 }
 
 // A TransactionAbortedError indicates that the transaction was
@@ -690,6 +706,17 @@ func (m *ReadWithinUncertaintyIntervalError) MarshalTo(data []byte) (int, error)
 		return 0, err
 	}
 	i += n5
+	data[i] = 0x18
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.NodeID))
+	data[i] = 0x22
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
+	n6, err := m.Txn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n6
 	return i, nil
 }
 
@@ -711,11 +738,11 @@ func (m *TransactionAbortedError) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
-	n6, err := m.Txn.MarshalTo(data[i:])
+	n7, err := m.Txn.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n6
+	i += n7
 	return i, nil
 }
 
@@ -738,20 +765,20 @@ func (m *TransactionPushError) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
-		n7, err := m.Txn.MarshalTo(data[i:])
+		n8, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n7
+		i += n8
 	}
 	data[i] = 0x12
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.PusheeTxn.Size()))
-	n8, err := m.PusheeTxn.MarshalTo(data[i:])
+	n9, err := m.PusheeTxn.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n8
+	i += n9
 	return i, nil
 }
 
@@ -773,11 +800,11 @@ func (m *TransactionRetryError) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
-	n9, err := m.Txn.MarshalTo(data[i:])
+	n10, err := m.Txn.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n9
+	i += n10
 	return i, nil
 }
 
@@ -799,11 +826,11 @@ func (m *TransactionStatusError) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
-	n10, err := m.Txn.MarshalTo(data[i:])
+	n11, err := m.Txn.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n10
+	i += n11
 	data[i] = 0x12
 	i++
 	i = encodeVarintErrors(data, i, uint64(len(m.Msg)))
@@ -867,19 +894,19 @@ func (m *WriteTooOldError) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Timestamp.Size()))
-	n11, err := m.Timestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n11
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.ExistingTimestamp.Size()))
-	n12, err := m.ExistingTimestamp.MarshalTo(data[i:])
+	n12, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n12
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.ExistingTimestamp.Size()))
+	n13, err := m.ExistingTimestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n13
 	return i, nil
 }
 
@@ -920,11 +947,11 @@ func (m *ConditionFailedError) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.ActualValue.Size()))
-		n13, err := m.ActualValue.MarshalTo(data[i:])
+		n14, err := m.ActualValue.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n13
+		i += n14
 	}
 	return i, nil
 }
@@ -947,19 +974,19 @@ func (m *LeaseRejectedError) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Requested.Size()))
-	n14, err := m.Requested.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n14
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Existing.Size()))
-	n15, err := m.Existing.MarshalTo(data[i:])
+	n15, err := m.Requested.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n15
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Existing.Size()))
+	n16, err := m.Existing.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n16
 	return i, nil
 }
 
@@ -982,141 +1009,141 @@ func (m *ErrorDetail) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.NotLeader.Size()))
-		n16, err := m.NotLeader.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n16
-	}
-	if m.RangeNotFound != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.RangeNotFound.Size()))
-		n17, err := m.RangeNotFound.MarshalTo(data[i:])
+		n17, err := m.NotLeader.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n17
 	}
-	if m.RangeKeyMismatch != nil {
-		data[i] = 0x1a
+	if m.RangeNotFound != nil {
+		data[i] = 0x12
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.RangeKeyMismatch.Size()))
-		n18, err := m.RangeKeyMismatch.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.RangeNotFound.Size()))
+		n18, err := m.RangeNotFound.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n18
 	}
-	if m.ReadWithinUncertaintyInterval != nil {
-		data[i] = 0x22
+	if m.RangeKeyMismatch != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.ReadWithinUncertaintyInterval.Size()))
-		n19, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.RangeKeyMismatch.Size()))
+		n19, err := m.RangeKeyMismatch.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n19
 	}
-	if m.TransactionAborted != nil {
-		data[i] = 0x2a
+	if m.ReadWithinUncertaintyInterval != nil {
+		data[i] = 0x22
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionAborted.Size()))
-		n20, err := m.TransactionAborted.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.ReadWithinUncertaintyInterval.Size()))
+		n20, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n20
 	}
-	if m.TransactionPush != nil {
-		data[i] = 0x32
+	if m.TransactionAborted != nil {
+		data[i] = 0x2a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionPush.Size()))
-		n21, err := m.TransactionPush.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionAborted.Size()))
+		n21, err := m.TransactionAborted.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n21
 	}
-	if m.TransactionRetry != nil {
-		data[i] = 0x3a
+	if m.TransactionPush != nil {
+		data[i] = 0x32
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionRetry.Size()))
-		n22, err := m.TransactionRetry.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionPush.Size()))
+		n22, err := m.TransactionPush.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n22
 	}
-	if m.TransactionStatus != nil {
-		data[i] = 0x42
+	if m.TransactionRetry != nil {
+		data[i] = 0x3a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionStatus.Size()))
-		n23, err := m.TransactionStatus.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionRetry.Size()))
+		n23, err := m.TransactionRetry.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n23
 	}
-	if m.WriteIntent != nil {
-		data[i] = 0x4a
+	if m.TransactionStatus != nil {
+		data[i] = 0x42
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.WriteIntent.Size()))
-		n24, err := m.WriteIntent.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionStatus.Size()))
+		n24, err := m.TransactionStatus.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n24
 	}
-	if m.WriteTooOld != nil {
-		data[i] = 0x52
+	if m.WriteIntent != nil {
+		data[i] = 0x4a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.WriteTooOld.Size()))
-		n25, err := m.WriteTooOld.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.WriteIntent.Size()))
+		n25, err := m.WriteIntent.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n25
 	}
-	if m.OpRequiresTxn != nil {
-		data[i] = 0x5a
+	if m.WriteTooOld != nil {
+		data[i] = 0x52
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.OpRequiresTxn.Size()))
-		n26, err := m.OpRequiresTxn.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.WriteTooOld.Size()))
+		n26, err := m.WriteTooOld.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n26
 	}
-	if m.ConditionFailed != nil {
-		data[i] = 0x62
+	if m.OpRequiresTxn != nil {
+		data[i] = 0x5a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.ConditionFailed.Size()))
-		n27, err := m.ConditionFailed.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.OpRequiresTxn.Size()))
+		n27, err := m.OpRequiresTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n27
 	}
-	if m.LeaseRejected != nil {
-		data[i] = 0x6a
+	if m.ConditionFailed != nil {
+		data[i] = 0x62
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.LeaseRejected.Size()))
-		n28, err := m.LeaseRejected.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.ConditionFailed.Size()))
+		n28, err := m.ConditionFailed.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n28
 	}
-	if m.NodeUnavailable != nil {
-		data[i] = 0x72
+	if m.LeaseRejected != nil {
+		data[i] = 0x6a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.NodeUnavailable.Size()))
-		n29, err := m.NodeUnavailable.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.LeaseRejected.Size()))
+		n29, err := m.LeaseRejected.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n29
+	}
+	if m.NodeUnavailable != nil {
+		data[i] = 0x72
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.NodeUnavailable.Size()))
+		n30, err := m.NodeUnavailable.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n30
 	}
 	return i, nil
 }
@@ -1152,11 +1179,11 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
-		n30, err := m.Detail.MarshalTo(data[i:])
+		n31, err := m.Detail.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n30
+		i += n31
 	}
 	data[i] = 0x20
 	i++
@@ -1243,6 +1270,9 @@ func (m *ReadWithinUncertaintyIntervalError) Size() (n int) {
 	l = m.Timestamp.Size()
 	n += 1 + l + sovErrors(uint64(l))
 	l = m.ExistingTimestamp.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	n += 1 + sovErrors(uint64(m.NodeID))
+	l = m.Txn.Size()
 	n += 1 + l + sovErrors(uint64(l))
 	return n
 }
@@ -1925,6 +1955,49 @@ func (m *ReadWithinUncertaintyIntervalError) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.ExistingTimestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeID", wireType)
+			}
+			m.NodeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.NodeID |= (NodeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -43,6 +45,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+type callDistSender kv.DistSender
+
+func (cds *callDistSender) Send(ctx context.Context, call proto.Call) {
+	client.SendCallConverted((*kv.DistSender)(cds), ctx, call)
+}
 
 // createTestNode creates an rpc server using the specified address,
 // gossip instance, KV database and a node using the specified slice
@@ -70,7 +78,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.Start(rpcServer, stopper)
 	}
 	ctx.Gossip = g
-	sender := kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock}, g)
+	sender := (*callDistSender)(kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock}, g))
 	ctx.DB = client.NewDB(sender)
 	// TODO(bdarnell): arrange to have the transport closed.
 	// (or attach LocalRPCTransport.Close to the stopper)

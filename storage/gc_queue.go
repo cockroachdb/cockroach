@@ -282,6 +282,9 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 	}
 
 	// Attempt to push the transaction which created the intent.
+	ba := &proto.BatchRequest{}
+	ba.Timestamp = now
+	ba.UserPriority = gogoproto.Int32(proto.MaxPriority)
 	pushArgs := &proto.PushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    now,
@@ -293,16 +296,17 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}
-	pushReply := &proto.PushTxnResponse{}
+	ba.Add(pushArgs)
+	br := &proto.BatchResponse{}
 	b := &client.Batch{}
-	b.InternalAddCall(proto.Call{Args: pushArgs, Reply: pushReply})
+	b.InternalAddCall(proto.Call{Args: ba, Reply: br})
 	if err := repl.rm.DB().Run(b); err != nil {
 		log.Warningf("push of txn %s failed: %s", txn, err)
 		updateOldestIntent(txn.OrigTimestamp.WallTime)
 		return
 	}
 	// Update the supplied txn on successful push.
-	*txn = *pushReply.PusheeTxn
+	*txn = *br.Responses[0].GetValue().(*proto.PushTxnResponse).PusheeTxn
 }
 
 // lookupGCPolicy finds the GC policy for 'repl'.

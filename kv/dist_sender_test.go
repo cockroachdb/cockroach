@@ -28,11 +28,13 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -255,6 +257,8 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	descriptor := proto.RangeDescriptor{
+		StartKey: proto.KeyMin,
+		EndKey:   proto.KeyMax,
 		RangeID:  rangeID,
 		Replicas: nil,
 	}
@@ -272,8 +276,8 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error) {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error) {
 			return []proto.RangeDescriptor{descriptor}, nil
 		}),
 	}
@@ -322,13 +326,17 @@ func TestSendRPCOrder(t *testing.T) {
 
 		args := tc.args
 		args.Header().RangeID = rangeID // Not used in this test, but why not.
+		args.Header().Key = proto.Key("a")
+		if proto.IsRange(args) {
+			args.Header().EndKey = proto.Key("b")
+		}
 		if !tc.consistent {
 			args.Header().ReadConsistency = proto.INCONSISTENT
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
 		call := proto.Call{Args: args, Reply: args.CreateReply()}
-		ds.Send(context.Background(), call)
+		client.SendCallConverted(ds, context.Background(), call)
 		if err := call.Reply.Header().GoError(); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
@@ -337,8 +345,19 @@ func TestSendRPCOrder(t *testing.T) {
 
 type mockRangeDescriptorDB func(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
 
-func (mdb mockRangeDescriptorDB) getRangeDescriptors(k proto.Key, lo lookupOptions) ([]proto.RangeDescriptor, error) {
-	return mdb(k, lo)
+func (mdb mockRangeDescriptorDB) rangeLookup(key proto.Key, options lookupOptions, _ *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
+	if bytes.HasPrefix(key, keys.Meta1Prefix) {
+		return mdb(key[len(keys.Meta1Prefix):], options)
+	}
+	// First range.
+	return mdb(nil, options)
+}
+func (mdb mockRangeDescriptorDB) firstRange() (*proto.RangeDescriptor, error) {
+	rs, err := mdb.rangeLookup(nil, lookupOptions{}, nil)
+	if err != nil || len(rs) == 0 {
+		return nil, err
+	}
+	return &rs[0], nil
 }
 
 // TestRetryOnNotLeaderError verifies that the DistSender correctly updates the
@@ -365,15 +384,15 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 			return []proto.RangeDescriptor{testRangeDescriptor}, nil
 		}),
 	}
 	ds := NewDistSender(ctx, g)
 	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
 	reply := call.Reply.(*proto.PutResponse)
-	ds.Send(context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := reply.GoError(); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
@@ -410,11 +429,14 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 			// Return next error and truncate the prefix of the errors array.
-			err := errors[0]
-			errors = errors[1:]
+			var err error
+			if k != nil {
+				err = errors[0]
+				errors = errors[1:]
+			}
 			return []proto.RangeDescriptor{testRangeDescriptor}, err
 		}),
 	}
@@ -422,12 +444,12 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
 	reply := call.Reply.(*proto.PutResponse)
 	// Fatal error on descriptor lookup, propagated to reply.
-	ds.Send(context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := reply.Header().Error; err.GetMessage() != "fatal boom" {
 		t.Errorf("unexpected error: %s", err)
 	}
 	// Retryable error on descriptor lookup, second attempt successful.
-	ds.Send(context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := reply.GoError(); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -462,10 +484,7 @@ func TestEvictCacheOnError(t *testing.T) {
 				return []gogoproto.Message{getReply()}, nil
 			}
 			first = false
-			err := &proto.Error{
-				Message:   "boom",
-				Retryable: tc.retryable,
-			}
+			err := rpc.NewSendError("boom", tc.retryable)
 			if tc.rpcError {
 				return nil, err
 			}
@@ -475,8 +494,8 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 
 		ctx := &DistSenderContext{
-			rpcSend: testFn,
-			rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+			RPCSend: testFn,
+			RangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 				return []proto.RangeDescriptor{testRangeDescriptor}, nil
 			}),
 		}
@@ -485,8 +504,8 @@ func TestEvictCacheOnError(t *testing.T) {
 
 		call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
 		reply := call.Reply.(*proto.PutResponse)
-		ds.Send(context.Background(), call)
-		if err := reply.GoError(); err != nil && err.Error() != "boom" {
+		client.SendCallConverted(ds, context.Background(), call)
+		if err := reply.GoError(); err != nil && !testutils.IsError(err, "boom") {
 			t.Errorf("put encountered unexpected error: %s", err)
 		}
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &proto.Replica{}) && !tc.shouldClearLeader {
@@ -499,40 +518,6 @@ func TestEvictCacheOnError(t *testing.T) {
 	}
 }
 
-// TestRangeLookupOnPushTxnIgnoresIntents verifies that if a push txn
-// request has range lookup set, the range lookup requests will have
-// ignore intents set.
-func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	g, s := makeTestGossip(t)
-	defer s()
-
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-		return []gogoproto.Message{getReply()}, nil
-	}
-
-	for _, rangeLookup := range []bool{true, false} {
-		ctx := &DistSenderContext{
-			rpcSend: testFn,
-			rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
-				if opts.ignoreIntents != rangeLookup {
-					t.Fatalf("expected ignore intents to be %t", rangeLookup)
-				}
-				return []proto.RangeDescriptor{testRangeDescriptor}, nil
-			}),
-		}
-		ds := NewDistSender(ctx, g)
-		call := proto.Call{
-			Args: &proto.PushTxnRequest{
-				RequestHeader: proto.RequestHeader{Key: proto.Key("a")},
-				RangeLookup:   rangeLookup,
-			},
-			Reply: &proto.PushTxnResponse{},
-		}
-		ds.Send(context.Background(), call)
-	}
-}
-
 // TestRetryOnWrongReplicaError sets up a DistSender on a minimal gossip
 // network and a mock of rpc.Send, and verifies that the DistSender correctly
 // retries upon encountering a stale entry in its range descriptor cache.
@@ -541,47 +526,51 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 	// Updated below, after it has first been returned.
+	badStartKey := proto.Key("m")
 	newRangeDescriptor := testRangeDescriptor
-	newEndKey := proto.Key("m")
+	goodStartKey := newRangeDescriptor.StartKey
+	newRangeDescriptor.StartKey = badStartKey
 	descStale := true
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-		header := getArgs(testAddress).(proto.Request).Header()
-		if method == "Node.RangeLookup" {
-			// If the non-broken descriptor has already been returned, that's
-			// an error.
-			if !descStale && bytes.HasPrefix(header.Key, keys.Meta2Prefix) {
+		ba := getArgs(testAddress).(*proto.BatchRequest)
+		if _, ok := ba.GetArg(proto.RangeLookup); ok {
+			if !descStale && bytes.HasPrefix(ba.Key, keys.Meta2Prefix) {
 				t.Errorf("unexpected extra lookup for non-stale replica descriptor at %s",
-					header.Key)
+					ba.Key)
 			}
 
-			r := getReply().(*proto.RangeLookupResponse)
-			// The fresh descriptor is about to be returned.
-			if bytes.HasPrefix(header.Key, keys.Meta2Prefix) &&
-				newRangeDescriptor.StartKey.Equal(newEndKey) {
-				descStale = false
-			}
+			br := getReply().(*proto.BatchResponse)
+			r := &proto.RangeLookupResponse{}
 			r.Ranges = append(r.Ranges, newRangeDescriptor)
-			return []gogoproto.Message{r}, nil
+			br.Add(r)
+			// If we just returned the stale descriptor, set up returning the
+			// good one next time.
+			if bytes.HasPrefix(ba.Key, keys.Meta2Prefix) {
+				if newRangeDescriptor.StartKey.Equal(badStartKey) {
+					newRangeDescriptor.StartKey = goodStartKey
+				} else {
+					descStale = false
+				}
+			}
+			return []gogoproto.Message{br}, nil
 		}
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
-		if !newRangeDescriptor.StartKey.Equal(newEndKey) {
-			newRangeDescriptor = *gogoproto.Clone(&testRangeDescriptor).(*proto.RangeDescriptor)
-			newRangeDescriptor.StartKey = newEndKey
-			return nil, &proto.RangeKeyMismatchError{RequestStartKey: header.Key,
-				RequestEndKey: header.EndKey}
+		if !newRangeDescriptor.StartKey.Equal(goodStartKey) {
+			return nil, &proto.RangeKeyMismatchError{RequestStartKey: ba.Key,
+				RequestEndKey: ba.EndKey}
 		}
 		return []gogoproto.Message{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
+		RPCSend: testFn,
 	}
 	ds := NewDistSender(ctx, g)
 	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 0)
 	sr := call.Reply.(*proto.ScanResponse)
-	ds.Send(context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := sr.GoError(); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
@@ -591,7 +580,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	n := simulation.NewNetwork(3, "tcp", gossip.TestInterval)
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
-	if _, err := ds.getFirstRangeDescriptor(); err == nil {
+	if _, err := ds.firstRange(); err == nil {
 		t.Errorf("expected not to find first range descriptor")
 	}
 	expectedDesc := &proto.RangeDescriptor{}
@@ -606,7 +595,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	}
 	maxCycles := 10
 	n.SimulateNetwork(func(cycle int, network *simulation.Network) bool {
-		desc, err := ds.getFirstRangeDescriptor()
+		desc, err := ds.firstRange()
 		if err != nil {
 			if cycle >= maxCycles {
 				t.Errorf("could not get range descriptor after %d cycles", cycle)
@@ -656,26 +645,28 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	// Define our rpcSend stub which returns success on the second address.
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-		if method == "Node.Scan" {
+		if method == "Node.Batch" {
 			// reply from first address failed
 			_ = getReply()
 			// reply from second address succeed
-			reply := getReply()
-			reply.(*proto.ScanResponse).Rows = append([]proto.KeyValue{}, proto.KeyValue{Key: proto.Key("b"), Value: proto.Value{}})
-			return []gogoproto.Message{reply}, nil
+			batchReply := getReply().(*proto.BatchResponse)
+			reply := &proto.ScanResponse{}
+			batchReply.Add(reply)
+			reply.Rows = append([]proto.KeyValue{}, proto.KeyValue{Key: proto.Key("b"), Value: proto.Value{}})
+			return []gogoproto.Message{batchReply}, nil
 		}
-		return nil, util.Errorf("Not expected method %v", method)
+		return nil, util.Errorf("unexpected method %v", method)
 	}
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 			return []proto.RangeDescriptor{descriptor}, nil
 		}),
 	}
 	ds := NewDistSender(ctx, g)
 	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 1)
 	sr := call.Reply.(*proto.ScanResponse)
-	ds.Send(context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := sr.GoError(); err != nil {
 		t.Fatal(err)
 	}
@@ -745,11 +736,13 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		{Key: proto.Key("c"), Value: proto.Value{Bytes: []byte("2")}},
 	}
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-		if method != "Node.Scan" {
+		if method != "Node.Batch" {
 			t.Fatalf("unexpected method:%s", method)
 		}
 		header := getArgs(testAddress).(proto.Request).Header()
-		reply := getReply().(*proto.ScanResponse)
+		batchReply := getReply().(*proto.BatchResponse)
+		reply := &proto.ScanResponse{}
+		batchReply.Add(reply)
 		results := []proto.KeyValue{}
 		for _, curKV := range existingKVs {
 			if header.Key.Less(curKV.Key.Next()) && curKV.Key.Less(header.EndKey) {
@@ -757,13 +750,13 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 			}
 		}
 		reply.Rows = results
-		return []gogoproto.Message{reply}, nil
+		return []gogoproto.Message{batchReply}, nil
 	}
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(key proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(key proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 			if !merged {
-				// Asume a range merge operation happened
+				// Assume a range merge operation happened.
 				merged = true
 				return []proto.RangeDescriptor{firstRange}, nil
 			}
@@ -775,7 +768,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	call.Args.Header().Txn = &proto.Transaction{}
 	reply := call.Reply.(*proto.ScanResponse)
-	ds.Send(context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := reply.GoError(); err != nil {
 		t.Fatalf("scan encountered error: %s", err)
 	}
@@ -796,9 +789,9 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
-			if !opts.useReverseScan {
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
+			if len(k) > 0 && !opts.useReverseScan {
 				t.Fatalf("expected useReverseScan to be set")
 			}
 			return []proto.RangeDescriptor{testRangeDescriptor}, nil
@@ -811,5 +804,5 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 		},
 		Reply: &proto.ReverseScanResponse{},
 	}
-	ds.Send(context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 }

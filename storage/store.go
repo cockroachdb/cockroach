@@ -1202,6 +1202,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 	}
 	var rng *Replica
 	var err error
+
 	// Add the command to the range for execution; exit retry loop on success.
 	for r := retry.Start(s.ctx.RangeRetryOptions); next(&r); {
 		// Get range and add command to the range for execution.
@@ -1236,6 +1237,8 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		}
 
 		switch t := err.(type) {
+		case *proto.ReadWithinUncertaintyIntervalError:
+			t.NodeID = header.Replica.NodeID
 		case *proto.WriteTooOldError:
 			trace.Event(fmt.Sprintf("error: %T", err))
 			// Update request timestamp and retry immediately.
@@ -1268,12 +1271,13 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			}
 			continue
 		}
-		return reply, err
+		return nil, err
 	}
 
 	// By default, retries are indefinite. However, some unittests set a
 	// maximum retry count; return txn retry error for transactional cases
 	// and the original error otherwise.
+	trace.Event("store retry limit exceeded") // good to check for if tests fail
 	if header.Txn != nil {
 		return nil, proto.NewTransactionRetryError(header.Txn)
 	}
@@ -1321,23 +1325,17 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	now := s.Clock().Now()
 	header := args.Header()
-	bArgs := &proto.BatchRequest{
+	ba := &proto.BatchRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    header.Timestamp,
 			UserPriority: header.UserPriority,
 		},
 	}
-	bReply := &proto.BatchResponse{}
+	br := &proto.BatchResponse{}
 	for _, intent := range pushIntents {
 		pushArgs := &proto.PushTxnRequest{
 			RequestHeader: proto.RequestHeader{
-				Timestamp: header.Timestamp,
-				Key:       intent.Txn.Key,
-				// TODO(tschottdorf): the following field is set here because
-				// in a batch, it must agree with the batch user priority. The
-				// TxnCoordSender is smart enough to fill these in, but some
-				// tests in this package do not go through the TxnCoordSender.
-				UserPriority: header.UserPriority,
+				Key: intent.Txn.Key,
 			},
 			PusherTxn: header.Txn,
 			PusheeTxn: intent.Txn,
@@ -1346,14 +1344,15 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			// here, we would run into busy loops because that timestamp
 			// usually stays fixed among retries, so it will never realize
 			// that a transaction has timed out. See #877.
-			Now:         now,
-			PushType:    pushType,
-			RangeLookup: args.Method() == proto.RangeLookup,
+			Now:      now,
+			PushType: pushType,
 		}
-		bArgs.Add(pushArgs)
+		ba.Add(pushArgs)
 	}
 	b := &client.Batch{}
-	b.InternalAddCall(proto.Call{Args: bArgs, Reply: bReply})
+	if len(ba.Requests) > 0 {
+		b.InternalAddCall(proto.Call{Args: ba, Reply: br})
+	}
 
 	// Run all pushes in parallel.
 	if pushErr := s.db.Run(b); pushErr != nil {
@@ -1376,7 +1375,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	wiErr.Resolved = true // success!
 
 	for i, intent := range pushIntents {
-		intent.Txn = *(bReply.Responses[i].PushTxn.PusheeTxn)
+		intent.Txn = *(br.Responses[i].PushTxn.PusheeTxn)
 		resolveIntents = append(resolveIntents, intent)
 	}
 

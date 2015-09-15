@@ -876,7 +876,32 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key proto.Key, timestamp p
 		return err
 	}
 
-	if expValue == nil && existVal != nil {
+	hackBecauseStoreNotAtomic := func() bool {
+		if txn == nil {
+			return false
+		}
+		_, _, err := MVCCGet(engine, key, timestamp, true /* consistent */, nil)
+		if _, ok := err.(*proto.WriteIntentError); !ok {
+			// Doesn't have an intent on top? Don't hack.
+			return false
+		}
+		// Now we're sure the top value is **our** intent.
+		// If what's there is what we intent to write, it's probably a
+		// retry on top of a half-executed batch.
+		if existVal != nil && bytes.Equal(value.Bytes, existVal.Bytes) {
+			return true
+		}
+		return false
+	}
+
+	if hackBecauseStoreNotAtomic() {
+		// TODO(tschottdorf): There's a chance that we've executed this
+		// ConditionalPut before but the Batch containing this request
+		// had to be retried. This is temporary logic until we execute
+		// Batches atomically: If this is written by our transaction,
+		// and it matches what we wanted to write: fine, let's go ahead.
+		// Provisional code; removed when batches are atomic on the Store.
+	} else if expValue == nil && existVal != nil {
 		return &proto.ConditionFailedError{
 			ActualValue: existVal,
 		}
@@ -1189,6 +1214,11 @@ func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Time
 // committed in the event the transaction succeeds (all those with
 // epoch matching the commit epoch), and which intents get aborted,
 // even if the transaction succeeds.
+//
+// TODO(tschottdorf): encountered a bug in which a Txn committed with
+// its original timestamp after laying down intents at higher timestamps.
+// Doesn't look like this code here caught that. Shouldn't resolve intents
+// when they're not at the timestamp the Txn mandates them to be.
 func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction) error {
 	if len(key) == 0 {
 		return emptyKeyError()
@@ -1205,7 +1235,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 	}
 	// For cases where there's no write intent to resolve, or one exists
 	// which we can't resolve, this is a noop.
-	if !ok || meta.Txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID) {
+	if !ok || !txn.Equal(meta.Txn) {
 		return nil
 	}
 	origAgeSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9

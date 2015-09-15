@@ -177,7 +177,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			// higher values require roughly offset/5 restarts.
 			txnClock.SetMaxOffset(maxOffset)
 
-			sender := NewTxnCoordSender(s.lSender, txnClock, false, nil, s.Stopper)
+			sender := NewTxnCoordSender(s.distSender, txnClock, false, nil, s.Stopper)
 			txnDB := client.NewDB(sender)
 
 			if err := txnDB.Txn(func(txn *client.Txn) error {
@@ -476,8 +476,8 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 			return err
 		}
 
-		if !gr1.Exists() && gr2.Exists() {
-			t.Fatalf("Repeat read same key in same txn but get different value gr1 nil gr2 %v", gr2.Value)
+		if gr1.Exists() || gr2.Exists() {
+			t.Fatalf("Repeat read same key in same txn but get different value gr1: %q, gr2 %q", gr1.Value, gr2.Value)
 		}
 		return nil
 	})

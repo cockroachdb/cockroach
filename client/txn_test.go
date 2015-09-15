@@ -38,6 +38,20 @@ var (
 	testPutResp = &proto.PutResponse{ResponseHeader: proto.ResponseHeader{Timestamp: testTS}}
 )
 
+func sendCall(sender Sender, call proto.Call) error {
+	call, unwrap := MaybeWrapCall(call)
+	defer unwrap(call)
+	sender.Send(context.Background(), call)
+	return call.Reply.Header().GoError()
+}
+
+func newDB(sender Sender) *DB {
+	return &DB{
+		sender:          sender,
+		txnRetryOptions: DefaultTxnRetryOptions,
+	}
+}
+
 func newTestSender(pre, post func(proto.Call)) SenderFunc {
 	txnKey := proto.Key("test-txn")
 	txnID := []byte(uuid.NewUUID4())
@@ -56,20 +70,19 @@ func newTestSender(pre, post func(proto.Call)) SenderFunc {
 		}
 
 		var writing bool
-		var status proto.TransactionStatus
-		switch t := call.Args.(type) {
-		case *proto.PutRequest:
-			gogoproto.Merge(call.Reply, testPutResp)
+		status := proto.PENDING
+		if _, ok := call.Args.(*proto.BatchRequest).GetArg(proto.Put); ok {
+			call.Reply.(*proto.BatchResponse).Add(gogoproto.Clone(testPutResp).(proto.Response))
 			writing = true
-		case *proto.EndTransactionRequest:
+		}
+		if args, ok := call.Args.(*proto.BatchRequest).GetArg(proto.EndTransaction); ok {
+			et := args.(*proto.EndTransactionRequest)
 			writing = true
-			if t.Commit {
+			if et.Commit {
 				status = proto.COMMITTED
 			} else {
 				status = proto.ABORTED
 			}
-		default:
-			// Do nothing.
 		}
 		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
 		if txn := call.Reply.Header().Txn; txn != nil && call.Reply.Header().GoError() == nil {
@@ -118,22 +131,26 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	txn := NewTxn(*db)
 
 	for testIdx = range testCases {
-		txn.db.sender.Send(context.Background(),
-			proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+		if err := sendCall(txn.db.sender, proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}}); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
 // TestTxnResetTxnOnAbort verifies transaction is reset on abort.
 func TestTxnResetTxnOnAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	db := NewDB(newTestSender(func(call proto.Call) {
-		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
-		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{})
+	db := newDB(newTestSender(func(call proto.Call) {
+		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{
+			Txn: *gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction),
+		})
 	}, nil))
 
 	txn := NewTxn(*db)
-	txn.db.sender.Send(context.Background(),
-		proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+	err := sendCall(txn.db.sender, proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+	if _, ok := err.(*proto.TransactionAbortedError); !ok {
+		t.Fatalf("expected TransactionAbortedError, got %v", err)
+	}
 
 	if len(txn.Proto.ID) != 0 {
 		t.Errorf("expected txn to be cleared")
@@ -164,8 +181,8 @@ func TestTransactionConfig(t *testing.T) {
 func TestCommitReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	var calls []proto.Method
-	db := NewDB(newTestSender(func(call proto.Call) {
-		calls = append(calls, call.Method())
+	db := newDB(newTestSender(func(call proto.Call) {
+		calls = append(calls, call.Args.(*proto.BatchRequest).Methods()...)
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		_, err := txn.Get("a")
@@ -186,8 +203,8 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	for _, withGet := range []bool{true, false} {
 		var calls []proto.Method
-		db := NewDB(newTestSender(func(call proto.Call) {
-			calls = append(calls, call.Method())
+		db := newDB(newTestSender(func(call proto.Call) {
+			calls = append(calls, call.Args.(*proto.BatchRequest).Methods()...)
 		}, nil))
 		if err := db.Txn(func(txn *Txn) error {
 			b := &Batch{}
@@ -213,10 +230,10 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 func TestCommitMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	var calls []proto.Method
-	db := NewDB(newTestSender(func(call proto.Call) {
-		calls = append(calls, call.Method())
-		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && !et.Commit {
-			t.Errorf("expected commit to be true; got %t", et.Commit)
+	db := newDB(newTestSender(func(call proto.Call) {
+		calls = append(calls, call.Args.(*proto.BatchRequest).Methods()...)
+		if et, ok := call.Args.(*proto.BatchRequest).GetArg(proto.EndTransaction); ok && !et.(*proto.EndTransactionRequest).Commit {
+			t.Errorf("expected commit to be true")
 		}
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
@@ -255,8 +272,8 @@ func TestCommitTransactionOnce(t *testing.T) {
 // transaction does not prompt an EndTransaction call.
 func TestAbortReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	db := NewDB(newTestSender(func(call proto.Call) {
-		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
+	db := newDB(newTestSender(func(call proto.Call) {
+		if _, ok := call.Args.(*proto.BatchRequest).GetArg(proto.EndTransaction); ok {
 			t.Errorf("did not expect EndTransaction")
 		}
 	}, nil))
@@ -277,8 +294,8 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	for _, success := range []bool{true, false} {
 		expCalls := []proto.Method{proto.Put, proto.EndTransaction}
 		var calls []proto.Method
-		db := NewDB(newTestSender(func(call proto.Call) {
-			calls = append(calls, call.Method())
+		db := newDB(newTestSender(func(call proto.Call) {
+			calls = append(calls, call.Args.(*proto.BatchRequest).Methods()...)
 		}, nil))
 		ok := false
 		if err := db.Txn(func(txn *Txn) error {
@@ -310,10 +327,10 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 func TestAbortMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	var calls []proto.Method
-	db := NewDB(newTestSender(func(call proto.Call) {
-		calls = append(calls, call.Method())
-		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && et.Commit {
-			t.Errorf("expected commit to be false; got %t", et.Commit)
+	db := newDB(newTestSender(func(call proto.Call) {
+		calls = append(calls, call.Args.(*proto.BatchRequest).Methods()...)
+		if et, ok := call.Args.(*proto.BatchRequest).GetArg(proto.EndTransaction); ok && et.(*proto.EndTransactionRequest).Commit {
+			t.Errorf("expected commit to be false")
 		}
 	}, nil))
 
@@ -351,8 +368,8 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 
 	for i, test := range testCases {
 		count := 0
-		db := NewDB(newTestSender(func(call proto.Call) {
-			if _, ok := call.Args.(*proto.PutRequest); ok {
+		db := newDB(newTestSender(func(call proto.Call) {
+			if _, ok := call.Args.(*proto.BatchRequest).GetArg(proto.Put); ok {
 				count++
 				if count == 1 {
 					call.Reply.Header().SetGoError(test.err)
@@ -365,7 +382,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 		})
 		if test.retry {
 			if count != 2 {
-				t.Errorf("%d: expected one retry; got %d", i, count)
+				t.Errorf("%d: expected one retry; got %d", i, count-1)
 			}
 			if err != nil {
 				t.Errorf("%d: expected success on retry; got %s", i, err)
@@ -403,7 +420,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	for _, test := range testCases {
 		var commit, abort bool
 		db := NewDB(newTestSender(func(call proto.Call) {
-			switch t := call.Args.(type) {
+			switch t := call.Args.(*proto.BatchRequest).Requests[0].GetValue().(type) {
 			case *proto.EndTransactionRequest:
 				if t.Commit {
 					commit = true

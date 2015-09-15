@@ -41,6 +41,9 @@ const ErrorUnexpectedlySet = "error is unexpectedly set"
 // a transaction to be restarted.
 type TransactionRestartError interface {
 	CanRestartTransaction() TransactionRestart
+	// Optionally, a transaction that should be used
+	// for an update before retrying.
+	Transaction() *Transaction
 }
 
 // Error implements the Go error interface.
@@ -58,7 +61,18 @@ func (e *Error) CanRestartTransaction() TransactionRestart {
 	return e.TransactionRestart
 }
 
-// SetResponseGoError sets Error using err
+// Transaction implements the TransactionRestartError interface.
+func (e *Error) Transaction() *Transaction {
+	detail := e.GetDetail()
+	if detail != nil {
+		if txnErr, ok := detail.GetValue().(TransactionRestartError); ok {
+			return txnErr.Transaction()
+		}
+	}
+	return nil
+}
+
+// SetResponseGoError sets Error using err.
 func (e *Error) SetResponseGoError(err error) {
 	e.Message = err.Error()
 	if r, ok := err.(retry.Retryable); ok {
@@ -145,9 +159,16 @@ func (e *TransactionAbortedError) Error() string {
 	return fmt.Sprintf("txn aborted %s", e.Txn)
 }
 
+var _ TransactionRestartError = &TransactionAbortedError{}
+
 // CanRestartTransaction implements the TransactionRestartError interface.
 func (e *TransactionAbortedError) CanRestartTransaction() TransactionRestart {
 	return TransactionRestart_BACKOFF
+}
+
+// Transaction implements TransactionRestartError. It returns nil.
+func (*TransactionAbortedError) Transaction() *Transaction {
+	return nil
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
@@ -164,9 +185,16 @@ func (e *TransactionPushError) Error() string {
 	return fmt.Sprintf("txn %s failed to push %s", e.Txn, e.PusheeTxn)
 }
 
+var _ TransactionRestartError = &TransactionPushError{}
+
 // CanRestartTransaction implements the TransactionRestartError interface.
 func (e *TransactionPushError) CanRestartTransaction() TransactionRestart {
 	return TransactionRestart_BACKOFF
+}
+
+// Transaction implements the TransactionRestartError interface.
+func (*TransactionPushError) Transaction() *Transaction {
+	return nil // pusher's txn doesn't change on a Push.
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
@@ -180,9 +208,16 @@ func (e *TransactionRetryError) Error() string {
 	return fmt.Sprintf("retry txn %s", e.Txn)
 }
 
+var _ TransactionRestartError = &TransactionRetryError{}
+
 // CanRestartTransaction implements the TransactionRestartError interface.
-func (e *TransactionRetryError) CanRestartTransaction() TransactionRestart {
+func (*TransactionRetryError) CanRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
+}
+
+// Transaction implements the TransactionRestartError interface.
+func (e *TransactionRetryError) Transaction() *Transaction {
+	return &e.Txn
 }
 
 // NewTransactionStatusError initializes a new TransactionStatusError.
@@ -217,9 +252,16 @@ func (e *ReadWithinUncertaintyIntervalError) Error() string {
 	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.Timestamp, e.ExistingTimestamp)
 }
 
+var _ TransactionRestartError = &ReadWithinUncertaintyIntervalError{}
+
 // CanRestartTransaction implements the TransactionRestartError interface.
 func (e *ReadWithinUncertaintyIntervalError) CanRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
+}
+
+// Transaction implements the TransactionRestartError interface.
+func (e *ReadWithinUncertaintyIntervalError) Transaction() *Transaction {
+	return &e.Txn
 }
 
 // Error formats error.

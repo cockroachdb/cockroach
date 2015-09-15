@@ -18,6 +18,7 @@
 package kv_test
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -84,19 +85,84 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 }
 
 // setupMultipleRanges creates a test server and splits the
-// key range at the given key. Returns the test server and client.
+// key range at the given keys. Returns the test server and client.
 // The caller is responsible for stopping the server and
 // closing the client.
-func setupMultipleRanges(t *testing.T, splitAt string) (*server.TestServer, *client.DB) {
+func setupMultipleRanges(t *testing.T, splitAt ...string) (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(t)
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
-	// Split the keyspace at the given key.
-	if err := db.AdminSplit(splitAt); err != nil {
-		t.Fatal(err)
+	// Split the keyspace at the given keys.
+	for _, key := range splitAt {
+		if err := db.AdminSplit(key); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	return s, db
+}
+
+func TestMultiRangeBatchBounded(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setupMultipleRanges(t, "a", "b", "c", "d", "e", "f")
+	defer s.Stop()
+	for _, key := range []string{"a", "aa", "aaa", "b", "bb", "cc", "d", "dd", "ff"} {
+		if err := db.Put(key, "value"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	expResults := [][]string{
+		{"aaa", "b", "bb"},
+		{"a", "aa"},
+		{"cc", "d", "dd"},
+	}
+
+	b := db.NewBatch()
+	b.Scan("aaa", "dd", 3)
+	b.Scan("a", "z", 2)
+	b.Scan("cc", "ff", 3)
+	if err := db.Run(b); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(expResults) != len(b.Results) {
+		t.Fatalf("only got %d results, wanted %d", len(expResults), len(b.Results))
+	}
+	for i, res := range b.Results {
+		expRes := expResults[i]
+		var actRes []string
+		for _, k := range res.Rows {
+			actRes = append(actRes, string(k.Key))
+		}
+		if !reflect.DeepEqual(actRes, expRes) {
+			t.Errorf("%d: got %v, wanted %v", i, actRes, expRes)
+		}
+	}
+}
+
+// TestMultiRangeEmptyAfterTruncate exercises a code path in which a
+// multi-range requests deals with a range without any active requests after
+// truncation. In that case, the request is skipped.
+func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setupMultipleRanges(t, "c", "d")
+	defer s.Stop()
+
+	// Delete the keys within a transaction. Implicitly, the intents are
+	// resolved via ResolveIntentRange upon completion.
+	if err := db.Txn(func(txn *client.Txn) error {
+		b := &client.Batch{}
+		b.DelRange("a", "b")
+		b.DelRange("e", "f")
+		// TODO(tschottdorf): write tests for range-local and range-global stuff;
+		// using KeyMin here currently fails miserably because it plows through
+		// internal data. See #2198.
+		// b.DelRange("aaa", proto.KeyMax)
+		return txn.CommitInBatch(b)
+	}); err != nil {
+		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
+	}
 }
 
 // TestMultiRangeScanReverseScanDeleteResolve verifies that Scan, ReverseScan,
@@ -135,6 +201,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
 	}
+
 	// Scan consistently to make sure the intents are gone.
 	if rows, err := db.Scan("a", "q", 0); err != nil {
 		t.Fatalf("unexpected error on Scan: %s", err)
@@ -187,7 +254,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	sr := call.Reply.(*proto.ScanResponse)
 	sa := call.Args.(*proto.ScanRequest)
 	sa.ReadConsistency = proto.INCONSISTENT
-	ds.Send(context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := sr.GoError(); err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +270,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	rsr := call.Reply.(*proto.ReverseScanResponse)
 	rsa := call.Args.(*proto.ReverseScanRequest)
 	rsa.ReadConsistency = proto.INCONSISTENT
-	ds.Send(context.Background(), call)
+	client.SendCallConverted(ds, context.Background(), call)
 	if err := rsr.GoError(); err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +282,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	}
 }
 
-func initReverseScanTestEvn(t *testing.T) (*server.TestServer, *client.DB) {
+func initReverseScanTestEnv(t *testing.T) (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(t)
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
@@ -240,7 +307,7 @@ func initReverseScanTestEvn(t *testing.T) (*server.TestServer, *client.DB) {
 // on a single range.
 func TestSingleRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, db := initReverseScanTestEvn(t)
+	s, db := initReverseScanTestEnv(t)
 	defer s.Stop()
 
 	// Case 1: Request.EndKey is in the middle of the range.
@@ -275,7 +342,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 // across multiple ranges.
 func TestMultiRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, db := initReverseScanTestEvn(t)
+	s, db := initReverseScanTestEnv(t)
 	defer s.Stop()
 
 	// Case 1: Request.EndKey is in the middle of the range.
@@ -296,7 +363,7 @@ func TestMultiRangeReverseScan(t *testing.T) {
 // across multiple ranges while range splits and merges happen.
 func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, db := initReverseScanTestEvn(t)
+	s, db := initReverseScanTestEnv(t)
 	defer s.Stop()
 
 	// Case 1: An encounter with a range split.
@@ -336,11 +403,11 @@ func TestStartEqualsEndKeyScan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Scan("a", "a", 0); !testutils.IsError(err, "must be greater") {
+	if _, err := db.Scan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on scan with startkey == endkey: %v", err)
 	}
 
-	if _, err := db.ReverseScan("a", "a", 0); !testutils.IsError(err, "must be greater") {
+	if _, err := db.ReverseScan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
 }

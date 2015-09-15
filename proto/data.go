@@ -467,6 +467,8 @@ func (t *Transaction) Restart(userPriority, upgradePriority int32, timestamp Tim
 // Update ratchets priority, timestamp and original timestamp values (among
 // others) for the transaction. If t.ID is empty, then the transaction is
 // copied from o.
+// TODO(tschottdorf): Make sure this updates all required fields. This method
+// is prone to code rot.
 func (t *Transaction) Update(o *Transaction) {
 	if o == nil {
 		return
@@ -487,6 +489,9 @@ func (t *Transaction) Update(o *Transaction) {
 	if t.OrigTimestamp.Less(o.OrigTimestamp) {
 		t.OrigTimestamp = o.OrigTimestamp
 	}
+	if t.LastHeartbeat == nil || (o.LastHeartbeat == nil || t.LastHeartbeat.Less(*o.LastHeartbeat)) {
+		t.LastHeartbeat = o.LastHeartbeat
+	}
 	// Should not actually change at the time of writing.
 	t.MaxTimestamp = o.MaxTimestamp
 	// Copy the list of nodes without time uncertainty.
@@ -494,9 +499,11 @@ func (t *Transaction) Update(o *Transaction) {
 		o.CertainNodes.Nodes...)}
 	t.UpgradePriority(o.Priority)
 	if t.Writing && !o.Writing {
-		panic("r/w status regression")
+		// TODO(tschottdorf): false positives; see #2300.
+		// panic("r/w status regression")
+	} else {
+		t.Writing = o.Writing
 	}
-	t.Writing = o.Writing
 }
 
 // UpgradePriority sets transaction priority to the maximum of current

@@ -106,8 +106,12 @@ func TestCombinable(t *testing.T) {
 		Rows:           append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
 	}
 
-	sr1.Combine(sr2)
-	sr1.Combine(&ScanResponse{})
+	if err := sr1.Combine(sr2); err != nil {
+		t.Fatal(err)
+	}
+	if err := sr1.Combine(&ScanResponse{}); err != nil {
+		t.Fatal(err)
+	}
 
 	if !reflect.DeepEqual(sr1, wantedSR) {
 		t.Errorf("wanted %v, got %v", wantedSR, sr1)
@@ -132,8 +136,12 @@ func TestCombinable(t *testing.T) {
 		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 111}},
 		NumDeleted:     20,
 	}
-	dr2.Combine(dr3)
-	dr1.Combine(dr2)
+	if err := dr2.Combine(dr3); err != nil {
+		t.Fatal(err)
+	}
+	if err := dr1.Combine(dr2); err != nil {
+		t.Fatal(err)
+	}
 
 	if !reflect.DeepEqual(dr1, wantedDR) {
 		t.Errorf("wanted %v, got %v", wantedDR, dr1)
@@ -197,4 +205,43 @@ func TestBatchKeyRange(t *testing.T) {
 		},
 	})
 	verify(br, Key("A"), Key("d1"))
+}
+
+func TestBatchSplit(t *testing.T) {
+	get := &GetRequest{}
+	scan := &ScanRequest{}
+	put := &PutRequest{}
+	spl := &AdminSplitRequest{}
+	dr := &DeleteRangeRequest{}
+	et := &EndTransactionRequest{}
+	rv := &ReverseScanRequest{}
+	testCases := []struct {
+		reqs  []Request
+		sizes []int
+	}{
+		{[]Request{get, put}, []int{1, 1}},
+		{[]Request{get, get, get, put, put, get, get}, []int{3, 2, 2}},
+		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 1, 1}},
+		{[]Request{spl, get, scan, spl, get}, []int{1, 2, 1, 1}},
+		{[]Request{spl, spl, get, spl}, []int{1, 1, 1, 1}},
+	}
+
+	for i, test := range testCases {
+		ba := BatchRequest{}
+		for _, args := range test.reqs {
+			ba.Add(args)
+		}
+		var partLen []int
+		var recombined []RequestUnion
+		for _, part := range ba.Split() {
+			recombined = append(recombined, part...)
+			partLen = append(partLen, len(part))
+		}
+		if !reflect.DeepEqual(partLen, test.sizes) {
+			t.Errorf("%d: expected chunks %v, got %v", i, test.sizes, partLen)
+		}
+		if !reflect.DeepEqual(recombined, ba.Requests) {
+			t.Errorf("%d: started with:\n%+v\ngot back:\n%+v", i, ba.Requests, recombined)
+		}
+	}
 }

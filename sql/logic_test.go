@@ -203,6 +203,9 @@ func (t *logicTest) setUser(user string) {
 	t.db = db
 }
 
+// TODO(tschottdorf): some logic tests currently take a long time to run.
+// Probably a case of heartbeats timing out or many restarts in some tests.
+// Need to investigate when all moving parts are in place.
 func (t *logicTest) run(path string) {
 	defer t.close()
 
