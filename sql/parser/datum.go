@@ -29,10 +29,44 @@ import (
 )
 
 var (
+	// DummyBool is a placeholder DBool value.
+	DummyBool = DBool(false)
+	// DummyInt is a placeholder DInt value.
+	DummyInt = DInt(0)
+	// DummyFloat is a placeholder DFloat value.
+	DummyFloat = DFloat(0)
+	// DummyString is a placeholder DString value.
+	DummyString = DString("")
+	// DummyBytes is a placeholder DBytes value.
+	DummyBytes = DBytes("")
+	// DummyDate is a placeholder DDate value.
+	DummyDate = DDate{}
+	// DummyTimestamp is a placeholder DTimestamp value.
+	DummyTimestamp = DTimestamp{}
+	// DummyInterval is a placeholder DInterval value.
+	DummyInterval = DInterval{}
+	// DummyTuple is a placeholder DTuple value.
+	DummyTuple = DTuple{}
+
+	// DNull is the NULL Datum.
+	DNull = dNull{}
+
+	_ Datum = DummyBool
+	_ Datum = DummyInt
+	_ Datum = DummyFloat
+	_ Datum = DummyString
+	_ Datum = DummyBytes
+	_ Datum = DummyDate
+	_ Datum = DummyTimestamp
+	_ Datum = DummyInterval
+	_ Datum = DummyTuple
+	_ Datum = DNull
+
 	boolType      = reflect.TypeOf(DummyBool)
 	intType       = reflect.TypeOf(DummyInt)
 	floatType     = reflect.TypeOf(DummyFloat)
 	stringType    = reflect.TypeOf(DummyString)
+	bytesType     = reflect.TypeOf(DummyBytes)
 	dateType      = reflect.TypeOf(DummyDate)
 	timestampType = reflect.TypeOf(DummyTimestamp)
 	intervalType  = reflect.TypeOf(DummyInterval)
@@ -58,38 +92,6 @@ type Datum interface {
 	// type can hold.
 	IsMin() bool
 }
-
-var (
-	// DummyBool is a placeholder DBool value.
-	DummyBool = DBool(false)
-	// DummyInt is a placeholder DInt value.
-	DummyInt = DInt(0)
-	// DummyFloat is a placeholder DFloat value.
-	DummyFloat = DFloat(0)
-	// DummyString is a placeholder DString value.
-	DummyString = DString("")
-	// DummyDate is a placeholder DDate value.
-	DummyDate = DDate{}
-	// DummyTimestamp is a placeholder DTimestamp value.
-	DummyTimestamp = DTimestamp{}
-	// DummyInterval is a placeholder DInterval value.
-	DummyInterval = DInterval{}
-	// DummyTuple is a placeholder DTuple value.
-	DummyTuple = DTuple{}
-
-	// DNull is the NULL Datum.
-	DNull = dNull{}
-
-	_ Datum = DummyBool
-	_ Datum = DummyInt
-	_ Datum = DummyFloat
-	_ Datum = DummyString
-	_ Datum = DummyDate
-	_ Datum = DummyTimestamp
-	_ Datum = DummyInterval
-	_ Datum = DummyTuple
-	_ Datum = DNull
-)
 
 // DBool is the boolean Datum.
 type DBool bool
@@ -141,7 +143,7 @@ func (d DBool) IsMin() bool {
 }
 
 func (d DBool) String() string {
-	return BoolVal(d).String()
+	return strconv.FormatBool(bool(d))
 }
 
 // DInt is the int Datum.
@@ -281,7 +283,56 @@ func (d DString) IsMin() bool {
 }
 
 func (d DString) String() string {
-	return StrVal(d).String()
+	var scratch [64]byte
+	return string(encodeSQLString(scratch[0:0], []byte(d)))
+}
+
+// DBytes is the bytes Datum. The underlying type is a string because we want
+// the immutability, but this may contain arbitrary bytes.
+type DBytes string
+
+// Type implements the Datum interface.
+func (d DBytes) Type() string {
+	return "bytes"
+}
+
+// Compare implements the Datum interface.
+func (d DBytes) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(DBytes)
+	if !ok {
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+	}
+	if d < v {
+		return -1
+	}
+	if d > v {
+		return 1
+	}
+	return 0
+}
+
+// Next implements the Datum interface.
+func (d DBytes) Next() Datum {
+	return DBytes(proto.Key(d).Next())
+}
+
+// IsMax implements the Datum interface.
+func (d DBytes) IsMax() bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d DBytes) IsMin() bool {
+	return len(d) == 0
+}
+
+func (d DBytes) String() string {
+	var scratch [64]byte
+	return string(encodeSQLBytes(scratch[0:0], []byte(d)))
 }
 
 // DDate is the date Datum.

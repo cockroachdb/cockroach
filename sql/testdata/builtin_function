@@ -4,11 +4,16 @@ SELECT foo.bar()
 query error unknown function: defaults
 SELECT defaults()
 
-query I colnames
-SELECT LENGTH('roach7')
+query II colnames
+SELECT LENGTH('roach7'), LENGTH(b'roach77')
 ----
-LENGTH('roach7')
-6
+LENGTH('roach7') LENGTH(b'roach77')
+6                7
+
+query II
+SELECT LENGTH('Hello, 世界'), LENGTH(b'Hello, 世界')
+----
+9 13
 
 statement error unknown signature for LENGTH: LENGTH\(int\)
 SELECT LENGTH(23)

@@ -72,19 +72,10 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 	case *ExistsExpr:
 		WalkStmt(v, t.Subquery.Select)
 
-	case BytesVal:
-		// Terminal node: nothing to do.
-
-	case StrVal:
-		// Terminal node: nothing to do.
-
 	case IntVal:
 		// Terminal node: nothing to do.
 
 	case NumVal:
-		// Terminal node: nothing to do.
-
-	case BoolVal:
 		// Terminal node: nothing to do.
 
 	case ValArg:

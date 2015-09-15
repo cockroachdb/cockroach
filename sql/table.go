@@ -217,6 +217,8 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 		return encoding.EncodeFloat(b, float64(t)), nil
 	case parser.DString:
 		return encoding.EncodeString(b, string(t)), nil
+	case parser.DBytes:
+		return encoding.EncodeString(b, string(t)), nil
 	case parser.DDate:
 		return encoding.EncodeTime(b, t.Time), nil
 	case parser.DTimestamp:
@@ -241,8 +243,10 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 			vals[i] = parser.DummyInt
 		case ColumnType_FLOAT:
 			vals[i] = parser.DummyFloat
-		case ColumnType_STRING, ColumnType_BYTES:
+		case ColumnType_STRING:
 			vals[i] = parser.DummyString
+		case ColumnType_BYTES:
+			vals[i] = parser.DummyBytes
 		case ColumnType_DATE:
 			vals[i] = parser.DummyDate
 		case ColumnType_TIMESTAMP:
@@ -332,6 +336,10 @@ func decodeTableKey(valType parser.Datum, key []byte) (parser.Datum, []byte, err
 		var r string
 		key, r = encoding.DecodeString(key, nil)
 		return parser.DString(r), key, nil
+	case parser.DBytes:
+		var r string
+		key, r = encoding.DecodeString(key, nil)
+		return parser.DBytes(r), key, nil
 	case parser.DDate:
 		var t time.Time
 		key, t = encoding.DecodeTime(key)
@@ -413,8 +421,12 @@ func convertDatum(col ColumnDescriptor, val parser.Datum) (interface{}, error) {
 		if v, ok := val.(parser.DFloat); ok {
 			return float64(v), nil
 		}
-	case ColumnType_STRING, ColumnType_BYTES:
+	case ColumnType_STRING:
 		if v, ok := val.(parser.DString); ok {
+			return string(v), nil
+		}
+	case ColumnType_BYTES:
+		if v, ok := val.(parser.DBytes); ok {
 			return string(v), nil
 		}
 	case ColumnType_DATE:

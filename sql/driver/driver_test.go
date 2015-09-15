@@ -58,7 +58,19 @@ func TestPlaceholders(t *testing.T) {
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE t.alltypes (a BIGINT PRIMARY KEY, b FLOAT, c TEXT, d BOOLEAN, e TIMESTAMP, f DATE, g INTERVAL)`); err != nil {
+	schema := `
+CREATE TABLE t.alltypes (
+  a BIGINT PRIMARY KEY,
+  b FLOAT,
+  c TEXT,
+  d BYTES,
+  e BOOLEAN,
+  f TIMESTAMP,
+  g DATE,
+  h INTERVAL
+)
+`
+	if _, err := db.Exec(schema); err != nil {
 		t.Fatal(err)
 	}
 
@@ -66,10 +78,11 @@ func TestPlaceholders(t *testing.T) {
 		a int64
 		b sql.NullFloat64
 		c sql.NullString
-		d sql.NullBool
-		e *time.Time
+		d sql.NullString
+		e sql.NullBool
 		f *time.Time
-		g sql.NullString // TODO(tamird): g is a time.Duration; can we do better?
+		g *time.Time
+		h sql.NullString // TODO(tamird): h is a time.Duration; can we do better?
 	)
 
 	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
@@ -82,17 +95,19 @@ func TestPlaceholders(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if expected := []string{"a", "b", "c", "d", "e", "f", "g"}; !reflect.DeepEqual(cols, expected) {
+		if expected := []string{"a", "b", "c", "d", "e", "f", "g", "h"}; !reflect.DeepEqual(cols, expected) {
 			t.Errorf("got unexpected columns:\n%s\nexpected:\n%s", cols, expected)
 		}
 	}
 
 	// Insert values for all the different types.
-	if _, err := db.Exec(`INSERT INTO t.alltypes (a, b, c, d, e, f, g) VALUES ($1, $2, $3, $4, $5, $5::DATE, $6::INTERVAL)`, 123, 3.4, "blah", true, timeVal, intervalVal); err != nil {
+	if _, err := db.Exec(`INSERT INTO t.alltypes VALUES ($1, $2, $3, $4, $5, $6, $6::DATE, $7::INTERVAL)`,
+		123, 3.4, "blah", []byte("foo"), true, timeVal, intervalVal); err != nil {
 		t.Fatal(err)
 	}
 	// Insert a row with NULL values
-	if _, err := db.Exec(`INSERT INTO t.alltypes (a, b, c, d, e, f, g) VALUES ($1, $2, $3, $4, $5, $6, $7)`, 456, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := db.Exec(`INSERT INTO t.alltypes VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		456, nil, nil, nil, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE a IN ($1)", 123); err != nil {
@@ -104,16 +119,19 @@ func TestPlaceholders(t *testing.T) {
 	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE c IN ($1)", "blah"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE d IN ($1)", true); err != nil {
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE d IN ($1)", []byte("foo")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE e IN ($1)", timeVal); err != nil {
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE e IN ($1)", true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE f IN ($1::DATE)", timeVal); err != nil {
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE f IN ($1)", timeVal); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE g IN ($1::INTERVAL)", intervalVal); err != nil {
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE g IN ($1::DATE)", timeVal); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE h IN ($1::INTERVAL)", intervalVal); err != nil {
 		t.Fatal(err)
 	}
 	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
@@ -122,7 +140,7 @@ func TestPlaceholders(t *testing.T) {
 		defer rows.Close()
 
 		rows.Next()
-		if err := rows.Scan(&a, &b, &c, &d, &e, &f, &g); err != nil {
+		if err := rows.Scan(&a, &b, &c, &d, &e, &f, &g, &h); err != nil {
 			t.Fatal(err)
 		}
 
@@ -130,12 +148,13 @@ func TestPlaceholders(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !(a == 123 && b.Float64 == 3.4 && c.String == "blah" && d.Bool && e.Equal(timeVal) && f.Equal(dateVal) && g.String == intervalVal.String()) {
+		if !(a == 123 && b.Float64 == 3.4 && c.String == "blah" && d.String == "foo" &&
+			e.Bool && f.Equal(timeVal) && g.Equal(dateVal) && h.String == intervalVal.String()) {
 			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g})
 		}
 
 		rows.Next()
-		if err := rows.Scan(&a, &b, &c, &d, &e, &f, &g); err != nil {
+		if err := rows.Scan(&a, &b, &c, &d, &e, &f, &g, &h); err != nil {
 			t.Fatal(err)
 		}
 
@@ -143,7 +162,7 @@ func TestPlaceholders(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && e == nil && f == nil && !g.Valid) {
+		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && !e.Valid && f == nil && g == nil && !h.Valid) {
 			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g})
 		}
 
@@ -161,7 +180,7 @@ func TestPlaceholders(t *testing.T) {
 		defer rows.Close()
 
 		rows.Next()
-		if err := rows.Scan(&a, &b, &c, &d, &e, &f, &g); err != nil {
+		if err := rows.Scan(&a, &b, &c, &d, &e, &f, &g, &h); err != nil {
 			t.Fatal(err)
 		}
 
@@ -169,7 +188,7 @@ func TestPlaceholders(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && e == nil && f == nil && !g.Valid) {
+		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && !e.Valid && f == nil && g == nil && !h.Valid) {
 			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g})
 		}
 

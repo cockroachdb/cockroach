@@ -1128,6 +1128,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 				}
 				return makePrefixRange(d, n.Left, true)
 			}
+			// TODO(pmattis): Support parser.DBytes?
 		case parser.SimilarTo:
 			// a SIMILAR TO "foo.*" -> a >= "foo" AND a < "fop"
 			if d, ok := n.Right.(parser.DString); ok {
@@ -1136,6 +1137,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 					return makePrefixRange(parser.DString(prefix), n.Left, complete)
 				}
 			}
+			// TODO(pmattis): Support parser.DBytes?
 		}
 	}
 	return parser.DBool(true)

@@ -40,11 +40,8 @@ func (*RangeCond) expr()      {}
 func (*IsExpr) expr()         {}
 func (*IsOfTypeExpr) expr()   {}
 func (*ExistsExpr) expr()     {}
-func (StrVal) expr()          {}
-func (BytesVal) expr()        {}
 func (IntVal) expr()          {}
 func (NumVal) expr()          {}
-func (BoolVal) expr()         {}
 func (ValArg) expr()          {}
 func (*QualifiedName) expr()  {}
 func (Tuple) expr()           {}
@@ -60,6 +57,7 @@ func (DBool) expr()           {}
 func (DInt) expr()            {}
 func (DFloat) expr()          {}
 func (DString) expr()         {}
+func (DBytes) expr()          {}
 func (DDate) expr()           {}
 func (DTimestamp) expr()      {}
 func (DInterval) expr()       {}
@@ -248,22 +246,6 @@ func (node *ExistsExpr) String() string {
 	return fmt.Sprintf("EXISTS %s", node.Subquery)
 }
 
-// StrVal represents a string value.
-type StrVal string
-
-func (node StrVal) String() string {
-	var scratch [64]byte
-	return string(encodeSQLString(scratch[0:0], []byte(node)))
-}
-
-// BytesVal represents a string of unprintable value.
-type BytesVal string
-
-func (node BytesVal) String() string {
-	var scratch [64]byte
-	return string(encodeSQLBytes(scratch[0:0], []byte(node)))
-}
-
 // IntVal represents an integer.
 type IntVal int64
 
@@ -283,16 +265,6 @@ type NumVal string
 
 func (node NumVal) String() string {
 	return string(node)
-}
-
-// BoolVal represents a boolean.
-type BoolVal bool
-
-func (node BoolVal) String() string {
-	if node {
-		return "true"
-	}
-	return "false"
 }
 
 // ValArg represents a named bind var argument.

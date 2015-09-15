@@ -911,7 +911,7 @@ const sqlEofCode = 1
 const sqlErrCode = 2
 const sqlMaxDepth = 200
 
-//line sql.y:3849
+//line sql.y:3848
 
 //line yacctab:1
 var sqlExca = [...]int{
@@ -6032,19 +6032,19 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:871
 		{
-			sqlVAL.expr = BoolVal(true)
+			sqlVAL.expr = DBool(true)
 		}
 	case 117:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:875
 		{
-			sqlVAL.expr = BoolVal(false)
+			sqlVAL.expr = DBool(false)
 		}
 	case 118:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:879
 		{
-			sqlVAL.expr = StrVal(sqlDollar[1].str)
+			sqlVAL.expr = DString(sqlDollar[1].str)
 		}
 	case 120:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -6100,13 +6100,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:910
 		{
-			sqlVAL.expr = StrVal(sqlDollar[1].str)
+			sqlVAL.expr = DString(sqlDollar[1].str)
 		}
 	case 131:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:914
 		{
-			sqlVAL.expr = StrVal(sqlDollar[1].str)
+			sqlVAL.expr = DString(sqlDollar[1].str)
 		}
 	case 132:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -8916,7 +8916,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3035
 		{
-			sqlVAL.exprs = Exprs{StrVal(sqlDollar[1].str), sqlDollar[3].expr}
+			sqlVAL.exprs = Exprs{DString(sqlDollar[1].str), sqlDollar[3].expr}
 		}
 	case 666:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
@@ -9245,73 +9245,72 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3330
 		{
-			sqlVAL.expr = StrVal(sqlDollar[1].str)
+			sqlVAL.expr = DString(sqlDollar[1].str)
 		}
 	case 727:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3334
 		{
-			// TODO(pmattis): bytes literal.
-			sqlVAL.expr = StrVal(sqlDollar[1].str)
+			sqlVAL.expr = DBytes(sqlDollar[1].str)
 		}
 	case 728:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3338
+		//line sql.y:3337
 		{
 		}
 	case 729:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3340
+		//line sql.y:3339
 		{
-			sqlVAL.expr = &CastExpr{Expr: StrVal(sqlDollar[2].str), Type: sqlDollar[1].colType}
+			sqlVAL.expr = &CastExpr{Expr: DString(sqlDollar[2].str), Type: sqlDollar[1].colType}
 		}
 	case 730:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3344
+		//line sql.y:3343
 		{
 			// TODO(pmattis): support opt_interval?
-			sqlVAL.expr = &CastExpr{Expr: StrVal(sqlDollar[2].str), Type: sqlDollar[1].colType}
+			sqlVAL.expr = &CastExpr{Expr: DString(sqlDollar[2].str), Type: sqlDollar[1].colType}
 		}
 	case 731:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3349
+		//line sql.y:3348
 		{
 			// TODO(pmattis): Support the precision specification?
-			sqlVAL.expr = &CastExpr{Expr: StrVal(sqlDollar[5].str), Type: sqlDollar[1].colType}
+			sqlVAL.expr = &CastExpr{Expr: DString(sqlDollar[5].str), Type: sqlDollar[1].colType}
 		}
 	case 732:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3354
+		//line sql.y:3353
 		{
-			sqlVAL.expr = BoolVal(true)
+			sqlVAL.expr = DBool(true)
 		}
 	case 733:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3358
+		//line sql.y:3357
 		{
-			sqlVAL.expr = BoolVal(false)
+			sqlVAL.expr = DBool(false)
 		}
 	case 734:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3362
+		//line sql.y:3361
 		{
 			sqlVAL.expr = DNull
 		}
 	case 736:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3369
+		//line sql.y:3368
 		{
 			sqlVAL.ival = +sqlDollar[2].ival
 		}
 	case 737:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3373
+		//line sql.y:3372
 		{
 			sqlVAL.ival = -sqlDollar[2].ival
 		}
 	case 742:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3395
+		//line sql.y:3394
 		{
 			sqlVAL.str = ""
 		}

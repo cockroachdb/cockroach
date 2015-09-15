@@ -869,15 +869,15 @@ iso_level:
 opt_boolean_or_string:
   TRUE
   {
-    $$ = BoolVal(true)
+    $$ = DBool(true)
   }
 | FALSE
   {
-    $$ = BoolVal(false)
+    $$ = DBool(false)
   }
 | ON
   {
-    $$ = StrVal($1)
+    $$ = DString($1)
   }
   // OFF is also accepted as a boolean value, but is handled by the
   // non_reserved_word rule. The action for booleans and strings is the same,
@@ -908,11 +908,11 @@ opt_encoding:
 non_reserved_word_or_sconst:
   non_reserved_word
   {
-    $$ = StrVal($1)
+    $$ = DString($1)
   }
 | SCONST
   {
-    $$ = StrVal($1)
+    $$ = DString($1)
   }
 
 show_stmt:
@@ -3033,7 +3033,7 @@ array_expr_list:
 extract_list:
   extract_arg FROM a_expr
   {
-    $$ = Exprs{StrVal($1), $3}
+    $$ = Exprs{DString($1), $3}
   }
 
 // TODO(vivek): Narrow down to just IDENT once the other
@@ -3328,35 +3328,34 @@ a_expr_const:
   }
 | SCONST
   {
-    $$ = StrVal($1)
+    $$ = DString($1)
   }
 | BCONST
   {
-    // TODO(pmattis): bytes literal.
-    $$ = StrVal($1)
+    $$ = DBytes($1)
   }
 | func_name '(' expr_list opt_sort_clause ')' SCONST {}
 | const_typename SCONST
   {
-    $$ = &CastExpr{Expr: StrVal($2), Type: $1}
+    $$ = &CastExpr{Expr: DString($2), Type: $1}
   }
 | const_interval SCONST opt_interval
   {
     // TODO(pmattis): support opt_interval?
-    $$ = &CastExpr{Expr: StrVal($2), Type: $1}
+    $$ = &CastExpr{Expr: DString($2), Type: $1}
   }
 | const_interval '(' ICONST ')' SCONST
   {
     // TODO(pmattis): Support the precision specification?
-    $$ = &CastExpr{Expr: StrVal($5), Type: $1}
+    $$ = &CastExpr{Expr: DString($5), Type: $1}
   }
 | TRUE
   {
-    $$ = BoolVal(true)
+    $$ = DBool(true)
   }
 | FALSE
   {
-    $$ = BoolVal(false)
+    $$ = DBool(false)
   }
 | NULL
   {
