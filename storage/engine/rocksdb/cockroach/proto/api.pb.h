@@ -3578,13 +3578,6 @@ class PushTxnRequest : public ::google::protobuf::Message {
   ::cockroach::proto::PushTxnType push_type() const;
   void set_push_type(::cockroach::proto::PushTxnType value);
 
-  // optional bool range_lookup = 6;
-  bool has_range_lookup() const;
-  void clear_range_lookup();
-  static const int kRangeLookupFieldNumber = 6;
-  bool range_lookup() const;
-  void set_range_lookup(bool value);
-
   // @@protoc_insertion_point(class_scope:cockroach.proto.PushTxnRequest)
  private:
   inline void set_has_header();
@@ -3597,8 +3590,6 @@ class PushTxnRequest : public ::google::protobuf::Message {
   inline void clear_has_now();
   inline void set_has_push_type();
   inline void clear_has_push_type();
-  inline void set_has_range_lookup();
-  inline void clear_has_range_lookup();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -3608,7 +3599,6 @@ class PushTxnRequest : public ::google::protobuf::Message {
   ::cockroach::proto::Transaction* pushee_txn_;
   ::cockroach::proto::Timestamp* now_;
   int push_type_;
-  bool range_lookup_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
@@ -8705,30 +8695,6 @@ inline void PushTxnRequest::set_push_type(::cockroach::proto::PushTxnType value)
   set_has_push_type();
   push_type_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.PushTxnRequest.push_type)
-}
-
-// optional bool range_lookup = 6;
-inline bool PushTxnRequest::has_range_lookup() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
-}
-inline void PushTxnRequest::set_has_range_lookup() {
-  _has_bits_[0] |= 0x00000020u;
-}
-inline void PushTxnRequest::clear_has_range_lookup() {
-  _has_bits_[0] &= ~0x00000020u;
-}
-inline void PushTxnRequest::clear_range_lookup() {
-  range_lookup_ = false;
-  clear_has_range_lookup();
-}
-inline bool PushTxnRequest::range_lookup() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.PushTxnRequest.range_lookup)
-  return range_lookup_;
-}
-inline void PushTxnRequest::set_range_lookup(bool value) {
-  set_has_range_lookup();
-  range_lookup_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.PushTxnRequest.range_lookup)
 }
 
 // -------------------------------------------------------------------

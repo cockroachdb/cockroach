@@ -495,6 +495,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 	var br *proto.BatchResponse
 	// Send the request to one range per iteration.
 	for {
+		options := lookupOptions{
+			useReverseScan: isReverse,
+		}
+
 		var curReply *proto.BatchResponse
 		var desc *proto.RangeDescriptor
 		var needAnother bool
@@ -506,17 +510,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 			descDone := trace.Epoch("meta descriptor lookup")
 			var evictDesc func()
 
-			// If the call contains a PushTxn, set considerIntents option as
-			// necessary. This prevents a potential infinite loop; see the
-			// comments in proto.RangeLookupRequest.
-			options := lookupOptions{}
-			// TODO(tschottdorf): awkward linear scan through the batch.
-			if arg, ok := ba.GetArg(proto.PushTxn); ok {
-				options.considerIntents = arg.(*proto.PushTxnRequest).RangeLookup
-			}
-			if isReverse {
-				options.useReverseScan = true
-			}
 			desc, needAnother, evictDesc, err = ds.getDescriptors(from, to, options)
 			descDone()
 
@@ -611,6 +604,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 				if log.V(1) {
 					log.Warning(err)
 				}
+				// For the remainder of this call, we'll assume that intents
+				// are fair game. This replaces more complex logic based on
+				// the type of request.
+				options.considerIntents = true
 				continue
 			case *proto.NotLeaderError:
 				trace.Event(fmt.Sprintf("reply error: %T", err))

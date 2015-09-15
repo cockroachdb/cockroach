@@ -644,7 +644,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 	// I think it needs the same special treatment.
 	// TestRangeSplitsWithConcurrentTxns demonstrates this when removing !consistent
 	// below.
-	if (!consistent || args.ConsiderIntents) && len(intents) > 0 && rand.Intn(2) == 0 {
+	if args.ConsiderIntents && len(intents) > 0 && rand.Intn(2) == 0 {
 		// NOTE (subtle): in general, we want to try to clean up dangling
 		// intents on meta records. However, if we're in the process of
 		// cleaning up a dangling intent on a meta record by pushing the

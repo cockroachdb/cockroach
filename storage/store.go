@@ -1344,9 +1344,8 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			// here, we would run into busy loops because that timestamp
 			// usually stays fixed among retries, so it will never realize
 			// that a transaction has timed out. See #877.
-			Now:         now,
-			PushType:    pushType,
-			RangeLookup: args.Method() == proto.RangeLookup,
+			Now:      now,
+			PushType: pushType,
 		}
 		ba.Add(pushArgs)
 	}

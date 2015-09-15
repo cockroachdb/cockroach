@@ -518,40 +518,6 @@ func TestEvictCacheOnError(t *testing.T) {
 	}
 }
 
-// TestRangeLookupOnPushTxnIgnoresIntents verifies that if a push txn
-// request has range lookup set, the range lookup requests will have
-// ignore intents set.
-func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	g, s := makeTestGossip(t)
-	defer s()
-
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-		return []gogoproto.Message{getReply()}, nil
-	}
-
-	for _, rangeLookup := range []bool{true, false} {
-		ctx := &DistSenderContext{
-			RPCSend: testFn,
-			RangeDescriptorDB: mockRangeDescriptorDB(func(k proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
-				if len(k) > 0 && opts.considerIntents != rangeLookup {
-					t.Fatalf("expected ignore intents to be %t", rangeLookup)
-				}
-				return []proto.RangeDescriptor{testRangeDescriptor}, nil
-			}),
-		}
-		ds := NewDistSender(ctx, g)
-		call := proto.Call{
-			Args: &proto.PushTxnRequest{
-				RequestHeader: proto.RequestHeader{Key: proto.Key("a")},
-				RangeLookup:   rangeLookup,
-			},
-			Reply: &proto.PushTxnResponse{},
-		}
-		client.SendCallConverted(ds, context.Background(), call)
-	}
-}
-
 // TestRetryOnWrongReplicaError sets up a DistSender on a minimal gossip
 // network and a mock of rpc.Send, and verifies that the DistSender correctly
 // retries upon encountering a stale entry in its range descriptor cache.

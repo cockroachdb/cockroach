@@ -353,10 +353,9 @@ message RangeLookupRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
   // ConsiderIntents indicates whether or not intents encountered
-  // while looking up the range info should be resolved. This should
-  // be false in general, except for the case where the lookup is
-  // already in service of pushing intents on meta records. Attempting
-  // to resolve intents in this case would lead to infinite recursion.
+  // while looking up the range info should randomly be returned
+  // to the caller. This is intended to be used when retrying due
+  // to range addressing errors.
   optional bool consider_intents = 3 [(gogoproto.nullable) = false];
   // Use a reverse scan to pre-fill the range descriptor cache instead
   // of an ascending scan.
@@ -456,10 +455,6 @@ message PushTxnRequest {
   // this to CLEANUP_TXN to determine whether dangling intents
   // may be resolved.
   optional PushTxnType push_type = 5 [(gogoproto.nullable) = false];
-  // Range lookup indicates whether we're pushing a txn because of an
-  // intent encountered while servicing an internal range lookup
-  // request. See notes in RangeLookupRequest.
-  optional bool range_lookup = 6 [(gogoproto.nullable) = false];
 }
 
 // A PushTxnResponse is the return value from the PushTxn() method. It

@@ -798,10 +798,9 @@ type RangeLookupRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	MaxRanges     int32 `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
 	// ConsiderIntents indicates whether or not intents encountered
-	// while looking up the range info should be resolved. This should
-	// be false in general, except for the case where the lookup is
-	// already in service of pushing intents on meta records. Attempting
-	// to resolve intents in this case would lead to infinite recursion.
+	// while looking up the range info should randomly be returned
+	// to the caller. This is intended to be used when retrying due
+	// to range addressing errors.
 	ConsiderIntents bool `protobuf:"varint,3,opt,name=consider_intents" json:"consider_intents"`
 	// Use a reverse scan to pre-fill the range descriptor cache instead
 	// of an ascending scan.
@@ -973,10 +972,6 @@ type PushTxnRequest struct {
 	// this to CLEANUP_TXN to determine whether dangling intents
 	// may be resolved.
 	PushType PushTxnType `protobuf:"varint,5,opt,name=push_type,enum=cockroach.proto.PushTxnType" json:"push_type"`
-	// Range lookup indicates whether we're pushing a txn because of an
-	// intent encountered while servicing an internal range lookup
-	// request. See notes in RangeLookupRequest.
-	RangeLookup bool `protobuf:"varint,6,opt,name=range_lookup" json:"range_lookup"`
 }
 
 func (m *PushTxnRequest) Reset()         { *m = PushTxnRequest{} }
@@ -1009,13 +1004,6 @@ func (m *PushTxnRequest) GetPushType() PushTxnType {
 		return m.PushType
 	}
 	return PUSH_TIMESTAMP
-}
-
-func (m *PushTxnRequest) GetRangeLookup() bool {
-	if m != nil {
-		return m.RangeLookup
-	}
-	return false
 }
 
 // A PushTxnResponse is the return value from the PushTxn() method. It
@@ -2743,14 +2731,6 @@ func (m *PushTxnRequest) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x28
 	i++
 	i = encodeVarintApi(data, i, uint64(m.PushType))
-	data[i] = 0x30
-	i++
-	if m.RangeLookup {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
 	return i, nil
 }
 
@@ -4092,7 +4072,6 @@ func (m *PushTxnRequest) Size() (n int) {
 	l = m.Now.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.PushType))
-	n += 2
 	return n
 }
 
@@ -7930,23 +7909,6 @@ func (m *PushTxnRequest) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 6:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RangeLookup", wireType)
-			}
-			var v int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				v |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.RangeLookup = bool(v != 0)
 		default:
 			var sizeOfWire int
 			for {
