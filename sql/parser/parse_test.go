@@ -35,6 +35,8 @@ func TestParse(t *testing.T) {
 		{`VALUES ("")`},
 
 		{`BEGIN TRANSACTION`},
+		{`BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT`},
+		{`BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE`},
 		{`COMMIT TRANSACTION`},
 		{`ROLLBACK TRANSACTION`},
 
@@ -109,6 +111,8 @@ func TestParse(t *testing.T) {
 		{`SHOW GRANTS ON DATABASE foo, bar`},
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
 		{`SHOW GRANTS FOR bar, baz`},
+
+		{`SHOW TRANSACTION ISOLATION LEVEL`},
 
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
@@ -297,6 +301,8 @@ func TestParse(t *testing.T) {
 		{`SET a = '3'`},
 		{`SET a = 3.0`},
 		{`SET a = $1`},
+		{`SET TRANSACTION ISOLATION LEVEL SNAPSHOT`},
+		{`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`},
 
 		// TODO(pmattis): Is this a postgres extension?
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a

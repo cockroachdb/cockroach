@@ -61,6 +61,7 @@ func (*Revoke) statement()              {}
 func (*RollbackTransaction) statement() {}
 func (*Select) statement()              {}
 func (*Set) statement()                 {}
+func (*SetTransaction) statement()      {}
 func (*Show) statement()                {}
 func (*ShowColumns) statement()         {}
 func (*ShowDatabases) statement()       {}

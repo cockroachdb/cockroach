@@ -53,7 +53,9 @@ func TestTxnDBBasics(t *testing.T) {
 
 		err := s.DB.Txn(func(txn *client.Txn) error {
 			// Use snapshot isolation so non-transactional read can always push.
-			txn.SetSnapshotIsolation()
+			if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+				return err
+			}
 
 			// Put transactional value.
 			if err := txn.Put(key, value); err != nil {
@@ -381,7 +383,9 @@ func TestTxnTimestampRegression(t *testing.T) {
 	keyB := "b"
 	err := s.DB.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
-		txn.SetSnapshotIsolation()
+		if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+			return err
+		}
 		// Put transactional value.
 		if err := txn.Put(keyA, "value1"); err != nil {
 			return err
@@ -423,7 +427,9 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	go func() {
 		err := s.DB.Txn(func(txn *client.Txn) error {
 			// Use snapshot isolation.
-			txn.SetSnapshotIsolation()
+			if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+				return err
+			}
 			// Put transactional value.
 			if err := txn.Put(keyA, "value1"); err != nil {
 				return err
@@ -451,7 +457,9 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	s.Manual.Set((storage.MinTSCacheWindow + time.Second).Nanoseconds())
 	err := s.DB.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation.
-		txn.SetSnapshotIsolation()
+		if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+			return err
+		}
 
 		// Attempt to get first keyB.
 		gr1, err := txn.Get(keyB)
@@ -495,7 +503,9 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	go func() {
 		err := s.DB.Txn(func(txn *client.Txn) error {
 			// Use snapshot isolation.
-			txn.SetSnapshotIsolation()
+			if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+				return err
+			}
 			// Put transactional value.
 			if err := txn.Put(keyA, "value1"); err != nil {
 				return err
@@ -522,7 +532,9 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 
 	err := s.DB.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation.
-		txn.SetSnapshotIsolation()
+		if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+			return err
+		}
 
 		// First get keyC, value will be nil.
 		gr1, err := txn.Get(keyC)

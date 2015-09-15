@@ -98,18 +98,17 @@ func (txn *Txn) DebugName() string {
 	return txn.Proto.Name
 }
 
-// SetSnapshotIsolation sets the transaction's isolation type to
-// snapshot. Transactions default to serializable isolation. The
-// isolation must be set before any operations are performed on the
-// transaction.
-//
-// TODO(pmattis): This isn't tested yet but will be as part of the
-// conversion of client_test.go.
-func (txn *Txn) SetSnapshotIsolation() {
-	// TODO(pmattis): Panic if the transaction has already had
-	// operations run on it. Needs to tie into the Txn reset in case of
-	// retries.
-	txn.Proto.Isolation = proto.SNAPSHOT
+// SetIsolation sets the transaction's isolation type. Transactions default to
+// serializable isolation. The isolation must be set before any operations are
+// performed on the transaction.
+func (txn *Txn) SetIsolation(isolation proto.IsolationType) error {
+	if txn.Proto.Isolation != isolation {
+		if txn.Proto.IsInitialized() {
+			return fmt.Errorf("cannot change the isolation level of a running transaction")
+		}
+		txn.Proto.Isolation = isolation
+	}
+	return nil
 }
 
 // InternalSetPriority sets the transaction priority. It is intended for

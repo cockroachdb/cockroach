@@ -17,11 +17,46 @@
 
 package parser
 
+import (
+	"bytes"
+	"fmt"
+)
+
+// IsolationLevel holds the isolation level for a transaction.
+type IsolationLevel int
+
+// IsolationLevel values
+const (
+	UnspecifiedIsolation IsolationLevel = iota
+	SnapshotIsolation
+	SerializableIsolation
+)
+
+var isolationLevelNames = [...]string{
+	UnspecifiedIsolation:  "UNSPECIFIED",
+	SnapshotIsolation:     "SNAPSHOT",
+	SerializableIsolation: "SERIALIZABLE",
+}
+
+func (i IsolationLevel) String() string {
+	if i < 0 || i > IsolationLevel(len(isolationLevelNames)-1) {
+		return fmt.Sprintf("IsolationLevel(%d)", i)
+	}
+	return isolationLevelNames[i]
+}
+
 // BeginTransaction represents a BEGIN statement
-type BeginTransaction struct{}
+type BeginTransaction struct {
+	Isolation IsolationLevel
+}
 
 func (node *BeginTransaction) String() string {
-	return "BEGIN TRANSACTION"
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("BEGIN TRANSACTION")
+	if node.Isolation != UnspecifiedIsolation {
+		fmt.Fprintf(&buf, " ISOLATION LEVEL %s", node.Isolation)
+	}
+	return buf.String()
 }
 
 // CommitTransaction represents a COMMIT statement.

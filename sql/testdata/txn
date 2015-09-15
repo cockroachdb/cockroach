@@ -152,3 +152,76 @@ COMMIT TRANSACTION
 
 statement error there is no transaction in progress
 ROLLBACK TRANSACTION
+
+# Set isolation level without a transaction is an error.
+
+statement error there is no transaction in progress
+SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
+
+statement ok
+BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
+
+statement ok
+BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
+
+# It is an error to change the isolation level of a running transaction.
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+UPDATE kv SET v = 'b' WHERE k in ('a')
+
+statement error cannot change the isolation level of a running transaction
+SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+
+statement ok
+ROLLBACK
+
+# Transactions default to serializable.
+
+statement ok
+BEGIN TRANSACTION
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SERIALIZABLE
+
+statement ok
+SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SNAPSHOT
+
+statement ok
+COMMIT
+
+# We can explicitly start a transaction in snapshot isolation.
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SNAPSHOT
+
+statement ok
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SERIALIZABLE
+
+statement ok
+COMMIT

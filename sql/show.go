@@ -38,6 +38,8 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 		v.rows = append(v.rows, []parser.Datum{parser.DString(p.session.Database)})
 	case `SYNTAX`:
 		v.rows = append(v.rows, []parser.Datum{parser.DString(parser.Syntax(p.session.Syntax).String())})
+	case `TRANSACTION ISOLATION LEVEL`:
+		v.rows = append(v.rows, []parser.Datum{parser.DString(p.txn.Proto.Isolation.String())})
 	default:
 		return nil, fmt.Errorf("unknown variable: %q", name)
 	}

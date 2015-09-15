@@ -128,6 +128,10 @@ func (e Executor) execStmt(stmt parser.Statement, params parameters, planMaker *
 		} else {
 			return result, errNoTransactionInProgress
 		}
+	case *parser.SetTransaction:
+		if planMaker.txn == nil {
+			return result, errNoTransactionInProgress
+		}
 	default:
 		if planMaker.txn != nil && planMaker.txn.Proto.Status == proto.ABORTED {
 			return result, errTransactionAborted

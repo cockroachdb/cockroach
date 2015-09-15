@@ -406,6 +406,11 @@ func (t *Transaction) TraceName() string {
 	return "t" + t.Short()
 }
 
+// IsInitialized returns true if the transaction has been initialized.
+func (t *Transaction) IsInitialized() bool {
+	return len(t.ID) > 0
+}
+
 // MakePriority generates a random priority value, biased by the
 // specified userPriority. If userPriority=100, the resulting
 // priority is 100x more likely to be probabilistically greater

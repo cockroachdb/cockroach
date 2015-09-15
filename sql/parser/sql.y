@@ -68,6 +68,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   dir            Direction
   alterTableCmd  AlterTableCmd
   alterTableCmds AlterTableCmds
+  isoLevel       IsolationLevel
 }
 
 %type <stmts> stmt_block
@@ -108,7 +109,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 
 %type <empty> opt_drop_behavior
 
-%type <empty> opt_transaction_iso_level transaction_iso_level
+%type <isoLevel> opt_transaction_iso_level transaction_iso_level
 
 %type <str>   name opt_name
 
@@ -121,7 +122,8 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 
 %type <empty> math_op
 
-%type <empty> iso_level opt_encoding
+%type <isoLevel> iso_level
+%type <empty> opt_encoding
 
 %type <tblDefs> opt_table_elem_list table_elem_list
 %type <empty> distinct_clause opt_all_clause
@@ -786,8 +788,11 @@ set_stmt:
   }
 
 set_rest:
-  TRANSACTION transaction_iso_level {}
-| set_rest_more {}
+  TRANSACTION transaction_iso_level
+  {
+    $$ = &SetTransaction{Isolation: $2}
+  }
+| set_rest_more
 
 generic_set:
   var_name TO var_list
@@ -837,10 +842,29 @@ var_value:
   }
 
 iso_level:
-  READ UNCOMMITTED {}
-| READ COMMITTED {}
-| REPEATABLE READ {}
-| SERIALIZABLE {}
+  READ UNCOMMITTED
+  {
+    // Mapped to the closest supported isolation level.
+    $$ = SnapshotIsolation
+  }
+| READ COMMITTED
+  {
+    // Mapped to the closest supported isolation level.
+    $$ = SnapshotIsolation
+  }
+| REPEATABLE READ
+  {
+    // Mapped to the closest supported isolation level.
+    $$ = SnapshotIsolation
+  }
+| SNAPSHOT
+  {
+    $$ = SnapshotIsolation
+  }
+| SERIALIZABLE
+  {
+    $$ = SerializableIsolation
+  }
 
 opt_boolean_or_string:
   TRUE
@@ -923,6 +947,10 @@ show_stmt:
 | SHOW TIME ZONE
   {
     $$ = nil
+  }
+| SHOW TRANSACTION ISOLATION LEVEL
+  {
+    $$ = &Show{Name: "TRANSACTION ISOLATION LEVEL"}
   }
 | SHOW ALL
   {
@@ -1325,7 +1353,7 @@ opt_set_data:
 transaction_stmt:
   BEGIN opt_transaction opt_transaction_iso_level
   {
-    $$ = &BeginTransaction{}
+    $$ = &BeginTransaction{Isolation: $3}
   }
 | COMMIT opt_transaction
   {
@@ -1341,11 +1369,17 @@ opt_transaction:
 | /* EMPTY */ {}
 
 opt_transaction_iso_level:
-  transaction_iso_level {}
-| /* EMPTY */ {}
+  transaction_iso_level
+| /* EMPTY */
+  {
+    $$ = UnspecifiedIsolation
+  }
 
 transaction_iso_level:
-  ISOLATION LEVEL iso_level {}
+  ISOLATION LEVEL iso_level
+  {
+    $$ = $3
+  }
 
 create_database_stmt:
   CREATE DATABASE name
