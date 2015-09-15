@@ -58,6 +58,7 @@ type LocalTestCluster struct {
 	Sender      *TxnCoordSender
 	distSender  *DistSender
 	Stopper     *stop.Stopper
+	tester      util.Tester
 }
 
 // Start starts the test cluster by bootstrapping an in-memory store
@@ -68,6 +69,7 @@ type LocalTestCluster struct {
 func (ltc *LocalTestCluster) Start(t util.Tester) {
 
 	nodeDesc := &proto.NodeDescriptor{NodeID: 1}
+	ltc.tester = t
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = stop.NewStopper()
@@ -122,6 +124,9 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 
 // Stop stops the cluster.
 func (ltc *LocalTestCluster) Stop() {
+	if ltc.tester.Failed() {
+		return
+	}
 	if r := recover(); r != nil {
 		panic(r)
 	}

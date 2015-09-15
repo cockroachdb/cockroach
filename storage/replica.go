@@ -43,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
+
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
