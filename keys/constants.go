@@ -143,9 +143,6 @@ var (
 	// MetaMax is the end of the range of addressing keys.
 	MetaMax = MakeKey(SystemPrefix, proto.Key("\x01"))
 
-	// ConfigZonePrefix specifies the key prefix for zone
-	// configurations. The suffix is the affected key prefix.
-	ConfigZonePrefix = MakeKey(SystemPrefix, proto.Key("zone"))
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.
 	DescIDGenerator = MakeKey(SystemPrefix, proto.Key("desc-idgen"))
@@ -174,11 +171,23 @@ var (
 	UserTableDataMin = MakeTablePrefix(MaxReservedDescID + 1)
 )
 
+// Various IDs used by the structured data layer.
+// NOTE: these must not change during the lifetime of a cluster.
 const (
 	// MaxReservedDescID is the maximum value of the system IDs
 	// under 'TableDataPrefix'.
 	// It is here only so that we may define keys/ranges using it.
-	// NOTE: this is not great, but the alternative is to
-	// move all the ID/keying from sql/ here, or drop ID entirely.
 	MaxReservedDescID = 999
+
+	// RootNamespaceID is the ID of the root namespace.
+	RootNamespaceID = 0
+
+	// SystemDatabaseID and following are the database/table IDs for objects
+	// in the system span.
+	// NOTE: IDs should remain <= MaxReservedDescID.
+	SystemDatabaseID  = 1
+	NamespaceTableID  = 2
+	DescriptorTableID = 3
+	UsersTableID      = 4
+	ZonesTableID      = 5
 )

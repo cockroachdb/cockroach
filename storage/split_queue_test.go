@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -37,14 +38,11 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	defer tc.Stop()
 
 	// Set zone configs.
-	zoneMap, err := config.NewPrefixConfigMap([]config.PrefixConfig{
-		config.MakePrefixConfig(proto.KeyMin, nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}),
-		config.MakePrefixConfig(proto.Key("/dbB"), nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := tc.gossip.AddInfoProto(gossip.KeyConfigZone, zoneMap, 0); err != nil {
+	config.TestingSetZoneConfig(2000, &config.ZoneConfig{RangeMaxBytes: 32 << 20})
+	config.TestingSetZoneConfig(2002, &config.ZoneConfig{RangeMaxBytes: 32 << 20})
+
+	// Despite faking the zone configs, we still need to have a gossip entry.
+	if err := tc.gossip.AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -57,7 +55,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		// No intersection, no bytes.
 		{proto.KeyMin, proto.Key("/"), 0, false, 0},
 		// Intersection in zone, no bytes.
-		{proto.Key("/dbA"), proto.Key("/dbC"), 0, true, 1},
+		{keys.MakeTablePrefix(2001), proto.KeyMax, 0, true, 1},
+		// Already split at largest ID.
+		{keys.MakeTablePrefix(2002), proto.KeyMax, 0, false, 0},
 		// Multiple intersections, no bytes.
 		{proto.KeyMin, proto.KeyMax, 0, true, 1},
 		// No intersection, max bytes.
@@ -67,7 +67,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		// No intersection, max bytes * 2.
 		{proto.KeyMin, proto.Key("/"), 64 << 21, true, 2},
 		// Intersection, max bytes +1.
-		{proto.KeyMin, proto.KeyMax, 64<<20 + 1, true, 2},
+		{keys.MakeTablePrefix(2000), proto.KeyMax, 32<<20 + 1, true, 2},
+		// Split needed at table boundary, but no zone config.
+		{keys.MakeTablePrefix(2001), proto.KeyMax, 32<<20 + 1, true, 1},
 	}
 
 	splitQ := newSplitQueue(nil, tc.gossip)

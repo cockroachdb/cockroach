@@ -35,7 +35,7 @@ import (
 // defaultRetryOptions sets the retry options for handling retryable errors and
 // connection I/O errors.
 var defaultRetryOptions = retry.Options{
-	InitialBackoff: 50 * time.Millisecond,
+	InitialBackoff: 250 * time.Millisecond,
 	MaxBackoff:     5 * time.Second,
 	Multiplier:     2,
 	MaxRetries:     5,

@@ -26,7 +26,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	configutil "github.com/cockroachdb/cockroach/config/util"
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -144,15 +145,9 @@ func runStart(cmd *cobra.Command, args []string) {
 	}
 
 	if context.EphemeralSingleNode {
-		// TODO(tamird): pass this to BootstrapRange rather than doing it
-		// at runtime. This was quicker, though.
-		db, clientStopper := makeDBClient()
-
-		if err := configutil.SetDefaultRangeReplicaNum(db, 1); err != nil {
-			log.Errorf("failed to set default replica number: %s", err)
-		}
-
-		clientStopper.Stop()
+		// TODO(marc): set this in the zones table when we have an entry
+		// for the default cluster-wide zone config.
+		config.DefaultZoneConfig.ReplicaAttrs = []proto.Attributes{{}}
 	}
 
 	signalCh := make(chan os.Signal, 1)

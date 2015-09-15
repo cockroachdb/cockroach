@@ -504,7 +504,7 @@ func TestSystemDBGossip(t *testing.T) {
 	}
 
 	// Register a callback for gossip updates.
-	s.Gossip().RegisterCallback(gossip.KeySystemDB, func(_ string, content []byte) {
+	s.Gossip().RegisterCallback(gossip.KeySystemConfig, func(_ string, content []byte) {
 		newCount := atomic.AddInt32(&count, 1)
 		if newCount != 2 {
 			// RegisterCallback calls us right away with the contents,

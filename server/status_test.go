@@ -149,10 +149,10 @@ func TestStatusGossipJson(t *testing.T) {
 
 	type infos struct {
 		Infos struct {
-			FirstRange *gossip.Info `json:"first-range"`
-			Zones      *gossip.Info `json:"zones"`
-			ClusterID  *gossip.Info `json:"cluster-id"`
-			Node1      *gossip.Info `json:"node:1"`
+			FirstRange   *gossip.Info `json:"first-range"`
+			ClusterID    *gossip.Info `json:"cluster-id"`
+			Node1        *gossip.Info `json:"node:1"`
+			SystemConfig *gossip.Info `json:"system-db"`
 		} `json:"infos"`
 	}
 
@@ -191,14 +191,14 @@ func TestStatusGossipJson(t *testing.T) {
 		if data.Infos.FirstRange == nil {
 			t.Errorf("no first-range info returned: %v", body)
 		}
-		if data.Infos.Zones == nil {
-			t.Errorf("no zone info returned: %v", body)
-		}
 		if data.Infos.ClusterID == nil {
 			t.Errorf("no clusterID info returned: %v", body)
 		}
 		if data.Infos.Node1 == nil {
 			t.Errorf("no node 1 info returned: %v", body)
+		}
+		if data.Infos.SystemConfig == nil {
+			t.Errorf("no system config info returned: %v", body)
 		}
 	}
 }

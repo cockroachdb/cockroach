@@ -19,7 +19,6 @@ package storage_test
 
 import (
 	"bytes"
-	"fmt"
 	"math/rand"
 	"reflect"
 	"sync"
@@ -31,13 +30,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
@@ -77,7 +77,6 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		keys.MakeKey(keys.Meta1Prefix, []byte("a")),
 		keys.MakeKey(keys.Meta1Prefix, proto.KeyMax),
 		keys.Meta2KeyMax,
-		keys.MakeKey(keys.ConfigZonePrefix, []byte("a")),
 		keys.MakeTablePrefix(10 /* system descriptor ID */),
 	} {
 		args := adminSplitArgs(proto.KeyMin, key, 1, store.StoreID())
@@ -88,25 +87,26 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	}
 }
 
-// TestStoreRangeSplitBetweenConfigPrefix verifies a range can be split
-// between ConfigPrefix and gossip them correctly.
-func TestStoreRangeSplitBetweenConfigPrefix(t *testing.T) {
+// TestStoreRangeSplitAtTablePrefix verifies a range can be split
+// at TableDataPrefix and still gossip the SystemConfig properly.
+func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	key := keys.MakeKey(keys.SystemPrefix, []byte("tsd"))
-
-	args := adminSplitArgs(proto.KeyMin, key, 1, store.StoreID())
+	key := keys.TableDataPrefix
+	args := adminSplitArgs(key, key, 1, store.StoreID())
 	_, err := store.ExecuteCmd(context.Background(), &args)
 	if err != nil {
 		t.Fatalf("%q: split unexpected error: %s", key, err)
 	}
 
-	// Update configs to trigger gossip in both of the ranges.
-	zoneConfig := &config.ZoneConfig{}
-	key = keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin)
-	if err = store.DB().Put(key, zoneConfig); err != nil {
+	// Update SystemConfig to trigger gossip.
+	if err := store.DB().Txn(func(txn *client.Txn) error {
+		txn.SetSystemDBTrigger()
+		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 1))
+		return txn.Put(k, 10)
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -310,7 +310,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	defer stopper.Stop()
 
 	// Split the range after the last table data key.
-	keyPrefix := proto.Key("\xff\xfe")
+	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
 	args := adminSplitArgs(proto.KeyMin, keyPrefix, 1, store.StoreID())
 	if _, err := store.ExecuteCmd(context.Background(), &args); err != nil {
 		t.Fatal(err)
@@ -406,43 +406,53 @@ func fillRange(store *storage.Store, rangeID proto.RangeID, prefix proto.Key, by
 func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
+	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
 
 	maxBytes := int64(1 << 16)
-	rng := store.LookupReplica(proto.KeyMin, nil)
-	fillRange(store, rng.Desc().RangeID, proto.Key("test"), maxBytes, t)
+	// Set max bytes.
+	config.TestingSetZoneConfig(1000, &config.ZoneConfig{RangeMaxBytes: maxBytes})
 
-	// Rewrite zone config with range max bytes set to 64K.
-	// This will cause the split queue to split the range in the background.
-	// This must happen after fillRange() because that function is not using
-	// a full-fledged client and cannot handle running concurrently with splits.
-	zoneConfig := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{},
-			{},
-			{},
-		},
-		RangeMinBytes: 1 << 8,
-		RangeMaxBytes: maxBytes,
-	}
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin)
-	if err := store.DB().Put(key, zoneConfig); err != nil {
+	// Trigger gossip callback.
+	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
 		t.Fatal(err)
 	}
 
-	// See if the range's max bytes is modified via gossip callback within 50ms.
+	// Wait for the range to be split along table boundaries.
+	originalRange := store.LookupReplica(proto.KeyMin, nil)
+	var rng *storage.Replica
 	if err := util.IsTrueWithin(func() bool {
-		return rng.GetMaxBytes() == zoneConfig.RangeMaxBytes
+		rng = store.LookupReplica(keys.MakeTablePrefix(1000), nil)
+		return rng.Desc().RangeID != originalRange.Desc().RangeID
 	}, 50*time.Millisecond); err != nil {
 		t.Fatalf("failed to notice range max bytes update: %s", err)
 	}
 
+	// Check range's max bytes settings.
+	if rng.GetMaxBytes() != maxBytes {
+		t.Fatalf("range max bytes mismatch, got: %d, expected: %d", rng.GetMaxBytes(), maxBytes)
+	}
+
+	// Make sure the second range goes to the end.
+	if !proto.KeyMax.Equal(rng.Desc().EndKey) {
+		t.Fatalf("second range has split: %+v", rng.Desc())
+	}
+
+	// Look in the range after prefix we're writing to.
+	fillRange(store, rng.Desc().RangeID, keys.MakeTablePrefix(1000), maxBytes, t)
+
 	// Verify that the range is in fact split (give it a second for very slow test machines).
+	var newRng *storage.Replica
 	if err := util.IsTrueWithin(func() bool {
-		newRng := store.LookupReplica(proto.Key("\xff\x00"), nil)
-		return newRng != rng
+		newRng = store.LookupReplica(keys.MakeTablePrefix(2000), nil)
+		return newRng.Desc().RangeID != rng.Desc().RangeID
 	}, time.Second); err != nil {
 		t.Errorf("expected range to split within 1s")
+	}
+
+	// Make sure the new range goes to the end.
+	if !proto.KeyMax.Equal(newRng.Desc().EndKey) {
+		t.Fatalf("second range has split: %+v", rng.Desc())
 	}
 }
 
@@ -452,29 +462,23 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
+	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
 
 	origRng := store.LookupReplica(proto.KeyMin, nil)
 
-	// Set the maxBytes and trigger a range split.
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("db1"))
+	// Set max bytes.
 	maxBytes := int64(1 << 16)
-	zoneConfig := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{},
-			{},
-			{},
-		},
-		RangeMinBytes: 1 << 8,
-		RangeMaxBytes: maxBytes,
-	}
-	if err := store.DB().Put(key, zoneConfig); err != nil {
+	config.TestingSetZoneConfig(1000, &config.ZoneConfig{RangeMaxBytes: maxBytes})
+
+	// Trigger gossip callback.
+	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that the range is split and the new range has the correct max bytes.
 	util.SucceedsWithin(t, time.Second, func() error {
-		newRng := store.LookupReplica(proto.Key("db1"), nil)
+		newRng := store.LookupReplica(keys.MakeTablePrefix(1000), nil)
 		if newRng.Desc().RangeID == origRng.Desc().RangeID {
 			return util.Errorf("expected new range created by split")
 		}
@@ -486,78 +490,45 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	})
 }
 
-// TestStoreRangeSplitOnConfigs verifies that config changes to
-// zone configs cause ranges to be split along prefix boundaries.
-func TestStoreRangeSplitOnConfigs(t *testing.T) {
+// TestStoreRangeSystemSplits verifies that splits are based on the
+// contents of the SystemDB span.
+func TestStoreRangeSystemSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	zoneConfig := &config.ZoneConfig{}
-
-	// Write zone configs for db1/2/3/4.
-	b := &client.Batch{}
-	for _, k := range []string{"db4", "db3", "db2", "db1"} {
-		b.Put(keys.MakeKey(keys.ConfigZonePrefix, proto.Key(k)), zoneConfig)
-	}
-	if err := store.DB().Run(b); err != nil {
-		t.Fatal(err)
-	}
-	log.Infof("wrote updated configs")
-
-	// Check that we split into expected ranges in allotted time.
-	expKeys := []proto.Key{
-		proto.Key("\x00\x00meta2db1"),
-		proto.Key("\x00\x00meta2db2"),
-		proto.Key("\x00\x00meta2db3"),
-		proto.Key("\x00\x00meta2db4"),
-		proto.Key("\x00\x00meta2db5"),
-		keys.MakeKey(proto.Key("\x00\x00meta2"), proto.KeyMax),
-	}
-	if err := util.IsTrueWithin(func() bool {
-		rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-		if err != nil {
-			t.Fatalf("failed to scan meta2 keys: %s", err)
+	// Write the initial sql values to the system DB as well
+	// as the equivalent of table descriptors for X user tables.
+	// This does two things:
+	// - descriptor IDs are used to determine split keys
+	// - the write triggers a SystemConfig update and gossip.
+	// We should end up with splits at each user table prefix.
+	if err := store.DB().Txn(func(txn *client.Txn) error {
+		txn.SetSystemDBTrigger()
+		for _, kv := range sql.GetInitialSystemValues() {
+			if errPut := txn.Put(kv.Key, kv.Value.Bytes); errPut != nil {
+				return util.Errorf("Could not put KV %+v: %v", kv, errPut)
+			}
 		}
-		var keys []proto.Key
-		for _, r := range rows {
-			keys = append(keys, r.Key)
+		for i := 1; i <= 5; i++ {
+			// We don't care about the values, just the keys.
+			k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + i))
+			if errPut := txn.Put(k, i); errPut != nil {
+				return util.Errorf("Could not put KV %+v: %v", k, errPut)
+			}
 		}
-		return reflect.DeepEqual(keys, expKeys)
-	}, 500*time.Millisecond); err != nil {
-		t.Errorf("expected splits not found: %s", err)
-	}
-}
-
-// TestStoreRangeManySplits splits many ranges at once.
-func TestStoreRangeManySplits(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	store, stopper := createTestStore(t)
-	defer stopper.Stop()
-
-	// Write zone configs to trigger the first round of splits.
-	numDbs := 20
-	zoneConfig := &config.ZoneConfig{}
-	b := &client.Batch{}
-	for i := 0; i < numDbs; i++ {
-		key := proto.Key(fmt.Sprintf("db%02d", 20-i))
-		b.Put(keys.MakeKey(keys.ConfigZonePrefix, key), zoneConfig)
-	}
-	if err := store.DB().Run(b); err != nil {
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Check that we finish splitting in allotted time.
 	expKeys := []proto.Key{}
-	// Expect numDb+1 keys as the zone config for "db20" creates
-	// "meta2db20" and "meta2db21" as start/end keys.
-	for i := 1; i <= numDbs+1; i++ {
-		if i%10 == 0 {
-			expKeys = append(expKeys, proto.Key(fmt.Sprintf("\x00\x00meta2db%d:", i/10-1)))
-		}
-		expKeys = append(expKeys, proto.Key(fmt.Sprintf("\x00\x00meta2db%02d", i)))
+	for i := 1; i <= 5; i++ {
+		expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix,
+			keys.MakeTablePrefix(uint32(keys.MaxReservedDescID+i))))
 	}
-	expKeys = append(expKeys, keys.MakeKey(proto.Key("\x00\x00meta2"), proto.KeyMax))
+	expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix, proto.KeyMax))
+
 	if err := util.IsTrueWithin(func() bool {
 		rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
@@ -572,31 +543,25 @@ func TestStoreRangeManySplits(t *testing.T) {
 		t.Errorf("expected splits not found: %s", err)
 	}
 
-	// Then start the second round of splits.
-	zoneConfig = &config.ZoneConfig{}
-	b = &client.Batch{}
-	for i := 0; i < numDbs; i++ {
-		key := proto.Key(fmt.Sprintf("db%02d/table", 20-i))
-		b.Put(keys.MakeKey(keys.ConfigZonePrefix, key), zoneConfig)
-	}
-	if err := store.DB().Run(b); err != nil {
+	// Write more descriptors for user tables.
+	if err := store.DB().Txn(func(txn *client.Txn) error {
+		txn.SetSystemDBTrigger()
+		// This time, only write the last table descriptor. Splits
+		// still occur for every ID.
+		// We don't care about the values, just the keys.
+		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 10))
+		return txn.Put(k, 10)
+	}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Check the result of splits again.
 	expKeys = []proto.Key{}
-	for i := 1; i <= numDbs; i++ {
-		if i%10 == 0 {
-			expKeys = append(expKeys, proto.Key(fmt.Sprintf("\x00\x00meta2db%d:", i/10-1)))
-		}
-		expKeys = append(expKeys,
-			proto.Key(fmt.Sprintf("\x00\x00meta2db%02d", i)),
-			proto.Key(fmt.Sprintf("\x00\x00meta2db%02d/table", i)),
-			proto.Key(fmt.Sprintf("\x00\x00meta2db%02d/tablf", i)))
+	for i := 1; i <= 10; i++ {
+		expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix,
+			keys.MakeTablePrefix(uint32(keys.MaxReservedDescID+i))))
 	}
-	expKeys = append(expKeys,
-		proto.Key("\x00\x00meta2db21"),
-		keys.MakeKey(proto.Key("\x00\x00meta2"), proto.KeyMax))
+	expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix, proto.KeyMax))
+
 	if err := util.IsTrueWithin(func() bool {
 		rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {

@@ -60,7 +60,6 @@ func TestKeyAddress(t *testing.T) {
 	}{
 		{proto.Key{}, proto.KeyMin},
 		{proto.Key("123"), proto.Key("123")},
-		{MakeKey(ConfigZonePrefix, proto.Key("foo")), proto.Key("\x00zonefoo")},
 		{RangeDescriptorKey(proto.Key("foo")), proto.Key("foo")},
 		{TransactionKey(proto.Key("baz"), proto.Key(uuid.NewUUID4())), proto.Key("baz")},
 		{TransactionKey(proto.KeyMax, proto.Key(uuid.NewUUID4())), proto.KeyMax},
@@ -82,10 +81,6 @@ func TestRangeMetaKey(t *testing.T) {
 		{
 			key:    proto.Key{},
 			expKey: proto.KeyMin,
-		},
-		{
-			key:    MakeKey(ConfigZonePrefix, proto.Key("foo")),
-			expKey: proto.Key("\x00\x00meta2\x00zonefoo"),
 		},
 		{
 			key:    proto.Key("\x00\x00meta2\x00zonefoo"),

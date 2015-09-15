@@ -147,6 +147,11 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
+	if IsSystemID(tableDesc.GetID()) {
+		// Mark transaction as operating on the system DB.
+		p.txn.SetSystemDBTrigger()
+	}
 	if err := p.txn.Run(&b); err != nil {
 		return nil, convertBatchError(tableDesc, b, err)
 	}

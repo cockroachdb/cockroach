@@ -20,6 +20,7 @@ package sql_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -94,7 +95,7 @@ func TestPrivilege(t *testing.T) {
 // TestPrivilegeValidate exercises validation for non-system descriptors.
 func TestPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	id := sql.MaxReservedDescID + 1
+	id := sql.ID(keys.MaxReservedDescID + 1)
 	descriptor := sql.NewDefaultPrivilegeDescriptor()
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)

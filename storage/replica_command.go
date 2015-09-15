@@ -414,9 +414,8 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 				}
 			} else if ct.ModifiedSpanTrigger != nil {
 				if ct.ModifiedSpanTrigger.GetSystemDBSpan() {
-					// Check if we need to gossip the system config, but do it in a separate
-					// goroutine, and after the batch has been committed.
-					batch.Defer(func() { go r.maybeGossipSystemConfig() })
+					// Check if we need to gossip the system config.
+					batch.Defer(r.maybeGossipSystemConfig)
 				}
 			}
 		}
@@ -1045,10 +1044,10 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 		log.Infof("range %d: new leader lease %s", rangeID, args.Lease)
 	}
 
-	// Gossip configs in the event this range contains config info.
-	r.maybeGossipConfigsLocked(func(configPrefix proto.Key) bool {
-		return r.ContainsKey(configPrefix)
-	})
+	// Gossip system config if this range includes the system span.
+	if r.ContainsKey(keys.SystemDBSpan.Start) {
+		r.maybeGossipSystemConfigLocked()
+	}
 	return reply, nil
 }
 

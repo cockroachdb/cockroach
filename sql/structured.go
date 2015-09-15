@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -213,7 +214,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	// before AllocateIDs.
 	savedID := desc.ID
 	if desc.ID == 0 {
-		desc.ID = MaxReservedDescID + 1
+		desc.ID = keys.MaxReservedDescID + 1
 	}
 	err := desc.Validate()
 	desc.ID = savedID

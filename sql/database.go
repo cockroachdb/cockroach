@@ -18,6 +18,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
@@ -28,7 +29,7 @@ type databaseKey struct {
 }
 
 func (dk databaseKey) Key() proto.Key {
-	return MakeNameMetadataKey(RootNamespaceID, dk.name)
+	return MakeNameMetadataKey(keys.RootNamespaceID, dk.name)
 }
 
 func (dk databaseKey) Name() string {

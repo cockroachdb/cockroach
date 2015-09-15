@@ -74,11 +74,23 @@ func checkEndTransactionTrigger(req proto.Request) error {
 }
 
 func setupTestServer(t *testing.T) *server.TestServer {
+	return setupTestServerWithContext(t, server.NewTestContext())
+}
+
+func setupTestServerWithContext(t *testing.T, ctx *server.Context) *server.TestServer {
 	storage.TestingCommandFilter = checkEndTransactionTrigger
-	return server.StartTestServer(t)
+	s := &server.TestServer{Ctx: ctx}
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	return s
 }
 
 func setup(t *testing.T) (*server.TestServer, *sql.DB, *client.DB) {
+	return setupWithContext(t, server.NewTestContext())
+}
+
+func setupWithContext(t *testing.T, ctx *server.Context) (*server.TestServer, *sql.DB, *client.DB) {
 	s := setupTestServer(t)
 	// SQL requests use "root" which has ALL permissions on everything.
 	sqlDB, err := sql.Open("cockroach", fmt.Sprintf("https://%s@%s?certs=test_certs",

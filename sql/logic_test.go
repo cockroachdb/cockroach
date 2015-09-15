@@ -36,6 +36,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -502,6 +503,11 @@ func (t *logicTest) success(file string) {
 
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)
+
+	// TODO(marc): splitting ranges at table boundaries causes
+	// a blocked task and won't drain. Investigate and fix.
+	config.TestingDisableTableSplits = true
+	defer func() { config.TestingDisableTableSplits = false }()
 
 	var globs []string
 	if *bigtest {

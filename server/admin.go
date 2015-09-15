@@ -38,8 +38,6 @@ import (
 )
 
 const (
-	maxGetResults = 0 // TODO(spencer): maybe we need paged query support
-
 	// adminEndpoint is the prefix for RESTful endpoints used to
 	// provide an administrative interface to the cockroach cluster.
 	adminEndpoint = "/_admin/"
@@ -50,8 +48,6 @@ const (
 	healthPath = adminEndpoint + "health"
 	// quitPath is the quit endpoint.
 	quitPath = adminEndpoint + "quit"
-	// zonePathPrefix is the prefix for zone configuration changes.
-	zonePathPrefix = adminEndpoint + "zones"
 )
 
 // An actionHandler is an interface which provides Get, Put & Delete
@@ -67,7 +63,6 @@ type actionHandler interface {
 type adminServer struct {
 	db      *client.DB    // Key-value database client
 	stopper *stop.Stopper // Used to shutdown the server
-	zone    *zoneHandler
 	mux     *http.ServeMux
 }
 
@@ -77,15 +72,12 @@ func newAdminServer(db *client.DB, stopper *stop.Stopper) *adminServer {
 	server := &adminServer{
 		db:      db,
 		stopper: stopper,
-		zone:    &zoneHandler{db: db},
 		mux:     http.NewServeMux(),
 	}
 
 	server.mux.HandleFunc(debugEndpoint, server.handleDebug)
 	server.mux.HandleFunc(healthPath, server.handleHealth)
 	server.mux.HandleFunc(quitPath, server.handleQuit)
-	server.mux.HandleFunc(zonePathPrefix, server.handleZoneAction)
-	server.mux.HandleFunc(zonePathPrefix+"/", server.handleZoneAction)
 	return server
 }
 
@@ -117,11 +109,6 @@ func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request) {
 func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
 	handler, _ := http.DefaultServeMux.Handler(r)
 	handler.ServeHTTP(w, r)
-}
-
-// handleZoneAction handles actions for zone configuration by method.
-func (s *adminServer) handleZoneAction(w http.ResponseWriter, r *http.Request) {
-	s.handleRESTAction(s.zone, w, r, zonePathPrefix)
 }
 
 // handleRESTAction handles RESTful admin actions.

@@ -18,11 +18,9 @@
 package storage
 
 import (
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -62,19 +60,28 @@ func (sq *splitQueue) needsLeaderLease() bool {
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone.
 func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bool, priority float64) {
-	// Set priority to 1 in the event the range is split by zone configs.
-	if len(computeSplitKeys(sq.gossip, rng)) > 0 {
+	// Load the system config.
+	cfg, err := sq.gossip.GetSystemConfig()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	desc := rng.Desc()
+	if len(cfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
+		// Set priority to 1 in the event the range is split by zone configs.
 		priority = 1
 		shouldQ = true
 	}
 
 	// Add priority based on the size of range compared to the max
 	// size for the zone it's in.
-	zone, err := lookupZoneConfig(sq.gossip, rng)
+	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		log.Error(err)
 		return
 	}
+
 	if ratio := float64(rng.stats.GetSize()) / float64(zone.RangeMaxBytes); ratio > 1 {
 		priority += ratio
 		shouldQ = true
@@ -84,8 +91,14 @@ func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bo
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(now proto.Timestamp, rng *Replica) error {
+	cfg, err := sq.gossip.GetSystemConfig()
+	if err != nil {
+		return err
+	}
+
 	// First handle case of splitting due to zone config maps.
-	splitKeys := computeSplitKeys(sq.gossip, rng)
+	desc := rng.Desc()
+	splitKeys := cfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)
 	if len(splitKeys) > 0 {
 		log.Infof("splitting %s at keys %v", rng, splitKeys)
 		for _, splitKey := range splitKeys {
@@ -95,8 +108,9 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Replica) error {
 		}
 		return nil
 	}
+
 	// Next handle case of splitting due to size.
-	zone, err := lookupZoneConfig(sq.gossip, rng)
+	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		return err
 	}
@@ -115,52 +129,4 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Replica) error {
 // timer returns interval between processing successive queued splits.
 func (sq *splitQueue) timer() time.Duration {
 	return splitQueueTimerDuration
-}
-
-// computeSplitKeys returns an array of keys at which the supplied
-// range should be split, as computed by intersecting the range with
-// zone config map boundaries.
-func computeSplitKeys(g *gossip.Gossip, repl *Replica) []proto.Key {
-	// Now split the range into pieces by intersecting it with the
-	// boundaries of the config map.
-	configMap, err := repl.rm.Gossip().GetZoneConfig()
-	if err != nil {
-		log.Errorf("unable to fetch zone config from gossip: %s", err)
-		return nil
-	}
-	desc := repl.Desc()
-	splits, err := configMap.SplitRangeByPrefixes(desc.StartKey, desc.EndKey)
-	if err != nil {
-		log.Errorf("unable to split %s by prefix map %s", repl, configMap)
-		return nil
-	}
-
-	// Gather new splits.
-	var splitKeys proto.KeySlice
-	for _, split := range splits {
-		if split.End.Less(desc.EndKey) {
-			splitKeys = append(splitKeys, split.End)
-		}
-	}
-
-	// Sort and unique the combined split keys from intersections with
-	// the zone config maps.
-	sort.Sort(splitKeys)
-	var unique []proto.Key
-	for i, key := range splitKeys {
-		if i == 0 || !key.Equal(splitKeys[i-1]) {
-			unique = append(unique, key)
-		}
-	}
-	return unique
-}
-
-// lookupZoneConfig returns the zone config matching the range.
-func lookupZoneConfig(g *gossip.Gossip, repl *Replica) (config.ZoneConfig, error) {
-	zoneMap, err := g.GetZoneConfig()
-	if err != nil {
-		return config.ZoneConfig{}, util.Errorf("unable to lookup zone config for range %s: %s", repl, err)
-	}
-	prefixConfig := zoneMap.MatchByPrefix(repl.Desc().StartKey)
-	return *prefixConfig.Config.GetValue().(*config.ZoneConfig), nil
 }

@@ -51,20 +51,6 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-var (
-	testDefaultZoneConfig = config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "mem"}},
-			{Attrs: []string{"dc2", "mem"}},
-		},
-		RangeMinBytes: 1 << 10, // 1k
-		RangeMaxBytes: 1 << 18, // 256k
-		GC: &config.GCPolicy{
-			TTLSeconds: 24 * 60 * 60, // 1 day
-		},
-	}
-)
-
 func testRangeDescriptor() *proto.RangeDescriptor {
 	return &proto.RangeDescriptor{
 		RangeID:  1,
@@ -118,6 +104,8 @@ func (tc *testContext) Start(t testing.TB) {
 	if tc.stopper == nil {
 		tc.stopper = stop.NewStopper()
 	}
+	// Setup fake zone config handler.
+	config.TestingSetupZoneConfigHook(tc.stopper)
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), tc.stopper)
 		tc.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
@@ -202,22 +190,13 @@ func (tc *testContext) Stop() {
 
 // initConfigs creates default configuration entries.
 func (tc *testContext) initConfigs(realRange bool) error {
-	var putMethod func(proto.Key, gogoproto.Message) error
-
-	if realRange && tc.bootstrapMode == bootstrapRangeWithMetadata {
-		putMethod = func(key proto.Key, proto gogoproto.Message) error {
-			return tc.store.ctx.DB.Put(key, proto)
-		}
-	} else {
-		timestamp := proto.MinTimestamp.Next()
-		putMethod = func(key proto.Key, proto gogoproto.Message) error {
-			return engine.MVCCPutProto(tc.engine, nil, key, timestamp, nil, proto)
-		}
-	}
-
-	if err := putMethod(keys.ConfigZonePrefix, &testDefaultZoneConfig); err != nil {
+	// Put an empty system config into gossip so that gossip callbacks get
+	// run. We're using a fake config, but it's hooked into SystemConfig.
+	if err := tc.gossip.AddInfoProto(gossip.KeySystemConfig,
+		&config.SystemConfig{}, 0); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -499,34 +478,26 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Add a zone config for a new key prefix.
-	db1Zone := config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "ssd"}},
-			{Attrs: []string{"dc2", "ssd"}},
-		},
-	}
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
-	if err := engine.MVCCPutProto(tc.engine, nil, key, proto.MinTimestamp, nil, &db1Zone); err != nil {
+	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
+	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
+	var val proto.Value
+	val.SetInteger(42)
+	if err := engine.MVCCPut(tc.engine, nil, key, proto.MinTimestamp, val, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	verifyZone := func() bool {
-		configMap, err := tc.gossip.GetZoneConfig()
+	verifySystem := func() bool {
+		cfg, err := tc.gossip.GetSystemConfig()
 		if err != nil {
 			t.Fatal(err)
 		}
-		expConfigs := []config.PrefixConfig{
-			config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
-			config.MakePrefixConfig(proto.Key("/db1"), nil, &db1Zone),
-			config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
-		}
-		return reflect.DeepEqual(configMap.Configs, expConfigs)
+		numValues := len(cfg.Values)
+		return numValues == 1 && cfg.Values[numValues-1].Key.Equal(key)
 	}
 
 	// If this actually failed, we would have gossiped from MVCCPutProto.
 	// Unlikely, but why not check.
-	if verifyZone() {
+	if verifySystem() {
 		t.Errorf("not expecting gossip of new config until new lease is acquired")
 	}
 
@@ -552,7 +523,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 		Expiration: now.Add(20, 0),
 		RaftNodeID: tc.store.RaftNodeID(),
 	})
-	if !verifyZone() {
+	if !verifySystem() {
 		t.Errorf("expected gossip of new config")
 	}
 }
@@ -639,102 +610,9 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	testData := []struct {
-		gossipKey string
-		configs   []config.PrefixConfig
-	}{
-		{gossip.KeyConfigZone, []config.PrefixConfig{config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig)}},
-	}
-	for _, test := range testData {
-		_, err := tc.gossip.GetInfo(test.gossipKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-// TestRangeGossipConfigWithMultipleKeyPrefixes verifies that multiple
-// key prefixes for a config are gossiped.
-func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-	// Add a zone for a new key prefix.
-	db1Zone := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "ssd"}},
-			{Attrs: []string{"dc2", "ssd"}},
-		},
-	}
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
-	data, err := gogoproto.Marshal(db1Zone)
+	_, err := tc.gossip.GetSystemConfig()
 	if err != nil {
 		t.Fatal(err)
-	}
-	req := proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
-		Value:         proto.Value{Bytes: data},
-	}
-
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &req); err != nil {
-		t.Fatal(err)
-	}
-
-	configMap, err := tc.gossip.GetZoneConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	expConfigs := []config.PrefixConfig{
-		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
-		config.MakePrefixConfig(proto.Key("/db1"), nil, db1Zone),
-		config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
-	}
-	if !reflect.DeepEqual(configMap.Configs, expConfigs) {
-		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
-	}
-}
-
-// TestRangeGossipConfigUpdates verifies that writes to the
-// zones cause the updated configs to be re-gossiped.
-func TestRangeGossipConfigUpdates(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-	// Add a zone for a new key prefix.
-	db1Zone := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "ssd"}},
-			{Attrs: []string{"dc2", "ssd"}},
-		},
-	}
-
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
-	data, err := gogoproto.Marshal(db1Zone)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
-		Value:         proto.Value{Bytes: data},
-	}
-
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &req); err != nil {
-		t.Fatal(err)
-	}
-
-	configMap, err := tc.gossip.GetZoneConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	expConfigs := []config.PrefixConfig{
-		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
-		config.MakePrefixConfig(proto.Key("/db1"), nil, db1Zone),
-		config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
-	}
-	if !reflect.DeepEqual(configMap.Configs, expConfigs) {
-		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
 }
 
@@ -746,22 +624,12 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Add a zone for a new key prefix.
-	db1Zone := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "ssd"}},
-			{Attrs: []string{"dc2", "ssd"}},
-		},
-	}
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
+	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
+	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 	rangeID := proto.RangeID(1)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
-	data, err := gogoproto.Marshal(db1Zone)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req1 := putArgs(key, data, rangeID, tc.store.StoreID())
+	req1 := putArgs(key, []byte("foo"), rangeID, tc.store.StoreID())
 	req1.Txn = txn
 	req1.Timestamp = txn.Timestamp
 
@@ -777,17 +645,13 @@ func TestRangeNoGossipConfig(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Information for db1 is not gossiped.
-		configMap, err := tc.gossip.GetZoneConfig()
+		// System config is not gossiped.
+		cfg, err := tc.gossip.GetSystemConfig()
 		if err != nil {
 			t.Fatal(err)
 		}
-		expConfigs := []config.PrefixConfig{
-			config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
-		}
-		if !reflect.DeepEqual(configMap.Configs, expConfigs) {
-			t.Errorf("%d: expected gossiped configs to be equal %s vs %s",
-				i, configMap, expConfigs)
+		if len(cfg.Values) != 0 {
+			t.Errorf("System config was gossiped at #%d", i)
 		}
 	}
 }
@@ -800,23 +664,12 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Add a zone for a new key prefix. Set the config in a transaction
-	// to avoid gossip.
-	db1Zone := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "ssd"}},
-			{Attrs: []string{"dc2", "ssd"}},
-		},
-	}
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
+	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
+	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 	rangeID := proto.RangeID(1)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
-	data, err := gogoproto.Marshal(db1Zone)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req1 := putArgs(key, data, rangeID, tc.store.StoreID())
+	req1 := putArgs(key, nil, rangeID, tc.store.StoreID())
 	req1.Txn = txn
 	req1.Timestamp = txn.Timestamp
 	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req1); err != nil {
@@ -842,19 +695,13 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	}
 
 	// Make sure the information for db1 is not gossiped.
-	tc.rng.maybeGossipConfigs(func(configPrefix proto.Key) bool {
-		return tc.rng.ContainsKey(configPrefix)
-	})
-	configMap, err := tc.gossip.GetZoneConfig()
+	tc.rng.maybeGossipSystemConfig()
+	cfg, err := tc.gossip.GetSystemConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	expConfigs := []config.PrefixConfig{
-		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
-	}
-	if !reflect.DeepEqual(configMap.Configs, expConfigs) {
-		t.Errorf("expected gossiped configs to be equal %s vs %s",
-			configMap, expConfigs)
+	if len(cfg.Values) != 0 {
+		t.Fatalf("non-lease holder gossiped the system config")
 	}
 }
 
