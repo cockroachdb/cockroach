@@ -309,6 +309,8 @@ func TestParse(t *testing.T) {
 		{`UPDATE a SET b.c = 3`},
 		{`UPDATE a SET b = 3, c = 4`},
 		{`UPDATE a SET b = 3 + 4`},
+		{`UPDATE a SET (b, c) = (3, 4)`},
+		{`UPDATE a SET (b, c) = (SELECT 3, 4)`},
 		{`UPDATE a SET b = 3 WHERE a = b`},
 		{`UPDATE T AS "0" SET K = ''`},                 // "0" lost its quotes
 		{`SELECT * FROM "0" JOIN "0" USING (id, "0")`}, // last "0" lost its quotes.

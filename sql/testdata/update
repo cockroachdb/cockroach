@@ -137,3 +137,52 @@ a   b
 
 statement error qualified name "kv3.nonexistent" not found
 UPDATE kv3 SET v = NULL WHERE nonexistent = 'a'
+
+statement ok
+CREATE TABLE abc (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)
+
+statement ok
+INSERT INTO abc VALUES (1, 2, 3)
+
+statement error number of columns \(2\) does not match number of values \(1\)
+UPDATE abc SET (b, c) = (4)
+
+statement error subquery must return 2 columns, found 1
+UPDATE abc SET (b, c) = (SELECT 4)
+
+statement ok
+UPDATE abc SET (b, c) = (4, 5)
+
+query III
+SELECT * FROM abc
+----
+1 4 5
+
+statement ok
+UPDATE abc SET (b, c) = (SELECT 6, 7)
+
+query III
+SELECT * FROM abc
+----
+1 6 7
+
+statement ok
+UPDATE abc SET (b, c) = (VALUES (8, 9))
+
+query III
+SELECT * FROM abc
+----
+1 8 9
+
+statement error multiple assignments to same column "b"
+UPDATE abc SET b = 10, b = 11
+
+statement error multiple assignments to same column "b"
+UPDATE abc SET (b, b) = (10, 11)
+
+statement error multiple assignments to same column "b"
+UPDATE abc SET (b, c) = (10, 11), b = 12
