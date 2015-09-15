@@ -35,8 +35,6 @@ const (
 
 	// Quit only handles Get requests.
 	Quit = "quit"
-	// Zone expects config.ZoneConfig.
-	Zone = "zones"
 )
 
 // AdminClient issues http requests to admin endpoints.

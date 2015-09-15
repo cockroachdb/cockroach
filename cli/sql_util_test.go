@@ -103,4 +103,27 @@ OK
 		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
 	}
 	b.Reset()
+
+	// Test custom formatting.
+	newFormat := func(val interface{}) string {
+		return fmt.Sprintf("--> %#v <--", val)
+	}
+
+	if err := runQueryWithFormat(db, fmtMap{"name": newFormat},
+		`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
+		t.Fatal(err)
+	}
+
+	expected = `
++----------+----------------------+----+
+| parentID |         name         | id |
++----------+----------------------+----+
+| 1        | --> "descriptor" <-- | 3  |
++----------+----------------------+----+
+`
+	if a, e := b.String(), expected[1:]; a != e {
+		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
+	}
+	b.Reset()
+
 }

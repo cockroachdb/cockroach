@@ -34,7 +34,6 @@ Fetches and displays the user configuration for <username>.
 	Run: runGetUser,
 }
 
-// runGetUser invokes the REST API with GET action and username as path.
 func runGetUser(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
@@ -58,8 +57,6 @@ List all user configs.
 	Run: runLsUsers,
 }
 
-// runLsUsers invokes the REST API with GET action and no path, which
-// fetches a list of all user configuration.
 func runLsUsers(cmd *cobra.Command, args []string) {
 	if len(args) > 0 {
 		cmd.Usage()
@@ -83,7 +80,6 @@ Remove an existing user config by username.
 	Run: runRmUser,
 }
 
-// runRmUser invokes the REST API with DELETE action and username as path.
 func runRmUser(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
@@ -108,8 +104,8 @@ for the password.
 	Run: runSetUser,
 }
 
-// runSetUser invokes the REST API with POST action and username as
-// path. Prompts for the password twice on stdin.
+// runSetUser prompts for a password, then inserts the user and hash
+// into the system.users table.
 // TODO(marc): once we have more fields in the user config, we will need
 // to allow changing just some of them (eg: change email, but leave password).
 func runSetUser(cmd *cobra.Command, args []string) {
@@ -123,6 +119,7 @@ func runSetUser(cmd *cobra.Command, args []string) {
 		return
 	}
 	db := makeSQLClient()
+	// TODO(marc): switch to UPSERT.
 	err = runQuery(db, `INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed)
 	if err != nil {
 		log.Error(err)
