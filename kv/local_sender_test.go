@@ -44,6 +44,21 @@ func TestLocalSenderAddStore(t *testing.T) {
 	}
 }
 
+func TestLocalSenderRemoveStore(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	ls := NewLocalSender()
+
+	storeID := proto.StoreID(89)
+
+	ls.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: storeID}})
+
+	ls.RemoveStore(&storage.Store{Ident: proto.StoreIdent{StoreID: storeID}})
+
+	if ls.HasStore(storeID) {
+		t.Errorf("expted local sender to remove storeID=%d", storeID)
+	}
+}
+
 func TestLocalSenderGetStoreCount(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ls := NewLocalSender()

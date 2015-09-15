@@ -107,17 +107,6 @@ func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
 	return nil
 }
 
-// GetStoreIDs returns all the current store ids in a random order.
-func (ls *LocalSender) GetStoreIDs() []proto.StoreID {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
-	storeIDs := make([]proto.StoreID, 0, len(ls.storeMap))
-	for storeID := range ls.storeMap {
-		storeIDs = append(storeIDs, storeID)
-	}
-	return storeIDs
-}
-
 // SendBatch implements batch.Sender.
 func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
 	trace := tracer.FromCtx(ctx)
