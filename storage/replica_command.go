@@ -1040,6 +1040,13 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 		return reply, rErr
 	}
 
+	// Verify that requestion replica is part of the current replica set.
+	desc := r.Desc()
+	_, requestingStore := proto.DecodeRaftNodeID(args.Lease.RaftNodeID)
+	if idx, _ := desc.FindReplica(requestingStore); idx == -1 {
+		return reply, rErr
+	}
+
 	// Wind the start timestamp back as far to the previous lease's expiration
 	// as we can. That'll make sure that when multiple leases are requested out
 	// of order at the same replica (after all, they use the request timestamp,
@@ -1074,7 +1081,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 
 	args.Lease.Start = effectiveStart
 
-	rangeID := r.Desc().RangeID
+	rangeID := desc.RangeID
 
 	// Store the lease to disk & in-memory.
 	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(rangeID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
