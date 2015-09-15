@@ -550,15 +550,25 @@ var builtins = map[string][]builtin{
 	},
 
 	"round": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(roundDigits(x, 0)), nil
+		}),
+		// TODO(thschroeter):
+		//
+		// Should we go through `FormatFloat` and `ParseFloat`
+		// instead, as CPython prefers?
+		//
+		// Need to figure out what the bounds for number of digits
+		// should be. Also, we need to decide if we want to support
+		// rounding in front of the decimal point for negative number
+		// of digits as Postges does, e.g. round(42, -1) is 40.
 		builtin{
 			returnType: DummyFloat,
 			types:      typeList{floatType, intType},
 			fn: func(args DTuple) (Datum, error) {
 				n := args[1].(DInt)
-				// TODO(thschroeter): bounds check on n
 				x := args[0].(DFloat)
-				return DFloat(roundDigits(float64(x),
-					int64(n))), nil
+				return DFloat(roundDigits(float64(x), int64(n))), nil
 			},
 		},
 	},
@@ -775,13 +785,12 @@ func datumToRawString(datum Datum) (string, error) {
 }
 
 // Round rounds x to n digits.
-// Directly taken from CPython's `double_round` in
-// cpython/Object/floatobject.c.
+// Directly taken from CPython's `double_round` at
+// https://hg.python.org/cpython/file/v3.5.0/Objects/floatobject.c#l863
 //
 // TODO(thschroeter):
-// - understand how it works
-// - bounds check for n
-// - test overflow
+// - test overflow scenarios
+// - determine the domain (what are the boundaries of valid input)
 func roundDigits(x float64, n int64) float64 {
 	var pow1, pow2, y, z float64
 	ndigits := float64(n)
@@ -798,14 +807,11 @@ func roundDigits(x float64, n int64) float64 {
 		}
 		y = (x * pow1) * pow2
 		/* if y overflows, then rounded value is exactly x */
-		//if (!Py_IS_FINITE(y))
-		//    return PyFloat_FromDouble(x);
 		if math.IsInf(y, 0) {
-			return math.NaN()
+			return x
 		}
 	} else {
 		pow1 = math.Pow(10, ndigits)
-		//pow2 = 1.0; /* unused; silences a gcc compiler warning */
 		y = x / pow1
 	}
 
@@ -822,16 +828,10 @@ func roundDigits(x float64, n int64) float64 {
 	}
 
 	/* if computation resulted in overflow, raise OverflowError */
-	//if (!Py_IS_FINITE(z)) {
-	//   PyErr_SetString(PyExc_OverflowError,
-	//                    "overflow occurred during round");
-	//  return NULL;
-	//}
 	if math.IsInf(z, 0) {
 		return math.NaN()
 	}
 
-	//return PyFloat_FromDouble(z);
 	return z
 }
 
