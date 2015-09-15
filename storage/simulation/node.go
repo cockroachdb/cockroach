@@ -18,43 +18,90 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/proto"
 )
 
+// node contains the bare essentials for the node.
 type node struct {
 	sync.RWMutex
 	desc   proto.NodeDescriptor
-	stores []*store
+	stores map[proto.StoreID]*store
 }
 
+// newNode creates a new node but does not add any stores.
 func newNode(nodeID proto.NodeID) *node {
 	node := &node{
 		desc: proto.NodeDescriptor{
 			NodeID: nodeID,
 		},
+		stores: make(map[proto.StoreID]*store),
 	}
-	node.addNewStore()
 	return node
 }
 
+// getDesc returns the node descriptor for the node.
 func (n *node) getDesc() proto.NodeDescriptor {
 	n.RLock()
 	defer n.RUnlock()
 	return n.desc
 }
 
-// getNextStoreIDLocked
-// Lock is assumed held by caller.
-func (n *node) getNextStoreIDLocked() proto.StoreID {
-	return proto.StoreID((int(n.desc.NodeID) * 100) + len(n.stores))
+// getStore returns the store found on the node.
+// TODO(bram): do we need this?
+func (n *node) getStore(storeID proto.StoreID) *store {
+	n.RLock()
+	defer n.RUnlock()
+	return n.stores[storeID]
 }
 
+// getStoreIDs returns the list of storeIDs from the stores contained on the
+// node.
+func (n *node) getStoreIDs() []proto.StoreID {
+	n.RLock()
+	defer n.RUnlock()
+	var storeIDs []proto.StoreID
+	for storeID := range n.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	return storeIDs
+}
+
+// getNextStoreIDLocked gets the store ID that should be used when adding a new
+// store to the node.
+// Lock is assumed held by caller.
+func (n *node) getNextStoreIDLocked() proto.StoreID {
+	return proto.StoreID((int(n.desc.NodeID) * 1000) + len(n.stores))
+}
+
+// addNewStore creates a new store and adds it to the node.
 func (n *node) addNewStore() *store {
 	n.Lock()
 	defer n.Unlock()
-	newStore := newStore(n.getNextStoreIDLocked(), n.desc)
-	n.stores = append(n.stores, newStore)
+	newStoreID := n.getNextStoreIDLocked()
+	newStore := newStore(newStoreID, n.desc)
+	n.stores[newStoreID] = newStore
 	return newStore
+}
+
+// String returns the current status of the node for human readable printing.
+func (n *node) String() string {
+	n.RLock()
+	defer n.RUnlock()
+	var buffer bytes.Buffer
+	buffer.WriteString(fmt.Sprintf("Node %d - Stores:[", n.desc.NodeID))
+	first := true
+	for storeID := range n.stores {
+		if first {
+			first = false
+		} else {
+			buffer.WriteString(",")
+		}
+		buffer.WriteString(storeID.String())
+	}
+	buffer.WriteString("]")
+	return buffer.String()
 }

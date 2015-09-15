@@ -27,9 +27,8 @@ func main() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	cluster := createCluster(100)
+	c := createCluster(stopper, 5)
 
 	fmt.Printf("A simulation of the cluster's rebalancing.\n\n")
-
-	fmt.Printf("%+v\n", cluster)
+	fmt.Printf("Cluster Info:\n%s\n", c)
 }
