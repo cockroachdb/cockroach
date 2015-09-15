@@ -165,7 +165,7 @@ type rangeManager interface {
 	Clock() *hlc.Clock
 	Engine() engine.Engine
 	DB() *client.DB
-	allocator() allocator
+	allocator() Allocator
 	Gossip() *gossip.Gossip
 	splitQueue() *splitQueue
 	rangeGCQueue() *rangeGCQueue
