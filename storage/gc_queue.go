@@ -213,13 +213,6 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
 
-	// Set start and end keys.
-	if len(gcArgs.Keys) == 0 {
-		return nil
-	}
-	gcArgs.Key = gcArgs.Keys[0].Key
-	gcArgs.EndKey = gcArgs.Keys[len(gcArgs.Keys)-1].Key.Next()
-
 	// Process push transactions in parallel.
 	var wg sync.WaitGroup
 	for _, txn := range txnMap {
@@ -239,8 +232,21 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 		}
 	}
 
+	done := true
 	if len(intents) > 0 {
+		done = false
 		repl.resolveIntents(repl.context(), intents)
+	}
+
+	// Set start and end keys.
+	if len(gcArgs.Keys) > 0 {
+		done = false
+		gcArgs.Key = gcArgs.Keys[0].Key
+		gcArgs.EndKey = gcArgs.Keys[len(gcArgs.Keys)-1].Key.Next()
+	}
+
+	if done {
+		return nil
 	}
 
 	// Send GC request through range.
