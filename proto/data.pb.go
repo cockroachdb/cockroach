@@ -166,9 +166,7 @@ func (m *Timestamp) GetLogical() int32 {
 }
 
 // Value specifies the value at a key. Multiple values at the same key
-// are supported based on timestamp. Values support the union of two
-// basic types: a "bag o' bytes" generic byte slice and an incrementable
-// int64, for use with the Increment API call.
+// are supported based on timestamp.
 type Value struct {
 	// Bytes is the byte slice value.
 	Bytes []byte `protobuf:"bytes,1,opt,name=bytes" json:"bytes,omitempty"`
