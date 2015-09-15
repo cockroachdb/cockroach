@@ -227,11 +227,11 @@ type TableDescriptor struct {
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	// The alias for the table. This is only used during query
 	// processing and not stored persistently.
-	Alias    string `protobuf:"bytes,2,opt,name=alias" json:"alias"`
-	ParentID ID     `protobuf:"varint,3,opt,name=id,casttype=ID" json:"id"`
+	Alias string `protobuf:"bytes,2,opt,name=alias" json:"alias"`
+	ID    ID     `protobuf:"varint,3,opt,name=id,casttype=ID" json:"id"`
 	// ID of the parent database.
-	ID      ID                 `protobuf:"varint,4,opt,name=parent_id,casttype=ID" json:"parent_id"`
-	Columns []ColumnDescriptor `protobuf:"bytes,5,rep,name=columns" json:"columns"`
+	ParentID ID                 `protobuf:"varint,4,opt,name=parent_id,casttype=ID" json:"parent_id"`
+	Columns  []ColumnDescriptor `protobuf:"bytes,5,rep,name=columns" json:"columns"`
 	// next_column_id is used to ensure that deleted column ids are not reused.
 	NextColumnID ColumnID        `protobuf:"varint,6,opt,name=next_column_id,casttype=ColumnID" json:"next_column_id"`
 	PrimaryIndex IndexDescriptor `protobuf:"bytes,7,opt,name=primary_index" json:"primary_index"`
@@ -260,16 +260,16 @@ func (m *TableDescriptor) GetAlias() string {
 	return ""
 }
 
-func (m *TableDescriptor) GetParentID() ID {
+func (m *TableDescriptor) GetID() ID {
 	if m != nil {
-		return m.ParentID
+		return m.ID
 	}
 	return 0
 }
 
-func (m *TableDescriptor) GetID() ID {
+func (m *TableDescriptor) GetParentID() ID {
 	if m != nil {
-		return m.ID
+		return m.ParentID
 	}
 	return 0
 }
@@ -524,10 +524,10 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	i += copy(data[i:], m.Alias)
 	data[i] = 0x18
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ParentID))
+	i = encodeVarintStructured(data, i, uint64(m.ID))
 	data[i] = 0x20
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ID))
+	i = encodeVarintStructured(data, i, uint64(m.ParentID))
 	if len(m.Columns) > 0 {
 		for _, msg := range m.Columns {
 			data[i] = 0x2a
@@ -701,8 +701,8 @@ func (m *TableDescriptor) Size() (n int) {
 	n += 1 + l + sovStructured(uint64(l))
 	l = len(m.Alias)
 	n += 1 + l + sovStructured(uint64(l))
-	n += 1 + sovStructured(uint64(m.ParentID))
 	n += 1 + sovStructured(uint64(m.ID))
+	n += 1 + sovStructured(uint64(m.ParentID))
 	if len(m.Columns) > 0 {
 		for _, e := range m.Columns {
 			l = e.Size()
@@ -1239,22 +1239,6 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ParentID", wireType)
-			}
-			m.ParentID = 0
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.ParentID |= (ID(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 4:
-			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
 			}
 			m.ID = 0
@@ -1265,6 +1249,22 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				b := data[iNdEx]
 				iNdEx++
 				m.ID |= (ID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ParentID", wireType)
+			}
+			m.ParentID = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.ParentID |= (ID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

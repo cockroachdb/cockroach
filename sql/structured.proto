@@ -92,10 +92,10 @@ message TableDescriptor {
   // processing and not stored persistently.
   optional string alias = 2 [(gogoproto.nullable) = false];
   optional uint32 id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
   // ID of the parent database.
   optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+      (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
   repeated ColumnDescriptor columns = 5 [(gogoproto.nullable) = false];
   // next_column_id is used to ensure that deleted column ids are not reused.
   optional uint32 next_column_id = 6 [(gogoproto.nullable) = false,
