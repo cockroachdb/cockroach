@@ -394,6 +394,10 @@ func TestFailedReplicaChange(t *testing.T) {
 	// can succeed.
 	runFilter.Store(false)
 
+	// The first failed replica change has laid down intents. Make sure those
+	// are pushable by making the transaction abandoned.
+	mtc.manualClock.Increment(10 * storage.DefaultHeartbeatInterval.Nanoseconds())
+
 	err = rng.ChangeReplicas(proto.ADD_REPLICA,
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
