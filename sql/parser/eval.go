@@ -31,14 +31,6 @@ import (
 var errZeroModulus = errors.New("zero modulus")
 var errDivByZero = errors.New("division by zero")
 
-// TODO(pmattis):
-//
-// - Support decimal arithmetic.
-//
-// - Allow partial expression evaluation to simplify expressions before being
-//   used in where clauses. Make Datum implement Expr and change EvalExpr to
-//   return an Expr.
-
 type unaryOp struct {
 	returnType Datum
 	fn         func(Datum) (Datum, error)
