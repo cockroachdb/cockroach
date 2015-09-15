@@ -25,26 +25,26 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 )
 
-// node contains the bare essentials for the node.
-type node struct {
+// Node is a simulated cockroach node.
+type Node struct {
 	sync.RWMutex
 	desc   proto.NodeDescriptor
-	stores map[proto.StoreID]*store
+	stores map[proto.StoreID]*Store
 }
 
-// newNode creates a new node but does not add any stores.
-func newNode(nodeID proto.NodeID) *node {
-	node := &node{
+// newNode creates a new node with no stores.
+func newNode(nodeID proto.NodeID) *Node {
+	node := &Node{
 		desc: proto.NodeDescriptor{
 			NodeID: nodeID,
 		},
-		stores: make(map[proto.StoreID]*store),
+		stores: make(map[proto.StoreID]*Store),
 	}
 	return node
 }
 
 // getDesc returns the node descriptor for the node.
-func (n *node) getDesc() proto.NodeDescriptor {
+func (n *Node) getDesc() proto.NodeDescriptor {
 	n.RLock()
 	defer n.RUnlock()
 	return n.desc
@@ -52,7 +52,7 @@ func (n *node) getDesc() proto.NodeDescriptor {
 
 // getStore returns the store found on the node.
 // TODO(bram): do we need this?
-func (n *node) getStore(storeID proto.StoreID) *store {
+func (n *Node) getStore(storeID proto.StoreID) *Store {
 	n.RLock()
 	defer n.RUnlock()
 	return n.stores[storeID]
@@ -60,7 +60,7 @@ func (n *node) getStore(storeID proto.StoreID) *store {
 
 // getStoreIDs returns the list of storeIDs from the stores contained on the
 // node.
-func (n *node) getStoreIDs() []proto.StoreID {
+func (n *Node) getStoreIDs() []proto.StoreID {
 	n.RLock()
 	defer n.RUnlock()
 	var storeIDs []proto.StoreID
@@ -73,12 +73,12 @@ func (n *node) getStoreIDs() []proto.StoreID {
 // getNextStoreIDLocked gets the store ID that should be used when adding a new
 // store to the node.
 // Lock is assumed held by caller.
-func (n *node) getNextStoreIDLocked() proto.StoreID {
+func (n *Node) getNextStoreIDLocked() proto.StoreID {
 	return proto.StoreID((int(n.desc.NodeID) * 1000) + len(n.stores))
 }
 
 // addNewStore creates a new store and adds it to the node.
-func (n *node) addNewStore() *store {
+func (n *Node) addNewStore() *Store {
 	n.Lock()
 	defer n.Unlock()
 	newStoreID := n.getNextStoreIDLocked()
@@ -88,20 +88,20 @@ func (n *node) addNewStore() *store {
 }
 
 // String returns the current status of the node for human readable printing.
-func (n *node) String() string {
+func (n *Node) String() string {
 	n.RLock()
 	defer n.RUnlock()
-	var buffer bytes.Buffer
-	buffer.WriteString(fmt.Sprintf("Node %d - Stores:[", n.desc.NodeID))
+	var buf bytes.Buffer
+	buf.WriteString(fmt.Sprintf("Node %d - Stores:[", n.desc.NodeID))
 	first := true
 	for storeID := range n.stores {
 		if first {
 			first = false
 		} else {
-			buffer.WriteString(",")
+			buf.WriteString(",")
 		}
-		buffer.WriteString(storeID.String())
+		buf.WriteString(storeID.String())
 	}
-	buffer.WriteString("]")
-	return buffer.String()
+	buf.WriteString("]")
+	return buf.String()
 }

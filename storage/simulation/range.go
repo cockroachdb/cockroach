@@ -28,47 +28,46 @@ import (
 
 const defaultReplicationFactor = 3
 
-// rng contains all details about a single range. It also contains a map with
-// the stores that contain replicas from this range.
-type rng struct {
+// Range is a simulated cockroach range.
+type Range struct {
 	sync.RWMutex
 	factor int // replication factor
 	desc   proto.RangeDescriptor
-	stores map[proto.StoreID]*store
+	stores map[proto.StoreID]*Store
 }
 
 // newRange returns a new range with the given rangeID.
-func newRange(rangeID proto.RangeID) *rng {
-	return &rng{
+func newRange(rangeID proto.RangeID) *Range {
+	return &Range{
 		desc: proto.RangeDescriptor{
 			RangeID: rangeID,
 		},
 		factor: defaultReplicationFactor,
-		stores: make(map[proto.StoreID]*store),
+		stores: make(map[proto.StoreID]*Store),
 	}
 }
 
 // getID returns the range's ID.
-func (r *rng) getID() proto.RangeID {
+func (r *Range) getID() proto.RangeID {
 	return r.getDesc().RangeID
 }
 
 // getDesc returns the range's descriptor.
-func (r *rng) getDesc() proto.RangeDescriptor {
+func (r *Range) getDesc() proto.RangeDescriptor {
 	r.RLock()
 	defer r.RUnlock()
 	return r.desc
 }
 
 // getFactor returns the range's replication factor.
-func (r *rng) getFactor() int {
+func (r *Range) getFactor() int {
 	r.RLock()
 	defer r.RUnlock()
 	return r.factor
 }
 
 // setFactor sets the range's replication factor.
-func (r *rng) setFactor(factor int) {
+func (r *Range) setFactor(factor int) {
 	r.Lock()
 	defer r.Unlock()
 	r.factor = factor
@@ -76,7 +75,7 @@ func (r *rng) setFactor(factor int) {
 
 // attachRangeToStore adds a new replica on the passed in store. It adds it to
 // both the range descriptor and the store map.
-func (r *rng) attachRangeToStore(s *store) {
+func (r *Range) attachRangeToStore(s *Store) {
 	r.Lock()
 	defer r.Unlock()
 	storeID, nodeID := s.getIDs()
@@ -88,7 +87,7 @@ func (r *rng) attachRangeToStore(s *store) {
 }
 
 // getStoreIDs returns the list of all stores where this range has replicas.
-func (r *rng) getStoreIDs() []proto.StoreID {
+func (r *Range) getStoreIDs() []proto.StoreID {
 	r.RLock()
 	defer r.RUnlock()
 	var storeIDs []proto.StoreID
@@ -99,7 +98,7 @@ func (r *rng) getStoreIDs() []proto.StoreID {
 }
 
 // String returns a human readable string with details about the range.
-func (r *rng) String() string {
+func (r *Range) String() string {
 	r.RLock()
 	defer r.RUnlock()
 
@@ -109,18 +108,18 @@ func (r *rng) String() string {
 	}
 	sort.Ints(storeIDs)
 
-	var buffer bytes.Buffer
-	buffer.WriteString(fmt.Sprintf("Range:%d, Factor:%d, Stores:[", r.desc.RangeID, r.factor))
+	var buf bytes.Buffer
+	buf.WriteString(fmt.Sprintf("Range:%d, Factor:%d, Stores:[", r.desc.RangeID, r.factor))
 
 	first := true
 	for _, storeID := range storeIDs {
 		if first {
 			first = false
 		} else {
-			buffer.WriteString(",")
+			buf.WriteString(",")
 		}
-		buffer.WriteString(fmt.Sprintf("%d", storeID))
+		buf.WriteString(fmt.Sprintf("%d", storeID))
 	}
-	buffer.WriteString("]")
-	return buffer.String()
+	buf.WriteString("]")
+	return buf.String()
 }

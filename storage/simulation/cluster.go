@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// cluster maintains a list of all nodes, stores and ranges as well as any
+// Cluster maintains a list of all nodes, stores and ranges as well as any
 // shared resources.
-type cluster struct {
+type Cluster struct {
 	stopper       *stop.Stopper
 	clock         *hlc.Clock
 	rpc           *rpc.Context
@@ -41,19 +41,19 @@ type cluster struct {
 	storePool     *storage.StorePool
 	allocator     storage.Allocator
 	storeGossiper *gossiputil.StoreGossiper
-	nodes         map[proto.NodeID]*node
-	stores        map[proto.StoreID]*store
-	ranges        map[proto.RangeID]*rng
+	nodes         map[proto.NodeID]*Node
+	stores        map[proto.StoreID]*Store
+	ranges        map[proto.RangeID]*Range
 }
 
 // createCluster generates a new cluster using the provided stopper and the
 // number of nodes supplied. Each node will have one store to start.
-func createCluster(stopper *stop.Stopper, nodeCount int) *cluster {
+func createCluster(stopper *stop.Stopper, nodeCount int) *Cluster {
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	storePool := storage.NewStorePool(g, storage.TestTimeUntilStoreDeadOff, stopper)
-	c := &cluster{
+	c := &Cluster{
 		stopper:       stopper,
 		clock:         clock,
 		rpc:           rpcContext,
@@ -61,9 +61,9 @@ func createCluster(stopper *stop.Stopper, nodeCount int) *cluster {
 		storePool:     storePool,
 		allocator:     storage.MakeAllocator(storePool),
 		storeGossiper: gossiputil.NewStoreGossiper(g),
-		nodes:         make(map[proto.NodeID]*node),
-		stores:        make(map[proto.StoreID]*store),
-		ranges:        make(map[proto.RangeID]*rng),
+		nodes:         make(map[proto.NodeID]*Node),
+		stores:        make(map[proto.StoreID]*Store),
+		ranges:        make(map[proto.RangeID]*Range),
 	}
 
 	// Add the nodes.
@@ -78,14 +78,14 @@ func createCluster(stopper *stop.Stopper, nodeCount int) *cluster {
 }
 
 // addNewNodeWithStore adds new node with a single store.
-func (c *cluster) addNewNodeWithStore() {
+func (c *Cluster) addNewNodeWithStore() {
 	nodeID := proto.NodeID(len(c.nodes))
 	c.nodes[nodeID] = newNode(nodeID)
 	c.addStore(nodeID)
 }
 
 // addStore adds a new store to the node with the provided nodeID.
-func (c *cluster) addStore(nodeID proto.NodeID) *store {
+func (c *Cluster) addStore(nodeID proto.NodeID) *Store {
 	n := c.nodes[nodeID]
 	s := n.addNewStore()
 	storeID, _ := s.getIDs()
@@ -95,7 +95,7 @@ func (c *cluster) addStore(nodeID proto.NodeID) *store {
 
 // addRange adds a new range to the cluster but does not attach it to any
 // store.
-func (c *cluster) addRange() *rng {
+func (c *Cluster) addRange() *Range {
 	rangeID := proto.RangeID(len(c.ranges))
 	newRng := newRange(rangeID)
 	c.ranges[rangeID] = newRng
@@ -103,7 +103,7 @@ func (c *cluster) addRange() *rng {
 }
 
 // String prints out the current status of the cluster.
-func (c *cluster) String() string {
+func (c *Cluster) String() string {
 	storesRangeCounts := make(map[proto.StoreID]int)
 	for _, r := range c.ranges {
 		for _, storeID := range r.getStoreIDs() {
@@ -117,12 +117,12 @@ func (c *cluster) String() string {
 	}
 	sort.Ints(nodeIDs)
 
-	var buffer bytes.Buffer
-	buffer.WriteString("Node Info:\n")
+	var buf bytes.Buffer
+	buf.WriteString("Node Info:\n")
 	for _, nodeID := range nodeIDs {
 		n := c.nodes[proto.NodeID(nodeID)]
-		buffer.WriteString(n.String())
-		buffer.WriteString("\n")
+		buf.WriteString(n.String())
+		buf.WriteString("\n")
 	}
 
 	var storeIDs []int
@@ -131,11 +131,11 @@ func (c *cluster) String() string {
 	}
 	sort.Ints(storeIDs)
 
-	buffer.WriteString("Store Info:\n")
+	buf.WriteString("Store Info:\n")
 	for _, storeID := range storeIDs {
 		s := c.stores[proto.StoreID(storeID)]
-		buffer.WriteString(s.String(storesRangeCounts[proto.StoreID(storeID)]))
-		buffer.WriteString("\n")
+		buf.WriteString(s.String(storesRangeCounts[proto.StoreID(storeID)]))
+		buf.WriteString("\n")
 	}
 
 	var rangeIDs []int
@@ -144,12 +144,12 @@ func (c *cluster) String() string {
 	}
 	sort.Ints(rangeIDs)
 
-	buffer.WriteString("Range Info:\n")
+	buf.WriteString("Range Info:\n")
 	for _, rangeID := range rangeIDs {
 		r := c.ranges[proto.RangeID(rangeID)]
-		buffer.WriteString(r.String())
-		buffer.WriteString("\n")
+		buf.WriteString(r.String())
+		buf.WriteString("\n")
 	}
 
-	return buffer.String()
+	return buf.String()
 }
