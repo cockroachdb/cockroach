@@ -566,7 +566,9 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	err := db.Txn(func(txn *client.Txn) error {
 		txn.SetDebugName(txnName, 0)
 		if isolation == proto.SNAPSHOT {
-			txn.SetSnapshotIsolation()
+			if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+				return err
+			}
 		}
 		txn.InternalSetPriority(priority)
 

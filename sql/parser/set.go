@@ -37,3 +37,12 @@ func (node *Set) String() string {
 	}
 	return fmt.Sprintf("SET %s = %v", node.Name, node.Values)
 }
+
+// SetTransaction represents a SET TRANSACTION statement.
+type SetTransaction struct {
+	Isolation IsolationLevel
+}
+
+func (node *SetTransaction) String() string {
+	return fmt.Sprintf("SET TRANSACTION ISOLATION LEVEL %s", node.Isolation)
+}

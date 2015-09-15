@@ -156,7 +156,9 @@ func TestClientRetryNonTxn(t *testing.T) {
 		count := 0 // keeps track of retries
 		err := db.Txn(func(txn *client.Txn) error {
 			if test.isolation == proto.SNAPSHOT {
-				txn.SetSnapshotIsolation()
+				if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+					return err
+				}
 			}
 			txn.InternalSetPriority(int32(txnPri))
 
@@ -247,7 +249,9 @@ func TestClientRunTransaction(t *testing.T) {
 
 		// Use snapshot isolation so non-transactional read can always push.
 		err := db.Txn(func(txn *client.Txn) error {
-			txn.SetSnapshotIsolation()
+			if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+				return err
+			}
 
 			// Put transactional value.
 			if err := txn.Put(key, value); err != nil {

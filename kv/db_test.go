@@ -204,7 +204,9 @@ func TestKVDBTransaction(t *testing.T) {
 	value := []byte("value")
 	err := db.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
-		txn.SetSnapshotIsolation()
+		if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+			return err
+		}
 
 		if err := txn.Put(key, value); err != nil {
 			t.Fatal(err)
