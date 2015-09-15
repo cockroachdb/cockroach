@@ -168,7 +168,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 
 	reply := &proto.PutResponse{}
 	key := proto.Key("key")
-	_ = sendCall(s.Sender, proto.Call{
+	if err := sendCall(s.Sender, proto.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          key,
@@ -180,9 +180,8 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 			},
 		},
 		Reply: reply,
-	})
-	if reply.Error != nil {
-		t.Fatal(reply.GoError())
+	}); err != nil {
+		t.Fatal(err)
 	}
 	if reply.Txn.Name != "test txn" {
 		t.Errorf("expected txn name to be %q; got %q", "test txn", reply.Txn.Name)
@@ -207,7 +206,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer teardownHeartbeats(s.Sender)
 
 	reply := &proto.PutResponse{}
-	_ = sendCall(s.Sender, proto.Call{
+	if err := sendCall(s.Sender, proto.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          proto.Key("key"),
@@ -220,9 +219,8 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 			},
 		},
 		Reply: reply,
-	})
-	if reply.Error != nil {
-		t.Fatal(reply.GoError())
+	}); err != nil {
+		t.Fatal(err)
 	}
 	if reply.Txn.Priority != 11 {
 		t.Errorf("expected txn priority 11; got %d", reply.Txn.Priority)

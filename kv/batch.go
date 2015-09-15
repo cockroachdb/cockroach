@@ -130,10 +130,11 @@ func newChunkingSender(f senderFn) client.BatchSender {
 
 // SendBatch implements Sender.
 // TODO(tschottdorf): We actually don't want to chop EndTransaction off for
-// single-range requests. Whether it is one or not is unknown right now (you
-// can only find out after you've sent to the Range/looked up a descriptor that
-// suggests that you're multi-range. In those cases, the wrapped sender should
-// return an error so that we split and retry once the chunk which contains
+// single-range requests (but that happens now since EndTransaction has the
+// isAlone flag). Whether it is one or not is unknown right now (you can only
+// find out after you've sent to the Range/looked up a descriptor that suggests
+// that you're multi-range. In those cases, the wrapped sender should return an
+// error so that we split and retry once the chunk which contains
 // EndTransaction (i.e. the last one).
 func (cs *chunkingSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
 	if len(ba.Requests) < 1 {
@@ -160,9 +161,7 @@ func (cs *chunkingSender) SendBatch(ctx context.Context, ba proto.BatchRequest) 
 
 	parts := ba.Split()
 	var rplChunks []*proto.BatchResponse
-	var part []proto.RequestUnion
-	for len(parts) > 0 {
-		part, parts = parts[0], parts[1:]
+	for _, part := range parts {
 		ba.Requests = part
 		ba.CmdID = nextID()
 		rpl, err := cs.f(ctx, ba)

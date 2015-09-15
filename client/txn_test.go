@@ -131,7 +131,9 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	txn := NewTxn(*db)
 
 	for testIdx = range testCases {
-		_ = sendCall(txn.db.sender, proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+		if err := sendCall(txn.db.sender, proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}}); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -145,7 +147,10 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	}, nil))
 
 	txn := NewTxn(*db)
-	_ = sendCall(txn.db.sender, proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+	err := sendCall(txn.db.sender, proto.Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+	if _, ok := err.(*proto.TransactionAbortedError); !ok {
+		t.Fatalf("expected TransactionAbortedError, got %v", err)
+	}
 
 	if len(txn.Proto.ID) != 0 {
 		t.Errorf("expected txn to be cleared")

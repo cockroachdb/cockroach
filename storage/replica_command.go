@@ -635,7 +635,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 	}
 
 	var rds []proto.RangeDescriptor // corresponding unmarshaled descriptors
-	// TODO(tschottdorf): IgnoreIntents is only set on a Push, but there are
+	// TODO(tschottdorf): ConsiderIntents is only set on a Push, but there are
 	// infinite loops because ResolveIntent doesn't get routed the right way;
 	// I think it needs the same special treatment.
 	// TestRangeSplitsWithConcurrentTxns demonstrates this when removing !consistent
