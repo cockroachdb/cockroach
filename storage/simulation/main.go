@@ -31,4 +31,11 @@ func main() {
 
 	fmt.Printf("A simulation of the cluster's rebalancing.\n\n")
 	fmt.Printf("Cluster Info:\n%s\n", c)
+
+	// Split a random range 100 times.
+	for i := 0; i < 100; i++ {
+		c.splitRangeRandom()
+	}
+
+	fmt.Printf("Cluster Info:\n%s\n", c)
 }

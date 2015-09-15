@@ -97,6 +97,29 @@ func (r *Range) getStoreIDs() []proto.StoreID {
 	return storeIDs
 }
 
+// getStores returns a shallow copy of the internal stores map.
+func (r *Range) getStores() map[proto.StoreID]*Store {
+	r.RLock()
+	defer r.RUnlock()
+	stores := make(map[proto.StoreID]*Store)
+	for storeID, store := range r.stores {
+		stores[storeID] = store
+	}
+	return stores
+}
+
+// split range adds a replica to all the stores from the passed in range. This
+// function should only be called on new ranges as it will overwrite all of the
+// replicas in the range.
+func (r *Range) splitRange(originalRange *Range) {
+	desc := originalRange.getDesc()
+	stores := originalRange.getStores()
+	r.Lock()
+	defer r.Unlock()
+	r.desc.Replicas = desc.Replicas
+	r.stores = stores
+}
+
 // String returns a human readable string with details about the range.
 func (r *Range) String() string {
 	r.RLock()
