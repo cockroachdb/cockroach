@@ -974,7 +974,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode
 	// Call the helper, which returns a batch containing data written
 	// during command execution and any associated error.
 	ms := engine.MVCCStats{}
-	batch, br, rErr := r.applyRaftCommandInBatch(ctx, index, originNode, ba, &ms)
+	batch, br, intents, rErr := r.applyRaftCommandInBatch(ctx, index, originNode, ba, &ms)
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
@@ -999,6 +999,12 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode
 		r.maybeAddToSplitQueue()
 	}
 
+	// On the replica on which this command originated, resolve skipped intents
+	// asynchronously - even on failure.
+	if originNode == r.rm.RaftNodeID() {
+		r.handleSkippedIntents(intents)
+	}
+
 	return br, rErr
 }
 
@@ -1006,14 +1012,14 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
 func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, originNode proto.RaftNodeID,
-	ba *proto.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *proto.BatchResponse, error) {
+	ba *proto.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *proto.BatchResponse, []intentsWithArg, error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.rm.Engine().NewBatch()
 
 	// Check the response cache for this batch to ensure idempotency.
 	if proto.IsWrite(ba) {
 		if replyWithErr, readErr := r.respCache.GetResponse(btch, ba.CmdID); readErr != nil {
-			return btch, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
+			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
 		} else if replyWithErr.Reply != nil {
 			// TODO(tschottdorf): this is a hack to avoid wrong replies served
 			// back. See #2297. Not 100% correct, only correct enough to get
@@ -1036,7 +1042,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 				}
 				// We successfully read from the response cache, so return whatever error
 				// was present in the cached entry (if any).
-				return btch, replyWithErr.Reply, replyWithErr.Err
+				return btch, replyWithErr.Reply, nil, replyWithErr.Err
 			}
 			log.Warningf("TODO(tschottdorf): manifestation of #2297: %s hit cache for: %+v", ba, replyWithErr.Reply)
 		}
@@ -1065,18 +1071,12 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// same ClientCmdID and would get the distributed sender stuck in an
 			// infinite loop, retrieving a stale NotLeaderError over and over
 			// again, even when proposing at the correct replica.
-			return btch, nil, r.newNotLeaderError(lease, originNode)
+			return btch, nil, nil, r.newNotLeaderError(lease, originNode)
 		}
 	}
 
 	// Execute the commands.
 	br, intents, err := r.executeBatch(btch, ms, ba)
-
-	// On the replica on which this command originated, resolve skipped intents
-	// asynchronously - even on failure.
-	if originNode == r.rm.RaftNodeID() {
-		r.handleSkippedIntents(intents)
-	}
 
 	// Regardless of error, add result to the response cache if this is
 	// a write method. This must be done as part of the execution of
@@ -1105,7 +1105,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		}
 	}
 
-	return btch, br, err
+	return btch, br, intents, err
 }
 
 type intentsWithArg struct {
