@@ -305,18 +305,6 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	const now int64 = 48 * 60 * 60 * 1E9 // 2d past the epoch
 	tc.manualClock.Set(now)
 
-	// TODO: why is this needed to trigger intent resolution?
-	key := proto.Key("foo")
-	timestamp := proto.MinTimestamp.Next()
-	if err := engine.MVCCPutProto(tc.engine, nil, key, timestamp, nil, &config.ZoneConfig{}); err != nil {
-		t.Fatal(err)
-	}
-
-	timestamp = timestamp.Next()
-	if err := engine.MVCCPutProto(tc.engine, nil, key, timestamp, nil, &config.ZoneConfig{}); err != nil {
-		t.Fatal(err)
-	}
-
 	txns := []*proto.Transaction{
 		newTransaction("txn1", proto.Key("0-00000"), 1, proto.SERIALIZABLE, tc.clock),
 		newTransaction("txn2", proto.Key("1-00000"), 1, proto.SERIALIZABLE, tc.clock),
