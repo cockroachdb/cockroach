@@ -1483,10 +1483,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		action := func() {
 			// TODO(tschottdorf): no tracing here yet.
 			if err := r.rm.DB().Run(b); err != nil {
-				if log.V(0) {
-					log.Warningf("unable to resolve: %s", err)
-					panic("TODO(tschottdorf)")
-				}
+				log.Warningf("unable to resolve intent: %s", err)
 			}
 		}
 		if !r.rm.Stopper().RunAsyncTask(action) {

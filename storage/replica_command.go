@@ -354,6 +354,10 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 
 	var externalIntents []proto.Intent
 	for _, intent := range args.Intents {
+		// Update the intent; we set the txn before (for handling
+		// TransactionAbortedError) but have changed the status in the
+		// meantime.
+		intent.Txn = *reply.Txn
 		if err := func() error {
 			if len(intent.EndKey) == 0 {
 				// For single-key intents, do a KeyAddress-aware check of

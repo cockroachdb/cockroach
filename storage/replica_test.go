@@ -1731,17 +1731,23 @@ func TestEndTransactionGC(t *testing.T) {
 }
 
 // TestEndTransactionResolveOnlyLocalIntents verifies that an end transaction
-// request resolves only local intents.
+// request resolves only local intents within the same batch.
 func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
+	key := proto.Key("a")
+	splitKey := key.Next()
+	TestingCommandFilter = func(args proto.Request) error {
+		if args.Method() == proto.ResolveIntentRange && args.Header().Key.Equal(splitKey) {
+			return util.Errorf("boom")
+		}
+		return nil
+	}
 	tc.Start(t)
 	defer tc.Stop()
 
 	// Split the range and create an intent in each range.
 	// The keys of the two intents are next to each other.
-	key := proto.Key("a")
-	splitKey := key.Next()
 	newRng := splitTestRange(tc.store, splitKey, splitKey, t)
 
 	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
