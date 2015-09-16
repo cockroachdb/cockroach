@@ -330,9 +330,9 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	}
 }
 
-// TestAcceptsUnplitRanges verifies that ranges that need to split are properly
+// TestAcceptsUnsplitRanges verifies that ranges that need to split are properly
 // rejected when the queue has 'acceptsUnsplitRanges = false'.
-func TestAcceptsUnplitRanges(t *testing.T) {
+func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
