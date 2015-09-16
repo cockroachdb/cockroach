@@ -639,32 +639,16 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 	}
 
 	var rds []proto.RangeDescriptor // corresponding unmarshaled descriptors
-	// TODO(tschottdorf): ConsiderIntents is only set on a Push, but there are
-	// infinite loops because ResolveIntent doesn't get routed the right way;
-	// I think it needs the same special treatment.
-	// TestRangeSplitsWithConcurrentTxns demonstrates this when removing !consistent
-	// below.
 	if args.ConsiderIntents && len(intents) > 0 && rand.Intn(2) == 0 {
-		// NOTE (subtle): in general, we want to try to clean up dangling
-		// intents on meta records. However, if we're in the process of
-		// cleaning up a dangling intent on a meta record by pushing the
-		// transaction, we don't want to create an infinite loop:
-		//
-		// intent! -> push-txn -> range-lookup -> intent! -> etc...
-		//
-		// Instead we want:
-		//
-		// intent! -> push-txn -> range-lookup -> ignore intent, return old/new ranges
-		//
-		// On the range-lookup from a push transaction, we therefore
-		// want to suppress WriteIntentErrors and return a value
-		// anyway. But which value? We don't know whether the range
-		// update succeeded or failed, but if we don't return the
-		// correct range descriptor we may not be able to find the
-		// transaction to push. Since we cannot know the correct answer,
-		// we choose randomly between the pre- and post- transaction
-		// values. If we guess wrong, the client will try again and get
-		// the other value (within a few tries).
+		// NOTE (subtle): dangling intents on meta records are peculiar: It's not
+		// clear whether the intent or the previous value point to the correct
+		// location of the Range. It gets even more complicated when there are
+		// split-related intents or a txn record colocated with a replica
+		// involved in the split. Since we cannot know the correct answer, we
+		// choose randomly between the pre- and post- transaction values when
+		// the ConsiderIntents flag is set (typically after retrying on
+		// addressing-related errors). If we guess wrong, the client will try
+		// again and get the other value (within a few tries).
 		for _, intent := range intents {
 			key, txn := intent.Key, &intent.Txn
 			val, _, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
