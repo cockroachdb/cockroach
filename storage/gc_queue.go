@@ -87,9 +87,10 @@ func (gcq *gcQueue) acceptsUnsplitRanges() bool {
 func (gcq *gcQueue) shouldQueue(now proto.Timestamp, repl *Replica,
 	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
 
-	zone, err := sysCfg.GetZoneConfigForKey(repl.Desc().StartKey)
+	desc := repl.Desc()
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Errorf("could not find GC policy for range %+v: %s", repl.Desc(), err)
+		log.Errorf("could not find GC policy for range %s: %s", repl, err)
 		return
 	}
 	policy := zone.GC
@@ -126,9 +127,9 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
 	defer snap.Close()
 
 	// Lookup the GC policy for the zone containing this key range.
-	zone, err := sysCfg.GetZoneConfigForKey(repl.Desc().StartKey)
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		return fmt.Errorf("could not find GC policy for range %+v: %s", repl.Desc(), err)
+		return fmt.Errorf("could not find GC policy for range %s: %s", repl, err)
 	}
 	policy := zone.GC
 

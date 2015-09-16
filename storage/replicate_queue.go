@@ -82,7 +82,7 @@ func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica,
 		return
 	}
 
-	action, priority := rq.allocator.ComputeAction(*zone, repl.Desc())
+	action, priority := rq.allocator.ComputeAction(*zone, desc)
 	if action == aaNoop {
 		return false, 0
 	}

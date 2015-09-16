@@ -186,12 +186,12 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now proto.Timestamp) {
 		return
 	}
 
-	if !bq.impl.acceptsUnsplitRanges() &&
-		cfg.NeedsSplit(repl.Desc().StartKey, repl.Desc().EndKey) {
+	desc := repl.Desc()
+	if !bq.impl.acceptsUnsplitRanges() && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(3) {
-			log.Infof("this replica of %s needs to be split; skipping...", repl)
+			log.Infof("range %s needs to be split; not adding", repl)
 		}
 		return
 	}
@@ -311,13 +311,6 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 }
 
 func (bq *baseQueue) processOne(clock *hlc.Clock) {
-	// Load the system config.
-	cfg, err := bq.gossip.GetSystemConfig()
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
 	start := time.Now()
 	bq.Lock()
 	repl := bq.pop()
@@ -329,12 +322,19 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 
 	now := clock.Now()
 
-	if !bq.impl.acceptsUnsplitRanges() &&
-		cfg.NeedsSplit(repl.Desc().StartKey, repl.Desc().EndKey) {
+	// Load the system config.
+	cfg, err := bq.gossip.GetSystemConfig()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	desc := repl.Desc()
+	if !bq.impl.acceptsUnsplitRanges() && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(3) {
-			log.Infof("this replica of %s needs to be split; skipping...", repl)
+			log.Infof("range %s needs to be split; skipping processing", repl)
 		}
 		return
 	}
