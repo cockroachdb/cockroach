@@ -74,6 +74,11 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 
 	splitQ := newSplitQueue(nil, tc.gossip)
 
+	cfg, err := tc.gossip.GetSystemConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for i, test := range testCases {
 		if err := tc.rng.stats.SetMVCCStats(tc.rng.rm.Engine(), engine.MVCCStats{KeyBytes: test.bytes}); err != nil {
 			t.Fatal(err)
@@ -84,7 +89,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		if err := tc.rng.setDesc(&copy); err != nil {
 			t.Fatal(err)
 		}
-		shouldQ, priority := splitQ.shouldQueue(proto.ZeroTimestamp, tc.rng)
+		shouldQ, priority := splitQ.shouldQueue(proto.ZeroTimestamp, tc.rng, cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}

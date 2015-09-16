@@ -242,3 +242,9 @@ func (s *SystemConfig) ComputeSplitKeys(startKey, endKey proto.Key) []proto.Key 
 
 	return splitKeys
 }
+
+// NeedsSplit returns whether the range [startKey, endKey) needs a split due
+// to zone configs.
+func (s *SystemConfig) NeedsSplit(startKey, endKey proto.Key) bool {
+	return len(s.ComputeSplitKeys(startKey, endKey)) > 0
+}
