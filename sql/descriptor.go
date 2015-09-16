@@ -39,6 +39,8 @@ var (
 var _ descriptorProto = &DatabaseDescriptor{}
 var _ descriptorProto = &TableDescriptor{}
 
+var dcache = map[string]descriptorProto{}
+
 // descriptorKey is the interface implemented by both
 // DatabaseKey and TableKey. It is used to easily get the
 // descriptor key and plain name.
@@ -111,12 +113,22 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 	b.CPut(descKey, descriptor, nil)
 	// Mark transaction as operating on the system DB.
 	p.txn.SetSystemDBTrigger()
-	return p.txn.Run(&b)
+	if err := p.txn.Run(&b); err != nil {
+		return err
+	}
+	dcache[string(key)] = descriptor
+	return nil
 }
 
 // getDescriptor looks up the descriptor for `key`, validates it,
 // and unmarshals it into `descriptor`.
 func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto) error {
+	if desc, ok := dcache[string(plainKey.Key())]; ok {
+		descriptor.Reset()
+		gogoproto.Merge(descriptor, desc)
+		return nil
+	}
+
 	gr, err := p.txn.Get(plainKey.Key())
 	if err != nil {
 		return err
