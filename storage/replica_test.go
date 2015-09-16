@@ -280,6 +280,18 @@ func TestRangeReadConsistency(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+
 	gArgs := getArgs(proto.Key("a"), 1, tc.store.StoreID())
 	gArgs.Timestamp = tc.clock.Now()
 
@@ -336,6 +348,18 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
+
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
 	ba := proto.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
@@ -395,6 +419,18 @@ func TestRangeLeaderLease(t *testing.T) {
 	defer tc.Stop()
 	tc.clock.SetMaxOffset(maxClockOffset)
 
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+
 	if held, _ := hasLease(tc.rng, tc.clock.Now()); !held {
 		t.Errorf("expected lease on range start")
 	}
@@ -427,6 +463,18 @@ func TestRangeNotLeaderError(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
+
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
 	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
 	now := tc.clock.Now()
@@ -477,6 +525,18 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
+
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
@@ -539,6 +599,18 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	defer tc.Stop()
 	tc.clock.SetMaxOffset(maxClockOffset)
 
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+
 	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
 	now := proto.Timestamp{WallTime: tc.manualClock.UnixNano()}
 
@@ -574,6 +646,36 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
 			t.Errorf("%d: expected low water %d; got %d, %d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
 		}
+	}
+}
+
+// TestRangeLeaderLeaseRejectUnknownRaftNodeID ensures that a replica cannot
+// obtain the leader lease if it is not part of the current range descriptor.
+// TODO(mrtracy): This should probably be tested in client_raft_test package,
+// using a real second store.
+func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
+	now := tc.clock.Now()
+	lease := &proto.Lease{
+		Start:      now,
+		Expiration: now.Add(10, 0),
+		RaftNodeID: proto.MakeRaftNodeID(2, 2),
+	}
+	args := &proto.BatchRequest{}
+	args.Add(&proto.LeaderLeaseRequest{Lease: *lease})
+	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), args)
+	var err error
+	if err = <-errChan; err == nil {
+		// Next if the command was committed, wait for the range to apply it.
+		err = (<-pendingCmd.done).Err
+	}
+	if err == nil {
+		t.Error("error: successfully obtained lease for a store that was not in the RangeDescriptor", err)
 	}
 }
 
