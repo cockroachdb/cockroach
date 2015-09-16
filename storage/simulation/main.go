@@ -30,12 +30,18 @@ func main() {
 	c := createCluster(stopper, 5)
 
 	fmt.Printf("A simulation of the cluster's rebalancing.\n\n")
-	fmt.Printf("Cluster Info:\n%s\n", c)
+	fmt.Println(c)
 
 	// Split a random range 100 times.
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
 		c.splitRangeRandom()
 	}
 
-	fmt.Printf("Cluster Info:\n%s\n", c)
+	fmt.Println(c.StringEpochHeader())
+
+	for i := 0; i < 100; i++ {
+		c.runEpoch()
+	}
+
+	fmt.Println(c)
 }
