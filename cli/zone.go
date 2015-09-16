@@ -21,106 +21,142 @@ package cli
 import (
 	"fmt"
 	"io/ioutil"
-	"strings"
+	"strconv"
 
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
+	yaml "gopkg.in/yaml.v1"
 
 	"github.com/spf13/cobra"
 )
 
-// A getZoneCmd command displays the zone config for the specified
-// prefix.
+// zoneProtoToYAMLString takes a marshalled proto and returns
+// its yaml representation.
+func zoneProtoToYAMLString(val string) (string, error) {
+	var zone config.ZoneConfig
+	if err := gogoproto.Unmarshal([]byte(val), &zone); err != nil {
+		return "", err
+	}
+	ret, err := yaml.Marshal(zone)
+	if err != nil {
+		return "", err
+	}
+	return string(ret), nil
+}
+
+// formatZone is a callback used to format the raw zone config
+// protobuf in a sql.Rows column for pretty printing.
+func formatZone(val interface{}) string {
+	if str, ok := val.(string); ok {
+		if ret, err := zoneProtoToYAMLString(str); err == nil {
+			return ret
+		}
+	}
+	// Fallback to raw string in case of problems.
+	return fmt.Sprintf("%#v", val)
+}
+
+// A getZoneCmd command displays the zone config for the specified ID.
 var getZoneCmd = &cobra.Command{
-	Use:   "get [options] <key-prefix>",
+	Use:   "get [options] <object-ID>",
 	Short: "fetches and displays the zone config",
 	Long: `
-Fetches and displays the zone configuration for <key-prefix>.
+Fetches and displays the zone configuration for <object-id>.
 `,
 	Run: runGetZone,
 }
 
-// runGetZone invokes the REST API with GET action and key prefix as path.
+// runGetZone retrieves the zone config for a given object id,
+// and if present, outputs its YAML representation.
+// TODO(marc): accept db/table names rather than IDs.
 func runGetZone(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&context.Context, context.Addr, client.Zone)
-	body, err := admin.GetYAML(args[0])
+	id, err := strconv.Atoi(args[0])
+	if err != nil {
+		log.Errorf("could not parse object ID %s", args[0])
+		return
+	}
+
+	db := makeSQLClient()
+	err = runQueryWithFormat(db, fmtMap{"config": formatZone}, `SELECT * FROM system.zones WHERE id=$1`, id)
 	if err != nil {
 		log.Error(err)
 		return
 	}
-	fmt.Printf("Zone config for prefix %q:\n%s\n", args[0], body)
 
+	if err != nil {
+		log.Error(err)
+		return
+	}
 }
 
-// A lsZonesCmd command displays a list of zone configs by prefix.
+// A lsZonesCmd command displays a list of zone configs by objet ID.
 var lsZonesCmd = &cobra.Command{
 	Use:   "ls [options]",
-	Short: "list all zone configs by key prefix",
+	Short: "list all zone configs by object ID",
 	Long: `
 List zone configs.
 `,
 	Run: runLsZones,
 }
 
-// runLsZones invokes the REST API with GET action and no path, which
-// fetches a list of all zone configuration prefixes. The optional
-// regexp is applied to the complete list and matching prefixes
-// displayed.
+// TODO(marc): return db/table names rather than IDs.
 func runLsZones(cmd *cobra.Command, args []string) {
 	if len(args) > 0 {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&context.Context, context.Addr, client.Zone)
-	list, err := admin.List()
+	db := makeSQLClient()
+	err := runQueryWithFormat(db, fmtMap{"config": formatZone}, `SELECT * FROM system.zones`)
 	if err != nil {
 		log.Error(err)
 		return
 	}
-	fmt.Printf("Zone keys:\n%s\n", strings.Join(list, "\n  "))
-
 }
 
-// A rmZoneCmd command removes a zone config by prefix.
+// A rmZoneCmd command removes a zone config by ID.
 var rmZoneCmd = &cobra.Command{
-	Use:   "rm [options] <key-prefix>",
-	Short: "remove a zone config by key prefix",
+	Use:   "rm [options] <object-id>",
+	Short: "remove a zone config by object id",
 	Long: `
-Remove an existing zone config by key prefix. No action is taken if no
-zone configuration exists for the specified key prefix. Note that this
-command can affect only a single zone config with an exactly matching
-prefix.
+Remove an existing zone config by object id. No action is taken if no
+zone configuration exists for the specified object ID.
 `,
 	Run: runRmZone,
 }
 
-// runRmZone invokes the REST API with DELETE action and key prefix as
-// path.
+// TODO(marc): accept db/table names rather than IDs.
 func runRmZone(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
 		return
 	}
-	admin := client.NewAdminClient(&context.Context, context.Addr, client.Zone)
-	if err := admin.Delete(args[0]); err != nil {
+	id, err := strconv.Atoi(args[0])
+	if err != nil {
+		log.Errorf("could not parse object ID %s", args[0])
+		return
+	}
+
+	db := makeSQLClient()
+	err = runQuery(db, `DELETE FROM system.zones WHERE id=$1`, id)
+	if err != nil {
 		log.Error(err)
 		return
 	}
 	fmt.Printf("Deleted zone key %q\n", args[0])
 }
 
-// A setZoneCmd command creates a new or updates an existing zone
-// config.
+// A setZoneCmd command creates a new or updates an existing zone config.
 var setZoneCmd = &cobra.Command{
-	Use:   "set [options] <key-prefix> <zone-config-file>",
-	Short: "create or update zone config for key prefix",
+	Use:   "set [options] <object-id> <zone-config-file>",
+	Short: "create or update zone config for object ID",
 	Long: `
-Create or update a zone config for the specified key prefix (first
-argument: <key-prefix>) to the contents of the specified file
+Create or update a zone config for the specified object ID (first
+argument: <object-id>) to the contents of the specified file
 (second argument: <zone-config-file>).
 
 The zone config format has the following YAML schema:
@@ -139,35 +175,58 @@ For example:
     - attrs: [us-west-1b, ssd]
   range_min_bytes: 8388608
   range_max_bytes: 67108864
-
-Setting zone configs will guarantee that key ranges will be split
-such that no key range straddles two zone config specifications.
-This feature can be taken advantage of to pre-split ranges.
 `,
 	Run: runSetZone,
 }
 
-// runSetZone invokes the REST API with POST action and key prefix as
-// path. The specified configuration file is read from disk and sent
-// as the POST body.
+// runSetZone parses the yaml input file, converts it to proto,
+// and inserts it in the system.zones table.
+// TODO(marc): accept db/table names rather than IDs.
 func runSetZone(cmd *cobra.Command, args []string) {
 	if len(args) != 2 {
 		cmd.Usage()
 		return
 	}
+	id, err := strconv.Atoi(args[0])
+	if err != nil {
+		log.Errorf("could not parse object ID %s", args[0])
+		return
+	}
+
 	// Read in the config file.
 	body, err := ioutil.ReadFile(args[1])
 	if err != nil {
 		log.Errorf("unable to read zone config file %q: %s", args[1], err)
 		return
 	}
-	admin := client.NewAdminClient(&context.Context, context.Addr, client.Zone)
-	if err := admin.SetYAML(args[0], string(body)); err != nil {
+
+	// Convert it to proto and marshal it again to put into the table.
+	// This is a bit more tedious than taking protos directly,
+	// but yaml is a more widely understood format.
+	var pbZoneConfig config.ZoneConfig
+	if err := yaml.Unmarshal(body, &pbZoneConfig); err != nil {
+		log.Errorf("unable to parse zone config file %q: %s", args[1], err)
+		return
+	}
+
+	if err := pbZoneConfig.Validate(); err != nil {
 		log.Error(err)
 		return
 	}
-	fmt.Printf("Wrote zone config to %q\n", args[0])
 
+	buf, err := gogoproto.Marshal(&pbZoneConfig)
+	if err != nil {
+		log.Errorf("unable to parse zone config file %q: %s", args[1], err)
+		return
+	}
+
+	db := makeSQLClient()
+	// TODO(marc): switch to UPSERT.
+	err = runQuery(db, `INSERT INTO system.zones VALUES ($1, $2)`, id, buf)
+	if err != nil {
+		log.Error(err)
+		return
+	}
 }
 
 var zoneCmds = []*cobra.Command{

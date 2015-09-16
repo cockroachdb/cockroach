@@ -44,6 +44,10 @@ func makeSQLClient() *sql.DB {
 	return db
 }
 
+// fmtMap is a mapping from column name to a function that takes the raw input,
+// and outputs the string to be displayed.
+type fmtMap map[string]func(interface{}) string
+
 // runQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes pretty output to osStdout.
 func runQuery(db *sql.DB, query string, parameters ...interface{}) error {
@@ -53,13 +57,27 @@ func runQuery(db *sql.DB, query string, parameters ...interface{}) error {
 	}
 
 	defer rows.Close()
-	return printQueryOutput(rows)
+	return printQueryOutput(rows, nil)
+}
+
+// runQueryWithFormat takes a 'query' with optional 'parameters'.
+// It runs the sql query and writes pretty output to osStdout.
+func runQueryWithFormat(db *sql.DB, format fmtMap, query string, parameters ...interface{}) error {
+	rows, err := db.Query(query, parameters...)
+	if err != nil {
+		return fmt.Errorf("query error: %s", err)
+	}
+
+	defer rows.Close()
+	return printQueryOutput(rows, format)
 }
 
 // printQueryOutput takes a set of sql rows and writes a pretty table
 // to osStdout, or "OK" if no rows are returned.
 // 'rows' should be closed by the caller.
-func printQueryOutput(rows *sql.Rows) error {
+// If 'formatter' is not nil, the values with column name
+// found in the map are run through the corresponding callback.
+func printQueryOutput(rows *sql.Rows, format fmtMap) error {
 	cols, err := rows.Columns()
 	if err != nil {
 		return fmt.Errorf("rows.Columns() error: %s", err)
@@ -74,6 +92,7 @@ func printQueryOutput(rows *sql.Rows) error {
 	// Initialize tablewriter and set column names as the header row.
 	table := tablewriter.NewWriter(osStdout)
 	table.SetAutoFormatHeaders(false)
+	table.SetAutoWrapText(false)
 	table.SetHeader(cols)
 
 	// Stringify all data and append rows to tablewriter.
@@ -87,7 +106,11 @@ func printQueryOutput(rows *sql.Rows) error {
 			return fmt.Errorf("scan error: %s", err)
 		}
 		for i, v := range vals {
-			rowStrings[i] = formatVal(*v.(*interface{}))
+			if f, ok := format[cols[i]]; ok {
+				rowStrings[i] = f(*v.(*interface{}))
+			} else {
+				rowStrings[i] = formatVal(*v.(*interface{}))
+			}
 		}
 		if err := table.Append(rowStrings); err != nil {
 			return err
