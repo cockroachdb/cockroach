@@ -27,13 +27,15 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 )
 
-var errEmptyInputString = errors.New("the input string should not be empty")
+var errEmptyInputString = errors.New("the input string must not be empty")
 var errAbsOfMinInt64 = errors.New("abs of min integer value (-9223372036854775808) not defined")
+var errRoundNumberDigits = errors.New("number of digits must be between 0 and 50")
 
 type typeList []reflect.Type
 
@@ -589,7 +591,18 @@ var builtins = map[string][]builtin{
 		}),
 	},
 
-	// TODO(thschroeter): implement round
+	"round": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return round(x, 0)
+		}),
+		builtin{
+			returnType: DummyFloat,
+			types:      typeList{floatType, intType},
+			fn: func(args DTuple) (Datum, error) {
+				return round(float64(args[0].(DFloat)), int64(args[1].(DInt)))
+			},
+		},
+	},
 
 	"sin": {
 		floatBuiltin1(func(x float64) (Datum, error) {
@@ -810,4 +823,13 @@ func datumToRawString(datum Datum) (string, error) {
 	}
 
 	return "", fmt.Errorf("argument type unsupported: %s", datum.Type())
+}
+
+func round(x float64, n int64) (Datum, error) {
+	if n < 0 || n > 50 {
+		return DNull, errRoundNumberDigits
+	}
+	const b = 64
+	y, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', int(n), b), b)
+	return DFloat(y), err
 }

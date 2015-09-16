@@ -134,7 +134,7 @@ select ascii('禅');
 ----
 31109
 
-query error ascii: the input string should not be empty
+query error ascii: the input string must not be empty
 select ascii('');
 
 query T
@@ -481,6 +481,44 @@ query T
 SELECT radians(-45.0), radians(45.0)
 ----
 -0.7853981633974483 0.7853981633974483
+
+# Our implementation of round is not fully Postgres-compatible because we do
+# not allow negative numbers of digits.
+
+query error round: number of digits must be between 0 and 50
+SELECT round(41.2, -1)
+
+query error round: number of digits must be between 0 and 50
+SELECT round(41.2, 51)
+
+query T
+SELECT round(4.2, 0), round(4.2, 50)
+----
+4 4.2
+
+# round to nearest even
+query T
+SELECT round(-2.5, 0), round(-1.5, 0), round(1.5, 0), round(2.5, 0)
+----
+-2 -2 2 2
+
+query T
+SELECT round(-2.5), round(-1.5), round(-0.0), round(0.0), round(1.5), round(2.5)
+----
+-2 -2 -0 0 2 2
+
+# Test rounding to 14 digits, because the logic test itself
+# formats floats rounded to 15 digits behind the decimal point.
+
+query T
+SELECT round(-2.123456789, 5), round(2.123456789, 5), round(2.12345678901234567890, 14)
+----
+-2.12346 2.12346 2.12345678901235
+
+query T
+SELECT round(-1.7976931348623157e+308, 1), round(1.7976931348623157e+308, 1)
+----
+-1.7976931348623157e+308 1.7976931348623157e+308
 
 query T
 SELECT sign(-2), sign(0), sign(2)
