@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 var (
@@ -39,8 +40,8 @@ func init() {
 
 // createTestResponseCache creates an in-memory engine and
 // returns a response cache using the supplied Range ID.
-func createTestResponseCache(t *testing.T, rangeID proto.RangeID) (*ResponseCache, engine.Engine) {
-	return NewResponseCache(rangeID), engine.NewInMem(proto.Attributes{}, 1<<20)
+func createTestResponseCache(t *testing.T, rangeID proto.RangeID, stopper *stop.Stopper) (*ResponseCache, engine.Engine) {
+	return NewResponseCache(rangeID), engine.NewInMem(proto.Attributes{}, 1<<20, stopper)
 }
 
 func makeCmdID(wallTime, random int64) proto.ClientCmdID {
@@ -54,7 +55,9 @@ func makeCmdID(wallTime, random int64) proto.ClientCmdID {
 // clearing the cache.
 func TestResponseCachePutGetClearData(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rc, e := createTestResponseCache(t, 1)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rc, e := createTestResponseCache(t, 1, stopper)
 	cmdID := makeCmdID(1, 1)
 	// Start with a get for an unseen cmdID.
 	if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
@@ -89,7 +92,9 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 // command id. All calls should be noops.
 func TestResponseCacheEmptyCmdID(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rc, e := createTestResponseCache(t, 1)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rc, e := createTestResponseCache(t, 1, stopper)
 	cmdID := proto.ClientCmdID{}
 	// Put value of 1 for test response.
 	if err := rc.PutResponse(e, cmdID, proto.ResponseWithError{Reply: &batchR, Err: nil}); err != nil {
@@ -107,8 +112,10 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 // transferred correctly to another cache using CopyInto().
 func TestResponseCacheCopyInto(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rc1, e := createTestResponseCache(t, 1)
-	rc2, _ := createTestResponseCache(t, 2)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rc1, e := createTestResponseCache(t, 1, stopper)
+	rc2, _ := createTestResponseCache(t, 2, stopper)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
 	if err := rc1.PutResponse(e, cmdID, proto.ResponseWithError{Reply: &batchR, Err: nil}); err != nil {
@@ -139,8 +146,10 @@ func TestResponseCacheCopyInto(t *testing.T) {
 // transferred correctly to another cache using CopyFrom().
 func TestResponseCacheCopyFrom(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rc1, e := createTestResponseCache(t, 1)
-	rc2, _ := createTestResponseCache(t, 2)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rc1, e := createTestResponseCache(t, 1, stopper)
+	rc2, _ := createTestResponseCache(t, 2, stopper)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
 	if err := rc1.PutResponse(e, cmdID, proto.ResponseWithError{Reply: &batchR, Err: nil}); err != nil {
@@ -173,7 +182,9 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 // invocations do not block on same keys.
 func TestResponseCacheInflight(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rc, e := createTestResponseCache(t, 1)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rc, e := createTestResponseCache(t, 1, stopper)
 	cmdID := makeCmdID(1, 1)
 	// Add inflight for cmdID.
 	if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
@@ -207,7 +218,9 @@ func TestResponseCacheInflight(t *testing.T) {
 // TestResponseCacheShouldCache verifies conditions for caching responses.
 func TestResponseCacheShouldCache(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rc, _ := createTestResponseCache(t, 1)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rc, _ := createTestResponseCache(t, 1, stopper)
 
 	testCases := []struct {
 		err         error
@@ -243,8 +256,9 @@ func TestResponseCacheShouldCache(t *testing.T) {
 // garbage collected periodically.
 func TestResponseCacheGC(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	eng := engine.NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, 1<<30)
-	defer eng.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	eng := engine.NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, 1<<30, stopper)
 
 	rc := NewResponseCache(1)
 	cmdID := makeCmdID(1, 1)

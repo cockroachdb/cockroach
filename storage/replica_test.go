@@ -117,7 +117,7 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.clock = hlc.NewClock(tc.manualClock.UnixNano)
 	}
 	if tc.engine == nil {
-		tc.engine = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+		tc.engine = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, tc.stopper)
 	}
 	if tc.transport == nil {
 		tc.transport = multiraft.NewLocalRPCTransport(tc.stopper)
@@ -236,12 +236,12 @@ func TestRangeContains(t *testing.T) {
 		EndKey:   proto.Key("b"),
 	}
 
-	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, stopper)
 	clock := hlc.NewClock(hlc.UnixNano)
 	ctx := TestStoreContext
 	ctx.Clock = clock
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	defer ctx.Transport.Close()
 	store := NewStore(ctx, e, &proto.NodeDescriptor{NodeID: 1})
@@ -2461,9 +2461,11 @@ func TestTruncateLog(t *testing.T) {
 func TestRaftStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	var eng engine.Engine
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 	storagetest.RunTests(t,
 		func(t *testing.T) storagetest.WriteableStorage {
-			eng = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+			eng = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, stopper)
 			// Fake store to house the engine.
 			store := &Store{
 				ctx: StoreContext{
@@ -2482,7 +2484,7 @@ func TestRaftStorage(t *testing.T) {
 			return rng
 		},
 		func(t *testing.T, r storagetest.WriteableStorage) {
-			eng.Close()
+			// Do nothing
 		})
 }
 

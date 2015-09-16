@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // TestRangeCommandClockUpdate verifies that followers update their
@@ -208,12 +209,14 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	manualClock := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manualClock.UnixNano)
-	store, stopper := createTestStoreWithEngine(t,
-		engine.NewInMem(proto.Attributes{}, 10<<20),
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	store := createTestStoreWithEngine(t,
+		engine.NewInMem(proto.Attributes{}, 10<<20, stopper),
 		clock,
 		true,
-		nil)
-	defer stopper.Stop()
+		nil,
+		stopper)
 
 	// Put an initial value.
 	initVal := []byte("initVal")

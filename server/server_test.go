@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -56,7 +57,8 @@ func TestInitEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tmp := util.CreateNTempDirs(t, "_server_test", 5)
 	defer util.CleanupDirs(tmp)
-
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 	testCases := []struct {
 		key       string           // data directory
 		expAttrs  proto.Attributes // attributes for engine
@@ -80,7 +82,7 @@ func TestInitEngine(t *testing.T) {
 	for _, spec := range testCases {
 		ctx := NewContext()
 		ctx.Stores, ctx.GossipBootstrap = spec.key, SelfGossipAddr
-		if err := ctx.InitStores(); err == nil {
+		if err := ctx.InitStores(stopper); err == nil {
 			engines := ctx.Engines
 			if spec.wantError {
 				t.Fatalf("invalid engine spec '%v' erroneously accepted: %+v", spec.key, spec)
@@ -122,7 +124,9 @@ func TestInitEngines(t *testing.T) {
 		{proto.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false},
 	}
 
-	if err := ctx.InitStores(); err != nil {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	if err := ctx.InitStores(stopper); err != nil {
 		t.Fatal(err)
 	}
 

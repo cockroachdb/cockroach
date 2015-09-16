@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func TestParseNodeAttributes(t *testing.T) {
@@ -31,7 +32,9 @@ func TestParseNodeAttributes(t *testing.T) {
 	ctx.Attrs = "attr1=val1::attr2=val2"
 	ctx.Stores = "mem=1"
 	ctx.GossipBootstrap = SelfGossipAddr
-	if err := ctx.InitStores(); err != nil {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	if err := ctx.InitStores(stopper); err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
 	if err := ctx.InitNode(); err != nil {
@@ -50,7 +53,9 @@ func TestParseGossipBootstrapAddrs(t *testing.T) {
 	ctx := NewContext()
 	ctx.GossipBootstrap = "localhost:12345,,localhost:23456"
 	ctx.Stores = "mem=1"
-	if err := ctx.InitStores(); err != nil {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	if err := ctx.InitStores(stopper); err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
 	if err := ctx.InitNode(); err != nil {

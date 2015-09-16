@@ -75,7 +75,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), ltc.Clock, ltc.Stopper)
 	ltc.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
-	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)
+	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20, ltc.Stopper)
 
 	ltc.localSender = NewLocalSender()
 	var rpcSend rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr,

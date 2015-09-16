@@ -24,7 +24,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"syscall"
 	"unsafe"
 
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -50,30 +50,35 @@ func init() {
 
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb       *C.DBEngine
-	refcount  int32
-	attrs     proto.Attributes // Attributes for this engine
-	dir       string           // The data directory
-	cacheSize int64            // Memory to use to cache values.
+	rdb         *C.DBEngine
+	attrs       proto.Attributes // Attributes for this engine
+	dir         string           // The data directory
+	cacheSize   int64            // Memory to use to cache values.
+	stopper     *stop.Stopper
+	deallocated chan struct{} // Closed when the underlying handle is deallocated.
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
-func NewRocksDB(attrs proto.Attributes, dir string, cacheSize int64) *RocksDB {
+func NewRocksDB(attrs proto.Attributes, dir string, cacheSize int64, stopper *stop.Stopper) *RocksDB {
 	if dir == "" {
 		panic(util.Errorf("dir must be non-empty"))
 	}
 	return &RocksDB{
-		attrs:     attrs,
-		dir:       dir,
-		cacheSize: cacheSize,
+		attrs:       attrs,
+		dir:         dir,
+		cacheSize:   cacheSize,
+		stopper:     stopper,
+		deallocated: make(chan struct{}),
 	}
 }
 
-func newMemRocksDB(attrs proto.Attributes, cacheSize int64) *RocksDB {
+func newMemRocksDB(attrs proto.Attributes, cacheSize int64, stopper *stop.Stopper) *RocksDB {
 	return &RocksDB{
 		attrs: attrs,
 		// dir: empty dir == "mem" RocksDB instance.
-		cacheSize: cacheSize,
+		cacheSize:   cacheSize,
+		stopper:     stopper,
+		deallocated: make(chan struct{}),
 	}
 }
 
@@ -91,7 +96,6 @@ func (r *RocksDB) String() string {
 // bring the reference count down to 0.
 func (r *RocksDB) Open() error {
 	if r.rdb != nil {
-		atomic.AddInt32(&r.refcount, 1)
 		return nil
 	}
 
@@ -109,13 +113,19 @@ func (r *RocksDB) Open() error {
 		return util.Errorf("could not open rocksdb instance: %s", err)
 	}
 
-	atomic.AddInt32(&r.refcount, 1)
+	// Start a gorountine that will finish when the underlying handle
+	// is deallocated. This is used to check a leak in tests.
+	go func() {
+		<-r.deallocated
+	}()
+	r.stopper.AddCloser(r)
 	return nil
 }
 
 // Close closes the database by deallocating the underlying handle.
 func (r *RocksDB) Close() {
-	if atomic.AddInt32(&r.refcount, -1) > 0 {
+	if r.rdb == nil {
+		log.Errorf("closing unopened rocksdb instance")
 		return
 	}
 	if len(r.dir) == 0 {
@@ -127,6 +137,7 @@ func (r *RocksDB) Close() {
 		C.DBClose(r.rdb)
 		r.rdb = nil
 	}
+	close(r.deallocated)
 }
 
 // Attrs returns the list of attributes describing this engine. This

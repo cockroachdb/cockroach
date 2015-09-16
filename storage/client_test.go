@@ -50,19 +50,19 @@ import (
 )
 
 // createTestStore creates a test store using an in-memory
-// engine. The caller is responsible for closing the store on exit.
+// engine. The caller is responsible for stopping the stopper on exit.
 func createTestStore(t *testing.T) (*storage.Store, *stop.Stopper) {
-	return createTestStoreWithEngine(t,
-		engine.NewInMem(proto.Attributes{}, 10<<20),
+	stopper := stop.NewStopper()
+	store := createTestStoreWithEngine(t,
+		engine.NewInMem(proto.Attributes{}, 10<<20, stopper),
 		hlc.NewClock(hlc.NewManualClock(0).UnixNano),
-		true, nil)
+		true, nil, stopper)
+	return store, stopper
 }
 
 // createTestStoreWithEngine creates a test store using the given engine and clock.
-// The caller is responsible for closing the store on exit.
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
-	bootstrap bool, sCtx *storage.StoreContext) (*storage.Store, *stop.Stopper) {
-	stopper := stop.NewStopper()
+	bootstrap bool, sCtx *storage.StoreContext, stopper *stop.Stopper) *storage.Store {
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
 	if sCtx == nil {
 		// make a copy
@@ -118,7 +118,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	if err := store.Start(stopper); err != nil {
 		t.Fatal(err)
 	}
-	return store, stopper
+	return store
 }
 
 type multiStoreSender struct {
@@ -150,6 +150,7 @@ type multiTestContext struct {
 	clientStopper      *stop.Stopper
 	stoppers           []*stop.Stopper
 	transportStopper   *stop.Stopper
+	engineStoppers     []*stop.Stopper
 	timeUntilStoreDead time.Duration
 }
 
@@ -217,9 +218,8 @@ func (m *multiTestContext) Stop() {
 	for _, s := range stoppers {
 		s.Stop()
 	}
-	// Remove the extra engine refcounts.
-	for _, e := range m.engines {
-		e.Close()
+	for _, s := range m.engineStoppers {
+		s.Stop()
 	}
 }
 
@@ -323,15 +323,11 @@ func (m *multiTestContext) addStore() {
 	if len(m.engines) > idx {
 		eng = m.engines[idx]
 	} else {
-		eng = engine.NewInMem(proto.Attributes{}, 1<<20)
+		engineStopper := stop.NewStopper()
+		m.engineStoppers = append(m.engineStoppers, engineStopper)
+		eng = engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
 		m.engines = append(m.engines, eng)
 		needBootstrap = true
-		// Add an extra refcount to the engine so the underlying rocksdb instances
-		// aren't closed when stopping and restarting the stores.
-		// These refcounts are removed in Stop().
-		if err := eng.Open(); err != nil {
-			m.t.Fatal(err)
-		}
 	}
 
 	stopper := stop.NewStopper()

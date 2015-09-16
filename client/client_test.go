@@ -685,7 +685,7 @@ func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 	if !useSSL {
 		s.Ctx.Insecure = true
 	}
-	s.Ctx.Engines = []engine.Engine{engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize)}
+	s.Ctx.Engines = []engine.Engine{engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, s.Stopper())}
 	if err := s.Start(); err != nil {
 		b.Fatal(err)
 	}
