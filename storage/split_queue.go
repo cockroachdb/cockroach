@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -38,17 +39,15 @@ const (
 // or along intersecting zone config boundaries.
 type splitQueue struct {
 	*baseQueue
-	db     *client.DB
-	gossip *gossip.Gossip
+	db *client.DB
 }
 
 // newSplitQueue returns a new instance of splitQueue.
 func newSplitQueue(db *client.DB, gossip *gossip.Gossip) *splitQueue {
 	sq := &splitQueue{
-		db:     db,
-		gossip: gossip,
+		db: db,
 	}
-	sq.baseQueue = newBaseQueue("split", sq, splitQueueMaxSize)
+	sq.baseQueue = newBaseQueue("split", sq, gossip, splitQueueMaxSize)
 	return sq
 }
 
@@ -56,19 +55,18 @@ func (sq *splitQueue) needsLeaderLease() bool {
 	return true
 }
 
+func (sq *splitQueue) acceptsUnsplitRanges() bool {
+	return true
+}
+
 // shouldQueue determines whether a range should be queued for
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone.
-func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bool, priority float64) {
-	// Load the system config.
-	cfg, err := sq.gossip.GetSystemConfig()
-	if err != nil {
-		log.Error(err)
-		return
-	}
+func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Replica,
+	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := rng.Desc()
-	if len(cfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
+	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
 		// Set priority to 1 in the event the range is split by zone configs.
 		priority = 1
 		shouldQ = true
@@ -76,7 +74,7 @@ func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bo
 
 	// Add priority based on the size of range compared to the max
 	// size for the zone it's in.
-	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		log.Error(err)
 		return
@@ -90,15 +88,12 @@ func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bo
 }
 
 // process synchronously invokes admin split for each proposed split key.
-func (sq *splitQueue) process(now proto.Timestamp, rng *Replica) error {
-	cfg, err := sq.gossip.GetSystemConfig()
-	if err != nil {
-		return err
-	}
+func (sq *splitQueue) process(now proto.Timestamp, rng *Replica,
+	sysCfg *config.SystemConfig) error {
 
 	// First handle case of splitting due to zone config maps.
 	desc := rng.Desc()
-	splitKeys := cfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)
+	splitKeys := sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)
 	if len(splitKeys) > 0 {
 		log.Infof("splitting %s at keys %v", rng, splitKeys)
 		for _, splitKey := range splitKeys {
@@ -110,7 +105,7 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Replica) error {
 	}
 
 	// Next handle case of splitting due to size.
-	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		return err
 	}

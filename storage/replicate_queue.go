@@ -20,6 +20,7 @@ package storage
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -40,7 +41,6 @@ const (
 // additional replica to their range.
 type replicateQueue struct {
 	*baseQueue
-	gossip    *gossip.Gossip
 	allocator Allocator
 	clock     *hlc.Clock
 }
@@ -48,12 +48,11 @@ type replicateQueue struct {
 // makeReplicateQueue returns a new instance of replicateQueue.
 func makeReplicateQueue(gossip *gossip.Gossip, allocator Allocator, clock *hlc.Clock) replicateQueue {
 	rq := replicateQueue{
-		gossip:    gossip,
 		allocator: allocator,
 		clock:     clock,
 	}
 	// rq must be a pointer in order to setup the reference cycle.
-	rq.baseQueue = newBaseQueue("replicate", &rq, replicateQueueMaxSize)
+	rq.baseQueue = newBaseQueue("replicate", &rq, gossip, replicateQueueMaxSize)
 	return rq
 }
 
@@ -61,22 +60,23 @@ func (rq replicateQueue) needsLeaderLease() bool {
 	return true
 }
 
-func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (shouldQ bool, priority float64) {
-	// Load the system config.
-	cfg, err := rq.gossip.GetSystemConfig()
-	if err != nil {
-		log.Error(err)
-		return
-	}
+// acceptsUnsplitRanges is false because the proper replication
+// policy cannot be determined for ranges that span zone configs.
+func (rq *replicateQueue) acceptsUnsplitRanges() bool {
+	return false
+}
+
+func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica,
+	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := repl.Desc()
-	if len(cfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
+	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
 		// If the replica's range needs splitting, wait until done.
 		return
 	}
 
 	// Find the zone config for this range.
-	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		log.Error(err)
 		return
@@ -89,18 +89,10 @@ func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (should
 	return true, priority
 }
 
-func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
-	// Load the system config.
-	cfg, err := rq.gossip.GetSystemConfig()
-	if err != nil {
-		return err
-	}
-
-	// TODO(marc): shouldn't we be checking whether the range needs to be split?
-
+func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *config.SystemConfig) error {
 	desc := repl.Desc()
 	// Find the zone config for this range.
-	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		return err
 	}

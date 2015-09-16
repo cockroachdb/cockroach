@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -48,11 +50,11 @@ type rangeGCQueue struct {
 }
 
 // newRangeGCQueue returns a new instance of rangeGCQueue.
-func newRangeGCQueue(db *client.DB) *rangeGCQueue {
+func newRangeGCQueue(db *client.DB, gossip *gossip.Gossip) *rangeGCQueue {
 	q := &rangeGCQueue{
 		db: db,
 	}
-	q.baseQueue = newBaseQueue("rangeGC", q, rangeGCQueueMaxSize)
+	q.baseQueue = newBaseQueue("rangeGC", q, gossip, rangeGCQueueMaxSize)
 	return q
 }
 
@@ -60,11 +62,17 @@ func (q *rangeGCQueue) needsLeaderLease() bool {
 	return false
 }
 
+func (q *rangeGCQueue) acceptsUnsplitRanges() bool {
+	return true
+}
+
 // shouldQueue determines whether a range should be queued for GC, and
 // if so at what priority. Ranges which have been inactive for longer
 // than rangeGCQueueInactivityThreshold are considered for possible GC
 // at equal priority.
-func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Replica) (bool, float64) {
+func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Replica,
+	_ *config.SystemConfig) (bool, float64) {
+
 	if l := rng.getLease(); l.Expiration.Add(RangeGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now) {
 		return true, 0
 	}
@@ -73,7 +81,7 @@ func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Replica) (bool, flo
 
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
-func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica) error {
+func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica, _ *config.SystemConfig) error {
 	desc := rng.Desc()
 
 	// Calls to RangeLookup typically use inconsistent reads, but we

@@ -372,11 +372,11 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 
 	// Add range scanner and configure with queues.
 	s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
-	s.gcQueue = newGCQueue()
+	s.gcQueue = newGCQueue(s.ctx.Gossip)
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
-	s.verifyQueue = newVerifyQueue(s.ReplicaCount)
+	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
 	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
-	s._rangeGCQueue = newRangeGCQueue(s.db)
+	s._rangeGCQueue = newRangeGCQueue(s.db, s.ctx.Gossip)
 	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue)
 
 	return s

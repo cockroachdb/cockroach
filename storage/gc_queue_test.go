@@ -20,14 +20,11 @@ package storage
 import (
 	"fmt"
 	"math"
-	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -93,7 +90,11 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		{bc, bc * ttl, 1, 0, makeTS(iaN*2, 0), true, 5},
 	}
 
-	gcQ := newGCQueue()
+	gcQ := newGCQueue(tc.gossip)
+	cfg, err := tc.gossip.GetSystemConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for i, test := range testCases {
 		// Write gc'able bytes as key bytes; since "live" bytes will be
@@ -109,7 +110,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		if err := tc.rng.stats.SetMVCCStats(tc.rng.rm.Engine(), stats); err != nil {
 			t.Fatal(err)
 		}
-		shouldQ, priority := gcQ.shouldQueue(test.now, tc.rng)
+		shouldQ, priority := gcQ.shouldQueue(test.now, tc.rng, cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}
@@ -208,9 +209,14 @@ func TestGCQueueProcess(t *testing.T) {
 		}
 	}
 
+	cfg, err := tc.gossip.GetSystemConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Process through a scan queue.
-	gcQ := newGCQueue()
-	if err := gcQ.process(tc.clock.Now(), tc.rng); err != nil {
+	gcQ := newGCQueue(tc.gossip)
+	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -329,15 +335,20 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		}
 	}
 
+	cfg, err := tc.gossip.GetSystemConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Process through a scan queue.
-	gcQ := newGCQueue()
-	if err := gcQ.process(tc.clock.Now(), tc.rng); err != nil {
+	gcQ := newGCQueue(tc.gossip)
+	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg); err != nil {
 		t.Fatal(err)
 	}
 
 	// Iterate through all values to ensure intents have been fully resolved.
 	meta := &engine.MVCCMetadata{}
-	err := tc.store.Engine().Iterate(engine.MVCCEncodeKey(proto.KeyMin), engine.MVCCEncodeKey(proto.KeyMax), func(kv proto.RawKeyValue) (bool, error) {
+	err = tc.store.Engine().Iterate(engine.MVCCEncodeKey(proto.KeyMin), engine.MVCCEncodeKey(proto.KeyMax), func(kv proto.RawKeyValue) (bool, error) {
 		if key, _, isValue := engine.MVCCDecodeKey(kv.Key); !isValue {
 			if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
 				t.Fatalf("unable to unmarshal mvcc metadata for key %s", key)
@@ -350,72 +361,5 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
-	}
-}
-
-// TestGCQueueLookupGCPolicy verifies gc policy lookups.
-func TestGCQueueLookupGCPolicy(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-
-	zoneDefault := config.DefaultZoneConfig
-	zoneTable1000 := &config.ZoneConfig{
-		ReplicaAttrs:  []proto.Attributes{},
-		RangeMinBytes: 1 << 10,
-		RangeMaxBytes: 1 << 18,
-		GC: &config.GCPolicy{
-			TTLSeconds: 60 * 60, // 1 hour only
-		},
-	}
-	zoneTable1002 := &config.ZoneConfig{
-		ReplicaAttrs:  []proto.Attributes{},
-		RangeMinBytes: 1 << 10,
-		RangeMaxBytes: 1 << 18,
-		// Note that there is no GC set here, so we should select the
-		// hierarchical parent's GC policy; in this case, zoneConfig1.
-	}
-
-	// Add configs to testing helper.
-	config.TestingSetZoneConfig(1000, zoneTable1000)
-	config.TestingSetZoneConfig(1002, zoneTable1002)
-
-	testCases := []struct {
-		start, end proto.Key
-		zoneConfig *config.ZoneConfig
-		errStr     string
-	}{
-		{proto.KeyMin, proto.KeyMax, nil, "spans multiple ranges"},
-		{keys.MakeTablePrefix(1000), keys.MakeTablePrefix(10002), nil, "spans multiple ranges"},
-		{proto.KeyMin, proto.Key("a"), zoneDefault, ""},
-		{keys.MakeTablePrefix(1000), keys.MakeTablePrefix(1001), zoneTable1000, ""},
-		{keys.MakeTablePrefix(1001), keys.MakeTablePrefix(1002), zoneDefault, ""},
-		{keys.MakeTablePrefix(1002), keys.MakeTablePrefix(1010), zoneTable1002, ""},
-		{keys.MakeTablePrefix(1002), proto.KeyMax, zoneTable1002, ""},
-		{keys.MakeTablePrefix(9999), proto.KeyMax, zoneDefault, ""},
-	}
-
-	gcQ := newGCQueue()
-	for testNum, testCase := range testCases {
-		rng := createRange(tc.store, proto.RangeID(testNum+1), testCase.start, testCase.end)
-
-		gcPolicy, err := gcQ.lookupGCPolicy(rng)
-		if testCase.errStr == "" {
-			if err != nil {
-				t.Errorf("#%d: error: %v", testNum, err)
-				continue
-			}
-		} else if !testutils.IsError(err, testCase.errStr) {
-			t.Errorf("#%d: expected err=%s, got %v", testNum, testCase.errStr, err)
-			continue
-		}
-		if testCase.zoneConfig == nil {
-			continue
-		}
-		if !reflect.DeepEqual(gcPolicy, testCase.zoneConfig.GC) {
-			t.Errorf("#%d: mismatching GCPolicy, got: %+v, expected: %+v",
-				testNum, gcPolicy, testCase.zoneConfig.GC)
-		}
 	}
 }

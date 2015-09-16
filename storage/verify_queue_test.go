@@ -53,10 +53,10 @@ func TestVerifyQueueShouldQueue(t *testing.T) {
 		{makeTS(verificationInterval.Nanoseconds()*2, 0), true, 2},
 	}
 
-	verifyQ := newVerifyQueue(nil)
+	verifyQ := newVerifyQueue(tc.gossip, nil)
 
 	for i, test := range testCases {
-		shouldQ, priority := verifyQ.shouldQueue(test.now, tc.rng)
+		shouldQ, priority := verifyQ.shouldQueue(test.now, tc.rng, nil /* system config not used */)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}

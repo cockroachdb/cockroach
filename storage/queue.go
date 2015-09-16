@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -85,13 +87,18 @@ type queueImpl interface {
 	// lease to operate on a replica.
 	needsLeaderLease() bool
 
-	// shouldQueue accepts current time and a replica and returns whether
-	// it should be queued and if so, at what priority.
-	shouldQueue(proto.Timestamp, *Replica) (shouldQueue bool, priority float64)
+	// acceptsUnsplitRanges returns whether this queue can process
+	// ranges that need to be split due to zone config settings.
+	// Ranges are checked before calling shouldQueue and process.
+	acceptsUnsplitRanges() bool
 
-	// process accepts current time and a replica and executes
-	// queue-specific work on it.
-	process(proto.Timestamp, *Replica) error
+	// shouldQueue accepts current time, a replica, and the system config
+	// and returns whether it should be queued and if so, at what priority.
+	shouldQueue(proto.Timestamp, *Replica, *config.SystemConfig) (shouldQueue bool, priority float64)
+
+	// process accepts current time, a replica, and the system config
+	// and executes queue-specific work on it.
+	process(proto.Timestamp, *Replica, *config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue.
@@ -106,6 +113,7 @@ type queueImpl interface {
 type baseQueue struct {
 	name       string
 	impl       queueImpl
+	gossip     *gossip.Gossip
 	maxSize    int                            // Maximum number of replicas to queue
 	incoming   chan struct{}                  // Channel signaled when a new replica is added to the queue.
 	sync.Mutex                                // Mutex protects priorityQ and replicas
@@ -121,10 +129,11 @@ type baseQueue struct {
 // maxSize doesn't prevent new replicas from being added, it just
 // limits the total size. Higher priority replicas can still be
 // added; their addition simply removes the lowest priority replica.
-func newBaseQueue(name string, impl queueImpl, maxSize int) *baseQueue {
+func newBaseQueue(name string, impl queueImpl, gossip *gossip.Gossip, maxSize int) *baseQueue {
 	return &baseQueue{
 		name:     name,
 		impl:     impl,
+		gossip:   gossip,
 		maxSize:  maxSize,
 		incoming: make(chan struct{}, 1),
 		replicas: map[proto.RangeID]*replicaItem{},
@@ -170,9 +179,26 @@ func (bq *baseQueue) Add(repl *Replica, priority float64) error {
 // not be added, as the replica with the lowest priority will be
 // dropped.
 func (bq *baseQueue) MaybeAdd(repl *Replica, now proto.Timestamp) {
+	// Load the system config.
+	cfg, err := bq.gossip.GetSystemConfig()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	if !bq.impl.acceptsUnsplitRanges() &&
+		cfg.NeedsSplit(repl.Desc().StartKey, repl.Desc().EndKey) {
+		// Range needs to be split due to zone configs, but queue does
+		// not accept unsplit ranges.
+		if log.V(3) {
+			log.Infof("this replica of %s needs to be split; skipping...", repl)
+		}
+		return
+	}
+
 	bq.Lock()
 	defer bq.Unlock()
-	should, priority := bq.impl.shouldQueue(now, repl)
+	should, priority := bq.impl.shouldQueue(now, repl, cfg)
 	if err := bq.addInternal(repl, should, priority); err != nil && log.V(3) {
 		log.Infof("couldn't add %s to queue %s: %s", repl, bq.name, err)
 	}
@@ -285,33 +311,55 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 }
 
 func (bq *baseQueue) processOne(clock *hlc.Clock) {
+	// Load the system config.
+	cfg, err := bq.gossip.GetSystemConfig()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
 	start := time.Now()
 	bq.Lock()
 	repl := bq.pop()
 	bq.Unlock()
-	if repl != nil {
-		now := clock.Now()
+
+	if repl == nil {
+		return
+	}
+
+	now := clock.Now()
+
+	if !bq.impl.acceptsUnsplitRanges() &&
+		cfg.NeedsSplit(repl.Desc().StartKey, repl.Desc().EndKey) {
+		// Range needs to be split due to zone configs, but queue does
+		// not accept unsplit ranges.
 		if log.V(3) {
-			log.Infof("processing replica %s from %s queue...", repl, bq.name)
+			log.Infof("this replica of %s needs to be split; skipping...", repl)
 		}
-		// If the queue requires a replica to have the range leader lease in
-		// order to be processed, check whether this replica has leader lease
-		// and renew or acquire if necessary.
-		if bq.impl.needsLeaderLease() {
-			// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-			args := &proto.GetRequest{RequestHeader: proto.RequestHeader{Timestamp: now}}
-			if err := repl.redirectOnOrAcquireLeaderLease(nil /* Trace */, args.Header().Timestamp); err != nil {
-				if log.V(3) {
-					log.Infof("this replica of %s could not acquire leader lease; skipping...", repl)
-				}
-				return
+		return
+	}
+
+	if log.V(3) {
+		log.Infof("processing replica %s from %s queue...", repl, bq.name)
+	}
+
+	// If the queue requires a replica to have the range leader lease in
+	// order to be processed, check whether this replica has leader lease
+	// and renew or acquire if necessary.
+	if bq.impl.needsLeaderLease() {
+		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
+		args := &proto.GetRequest{RequestHeader: proto.RequestHeader{Timestamp: now}}
+		if err := repl.redirectOnOrAcquireLeaderLease(nil /* Trace */, args.Header().Timestamp); err != nil {
+			if log.V(3) {
+				log.Infof("this replica of %s could not acquire leader lease; skipping...", repl)
 			}
+			return
 		}
-		if err := bq.impl.process(now, repl); err != nil {
-			log.Errorf("failure processing replica %s from %s queue: %s", repl, bq.name, err)
-		} else if log.V(2) {
-			log.Infof("processed replica %s from %s queue in %s", repl, bq.name, time.Now().Sub(start))
-		}
+	}
+	if err := bq.impl.process(now, repl, cfg); err != nil {
+		log.Errorf("failure processing replica %s from %s queue: %s", repl, bq.name, err)
+	} else if log.V(2) {
+		log.Infof("processed replica %s from %s queue in %s", repl, bq.name, time.Now().Sub(start))
 	}
 }
 
