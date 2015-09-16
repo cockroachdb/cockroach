@@ -62,17 +62,17 @@ func TestValues(t *testing.T) {
 			true,
 		},
 		{
-			parser.Values{{parser.StrVal(vStr)}},
+			parser.Values{{parser.DString(vStr)}},
 			asRow(parser.DString(vStr)),
 			true,
 		},
 		{
-			parser.Values{{parser.BytesVal(vStr)}},
-			asRow(parser.DString(vStr)),
+			parser.Values{{parser.DBytes(vStr)}},
+			asRow(parser.DBytes(vStr)),
 			true,
 		},
 		{
-			parser.Values{{parser.BoolVal(vBool)}},
+			parser.Values{{parser.DBool(vBool)}},
 			asRow(parser.DBool(vBool)),
 			true,
 		},

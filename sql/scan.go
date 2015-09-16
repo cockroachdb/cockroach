@@ -704,8 +704,10 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 			return parser.DBool(kv.ValueInt() != 0), true
 		case ColumnType_FLOAT:
 			return parser.DFloat(math.Float64frombits(uint64(kv.ValueInt()))), true
-		case ColumnType_STRING, ColumnType_BYTES:
+		case ColumnType_STRING:
 			return parser.DString(kv.ValueBytes()), true
+		case ColumnType_BYTES:
+			return parser.DBytes(kv.ValueBytes()), true
 		case ColumnType_DATE:
 			var t time.Time
 			if err := t.UnmarshalBinary(kv.ValueBytes()); err != nil {
@@ -745,8 +747,10 @@ func (n *scanNode) getQVal(col ColumnDescriptor) *qvalue {
 			qval.datum = parser.DummyBool
 		case ColumnType_FLOAT:
 			qval.datum = parser.DummyFloat
-		case ColumnType_STRING, ColumnType_BYTES:
+		case ColumnType_STRING:
 			qval.datum = parser.DummyString
+		case ColumnType_BYTES:
+			qval.datum = parser.DummyBytes
 		case ColumnType_DATE:
 			qval.datum = parser.DummyDate
 		case ColumnType_TIMESTAMP:

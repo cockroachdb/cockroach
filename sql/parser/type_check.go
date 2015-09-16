@@ -82,16 +82,19 @@ func TypeCheckExpr(expr Expr) (Datum, error) {
 	case *ExistsExpr:
 		return TypeCheckExpr(t.Subquery)
 
-	case BytesVal, StrVal:
+	case DString:
 		return DummyString, nil
 
-	case IntVal:
+	case DBytes:
+		return DummyBytes, nil
+
+	case DInt, IntVal:
 		return DummyInt, nil
 
-	case NumVal:
+	case DFloat, NumVal:
 		return DummyFloat, nil
 
-	case BoolVal:
+	case DBool:
 		return DummyBool, nil
 
 	case ValArg:
@@ -454,10 +457,16 @@ func typeCheckCastExpr(expr *CastExpr) (Datum, error) {
 			return DummyFloat, nil
 		}
 
-	case *StringType, *BytesType:
+	case *StringType:
 		switch dummyExpr {
-		case DummyBool, DummyInt, DummyFloat, DNull, DummyString:
+		case DummyBool, DummyInt, DummyFloat, DNull, DummyString, DummyBytes:
 			return DummyString, nil
+		}
+
+	case *BytesType:
+		switch dummyExpr {
+		case DummyBytes, DummyString:
+			return DummyBytes, nil
 		}
 
 	case *DateType:

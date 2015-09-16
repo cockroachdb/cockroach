@@ -29,6 +29,7 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var errEmptyInputString = errors.New("the input string should not be empty")
@@ -66,9 +67,16 @@ func (b builtin) match(types typeList) bool {
 // sorted please.
 var builtins = map[string][]builtin{
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
-	"length": {stringBuiltin1(func(s string) (Datum, error) {
-		return DInt(len(s)), nil
-	}, DummyInt)},
+	"length": {
+		stringBuiltin1(func(s string) (Datum, error) {
+			return DInt(utf8.RuneCountInString(s)), nil
+		}, DummyInt),
+		bytesBuiltin1(func(s string) (Datum, error) {
+			return DInt(len(s)), nil
+		}, DummyInt),
+	},
+
+	// TODO(pmattis): What string functions should also support bytesType?
 
 	"lower": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(strings.ToLower(s)), nil
@@ -96,7 +104,7 @@ var builtins = map[string][]builtin{
 					if err != nil {
 						return DNull, err
 					}
-					buffer.WriteString(ds)
+					_, _ = buffer.WriteString(ds)
 				}
 				return DString(buffer.String()), nil
 			},
@@ -413,8 +421,8 @@ var builtins = map[string][]builtin{
 
 	"count": countImpls(),
 
-	"max": aggregateImpls(boolType, intType, floatType, stringType),
-	"min": aggregateImpls(boolType, intType, floatType, stringType),
+	"max": aggregateImpls(boolType, intType, floatType, stringType, bytesType),
+	"min": aggregateImpls(boolType, intType, floatType, stringType, bytesType),
 	"sum": aggregateImpls(intType, floatType),
 
 	// Math functions
@@ -620,7 +628,7 @@ func aggregateImpls(types ...reflect.Type) []builtin {
 
 func countImpls() []builtin {
 	var r []builtin
-	types := typeList{boolType, intType, floatType, stringType, tupleType}
+	types := typeList{boolType, intType, floatType, stringType, bytesType, tupleType}
 	for _, t := range types {
 		r = append(r, builtin{
 			types:      typeList{t},
@@ -657,7 +665,7 @@ var substringImpls = []builtin{
 	},
 	{
 		types:      typeList{stringType, intType, intType},
-		returnType: DummyFloat,
+		returnType: DummyString,
 		fn: func(args DTuple) (Datum, error) {
 			str := args[0].(DString)
 			// SQL strings are 1-indexed.
@@ -750,6 +758,16 @@ func stringBuiltin3(f func(string, string, string) (Datum, error), returnType Da
 		returnType: returnType,
 		fn: func(args DTuple) (Datum, error) {
 			return f(string(args[0].(DString)), string(args[1].(DString)), string(args[2].(DString)))
+		},
+	}
+}
+
+func bytesBuiltin1(f func(string) (Datum, error), returnType Datum) builtin {
+	return builtin{
+		types:      typeList{bytesType},
+		returnType: returnType,
+		fn: func(args DTuple) (Datum, error) {
+			return f(string(args[0].(DBytes)))
 		},
 	}
 }

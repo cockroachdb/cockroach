@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -288,6 +289,12 @@ var binOps = map[binArgs]binOp{
 			return left.(DString) + right.(DString), nil
 		},
 	},
+	binArgs{Concat, bytesType, bytesType}: {
+		returnType: DummyBytes,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DBytes) + right.(DBytes), nil
+		},
+	},
 
 	// TODO(pmattis): Check that the shift is valid.
 	binArgs{LShift, intType, intType}: {
@@ -318,6 +325,9 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 	cmpArgs{EQ, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DString) == right.(DString)), nil
 	},
+	cmpArgs{EQ, bytesType, bytesType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DBytes) == right.(DBytes)), nil
+	},
 	cmpArgs{EQ, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DBool) == right.(DBool)), nil
 	},
@@ -340,6 +350,9 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 	cmpArgs{LT, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DString) < right.(DString)), nil
 	},
+	cmpArgs{LT, bytesType, bytesType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DBytes) < right.(DBytes)), nil
+	},
 	cmpArgs{LT, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(!left.(DBool) && right.(DBool)), nil
 	},
@@ -361,6 +374,9 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 
 	cmpArgs{LE, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DString) <= right.(DString)), nil
+	},
+	cmpArgs{LE, bytesType, bytesType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DBytes) <= right.(DBytes)), nil
 	},
 	cmpArgs{LE, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(!left.(DBool) || right.(DBool)), nil
@@ -392,6 +408,7 @@ func init() {
 	cmpOps[cmpArgs{In, intType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, floatType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, stringType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, bytesType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, dateType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, timestampType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, intervalType, tupleType}] = evalTupleIN
@@ -439,12 +456,6 @@ func EvalExpr(expr Expr) (Datum, error) {
 		// The subquery within the exists should have been executed before
 		// expression evaluation and the exists nodes replaced with the result.
 
-	case BytesVal:
-		return DString(t), nil
-
-	case StrVal:
-		return DString(t), nil
-
 	case IntVal:
 		if t < 0 {
 			return DNull, fmt.Errorf("integer value out of range: %s", t)
@@ -457,9 +468,6 @@ func EvalExpr(expr Expr) (Datum, error) {
 			return DNull, err
 		}
 		return DFloat(v), nil
-
-	case BoolVal:
-		return DBool(t), nil
 
 	case ValArg:
 		// Placeholders should have been replaced before expression evaluation.
@@ -643,6 +651,10 @@ func evalIsOfTypeExpr(expr *IsOfTypeExpr) (Datum, error) {
 			if _, ok := t.(*StringType); ok {
 				return result, nil
 			}
+		}
+
+	case DBytes:
+		for _, t := range expr.Types {
 			if _, ok := t.(*BytesType); ok {
 				return result, nil
 			}
@@ -1000,13 +1012,18 @@ func evalCastExpr(expr *CastExpr) (Datum, error) {
 			return DFloat(f), nil
 		}
 
-	case *StringType, *BytesType:
+	case *StringType:
 		var s DString
-		switch d.(type) {
+		switch t := d.(type) {
 		case DBool, DInt, DFloat, dNull:
 			s = DString(d.String())
 		case DString:
-			s = d.(DString)
+			s = t
+		case DBytes:
+			if !utf8.ValidString(string(t)) {
+				return DNull, fmt.Errorf("invalid utf8: %q", string(t))
+			}
+			s = DString(t)
 		}
 		if c, ok := expr.Type.(*StringType); ok {
 			// If the CHAR type specifies a limit we truncate to that limit:
@@ -1016,6 +1033,14 @@ func evalCastExpr(expr *CastExpr) (Datum, error) {
 			}
 		}
 		return s, nil
+
+	case *BytesType:
+		switch t := d.(type) {
+		case DString:
+			return DBytes(t), nil
+		case DBytes:
+			return d, nil
+		}
 
 	case *DateType:
 		switch d := d.(type) {

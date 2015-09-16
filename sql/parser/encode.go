@@ -96,11 +96,20 @@ func encIdent(s string) string {
 	return buf.String()
 }
 
-func encodeSQLBytes(buf []byte, v []byte) []byte {
-	buf = append(buf, "x'"...)
-	for _, d := range v {
-		buf = append(buf, hexMap[d]...)
+func encodeSQLBytes(buf []byte, in []byte) []byte {
+	start := 0
+	buf = append(buf, "b'"...)
+	for i, ch := range in {
+		if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
+			buf = append(buf, in[start:i]...)
+			buf = append(buf, '\\', encodedChar)
+			start = i + 1
+		} else if ch >= 0x80 {
+			buf = append(buf, hexMap[ch]...)
+			start = i + 1
+		}
 	}
+	buf = append(buf, in[start:]...)
 	buf = append(buf, '\'')
 	return buf
 }
@@ -127,6 +136,6 @@ func init() {
 	}
 
 	for i := range hexMap {
-		hexMap[i] = []byte(fmt.Sprintf("%02x", i))
+		hexMap[i] = []byte(fmt.Sprintf("\\x%02x", i))
 	}
 }

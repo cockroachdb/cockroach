@@ -172,6 +172,8 @@ func (e Executor) execStmt(stmt parser.Statement, params parameters, planMaker *
 						row.Values = append(row.Values, driver.Datum{FloatVal: (*float64)(&vt)})
 					case parser.DString:
 						row.Values = append(row.Values, driver.Datum{StringVal: (*string)(&vt)})
+					case parser.DBytes:
+						row.Values = append(row.Values, driver.Datum{BytesVal: []byte(vt)})
 					case parser.DDate:
 						row.Values = append(row.Values, driver.Datum{TimeVal: &driver.Datum_Timestamp{
 							Sec:  vt.Unix(),
@@ -261,7 +263,7 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 	case *float64:
 		return parser.DFloat(*t), true
 	case []byte:
-		return parser.DString(t), true
+		return parser.DBytes(t), true
 	case *string:
 		return parser.DString(*t), true
 	case *driver.Datum_Timestamp:

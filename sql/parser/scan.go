@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 const eof = -1
@@ -192,7 +193,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 		if t := s.peek(); t == singleQuote || t == s.stringQuote {
 			// [bB]'[^']'
 			s.pos++
-			if s.scanString(lval, t, s.syntax == Modern) {
+			if s.scanString(lval, t, true) {
 				lval.id = BCONST
 			}
 			return
@@ -585,16 +586,18 @@ func (s *scanner) scanParam(lval *sqlSymType) {
 }
 
 func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
-	lval.str = ""
+	var buf []byte
+	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
 	tripleQuoted := false
 
+outer:
 	for {
 		switch s.next() {
 		case ch:
 			switch s.syntax {
 			case Traditional:
-				lval.str += s.in[start : s.pos-1]
+				buf = append(buf, s.in[start:s.pos-1]...)
 				if s.peek() == ch {
 					// Double quote is translated into a single quote that is part of the
 					// string.
@@ -606,13 +609,13 @@ func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 				if newline, ok := s.skipWhitespace(lval, false); !ok {
 					return false
 				} else if !newline {
-					return true
+					break outer
 				}
 				// SQL allows joining adjacent strings separated by whitespace as long as
 				// that whitespace contains at least one newline. Kind of strange to
 				// require the newline, but that is the standard.
 				if s.peek() != ch {
-					return true
+					break outer
 				}
 				s.pos++
 				start = s.pos
@@ -626,14 +629,14 @@ func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 					continue
 				}
 				if !tripleQuoted {
-					lval.str += s.in[start : s.pos-1]
-					return true
+					buf = append(buf, s.in[start:s.pos-1]...)
+					break outer
 				}
 				if s.peek() == ch && s.peekN(1) == ch {
 					// Triple-quotes at the end of the string.
-					lval.str += s.in[start : s.pos-1]
+					buf = append(buf, s.in[start:s.pos-1]...)
 					s.pos += 2
-					return true
+					break outer
 				}
 			}
 			continue
@@ -649,7 +652,7 @@ func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 			t := s.peek()
 
 			if allowEscapes {
-				lval.str += s.in[start : s.pos-1]
+				buf = append(buf, s.in[start:s.pos-1]...)
 				if t == ch {
 					start = s.pos
 					s.pos++
@@ -667,13 +670,18 @@ func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 					} else {
 						tmp = s.in[s.pos-1:]
 					}
-					v, _, tail, err := strconv.UnquoteChar(tmp, byte(ch))
+					v, multibyte, tail, err := strconv.UnquoteChar(tmp, byte(ch))
 					if err != nil {
 						lval.id = ERROR
 						lval.str = err.Error()
 						return false
 					}
-					lval.str += string(v)
+					if v < utf8.RuneSelf || !multibyte {
+						buf = append(buf, byte(v))
+					} else {
+						n := utf8.EncodeRune(runeTmp[:], v)
+						buf = append(buf, runeTmp[:n]...)
+					}
 					s.pos += len(tmp) - len(tail) - 1
 					start = s.pos
 					continue
@@ -692,6 +700,9 @@ func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 			return false
 		}
 	}
+
+	lval.str = string(buf)
+	return true
 }
 
 func isDigit(ch int) bool {
