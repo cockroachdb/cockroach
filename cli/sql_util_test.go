@@ -22,6 +22,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
@@ -55,7 +56,7 @@ func TestRunQuery(t *testing.T) {
 	}()
 
 	// Non-query statement.
-	if err := runQuery(db, `SET DATABASE=system`); err != nil {
+	if err := runPrettyQuery(db, `SET DATABASE=system`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -68,7 +69,26 @@ OK
 	b.Reset()
 
 	// Use system database for sample query/output as they are fairly fixed.
-	if err := runQuery(db, `SHOW COLUMNS FROM system.namespace`); err != nil {
+	cols, rows, err := runQuery(db, `SHOW COLUMNS FROM system.namespace`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedCols := []string{"Field", "Type", "Null"}
+	if !reflect.DeepEqual(expectedCols, cols) {
+		t.Fatalf("expected:\n%v\ngot:\n%v", expectedCols, cols)
+	}
+
+	expectedRows := [][]string{
+		{`"parentID"`, `"INT"`, `true`},
+		{`"name"`, `"STRING"`, `true`},
+		{`"id"`, `"INT"`, `true`},
+	}
+	if !reflect.DeepEqual(expectedRows, rows) {
+		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
+	}
+
+	if err := runPrettyQuery(db, `SHOW COLUMNS FROM system.namespace`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -88,7 +108,7 @@ OK
 	b.Reset()
 
 	// Test placeholders.
-	if err := runQuery(db, `SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
+	if err := runPrettyQuery(db, `SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -109,7 +129,7 @@ OK
 		return fmt.Sprintf("--> %#v <--", val)
 	}
 
-	if err := runQueryWithFormat(db, fmtMap{"name": newFormat},
+	if err := runPrettyQueryWithFormat(db, fmtMap{"name": newFormat},
 		`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
 		t.Fatal(err)
 	}

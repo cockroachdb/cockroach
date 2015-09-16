@@ -82,19 +82,21 @@ func runGetZone(cmd *cobra.Command, args []string) {
 	}
 
 	db := makeSQLClient()
-	err = runQueryWithFormat(db, fmtMap{"config": formatZone}, `SELECT * FROM system.zones WHERE id=$1`, id)
+	_, rows, err := runQueryWithFormat(db, fmtMap{"config": formatZone},
+		`SELECT * FROM system.zones WHERE id=$1`, id)
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	if err != nil {
-		log.Error(err)
+	if len(rows) == 0 {
+		log.Errorf("Object %d: no zone config found", id)
 		return
 	}
+	fmt.Fprintln(osStdout, rows[0][1])
 }
 
-// A lsZonesCmd command displays a list of zone configs by objet ID.
+// A lsZonesCmd command displays a list of zone configs by object ID.
 var lsZonesCmd = &cobra.Command{
 	Use:   "ls [options]",
 	Short: "list all zone configs by object ID",
@@ -111,10 +113,18 @@ func runLsZones(cmd *cobra.Command, args []string) {
 		return
 	}
 	db := makeSQLClient()
-	err := runQueryWithFormat(db, fmtMap{"config": formatZone}, `SELECT * FROM system.zones`)
+	_, rows, err := runQueryWithFormat(db, fmtMap{"config": formatZone}, `SELECT * FROM system.zones`)
 	if err != nil {
 		log.Error(err)
 		return
+	}
+
+	if len(rows) == 0 {
+		log.Error("No zone configs founds")
+		return
+	}
+	for _, r := range rows {
+		fmt.Fprintf(osStdout, "Object %s:\n%s\n", r[0], r[1])
 	}
 }
 
@@ -142,12 +152,11 @@ func runRmZone(cmd *cobra.Command, args []string) {
 	}
 
 	db := makeSQLClient()
-	err = runQuery(db, `DELETE FROM system.zones WHERE id=$1`, id)
+	err = runPrettyQuery(db, `DELETE FROM system.zones WHERE id=$1`, id)
 	if err != nil {
 		log.Error(err)
 		return
 	}
-	fmt.Printf("Deleted zone key %q\n", args[0])
 }
 
 // A setZoneCmd command creates a new or updates an existing zone config.
@@ -222,7 +231,7 @@ func runSetZone(cmd *cobra.Command, args []string) {
 
 	db := makeSQLClient()
 	// TODO(marc): switch to UPSERT.
-	err = runQuery(db, `INSERT INTO system.zones VALUES ($1, $2)`, id, buf)
+	err = runPrettyQuery(db, `INSERT INTO system.zones VALUES ($1, $2)`, id, buf)
 	if err != nil {
 		log.Error(err)
 		return
