@@ -283,8 +283,7 @@ func (d DString) IsMin() bool {
 }
 
 func (d DString) String() string {
-	var scratch [64]byte
-	return string(encodeSQLString(scratch[0:0], []byte(d)))
+	return encodeSQLString(string(d))
 }
 
 // DBytes is the bytes Datum. The underlying type is a string because we want
@@ -331,8 +330,7 @@ func (d DBytes) IsMin() bool {
 }
 
 func (d DBytes) String() string {
-	var scratch [64]byte
-	return string(encodeSQLBytes(scratch[0:0], []byte(d)))
+	return encodeSQLBytes(string(d))
 }
 
 // DDate is the date Datum.
