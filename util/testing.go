@@ -28,6 +28,7 @@ import (
 // Tester is a proxy for e.g. testing.T which does not introduce a dependency
 // on "testing".
 type Tester interface {
+	Failed() bool
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
 }

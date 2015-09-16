@@ -37,7 +37,8 @@ func (*NotExpr) expr()        {}
 func (*ParenExpr) expr()      {}
 func (*ComparisonExpr) expr() {}
 func (*RangeCond) expr()      {}
-func (*NullCheck) expr()      {}
+func (*IsExpr) expr()         {}
+func (*IsOfTypeExpr) expr()   {}
 func (*ExistsExpr) expr()     {}
 func (StrVal) expr()          {}
 func (BytesVal) expr()        {}
@@ -118,21 +119,25 @@ const (
 	NotLike
 	SimilarTo
 	NotSimilarTo
+	IsDistinctFrom
+	IsNotDistinctFrom
 )
 
 var comparisonOpName = [...]string{
-	EQ:           "=",
-	LT:           "<",
-	GT:           ">",
-	LE:           "<=",
-	GE:           ">=",
-	NE:           "!=",
-	In:           "IN",
-	NotIn:        "NOT IN",
-	Like:         "LIKE",
-	NotLike:      "NOT LIKE",
-	SimilarTo:    "SIMILAR TO",
-	NotSimilarTo: "NOT SIMILAR TO",
+	EQ:                "=",
+	LT:                "<",
+	GT:                ">",
+	LE:                "<=",
+	GE:                ">=",
+	NE:                "!=",
+	In:                "IN",
+	NotIn:             "NOT IN",
+	Like:              "LIKE",
+	NotLike:           "NOT LIKE",
+	SimilarTo:         "SIMILAR TO",
+	NotSimilarTo:      "NOT SIMILAR TO",
+	IsDistinctFrom:    "IS DISTINCT FROM",
+	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
 }
 
 func (i ComparisonOp) String() string {
@@ -166,17 +171,72 @@ func (node *RangeCond) String() string {
 	return fmt.Sprintf("%s BETWEEN %s AND %s", node.Left, node.From, node.To)
 }
 
-// NullCheck represents an IS NULL or an IS NOT NULL expression.
-type NullCheck struct {
-	Not  bool
-	Expr Expr
+// IsOp represents an IS expression operator.
+type IsOp int
+
+// IsExpr.Operator
+const (
+	IsNull = iota
+	IsNotNull
+	IsTrue
+	IsNotTrue
+	IsFalse
+	IsNotFalse
+	IsUnknown
+	IsNotUnknown
+)
+
+var isOpName = [...]string{
+	IsNull:       "IS NULL",
+	IsNotNull:    "IS NOT NULL",
+	IsTrue:       "IS TRUE",
+	IsNotTrue:    "IS NOT TRUE",
+	IsFalse:      "IS FALSE",
+	IsNotFalse:   "IS NOT FALSE",
+	IsUnknown:    "IS UNKNOWN",
+	IsNotUnknown: "IS NOT UNKNOWN",
 }
 
-func (node *NullCheck) String() string {
-	if node.Not {
-		return fmt.Sprintf("%s IS NOT NULL", node.Expr)
+func (i IsOp) String() string {
+	if i < 0 || i > IsOp(len(isOpName)-1) {
+		return fmt.Sprintf("IsOp(%d)", i)
 	}
-	return fmt.Sprintf("%s IS NULL", node.Expr)
+	return isOpName[i]
+}
+
+// IsExpr represents an IS {,NOT} {NULL,TRUE,FALSE,UNKNOWN} expression.
+type IsExpr struct {
+	Operator IsOp
+	Expr     Expr
+}
+
+func (node *IsExpr) String() string {
+	return fmt.Sprintf("%s %s", node.Expr, node.Operator)
+}
+
+// IsOfTypeExpr represents an IS {,NOT} OF (type_list) expression.
+type IsOfTypeExpr struct {
+	Not   bool
+	Expr  Expr
+	Types []ColumnType
+}
+
+func (node *IsOfTypeExpr) String() string {
+	var buf bytes.Buffer
+	_, _ = buf.WriteString(node.Expr.String())
+	_, _ = buf.WriteString(" IS")
+	if node.Not {
+		_, _ = buf.WriteString(" NOT")
+	}
+	_, _ = buf.WriteString(" OF (")
+	for i, t := range node.Types {
+		if i > 0 {
+			_, _ = buf.WriteString(", ")
+		}
+		_, _ = buf.WriteString(t.String())
+	}
+	_, _ = buf.WriteString(")")
+	return buf.String()
 }
 
 // ExistsExpr represents an EXISTS expression.

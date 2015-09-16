@@ -52,12 +52,15 @@ func setTestRetryOptions() {
 func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup, retries *int32,
 	txnChannel chan struct{}, done <-chan struct{}, t *testing.T) {
 	src := rand.New(rand.NewSource(i))
+	defer func() {
+		if wg != nil {
+			wg.Done()
+		}
+	}()
+
 	for j := 0; ; j++ {
 		select {
 		case <-done:
-			if wg != nil {
-				wg.Done()
-			}
 			return
 		default:
 			first := true
@@ -87,10 +90,10 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 	}
 }
 
-// TestRangeSplit executes various splits and checks that all created intents
-// are resolved. This includes both intents which are resolved synchronously
-// with EndTransaction and via RPC.
-func TestRangeSplit(t *testing.T) {
+// TestRangeSplitMeta executes various splits (including at meta addressing)
+// and checks that all created intents are resolved. This includes both intents
+// which are resolved synchronously with EndTransaction and via RPC.
+func TestRangeSplitMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
@@ -150,7 +153,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 		}
 		log.Infof("starting split at key %q...", splitKey)
 		if err := s.DB.AdminSplit(splitKey); err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 		log.Infof("split at key %q complete", splitKey)
 	}
@@ -168,23 +171,16 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	// Override default zone config.
+	previousMaxBytes := config.DefaultZoneConfig.RangeMaxBytes
+	config.DefaultZoneConfig.RangeMaxBytes = 1 << 18
+	defer func() { config.DefaultZoneConfig.RangeMaxBytes = previousMaxBytes }()
+
 	s := createTestDB(t)
+	// This is purely to silence log spam.
+	config.TestingSetupZoneConfigHook(s.Stopper)
 	defer s.Stop()
 	setTestRetryOptions()
-
-	// Rewrite a zone config with low max bytes.
-	zoneConfig := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{},
-			{},
-			{},
-		},
-		RangeMinBytes: 1 << 8,
-		RangeMaxBytes: 1 << 18,
-	}
-	if err := s.DB.Put(keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin), zoneConfig); err != nil {
-		t.Fatal(err)
-	}
 
 	// Start test writer write about a 32K/key so there aren't too many writes necessary to split 64K range.
 	done := make(chan struct{})

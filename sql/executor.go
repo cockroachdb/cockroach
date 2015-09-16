@@ -36,11 +36,19 @@ var errNoTransactionInProgress = errors.New("there is no transaction in progress
 var errTransactionAborted = errors.New("current transaction is aborted, commands ignored until end of transaction block")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
-type server struct {
+// An Executor executes SQL statements.
+type Executor struct {
 	db client.DB
 }
 
-func (s server) execute(args driver.Request) (driver.Response, int, error) {
+// NewExecutor creates an Executor.
+func NewExecutor(db client.DB) Executor {
+	return Executor{db}
+}
+
+// Execute the statement(s) in the given request and return a response.
+// On error, the returned integer is an HTTP error code.
+func (e Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	// Pick up current session state.
 	planMaker := planner{user: args.GetUser()}
 	if err := gogoproto.Unmarshal(args.Session, &planMaker.session); err != nil {
@@ -48,7 +56,7 @@ func (s server) execute(args driver.Request) (driver.Response, int, error) {
 	}
 	// Open a pending transaction if needed.
 	if planMaker.session.Txn != nil {
-		txn := client.NewTxn(s.db)
+		txn := client.NewTxn(e.db)
 		txn.Proto = *planMaker.session.Txn
 		if planMaker.session.MutatesSystemDB {
 			txn.SetSystemDBTrigger()
@@ -58,7 +66,7 @@ func (s server) execute(args driver.Request) (driver.Response, int, error) {
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	reply := s.execStmts(args.Sql, parameters(args.Params), &planMaker)
+	reply := e.execStmts(args.Sql, parameters(args.Params), &planMaker)
 
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
@@ -80,7 +88,7 @@ func (s server) execute(args driver.Request) (driver.Response, int, error) {
 
 // exec executes the request. Any error encountered is returned; it is
 // the caller's responsibility to update the response.
-func (s server) execStmts(sql string, params parameters, planMaker *planner) driver.Response {
+func (e Executor) execStmts(sql string, params parameters, planMaker *planner) driver.Response {
 	var resp driver.Response
 	stmts, err := parser.Parse(sql, parser.Syntax(planMaker.session.Syntax))
 	if err != nil {
@@ -90,7 +98,7 @@ func (s server) execStmts(sql string, params parameters, planMaker *planner) dri
 		return resp
 	}
 	for _, stmt := range stmts {
-		result, err := s.execStmt(stmt, params, planMaker)
+		result, err := e.execStmt(stmt, params, planMaker)
 		if err != nil {
 			result = makeResultFromError(planMaker, err)
 		}
@@ -99,7 +107,7 @@ func (s server) execStmts(sql string, params parameters, planMaker *planner) dri
 	return resp
 }
 
-func (s server) execStmt(stmt parser.Statement, params parameters, planMaker *planner) (driver.Result, error) {
+func (e Executor) execStmt(stmt parser.Statement, params parameters, planMaker *planner) (driver.Result, error) {
 	var result driver.Result
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
@@ -108,7 +116,7 @@ func (s server) execStmt(stmt parser.Statement, params parameters, planMaker *pl
 		}
 		// Start a transaction here and not in planMaker to prevent begin
 		// transaction from being called within an auto-transaction below.
-		planMaker.txn = client.NewTxn(s.db)
+		planMaker.txn = client.NewTxn(e.db)
 		planMaker.txn.SetDebugName("sql", 0)
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if planMaker.txn != nil {
@@ -118,6 +126,10 @@ func (s server) execStmt(stmt parser.Statement, params parameters, planMaker *pl
 				return result, nil
 			}
 		} else {
+			return result, errNoTransactionInProgress
+		}
+	case *parser.SetTransaction:
+		if planMaker.txn == nil {
 			return result, errNoTransactionInProgress
 		}
 	default:
@@ -192,7 +204,7 @@ func (s server) execStmt(stmt parser.Statement, params parameters, planMaker *pl
 
 	// No transaction. Run the command as a retryable block in an
 	// auto-transaction.
-	err := s.db.Txn(func(txn *client.Txn) error {
+	err := e.db.Txn(func(txn *client.Txn) error {
 		planMaker.txn = txn
 		err := f()
 		planMaker.txn = nil
@@ -209,21 +221,6 @@ func makeResultFromError(planMaker *planner, err error) driver.Result {
 		if err != errTransactionAborted {
 			planMaker.txn.Cleanup(err)
 		}
-		// This transaction will normally get marked aborted as part of
-		// Cleanup above, but we do it explicitly here because edge cases
-		// exist:
-		// (1)
-		// BEGIN
-		// <some operation which is implemented using CPut, which fails>
-		// (2)
-		// BEGIN
-		// <syntax error>
-		// Both cases will not write any intents, and so client.Txn will
-		// not actually send an EndTransaction, and rightly so.
-		// Unfortunately, we depend on txn.Proto.Status being equivalent to
-		// our SQL transaction's status, and in these cases, our SQL
-		// transaction is aborted.
-		planMaker.txn.Proto.Status = proto.ABORTED
 	}
 	var errProto proto.Error
 	errProto.SetResponseGoError(err)

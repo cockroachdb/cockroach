@@ -1,10 +1,8 @@
 query error unknown function: foo.bar
 SELECT foo.bar()
-----
 
 query error unknown function: defaults
 SELECT defaults()
-----
 
 query I colnames
 SELECT LENGTH('roach7')
@@ -133,7 +131,6 @@ select ascii('禅');
 
 query error ascii: the input string should not be empty
 select ascii('');
-----
 
 query T
 SELECT md5('abc')
@@ -244,7 +241,6 @@ true
 
 query error syntax error at or near "\("
 SELECT current_date()
-----
 
 query T
 SELECT now() - current_timestamp < interval '10s'
@@ -253,7 +249,6 @@ true
 
 query error syntax error at or near "\("
 SELECT current_timestamp()
-----
 
 query T
 SELECT extract(year from timestamp '2001-04-10 12:04:59')
@@ -337,5 +332,177 @@ SELECT extract(nanosecond from timestamp '2001-04-10 12:04:59.34565423')
 
 query error extract: unsupported timespan: nansecond
 SELECT extract(nansecond from timestamp '2001-04-10 12:04:59.34565423')
-----
 
+query T
+SELECT abs(-1.2), abs(1.2), abs(-0.0), abs(0), abs(1)
+----
+1.2 1.2 0 0 1
+
+query error abs: abs of min integer value \(-9223372036854775808\) not defined
+SELECT abs(-9223372036854775808)
+
+query T
+SELECT abs(-9223372036854775807)
+----
+9223372036854775807
+
+query T
+SELECT abs(sin(pi())) < 1e-12
+----
+true
+
+query T
+SELECT acos(-0.5), acos(0.5)
+----
+2.0943951023931957 1.0471975511965976
+
+query T
+SELECT asin(-0.5), asin(0.5), asin(1.5)
+----
+-0.5235987755982989 0.5235987755982989 NaN
+
+query T
+SELECT atan(-0.5), atan(0.5)
+----
+-0.4636476090008061 0.4636476090008061
+
+query T
+SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
+----
+-1.1071487177940904 1.1071487177940904
+
+query T
+SELECT ceil(-0.5), ceil(0.5), ceiling(0.5)
+----
+-0 1 1
+
+query T
+SELECT cos(-0.5), cos(0.5)
+----
+0.8775825618903728 0.8775825618903728
+
+query T
+SELECT degrees(-0.5), degrees(0.5)
+----
+-28.64788975654116 28.64788975654116
+
+query T
+SELECT div(-1.0, 2.0), div(1.0, 2.0), div(1.0, 0.0)
+----
+-0.5 0.5 +Inf
+
+query T
+SELECT exp(-1.0), exp(1.0)
+----
+0.36787944117144233 2.718281828459045
+
+query T
+SELECT floor(-1.5), floor(1.5)
+----
+-2 1
+
+query T
+SELECT ln(-2.0), ln(2.0)
+----
+NaN 0.6931471805599453
+
+query T
+SELECT log(10.0)
+----
+1
+
+query T
+SELECT mod(5.0, 2.0), mod(1.0, 0.0), mod(5, 2)
+----
+1 NaN 1
+
+# mod returns the same results as PostgreSQL 9.4.4
+# in tests below (except for the error message).
+
+query error mod: zero modulus
+SELECT mod(5, 0)
+
+query T
+SELECT mod(-100, -8), mod(-100, 8)
+----
+-4 -4
+
+query T
+SELECT mod(-9223372036854775808, 3)
+----
+-2
+
+query T
+SELECT mod(-9223372036854775808, -1)
+----
+0
+
+qery T
+SELECT mod(9223372036854775807, -1)
+----
+0
+
+qery T
+SELECT mod(9223372036854775807, -2)
+----
+1
+
+qery T
+SELECT mod(9223372036854775807, 1)
+----
+0
+
+qery T
+SELECT mod(9223372036854775807, 2)
+----
+1
+
+qery T
+SELECT mod(9223372036854775807, 4)
+----
+3
+
+query T
+SELECT pi()
+----
+3.141592653589793
+
+query T
+SELECT pow(-3.0, 2.0), pow(3.0, 2.0)
+----
+9 9
+
+query T
+SELECT radians(-45.0), radians(45.0)
+----
+-0.7853981633974483 0.7853981633974483
+
+query T
+SELECT sign(-2), sign(0), sign(2)
+----
+-1 0 1
+
+query T
+SELECT sign(-2.0), sign(-0.0), sign(0.0), sign(2.0)
+----
+-1 0 0 1
+
+query T
+SELECT sin(-1.0), sin(0.0), sin(1.0)
+----
+-0.8414709848078965 0 0.8414709848078965
+
+query T
+SELECT sqrt(-1.0), sqrt(4.0)
+----
+NaN 2
+
+query T
+SELECT tan(-5.0), tan(0.0), tan(5.0)
+----
+3.3805150062465854 0 -3.3805150062465854
+
+query T
+SELECT trunc(-0.0), trunc(0.0), trunc(1.9)
+----
+-0 0 1

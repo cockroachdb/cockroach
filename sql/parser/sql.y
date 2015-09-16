@@ -37,11 +37,15 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   indirect       Indirection
   stmt           Statement
   stmts          []Statement
+  selectStmt     SelectStatement
+  colDef         *ColumnTableDef
+  constraintDef  ConstraintTableDef
   tblDef         TableDef
   tblDefs        []TableDef
   colConstraint  ColumnConstraint
   colConstraints []ColumnConstraint
   colType        ColumnType
+  colTypes       []ColumnType
   expr           Expr
   exprs          Exprs
   selExpr        SelectExpr
@@ -62,21 +66,20 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   orders         []*Order
   order          *Order
   dir            Direction
+  alterTableCmd  AlterTableCmd
+  alterTableCmds AlterTableCmds
+  isoLevel       IsolationLevel
 }
 
 %type <stmts> stmt_block
 %type <stmts> stmt_list
 %type <stmt> stmt
 
-%type <stmt> alter_stmt
-%type <stmt> alter_database_stmt
-%type <stmt> alter_index_stmt
 %type <stmt> alter_table_stmt
 %type <stmt> create_stmt
 %type <stmt> create_database_stmt
 %type <stmt> create_index_stmt
 %type <stmt> create_table_stmt
-%type <stmt> create_table_as_stmt
 %type <stmt> delete_stmt
 %type <stmt> drop_stmt
 %type <stmt> explain_stmt
@@ -86,35 +89,32 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <stmt> preparable_stmt
 %type <stmt> rename_stmt
 %type <stmt> revoke_stmt
-%type <stmt> select_stmt
+%type <selectStmt> select_stmt
 %type <stmt> set_stmt
 %type <stmt> show_stmt
 %type <stmt> transaction_stmt
 %type <stmt> truncate_stmt
 %type <stmt> update_stmt
 
-%type <stmt> select_no_parens select_with_parens select_clause
-%type <stmt> simple_select values_clause
+%type <selectStmt> select_no_parens select_with_parens select_clause
+%type <selectStmt> simple_select values_clause
 
 %type <empty> alter_column_default alter_using
 %type <dir> opt_asc_desc
 
-%type <empty> alter_table_cmd opt_collate_clause
-%type <empty> alter_table_cmds
+%type <alterTableCmd> alter_table_cmd
+%type <alterTableCmds> alter_table_cmds
+
+%type <empty> opt_collate_clause
 
 %type <empty> opt_drop_behavior
 
-%type <empty> transaction_mode_list
-%type <empty> transaction_mode_item
-
-%type <empty> opt_with_data
-%type <empty> opt_nowait_or_skip
+%type <isoLevel> opt_transaction_iso_level transaction_iso_level
 
 %type <str>   name opt_name
 
 %type <empty> subquery_op
 %type <qname> func_name
-%type <empty> opt_class
 %type <empty> opt_collate
 
 %type <qname> qualified_name
@@ -122,13 +122,11 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 
 %type <empty> math_op
 
-%type <empty> iso_level opt_encoding
+%type <isoLevel> iso_level
+%type <empty> opt_encoding
 
 %type <tblDefs> opt_table_elem_list table_elem_list
-%type <empty> opt_inherit
-%type <empty> opt_typed_table_elem_list typed_table_elem_list
-%type <empty> reloptions
-%type <empty> opt_with distinct_clause opt_all_clause
+%type <empty> distinct_clause opt_all_clause
 %type <strs> opt_column_list
 %type <orderBy> sort_clause opt_sort_clause
 %type <orders> sortby_list
@@ -139,7 +137,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <qnames> qualified_name_list
 %type <qname> any_name
 %type <qnames> any_name_list
-%type <empty> any_operator
 %type <exprs> expr_list extract_list
 %type <indirect> attrs
 %type <selExprs> target_list opt_target_list
@@ -147,27 +144,14 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <updateExpr> set_clause multiple_set_clause
 %type <indirect> indirection
 %type <exprs> ctext_expr_list ctext_row
-%type <empty> reloption_list group_clause
-%type <limit> select_limit opt_select_limit
-%type <empty> transaction_mode_list_or_empty
+%type <empty> group_clause
+%type <limit> select_limit
 %type <empty> table_func_elem_list
-%type <empty> returning_clause
 %type <qnames> relation_expr_list
 
 %type <empty> group_by_list
 %type <empty> group_by_item empty_grouping_set
 
-%type <empty> create_as_target
-
-%type <empty> func_type
-
-%type <empty> opt_restart_seqs
-%type <empty> on_commit_option
-
-%type <empty> for_locking_strength
-%type <empty> for_locking_item
-%type <empty> for_locking_clause opt_for_locking_clause for_locking_items
-%type <empty> locked_rels_list
 %type <empty> all_or_distinct
 
 %type <empty> join_outer
@@ -194,13 +178,11 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> opt_on_conflict
 
 %type <stmt>  generic_set set_rest set_rest_more
-%type <empty> set_reset_clause
 
-%type <tblDef> table_elem column_def constraint_elem
-%type <empty> typed_table_elem table_func_elem
-%type <empty> column_options
-%type <empty> reloption_elem
-%type <empty> def_arg
+%type <strs> opt_storing
+%type <colDef> column_def
+%type <tblDef> table_elem
+%type <empty> table_func_elem
 %type <expr>  where_clause
 %type <indirectElem> indirection_elem
 %type <expr>  a_expr b_expr c_expr a_expr_const
@@ -208,11 +190,9 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <expr>  having_clause
 %type <empty> func_table
 %type <expr>  array_expr
-%type <empty> exclusion_where_clause
 %type <empty> rowsfrom_item rowsfrom_list opt_col_def_list
 %type <empty> opt_ordinality
-%type <empty> exclusion_constraint_list exclusion_constraint_elem
-%type <empty> type_list
+%type <colTypes> type_list
 %type <exprs> array_expr_list
 %type <expr>  row explicit_row implicit_row
 %type <expr>  case_expr case_arg case_default
@@ -244,8 +224,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <colType> bit const_bit bit_with_length bit_without_length
 %type <colType> character_base
 %type <str> extract_arg
-%type <empty> opt_charset
-%type <empty> opt_varying opt_no_inherit
+%type <empty> opt_varying
 
 %type <ival>  signed_iconst
 %type <expr>  opt_boolean_or_string
@@ -260,12 +239,11 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <str>   unreserved_keyword type_func_name_keyword
 %type <str>   col_name_keyword reserved_keyword
 
-%type <tblDef> table_constraint table_like_clause
-%type <empty> table_like_option_list table_like_option
+%type <constraintDef> table_constraint constraint_elem
+%type <tblDef> index_def
 %type <colConstraints> col_qual_list
 %type <colConstraint> col_constraint col_constraint_elem
 %type <empty> key_actions key_delete key_match key_update key_action
-%type <empty> existing_index
 
 %type <expr>  func_application func_expr_common_subexpr
 %type <expr>  func_expr func_expr_windowless
@@ -306,7 +284,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 // "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str>   ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER
+%token <str>   ABSOLUTE ACCESS ACTION ADD ADMIN AFTER
 %token <str>   AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
 %token <str>   ASSERTION ASSIGNMENT ASYMMETRIC AT ATTRIBUTE AUTHORIZATION
 
@@ -317,7 +295,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLOSE
 %token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str>   COMMITTED CONCAT CONCURRENTLY CONFIGURATION CONFLICT CONNECTION CONSTRAINT
-%token <str>   CONSTRAINTS CONTENT CONTINUE CONVERSION COPY COST CREATE
+%token <str>   CONSTRAINTS CONTENT CONTINUE CONVERSION COPY COST COVERING CREATE
 %token <str>   CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
 %token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str>   CURRENT_USER CURSOR CYCLE
@@ -327,7 +305,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   DICTIONARY DISABLE DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str>   EACH ELSE ENABLE ENCODING ENCRYPTED END ENUM ESCAPE EVENT EXCEPT
-%token <str>   EXCLUDE EXCLUDING EXCLUSIVE EXECUTE EXISTS EXPLAIN EXTENSION EXTERNAL EXTRACT
+%token <str>   EXCLUSIVE EXECUTE EXISTS EXPLAIN EXTENSION EXTERNAL EXTRACT
 
 %token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FOLLOWING FOR
 %token <str>   FORCE FOREIGN FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
@@ -369,10 +347,10 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   RESTRICT RETURNING RETURNS REVOKE RIGHT ROLLBACK ROLLUP
 %token <str>   ROW ROWS RSHIFT RULE
 
-%token <str>   SAVEPOINT SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
-%token <str>   SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
-%token <str>   SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL STABLE STANDALONE START
-%token <str>   STATEMENT STATISTICS STDIN STDOUT STRICT STRING STRIP SUBSTRING
+%token <str>   SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
+%token <str>   SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SHARE SHOW
+%token <str>   SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL STABLE STANDALONE
+%token <str>   STATEMENT STATISTICS STDIN STDOUT STRICT STRING STRIP STORING SUBSTRING
 %token <str>   SYMMETRIC SYSID SYSTEM
 
 %token <str>   TABLE TABLES TEXT THEN
@@ -385,7 +363,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %token <str>   VACUUM VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VARYING
 %token <str>   VERBOSE VERSION
 
-%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRAPPER WRITE
+%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WRAPPER WRITE
 
 %token <str>   YEAR YES
 
@@ -487,7 +465,7 @@ stmt_list:
   }
 
 stmt:
-  alter_stmt
+  alter_table_stmt
 | create_stmt
 | delete_stmt
 | drop_stmt
@@ -497,6 +475,9 @@ stmt:
 | rename_stmt
 | revoke_stmt
 | select_stmt
+  {
+    $$ = $1
+  }
 | set_stmt
 | show_stmt
 | transaction_stmt
@@ -507,63 +488,53 @@ stmt:
     $$ = nil
   }
 
-// ALTER [DATABASE|INDEX|TABLE]
-alter_stmt:
-  alter_database_stmt
-| alter_index_stmt
-| alter_table_stmt
-
-alter_database_stmt:
-  ALTER DATABASE name
-  {
-    $$ = nil
-  }
-| ALTER DATABASE name set_reset_clause
-  {
-    $$ = nil
-  }
-
-alter_index_stmt:
-  ALTER INDEX qualified_name alter_table_cmds
-  {
-    $$ = nil
-  }
-| ALTER INDEX IF EXISTS qualified_name alter_table_cmds
-  {
-    $$ = nil
-  }
-
 alter_table_stmt:
   ALTER TABLE relation_expr alter_table_cmds
   {
-    $$ = nil
+    $$ = &AlterTable{Table: $3, IfExists: false, Cmds: $4}
   }
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
-    $$ = nil
+    $$ = &AlterTable{Table: $5, IfExists: true, Cmds: $6}
   }
 
 alter_table_cmds:
   alter_table_cmd
+  {
+    $$ = AlterTableCmds{$1}
+  }
 | alter_table_cmds ',' alter_table_cmd
+  {
+    $$ = append($1, $3)
+  }
 
 alter_table_cmd:
   // ALTER TABLE <name> ADD <coldef>
-  ADD column_def {}
+  ADD column_def
+  {
+    $$ = &AlterTableAddColumn{columnKeyword: false, IfNotExists: false, ColumnDef: $2}
+  }
+  // ALTER TABLE <name> ADD IF NOT EXISTS <coldef>
+| ADD IF NOT EXISTS column_def
+  {
+    $$ = &AlterTableAddColumn{columnKeyword: false, IfNotExists: true, ColumnDef: $5}
+  }
   // ALTER TABLE <name> ADD COLUMN <coldef>
-| ADD COLUMN column_def {}
+| ADD COLUMN column_def
+  {
+    $$ = &AlterTableAddColumn{columnKeyword: true, IfNotExists: false, ColumnDef: $3}
+  }
+  // ALTER TABLE <name> ADD COLUMN IF NOT EXISTS <coldef>
+| ADD COLUMN IF NOT EXISTS column_def
+  {
+    $$ = &AlterTableAddColumn{columnKeyword: true, IfNotExists: true, ColumnDef: $6}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> {SET DEFAULT <expr>|DROP DEFAULT}
 | ALTER opt_column name alter_column_default {}
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
 | ALTER opt_column name DROP NOT NULL {}
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
 | ALTER opt_column name SET NOT NULL {}
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET STATISTICS <signed_iconst>
-| ALTER opt_column name SET STATISTICS signed_iconst {}
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET ( column_parameter = value [, ... ] )
-| ALTER opt_column name SET reloptions {}
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET ( column_parameter = value [, ... ] )
-| ALTER opt_column name RESET reloptions {}
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS name opt_drop_behavior {}
   // ALTER TABLE <name> DROP [COLUMN] <colname> [RESTRICT|CASCADE]
@@ -572,7 +543,10 @@ alter_table_cmd:
   //     [ USING <expression> ]
 | ALTER opt_column name opt_set_data TYPE typename opt_collate_clause alter_using {}
   // ALTER TABLE <name> ADD CONSTRAINT ...
-| ADD table_constraint {}
+| ADD table_constraint
+  {
+    $$ = &AlterTableAddConstraint{ConstraintDef: $2}
+  }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
 | ALTER CONSTRAINT name {}
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
@@ -581,22 +555,6 @@ alter_table_cmd:
 | DROP CONSTRAINT IF EXISTS name opt_drop_behavior {}
   // ALTER TABLE <name> DROP CONSTRAINT <name> [RESTRICT|CASCADE]
 | DROP CONSTRAINT name opt_drop_behavior {}
-  // ALTER TABLE <name> SET LOGGED
-| SET LOGGED {}
-  // ALTER TABLE <name> SET UNLOGGED
-| SET UNLOGGED {}
-  // ALTER TABLE <name> INHERIT <parent>
-| INHERIT qualified_name {}
-  // ALTER TABLE <name> NO INHERIT <parent>
-| NO INHERIT qualified_name {}
-  // ALTER TABLE <name> OF <type_name>
-| OF any_name {}
-  // ALTER TABLE <name> NOT OF
-| NOT OF {}
-  // ALTER TABLE <name> SET (...)
-| SET reloptions {}
-  // ALTER TABLE <name> RESET (...)
-| RESET reloptions {}
 
 alter_column_default:
   SET DEFAULT a_expr {}
@@ -615,34 +573,15 @@ alter_using:
   USING a_expr {}
 | /* EMPTY */ {}
 
-reloptions:
-  '(' reloption_list ')'
-  {
-    $$ = $2
-  }
-
-reloption_list:
-  reloption_elem {}
-| reloption_list ',' reloption_elem {}
-
-// This should match def_elem and also allow qualified names.
-reloption_elem:
-  col_label '=' def_arg {}
-| col_label {}
-| col_label '.' col_label '=' def_arg {}
-| col_label '.' col_label {}
-
 // CREATE [DATABASE|INDEX|TABLE|TABLE AS]
 create_stmt:
   create_database_stmt
 | create_index_stmt
 | create_table_stmt
-| create_table_as_stmt
 
 // DELETE FROM query
 delete_stmt:
-  opt_with_clause DELETE FROM relation_expr_opt_alias
-    where_clause returning_clause
+  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause
   {
     $$ = &Delete{Table: $4, Where: newWhere(astWhere, $5)}
   }
@@ -720,10 +659,12 @@ explain_stmt:
 
 explainable_stmt:
   select_stmt
+  {
+    $$ = $1
+  }
 | insert_stmt
 | update_stmt
 | delete_stmt
-| create_table_as_stmt
 
 explain_option_list:
   explain_option_name
@@ -825,7 +766,7 @@ grantee_list:
   {
     $$ = []string{$1}
   }
-  | grantee_list ',' name
+| grantee_list ',' name
   {
     $$ = append($1, $3)
   }
@@ -847,9 +788,11 @@ set_stmt:
   }
 
 set_rest:
-  TRANSACTION transaction_mode_list {}
-| SESSION CHARACTERISTICS AS TRANSACTION transaction_mode_list {}
-| set_rest_more {}
+  TRANSACTION transaction_iso_level
+  {
+    $$ = &SetTransaction{Isolation: $2}
+  }
+| set_rest_more
 
 generic_set:
   var_name TO var_list
@@ -899,10 +842,29 @@ var_value:
   }
 
 iso_level:
-  READ UNCOMMITTED {}
-| READ COMMITTED {}
-| REPEATABLE READ {}
-| SERIALIZABLE {}
+  READ UNCOMMITTED
+  {
+    // Mapped to the closest supported isolation level.
+    $$ = SnapshotIsolation
+  }
+| READ COMMITTED
+  {
+    // Mapped to the closest supported isolation level.
+    $$ = SnapshotIsolation
+  }
+| REPEATABLE READ
+  {
+    // Mapped to the closest supported isolation level.
+    $$ = SnapshotIsolation
+  }
+| SNAPSHOT
+  {
+    $$ = SnapshotIsolation
+  }
+| SERIALIZABLE
+  {
+    $$ = SerializableIsolation
+  }
 
 opt_boolean_or_string:
   TRUE
@@ -953,9 +915,6 @@ non_reserved_word_or_sconst:
     $$ = StrVal($1)
   }
 
-set_reset_clause:
-  SET set_rest {}
-
 show_stmt:
   SHOW IDENT
   {
@@ -988,6 +947,10 @@ show_stmt:
 | SHOW TIME ZONE
   {
     $$ = nil
+  }
+| SHOW TRANSACTION ISOLATION LEVEL
+  {
+    $$ = &Show{Name: "TRANSACTION ISOLATION LEVEL"}
   }
 | SHOW ALL
   {
@@ -1028,24 +991,12 @@ for_grantee_clause:
 // CREATE TABLE relname
 create_table_stmt:
   CREATE TABLE any_name '(' opt_table_elem_list ')'
-    opt_inherit opt_with on_commit_option
   {
     $$ = &CreateTable{Table: $3, IfNotExists: false, Defs: $5}
   }
 | CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')'
-    opt_inherit opt_with on_commit_option
   {
     $$ = &CreateTable{Table: $6, IfNotExists: true, Defs: $8}
-  }
-| CREATE TABLE any_name OF any_name
-    opt_typed_table_elem_list opt_with on_commit_option
-  {
-    $$ = nil
-  }
-| CREATE TABLE IF NOT EXISTS any_name OF any_name
-    opt_typed_table_elem_list opt_with on_commit_option
-  {
-    $$ = nil
   }
 
 opt_table_elem_list:
@@ -1054,13 +1005,6 @@ opt_table_elem_list:
   {
     $$ = nil
   }
-
-opt_typed_table_elem_list:
-  '(' typed_table_elem_list ')'
-  {
-    $$ = $2
-  }
-| /* EMPTY */ {}
 
 table_elem_list:
   table_elem
@@ -1072,27 +1016,22 @@ table_elem_list:
     $$ = append($1, $3)
   }
 
-typed_table_elem_list:
-  typed_table_elem {}
-| typed_table_elem_list ',' typed_table_elem {}
-
 table_elem:
   column_def
-| table_like_clause {}
+  {
+    $$ = $1
+  }
+| index_def
 | table_constraint
-
-typed_table_elem:
-  column_options {}
-| table_constraint {}
+  {
+    $$ = $1
+  }
 
 column_def:
   name typename col_qual_list
   {
     $$ = newColumnTableDef(Name($1), $2, $3)
   }
-
-column_options:
-  name WITH OPTIONS col_qual_list {}
 
 col_qual_list:
   col_qual_list col_constraint
@@ -1142,24 +1081,29 @@ col_constraint_elem:
   {
     $$ = PrimaryKeyConstraint{}
   }
-| CHECK '(' a_expr ')' opt_no_inherit {}
+| CHECK '(' a_expr ')' {}
 | DEFAULT b_expr {}
 | REFERENCES qualified_name opt_column_list key_match key_actions {}
 
-table_like_clause:
-  LIKE qualified_name table_like_option_list {}
-
-table_like_option_list:
-  table_like_option_list INCLUDING table_like_option {}
-| table_like_option_list EXCLUDING table_like_option {}
-| /* EMPTY */ {}
-
-table_like_option:
-  DEFAULTS {}
-| CONSTRAINTS {}
-| INDEXES {}
-| COMMENTS {}
-| ALL {}
+index_def:
+  INDEX opt_name '(' name_list ')' opt_storing
+  {
+    $$ = &IndexTableDef{
+      Name:    Name($2),
+      Columns: NameList($4),
+      Storing: $6,
+    }
+  }
+| UNIQUE INDEX opt_name '(' name_list ')' opt_storing
+  {
+    $$ = &UniqueConstraintTableDef{
+      IndexTableDef: IndexTableDef {
+        Name:    Name($3),
+        Columns: NameList($5),
+        Storing: $7,
+      },
+    }
+  }
 
 // constraint_elem specifies constraint syntax which is not embedded into a
 // column definition. col_constraint_elem specifies the embedded form.
@@ -1168,9 +1112,7 @@ table_constraint:
   CONSTRAINT name constraint_elem
   {
     $$ = $3
-    if i, ok := $$.(*IndexTableDef); ok {
-      i.Name = Name($2)
-    }
+    $$.setName(Name($2))
   }
 | constraint_elem
   {
@@ -1179,28 +1121,49 @@ table_constraint:
 
 constraint_elem:
   CHECK '(' a_expr ')' {}
-| UNIQUE '(' name_list ')'
+| UNIQUE '(' name_list ')' opt_storing
   {
-    $$ = &IndexTableDef{Unique: true, Columns: NameList($3)}
-  }
-| UNIQUE existing_index {}
-| INDEX '(' name_list ')'
-  {
-    $$ = &IndexTableDef{Columns: NameList($3)}
+    $$ = &UniqueConstraintTableDef{
+      IndexTableDef: IndexTableDef{
+        Columns: NameList($3),
+        Storing: $5,
+      },
+    }
   }
 | PRIMARY KEY '(' name_list ')'
   {
-    $$ = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: NameList($4)}
+    $$ = &UniqueConstraintTableDef{
+      IndexTableDef: IndexTableDef{
+        Columns: NameList($4),
+      },
+      PrimaryKey:    true,
+    }
   }
-| PRIMARY KEY existing_index {}
-| EXCLUDE '(' exclusion_constraint_list ')'
-    exclusion_where_clause {}
 | FOREIGN KEY '(' name_list ')' REFERENCES qualified_name
     opt_column_list key_match key_actions {}
 
-opt_no_inherit:
-  NO INHERIT {}
-| /* EMPTY */ {}
+storing:
+  COVERING
+| STORING
+
+// TODO(pmattis): It would be nice to support a syntax like STORING
+// ALL or STORING (*). The syntax addition is straightforward, but we
+// need to be careful with the rest of the implementation. In
+// particular, columns stored at indexes are currently encoded in such
+// a way that adding a new column would require rewriting the existing
+// index values. We will need to change the storage format so that it
+// is a list of <columnID, value> pairs which will allow both adding
+// and dropping columns without rewriting indexes that are storing the
+// adjusted column.
+opt_storing:
+  storing '(' name_list ')'
+  {
+    $$ = $3
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 opt_column_list:
   '(' name_list ')'
@@ -1216,17 +1179,6 @@ key_match:
   MATCH FULL {}
 | MATCH PARTIAL {}
 | MATCH SIMPLE {}
-| /* EMPTY */ {}
-
-exclusion_constraint_list:
-  exclusion_constraint_elem {}
-| exclusion_constraint_list ',' exclusion_constraint_elem {}
-
-exclusion_constraint_elem:
-  index_elem WITH any_operator {}
-
-exclusion_where_clause:
-  WHERE '(' a_expr ')' {}
 | /* EMPTY */ {}
 
 // We combine the update and delete actions into one value temporarily for
@@ -1253,42 +1205,6 @@ key_action:
 | SET NULL {}
 | SET DEFAULT {}
 
-opt_inherit:
-  INHERITS '(' qualified_name_list ')' {}
-| /* EMPTY */ {}
-
-opt_with:
-  WITH reloptions {}
-| /* EMPTY */ {}
-
-on_commit_option:
-  ON COMMIT DROP {}
-| ON COMMIT DELETE ROWS {}
-| ON COMMIT PRESERVE ROWS {}
-| /* EMPTY */ {}
-
-existing_index:
-  USING INDEX name {}
-
-// CREATE TABLE relname AS select_stmt [ WITH [NO] DATA ]
-create_table_as_stmt:
-  CREATE TABLE create_as_target AS select_stmt opt_with_data
-  {
-    $$ = nil
-  }
-| CREATE TABLE IF NOT EXISTS create_as_target AS select_stmt opt_with_data
-  {
-    $$ = nil
-  }
-
-create_as_target:
-  any_name opt_column_list opt_with on_commit_option {}
-
-opt_with_data:
-  WITH DATA {}
-| WITH NO DATA {}
-| /* EMPTY */ {}
-
 numeric_only:
   FCONST
   {
@@ -1303,38 +1219,26 @@ numeric_only:
     $$ = IntVal($1)
   }
 
-// Note: any simple identifier will be returned as a type name!
-def_arg:
-  func_type {}
-| reserved_keyword {}
-| math_op {}
-| numeric_only {}
-| SCONST {}
-
 // TRUNCATE table relname1, relname2, ...
 truncate_stmt:
-  TRUNCATE opt_table relation_expr_list opt_restart_seqs opt_drop_behavior
+  TRUNCATE opt_table relation_expr_list opt_drop_behavior
   {
     $$ = &Truncate{Tables: $3}
   }
 
-opt_restart_seqs:
-  CONTINUE IDENTITY {}
-| RESTART IDENTITY {}
-| /* EMPTY */ {}
-
 // CREATE INDEX
 create_index_stmt:
-  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')'
+  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing
   {
     $$ = &CreateIndex{
       Name:    Name($4),
       Table:   $6,
       Unique:  $2,
       Columns: $8,
+      Storing: $10,
     }
   }
-| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')'
+| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')' opt_storing
   {
     $$ = &CreateIndex{
       Name:        Name($7),
@@ -1342,6 +1246,7 @@ create_index_stmt:
       Unique:      $2,
       IfNotExists: true,
       Columns:     $11,
+      Storing:     $13,
     }
   }
 
@@ -1369,23 +1274,18 @@ index_params:
 // expressions in parens. For backwards-compatibility reasons, we allow an
 // expression that's just a function call to be written without parens.
 index_elem:
-  name opt_collate opt_class opt_asc_desc
+  name opt_collate opt_asc_desc
   {
     // TODO(pmattis): Support opt_asc_desc.
     $$ = $1
   }
-| func_expr_windowless opt_collate opt_class opt_asc_desc
+| func_expr_windowless opt_collate opt_asc_desc
   {}
-| '(' a_expr ')' opt_collate opt_class opt_asc_desc
+| '(' a_expr ')' opt_collate opt_asc_desc
   {}
 
 opt_collate:
   COLLATE any_name {}
-| /* EMPTY */ {}
-
-opt_class:
-  any_name {}
-| USING any_name {}
 | /* EMPTY */ {}
 
 opt_asc_desc:
@@ -1401,18 +1301,6 @@ opt_asc_desc:
   {
     $$ = DefaultDirection
   }
-
-// We would like to make the %TYPE productions here be name attrs etc, but
-// that causes reduce/reduce conflicts. type_function_name is next best
-// choice.
-func_type:
-  typename {}
-| type_function_name attrs '%' TYPE {}
-| SETOF type_function_name attrs '%' TYPE {}
-
-any_operator:
-  math_op {}
-| name '.' any_operator {}
 
 // ALTER THING name RENAME TO newname
 rename_stmt:
@@ -1463,84 +1351,35 @@ opt_set_data:
 
 // BEGIN / COMMIT / ROLLBACK / ...
 transaction_stmt:
-  ABORT opt_transaction
+  BEGIN opt_transaction opt_transaction_iso_level
   {
-    $$ = nil
-  }
-| BEGIN opt_transaction transaction_mode_list_or_empty
-  {
-    $$ = &BeginTransaction{}
-  }
-| START TRANSACTION transaction_mode_list_or_empty
-  {
-    $$ = nil
+    $$ = &BeginTransaction{Isolation: $3}
   }
 | COMMIT opt_transaction
   {
     $$ = &CommitTransaction{}
   }
-| END opt_transaction
-  {
-    $$ = nil
-  }
 | ROLLBACK opt_transaction
   {
     $$ = &RollbackTransaction{}
   }
-| SAVEPOINT name
-  {
-    $$ = nil
-  }
-| RELEASE SAVEPOINT name
-  {
-    $$ = nil
-  }
-| RELEASE name
-  {
-    $$ = nil
-  }
-| ROLLBACK opt_transaction TO SAVEPOINT name
-  {
-    $$ = nil
-  }
-| ROLLBACK opt_transaction TO name
-  {
-    $$ = nil
-  }
-| PREPARE TRANSACTION SCONST
-  {
-    $$ = nil
-  }
-| COMMIT PREPARED SCONST
-  {
-    $$ = nil
-  }
-| ROLLBACK PREPARED SCONST
-  {
-    $$ = nil
-  }
 
 opt_transaction:
-  WORK {}
-| TRANSACTION {}
+  TRANSACTION {}
 | /* EMPTY */ {}
 
-transaction_mode_item:
-  ISOLATION LEVEL iso_level {}
-| READ ONLY {}
-| READ WRITE {}
-| DEFERRABLE {}
-| NOT DEFERRABLE {}
+opt_transaction_iso_level:
+  transaction_iso_level
+| /* EMPTY */
+  {
+    $$ = UnspecifiedIsolation
+  }
 
-// Syntax with commas is SQL-spec, without commas is Postgres historical.
-transaction_mode_list:
-  transaction_mode_item {}
-| transaction_mode_list ',' transaction_mode_item {}
-| transaction_mode_list transaction_mode_item {}
-
-transaction_mode_list_or_empty:
-  transaction_mode_list {}
-| /* EMPTY */ {}
+transaction_iso_level:
+  ISOLATION LEVEL iso_level
+  {
+    $$ = $3
+  }
 
 create_database_stmt:
   CREATE DATABASE name
@@ -1553,8 +1392,7 @@ create_database_stmt:
   }
 
 insert_stmt:
-  opt_with_clause INSERT INTO insert_target insert_rest
-    opt_on_conflict returning_clause
+  opt_with_clause INSERT INTO insert_target insert_rest opt_on_conflict
   {
     $$ = $5
     $$.(*Insert).Table = $4
@@ -1572,11 +1410,11 @@ insert_target:
 insert_rest:
   select_stmt
   {
-    $$ = &Insert{Rows: $1.(SelectStatement)}
+    $$ = &Insert{Rows: $1}
   }
 | '(' qualified_name_list ')' select_stmt
   {
-    $$ = &Insert{Columns: $2, Rows: $4.(SelectStatement)}
+    $$ = &Insert{Columns: $2, Rows: $4}
   }
 | DEFAULT VALUES
   {
@@ -1593,16 +1431,9 @@ opt_conf_expr:
 | ON CONSTRAINT name {}
 | /* EMPTY */ {}
 
-returning_clause:
-  RETURNING target_list {}
-| /* EMPTY */ {}
-
 update_stmt:
   opt_with_clause UPDATE relation_expr_opt_alias
-    SET set_clause_list
-    from_clause
-    where_clause
-    returning_clause
+    SET set_clause_list from_clause where_clause
   {
     $$ = &Update{Table: $3, Exprs: $5, Where: newWhere(astWhere, $7)}
   }
@@ -1624,7 +1455,7 @@ set_clause:
 single_set_clause:
   qualified_name '=' ctext_expr
   {
-    $$ = &UpdateExpr{Name: $1, Expr: $3}
+    $$ = &UpdateExpr{Names: QualifiedNames{$1}, Expr: $3}
   }
 
 // Ideally, we'd accept any row-valued a_expr as RHS of a multiple_set_clause.
@@ -1634,8 +1465,14 @@ single_set_clause:
 // moment, the planner/executor only support a subquery as a multiassignment
 // source anyhow, so we need only accept ctext_row and subqueries here.
 multiple_set_clause:
-  '(' qualified_name_list ')' '=' ctext_row {}
-| '(' qualified_name_list ')' '=' select_with_parens {}
+  '(' qualified_name_list ')' '=' ctext_row
+  {
+    $$ = &UpdateExpr{Tuple: true, Names: $2, Expr: Tuple($5)}
+  }
+| '(' qualified_name_list ')' '=' select_with_parens
+  {
+    $$ = &UpdateExpr{Tuple: true, Names: $2, Expr: &Subquery{Select: $5}}
+  }
 
 // A complete SELECT statement looks like this.
 //
@@ -1681,11 +1518,11 @@ select_stmt:
 select_with_parens:
   '(' select_no_parens ')'
   {
-    $$ = &ParenSelect{Select: $2.(SelectStatement)}
+    $$ = &ParenSelect{Select: $2}
   }
 | '(' select_with_parens ')'
   {
-    $$ = &ParenSelect{Select: $2.(SelectStatement)}
+    $$ = &ParenSelect{Select: $2}
   }
 
 // This rule parses the equivalent of the standard's <query expression>. The
@@ -1706,15 +1543,7 @@ select_no_parens:
       s.OrderBy = $2
     }
   }
-| select_clause opt_sort_clause for_locking_clause opt_select_limit
-  {
-    $$ = $1
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $2
-      s.Limit = $4
-    }
-  }
-| select_clause opt_sort_clause select_limit opt_for_locking_clause
+| select_clause opt_sort_clause select_limit
   {
     $$ = $1
     if s, ok := $$.(*Select); ok {
@@ -1733,15 +1562,7 @@ select_no_parens:
       s.OrderBy = $3
     }
   }
-| with_clause select_clause opt_sort_clause for_locking_clause opt_select_limit
-  {
-    $$ = $2
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $3
-      s.Limit = $5
-    }
-  }
-| with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause
+| with_clause select_clause opt_sort_clause select_limit
   {
     $$ = $2
     if s, ok := $$.(*Select); ok {
@@ -1815,8 +1636,8 @@ simple_select:
     // TODO(pmattis): Support all/distinct
     $$ = &Union{
       Type:  astUnion,
-      Left:  $1.(SelectStatement),
-      Right: $4.(SelectStatement),
+      Left:  $1,
+      Right: $4,
     }
   }
 | select_clause INTERSECT all_or_distinct select_clause
@@ -1824,8 +1645,8 @@ simple_select:
     // TODO(pmattis): Support all/distinct
     $$ = &Union{
       Type:  astIntersect,
-      Left:  $1.(SelectStatement),
-      Right: $4.(SelectStatement),
+      Left:  $1,
+      Right: $4,
     }
   }
 | select_clause EXCEPT all_or_distinct select_clause
@@ -1833,8 +1654,8 @@ simple_select:
     // TODO(pmattis): Support all/distinct
     $$ = &Union{
       Type:  astExcept,
-      Left:  $1.(SelectStatement),
-      Right: $4.(SelectStatement),
+      Left:  $1,
+      Right: $4,
     }
   }
 
@@ -1860,6 +1681,9 @@ common_table_expr:
 
 preparable_stmt:
   select_stmt
+  {
+    $$ = $1
+  }
 | insert_stmt
 | update_stmt
 | delete_stmt
@@ -1940,13 +1764,6 @@ select_limit:
   }
 | limit_clause
 | offset_clause
-
-opt_select_limit:
-  select_limit
-| /* EMPTY */
-  {
-    $$ = nil
-  }
 
 limit_clause:
   LIMIT select_limit_value
@@ -2040,36 +1857,6 @@ having_clause:
     $$ = nil
   }
 
-for_locking_clause:
-  for_locking_items {}
-| FOR READ ONLY {}
-
-opt_for_locking_clause:
-  for_locking_clause {}
-| /* EMPTY */ {}
-
-for_locking_items:
-  for_locking_item {}
-| for_locking_items for_locking_item {}
-
-for_locking_item:
-  for_locking_strength locked_rels_list opt_nowait_or_skip {}
-
-opt_nowait_or_skip:
- NOWAIT {}
-| SKIP LOCKED {}
-| /* EMPTY */ {}
-
-for_locking_strength:
-  FOR UPDATE {}
-| FOR NO KEY UPDATE {}
-| FOR SHARE {}
-| FOR KEY SHARE {}
-
-locked_rels_list:
-  OF qualified_name_list {}
-| /* EMPTY */ {}
-
 values_clause:
   VALUES ctext_row
   {
@@ -2114,7 +1901,7 @@ table_ref:
 | LATERAL func_table func_alias_clause {}
 | select_with_parens opt_alias_clause
   {
-    $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1.(SelectStatement)}, As: Name($2)}
+    $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1}, As: Name($2)}
   }
 | LATERAL select_with_parens opt_alias_clause {}
 | joined_table
@@ -2336,12 +2123,9 @@ typename:
   {
     $$ = $1
   }
-| SETOF simple_typename opt_array_bounds {}
   // SQL standard syntax, currently only one-dimensional
 | simple_typename ARRAY '[' ICONST ']' {}
-| SETOF simple_typename ARRAY '[' ICONST ']' {}
 | simple_typename ARRAY {}
-| SETOF simple_typename ARRAY {}
 
 opt_array_bounds:
   opt_array_bounds '[' ']' {}
@@ -2504,14 +2288,14 @@ const_character:
 | character_without_length
 
 character_with_length:
-  character_base '(' ICONST ')' opt_charset
+  character_base '(' ICONST ')'
   {
     $$ = $1
     $$.(*StringType).N = int($3)
   }
 
 character_without_length:
-  character_base opt_charset
+  character_base
   {
     $$ = $1
   }
@@ -2532,10 +2316,6 @@ character_base:
 
 opt_varying:
   VARYING {}
-| /* EMPTY */ {}
-
-opt_charset:
-  CHARACTER SET name {}
 | /* EMPTY */ {}
 
 // SQL date/time types
@@ -2726,23 +2506,56 @@ a_expr:
   }
 | a_expr IS NULL %prec IS
   {
-    $$ = &NullCheck{Expr: $1}
+    $$ = &IsExpr{Operator: IsNull, Expr: $1}
   }
 | a_expr IS NOT NULL %prec IS
   {
-    $$ = &NullCheck{Not: true, Expr: $1}
+    $$ = &IsExpr{Operator: IsNotNull, Expr: $1}
   }
-| row OVERLAPS row {}
-| a_expr IS TRUE %prec IS {}
-| a_expr IS NOT TRUE %prec IS {}
-| a_expr IS FALSE %prec IS {}
-| a_expr IS NOT FALSE %prec IS {}
-| a_expr IS UNKNOWN %prec IS {}
-| a_expr IS NOT UNKNOWN %prec IS {}
-| a_expr IS DISTINCT FROM a_expr %prec IS {}
-| a_expr IS NOT DISTINCT FROM a_expr %prec IS {}
-| a_expr IS OF '(' type_list ')' %prec IS {}
-| a_expr IS NOT OF '(' type_list ')' %prec IS {}
+| row OVERLAPS row
+  {
+    panic("TODO(pmattis): unimplemented)")
+  }
+| a_expr IS TRUE %prec IS
+  {
+    $$ = &IsExpr{Operator: IsTrue, Expr: $1}
+  }
+| a_expr IS NOT TRUE %prec IS
+  {
+    $$ = &IsExpr{Operator: IsNotTrue, Expr: $1}
+  }
+| a_expr IS FALSE %prec IS
+  {
+    $$ = &IsExpr{Operator: IsFalse, Expr: $1}
+  }
+| a_expr IS NOT FALSE %prec IS
+  {
+    $$ = &IsExpr{Operator: IsNotFalse, Expr: $1}
+  }
+| a_expr IS UNKNOWN %prec IS
+  {
+    $$ = &IsExpr{Operator: IsUnknown, Expr: $1}
+  }
+| a_expr IS NOT UNKNOWN %prec IS
+  {
+    $$ = &IsExpr{Operator: IsNotUnknown, Expr: $1}
+  }
+| a_expr IS DISTINCT FROM a_expr %prec IS
+  {
+    $$ = &ComparisonExpr{Operator: IsDistinctFrom, Left: $1, Right: $5}
+  }
+| a_expr IS NOT DISTINCT FROM a_expr %prec IS
+  {
+    $$ = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1, Right: $6}
+  }
+| a_expr IS OF '(' type_list ')' %prec IS
+  {
+    $$ = &IsOfTypeExpr{Expr: $1, Types: $5}
+  }
+| a_expr IS NOT OF '(' type_list ')' %prec IS
+  {
+    $$ = &IsOfTypeExpr{Not: true, Expr: $1, Types: $6}
+  }
 | a_expr BETWEEN opt_asymmetric b_expr AND a_expr %prec BETWEEN
   {
     $$ = &RangeCond{Left: $1, From: $4, To: $6}
@@ -2868,10 +2681,22 @@ b_expr:
   {
     $$ = &ComparisonExpr{Operator: NE, Left: $1, Right: $3}
   }
-| b_expr IS DISTINCT FROM b_expr %prec IS {}
-| b_expr IS NOT DISTINCT FROM b_expr %prec IS {}
-| b_expr IS OF '(' type_list ')' %prec IS {}
-| b_expr IS NOT OF '(' type_list ')' %prec IS {}
+| b_expr IS DISTINCT FROM b_expr %prec IS
+  {
+    $$ = &ComparisonExpr{Operator: IsDistinctFrom, Left: $1, Right: $5}
+  }
+| b_expr IS NOT DISTINCT FROM b_expr %prec IS
+  {
+    $$ = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1, Right: $6}
+  }
+| b_expr IS OF '(' type_list ')' %prec IS
+  {
+    $$ = &IsOfTypeExpr{Expr: $1, Types: $5}
+  }
+| b_expr IS NOT OF '(' type_list ')' %prec IS
+  {
+    $$ = &IsOfTypeExpr{Not: true, Expr: $1, Types: $6}
+  }
 
 // Productions that can be used in both a_expr and b_expr.
 //
@@ -2897,15 +2722,15 @@ c_expr:
 | func_expr
 | select_with_parens %prec UMINUS
   {
-    $$ = &Subquery{Select: $1.(SelectStatement)}
+    $$ = &Subquery{Select: $1}
   }
 | select_with_parens indirection
   {
-    $$ = &Subquery{Select: $1.(SelectStatement)}
+    $$ = &Subquery{Select: $1}
   }
 | EXISTS select_with_parens
   {
-    $$ = &ExistsExpr{Subquery: &Subquery{Select: $2.(SelectStatement)}}
+    $$ = &ExistsExpr{Subquery: &Subquery{Select: $2}}
   }
 // TODO(pmattis): Support this notation?
 // | ARRAY select_with_parens {}
@@ -3172,8 +2997,14 @@ expr_list:
   }
 
 type_list:
-  typename {}
-| type_list ',' typename {}
+  typename
+  {
+    $$ = []ColumnType{$1}
+  }
+| type_list ',' typename
+  {
+    $$ = append($1, $3)
+  }
 
 array_expr:
   '[' expr_list ']'
@@ -3266,7 +3097,7 @@ trim_list:
 in_expr:
   select_with_parens
   {
-    $$ = &Subquery{Select: $1.(SelectStatement)}
+    $$ = &Subquery{Select: $1}
   }
 | '(' expr_list ')'
   {
@@ -3600,8 +3431,7 @@ col_label:
 //
 // "Unreserved" keywords --- available for use as any kind of name.
 unreserved_keyword:
-  ABORT
-| ABSOLUTE
+  ABSOLUTE
 | ACCESS
 | ACTION
 | ADD
@@ -3672,8 +3502,6 @@ unreserved_keyword:
 | ENCRYPTED
 | ENUM
 | EVENT
-| EXCLUDE
-| EXCLUDING
 | EXCLUSIVE
 | EXECUTE
 | EXPLAIN
@@ -3702,7 +3530,6 @@ unreserved_keyword:
 | IMPORT
 | INCLUDING
 | INCREMENT
-| INDEX
 | INDEXES
 | INHERIT
 | INHERITS
@@ -3794,7 +3621,6 @@ unreserved_keyword:
 | ROLLUP
 | ROWS
 | RULE
-| SAVEPOINT
 | SCROLL
 | SEARCH
 | SECOND
@@ -3814,7 +3640,6 @@ unreserved_keyword:
 | SQL
 | STABLE
 | STANDALONE
-| START
 | STATEMENT
 | STATISTICS
 | STDIN
@@ -3848,7 +3673,6 @@ unreserved_keyword:
 | VERSION
 | WITHIN
 | WITHOUT
-| WORK
 | WRAPPER
 | WRITE
 | YEAR
@@ -3899,7 +3723,6 @@ col_name_keyword:
 | PRECISION
 | REAL
 | ROW
-| SETOF
 | SMALLINT
 | STRING
 | SUBSTRING
@@ -3984,6 +3807,7 @@ reserved_keyword:
 | GROUP
 | HAVING
 | IN
+| INDEX
 | INITIALLY
 | INTERSECT
 | INTO

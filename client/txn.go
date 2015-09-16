@@ -48,15 +48,25 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 	// Send call through wrapped sender.
 	call.Args.Header().Txn = &ts.Proto
 	ts.wrapped.Send(ctx, call)
-	ts.Proto.Update(call.Reply.Header().Txn)
 
-	if err, ok := call.Reply.Header().GoError().(*proto.TransactionAbortedError); ok {
+	err := call.Reply.Header().GoError()
+	// Only successful requests can carry an updated Txn in their response
+	// header. Any error (e.g. a restart) can have a Txn attached to them as
+	// well; those update our local state in the same way for the next attempt.
+	// The exception is if our transaction was aborted and needs to restart
+	// from scratch, in which case we do just that.
+	if err == nil {
+		ts.Proto.Update(call.Reply.Header().Txn)
+	} else if abrtErr, ok := err.(*proto.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
 		ts.Proto = proto.Transaction{
 			Name:      ts.Proto.Name,
 			Isolation: ts.Proto.Isolation,
-			Priority:  err.Txn.Priority, // acts as a minimum priority on restart
+			// Acts as a minimum priority on restart.
+			Priority: abrtErr.Transaction().GetPriority(),
 		}
+	} else if txnErr, ok := err.(proto.TransactionRestartError); ok {
+		ts.Proto.Update(txnErr.Transaction())
 	}
 }
 
@@ -98,18 +108,17 @@ func (txn *Txn) DebugName() string {
 	return txn.Proto.Name
 }
 
-// SetSnapshotIsolation sets the transaction's isolation type to
-// snapshot. Transactions default to serializable isolation. The
-// isolation must be set before any operations are performed on the
-// transaction.
-//
-// TODO(pmattis): This isn't tested yet but will be as part of the
-// conversion of client_test.go.
-func (txn *Txn) SetSnapshotIsolation() {
-	// TODO(pmattis): Panic if the transaction has already had
-	// operations run on it. Needs to tie into the Txn reset in case of
-	// retries.
-	txn.Proto.Isolation = proto.SNAPSHOT
+// SetIsolation sets the transaction's isolation type. Transactions default to
+// serializable isolation. The isolation must be set before any operations are
+// performed on the transaction.
+func (txn *Txn) SetIsolation(isolation proto.IsolationType) error {
+	if txn.Proto.Isolation != isolation {
+		if txn.Proto.IsInitialized() {
+			return fmt.Errorf("cannot change the isolation level of a running transaction")
+		}
+		txn.Proto.Isolation = isolation
+	}
+	return nil
 }
 
 // InternalSetPriority sets the transaction priority. It is intended for
@@ -406,12 +415,25 @@ func (txn *Txn) send(calls ...proto.Call) error {
 		}
 	}
 
-	_, haveEndTxn := lastReq.(*proto.EndTransactionRequest)
+	endTxnRequest, haveEndTxn := lastReq.(*proto.EndTransactionRequest)
 	needEndTxn := txn.Proto.Writing || haveTxnWrite
+	elideEndTxn := haveEndTxn && !needEndTxn
 
-	if haveEndTxn && !needEndTxn {
+	if elideEndTxn {
 		calls = calls[:lastIndex]
 	}
 
-	return txn.db.send(calls...)
+	err := txn.db.send(calls...)
+	if elideEndTxn && err == nil {
+		// This normally happens on the server and sent back in response
+		// headers, but this transaction was optimized away. The caller may
+		// still inspect the transaction struct, so we manually update it
+		// here to emulate a true transaction.
+		if endTxnRequest.Commit {
+			txn.Proto.Status = proto.COMMITTED
+		} else {
+			txn.Proto.Status = proto.ABORTED
+		}
+	}
+	return err
 }

@@ -91,7 +91,6 @@ BEGIN
 
 query error syntax error at or near ","
 SELECT COUNT(*, 1) FROM kv
-----
 
 statement error current transaction is aborted, commands ignored until end of transaction block
 UPDATE kv SET v = 'b' WHERE k in ('a')
@@ -109,7 +108,9 @@ a c
 statement ok
 BEGIN
 
-statement error duplicate key value \(k\)=\('a'\) violates unique constraint "primary"
+# TODO(tschottdorf): #1891, then:
+# statement error duplicate key value \(k\)=\('a'\) violates unique constraint "primary"
+statement error unexpected value.*
 INSERT INTO kv VALUES('a', 'c')
 
 statement error current transaction is aborted, commands ignored until end of transaction block
@@ -153,3 +154,76 @@ COMMIT TRANSACTION
 
 statement error there is no transaction in progress
 ROLLBACK TRANSACTION
+
+# Set isolation level without a transaction is an error.
+
+statement error there is no transaction in progress
+SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
+
+statement ok
+BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
+
+statement ok
+BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
+
+# It is an error to change the isolation level of a running transaction.
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+UPDATE kv SET v = 'b' WHERE k in ('a')
+
+statement error cannot change the isolation level of a running transaction
+SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+
+statement ok
+ROLLBACK
+
+# Transactions default to serializable.
+
+statement ok
+BEGIN TRANSACTION
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SERIALIZABLE
+
+statement ok
+SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SNAPSHOT
+
+statement ok
+COMMIT
+
+# We can explicitly start a transaction in snapshot isolation.
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SNAPSHOT
+
+statement ok
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SERIALIZABLE
+
+statement ok
+COMMIT

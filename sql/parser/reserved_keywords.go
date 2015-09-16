@@ -43,6 +43,7 @@ var reservedKeywords = map[string]struct{}{
 	"GROUP":             {},
 	"HAVING":            {},
 	"IN":                {},
+	"INDEX":             {},
 	"INITIALLY":         {},
 	"INTERSECT":         {},
 	"INTO":              {},

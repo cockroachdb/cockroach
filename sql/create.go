@@ -20,12 +20,9 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // CreateDatabase creates a database.
@@ -72,11 +69,14 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	}
 
 	indexDesc := IndexDescriptor{
-		Name:        string(n.Name),
-		Unique:      n.Unique,
-		ColumnNames: n.Columns,
+		Name:             string(n.Name),
+		Unique:           n.Unique,
+		ColumnNames:      n.Columns,
+		StoreColumnNames: n.Storing,
 	}
-	tableDesc.Indexes = append(tableDesc.Indexes, indexDesc)
+	if err := tableDesc.AddIndex(indexDesc, false); err != nil {
+		return nil, err
+	}
 
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, err
@@ -85,92 +85,17 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	// `indexDesc` changed on us when we called `tableDesc.AllocateIDs()`.
 	indexDesc = tableDesc.Indexes[len(tableDesc.Indexes)-1]
 
-	// Get all the rows affected.
-	// TODO(vivek): Avoid going through Select.
-	// TODO(tamird): Support partial indexes?
-	row, err := p.Select(&parser.Select{
-		Exprs: parser.SelectExprs{parser.StarSelectExpr()},
-		From:  parser.TableExprs{&parser.AliasedTableExpr{Expr: n.Table}},
-	})
+	b, err := p.makeBackfillBatch(n.Table, tableDesc, indexDesc)
 	if err != nil {
 		return nil, err
 	}
 
-	// Construct a map from column ID to the index the value appears at within a
-	// row.
-	colIDtoRowIndex := map[ColumnID]int{}
-	for i, name := range row.Columns() {
-		c, err := tableDesc.FindColumnByName(name)
-		if err != nil {
-			return nil, err
-		}
-		colIDtoRowIndex[c.ID] = i
-	}
-
-	// TODO(tamird): This will fall down in production use. We need to do
-	// something better (see #2036). In particular, this implementation
-	// has the following problems:
-	// - Very large tables will generate an enormous batch here. This
-	// isn't really a problem in itself except that it will exacerbate
-	// the other issue:
-	// - Any non-quiescent table that this runs against will end up with
-	// an inconsistent index. This is because as inserts/updates continue
-	// to roll in behind this operation's read front, the written index
-	// will become incomplete/stale before it's written.
-	var b client.Batch
 	b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
-
-	// We need a dummy element in this slice to account for the `Put`
-	// above; the `Put` won't fail, but if we don't add an entry for it,
-	// we'll end up with out-of-bounds error when we iterate over the
-	// writes in the error case.
-	writes := []write{{}}
-
-	for row.Next() {
-		rowVals := row.Values()
-
-		secondaryIndexEntries, err := encodeSecondaryIndexes(
-			tableDesc.ID, []IndexDescriptor{indexDesc}, colIDtoRowIndex, rowVals)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, secondaryIndexEntry := range secondaryIndexEntries {
-			if log.V(2) {
-				log.Infof("CPut %q -> %v", secondaryIndexEntry.key, secondaryIndexEntry.value)
-			}
-			b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
-
-			var w write
-
-			for i, columnID := range indexDesc.ColumnIDs {
-				w.values = append(w.values, writePair{
-					col: indexDesc.ColumnNames[i],
-					val: rowVals[colIDtoRowIndex[columnID]],
-				})
-			}
-
-			w.constraint = &indexDesc
-
-			writes = append(writes, w)
-		}
-	}
-
-	if err := row.Err(); err != nil {
-		return nil, err
-	}
-
 	// Mark transaction as operating on the system DB.
 	p.txn.SetSystemDBTrigger()
-	if err := p.txn.Run(&b); err != nil {
-		for i, result := range b.Results {
-			if _, ok := result.Err.(*proto.ConditionFailedError); ok {
-				w := writes[i]
 
-				return nil, fmt.Errorf("duplicate key value %s violates unique constraint %q", w.values, w.constraint.Name)
-			}
-		}
-		return nil, err
+	if err := p.txn.Run(&b); err != nil {
+		return nil, convertBatchError(tableDesc, b, err)
 	}
 
 	return &valuesNode{}, nil
@@ -193,7 +118,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	desc, err := makeTableDesc(n)
+	desc, err := makeTableDesc(n, dbDesc.ID)
 	if err != nil {
 		return nil, err
 	}

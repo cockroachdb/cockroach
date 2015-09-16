@@ -53,7 +53,9 @@ func TestTxnDBBasics(t *testing.T) {
 
 		err := s.DB.Txn(func(txn *client.Txn) error {
 			// Use snapshot isolation so non-transactional read can always push.
-			txn.SetSnapshotIsolation()
+			if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+				return err
+			}
 
 			// Put transactional value.
 			if err := txn.Put(key, value); err != nil {
@@ -175,7 +177,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			// higher values require roughly offset/5 restarts.
 			txnClock.SetMaxOffset(maxOffset)
 
-			sender := NewTxnCoordSender(s.lSender, txnClock, false, nil, s.Stopper)
+			sender := NewTxnCoordSender(s.distSender, txnClock, false, nil, s.Stopper)
 			txnDB := client.NewDB(sender)
 
 			if err := txnDB.Txn(func(txn *client.Txn) error {
@@ -381,7 +383,9 @@ func TestTxnTimestampRegression(t *testing.T) {
 	keyB := "b"
 	err := s.DB.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
-		txn.SetSnapshotIsolation()
+		if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+			return err
+		}
 		// Put transactional value.
 		if err := txn.Put(keyA, "value1"); err != nil {
 			return err
@@ -423,7 +427,9 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	go func() {
 		err := s.DB.Txn(func(txn *client.Txn) error {
 			// Use snapshot isolation.
-			txn.SetSnapshotIsolation()
+			if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+				return err
+			}
 			// Put transactional value.
 			if err := txn.Put(keyA, "value1"); err != nil {
 				return err
@@ -451,7 +457,9 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	s.Manual.Set((storage.MinTSCacheWindow + time.Second).Nanoseconds())
 	err := s.DB.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation.
-		txn.SetSnapshotIsolation()
+		if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+			return err
+		}
 
 		// Attempt to get first keyB.
 		gr1, err := txn.Get(keyB)
@@ -468,8 +476,8 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 			return err
 		}
 
-		if !gr1.Exists() && gr2.Exists() {
-			t.Fatalf("Repeat read same key in same txn but get different value gr1 nil gr2 %v", gr2.Value)
+		if gr1.Exists() || gr2.Exists() {
+			t.Fatalf("Repeat read same key in same txn but get different value gr1: %q, gr2 %q", gr1.Value, gr2.Value)
 		}
 		return nil
 	})
@@ -495,7 +503,9 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	go func() {
 		err := s.DB.Txn(func(txn *client.Txn) error {
 			// Use snapshot isolation.
-			txn.SetSnapshotIsolation()
+			if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+				return err
+			}
 			// Put transactional value.
 			if err := txn.Put(keyA, "value1"); err != nil {
 				return err
@@ -522,7 +532,9 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 
 	err := s.DB.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation.
-		txn.SetSnapshotIsolation()
+		if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+			return err
+		}
 
 		// First get keyC, value will be nil.
 		gr1, err := txn.Get(keyC)

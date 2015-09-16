@@ -347,15 +347,19 @@ func (r *Replica) updateRangeInfo() error {
 	// copying maxBytes from the original range does not work
 	// since the original range and the new range might belong
 	// to different zones.
-	zone, err := lookupZoneConfig(r.rm.Gossip(), r)
+	// Load the system config.
+	cfg, err := r.rm.Gossip().GetSystemConfig()
+	if err != nil {
+		return err
+	}
+
+	// Find zone config for this range.
+	zone, err := cfg.GetZoneConfigForKey(r.Desc().StartKey)
 	if err != nil {
 		return util.Errorf("failed to lookup zone config for Range %s: %s", r, err)
 	}
+
 	r.SetMaxBytes(zone.RangeMaxBytes)
-
-	// No need to update configHashes. It will be set when a leader lease calls
-	// maybeGossipConfigs.
-
 	return nil
 }
 

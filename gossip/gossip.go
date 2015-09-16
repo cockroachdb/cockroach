@@ -280,13 +280,13 @@ func (g *Gossip) GetInfoProto(key string, proto gogoproto.Message) error {
 	return gogoproto.Unmarshal(bytes, proto)
 }
 
-// GetZoneConfig returns the zone config map.
-func (g *Gossip) GetZoneConfig() (*config.PrefixConfigMap, error) {
-	configMap := &config.PrefixConfigMap{}
-	if err := g.GetInfoProto(KeyConfigZone, configMap); err != nil {
+// GetSystemConfig returns the system config.
+func (g *Gossip) GetSystemConfig() (*config.SystemConfig, error) {
+	cfg := &config.SystemConfig{}
+	if err := g.GetInfoProto(KeySystemConfig, cfg); err != nil {
 		return nil, err
 	}
-	return configMap, nil
+	return cfg, nil
 }
 
 // GetInfosAsJSON returns the contents of the infostore, marshalled to

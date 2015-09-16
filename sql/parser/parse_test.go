@@ -35,6 +35,8 @@ func TestParse(t *testing.T) {
 		{`VALUES ("")`},
 
 		{`BEGIN TRANSACTION`},
+		{`BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT`},
+		{`BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE`},
 		{`COMMIT TRANSACTION`},
 		{`ROLLBACK TRANSACTION`},
 
@@ -44,7 +46,9 @@ func TestParse(t *testing.T) {
 		{`CREATE INDEX a ON b (c)`},
 		{`CREATE INDEX a ON b.c (d)`},
 		{`CREATE INDEX ON a (b)`},
+		{`CREATE INDEX ON a (b) STORING (c)`},
 		{`CREATE UNIQUE INDEX a ON b (c)`},
+		{`CREATE UNIQUE INDEX a ON b (c) STORING (d)`},
 		{`CREATE UNIQUE INDEX a ON b.c (d)`},
 
 		{`CREATE TABLE a ()`},
@@ -61,8 +65,12 @@ func TestParse(t *testing.T) {
 		// "0" lost quotes previously.
 		{`CREATE TABLE a (b INT, c TEXT, PRIMARY KEY (b, c, "0"))`},
 		{`CREATE TABLE a (b INT, c TEXT, INDEX (b, c))`},
-		{`CREATE TABLE a (b INT, c TEXT, CONSTRAINT d INDEX (b, c))`},
+		{`CREATE TABLE a (b INT, c TEXT, INDEX d (b, c))`},
+		{`CREATE TABLE a (b INT, c TEXT, CONSTRAINT d UNIQUE (b, c))`},
 		{`CREATE TABLE a (b INT, UNIQUE (b))`},
+		{`CREATE TABLE a (b INT, UNIQUE (b) STORING (c))`},
+		{`CREATE TABLE a (b INT, INDEX (b))`},
+		{`CREATE TABLE a (b INT, INDEX (b) STORING (c))`},
 		{`CREATE TABLE a.b (b INT)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
 
@@ -103,6 +111,8 @@ func TestParse(t *testing.T) {
 		{`SHOW GRANTS ON DATABASE foo, bar`},
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
 		{`SHOW GRANTS FOR bar, baz`},
+
+		{`SHOW TRANSACTION ISOLATION LEVEL`},
 
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
@@ -223,6 +233,16 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t WHERE a NOT BETWEEN b AND c`},
 		{`SELECT FROM t WHERE a IS NULL`},
 		{`SELECT FROM t WHERE a IS NOT NULL`},
+		{`SELECT FROM t WHERE a IS TRUE`},
+		{`SELECT FROM t WHERE a IS NOT TRUE`},
+		{`SELECT FROM t WHERE a IS FALSE`},
+		{`SELECT FROM t WHERE a IS NOT FALSE`},
+		{`SELECT FROM t WHERE a IS UNKNOWN`},
+		{`SELECT FROM t WHERE a IS NOT UNKNOWN`},
+		{`SELECT FROM t WHERE a IS OF (INT)`},
+		{`SELECT FROM t WHERE a IS NOT OF (FLOAT, STRING)`},
+		{`SELECT FROM t WHERE a IS DISTINCT FROM b`},
+		{`SELECT FROM t WHERE a IS NOT DISTINCT FROM b`},
 		{`SELECT FROM t WHERE a < b`},
 		{`SELECT FROM t WHERE a <= b`},
 		{`SELECT FROM t WHERE a >= b`},
@@ -281,6 +301,8 @@ func TestParse(t *testing.T) {
 		{`SET a = '3'`},
 		{`SET a = 3.0`},
 		{`SET a = $1`},
+		{`SET TRANSACTION ISOLATION LEVEL SNAPSHOT`},
+		{`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`},
 
 		// TODO(pmattis): Is this a postgres extension?
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a
@@ -293,6 +315,8 @@ func TestParse(t *testing.T) {
 		{`UPDATE a SET b.c = 3`},
 		{`UPDATE a SET b = 3, c = 4`},
 		{`UPDATE a SET b = 3 + 4`},
+		{`UPDATE a SET (b, c) = (3, 4)`},
+		{`UPDATE a SET (b, c) = (SELECT 3, 4)`},
 		{`UPDATE a SET b = 3 WHERE a = b`},
 		{`UPDATE T AS "0" SET K = ''`},                 // "0" lost its quotes
 		{`SELECT * FROM "0" JOIN "0" USING (id, "0")`}, // last "0" lost its quotes.
@@ -304,6 +328,15 @@ func TestParse(t *testing.T) {
 		{`ALTER INDEX IF EXISTS a RENAME TO b`},
 		{`ALTER TABLE a RENAME COLUMN c1 TO c2`},
 		{`ALTER TABLE IF EXISTS a RENAME COLUMN c1 TO c2`},
+
+		{`ALTER TABLE a ADD b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
+		{`ALTER TABLE a ADD IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
+		{`ALTER TABLE IF EXISTS a ADD b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
+		{`ALTER TABLE IF EXISTS a ADD IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
+		{`ALTER TABLE a ADD COLUMN b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
+		{`ALTER TABLE a ADD COLUMN IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
+		{`ALTER TABLE IF EXISTS a ADD COLUMN b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
+		{`ALTER TABLE IF EXISTS a ADD COLUMN IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
 	}
 	for _, d := range testData {
 		stmts, err := ParseTraditional(d.sql)
@@ -326,6 +359,9 @@ func TestParse2(t *testing.T) {
 		expected string
 	}{
 		{`CREATE INDEX ON a (b ASC, c DESC)`, `CREATE INDEX ON a (b, c)`},
+		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b))`,
+			`CREATE TABLE a (b INT, CONSTRAINT foo UNIQUE (b))`},
+		{`CREATE INDEX ON a (b) COVERING (c)`, `CREATE INDEX ON a (b) STORING (c)`},
 
 		{`SELECT BOOL 'foo'`, `SELECT CAST('foo' AS BOOL)`},
 		{`SELECT INT 'foo'`, `SELECT CAST('foo' AS INT)`},
@@ -420,10 +456,6 @@ func TestParseSyntax(t *testing.T) {
 		sql string
 	}{
 		{`SELECT '\0' FROM a`},
-		{`SELECT 1 FROM t FOR READ ONLY`},
-		{`SELECT 1 FROM t FOR UPDATE`},
-		{`SELECT 1 FROM t FOR SHARE`},
-		{`SELECT 1 FROM t FOR KEY SHARE`},
 		{`SELECT ((1)) FROM t WHERE ((a)) IN (((1))) AND ((a, b)) IN ((((1, 1))), ((2, 2)))`},
 		{`SELECT e'\'\"\b\n\r\t\\' FROM t`},
 		{`SELECT '\x' FROM t`},
@@ -470,11 +502,11 @@ SELECT '1
        ^
 `},
 		{`CREATE TABLE test (
-  INDEX foo (bar)
-)`, `syntax error at or near "foo"
+  CONSTRAINT foo INDEX (bar)
+)`, `syntax error at or near "INDEX"
 CREATE TABLE test (
-  INDEX foo (bar)
-        ^
+  CONSTRAINT foo INDEX (bar)
+                 ^
 `},
 		{`CREATE DATABASE a b`,
 			`syntax error at or near "b"
@@ -485,6 +517,11 @@ CREATE DATABASE a b
 			`syntax error at or near "b"
 CREATE DATABASE a b c
                   ^
+`},
+		{`CREATE INDEX ON a (b) STORING ()`,
+			`syntax error at or near ")"
+CREATE INDEX ON a (b) STORING ()
+                               ^
 `},
 		{"SELECT 1e-\n-1",
 			`invalid floating point literal

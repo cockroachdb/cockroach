@@ -47,12 +47,12 @@ func (a rangeCacheKey) Compare(b llrb.Comparable) int {
 // underlying datastore. This interface is used by rangeDescriptorCache to
 // initially retrieve information which will be cached.
 type rangeDescriptorDB interface {
-	// getRangeDescriptors returns a sorted slice of RangeDescriptors for a set
-	// of consecutive ranges, the first of which must contain the requested key.
-	// The additional RangeDescriptors are returned with the intent of pre-
-	// caching subsequent ranges which are likely to be requested soon by the
-	// current workload.
-	getRangeDescriptors(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
+	// rangeLookup takes a meta key to look up descriptors for,
+	// for example \x00\x00meta1aa or \x00\x00meta2f.
+	rangeLookup(proto.Key, lookupOptions, *proto.RangeDescriptor) ([]proto.RangeDescriptor, error)
+	// firstRange returns the descriptor for the first Range. This is the
+	// Range containing all \x00\x00meta1 entries.
+	firstRange() (*proto.RangeDescriptor, error)
 }
 
 // rangeDescriptorCache is used to retrieve range descriptors for
@@ -123,9 +123,46 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	} else if log.V(1) {
 		log.Infof("lookup range descriptor: key=%s", key)
 	}
-	rs, err := rdc.db.getRangeDescriptors(key, options)
+	rs, err := func(key proto.Key, options lookupOptions) ([]proto.RangeDescriptor, error) {
+		var (
+			// metadataKey is sent to rangeLookup to find the
+			// RangeDescriptor which contains key.
+			metadataKey = keys.RangeMetaKey(key)
+			// desc is the RangeDescriptor for the range which contains
+			// metadataKey.
+			desc *proto.RangeDescriptor
+			err  error
+		)
+		if bytes.Equal(metadataKey, proto.KeyMin) {
+			// In this case, the requested key is stored in the cluster's first
+			// range. Return the first range, which is always gossiped and not
+			// queried from the datastore.
+			rd, err := rdc.db.firstRange()
+			if err != nil {
+				return nil, err
+			}
+			return []proto.RangeDescriptor{*rd}, nil
+		}
+		if bytes.HasPrefix(metadataKey, keys.Meta1Prefix) {
+			// In this case, desc is the cluster's first range.
+			if desc, err = rdc.db.firstRange(); err != nil {
+				return nil, err
+			}
+		} else {
+			// Look up desc from the cache, which will recursively call into
+			// this function if it is not cached.
+			desc, err = rdc.LookupRangeDescriptor(metadataKey, options)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return rdc.db.rangeLookup(metadataKey, options, desc)
+	}(key, options)
 	if err != nil {
 		return nil, err
+	}
+	if len(rs) == 0 {
+		panic(fmt.Sprintf("no range descriptors returned for %s", key))
 	}
 	// TODO(tamird): there is a race here; multiple readers may experience cache
 	// misses and concurrently attempt to refresh the cache, duplicating work.
@@ -149,9 +186,6 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 		}
 		rdc.clearOverlappingCachedRangeDescriptors(rs[i].EndKey, rangeKey, &rs[i])
 		rdc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
-	}
-	if len(rs) == 0 {
-		log.Fatalf("no range descriptors returned for %s", key)
 	}
 	rdc.rangeCacheMu.Unlock()
 	return &rs[0], nil
@@ -183,7 +217,7 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key,
 		return
 	}
 
-	for !bytes.Equal(descKey, proto.KeyMin) {
+	for {
 		if log.V(2) {
 			log.Infof("evict cached descriptor: key=%s desc=%s\n%s", descKey, cachedDesc, rdc.stringLocked())
 		} else if log.V(1) {
@@ -196,6 +230,13 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key,
 		// returns KeyMin as its metadata key.
 		descKey = keys.RangeMetaKey(descKey)
 		rngKey, cachedDesc = rdc.getCachedRangeDescriptorLocked(descKey, inclusive)
+		// TODO(tschottdorf): write a test that verifies that the first descriptor
+		// can also be evicted. This is necessary since the initial range
+		// [KeyMin,KeyMax) may turn into [KeyMin, "something"), after which
+		// larger ranges don't fit into it any more.
+		if bytes.Equal(descKey, proto.KeyMin) {
+			break
+		}
 	}
 }
 
@@ -235,7 +276,7 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key, i
 	rd := v.(*proto.RangeDescriptor)
 
 	// Check that key actually belongs to the range.
-	if !rd.ContainsKey(keys.KeyAddress(key)) {
+	if !rd.ContainsKey(key) {
 		// The key is the EndKey and we're inclusive, so just return the range descriptor.
 		if inclusive && key.Equal(rd.EndKey) {
 			return metaEndKey, rd
@@ -263,8 +304,7 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, met
 	k, v, ok := rdc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if ok {
 		descriptor := v.(*proto.RangeDescriptor)
-		addrKey := keys.KeyAddress(key)
-		if !addrKey.Less(descriptor.StartKey) && !descriptor.EndKey.Less(addrKey) {
+		if !key.Less(descriptor.StartKey) && !descriptor.EndKey.Less(key) {
 			if log.V(1) {
 				log.Infof("clearing overlapping descriptor: key=%s desc=%s", k, descriptor)
 			}

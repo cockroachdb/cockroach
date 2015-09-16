@@ -7,7 +7,7 @@
 
 	It is generated from these files:
 		cockroach/sql/privilege.proto
-		cockroach/sql/server.proto
+		cockroach/sql/session.proto
 		cockroach/sql/structured.proto
 
 	It has these top-level messages:

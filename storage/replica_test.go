@@ -51,20 +51,6 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-var (
-	testDefaultZoneConfig = config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "mem"}},
-			{Attrs: []string{"dc2", "mem"}},
-		},
-		RangeMinBytes: 1 << 10, // 1k
-		RangeMaxBytes: 1 << 18, // 256k
-		GC: &config.GCPolicy{
-			TTLSeconds: 24 * 60 * 60, // 1 day
-		},
-	}
-)
-
 func testRangeDescriptor() *proto.RangeDescriptor {
 	return &proto.RangeDescriptor{
 		RangeID:  1,
@@ -118,6 +104,8 @@ func (tc *testContext) Start(t testing.TB) {
 	if tc.stopper == nil {
 		tc.stopper = stop.NewStopper()
 	}
+	// Setup fake zone config handler.
+	config.TestingSetupZoneConfigHook(tc.stopper)
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), tc.stopper)
 		tc.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
@@ -202,22 +190,13 @@ func (tc *testContext) Stop() {
 
 // initConfigs creates default configuration entries.
 func (tc *testContext) initConfigs(realRange bool) error {
-	var putMethod func(proto.Key, gogoproto.Message) error
-
-	if realRange && tc.bootstrapMode == bootstrapRangeWithMetadata {
-		putMethod = func(key proto.Key, proto gogoproto.Message) error {
-			return tc.store.ctx.DB.Put(key, proto)
-		}
-	} else {
-		timestamp := proto.MinTimestamp.Next()
-		putMethod = func(key proto.Key, proto gogoproto.Message) error {
-			return engine.MVCCPutProto(tc.engine, nil, key, timestamp, nil, proto)
-		}
-	}
-
-	if err := putMethod(keys.ConfigZonePrefix, &testDefaultZoneConfig); err != nil {
+	// Put an empty system config into gossip so that gossip callbacks get
+	// run. We're using a fake config, but it's hooked into SystemConfig.
+	if err := tc.gossip.AddInfoProto(gossip.KeySystemConfig,
+		&config.SystemConfig{}, 0); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -301,6 +280,18 @@ func TestRangeReadConsistency(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+
 	gArgs := getArgs(proto.Key("a"), 1, tc.store.StoreID())
 	gArgs.Timestamp = tc.clock.Now()
 
@@ -358,12 +349,24 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	bArgs := proto.BatchRequest{}
-	bArgs.Timestamp = tc.clock.Now()
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+
+	ba := proto.BatchRequest{}
+	ba.Timestamp = tc.clock.Now()
 	pArgs := putArgs(proto.Key("a"), []byte("asd"),
 		tc.rng.Desc().RangeID, tc.store.StoreID())
-	pArgs.Timestamp = bArgs.Timestamp
-	bArgs.Add(&pArgs)
+	pArgs.Timestamp = ba.Timestamp
+	ba.Add(&pArgs)
 
 	// Lose the lease.
 	start := tc.rng.getLease().Expiration.Add(1, 0)
@@ -375,7 +378,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	})
 
 	// Submit a proposal to Raft.
-	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), &bArgs)
+	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), &ba)
 	if err := <-errChan; err != nil {
 		t.Fatal(err)
 	}
@@ -416,6 +419,18 @@ func TestRangeLeaderLease(t *testing.T) {
 	defer tc.Stop()
 	tc.clock.SetMaxOffset(maxClockOffset)
 
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+
 	if held, _ := hasLease(tc.rng, tc.clock.Now()); !held {
 		t.Errorf("expected lease on range start")
 	}
@@ -448,6 +463,18 @@ func TestRangeNotLeaderError(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
+
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
 	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
 	now := tc.clock.Now()
@@ -499,34 +526,38 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Add a zone config for a new key prefix.
-	db1Zone := config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "ssd"}},
-			{Attrs: []string{"dc2", "ssd"}},
-		},
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
 	}
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
-	if err := engine.MVCCPutProto(tc.engine, nil, key, proto.MinTimestamp, nil, &db1Zone); err != nil {
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+
+	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
+	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
+	var val proto.Value
+	val.SetInteger(42)
+	if err := engine.MVCCPut(tc.engine, nil, key, proto.MinTimestamp, val, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	verifyZone := func() bool {
-		configMap, err := tc.gossip.GetZoneConfig()
+	verifySystem := func() bool {
+		cfg, err := tc.gossip.GetSystemConfig()
 		if err != nil {
 			t.Fatal(err)
 		}
-		expConfigs := []config.PrefixConfig{
-			config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
-			config.MakePrefixConfig(proto.Key("/db1"), nil, &db1Zone),
-			config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
-		}
-		return reflect.DeepEqual(configMap.Configs, expConfigs)
+		numValues := len(cfg.Values)
+		return numValues == 1 && cfg.Values[numValues-1].Key.Equal(key)
 	}
 
 	// If this actually failed, we would have gossiped from MVCCPutProto.
 	// Unlikely, but why not check.
-	if verifyZone() {
+	if verifySystem() {
 		t.Errorf("not expecting gossip of new config until new lease is acquired")
 	}
 
@@ -552,7 +583,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 		Expiration: now.Add(20, 0),
 		RaftNodeID: tc.store.RaftNodeID(),
 	})
-	if !verifyZone() {
+	if !verifySystem() {
 		t.Errorf("expected gossip of new config")
 	}
 }
@@ -567,6 +598,18 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 	tc.clock.SetMaxOffset(maxClockOffset)
+
+	// Modify range descriptor to include a second replica; leader lease can
+	// only be obtained by Replicas which are part of the range descriptor. This
+	// workaround is sufficient for the purpose of this test.
+	secondReplica := proto.Replica{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rngDesc := tc.rng.Desc()
+	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
+	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
 	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
 	now := proto.Timestamp{WallTime: tc.manualClock.UnixNano()}
@@ -606,6 +649,36 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	}
 }
 
+// TestRangeLeaderLeaseRejectUnknownRaftNodeID ensures that a replica cannot
+// obtain the leader lease if it is not part of the current range descriptor.
+// TODO(mrtracy): This should probably be tested in client_raft_test package,
+// using a real second store.
+func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
+	now := tc.clock.Now()
+	lease := &proto.Lease{
+		Start:      now,
+		Expiration: now.Add(10, 0),
+		RaftNodeID: proto.MakeRaftNodeID(2, 2),
+	}
+	args := &proto.BatchRequest{}
+	args.Add(&proto.LeaderLeaseRequest{Lease: *lease})
+	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), args)
+	var err error
+	if err = <-errChan; err == nil {
+		// Next if the command was committed, wait for the range to apply it.
+		err = (<-pendingCmd.done).Err
+	}
+	if err == nil {
+		t.Error("error: successfully obtained lease for a store that was not in the RangeDescriptor", err)
+	}
+}
+
 // TestRangeGossipFirstRange verifies that the first range gossips its
 // location and the cluster ID.
 func TestRangeGossipFirstRange(t *testing.T) {
@@ -639,102 +712,9 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	testData := []struct {
-		gossipKey string
-		configs   []config.PrefixConfig
-	}{
-		{gossip.KeyConfigZone, []config.PrefixConfig{config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig)}},
-	}
-	for _, test := range testData {
-		_, err := tc.gossip.GetInfo(test.gossipKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-// TestRangeGossipConfigWithMultipleKeyPrefixes verifies that multiple
-// key prefixes for a config are gossiped.
-func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-	// Add a zone for a new key prefix.
-	db1Zone := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "ssd"}},
-			{Attrs: []string{"dc2", "ssd"}},
-		},
-	}
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
-	data, err := gogoproto.Marshal(db1Zone)
+	_, err := tc.gossip.GetSystemConfig()
 	if err != nil {
 		t.Fatal(err)
-	}
-	req := proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
-		Value:         proto.Value{Bytes: data},
-	}
-
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &req); err != nil {
-		t.Fatal(err)
-	}
-
-	configMap, err := tc.gossip.GetZoneConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	expConfigs := []config.PrefixConfig{
-		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
-		config.MakePrefixConfig(proto.Key("/db1"), nil, db1Zone),
-		config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
-	}
-	if !reflect.DeepEqual(configMap.Configs, expConfigs) {
-		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
-	}
-}
-
-// TestRangeGossipConfigUpdates verifies that writes to the
-// zones cause the updated configs to be re-gossiped.
-func TestRangeGossipConfigUpdates(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-	// Add a zone for a new key prefix.
-	db1Zone := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "ssd"}},
-			{Attrs: []string{"dc2", "ssd"}},
-		},
-	}
-
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
-	data, err := gogoproto.Marshal(db1Zone)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
-		Value:         proto.Value{Bytes: data},
-	}
-
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &req); err != nil {
-		t.Fatal(err)
-	}
-
-	configMap, err := tc.gossip.GetZoneConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	expConfigs := []config.PrefixConfig{
-		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
-		config.MakePrefixConfig(proto.Key("/db1"), nil, db1Zone),
-		config.MakePrefixConfig(proto.Key("/db2"), proto.KeyMin, &testDefaultZoneConfig),
-	}
-	if !reflect.DeepEqual(configMap.Configs, expConfigs) {
-		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
 }
 
@@ -746,22 +726,12 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Add a zone for a new key prefix.
-	db1Zone := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "ssd"}},
-			{Attrs: []string{"dc2", "ssd"}},
-		},
-	}
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
+	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
+	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 	rangeID := proto.RangeID(1)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
-	data, err := gogoproto.Marshal(db1Zone)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req1 := putArgs(key, data, rangeID, tc.store.StoreID())
+	req1 := putArgs(key, []byte("foo"), rangeID, tc.store.StoreID())
 	req1.Txn = txn
 	req1.Timestamp = txn.Timestamp
 
@@ -777,17 +747,13 @@ func TestRangeNoGossipConfig(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Information for db1 is not gossiped.
-		configMap, err := tc.gossip.GetZoneConfig()
+		// System config is not gossiped.
+		cfg, err := tc.gossip.GetSystemConfig()
 		if err != nil {
 			t.Fatal(err)
 		}
-		expConfigs := []config.PrefixConfig{
-			config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
-		}
-		if !reflect.DeepEqual(configMap.Configs, expConfigs) {
-			t.Errorf("%d: expected gossiped configs to be equal %s vs %s",
-				i, configMap, expConfigs)
+		if len(cfg.Values) != 0 {
+			t.Errorf("System config was gossiped at #%d", i)
 		}
 	}
 }
@@ -800,23 +766,12 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Add a zone for a new key prefix. Set the config in a transaction
-	// to avoid gossip.
-	db1Zone := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{Attrs: []string{"dc1", "ssd"}},
-			{Attrs: []string{"dc2", "ssd"}},
-		},
-	}
-	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("/db1"))
+	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
+	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 	rangeID := proto.RangeID(1)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
-	data, err := gogoproto.Marshal(db1Zone)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req1 := putArgs(key, data, rangeID, tc.store.StoreID())
+	req1 := putArgs(key, nil, rangeID, tc.store.StoreID())
 	req1.Txn = txn
 	req1.Timestamp = txn.Timestamp
 	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req1); err != nil {
@@ -842,19 +797,13 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	}
 
 	// Make sure the information for db1 is not gossiped.
-	tc.rng.maybeGossipConfigs(func(configPrefix proto.Key) bool {
-		return tc.rng.ContainsKey(configPrefix)
-	})
-	configMap, err := tc.gossip.GetZoneConfig()
+	tc.rng.maybeGossipSystemConfig()
+	cfg, err := tc.gossip.GetSystemConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	expConfigs := []config.PrefixConfig{
-		config.MakePrefixConfig(proto.KeyMin, nil, &testDefaultZoneConfig),
-	}
-	if !reflect.DeepEqual(configMap.Configs, expConfigs) {
-		t.Errorf("expected gossiped configs to be equal %s vs %s",
-			configMap, expConfigs)
+	if len(cfg.Values) != 0 {
+		t.Fatalf("non-lease holder gossiped the system config")
 	}
 }
 
@@ -956,9 +905,9 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, 
 			Timestamp: pusher.Timestamp,
 			RangeID:   rangeID,
 			Replica:   proto.Replica{StoreID: storeID},
-			Txn:       pusher,
 		},
 		Now:       pusher.Timestamp,
+		PusherTxn: pusher,
 		PusheeTxn: *pushee,
 		PushType:  pushType,
 	}
@@ -1547,12 +1496,12 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	cmdID := proto.ClientCmdID{WallTime: 1, Random: 1}
 	// Write an error into the response cache.
 	incReply := proto.IncrementResponse{}
-	bReply := proto.BatchResponse{}
-	bReply.Add(&incReply)
+	br := proto.BatchResponse{}
+	br.Add(&incReply)
 	pastError := errors.New("boom")
 	var expError error = &proto.Error{Message: pastError.Error()}
 	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID,
-		proto.ResponseWithError{Reply: &bReply, Err: pastError})
+		proto.ResponseWithError{Reply: &br, Err: pastError})
 
 	args := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 	args.CmdID = cmdID
@@ -1605,7 +1554,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 	// Don't automatically GC the Txn record: We want to heartbeat the
 	// committed Transaction and compare it against our expectations.
 	// When it's removed, the heartbeat would recreate it.
-	defer withoutTxnAutoGC()()
+	defer setTxnAutoGC(false)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1631,15 +1580,15 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 
 		// Try a heartbeat to the already-committed transaction; should get
 		// committed txn back, but without last heartbeat timestamp set.
-		hbArgs := heartbeatArgs(txn, 1, tc.store.StoreID())
+		hBA := heartbeatArgs(txn, 1, tc.store.StoreID())
 
-		resp, err = tc.rng.AddCmd(tc.rng.context(), &hbArgs)
+		resp, err = tc.rng.AddCmd(tc.rng.context(), &hBA)
 		if err != nil {
 			t.Error(err)
 		}
-		hbReply := resp.(*proto.HeartbeatTxnResponse)
-		if hbReply.Txn.Status != expStatus || hbReply.Txn.LastHeartbeat != nil {
-			t.Errorf("unexpected heartbeat reply contents: %+v", hbReply)
+		hBR := resp.(*proto.HeartbeatTxnResponse)
+		if hBR.Txn.Status != expStatus || hBR.Txn.LastHeartbeat != nil {
+			t.Errorf("unexpected heartbeat reply contents: %+v", hBR)
 		}
 	}
 }
@@ -1657,16 +1606,16 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 
 		// Start out with a heartbeat to the transaction.
-		hbArgs := heartbeatArgs(txn, 1, tc.store.StoreID())
-		hbArgs.Timestamp = txn.Timestamp
+		hBA := heartbeatArgs(txn, 1, tc.store.StoreID())
+		hBA.Timestamp = txn.Timestamp
 
-		resp, err := tc.rng.AddCmd(tc.rng.context(), &hbArgs)
+		resp, err := tc.rng.AddCmd(tc.rng.context(), &hBA)
 		if err != nil {
 			t.Error(err)
 		}
-		hbReply := resp.(*proto.HeartbeatTxnResponse)
-		if hbReply.Txn.Status != proto.PENDING || hbReply.Txn.LastHeartbeat == nil {
-			t.Errorf("unexpected heartbeat reply contents: %+v", hbReply)
+		hBR := resp.(*proto.HeartbeatTxnResponse)
+		if hBR.Txn.Status != proto.PENDING || hBR.Txn.LastHeartbeat == nil {
+			t.Errorf("unexpected heartbeat reply contents: %+v", hBR)
 		}
 
 		args := endTxnArgs(txn, commit, 1, tc.store.StoreID())
@@ -1684,9 +1633,9 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		if reply.Txn.Status != expStatus {
 			t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
 		}
-		if reply.Txn.LastHeartbeat == nil || !reply.Txn.LastHeartbeat.Equal(*hbReply.Txn.LastHeartbeat) {
+		if reply.Txn.LastHeartbeat == nil || !reply.Txn.LastHeartbeat.Equal(*hBR.Txn.LastHeartbeat) {
 			t.Errorf("expected heartbeats to remain equal: %+v != %+v",
-				reply.Txn.LastHeartbeat, hbReply.Txn.LastHeartbeat)
+				reply.Txn.LastHeartbeat, hBR.Txn.LastHeartbeat)
 		}
 	}
 }
@@ -1756,10 +1705,10 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 
 	// Start out with a heartbeat to the transaction.
-	hbArgs := heartbeatArgs(txn, 1, tc.store.StoreID())
-	hbArgs.Timestamp = txn.Timestamp
+	hBA := heartbeatArgs(txn, 1, tc.store.StoreID())
+	hBA.Timestamp = txn.Timestamp
 
-	_, err := tc.rng.AddCmd(tc.rng.context(), &hbArgs)
+	_, err := tc.rng.AddCmd(tc.rng.context(), &hBA)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1841,6 +1790,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 // local relative to the transaction record's location.
 func TestEndTransactionGC(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer setTxnAutoGC(true)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1883,17 +1833,23 @@ func TestEndTransactionGC(t *testing.T) {
 }
 
 // TestEndTransactionResolveOnlyLocalIntents verifies that an end transaction
-// request resolves only local intents.
+// request resolves only local intents within the same batch.
 func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
+	key := proto.Key("a")
+	splitKey := key.Next()
+	TestingCommandFilter = func(args proto.Request) error {
+		if args.Method() == proto.ResolveIntentRange && args.Header().Key.Equal(splitKey) {
+			return util.Errorf("boom")
+		}
+		return nil
+	}
 	tc.Start(t)
 	defer tc.Stop()
 
 	// Split the range and create an intent in each range.
 	// The keys of the two intents are next to each other.
-	key := proto.Key("a")
-	splitKey := key.Next()
 	newRng := splitTestRange(tc.store, splitKey, splitKey, t)
 
 	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
@@ -1952,7 +1908,7 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 	// be deleted and the intents resolved instantaneously on successful
 	// commit (since they're on the same Range). Could split the range and have
 	// non-local intents if we ever wanted to get rid of this.
-	defer withoutTxnAutoGC()()
+	defer setTxnAutoGC(false)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2026,10 +1982,10 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		// First, establish "start" of existing pushee's txn via heartbeat.
 		pushee.Epoch = test.startEpoch
 		pushee.Timestamp = test.startTS
-		hbArgs := heartbeatArgs(pushee, 1, tc.store.StoreID())
-		hbArgs.Timestamp = pushee.Timestamp
+		hBA := heartbeatArgs(pushee, 1, tc.store.StoreID())
+		hBA.Timestamp = pushee.Timestamp
 
-		if _, err := tc.rng.AddCmd(tc.rng.context(), &hbArgs); err != nil {
+		if _, err := tc.rng.AddCmd(tc.rng.context(), &hBA); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2102,10 +2058,10 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// First, establish "start" of existing pushee's txn via heartbeat.
 		if test.heartbeat != nil {
-			hbArgs := heartbeatArgs(pushee, 1, tc.store.StoreID())
-			hbArgs.Timestamp = *test.heartbeat
+			hBA := heartbeatArgs(pushee, 1, tc.store.StoreID())
+			hBA.Timestamp = *test.heartbeat
 
-			if _, err := tc.rng.AddCmd(tc.rng.context(), &hbArgs); err != nil {
+			if _, err := tc.rng.AddCmd(tc.rng.context(), &hBA); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -2670,8 +2626,12 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 // appropriately. Normally, the old value and a write intent error
 // should be returned. If IgnoreIntents is specified, then a random
 // choice of old or new is returned with no error.
+// TODO(tschottdorf): add a test in which there is a dangling intent on a
+// descriptor we would've otherwise discarded in a reverse scan; verify that
+// we don't erroneously return that descriptor (recently fixed bug) if the
 func TestRangeDanglingMetaIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(tschottdorf): disabled; see comment in RangeLookup")
 	// Test RangeLookup with Scan.
 	testRangeDanglingMetaIntent(t, false)
 	// Test RangeLookup with ReverseScan.
@@ -2745,7 +2705,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	// Try 100 lookups with IgnoreIntents. Expect to see each descriptor at least once.
 	// First, try this consistently, which should not be allowed.
-	rlArgs.IgnoreIntents = true
+	rlArgs.ConsiderIntents = true
 	_, err = tc.rng.AddCmd(tc.rng.context(), rlArgs)
 	if !testutils.IsError(err, "can not read consistently and skip intents") {
 		t.Fatalf("wanted specific error, not %s", err)
@@ -2779,10 +2739,11 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	}
 }
 
-// TestRangeLookupUseReverseScan verifies the correctness of the results which are retrived
+// TestRangeLookupUseReverseScan verifies the correctness of the results which are retrieved
 // from RangeLookup by using ReverseScan.
 func TestRangeLookupUseReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(tschottdorf): disabled; see comment in RangeLookup")
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

@@ -9,20 +9,15 @@ INSERT INTO kv VALUES (1, 2), (3, 4), (5, NULL)
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT COUNT(*), k FROM kv
-----
-3
 
 query error syntax error at or near ","
 SELECT COUNT(*, 1) FROM kv
-----
 
 query error unknown signature for COUNT: COUNT\(int, int\)
 SELECT COUNT(k, v) FROM kv
-----
 
 query error unimplemented ORDER BY with GROUP BY/aggregation
 SELECT COUNT(k) FROM kv ORDER BY v
-----
 
 query I colnames
 SELECT COUNT(*), COUNT(kv.*), COUNT(k), COUNT(kv.v) FROM kv
@@ -103,24 +98,18 @@ SELECT AVG(b), SUM(b) FROM abc
 
 query error unknown signature for AVG: AVG\(string\)
 SELECT AVG(a) FROM abc
-----
 
 query error unknown signature for AVG: AVG\(bool\)
 SELECT AVG(c) FROM abc
-----
 
 query error unknown signature for AVG: AVG\(tuple\)
 SELECT AVG((a,c)) FROM abc
-----
 
 query error unknown signature for SUM: SUM\(string\)
 SELECT SUM(a) FROM abc
-----
 
 query error unknown signature for SUM: SUM\(bool\)
 SELECT SUM(c) FROM abc
-----
 
 query error unknown signature for SUM: SUM\(tuple\)
 SELECT SUM((a,c)) FROM abc
-----

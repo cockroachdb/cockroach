@@ -66,7 +66,7 @@ func TestKVDBCoverage(t *testing.T) {
 	if gr, err := db.Get(key); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
-		t.Error("expected key to exist after delete")
+		t.Error("expected key to exist")
 	}
 
 	// Conditional put should succeed, changing value1 to value2.
@@ -143,6 +143,7 @@ func TestKVDBCoverage(t *testing.T) {
 // HTTP DB interface.
 func TestKVDBInternalMethods(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("test broken & disabled; obsolete after after #2271")
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -178,10 +179,10 @@ func TestKVDBInternalMethods(t *testing.T) {
 		}
 
 		// Verify same but within a Batch request.
-		bArgs := &proto.BatchRequest{}
-		bArgs.Add(args)
+		ba := &proto.BatchRequest{}
+		ba.Add(args)
 		b = &client.Batch{}
-		b.InternalAddCall(proto.Call{Args: bArgs, Reply: &proto.BatchResponse{}})
+		b.InternalAddCall(proto.Call{Args: ba, Reply: &proto.BatchResponse{}})
 
 		if err := db.Run(b); err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())
@@ -204,7 +205,9 @@ func TestKVDBTransaction(t *testing.T) {
 	value := []byte("value")
 	err := db.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
-		txn.SetSnapshotIsolation()
+		if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+			return err
+		}
 
 		if err := txn.Put(key, value); err != nil {
 			t.Fatal(err)

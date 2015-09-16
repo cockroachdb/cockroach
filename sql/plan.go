@@ -38,6 +38,8 @@ type planner struct {
 // in order to retrieve matching rows.
 func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 	switch n := stmt.(type) {
+	case *parser.AlterTable:
+		return p.AlterTable(n)
 	case *parser.BeginTransaction:
 		return p.BeginTransaction(n)
 	case *parser.CommitTransaction:
@@ -78,6 +80,8 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 		return p.Select(n)
 	case *parser.Set:
 		return p.Set(n)
+	case *parser.SetTransaction:
+		return p.SetTransaction(n)
 	case *parser.Show:
 		return p.Show(n)
 	case *parser.ShowColumns:

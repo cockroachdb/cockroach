@@ -20,11 +20,13 @@ package sql_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 func TestDropTable(t *testing.T) {
@@ -40,21 +42,33 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	// The first `MaxReservedDescID` (plus 0) are set aside.
-	nameKey := sql.MakeNameMetadataKey(sql.MaxReservedDescID+1, "kv")
+	nameKey := sql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
 	gr, err := kvDB.Get(nameKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if !gr.Exists() {
-		t.Fatalf("TableDescriptor %q does not exist", nameKey)
+		t.Fatalf("Name entry %q does not exist", nameKey)
 	}
 
 	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
 	desc := sql.TableDescriptor{}
 	if err := kvDB.GetProto(descKey, &desc); err != nil {
 		t.Fatal(err)
+	}
+
+	// Add a zone config for the table.
+	buf, err := gogoproto.Marshal(config.DefaultZoneConfig)
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, desc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	zoneKey := sql.MakeZoneKey(desc.ID)
+	if gr, err := kvDB.Get(zoneKey); err != nil {
+		t.Fatal(err)
+	} else if !gr.Exists() {
+		t.Fatalf("zone config entry not found")
 	}
 
 	var tablePrefix []byte
@@ -90,6 +104,12 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	} else if gr.Exists() {
 		t.Fatalf("table namekey still exists after the table is dropped")
 	}
+
+	if gr, err := kvDB.Get(zoneKey); err != nil {
+		t.Fatal(err)
+	} else if gr.Exists() {
+		t.Fatalf("zone config entry still exists after the table is dropped")
+	}
 }
 
 func TestDropDatabase(t *testing.T) {
@@ -105,7 +125,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	dbNameKey := sql.MakeNameMetadataKey(sql.RootNamespaceID, "t")
+	dbNameKey := sql.MakeNameMetadataKey(keys.RootNamespaceID, "t")
 	r, err := kvDB.Get(dbNameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -131,6 +151,28 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tbDesc := sql.TableDescriptor{}
 	if err := kvDB.GetProto(tbDescKey, &tbDesc); err != nil {
 		t.Fatal(err)
+	}
+
+	// Add a zone config for both the table and database.
+	buf, err := gogoproto.Marshal(config.DefaultZoneConfig)
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, dbDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	tbZoneKey := sql.MakeZoneKey(tbDesc.ID)
+	dbZoneKey := sql.MakeZoneKey(dbDesc.ID)
+	if gr, err := kvDB.Get(tbZoneKey); err != nil {
+		t.Fatal(err)
+	} else if !gr.Exists() {
+		t.Fatalf("table zone config entry not found")
+	}
+	if gr, err := kvDB.Get(dbZoneKey); err != nil {
+		t.Fatal(err)
+	} else if !gr.Exists() {
+		t.Fatalf("database zone config entry not found")
 	}
 
 	var tablePrefix []byte
@@ -177,5 +219,17 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("database descriptor key still exists after database is dropped")
+	}
+
+	if gr, err := kvDB.Get(tbZoneKey); err != nil {
+		t.Fatal(err)
+	} else if gr.Exists() {
+		t.Fatalf("table zone config entry still exists after the database is dropped")
+	}
+
+	if gr, err := kvDB.Get(dbZoneKey); err != nil {
+		t.Fatal(err)
+	} else if gr.Exists() {
+		t.Fatalf("database zone config entry still exists after the database is dropped")
 	}
 }

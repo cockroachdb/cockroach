@@ -67,19 +67,16 @@ func (db *testDescriptorDB) getDescriptor(key proto.Key) []proto.RangeDescriptor
 	return response
 }
 
-func (db *testDescriptorDB) getRangeDescriptors(key proto.Key,
-	options lookupOptions) ([]proto.RangeDescriptor, error) {
+func (db *testDescriptorDB) firstRange() (*proto.RangeDescriptor, error) {
+	return nil, nil
+}
+
+func (db *testDescriptorDB) rangeLookup(key proto.Key, _ lookupOptions, _ *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
 	db.lookupCount++
-	metadataKey := keys.RangeMetaKey(key)
-
-	var err error
-
-	// Recursively call into cache as the real DB would, terminating recursion
-	// when a meta1key is encountered.
-	if len(metadataKey) > 0 && !bytes.HasPrefix(metadataKey, keys.Meta1Prefix) {
-		_, err = db.cache.LookupRangeDescriptor(metadataKey, options)
+	if bytes.HasPrefix(key, keys.Meta2Prefix) {
+		return db.getDescriptor(key[len(keys.Meta2Prefix):]), nil
 	}
-	return db.getDescriptor(key), err
+	return db.getDescriptor(key), nil
 }
 
 func (db *testDescriptorDB) splitRange(t *testing.T, key proto.Key) {

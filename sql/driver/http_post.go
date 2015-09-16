@@ -25,6 +25,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/base"
@@ -68,10 +69,19 @@ func httpPost(c postContext, request, response gogoproto.Message, method fmt.Str
 		return err
 	}
 
-	client, err := c.Context.GetHTTPClient()
+	sharedClient, err := c.Context.GetHTTPClient()
 	if err != nil {
 		return err
 	}
+
+	// TODO(pmattis): Figure out the right thing to do here. The HTTP client we
+	// get back from base.Context has a 3 second timeout. If a client operation
+	// takes longer than that it will be retried. If we're not in an explicit
+	// transaction the auto-transaction created on the server for the second
+	// operation will be different than the still running first operation giving
+	// them the potential to stomp on each other.
+	client := *sharedClient
+	client.Timeout = 60 * time.Second
 
 	url := c.Context.HTTPRequestScheme() + "://" + c.Server + c.Endpoint + method.String()
 

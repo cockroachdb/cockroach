@@ -36,6 +36,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -202,6 +203,9 @@ func (t *logicTest) setUser(user string) {
 	t.db = db
 }
 
+// TODO(tschottdorf): some logic tests currently take a long time to run.
+// Probably a case of heartbeats timing out or many restarts in some tests.
+// Need to investigate when all moving parts are in place.
 func (t *logicTest) run(path string) {
 	defer t.close()
 
@@ -299,40 +303,49 @@ SET DATABASE = test;
 					query.label = fields[3]
 				}
 			}
+
 			var buf bytes.Buffer
 			for s.Scan() {
 				line := s.Text()
 				if line == "----" {
+					if query.expectErr != "" {
+						t.Fatalf("%s: invalid ---- delimiter after a query expecting an error: %s", query.pos, query.expectErr)
+					}
+					break
+				}
+				if strings.TrimSpace(s.Text()) == "" {
 					break
 				}
 				fmt.Fprintln(&buf, line)
 			}
 			query.sql = strings.TrimSpace(buf.String())
 
-			// Query results are either a space separated list of values up to a
-			// blank line or a line of the form "xx values hashing to yyy". The
-			// latter format is used by sqllogictest when a large number of results
-			// match the query.
-			if s.Scan() {
-				if m := resultsRE.FindStringSubmatch(s.Text()); m != nil {
-					var err error
-					query.expectedValues, err = strconv.Atoi(m[1])
-					if err != nil {
-						t.Fatal(err)
-					}
-					query.expectedHash = m[2]
-				} else {
-					for {
-						results := strings.Fields(s.Text())
-						if len(results) == 0 {
-							break
+			if query.expectErr == "" {
+				// Query results are either a space separated list of values up to a
+				// blank line or a line of the form "xx values hashing to yyy". The
+				// latter format is used by sqllogictest when a large number of results
+				// match the query.
+				if s.Scan() {
+					if m := resultsRE.FindStringSubmatch(s.Text()); m != nil {
+						var err error
+						query.expectedValues, err = strconv.Atoi(m[1])
+						if err != nil {
+							t.Fatal(err)
 						}
-						query.expectedResults = append(query.expectedResults, results...)
-						if !s.Scan() {
-							break
+						query.expectedHash = m[2]
+					} else {
+						for {
+							results := strings.Fields(s.Text())
+							if len(results) == 0 {
+								break
+							}
+							query.expectedResults = append(query.expectedResults, results...)
+							if !s.Scan() {
+								break
+							}
 						}
+						query.expectedValues = len(query.expectedResults)
 					}
-					query.expectedValues = len(query.expectedResults)
 				}
 			}
 
@@ -493,6 +506,11 @@ func (t *logicTest) success(file string) {
 
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)
+
+	// TODO(marc): splitting ranges at table boundaries causes
+	// a blocked task and won't drain. Investigate and fix.
+	config.TestingDisableTableSplits = true
+	defer func() { config.TestingDisableTableSplits = false }()
 
 	var globs []string
 	if *bigtest {

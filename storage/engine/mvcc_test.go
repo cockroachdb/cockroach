@@ -1759,12 +1759,16 @@ func TestValidSplitKeys(t *testing.T) {
 		{proto.Key("\x00pern"), true},
 		{proto.Key("\x00zond"), true},
 		{proto.Key("\x00zone"), true},
-		{proto.Key("\x00zone\x00"), false},
-		{proto.Key("\x00zone\xff"), false},
+		// Deprecated zone config key. Valid split.
+		{proto.Key("\x00zone\x00"), true},
+		{proto.Key("\x00zone\xff"), true},
 		{proto.Key("\x00zonf"), true},
 		{proto.Key("\x01"), true},
 		{proto.Key("a"), true},
 		{proto.Key("\xff"), true},
+		{proto.Key("\xff\x00"), false},
+		{proto.Key(keys.MakeTablePrefix(keys.MaxReservedDescID)), false},
+		{proto.Key(keys.MakeTablePrefix(keys.MaxReservedDescID + 1)), true},
 	}
 
 	for i, test := range testCases {
@@ -1832,12 +1836,11 @@ func TestFindValidSplitKeys(t *testing.T) {
 			expSplit: nil,
 			expError: true,
 		},
-		// All zone cannot be split.
+		// All system span cannot be split.
 		{
 			keys: []proto.Key{
-				proto.Key("\x00zone"),
-				proto.Key("\x00zone\x00"),
-				proto.Key("\x00zone\xff"),
+				proto.Key(keys.MakeTablePrefix(1)),
+				proto.Key(keys.MakeTablePrefix(keys.MaxReservedDescID)),
 			},
 			expSplit: nil,
 			expError: true,
@@ -1874,7 +1877,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				proto.Key("\x00zone\x00"),
 				proto.Key("\x00zone\xff"),
 			},
-			expSplit: proto.Key("\x00zone"),
+			expSplit: proto.Key("\x00zone\x00"),
 			expError: false,
 		},
 		// Lopsided, truncate non-zone suffix.
@@ -1885,7 +1888,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				proto.Key("\x00zone\xff"),
 				proto.Key("\x00zonf"),
 			},
-			expSplit: proto.Key("\x00zonf"),
+			expSplit: proto.Key("\x00zone\xff"),
 			expError: false,
 		},
 	}

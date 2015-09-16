@@ -26,6 +26,7 @@ client_*.go.
 package storage_test
 
 import (
+	"net"
 	"testing"
 	"time"
 
@@ -38,11 +39,14 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
+
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // createTestStore creates a test store using an in-memory
@@ -57,30 +61,57 @@ func createTestStore(t *testing.T) (*storage.Store, *stop.Stopper) {
 // createTestStoreWithEngine creates a test store using the given engine and clock.
 // The caller is responsible for closing the store on exit.
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
-	bootstrap bool, context *storage.StoreContext) (*storage.Store, *stop.Stopper) {
+	bootstrap bool, sCtx *storage.StoreContext) (*storage.Store, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
-	if context == nil {
+	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
+	if sCtx == nil {
 		// make a copy
 		ctx := storage.TestStoreContext
-		context = &ctx
+		sCtx = &ctx
 	}
-	context.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
-	lSender := kv.NewLocalSender()
-	sender := kv.NewTxnCoordSender(lSender, clock, false, nil, stopper)
-	context.Clock = clock
-	context.DB = client.NewDB(sender)
-	context.Transport = multiraft.NewLocalRPCTransport(stopper)
+	nodeDesc := &proto.NodeDescriptor{NodeID: 1}
+	sCtx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	localSender := kv.NewLocalSender()
+	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
+		getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message,
+		_ *rpc.Context) ([]gogoproto.Message, error) {
+		call := proto.Call{
+			Args:  getArgs(nil /* net.Addr */).(proto.Request),
+			Reply: getReply().(proto.Response),
+		}
+		localSender.Send(context.Background(), call)
+		return []gogoproto.Message{call.Reply}, call.Reply.Header().GoError()
+	}
+
+	// Mostly makes sure that we don't see a warning per request.
+	{
+		if err := sCtx.Gossip.AddInfoProto(gossip.MakeNodeIDKey(nodeDesc.NodeID), nodeDesc, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+		if err := sCtx.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
+			t.Fatal(err)
+		}
+	}
+	distSender := kv.NewDistSender(&kv.DistSenderContext{
+		Clock:             clock,
+		RPCSend:           rpcSend,     // defined above
+		RangeDescriptorDB: localSender, // for descriptor lookup
+	}, sCtx.Gossip)
+
+	sender := kv.NewTxnCoordSender(distSender, clock, false, nil, stopper)
+	sCtx.Clock = clock
+	sCtx.DB = client.NewDB(sender)
+	sCtx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	// TODO(bdarnell): arrange to have the transport closed.
-	store := storage.NewStore(*context, eng, &proto.NodeDescriptor{NodeID: 1})
+	store := storage.NewStore(*sCtx, eng, nodeDesc)
 	if bootstrap {
 		if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 			t.Fatal(err)
 		}
 	}
-	lSender.AddStore(store)
+	localSender.AddStore(store)
 	if bootstrap {
-		if err := store.BootstrapRange(nil); err != nil {
+		if err := store.BootstrapRange(sql.GetInitialSystemValues()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -158,8 +189,24 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	// Always create the first sender.
 	m.senders = append(m.senders, kv.NewLocalSender())
 
+	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
+		getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message,
+		_ *rpc.Context) ([]gogoproto.Message, error) {
+		call := proto.Call{
+			Args:  getArgs(nil /* net.Addr */).(proto.Request),
+			Reply: getReply().(proto.Response),
+		}
+		m.senders[0].Send(context.Background(), call)
+		return []gogoproto.Message{call.Reply}, call.Reply.Header().GoError()
+	}
+
 	if m.db == nil {
-		sender := kv.NewTxnCoordSender(m, m.clock, false, nil, m.clientStopper)
+		distSender := kv.NewDistSender(&kv.DistSenderContext{
+			Clock:             m.clock,
+			RangeDescriptorDB: m.senders[0],
+			RPCSend:           rpcSend,
+		}, m.gossip)
+		sender := kv.NewTxnCoordSender(distSender, m.clock, false, nil, m.clientStopper)
 		m.db = client.NewDB(sender)
 	}
 
@@ -184,29 +231,6 @@ func (m *multiTestContext) Stop() {
 	// Remove the extra engine refcounts.
 	for _, e := range m.engines {
 		e.Close()
-	}
-}
-
-// Send implements the client.Sender interface. This implementation of "Send" is
-// used to multiplex calls between many local senders in a simple way; It sends
-// the request to each localSender of a multiTestContext in order, stopping if
-// the request succeeds or any error other than RangeKeyMismatch is returned.
-///
-// TODO(mrtracy): remove once #2141 is merged and multiTestContext begins using
-// DistSender. This simple implementation will likely be incorrect in some
-// untested cases and is a temporary measure until DistSender is hooked up.
-func (m *multiTestContext) Send(ctx context.Context, call proto.Call) {
-	for _, ls := range m.senders {
-		ls.Send(ctx, call)
-		if err := call.Reply.Header().GoError(); err != nil {
-			// Try the next localSender if this localSender did not have the
-			// requested range.
-			if _, ok := err.(*proto.RangeKeyMismatchError); ok {
-				call.Reply.Header().SetGoError(nil)
-				continue
-			}
-		}
-		break
 	}
 }
 
@@ -266,7 +290,7 @@ func (m *multiTestContext) addStore() {
 
 		// Bootstrap the initial range on the first store
 		if idx == 0 {
-			if err := store.BootstrapRange(nil); err != nil {
+			if err := store.BootstrapRange(sql.GetInitialSystemValues()); err != nil {
 				m.t.Fatal(err)
 			}
 		}

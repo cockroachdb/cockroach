@@ -39,9 +39,6 @@ const (
 	// Gossip.Connected channel is closed when we see this key.
 	KeyClusterID = "cluster-id"
 
-	// KeyConfigZone is the zone configuration map.
-	KeyConfigZone = "zones"
-
 	// KeyStorePrefix is the key prefix for gossiping stores in the network.
 	// The suffix is a store ID and the value is proto.StoreDescriptor.
 	KeyStorePrefix = "store"
@@ -64,8 +61,10 @@ const (
 	// of storage.Replica structs.
 	KeyFirstRangeDescriptor = "first-range"
 
-	// KeySystemDB is the gossip key for the system DB span.
-	KeySystemDB = "system-db"
+	// KeySystemConfig is the gossip key for the system DB span.
+	// The value if a config.SystemConfig which holds all key/value
+	// pairs in the system DB span.
+	KeySystemConfig = "system-db"
 )
 
 // MakeKey creates a canonical key under which to gossip a piece of

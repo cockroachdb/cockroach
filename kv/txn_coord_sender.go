@@ -20,6 +20,7 @@ package kv
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
-	gogoproto "github.com/gogo/protobuf/proto"
 	"github.com/montanaflynn/stats"
 )
 
@@ -62,7 +62,7 @@ const statusLogInterval = 5 * time.Second
 // cleanup. Instead, intents are garbage collected by the ranges
 // periodically on their own.
 type txnMetadata struct {
-	// txn is the transaction struct from the initial AddRequest call.
+	// txn is a copy of the transaction record, updated with each request.
 	txn proto.Transaction
 
 	// keys stores key ranges affected by this transaction through this
@@ -172,7 +172,7 @@ type txnCoordStats struct {
 // transaction. When the transaction is committed or aborted, it
 // clears accumulated write intents for the transaction.
 type TxnCoordSender struct {
-	wrapped           client.Sender
+	wrapped           client.BatchSender
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	clientTimeout     time.Duration
@@ -184,9 +184,11 @@ type TxnCoordSender struct {
 	stopper           *stop.Stopper
 }
 
+var _ client.BatchSender = &TxnCoordSender{}
+
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
 // distributed DB instance.
-func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, tracer *tracer.Tracer, stopper *stop.Stopper) *TxnCoordSender {
+func NewTxnCoordSender(wrapped client.BatchSender, clock *hlc.Clock, linearizable bool, tracer *tracer.Tracer, stopper *stop.Stopper) *TxnCoordSender {
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
 		clock:             clock,
@@ -288,268 +290,17 @@ func (tc *TxnCoordSender) startStats() {
 // Send implements the client.Sender interface. If the call is part
 // of a transaction, the coordinator will initialize the transaction
 // if it's not nil but has an empty ID.
+// TODO(tschottdorf): remove in favor of SendBatch.
 func (tc *TxnCoordSender) Send(ctx context.Context, call proto.Call) {
-	header := call.Args.Header()
-	tc.maybeBeginTxn(header)
-	header.CmdID = header.GetOrCreateCmdID(tc.clock.PhysicalNow())
-
-	// This is the earliest point at which the request has a ClientCmdID and/or
-	// TxnID (if applicable). Begin a Trace which follows this request.
-	trace := tc.tracer.NewTrace(call.Args.Header())
-	defer trace.Finalize()
-	defer trace.Epoch(fmt.Sprintf("sending %s", call.Method()))()
-	defer func() {
-		if err := call.Reply.Header().GoError(); err != nil {
-			trace.Event(fmt.Sprintf("reply error: %T", err))
-		}
-	}()
-	ctx = tracer.ToCtx(ctx, trace)
-
-	// Process batch specially; otherwise, send via wrapped sender.
-	switch args := call.Args.(type) {
-	case *proto.BatchRequest:
-		trace.Event("batch processing")
-		tc.sendBatch(ctx, args, call.Reply.(*proto.BatchResponse))
-	default:
-		// TODO(tschottdorf): should treat all calls as Batch. After all, that
-		// will be almost all calls.
-		tc.sendOne(ctx, call)
-	}
+	client.SendCallConverted(tc, ctx, call)
 }
 
-// maybeBeginTxn begins a new transaction if a txn has been specified
-// in the request but has a nil ID. The new transaction is initialized
-// using the name and isolation in the otherwise uninitialized txn.
-// The Priority, if non-zero is used as a minimum.
-func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
-	if header.Txn != nil {
-		if len(header.Txn.ID) == 0 {
-			newTxn := proto.NewTransaction(header.Txn.Name, keys.KeyAddress(header.Key), header.GetUserPriority(),
-				header.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
-			// Use existing priority as a minimum. This is used on transaction
-			// aborts to ratchet priority when creating successor transaction.
-			if newTxn.Priority < header.Txn.Priority {
-				newTxn.Priority = header.Txn.Priority
-			}
-			header.Txn = newTxn
-		}
-	}
-}
-
-// sendOne sends a single call via the wrapped sender. If the call is
-// part of a transaction, the TxnCoordSender adds the transaction to a
-// map of active transactions and begins heartbeating it. Every
-// subsequent call for the same transaction updates the lastUpdate
-// timestamp to prevent live transactions from being considered
-// abandoned and garbage collected. Read/write mutating requests have
-// their key or key range added to the transaction's interval tree of
-// key ranges for eventual cleanup via resolved write intents.
-//
-// On success, and if the call is part of a transaction, the affected
-// key range is recorded as live intents for eventual cleanup upon
-// transaction commit. Upon successful txn commit, initiates cleanup
-// of intents.
-func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
-	var startNS int64
-	header := call.Args.Header()
-	trace := tracer.FromCtx(ctx)
-	var id string // optional transaction ID
-	if header.Txn != nil {
-		// If this call is part of a transaction...
-		id = string(header.Txn.ID)
-		// Verify that if this Transaction is not read-only, we have it on
-		// file. If not, refuse writes - the client must have issued a write on
-		// another coordinator previously.
-		if header.Txn.Writing && proto.IsTransactionWrite(call.Args) {
-			tc.Lock()
-			_, ok := tc.txns[id]
-			tc.Unlock()
-			if !ok {
-				call.Reply.Header().SetGoError(util.Errorf(
-					"transaction must not write on multiple coordinators"))
-				return
-			}
-		}
-
-		// Set the timestamp to the original timestamp for read-only
-		// commands and to the transaction timestamp for read/write
-		// commands.
-		if proto.IsReadOnly(call.Args) {
-			header.Timestamp = header.Txn.OrigTimestamp
-		} else {
-			header.Timestamp = header.Txn.Timestamp
-		}
-
-		if args, ok := call.Args.(*proto.EndTransactionRequest); ok {
-			// Remember when EndTransaction started in case we want to
-			// be linearizable.
-			startNS = tc.clock.PhysicalNow()
-			// EndTransaction must have its key set to that of the txn.
-			header.Key = header.Txn.Key
-			if len(args.Intents) > 0 {
-				// TODO(tschottdorf): it may be useful to allow this later.
-				// That would be part of a possible plan to allow txns which
-				// write on multiple coordinators.
-				call.Reply.Header().SetGoError(util.Errorf(
-					"client must not pass intents to EndTransaction"))
-				return
-			}
-			tc.Lock()
-			txnMeta, metaOK := tc.txns[id]
-			if id != "" && metaOK {
-				args.Intents = txnMeta.intents()
-			}
-			tc.Unlock()
-
-			if !metaOK {
-				// If we don't have the transaction, then this must be a retry
-				// by the client. We can no longer reconstruct a correct
-				// request so we must fail.
-				//
-				// TODO(bdarnell): if we had a GetTransactionStatus API then
-				// we could lookup the transaction and return either nil or
-				// TransactionAbortedError instead of this ambivalent error.
-				call.Reply.Header().SetGoError(util.Errorf(
-					"transaction is already committed or aborted"))
-				return
-			} else if len(args.Intents) == 0 {
-				// If there aren't any intents, then there's factually no
-				// transaction to end. Read-only txns have all of their state in
-				// the client.
-				call.Reply.Header().SetGoError(util.Errorf(
-					"cannot commit a read-only transaction"))
-				return
-			}
-		}
-	}
-
-	// Send the command through wrapped sender.
-	tc.wrapped.Send(ctx, call)
-
-	// For transactional calls, need to track & update the transaction.
-	if header.Txn != nil {
-		respHeader := call.Reply.Header()
-		if respHeader.Txn == nil {
-			// When empty, simply use the request's transaction.
-			// This is expected: the Range doesn't bother copying unless the
-			// object changes.
-			respHeader.Txn = gogoproto.Clone(header.Txn).(*proto.Transaction)
-		}
-		tc.updateResponseTxn(header, respHeader)
-	}
-
-	if txn := call.Reply.Header().Txn; txn != nil {
-		if !header.Txn.Equal(txn) {
-			panic("transaction ID changed")
-		}
-		tc.Lock()
-		txnMeta := tc.txns[id]
-		// If this transactional command leaves transactional intents, add the key
-		// or key range to the intents map. If the transaction metadata doesn't yet
-		// exist, create it.
-		if call.Reply.Header().GoError() == nil {
-			if proto.IsTransactionWrite(call.Args) {
-				if txnMeta == nil {
-					txn.Writing = true
-					trace.Event("coordinator spawns")
-					txnMeta = &txnMetadata{
-						txn:              *txn,
-						keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
-						firstUpdateNanos: tc.clock.PhysicalNow(),
-						lastUpdateNanos:  tc.clock.PhysicalNow(),
-						timeoutDuration:  tc.clientTimeout,
-						txnEnd:           make(chan struct{}),
-					}
-					tc.txns[id] = txnMeta
-					if !tc.stopper.RunAsyncTask(func() {
-						tc.heartbeatLoop(id)
-					}) {
-						// The system is already draining and we can't start the
-						// heartbeat. We refuse new transactions for now because
-						// they're likely not going to have all intents committed.
-						// In principle, we can relax this as needed though.
-						call.Reply.Header().SetGoError(&proto.NodeUnavailableError{})
-						tc.Unlock()
-						tc.unregisterTxn(id)
-						return
-					}
-				}
-				txnMeta.addKeyRange(header.Key, header.EndKey)
-			}
-			// Update our record of this transaction.
-			if txnMeta != nil {
-				txnMeta.txn = *txn
-				txnMeta.setLastUpdate(tc.clock.PhysicalNow())
-			}
-		}
-		tc.Unlock()
-	}
-
-	// Cleanup intents and transaction map if end of transaction.
-	switch t := call.Reply.Header().GoError().(type) {
-	case *proto.TransactionStatusError:
-		// Likely already committed or more obscure errors such as epoch or
-		// timestamp regressions; consider it dead.
-		tc.cleanupTxn(trace, t.Txn)
-	case *proto.TransactionAbortedError:
-		// If already aborted, cleanup the txn on this TxnCoordSender.
-		tc.cleanupTxn(trace, t.Txn)
-	case *proto.OpRequiresTxnError:
-		// Run a one-off transaction with that single command.
-		if log.V(1) {
-			log.Infof("%s: auto-wrapping in txn and re-executing", call.Method())
-		}
-		// TODO(tschottdorf): this part is awkward. Consider resending here
-		// without starting a new call, which is hard to trace. Plus, the
-		// below depends on default configuration.
-		tmpDB := client.NewDBWithPriority(tc, call.Args.Header().GetUserPriority())
-		call.Reply.Reset()
-		if err := tmpDB.Txn(func(txn *client.Txn) error {
-			txn.SetDebugName("auto-wrap", 0)
-			b := &client.Batch{}
-			b.InternalAddCall(call)
-			return txn.CommitInBatch(b)
-		}); err != nil {
-			log.Warning(err)
-		}
-	case nil:
-		if txn := call.Reply.Header().Txn; txn != nil {
-			if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
-				// If the --linearizable flag is set, we want to make sure that
-				// all the clocks in the system are past the commit timestamp
-				// of the transaction. This is guaranteed if either
-				// - the commit timestamp is MaxOffset behind startNS
-				// - MaxOffset ns were spent in this function
-				// when returning to the client. Below we choose the option
-				// that involves less waiting, which is likely the first one
-				// unless a transaction commits with an odd timestamp.
-				if tsNS := txn.Timestamp.WallTime; startNS > tsNS {
-					startNS = tsNS
-				}
-				sleepNS := tc.clock.MaxOffset() -
-					time.Duration(tc.clock.PhysicalNow()-startNS)
-				if tc.linearizable && sleepNS > 0 {
-					defer func() {
-						if log.V(1) {
-							log.Infof("%v: waiting %s on EndTransaction for linearizability", txn.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
-						}
-						time.Sleep(sleepNS)
-					}()
-				}
-				if txn.Status != proto.PENDING {
-					tc.cleanupTxn(trace, *txn)
-				}
-
-			}
-		}
-	}
-}
-
-// updateForBatch updates the first argument (the header of a request contained
+// UpdateForBatch updates the first argument (the header of a request contained
 // in a batch) from the second one (the batch header), returning an error when
 // inconsistencies are found.
-// It is checked that the individual call does not have a User, UserPriority
+// It is checked that the individual call does not have a UserPriority
 // or Txn set that differs from the batch's.
+// TODO(tschottdorf): will go with #2143.
 func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 	// Disallow transaction, user and priority on individual calls, unless
 	// equal.
@@ -558,110 +309,194 @@ func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 		return util.Errorf("conflicting user priority on call in batch")
 	}
 	aHeader.UserPriority = bHeader.UserPriority
-	// Only allow individual transactions on the requests of a batch if
-	// - the batch is non-transactional,
-	// - the individual transaction does not write intents, and
-	// - the individual transaction is initialized.
-	// The main usage of this is to allow mass-resolution of intents, which
-	// entails sending a non-txn batch of transactional InternalResolveIntent.
-	if aHeader.Txn != nil && !aHeader.Txn.Equal(bHeader.Txn) {
-		if len(aHeader.Txn.ID) == 0 || proto.IsTransactionWrite(args) || bHeader.Txn != nil {
-			return util.Errorf("conflicting transaction in transactional batch")
-		}
-	} else {
-		aHeader.Txn = bHeader.Txn
-	}
+	aHeader.Txn = bHeader.Txn // reqs always take Txn from batch
 	return nil
 }
 
-// sendBatch unrolls a batched command and sends each constituent
-// command in parallel.
-// TODO(tschottdorf): modify sendBatch so that it sends truly parallel requests
-// when outside of a Transaction. This can then be used to address the TODO in
-// (*TxnCoordSender).resolve().
-func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.BatchRequest, batchReply *proto.BatchResponse) {
-	// Prepare the calls by unrolling the batch. If the batchReply is
-	// pre-initialized with replies, use those; otherwise create replies
-	// as needed.
-	// TODO(spencer): send calls in parallel.
-	batchReply.Txn = batchArgs.Txn
-	for i := range batchArgs.Requests {
-		args := batchArgs.Requests[i].GetValue().(proto.Request)
-		if err := updateForBatch(args, batchArgs.RequestHeader); err != nil {
-			batchReply.Header().SetGoError(err)
-			return
-		}
-		call := proto.Call{Args: args}
-		// Create a reply from the method type and add to batch response.
-		if i >= len(batchReply.Responses) {
-			call.Reply = args.CreateReply()
-			batchReply.Add(call.Reply)
-		} else {
-			call.Reply = batchReply.Responses[i].GetValue().(proto.Response)
-		}
-		tc.sendOne(ctx, call)
-		// Amalgamate transaction updates and propagate first error, if applicable.
-		if batchReply.Txn != nil {
-			batchReply.Txn.Update(call.Reply.Header().Txn)
-		}
-		if call.Reply.Header().Error != nil {
-			batchReply.Error = call.Reply.Header().Error
-			return
+// SendBatch implements the batch.Sender interface. If the request is
+// part of a transaction, the TxnCoordSender adds the transaction to a
+// map of active transactions and begins heartbeating it. Every
+// subsequent request for the same transaction updates the lastUpdate
+// timestamp to prevent live transactions from being considered
+// abandoned and garbage collected. Read/write mutating requests have
+// their key or key range added to the transaction's interval tree of
+// key ranges for eventual cleanup via resolved write intents; they're
+// tagged to an outgoing EndTransaction request, with the receiving
+// replica in charge of resolving them.
+func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
+	tc.maybeBeginTxn(&ba)
+	ba.CmdID = ba.GetOrCreateCmdID(tc.clock.PhysicalNow())
+	var startNS int64
+
+	// This is the earliest point at which the request has a ClientCmdID and/or
+	// TxnID (if applicable). Begin a Trace which follows this request.
+	trace := tc.tracer.NewTrace(&ba)
+	defer trace.Finalize()
+	// TODO(tschottdorf): always "Batch"
+	defer trace.Epoch(fmt.Sprintf("sending %s", ba.Method()))()
+	ctx = tracer.ToCtx(ctx, trace)
+
+	// TODO(tschottdorf): No looping through the batch will be necessary once
+	// we've eliminated all the redundancies.
+	for _, arg := range ba.Requests {
+		trace.Event(fmt.Sprintf("%T", arg.GetValue()))
+		if err := updateForBatch(arg.GetValue().(proto.Request), ba.RequestHeader); err != nil {
+			return nil, err
 		}
 	}
+
+	var id string // optional transaction ID
+	if ba.Txn != nil {
+		// If this request is part of a transaction...
+		id = string(ba.Txn.ID)
+		// Verify that if this Transaction is not read-only, we have it on
+		// file. If not, refuse writes - the client must have issued a write on
+		// another coordinator previously.
+		if ba.Txn.Writing && ba.IsTransactionWrite() {
+			tc.Lock()
+			_, ok := tc.txns[id]
+			tc.Unlock()
+			if !ok {
+				return nil, util.Errorf("transaction must not write on multiple coordinators")
+			}
+		}
+
+		// Set the timestamp to the original timestamp for read-only
+		// commands and to the transaction timestamp for read/write
+		// commands.
+		if ba.IsReadOnly() {
+			ba.Timestamp = ba.Txn.OrigTimestamp
+		} else {
+			ba.Timestamp = ba.Txn.Timestamp
+		}
+
+		if rArgs, ok := ba.GetArg(proto.EndTransaction); ok {
+			et := rArgs.(*proto.EndTransactionRequest)
+			// Remember when EndTransaction started in case we want to
+			// be linearizable.
+			startNS = tc.clock.PhysicalNow()
+			// EndTransaction must have its key set to that of the txn.
+			// TODO(tschottdorf): Should remove this here and make sure
+			// the client does it properly.
+			et.Key = ba.Txn.Key
+			if len(et.Intents) > 0 {
+				// TODO(tschottdorf): it may be useful to allow this later.
+				// That would be part of a possible plan to allow txns which
+				// write on multiple coordinators.
+				return nil, util.Errorf("client must not pass intents to EndTransaction")
+			}
+			tc.Lock()
+			txnMeta, metaOK := tc.txns[id]
+			if id != "" && metaOK {
+				et.Intents = txnMeta.intents()
+			}
+			tc.Unlock()
+
+			if intents := ba.GetIntents(); len(intents) > 0 {
+				// Writes in Batch, so EndTransaction is fine. Should add
+				// outstanding intents to EndTransaction, though.
+				// TODO(tschottdorf): possible issues when the batch fails,
+				// but the intents have been added anyways.
+				// TODO(tschottdorf): some of these intents may be covered
+				// by others, for example {[a,b), a}). This can lead to
+				// some extra requests when those are non-local to the txn
+				// record. But it doesn't seem worth optimizing now.
+				et.Intents = append(et.Intents, intents...)
+			} else if !metaOK {
+				// If we don't have the transaction, then this must be a retry
+				// by the client. We can no longer reconstruct a correct
+				// request so we must fail.
+				//
+				// TODO(bdarnell): if we had a GetTransactionStatus API then
+				// we could lookup the transaction and return either nil or
+				// TransactionAbortedError instead of this ambivalent error.
+				return nil, util.Errorf("transaction is already committed or aborted")
+			}
+			if len(et.Intents) == 0 {
+				// If there aren't any intents, then there's factually no
+				// transaction to end. Read-only txns have all of their state in
+				// the client.
+				return nil, util.Errorf("cannot commit a read-only transaction")
+			}
+			// TODO(tschottdorf): V(1)
+			for _, intent := range et.Intents {
+				trace.Event(fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
+			}
+		}
+	}
+
+	// Send the command through wrapped sender, taking appropriate measures
+	// on error.
+	var br *proto.BatchResponse
+	{
+		var err error
+		br, err = tc.wrapped.SendBatch(ctx, ba)
+
+		if _, ok := err.(*proto.OpRequiresTxnError); ok {
+			br, err = tc.resendWithTxn(ba)
+		}
+
+		if err := tc.updateState(ctx, ba, br, err); err != nil {
+			return nil, err
+		}
+	}
+
+	if br.Txn == nil {
+		return br, nil
+	}
+
+	if _, ok := ba.GetArg(proto.EndTransaction); !ok {
+		return br, nil
+	}
+	// If the --linearizable flag is set, we want to make sure that
+	// all the clocks in the system are past the commit timestamp
+	// of the transaction. This is guaranteed if either
+	// - the commit timestamp is MaxOffset behind startNS
+	// - MaxOffset ns were spent in this function
+	// when returning to the client. Below we choose the option
+	// that involves less waiting, which is likely the first one
+	// unless a transaction commits with an odd timestamp.
+	if tsNS := br.Txn.Timestamp.WallTime; startNS > tsNS {
+		startNS = tsNS
+	}
+	sleepNS := tc.clock.MaxOffset() -
+		time.Duration(tc.clock.PhysicalNow()-startNS)
+	if tc.linearizable && sleepNS > 0 {
+		defer func() {
+			if log.V(1) {
+				log.Infof("%v: waiting %s on EndTransaction for linearizability", br.Txn.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
+			}
+			time.Sleep(sleepNS)
+		}()
+	}
+	if br.Txn.Status != proto.PENDING {
+		tc.cleanupTxn(trace, *br.Txn)
+	}
+	return br, nil
 }
 
-// updateResponseTxn updates the response txn based on the response
-// timestamp and error. The timestamp may have changed upon
-// encountering a newer write or read. Both the timestamp and the
-// priority may change depending on error conditions.
-func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, replyHeader *proto.ResponseHeader) {
-	// Move txn timestamp forward to response timestamp if applicable.
-	if replyHeader.Txn.Timestamp.Less(replyHeader.Timestamp) {
-		replyHeader.Txn.Timestamp = replyHeader.Timestamp
+// maybeBeginTxn begins a new transaction if a txn has been specified
+// in the request but has a nil ID. The new transaction is initialized
+// using the name and isolation in the otherwise uninitialized txn.
+// The Priority, if non-zero is used as a minimum.
+func (tc *TxnCoordSender) maybeBeginTxn(ba *proto.BatchRequest) {
+	if ba.Txn == nil {
+		return
 	}
-
-	// Take action on various errors.
-	switch t := replyHeader.GoError().(type) {
-	case *proto.ReadWithinUncertaintyIntervalError:
-		// Mark the host as certain. See the protobuf comment for
-		// Transaction.CertainNodes for details.
-		replyHeader.Txn.CertainNodes.Add(argsHeader.Replica.NodeID)
-
-		// If the reader encountered a newer write within the uncertainty
-		// interval, move the timestamp forward, just past that write or
-		// up to MaxTimestamp, whichever comes first.
-		var candidateTS proto.Timestamp
-		if t.ExistingTimestamp.Less(replyHeader.Txn.MaxTimestamp) {
-			candidateTS = t.ExistingTimestamp
-			candidateTS.Logical++
-		} else {
-			candidateTS = replyHeader.Txn.MaxTimestamp
+	if len(ba.Requests) == 0 {
+		panic("empty batch with txn")
+	}
+	if len(ba.Txn.ID) == 0 {
+		// TODO(tschottdorf): should really choose the first txn write here.
+		firstKey := ba.Requests[0].GetValue().(proto.Request).Header().Key
+		newTxn := proto.NewTransaction(ba.Txn.Name, keys.KeyAddress(firstKey), ba.GetUserPriority(),
+			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
+		// Use existing priority as a minimum. This is used on transaction
+		// aborts to ratchet priority when creating successor transaction.
+		if newTxn.Priority < ba.Txn.Priority {
+			newTxn.Priority = ba.Txn.Priority
 		}
-		// Only change the timestamp if we're moving it forward.
-		if replyHeader.Txn.Timestamp.Less(candidateTS) {
-			replyHeader.Txn.Timestamp = candidateTS
-		}
-		replyHeader.Txn.Restart(argsHeader.GetUserPriority(), replyHeader.Txn.Priority, replyHeader.Txn.Timestamp)
-	case *proto.TransactionAbortedError:
-		// Increase timestamp if applicable.
-		if replyHeader.Txn.Timestamp.Less(t.Txn.Timestamp) {
-			replyHeader.Txn.Timestamp = t.Txn.Timestamp
-		}
-		replyHeader.Txn.Priority = t.Txn.Priority
-	case *proto.TransactionPushError:
-		// Increase timestamp if applicable.
-		if replyHeader.Txn.Timestamp.Less(t.PusheeTxn.Timestamp) {
-			replyHeader.Txn.Timestamp = t.PusheeTxn.Timestamp
-			replyHeader.Txn.Timestamp.Logical++ // ensure this txn's timestamp > other txn
-		}
-		replyHeader.Txn.Restart(argsHeader.GetUserPriority(), t.PusheeTxn.Priority-1, replyHeader.Txn.Timestamp)
-	case *proto.TransactionRetryError:
-		// Increase timestamp if applicable.
-		if replyHeader.Txn.Timestamp.Less(t.Txn.Timestamp) {
-			replyHeader.Txn.Timestamp = t.Txn.Timestamp
-		}
-		replyHeader.Txn.Restart(argsHeader.GetUserPriority(), t.Txn.Priority, replyHeader.Txn.Timestamp)
+		ba.Txn = newTxn
 	}
 }
 
@@ -781,28 +616,22 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 		return false
 	}
 
-	request := &proto.HeartbeatTxnRequest{
-		RequestHeader: proto.RequestHeader{
-			Key: txn.Key,
-			Txn: &txn,
-		},
-	}
-
-	request.Header().Timestamp = tc.clock.Now()
-	reply := &proto.HeartbeatTxnResponse{}
-	call := proto.Call{
-		Args:  request,
-		Reply: reply,
-	}
+	hb := &proto.HeartbeatTxnRequest{}
+	hb.Key = txn.Key
+	ba := proto.BatchRequest{}
+	ba.Timestamp = tc.clock.Now()
+	ba.Key = txn.Key
+	ba.Txn = &txn
+	ba.Add(hb)
 
 	epochEnds := trace.Epoch("heartbeat")
-	tc.wrapped.Send(ctx, call)
+	_, err := tc.wrapped.SendBatch(ctx, ba)
 	epochEnds()
 	// If the transaction is not in pending state, then we can stop
 	// the heartbeat. It's either aborted or committed, and we resolve
 	// write intents accordingly.
-	if reply.GoError() != nil {
-		log.Warningf("heartbeat to %s failed: %s", txn, reply.GoError())
+	if err != nil {
+		log.Warningf("heartbeat to %s failed: %s", txn, err)
 	}
 	// TODO(bdarnell): once we have gotten a heartbeat response with
 	// Status != PENDING, future heartbeats are useless. However, we
@@ -814,4 +643,155 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	// to send TransactionAbortedErrors to the client so it can restart
 	// immediately instead of running until its EndTransaction.
 	return true
+}
+
+// updateState updates the transaction state in both the success and
+// error cases, applying those updates to the corresponding txnMeta
+// object when adequate. It also updates certain errors with the
+// updated transaction for use by client restarts.
+func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest, br *proto.BatchResponse, err error) error {
+	trace := tracer.FromCtx(ctx)
+	newTxn := &proto.Transaction{}
+	newTxn.Update(ba.GetTxn())
+	switch t := err.(type) {
+	case nil:
+		newTxn.Update(br.GetTxn())
+		// Move txn timestamp forward to response timestamp if applicable.
+		// TODO(tschottdorf): see (*Replica).executeBatch and comments within.
+		// Looks like this isn't necessary any more, nor did it prevent a bug
+		// referenced in a TODO there.
+		newTxn.Timestamp.Forward(br.Timestamp)
+	case *proto.TransactionStatusError:
+		// Likely already committed or more obscure errors such as epoch or
+		// timestamp regressions; consider txn dead.
+		defer tc.cleanupTxn(trace, t.Txn)
+	case *proto.OpRequiresTxnError:
+		// TODO(tschottdorf): range-spanning autowrap currently broken.
+		panic("TODO(tschottdorf): disabled")
+	case *proto.ReadWithinUncertaintyIntervalError:
+		// Mark the host as certain. See the protobuf comment for
+		// Transaction.CertainNodes for details.
+		if t.NodeID == 0 {
+			panic("no replica set in header on uncertainty restart")
+		}
+		newTxn.CertainNodes.Add(t.NodeID)
+		// If the reader encountered a newer write within the uncertainty
+		// interval, move the timestamp forward, just past that write or
+		// up to MaxTimestamp, whichever comes first.
+		candidateTS := newTxn.MaxTimestamp
+		candidateTS.Backward(t.ExistingTimestamp.Add(0, 1))
+		newTxn.Timestamp.Forward(candidateTS)
+		newTxn.Restart(ba.GetUserPriority(), newTxn.Priority, newTxn.Timestamp)
+		t.Txn = *newTxn
+	case *proto.TransactionAbortedError:
+		// Increase timestamp if applicable.
+		newTxn.Timestamp.Forward(t.Txn.Timestamp)
+		newTxn.Priority = t.Txn.Priority
+		t.Txn = *newTxn
+		// Clean up the freshly aborted transaction in defer(), avoiding a
+		// race with the state update below.
+		defer tc.cleanupTxn(trace, t.Txn)
+	case *proto.TransactionPushError:
+		// Increase timestamp if applicable, ensuring that we're
+		// just ahead of the pushee.
+		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp.Add(0, 1))
+		newTxn.Restart(ba.GetUserPriority(), t.PusheeTxn.Priority-1, newTxn.Timestamp)
+		t.Txn = newTxn
+	case *proto.TransactionRetryError:
+		// Increase timestamp if applicable.
+		newTxn.Timestamp.Forward(t.Txn.Timestamp)
+		newTxn.Restart(ba.GetUserPriority(), t.Txn.Priority, newTxn.Timestamp)
+		t.Txn = *newTxn
+	}
+	// TODO(tschottdorf): temporary assertion.
+	if txnErr, ok := err.(proto.TransactionRestartError); ok && txnErr.Transaction() != nil && !reflect.DeepEqual(txnErr.Transaction(), newTxn) {
+		panic(fmt.Sprintf("%T did not have the latest transaction updates", txnErr))
+	}
+
+	if len(newTxn.ID) > 0 {
+		id := string(newTxn.ID)
+		tc.Lock()
+		txnMeta := tc.txns[id]
+		// For successful transactional requests, keep the written intents and
+		// the updated transaction record to be sent along with the reply.
+		// The transaction metadata is created with the first writing operation
+		// TODO(tschottdorf): already computed the intents prior to sending,
+		// consider re-using those.
+		if intents := ba.GetIntents(); len(intents) > 0 && err == nil {
+			// TODO(tschottdorf): avoid spawning one if EndTransaction is in
+			// the same batch.
+			if txnMeta == nil {
+				newTxn.Writing = true
+				trace.Event("coordinator spawns")
+				txnMeta = &txnMetadata{
+					txn:              *newTxn,
+					keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
+					firstUpdateNanos: tc.clock.PhysicalNow(),
+					lastUpdateNanos:  tc.clock.PhysicalNow(),
+					timeoutDuration:  tc.clientTimeout,
+					txnEnd:           make(chan struct{}),
+				}
+				tc.txns[id] = txnMeta
+				if !tc.stopper.RunAsyncTask(func() {
+					tc.heartbeatLoop(id)
+				}) {
+					// The system is already draining and we can't start the
+					// heartbeat. We refuse new transactions for now because
+					// they're likely not going to have all intents committed.
+					// In principle, we can relax this as needed though.
+					tc.Unlock()
+					tc.unregisterTxn(id)
+					return &proto.NodeUnavailableError{}
+				}
+			}
+			for _, intent := range intents {
+				txnMeta.addKeyRange(intent.Key, intent.EndKey)
+			}
+		}
+		// Update our record of this transaction, even on error.
+		if txnMeta != nil {
+			txnMeta.txn.Update(newTxn) // better to replace after #2300
+			if !txnMeta.txn.Writing {
+				panic("tracking a non-writing txn")
+			}
+			txnMeta.setLastUpdate(tc.clock.PhysicalNow())
+		}
+		tc.Unlock()
+		if err == nil {
+			// For successful transactional requests, always send the updated txn
+			// record back.
+			if br.Txn == nil {
+				br.Txn = &proto.Transaction{}
+			}
+			*br.Txn = *newTxn
+		}
+	}
+	return err
+}
+
+// TODO(tschottdorf): this method is somewhat awkward but unless we want to
+// give this error back to the client, our options are limited. We'll have to
+// run the whole thing for them, or any restart will still end up at the client
+// which will not be prepared to be handed a Txn.
+func (tc *TxnCoordSender) resendWithTxn(ba proto.BatchRequest) (*proto.BatchResponse, error) {
+	// Run a one-off transaction with that single command.
+	if log.V(1) {
+		log.Infof("%s: auto-wrapping in txn and re-executing: ", ba)
+	}
+	tmpDB := client.NewDBWithPriority(tc, ba.GetUserPriority())
+	br := &proto.BatchResponse{}
+	if err := tmpDB.Txn(func(txn *client.Txn) error {
+		txn.SetDebugName("auto-wrap", 0)
+		b := &client.Batch{}
+		for _, arg := range ba.Requests {
+			req := arg.GetValue().(proto.Request)
+			call := proto.Call{Args: req, Reply: req.CreateReply()}
+			b.InternalAddCall(call)
+			br.Add(call.Reply)
+		}
+		return txn.CommitInBatch(b)
+	}); err != nil {
+		return nil, err
+	}
+	return br, nil
 }

@@ -102,8 +102,11 @@ func goroutineLeaked() bool {
 // than TestMainWithLeakCheck alone.
 func AfterTest(t testing.TB) {
 	http.DefaultTransport.(*http.Transport).CloseIdleConnections()
-	if testing.Short() {
+	if testing.Short() || t.Failed() {
 		return
+	}
+	if r := recover(); r != nil {
+		panic(r)
 	}
 	var bad string
 	badSubstring := map[string]string{

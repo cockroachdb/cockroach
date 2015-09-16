@@ -40,6 +40,7 @@ type Statement interface {
 	statement()
 }
 
+func (*AlterTable) statement()          {}
 func (*BeginTransaction) statement()    {}
 func (*CommitTransaction) statement()   {}
 func (*CreateDatabase) statement()      {}
@@ -60,6 +61,7 @@ func (*Revoke) statement()              {}
 func (*RollbackTransaction) statement() {}
 func (*Select) statement()              {}
 func (*Set) statement()                 {}
+func (*SetTransaction) statement()      {}
 func (*Show) statement()                {}
 func (*ShowColumns) statement()         {}
 func (*ShowDatabases) statement()       {}

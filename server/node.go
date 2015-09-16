@@ -224,6 +224,7 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	attrs proto.Attributes, stopper *stop.Stopper) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	requests := []proto.Request{
+		&proto.BatchRequest{},
 		&proto.GetRequest{},
 		&proto.PutRequest{},
 		&proto.ConditionalPutRequest{},
@@ -473,7 +474,6 @@ func (n *Node) publishStoreStatuses() error {
 // executeCmd creates a proto.Call struct and sends it via our local sender.
 func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
 	args := argsI.(proto.Request)
-	reply := args.CreateReply()
 	// TODO(tschottdorf) get a hold of the client's ID, add it to the
 	// context before dispatching, and create an ID for tracing the request.
 	header := args.Header()
@@ -483,10 +483,16 @@ func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
 	defer trace.Epoch("node")()
 	ctx := tracer.ToCtx((*Node)(n).context(), trace)
 
-	n.lSender.Send(ctx, proto.Call{Args: args, Reply: reply})
-	n.feed.CallComplete(args, reply)
-	if err := reply.Header().GoError(); err != nil {
+	ba, unwrap := client.MaybeWrap(args)
+	br, err := n.lSender.SendBatch(ctx, *ba)
+	if err != nil {
+		br = &proto.BatchResponse{}
 		trace.Event(fmt.Sprintf("error: %T", err))
 	}
-	return reply, nil
+	if br.GoError() != nil {
+		panic(proto.ErrorUnexpectedlySet)
+	}
+	br.SetGoError(err)
+	n.feed.CallComplete(ba, br)
+	return unwrap(br), nil
 }

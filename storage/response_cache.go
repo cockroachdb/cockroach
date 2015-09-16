@@ -83,16 +83,16 @@ func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID) (
 	}
 
 	// Pull response from the cache and read into reply if available.
-	bReply := &proto.BatchResponse{}
+	br := &proto.BatchResponse{}
 	key := keys.ResponseCacheKey(rc.rangeID, &cmdID)
-	ok, err := engine.MVCCGetProto(e, key, proto.ZeroTimestamp, true, nil, bReply)
+	ok, err := engine.MVCCGetProto(e, key, proto.ZeroTimestamp, true, nil, br)
 	if err != nil {
 		return proto.ResponseWithError{}, err
 	}
 	if ok {
-		header := bReply.Header()
+		header := br.Header()
 		defer func() { header.Error = nil }()
-		return proto.ResponseWithError{Reply: bReply, Err: header.GoError()}, nil
+		return proto.ResponseWithError{Reply: br, Err: header.GoError()}, nil
 	}
 	return proto.ResponseWithError{}, nil
 }

@@ -18,6 +18,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -26,6 +27,9 @@ import (
 func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error) {
 	if p.txn == nil {
 		return nil, util.Errorf("the server should have already created a transaction")
+	}
+	if err := p.setIsolationLevel(n.Isolation); err != nil {
+		return nil, err
 	}
 	return &valuesNode{}, nil
 }
@@ -44,4 +48,25 @@ func (p *planner) RollbackTransaction(n *parser.RollbackTransaction) (planNode, 
 	// Reset transaction.
 	p.txn = nil
 	return &valuesNode{}, err
+}
+
+// SetTransaction sets a transaction's isolation level
+func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, error) {
+	if err := p.setIsolationLevel(n.Isolation); err != nil {
+		return nil, err
+	}
+	return &valuesNode{}, nil
+}
+
+func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
+	switch level {
+	case parser.UnspecifiedIsolation:
+		return nil
+	case parser.SnapshotIsolation:
+		return p.txn.SetIsolation(proto.SNAPSHOT)
+	case parser.SerializableIsolation:
+		return p.txn.SetIsolation(proto.SERIALIZABLE)
+	default:
+		return util.Errorf("unknown isolation level: %s", level)
+	}
 }

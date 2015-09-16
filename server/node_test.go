@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -42,6 +45,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+type callDistSender kv.DistSender
+
+func (cds *callDistSender) Send(ctx context.Context, call proto.Call) {
+	client.SendCallConverted((*kv.DistSender)(cds), ctx, call)
+}
 
 // createTestNode creates an rpc server using the specified address,
 // gossip instance, KV database and a node using the specified slice
@@ -69,7 +78,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.Start(rpcServer, stopper)
 	}
 	ctx.Gossip = g
-	sender := kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock}, g)
+	sender := (*callDistSender)(kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock}, g))
 	ctx.DB = client.NewDB(sender)
 	// TODO(bdarnell): arrange to have the transport closed.
 	// (or attach LocalRPCTransport.Close to the stopper)
@@ -114,31 +123,27 @@ func TestBootstrapCluster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var keys []proto.Key
+	var foundKeys proto.KeySlice
 	for _, kv := range rows {
-		keys = append(keys, kv.Key)
+		foundKeys = append(foundKeys, kv.Key)
 	}
-	// TODO(marc): this depends on the sql system objects.
-	var expectedKeys = []proto.Key{
+	var expectedKeys = proto.KeySlice{
 		proto.MakeKey(proto.Key("\x00\x00meta1"), proto.KeyMax),
 		proto.MakeKey(proto.Key("\x00\x00meta2"), proto.KeyMax),
-		proto.Key("\x00desc-idgen"),
 		proto.Key("\x00node-idgen"),
 		proto.Key("\x00range-tree-root"),
 		proto.Key("\x00store-idgen"),
-		proto.Key("\x00zone"),
-		proto.Key("\xff\n\x02\n\x01\tsystem\x00\x01\n\x03"),
-		proto.Key("\xff\n\x02\n\x01\n\x01descriptor\x00\x01\n\x03"),
-		proto.Key("\xff\n\x02\n\x01\n\x01namespace\x00\x01\n\x03"),
-		proto.Key("\xff\n\x02\n\x01\n\x01users\x00\x01\n\x03"),
-		proto.Key("\xff\n\x03\n\x01\n\x01\n\x02"),
-		proto.Key("\xff\n\x03\n\x01\n\x02\n\x02"),
-		proto.Key("\xff\n\x03\n\x01\n\x03\n\x02"),
-		proto.Key("\xff\n\x03\n\x01\n\x04\n\x02"),
 	}
-	if !reflect.DeepEqual(keys, expectedKeys) {
+	// Add the initial keys for sql.
+	for _, kv := range sql.GetInitialSystemValues() {
+		expectedKeys = append(expectedKeys, kv.Key)
+	}
+	// Resort the list. The sql values are not sorted.
+	sort.Sort(expectedKeys)
+
+	if !reflect.DeepEqual(foundKeys, expectedKeys) {
 		t.Errorf("expected keys mismatch:\n%s\n  -- vs. -- \n\n%s",
-			formatKeys(keys), formatKeys(expectedKeys))
+			formatKeys(foundKeys), formatKeys(expectedKeys))
 	}
 
 	// TODO(spencer): check values.

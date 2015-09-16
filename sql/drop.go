@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
@@ -79,6 +80,8 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		b := &client.Batch{}
 		b.Del(descKey)
 		b.Del(nameKey)
+		// Delete the zone config entry for this table.
+		b.Del(MakeZoneKey(tableDesc.ID))
 		// Mark transaction as operating on the system DB.
 		p.txn.SetSystemDBTrigger()
 		err = p.txn.Run(b)
@@ -102,7 +105,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 		return nil, errEmptyDatabaseName
 	}
 
-	nameKey := MakeNameMetadataKey(RootNamespaceID, string(n.Name))
+	nameKey := MakeNameMetadataKey(keys.RootNamespaceID, string(n.Name))
 	gr, err := p.txn.Get(nameKey)
 	if err != nil {
 		return nil, err
@@ -140,6 +143,8 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	b := &client.Batch{}
 	b.Del(descKey)
 	b.Del(nameKey)
+	// Delete the zone config entry for this database.
+	b.Del(MakeZoneKey(desc.ID))
 	// Mark transaction as operating on the system DB.
 	p.txn.SetSystemDBTrigger()
 	if err := p.txn.Run(b); err != nil {

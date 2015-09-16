@@ -352,12 +352,11 @@ message AdminMergeResponse {
 message RangeLookupRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
-  // Ignore intents indicates whether or not intents encountered
-  // while looking up the range info should be resolved. This should
-  // be false in general, except for the case where the lookup is
-  // already in service of pushing intents on meta records. Attempting
-  // to resolve intents in this case would lead to infinite recursion.
-  optional bool ignore_intents = 3 [(gogoproto.nullable) = false];
+  // ConsiderIntents indicates whether or not intents encountered
+  // while looking up the range info should randomly be returned
+  // to the caller. This is intended to be used when retrying due
+  // to range addressing errors.
+  optional bool consider_intents = 3 [(gogoproto.nullable) = false];
   // Use a reverse scan to pre-fill the range descriptor cache instead
   // of an ascending scan.
   optional bool reverse = 4 [(gogoproto.nullable) = false];
@@ -424,8 +423,8 @@ enum PushTxnType {
 // readers or writers which have encountered an "intent" laid down by
 // another transaction. The goal is to resolve the conflict. Note that
 // args.Key should be set to the txn ID of args.PusheeTxn, not
-// args.Txn, as is usual. This RPC is addressed to the range which
-// owns the pushee's txn record.
+// args.PusherTxn (which might be nil in any case). This RPC is
+// addressed to the range which owns the pushee's txn record.
 //
 // Resolution is trivial if the txn which owns the intent has either
 // been committed or aborted already. Otherwise, the existing txn can
@@ -435,23 +434,27 @@ enum PushTxnType {
 // the owning txn's status and priority.
 message PushTxnRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+  // Transaction which encountered the intent, if applicable. For a
+  // non-transactional operation, pusher_txn will be nil. Used to
+  // compare priorities and timestamps if priorities are equal.
+  optional Transaction pusher_txn = 2;
+  // Transaction to be pushed, as specified at the intent which led to
+  // the push transaction request. Note that this may not be the most
+  // up-to-date value of the transaction record, but will be set or
+  // merged as appropriate.
+  optional Transaction pushee_txn = 3 [(gogoproto.nullable) = false];
   // Now holds the timestamp used to compare the last heartbeat of the pushee
   // against. This is necessary since the request header's timestamp does not
   // necessarily advance with the node clock across retries and hence cannot
   // detect abandoned transactions.
-  optional Timestamp now = 3 [(gogoproto.nullable) = false];
+  optional Timestamp now = 4 [(gogoproto.nullable) = false];
   // Readers set this to PUSH_TIMESTAMP to move PusheeTxn's commit
   // timestamp forward. Writers set this to ABORT_TXN to request that
   // the PushTxn be aborted if possible. This is done in the event of
   // a writer conflicting with PusheeTxn. Inconsistent readers set
   // this to CLEANUP_TXN to determine whether dangling intents
   // may be resolved.
-  optional PushTxnType push_type = 4 [(gogoproto.nullable) = false];
-  // Range lookup indicates whether we're pushing a txn because of an
-  // intent encountered while servicing an internal range lookup
-  // request. See notes in RangeLookupRequest.
-  optional bool range_lookup = 5 [(gogoproto.nullable) = false];
+  optional PushTxnType push_type = 5 [(gogoproto.nullable) = false];
 }
 
 // A PushTxnResponse is the return value from the PushTxn() method. It
@@ -490,6 +493,16 @@ message ResolveIntentRangeRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intents are being resolved.
   optional Transaction intent_txn = 2 [(gogoproto.nullable) = false];
+}
+
+// A NoopResponse is the return value from a no-op operation.
+message NoopResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A NoopRequest is a no-op.
+message NoopRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A ResolveIntentRangeResponse is the return value from the
@@ -554,17 +567,20 @@ message RequestUnion {
     DeleteRequest delete = 5;
     DeleteRangeRequest delete_range = 6;
     ScanRequest scan = 7;
-    ReverseScanRequest reverse_scan = 8;
-    EndTransactionRequest end_transaction = 9;
-    HeartbeatTxnRequest heartbeat_txn = 10;
-    GCRequest gc = 11;
-    PushTxnRequest push_txn = 12;
-    RangeLookupRequest range_lookup = 13;
-    ResolveIntentRequest resolve_intent = 14;
-    ResolveIntentRangeRequest resolve_intent_range = 15;
-    MergeRequest merge = 16;
-    TruncateLogRequest truncate = 17;
-    LeaderLeaseRequest leader_lease = 18;
+    EndTransactionRequest end_transaction = 8;
+    AdminSplitRequest admin_split = 9;
+    AdminMergeRequest admin_merge = 10;
+    HeartbeatTxnRequest heartbeat_txn = 11;
+    GCRequest gc = 12;
+    PushTxnRequest push_txn = 13;
+    RangeLookupRequest range_lookup = 14;
+    ResolveIntentRequest resolve_intent = 15;
+    ResolveIntentRangeRequest resolve_intent_range = 16;
+    MergeRequest merge = 17;
+    TruncateLogRequest truncate = 18;
+    LeaderLeaseRequest leader_lease = 19;
+    ReverseScanRequest reverse_scan = 20;
+    NoopRequest noop = 21;
   }
 }
 
@@ -580,17 +596,20 @@ message ResponseUnion {
     DeleteResponse delete = 5;
     DeleteRangeResponse delete_range = 6;
     ScanResponse scan = 7;
-    ReverseScanResponse reverse_scan = 8;
-    EndTransactionResponse end_transaction = 9;
-    HeartbeatTxnResponse heartbeat_txn = 10;
-    GCResponse gc = 11;
-    PushTxnResponse push_txn = 12;
-    RangeLookupResponse range_lookup = 13;
-    ResolveIntentResponse resolve_intent = 14;
-    ResolveIntentRangeResponse resolve_intent_range = 15;
-    MergeResponse merge = 16;
-    TruncateLogResponse truncate = 17;
-    LeaderLeaseResponse leader_lease = 18;
+    EndTransactionResponse end_transaction = 8;
+    AdminSplitResponse admin_split = 9;
+    AdminMergeResponse admin_merge = 10;
+    HeartbeatTxnResponse heartbeat_txn = 11;
+    GCResponse gc = 12;
+    PushTxnResponse push_txn = 13;
+    RangeLookupResponse range_lookup = 14;
+    ResolveIntentResponse resolve_intent = 15;
+    ResolveIntentRangeResponse resolve_intent_range = 16;
+    MergeResponse merge = 17;
+    TruncateLogResponse truncate = 18;
+    LeaderLeaseResponse leader_lease = 19;
+    ReverseScanResponse reverse_scan = 20;
+    NoopResponse noop = 21;
   }
 }
 
@@ -603,6 +622,7 @@ message ResponseUnion {
 // calls must not have transactions specified. The same applies to
 // the User and UserPriority fields.
 message BatchRequest {
+  option (gogoproto.goproto_stringer) = false;
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
 }

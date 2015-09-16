@@ -105,7 +105,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 
-	tbKey := tableKey{dbDesc.ID, string(n.Name.Table())}.Key()
+	tbKey := tableKey{dbDesc.ID, n.Name.Table()}.Key()
 
 	// Check if table exists.
 	gr, err := p.txn.Get(tbKey)
@@ -145,6 +145,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	}
 
 	tableDesc.SetName(n.NewName.Table())
+	tableDesc.ParentID = targetDbDesc.ID
 
 	newTbKey := tableKey{targetDbDesc.ID, n.NewName.Table()}.Key()
 	descKey := MakeDescMetadataKey(tableDesc.GetID())

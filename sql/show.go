@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -38,6 +39,8 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 		v.rows = append(v.rows, []parser.Datum{parser.DString(p.session.Database)})
 	case `SYNTAX`:
 		v.rows = append(v.rows, []parser.Datum{parser.DString(parser.Syntax(p.session.Syntax).String())})
+	case `TRANSACTION ISOLATION LEVEL`:
+		v.rows = append(v.rows, []parser.Datum{parser.DString(p.txn.Proto.Isolation.String())})
 	default:
 		return nil, fmt.Errorf("unknown variable: %q", name)
 	}
@@ -74,7 +77,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	//
 	//   SELECT id FROM system.namespace WHERE parentID = 0
 
-	prefix := MakeNameMetadataKey(RootNamespaceID, "")
+	prefix := MakeNameMetadataKey(keys.RootNamespaceID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -144,18 +147,23 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 		return nil, err
 	}
 
-	v := &valuesNode{columns: []string{"Table", "Name", "Unique", "Seq", "Column"}}
+	v := &valuesNode{columns: []string{"Table", "Name", "Unique", "Seq", "Column", "Storing"}}
 
 	name := n.Table.Table()
 	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
-		for j, col := range index.ColumnNames {
-			v.rows = append(v.rows, []parser.Datum{
-				parser.DString(name),
-				parser.DString(index.Name),
-				parser.DBool(index.Unique),
-				parser.DInt(j + 1),
-				parser.DString(col),
-			})
+		j := 1
+		for i, cols := range [][]string{index.ColumnNames, index.StoreColumnNames} {
+			for _, col := range cols {
+				v.rows = append(v.rows, []parser.Datum{
+					parser.DString(name),
+					parser.DString(index.Name),
+					parser.DBool(index.Unique),
+					parser.DInt(j),
+					parser.DString(col),
+					parser.DBool(i == 1),
+				})
+				j++
+			}
 		}
 	}
 	return v, nil

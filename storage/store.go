@@ -28,7 +28,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -251,13 +250,12 @@ type Store struct {
 	ctx               StoreContext
 	db                *client.DB
 	engine            engine.Engine   // The underlying key-value store
-	_allocator        allocator       // Makes allocation decisions
+	_allocator        Allocator       // Makes allocation decisions
 	rangeIDAlloc      *idAllocator    // Range ID allocator
 	gcQueue           *gcQueue        // Garbage collection queue
 	_splitQueue       *splitQueue     // Range splitting queue
 	verifyQueue       *verifyQueue    // Checksum verification queue
 	replicateQueue    replicateQueue  // Replication queue
-	repairQueue       repairQueue     // Recovery Queue
 	_rangeGCQueue     *rangeGCQueue   // Range GC queue
 	scanner           *replicaScanner // Range scanner
 	feed              StoreEventFeed  // Event Feed
@@ -363,7 +361,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 		ctx:               ctx,
 		db:                ctx.DB, // TODO(tschottdorf) remove redundancy.
 		engine:            eng,
-		_allocator:        makeAllocator(ctx.StorePool),
+		_allocator:        MakeAllocator(ctx.StorePool),
 		replicas:          map[proto.RangeID]*Replica{},
 		replicasByKey:     btree.New(64 /* degree */),
 		uninitReplicas:    map[proto.RangeID]*Replica{},
@@ -378,9 +376,8 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ReplicaCount)
 	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
-	s.repairQueue = makeRepairQueue(s.ctx.StorePool, &s.replicateQueue, s.ctx.Clock)
 	s._rangeGCQueue = newRangeGCQueue(s.db)
-	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue, s.repairQueue)
+	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue)
 
 	return s
 }
@@ -528,12 +525,10 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
 	if s.ctx.Gossip != nil {
-		// Register callbacks for any changes to zone
-		// configurations; we split ranges along prefix boundaries to
-		// avoid having a range that has two different zone
-		// configs. (We don't need a callback for users since
-		// users don't have such a requirement.)
-		s.ctx.Gossip.RegisterCallback(gossip.KeyConfigZone, s.configGossipUpdate)
+		// Register callbacks for any changes to the system config.
+		// This may trigger splits along structured boundaries,
+		// and update max range bytes.
+		s.ctx.Gossip.RegisterCallback(gossip.KeySystemConfig, s.systemGossipUpdate)
 
 		// Start a single goroutine in charge of periodically gossiping the
 		// sentinel and first range metadata if we have a first range.
@@ -576,7 +571,7 @@ func (s *Store) startGossip() {
 	ctx := s.Context(nil)
 	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
 	// of their first iteration.
-	s.initComplete.Add(3)
+	s.initComplete.Add(2)
 	s.stopper.RunWorker(func() {
 		// Run the first time without waiting for the Ticker and signal the WaitGroup.
 		if err := s.maybeGossipFirstRange(); err != nil {
@@ -590,25 +585,6 @@ func (s *Store) startGossip() {
 			case <-ticker.C:
 				if err := s.maybeGossipFirstRange(); err != nil {
 					log.Warningc(ctx, "error gossiping first range data: %s", err)
-				}
-			case <-s.stopper.ShouldStop():
-				return
-			}
-		}
-	})
-
-	s.stopper.RunWorker(func() {
-		if err := s.maybeGossipConfigs(); err != nil {
-			log.Warningc(ctx, "error gossiping configs: %s", err)
-		}
-		s.initComplete.Done()
-		ticker := time.NewTicker(configGossipInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := s.maybeGossipConfigs(); err != nil {
-					log.Warningc(ctx, "error gossiping configs: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
 				return
@@ -647,33 +623,6 @@ func (s *Store) maybeGossipFirstRange() error {
 	return nil
 }
 
-// maybeGossipConfigs checks which of the store's ranges contain config
-// descriptors and lets these ranges gossip them. Config gossip entries do not
-// expire, so this is a rarely needed action in a working cluster - if values
-// change, ranges will update gossip autonomously. However, the lease holder,
-// who is normally in charge of that might crash after updates before gossiping
-// and a new leader lease is only acquired if needed. To account for this rare
-// scenario, we activate the very few ranges that hold config maps
-// periodically.
-func (s *Store) maybeGossipConfigs() error {
-	for _, cd := range configDescriptors {
-		rng := s.LookupReplica(cd.keyPrefix, nil)
-		if rng == nil {
-			// This store has no range with this configuration.
-			continue
-		}
-		// Wake up the replica. If it acquires a fresh lease, it will
-		// gossip. If an unexpected error occurs (i.e. nobody else seems to
-		// have an active lease but we still failed to obtain it), return
-		// that error. If we ignored it we would run the risk of running a
-		// cluster without configs gossiped.
-		if _, err := rng.getLeaseForGossip(s.Context(nil)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // maybeGossipSystemConfig looks for the range containing SystemDB keys and
 // lets that range gossip them.
 func (s *Store) maybeGossipSystemConfig() error {
@@ -690,21 +639,24 @@ func (s *Store) maybeGossipSystemConfig() error {
 	return err
 }
 
-// configGossipUpdate is a callback for gossip updates to
-// configuration maps which affect range split boundaries.
-func (s *Store) configGossipUpdate(key string, content []byte) {
-	configMap := &config.PrefixConfigMap{}
-	if err := gogoproto.Unmarshal(content, configMap); err != nil {
-		ctx := s.Context(nil)
-		log.Errorc(ctx, "gossiped info is not a prefix configuration map: %s", err)
+// systemGossipUpdate is a callback for gossip updates to
+// the system config which affect range split boundaries.
+func (s *Store) systemGossipUpdate(key string, _ []byte) {
+	// Load the system config.
+	cfg, err := s.Gossip().GetSystemConfig()
+	if err != nil {
+		log.Error(err)
 		return
 	}
 
-	s.maybeSplitRangesByConfigs(configMap)
-
-	// If the zone configs changed, run through ranges and set max bytes.
-	if key == gossip.KeyConfigZone {
-		s.setRangesMaxBytes(configMap)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// For every range, update its MaxBytes and check if it needs to be split.
+	for _, rng := range s.replicas {
+		if zone, err := cfg.GetZoneConfigForKey(rng.Desc().StartKey); err == nil {
+			rng.SetMaxBytes(zone.RangeMaxBytes)
+		}
+		s.splitQueue().MaybeAdd(rng, s.ctx.Clock.Now())
 	}
 }
 
@@ -722,27 +674,6 @@ func (s *Store) GossipStore() {
 	// Gossip store descriptor.
 	if err := s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
 		log.Warningc(ctx, "%s", err)
-	}
-}
-
-// maybeSplitRangesByConfigs determines ranges which should be
-// split by the boundaries of the prefix config map, if any, and
-// adds them to the split queue.
-func (s *Store) maybeSplitRangesByConfigs(configMap *config.PrefixConfigMap) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, config := range configMap.Configs {
-		// Find the range which contains this config prefix, if any.
-		var rng *Replica
-		s.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(config.Prefix.Next()), func(i btree.Item) bool {
-			rng = i.(*Replica)
-			return false
-		})
-		// If the config doesn't split the range, continue.
-		if rng == nil || !rng.Desc().ContainsKey(config.Prefix) {
-			continue
-		}
-		s.splitQueue().MaybeAdd(rng, s.ctx.Clock.Now())
 	}
 }
 
@@ -772,40 +703,6 @@ func (s *Store) ForceRangeGCScan(t util.Tester) {
 	for _, r := range s.replicas {
 		s._rangeGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
-}
-
-// ForceRepairScan iterates over all ranges and enqueues any that need to be
-// repaired. Exposed only for testing.
-func (s *Store) ForceRepairScan(_ util.Tester) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, r := range s.replicas {
-		s.repairQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-}
-
-// setRangesMaxBytes sets the max bytes for every range according
-// to the zone configs.
-//
-// TODO(spencer): scanning all ranges with the lock held could cause
-// perf issues if the number of ranges grows large enough.
-func (s *Store) setRangesMaxBytes(zoneMap *config.PrefixConfigMap) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	zone := zoneMap.Configs[0].Config.GetValue().(*config.ZoneConfig)
-	idx := 0
-	// Note that we must iterate through the ranges in lexicographic
-	// order to match the ordering of the zoneMap.
-	s.replicasByKey.Ascend(func(i btree.Item) bool {
-		rng := i.(*Replica)
-		if idx < zoneMap.Len()-1 && !rng.Desc().StartKey.Less(zoneMap.Configs[idx+1].Prefix) {
-			idx++
-			zone = zoneMap.Configs[idx].Config.GetValue().(*config.ZoneConfig)
-		}
-		rng.SetMaxBytes(zone.RangeMaxBytes)
-		return true
-	})
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To
@@ -930,22 +827,6 @@ func (s *Store) BootstrapRange(initialValues []proto.KeyValue) error {
 	if err := engine.MVCCPutProto(batch, ms, meta1Key, now, nil, desc); err != nil {
 		return err
 	}
-	// Zone config.
-	zoneConfig := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			{},
-			{},
-			{},
-		},
-		RangeMinBytes: 1048576,
-		RangeMaxBytes: 67108864,
-		GC: &config.GCPolicy{
-			TTLSeconds: 24 * 60 * 60, // 1 day
-		},
-	}
-	if err := engine.MVCCPutProto(batch, ms, keys.ConfigZonePrefix, now, nil, zoneConfig); err != nil {
-		return err
-	}
 
 	// Now add all passed-in default entries.
 	for _, kv := range initialValues {
@@ -993,7 +874,7 @@ func (s *Store) Engine() engine.Engine { return s.engine }
 func (s *Store) DB() *client.DB { return s.ctx.DB }
 
 // Allocator accessor.
-func (s *Store) allocator() allocator { return s._allocator }
+func (s *Store) allocator() Allocator { return s._allocator }
 
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
@@ -1374,6 +1255,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 	}
 	var rng *Replica
 	var err error
+
 	// Add the command to the range for execution; exit retry loop on success.
 	for r := retry.Start(s.ctx.RangeRetryOptions); next(&r); {
 		// Get range and add command to the range for execution.
@@ -1408,6 +1290,8 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		}
 
 		switch t := err.(type) {
+		case *proto.ReadWithinUncertaintyIntervalError:
+			t.NodeID = header.Replica.NodeID
 		case *proto.WriteTooOldError:
 			trace.Event(fmt.Sprintf("error: %T", err))
 			// Update request timestamp and retry immediately.
@@ -1440,12 +1324,13 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			}
 			continue
 		}
-		return reply, err
+		return nil, err
 	}
 
 	// By default, retries are indefinite. However, some unittests set a
 	// maximum retry count; return txn retry error for transactional cases
 	// and the original error otherwise.
+	trace.Event("store retry limit exceeded") // good to check for if tests fail
 	if header.Txn != nil {
 		return nil, proto.NewTransactionRetryError(header.Txn)
 	}
@@ -1493,50 +1378,34 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	now := s.Clock().Now()
 	header := args.Header()
-	bArgs := &proto.BatchRequest{
+	ba := &proto.BatchRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    header.Timestamp,
-			Txn:          header.Txn,
 			UserPriority: header.UserPriority,
 		},
 	}
-	bReply := &proto.BatchResponse{}
+	br := &proto.BatchResponse{}
 	for _, intent := range pushIntents {
 		pushArgs := &proto.PushTxnRequest{
 			RequestHeader: proto.RequestHeader{
-				Timestamp: header.Timestamp,
-				Key:       intent.Txn.Key,
-				// TODO(tschottdorf):
-				// The following fields should not be supplied here, but store
-				// tests (for example TestStoreResolveWriteIntent) which do not
-				// go through TxnCoordSender rely on them being specified on
-				// the individual calls (and TxnCoordSender is in charge of
-				// filling them in here later).
-				Txn: header.Txn,
-				// This is here only for legacy reasons: testSender in the
-				// storage tests duplicates batch processing and isn't as
-				// smart as TxnCoordSender. A test that relies on this is
-				// TestStoreResolveWriteIntentNoTxn.
-				// This should disappear naturally when batches which address
-				// the same Range get sent to that Range wholesale:
-				// testSender then simply sends batches as any other call,
-				// which should be enough for the few tests that need them.
-				UserPriority: header.UserPriority,
+				Key: intent.Txn.Key,
 			},
+			PusherTxn: header.Txn,
 			PusheeTxn: intent.Txn,
 			// The timestamp is used by PushTxn for figuring out whether the
 			// transaction is abandoned. If we used the argument's timestamp
 			// here, we would run into busy loops because that timestamp
 			// usually stays fixed among retries, so it will never realize
 			// that a transaction has timed out. See #877.
-			Now:         now,
-			PushType:    pushType,
-			RangeLookup: args.Method() == proto.RangeLookup,
+			Now:      now,
+			PushType: pushType,
 		}
-		bArgs.Add(pushArgs)
+		ba.Add(pushArgs)
 	}
 	b := &client.Batch{}
-	b.InternalAddCall(proto.Call{Args: bArgs, Reply: bReply})
+	if len(ba.Requests) > 0 {
+		b.InternalAddCall(proto.Call{Args: ba, Reply: br})
+	}
 
 	// Run all pushes in parallel.
 	if pushErr := s.db.Run(b); pushErr != nil {
@@ -1559,7 +1428,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	wiErr.Resolved = true // success!
 
 	for i, intent := range pushIntents {
-		intent.Txn = *(bReply.Responses[i].PushTxn.PusheeTxn)
+		intent.Txn = *(br.Responses[i].PushTxn.PusheeTxn)
 		resolveIntents = append(resolveIntents, intent)
 	}
 
@@ -1770,11 +1639,10 @@ func (s *Store) GetStatus() (*StoreStatus, error) {
 // availability changes.
 func (s *Store) computeReplicationStatus(now int64) (
 	leaderRangeCount, replicatedRangeCount, availableRangeCount int32) {
-	// Get the zone configs, which are needed to determine if a range is
-	// under-replicated.
-	zoneMap, err := s.Gossip().GetZoneConfig()
+	// Load the system config.
+	cfg, err := s.Gossip().GetSystemConfig()
 	if err != nil {
-		log.Error("unable to get zone configs")
+		log.Error(err)
 		return
 	}
 
@@ -1782,8 +1650,11 @@ func (s *Store) computeReplicationStatus(now int64) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for rangeID, rng := range s.replicas {
-		configUnion := zoneMap.MatchByPrefix(rng.Desc().StartKey).Config
-		zoneConfig := configUnion.GetValue().(*config.ZoneConfig)
+		zoneConfig, err := cfg.GetZoneConfigForKey(rng.Desc().StartKey)
+		if err != nil {
+			log.Error(err)
+			continue
+		}
 		raftStatus := s.RaftStatus(rangeID)
 		if raftStatus == nil {
 			continue

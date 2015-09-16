@@ -21,6 +21,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
@@ -143,7 +146,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 			columnID = desc.NextColumnID
 			desc.NextColumnID++
 		}
-		columnNames[desc.Columns[i].Name] = columnID
+		columnNames[normalizeName(desc.Columns[i].Name)] = columnID
 		desc.Columns[i].ID = columnID
 	}
 
@@ -167,7 +170,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 		index.allocateName(desc)
 	}
 
-	// Populate IDs
+	// Populate IDs.
 	for _, index := range indexes {
 		if index.ID == 0 {
 			index.ID = desc.NextIndexID
@@ -178,7 +181,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 				index.ColumnIDs = append(index.ColumnIDs, 0)
 			}
 			if index.ColumnIDs[j] == 0 {
-				index.ColumnIDs[j] = columnNames[colName]
+				index.ColumnIDs[j] = columnNames[normalizeName(colName)]
 			}
 		}
 		if index != &desc.PrimaryIndex {
@@ -189,6 +192,20 @@ func (desc *TableDescriptor) AllocateIDs() error {
 				}
 			}
 			index.ImplicitColumnIDs = extraColumnIDs
+
+			for _, colName := range index.StoreColumnNames {
+				col, err := desc.FindColumnByName(colName)
+				if err != nil {
+					return err
+				}
+				if desc.PrimaryIndex.containsColumnID(col.ID) {
+					continue
+				}
+				if index.containsColumnID(col.ID) {
+					return fmt.Errorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
+				}
+				index.ImplicitColumnIDs = append(index.ImplicitColumnIDs, col.ID)
+			}
 		}
 	}
 
@@ -197,7 +214,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	// before AllocateIDs.
 	savedID := desc.ID
 	if desc.ID == 0 {
-		desc.ID = MaxReservedDescID + 1
+		desc.ID = keys.MaxReservedDescID + 1
 	}
 	err := desc.Validate()
 	desc.ID = savedID
@@ -216,6 +233,12 @@ func (desc *TableDescriptor) Validate() error {
 		return fmt.Errorf("invalid table ID %d", desc.ID)
 	}
 
+	// ParentID is the ID of the database holding this table.
+	// It is often < ID, except when a table gets moved across databases.
+	if desc.ParentID == 0 {
+		return fmt.Errorf("invalid parent ID %d", desc.ParentID)
+	}
+
 	if len(desc.Columns) == 0 {
 		return errMissingColumns
 	}
@@ -230,10 +253,10 @@ func (desc *TableDescriptor) Validate() error {
 			return fmt.Errorf("invalid column ID %d", column.ID)
 		}
 
-		if _, ok := columnNames[column.Name]; ok {
+		if _, ok := columnNames[normalizeName(column.Name)]; ok {
 			return fmt.Errorf("duplicate column name: \"%s\"", column.Name)
 		}
-		columnNames[column.Name] = column.ID
+		columnNames[normalizeName(column.Name)] = column.ID
 
 		if other, ok := columnIDs[column.ID]; ok {
 			return fmt.Errorf("column \"%s\" duplicate ID of column \"%s\": %d",
@@ -263,10 +286,10 @@ func (desc *TableDescriptor) Validate() error {
 			return fmt.Errorf("invalid index ID %d", index.ID)
 		}
 
-		if _, ok := indexNames[index.Name]; ok {
+		if _, ok := indexNames[normalizeName(index.Name)]; ok {
 			return fmt.Errorf("duplicate index name: \"%s\"", index.Name)
 		}
-		indexNames[index.Name] = struct{}{}
+		indexNames[normalizeName(index.Name)] = struct{}{}
 
 		if other, ok := indexIDs[index.ID]; ok {
 			return fmt.Errorf("index \"%s\" duplicate ID of index \"%s\": %d",
@@ -289,7 +312,7 @@ func (desc *TableDescriptor) Validate() error {
 		}
 
 		for i, name := range index.ColumnNames {
-			colID, ok := columnNames[name]
+			colID, ok := columnNames[normalizeName(name)]
 			if !ok {
 				return fmt.Errorf("index \"%s\" contains unknown column \"%s\"", index.Name, name)
 			}
@@ -303,6 +326,30 @@ func (desc *TableDescriptor) Validate() error {
 	return desc.Privileges.Validate(desc.GetID())
 }
 
+// AddColumn adds a column to the table.
+func (desc *TableDescriptor) AddColumn(col ColumnDescriptor) {
+	desc.Columns = append(desc.Columns, col)
+}
+
+// AddIndex adds an index to the table.
+func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
+	if primary {
+		// PrimaryIndex is unset.
+		if desc.PrimaryIndex.Name == "" {
+			if idx.Name == "" {
+				// Only override the index name if it hasn't been set by the user.
+				idx.Name = PrimaryKeyIndexName
+			}
+			desc.PrimaryIndex = idx
+		} else {
+			return fmt.Errorf("multiple primary keys for table %q are not allowed", desc.Name)
+		}
+	} else {
+		desc.Indexes = append(desc.Indexes, idx)
+	}
+	return nil
+}
+
 // FindColumnByName finds the column with specified name.
 func (desc *TableDescriptor) FindColumnByName(name string) (*ColumnDescriptor, error) {
 	for i, c := range desc.Columns {
@@ -310,7 +357,7 @@ func (desc *TableDescriptor) FindColumnByName(name string) (*ColumnDescriptor, e
 			return &desc.Columns[i], nil
 		}
 	}
-	return nil, fmt.Errorf("column \"%s\" does not exist", name)
+	return nil, util.Errorf("column %q does not exist", name)
 }
 
 // FindColumnByID finds the column with specified ID.
@@ -320,7 +367,7 @@ func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, err
 			return &desc.Columns[i], nil
 		}
 	}
-	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+	return nil, util.Errorf("column-id \"%d\" does not exist", id)
 }
 
 // FindIndexByName finds the index with specified name.
@@ -330,7 +377,19 @@ func (desc *TableDescriptor) FindIndexByName(name string) (*IndexDescriptor, err
 			return &desc.Indexes[i], nil
 		}
 	}
-	return nil, fmt.Errorf("index \"%s\" does not exist", name)
+	return nil, util.Errorf("index %q does not exist", name)
+}
+
+// FindIndexByID finds the index with specified ID.
+func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error) {
+	indexes := append(desc.Indexes, desc.PrimaryIndex)
+
+	for i, c := range indexes {
+		if c.ID == id {
+			return &indexes[i], nil
+		}
+	}
+	return nil, util.Errorf("index-id \"%d\" does not exist", id)
 }
 
 // SQLString returns the SQL string corresponding to the type.

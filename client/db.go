@@ -245,6 +245,7 @@ func Open(stopper *stop.Stopper, addr string) (*DB, error) {
 }
 
 // NewBatch creates and returns a new empty batch object for use with the DB.
+// TODO(tschottdorf): it appears this can be unexported.
 func (db *DB) NewBatch() *Batch {
 	return &Batch{DB: db}
 }
@@ -405,10 +406,10 @@ func sendAndFill(send func(...proto.Call) error, b *Batch) error {
 	// result gets initialized with an error from the corresponding call.
 	err1 := send(b.calls...)
 	err2 := b.fillResults()
-	if err1 != nil {
-		return err1
+	if err2 != nil {
+		return err2
 	}
-	return err2
+	return err1
 }
 
 // Run executes the operations queued up within a batch. Before executing any
@@ -451,27 +452,30 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 
 	if len(calls) == 1 {
 		c := calls[0]
-		if c.Args.Header().UserPriority == nil && db.userPriority != 0 {
-			c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
-		}
-		resetClientCmdID(c.Args)
-		db.sender.Send(context.TODO(), c)
-		err = c.Reply.Header().GoError()
-		if err != nil {
-			if log.V(1) {
-				log.Infof("failed %s: %s", c.Method(), err)
+		// We only send BatchRequest. Everything else needs to go into one.
+		if _, ok := calls[0].Args.(*proto.BatchRequest); ok {
+			if c.Args.Header().UserPriority == nil && db.userPriority != 0 {
+				c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
 			}
-		} else if c.Post != nil {
-			err = c.Post()
+			resetClientCmdID(c.Args)
+			db.sender.Send(context.TODO(), c)
+			err = c.Reply.Header().GoError()
+			if err != nil {
+				if log.V(1) {
+					log.Infof("failed %s: %s", c.Method(), err)
+				}
+			} else if c.Post != nil {
+				err = c.Post()
+			}
+			return
 		}
-		return
 	}
 
-	bArgs, bReply := &proto.BatchRequest{}, &proto.BatchResponse{}
+	ba, br := &proto.BatchRequest{}, &proto.BatchResponse{}
 	for _, call := range calls {
-		bArgs.Add(call.Args)
+		ba.Add(call.Args)
 	}
-	err = db.send(proto.Call{Args: bArgs, Reply: bReply})
+	err = db.send(proto.Call{Args: ba, Reply: br})
 
 	// Recover from protobuf merge panics.
 	defer func() {
@@ -487,7 +491,7 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 	}()
 
 	// Transfer individual responses from batch response to prepared replies.
-	for i, reply := range bReply.Responses {
+	for i, reply := range br.Responses {
 		c := calls[i]
 		gogoproto.Merge(c.Reply, reply.GetValue().(gogoproto.Message))
 		if c.Post != nil {

@@ -22,9 +22,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -45,7 +45,31 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	// Determine which columns we're inserting into.
 	var names parser.QualifiedNames
 	for _, expr := range n.Exprs {
-		names = append(names, expr.Name)
+		var err error
+		expr.Expr, err = p.expandSubqueries(expr.Expr, len(expr.Names))
+		if err != nil {
+			return nil, err
+		}
+
+		if expr.Tuple {
+			// TODO(pmattis): The distinction between Tuple and DTuple here is
+			// irritating. We'll see a DTuple if the expression was a subquery that
+			// has been evaluated. We'll see a Tuple in other cases.
+			n := 0
+			switch t := expr.Expr.(type) {
+			case parser.Tuple:
+				n = len(t)
+			case parser.DTuple:
+				n = len(t)
+			default:
+				return nil, util.Errorf("unsupported tuple assignment: %T", expr.Expr)
+			}
+			if len(expr.Names) != n {
+				return nil, fmt.Errorf("number of columns (%d) does not match number of values (%d)",
+					len(expr.Names), n)
+			}
+		}
+		names = append(names, expr.Names...)
 	}
 	cols, err := p.processColumns(tableDesc, names)
 	if err != nil {
@@ -66,11 +90,27 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 
 	// Generate the list of select targets. We need to select all of the columns
 	// plus we select all of the update expressions in case those expressions
-	// reference columns (e.g. "UPDATE t SET v = v + 1").
+	// reference columns (e.g. "UPDATE t SET v = v + 1"). Note that we flatten
+	// expressions for tuple assignments just as we flattened the column names
+	// above. So "UPDATE t SET (a, b) = (1, 2)" translates into select targets of
+	// "*, 1, 2", not "*, (1, 2)".
 	targets := make(parser.SelectExprs, 0, len(n.Exprs)+1)
 	targets = append(targets, parser.StarSelectExpr())
 	for _, expr := range n.Exprs {
-		targets = append(targets, parser.SelectExpr{Expr: expr.Expr})
+		if expr.Tuple {
+			switch t := expr.Expr.(type) {
+			case parser.Tuple:
+				for _, e := range t {
+					targets = append(targets, parser.SelectExpr{Expr: e})
+				}
+			case parser.DTuple:
+				for _, e := range t {
+					targets = append(targets, parser.SelectExpr{Expr: e})
+				}
+			}
+		} else {
+			targets = append(targets, parser.SelectExpr{Expr: expr.Expr})
+		}
 	}
 
 	// Query the rows that need updating.
@@ -106,7 +146,6 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 
 	// Update all the rows.
 	var b client.Batch
-	var writes []write
 	for rows.Next() {
 		rowVals := rows.Values()
 		primaryIndexKey, _, err := encodeIndexKey(
@@ -150,20 +189,6 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 					log.Infof("Del %q", secondaryIndexEntry.key)
 				}
 				b.Del(secondaryIndexEntry.key)
-
-				var w write
-
-				indexDesc := &tableDesc.Indexes[i]
-				for i, columnID := range indexDesc.ColumnIDs {
-					w.values = append(w.values, writePair{
-						col: indexDesc.ColumnNames[i],
-						val: rowVals[colIDtoRowIndex[columnID]],
-					})
-				}
-
-				w.constraint = indexDesc
-
-				writes = append(writes, w)
 			}
 		}
 
@@ -186,8 +211,6 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				}
 
 				b.Put(key, primitive)
-
-				writes = append(writes, write{})
 			} else {
 				// The column might have already existed but is being set to NULL, so
 				// delete it.
@@ -203,16 +226,8 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-
 	if err := p.txn.Run(&b); err != nil {
-		for i, result := range b.Results {
-			if _, ok := result.Err.(*proto.ConditionFailedError); ok {
-				w := writes[i]
-
-				return nil, fmt.Errorf("duplicate key value %s violates unique constraint %q", w.values, w.constraint.Name)
-			}
-		}
-		return nil, err
+		return nil, convertBatchError(tableDesc, b, err)
 	}
 
 	// TODO(tamird/pmattis): return the number of affected rows.

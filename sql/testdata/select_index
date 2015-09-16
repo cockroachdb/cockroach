@@ -5,8 +5,8 @@ CREATE TABLE t (
   c INT,
   d CHAR,
   PRIMARY KEY (a, b),
-  CONSTRAINT bc INDEX (b, c),
-  CONSTRAINT dc INDEX (d, c)
+  INDEX bc (b, c),
+  INDEX dc (d, c)
 )
 
 statement ok
@@ -118,7 +118,7 @@ statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,
-  CONSTRAINT ab INDEX (a, b)
+  INDEX ab (a, b)
 )
 
 statement ok

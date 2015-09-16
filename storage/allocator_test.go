@@ -164,13 +164,34 @@ var multiDCStores = []*proto.StoreDescriptor{
 
 // createTestAllocator creates a stopper, gossip, store pool and allocator for
 // use in tests. Stopper must be stopped by the caller.
-func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, allocator) {
+func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	storePool := NewStorePool(g, TestTimeUntilStoreDeadOff, stopper)
-	a := makeAllocator(storePool)
+	a := MakeAllocator(storePool)
 	return stopper, g, storePool, a
+}
+
+// mockStorePool sets up a collection of a alive and dead stores in the
+// store pool for testing purposes.
+func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []proto.StoreID) {
+	storePool.mu.Lock()
+	defer storePool.mu.Unlock()
+
+	storePool.stores = make(map[proto.StoreID]*storeDetail)
+	for _, storeID := range aliveStoreIDs {
+		storePool.stores[storeID] = &storeDetail{
+			dead: false,
+			desc: proto.StoreDescriptor{StoreID: storeID},
+		}
+	}
+	for _, storeID := range deadStoreIDs {
+		storePool.stores[storeID] = &storeDetail{
+			dead: true,
+			desc: proto.StoreDescriptor{StoreID: storeID},
+		}
+	}
 }
 
 func TestAllocatorSimpleRetrieval(t *testing.T) {
@@ -178,7 +199,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, err := a.allocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
+	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -191,7 +212,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, _, _, a := createTestAllocator()
 	defer stopper.Stop()
-	result, err := a.allocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
+	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
 	}
@@ -205,7 +226,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	result1, err := a.allocateTarget(multiDisksConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
+	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -218,7 +239,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 			StoreID: result1.StoreID,
 		},
 	}
-	result2, err := a.allocateTarget(multiDisksConfig.ReplicaAttrs[1], exReplicas, false, nil)
+	result2, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], exReplicas, false, nil)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -228,7 +249,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	if result1.Node.NodeID == result2.Node.NodeID {
 		t.Errorf("Expected node ids to be different %+v vs %+v", result1, result2)
 	}
-	result3, err := a.allocateTarget(multiDisksConfig.ReplicaAttrs[2], []proto.Replica{}, false, nil)
+	result3, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []proto.Replica{}, false, nil)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -242,11 +263,11 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
-	result1, err := a.allocateTarget(multiDCConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
+	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	result2, err := a.allocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.Replica{}, false, nil)
+	result2, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.Replica{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -254,7 +275,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		t.Errorf("Expected nodes 1 & 2: %+v vs %+v", result1.Node, result2.Node)
 	}
 	// Verify that no result is forthcoming if we already have a replica.
-	_, err = a.allocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.Replica{
+	_, err = a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.Replica{
 		{
 			NodeID:  result2.Node.NodeID,
 			StoreID: result2.StoreID,
@@ -270,7 +291,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	result, err := a.allocateTarget(multiDisksConfig.ReplicaAttrs[1], []proto.Replica{
+	result, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], []proto.Replica{
 		{
 			NodeID:  2,
 			StoreID: 2,
@@ -324,7 +345,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 		for _, id := range test.existing {
 			existing = append(existing, proto.Replica{NodeID: proto.NodeID(id), StoreID: proto.StoreID(id)})
 		}
-		result, err := a.allocateTarget(proto.Attributes{Attrs: test.required}, existing, test.relaxConstraints, nil)
+		result, err := a.AllocateTarget(proto.Attributes{Attrs: test.required}, existing, test.relaxConstraints, nil)
 		if haveErr := (err != nil); haveErr != test.expErr {
 			t.Errorf("%d: expected error %t; got %t: %s", i, test.expErr, haveErr, err)
 		} else if err == nil && proto.StoreID(test.expID) != result.StoreID {
@@ -368,7 +389,7 @@ func TestAllocatorRandomAllocation(t *testing.T) {
 	// store 1 or store 2 will be chosen, as the least loaded of the
 	// three random choices is returned.
 	for i := 0; i < 10; i++ {
-		result, err := a.allocateTarget(proto.Attributes{}, []proto.Replica{}, false, nil)
+		result, err := a.AllocateTarget(proto.Attributes{}, []proto.Replica{}, false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -411,7 +432,7 @@ func TestAllocatorRebalance(t *testing.T) {
 
 	// Every rebalance target must be either stores 1 or 2.
 	for i := 0; i < 10; i++ {
-		result := a.rebalanceTarget(proto.Attributes{}, []proto.Replica{})
+		result := a.RebalanceTarget(proto.Attributes{}, []proto.Replica{})
 		if result == nil {
 			t.Fatal("nil result")
 		}
@@ -462,7 +483,7 @@ func TestAllocatorRebalanceByCapacity(t *testing.T) {
 
 	// Every rebalance target must be store 4 (if not nil).
 	for i := 0; i < 10; i++ {
-		result := a.rebalanceTarget(proto.Attributes{}, []proto.Replica{})
+		result := a.RebalanceTarget(proto.Attributes{}, []proto.Replica{})
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
@@ -512,7 +533,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
-		result := a.rebalanceTarget(proto.Attributes{}, []proto.Replica{})
+		result := a.RebalanceTarget(proto.Attributes{}, []proto.Replica{})
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
@@ -584,7 +605,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	targetRepl, err := a.removeTarget(replicas)
+	targetRepl, err := a.RemoveTarget(replicas)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -618,12 +639,416 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	}
 	sg.GossipStores(stores, t)
 
-	targetRepl, err = a.removeTarget(replicas)
+	targetRepl, err = a.RemoveTarget(replicas)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if a, e := targetRepl, replicas[1]; a != e {
 		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
+	}
+}
+
+func TestAllocatorComputeAction(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper, _, sp, a := createTestAllocator()
+	defer stopper.Stop()
+
+	// Set up seven stores. Stores six and seven are marked as dead.
+	mockStorePool(sp, []proto.StoreID{1, 2, 3, 4, 5}, []proto.StoreID{6, 7})
+
+	// Each test case should describe a repair situation which has a lower
+	// priority than the previous test case.
+	testCases := []struct {
+		zone           config.ZoneConfig
+		desc           proto.RangeDescriptor
+		expectedAction AllocatorAction
+	}{
+		// Needs Three replicas, two are on dead stores.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   7,
+						NodeID:    7,
+						ReplicaID: 7,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
+				},
+			},
+			expectedAction: aaRemoveDead,
+		},
+		// Needs Three replicas, one is on a dead store.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
+				},
+			},
+			expectedAction: aaRemoveDead,
+		},
+		// Needs five replicas, one is on a dead store.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
+				},
+			},
+			expectedAction: aaRemoveDead,
+		},
+		// Needs Three replicas, have two
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+				},
+			},
+			expectedAction: aaAdd,
+		},
+		// Needs Five replicas, have four.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction: aaAdd,
+		},
+		// Need three replicas, have four.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction: aaRemove,
+		},
+		// Need three replicas, have five.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+					{
+						StoreID:   5,
+						NodeID:    5,
+						ReplicaID: 5,
+					},
+				},
+			},
+			expectedAction: aaRemove,
+		},
+		// Three replicas have three, none of the replicas in the store pool.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   10,
+						NodeID:    10,
+						ReplicaID: 10,
+					},
+					{
+						StoreID:   20,
+						NodeID:    20,
+						ReplicaID: 20,
+					},
+					{
+						StoreID:   30,
+						NodeID:    30,
+						ReplicaID: 30,
+					},
+				},
+			},
+			expectedAction: aaNoop,
+		},
+		// Three replicas have three.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []proto.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: proto.RangeDescriptor{
+				Replicas: []proto.Replica{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction: aaNoop,
+		},
+	}
+
+	lastPriority := float64(999999999)
+	for i, tcase := range testCases {
+		action, priority := a.ComputeAction(tcase.zone, &tcase.desc)
+		if tcase.expectedAction != action {
+			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+			continue
+		}
+		if tcase.expectedAction != aaNoop && priority >= lastPriority {
+			t.Errorf("Test cases should have descending priority. Case %d had priority %f, previous case had priority %f", i, priority, lastPriority)
+		}
+		lastPriority = priority
 	}
 }
 
@@ -653,7 +1078,7 @@ func Example_rebalancing() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	sp := NewStorePool(g, TestTimeUntilStoreDeadOff, stopper)
-	alloc := makeAllocator(sp)
+	alloc := MakeAllocator(sp)
 	alloc.randGen = rand.New(rand.NewSource(0))
 	alloc.deterministic = true
 
@@ -692,7 +1117,7 @@ func Example_rebalancing() {
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
 			if alloc.shouldRebalance(&testStores[j].StoreDescriptor) {
-				target := alloc.rebalanceTarget(proto.Attributes{}, []proto.Replica{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}})
+				target := alloc.RebalanceTarget(proto.Attributes{}, []proto.Replica{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}})
 				if target != nil {
 					testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 				}

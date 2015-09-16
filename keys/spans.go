@@ -39,9 +39,6 @@ var (
 	// Meta1Span holds all first level addressing.
 	Meta1Span = Span{proto.KeyMin, Meta2Prefix}
 
-	// ZoneConfigSpan is the range for all zone configs.
-	ZoneConfigSpan = Span{ConfigZonePrefix, ConfigZonePrefix.PrefixEnd()}
-
 	// UserDataSpan is the non-meta and non-structured portion of the key space.
 	UserDataSpan = Span{SystemMax, TableDataPrefix}
 
@@ -50,7 +47,6 @@ var (
 
 	// NoSplitSpans describes the ranges that should never be split.
 	// Meta1Span: needed to find other ranges.
-	// ZoneConfigSpan: configs are hierarchical by prefix.
 	// SystemDBSpan: system objects have interdepencies.
-	NoSplitSpans = []Span{Meta1Span, ZoneConfigSpan, SystemDBSpan}
+	NoSplitSpans = []Span{Meta1Span, SystemDBSpan}
 )

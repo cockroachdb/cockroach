@@ -153,15 +153,18 @@ type IndexDescriptor struct {
 	// names here proves to be prohibitive, we could clear this field before
 	// saving and reconstruct it after loading.
 	ColumnNames []string `protobuf:"bytes,4,rep,name=column_names" json:"column_names,omitempty"`
+	// An ordered list of column names which the index stores in
+	// addition to the columns which are explicitly part of the index.
+	StoreColumnNames []string `protobuf:"bytes,5,rep,name=store_column_names" json:"store_column_names,omitempty"`
 	// An ordered list of column ids of which the index is comprised. This list
 	// parallels the column_names list.
-	ColumnIDs []ColumnID `protobuf:"varint,5,rep,name=column_ids,casttype=ColumnID" json:"column_ids,omitempty"`
+	ColumnIDs []ColumnID `protobuf:"varint,6,rep,name=column_ids,casttype=ColumnID" json:"column_ids,omitempty"`
 	// An ordered list of implicit column ids associated with the index. For
 	// non-unique indexes, these columns will be appended to the key. For unique
 	// indexes these columns will be stored in the value. The extra column IDs is
 	// computed as PrimaryIndex.column_ids - column_ids. For the primary index
 	// the list will be empty.
-	ImplicitColumnIDs []ColumnID `protobuf:"varint,6,rep,name=implicit_column_ids,casttype=ColumnID" json:"implicit_column_ids,omitempty"`
+	ImplicitColumnIDs []ColumnID `protobuf:"varint,7,rep,name=implicit_column_ids,casttype=ColumnID" json:"implicit_column_ids,omitempty"`
 }
 
 func (m *IndexDescriptor) Reset()         { *m = IndexDescriptor{} }
@@ -196,6 +199,13 @@ func (m *IndexDescriptor) GetColumnNames() []string {
 	return nil
 }
 
+func (m *IndexDescriptor) GetStoreColumnNames() []string {
+	if m != nil {
+		return m.StoreColumnNames
+	}
+	return nil
+}
+
 func (m *IndexDescriptor) GetColumnIDs() []ColumnID {
 	if m != nil {
 		return m.ColumnIDs
@@ -217,17 +227,19 @@ type TableDescriptor struct {
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	// The alias for the table. This is only used during query
 	// processing and not stored persistently.
-	Alias   string             `protobuf:"bytes,2,opt,name=alias" json:"alias"`
-	ID      ID                 `protobuf:"varint,3,opt,name=id,casttype=ID" json:"id"`
-	Columns []ColumnDescriptor `protobuf:"bytes,4,rep,name=columns" json:"columns"`
+	Alias string `protobuf:"bytes,2,opt,name=alias" json:"alias"`
+	ID    ID     `protobuf:"varint,3,opt,name=id,casttype=ID" json:"id"`
+	// ID of the parent database.
+	ParentID ID                 `protobuf:"varint,4,opt,name=parent_id,casttype=ID" json:"parent_id"`
+	Columns  []ColumnDescriptor `protobuf:"bytes,5,rep,name=columns" json:"columns"`
 	// next_column_id is used to ensure that deleted column ids are not reused.
-	NextColumnID ColumnID        `protobuf:"varint,5,opt,name=next_column_id,casttype=ColumnID" json:"next_column_id"`
-	PrimaryIndex IndexDescriptor `protobuf:"bytes,6,opt,name=primary_index" json:"primary_index"`
+	NextColumnID ColumnID        `protobuf:"varint,6,opt,name=next_column_id,casttype=ColumnID" json:"next_column_id"`
+	PrimaryIndex IndexDescriptor `protobuf:"bytes,7,opt,name=primary_index" json:"primary_index"`
 	// indexes are all the secondary indexes.
-	Indexes []IndexDescriptor `protobuf:"bytes,7,rep,name=indexes" json:"indexes"`
+	Indexes []IndexDescriptor `protobuf:"bytes,8,rep,name=indexes" json:"indexes"`
 	// next_index_id is used to ensure that deleted index ids are not reused.
-	NextIndexID IndexID              `protobuf:"varint,8,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
-	Privileges  *PrivilegeDescriptor `protobuf:"bytes,9,opt,name=privileges" json:"privileges,omitempty"`
+	NextIndexID IndexID              `protobuf:"varint,9,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
+	Privileges  *PrivilegeDescriptor `protobuf:"bytes,10,opt,name=privileges" json:"privileges,omitempty"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -251,6 +263,13 @@ func (m *TableDescriptor) GetAlias() string {
 func (m *TableDescriptor) GetID() ID {
 	if m != nil {
 		return m.ID
+	}
+	return 0
+}
+
+func (m *TableDescriptor) GetParentID() ID {
+	if m != nil {
+		return m.ParentID
 	}
 	return 0
 }
@@ -448,16 +467,31 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (int, error) {
 			i += copy(data[i:], s)
 		}
 	}
+	if len(m.StoreColumnNames) > 0 {
+		for _, s := range m.StoreColumnNames {
+			data[i] = 0x2a
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
 	if len(m.ColumnIDs) > 0 {
 		for _, num := range m.ColumnIDs {
-			data[i] = 0x28
+			data[i] = 0x30
 			i++
 			i = encodeVarintStructured(data, i, uint64(num))
 		}
 	}
 	if len(m.ImplicitColumnIDs) > 0 {
 		for _, num := range m.ImplicitColumnIDs {
-			data[i] = 0x30
+			data[i] = 0x38
 			i++
 			i = encodeVarintStructured(data, i, uint64(num))
 		}
@@ -491,9 +525,12 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.ID))
+	data[i] = 0x20
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.ParentID))
 	if len(m.Columns) > 0 {
 		for _, msg := range m.Columns {
-			data[i] = 0x22
+			data[i] = 0x2a
 			i++
 			i = encodeVarintStructured(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -503,10 +540,10 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
-	data[i] = 0x28
+	data[i] = 0x30
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.NextColumnID))
-	data[i] = 0x32
+	data[i] = 0x3a
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.PrimaryIndex.Size()))
 	n2, err := m.PrimaryIndex.MarshalTo(data[i:])
@@ -516,7 +553,7 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	i += n2
 	if len(m.Indexes) > 0 {
 		for _, msg := range m.Indexes {
-			data[i] = 0x3a
+			data[i] = 0x42
 			i++
 			i = encodeVarintStructured(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -526,11 +563,11 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
-	data[i] = 0x40
+	data[i] = 0x48
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.NextIndexID))
 	if m.Privileges != nil {
-		data[i] = 0x4a
+		data[i] = 0x52
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
 		n3, err := m.Privileges.MarshalTo(data[i:])
@@ -638,6 +675,12 @@ func (m *IndexDescriptor) Size() (n int) {
 			n += 1 + l + sovStructured(uint64(l))
 		}
 	}
+	if len(m.StoreColumnNames) > 0 {
+		for _, s := range m.StoreColumnNames {
+			l = len(s)
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
 	if len(m.ColumnIDs) > 0 {
 		for _, e := range m.ColumnIDs {
 			n += 1 + sovStructured(uint64(e))
@@ -659,6 +702,7 @@ func (m *TableDescriptor) Size() (n int) {
 	l = len(m.Alias)
 	n += 1 + l + sovStructured(uint64(l))
 	n += 1 + sovStructured(uint64(m.ID))
+	n += 1 + sovStructured(uint64(m.ParentID))
 	if len(m.Columns) > 0 {
 		for _, e := range m.Columns {
 			l = e.Size()
@@ -1037,6 +1081,32 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			m.ColumnNames = append(m.ColumnNames, string(data[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreColumnNames", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.StoreColumnNames = append(m.StoreColumnNames, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 6:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ColumnIDs", wireType)
 			}
@@ -1053,7 +1123,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			m.ColumnIDs = append(m.ColumnIDs, v)
-		case 6:
+		case 7:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ImplicitColumnIDs", wireType)
 			}
@@ -1184,6 +1254,22 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ParentID", wireType)
+			}
+			m.ParentID = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.ParentID |= (ID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
 			}
@@ -1211,7 +1297,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 5:
+		case 6:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NextColumnID", wireType)
 			}
@@ -1227,7 +1313,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 6:
+		case 7:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PrimaryIndex", wireType)
 			}
@@ -1254,7 +1340,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 7:
+		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Indexes", wireType)
 			}
@@ -1282,7 +1368,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 8:
+		case 9:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NextIndexID", wireType)
 			}
@@ -1298,7 +1384,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 9:
+		case 10:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Privileges", wireType)
 			}

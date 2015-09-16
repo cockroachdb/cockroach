@@ -22,6 +22,12 @@ CREATE TABLE "" (id INT PRIMARY KEY)
 statement error table "a" already exists
 CREATE TABLE a (id INT PRIMARY KEY)
 
+statement error duplicate column name: "id"
+CREATE TABLE a (id INT PRIMARY KEY, id INT)
+
+multiple primary keys for table "b" are not allowed
+CREATE TABLE b (id INT PRIMARY KEY, id2 INT PRIMARY KEY)
+
 statement ok
 CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 
@@ -39,7 +45,7 @@ CREATE TABLE c (
   id INT PRIMARY KEY,
   foo INT,
   bar INT,
-  CONSTRAINT c_foo_idx INDEX (foo),
+  INDEX c_foo_idx (foo),
   INDEX (foo),
   UNIQUE (bar)
 )
@@ -47,11 +53,11 @@ CREATE TABLE c (
 query TTTTT colnames
 SHOW INDEX FROM c
 ----
-Table Name       Unique Seq Column
-c     primary    true   1   id
-c     c_foo_idx  false  1   foo
-c     c_foo_idx1 false  1   foo
-c     c_bar_key  true   1   bar
+Table Name       Unique Seq Column Storing
+c     primary    true   1   id     false
+c     c_foo_idx  false  1   foo    false
+c     c_foo_idx1 false  1   foo    false
+c     c_bar_key  true   1   bar    false
 
 query T
 SHOW TABLES FROM test
@@ -65,35 +71,29 @@ SET DATABASE = ""
 
 query error no database specified
 SHOW COLUMNS FROM users
-----
 
 query error database "foo" does not exist
 SHOW COLUMNS FROM foo.users
-----
 
 query error table "users" does not exist
 SHOW COLUMNS FROM test.users
-----
 
 query error no database specified
 SHOW INDEX FROM users
-----
 
 query error database "foo" does not exist
 SHOW INDEX FROM foo.users
-----
 
 query error table "users" does not exist
 SHOW INDEX FROM test.users
-----
 
 statement ok
 CREATE TABLE test.users (
   id    INT PRIMARY KEY,
   name  VARCHAR NOT NULL,
   title VARCHAR,
-  CONSTRAINT foo INDEX (name),
-  CONSTRAINT bar UNIQUE (id, name)
+  INDEX foo (name),
+  UNIQUE INDEX bar (id, name)
 )
 
 query TTT colnames
@@ -107,8 +107,8 @@ title STRING true
 query TTTTT colnames
 SHOW INDEX FROM test.users
 ----
-Table Name    Unique Seq Column
-users primary true   1   id
-users foo     false  1   name
-users bar     true   1   id
-users bar     true   2   name
+Table Name    Unique Seq Column Storing
+users primary true   1   id     false
+users foo     false  1   name   false
+users bar     true   1   id     false
+users bar     true   2   name   false

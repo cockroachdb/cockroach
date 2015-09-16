@@ -43,86 +43,98 @@ func (tk tableKey) Name() string {
 	return tk.name
 }
 
-func makeTableDesc(p *parser.CreateTable) (TableDescriptor, error) {
+func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) {
 	desc := TableDescriptor{}
 	if err := p.Table.NormalizeTableName(""); err != nil {
 		return desc, err
 	}
 	desc.Name = p.Table.Table()
+	desc.ParentID = parentID
 
 	for _, def := range p.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
-			col := ColumnDescriptor{
-				Name:     string(d.Name),
-				Nullable: (d.Nullable != parser.NotNull),
+			col, idx, err := makeColumnDefDescs(d)
+			if err != nil {
+				return desc, err
 			}
-			switch t := d.Type.(type) {
-			case *parser.BoolType:
-				col.Type.Kind = ColumnType_BOOL
-			case *parser.IntType:
-				col.Type.Kind = ColumnType_INT
-				col.Type.Width = int32(t.N)
-			case *parser.FloatType:
-				col.Type.Kind = ColumnType_FLOAT
-				col.Type.Precision = int32(t.Prec)
-			case *parser.DecimalType:
-				col.Type.Kind = ColumnType_DECIMAL
-				col.Type.Width = int32(t.Scale)
-				col.Type.Precision = int32(t.Prec)
-			case *parser.DateType:
-				col.Type.Kind = ColumnType_DATE
-			case *parser.TimestampType:
-				col.Type.Kind = ColumnType_TIMESTAMP
-			case *parser.IntervalType:
-				col.Type.Kind = ColumnType_INTERVAL
-			case *parser.StringType:
-				col.Type.Kind = ColumnType_STRING
-				col.Type.Width = int32(t.N)
-			case *parser.BytesType:
-				col.Type.Kind = ColumnType_BYTES
-			default:
-				panic(fmt.Sprintf("unexpected type %T", t))
-			}
-			desc.Columns = append(desc.Columns, col)
-
-			// Create any associated index.
-			if d.PrimaryKey || d.Unique {
-				index := IndexDescriptor{
-					Unique:      true,
-					ColumnNames: []string{string(d.Name)},
-				}
-				if d.PrimaryKey {
-					index.Name = PrimaryKeyIndexName
-					desc.PrimaryIndex = index
-				} else {
-					desc.Indexes = append(desc.Indexes, index)
+			desc.AddColumn(*col)
+			if idx != nil {
+				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
+					return desc, err
 				}
 			}
 		case *parser.IndexTableDef:
-			index := IndexDescriptor{
-				Name:        string(d.Name),
-				Unique:      d.Unique,
-				ColumnNames: d.Columns,
+			idx := IndexDescriptor{
+				Name:             string(d.Name),
+				ColumnNames:      d.Columns,
+				StoreColumnNames: d.Storing,
 			}
-			if d.PrimaryKey {
-				// Only override the index name if it hasn't been set by the user.
-				if index.Name == "" {
-					index.Name = PrimaryKeyIndexName
-				}
-				desc.PrimaryIndex = index
-			} else {
-				desc.Indexes = append(desc.Indexes, index)
+			if err := desc.AddIndex(idx, false); err != nil {
+				return desc, err
+			}
+		case *parser.UniqueConstraintTableDef:
+			idx := IndexDescriptor{
+				Name:             string(d.Name),
+				Unique:           true,
+				ColumnNames:      d.Columns,
+				StoreColumnNames: d.Storing,
+			}
+			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
+				return desc, err
 			}
 		default:
-			return desc, fmt.Errorf("unsupported table def: %T", def)
+			return desc, util.Errorf("unsupported table def: %T", def)
 		}
 	}
 	return desc, nil
 }
 
-func (p *planner) getTableDesc(qname *parser.QualifiedName) (
-	*TableDescriptor, error) {
+func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, error) {
+	col := &ColumnDescriptor{
+		Name:     string(d.Name),
+		Nullable: (d.Nullable != parser.NotNull),
+	}
+	switch t := d.Type.(type) {
+	case *parser.BoolType:
+		col.Type.Kind = ColumnType_BOOL
+	case *parser.IntType:
+		col.Type.Kind = ColumnType_INT
+		col.Type.Width = int32(t.N)
+	case *parser.FloatType:
+		col.Type.Kind = ColumnType_FLOAT
+		col.Type.Precision = int32(t.Prec)
+	case *parser.DecimalType:
+		col.Type.Kind = ColumnType_DECIMAL
+		col.Type.Width = int32(t.Scale)
+		col.Type.Precision = int32(t.Prec)
+	case *parser.DateType:
+		col.Type.Kind = ColumnType_DATE
+	case *parser.TimestampType:
+		col.Type.Kind = ColumnType_TIMESTAMP
+	case *parser.IntervalType:
+		col.Type.Kind = ColumnType_INTERVAL
+	case *parser.StringType:
+		col.Type.Kind = ColumnType_STRING
+		col.Type.Width = int32(t.N)
+	case *parser.BytesType:
+		col.Type.Kind = ColumnType_BYTES
+	default:
+		return nil, nil, util.Errorf("unexpected type %T", t)
+	}
+
+	var idx *IndexDescriptor
+	if d.PrimaryKey || d.Unique {
+		idx = &IndexDescriptor{
+			Unique:      true,
+			ColumnNames: []string{string(d.Name)},
+		}
+	}
+
+	return col, idx, nil
+}
+
+func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, err
 	}
@@ -244,31 +256,40 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 	return vals, nil
 }
 
+func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, error) {
+	var tableID, indexID uint64
+
+	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
+		return IndexID(indexID), nil, util.Errorf("%s: invalid key prefix: %q", desc.Name, key)
+	}
+
+	key = bytes.TrimPrefix(key, keys.TableDataPrefix)
+	key, tableID = encoding.DecodeUvarint(key)
+	key, indexID = encoding.DecodeUvarint(key)
+
+	if ID(tableID) != desc.ID {
+		return IndexID(indexID), nil, util.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
+	}
+
+	return IndexID(indexID), key, nil
+}
+
 // decodeIndexKey decodes the values that are a part of the specified index
 // key. ValTypes is a slice returned from makeKeyVals. The remaining bytes in the
 // index key are returned which will either be an encoded column ID for the
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
-func decodeIndexKey(desc *TableDescriptor,
-	index IndexDescriptor, valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
-	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
-		return nil, fmt.Errorf("%s: invalid key prefix: %q", desc.Name, key)
-	}
-	key = bytes.TrimPrefix(key, keys.TableDataPrefix)
-
-	var tableID uint64
-	key, tableID = encoding.DecodeUvarint(key)
-	if ID(tableID) != desc.ID {
-		return nil, fmt.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
+func decodeIndexKey(desc *TableDescriptor, index IndexDescriptor, valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
+	indexID, remaining, err := decodeIndexKeyPrefix(desc, key)
+	if err != nil {
+		return nil, err
 	}
 
-	var indexID uint64
-	key, indexID = encoding.DecodeUvarint(key)
-	if IndexID(indexID) != index.ID {
-		return nil, fmt.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
+	if indexID != index.ID {
+		return nil, util.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
 	}
 
-	return decodeKeyVals(valTypes, vals, key)
+	return decodeKeyVals(valTypes, vals, remaining)
 }
 
 // decodeKeyVals decodes the values that are part of the key. ValTypes is a

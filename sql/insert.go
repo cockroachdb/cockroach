@@ -19,40 +19,12 @@ package sql
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/log"
 )
-
-// TODO(tamird): instead of tracking every write, use the failed CPut's
-// key to decode the index and values.
-type writePair struct {
-	col string
-	val parser.Datum
-}
-
-type writePairs []writePair
-
-func (wp writePairs) String() string {
-	cols := make([]string, 0, len(wp))
-	vals := make([]string, 0, len(wp))
-
-	for _, pair := range wp {
-		cols = append(cols, pair.col)
-		vals = append(vals, pair.val.String())
-	}
-
-	return fmt.Sprintf("(%s)=(%s)", strings.Join(cols, ","), strings.Join(vals, ","))
-}
-
-type write struct {
-	constraint *IndexDescriptor
-	values     writePairs
-}
 
 // Insert inserts rows into the database.
 // Privileges: INSERT on table
@@ -101,7 +73,6 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	var b client.Batch
-	var writes []write
 	for rows.Next() {
 		rowVals := rows.Values()
 		for range cols[len(rowVals):] {
@@ -129,25 +100,11 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			return nil, err
 		}
 
-		for i, secondaryIndexEntry := range secondaryIndexEntries {
+		for _, secondaryIndexEntry := range secondaryIndexEntries {
 			if log.V(2) {
 				log.Infof("CPut %q -> %v", secondaryIndexEntry.key, secondaryIndexEntry.value)
 			}
 			b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
-
-			var w write
-
-			indexDesc := &tableDesc.Indexes[i]
-			for i, columnID := range indexDesc.ColumnIDs {
-				w.values = append(w.values, writePair{
-					col: indexDesc.ColumnNames[i],
-					val: rowVals[colIDtoRowIndex[columnID]],
-				})
-			}
-
-			w.constraint = indexDesc
-
-			writes = append(writes, w)
 		}
 
 		// Write the row sentinel.
@@ -155,20 +112,6 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			log.Infof("CPut %q -> NULL", primaryIndexKey)
 		}
 		b.CPut(primaryIndexKey, nil, nil)
-
-		var w write
-
-		indexDesc := &tableDesc.PrimaryIndex
-		for i, columnID := range indexDesc.ColumnIDs {
-			w.values = append(w.values, writePair{
-				col: indexDesc.ColumnNames[i],
-				val: rowVals[colIDtoRowIndex[columnID]],
-			})
-		}
-
-		w.constraint = indexDesc
-
-		writes = append(writes, w)
 
 		// Write the row columns.
 		for i, val := range rowVals {
@@ -198,23 +141,19 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 				}
 
 				b.CPut(key, primitive, nil)
-
-				writes = append(writes, write{})
 			}
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if err := p.txn.Run(&b); err != nil {
-		for i, result := range b.Results {
-			if _, ok := result.Err.(*proto.ConditionFailedError); ok {
-				w := writes[i]
 
-				return nil, fmt.Errorf("duplicate key value %s violates unique constraint %q", w.values, w.constraint.Name)
-			}
-		}
-		return nil, err
+	if IsSystemID(tableDesc.GetID()) {
+		// Mark transaction as operating on the system DB.
+		p.txn.SetSystemDBTrigger()
+	}
+	if err := p.txn.Run(&b); err != nil {
+		return nil, convertBatchError(tableDesc, b, err)
 	}
 	// TODO(tamird/pmattis): return the number of affected rows
 	return &valuesNode{}, nil
@@ -227,6 +166,7 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 	}
 
 	cols := make([]ColumnDescriptor, len(node))
+	colIDSet := make(map[ColumnID]struct{}, len(node))
 	for i, n := range node {
 		// TODO(pmattis): If the name is qualified, verify the table name matches
 		// tableDesc.Name.
@@ -237,6 +177,10 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 		if err != nil {
 			return nil, err
 		}
+		if _, ok := colIDSet[col.ID]; ok {
+			return nil, fmt.Errorf("multiple assignments to same column \"%s\"", n.Column())
+		}
+		colIDSet[col.ID] = struct{}{}
 		cols[i] = *col
 	}
 

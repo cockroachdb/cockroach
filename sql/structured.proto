@@ -67,16 +67,19 @@ message IndexDescriptor {
   // names here proves to be prohibitive, we could clear this field before
   // saving and reconstruct it after loading.
   repeated string column_names = 4;
+  // An ordered list of column names which the index stores in
+  // addition to the columns which are explicitly part of the index.
+  repeated string store_column_names = 5;
   // An ordered list of column ids of which the index is comprised. This list
   // parallels the column_names list.
-  repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
+  repeated uint32 column_ids = 6 [(gogoproto.customname) = "ColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
   // An ordered list of implicit column ids associated with the index. For
   // non-unique indexes, these columns will be appended to the key. For unique
   // indexes these columns will be stored in the value. The extra column IDs is
   // computed as PrimaryIndex.column_ids - column_ids. For the primary index
   // the list will be empty.
-  repeated uint32 implicit_column_ids = 6 [(gogoproto.customname) = "ImplicitColumnIDs",
+  repeated uint32 implicit_column_ids = 7 [(gogoproto.customname) = "ImplicitColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
 }
 
@@ -90,17 +93,20 @@ message TableDescriptor {
   optional string alias = 2 [(gogoproto.nullable) = false];
   optional uint32 id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
-  repeated ColumnDescriptor columns = 4 [(gogoproto.nullable) = false];
+  // ID of the parent database.
+  optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+  repeated ColumnDescriptor columns = 5 [(gogoproto.nullable) = false];
   // next_column_id is used to ensure that deleted column ids are not reused.
-  optional uint32 next_column_id = 5 [(gogoproto.nullable) = false,
+  optional uint32 next_column_id = 6 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextColumnID", (gogoproto.casttype) = "ColumnID"];
-  optional IndexDescriptor primary_index = 6 [(gogoproto.nullable) = false];
+  optional IndexDescriptor primary_index = 7 [(gogoproto.nullable) = false];
   // indexes are all the secondary indexes.
-  repeated IndexDescriptor indexes = 7 [(gogoproto.nullable) = false];
+  repeated IndexDescriptor indexes = 8 [(gogoproto.nullable) = false];
   // next_index_id is used to ensure that deleted index ids are not reused.
-  optional uint32 next_index_id = 8 [(gogoproto.nullable) = false,
+  optional uint32 next_index_id = 9 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
-  optional PrivilegeDescriptor privileges = 9;
+  optional PrivilegeDescriptor privileges = 10;
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
