@@ -30,7 +30,7 @@ type Name string
 
 // String formats an SQL identifier, applying proper escaping rules.
 func (n Name) String() string {
-	return encIdent(string(n))
+	return encodeSQLIdent(string(n))
 }
 
 // A NameList is a list of identifier.
@@ -45,7 +45,7 @@ func (l NameList) String() string {
 		if i > 0 {
 			_, _ = buf.WriteString(", ")
 		}
-		buf.WriteString(Name(n).String())
+		_, _ = buf.WriteString(Name(n).String())
 	}
 	return buf.String()
 }
