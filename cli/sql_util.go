@@ -49,40 +49,90 @@ func makeSQLClient() *sql.DB {
 type fmtMap map[string]func(interface{}) string
 
 // runQuery takes a 'query' with optional 'parameters'.
-// It runs the sql query and writes pretty output to osStdout.
-func runQuery(db *sql.DB, query string, parameters ...interface{}) error {
-	rows, err := db.Query(query, parameters...)
-	if err != nil {
-		return fmt.Errorf("query error: %s", err)
-	}
-
-	defer rows.Close()
-	return printQueryOutput(rows, nil)
+// It runs the sql query and returns a list of columns names and a list of rows.
+func runQuery(db *sql.DB, query string, parameters ...interface{}) (
+	[]string, [][]string, error) {
+	return runQueryWithFormat(db, nil, query, parameters...)
 }
 
-// runQueryWithFormat takes a 'query' with optional 'parameters'.
-// It runs the sql query and writes pretty output to osStdout.
-func runQueryWithFormat(db *sql.DB, format fmtMap, query string, parameters ...interface{}) error {
-	rows, err := db.Query(query, parameters...)
-	if err != nil {
-		return fmt.Errorf("query error: %s", err)
-	}
-
-	defer rows.Close()
-	return printQueryOutput(rows, format)
-}
-
-// printQueryOutput takes a set of sql rows and writes a pretty table
-// to osStdout, or "OK" if no rows are returned.
-// 'rows' should be closed by the caller.
-// If 'formatter' is not nil, the values with column name
+// runQuery takes a 'query' with optional 'parameters'.
+// It runs the sql query and returns a list of columns names and a list of rows.
+// If 'format' is not nil, the values with column name
 // found in the map are run through the corresponding callback.
-func printQueryOutput(rows *sql.Rows, format fmtMap) error {
+func runQueryWithFormat(db *sql.DB, format fmtMap, query string, parameters ...interface{}) (
+	[]string, [][]string, error) {
+	rows, err := db.Query(query, parameters...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("query error: %s", err)
+	}
+
+	defer rows.Close()
+	return sqlRowsToStrings(rows, format)
+}
+
+// runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
+// It runs the sql query and writes pretty output to osStdout.
+func runPrettyQuery(db *sql.DB, query string, parameters ...interface{}) error {
+	return runPrettyQueryWithFormat(db, nil, query, parameters...)
+}
+
+// runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
+// It runs the sql query and writes pretty output to osStdout.
+// If 'format' is not nil, the values with column name
+// found in the map are run through the corresponding callback.
+func runPrettyQueryWithFormat(db *sql.DB, format fmtMap, query string, parameters ...interface{}) error {
+	cols, allRows, err := runQueryWithFormat(db, format, query, parameters...)
+	if err != nil {
+		return err
+	}
+	return printQueryOutput(cols, allRows)
+}
+
+// sqlRowsToStrings turns 'rows' into a list of rows, each of which
+// is a  list of column values.
+// 'rows' should be closed by the caller.
+// If 'format' is not nil, the values with column name
+// found in the map are run through the corresponding callback.
+// It returns the header row followed by all data rows.
+// If both the header row and list of rows are empty, it means no row
+// information was returned (eg: statement was not a query).
+func sqlRowsToStrings(rows *sql.Rows, format fmtMap) ([]string, [][]string, error) {
 	cols, err := rows.Columns()
 	if err != nil {
-		return fmt.Errorf("rows.Columns() error: %s", err)
+		return nil, nil, fmt.Errorf("rows.Columns() error: %s", err)
 	}
 
+	if len(cols) == 0 {
+		return nil, nil, nil
+	}
+
+	vals := make([]interface{}, len(cols))
+	for i := range vals {
+		vals[i] = new(interface{})
+	}
+
+	allRows := [][]string{}
+	for rows.Next() {
+		rowStrings := make([]string, len(cols))
+		if err := rows.Scan(vals...); err != nil {
+			return nil, nil, fmt.Errorf("scan error: %s", err)
+		}
+		for i, v := range vals {
+			if f, ok := format[cols[i]]; ok {
+				rowStrings[i] = f(*v.(*interface{}))
+			} else {
+				rowStrings[i] = formatVal(*v.(*interface{}))
+			}
+		}
+		allRows = append(allRows, rowStrings)
+	}
+
+	return cols, allRows, nil
+}
+
+// printQueryOutput takes a list of column names and a list of row contents
+// writes a pretty table to osStdout, or "OK" if empty.
+func printQueryOutput(cols []string, allRows [][]string) error {
 	if len(cols) == 0 {
 		// This operation did not return rows, just show success.
 		fmt.Fprintln(osStdout, "OK")
@@ -95,24 +145,8 @@ func printQueryOutput(rows *sql.Rows, format fmtMap) error {
 	table.SetAutoWrapText(false)
 	table.SetHeader(cols)
 
-	// Stringify all data and append rows to tablewriter.
-	vals := make([]interface{}, len(cols))
-	for i := range vals {
-		vals[i] = new(interface{})
-	}
-	rowStrings := make([]string, len(cols))
-	for rows.Next() {
-		if err := rows.Scan(vals...); err != nil {
-			return fmt.Errorf("scan error: %s", err)
-		}
-		for i, v := range vals {
-			if f, ok := format[cols[i]]; ok {
-				rowStrings[i] = f(*v.(*interface{}))
-			} else {
-				rowStrings[i] = formatVal(*v.(*interface{}))
-			}
-		}
-		if err := table.Append(rowStrings); err != nil {
+	for _, row := range allRows {
+		if err := table.Append(row); err != nil {
 			return err
 		}
 	}
