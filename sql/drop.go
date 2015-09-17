@@ -26,6 +26,67 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
 
+// DropDatabase drops a database.
+// Privileges: DROP on database.
+//   Notes: postgres allows only the database owner to DROP a database.
+//          mysql requires the DROP privileges on the database.
+// TODO(XisiHuang): our DROP DATABASE is like the postgres DROP SCHEMA
+// (cockroach database == postgres schema). the postgres default of not
+// dropping the schema if there are dependent objects is more sensible
+// (see the RESTRICT and CASCADE options).
+func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
+	if n.Name == "" {
+		return nil, errEmptyDatabaseName
+	}
+
+	nameKey := MakeNameMetadataKey(keys.RootNamespaceID, string(n.Name))
+	gr, err := p.txn.Get(nameKey)
+	if err != nil {
+		return nil, err
+	}
+	if !gr.Exists() {
+		if n.IfExists {
+			// Noop.
+			return &valuesNode{}, nil
+		}
+		return nil, fmt.Errorf("database %q does not exist", n.Name)
+	}
+
+	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
+	desc := DatabaseDescriptor{}
+	if err := p.txn.GetProto(descKey, &desc); err != nil {
+		return nil, err
+	}
+	if err := desc.Validate(); err != nil {
+		return nil, err
+	}
+
+	if err := p.checkPrivilege(&desc, privilege.DROP); err != nil {
+		return nil, err
+	}
+
+	tbNames, err := p.getTableNames(&desc)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := p.DropTable(&parser.DropTable{Names: tbNames}); err != nil {
+		return nil, err
+	}
+
+	b := &client.Batch{}
+	b.Del(descKey)
+	b.Del(nameKey)
+	// Delete the zone config entry for this database.
+	b.Del(MakeZoneKey(desc.ID))
+	// Mark transaction as operating on the system DB.
+	p.txn.SetSystemDBTrigger()
+	if err := p.txn.Run(b); err != nil {
+		return nil, err
+	}
+	return &valuesNode{}, nil
+}
+
 // DropTable drops a table.
 // Privileges: DROP on table.
 //   Notes: postgres allows only the table owner to DROP a table.
@@ -88,67 +149,6 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-	}
-	return &valuesNode{}, nil
-}
-
-// DropDatabase drops a database.
-// Privileges: DROP on database.
-//   Notes: postgres allows only the database owner to DROP a database.
-//          mysql requires the DROP privileges on the database.
-// TODO(XisiHuang): our DROP DATABASE is like the postgres DROP SCHEMA
-// (cockroach database == postgres schema). the postgres default of not
-// dropping the schema if there are dependent objects is more sensible
-// (see the RESTRICT and CASCADE options).
-func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
-	if n.Name == "" {
-		return nil, errEmptyDatabaseName
-	}
-
-	nameKey := MakeNameMetadataKey(keys.RootNamespaceID, string(n.Name))
-	gr, err := p.txn.Get(nameKey)
-	if err != nil {
-		return nil, err
-	}
-	if !gr.Exists() {
-		if n.IfExists {
-			// Noop.
-			return &valuesNode{}, nil
-		}
-		return nil, fmt.Errorf("database %q does not exist", n.Name)
-	}
-
-	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
-	desc := DatabaseDescriptor{}
-	if err := p.txn.GetProto(descKey, &desc); err != nil {
-		return nil, err
-	}
-	if err := desc.Validate(); err != nil {
-		return nil, err
-	}
-
-	if err := p.checkPrivilege(&desc, privilege.DROP); err != nil {
-		return nil, err
-	}
-
-	tbNames, err := p.getTableNames(&desc)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := p.DropTable(&parser.DropTable{Names: tbNames}); err != nil {
-		return nil, err
-	}
-
-	b := &client.Batch{}
-	b.Del(descKey)
-	b.Del(nameKey)
-	// Delete the zone config entry for this database.
-	b.Del(MakeZoneKey(desc.ID))
-	// Mark transaction as operating on the system DB.
-	p.txn.SetSystemDBTrigger()
-	if err := p.txn.Run(b); err != nil {
-		return nil, err
 	}
 	return &valuesNode{}, nil
 }
