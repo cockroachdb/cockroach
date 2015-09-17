@@ -108,6 +108,17 @@ func TestEvalExpr(t *testing.T) {
 		// Comparisons against NULL result in NULL.
 		{`0 = NULL`, `NULL`},
 		{`NULL = NULL`, `NULL`},
+		// LIKE and NOT LIKE
+		{`'TEST' LIKE 'TEST'`, `true`},
+		{`'TEST' LIKE 'TE%'`, `true`},
+		{`'TEST' LIKE '%E%'`, `true`},
+		{`'TEST' LIKE 'TES_'`, `true`},
+		{`'TEST' LIKE 'TE_'`, `false`},
+		{`'TEST' LIKE '%R'`, `false`},
+		{`'TEST' LIKE 'TESTER'`, `false`},
+		{`'TEST' NOT LIKE '%E%'`, `false`},
+		{`'TEST' NOT LIKE 'TES_'`, `false`},
+		{`'TEST' NOT LIKE 'TE_'`, `true`},
 		// IS DISTINCT FROM can be used to compare NULLs "safely".
 		{`0 IS DISTINCT FROM 0`, `false`},
 		{`0 IS DISTINCT FROM 1`, `true`},

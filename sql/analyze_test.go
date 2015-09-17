@@ -202,12 +202,11 @@ func TestSimplifyExpr(t *testing.T) {
 		{`(a, b) = (1, 2) OR (a, b) = (3, 4)`, `(a, b) IN ((1, 2), (3, 4))`},
 		{`(a, b) IN ((2, 1), (1, 2), (1, 2), (2, 1))`, `(a, b) IN ((1, 2), (2, 1))`},
 
-		// TODO(pmattis): unsupported comparison operator: LIKE
-		// {`i LIKE '%foo'`, `true`},
-		// {`i LIKE 'foo'`, `i = 'foo'`},
-		// {`i LIKE 'foo%'`, `i >= 'foo' AND i < 'fop'`},
-		// {`i LIKE 'foo_'`, `i >= 'foo' AND i < 'fop'`},
-		// {`i LIKE 'bar_foo%'`, `i >= 'bar' AND i < 'bas'`},
+		{`i LIKE '%foo'`, `true`},
+		{`i LIKE 'foo'`, `i = 'foo'`},
+		{`i LIKE 'foo%'`, `i >= 'foo' AND i < 'fop'`},
+		{`i LIKE 'foo_'`, `i >= 'foo' AND i < 'fop'`},
+		{`i LIKE 'bar_foo%'`, `i >= 'bar' AND i < 'bas'`},
 		// TODO(pmattis): unsupported comparison operator: SIMILAR TO
 		// {`i SIMILAR TO '.*'`, `true`},
 		// {`i SIMILAR TO 'foo'`, `i = 'foo'`},
@@ -239,9 +238,8 @@ func TestSimplifyNotExpr(t *testing.T) {
 		{`NOT a <= 1`, `a > 1`, true},
 		{`NOT a IN (1, 2)`, `a NOT IN (1, 2)`, true},
 		{`NOT a NOT IN (1, 2)`, `a IN (1, 2)`, true},
-		// TODO(pmattis): unsupported comparison operator: LIKE
-		// {`NOT i LIKE 'foo'`, `true`, false},
-		// {`NOT i NOT LIKE 'foo'`, `i = 'foo'`, false},
+		{`NOT i LIKE 'foo'`, `true`, false},
+		{`NOT i NOT LIKE 'foo'`, `i = 'foo'`, false},
 		// TODO(pmattis): unsupported comparison operator: SIMILAR TO
 		// {`NOT i SIMILAR TO 'foo'`, `true`, false},
 		// {`NOT i NOT SIMILAR TO 'foo'`, `i = 'foo'`, false},
