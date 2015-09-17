@@ -22,8 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // DropDatabase drops a database.
@@ -84,6 +87,79 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	if err := p.txn.Run(b); err != nil {
 		return nil, err
 	}
+	return &valuesNode{}, nil
+}
+
+// DropIndex drops an index.
+// Privileges: CREATE on table.
+//   Notes: postgres allows only the index owner to DROP an index.
+//          mysql requires the INDEX privilege on the table.
+func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
+	var b client.Batch
+
+	for _, indexQualifiedName := range n.Names {
+		if err := indexQualifiedName.NormalizeTableName(p.session.Database); err != nil {
+			return nil, err
+		}
+
+		tableDesc, err := p.getTableDesc(indexQualifiedName)
+		if err != nil {
+			return nil, err
+		}
+
+		idxName := indexQualifiedName.Index()
+		idx, err := tableDesc.FindIndexByName(idxName)
+		if err != nil {
+			if n.IfExists {
+				// Noop.
+				return &valuesNode{}, nil
+			}
+			// Index does not exist, but we want it to: error out.
+			return nil, fmt.Errorf("index %q does not exist", idxName)
+		}
+
+		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+			return nil, err
+		}
+
+		indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, idx.ID)
+
+		// Delete the index.
+		indexStartKey := proto.Key(indexPrefix)
+		indexEndKey := indexStartKey.PrefixEnd()
+		if log.V(2) {
+			log.Infof("DelRange %q - %q", indexStartKey, indexEndKey)
+		}
+		b.DelRange(indexStartKey, indexEndKey)
+
+		found := false
+		for i := range tableDesc.Indexes {
+			if &tableDesc.Indexes[i] == idx {
+				tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, util.Errorf("index %s not found in %s", idx, tableDesc)
+		}
+
+		descKey := MakeDescMetadataKey(tableDesc.GetID())
+		if err := tableDesc.Validate(); err != nil {
+			return nil, err
+		}
+		if err := p.txn.Put(descKey, tableDesc); err != nil {
+			return nil, err
+		}
+
+		// Mark transaction as operating on the system DB.
+		p.txn.SetSystemDBTrigger()
+	}
+
+	if err := p.txn.Run(&b); err != nil {
+		return nil, err
+	}
+
 	return &valuesNode{}, nil
 }
 

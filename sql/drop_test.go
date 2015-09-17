@@ -151,6 +151,73 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 }
 
+func TestDropIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, sqlDB, kvDB := setup(t)
+	defer cleanup(s, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE INDEX foo on t.kv (v);
+INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	nameKey := sql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+
+	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
+	desc := sql.TableDescriptor{}
+	if err := kvDB.GetProto(descKey, &desc); err != nil {
+		t.Fatal(err)
+	}
+
+	idx, err := desc.FindIndexByName("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	indexPrefix := sql.MakeIndexKeyPrefix(desc.ID, idx.ID)
+
+	indexStartKey := proto.Key(indexPrefix)
+	indexEndKey := indexStartKey.PrefixEnd()
+	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 3; len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+
+	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
+		t.Fatal(err)
+	}
+
+	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 0; len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+
+	if err := kvDB.GetProto(descKey, &desc); err != nil {
+		t.Fatal(err)
+	} else {
+		if _, err := desc.FindIndexByName("foo"); err == nil {
+			t.Fatalf("table descriptor still contains index after index is dropped")
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, sqlDB, kvDB := setup(t)
