@@ -459,7 +459,7 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT ((1)) FROM t WHERE ((a)) IN (((1))) AND ((a, b)) IN ((((1, 1))), ((2, 2)))`},
 		{`SELECT e'\'\"\b\n\r\t\\' FROM t`},
 		{`SELECT '\x' FROM t`},
-		{`SELECT 1 FROM t GROUP BY a`},
+		// {`SELECT 1 FROM t GROUP BY a`},
 		{`DROP INDEX a`},
 		{`DROP INDEX IF EXISTS a`},
 	}
