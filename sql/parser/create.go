@@ -113,22 +113,25 @@ const (
 // ColumnTableDef represents a column definition within a CREATE TABLE
 // statement.
 type ColumnTableDef struct {
-	Name       Name
-	Type       ColumnType
-	Nullable   Nullability
-	PrimaryKey bool
-	Unique     bool
+	Name        Name
+	Type        ColumnType
+	Nullable    Nullability
+	PrimaryKey  bool
+	Unique      bool
+	DefaultExpr Expr
 }
 
 func newColumnTableDef(name Name, typ ColumnType,
-	constraints []ColumnConstraint) *ColumnTableDef {
+	qualifications []ColumnQualification) *ColumnTableDef {
 	d := &ColumnTableDef{
 		Name:     name,
 		Type:     typ,
 		Nullable: SilentNull,
 	}
-	for _, c := range constraints {
-		switch c.(type) {
+	for _, c := range qualifications {
+		switch t := c.(type) {
+		case *ColumnDefault:
+			d.DefaultExpr = t.Expr
 		case NotNullConstraint:
 			d.Nullable = NotNull
 		case NullConstraint:
@@ -137,6 +140,8 @@ func newColumnTableDef(name Name, typ ColumnType,
 			d.PrimaryKey = true
 		case UniqueConstraint:
 			d.Unique = true
+		default:
+			panic(fmt.Sprintf("unexpected column qualification: %T", c))
 		}
 	}
 	return d
@@ -160,18 +165,27 @@ func (node *ColumnTableDef) String() string {
 	} else if node.Unique {
 		buf.WriteString(" UNIQUE")
 	}
+	if node.DefaultExpr != nil {
+		fmt.Fprintf(&buf, " DEFAULT %s", node.DefaultExpr)
+	}
 	return buf.String()
 }
 
-// ColumnConstraint represents a constraint on a column.
-type ColumnConstraint interface {
-	columnConstraint()
+// ColumnQualification represents a constraint on a column.
+type ColumnQualification interface {
+	columnQualification()
 }
 
-func (NotNullConstraint) columnConstraint()    {}
-func (NullConstraint) columnConstraint()       {}
-func (PrimaryKeyConstraint) columnConstraint() {}
-func (UniqueConstraint) columnConstraint()     {}
+func (*ColumnDefault) columnQualification()       {}
+func (NotNullConstraint) columnQualification()    {}
+func (NullConstraint) columnQualification()       {}
+func (PrimaryKeyConstraint) columnQualification() {}
+func (UniqueConstraint) columnQualification()     {}
+
+// ColumnDefault represents a DEFAULT clause for a column.
+type ColumnDefault struct {
+	Expr Expr
+}
 
 // NotNullConstraint represents NOT NULL on a column.
 type NotNullConstraint struct{}

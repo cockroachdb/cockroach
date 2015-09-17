@@ -20,10 +20,10 @@ user root
 statement ok
 ALTER TABLE t ADD b INT
 
-query TTTTT colnames
+query TTTT colnames
 SHOW COLUMNS FROM t
 ----
-Field Type Null
+Field Type Null Default
 a     INT  true
 b     INT  true
 

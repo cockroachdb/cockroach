@@ -95,32 +95,56 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		Name:     string(d.Name),
 		Nullable: (d.Nullable != parser.NotNull),
 	}
+
+	var colDatumType parser.Datum
 	switch t := d.Type.(type) {
 	case *parser.BoolType:
 		col.Type.Kind = ColumnType_BOOL
+		colDatumType = parser.DummyBool
 	case *parser.IntType:
 		col.Type.Kind = ColumnType_INT
 		col.Type.Width = int32(t.N)
+		colDatumType = parser.DummyInt
 	case *parser.FloatType:
 		col.Type.Kind = ColumnType_FLOAT
 		col.Type.Precision = int32(t.Prec)
+		colDatumType = parser.DummyFloat
 	case *parser.DecimalType:
 		col.Type.Kind = ColumnType_DECIMAL
 		col.Type.Width = int32(t.Scale)
 		col.Type.Precision = int32(t.Prec)
 	case *parser.DateType:
 		col.Type.Kind = ColumnType_DATE
+		colDatumType = parser.DummyDate
 	case *parser.TimestampType:
 		col.Type.Kind = ColumnType_TIMESTAMP
+		colDatumType = parser.DummyTimestamp
 	case *parser.IntervalType:
 		col.Type.Kind = ColumnType_INTERVAL
+		colDatumType = parser.DummyInterval
 	case *parser.StringType:
 		col.Type.Kind = ColumnType_STRING
 		col.Type.Width = int32(t.N)
+		colDatumType = parser.DummyString
 	case *parser.BytesType:
 		col.Type.Kind = ColumnType_BYTES
+		colDatumType = parser.DummyBytes
 	default:
 		return nil, nil, util.Errorf("unexpected type %T", t)
+	}
+
+	if d.DefaultExpr != nil {
+		// Verify the default expression type is compatible with the column type.
+		defaultType, err := parser.TypeCheckExpr(d.DefaultExpr)
+		if err != nil {
+			return nil, nil, err
+		}
+		if colDatumType != defaultType {
+			return nil, nil, fmt.Errorf("incompatible column type and default expression: %s vs %s",
+				col.Type.Kind, defaultType.Type())
+		}
+
+		col.DefaultExpr = d.DefaultExpr.String()
 	}
 
 	var idx *IndexDescriptor

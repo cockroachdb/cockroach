@@ -78,6 +78,9 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 	case NumVal:
 		// Terminal node: nothing to do.
 
+	case DefaultVal:
+		// Terminal node: nothing to do.
+
 	case ValArg:
 		// Terminal node: nothing to do.
 

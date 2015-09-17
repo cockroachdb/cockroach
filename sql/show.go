@@ -57,12 +57,13 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := &valuesNode{columns: []string{"Field", "Type", "Null"}}
+	v := &valuesNode{columns: []string{"Field", "Type", "Null", "Default"}}
 	for i, col := range desc.Columns {
 		v.rows = append(v.rows, []parser.Datum{
 			parser.DString(desc.Columns[i].Name),
 			parser.DString(col.Type.SQLString()),
 			parser.DBool(desc.Columns[i].Nullable),
+			parser.DString(desc.Columns[i].DefaultExpr),
 		})
 	}
 	return v, nil

@@ -62,6 +62,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT PRIMARY KEY)`},
 		{`CREATE TABLE a (b INT UNIQUE)`},
 		{`CREATE TABLE a (b INT NULL PRIMARY KEY)`},
+		{`CREATE TABLE a (b INT DEFAULT 1)`},
+		{`CREATE TABLE a (b INT DEFAULT now())`},
 		// "0" lost quotes previously.
 		{`CREATE TABLE a (b INT, c TEXT, PRIMARY KEY (b, c, "0"))`},
 		{`CREATE TABLE a (b INT, c TEXT, INDEX (b, c))`},
@@ -138,6 +140,7 @@ func TestParse(t *testing.T) {
 		{`INSERT INTO a VALUES (1)`},
 		{`INSERT INTO a.b VALUES (1)`},
 		{`INSERT INTO a VALUES (1, 2)`},
+		{`INSERT INTO a VALUES (1, DEFAULT)`},
 		{`INSERT INTO a VALUES (1, 2), (3, 4)`},
 		{`INSERT INTO a VALUES (a + 1, 2 * 3)`},
 		{`INSERT INTO a(a, b) VALUES (1, 2)`},
@@ -321,9 +324,9 @@ func TestParse(t *testing.T) {
 		{`UPDATE a SET b = 3`},
 		{`UPDATE a.b SET b = 3`},
 		{`UPDATE a SET b.c = 3`},
-		{`UPDATE a SET b = 3, c = 4`},
+		{`UPDATE a SET b = 3, c = DEFAULT`},
 		{`UPDATE a SET b = 3 + 4`},
-		{`UPDATE a SET (b, c) = (3, 4)`},
+		{`UPDATE a SET (b, c) = (3, DEFAULT)`},
 		{`UPDATE a SET (b, c) = (SELECT 3, 4)`},
 		{`UPDATE a SET b = 3 WHERE a = b`},
 		{`UPDATE T AS "0" SET K = ''`},                 // "0" lost its quotes
@@ -555,6 +558,13 @@ SELECT foo''
 			`invalid hexadecimal literal
 SELECT 0x FROM t
        ^
+`,
+		},
+		{
+			`CREATE TABLE a (b INT DEFAULT c)`,
+			`default expression contains a variable at or near ")"
+CREATE TABLE a (b INT DEFAULT c)
+                               ^
 `,
 		},
 	}

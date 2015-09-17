@@ -88,6 +88,11 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		}
 	}
 
+	defaultExprs, err := p.makeDefaultExprs(cols)
+	if err != nil {
+		return nil, err
+	}
+
 	// Generate the list of select targets. We need to select all of the columns
 	// plus we select all of the update expressions in case those expressions
 	// reference columns (e.g. "UPDATE t SET v = v + 1"). Note that we flatten
@@ -100,7 +105,11 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		if expr.Tuple {
 			switch t := expr.Expr.(type) {
 			case parser.Tuple:
-				for _, e := range t {
+				for i, e := range t {
+					e, err := fillDefault(e, i, defaultExprs)
+					if err != nil {
+						return nil, err
+					}
 					targets = append(targets, parser.SelectExpr{Expr: e})
 				}
 			case parser.DTuple:
@@ -109,7 +118,11 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				}
 			}
 		} else {
-			targets = append(targets, parser.SelectExpr{Expr: expr.Expr})
+			e, err := fillDefault(expr.Expr, 0, defaultExprs)
+			if err != nil {
+				return nil, err
+			}
+			targets = append(targets, parser.SelectExpr{Expr: e})
 		}
 	}
 
@@ -232,4 +245,12 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 
 	// TODO(tamird/pmattis): return the number of affected rows.
 	return &valuesNode{}, nil
+}
+
+func fillDefault(expr parser.Expr, index int, defaultExprs []parser.Expr) (parser.Expr, error) {
+	switch expr.(type) {
+	case parser.DefaultVal:
+		return defaultExprs[index], nil
+	}
+	return expr, nil
 }

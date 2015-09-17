@@ -18,11 +18,13 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -53,6 +55,17 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		colIDtoRowIndex[c.ID] = i
 	}
 
+	// Add any column not already present that has a DEFAULT expression.
+	for _, col := range tableDesc.Columns {
+		if _, ok := colIDtoRowIndex[col.ID]; ok {
+			continue
+		}
+		if col.DefaultExpr != "" {
+			colIDtoRowIndex[col.ID] = len(cols)
+			cols = append(cols, col)
+		}
+	}
+
 	// Verify we have at least the columns that are part of the primary key.
 	primaryKeyCols := map[ColumnID]struct{}{}
 	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
@@ -60,6 +73,18 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			return nil, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 		primaryKeyCols[id] = struct{}{}
+	}
+
+	// Construct the default expressions. The returned slice will be nil if no
+	// column in the table has a default expression.
+	defaultExprs, err := p.makeDefaultExprs(cols)
+	if err != nil {
+		return nil, err
+	}
+
+	// Replace any DEFAULT markers with the corresponding default expressions.
+	if n.Rows, err = p.fillDefaults(defaultExprs, cols, n.Rows); err != nil {
+		return nil, err
 	}
 
 	// Transform the values into a rows object. This expands SELECT statements or
@@ -75,10 +100,23 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	var b client.Batch
 	for rows.Next() {
 		rowVals := rows.Values()
-		for range cols[len(rowVals):] {
-			rowVals = append(rowVals, parser.DNull)
+
+		// The values for the row may be shorter than the number of columns being
+		// inserted into. Generate default values for those columns using the
+		// default expressions.
+		for i := len(rowVals); i < len(cols); i++ {
+			if defaultExprs == nil {
+				rowVals = append(rowVals, parser.DNull)
+				continue
+			}
+			d, err := parser.EvalExpr(defaultExprs[i])
+			if err != nil {
+				return nil, err
+			}
+			rowVals = append(rowVals, d)
 		}
 
+		// Check to see if NULL is being inserted into any non-nullable column.
 		for _, col := range tableDesc.Columns {
 			if !col.Nullable {
 				if i, ok := colIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
@@ -185,4 +223,95 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 	}
 
 	return cols, nil
+}
+
+func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
+	// Check to see if any of the columns have DEFAULT expressions. If there are
+	// no DEFAULT expressions, we don't bother with constructing the defaults map
+	// as the defaults are all NULL.
+	haveDefaults := false
+	for _, col := range cols {
+		if col.DefaultExpr != "" {
+			haveDefaults = true
+			break
+		}
+	}
+	if !haveDefaults {
+		return nil, nil
+	}
+
+	// Construct a SELECT statement with an output for each column. The output is
+	// either the DEFAULT expression or NULL if no default expression was
+	// configured.
+	var buf bytes.Buffer
+	buf.WriteString("SELECT ")
+	for i, col := range cols {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		if col.DefaultExpr != "" {
+			buf.WriteString(col.DefaultExpr)
+		} else {
+			buf.WriteString("NULL")
+		}
+	}
+
+	sql := buf.String()
+	stmts, err := parser.Parse(sql, parser.Syntax(p.session.Syntax))
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, util.Errorf("expected 1 statement, but found %d", len(stmts))
+	}
+	sel, ok := stmts[0].(*parser.Select)
+	if !ok {
+		return nil, util.Errorf("expected a SELECT statement, but found %T", stmts[0])
+	}
+	if n, m := len(cols), len(sel.Exprs); n != m {
+		return nil, util.Errorf("expected %d outputs, but found %d", n, m)
+	}
+
+	// Build the default expressions map from the parsed SELECT statement.
+	defaultExprs := make([]parser.Expr, 0, len(cols))
+	for i := range cols {
+		expr, err := parser.NormalizeExpr(sel.Exprs[i].Expr)
+		if err != nil {
+			return nil, err
+		}
+		defaultExprs = append(defaultExprs, expr)
+	}
+	return defaultExprs, nil
+}
+
+func (p *planner) fillDefaults(defaultExprs []parser.Expr,
+	cols []ColumnDescriptor, rows parser.SelectStatement) (parser.SelectStatement, error) {
+	switch values := rows.(type) {
+	case nil:
+		// This indicates a DEFAULT VALUES expression.
+		row := make(parser.Tuple, 0, len(cols))
+		for i := range cols {
+			if defaultExprs == nil {
+				row = append(row, parser.DNull)
+				continue
+			}
+			row = append(row, defaultExprs[i])
+		}
+		return parser.Values{row}, nil
+
+	case parser.Values:
+		for _, tuple := range values {
+			for i, val := range tuple {
+				switch val.(type) {
+				case parser.DefaultVal:
+					if defaultExprs == nil {
+						tuple[i] = parser.DNull
+						continue
+					}
+					tuple[i] = defaultExprs[i]
+				}
+			}
+		}
+	}
+	return rows, nil
 }

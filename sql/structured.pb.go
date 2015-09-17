@@ -110,6 +110,9 @@ type ColumnDescriptor struct {
 	ID       ColumnID   `protobuf:"varint,2,opt,name=id,casttype=ColumnID" json:"id"`
 	Type     ColumnType `protobuf:"bytes,3,opt,name=type" json:"type"`
 	Nullable bool       `protobuf:"varint,4,opt,name=nullable" json:"nullable"`
+	// Default expression to use to populate the column on insert if no
+	// value is provided.
+	DefaultExpr string `protobuf:"bytes,5,opt,name=default_expr" json:"default_expr"`
 }
 
 func (m *ColumnDescriptor) Reset()         { *m = ColumnDescriptor{} }
@@ -142,6 +145,13 @@ func (m *ColumnDescriptor) GetNullable() bool {
 		return m.Nullable
 	}
 	return false
+}
+
+func (m *ColumnDescriptor) GetDefaultExpr() string {
+	if m != nil {
+		return m.DefaultExpr
+	}
+	return ""
 }
 
 type IndexDescriptor struct {
@@ -419,6 +429,10 @@ func (m *ColumnDescriptor) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
+	data[i] = 0x2a
+	i++
+	i = encodeVarintStructured(data, i, uint64(len(m.DefaultExpr)))
+	i += copy(data[i:], m.DefaultExpr)
 	return i, nil
 }
 
@@ -659,6 +673,8 @@ func (m *ColumnDescriptor) Size() (n int) {
 	l = m.Type.Size()
 	n += 1 + l + sovStructured(uint64(l))
 	n += 2
+	l = len(m.DefaultExpr)
+	n += 1 + l + sovStructured(uint64(l))
 	return n
 }
 
@@ -950,6 +966,32 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			m.Nullable = bool(v != 0)
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DefaultExpr", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DefaultExpr = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			var sizeOfWire int
 			for {
