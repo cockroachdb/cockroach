@@ -49,19 +49,45 @@ func makeIndexJoin(indexScan *scanNode) (*indexJoinNode, error) {
 	table.isSecondaryIndex = false
 	table.initOrdering()
 
-	// Reset the render targets for the index scan to be exactly the primary key
-	// columns.
-	indexScan.render = nil
+	// We want to the index scan to keep the same render target indexes for
+	// columns which are part of the primary key or part of the index. This
+	// allows sorting (which was calculated based on the output columns) to be
+	// avoided if possible.
 	colIDtoRowIndex := map[ColumnID]int{}
-	for i, colName := range table.desc.PrimaryIndex.ColumnNames {
-		sexpr := parser.SelectExpr{
-			Expr: &parser.QualifiedName{Base: parser.Name(colName)},
-		}
-		if err := indexScan.addRender(sexpr); err != nil {
-			return nil, err
-		}
-		colIDtoRowIndex[table.desc.PrimaryIndex.ColumnIDs[i]] = i
+	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
+		colIDtoRowIndex[colID] = -1
 	}
+	for _, colID := range indexScan.index.ColumnIDs {
+		colIDtoRowIndex[colID] = -1
+	}
+
+	// Rebuild the render targets for the index scan by looping over the render
+	// targets for the table. Any referenced column that is part of the index or
+	// the primary key is kept in its current location. Any other render target
+	// is replaced with "1".
+	indexScan.render = nil
+	for _, render := range table.render {
+		switch t := render.(type) {
+		case *qvalue:
+			if _, ok := colIDtoRowIndex[t.col.ID]; ok {
+				colIDtoRowIndex[t.col.ID] = len(indexScan.render)
+				indexScan.render = append(indexScan.render, t)
+				continue
+			}
+		}
+		indexScan.render = append(indexScan.render, parser.DInt(1))
+	}
+	for colID, index := range colIDtoRowIndex {
+		if index == -1 {
+			col, err := table.desc.FindColumnByID(colID)
+			if err != nil {
+				return nil, err
+			}
+			colIDtoRowIndex[col.ID] = len(indexScan.render)
+			indexScan.render = append(indexScan.render, indexScan.getQVal(*col))
+		}
+	}
+
 	indexScan.initOrdering()
 
 	primaryKeyPrefix := proto.Key(MakeIndexKeyPrefix(table.desc.ID, table.index.ID))
@@ -79,7 +105,7 @@ func (n *indexJoinNode) Columns() []string {
 }
 
 func (n *indexJoinNode) Ordering() []int {
-	return n.table.Ordering()
+	return n.index.Ordering()
 }
 
 func (n *indexJoinNode) Values() parser.DTuple {

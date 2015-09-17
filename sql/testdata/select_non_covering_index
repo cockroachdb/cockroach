@@ -43,3 +43,23 @@ query III
 SELECT * FROM t WHERE c = 6
 ----
 4 5 6
+
+query III
+SELECT * FROM t WHERE c > 0 ORDER BY c DESC
+----
+4 5 6
+1 2 3
+
+query ITT
+EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c DESC
+----
+0 index-join
+1 revscan    t@c /1-
+1 scan       t@primary
+
+query ITT
+EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c
+----
+0 index-join
+1 scan       t@c /1-
+1 scan       t@primary
