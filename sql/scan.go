@@ -76,11 +76,11 @@ func prettySpans(spans []span, desc *TableDescriptor, index *IndexDescriptor) st
 	var buf bytes.Buffer
 	for i, span := range spans {
 		if i > 0 {
-			_, _ = buf.WriteString(" ")
+			buf.WriteString(" ")
 		}
 		for j, key := range []proto.Key{span.start, span.end} {
 			if j == 1 {
-				_, _ = buf.WriteString("-")
+				buf.WriteString("-")
 			}
 			if !bytes.HasPrefix(key, prefix) {
 				if j == 1 {
@@ -96,7 +96,7 @@ func prettySpans(spans []span, desc *TableDescriptor, index *IndexDescriptor) st
 					break
 				}
 			}
-			_, _ = buf.WriteString(prettyKeyVals(vals[:k]))
+			buf.WriteString(prettyKeyVals(vals[:k]))
 		}
 	}
 	return buf.String()

@@ -43,9 +43,9 @@ func (l NameList) String() string {
 	var buf bytes.Buffer
 	for i, n := range l {
 		if i > 0 {
-			_, _ = buf.WriteString(", ")
+			buf.WriteString(", ")
 		}
-		_, _ = buf.WriteString(Name(n).String())
+		buf.WriteString(Name(n).String())
 	}
 	return buf.String()
 }

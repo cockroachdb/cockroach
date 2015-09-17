@@ -101,7 +101,7 @@ func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net
 func formatKeys(keys []proto.Key) string {
 	var buf bytes.Buffer
 	for i, key := range keys {
-		buf.WriteString(fmt.Sprintf("%d: %s\n", i, key))
+		fmt.Fprintf(&buf, "%d: %s\n", i, key)
 	}
 	return buf.String()
 }

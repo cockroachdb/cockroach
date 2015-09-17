@@ -106,7 +106,7 @@ var builtins = map[string][]builtin{
 					if err != nil {
 						return DNull, err
 					}
-					_, _ = buffer.WriteString(ds)
+					buffer.WriteString(ds)
 				}
 				return DString(buffer.String()), nil
 			},

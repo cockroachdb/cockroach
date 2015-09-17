@@ -18,7 +18,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"sync"
 
@@ -83,10 +82,8 @@ func (s *Store) getCapacity(rangeCount int) proto.StoreCapacity {
 func (s *Store) String(rangeCount int) string {
 	s.RLock()
 	defer s.RUnlock()
-	var buf bytes.Buffer
 	desc := s.getDesc(rangeCount)
-	buf.WriteString(fmt.Sprintf("Store %d - Node:%d, Replicas:%d, AvailableReplicas:%d, Capacity:%d, Available:%d",
+	return fmt.Sprintf("Store %d - Node:%d, Replicas:%d, AvailableReplicas:%d, Capacity:%d, Available:%d",
 		desc.StoreID, desc.Node.NodeID, desc.Capacity.RangeCount, desc.Capacity.Available/bytesPerRange,
-		desc.Capacity.Capacity, desc.Capacity.Available))
-	return buf.String()
+		desc.Capacity.Capacity, desc.Capacity.Available)
 }

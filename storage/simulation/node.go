@@ -92,7 +92,7 @@ func (n *Node) String() string {
 	n.RLock()
 	defer n.RUnlock()
 	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf("Node %d - Stores:[", n.desc.NodeID))
+	fmt.Fprintf(&buf, "Node %d - Stores:[", n.desc.NodeID)
 	first := true
 	for storeID := range n.stores {
 		if first {

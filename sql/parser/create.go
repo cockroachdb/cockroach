@@ -36,11 +36,11 @@ type CreateDatabase struct {
 
 func (node *CreateDatabase) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("CREATE DATABASE ")
+	buf.WriteString("CREATE DATABASE ")
 	if node.IfNotExists {
-		_, _ = buf.WriteString("IF NOT EXISTS ")
+		buf.WriteString("IF NOT EXISTS ")
 	}
-	_, _ = buf.WriteString(node.Name.String())
+	buf.WriteString(node.Name.String())
 	return buf.String()
 }
 
@@ -56,13 +56,13 @@ type CreateIndex struct {
 
 func (node *CreateIndex) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("CREATE ")
+	buf.WriteString("CREATE ")
 	if node.Unique {
-		_, _ = buf.WriteString("UNIQUE ")
+		buf.WriteString("UNIQUE ")
 	}
-	_, _ = buf.WriteString("INDEX ")
+	buf.WriteString("INDEX ")
 	if node.IfNotExists {
-		_, _ = buf.WriteString("IF NOT EXISTS ")
+		buf.WriteString("IF NOT EXISTS ")
 	}
 	if node.Name != "" {
 		fmt.Fprintf(&buf, "%s ", node.Name)
@@ -151,14 +151,14 @@ func (node *ColumnTableDef) String() string {
 	fmt.Fprintf(&buf, "%s %s", node.Name, node.Type)
 	switch node.Nullable {
 	case Null:
-		_, _ = buf.WriteString(" NULL")
+		buf.WriteString(" NULL")
 	case NotNull:
-		_, _ = buf.WriteString(" NOT NULL")
+		buf.WriteString(" NOT NULL")
 	}
 	if node.PrimaryKey {
-		_, _ = buf.WriteString(" PRIMARY KEY")
+		buf.WriteString(" PRIMARY KEY")
 	} else if node.Unique {
-		_, _ = buf.WriteString(" UNIQUE")
+		buf.WriteString(" UNIQUE")
 	}
 	return buf.String()
 }
@@ -199,7 +199,7 @@ func (node *IndexTableDef) setName(name Name) {
 
 func (node *IndexTableDef) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("INDEX ")
+	buf.WriteString("INDEX ")
 	if node.Name != "" {
 		fmt.Fprintf(&buf, "%s ", node.Name)
 	}
@@ -234,9 +234,9 @@ func (node *UniqueConstraintTableDef) String() string {
 		fmt.Fprintf(&buf, "CONSTRAINT %s ", node.Name)
 	}
 	if node.PrimaryKey {
-		_, _ = buf.WriteString("PRIMARY KEY ")
+		buf.WriteString("PRIMARY KEY ")
 	} else {
-		_, _ = buf.WriteString("UNIQUE ")
+		buf.WriteString("UNIQUE ")
 	}
 	fmt.Fprintf(&buf, "(%s)", node.Columns)
 	if node.Storing != nil {
@@ -254,9 +254,9 @@ type CreateTable struct {
 
 func (node *CreateTable) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("CREATE TABLE")
+	buf.WriteString("CREATE TABLE")
 	if node.IfNotExists {
-		_, _ = buf.WriteString(" IF NOT EXISTS")
+		buf.WriteString(" IF NOT EXISTS")
 	}
 	fmt.Fprintf(&buf, " %s (%s)", node.Table, node.Defs)
 	return buf.String()

@@ -104,5 +104,7 @@ func (s HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
-	w.Write(body)
+	if _, err := w.Write(body); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

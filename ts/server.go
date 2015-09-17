@@ -104,5 +104,8 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }

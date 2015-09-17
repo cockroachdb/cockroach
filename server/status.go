@@ -213,7 +213,9 @@ func (s *statusServer) handleGossipLocal(w http.ResponseWriter, _ *http.Request,
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // handleGossip handles GET requests for gossip network status.
@@ -251,7 +253,9 @@ func (s *statusServer) handleDetailsLocal(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // handleDetails handles GET requests for node details.
@@ -286,7 +290,9 @@ func (s *statusServer) handleLogFilesListLocal(w http.ResponseWriter, r *http.Re
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // handleLogFilesList handles GET requests for a list of available log files.
@@ -340,7 +346,9 @@ func (s *statusServer) handleLogFileLocal(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // handleLogFile handles GET requests for a single log file.
@@ -471,7 +479,9 @@ func (s *statusServer) handleLogsLocal(w http.ResponseWriter, r *http.Request, _
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // handleLogs handles GET requests for log entires.
@@ -502,7 +512,9 @@ func (s *statusServer) handleStacksLocal(w http.ResponseWriter, _ *http.Request,
 			continue
 		}
 		w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
-		w.Write(buf[:length])
+		if _, err := w.Write(buf[:length]); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 }
@@ -551,7 +563,9 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // handleNodeStatus handles GET requests for a single node's status.
@@ -577,7 +591,9 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // handleStoresStatus handles GET requests for all store statuses.
@@ -609,7 +625,9 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // handleStoreStatus handles GET requests for a single node's status.
@@ -639,5 +657,7 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 	}
 
 	w.Header().Set(util.ContentTypeHeader, contentType)
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

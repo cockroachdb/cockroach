@@ -72,7 +72,7 @@ Fetches and displays the zone configuration for <object-id>.
 // TODO(marc): accept db/table names rather than IDs.
 func runGetZone(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	id, err := strconv.Atoi(args[0])
@@ -109,7 +109,7 @@ List zone configs.
 // TODO(marc): return db/table names rather than IDs.
 func runLsZones(cmd *cobra.Command, args []string) {
 	if len(args) > 0 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	db := makeSQLClient()
@@ -142,7 +142,7 @@ zone configuration exists for the specified object ID.
 // TODO(marc): accept db/table names rather than IDs.
 func runRmZone(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	id, err := strconv.Atoi(args[0])
@@ -193,7 +193,7 @@ For example:
 // TODO(marc): accept db/table names rather than IDs.
 func runSetZone(cmd *cobra.Command, args []string) {
 	if len(args) != 2 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	id, err := strconv.Atoi(args[0])
@@ -249,7 +249,7 @@ var zoneCmd = &cobra.Command{
 	Use:   "zone",
 	Short: "get, set, list and remove zones\n",
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Usage()
+		mustUsage(cmd)
 	},
 }
 

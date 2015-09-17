@@ -42,7 +42,7 @@ func (node *Insert) String() string {
 		fmt.Fprintf(&buf, "(%s)", node.Columns)
 	}
 	if node.Rows == nil {
-		_, _ = buf.WriteString(" DEFAULT VALUES")
+		buf.WriteString(" DEFAULT VALUES")
 	} else {
 		fmt.Fprintf(&buf, " %s", node.Rows)
 	}
