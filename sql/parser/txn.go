@@ -52,7 +52,7 @@ type BeginTransaction struct {
 
 func (node *BeginTransaction) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("BEGIN TRANSACTION")
+	buf.WriteString("BEGIN TRANSACTION")
 	if node.Isolation != UnspecifiedIsolation {
 		fmt.Fprintf(&buf, " ISOLATION LEVEL %s", node.Isolation)
 	}

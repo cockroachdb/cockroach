@@ -119,3 +119,9 @@ func Run(args []string) error {
 	cockroachCmd.SetArgs(args)
 	return cockroachCmd.Execute()
 }
+
+func mustUsage(cmd *cobra.Command) {
+	if err := cmd.Usage(); err != nil {
+		panic(err)
+	}
+}

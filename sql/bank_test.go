@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS bank.accounts (
 		var values []interface{}
 		for i := 0; i < *numAccounts; i++ {
 			if i > 0 {
-				_, _ = placeholders.WriteString(", ")
+				placeholders.WriteString(", ")
 			}
 			fmt.Fprintf(&placeholders, "($%d, 0)", i+1)
 			values = append(values, i)

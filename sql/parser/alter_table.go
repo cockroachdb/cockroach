@@ -31,9 +31,9 @@ type AlterTable struct {
 
 func (node *AlterTable) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("ALTER TABLE")
+	buf.WriteString("ALTER TABLE")
 	if node.IfExists {
-		_, _ = buf.WriteString(" IF EXISTS")
+		buf.WriteString(" IF EXISTS")
 	}
 	fmt.Fprintf(&buf, " %s %s", node.Table, node.Cmds)
 	return buf.String()
@@ -71,12 +71,12 @@ type AlterTableAddColumn struct {
 
 func (node *AlterTableAddColumn) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("ADD")
+	buf.WriteString("ADD")
 	if node.columnKeyword {
-		_, _ = buf.WriteString(" COLUMN")
+		buf.WriteString(" COLUMN")
 	}
 	if node.IfNotExists {
-		_, _ = buf.WriteString(" IF NOT EXISTS")
+		buf.WriteString(" IF NOT EXISTS")
 	}
 	fmt.Fprintf(&buf, " %s", node.ColumnDef)
 	return buf.String()

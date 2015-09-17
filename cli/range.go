@@ -39,7 +39,7 @@ Lists the ranges in a cluster.
 
 func runLsRanges(cmd *cobra.Command, args []string) {
 	if len(args) > 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	var startKey proto.Key
@@ -85,7 +85,7 @@ Splits the range containing <key> at <key>.
 
 func runSplitRange(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 
@@ -110,7 +110,7 @@ Merges the range containing <key> with the immediate successor range.
 
 func runMergeRange(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 
@@ -132,7 +132,7 @@ var rangeCmd = &cobra.Command{
 	Use:   "range",
 	Short: "list, split and merge ranges",
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Usage()
+		mustUsage(cmd)
 	},
 }
 

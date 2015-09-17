@@ -55,7 +55,7 @@ type IntType struct {
 
 func (node *IntType) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString(node.Name)
+	buf.WriteString(node.Name)
 	if node.N > 0 {
 		fmt.Fprintf(&buf, "(%d)", node.N)
 	}
@@ -70,7 +70,7 @@ type FloatType struct {
 
 func (node *FloatType) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString(node.Name)
+	buf.WriteString(node.Name)
 	if node.Prec > 0 {
 		fmt.Fprintf(&buf, "(%d)", node.Prec)
 	}
@@ -86,13 +86,13 @@ type DecimalType struct {
 
 func (node *DecimalType) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString(node.Name)
+	buf.WriteString(node.Name)
 	if node.Prec > 0 {
 		fmt.Fprintf(&buf, "(%d", node.Prec)
 		if node.Scale > 0 {
 			fmt.Fprintf(&buf, ",%d", node.Scale)
 		}
-		_, _ = buf.WriteString(")")
+		buf.WriteString(")")
 	}
 	return buf.String()
 }
@@ -129,7 +129,7 @@ type StringType struct {
 
 func (node *StringType) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString(node.Name)
+	buf.WriteString(node.Name)
 	if node.N > 0 {
 		fmt.Fprintf(&buf, "(%d)", node.N)
 	}

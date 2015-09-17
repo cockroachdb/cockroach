@@ -221,19 +221,19 @@ type IsOfTypeExpr struct {
 
 func (node *IsOfTypeExpr) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString(node.Expr.String())
-	_, _ = buf.WriteString(" IS")
+	buf.WriteString(node.Expr.String())
+	buf.WriteString(" IS")
 	if node.Not {
-		_, _ = buf.WriteString(" NOT")
+		buf.WriteString(" NOT")
 	}
-	_, _ = buf.WriteString(" OF (")
+	buf.WriteString(" OF (")
 	for i, t := range node.Types {
 		if i > 0 {
-			_, _ = buf.WriteString(", ")
+			buf.WriteString(", ")
 		}
-		_, _ = buf.WriteString(t.String())
+		buf.WriteString(t.String())
 	}
-	_, _ = buf.WriteString(")")
+	buf.WriteString(")")
 	return buf.String()
 }
 
@@ -490,9 +490,9 @@ func (n QualifiedNames) String() string {
 	var buf bytes.Buffer
 	for i, e := range n {
 		if i > 0 {
-			_, _ = buf.WriteString(", ")
+			buf.WriteString(", ")
 		}
-		_, _ = buf.WriteString(e.String())
+		buf.WriteString(e.String())
 	}
 	return buf.String()
 }

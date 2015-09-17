@@ -1511,8 +1511,12 @@ func loadSystemDBSpan(eng engine.Engine) ([]proto.KeyValue, []byte, error) {
 	}
 	sha := sha1.New()
 	for _, kv := range kvs {
-		sha.Write(kv.Key)
-		sha.Write(kv.Value.Bytes)
+		if _, err := sha.Write(kv.Key); err != nil {
+			return nil, nil, err
+		}
+		if _, err := sha.Write(kv.Value.Bytes); err != nil {
+			return nil, nil, err
+		}
 	}
 	return kvs, sha.Sum(nil), err
 }

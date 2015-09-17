@@ -457,8 +457,9 @@ func (t *logicTest) execQuery(query logicQuery) {
 		// sqllogictest.c.
 		h := md5.New()
 		for _, r := range results {
-			_, _ = io.WriteString(h, r)
-			_, _ = io.WriteString(h, "\n")
+			if _, err := h.Write(append([]byte(r), byte('\n'))); err != nil {
+				t.Fatal(err)
+			}
 		}
 		hash := fmt.Sprintf("%x", h.Sum(nil))
 		if query.expectedHash != hash {

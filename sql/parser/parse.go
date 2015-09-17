@@ -37,9 +37,9 @@ func (l StatementList) String() string {
 	var buf bytes.Buffer
 	for i, s := range l {
 		if i > 0 {
-			_, _ = buf.WriteString("; ")
+			buf.WriteString("; ")
 		}
-		_, _ = buf.WriteString(s.String())
+		buf.WriteString(s.String())
 	}
 	return buf.String()
 }

@@ -94,7 +94,7 @@ The certs directory should contain a CA cert and key.
 // to their corresponding files.
 func runCreateClientCert(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	err := security.RunCreateClientCert(context.Certs, keySize, args[0])
@@ -115,7 +115,7 @@ var certCmd = &cobra.Command{
 	Use:   "cert",
 	Short: "create ca, node, and client certs",
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Usage()
+		mustUsage(cmd)
 	},
 }
 

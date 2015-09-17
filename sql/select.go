@@ -208,22 +208,22 @@ type indexConstraints []indexConstraint
 
 func (c indexConstraints) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("[")
+	buf.WriteString("[")
 	for i := range c {
 		if i > 0 {
-			_, _ = buf.WriteString(", ")
+			buf.WriteString(", ")
 		}
 		if c[i].start != nil {
 			fmt.Fprintf(&buf, "%s", c[i].start)
 		}
 		if c[i].end != nil && c[i].end != c[i].start {
 			if c[i].start != nil {
-				_, _ = buf.WriteString(", ")
+				buf.WriteString(", ")
 			}
 			fmt.Fprintf(&buf, "%s", c[i].end)
 		}
 	}
-	_, _ = buf.WriteString("]")
+	buf.WriteString("]")
 	return buf.String()
 }
 

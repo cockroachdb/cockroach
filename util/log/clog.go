@@ -581,11 +581,11 @@ func formatLogEntry(entry *LogEntry, colors *colorProfile) []byte {
 		args = append(args, arg.Str)
 	}
 	if len(entry.Format) == 0 {
-		buf.WriteString(fmt.Sprint(args...))
+		fmt.Fprint(buf, args...)
 	} else {
-		buf.WriteString(fmt.Sprintf(entry.Format, args...))
+		fmt.Fprintf(buf, entry.Format, args...)
 	}
-	buf.WriteByte('\n')
+	_ = buf.WriteByte('\n')
 	if len(entry.Stacks) > 0 {
 		buf.Write(entry.Stacks)
 	}
@@ -744,14 +744,21 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, alsoToStder
 	}
 
 	if l.toStderr {
-		_, _ = os.Stderr.Write(l.processForStderr(entry))
+		if _, err := os.Stderr.Write(l.processForStderr(entry)); err != nil {
+			panic(err)
+		}
 	} else {
 		if alsoToStderr || l.alsoToStderr || s >= l.stderrThreshold.get() {
-			_, _ = os.Stderr.Write(l.processForStderr(entry))
+			if _, err := os.Stderr.Write(l.processForStderr(entry)); err != nil {
+				panic(err)
+			}
 		}
 		if l.file[s] == nil {
 			if err := l.createFiles(s); err != nil {
-				_, _ = os.Stderr.Write(l.processForStderr(entry)) // Make sure the message appears somewhere.
+				// Make sure the message appears somewhere.
+				if _, err := os.Stderr.Write(l.processForStderr(entry)); err != nil {
+					panic(err)
+				}
 				l.exit(err)
 			}
 		}
@@ -760,16 +767,24 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, alsoToStder
 
 		switch s {
 		case FatalLog:
-			l.file[FatalLog].Write(data)
+			if _, err := l.file[FatalLog].Write(data); err != nil {
+				panic(err)
+			}
 			fallthrough
 		case ErrorLog:
-			l.file[ErrorLog].Write(data)
+			if _, err := l.file[ErrorLog].Write(data); err != nil {
+				panic(err)
+			}
 			fallthrough
 		case WarningLog:
-			l.file[WarningLog].Write(data)
+			if _, err := l.file[WarningLog].Write(data); err != nil {
+				panic(err)
+			}
 			fallthrough
 		case InfoLog:
-			l.file[InfoLog].Write(data)
+			if _, err := l.file[InfoLog].Write(data); err != nil {
+				panic(err)
+			}
 		}
 
 		if stats := severityStats[s]; stats != nil {

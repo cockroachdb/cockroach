@@ -183,7 +183,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	security.LogTLSState("RPC", r.TLS)
-	io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
+	if _, err := io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n"); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
 
 	codec := codec.NewServerCodec(conn)
 	responses := make(chan serverResponse)

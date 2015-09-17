@@ -322,7 +322,9 @@ func (v *Value) SetProto(msg gogoproto.Message) error {
 func (v *Value) computeChecksum(key []byte) uint32 {
 	c := encoding.NewCRC32Checksum(key)
 	if v.Bytes != nil {
-		c.Write(v.Bytes)
+		if _, err := c.Write(v.Bytes); err != nil {
+			panic(err)
+		}
 	}
 	sum := c.Sum32()
 	encoding.ReleaseCRC32Checksum(c)

@@ -544,9 +544,9 @@ func (d DTuple) String() string {
 	_ = buf.WriteByte('(')
 	for i, v := range d {
 		if i > 0 {
-			_, _ = buf.WriteString(", ")
+			buf.WriteString(", ")
 		}
-		_, _ = buf.WriteString(v.String())
+		buf.WriteString(v.String())
 	}
 	_ = buf.WriteByte(')')
 	return buf.String()

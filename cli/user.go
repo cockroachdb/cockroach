@@ -36,7 +36,7 @@ Fetches and displays the user configuration for <username>.
 
 func runGetUser(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	db := makeSQLClient()
@@ -59,7 +59,7 @@ List all user configs.
 
 func runLsUsers(cmd *cobra.Command, args []string) {
 	if len(args) > 0 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	db := makeSQLClient()
@@ -82,7 +82,7 @@ Remove an existing user config by username.
 
 func runRmUser(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	db := makeSQLClient()
@@ -110,7 +110,7 @@ for the password.
 // to allow changing just some of them (eg: change email, but leave password).
 func runSetUser(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	hashed, err := security.PromptForPasswordAndHash()
@@ -138,7 +138,7 @@ var userCmd = &cobra.Command{
 	Use:   "user",
 	Short: "get, set, list and remove users",
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Usage()
+		mustUsage(cmd)
 	},
 }
 

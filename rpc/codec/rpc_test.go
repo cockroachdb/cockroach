@@ -434,7 +434,10 @@ func benchmarkEchoProtoHTTP(b *testing.B, size int) {
 				return
 			}
 			w.Header().Set(util.ContentTypeHeader, util.ProtoContentType)
-			w.Write(body)
+			if _, err := w.Write(body); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 		})); err != nil {
 			b.Fatal(err)
 		}

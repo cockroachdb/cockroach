@@ -40,7 +40,7 @@ type Indirection []IndirectionElem
 func (i Indirection) String() string {
 	var buf bytes.Buffer
 	for _, e := range i {
-		_, _ = buf.WriteString(e.String())
+		buf.WriteString(e.String())
 	}
 	return buf.String()
 }
@@ -79,12 +79,12 @@ type ArrayIndirection struct {
 
 func (a *ArrayIndirection) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("[")
-	_, _ = buf.WriteString(a.Begin.String())
+	buf.WriteString("[")
+	buf.WriteString(a.Begin.String())
 	if a.End != nil {
-		_, _ = buf.WriteString(":")
-		_, _ = buf.WriteString(a.End.String())
+		buf.WriteString(":")
+		buf.WriteString(a.End.String())
 	}
-	_, _ = buf.WriteString("]")
+	buf.WriteString("]")
 	return buf.String()
 }

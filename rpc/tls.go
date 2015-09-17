@@ -70,7 +70,9 @@ func TLSDialHTTP(network, address string, config *tls.Config) (net.Conn, error) 
 	}
 
 	// Note: this code was adapted from net/rpc.DialHTTPPath.
-	io.WriteString(conn, "CONNECT "+rpc.DefaultRPCPath+" HTTP/1.0\n\n")
+	if _, err := io.WriteString(conn, "CONNECT "+rpc.DefaultRPCPath+" HTTP/1.0\n\n"); err != nil {
+		return conn, err
+	}
 
 	// Require successful HTTP response before switching to RPC protocol.
 	resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "CONNECT"})
