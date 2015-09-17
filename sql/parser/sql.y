@@ -596,21 +596,21 @@ delete_stmt:
 
 // DROP itemtype [ IF EXISTS ] itemname [, itemname ...] [ RESTRICT | CASCADE ]
 drop_stmt:
-  DROP INDEX IF EXISTS any_name_list opt_drop_behavior
-  {
-    $$ = nil
-  }
-| DROP INDEX any_name_list opt_drop_behavior
-  {
-    $$ = nil
-  }
-| DROP DATABASE name
+  DROP DATABASE name
   {
     $$ = &DropDatabase{Name: Name($3), IfExists: false}
   }
 | DROP DATABASE IF EXISTS name
   {
     $$ = &DropDatabase{Name: Name($5), IfExists: true}
+  }
+| DROP INDEX qualified_name_list opt_drop_behavior
+  {
+    $$ = &DropIndex{Names: $3, IfExists: false}
+  }
+| DROP INDEX IF EXISTS qualified_name_list opt_drop_behavior
+  {
+    $$ = &DropIndex{Names: $5, IfExists: true}
   }
 | DROP TABLE any_name_list
   {

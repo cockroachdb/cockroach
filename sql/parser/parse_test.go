@@ -84,6 +84,8 @@ func TestParse(t *testing.T) {
 		{`DROP TABLE a.b`},
 		{`DROP TABLE a, b`},
 		{`DROP TABLE IF EXISTS a`},
+		{`DROP INDEX a.b@c`},
+		{`DROP INDEX IF EXISTS a.b@c`},
 
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN (DEBUG) SELECT 1`},
@@ -477,8 +479,6 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT ((1)) FROM t WHERE ((a)) IN (((1))) AND ((a, b)) IN ((((1, 1))), ((2, 2)))`},
 		{`SELECT e'\'\"\b\n\r\t\\' FROM t`},
 		{`SELECT '\x' FROM t`},
-		{`DROP INDEX a`},
-		{`DROP INDEX IF EXISTS a`},
 	}
 	for _, d := range testData {
 		if _, err := ParseTraditional(d.sql); err != nil {

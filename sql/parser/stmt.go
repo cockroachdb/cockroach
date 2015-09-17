@@ -48,6 +48,7 @@ func (*CreateIndex) statement()         {}
 func (*CreateTable) statement()         {}
 func (*Delete) statement()              {}
 func (*DropDatabase) statement()        {}
+func (*DropIndex) statement()           {}
 func (*DropTable) statement()           {}
 func (*Explain) statement()             {}
 func (*Grant) statement()               {}
