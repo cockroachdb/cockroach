@@ -275,6 +275,9 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t ORDER BY a ASC`},
 		{`SELECT FROM t ORDER BY a DESC`},
 
+		{`SELECT 1 FROM t GROUP BY a`},
+		{`SELECT 1 FROM t GROUP BY a, b`},
+
 		{`SELECT FROM t HAVING a = b`},
 
 		{`SELECT FROM t UNION SELECT 1 FROM t`},
@@ -459,7 +462,6 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT ((1)) FROM t WHERE ((a)) IN (((1))) AND ((a, b)) IN ((((1, 1))), ((2, 2)))`},
 		{`SELECT e'\'\"\b\n\r\t\\' FROM t`},
 		{`SELECT '\x' FROM t`},
-		// {`SELECT 1 FROM t GROUP BY a`},
 		{`DROP INDEX a`},
 		{`DROP INDEX IF EXISTS a`},
 	}

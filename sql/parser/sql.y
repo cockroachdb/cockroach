@@ -69,6 +69,7 @@ func unimplemented() {
   orderBy        OrderBy
   orders         []*Order
   order          *Order
+  groupBy        GroupBy
   dir            Direction
   alterTableCmd  AlterTableCmd
   alterTableCmds AlterTableCmds
@@ -148,12 +149,9 @@ func unimplemented() {
 %type <updateExpr> set_clause multiple_set_clause
 %type <indirect> indirection
 %type <exprs> ctext_expr_list ctext_row
-%type <empty> group_clause
+%type <groupBy> group_clause
 %type <limit> select_limit
 %type <qnames> relation_expr_list
-
-%type <empty> group_by_list
-%type <empty> group_by_item empty_grouping_set
 
 %type <empty> all_or_distinct
 
@@ -1596,10 +1594,11 @@ simple_select:
     group_clause having_clause window_clause
   {
     $$ = &Select{
-      Exprs:  $3,
-      From:   $4,
-      Where:  newWhere(astWhere, $5),
-      Having: newWhere(astHaving, $7),
+      Exprs:   $3,
+      From:    $4,
+      Where:   newWhere(astWhere, $5),
+      GroupBy: $6,
+      Having:  newWhere(astHaving, $7),
     }
   }
 | SELECT distinct_clause target_list
@@ -1612,6 +1611,7 @@ simple_select:
       Exprs:    $3,
       From:     $4,
       Where:    newWhere(astWhere, $5),
+      GroupBy:  $6,
       Having:   newWhere(astHaving, $7),
     }
   }
@@ -1827,19 +1827,14 @@ row_or_rows:
 // Each item in the group_clause list is either an expression tree or a
 // GroupingSet node of some type.
 group_clause:
-  GROUP BY group_by_list { unimplemented() }
-| /* EMPTY */ {}
-
-group_by_list:
-  group_by_item { unimplemented() }
-| group_by_list ',' group_by_item { unimplemented() }
-
-group_by_item:
-  a_expr { unimplemented() }
-| empty_grouping_set { unimplemented() }
-
-empty_grouping_set:
-  '(' ')' { unimplemented() }
+  GROUP BY expr_list
+  {
+    $$ = GroupBy($3)
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 having_clause:
   HAVING a_expr
