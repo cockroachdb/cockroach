@@ -22,7 +22,9 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -396,6 +398,17 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 	cmpArgs{LE, intervalType, intervalType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DInterval).Duration <= right.(DInterval).Duration), nil
 	},
+
+	cmpArgs{Like, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
+		pattern := regexp.QuoteMeta(string(right.(DString)))
+		pattern = strings.Replace(pattern, "%", ".*", -1)
+		pattern = strings.Replace(pattern, "_", ".", -1)
+		pattern = fmt.Sprintf("^%s$", pattern)
+
+		// TODO(pmattis): Can we cache this regexp compilation?
+		re := regexp.MustCompile(pattern)
+		return DBool(re.MatchString(string(left.(DString)))), nil
+	},
 }
 
 func init() {
@@ -727,6 +740,10 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 		// NotIn(left, right) is implemented as !IN(left, right)
 		not = true
 		op = In
+	case NotLike:
+		// NotLike(left, right) is implemented as !Like(left, right)
+		not = true
+		op = Like
 	case IsDistinctFrom:
 		// IsDistinctFrom(left, right) is implemented as !EQ(left, right)
 		//
@@ -751,7 +768,7 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 	}
 
 	switch op {
-	case Like, NotLike, SimilarTo, NotSimilarTo:
+	case SimilarTo, NotSimilarTo:
 		return DNull, util.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 

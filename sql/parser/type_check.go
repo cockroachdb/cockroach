@@ -197,6 +197,9 @@ func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum,
 	case NotIn:
 		// NotIn(left, right) is implemented as !IN(left, right)
 		op = In
+	case NotLike:
+		// NotLike(left, right) is implemented as !Like(left, right)
+		op = Like
 	}
 
 	lType := reflect.TypeOf(dummyLeft)
@@ -219,7 +222,7 @@ func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum,
 	}
 
 	switch op {
-	case Like, NotLike, SimilarTo, NotSimilarTo:
+	case SimilarTo, NotSimilarTo:
 		return nil, util.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 
