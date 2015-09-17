@@ -133,7 +133,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			return nil, err
 		}
 
-		if _, err = p.Truncate(&parser.Truncate{Tables: n.Names[i : i+1]}); err != nil {
+		if _, err := p.Truncate(&parser.Truncate{Tables: n.Names[i : i+1]}); err != nil {
 			return nil, err
 		}
 
@@ -145,8 +145,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		b.Del(MakeZoneKey(tableDesc.ID))
 		// Mark transaction as operating on the system DB.
 		p.txn.SetSystemDBTrigger()
-		err = p.txn.Run(b)
-		if err != nil {
+		if err := p.txn.Run(b); err != nil {
 			return nil, err
 		}
 	}
