@@ -36,7 +36,7 @@ import (
 
 var errEmptyInputString = errors.New("the input string must not be empty")
 var errAbsOfMinInt64 = errors.New("abs of min integer value (-9223372036854775808) not defined")
-var errRoundNumberDigits = errors.New("number of digits must be between 0 and 50")
+var errRoundNumberDigits = errors.New("number of digits must be greater than 0")
 
 type typeList []reflect.Type
 
@@ -832,8 +832,25 @@ func datumToRawString(datum Datum) (string, error) {
 }
 
 func round(x float64, n int64) (Datum, error) {
-	if n < 0 || n > 50 {
+	switch {
+	case n < 0:
 		return DNull, errRoundNumberDigits
+	case n > 323:
+		// When rounding to more than 323 digits after the decimal
+		// point, the original number is returned, because rounding has
+		// no effect at scales smaller than 1e-323.
+		//
+		// 323 is the sum of
+		//
+		// 15, the maximum number of significant digits in a decimal
+		// string that can be converted to the IEEE 754 double precision
+		// representation and back to a string that matches the
+		// original; and
+		//
+		// 308, the largest exponent. The significant digits can be
+		// right shifted by 308 positions at most, by setting the
+		// exponent to -308.
+		return DFloat(x), nil
 	}
 	const b = 64
 	y, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', int(n), b), b)
