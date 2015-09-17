@@ -583,7 +583,6 @@ func getRangeMetadata(key proto.Key, mtc *multiTestContext, t *testing.T) proto.
 // over-replicated ranges and remove replicas from them.
 func TestStoreRangeDownReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf)")
 	mtc := startMultiTestContext(t, 5)
 	defer mtc.Stop()
 	store0 := mtc.stores[0]
@@ -674,14 +673,14 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 		return false, foundIDset
 	}
 
-	maxTimeout := time.After(5 * time.Second)
+	maxTimeout := time.After(10 * time.Second)
 	succeeded := false
 	for !succeeded {
 		select {
 		case <-maxTimeout:
-			t.Fatalf("Failed to achieve proper replication within 5 seconds")
+			t.Fatalf("Failed to achieve proper replication within 10 seconds")
 		case <-time.After(10 * time.Millisecond):
-			mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration))
+			mtc.expireLeaderLeases()
 			// If our replication level matches the target, we have succeeded.
 			var idSet storeIDset
 			succeeded, idSet = checkReplication()
@@ -704,9 +703,9 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 		}
 	}
 
-	// Increment the manual clock one more time, so that any remaining intent
-	// resolutions can get a leader lease.
-	mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration))
+	// Expire leader leases one more time, so that any remaining resolutions can
+	// get a leader lease.
+	mtc.expireLeaderLeases()
 }
 
 // TestChangeReplicasDuplicateError tests that a replica change aborts if
@@ -1174,4 +1173,76 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 		}
 	}
 	ticker.Stop()
+}
+
+// TestStoreRangeRebalance verifies that the replication queue will take
+// rebalancing opportunities and add a new replica on another store.
+func TestStoreRangeRebalance(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	// Start multiTestContext with replica rebalancing enabled.
+	mtc := &multiTestContext{
+		storeContext: &storage.StoreContext{},
+	}
+	*mtc.storeContext = storage.TestStoreContext
+	mtc.storeContext.RebalancingOptions = storage.RebalancingOptions{
+		AllowRebalance: true,
+		Deterministic:  true,
+	}
+
+	// Four stores.
+	mtc.Start(t, 4)
+	defer mtc.Stop()
+
+	// Replicate the first range to the first three stores.
+	store0 := mtc.stores[0]
+	replica := store0.LookupReplica(proto.KeyMin, nil)
+	desc := replica.Desc()
+	mtc.replicateRange(desc.RangeID, 0, 1, 2)
+
+	// Initialize the gossip network with fake capacity data.
+	storeDescs := make([]*proto.StoreDescriptor, 0, len(mtc.stores))
+	for _, s := range mtc.stores {
+		desc, err := s.Descriptor()
+		if err != nil {
+			t.Fatal(err)
+		}
+		desc.Capacity.Capacity = 1024 * 1024
+		desc.Capacity.Available = 1024 * 1024
+		// Make sure store[1] is chosen as removal target.
+		if desc.StoreID == mtc.stores[1].StoreID() {
+			desc.Capacity.Available = 0
+		}
+		storeDescs = append(storeDescs, desc)
+	}
+	sg := gossiputil.NewStoreGossiper(mtc.gossip)
+	sg.GossipStores(storeDescs, t)
+
+	// This can't use SucceedsWithin as using the exponential backoff mechanic
+	// won't work well with the forced replication scans.
+	maxTimeout := time.After(5 * time.Second)
+	succeeded := false
+	for !succeeded {
+		select {
+		case <-maxTimeout:
+			t.Fatal("Failed to rebalance replica within 5 seconds")
+		case <-time.After(10 * time.Millisecond):
+			// Look up the official range descriptor, make sure fourth store is on it.
+			rangeDesc := getRangeMetadata(proto.KeyMin, mtc, t)
+
+			// Test if we have already succeeded.
+			for _, repl := range rangeDesc.Replicas {
+				if repl.StoreID == mtc.stores[3].StoreID() {
+					succeeded = true
+				}
+			}
+
+			if succeeded {
+				break
+			}
+
+			mtc.expireLeaderLeases()
+			mtc.stores[1].ForceReplicationScan(t)
+		}
+	}
 }
