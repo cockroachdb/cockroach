@@ -310,25 +310,27 @@ func (n *scanNode) initScan() bool {
 		}
 	}
 
-	// Prepare our index key vals slice.
-	if n.valTypes, n.err = makeKeyVals(n.desc, n.columnIDs); n.err != nil {
-		return false
-	}
-	n.vals = make([]parser.Datum, len(n.valTypes))
-
-	if n.isSecondaryIndex && n.index.Unique {
-		// Unique secondary indexes have a value that is the primary index
-		// key. Prepare implicitVals for use in decoding this value.
-		if n.implicitValTypes, n.err = makeKeyVals(n.desc, n.index.ImplicitColumnIDs); n.err != nil {
+	if n.valTypes == nil {
+		// Prepare our index key vals slice.
+		if n.valTypes, n.err = makeKeyVals(n.desc, n.columnIDs); n.err != nil {
 			return false
 		}
-		n.implicitVals = make([]parser.Datum, len(n.implicitValTypes))
-	}
+		n.vals = make([]parser.Datum, len(n.valTypes))
 
-	// Prepare a map from column ID to column kind used for unmarshalling values.
-	n.colKind = make(colKindMap, len(n.desc.Columns))
-	for _, col := range n.desc.Columns {
-		n.colKind[col.ID] = col.Type.Kind
+		if n.isSecondaryIndex && n.index.Unique {
+			// Unique secondary indexes have a value that is the primary index
+			// key. Prepare implicitVals for use in decoding this value.
+			if n.implicitValTypes, n.err = makeKeyVals(n.desc, n.index.ImplicitColumnIDs); n.err != nil {
+				return false
+			}
+			n.implicitVals = make([]parser.Datum, len(n.implicitValTypes))
+		}
+
+		// Prepare a map from column ID to column kind used for unmarshalling values.
+		n.colKind = make(colKindMap, len(n.desc.Columns))
+		for _, col := range n.desc.Columns {
+			n.colKind[col.ID] = col.Type.Kind
+		}
 	}
 	return true
 }

@@ -148,9 +148,8 @@ type planNode interface {
 }
 
 var _ planNode = &groupNode{}
+var _ planNode = &indexJoinNode{}
 var _ planNode = &limitNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
-
-// TODO(pmattis): joinNode.

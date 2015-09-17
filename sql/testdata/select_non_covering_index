@@ -1,0 +1,65 @@
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  INDEX b (b),
+  UNIQUE INDEX c (c)
+)
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3), (4, 5, 6)
+
+query ITT
+EXPLAIN SELECT * FROM t WHERE b = 2
+----
+0 index-join
+1 scan       t@b /2-/3
+1 scan       t@primary
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2
+----
+0 /t/b/2/1 NULL true
+
+query III
+SELECT * FROM t WHERE b = 2
+----
+1 2 3
+
+query ITT
+EXPLAIN SELECT * FROM t WHERE c = 6
+----
+0 index-join
+1 scan       t@c /6-/7
+1 scan       t@primary
+
+query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE c = 6
+----
+0 /t/c/6 /4 true
+
+query III
+SELECT * FROM t WHERE c = 6
+----
+4 5 6
+
+query III
+SELECT * FROM t WHERE c > 0 ORDER BY c DESC
+----
+4 5 6
+1 2 3
+
+query ITT
+EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c DESC
+----
+0 index-join
+1 revscan    t@c /1-
+1 scan       t@primary
+
+query ITT
+EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c
+----
+0 index-join
+1 scan       t@c /1-
+1 scan       t@primary
