@@ -248,6 +248,32 @@ var builtins = map[string][]builtin{
 		return DString(strings.Replace(s, from, to, -1)), nil
 	}, DummyString)},
 
+	"translate": {stringBuiltin3(func(s, from, to string) (Datum, error) {
+		const deletionRune = utf8.MaxRune + 1
+		translation := make(map[rune]rune, len(from))
+		for _, fromRune := range from {
+			toRune, size := utf8.DecodeRuneInString(to)
+			if toRune == utf8.RuneError {
+				toRune = deletionRune
+			} else {
+				to = to[size:]
+			}
+			translation[fromRune] = toRune
+		}
+
+		runes := make([]rune, 0, len(s))
+		for _, c := range s {
+			if t, ok := translation[c]; ok {
+				if t != deletionRune {
+					runes = append(runes, t)
+				}
+			} else {
+				runes = append(runes, c)
+			}
+		}
+		return DString(string(runes)), nil
+	}, DummyString)},
+
 	"initcap": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(strings.Title(strings.ToLower(s))), nil
 	}, DummyString)},

@@ -516,3 +516,23 @@ query T
 SELECT trunc(-0.0), trunc(0.0), trunc(1.9)
 ----
 -0 0 1
+
+query T
+SELECT translate('Techonthenet.com', 'e.to', '456')
+----
+T4chn6h4n465cm
+
+query T
+SELECT translate('12345', '143', 'ax')
+----
+a2x5
+
+query T
+SELECT translate('12345', 'abc', 'ax')
+----
+12345
+
+query T
+SELECT translate('a‰ÒÁ', 'aÒ', '∏p')
+----
+∏‰pÁ
