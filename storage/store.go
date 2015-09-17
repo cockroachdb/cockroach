@@ -28,6 +28,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -528,7 +529,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// Register callbacks for any changes to the system config.
 		// This may trigger splits along structured boundaries,
 		// and update max range bytes.
-		s.ctx.Gossip.RegisterCallback(gossip.KeySystemConfig, s.systemGossipUpdate)
+		s.ctx.Gossip.RegisterSystemConfigCallback(s.systemGossipUpdate)
 
 		// Start a single goroutine in charge of periodically gossiping the
 		// sentinel and first range metadata if we have a first range.
@@ -641,14 +642,7 @@ func (s *Store) maybeGossipSystemConfig() error {
 
 // systemGossipUpdate is a callback for gossip updates to
 // the system config which affect range split boundaries.
-func (s *Store) systemGossipUpdate(key string, _ []byte) {
-	// Load the system config.
-	cfg, err := s.Gossip().GetSystemConfig()
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
+func (s *Store) systemGossipUpdate(cfg *config.SystemConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// For every range, update its MaxBytes and check if it needs to be split.
@@ -1587,9 +1581,9 @@ func (s *Store) GetStatus() (*StoreStatus, error) {
 func (s *Store) computeReplicationStatus(now int64) (
 	leaderRangeCount, replicatedRangeCount, availableRangeCount int32) {
 	// Load the system config.
-	cfg, err := s.Gossip().GetSystemConfig()
-	if err != nil {
-		log.Error(err)
+	cfg := s.Gossip().GetSystemConfig()
+	if cfg == nil {
+		log.Infof("system config not yet available")
 		return
 	}
 

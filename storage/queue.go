@@ -180,9 +180,9 @@ func (bq *baseQueue) Add(repl *Replica, priority float64) error {
 // dropped.
 func (bq *baseQueue) MaybeAdd(repl *Replica, now proto.Timestamp) {
 	// Load the system config.
-	cfg, err := bq.gossip.GetSystemConfig()
-	if err != nil {
-		log.Error(err)
+	cfg := bq.gossip.GetSystemConfig()
+	if cfg == nil {
+		log.Infof("no system config available. skipping...")
 		return
 	}
 
@@ -323,9 +323,9 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 	now := clock.Now()
 
 	// Load the system config.
-	cfg, err := bq.gossip.GetSystemConfig()
-	if err != nil {
-		log.Error(err)
+	cfg := bq.gossip.GetSystemConfig()
+	if cfg == nil {
+		log.Infof("no system config available. skipping...")
 		return
 	}
 

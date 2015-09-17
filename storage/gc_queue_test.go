@@ -91,9 +91,9 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	}
 
 	gcQ := newGCQueue(tc.gossip)
-	cfg, err := tc.gossip.GetSystemConfig()
-	if err != nil {
-		t.Fatal(err)
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
+		t.Fatal("nil config")
 	}
 
 	for i, test := range testCases {
@@ -209,9 +209,9 @@ func TestGCQueueProcess(t *testing.T) {
 		}
 	}
 
-	cfg, err := tc.gossip.GetSystemConfig()
-	if err != nil {
-		t.Fatal(err)
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
+		t.Fatal("nil config")
 	}
 
 	// Process through a scan queue.
@@ -335,9 +335,9 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		}
 	}
 
-	cfg, err := tc.gossip.GetSystemConfig()
-	if err != nil {
-		t.Fatal(err)
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
+		t.Fatal("nil config")
 	}
 
 	// Process through a scan queue.
@@ -348,7 +348,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 	// Iterate through all values to ensure intents have been fully resolved.
 	meta := &engine.MVCCMetadata{}
-	err = tc.store.Engine().Iterate(engine.MVCCEncodeKey(proto.KeyMin), engine.MVCCEncodeKey(proto.KeyMax), func(kv proto.RawKeyValue) (bool, error) {
+	err := tc.store.Engine().Iterate(engine.MVCCEncodeKey(proto.KeyMin), engine.MVCCEncodeKey(proto.KeyMax), func(kv proto.RawKeyValue) (bool, error) {
 		if key, _, isValue := engine.MVCCDecodeKey(kv.Key); !isValue {
 			if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
 				t.Fatalf("unable to unmarshal mvcc metadata for key %s", key)

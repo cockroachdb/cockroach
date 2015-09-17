@@ -34,12 +34,8 @@ import (
 
 func getLatestConfig(s *server.TestServer, expected int) (cfg *config.SystemConfig, err error) {
 	err = util.IsTrueWithin(func() bool {
-		var err2 error
-		cfg, err2 = s.Gossip().GetSystemConfig()
-		if err2 != nil {
-			return false
-		}
-		return len(cfg.Values) != expected
+		cfg = s.Gossip().GetSystemConfig()
+		return cfg != nil && len(cfg.Values) == expected
 	}, 500*time.Millisecond)
 	return
 }
@@ -54,7 +50,7 @@ func TestGetZoneConfig(t *testing.T) {
 	s, sqlDB, _ := setup(t)
 	defer cleanup(s, sqlDB)
 
-	expectedLength := len(sql.GetInitialSystemValues())
+	expectedLength := len(sql.GetInitialSystemValues()) - 1 /* ignore ID generator */
 	expectedCounter := uint32(keys.MaxReservedDescID + 1)
 
 	// Naming scheme for database and tables:
@@ -97,8 +93,8 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 	expectedCounter++
 
-	// We've created 2 databases at 1 key each, and 4 tables at 2 keys each.
-	expectedLength += 2 + 4*2
+	// We've created 2 databases at 2 key each, and 4 tables at 2 keys each.
+	expectedLength += 2*2 + 4*2
 
 	cfg, err := getLatestConfig(s, expectedLength)
 	if err != nil {
@@ -159,8 +155,8 @@ func TestGetZoneConfig(t *testing.T) {
 		}
 	}
 
-	// We wrote 3 zone entries.
-	expectedLength += 3
+	// We wrote 3 zone entries with 2 keys each.
+	expectedLength += 3 * 2
 	cfg, err = getLatestConfig(s, expectedLength)
 	if err != nil {
 		t.Fatalf("failed to get latest system config: %s", err)
