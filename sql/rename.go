@@ -196,7 +196,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 			// Noop.
 			return &valuesNode{}, nil
 		}
-		// index does not exist, but we want it to: error out.
+		// Index does not exist, but we want it to: error out.
 		return nil, fmt.Errorf("index %q does not exist", idxName)
 	}
 
