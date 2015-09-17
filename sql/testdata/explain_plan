@@ -34,6 +34,21 @@ Level  Type    Description
 query ITT colnames
 EXPLAIN SELECT * FROM t LIMIT 1 OFFSET 1
 ----
-Level  Type  Description
-0      limit count: 1, offset:  1
-1      scan  t@primary
+Level  Type    Description
+0      limit   count: 1, offset:  1
+1      scan    t@primary
+
+query ITT colnames
+EXPLAIN SELECT DISTINCT * FROM t
+----
+Level  Type     Description
+0      distinct k
+1      scan     t@primary
+
+query ITT colnames
+EXPLAIN SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
+----
+Level  Type     Description
+0      limit    count: 1, offset:  1
+1      distinct k
+2      scan     t@primary

@@ -209,7 +209,6 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t AS t1`},
 		{`SELECT FROM s.t`},
 
-		{`SELECT DISTINCT 1 FROM t`},
 		{`SELECT COUNT(DISTINCT a) FROM t`},
 
 		{`SELECT FROM t WHERE b = - 2`},
@@ -282,8 +281,11 @@ func TestParse(t *testing.T) {
 
 		{`SELECT FROM t UNION SELECT 1 FROM t`},
 		{`SELECT FROM t UNION SELECT 1 FROM t UNION SELECT 1 FROM t`},
+		{`SELECT FROM t UNION ALL SELECT 1 FROM t`},
 		{`SELECT FROM t EXCEPT SELECT 1 FROM t`},
+		{`SELECT FROM t EXCEPT ALL SELECT 1 FROM t`},
 		{`SELECT FROM t INTERSECT SELECT 1 FROM t`},
+		{`SELECT FROM t INTERSECT ALL SELECT 1 FROM t`},
 
 		{`SELECT FROM t1 JOIN t2 ON a = b`},
 		{`SELECT FROM t1 JOIN t2 USING (a)`},
@@ -298,7 +300,8 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t LIMIT a`},
 		{`SELECT FROM t OFFSET b`},
 		{`SELECT FROM t LIMIT a OFFSET b`},
-
+		{`SELECT DISTINCT * FROM t`},
+		{`SELECT DISTINCT a, b FROM t`},
 		{`SET a = 3`},
 		{`SET a = 3, 4`},
 		{`SET a = '3'`},
@@ -410,9 +413,6 @@ func TestParse2(t *testing.T) {
 			`SELECT FROM t1 LEFT JOIN t2 ON a = b`},
 		{`SELECT FROM t1 RIGHT OUTER JOIN t2 ON a = b`,
 			`SELECT FROM t1 RIGHT JOIN t2 ON a = b`},
-		// TODO(pmattis): Handle UNION ALL.
-		{`SELECT FROM t UNION ALL SELECT 1 FROM t`,
-			`SELECT FROM t UNION SELECT 1 FROM t`},
 		// We allow OFFSET before LIMIT, but always output LIMIT first.
 		{`SELECT FROM t OFFSET a LIMIT b`,
 			`SELECT FROM t LIMIT b OFFSET a`},
@@ -435,6 +435,12 @@ func TestParse2(t *testing.T) {
 			`SELECT + y[ARRAY[]]`},
 		{`SELECT(0)FROM y[array[]]`,
 			`SELECT (0) FROM y[ARRAY[]]`},
+		{`SELECT FROM t UNION DISTINCT SELECT 1 FROM t`,
+			`SELECT FROM t UNION SELECT 1 FROM t`},
+		{`SELECT FROM t EXCEPT DISTINCT SELECT 1 FROM t`,
+			`SELECT FROM t EXCEPT SELECT 1 FROM t`},
+		{`SELECT FROM t INTERSECT DISTINCT SELECT 1 FROM t`,
+			`SELECT FROM t INTERSECT SELECT 1 FROM t`},
 	}
 	for _, d := range testData {
 		stmts, err := ParseTraditional(d.sql)
