@@ -503,6 +503,11 @@ SELECT sqrt(-1.0), sqrt(4.0)
 NaN 2
 
 query T
+SELECT cbrt(-1.0), cbrt(27.0)
+----
+-1 3
+
+query T
 SELECT tan(-5.0), tan(0.0), tan(5.0)
 ----
 3.3805150062465854 0 -3.3805150062465854

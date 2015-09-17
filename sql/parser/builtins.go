@@ -475,6 +475,12 @@ var builtins = map[string][]builtin{
 		}),
 	},
 
+	"cbrt": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Cbrt(x)), nil
+		}),
+	},
+
 	"ceil":    {ceilImpl},
 	"ceiling": {ceilImpl},
 
