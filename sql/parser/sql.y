@@ -146,7 +146,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <exprs> ctext_expr_list ctext_row
 %type <empty> group_clause
 %type <limit> select_limit
-%type <empty> table_func_elem_list
 %type <qnames> relation_expr_list
 
 %type <empty> group_by_list
@@ -182,16 +181,12 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <strs> opt_storing
 %type <colDef> column_def
 %type <tblDef> table_elem
-%type <empty> table_func_elem
 %type <expr>  where_clause
 %type <indirectElem> indirection_elem
 %type <expr>  a_expr b_expr c_expr a_expr_const
 %type <expr>  in_expr
 %type <expr>  having_clause
-%type <empty> func_table
 %type <expr>  array_expr
-%type <empty> rowsfrom_item rowsfrom_list opt_col_def_list
-%type <empty> opt_ordinality
 %type <colTypes> type_list
 %type <exprs> array_expr_list
 %type <expr>  row explicit_row implicit_row
@@ -202,7 +197,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <expr> ctext_expr
 %type <expr> numeric_only
 %type <str> alias_clause opt_alias_clause
-%type <empty> func_alias_clause
 %type <order> sortby
 %type <str> index_elem
 %type <tblExpr> table_ref
@@ -1897,13 +1891,10 @@ table_ref:
   {
     $$ = &AliasedTableExpr{Expr: $1, As: Name($2)}
   }
-| func_table func_alias_clause {}
-| LATERAL func_table func_alias_clause {}
 | select_with_parens opt_alias_clause
   {
     $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1}, As: Name($2)}
   }
-| LATERAL select_with_parens opt_alias_clause {}
 | joined_table
 | '(' joined_table ')' alias_clause {}
 
@@ -1965,15 +1956,6 @@ opt_alias_clause:
   {
     $$ = ""
   }
-
-// func_alias_clause can include both an Alias and a coldeflist, so we make it
-// return a 2-element list that gets disassembled by calling production.
-func_alias_clause:
-  alias_clause {}
-| AS '(' table_func_elem_list ')' {}
-| AS name '(' table_func_elem_list ')' {}
-| name '(' table_func_elem_list ')' {}
-| /* EMPTY */ {}
 
 join_type:
   FULL join_outer
@@ -2067,34 +2049,6 @@ relation_expr_opt_alias:
     $$ = &AliasedTableExpr{Expr: $1, As: Name($3)}
   }
 
-// func_table represents a function invocation in a FROM list. It can be a
-// plain function call, like "foo(...)", or a ROWS FROM expression with one or
-// more function calls, "ROWS FROM (foo(...), bar(...))", optionally with WITH
-// ORDINALITY attached. In the ROWS FROM syntax, a column definition list can
-// be given for each function, for example:
-//     ROWS FROM (foo() AS (foo_res_a text, foo_res_b text),
-//                bar() AS (bar_res_a text, bar_res_b text))
-// It's also possible to attach a column definition list to the RangeFunction
-// as a whole, but that's handled by the table_ref production.
-func_table:
-  func_expr_windowless opt_ordinality {}
-| ROWS FROM '(' rowsfrom_list ')' opt_ordinality {}
-
-rowsfrom_item:
-  func_expr_windowless opt_col_def_list {}
-
-rowsfrom_list:
-  rowsfrom_item {}
-| rowsfrom_list ',' rowsfrom_item {}
-
-opt_col_def_list:
-  AS '(' table_func_elem_list ')' {}
-| /* EMPTY */ {}
-
-opt_ordinality:
-  WITH_LA ORDINALITY {}
-| /* EMPTY */ {}
-
 where_clause:
   WHERE a_expr
   {
@@ -2104,13 +2058,6 @@ where_clause:
   {
     $$ = nil
   }
-
-table_func_elem_list:
-  table_func_elem {}
-| table_func_elem_list ',' table_func_elem {}
-
-table_func_elem:
-  name typename opt_collate_clause {}
 
 // Type syntax
 //   SQL introduces a large amount of type-specific syntax.
