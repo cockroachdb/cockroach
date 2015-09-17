@@ -147,6 +147,7 @@ type planNode interface {
 	ExplainPlan() (name, description string, children []planNode)
 }
 
+var _ planNode = &distinctNode{}
 var _ planNode = &groupNode{}
 var _ planNode = &indexJoinNode{}
 var _ planNode = &limitNode{}

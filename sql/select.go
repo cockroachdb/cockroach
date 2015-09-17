@@ -62,6 +62,9 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	distinct := p.distinct(n)
+
 	// TODO(pmattis): Consider aggregation functions during index
 	// selection. Specifically, MIN(k) and MAX(k) where k is the first column in
 	// an index can be satisfied with a single read.
@@ -69,7 +72,8 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	limit, err := p.limit(n, sort.wrap(group.wrap(plan)))
+
+	limit, err := p.limit(n, distinct.wrap(sort.wrap(group.wrap(plan))))
 	if err != nil {
 		return nil, err
 	}

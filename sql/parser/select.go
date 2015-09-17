@@ -50,7 +50,7 @@ func (node *ParenSelect) String() string {
 
 // Select represents a SELECT statement.
 type Select struct {
-	Distinct    string
+	Distinct    bool
 	Exprs       SelectExprs
 	From        TableExprs
 	Where       *Where
@@ -62,17 +62,16 @@ type Select struct {
 	tableSelect bool
 }
 
-// Select.Distinct
-const (
-	astDistinct = " DISTINCT"
-)
-
 func (node *Select) String() string {
 	if node.tableSelect && len(node.From) == 1 {
 		return fmt.Sprintf("TABLE %s", node.From[0])
 	}
+	var distinct string
+	if node.Distinct {
+		distinct = " DISTINCT"
+	}
 	return fmt.Sprintf("SELECT%s%s%s%s%s%s%s%s%s",
-		node.Distinct, node.Exprs,
+		distinct, node.Exprs,
 		node.From, node.Where,
 		node.GroupBy, node.Having, node.OrderBy,
 		node.Limit, node.Lock)

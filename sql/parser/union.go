@@ -29,6 +29,7 @@ import "fmt"
 type Union struct {
 	Type        string
 	Left, Right SelectStatement
+	All         bool
 }
 
 // Union.Type
@@ -39,5 +40,9 @@ const (
 )
 
 func (node *Union) String() string {
-	return fmt.Sprintf("%s %s %s", node.Left, node.Type, node.Right)
+	all := ""
+	if node.All {
+		all = " ALL"
+	}
+	return fmt.Sprintf("%s %s%s %s", node.Left, node.Type, all, node.Right)
 }
