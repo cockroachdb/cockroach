@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Tamir Duberstein (tamird@gmail.com)
+// Author: Vivek Menezes (vivek.menezes@gmail.com)
 
 package sql
 
@@ -25,12 +25,32 @@ import (
 )
 
 // distinct constructs a distinctNode.
-func (*planner) distinct(n *parser.Select) *distinctNode {
-	if n.Distinct {
-		d := distinctNode{suffixSeen: make(map[string]struct{})}
-		return &d
+func (*planner) distinct(n *parser.Select, p planNode) planNode {
+	if !n.Distinct {
+		return p
 	}
-	return nil
+	d := &distinctNode{
+		planNode:   p,
+		suffixSeen: make(map[string]struct{}),
+	}
+	if len(p.Ordering()) != 0 {
+		d.columnsInOrder = make([]bool, len(p.Columns()))
+	}
+	for _, p := range p.Ordering() {
+		if p < 0 {
+			p = -p
+		}
+		if p <= len(d.columnsInOrder) {
+			d.columnsInOrder[p-1] = true
+		} else {
+			// Cannot use sort order. This happens when the
+			// columns used for sorting are not part of the output.
+			// e.g. SELECT a FROM t ORDER BY c.
+			d.columnsInOrder = nil
+			break
+		}
+	}
+	return d
 }
 
 type distinctNode struct {
@@ -44,33 +64,6 @@ type distinctNode struct {
 	// prefixSeen value.
 	suffixSeen map[string]struct{}
 	err        error
-}
-
-// wrap the supplied planNode with the distinctNode if distinct is required.
-func (n *distinctNode) wrap(plan planNode) planNode {
-	if n == nil {
-		return plan
-	}
-	n.planNode = plan
-	if len(plan.Ordering()) == 0 {
-		return n
-	}
-	n.columnsInOrder = make([]bool, len(plan.Columns()))
-	for _, p := range plan.Ordering() {
-		if p < 0 {
-			p = -p
-		}
-		if p <= len(n.columnsInOrder) {
-			n.columnsInOrder[p-1] = true
-		} else {
-			// Cannot use sort order. This happens when the
-			// columns used for sorting are not part of the output.
-			// e.g. SELECT a FROM t ORDER BY c.
-			n.columnsInOrder = nil
-			break
-		}
-	}
-	return n
 }
 
 func (n *distinctNode) Next() bool {
