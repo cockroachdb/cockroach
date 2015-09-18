@@ -159,8 +159,8 @@ GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
 
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) build/devbase/deps.sh GLOCKFILE
-	@build/devbase/deps.sh
+.bootstrap: $(GITHOOKS) GLOCKFILE
+	@glock sync github.com/cockroachdb/cockroach
 	@touch $@
 
 -include .bootstrap
