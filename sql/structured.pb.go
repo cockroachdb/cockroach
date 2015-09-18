@@ -112,7 +112,7 @@ type ColumnDescriptor struct {
 	Nullable bool       `protobuf:"varint,4,opt,name=nullable" json:"nullable"`
 	// Default expression to use to populate the column on insert if no
 	// value is provided.
-	DefaultExpr string `protobuf:"bytes,5,opt,name=default_expr" json:"default_expr"`
+	DefaultExpr *string `protobuf:"bytes,5,opt,name=default_expr" json:"default_expr,omitempty"`
 }
 
 func (m *ColumnDescriptor) Reset()         { *m = ColumnDescriptor{} }
@@ -148,8 +148,8 @@ func (m *ColumnDescriptor) GetNullable() bool {
 }
 
 func (m *ColumnDescriptor) GetDefaultExpr() string {
-	if m != nil {
-		return m.DefaultExpr
+	if m != nil && m.DefaultExpr != nil {
+		return *m.DefaultExpr
 	}
 	return ""
 }
@@ -429,10 +429,12 @@ func (m *ColumnDescriptor) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
-	data[i] = 0x2a
-	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.DefaultExpr)))
-	i += copy(data[i:], m.DefaultExpr)
+	if m.DefaultExpr != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintStructured(data, i, uint64(len(*m.DefaultExpr)))
+		i += copy(data[i:], *m.DefaultExpr)
+	}
 	return i, nil
 }
 
@@ -673,8 +675,10 @@ func (m *ColumnDescriptor) Size() (n int) {
 	l = m.Type.Size()
 	n += 1 + l + sovStructured(uint64(l))
 	n += 2
-	l = len(m.DefaultExpr)
-	n += 1 + l + sovStructured(uint64(l))
+	if m.DefaultExpr != nil {
+		l = len(*m.DefaultExpr)
+		n += 1 + l + sovStructured(uint64(l))
+	}
 	return n
 }
 
@@ -990,7 +994,8 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.DefaultExpr = string(data[iNdEx:postIndex])
+			s := string(data[iNdEx:postIndex])
+			m.DefaultExpr = &s
 			iNdEx = postIndex
 		default:
 			var sizeOfWire int

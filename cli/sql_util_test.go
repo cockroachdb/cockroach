@@ -80,9 +80,9 @@ OK
 	}
 
 	expectedRows := [][]string{
-		{`"parentID"`, `"INT"`, `true`, `""`},
-		{`"name"`, `"STRING"`, `true`, `""`},
-		{`"id"`, `"INT"`, `true`, `""`},
+		{`"parentID"`, `"INT"`, `true`, `<nil>`},
+		{`"name"`, `"STRING"`, `true`, `<nil>`},
+		{`"id"`, `"INT"`, `true`, `<nil>`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
@@ -96,9 +96,9 @@ OK
 +------------+----------+------+---------+
 |   Field    |   Type   | Null | Default |
 +------------+----------+------+---------+
-| "parentID" | "INT"    | true | ""      |
-| "name"     | "STRING" | true | ""      |
-| "id"       | "INT"    | true | ""      |
+| "parentID" | "INT"    | true | <nil>   |
+| "name"     | "STRING" | true | <nil>   |
+| "id"       | "INT"    | true | <nil>   |
 +------------+----------+------+---------+
 `
 

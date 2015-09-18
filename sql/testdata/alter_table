@@ -24,8 +24,8 @@ query TTTT colnames
 SHOW COLUMNS FROM t
 ----
 Field Type Null Default
-a     INT  true
-b     INT  true
+a     INT  true NULL
+b     INT  true NULL
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)

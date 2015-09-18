@@ -144,7 +144,8 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 				col.Type.Kind, defaultType.Type())
 		}
 
-		col.DefaultExpr = d.DefaultExpr.String()
+		s := d.DefaultExpr.String()
+		col.DefaultExpr = &s
 	}
 
 	var idx *IndexDescriptor

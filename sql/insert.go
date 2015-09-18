@@ -60,7 +60,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		if _, ok := colIDtoRowIndex[col.ID]; ok {
 			continue
 		}
-		if col.DefaultExpr != "" {
+		if col.DefaultExpr != nil {
 			colIDtoRowIndex[col.ID] = len(cols)
 			cols = append(cols, col)
 		}
@@ -231,7 +231,7 @@ func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, erro
 	// as the defaults are all NULL.
 	haveDefaults := false
 	for _, col := range cols {
-		if col.DefaultExpr != "" {
+		if col.DefaultExpr != nil {
 			haveDefaults = true
 			break
 		}
@@ -249,8 +249,8 @@ func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, erro
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		if col.DefaultExpr != "" {
-			buf.WriteString(col.DefaultExpr)
+		if col.DefaultExpr != nil {
+			buf.WriteString(*col.DefaultExpr)
 		} else {
 			buf.WriteString("NULL")
 		}
