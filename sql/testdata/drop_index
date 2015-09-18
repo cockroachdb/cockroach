@@ -1,0 +1,75 @@
+statement ok
+CREATE TABLE users (
+  id    INT PRIMARY KEY,
+  name  VARCHAR NOT NULL,
+  title VARCHAR,
+  INDEX foo (name),
+  UNIQUE INDEX bar (id, name)
+)
+
+statement ok
+INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
+
+query TTTTT colnames
+SHOW INDEX FROM users
+----
+Table Name    Unique Seq Column Storing
+users primary true   1   id     false
+users foo     false  1   name   false
+users bar     true   1   id     false
+users bar     true   2   name   false
+
+statement error index "ffo" does not exist
+DROP INDEX users@ffo
+
+statement ok
+DROP INDEX IF EXISTS users@ffo
+
+query TTTTT colnames
+SHOW INDEX FROM users
+----
+Table Name    Unique Seq Column Storing
+users primary true   1   id     false
+users foo     false  1   name   false
+users bar     true   1   id     false
+users bar     true   2   name   false
+
+statement ok
+DROP INDEX IF EXISTS users@foo
+
+query TTTTT colnames
+SHOW INDEX FROM users
+----
+Table Name    Unique Seq Column Storing
+users primary true   1   id     false
+users bar     true   1   id     false
+users bar     true   2   name   false
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on table users
+DROP INDEX users@bar
+
+user root
+
+statement ok
+GRANT CREATE ON TABLE users TO testuser
+
+user testuser
+
+statement ok
+DROP INDEX users@bar
+
+query TTTTT colnames
+SHOW INDEX FROM users
+----
+Table Name    Unique Seq Column Storing
+users primary true   1   id     false
+
+user root
+
+query ITT
+SELECT * FROM users
+----
+1 tom   cat
+2 jerry rat

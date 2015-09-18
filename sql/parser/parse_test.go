@@ -84,6 +84,8 @@ func TestParse(t *testing.T) {
 		{`DROP TABLE a.b`},
 		{`DROP TABLE a, b`},
 		{`DROP TABLE IF EXISTS a`},
+		{`DROP INDEX a.b@c`},
+		{`DROP INDEX IF EXISTS a.b@c`},
 
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN (DEBUG) SELECT 1`},
@@ -343,6 +345,15 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE a ADD COLUMN IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
+
+		{`ALTER TABLE a DROP b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE a DROP IF EXISTS b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE IF EXISTS a DROP b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE IF EXISTS a DROP IF EXISTS b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE a DROP COLUMN b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE a DROP COLUMN IF EXISTS b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE IF EXISTS a DROP COLUMN b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE IF EXISTS a DROP COLUMN IF EXISTS b, DROP CONSTRAINT a_idx`},
 	}
 	for _, d := range testData {
 		stmts, err := ParseTraditional(d.sql)
@@ -468,8 +479,6 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT ((1)) FROM t WHERE ((a)) IN (((1))) AND ((a, b)) IN ((((1, 1))), ((2, 2)))`},
 		{`SELECT e'\'\"\b\n\r\t\\' FROM t`},
 		{`SELECT '\x' FROM t`},
-		{`DROP INDEX a`},
-		{`DROP INDEX IF EXISTS a`},
 	}
 	for _, d := range testData {
 		if _, err := ParseTraditional(d.sql); err != nil {

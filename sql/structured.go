@@ -74,8 +74,8 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 	name := baseName
 
 	exists := func(name string) bool {
-		idx, _ := tableDesc.FindIndexByName(name)
-		return idx != nil
+		_, err := tableDesc.FindIndexByName(name)
+		return err == nil
 	}
 	for i := 1; exists(name); i++ {
 		name = fmt.Sprintf("%s%d", baseName, i)

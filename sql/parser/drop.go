@@ -41,6 +41,22 @@ func (node *DropDatabase) String() string {
 	return buf.String()
 }
 
+// DropIndex represents a DROP DATABASE statement.
+type DropIndex struct {
+	Names    QualifiedNames
+	IfExists bool
+}
+
+func (node *DropIndex) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("DROP INDEX ")
+	if node.IfExists {
+		buf.WriteString("IF EXISTS ")
+	}
+	buf.WriteString(node.Names.String())
+	return buf.String()
+}
+
 // DropTable represents a DROP TABLE statement.
 type DropTable struct {
 	Names    QualifiedNames

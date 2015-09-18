@@ -29,89 +29,6 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-func TestDropTable(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	s, sqlDB, kvDB := setup(t)
-	defer cleanup(s, sqlDB)
-
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	nameKey := sql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
-	gr, err := kvDB.Get(nameKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-
-	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
-	desc := sql.TableDescriptor{}
-	if err := kvDB.GetProto(descKey, &desc); err != nil {
-		t.Fatal(err)
-	}
-
-	// Add a zone config for the table.
-	buf, err := gogoproto.Marshal(config.DefaultZoneConfig)
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, desc.ID, buf); err != nil {
-		t.Fatal(err)
-	}
-
-	zoneKey := sql.MakeZoneKey(desc.ID)
-	if gr, err := kvDB.Get(zoneKey); err != nil {
-		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatalf("zone config entry not found")
-	}
-
-	var tablePrefix []byte
-	tablePrefix = append(tablePrefix, keys.TableDataPrefix...)
-	tablePrefix = encoding.EncodeUvarint(tablePrefix, uint64(desc.ID))
-
-	tableStartKey := proto.Key(tablePrefix)
-	tableEndKey := tableStartKey.PrefixEnd()
-	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
-		t.Fatal(err)
-	} else if l := 6; len(kvs) != l {
-		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
-	}
-
-	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
-		t.Fatal(err)
-	}
-
-	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
-		t.Fatal(err)
-	} else if l := 0; len(kvs) != l {
-		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
-	}
-
-	if gr, err := kvDB.Get(descKey); err != nil {
-		t.Fatal(err)
-	} else if gr.Exists() {
-		t.Fatalf("table descriptor still exists after the table is dropped")
-	}
-
-	if gr, err := kvDB.Get(nameKey); err != nil {
-		t.Fatal(err)
-	} else if gr.Exists() {
-		t.Fatalf("table namekey still exists after the table is dropped")
-	}
-
-	if gr, err := kvDB.Get(zoneKey); err != nil {
-		t.Fatal(err)
-	} else if gr.Exists() {
-		t.Fatalf("zone config entry still exists after the table is dropped")
-	}
-}
-
 func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, sqlDB, kvDB := setup(t)
@@ -231,5 +148,155 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("database zone config entry still exists after the database is dropped")
+	}
+}
+
+func TestDropIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, sqlDB, kvDB := setup(t)
+	defer cleanup(s, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE INDEX foo on t.kv (v);
+INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	nameKey := sql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+
+	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
+	desc := sql.TableDescriptor{}
+	if err := kvDB.GetProto(descKey, &desc); err != nil {
+		t.Fatal(err)
+	}
+
+	idx, err := desc.FindIndexByName("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	indexPrefix := sql.MakeIndexKeyPrefix(desc.ID, idx.ID)
+
+	indexStartKey := proto.Key(indexPrefix)
+	indexEndKey := indexStartKey.PrefixEnd()
+	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 3; len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+
+	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
+		t.Fatal(err)
+	}
+
+	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 0; len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+
+	if err := kvDB.GetProto(descKey, &desc); err != nil {
+		t.Fatal(err)
+	} else {
+		if _, err := desc.FindIndexByName("foo"); err == nil {
+			t.Fatalf("table descriptor still contains index after index is dropped")
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestDropTable(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, sqlDB, kvDB := setup(t)
+	defer cleanup(s, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	nameKey := sql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+
+	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
+	desc := sql.TableDescriptor{}
+	if err := kvDB.GetProto(descKey, &desc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add a zone config for the table.
+	buf, err := gogoproto.Marshal(config.DefaultZoneConfig)
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, desc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	zoneKey := sql.MakeZoneKey(desc.ID)
+	if gr, err := kvDB.Get(zoneKey); err != nil {
+		t.Fatal(err)
+	} else if !gr.Exists() {
+		t.Fatalf("zone config entry not found")
+	}
+
+	var tablePrefix []byte
+	tablePrefix = append(tablePrefix, keys.TableDataPrefix...)
+	tablePrefix = encoding.EncodeUvarint(tablePrefix, uint64(desc.ID))
+
+	tableStartKey := proto.Key(tablePrefix)
+	tableEndKey := tableStartKey.PrefixEnd()
+	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 6; len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+
+	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
+		t.Fatal(err)
+	}
+
+	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 0; len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+
+	if gr, err := kvDB.Get(descKey); err != nil {
+		t.Fatal(err)
+	} else if gr.Exists() {
+		t.Fatalf("table descriptor still exists after the table is dropped")
+	}
+
+	if gr, err := kvDB.Get(nameKey); err != nil {
+		t.Fatal(err)
+	} else if gr.Exists() {
+		t.Fatalf("table namekey still exists after the table is dropped")
+	}
+
+	if gr, err := kvDB.Get(zoneKey); err != nil {
+		t.Fatal(err)
+	} else if gr.Exists() {
+		t.Fatalf("zone config entry still exists after the table is dropped")
 	}
 }
