@@ -117,7 +117,7 @@ func (n *groupNode) Values() parser.DTuple {
 }
 
 func (n *groupNode) Next() bool {
-	if !n.needGroup {
+	if !n.needGroup || n.err != nil {
 		return false
 	}
 	n.needGroup = false
@@ -127,7 +127,7 @@ func (n *groupNode) Next() bool {
 	for n.plan.Next() {
 		values := n.plan.Values()
 		for i, f := range n.funcs {
-			if n.err = f.impl.Add(values[i]); n.err != nil {
+			if n.err = f.Add(values[i]); n.err != nil {
 				return false
 			}
 		}
@@ -204,6 +204,9 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 				},
 				impl: impl.New(),
 			}
+			if t.Distinct {
+				f.seen = make(map[string]struct{})
+			}
 			v.funcs = append(v.funcs, f)
 			return nil, &f.val
 		}
@@ -259,6 +262,37 @@ func (v *aggregateValue) Datum() parser.Datum {
 type aggregateFunc struct {
 	val  aggregateValue
 	impl aggregateImpl
+	seen map[string]struct{}
+}
+
+func (a *aggregateFunc) Add(d parser.Datum) error {
+	if a.seen != nil {
+		encoded, err := encodeDatum(nil, d)
+		if err != nil {
+			return err
+		}
+		e := string(encoded)
+		if _, ok := a.seen[e]; ok {
+			// skip
+			return nil
+		}
+		a.seen[e] = struct{}{}
+	}
+	return a.impl.Add(d)
+}
+
+func encodeDatum(b []byte, d parser.Datum) ([]byte, error) {
+	if values, ok := d.(parser.DTuple); ok {
+		for _, val := range values {
+			var err error
+			b, err = encodeDatum(b, val)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return b, nil
+	}
+	return encodeTableKey(b, d)
 }
 
 type aggregateImpl interface {
