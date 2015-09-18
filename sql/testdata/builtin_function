@@ -157,10 +157,20 @@ SELECT to_hex(2147483647)
 ----
 7fffffff
 
-query T
+query I
+SELECT strpos('high', 'a')
+----
+0
+
+query I
 SELECT strpos('high', 'ig')
 ----
 2
+
+query I
+SELECT strpos('💩high', 'ig')
+----
+3
 
 query T
 SELECT btrim('xyxtrimyyx', 'xy')
@@ -183,14 +193,14 @@ SELECT ltrim('   trimxyz')
 trimxyz
 
 query T
-SELECT rtrim('zzzytrimxyz', 'xyz')
+SELECT rtrim('xyzzzzytrimxyz', 'xyz')
 ----
-zzzytrim
+xyzzzzytrim
 
 query T
-SELECT rtrim('zzzytrimxyz   ')
+SELECT 'a' || rtrim(' zzzytrimxyz   ')
 ----
-zzzytrimxyz
+a zzzytrimxyz
 
 query T
 SELECT reverse('abcde')
@@ -213,14 +223,14 @@ SELECT initcap('THOMAS')
 Thomas
 
 query T
-SELECT left('abcde', 2)
+SELECT left('💩abcde', 2)
 ----
-ab
+💩a
 
 query T
-SELECT right('abcde', 2)
+SELECT right('abcde💩', 2)
 ----
-de
+e💩
 
 # TIMESTAMP/DATE builtins.
 

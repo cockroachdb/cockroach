@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -206,7 +207,12 @@ var builtins = map[string][]builtin{
 
 	// TODO(XisiHuang): support the position(substring in string) syntax.
 	"strpos": {stringBuiltin2(func(s, substring string) (Datum, error) {
-		return DInt(strings.Index(s, substring) + 1), nil
+		index := strings.Index(s, substring)
+		if index < 0 {
+			return DInt(0), nil
+		}
+
+		return DInt(utf8.RuneCountInString(s[:index]) + 1), nil
 	}, DummyInt)},
 
 	// TODO(XisiHuang): support the trim([leading|trailing|both] [characters]
@@ -216,7 +222,7 @@ var builtins = map[string][]builtin{
 			return DString(strings.Trim(s, chars)), nil
 		}, DummyString),
 		stringBuiltin1(func(s string) (Datum, error) {
-			return DString(strings.Trim(s, " ")), nil
+			return DString(strings.TrimSpace(s)), nil
 		}, DummyString),
 	},
 
@@ -225,7 +231,7 @@ var builtins = map[string][]builtin{
 			return DString(strings.TrimLeft(s, chars)), nil
 		}, DummyString),
 		stringBuiltin1(func(s string) (Datum, error) {
-			return DString(strings.TrimLeft(s, " ")), nil
+			return DString(strings.TrimLeftFunc(s, unicode.IsSpace)), nil
 		}, DummyString),
 	},
 
@@ -234,7 +240,7 @@ var builtins = map[string][]builtin{
 			return DString(strings.TrimRight(s, chars)), nil
 		}, DummyString),
 		stringBuiltin1(func(s string) (Datum, error) {
-			return DString(strings.Trim(s, " ")), nil
+			return DString(strings.TrimRightFunc(s, unicode.IsSpace)), nil
 		}, DummyString),
 	},
 
@@ -285,17 +291,17 @@ var builtins = map[string][]builtin{
 			types:      typeList{stringType, intType},
 			returnType: DummyString,
 			fn: func(args DTuple) (Datum, error) {
-				str := string(args[0].(DString))
+				runes := []rune(string(args[0].(DString)))
 				n := int(args[1].(DInt))
 
-				if n < -len(str) {
+				if n < -len(runes) {
 					n = 0
 				} else if n < 0 {
-					n = len(str) + n
-				} else if n > len(str) {
-					n = len(str)
+					n = len(runes) + n
+				} else if n > len(runes) {
+					n = len(runes)
 				}
-				return DString(str[:n]), nil
+				return DString(runes[:n]), nil
 			},
 		},
 	},
@@ -305,17 +311,17 @@ var builtins = map[string][]builtin{
 			types:      typeList{stringType, intType},
 			returnType: DummyString,
 			fn: func(args DTuple) (Datum, error) {
-				str := string(args[0].(DString))
+				runes := []rune(string(args[0].(DString)))
 				n := int(args[1].(DInt))
 
-				if n < -len(str) {
+				if n < -len(runes) {
 					n = 0
 				} else if n < 0 {
-					n = len(str) + n
-				} else if n > len(str) {
-					n = len(str)
+					n = len(runes) + n
+				} else if n > len(runes) {
+					n = len(runes)
 				}
-				return DString(str[len(str)-n:]), nil
+				return DString(runes[len(runes)-n:]), nil
 			},
 		},
 	},
