@@ -286,17 +286,17 @@ var builtins = map[string][]builtin{
 			types:      typeList{stringType, intType},
 			returnType: DummyString,
 			fn: func(args DTuple) (Datum, error) {
-				str := string(args[0].(DString))
+				runes := []rune(string(args[0].(DString)))
 				n := int(args[1].(DInt))
 
-				if n < -len(str) {
+				if n < -len(runes) {
 					n = 0
 				} else if n < 0 {
-					n = len(str) + n
-				} else if n > len(str) {
-					n = len(str)
+					n = len(runes) + n
+				} else if n > len(runes) {
+					n = len(runes)
 				}
-				return DString(str[:n]), nil
+				return DString(runes[:n]), nil
 			},
 		},
 	},
@@ -306,17 +306,17 @@ var builtins = map[string][]builtin{
 			types:      typeList{stringType, intType},
 			returnType: DummyString,
 			fn: func(args DTuple) (Datum, error) {
-				str := string(args[0].(DString))
+				runes := []rune(string(args[0].(DString)))
 				n := int(args[1].(DInt))
 
-				if n < -len(str) {
+				if n < -len(runes) {
 					n = 0
 				} else if n < 0 {
-					n = len(str) + n
-				} else if n > len(str) {
-					n = len(str)
+					n = len(runes) + n
+				} else if n > len(runes) {
+					n = len(runes)
 				}
-				return DString(str[len(str)-n:]), nil
+				return DString(runes[len(runes)-n:]), nil
 			},
 		},
 	},

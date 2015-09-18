@@ -213,14 +213,14 @@ SELECT initcap('THOMAS')
 Thomas
 
 query T
-SELECT left('abcde', 2)
+SELECT left('💩abcde', 2)
 ----
-ab
+💩a
 
 query T
-SELECT right('abcde', 2)
+SELECT right('abcde💩', 2)
 ----
-de
+e💩
 
 # TIMESTAMP/DATE builtins.
 
