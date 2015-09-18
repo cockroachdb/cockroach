@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -216,7 +217,7 @@ var builtins = map[string][]builtin{
 			return DString(strings.Trim(s, chars)), nil
 		}, DummyString),
 		stringBuiltin1(func(s string) (Datum, error) {
-			return DString(strings.Trim(s, " ")), nil
+			return DString(strings.TrimSpace(s)), nil
 		}, DummyString),
 	},
 
@@ -225,7 +226,7 @@ var builtins = map[string][]builtin{
 			return DString(strings.TrimLeft(s, chars)), nil
 		}, DummyString),
 		stringBuiltin1(func(s string) (Datum, error) {
-			return DString(strings.TrimLeft(s, " ")), nil
+			return DString(strings.TrimLeftFunc(s, unicode.IsSpace)), nil
 		}, DummyString),
 	},
 
@@ -234,7 +235,7 @@ var builtins = map[string][]builtin{
 			return DString(strings.TrimRight(s, chars)), nil
 		}, DummyString),
 		stringBuiltin1(func(s string) (Datum, error) {
-			return DString(strings.Trim(s, " ")), nil
+			return DString(strings.TrimRightFunc(s, unicode.IsSpace)), nil
 		}, DummyString),
 	},
 

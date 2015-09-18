@@ -183,14 +183,14 @@ SELECT ltrim('   trimxyz')
 trimxyz
 
 query T
-SELECT rtrim('zzzytrimxyz', 'xyz')
+SELECT rtrim('xyzzzzytrimxyz', 'xyz')
 ----
-zzzytrim
+xyzzzzytrim
 
 query T
-SELECT rtrim('zzzytrimxyz   ')
+SELECT 'a' || rtrim(' zzzytrimxyz   ')
 ----
-zzzytrimxyz
+a zzzytrimxyz
 
 query T
 SELECT reverse('abcde')
