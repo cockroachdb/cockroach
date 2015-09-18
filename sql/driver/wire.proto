@@ -46,6 +46,7 @@ message Datum {
     bytes bytes_val = 4;
     string string_val = 5;
     Timestamp time_val = 6;
+    int64 interval_val = 7;
     // TODO(vivek): Add additional types like Date and Interval that are
     // supported by Cockroach but not supported by the Go sql driver. These
     // will be useful for drivers in other languages.

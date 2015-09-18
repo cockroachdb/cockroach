@@ -82,7 +82,7 @@ CREATE TABLE t.alltypes (
 		e sql.NullBool
 		f *time.Time
 		g *time.Time
-		h sql.NullString // TODO(tamird): h is a time.Duration; can we do better?
+		h *int64
 	)
 
 	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
@@ -149,8 +149,8 @@ CREATE TABLE t.alltypes (
 		}
 
 		if !(a == 123 && b.Float64 == 3.4 && c.String == "blah" && d.String == "foo" &&
-			e.Bool && f.Equal(timeVal) && g.Equal(dateVal) && h.String == intervalVal.String()) {
-			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g})
+			e.Bool && f.Equal(timeVal) && g.Equal(dateVal) && *h == intervalVal.Nanoseconds()) {
+			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g, h})
 		}
 
 		rows.Next()
@@ -162,8 +162,8 @@ CREATE TABLE t.alltypes (
 			t.Fatal(err)
 		}
 
-		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && !e.Valid && f == nil && g == nil && !h.Valid) {
-			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g})
+		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && !e.Valid && f == nil && g == nil && h == nil) {
+			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g, h})
 		}
 
 		if rows.Next() {
@@ -188,8 +188,8 @@ CREATE TABLE t.alltypes (
 			t.Fatal(err)
 		}
 
-		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && !e.Valid && f == nil && g == nil && !h.Valid) {
-			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g})
+		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && !e.Valid && f == nil && g == nil && h == nil) {
+			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g, h})
 		}
 
 		if rows.Next() {

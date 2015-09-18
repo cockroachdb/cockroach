@@ -41,6 +41,7 @@ type Datum struct {
 	//	*Datum_BytesVal
 	//	*Datum_StringVal
 	//	*Datum_TimeVal
+	//	*Datum_IntervalVal
 	Payload isDatum_Payload `protobuf_oneof:"payload"`
 }
 
@@ -72,13 +73,17 @@ type Datum_StringVal struct {
 type Datum_TimeVal struct {
 	TimeVal *Datum_Timestamp `protobuf:"bytes,6,opt,name=time_val,oneof"`
 }
+type Datum_IntervalVal struct {
+	IntervalVal int64 `protobuf:"varint,7,opt,name=interval_val,oneof"`
+}
 
-func (*Datum_BoolVal) isDatum_Payload()   {}
-func (*Datum_IntVal) isDatum_Payload()    {}
-func (*Datum_FloatVal) isDatum_Payload()  {}
-func (*Datum_BytesVal) isDatum_Payload()  {}
-func (*Datum_StringVal) isDatum_Payload() {}
-func (*Datum_TimeVal) isDatum_Payload()   {}
+func (*Datum_BoolVal) isDatum_Payload()     {}
+func (*Datum_IntVal) isDatum_Payload()      {}
+func (*Datum_FloatVal) isDatum_Payload()    {}
+func (*Datum_BytesVal) isDatum_Payload()    {}
+func (*Datum_StringVal) isDatum_Payload()   {}
+func (*Datum_TimeVal) isDatum_Payload()     {}
+func (*Datum_IntervalVal) isDatum_Payload() {}
 
 func (m *Datum) GetPayload() isDatum_Payload {
 	if m != nil {
@@ -129,6 +134,13 @@ func (m *Datum) GetTimeVal() *Datum_Timestamp {
 	return nil
 }
 
+func (m *Datum) GetIntervalVal() int64 {
+	if x, ok := m.GetPayload().(*Datum_IntervalVal); ok {
+		return x.IntervalVal
+	}
+	return 0
+}
+
 // XXX_OneofFuncs is for the internal use of the proto package.
 func (*Datum) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), []interface{}) {
 	return _Datum_OneofMarshaler, _Datum_OneofUnmarshaler, []interface{}{
@@ -138,6 +150,7 @@ func (*Datum) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, 
 		(*Datum_BytesVal)(nil),
 		(*Datum_StringVal)(nil),
 		(*Datum_TimeVal)(nil),
+		(*Datum_IntervalVal)(nil),
 	}
 }
 
@@ -169,6 +182,9 @@ func _Datum_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 		if err := b.EncodeMessage(x.TimeVal); err != nil {
 			return err
 		}
+	case *Datum_IntervalVal:
+		_ = b.EncodeVarint(7<<3 | proto.WireVarint)
+		_ = b.EncodeVarint(uint64(x.IntervalVal))
 	case nil:
 	default:
 		return fmt.Errorf("Datum.Payload has unexpected type %T", x)
@@ -221,6 +237,13 @@ func _Datum_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) 
 		msg := new(Datum_Timestamp)
 		err := b.DecodeMessage(msg)
 		m.Payload = &Datum_TimeVal{msg}
+		return true, err
+	case 7: // payload.interval_val
+		if wire != proto.WireVarint {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeVarint()
+		m.Payload = &Datum_IntervalVal{int64(x)}
 		return true, err
 	default:
 		return false, nil
@@ -462,6 +485,13 @@ func (m *Datum_TimeVal) MarshalTo(data []byte) (int, error) {
 		}
 		i += n2
 	}
+	return i, nil
+}
+func (m *Datum_IntervalVal) MarshalTo(data []byte) (int, error) {
+	i := 0
+	data[i] = 0x38
+	i++
+	i = encodeVarintWire(data, i, uint64(m.IntervalVal))
 	return i, nil
 }
 func (m *Datum_Timestamp) Marshal() (data []byte, err error) {
@@ -726,6 +756,12 @@ func (m *Datum_TimeVal) Size() (n int) {
 		l = m.TimeVal.Size()
 		n += 1 + l + sovWire(uint64(l))
 	}
+	return n
+}
+func (m *Datum_IntervalVal) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovWire(uint64(m.IntervalVal))
 	return n
 }
 func (m *Datum_Timestamp) Size() (n int) {
@@ -998,6 +1034,26 @@ func (m *Datum) Unmarshal(data []byte) error {
 			}
 			m.Payload = &Datum_TimeVal{v}
 			iNdEx = postIndex
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IntervalVal", wireType)
+			}
+			var v int64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Payload = &Datum_IntervalVal{v}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipWire(data[iNdEx:])

@@ -81,6 +81,8 @@ func (d Datum) Value() (driver.Value, error) {
 		val = t.StringVal
 	case *Datum_TimeVal:
 		val = t.TimeVal.GoTime().UTC()
+	case *Datum_IntervalVal:
+		val = t.IntervalVal
 	}
 
 	if driver.IsValue(val) {

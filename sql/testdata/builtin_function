@@ -237,7 +237,7 @@ e💩
 query T
 SELECT age(timestamp '2001-04-10 22:06:45', timestamp '1957-06-13')
 ----
-384190h6m45s
+1383084405000000000
 
 query T
 SELECT age(timestamp '1957-06-13') - age(now(), timestamp '1957-06-13') < interval '10s'
