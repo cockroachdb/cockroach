@@ -157,6 +157,8 @@ func printQueryOutput(cols []string, allRows [][]string) error {
 
 func formatVal(val interface{}) string {
 	switch t := val.(type) {
+	case nil:
+		return "NULL"
 	case time.Time:
 		return t.Format(parser.TimestampWithOffsetZoneFormat)
 	}
