@@ -47,7 +47,7 @@ func TestPlaceholders(t *testing.T) {
 	s, db := setup(t)
 	defer cleanup(s, db)
 
-	year, month, day := 2015, time.August, 30
+	year, month, day := 3015, time.August, 30
 	timeVal := time.Date(year, month, day, 3, 34, 45, 345670000, time.UTC)
 	dateVal := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 	intervalVal, err := time.ParseDuration("34h2s")
