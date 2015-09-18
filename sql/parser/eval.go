@@ -401,12 +401,26 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 
 	cmpArgs{Like, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		pattern := regexp.QuoteMeta(string(right.(DString)))
+		// Replace LIKE specific wildcards with standard wildcards
 		pattern = strings.Replace(pattern, "%", ".*", -1)
 		pattern = strings.Replace(pattern, "_", ".", -1)
-		pattern = fmt.Sprintf("^%s$", pattern)
+		pattern = anchorPattern(pattern, false)
 
 		// TODO(pmattis): Can we cache this regexp compilation?
 		re := regexp.MustCompile(pattern)
+		return DBool(re.MatchString(string(left.(DString)))), nil
+	},
+
+	cmpArgs{SimilarTo, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
+		pattern := SimilarEscape(string(right.(DString)))
+		pattern = anchorPattern(pattern, false)
+
+		// TODO(pmattis): Can we cache this regexp compilation?
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return DBool(false), err
+		}
+
 		return DBool(re.MatchString(string(left.(DString)))), nil
 	},
 }
@@ -744,6 +758,10 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 		// NotLike(left, right) is implemented as !Like(left, right)
 		not = true
 		op = Like
+	case NotSimilarTo:
+		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
+		not = true
+		op = SimilarTo
 	case IsDistinctFrom:
 		// IsDistinctFrom(left, right) is implemented as !EQ(left, right)
 		//
@@ -765,11 +783,6 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 			return !d, nil
 		}
 		return d, err
-	}
-
-	switch op {
-	case SimilarTo, NotSimilarTo:
-		return DNull, util.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 
 	return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
@@ -1143,4 +1156,83 @@ func ParseTimestamp(s DString) (DTimestamp, error) {
 	}
 	// Parse other formats in the future.
 	return DummyTimestamp, err
+}
+
+// SimilarEscape converts a SQL:2008 regexp pattern to POSIX style, so it can
+// be used by our regexp engine.
+func SimilarEscape(pattern string) string {
+	return similarEscapeCustomChar(pattern, '\\')
+}
+
+// similarEscapeCustomChar converts a SQL:2008 regexp pattern to POSIX style,
+// so it can be used by our regexp engine. This version of the function allows
+// for a custom escape character.
+func similarEscapeCustomChar(pattern string, escapeChar rune) string {
+	patternBuilder := make([]rune, 0, utf8.RuneCountInString(pattern))
+
+	inCharClass := false
+	afterEscape := false
+	numQuotes := 0
+	for _, c := range pattern {
+		switch {
+		case afterEscape:
+			// For SUBSTRING patterns
+			if c == '"' && !inCharClass {
+				if numQuotes%2 == 0 {
+					patternBuilder = append(patternBuilder, '(')
+				} else {
+					patternBuilder = append(patternBuilder, ')')
+				}
+				numQuotes++
+			} else {
+				patternBuilder = append(patternBuilder, '\\', c)
+			}
+			afterEscape = false
+		case utf8.ValidRune(escapeChar) && c == escapeChar:
+			// SQL99 escape character; do not immediately send to output
+			afterEscape = true
+		case inCharClass:
+			if c == '\\' {
+				patternBuilder = append(patternBuilder, '\\')
+			}
+			patternBuilder = append(patternBuilder, c)
+			if c == ']' {
+				inCharClass = false
+			}
+		case c == '[':
+			patternBuilder = append(patternBuilder, c)
+			inCharClass = true
+		case c == '%':
+			patternBuilder = append(patternBuilder, '.', '*')
+		case c == '_':
+			patternBuilder = append(patternBuilder, '.')
+		case c == '(':
+			// Convert to non-capturing parenthesis
+			patternBuilder = append(patternBuilder, '(', '?', ':')
+		case c == '\\', c == '.', c == '^', c == '$':
+			// Escape these characters because they are NOT
+			// metacharacters for SQL-style regexp
+			patternBuilder = append(patternBuilder, '\\', c)
+		default:
+			patternBuilder = append(patternBuilder, c)
+		}
+	}
+
+	return string(patternBuilder)
+}
+
+// anchorPattern surrounds the transformed input string with
+//   ^(?: ... )$
+// which requires some explanation.  We need "^" and "$" to force
+// the pattern to match the entire input string as per SQL99 spec.
+// The "(?:" and ")" are a non-capturing set of parens; we have to have
+// parens in case the string contains "|", else the "^" and "$" will
+// be bound into the first and last alternatives which is not what we
+// want, and the parens must be non capturing because we don't want them
+// to count when selecting output for SUBSTRING.
+func anchorPattern(pattern string, caseInsensitive bool) string {
+	if caseInsensitive {
+		return fmt.Sprintf("^(?i:%s)$", pattern)
+	}
+	return fmt.Sprintf("^(?:%s)$", pattern)
 }

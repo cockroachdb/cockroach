@@ -200,6 +200,9 @@ func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum,
 	case NotLike:
 		// NotLike(left, right) is implemented as !Like(left, right)
 		op = Like
+	case NotSimilarTo:
+		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
+		op = SimilarTo
 	}
 
 	lType := reflect.TypeOf(dummyLeft)
@@ -219,11 +222,6 @@ func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum,
 		}
 
 		return cmpOpResultType, nil
-	}
-
-	switch op {
-	case SimilarTo, NotSimilarTo:
-		return nil, util.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 
 	return nil, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
