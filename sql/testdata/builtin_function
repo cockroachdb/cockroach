@@ -157,10 +157,20 @@ SELECT to_hex(2147483647)
 ----
 7fffffff
 
-query T
+query I
+SELECT strpos('high', 'a')
+----
+0
+
+query I
 SELECT strpos('high', 'ig')
 ----
 2
+
+query I
+SELECT strpos('💩high', 'ig')
+----
+3
 
 query T
 SELECT btrim('xyxtrimyyx', 'xy')
