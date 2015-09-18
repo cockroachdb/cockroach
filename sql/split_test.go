@@ -98,7 +98,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 			t.Fatalf("failed to retrieve range list: %s", err)
 		}
 		return num == 2
-	}, 500*time.Millisecond); err != nil {
+	}, 10*time.Second); err != nil {
 		t.Errorf("missing split: %s", err)
 	}
 
@@ -125,7 +125,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		}
 		t.Logf("Num ranges: %d", num)
 		return num == 3
-	}, 500*time.Millisecond); err != nil {
+	}, 10*time.Second); err != nil {
 		t.Errorf("missing split: %s", err)
 	}
 

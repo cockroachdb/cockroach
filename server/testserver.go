@@ -18,6 +18,7 @@
 package server
 
 import (
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
@@ -115,10 +116,18 @@ func (ts *TestServer) Clock() *hlc.Clock {
 	return nil
 }
 
-//TsDB returns the ts.DB instance used by the TestServer.
+// TsDB returns the ts.DB instance used by the TestServer.
 func (ts *TestServer) TsDB() *ts.DB {
 	if ts != nil {
 		return ts.tsDB
+	}
+	return nil
+}
+
+// DB returns the client.DB instance used by the TestServer.
+func (ts *TestServer) DB() *client.DB {
+	if ts != nil {
+		return ts.db
 	}
 	return nil
 }

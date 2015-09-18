@@ -125,7 +125,7 @@ func TestGet(t *testing.T) {
 	cfg := config.SystemConfig{}
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		val, found := cfg.Get([]byte(tc.key))
+		val, found := cfg.GetValue([]byte(tc.key))
 		if found != tc.found {
 			t.Errorf("#%d: expected found=%t", tcNum, tc.found)
 			continue
