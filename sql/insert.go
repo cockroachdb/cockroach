@@ -18,7 +18,6 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -272,44 +271,23 @@ func makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
 		return nil, nil
 	}
 
-	// Construct a SELECT statement with an output for each column. The output is
-	// either the DEFAULT expression or NULL if no default expression was
-	// configured.
-	var buf bytes.Buffer
-	buf.WriteString("SELECT ")
-	for i, col := range cols {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		if col.DefaultExpr != nil {
-			buf.WriteString(*col.DefaultExpr)
-		} else {
-			buf.WriteString("NULL")
-		}
-	}
-
-	sql := buf.String()
-	stmts, err := parser.ParseTraditional(sql)
-	if err != nil {
-		return nil, err
-	}
-	if len(stmts) != 1 {
-		return nil, util.Errorf("expected 1 statement, but found %d", len(stmts))
-	}
-	sel, ok := stmts[0].(*parser.Select)
-	if !ok {
-		return nil, util.Errorf("expected a SELECT statement, but found %T", stmts[0])
-	}
-	if n, m := len(cols), len(sel.Exprs); n != m {
-		return nil, util.Errorf("expected %d outputs, but found %d", n, m)
-	}
-
 	// Build the default expressions map from the parsed SELECT statement.
 	defaultExprs := make([]parser.Expr, 0, len(cols))
-	for i := range cols {
-		expr, err := parser.NormalizeExpr(sel.Exprs[i].Expr)
+	for _, col := range cols {
+		if col.DefaultExpr == nil {
+			defaultExprs = append(defaultExprs, parser.DNull)
+			continue
+		}
+		expr, err := parser.ParseExpr(*col.DefaultExpr, parser.Traditional)
 		if err != nil {
 			return nil, err
+		}
+		expr, err = parser.NormalizeExpr(expr)
+		if err != nil {
+			return nil, err
+		}
+		if parser.ContainsVars(expr) {
+			return nil, util.Errorf("default expression contains variables")
 		}
 		defaultExprs = append(defaultExprs, expr)
 	}
