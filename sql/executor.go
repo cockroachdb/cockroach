@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
@@ -267,7 +266,7 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 	case *string:
 		return parser.DString(*t), true
 	case *driver.Datum_Timestamp:
-		return parser.DTimestamp{Time: time.Unix((*t).Sec, int64((*t).Nsec)).UTC()}, true
+		return parser.DTimestamp{Time: t.GoTime().UTC()}, true
 	default:
 		panic(fmt.Sprintf("unexpected type %T", t))
 	}

@@ -80,7 +80,7 @@ func (d Datum) Value() (driver.Value, error) {
 	case *string:
 		val = *t
 	case *Datum_Timestamp:
-		val = time.Unix((*t).Sec, int64((*t).Nsec)).UTC()
+		val = t.GoTime().UTC()
 	}
 
 	if driver.IsValue(val) {
@@ -104,6 +104,11 @@ func (d Datum) String() string {
 	}
 
 	return fmt.Sprint(v)
+}
+
+// GoTime converts the timestamp to a time.Time.
+func (t Datum_Timestamp) GoTime() time.Time {
+	return time.Unix(t.Sec, int64(t.Nsec))
 }
 
 // Method returns the method.
