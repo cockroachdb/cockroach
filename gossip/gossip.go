@@ -119,6 +119,15 @@ type Gossip struct {
 	disconnected  chan *client        // Channel of disconnected clients
 	stalled       chan struct{}       // Channel to wakeup stalled bootstrap
 
+	// The system config is treated unlike other info objects.
+	// It is used so often that we keep an unmarshalled version of it
+	// here and its own set of callbacks.
+	// We do not use the infostore to avoid unmarshalling under the
+	// main gossip lock.
+	systemConfig          *config.SystemConfig
+	systemConfigMu        sync.RWMutex
+	systemConfigCallbacks []systemConfigCallback
+
 	// resolvers is a list of resolvers used to determine
 	// bootstrap hosts for connecting to the gossip network.
 	resolverIdx int
@@ -147,6 +156,9 @@ func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []reso
 		g.bsRPCContext.DisableCache = true
 		g.bsRPCContext.RemoteClocks = nil
 	}
+
+	// Add ourselves as a SystemConfig watcher.
+	g.is.registerCallback(KeySystemConfig, g.updateSystemConfig)
 	return g
 }
 
@@ -280,15 +292,6 @@ func (g *Gossip) GetInfoProto(key string, proto gogoproto.Message) error {
 	return gogoproto.Unmarshal(bytes, proto)
 }
 
-// GetSystemConfig returns the system config.
-func (g *Gossip) GetSystemConfig() (*config.SystemConfig, error) {
-	cfg := &config.SystemConfig{}
-	if err := g.GetInfoProto(KeySystemConfig, cfg); err != nil {
-		return nil, err
-	}
-	return cfg, nil
-}
-
 // GetInfosAsJSON returns the contents of the infostore, marshalled to
 // JSON.
 func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
@@ -306,9 +309,62 @@ type Callback func(key string, content []byte)
 // received. The callback method is invoked with the info key which
 // matched pattern.
 func (g *Gossip) RegisterCallback(pattern string, method Callback) {
+	if pattern == KeySystemConfig {
+		log.Warning("raw gossip callback registered on %s, consider using RegisterSystemConfigCallback",
+			KeySystemConfig)
+	}
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.is.registerCallback(pattern, method)
+}
+
+// GetSystemConfig returns the local unmarshalled version of the
+// system config. It may be nil if it was never gossiped.
+func (g *Gossip) GetSystemConfig() *config.SystemConfig {
+	g.systemConfigMu.RLock()
+	defer g.systemConfigMu.RUnlock()
+	return g.systemConfig
+}
+
+type systemConfigCallback func(*config.SystemConfig)
+
+// RegisterSystemConfigCallback registers a callback for the unmarshalled
+// system config. It is called after registration, and whenever a new
+// system config is successfully unmarshalled.
+func (g *Gossip) RegisterSystemConfigCallback(method systemConfigCallback) {
+	g.systemConfigMu.Lock()
+	defer g.systemConfigMu.Unlock()
+	g.systemConfigCallbacks = append(g.systemConfigCallbacks, method)
+
+	if g.systemConfig == nil {
+		return
+	}
+
+	// Run the callback right away if we have a config.
+	go method(g.systemConfig)
+}
+
+// updateSystemConfig is the raw gossip info callback.
+// Unmarshal the system config, and if successfuly, update out
+// copy and run the callbacks.
+func (g *Gossip) updateSystemConfig(key string, content []byte) {
+	if key != KeySystemConfig {
+		log.Fatalf("wrong key received on SystemConfig callback: %s", key)
+		return
+	}
+	cfg := &config.SystemConfig{}
+	if err := gogoproto.Unmarshal(content, cfg); err != nil {
+		log.Errorf("could not unmarshal system config on callback: %s", err)
+		return
+	}
+
+	g.systemConfigMu.Lock()
+	defer g.systemConfigMu.Unlock()
+	g.systemConfig = cfg
+	for _, cb := range g.systemConfigCallbacks {
+		go cb(cfg)
+	}
 }
 
 // MaxHops returns the maximum number of hops to reach the furthest

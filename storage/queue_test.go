@@ -50,6 +50,13 @@ func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
 		t.Fatal(err)
 	}
 
+	// Wait for SystemConfig.
+	if err := util.IsTrueWithin(func() bool {
+		return g.GetSystemConfig() != nil
+	}, 100*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+
 	return g, stopper
 }
 
@@ -373,9 +380,9 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.Start(clock, stopper)
 
 	// Check our config.
-	sysCfg, err := g.GetSystemConfig()
-	if err != nil {
-		t.Fatal(err)
+	sysCfg := g.GetSystemConfig()
+	if sysCfg == nil {
+		t.Fatal("nil config")
 	}
 	if sysCfg.NeedsSplit(neverSplits.Desc().StartKey, neverSplits.Desc().EndKey) {
 		t.Fatal("System config says range needs to be split")

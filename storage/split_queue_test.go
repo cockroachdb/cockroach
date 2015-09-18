@@ -74,9 +74,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 
 	splitQ := newSplitQueue(nil, tc.gossip)
 
-	cfg, err := tc.gossip.GetSystemConfig()
-	if err != nil {
-		t.Fatal(err)
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
+		t.Fatal("nil config")
 	}
 
 	for i, test := range testCases {

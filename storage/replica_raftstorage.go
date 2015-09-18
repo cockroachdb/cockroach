@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"fmt"
 	"sync/atomic"
 	"unsafe"
 
@@ -348,9 +349,9 @@ func (r *Replica) updateRangeInfo() error {
 	// since the original range and the new range might belong
 	// to different zones.
 	// Load the system config.
-	cfg, err := r.rm.Gossip().GetSystemConfig()
-	if err != nil {
-		return err
+	cfg := r.rm.Gossip().GetSystemConfig()
+	if cfg == nil {
+		return fmt.Errorf("no system config available")
 	}
 
 	// Find zone config for this range.

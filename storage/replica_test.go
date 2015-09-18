@@ -197,6 +197,13 @@ func (tc *testContext) initConfigs(realRange bool) error {
 		return err
 	}
 
+	// Wait for the unmarshalling callback to run.
+	if err := util.IsTrueWithin(func() bool {
+		return tc.gossip.GetSystemConfig() != nil
+	}, 100*time.Millisecond); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -547,12 +554,14 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	}
 
 	verifySystem := func() bool {
-		cfg, err := tc.gossip.GetSystemConfig()
-		if err != nil {
-			t.Fatal(err)
-		}
-		numValues := len(cfg.Values)
-		return numValues == 1 && cfg.Values[numValues-1].Key.Equal(key)
+		return util.IsTrueWithin(func() bool {
+			cfg := tc.gossip.GetSystemConfig()
+			if cfg == nil {
+				return false
+			}
+			numValues := len(cfg.Values)
+			return numValues == 1 && cfg.Values[numValues-1].Key.Equal(key)
+		}, 100*time.Millisecond) == nil
 	}
 
 	// If this actually failed, we would have gossiped from MVCCPutProto.
@@ -712,9 +721,9 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	_, err := tc.gossip.GetSystemConfig()
-	if err != nil {
-		t.Fatal(err)
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
+		t.Fatal("nil config")
 	}
 }
 
@@ -748,9 +757,9 @@ func TestRangeNoGossipConfig(t *testing.T) {
 		}
 
 		// System config is not gossiped.
-		cfg, err := tc.gossip.GetSystemConfig()
-		if err != nil {
-			t.Fatal(err)
+		cfg := tc.gossip.GetSystemConfig()
+		if cfg == nil {
+			t.Fatal("nil config")
 		}
 		if len(cfg.Values) != 0 {
 			t.Errorf("System config was gossiped at #%d", i)
@@ -798,7 +807,11 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 
 	// Make sure the information for db1 is not gossiped.
 	tc.rng.maybeGossipSystemConfig()
-	cfg, err := tc.gossip.GetSystemConfig()
+	// Fetch the raw gossip info. GetSystemConfig is based on callbacks at
+	// modification time. But we're checking for _not_ gossiped, so there should
+	// be no callbacks. Easier to check the raw info.
+	var cfg config.SystemConfig
+	err := tc.gossip.GetInfoProto(gossip.KeySystemConfig, &cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
