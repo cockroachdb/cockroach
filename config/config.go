@@ -125,8 +125,11 @@ func (s *SystemConfig) Get(key proto.Key) ([]byte, bool) {
 // GetLargestObjectID returns the largest object ID found in the config.
 // This could be either a table or a database.
 func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
-	if TestingLargestIDHook != nil {
-		return TestingLargestIDHook(), nil
+	testingLock.Lock()
+	hook := TestingLargestIDHook
+	testingLock.Unlock()
+	if hook != nil {
+		return hook(), nil
 	}
 
 	if len(s.Values) == 0 {
@@ -177,14 +180,17 @@ func (s *SystemConfig) GetZoneConfigForKey(key proto.Key) (*ZoneConfig, error) {
 // GetZoneConfigForID looks up the zone config for the object (table or database)
 // with 'id'.
 func (s *SystemConfig) GetZoneConfigForID(id uint32) (*ZoneConfig, error) {
-	if ZoneConfigHook == nil {
+	testingLock.Lock()
+	hook := ZoneConfigHook
+	testingLock.Unlock()
+	if hook == nil {
 		return nil, util.Errorf("ZoneConfigHook not set, unable to lookup zone config")
 	}
 	// For now, only user databases and tables get custom zone configs.
 	if id <= keys.MaxReservedDescID {
 		return DefaultZoneConfig, nil
 	}
-	return ZoneConfigHook(s, id)
+	return hook(s, id)
 }
 
 // ComputeSplitKeys takes a start and end key and returns an array of keys
