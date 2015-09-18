@@ -20,7 +20,7 @@ statement ok
 INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT)
 
 query IBB
-SELECT a, b >= now(), c >= 0.0 FROM t
+SELECT a, b <= now(), c >= 0.0 FROM t
 ----
 42 true true
 
@@ -31,7 +31,7 @@ statement ok
 INSERT INTO t DEFAULT VALUES
 
 query IBB
-SELECT a, b >= now(), c >= 0.0 FROM t
+SELECT a, b <= now(), c >= 0.0 FROM t
 ----
 42 true true
 
@@ -39,7 +39,7 @@ statement ok
 INSERT INTO t (a) VALUES (1)
 
 query IBB
-SELECT a, b >= now(), c >= 0.0 FROM t WHERE a = 1
+SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 1
 ----
 1 true true
 
@@ -47,7 +47,7 @@ statement ok
 INSERT INTO t VALUES (2)
 
 query IBB
-SELECT a, b >= now(), c >= 0.0 FROM t WHERE a = 2
+SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 2
 ----
 2 true true
 
@@ -58,7 +58,7 @@ statement ok
 UPDATE t SET b = DEFAULT WHERE a = 1
 
 query IBB
-SELECT a, b >= now(), c = -1.0 FROM t WHERE a = 1
+SELECT a, b <= now(), c = -1.0 FROM t WHERE a = 1
 ----
 1 true true
 
@@ -66,7 +66,6 @@ statement ok
 UPDATE t SET (b, c) = (DEFAULT, DEFAULT) WHERE a = 2
 
 query IBB
-SELECT a, b >= now(), c >= 0.0 FROM t WHERE a = 2
+SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 2
 ----
 2 true true
-
