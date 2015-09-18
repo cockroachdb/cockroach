@@ -157,10 +157,19 @@ GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
 	@mkdir -p $(dir $@)
 	@ln -s ../../$(basename $<) $(dir $@)
 
+GLOCK := ../../../../bin/glock
+#        ^  ^  ^  ^~ GOPATH
+#        |  |  |~ GOPATH/src
+#        |  |~ GOPATH/src/github.com
+#        |~ GOPATH/src/github.com/cockroachdb
+
+$(GLOCK):
+	go get github.com/robfig/glock
+
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) build/devbase/deps.sh GLOCKFILE
-	@build/devbase/deps.sh
+.bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE
+	@glock sync github.com/cockroachdb/cockroach
 	@touch $@
 
 -include .bootstrap

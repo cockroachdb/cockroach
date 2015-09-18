@@ -12,8 +12,7 @@ if [ "${1-}" = "docker" ]; then
   cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
 
   # Pretend we're already bootstrapped, so that `make` doesn't go
-  # through the bootstrap process which would glock sync and run
-  # build/devbase/deps.sh (unnecessarily).
+  # through the bootstrap process which would glock sync unnecessarily.
   touch .bootstrap
 
   # Restore previously cached build artifacts.
@@ -56,12 +55,6 @@ if ! docker images | grep -q "${tag}"; then
     docker tag -f "cockroachdb/builder:${tag}" "cockroachdb/builder:latest"
   fi
 fi
-
-# TODO(pmattis): This script differs from build/devbase/deps.sh. It
-# would be nice to re-unify the two. The problematic part is that this
-# script performs "git" work in the host environment and "go" work
-# inside the docker container. The "deps.sh" script doesn't know about
-# the separation between the two environments.
 
 HOME="" go get -d -u github.com/cockroachdb/build-cache
 HOME="" go get -u github.com/robfig/glock
