@@ -67,14 +67,6 @@ type Config struct {
 	HeartbeatIntervalTicks int
 	TickInterval           time.Duration
 
-	// EventBufferSize is the capacity (in number of events) of the
-	// MultiRaft.Events channel. In tests, we use 0 to ensure that there
-	// are no deadlocks when the limit is reached; real deployments may
-	// want to set a buffer so that applying a command committed on one
-	// group does not interfere with other groups or cause heartbeats to
-	// be missed.
-	EventBufferSize int
-
 	EntryFormatter raft.EntryFormatter
 }
 
@@ -102,7 +94,7 @@ type MultiRaft struct {
 	Config
 	stopper         *stop.Stopper
 	multiNode       raft.MultiNode
-	Events          chan interface{}
+	Events          chan []interface{}
 	nodeID          proto.RaftNodeID
 	reqChan         chan *RaftMessageRequest
 	createGroupChan chan *createGroupOp
@@ -150,7 +142,7 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *stop.Stopper
 		nodeID:    nodeID,
 
 		// Output channel.
-		Events: make(chan interface{}, config.EventBufferSize),
+		Events: make(chan []interface{}),
 
 		// Input channels.
 		reqChan:         make(chan *RaftMessageRequest, reqBufferSize),
@@ -184,11 +176,8 @@ func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest) (*RaftMessageRes
 	}
 }
 
-func (m *MultiRaft) sendEvent(event interface{}) {
-	select {
-	case m.Events <- event:
-	case <-m.stopper.ShouldStop():
-	}
+func (s *state) sendEvent(event interface{}) {
+	s.pendingEvents = append(s.pendingEvents, event)
 }
 
 // fanoutHeartbeat sends the given heartbeat to all groups which believe that
@@ -391,6 +380,10 @@ type group struct {
 	writing bool
 	// nodeIDs track the remote nodes associated with this group.
 	nodeIDs []proto.RaftNodeID
+	// waitForCallback is true while a configuration change callback
+	// is waiting to be called. It's a bool other than a counter
+	// as only one configuration change should be pending in range leader.
+	waitForCallback bool
 }
 
 type createGroupOp struct {
@@ -428,6 +421,9 @@ type state struct {
 	groups    map[proto.RangeID]*group
 	nodes     map[proto.RaftNodeID]*node
 	writeTask *writeTask
+	// Buffer the events and send them in batch to avoid the deadlock
+	// between s.Events channel and callbackChan.
+	pendingEvents []interface{}
 }
 
 func newState(m *MultiRaft) *state {
@@ -465,6 +461,7 @@ func (s *state) start() {
 			// performing all writes synchronously.
 			// TODO(bdarnell): either reinstate writeReady or rip it out completely.
 			//var writeReady chan struct{}
+			var eventsChan chan []interface{}
 
 			// The order of operations in this loop structure is as follows:
 			// start by setting raftReady to the multiNode's Ready()
@@ -477,6 +474,12 @@ func (s *state) start() {
 				//writeReady = s.writeTask.ready
 			} else if writingGroups == nil {
 				raftReady = s.multiNode.Ready()
+			}
+
+			// If there is any pending events, then check the s.Events to see
+			// if it's free to accept pending events.
+			if len(s.pendingEvents) > 0 {
+				eventsChan = s.Events
 			}
 
 			if log.V(8) {
@@ -569,7 +572,16 @@ func (s *state) start() {
 				}
 
 			case cb := <-s.callbackChan:
+				if log.V(8) {
+					log.Infof("node %v: got callback", s.nodeID)
+				}
 				cb()
+
+			case eventsChan <- s.pendingEvents:
+				if log.V(8) {
+					log.Infof("node %v: send pendingEvents len %d", s.nodeID, len(s.pendingEvents))
+				}
+				s.pendingEvents = nil
 			}
 		}
 	})
@@ -787,6 +799,11 @@ func (s *state) propose(p *proposal) {
 		s.removePending(nil, p, ErrGroupDeleted)
 		return
 	}
+	// If configration change callback is pending, wait for it.
+	if g.waitForCallback {
+		g.pending[p.commandID] = p
+		return
+	}
 
 	if log.V(3) {
 		log.Infof("group %d: new proposal %x", p.groupID, p.commandID)
@@ -881,6 +898,7 @@ func (s *state) processCommittedEntry(groupID proto.RangeID, g *group, entry raf
 		if len(cc.Context) > 0 {
 			commandID, payload = decodeCommand(cc.Context)
 		}
+		g.waitForCallback = true
 		s.sendEvent(&EventMembershipChangeCommitted{
 			GroupID:    groupID,
 			CommandID:  commandID,
@@ -914,11 +932,9 @@ func (s *state) processCommittedEntry(groupID proto.RangeID, g *group, entry raf
 							raftpb.ConfChange{})
 					}
 
-					// Re-submit all pending proposals, in case any of them were config changes
-					// that were dropped due to the one-at-a-time rule. This is a little
-					// redundant since most pending proposals won't benefit from this but
-					// config changes should be rare enough (and the size of the pending queue
-					// small enough) that it doesn't really matter.
+					// Re-submit all pending proposals that were held
+					// while the config change was pending
+					g.waitForCallback = false
 					for _, prop := range g.pending {
 						s.propose(prop)
 					}

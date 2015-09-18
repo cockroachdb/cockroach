@@ -474,10 +474,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		ElectionTimeoutTicks:   s.ctx.RaftElectionTimeoutTicks,
 		HeartbeatIntervalTicks: s.ctx.RaftHeartbeatIntervalTicks,
 		EntryFormatter:         raftEntryFormatter,
-		// TODO(bdarnell): Multiraft deadlocks if the Events channel is
-		// unbuffered. Temporarily give it some breathing room until the underlying
-		// deadlock is fixed. See #1185, #1193.
-		EventBufferSize: 1000,
 	}, s.stopper); err != nil {
 		return err
 	}
@@ -1442,57 +1438,59 @@ func (s *Store) processRaft() {
 	s.stopper.RunWorker(func() {
 		for {
 			select {
-			case e := <-s.multiraft.Events:
-				var cmd proto.RaftCommand
-				var groupID proto.RangeID
-				var commandID string
-				var index uint64
-				var callback func(error)
+			case events := <-s.multiraft.Events:
+				for _, e := range events {
+					var cmd proto.RaftCommand
+					var groupID proto.RangeID
+					var commandID string
+					var index uint64
+					var callback func(error)
 
-				switch e := e.(type) {
-				case *multiraft.EventCommandCommitted:
-					groupID = e.GroupID
-					commandID = e.CommandID
-					index = e.Index
-					err := gogoproto.Unmarshal(e.Command, &cmd)
-					if err != nil {
-						log.Fatal(err)
+					switch e := e.(type) {
+					case *multiraft.EventCommandCommitted:
+						groupID = e.GroupID
+						commandID = e.CommandID
+						index = e.Index
+						err := gogoproto.Unmarshal(e.Command, &cmd)
+						if err != nil {
+							log.Fatal(err)
+						}
+						if log.V(6) {
+							log.Infof("store %s: new committed command at index %d", s, e.Index)
+						}
+
+					case *multiraft.EventMembershipChangeCommitted:
+						groupID = e.GroupID
+						commandID = e.CommandID
+						index = e.Index
+						callback = e.Callback
+						err := gogoproto.Unmarshal(e.Payload, &cmd)
+						if err != nil {
+							log.Fatal(err)
+						}
+
+					default:
+						continue
 					}
-					if log.V(6) {
-						log.Infof("store %s: new committed command at index %d", s, e.Index)
+
+					if groupID != cmd.RangeID {
+						log.Fatalf("e.GroupID (%d) should == cmd.RangeID (%d)", groupID, cmd.RangeID)
 					}
 
-				case *multiraft.EventMembershipChangeCommitted:
-					groupID = e.GroupID
-					commandID = e.CommandID
-					index = e.Index
-					callback = e.Callback
-					err := gogoproto.Unmarshal(e.Payload, &cmd)
-					if err != nil {
-						log.Fatal(err)
+					s.mu.RLock()
+					r, ok := s.replicas[groupID]
+					s.mu.RUnlock()
+					var err error
+					if !ok {
+						err = util.Errorf("got committed raft command for %d but have no range with that ID: %+v",
+							groupID, cmd)
+						log.Error(err)
+					} else {
+						err = r.processRaftCommand(cmdIDKey(commandID), index, cmd)
 					}
-
-				default:
-					continue
-				}
-
-				if groupID != cmd.RangeID {
-					log.Fatalf("e.GroupID (%d) should == cmd.RangeID (%d)", groupID, cmd.RangeID)
-				}
-
-				s.mu.RLock()
-				r, ok := s.replicas[groupID]
-				s.mu.RUnlock()
-				var err error
-				if !ok {
-					err = util.Errorf("got committed raft command for %d but have no range with that ID: %+v",
-						groupID, cmd)
-					log.Error(err)
-				} else {
-					err = r.processRaftCommand(cmdIDKey(commandID), index, cmd)
-				}
-				if callback != nil {
-					callback(err)
+					if callback != nil {
+						callback(err)
+					}
 				}
 
 			case op := <-s.removeReplicaChan:
