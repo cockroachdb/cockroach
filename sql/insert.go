@@ -77,7 +77,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 	// Construct the default expressions. The returned slice will be nil if no
 	// column in the table has a default expression.
-	defaultExprs, err := p.makeDefaultExprs(cols)
+	defaultExprs, err := makeDefaultExprs(cols)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +225,39 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 	return cols, nil
 }
 
-func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
+func (p *planner) fillDefaults(defaultExprs []parser.Expr,
+	cols []ColumnDescriptor, rows parser.SelectStatement) (parser.SelectStatement, error) {
+	switch values := rows.(type) {
+	case nil:
+		// This indicates a DEFAULT VALUES expression.
+		row := make(parser.Tuple, 0, len(cols))
+		for i := range cols {
+			if defaultExprs == nil {
+				row = append(row, parser.DNull)
+				continue
+			}
+			row = append(row, defaultExprs[i])
+		}
+		return parser.Values{row}, nil
+
+	case parser.Values:
+		for _, tuple := range values {
+			for i, val := range tuple {
+				switch val.(type) {
+				case parser.DefaultVal:
+					if defaultExprs == nil {
+						tuple[i] = parser.DNull
+						continue
+					}
+					tuple[i] = defaultExprs[i]
+				}
+			}
+		}
+	}
+	return rows, nil
+}
+
+func makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there are
 	// no DEFAULT expressions, we don't bother with constructing the defaults map
 	// as the defaults are all NULL.
@@ -257,7 +289,7 @@ func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, erro
 	}
 
 	sql := buf.String()
-	stmts, err := parser.Parse(sql, parser.Syntax(p.session.Syntax))
+	stmts, err := parser.ParseTraditional(sql)
 	if err != nil {
 		return nil, err
 	}
@@ -282,36 +314,4 @@ func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, erro
 		defaultExprs = append(defaultExprs, expr)
 	}
 	return defaultExprs, nil
-}
-
-func (p *planner) fillDefaults(defaultExprs []parser.Expr,
-	cols []ColumnDescriptor, rows parser.SelectStatement) (parser.SelectStatement, error) {
-	switch values := rows.(type) {
-	case nil:
-		// This indicates a DEFAULT VALUES expression.
-		row := make(parser.Tuple, 0, len(cols))
-		for i := range cols {
-			if defaultExprs == nil {
-				row = append(row, parser.DNull)
-				continue
-			}
-			row = append(row, defaultExprs[i])
-		}
-		return parser.Values{row}, nil
-
-	case parser.Values:
-		for _, tuple := range values {
-			for i, val := range tuple {
-				switch val.(type) {
-				case parser.DefaultVal:
-					if defaultExprs == nil {
-						tuple[i] = parser.DNull
-						continue
-					}
-					tuple[i] = defaultExprs[i]
-				}
-			}
-		}
-	}
-	return rows, nil
 }
