@@ -81,6 +81,8 @@ func (d Datum) Value() (driver.Value, error) {
 		val = t.BytesVal
 	case *Datum_StringVal:
 		val = t.StringVal
+	case *Datum_DateVal:
+		val = t.DateVal.GoTime().UTC()
 	case *Datum_TimeVal:
 		val = t.TimeVal.GoTime().UTC()
 	case *Datum_IntervalVal:

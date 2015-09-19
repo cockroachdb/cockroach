@@ -45,11 +45,9 @@ message Datum {
     double float_val = 3;
     bytes bytes_val = 4;
     string string_val = 5;
-    Timestamp time_val = 6;
-    int64 interval_val = 7;
-    // TODO(vivek): Add additional types like Date and Interval that are
-    // supported by Cockroach but not supported by the Go sql driver. These
-    // will be useful for drivers in other languages.
+    Timestamp date_val = 6;
+    Timestamp time_val = 7;
+    int64 interval_val = 8;
   }
 
   // TODO(pmattis): How to add end-to-end checksumming? Just adding a checksum

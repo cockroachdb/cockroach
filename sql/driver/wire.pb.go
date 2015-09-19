@@ -40,6 +40,7 @@ type Datum struct {
 	//	*Datum_FloatVal
 	//	*Datum_BytesVal
 	//	*Datum_StringVal
+	//	*Datum_DateVal
 	//	*Datum_TimeVal
 	//	*Datum_IntervalVal
 	Payload isDatum_Payload `protobuf_oneof:"payload"`
@@ -70,11 +71,14 @@ type Datum_BytesVal struct {
 type Datum_StringVal struct {
 	StringVal string `protobuf:"bytes,5,opt,name=string_val,oneof"`
 }
+type Datum_DateVal struct {
+	DateVal *Datum_Timestamp `protobuf:"bytes,6,opt,name=date_val,oneof"`
+}
 type Datum_TimeVal struct {
-	TimeVal *Datum_Timestamp `protobuf:"bytes,6,opt,name=time_val,oneof"`
+	TimeVal *Datum_Timestamp `protobuf:"bytes,7,opt,name=time_val,oneof"`
 }
 type Datum_IntervalVal struct {
-	IntervalVal int64 `protobuf:"varint,7,opt,name=interval_val,oneof"`
+	IntervalVal int64 `protobuf:"varint,8,opt,name=interval_val,oneof"`
 }
 
 func (*Datum_BoolVal) isDatum_Payload()     {}
@@ -82,6 +86,7 @@ func (*Datum_IntVal) isDatum_Payload()      {}
 func (*Datum_FloatVal) isDatum_Payload()    {}
 func (*Datum_BytesVal) isDatum_Payload()    {}
 func (*Datum_StringVal) isDatum_Payload()   {}
+func (*Datum_DateVal) isDatum_Payload()     {}
 func (*Datum_TimeVal) isDatum_Payload()     {}
 func (*Datum_IntervalVal) isDatum_Payload() {}
 
@@ -127,6 +132,13 @@ func (m *Datum) GetStringVal() string {
 	return ""
 }
 
+func (m *Datum) GetDateVal() *Datum_Timestamp {
+	if x, ok := m.GetPayload().(*Datum_DateVal); ok {
+		return x.DateVal
+	}
+	return nil
+}
+
 func (m *Datum) GetTimeVal() *Datum_Timestamp {
 	if x, ok := m.GetPayload().(*Datum_TimeVal); ok {
 		return x.TimeVal
@@ -149,6 +161,7 @@ func (*Datum) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, 
 		(*Datum_FloatVal)(nil),
 		(*Datum_BytesVal)(nil),
 		(*Datum_StringVal)(nil),
+		(*Datum_DateVal)(nil),
 		(*Datum_TimeVal)(nil),
 		(*Datum_IntervalVal)(nil),
 	}
@@ -177,13 +190,18 @@ func _Datum_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	case *Datum_StringVal:
 		_ = b.EncodeVarint(5<<3 | proto.WireBytes)
 		_ = b.EncodeStringBytes(x.StringVal)
-	case *Datum_TimeVal:
+	case *Datum_DateVal:
 		_ = b.EncodeVarint(6<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.DateVal); err != nil {
+			return err
+		}
+	case *Datum_TimeVal:
+		_ = b.EncodeVarint(7<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.TimeVal); err != nil {
 			return err
 		}
 	case *Datum_IntervalVal:
-		_ = b.EncodeVarint(7<<3 | proto.WireVarint)
+		_ = b.EncodeVarint(8<<3 | proto.WireVarint)
 		_ = b.EncodeVarint(uint64(x.IntervalVal))
 	case nil:
 	default:
@@ -230,7 +248,15 @@ func _Datum_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) 
 		x, err := b.DecodeStringBytes()
 		m.Payload = &Datum_StringVal{x}
 		return true, err
-	case 6: // payload.time_val
+	case 6: // payload.date_val
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Datum_Timestamp)
+		err := b.DecodeMessage(msg)
+		m.Payload = &Datum_DateVal{msg}
+		return true, err
+	case 7: // payload.time_val
 		if wire != proto.WireBytes {
 			return true, proto.ErrInternalBadWireType
 		}
@@ -238,7 +264,7 @@ func _Datum_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) 
 		err := b.DecodeMessage(msg)
 		m.Payload = &Datum_TimeVal{msg}
 		return true, err
-	case 7: // payload.interval_val
+	case 8: // payload.interval_val
 		if wire != proto.WireVarint {
 			return true, proto.ErrInternalBadWireType
 		}
@@ -473,13 +499,13 @@ func (m *Datum_StringVal) MarshalTo(data []byte) (int, error) {
 	i += copy(data[i:], m.StringVal)
 	return i, nil
 }
-func (m *Datum_TimeVal) MarshalTo(data []byte) (int, error) {
+func (m *Datum_DateVal) MarshalTo(data []byte) (int, error) {
 	i := 0
-	if m.TimeVal != nil {
+	if m.DateVal != nil {
 		data[i] = 0x32
 		i++
-		i = encodeVarintWire(data, i, uint64(m.TimeVal.Size()))
-		n2, err := m.TimeVal.MarshalTo(data[i:])
+		i = encodeVarintWire(data, i, uint64(m.DateVal.Size()))
+		n2, err := m.DateVal.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -487,9 +513,23 @@ func (m *Datum_TimeVal) MarshalTo(data []byte) (int, error) {
 	}
 	return i, nil
 }
+func (m *Datum_TimeVal) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.TimeVal != nil {
+		data[i] = 0x3a
+		i++
+		i = encodeVarintWire(data, i, uint64(m.TimeVal.Size()))
+		n3, err := m.TimeVal.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	return i, nil
+}
 func (m *Datum_IntervalVal) MarshalTo(data []byte) (int, error) {
 	i := 0
-	data[i] = 0x38
+	data[i] = 0x40
 	i++
 	i = encodeVarintWire(data, i, uint64(m.IntervalVal))
 	return i, nil
@@ -749,6 +789,15 @@ func (m *Datum_StringVal) Size() (n int) {
 	n += 1 + l + sovWire(uint64(l))
 	return n
 }
+func (m *Datum_DateVal) Size() (n int) {
+	var l int
+	_ = l
+	if m.DateVal != nil {
+		l = m.DateVal.Size()
+		n += 1 + l + sovWire(uint64(l))
+	}
+	return n
+}
 func (m *Datum_TimeVal) Size() (n int) {
 	var l int
 	_ = l
@@ -1004,6 +1053,38 @@ func (m *Datum) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 6:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DateVal", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &Datum_Timestamp{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Payload = &Datum_DateVal{v}
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field TimeVal", wireType)
 			}
 			var msglen int
@@ -1034,7 +1115,7 @@ func (m *Datum) Unmarshal(data []byte) error {
 			}
 			m.Payload = &Datum_TimeVal{v}
 			iNdEx = postIndex
-		case 7:
+		case 8:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IntervalVal", wireType)
 			}

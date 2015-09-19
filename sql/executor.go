@@ -186,8 +186,8 @@ func (e Executor) execStmt(stmt parser.Statement, params parameters, planMaker *
 						})
 					case parser.DDate:
 						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_TimeVal{
-								TimeVal: &driver.Datum_Timestamp{
+							Payload: &driver.Datum_DateVal{
+								DateVal: &driver.Datum_Timestamp{
 									Sec:  vt.Unix(),
 									Nsec: uint32(vt.Nanosecond()),
 								},
@@ -284,6 +284,8 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 		return parser.DBytes(t.BytesVal), true
 	case *driver.Datum_StringVal:
 		return parser.DString(t.StringVal), true
+	case *driver.Datum_DateVal:
+		return parser.DTimestamp{Time: t.DateVal.GoTime().UTC()}, true
 	case *driver.Datum_TimeVal:
 		return parser.DTimestamp{Time: t.TimeVal.GoTime().UTC()}, true
 	case *driver.Datum_IntervalVal:
