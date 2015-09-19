@@ -11,9 +11,10 @@ set -eux
 if [ "${1-}" = "docker" ]; then
   cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
 
-  # Pretend we're already bootstrapped, so that `make` doesn't go
-  # through the bootstrap process which would glock sync unnecessarily.
-  touch .bootstrap
+  # Skip bootstrapping, so that `make` doesn't go through the
+  # bootstrap process which would install glock and glock sync
+  # unnecessarily.
+  export SKIP_BOOTSTRAP=1
 
   # Restore previously cached build artifacts.
   time go install github.com/cockroachdb/build-cache
@@ -21,7 +22,7 @@ if [ "${1-}" = "docker" ]; then
   # Build everything needed by circle-test.sh.
   time go test -race -v -i ./...
   time go install -v ${cmds}
-  time make GITHOOKS= install
+  time make install
   time go test -v -c -tags acceptance ./acceptance
   # Cache the current build artifacts for future builds.
   time build-cache save . .:race,test ${cmds}

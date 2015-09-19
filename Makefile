@@ -150,6 +150,8 @@ clean:
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -rf build/deploy/build
 
+ifneq ($(SKIP_BOOTSTRAP),1)
+
 GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
 .git/hooks/%: githooks/%
 	@echo installing $<
@@ -170,6 +172,8 @@ $(GLOCK):
 # of them (or their dependencies) change.
 .bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE
 	@glock sync github.com/cockroachdb/cockroach
-	@touch $@
+	touch $@
 
 -include .bootstrap
+
+endif
