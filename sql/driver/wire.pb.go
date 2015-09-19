@@ -19,7 +19,6 @@ package driver
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_proto2 "github.com/cockroachdb/cockroach/proto"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
@@ -257,7 +256,7 @@ func (m *Datum_Timestamp) GetNsec() uint32 {
 // A Result is a collection of rows.
 type Result struct {
 	// Error is non-nil if an error occurred while executing the statement.
-	Error *cockroach_proto2.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error *string `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
 	// The names of the columns returned in the result set in the order specified
 	// in the SQL statement. The number of columns will equal the number of
 	// values in each Row.
@@ -270,11 +269,11 @@ func (m *Result) Reset()         { *m = Result{} }
 func (m *Result) String() string { return proto.CompactTextString(m) }
 func (*Result) ProtoMessage()    {}
 
-func (m *Result) GetError() *cockroach_proto2.Error {
-	if m != nil {
-		return m.Error
+func (m *Result) GetError() string {
+	if m != nil && m.Error != nil {
+		return *m.Error
 	}
-	return nil
+	return ""
 }
 
 func (m *Result) GetColumns() []string {
@@ -506,12 +505,8 @@ func (m *Result) MarshalTo(data []byte) (int, error) {
 	if m.Error != nil {
 		data[i] = 0xa
 		i++
-		i = encodeVarintWire(data, i, uint64(m.Error.Size()))
-		n3, err := m.Error.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
+		i = encodeVarintWire(data, i, uint64(len(*m.Error)))
+		i += copy(data[i:], *m.Error)
 	}
 	if len(m.Columns) > 0 {
 		for _, s := range m.Columns {
@@ -744,7 +739,7 @@ func (m *Result) Size() (n int) {
 	var l int
 	_ = l
 	if m.Error != nil {
-		l = m.Error.Size()
+		l = len(*m.Error)
 		n += 1 + l + sovWire(uint64(l))
 	}
 	if len(m.Columns) > 0 {
@@ -1144,7 +1139,7 @@ func (m *Result) Unmarshal(data []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
 			}
-			var msglen int
+			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowWire
@@ -1154,24 +1149,21 @@ func (m *Result) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if msglen < 0 {
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
 				return ErrInvalidLengthWire
 			}
-			postIndex := iNdEx + msglen
+			postIndex := iNdEx + intStringLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Error == nil {
-				m.Error = &cockroach_proto2.Error{}
-			}
-			if err := m.Error.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
+			s := string(data[iNdEx:postIndex])
+			m.Error = &s
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {

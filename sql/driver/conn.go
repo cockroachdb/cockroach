@@ -17,7 +17,10 @@
 
 package driver
 
-import "database/sql/driver"
+import (
+	"database/sql/driver"
+	"errors"
+)
 
 var _ driver.Conn = &conn{}
 var _ driver.Queryer = &conn{}
@@ -120,7 +123,7 @@ func (c *conn) send(stmt string, dArgs []Datum) (*Result, error) {
 	// a single error.
 	for _, result := range resp.Results {
 		if result.Error != nil {
-			return nil, result.Error
+			return nil, errors.New(*result.Error)
 		}
 	}
 

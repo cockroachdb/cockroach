@@ -242,9 +242,8 @@ func makeResultFromError(planMaker *planner, err error) driver.Result {
 			planMaker.txn.Cleanup(err)
 		}
 	}
-	var errProto proto.Error
-	errProto.SetResponseGoError(err)
-	return driver.Result{Error: &errProto}
+	errString := err.Error()
+	return driver.Result{Error: &errString}
 }
 
 // parameters implements the parser.Args interface.
