@@ -495,16 +495,18 @@ SELECT radians(-45.0), radians(45.0)
 # Our implementation of round is not fully Postgres-compatible because we do
 # not allow negative numbers of digits.
 
-query error round: number of digits must be between 0 and 50
+query error round: number of digits must be greater than 0
 SELECT round(41.2, -1)
-
-query error round: number of digits must be between 0 and 50
-SELECT round(41.2, 51)
 
 query T
 SELECT round(4.2, 0), round(4.2, 50)
 ----
 4 4.2
+
+query T
+SELECT round(1e-308, 324)
+----
+1e-308
 
 # round to nearest even
 query T
