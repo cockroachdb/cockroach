@@ -69,6 +69,8 @@ func (d Datum) Value() (driver.Value, error) {
 	var val driver.Value
 
 	switch t := d.Payload.(type) {
+	case nil:
+		val = t
 	case *Datum_BoolVal:
 		val = t.BoolVal
 	case *Datum_IntVal:
@@ -82,13 +84,12 @@ func (d Datum) Value() (driver.Value, error) {
 	case *Datum_TimeVal:
 		val = t.TimeVal.GoTime().UTC()
 	case *Datum_IntervalVal:
-		val = t.IntervalVal
+		val = time.Duration(t.IntervalVal)
+	default:
+		return nil, util.Errorf("unsupported type %T", t)
 	}
 
-	if driver.IsValue(val) {
-		return val, nil
-	}
-	return nil, util.Errorf("unsupported type %T", val)
+	return val, nil
 }
 
 // GoTime converts the timestamp to a time.Time.

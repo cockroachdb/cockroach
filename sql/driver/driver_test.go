@@ -82,7 +82,7 @@ CREATE TABLE t.alltypes (
 		e sql.NullBool
 		f *time.Time
 		g *time.Time
-		h *int64
+		h *time.Duration
 	)
 
 	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
@@ -149,7 +149,7 @@ CREATE TABLE t.alltypes (
 		}
 
 		if !(a == 123 && b.Float64 == 3.4 && c.String == "blah" && d.String == "foo" &&
-			e.Bool && f.Equal(timeVal) && g.Equal(dateVal) && *h == intervalVal.Nanoseconds()) {
+			e.Bool && f.Equal(timeVal) && g.Equal(dateVal) && *h == intervalVal) {
 			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g, h})
 		}
 
