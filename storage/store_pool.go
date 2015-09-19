@@ -309,15 +309,14 @@ func (sp *StorePool) getStoreList(required proto.Attributes, deterministic bool)
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
-	// TODO(bram): Consider adding the sort interface to proto.StoreID.
-	var storeIDs []int
+	var storeIDs proto.StoreIDSlice
 	for storeID := range sp.stores {
-		storeIDs = append(storeIDs, int(storeID))
+		storeIDs = append(storeIDs, storeID)
 	}
 	// Sort the stores by key if deterministic is requested. This is only for
 	// unit testing.
 	if deterministic {
-		sort.Ints(storeIDs)
+		sort.Sort(storeIDs)
 	}
 	sl := new(StoreList)
 	for _, storeID := range storeIDs {

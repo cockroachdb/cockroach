@@ -46,7 +46,7 @@ type Cluster struct {
 	storeGossiper *gossiputil.StoreGossiper
 	nodes         map[proto.NodeID]*Node
 	stores        map[proto.StoreID]*Store
-	storeIDs      []proto.StoreID // sorted
+	storeIDs      proto.StoreIDSlice // sorted
 	ranges        map[proto.RangeID]*Range
 	rand          *rand.Rand
 	seed          int64
@@ -83,7 +83,7 @@ func createCluster(stopper *stop.Stopper, nodeCount int) *Cluster {
 
 	// Add a single range and add to this first node's first store.
 	firstRange := c.addRange()
-	firstRange.addReplica(c.stores[proto.StoreID(0)])
+	firstRange.addReplica(c.stores[0])
 	return c
 }
 
@@ -101,17 +101,11 @@ func (c *Cluster) addStore(nodeID proto.NodeID) *Store {
 	storeID, _ := s.getIDs()
 	c.stores[storeID] = s
 
-	// Save a sorted array of store IDs since to avoid having to calculate them
+	// Save a sorted array of store IDs to avoid having to calculate them
 	// multiple times.
-	var storeIDs []int
-	for storeID := range c.stores {
-		storeIDs = append(storeIDs, int(storeID))
-	}
-	sort.Ints(storeIDs)
-	c.storeIDs = []proto.StoreID{}
-	for _, storeID := range storeIDs {
-		c.storeIDs = append(c.storeIDs, proto.StoreID(storeID))
-	}
+	c.storeIDs = append(c.storeIDs, storeID)
+	sort.Sort(proto.StoreIDSlice(c.storeIDs))
+
 	return s
 }
 
@@ -245,37 +239,36 @@ func (c *Cluster) String() string {
 		}
 	}
 
-	var nodeIDs []int
+	var nodeIDs proto.NodeIDSlice
 	for nodeID := range c.nodes {
-		nodeIDs = append(nodeIDs, int(nodeID))
+		nodeIDs = append(nodeIDs, nodeID)
 	}
-	sort.Ints(nodeIDs)
+	sort.Sort(nodeIDs)
 
 	buf.WriteString("Node Info:\n")
 	for _, nodeID := range nodeIDs {
-		n := c.nodes[proto.NodeID(nodeID)]
+		n := c.nodes[nodeID]
 		buf.WriteString(n.String())
 		buf.WriteString("\n")
 	}
 
 	buf.WriteString("Store Info:\n")
 	for _, storeID := range c.storeIDs {
-		s := c.stores[proto.StoreID(storeID)]
-		buf.WriteString(s.String(storesRangeCounts[proto.StoreID(storeID)]))
+		s := c.stores[storeID]
+		buf.WriteString(s.String(storesRangeCounts[storeID]))
 		buf.WriteString("\n")
 	}
 
-	var rangeIDs []int
+	var rangeIDs proto.RangeIDSlice
 	for rangeID := range c.ranges {
-		rangeIDs = append(rangeIDs, int(rangeID))
+		rangeIDs = append(rangeIDs, rangeID)
 	}
-	sort.Ints(rangeIDs)
+	sort.Sort(rangeIDs)
 
 	buf.WriteString("Range Info:\n")
 	for _, rangeID := range rangeIDs {
-		r := c.ranges[proto.RangeID(rangeID)]
-		buf.WriteString(r.String())
-		buf.WriteString("\n")
+		r := c.ranges[rangeID]
+		fmt.Fprintf(&buf, "%s\n", r)
 	}
 
 	return buf.String()

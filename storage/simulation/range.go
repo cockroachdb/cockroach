@@ -174,11 +174,11 @@ func (r *Range) String() string {
 	r.RLock()
 	defer r.RUnlock()
 
-	var storeIDs []int
-	for storeID := range r.stores {
-		storeIDs = append(storeIDs, int(storeID))
+	var storeIDs proto.StoreIDSlice
+	for storeID := range r.replicas {
+		storeIDs = append(storeIDs, storeID)
 	}
-	sort.Ints(storeIDs)
+	sort.Sort(storeIDs)
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "Range:%d, Factor:%d, Stores:[", r.desc.RangeID, len(r.zone.ReplicaAttrs))
