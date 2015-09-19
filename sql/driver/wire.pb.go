@@ -17,70 +17,213 @@
 package driver
 
 import proto "github.com/gogo/protobuf/proto"
+import fmt "fmt"
 import math "math"
-import cockroach_proto2 "github.com/cockroachdb/cockroach/proto"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
-import fmt "fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
+var _ = fmt.Errorf
 var _ = math.Inf
 
 type Datum struct {
-	BoolVal   *bool            `protobuf:"varint,1,opt,name=bool_val" json:"bool_val,omitempty"`
-	IntVal    *int64           `protobuf:"varint,2,opt,name=int_val" json:"int_val,omitempty"`
-	FloatVal  *float64         `protobuf:"fixed64,3,opt,name=float_val" json:"float_val,omitempty"`
-	BytesVal  []byte           `protobuf:"bytes,4,opt,name=bytes_val" json:"bytes_val,omitempty"`
-	StringVal *string          `protobuf:"bytes,5,opt,name=string_val" json:"string_val,omitempty"`
-	TimeVal   *Datum_Timestamp `protobuf:"bytes,6,opt,name=time_val" json:"time_val,omitempty"`
+	// Using explicit proto types provides convenient access when using json. If
+	// we used a Kind+Bytes approach the json interface would involve base64
+	// encoded data.
+	//
+	// Types that are valid to be assigned to Payload:
+	//	*Datum_BoolVal
+	//	*Datum_IntVal
+	//	*Datum_FloatVal
+	//	*Datum_BytesVal
+	//	*Datum_StringVal
+	//	*Datum_TimeVal
+	Payload isDatum_Payload `protobuf_oneof:"payload"`
 }
 
 func (m *Datum) Reset()      { *m = Datum{} }
 func (*Datum) ProtoMessage() {}
 
+type isDatum_Payload interface {
+	isDatum_Payload()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type Datum_BoolVal struct {
+	BoolVal bool `protobuf:"varint,1,opt,name=bool_val,oneof"`
+}
+type Datum_IntVal struct {
+	IntVal int64 `protobuf:"varint,2,opt,name=int_val,oneof"`
+}
+type Datum_FloatVal struct {
+	FloatVal float64 `protobuf:"fixed64,3,opt,name=float_val,oneof"`
+}
+type Datum_BytesVal struct {
+	BytesVal []byte `protobuf:"bytes,4,opt,name=bytes_val,oneof"`
+}
+type Datum_StringVal struct {
+	StringVal string `protobuf:"bytes,5,opt,name=string_val,oneof"`
+}
+type Datum_TimeVal struct {
+	TimeVal *Datum_Timestamp `protobuf:"bytes,6,opt,name=time_val,oneof"`
+}
+
+func (*Datum_BoolVal) isDatum_Payload()   {}
+func (*Datum_IntVal) isDatum_Payload()    {}
+func (*Datum_FloatVal) isDatum_Payload()  {}
+func (*Datum_BytesVal) isDatum_Payload()  {}
+func (*Datum_StringVal) isDatum_Payload() {}
+func (*Datum_TimeVal) isDatum_Payload()   {}
+
+func (m *Datum) GetPayload() isDatum_Payload {
+	if m != nil {
+		return m.Payload
+	}
+	return nil
+}
+
 func (m *Datum) GetBoolVal() bool {
-	if m != nil && m.BoolVal != nil {
-		return *m.BoolVal
+	if x, ok := m.GetPayload().(*Datum_BoolVal); ok {
+		return x.BoolVal
 	}
 	return false
 }
 
 func (m *Datum) GetIntVal() int64 {
-	if m != nil && m.IntVal != nil {
-		return *m.IntVal
+	if x, ok := m.GetPayload().(*Datum_IntVal); ok {
+		return x.IntVal
 	}
 	return 0
 }
 
 func (m *Datum) GetFloatVal() float64 {
-	if m != nil && m.FloatVal != nil {
-		return *m.FloatVal
+	if x, ok := m.GetPayload().(*Datum_FloatVal); ok {
+		return x.FloatVal
 	}
 	return 0
 }
 
 func (m *Datum) GetBytesVal() []byte {
-	if m != nil {
-		return m.BytesVal
+	if x, ok := m.GetPayload().(*Datum_BytesVal); ok {
+		return x.BytesVal
 	}
 	return nil
 }
 
 func (m *Datum) GetStringVal() string {
-	if m != nil && m.StringVal != nil {
-		return *m.StringVal
+	if x, ok := m.GetPayload().(*Datum_StringVal); ok {
+		return x.StringVal
 	}
 	return ""
 }
 
 func (m *Datum) GetTimeVal() *Datum_Timestamp {
-	if m != nil {
-		return m.TimeVal
+	if x, ok := m.GetPayload().(*Datum_TimeVal); ok {
+		return x.TimeVal
 	}
 	return nil
+}
+
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*Datum) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), []interface{}) {
+	return _Datum_OneofMarshaler, _Datum_OneofUnmarshaler, []interface{}{
+		(*Datum_BoolVal)(nil),
+		(*Datum_IntVal)(nil),
+		(*Datum_FloatVal)(nil),
+		(*Datum_BytesVal)(nil),
+		(*Datum_StringVal)(nil),
+		(*Datum_TimeVal)(nil),
+	}
+}
+
+func _Datum_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*Datum)
+	// payload
+	switch x := m.Payload.(type) {
+	case *Datum_BoolVal:
+		t := uint64(0)
+		if x.BoolVal {
+			t = 1
+		}
+		_ = b.EncodeVarint(1<<3 | proto.WireVarint)
+		_ = b.EncodeVarint(t)
+	case *Datum_IntVal:
+		_ = b.EncodeVarint(2<<3 | proto.WireVarint)
+		_ = b.EncodeVarint(uint64(x.IntVal))
+	case *Datum_FloatVal:
+		_ = b.EncodeVarint(3<<3 | proto.WireFixed64)
+		_ = b.EncodeFixed64(math.Float64bits(x.FloatVal))
+	case *Datum_BytesVal:
+		_ = b.EncodeVarint(4<<3 | proto.WireBytes)
+		_ = b.EncodeRawBytes(x.BytesVal)
+	case *Datum_StringVal:
+		_ = b.EncodeVarint(5<<3 | proto.WireBytes)
+		_ = b.EncodeStringBytes(x.StringVal)
+	case *Datum_TimeVal:
+		_ = b.EncodeVarint(6<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.TimeVal); err != nil {
+			return err
+		}
+	case nil:
+	default:
+		return fmt.Errorf("Datum.Payload has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _Datum_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*Datum)
+	switch tag {
+	case 1: // payload.bool_val
+		if wire != proto.WireVarint {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeVarint()
+		m.Payload = &Datum_BoolVal{x != 0}
+		return true, err
+	case 2: // payload.int_val
+		if wire != proto.WireVarint {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeVarint()
+		m.Payload = &Datum_IntVal{int64(x)}
+		return true, err
+	case 3: // payload.float_val
+		if wire != proto.WireFixed64 {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeFixed64()
+		m.Payload = &Datum_FloatVal{math.Float64frombits(x)}
+		return true, err
+	case 4: // payload.bytes_val
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeRawBytes(true)
+		m.Payload = &Datum_BytesVal{x}
+		return true, err
+	case 5: // payload.string_val
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeStringBytes()
+		m.Payload = &Datum_StringVal{x}
+		return true, err
+	case 6: // payload.time_val
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Datum_Timestamp)
+		err := b.DecodeMessage(msg)
+		m.Payload = &Datum_TimeVal{msg}
+		return true, err
+	default:
+		return false, nil
+	}
 }
 
 // Timestamp represents an absolute timestamp devoid of time-zone.
@@ -113,7 +256,7 @@ func (m *Datum_Timestamp) GetNsec() uint32 {
 // A Result is a collection of rows.
 type Result struct {
 	// Error is non-nil if an error occurred while executing the statement.
-	Error *cockroach_proto2.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error *string `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
 	// The names of the columns returned in the result set in the order specified
 	// in the SQL statement. The number of columns will equal the number of
 	// values in each Row.
@@ -126,11 +269,11 @@ func (m *Result) Reset()         { *m = Result{} }
 func (m *Result) String() string { return proto.CompactTextString(m) }
 func (*Result) ProtoMessage()    {}
 
-func (m *Result) GetError() *cockroach_proto2.Error {
-	if m != nil {
-		return m.Error
+func (m *Result) GetError() string {
+	if m != nil && m.Error != nil {
+		return *m.Error
 	}
-	return nil
+	return ""
 }
 
 func (m *Result) GetColumns() []string {
@@ -252,51 +395,74 @@ func (m *Datum) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.BoolVal != nil {
-		data[i] = 0x8
-		i++
-		if *m.BoolVal {
-			data[i] = 1
-		} else {
-			data[i] = 0
+	if m.Payload != nil {
+		nn1, err := m.Payload.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
 		}
-		i++
+		i += nn1
 	}
-	if m.IntVal != nil {
-		data[i] = 0x10
-		i++
-		i = encodeVarintWire(data, i, uint64(*m.IntVal))
+	return i, nil
+}
+
+func (m *Datum_BoolVal) MarshalTo(data []byte) (int, error) {
+	i := 0
+	data[i] = 0x8
+	i++
+	if m.BoolVal {
+		data[i] = 1
+	} else {
+		data[i] = 0
 	}
-	if m.FloatVal != nil {
-		data[i] = 0x19
-		i++
-		i = encodeFixed64Wire(data, i, uint64(math.Float64bits(*m.FloatVal)))
-	}
+	i++
+	return i, nil
+}
+func (m *Datum_IntVal) MarshalTo(data []byte) (int, error) {
+	i := 0
+	data[i] = 0x10
+	i++
+	i = encodeVarintWire(data, i, uint64(m.IntVal))
+	return i, nil
+}
+func (m *Datum_FloatVal) MarshalTo(data []byte) (int, error) {
+	i := 0
+	data[i] = 0x19
+	i++
+	i = encodeFixed64Wire(data, i, uint64(math.Float64bits(m.FloatVal)))
+	return i, nil
+}
+func (m *Datum_BytesVal) MarshalTo(data []byte) (int, error) {
+	i := 0
 	if m.BytesVal != nil {
 		data[i] = 0x22
 		i++
 		i = encodeVarintWire(data, i, uint64(len(m.BytesVal)))
 		i += copy(data[i:], m.BytesVal)
 	}
-	if m.StringVal != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintWire(data, i, uint64(len(*m.StringVal)))
-		i += copy(data[i:], *m.StringVal)
-	}
+	return i, nil
+}
+func (m *Datum_StringVal) MarshalTo(data []byte) (int, error) {
+	i := 0
+	data[i] = 0x2a
+	i++
+	i = encodeVarintWire(data, i, uint64(len(m.StringVal)))
+	i += copy(data[i:], m.StringVal)
+	return i, nil
+}
+func (m *Datum_TimeVal) MarshalTo(data []byte) (int, error) {
+	i := 0
 	if m.TimeVal != nil {
 		data[i] = 0x32
 		i++
 		i = encodeVarintWire(data, i, uint64(m.TimeVal.Size()))
-		n1, err := m.TimeVal.MarshalTo(data[i:])
+		n2, err := m.TimeVal.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n1
+		i += n2
 	}
 	return i, nil
 }
-
 func (m *Datum_Timestamp) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -339,12 +505,8 @@ func (m *Result) MarshalTo(data []byte) (int, error) {
 	if m.Error != nil {
 		data[i] = 0xa
 		i++
-		i = encodeVarintWire(data, i, uint64(m.Error.Size()))
-		n2, err := m.Error.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
+		i = encodeVarintWire(data, i, uint64(len(*m.Error)))
+		i += copy(data[i:], *m.Error)
 	}
 	if len(m.Columns) > 0 {
 		for _, s := range m.Columns {
@@ -516,30 +678,55 @@ func encodeVarintWire(data []byte, offset int, v uint64) int {
 func (m *Datum) Size() (n int) {
 	var l int
 	_ = l
-	if m.BoolVal != nil {
-		n += 2
+	if m.Payload != nil {
+		n += m.Payload.Size()
 	}
-	if m.IntVal != nil {
-		n += 1 + sovWire(uint64(*m.IntVal))
-	}
-	if m.FloatVal != nil {
-		n += 9
-	}
+	return n
+}
+
+func (m *Datum_BoolVal) Size() (n int) {
+	var l int
+	_ = l
+	n += 2
+	return n
+}
+func (m *Datum_IntVal) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovWire(uint64(m.IntVal))
+	return n
+}
+func (m *Datum_FloatVal) Size() (n int) {
+	var l int
+	_ = l
+	n += 9
+	return n
+}
+func (m *Datum_BytesVal) Size() (n int) {
+	var l int
+	_ = l
 	if m.BytesVal != nil {
 		l = len(m.BytesVal)
 		n += 1 + l + sovWire(uint64(l))
 	}
-	if m.StringVal != nil {
-		l = len(*m.StringVal)
-		n += 1 + l + sovWire(uint64(l))
-	}
+	return n
+}
+func (m *Datum_StringVal) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.StringVal)
+	n += 1 + l + sovWire(uint64(l))
+	return n
+}
+func (m *Datum_TimeVal) Size() (n int) {
+	var l int
+	_ = l
 	if m.TimeVal != nil {
 		l = m.TimeVal.Size()
 		n += 1 + l + sovWire(uint64(l))
 	}
 	return n
 }
-
 func (m *Datum_Timestamp) Size() (n int) {
 	var l int
 	_ = l
@@ -552,7 +739,7 @@ func (m *Result) Size() (n int) {
 	var l int
 	_ = l
 	if m.Error != nil {
-		l = m.Error.Size()
+		l = len(*m.Error)
 		n += 1 + l + sovWire(uint64(l))
 	}
 	if len(m.Columns) > 0 {
@@ -631,53 +818,16 @@ func sovWire(x uint64) (n int) {
 func sozWire(x uint64) (n int) {
 	return sovWire(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (this *Datum) GetValue() interface{} {
-	if this.BoolVal != nil {
-		return this.BoolVal
-	}
-	if this.IntVal != nil {
-		return this.IntVal
-	}
-	if this.FloatVal != nil {
-		return this.FloatVal
-	}
-	if this.BytesVal != nil {
-		return this.BytesVal
-	}
-	if this.StringVal != nil {
-		return this.StringVal
-	}
-	if this.TimeVal != nil {
-		return this.TimeVal
-	}
-	return nil
-}
-
-func (this *Datum) SetValue(value interface{}) bool {
-	switch vt := value.(type) {
-	case *bool:
-		this.BoolVal = vt
-	case *int64:
-		this.IntVal = vt
-	case *float64:
-		this.FloatVal = vt
-	case []byte:
-		this.BytesVal = vt
-	case *string:
-		this.StringVal = vt
-	case *Datum_Timestamp:
-		this.TimeVal = vt
-	default:
-		return false
-	}
-	return true
-}
 func (m *Datum) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -690,6 +840,12 @@ func (m *Datum) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Datum: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Datum: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
@@ -697,6 +853,9 @@ func (m *Datum) Unmarshal(data []byte) error {
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -708,13 +867,16 @@ func (m *Datum) Unmarshal(data []byte) error {
 				}
 			}
 			b := bool(v != 0)
-			m.BoolVal = &b
+			m.Payload = &Datum_BoolVal{b}
 		case 2:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IntVal", wireType)
 			}
 			var v int64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -725,7 +887,7 @@ func (m *Datum) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			m.IntVal = &v
+			m.Payload = &Datum_IntVal{v}
 		case 3:
 			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field FloatVal", wireType)
@@ -743,14 +905,16 @@ func (m *Datum) Unmarshal(data []byte) error {
 			v |= uint64(data[iNdEx-3]) << 40
 			v |= uint64(data[iNdEx-2]) << 48
 			v |= uint64(data[iNdEx-1]) << 56
-			v2 := float64(math.Float64frombits(v))
-			m.FloatVal = &v2
+			m.Payload = &Datum_FloatVal{float64(math.Float64frombits(v))}
 		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field BytesVal", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -768,7 +932,9 @@ func (m *Datum) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.BytesVal = append([]byte{}, data[iNdEx:postIndex]...)
+			v := make([]byte, postIndex-iNdEx)
+			copy(v, data[iNdEx:postIndex])
+			m.Payload = &Datum_BytesVal{v}
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -776,6 +942,208 @@ func (m *Datum) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Payload = &Datum_StringVal{string(data[iNdEx:postIndex])}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TimeVal", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &Datum_Timestamp{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Payload = &Datum_TimeVal{v}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipWire(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Datum_Timestamp) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Timestamp: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Timestamp: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sec", wireType)
+			}
+			m.Sec = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Sec |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nsec", wireType)
+			}
+			m.Nsec = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Nsec |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipWire(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Result) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Result: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Result: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -795,189 +1163,7 @@ func (m *Datum) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			s := string(data[iNdEx:postIndex])
-			m.StringVal = &s
-			iNdEx = postIndex
-		case 6:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TimeVal", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthWire
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.TimeVal == nil {
-				m.TimeVal = &Datum_Timestamp{}
-			}
-			if err := m.TimeVal.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipWire(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthWire
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	return nil
-}
-func (m *Datum_Timestamp) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Sec", wireType)
-			}
-			m.Sec = 0
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Sec |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Nsec", wireType)
-			}
-			m.Nsec = 0
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Nsec |= (uint32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipWire(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthWire
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	return nil
-}
-func (m *Result) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthWire
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Error == nil {
-				m.Error = &cockroach_proto2.Error{}
-			}
-			if err := m.Error.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
+			m.Error = &s
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -985,6 +1171,9 @@ func (m *Result) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1011,6 +1200,9 @@ func (m *Result) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1034,15 +1226,7 @@ func (m *Result) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1057,14 +1241,21 @@ func (m *Result) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *Result_Row) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1077,6 +1268,12 @@ func (m *Result_Row) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Row: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Row: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -1084,6 +1281,9 @@ func (m *Result_Row) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1107,15 +1307,7 @@ func (m *Result_Row) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1130,14 +1322,21 @@ func (m *Result_Row) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *Request) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1150,6 +1349,12 @@ func (m *Request) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Request: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Request: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -1157,6 +1362,9 @@ func (m *Request) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1183,6 +1391,9 @@ func (m *Request) Unmarshal(data []byte) error {
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1208,6 +1419,9 @@ func (m *Request) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1234,6 +1448,9 @@ func (m *Request) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1257,15 +1474,7 @@ func (m *Request) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1280,14 +1489,21 @@ func (m *Request) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *Response) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1300,6 +1516,12 @@ func (m *Response) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Response: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Response: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -1307,6 +1529,9 @@ func (m *Response) Unmarshal(data []byte) error {
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1332,6 +1557,9 @@ func (m *Response) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1355,15 +1583,7 @@ func (m *Response) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1378,6 +1598,9 @@ func (m *Response) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func skipWire(data []byte) (n int, err error) {
@@ -1386,6 +1609,9 @@ func skipWire(data []byte) (n int, err error) {
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowWire
+			}
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
@@ -1399,7 +1625,10 @@ func skipWire(data []byte) (n int, err error) {
 		wireType := int(wire & 0x7)
 		switch wireType {
 		case 0:
-			for {
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -1415,6 +1644,9 @@ func skipWire(data []byte) (n int, err error) {
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowWire
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -1435,6 +1667,9 @@ func skipWire(data []byte) (n int, err error) {
 				var innerWire uint64
 				var start int = iNdEx
 				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return 0, ErrIntOverflowWire
+					}
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
@@ -1470,4 +1705,5 @@ func skipWire(data []byte) (n int, err error) {
 
 var (
 	ErrInvalidLengthWire = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowWire   = fmt.Errorf("proto: integer overflow")
 )

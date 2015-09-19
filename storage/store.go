@@ -1160,7 +1160,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		}
 	} else {
 		for _, union := range args.(*proto.BatchRequest).Requests {
-			arg := union.GetValue().(proto.Request)
+			arg := union.GetInner()
 			header := arg.Header()
 			if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(arg)); err != nil {
 				return nil, err
@@ -1369,7 +1369,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	wiErr.Resolved = true // success!
 
 	for i, intent := range pushIntents {
-		intent.Txn = *(br.Responses[i].PushTxn.PusheeTxn)
+		intent.Txn = *(br.Responses[i].GetInner().(*proto.PushTxnResponse).PusheeTxn)
 		resolveIntents = append(resolveIntents, intent)
 	}
 
@@ -1409,7 +1409,7 @@ func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd proto.RaftCommand) <-
 		log.Fatal(err)
 	}
 	for _, union := range cmd.Cmd.Requests {
-		args := union.GetValue().(proto.Request)
+		args := union.GetInner()
 		etr, ok := args.(*proto.EndTransactionRequest)
 		if ok && etr.InternalCommitTrigger != nil && etr.InternalCommitTrigger.ChangeReplicasTrigger != nil {
 			// TODO(tschottdorf): the real check is that EndTransaction needs

@@ -5,15 +5,16 @@
 package message
 
 import proto "github.com/gogo/protobuf/proto"
+import fmt "fmt"
 import math "math"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
-import fmt "fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
+var _ = fmt.Errorf
 var _ = math.Inf
 
 type EchoRequest struct {
@@ -150,8 +151,12 @@ func (m *EchoRequest) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowEcho
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -164,6 +169,12 @@ func (m *EchoRequest) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: EchoRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: EchoRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -171,6 +182,9 @@ func (m *EchoRequest) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowEcho
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -192,15 +206,7 @@ func (m *EchoRequest) Unmarshal(data []byte) error {
 			m.Msg = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipEcho(data[iNdEx:])
 			if err != nil {
 				return err
@@ -215,14 +221,21 @@ func (m *EchoRequest) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *EchoResponse) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowEcho
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -235,6 +248,12 @@ func (m *EchoResponse) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: EchoResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: EchoResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -242,6 +261,9 @@ func (m *EchoResponse) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowEcho
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -263,15 +285,7 @@ func (m *EchoResponse) Unmarshal(data []byte) error {
 			m.Msg = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipEcho(data[iNdEx:])
 			if err != nil {
 				return err
@@ -286,6 +300,9 @@ func (m *EchoResponse) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func skipEcho(data []byte) (n int, err error) {
@@ -294,6 +311,9 @@ func skipEcho(data []byte) (n int, err error) {
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowEcho
+			}
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
@@ -307,7 +327,10 @@ func skipEcho(data []byte) (n int, err error) {
 		wireType := int(wire & 0x7)
 		switch wireType {
 		case 0:
-			for {
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowEcho
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -323,6 +346,9 @@ func skipEcho(data []byte) (n int, err error) {
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowEcho
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -343,6 +369,9 @@ func skipEcho(data []byte) (n int, err error) {
 				var innerWire uint64
 				var start int = iNdEx
 				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return 0, ErrIntOverflowEcho
+					}
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
@@ -378,4 +407,5 @@ func skipEcho(data []byte) (n int, err error) {
 
 var (
 	ErrInvalidLengthEcho = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowEcho   = fmt.Errorf("proto: integer overflow")
 )

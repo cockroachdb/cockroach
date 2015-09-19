@@ -97,7 +97,7 @@ func MaybeWrap(args proto.Request) (*proto.BatchRequest, func(proto.Response) pr
 		if len(br.Responses) == 0 {
 			unwrappedReply = args.CreateReply()
 		} else {
-			unwrappedReply = br.Responses[0].GetValue().(proto.Response)
+			unwrappedReply = br.Responses[0].GetInner()
 		}
 		// The ReplyTxn is propagated from one response to the next request,
 		// and we adopt the mechanism that whenever the Txn changes, it needs

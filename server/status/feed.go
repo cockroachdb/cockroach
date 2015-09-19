@@ -73,7 +73,7 @@ func (nef NodeEventFeed) StartNode(desc proto.NodeDescriptor, startedAt int64) {
 func (nef NodeEventFeed) CallComplete(args proto.Request, reply proto.Response) {
 	method := args.Method()
 	if ba, ok := args.(*proto.BatchRequest); ok && len(ba.Requests) > 0 {
-		method = ba.Requests[0].GetValue().(proto.Request).Method()
+		method = ba.Requests[0].GetInner().Method()
 	}
 	if err := reply.Header().Error; err != nil &&
 		err.CanRestartTransaction() == proto.TransactionRestart_ABORT {

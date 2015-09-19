@@ -16,16 +16,17 @@
 package engine
 
 import proto "github.com/gogo/protobuf/proto"
+import fmt "fmt"
 import math "math"
 import cockroach_proto1 "github.com/cockroachdb/cockroach/proto"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
-import fmt "fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
+var _ = fmt.Errorf
 var _ = math.Inf
 
 // MVCCValue differentiates between normal versioned values and
@@ -490,8 +491,12 @@ func (m *MVCCValue) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -504,6 +509,12 @@ func (m *MVCCValue) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MVCCValue: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MVCCValue: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
@@ -511,6 +522,9 @@ func (m *MVCCValue) Unmarshal(data []byte) error {
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -528,6 +542,9 @@ func (m *MVCCValue) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -553,15 +570,7 @@ func (m *MVCCValue) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipMvcc(data[iNdEx:])
 			if err != nil {
 				return err
@@ -576,14 +585,21 @@ func (m *MVCCValue) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *MVCCMetadata) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -596,6 +612,12 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MVCCMetadata: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MVCCMetadata: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -603,6 +625,9 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -633,6 +658,9 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -660,6 +688,9 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -677,6 +708,9 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			}
 			m.KeyBytes = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -693,6 +727,9 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			}
 			m.ValBytes = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -709,6 +746,9 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -734,15 +774,7 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipMvcc(data[iNdEx:])
 			if err != nil {
 				return err
@@ -757,14 +789,21 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *MVCCStats) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -777,6 +816,12 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MVCCStats: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MVCCStats: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
@@ -784,6 +829,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.LiveBytes = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -800,6 +848,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.KeyBytes = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -816,6 +867,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.ValBytes = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -832,6 +886,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.IntentBytes = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -848,6 +905,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.LiveCount = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -864,6 +924,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.KeyCount = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -880,6 +943,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.ValCount = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -896,6 +962,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.IntentCount = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -912,6 +981,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.IntentAge = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -928,6 +1000,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.GCBytesAge = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -944,6 +1019,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.SysBytes = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -960,6 +1038,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.SysCount = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -976,6 +1057,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 			m.LastUpdateNanos = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -987,15 +1071,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 				}
 			}
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipMvcc(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1010,6 +1086,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func skipMvcc(data []byte) (n int, err error) {
@@ -1018,6 +1097,9 @@ func skipMvcc(data []byte) (n int, err error) {
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowMvcc
+			}
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
@@ -1031,7 +1113,10 @@ func skipMvcc(data []byte) (n int, err error) {
 		wireType := int(wire & 0x7)
 		switch wireType {
 		case 0:
-			for {
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -1047,6 +1132,9 @@ func skipMvcc(data []byte) (n int, err error) {
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowMvcc
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -1067,6 +1155,9 @@ func skipMvcc(data []byte) (n int, err error) {
 				var innerWire uint64
 				var start int = iNdEx
 				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return 0, ErrIntOverflowMvcc
+					}
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
@@ -1102,4 +1193,5 @@ func skipMvcc(data []byte) (n int, err error) {
 
 var (
 	ErrInvalidLengthMvcc = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowMvcc   = fmt.Errorf("proto: integer overflow")
 )

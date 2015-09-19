@@ -39,23 +39,24 @@ func makeDatum(val driver.Value) (Datum, error) {
 	if val == nil {
 		return datum, nil
 	}
-
 	switch t := val.(type) {
-	case int64:
-		datum.IntVal = &t
-	case float64:
-		datum.FloatVal = &t
 	case bool:
-		datum.BoolVal = &t
+		datum.Payload = &Datum_BoolVal{t}
+	case int64:
+		datum.Payload = &Datum_IntVal{t}
+	case float64:
+		datum.Payload = &Datum_FloatVal{t}
 	case []byte:
-		datum.BytesVal = t
+		datum.Payload = &Datum_BytesVal{t}
 	case string:
-		datum.StringVal = &t
+		datum.Payload = &Datum_StringVal{t}
 	case time.Time:
 		// Send absolute time devoid of time-zone.
-		datum.TimeVal = &Datum_Timestamp{
-			Sec:  t.Unix(),
-			Nsec: uint32(t.Nanosecond()),
+		datum.Payload = &Datum_TimeVal{
+			&Datum_Timestamp{
+				Sec:  t.Unix(),
+				Nsec: uint32(t.Nanosecond()),
+			},
 		}
 	default:
 		return datum, util.Errorf("unsupported type %T", t)
@@ -66,21 +67,21 @@ func makeDatum(val driver.Value) (Datum, error) {
 
 // Value implements the driver.Valuer interface.
 func (d Datum) Value() (driver.Value, error) {
-	val := d.GetValue()
+	var val driver.Value
 
-	switch t := val.(type) {
-	case *bool:
-		val = *t
-	case *int64:
-		val = *t
-	case *float64:
-		val = *t
-	case []byte:
-		val = t
-	case *string:
-		val = *t
-	case *Datum_Timestamp:
-		val = t.GoTime().UTC()
+	switch t := d.Payload.(type) {
+	case *Datum_BoolVal:
+		val = t.BoolVal
+	case *Datum_IntVal:
+		val = t.IntVal
+	case *Datum_FloatVal:
+		val = t.FloatVal
+	case *Datum_BytesVal:
+		val = t.BytesVal
+	case *Datum_StringVal:
+		val = t.StringVal
+	case *Datum_TimeVal:
+		val = t.TimeVal.GoTime().UTC()
 	}
 
 	if driver.IsValue(val) {

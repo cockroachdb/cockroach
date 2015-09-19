@@ -341,7 +341,7 @@ func Range(br proto.BatchRequest) (proto.Key, proto.Key) {
 	from := proto.KeyMax
 	to := proto.KeyMin
 	for _, arg := range br.Requests {
-		req := arg.GetValue().(proto.Request)
+		req := arg.GetInner()
 		if req.Method() == proto.Noop {
 			continue
 		}

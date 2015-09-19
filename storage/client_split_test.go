@@ -506,15 +506,19 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	if err := store.DB().Txn(func(txn *client.Txn) error {
 		txn.SetSystemDBTrigger()
 		for _, kv := range sql.GetInitialSystemValues() {
-			if errPut := txn.Put(kv.Key, kv.Value.Bytes); errPut != nil {
-				return util.Errorf("Could not put KV %+v: %v", kv, errPut)
+			if err := txn.Put(kv.Key, kv.Value.Bytes); err != nil {
+				return err
 			}
 		}
 		for i := 1; i <= 5; i++ {
 			// We don't care about the values, just the keys.
 			k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + i))
-			if errPut := txn.Put(k, i); errPut != nil {
-				return util.Errorf("Could not put KV %+v: %v", k, errPut)
+			v, err := txn.Get(k)
+			if err != nil {
+				return err
+			}
+			if err := txn.Put(k, v.Value); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -550,7 +554,11 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// still occur for every ID.
 		// We don't care about the values, just the keys.
 		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 10))
-		return txn.Put(k, 10)
+		v, err := txn.Get(k)
+		if err != nil {
+			return err
+		}
+		return txn.Put(k, v.Value)
 	}); err != nil {
 		t.Fatal(err)
 	}

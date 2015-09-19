@@ -92,7 +92,7 @@ func verifyRequest(args proto.Request) error {
 		return verifyEndTransaction(t)
 	case *proto.BatchRequest:
 		for _, reqUnion := range t.Requests {
-			req := reqUnion.GetValue()
+			req := reqUnion.GetInner()
 
 			if et, ok := req.(*proto.EndTransactionRequest); ok {
 				if err := verifyEndTransaction(et); err != nil {
@@ -100,7 +100,7 @@ func verifyRequest(args proto.Request) error {
 				}
 			}
 
-			method := req.(proto.Request).Method()
+			method := req.Method()
 
 			if int(method) > len(allExternalMethods) || allExternalMethods[method] == nil {
 				return util.Errorf("Batch contains an internal request %s", method)

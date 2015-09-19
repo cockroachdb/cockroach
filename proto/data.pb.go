@@ -5,15 +5,16 @@
 package proto
 
 import proto1 "github.com/gogo/protobuf/proto"
+import fmt "fmt"
 import math "math"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
-import fmt "fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto1.Marshal
+var _ = fmt.Errorf
 var _ = math.Inf
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
@@ -547,7 +548,7 @@ type Transaction struct {
 	CertainNodes NodeList `protobuf:"bytes,12,opt,name=certain_nodes" json:"certain_nodes"`
 	// Writing is true if the transaction has previously executed a successful
 	// write request, i.e. a request that may have left intents (across retries).
-	Writing bool `protobuf:"varint,13,opt" json:"Writing"`
+	Writing bool `protobuf:"varint,13,opt,name=Writing" json:"Writing"`
 }
 
 func (m *Transaction) Reset()      { *m = Transaction{} }
@@ -1593,8 +1594,12 @@ func (m *Timestamp) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1607,6 +1612,12 @@ func (m *Timestamp) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Timestamp: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Timestamp: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
@@ -1614,6 +1625,9 @@ func (m *Timestamp) Unmarshal(data []byte) error {
 			}
 			m.WallTime = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1630,6 +1644,9 @@ func (m *Timestamp) Unmarshal(data []byte) error {
 			}
 			m.Logical = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1641,15 +1658,7 @@ func (m *Timestamp) Unmarshal(data []byte) error {
 				}
 			}
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1664,14 +1673,21 @@ func (m *Timestamp) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *Value) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1684,6 +1700,12 @@ func (m *Value) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Value: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Value: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -1691,6 +1713,9 @@ func (m *Value) Unmarshal(data []byte) error {
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1730,6 +1755,9 @@ func (m *Value) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1760,6 +1788,9 @@ func (m *Value) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1782,15 +1813,7 @@ func (m *Value) Unmarshal(data []byte) error {
 			m.Tag = &s
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1805,14 +1828,21 @@ func (m *Value) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *KeyValue) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1825,6 +1855,12 @@ func (m *KeyValue) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: KeyValue: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: KeyValue: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -1832,6 +1868,9 @@ func (m *KeyValue) Unmarshal(data []byte) error {
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1857,6 +1896,9 @@ func (m *KeyValue) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1879,15 +1921,7 @@ func (m *KeyValue) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1902,14 +1936,21 @@ func (m *KeyValue) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *RawKeyValue) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1922,6 +1963,12 @@ func (m *RawKeyValue) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RawKeyValue: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RawKeyValue: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -1929,6 +1976,9 @@ func (m *RawKeyValue) Unmarshal(data []byte) error {
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1954,6 +2004,9 @@ func (m *RawKeyValue) Unmarshal(data []byte) error {
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1974,15 +2027,7 @@ func (m *RawKeyValue) Unmarshal(data []byte) error {
 			m.Value = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1997,14 +2042,21 @@ func (m *RawKeyValue) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *StoreIdent) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2017,6 +2069,12 @@ func (m *StoreIdent) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StoreIdent: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StoreIdent: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -2024,6 +2082,9 @@ func (m *StoreIdent) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2050,6 +2111,9 @@ func (m *StoreIdent) Unmarshal(data []byte) error {
 			}
 			m.NodeID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2066,6 +2130,9 @@ func (m *StoreIdent) Unmarshal(data []byte) error {
 			}
 			m.StoreID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2077,15 +2144,7 @@ func (m *StoreIdent) Unmarshal(data []byte) error {
 				}
 			}
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -2100,14 +2159,21 @@ func (m *StoreIdent) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *SplitTrigger) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2120,6 +2186,12 @@ func (m *SplitTrigger) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SplitTrigger: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SplitTrigger: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -2127,6 +2199,9 @@ func (m *SplitTrigger) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2154,6 +2229,9 @@ func (m *SplitTrigger) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2176,15 +2254,7 @@ func (m *SplitTrigger) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -2199,14 +2269,21 @@ func (m *SplitTrigger) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *MergeTrigger) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2219,6 +2296,12 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MergeTrigger: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MergeTrigger: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -2226,6 +2309,9 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2253,6 +2339,9 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 			}
 			m.SubsumedRangeID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2264,15 +2353,7 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 				}
 			}
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -2287,14 +2368,21 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2307,6 +2395,12 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ChangeReplicasTrigger: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ChangeReplicasTrigger: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
@@ -2314,6 +2408,9 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 			}
 			m.NodeID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2330,6 +2427,9 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 			}
 			m.StoreID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2346,6 +2446,9 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 			}
 			m.ChangeType = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2362,6 +2465,9 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2389,6 +2495,9 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2417,6 +2526,9 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 			}
 			m.NextReplicaID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2428,15 +2540,7 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 				}
 			}
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -2451,14 +2555,21 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *ModifiedSpanTrigger) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2471,6 +2582,12 @@ func (m *ModifiedSpanTrigger) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ModifiedSpanTrigger: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ModifiedSpanTrigger: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
@@ -2478,6 +2595,9 @@ func (m *ModifiedSpanTrigger) Unmarshal(data []byte) error {
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2490,15 +2610,7 @@ func (m *ModifiedSpanTrigger) Unmarshal(data []byte) error {
 			}
 			m.SystemDBSpan = bool(v != 0)
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -2513,14 +2625,21 @@ func (m *ModifiedSpanTrigger) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2533,6 +2652,12 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: InternalCommitTrigger: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: InternalCommitTrigger: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -2540,6 +2665,9 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2570,6 +2698,9 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2600,6 +2731,9 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2630,6 +2764,9 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2655,15 +2792,7 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -2678,14 +2807,21 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *NodeList) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2698,11 +2834,20 @@ func (m *NodeList) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: NodeList: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: NodeList: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType == 2 {
 				var packedLen int
 				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowData
+					}
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
@@ -2723,6 +2868,9 @@ func (m *NodeList) Unmarshal(data []byte) error {
 				for iNdEx < postIndex {
 					var v int32
 					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowData
+						}
 						if iNdEx >= l {
 							return io.ErrUnexpectedEOF
 						}
@@ -2738,6 +2886,9 @@ func (m *NodeList) Unmarshal(data []byte) error {
 			} else if wireType == 0 {
 				var v int32
 				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowData
+					}
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
@@ -2753,15 +2904,7 @@ func (m *NodeList) Unmarshal(data []byte) error {
 				return fmt.Errorf("proto: wrong wireType = %d for field Nodes", wireType)
 			}
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -2776,14 +2919,21 @@ func (m *NodeList) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *Transaction) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2796,6 +2946,12 @@ func (m *Transaction) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Transaction: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Transaction: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -2803,6 +2959,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2829,6 +2988,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2854,6 +3016,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2879,6 +3044,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			m.Priority = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2895,6 +3063,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			m.Isolation = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2911,6 +3082,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			m.Status = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2927,6 +3101,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			m.Epoch = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2943,6 +3120,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2973,6 +3153,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3000,6 +3183,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3027,6 +3213,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3054,6 +3243,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3081,6 +3273,9 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3093,15 +3288,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			m.Writing = bool(v != 0)
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -3116,14 +3303,21 @@ func (m *Transaction) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *Lease) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3136,6 +3330,12 @@ func (m *Lease) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Lease: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Lease: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -3143,6 +3343,9 @@ func (m *Lease) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3170,6 +3373,9 @@ func (m *Lease) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3197,6 +3403,9 @@ func (m *Lease) Unmarshal(data []byte) error {
 			}
 			m.RaftNodeID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3208,15 +3417,7 @@ func (m *Lease) Unmarshal(data []byte) error {
 				}
 			}
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -3231,14 +3432,21 @@ func (m *Lease) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *Intent) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3251,6 +3459,12 @@ func (m *Intent) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Intent: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Intent: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -3258,6 +3472,9 @@ func (m *Intent) Unmarshal(data []byte) error {
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3283,6 +3500,9 @@ func (m *Intent) Unmarshal(data []byte) error {
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3308,6 +3528,9 @@ func (m *Intent) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3330,15 +3553,7 @@ func (m *Intent) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -3353,14 +3568,21 @@ func (m *Intent) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *GCMetadata) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3373,6 +3595,12 @@ func (m *GCMetadata) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GCMetadata: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GCMetadata: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
@@ -3380,6 +3608,9 @@ func (m *GCMetadata) Unmarshal(data []byte) error {
 			}
 			m.LastScanNanos = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3396,6 +3627,9 @@ func (m *GCMetadata) Unmarshal(data []byte) error {
 			}
 			var v int64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -3408,15 +3642,7 @@ func (m *GCMetadata) Unmarshal(data []byte) error {
 			}
 			m.OldestIntentNanos = &v
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
 			if err != nil {
 				return err
@@ -3431,6 +3657,9 @@ func (m *GCMetadata) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func skipData(data []byte) (n int, err error) {
@@ -3439,6 +3668,9 @@ func skipData(data []byte) (n int, err error) {
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowData
+			}
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
@@ -3452,7 +3684,10 @@ func skipData(data []byte) (n int, err error) {
 		wireType := int(wire & 0x7)
 		switch wireType {
 		case 0:
-			for {
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -3468,6 +3703,9 @@ func skipData(data []byte) (n int, err error) {
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowData
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -3488,6 +3726,9 @@ func skipData(data []byte) (n int, err error) {
 				var innerWire uint64
 				var start int = iNdEx
 				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return 0, ErrIntOverflowData
+					}
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
@@ -3523,4 +3764,5 @@ func skipData(data []byte) (n int, err error) {
 
 var (
 	ErrInvalidLengthData = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowData   = fmt.Errorf("proto: integer overflow")
 )

@@ -101,7 +101,7 @@ func TestTruncate(t *testing.T) {
 		}
 		var reqs int
 		for j, arg := range ba.Requests {
-			req := arg.GetValue().(proto.Request)
+			req := arg.GetInner()
 			if h := req.Header(); !bytes.Equal(h.Key, proto.Key(test.expKeys[j][0])) || !bytes.Equal(h.EndKey, proto.Key(test.expKeys[j][1])) {
 				t.Errorf("%d.%d: range mismatch: actual [%q,%q), wanted [%q,%q)", i, j,
 					h.Key, h.EndKey, test.expKeys[j][0], test.expKeys[j][1])
