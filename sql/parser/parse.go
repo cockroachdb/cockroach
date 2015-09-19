@@ -26,6 +26,8 @@ package parser
 import (
 	"bytes"
 	"errors"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 //go:generate make
@@ -65,4 +67,23 @@ func Parse(sql string, syntax Syntax) (StatementList, error) {
 // ParseTraditional is short-hand for Parse(sql, Traditional)
 func ParseTraditional(sql string) (StatementList, error) {
 	return Parse(sql, Traditional)
+}
+
+// ParseExpr parses a sql expression.
+func ParseExpr(expr string, syntax Syntax) (Expr, error) {
+	stmts, err := Parse(`SELECT `+expr, syntax)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, util.Errorf("expected 1 statement, but found %d", len(stmts))
+	}
+	sel, ok := stmts[0].(*Select)
+	if !ok {
+		return nil, util.Errorf("expected a SELECT statement, but found %T", stmts[0])
+	}
+	if n := len(sel.Exprs); n != 1 {
+		return nil, util.Errorf("expected 1 expression, but found %d", n)
+	}
+	return sel.Exprs[0].Expr, nil
 }

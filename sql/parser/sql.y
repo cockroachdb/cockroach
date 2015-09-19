@@ -46,8 +46,8 @@ func unimplemented() {
   constraintDef  ConstraintTableDef
   tblDef         TableDef
   tblDefs        []TableDef
-  colConstraint  ColumnConstraint
-  colConstraints []ColumnConstraint
+  colQual        ColumnQualification
+  colQuals       []ColumnQualification
   colType        ColumnType
   colTypes       []ColumnType
   expr           Expr
@@ -237,8 +237,8 @@ func unimplemented() {
 
 %type <constraintDef> table_constraint constraint_elem
 %type <tblDef> index_def
-%type <colConstraints> col_qual_list
-%type <colConstraint> col_constraint col_constraint_elem
+%type <colQuals> col_qual_list
+%type <colQual> col_qualification col_qualification_elem
 %type <empty> key_actions key_delete key_match key_update key_action
 
 %type <expr>  func_application func_expr_common_subexpr
@@ -1039,7 +1039,7 @@ column_def:
   }
 
 col_qual_list:
-  col_qual_list col_constraint
+  col_qual_list col_qualification
   {
     $$ = append($1, $2)
   }
@@ -1048,13 +1048,13 @@ col_qual_list:
     $$ = nil
   }
 
-col_constraint:
-  CONSTRAINT name col_constraint_elem
+col_qualification:
+  CONSTRAINT name col_qualification_elem
   {
     // TODO(pmattis): Handle constraint name.
     $$ = $3
   }
-| col_constraint_elem
+| col_qualification_elem
 | COLLATE any_name { unimplemented() }
 
 // DEFAULT NULL is already the default for Postgres. But define it here and
@@ -1069,7 +1069,7 @@ col_constraint:
 // DEFAULT expression must be b_expr not a_expr to prevent shift/reduce
 // conflict on NOT (since NOT might start a subsequent NOT NULL constraint, or
 // be part of a_expr NOT LIKE or similar constructs).
-col_constraint_elem:
+col_qualification_elem:
   NOT NULL
   {
     $$ = NotNullConstraint{}
@@ -1087,7 +1087,15 @@ col_constraint_elem:
     $$ = PrimaryKeyConstraint{}
   }
 | CHECK '(' a_expr ')' { unimplemented() }
-| DEFAULT b_expr { unimplemented() }
+| DEFAULT b_expr
+  {
+    // TODO(pmattis): Also reject expressions containing subqueries.
+    if ContainsVars($2) {
+      sqllex.Error("default expression contains a variable")
+      return 1
+    }
+    $$ = &ColumnDefault{Expr: $2}
+  }
 | REFERENCES qualified_name opt_column_list key_match key_actions { unimplemented() }
 
 index_def:
@@ -1111,7 +1119,7 @@ index_def:
   }
 
 // constraint_elem specifies constraint syntax which is not embedded into a
-// column definition. col_constraint_elem specifies the embedded form.
+// column definition. col_qualification_elem specifies the embedded form.
 // - thomas 1997-12-03
 table_constraint:
   CONSTRAINT name constraint_elem
@@ -3149,7 +3157,7 @@ ctext_expr:
   a_expr
 | DEFAULT
   {
-    $$ = nil
+    $$ = DefaultVal{}
   }
 
 ctext_expr_list:

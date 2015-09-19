@@ -74,15 +74,15 @@ OK
 		t.Fatal(err)
 	}
 
-	expectedCols := []string{"Field", "Type", "Null"}
+	expectedCols := []string{"Field", "Type", "Null", "Default"}
 	if !reflect.DeepEqual(expectedCols, cols) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedCols, cols)
 	}
 
 	expectedRows := [][]string{
-		{`"parentID"`, `"INT"`, `true`},
-		{`"name"`, `"STRING"`, `true`},
-		{`"id"`, `"INT"`, `true`},
+		{`"parentID"`, `"INT"`, `true`, `<nil>`},
+		{`"name"`, `"STRING"`, `true`, `<nil>`},
+		{`"id"`, `"INT"`, `true`, `<nil>`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
@@ -93,13 +93,13 @@ OK
 	}
 
 	expected = `
-+------------+----------+------+
-|   Field    |   Type   | Null |
-+------------+----------+------+
-| "parentID" | "INT"    | true |
-| "name"     | "STRING" | true |
-| "id"       | "INT"    | true |
-+------------+----------+------+
++------------+----------+------+---------+
+|   Field    |   Type   | Null | Default |
++------------+----------+------+---------+
+| "parentID" | "INT"    | true | <nil>   |
+| "name"     | "STRING" | true | <nil>   |
+| "id"       | "INT"    | true | <nil>   |
++------------+----------+------+---------+
 `
 
 	if a, e := b.String(), expected[1:]; a != e {

@@ -64,3 +64,13 @@ query TTT
 SELECT * FROM u WHERE a = 234
 ----
 234 2015-08-25 04:45:45.53453 +0000 UTC   2015-08-25 00:00:00 +0000 UTC   2h45m2.234s
+
+query B
+SELECT now() < now() + '1m'::interval, now() <= now() + '1m'::interval
+----
+true true
+
+query B
+SELECT now() + '1m'::interval > now(), now() + '1m'::interval >= now()
+----
+true true

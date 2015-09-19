@@ -393,7 +393,7 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 		return DBool(right.(DDate).Before(left.(DDate).Time)), nil
 	},
 	cmpArgs{LE, timestampType, timestampType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(right.(DTimestamp).Before(left.(DTimestamp).Time)), nil
+		return !DBool(right.(DTimestamp).Before(left.(DTimestamp).Time)), nil
 	},
 	cmpArgs{LE, intervalType, intervalType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DInterval).Duration <= right.(DInterval).Duration), nil

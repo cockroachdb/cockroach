@@ -42,6 +42,7 @@ func (*IsOfTypeExpr) expr()   {}
 func (*ExistsExpr) expr()     {}
 func (IntVal) expr()          {}
 func (NumVal) expr()          {}
+func (DefaultVal) expr()      {}
 func (ValArg) expr()          {}
 func (*QualifiedName) expr()  {}
 func (Tuple) expr()           {}
@@ -265,6 +266,13 @@ type NumVal string
 
 func (node NumVal) String() string {
 	return string(node)
+}
+
+// DefaultVal represents the DEFAULT expression.
+type DefaultVal struct{}
+
+func (node DefaultVal) String() string {
+	return "DEFAULT"
 }
 
 // ValArg represents a named bind var argument.

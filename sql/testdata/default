@@ -1,0 +1,71 @@
+statement error incompatible column type and default expression: INT vs bool
+CREATE TABLE t (a INT PRIMARY KEY DEFAULT false)
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY DEFAULT 42,
+  b TIMESTAMP DEFAULT now(),
+  c FLOAT DEFAULT random()
+)
+
+query TTTT colnames
+SHOW COLUMNS FROM t
+----
+Field Type      Null Default
+a     INT       true 42
+b     TIMESTAMP true now()
+c     FLOAT     true random()
+
+statement ok
+INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT)
+
+query IBB
+SELECT a, b <= now(), c >= 0.0 FROM t
+----
+42 true true
+
+statement ok
+TRUNCATE TABLE t
+
+statement ok
+INSERT INTO t DEFAULT VALUES
+
+query IBB
+SELECT a, b <= now(), c >= 0.0 FROM t
+----
+42 true true
+
+statement ok
+INSERT INTO t (a) VALUES (1)
+
+query IBB
+SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 1
+----
+1 true true
+
+statement ok
+INSERT INTO t VALUES (2)
+
+query IBB
+SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 2
+----
+2 true true
+
+statement ok
+UPDATE t SET (b, c) = ('2015-09-18 00:00:00'::timestamp, -1.0)
+
+statement ok
+UPDATE t SET b = DEFAULT WHERE a = 1
+
+query IBB
+SELECT a, b <= now(), c = -1.0 FROM t WHERE a = 1
+----
+1 true true
+
+statement ok
+UPDATE t SET (b, c) = (DEFAULT, DEFAULT) WHERE a = 2
+
+query IBB
+SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 2
+----
+2 true true
