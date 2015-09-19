@@ -12,6 +12,7 @@
 		cockroach/proto/heartbeat.proto
 		cockroach/proto/internal.proto
 		cockroach/proto/metadata.proto
+		cockroach/proto/refactored.proto
 		cockroach/proto/timeseries.proto
 
 	It has these top-level messages:
