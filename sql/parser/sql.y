@@ -1089,9 +1089,12 @@ col_qualification_elem:
 | CHECK '(' a_expr ')' { unimplemented() }
 | DEFAULT b_expr
   {
-    // TODO(pmattis): Also reject expressions containing subqueries.
     if ContainsVars($2) {
       sqllex.Error("default expression contains a variable")
+      return 1
+    }
+    if containsSubquery($2) {
+      sqllex.Error("default expression contains a subquery")
       return 1
     }
     $$ = &ColumnDefault{Expr: $2}
