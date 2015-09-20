@@ -32,13 +32,14 @@ import (
 //   a + 1 = 2             -> a = 1
 //   a BETWEEN b AND c     -> (a >= b) AND (a <= c)
 //   a NOT BETWEEN b AND c -> (a < b) OR (a > c)
-func NormalizeExpr(expr Expr) (Expr, error) {
-	v := normalizeVisitor{}
+func NormalizeExpr(ctx EvalContext, expr Expr) (Expr, error) {
+	v := normalizeVisitor{ctx: ctx}
 	expr = WalkExpr(&v, expr)
 	return expr, v.err
 }
 
 type normalizeVisitor struct {
+	ctx EvalContext
 	err error
 }
 
@@ -87,7 +88,7 @@ func (v *normalizeVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 
 	// Evaluate constant expressions.
 	if isConst(expr) {
-		expr, v.err = EvalExpr(expr)
+		expr, v.err = v.ctx.EvalExpr(expr)
 		if v.err != nil {
 			return nil, expr
 		}
@@ -143,7 +144,7 @@ func (v *normalizeVisitor) normalizeRangeCond(n *RangeCond) Expr {
 func (v *normalizeVisitor) normalizeAndExpr(n *AndExpr) (Visitor, Expr) {
 	// Use short-circuit evaluation to simplify AND expressions.
 	if isConst(n.Left) {
-		n.Left, v.err = EvalExpr(n.Left)
+		n.Left, v.err = v.ctx.EvalExpr(n.Left)
 		if v.err != nil {
 			return nil, n
 		}
@@ -158,7 +159,7 @@ func (v *normalizeVisitor) normalizeAndExpr(n *AndExpr) (Visitor, Expr) {
 		return v, n
 	}
 	if isConst(n.Right) {
-		n.Right, v.err = EvalExpr(n.Right)
+		n.Right, v.err = v.ctx.EvalExpr(n.Right)
 		if v.err != nil {
 			return nil, n
 		}
@@ -178,7 +179,7 @@ func (v *normalizeVisitor) normalizeAndExpr(n *AndExpr) (Visitor, Expr) {
 func (v *normalizeVisitor) normalizeOrExpr(n *OrExpr) (Visitor, Expr) {
 	// Use short-circuit evaluation to simplify OR expressions.
 	if isConst(n.Left) {
-		n.Left, v.err = EvalExpr(n.Left)
+		n.Left, v.err = v.ctx.EvalExpr(n.Left)
 		if v.err != nil {
 			return nil, n
 		}
@@ -192,7 +193,7 @@ func (v *normalizeVisitor) normalizeOrExpr(n *OrExpr) (Visitor, Expr) {
 		}
 	}
 	if isConst(n.Right) {
-		n.Right, v.err = EvalExpr(n.Right)
+		n.Right, v.err = v.ctx.EvalExpr(n.Right)
 		if v.err != nil {
 			return nil, n
 		}
@@ -283,7 +284,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 				}
 				// Clear the function cache now that we've changed the operator.
 				left.fn.fn = nil
-				n.Right, v.err = EvalExpr(left)
+				n.Right, v.err = v.ctx.EvalExpr(left)
 				if v.err != nil {
 					return nil, nil
 				}
@@ -310,7 +311,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 				} else {
 					n.Operator = invertComparisonOp(n.Operator)
 				}
-				n.Left, v.err = EvalExpr(left)
+				n.Left, v.err = v.ctx.EvalExpr(left)
 				if v.err != nil {
 					return nil, nil
 				}

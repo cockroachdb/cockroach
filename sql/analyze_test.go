@@ -54,7 +54,7 @@ func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
 		t.Fatalf("%s: %v", sql, err)
 	}
 	expr := q[0].(*parser.Select).Exprs[0].Expr
-	expr, err = parser.NormalizeExpr(expr)
+	expr, err = parser.NormalizeExpr(parser.EvalContext{}, expr)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
@@ -87,11 +87,11 @@ func checkEquivExpr(a, b parser.Expr, qvals qvalMap) error {
 		for _, q := range qvals {
 			q.datum = v
 		}
-		da, err := parser.EvalExpr(a)
+		da, err := (parser.EvalContext{}).EvalExpr(a)
 		if err != nil {
 			return fmt.Errorf("%s: %v", a, err)
 		}
-		db, err := parser.EvalExpr(b)
+		db, err := (parser.EvalContext{}).EvalExpr(b)
 		if err != nil {
 			return fmt.Errorf("%s: %v", b, err)
 		}

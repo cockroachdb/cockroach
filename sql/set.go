@@ -33,7 +33,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	name := strings.ToUpper(n.Name.String())
 	switch name {
 	case `DATABASE`:
-		dbName, err := getStringVal(name, n.Values)
+		dbName, err := p.getStringVal(name, n.Values)
 		if err != nil {
 			return nil, err
 		}
@@ -46,7 +46,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		p.session.Database = dbName
 
 	case `SYNTAX`:
-		s, err := getStringVal(name, n.Values)
+		s, err := p.getStringVal(name, n.Values)
 		if err != nil {
 			return nil, err
 		}
@@ -65,11 +65,11 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	return &valuesNode{}, nil
 }
 
-func getStringVal(name string, values parser.Exprs) (string, error) {
+func (p *planner) getStringVal(name string, values parser.Exprs) (string, error) {
 	if len(values) != 1 {
 		return "", fmt.Errorf("%s: requires a single string value", name)
 	}
-	val, err := parser.EvalExpr(values[0])
+	val, err := p.evalCtx.EvalExpr(values[0])
 	if err != nil {
 		return "", err
 	}

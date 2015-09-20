@@ -31,6 +31,7 @@ type planner struct {
 	txn     *client.Txn
 	session Session
 	user    string
+	evalCtx parser.EvalContext
 }
 
 // makePlan creates the query plan for a single SQL statement. The returned

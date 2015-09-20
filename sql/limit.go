@@ -26,9 +26,9 @@ import (
 )
 
 // limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (*planner) limit(n *parser.Select, p planNode) (planNode, error) {
+func (p *planner) limit(n *parser.Select, plan planNode) (planNode, error) {
 	if n.Limit == nil {
-		return p, nil
+		return plan, nil
 	}
 
 	var count, offset int64
@@ -51,11 +51,11 @@ func (*planner) limit(n *parser.Select, p planNode) (planNode, error) {
 				return nil, fmt.Errorf("argument of %s must not contain variables", datum.name)
 			}
 
-			normalized, err := parser.NormalizeExpr(datum.src)
+			normalized, err := parser.NormalizeExpr(p.evalCtx, datum.src)
 			if err != nil {
 				return nil, err
 			}
-			dstDatum, err := parser.EvalExpr(normalized)
+			dstDatum, err := p.evalCtx.EvalExpr(normalized)
 			if err != nil {
 				return nil, err
 			}
@@ -74,7 +74,7 @@ func (*planner) limit(n *parser.Select, p planNode) (planNode, error) {
 		}
 	}
 
-	return &limitNode{planNode: p, count: count, offset: offset}, nil
+	return &limitNode{planNode: plan, count: count, offset: offset}, nil
 }
 
 type limitNode struct {

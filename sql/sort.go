@@ -44,7 +44,7 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, error) {
 
 		// Normalize the expression which has the side-effect of evaluating
 		// constant expressions and unwrapping expressions like "((a))" to "a".
-		expr, err := parser.NormalizeExpr(o.Expr)
+		expr, err := parser.NormalizeExpr(p.evalCtx, o.Expr)
 		if err != nil {
 			return nil, err
 		}

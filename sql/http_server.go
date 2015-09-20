@@ -25,10 +25,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/driver"
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -109,9 +107,4 @@ func (s HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write(body); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-}
-
-// SetNodeID sets the node ID for the SQL server.
-func (s HTTPServer) SetNodeID(nodeID proto.NodeID) {
-	parser.SetNodeID(uint32(nodeID))
 }
