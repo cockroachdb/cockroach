@@ -194,12 +194,10 @@ func TestResponseCacheInflight(t *testing.T) {
 			close(doneChan)
 		}()
 	}
-	for count := 0; count < 2; count++ {
+	for _, doneChan := range doneChans {
 		select {
-		case <-doneChans[0]:
-			count++
-		case <-doneChans[1]:
-			count++
+		case <-doneChan:
+			break
 		case <-time.After(100 * time.Millisecond):
 			t.Fatalf("concurrent gets to cache did not complete")
 		}
