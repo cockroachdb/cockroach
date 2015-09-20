@@ -11,6 +11,14 @@ set -eux
 if [ "${1-}" = "docker" ]; then
   cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
 
+  # `"$GOPATH"/pkg/cache` is `cachedir` on the host computer.
+  # Create the cache directories to avoid errors on `ln` below.
+  mkdir -p "$GOPATH"/pkg/cache/{bower_components,node_modules,typings}
+
+  # Symlink the cache into the source tree.
+  ln -s "$GOPATH"/pkg/cache/{bower_components,node_modules,typings} ui/
+  time make -C ui {bower,npm,tsd}.installed
+
   # Restore previously cached build artifacts.
   time go install github.com/cockroachdb/build-cache
   time build-cache restore . .:race,test ${cmds}
@@ -31,7 +39,7 @@ cachedir="${gopath0}/pkg/cache"
 # The tag for the cockroachdb/builder image. If the image is changed
 # (for example, adding "npm"), a new image should be pushed using
 # "build/builder.sh push" and the new tag value placed here.
-tag="20150928-162648"
+tag="20150929-133252"
 
 mkdir -p "${cachedir}"
 du -sh "${cachedir}"

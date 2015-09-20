@@ -5,20 +5,7 @@ set -eu
 image="cockroachdb/builder"
 
 function init() {
-  docker build --tag="${image}" - <<EOF
-FROM golang:1.5
-
-RUN curl --silent --location https://deb.nodesource.com/setup_4.x | bash - && \
- apt-get dist-upgrade -y && \
- apt-get install --no-install-recommends --auto-remove -y git build-essential file nodejs && \
- apt-get clean autoclean && \
- apt-get autoremove -y && \
- rm -rf /tmp/*
-RUN go get golang.org/x/tools/cmd/vet
-ENV SKIP_BOOTSTRAP=1
-
-CMD ["/bin/bash"]
-EOF
+  docker build --tag="${image}" "$(dirname $0)"
 }
 
 if [ "${1-}" = "pull" ]; then
