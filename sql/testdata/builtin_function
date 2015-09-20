@@ -586,3 +586,8 @@ query T
 SELECT translate('a‰ÒÁ', 'aÒ', '∏p')
 ----
 ∏‰pÁ
+
+query B
+SELECT unique_id() < unique_id(), length(unique_id())
+----
+true 13

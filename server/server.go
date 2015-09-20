@@ -193,6 +193,8 @@ func (s *Server) Start(selfBootstrap bool) error {
 	// Begin recording status summaries.
 	s.startWriteSummaries()
 
+	s.sqlServer.SetNodeID(s.node.Descriptor.NodeID)
+
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), s.rpc.Addr())
 	s.initHTTP()
 	s.rpc.Serve(s)

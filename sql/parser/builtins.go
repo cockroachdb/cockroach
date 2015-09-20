@@ -29,9 +29,12 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 var errEmptyInputString = errors.New("the input string must not be empty")
@@ -333,6 +336,22 @@ var builtins = map[string][]builtin{
 			impure:     true,
 			fn: func(args DTuple) (Datum, error) {
 				return DFloat(rand.Float64()), nil
+			},
+		},
+	},
+
+	"unique_id": {
+		builtin{
+			types:      typeList{},
+			returnType: DummyBytes,
+			impure:     true,
+			fn: func(args DTuple) (Datum, error) {
+				millis, rand, nodeID := generateUniqueID()
+				b := make([]byte, 0, 16)
+				b = encoding.EncodeUvarint(b, millis)
+				b = encoding.EncodeUint32(b, rand)
+				b = encoding.EncodeUvarint(b, uint64(nodeID))
+				return DBytes(b), nil
 			},
 		},
 	},
@@ -855,4 +874,56 @@ func round(x float64, n int64) (Datum, error) {
 	const b = 64
 	y, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', int(n), b), b)
 	return DFloat(y), err
+}
+
+// TODO(pmattis): The global nodeID state won't work well if we're running
+// multiple nodes within a single process. Figure out a way to pass per-server
+// context to the builtin functions.
+var uniqueIDState struct {
+	sync.Mutex
+	millis uint64
+	rand   uint32
+	nodeID uint32
+}
+
+// SetNodeID sets the node ID to use for unique ID generation.
+func SetNodeID(nodeID uint32) {
+	uniqueIDState.Lock()
+	uniqueIDState.nodeID = nodeID
+	uniqueIDState.Unlock()
+}
+
+func generateUniqueID() (uint64, uint32, uint32) {
+	// Unique IDs are composed of the current time in milliseconds, a 31-bit
+	// random number and a 32-bit node-id. If two unique IDs are generated within
+	// the same millisecond on a server, the random number is incremented instead
+	// of being generated fresh. This ensures that unique ID generation is
+	// monotonic on a single server and k-sorted across servers.
+	//
+	// Note that rand.Int31 returns a 32-bit positive signed integer. We cast
+	// this to a uint32. There are at least 1<<31 increments we can perform on
+	// this number before it wraps to 0, so such wrapping is not a concern within
+	// a given millisecond.
+	//
+	// TODO(pmattis): We could squeeze a bit more space out of the encoding. For
+	// example, we could limit the node-id to 16-bits and the random component to
+	// 16-bits and handle overflow of the rand value by incrementing the
+	// millisecond component.
+	//
+	// TODO(pmattis): Do we have to worry about persisting the milliseconds value
+	// periodically to avoid the clock ever going backwards (e.g. due to NTP
+	// adjustment)?
+	millis := uint64(time.Now().UnixNano() / int64(time.Millisecond))
+	uniqueIDState.Lock()
+	if millis <= uniqueIDState.millis {
+		millis = uniqueIDState.millis
+		uniqueIDState.rand++
+	} else {
+		uniqueIDState.millis = millis
+		uniqueIDState.rand = uint32(rand.Int31())
+	}
+	rand := uniqueIDState.rand
+	nodeID := uniqueIDState.nodeID
+	uniqueIDState.Unlock()
+	return millis, rand, nodeID
 }
