@@ -258,7 +258,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 func main() {
 	// Seed the random number generator for non-determinism across
 	// multiple runs.
-	rand.Seed(time.Now().UTC().UnixNano())
+	rand.Seed(time.Now().UnixNano())
 
 	if f := flag.Lookup("alsologtostderr"); f != nil {
 		fmt.Println("Starting simulation. Add -alsologtostderr to see progress.")

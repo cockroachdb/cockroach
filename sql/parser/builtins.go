@@ -436,7 +436,7 @@ var builtins = map[string][]builtin{
 			types:      typeList{},
 			returnType: DummyDate,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return DDate{Time: e.StmtTimestamp.Truncate(24 * time.Hour)}, nil
+				return MakeDDate(e.StmtTimestamp.Time), nil
 			},
 		},
 	},

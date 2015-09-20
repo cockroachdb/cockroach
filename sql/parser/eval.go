@@ -560,7 +560,11 @@ type EvalContext struct {
 	GetLocation   func() (*time.Location, error)
 }
 
-var defaultContext EvalContext
+var defaultContext = EvalContext{
+	GetLocation: func() (*time.Location, error) {
+		return time.UTC, nil
+	},
+}
 
 // EvalExpr evaluates an SQL expression. Expression evaluation is a mostly
 // straightforward walk over the parse tree. The only significant complexity is
@@ -1129,7 +1133,11 @@ func (ctx EvalContext) evalCastExpr(expr *CastExpr) (Datum, error) {
 		case DString:
 			return ParseDate(d)
 		case DTimestamp:
-			return DDate{Time: d.Truncate(24 * time.Hour)}, nil
+			loc, err := ctx.GetLocation()
+			if err != nil {
+				return DNull, err
+			}
+			return MakeDDate(d.Time.In(loc)), nil
 		}
 
 	case *TimestampType:
@@ -1239,7 +1247,7 @@ func ParseDate(s DString) (DDate, error) {
 		return DummyDate, err
 	}
 
-	return DDate{Time: t}, nil
+	return MakeDDate(t), nil
 }
 
 // ParseTimestamp parses the timestamp.
@@ -1263,7 +1271,7 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 	} {
 		var t time.Time
 		if t, err = time.ParseInLocation(format, str, loc); err == nil {
-			return DTimestamp{Time: t.UTC()}, nil
+			return DTimestamp{Time: t}, nil
 		}
 	}
 

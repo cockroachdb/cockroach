@@ -699,6 +699,12 @@ func (n *scanNode) explainDebug(endOfRow, outputRow bool) {
 	if n.implicitVals != nil {
 		n.row[2] = parser.DString(prettyKeyVals(n.implicitVals))
 	} else {
+		// This conversion to DString is odd. `n.explainValue` is already a
+		// `Datum`, but logic_test currently expects EXPLAIN DEBUG output
+		// to come out formatted using `encodeSQLString`. This is not
+		// consistent across all printing of strings in logic_test, though.
+		// TODO(tamird/pmattis): figure out a consistent story for string
+		// printing in logic_test.
 		n.row[2] = parser.DString(n.explainValue.String())
 	}
 	if endOfRow {
