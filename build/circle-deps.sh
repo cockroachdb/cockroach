@@ -16,6 +16,8 @@ if [ "${1-}" = "docker" ]; then
   # unnecessarily.
   export SKIP_BOOTSTRAP=1
 
+  ln -s /go/node_modules ui/ && touch ui/npm.installed
+
   # Restore previously cached build artifacts.
   time go install github.com/cockroachdb/build-cache
   time build-cache restore . .:race,test ${cmds}
@@ -36,7 +38,7 @@ cachedir="${gopath0}/pkg/cache"
 # The tag for the cockroachdb/builder image. If the image is changed
 # (for example, adding "npm"), a new image should be pushed using
 # "build/builder.sh push" and the new tag value placed here.
-tag="20150911-124101"
+tag="20150920-165703"
 
 mkdir -p "${cachedir}"
 du -sh "${cachedir}"
