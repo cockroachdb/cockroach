@@ -46,10 +46,10 @@ func TestResponseHeaderSetGoError(t *testing.T) {
 	rh := ResponseHeader{}
 	rh.SetGoError(&testError{})
 	err := rh.GoError()
-	if _, ok := err.(*Error); !ok {
-		t.Errorf("expected set error to be type Error; got %T", err)
+	if err.Error() != "test" {
+		t.Fatalf("unexpected error: %s", err)
 	}
-	if !err.(*Error).Retryable {
+	if !rh.Error.Retryable {
 		t.Error("expected generic error to be retryable")
 	}
 }
@@ -150,10 +150,10 @@ func TestCombinable(t *testing.T) {
 
 func TestSetGoErrorCopy(t *testing.T) {
 	rh := ResponseHeader{}
-	err := &Error{Message: "test123"}
-	rh.SetGoError(err)
-	err.Message = "321tset"
-	if rh.Error.Message != "test123" {
+	oErr := &Error{Message: "test123"}
+	rh.Error = oErr
+	rh.SetGoError(&testError{})
+	if oErr.Message != "test123" {
 		t.Fatalf("SetGoError did not create a new error")
 	}
 }

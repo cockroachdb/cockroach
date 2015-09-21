@@ -20,6 +20,7 @@ package kv
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"reflect"
@@ -417,14 +418,8 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	}
 
 	errors := []error{
-		&proto.Error{
-			Message:   "fatal boom",
-			Retryable: false,
-		},
-		&proto.Error{
-			Message:   "temporary boom",
-			Retryable: true,
-		},
+		errors.New("fatal boom"),
+		&proto.RangeKeyMismatchError{}, // retryable
 		nil,
 	}
 
@@ -445,7 +440,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	reply := call.Reply.(*proto.PutResponse)
 	// Fatal error on descriptor lookup, propagated to reply.
 	client.SendCallConverted(ds, context.Background(), call)
-	if err := reply.Header().Error; err.GetMessage() != "fatal boom" {
+	if err := reply.Header().GoError(); err.Error() != "fatal boom" {
 		t.Errorf("unexpected error: %s", err)
 	}
 	// Retryable error on descriptor lookup, second attempt successful.

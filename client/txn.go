@@ -49,6 +49,8 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 	call.Args.Header().Txn = &ts.Proto
 	ts.wrapped.Send(ctx, call)
 
+	// TODO(tschottdorf): see about using only the top-level *proto.Error
+	// information for this restart logic (includes adding the Txn).
 	err := call.Reply.Header().GoError()
 	// Only successful requests can carry an updated Txn in their response
 	// header. Any error (e.g. a restart) can have a Txn attached to them as

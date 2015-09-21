@@ -218,7 +218,6 @@ func TestResponseCacheShouldCache(t *testing.T) {
 		{&proto.TransactionAbortedError{}, true},
 		{&proto.TransactionPushError{}, true},
 		{&proto.TransactionRetryError{}, true},
-		{&proto.Error{}, true},
 		{&proto.RangeNotFoundError{}, true},
 		{&proto.RangeKeyMismatchError{}, true},
 		{&proto.TransactionStatusError{}, true},
