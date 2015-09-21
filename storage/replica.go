@@ -1133,7 +1133,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *pr
 	// so the code is fairly clumsy and tries to overwrite as much as it can
 	// from the batch. There'll certainly be some more iterations to stream-
 	// line the code in this loop.
-	for _, union := range ba.Requests {
+	for index, union := range ba.Requests {
 		// Execute the command.
 		args := union.GetInner()
 
@@ -1162,7 +1162,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *pr
 		}
 
 		if err != nil {
-			return nil, intents, err
+			return nil, intents, &errWithIndex{err: err, index: index}
 		}
 
 		// Add the response to the batch, updating the timestamp.

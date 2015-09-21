@@ -139,6 +139,15 @@ func verifyKeys(start, end proto.Key, checkEndKey bool) error {
 	return nil
 }
 
+type errWithIndex struct {
+	index int
+	err   error
+}
+
+func (ewi *errWithIndex) Error() string {
+	return fmt.Sprintf("at %d: %s", ewi.index, ewi.err)
+}
+
 type rangeAlreadyExists struct {
 	rng *Replica
 }
@@ -1206,6 +1215,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		}
 
 		var reply proto.Response
+		index := -1
 		reply, err = rng.AddCmd(ctx, args)
 		if err == nil {
 			return reply, nil
@@ -1213,6 +1223,10 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			// This error needs to be converted appropriately so that
 			// clients will retry.
 			err = proto.NewRangeNotFoundError(rng.Desc().RangeID)
+		} else if iErr, ok := err.(*errWithIndex); ok {
+			err, index = iErr.err, iErr.index
+			// TODO(tschottdorf): propagate the index up. See #1891.
+			_ = index
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
