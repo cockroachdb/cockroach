@@ -108,7 +108,7 @@ func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
 }
 
 // SendBatch implements batch.Sender.
-func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
+func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	trace := tracer.FromCtx(ctx)
 	var store *storage.Store
 	var err error
@@ -135,6 +135,7 @@ func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*p
 	}
 
 	var br *proto.BatchResponse
+	// TODO(tschottdorf): handle err != nil first.
 	if err == nil {
 		// For calls that read data within a txn, we can avoid uncertainty
 		// related retries in certain situations. If the node is in
@@ -147,10 +148,8 @@ func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*p
 			ba.Txn.MaxTimestamp = ba.Txn.Timestamp
 		}
 		{
-			var tmpR proto.Response
-			var tmpErr *proto.Error
 			// TODO(tschottdorf): &ba -> ba
-			tmpR, tmpErr = store.ExecuteCmd(ctx, &ba)
+			tmpR, pErr := store.ExecuteCmd(ctx, &ba)
 			// TODO(tschottdorf): remove this dance once BatchResponse is returned.
 			if tmpR != nil {
 				br = tmpR.(*proto.BatchResponse)
@@ -158,13 +157,13 @@ func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*p
 					panic(proto.ErrorUnexpectedlySet)
 				}
 			}
-			err = tmpErr.GoError()
+			return br, pErr
 		}
 	}
 	// TODO(tschottdorf): Later error needs to be associated to an index
 	// and ideally individual requests don't even have an error in their
 	// header. See #1891.
-	return br, err
+	return br, proto.NewError(err)
 }
 
 // Send implements the client.Sender interface. The store is looked
@@ -241,7 +240,7 @@ func (ls *LocalSender) rangeLookup(key proto.Key, options lookupOptions, _ *prot
 	})
 	br, err := ls.SendBatch(context.Background(), *ba)
 	if err != nil {
-		return nil, err
+		return nil, err.GoError()
 	}
 	return unwrap(br).(*proto.RangeLookupResponse).Ranges, nil
 }

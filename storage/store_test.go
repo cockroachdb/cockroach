@@ -949,7 +949,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 				}
 			} else {
 				if _, ok := cErr.GoError().(*proto.TransactionRetryError); !ok {
-					t.Errorf("expected transaction retry error; got %s", pErr)
+					t.Errorf("expected transaction retry error; got %s", cErr)
 				}
 			}
 		} else {

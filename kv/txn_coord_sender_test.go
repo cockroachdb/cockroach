@@ -571,8 +571,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
-		ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ proto.BatchRequest) (*proto.BatchResponse, error) {
-			return nil, test.err
+		ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+			return nil, proto.NewError(test.err)
 		}), clock, false, nil, stopper)
 		reply := &proto.PutResponse{}
 		ts.Send(context.Background(), proto.Call{Args: gogoproto.Clone(testPutReq).(proto.Request), Reply: reply})
@@ -616,11 +616,11 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano)
 	var called bool
 	var alwaysError = errors.New("success")
-	ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ proto.BatchRequest) (*proto.BatchResponse, error) {
+	ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 		called = true
 		// Returning this error is an easy way of preventing heartbeats
 		// to be started for otherwise "successful" calls.
-		return nil, alwaysError
+		return nil, proto.NewError(alwaysError)
 	}), clock, false, nil, stopper)
 
 	pushArg := &proto.PushTxnRequest{}
