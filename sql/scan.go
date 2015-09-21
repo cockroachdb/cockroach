@@ -343,7 +343,7 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	if n.err == nil {
 		// Normalize the expression (this will also evaluate any branches that are
 		// constant).
-		n.filter, n.err = parser.NormalizeExpr(n.planner.evalCtx, n.filter)
+		n.filter, n.err = n.planner.evalCtx.NormalizeExpr(n.filter)
 	}
 	if n.err == nil {
 		var whereType parser.Datum
@@ -468,7 +468,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	}
 	// Type check the expression to memoize operators and functions.
 	var normalized parser.Expr
-	if normalized, n.err = parser.NormalizeAndTypeCheckExpr(n.planner.evalCtx, resolved); n.err != nil {
+	if normalized, n.err = n.planner.evalCtx.NormalizeAndTypeCheckExpr(resolved); n.err != nil {
 		return n.err
 	}
 	if normalized, n.err = n.planner.expandSubqueries(normalized, 1); n.err != nil {

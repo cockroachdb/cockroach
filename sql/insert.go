@@ -282,7 +282,7 @@ func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, erro
 		if err != nil {
 			return nil, err
 		}
-		expr, err = parser.NormalizeExpr(p.evalCtx, expr)
+		expr, err = p.evalCtx.NormalizeExpr(expr)
 		if err != nil {
 			return nil, err
 		}

@@ -276,7 +276,7 @@ func TestEvalExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		expr := q[0].(*Select).Exprs[0].Expr
-		if expr, err = NormalizeExpr(defaultContext, expr); err != nil {
+		if expr, err = defaultContext.NormalizeExpr(expr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		r, err := defaultContext.EvalExpr(expr)

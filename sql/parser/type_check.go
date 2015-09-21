@@ -29,9 +29,9 @@ import (
 // TypeCheckExpr. It returns returns an error if either of
 // NormalizeExpr or TypeCheckExpr return one, and otherwise returns
 // the Expr returned by NormalizeExpr.
-func NormalizeAndTypeCheckExpr(ctx EvalContext, expr Expr) (Expr, error) {
+func (ctx EvalContext) NormalizeAndTypeCheckExpr(expr Expr) (Expr, error) {
 	var err error
-	expr, err = NormalizeExpr(ctx, expr)
+	expr, err = ctx.NormalizeExpr(expr)
 	if err != nil {
 		return nil, err
 	}

@@ -32,7 +32,7 @@ import (
 //   a + 1 = 2             -> a = 1
 //   a BETWEEN b AND c     -> (a >= b) AND (a <= c)
 //   a NOT BETWEEN b AND c -> (a < b) OR (a > c)
-func NormalizeExpr(ctx EvalContext, expr Expr) (Expr, error) {
+func (ctx EvalContext) NormalizeExpr(expr Expr) (Expr, error) {
 	v := normalizeVisitor{ctx: ctx}
 	expr = WalkExpr(&v, expr)
 	return expr, v.err

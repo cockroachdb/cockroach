@@ -55,13 +55,13 @@ func (e *Executor) SetNodeID(nodeID proto.NodeID) {
 // Execute the statement(s) in the given request and return a response.
 // On error, the returned integer is an HTTP error code.
 func (e Executor) Execute(args driver.Request) (driver.Response, int, error) {
-	// Pick up current session state.
 	planMaker := planner{
 		user: args.GetUser(),
 		evalCtx: parser.EvalContext{
 			NodeID: e.nodeID,
 		},
 	}
+	// Pick up current session state.
 	if err := gogoproto.Unmarshal(args.Session, &planMaker.session); err != nil {
 		return args.CreateReply(), http.StatusBadRequest, err
 	}
