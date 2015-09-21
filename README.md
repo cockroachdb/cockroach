@@ -123,9 +123,9 @@ see [cockroach-prod](https://github.com/cockroachdb/cockroach-prod)
 
 We spend almost all of our time here on GitHub, and use the [issue
 tracker](https://github.com/cockroachdb/cockroach/issues) for
-bug reports and development-related questions.
+bug reports.
 
-For anything else, message our mailing list at [cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db). We recommend joining before posting, or your messages may be held back for moderation.
+For development related questions and anything else, message our mailing list at [cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db). We recommend joining before posting, or your messages may be held back for moderation.
 
 ### Contributing
 
