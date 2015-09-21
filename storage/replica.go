@@ -1005,7 +1005,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode
 		atomic.StoreUint64(&r.appliedIndex, index)
 		// Invalidate the cache and let raftTruncatedState() read the value the next
 		// time it's required.
-		if args.Method() == proto.TruncateLog {
+		if _, ok := ba.GetArg(proto.TruncateLog); ok {
 			r.setCachedTruncatedState(nil)
 		}
 	}
