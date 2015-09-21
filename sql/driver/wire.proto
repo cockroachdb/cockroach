@@ -27,8 +27,6 @@ option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_unrecognized_all) = false;
 
 message Datum {
-  option (gogoproto.goproto_stringer) = false;
-
   // Timestamp represents an absolute timestamp devoid of time-zone.
   message Timestamp {
     // The time in seconds since, January 1, 1970 UTC (Unix time).

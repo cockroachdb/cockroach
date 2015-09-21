@@ -44,8 +44,9 @@ type Datum struct {
 	Payload isDatum_Payload `protobuf_oneof:"payload"`
 }
 
-func (m *Datum) Reset()      { *m = Datum{} }
-func (*Datum) ProtoMessage() {}
+func (m *Datum) Reset()         { *m = Datum{} }
+func (m *Datum) String() string { return proto.CompactTextString(m) }
+func (*Datum) ProtoMessage()    {}
 
 type isDatum_Payload interface {
 	isDatum_Payload()
