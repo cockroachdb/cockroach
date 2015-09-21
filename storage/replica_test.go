@@ -65,6 +65,13 @@ func testRangeDescriptor() *proto.RangeDescriptor {
 	}
 }
 
+func unwrapIndexedError(err error) error {
+	if iErr, ok := err.(*errWithIndex); ok {
+		return iErr.err
+	}
+	return err
+}
+
 // boostrapMode controls how the first range is created in testContext.
 type bootstrapMode int
 
@@ -1679,6 +1686,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 		args.Timestamp = tc.clock.Now()
 
 		resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		err = unwrapIndexedError(err)
 
 		if test.expErr {
 			if err == nil {
@@ -1886,6 +1894,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	// Check if the intent in the other range has not yet been resolved.
 	gArgs := getArgs(splitKey, newRng.Desc().RangeID, tc.store.StoreID())
 	_, err := newRng.AddCmd(newRng.context(), &gArgs)
+	err = unwrapIndexedError(err)
 	if _, ok := err.(*proto.WriteIntentError); !ok {
 		t.Errorf("expected write intent error, but got %s", err)
 	}
@@ -2091,6 +2100,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
 		}
 		if err != nil {
+			err = unwrapIndexedError(err)
 			if _, ok := err.(*proto.TransactionPushError); !ok {
 				t.Errorf("expected txn push error: %s", err)
 			}
@@ -2156,6 +2166,7 @@ func TestPushTxnPriorities(t *testing.T) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
 		}
 		if err != nil {
+			err = unwrapIndexedError(err)
 			if _, ok := err.(*proto.TransactionPushError); !ok {
 				t.Errorf("expected txn push error: %s", err)
 			}
@@ -2516,6 +2527,8 @@ func TestConditionFailedError(t *testing.T) {
 	}
 
 	_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+
+	err = unwrapIndexedError(err)
 
 	if cErr, ok := err.(*proto.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
@@ -3103,4 +3116,40 @@ func TestIntentIntersect(t *testing.T) {
 			t.Errorf("%d: wanted %v, got %v", i, tc.exp, all)
 		}
 	}
+}
+
+// TestBatchErrorWithIndex tests that when an individual entry in a batch
+// results in an error, the index of this command is propagated along with
+// the error.
+func TestBatchErrorWithIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	ba := &proto.BatchRequest{}
+	ba.RangeID = tc.rng.Desc().RangeID
+	ba.Replica.StoreID = tc.store.StoreID()
+	ba.Add(&proto.PutRequest{
+		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
+		Value:         proto.Value{Bytes: []byte("not nil")},
+	})
+	ba.Add(&proto.ConditionalPutRequest{
+		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
+		Value:         proto.Value{Bytes: []byte("irrelevant")},
+		ExpValue:      nil, // not true after above Put
+	})
+	// This one is never executed.
+	ba.Add(&proto.GetRequest{
+		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
+	})
+
+	if _, err := tc.rng.AddCmd(tc.rng.context(), ba); err == nil {
+		t.Fatal("expected an error")
+	} else if iErr, ok := err.(*errWithIndex); !ok {
+		t.Fatalf("expected indexed error, got %s", err)
+	} else if iErr.index != 1 || !testutils.IsError(err, "unexpected value") {
+		t.Fatalf("invalid index or error type: %s", iErr)
+	}
+
 }
