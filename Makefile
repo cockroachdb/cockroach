@@ -148,7 +148,7 @@ check:
 clean:
 	$(GO) clean -tags '$(TAGS)' $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test' -type f -exec rm -f {} \;
-	rm -rf build/deploy/build
+	rm -rf build/deploy/build .bootstrap
 
 ifneq ($(SKIP_BOOTSTRAP),1)
 
