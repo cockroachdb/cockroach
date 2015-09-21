@@ -35,6 +35,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 var errEmptyInputString = errors.New("the input string must not be empty")
@@ -347,6 +348,17 @@ var builtins = map[string][]builtin{
 			impure:     true,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 				return generateUniqueID(ctx.NodeID), nil
+			},
+		},
+	},
+
+	"uuid_v4": {
+		builtin{
+			types:      typeList{},
+			returnType: DummyBytes,
+			impure:     true,
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				return DBytes(uuid.NewUUID4()), nil
 			},
 		},
 	},

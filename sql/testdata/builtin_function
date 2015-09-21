@@ -591,3 +591,8 @@ query B
 SELECT unique_id() < unique_id(), length(unique_id())
 ----
 true 13
+
+query B
+SELECT uuid_v4() != uuid_v4(), length(uuid_v4())
+----
+true 16
