@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/proto"
@@ -40,7 +39,6 @@ type replica struct {
 
 // Range is a simulated cockroach range.
 type Range struct {
-	sync.RWMutex
 	zone      config.ZoneConfig
 	desc      proto.RangeDescriptor
 	replicas  map[proto.StoreID]replica
@@ -59,37 +57,9 @@ func newRange(rangeID proto.RangeID, allocator storage.Allocator) *Range {
 	}
 }
 
-// getID returns the range's ID.
-func (r *Range) getID() proto.RangeID {
-	return r.getDesc().RangeID
-}
-
-// getDesc returns the range's descriptor.
-func (r *Range) getDesc() proto.RangeDescriptor {
-	r.RLock()
-	defer r.RUnlock()
-	return r.desc
-}
-
-// getFactor returns the range's zone config.
-func (r *Range) getZoneConfig() config.ZoneConfig {
-	r.RLock()
-	defer r.RUnlock()
-	return r.zone
-}
-
-// setFactor sets the range's replication factor.
-func (r *Range) setZoneConfig(zone config.ZoneConfig) {
-	r.Lock()
-	defer r.Unlock()
-	r.zone = zone
-}
-
 // addReplica adds a new replica on the passed in store. It adds it to
 // both the range descriptor and the store map.
 func (r *Range) addReplica(s *Store) {
-	r.Lock()
-	defer r.Unlock()
 	storeID, nodeID := s.getIDs()
 	r.desc.Replicas = append(r.desc.Replicas, proto.Replica{
 		NodeID:  nodeID,
@@ -102,8 +72,6 @@ func (r *Range) addReplica(s *Store) {
 
 // getStoreIDs returns the list of all stores where this range has replicas.
 func (r *Range) getStoreIDs() []proto.StoreID {
-	r.RLock()
-	defer r.RUnlock()
 	var storeIDs []proto.StoreID
 	for storeID := range r.replicas {
 		storeIDs = append(storeIDs, storeID)
@@ -113,8 +81,6 @@ func (r *Range) getStoreIDs() []proto.StoreID {
 
 // getStores returns a shallow copy of the internal stores map.
 func (r *Range) getStores() map[proto.StoreID]*Store {
-	r.RLock()
-	defer r.RUnlock()
 	stores := make(map[proto.StoreID]*Store)
 	for storeID, replica := range r.replicas {
 		stores[storeID] = replica.store
@@ -126,11 +92,8 @@ func (r *Range) getStores() map[proto.StoreID]*Store {
 // function should only be called on new ranges as it will overwrite all of the
 // replicas in the range.
 func (r *Range) splitRange(originalRange *Range) {
-	desc := originalRange.getDesc()
 	stores := originalRange.getStores()
-	r.Lock()
-	defer r.Unlock()
-	r.desc.Replicas = append([]proto.Replica(nil), desc.Replicas...)
+	r.desc.Replicas = append([]proto.Replica(nil), originalRange.desc.Replicas...)
 	for storeID, store := range stores {
 		r.replicas[storeID] = replica{
 			store: store,
@@ -141,8 +104,6 @@ func (r *Range) splitRange(originalRange *Range) {
 // getNextAction returns the action and rebalance from the replica with the
 // highest action priority.
 func (r *Range) getNextAction() (storage.AllocatorAction, bool) {
-	r.RLock()
-	defer r.RUnlock()
 	var topReplica replica
 	if len(r.replicas) == 0 {
 		return storage.AANoop, false
@@ -160,8 +121,6 @@ func (r *Range) getNextAction() (storage.AllocatorAction, bool) {
 // getAllocateTarget calls allocateTarget for the range and returns the top
 // target store.
 func (r *Range) getAllocateTarget() (proto.StoreID, error) {
-	r.RLock()
-	defer r.RUnlock()
 	newStore, err := r.allocator.AllocateTarget(r.zone.ReplicaAttrs[0], r.desc.Replicas, true, nil)
 	if err != nil {
 		return 0, err
@@ -171,9 +130,6 @@ func (r *Range) getAllocateTarget() (proto.StoreID, error) {
 
 // String returns a human readable string with details about the range.
 func (r *Range) String() string {
-	r.RLock()
-	defer r.RUnlock()
-
 	var storeIDs proto.StoreIDSlice
 	for storeID := range r.replicas {
 		storeIDs = append(storeIDs, storeID)
