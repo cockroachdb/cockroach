@@ -423,7 +423,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		if err := s.engine.Open(); err != nil {
 			return err
 		}
-		s.stopper.AddCloser(s.engine)
 
 		// Read store ident and return a not-bootstrapped error if necessary.
 		ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), proto.ZeroTimestamp, true,
@@ -711,7 +710,6 @@ func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *stop.Stopper) error {
 	if err := s.engine.Open(); err != nil {
 		return err
 	}
-	stopper.AddCloser(s.engine)
 	s.Ident = ident
 	kvs, err := engine.Scan(s.engine, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 1)
 	if err != nil {

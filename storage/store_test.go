@@ -138,7 +138,7 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.
 	ctx.StorePool = NewStorePool(ctx.Gossip, TestTimeUntilStoreDeadOff, stopper)
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(proto.Attributes{}, 10<<20)
+	eng := engine.NewInMem(proto.Attributes{}, 10<<20, stopper)
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	stopper.AddCloser(ctx.Transport)
 	sender := &testSender{}
@@ -178,9 +178,9 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	ctx := TestStoreContext
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20, stopper)
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	stopper.AddCloser(ctx.Transport)
 	store := NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})
@@ -220,7 +220,9 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 // is not empty.
 func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20, stopper)
 
 	// Put some random garbage into the engine.
 	if err := eng.Put(proto.EncodedKey("foo"), []byte("bar")); err != nil {
@@ -229,8 +231,6 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	ctx := TestStoreContext
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	stopper.AddCloser(ctx.Transport)
 	store := NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})

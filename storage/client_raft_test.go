@@ -68,7 +68,9 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+	engineStopper := stop.NewStopper()
+	defer engineStopper.Stop()
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
 	var rangeID2 proto.RangeID
 
 	get := func(store *storage.Store, rangeID proto.RangeID, key proto.Key) int64 {
@@ -91,8 +93,9 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// First, populate the store with data across two ranges. Each range contains commands
 	// that both predate and postdate the split.
 	func() {
-		store, stopper := createTestStoreWithEngine(t, eng, clock, true, nil)
+		stopper := stop.NewStopper()
 		defer stopper.Stop()
+		store := createTestStoreWithEngine(t, eng, clock, true, nil, stopper)
 
 		increment := func(rangeID proto.RangeID, key proto.Key, value int64) (*proto.IncrementResponse, error) {
 			args := incrementArgs(key, value, rangeID, store.StoreID())
@@ -126,8 +129,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Now create a new store with the same engine and make sure the expected data is present.
 	// We must use the same clock because a newly-created manual clock will be behind the one
 	// we wrote with and so will see stale MVCC data.
-	store, stopper := createTestStoreWithEngine(t, eng, clock, false, nil)
-	defer stopper.Stop()
+	store := createTestStoreWithEngine(t, eng, clock, false, nil, engineStopper)
 
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
 	// ensure that is has been started.
@@ -150,7 +152,9 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	defer func() { storage.TestingCommandFilter = nil }()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+	engineStopper := stop.NewStopper()
+	defer engineStopper.Stop()
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
 
 	numIncrements := 0
 
@@ -162,8 +166,9 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	}
 
 	func() {
-		store, stopper := createTestStoreWithEngine(t, eng, clock, true, nil)
+		stopper := stop.NewStopper()
 		defer stopper.Stop()
+		store := createTestStoreWithEngine(t, eng, clock, true, nil, stopper)
 
 		// Write a bytes value so the increment will fail.
 		putArgs := putArgs(proto.Key("a"), []byte("asdf"), 1, store.StoreID())
@@ -184,8 +189,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	}
 
 	// Recover from the engine.
-	store, stopper := createTestStoreWithEngine(t, eng, clock, false, nil)
-	defer stopper.Stop()
+	store := createTestStoreWithEngine(t, eng, clock, false, nil, engineStopper)
 
 	// Issue a no-op write to lazily initialize raft on the range.
 	incArgs := incrementArgs(proto.Key("b"), 0, 1, store.StoreID())

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -54,8 +55,9 @@ var (
 // runWithAllEngines creates a new engine of each supported type and
 // invokes the supplied test func with each instance.
 func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
-	inMem := NewInMem(inMemAttrs, testCacheSize)
-	defer inMem.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	inMem := NewInMem(inMemAttrs, testCacheSize, stopper)
 	test(inMem, t)
 }
 

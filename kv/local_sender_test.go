@@ -144,7 +144,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		{3, proto.Key("x"), proto.Key("z")},
 	}
 	for i, rng := range ranges {
-		e[i] = engine.NewInMem(proto.Attributes{}, 1<<20)
+		e[i] = engine.NewInMem(proto.Attributes{}, 1<<20, stopper)
 		ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 		defer ctx.Transport.Close()
 		s[i] = storage.NewStore(ctx, e[i], &proto.NodeDescriptor{NodeID: 1})

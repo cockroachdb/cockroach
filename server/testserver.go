@@ -153,7 +153,7 @@ func (ts *TestServer) Start() error {
 		ts.StoresPerNode = 1
 	}
 	for i := len(ts.Ctx.Engines); i < ts.StoresPerNode; i++ {
-		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(proto.Attributes{}, 100<<20))
+		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(proto.Attributes{}, 100<<20, ts.Server.stopper))
 	}
 
 	if !ts.SkipBootstrap {

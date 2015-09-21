@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -31,8 +32,9 @@ import (
 // visible until commit, and then are all visible after commit.
 func TestBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
@@ -98,8 +100,9 @@ func TestBatchBasics(t *testing.T) {
 
 func TestBatchGet(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
@@ -151,8 +154,9 @@ func compareMergedValues(t *testing.T, result, expected []byte) bool {
 
 func TestBatchMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
@@ -207,8 +211,9 @@ func TestBatchMerge(t *testing.T) {
 
 func TestBatchProto(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
@@ -253,8 +258,9 @@ func TestBatchProto(t *testing.T) {
 
 func TestBatchScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
@@ -345,8 +351,9 @@ func TestBatchScan(t *testing.T) {
 // a single deleted value returns nothing.
 func TestBatchScanWithDelete(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
@@ -372,8 +379,9 @@ func TestBatchScanWithDelete(t *testing.T) {
 // max on a scan is still reached.
 func TestBatchScanMaxWithDeleted(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
@@ -405,8 +413,9 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 // batches, but worth verifying.
 func TestBatchConcurrency(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
@@ -439,8 +448,9 @@ func TestBatchConcurrency(t *testing.T) {
 func TestBatchDefer(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
