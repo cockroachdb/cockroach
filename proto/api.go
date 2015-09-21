@@ -23,7 +23,6 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -403,36 +402,7 @@ func (rh *ResponseHeader) Verify(req Request) error {
 
 // GoError returns the non-nil error from the proto.Error union.
 func (rh *ResponseHeader) GoError() error {
-	if rh.Error == nil {
-		return nil
-	}
-	if rh.Error.Detail == nil {
-		return rh.Error
-	}
-	err := rh.Error.getDetail()
-	if err == nil {
-		// Unknown error detail; return the generic error.
-		return rh.Error
-	}
-	// Make sure that the flags in the generic portion of the error
-	// match the methods of the specific error type.
-	if rh.Error.Retryable {
-		if r, ok := err.(retry.Retryable); !ok || !r.CanRetry() {
-			panic(fmt.Sprintf("inconsistent error proto; expected %T to be retryable", err))
-		}
-	}
-	if r, ok := err.(TransactionRestartError); ok {
-		if r.CanRestartTransaction() != rh.Error.TransactionRestart {
-			panic(fmt.Sprintf("inconsistent error proto; expected %T to have restart mode %v",
-				err, rh.Error.TransactionRestart))
-		}
-	} else {
-		// Error type doesn't implement TransactionRestartError, so expect it to have the default.
-		if rh.Error.TransactionRestart != TransactionRestart_ABORT {
-			panic(fmt.Sprintf("inconsistent error proto; expected %T to have restart mode ABORT", err))
-		}
-	}
-	return err
+	return rh.Error.GoError()
 }
 
 // SetGoError converts the specified type into either one of the proto-
