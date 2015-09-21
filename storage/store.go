@@ -148,6 +148,15 @@ func (ewi *errWithIndex) Error() string {
 	return fmt.Sprintf("at %d: %s", ewi.index, ewi.err)
 }
 
+// unwrapIndexedError returns the wrapped error for an *errWithIndex, and
+// the given error otherwise.
+func unwrapIndexedError(err error) error {
+	if iErr, ok := err.(*errWithIndex); ok {
+		return iErr.err
+	}
+	return err
+}
+
 type rangeAlreadyExists struct {
 	rng *Replica
 }
