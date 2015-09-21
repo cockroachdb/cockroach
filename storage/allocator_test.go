@@ -441,10 +441,10 @@ func TestAllocatorRebalance(t *testing.T) {
 		}
 	}
 
-	// Verify shouldRebalance results.
+	// Verify ShouldRebalance results.
 	a.options.Deterministic = true
 	for i, store := range stores {
-		result := a.shouldRebalance(store.StoreID)
+		result := a.ShouldRebalance(store.StoreID)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -490,10 +490,10 @@ func TestAllocatorRebalanceByCapacity(t *testing.T) {
 		}
 	}
 
-	// Verify shouldRebalance results.
+	// Verify ShouldRebalance results.
 	a.options.Deterministic = true
 	for i, store := range stores {
-		result := a.shouldRebalance(store.StoreID)
+		result := a.ShouldRebalance(store.StoreID)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -541,10 +541,10 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 		}
 	}
 
-	// Verify shouldRebalance results.
+	// Verify ShouldRebalance results.
 	a.options.Deterministic = true
 	for i, store := range stores {
-		result := a.shouldRebalance(store.StoreID)
+		result := a.ShouldRebalance(store.StoreID)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -702,7 +702,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: aaRemoveDead,
+			expectedAction: AARemoveDead,
 		},
 		// Needs Three replicas, one is on a dead store.
 		{
@@ -740,7 +740,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: aaRemoveDead,
+			expectedAction: AARemoveDead,
 		},
 		// Needs five replicas, one is on a dead store.
 		{
@@ -788,7 +788,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: aaRemoveDead,
+			expectedAction: AARemoveDead,
 		},
 		// Needs Three replicas, have two
 		{
@@ -821,7 +821,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: aaAdd,
+			expectedAction: AAAdd,
 		},
 		// Needs Five replicas, have four.
 		{
@@ -870,7 +870,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: aaAdd,
+			expectedAction: AAAdd,
 		},
 		// Need three replicas, have four.
 		{
@@ -913,7 +913,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: aaRemove,
+			expectedAction: AARemove,
 		},
 		// Need three replicas, have five.
 		{
@@ -961,7 +961,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: aaRemove,
+			expectedAction: AARemove,
 		},
 		// Three replicas have three, none of the replicas in the store pool.
 		{
@@ -999,7 +999,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: aaNoop,
+			expectedAction: AANoop,
 		},
 		// Three replicas have three.
 		{
@@ -1037,7 +1037,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: aaNoop,
+			expectedAction: AANoop,
 		},
 	}
 
@@ -1048,7 +1048,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 			continue
 		}
-		if tcase.expectedAction != aaNoop && priority >= lastPriority {
+		if tcase.expectedAction != AANoop && priority >= lastPriority {
 			t.Errorf("Test cases should have descending priority. Case %d had priority %f, previous case had priority %f", i, priority, lastPriority)
 		}
 		lastPriority = priority
@@ -1118,7 +1118,7 @@ func Example_rebalancing() {
 		// Next loop through test stores and maybe rebalance.
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
-			if alloc.shouldRebalance(ts.StoreID) {
+			if alloc.ShouldRebalance(ts.StoreID) {
 				target := alloc.RebalanceTarget(proto.Attributes{}, []proto.Replica{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}})
 				if target != nil {
 					testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))

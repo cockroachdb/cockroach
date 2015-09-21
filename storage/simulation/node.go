@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 )
 
@@ -30,15 +31,17 @@ type Node struct {
 	sync.RWMutex
 	desc   proto.NodeDescriptor
 	stores map[proto.StoreID]*Store
+	gossip *gossip.Gossip
 }
 
 // newNode creates a new node with no stores.
-func newNode(nodeID proto.NodeID) *Node {
+func newNode(nodeID proto.NodeID, gossip *gossip.Gossip) *Node {
 	node := &Node{
 		desc: proto.NodeDescriptor{
 			NodeID: nodeID,
 		},
 		stores: make(map[proto.StoreID]*Store),
+		gossip: gossip,
 	}
 	return node
 }
@@ -82,7 +85,7 @@ func (n *Node) addNewStore() *Store {
 	n.Lock()
 	defer n.Unlock()
 	newStoreID := n.getNextStoreIDLocked()
-	newStore := newStore(newStoreID, n.desc)
+	newStore := newStore(newStoreID, n.desc, n.gossip)
 	n.stores[newStoreID] = newStore
 	return newStore
 }

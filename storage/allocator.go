@@ -61,11 +61,12 @@ const (
 // recommended by the allocator.
 type AllocatorAction int
 
+// These are the possible allocator actions.
 const (
-	aaNoop AllocatorAction = iota
-	aaRemove
-	aaAdd
-	aaRemoveDead
+	AANoop AllocatorAction = iota
+	AARemove
+	AAAdd
+	AARemoveDead
 )
 
 // RebalancingOptions are configurable options which effect the way that the
@@ -135,7 +136,7 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *proto.RangeDescr
 		// Adjust the priority by the number of dead replicas the range has.
 		quorum := computeQuorum(len(desc.Replicas))
 		liveReplicas := len(desc.Replicas) - len(deadReplicas)
-		return aaRemoveDead, removeDeadReplicaPriority + float64(quorum-liveReplicas)
+		return AARemoveDead, removeDeadReplicaPriority + float64(quorum-liveReplicas)
 	}
 
 	// TODO(mrtracy): Handle non-homogenous and mismatched attribute sets.
@@ -146,17 +147,17 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *proto.RangeDescr
 		// Priority is adjusted by the difference between the current replica
 		// count and the quorum of the desired replica count.
 		neededQuorum := computeQuorum(need)
-		return aaAdd, addMissingReplicaPriority + float64(neededQuorum-have)
+		return AAAdd, addMissingReplicaPriority + float64(neededQuorum-have)
 	}
 	if have > need {
 		// Range is over-replicated, and should remove a replica.
 		// Ranges with an even number of replicas get extra priority because
 		// they have a more fragile quorum.
-		return aaRemove, removeExtraReplicaPriority - float64(have%2)
+		return AARemove, removeExtraReplicaPriority - float64(have%2)
 	}
 
 	// Nothing to do.
-	return aaNoop, 0
+	return AANoop, 0
 }
 
 // AllocateTarget returns a suitable store for a new allocation with the
@@ -308,9 +309,9 @@ func (a Allocator) RebalanceTarget(required proto.Attributes, existing []proto.R
 	return s
 }
 
-// shouldRebalance returns whether the specified store should attempt to
+// ShouldRebalance returns whether the specified store should attempt to
 // rebalance a replica to another store.
-func (a Allocator) shouldRebalance(storeID proto.StoreID) bool {
+func (a Allocator) ShouldRebalance(storeID proto.StoreID) bool {
 	if !a.options.AllowRebalance {
 		return false
 	}

@@ -29,6 +29,13 @@ import (
 // A RangeID is a unique ID associated to a Raft consensus group.
 type RangeID int64
 
+// RangeIDSlice implements sort.Interface.
+type RangeIDSlice []RangeID
+
+func (r RangeIDSlice) Len() int           { return len(r) }
+func (r RangeIDSlice) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
+func (r RangeIDSlice) Less(i, j int) bool { return r[i] < r[j] }
+
 // IsEmpty returns true if the client command ID has zero values.
 func (ccid ClientCmdID) IsEmpty() bool {
 	return ccid.WallTime == 0 && ccid.Random == 0
