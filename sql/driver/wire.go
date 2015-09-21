@@ -19,7 +19,6 @@ package driver
 
 import (
 	"database/sql/driver"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -70,6 +69,8 @@ func (d Datum) Value() (driver.Value, error) {
 	var val driver.Value
 
 	switch t := d.Payload.(type) {
+	case nil:
+		val = t
 	case *Datum_BoolVal:
 		val = t.BoolVal
 	case *Datum_IntVal:
@@ -80,31 +81,17 @@ func (d Datum) Value() (driver.Value, error) {
 		val = t.BytesVal
 	case *Datum_StringVal:
 		val = t.StringVal
+	case *Datum_DateVal:
+		val = t.DateVal.GoTime().UTC()
 	case *Datum_TimeVal:
 		val = t.TimeVal.GoTime().UTC()
+	case *Datum_IntervalVal:
+		val = time.Duration(t.IntervalVal)
+	default:
+		return nil, util.Errorf("unsupported type %T", t)
 	}
 
-	if driver.IsValue(val) {
-		return val, nil
-	}
-	return nil, util.Errorf("unsupported type %T", val)
-}
-
-func (d Datum) String() string {
-	v, err := d.Value()
-	if err != nil {
-		panic(err)
-	}
-
-	if v == nil {
-		return "NULL"
-	}
-
-	if bytes, ok := v.([]byte); ok {
-		return string(bytes)
-	}
-
-	return fmt.Sprint(v)
+	return val, nil
 }
 
 // GoTime converts the timestamp to a time.Time.

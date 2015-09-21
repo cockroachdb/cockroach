@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
@@ -185,8 +186,8 @@ func (e Executor) execStmt(stmt parser.Statement, params parameters, planMaker *
 						})
 					case parser.DDate:
 						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_TimeVal{
-								TimeVal: &driver.Datum_Timestamp{
+							Payload: &driver.Datum_DateVal{
+								DateVal: &driver.Datum_Timestamp{
 									Sec:  vt.Unix(),
 									Nsec: uint32(vt.Nanosecond()),
 								},
@@ -203,7 +204,7 @@ func (e Executor) execStmt(stmt parser.Statement, params parameters, planMaker *
 						})
 					case parser.DInterval:
 						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_StringVal{StringVal: vt.String()},
+							Payload: &driver.Datum_IntervalVal{IntervalVal: vt.Nanoseconds()},
 						})
 					default:
 						return util.Errorf("unsupported datum: %T", val)
@@ -283,8 +284,12 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 		return parser.DBytes(t.BytesVal), true
 	case *driver.Datum_StringVal:
 		return parser.DString(t.StringVal), true
+	case *driver.Datum_DateVal:
+		return parser.DTimestamp{Time: t.DateVal.GoTime().UTC()}, true
 	case *driver.Datum_TimeVal:
 		return parser.DTimestamp{Time: t.TimeVal.GoTime().UTC()}, true
+	case *driver.Datum_IntervalVal:
+		return parser.DInterval{Duration: time.Duration(t.IntervalVal)}, true
 	default:
 		panic(fmt.Sprintf("unexpected type %T", t))
 	}

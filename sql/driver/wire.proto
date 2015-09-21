@@ -27,8 +27,6 @@ option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_unrecognized_all) = false;
 
 message Datum {
-  option (gogoproto.goproto_stringer) = false;
-
   // Timestamp represents an absolute timestamp devoid of time-zone.
   message Timestamp {
     // The time in seconds since, January 1, 1970 UTC (Unix time).
@@ -47,10 +45,9 @@ message Datum {
     double float_val = 3;
     bytes bytes_val = 4;
     string string_val = 5;
-    Timestamp time_val = 6;
-    // TODO(vivek): Add additional types like Date and Interval that are
-    // supported by Cockroach but not supported by the Go sql driver. These
-    // will be useful for drivers in other languages.
+    Timestamp date_val = 6;
+    Timestamp time_val = 7;
+    int64 interval_val = 8;
   }
 
   // TODO(pmattis): How to add end-to-end checksumming? Just adding a checksum
