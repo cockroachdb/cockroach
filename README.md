@@ -10,7 +10,7 @@
 - [What is CockroachDB](#what-is-cockroachdb)
 - [Status](#status)
 - [Running CockroachDB Locally](#running-cockroach-locally)
-- [Deploying CockroachDB in production](#deploying-cockroach-in-production)
+- [Deploying CockroachDB in production](#deploying-cockroachdb-in-production)
 - [Getting in touch and contributing](#get-in-touch)
 - [Talks](#talks)
 - [Design](#design) and [Datastore Goal Articulation](#datastore-goal-articulation)
