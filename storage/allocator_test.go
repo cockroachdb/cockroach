@@ -702,7 +702,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AARemoveDead,
+			expectedAction: AllocatorRemoveDead,
 		},
 		// Needs Three replicas, one is on a dead store.
 		{
@@ -740,7 +740,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AARemoveDead,
+			expectedAction: AllocatorRemoveDead,
 		},
 		// Needs five replicas, one is on a dead store.
 		{
@@ -788,7 +788,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AARemoveDead,
+			expectedAction: AllocatorRemoveDead,
 		},
 		// Needs Three replicas, have two
 		{
@@ -821,7 +821,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AAAdd,
+			expectedAction: AllocatorAdd,
 		},
 		// Needs Five replicas, have four.
 		{
@@ -870,7 +870,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AAAdd,
+			expectedAction: AllocatorAdd,
 		},
 		// Need three replicas, have four.
 		{
@@ -913,7 +913,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AARemove,
+			expectedAction: AllocatorRemove,
 		},
 		// Need three replicas, have five.
 		{
@@ -961,7 +961,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AARemove,
+			expectedAction: AllocatorRemove,
 		},
 		// Three replicas have three, none of the replicas in the store pool.
 		{
@@ -999,7 +999,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AANoop,
+			expectedAction: AllocatorNoop,
 		},
 		// Three replicas have three.
 		{
@@ -1037,7 +1037,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AANoop,
+			expectedAction: AllocatorNoop,
 		},
 	}
 
@@ -1048,7 +1048,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 			continue
 		}
-		if tcase.expectedAction != AANoop && priority >= lastPriority {
+		if tcase.expectedAction != AllocatorNoop && priority >= lastPriority {
 			t.Errorf("Test cases should have descending priority. Case %d had priority %f, previous case had priority %f", i, priority, lastPriority)
 		}
 		lastPriority = priority

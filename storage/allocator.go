@@ -63,10 +63,11 @@ type AllocatorAction int
 
 // These are the possible allocator actions.
 const (
-	AANoop AllocatorAction = iota
-	AARemove
-	AAAdd
-	AARemoveDead
+	_ AllocatorAction = iota
+	AllocatorNoop
+	AllocatorRemove
+	AllocatorAdd
+	AllocatorRemoveDead
 )
 
 // RebalancingOptions are configurable options which effect the way that the
@@ -136,7 +137,7 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *proto.RangeDescr
 		// Adjust the priority by the number of dead replicas the range has.
 		quorum := computeQuorum(len(desc.Replicas))
 		liveReplicas := len(desc.Replicas) - len(deadReplicas)
-		return AARemoveDead, removeDeadReplicaPriority + float64(quorum-liveReplicas)
+		return AllocatorRemoveDead, removeDeadReplicaPriority + float64(quorum-liveReplicas)
 	}
 
 	// TODO(mrtracy): Handle non-homogenous and mismatched attribute sets.
@@ -147,17 +148,17 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *proto.RangeDescr
 		// Priority is adjusted by the difference between the current replica
 		// count and the quorum of the desired replica count.
 		neededQuorum := computeQuorum(need)
-		return AAAdd, addMissingReplicaPriority + float64(neededQuorum-have)
+		return AllocatorAdd, addMissingReplicaPriority + float64(neededQuorum-have)
 	}
 	if have > need {
 		// Range is over-replicated, and should remove a replica.
 		// Ranges with an even number of replicas get extra priority because
 		// they have a more fragile quorum.
-		return AARemove, removeExtraReplicaPriority - float64(have%2)
+		return AllocatorRemove, removeExtraReplicaPriority - float64(have%2)
 	}
 
 	// Nothing to do.
-	return AANoop, 0
+	return AllocatorNoop, 0
 }
 
 // AllocateTarget returns a suitable store for a new allocation with the

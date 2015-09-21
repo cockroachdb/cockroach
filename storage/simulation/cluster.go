@@ -188,7 +188,7 @@ func (c *Cluster) prepareActions() {
 	for _, r := range c.ranges {
 		for storeID, replica := range r.replicas {
 			replica.action, replica.priority = r.allocator.ComputeAction(r.zone, &r.desc)
-			if replica.action == storage.AANoop {
+			if replica.action == storage.AllocatorNoop {
 				replica.rebalance = r.allocator.ShouldRebalance(storeID)
 				replica.priority = 0
 			} else {
@@ -204,20 +204,20 @@ func (c *Cluster) performActions() {
 	for rangeID, r := range c.ranges {
 		nextAction, rebalance := r.getNextAction()
 		switch nextAction {
-		case storage.AAAdd:
+		case storage.AllocatorAdd:
 			newStoreID, err := r.getAllocateTarget()
 			if err != nil {
 				fmt.Printf("Error: %s\n", err)
 				continue
 			}
 			r.addReplica(c.stores[newStoreID])
-		case storage.AARemoveDead:
+		case storage.AllocatorRemoveDead:
 			// TODO(bram): implement this.
 			fmt.Printf("Range %d - Repair\n", rangeID)
-		case storage.AARemove:
+		case storage.AllocatorRemove:
 			// TODO(bram): implement this.
 			fmt.Printf("Range %d - Remove\n", rangeID)
-		case storage.AANoop:
+		case storage.AllocatorNoop:
 			if rebalance {
 				// TODO(bram): implement this.
 				fmt.Printf("Range %d - Rebalance\n", rangeID)
