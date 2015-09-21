@@ -32,12 +32,12 @@ type Truncate struct {
 
 func (node *Truncate) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("TRUNCATE TABLE ")
+	buf.WriteString("TRUNCATE TABLE ")
 	for i, n := range node.Tables {
 		if i > 0 {
-			_, _ = buf.WriteString(", ")
+			buf.WriteString(", ")
 		}
-		_, _ = buf.WriteString(n.String())
+		buf.WriteString(n.String())
 	}
 	return buf.String()
 }

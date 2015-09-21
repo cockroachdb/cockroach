@@ -34,14 +34,13 @@ Fetches and displays the user configuration for <username>.
 	Run: runGetUser,
 }
 
-// runGetUser invokes the REST API with GET action and username as path.
 func runGetUser(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	db := makeSQLClient()
-	err := runQuery(db, `SELECT * FROM system.users WHERE username=$1`, args[0])
+	err := runPrettyQuery(db, `SELECT * FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
 		log.Error(err)
 		return
@@ -58,15 +57,13 @@ List all user configs.
 	Run: runLsUsers,
 }
 
-// runLsUsers invokes the REST API with GET action and no path, which
-// fetches a list of all user configuration.
 func runLsUsers(cmd *cobra.Command, args []string) {
 	if len(args) > 0 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	db := makeSQLClient()
-	err := runQuery(db, `SELECT username FROM system.users`)
+	err := runPrettyQuery(db, `SELECT username FROM system.users`)
 	if err != nil {
 		log.Error(err)
 		return
@@ -83,14 +80,13 @@ Remove an existing user config by username.
 	Run: runRmUser,
 }
 
-// runRmUser invokes the REST API with DELETE action and username as path.
 func runRmUser(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	db := makeSQLClient()
-	err := runQuery(db, `DELETE FROM system.users WHERE username=$1`, args[0])
+	err := runPrettyQuery(db, `DELETE FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
 		log.Error(err)
 		return
@@ -108,13 +104,13 @@ for the password.
 	Run: runSetUser,
 }
 
-// runSetUser invokes the REST API with POST action and username as
-// path. Prompts for the password twice on stdin.
+// runSetUser prompts for a password, then inserts the user and hash
+// into the system.users table.
 // TODO(marc): once we have more fields in the user config, we will need
 // to allow changing just some of them (eg: change email, but leave password).
 func runSetUser(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	hashed, err := security.PromptForPasswordAndHash()
@@ -123,7 +119,8 @@ func runSetUser(cmd *cobra.Command, args []string) {
 		return
 	}
 	db := makeSQLClient()
-	err = runQuery(db, `INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed)
+	// TODO(marc): switch to UPSERT.
+	err = runPrettyQuery(db, `INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed)
 	if err != nil {
 		log.Error(err)
 		return
@@ -141,7 +138,7 @@ var userCmd = &cobra.Command{
 	Use:   "user",
 	Short: "get, set, list and remove users",
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Usage()
+		mustUsage(cmd)
 	},
 }
 

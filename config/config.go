@@ -29,6 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+const (
+	// minRangeMaxBytes is the minimum value for range max bytes.
+	// TODO(marc): should we revise this lower?
+	minRangeMaxBytes = 1 << 20
+)
+
 var (
 	// DefaultZoneConfig is the default zone configuration
 	// used when no custom config has been specified.
@@ -58,6 +64,22 @@ var (
 	// splits of tables into separate ranges.
 	TestingDisableTableSplits bool
 )
+
+// Validate verifies some ZoneConfig fields.
+// This should be used to validate user input when setting a new zone config.
+func (z *ZoneConfig) Validate() error {
+	if len(z.ReplicaAttrs) == 0 {
+		return util.Errorf("attributes for at least one replica must be specified in zone config")
+	}
+	if z.RangeMaxBytes < minRangeMaxBytes {
+		return util.Errorf("RangeMaxBytes %d less than minimum allowed %d", z.RangeMaxBytes, minRangeMaxBytes)
+	}
+	if z.RangeMinBytes >= z.RangeMaxBytes {
+		return util.Errorf("RangeMinBytes %d is greater than or equal to RangeMaxBytes %d",
+			z.RangeMinBytes, z.RangeMaxBytes)
+	}
+	return nil
+}
 
 // ObjectIDForKey returns the object ID (table or database) for 'key',
 // or (_, false) if not within the structured key space.
@@ -90,7 +112,7 @@ func ObjectIDForKey(key proto.Key) (uint32, bool) {
 func (s *SystemConfig) Get(key proto.Key) ([]byte, bool) {
 	l := len(s.Values)
 	index := sort.Search(l, func(i int) bool {
-		return bytes.Compare(s.Values[i].Key, key) >= 0
+		return !s.Values[i].Key.Less(key)
 	})
 	if index == l || !key.Equal(s.Values[index].Key) {
 		return nil, false
@@ -103,8 +125,11 @@ func (s *SystemConfig) Get(key proto.Key) ([]byte, bool) {
 // GetLargestObjectID returns the largest object ID found in the config.
 // This could be either a table or a database.
 func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
-	if TestingLargestIDHook != nil {
-		return TestingLargestIDHook(), nil
+	testingLock.Lock()
+	hook := TestingLargestIDHook
+	testingLock.Unlock()
+	if hook != nil {
+		return hook(), nil
 	}
 
 	if len(s.Values) == 0 {
@@ -114,9 +139,9 @@ func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
 	// Search for the first key after the descriptor table.
 	// We can't use Get as we don't mind if there is nothing after
 	// the descriptor table.
-	key := keys.MakeTablePrefix(keys.DescriptorTableID + 1)
+	key := proto.Key(keys.MakeTablePrefix(keys.DescriptorTableID + 1))
 	index := sort.Search(len(s.Values), func(i int) bool {
-		return bytes.Compare(s.Values[i].Key, key) >= 0
+		return !s.Values[i].Key.Less(key)
 	})
 
 	if index == 0 {
@@ -155,14 +180,17 @@ func (s *SystemConfig) GetZoneConfigForKey(key proto.Key) (*ZoneConfig, error) {
 // GetZoneConfigForID looks up the zone config for the object (table or database)
 // with 'id'.
 func (s *SystemConfig) GetZoneConfigForID(id uint32) (*ZoneConfig, error) {
-	if ZoneConfigHook == nil {
+	testingLock.Lock()
+	hook := ZoneConfigHook
+	testingLock.Unlock()
+	if hook == nil {
 		return nil, util.Errorf("ZoneConfigHook not set, unable to lookup zone config")
 	}
 	// For now, only user databases and tables get custom zone configs.
 	if id <= keys.MaxReservedDescID {
 		return DefaultZoneConfig, nil
 	}
-	return ZoneConfigHook(s, id)
+	return hook(s, id)
 }
 
 // ComputeSplitKeys takes a start and end key and returns an array of keys
@@ -219,4 +247,10 @@ func (s *SystemConfig) ComputeSplitKeys(startKey, endKey proto.Key) []proto.Key 
 	}
 
 	return splitKeys
+}
+
+// NeedsSplit returns whether the range [startKey, endKey) needs a split due
+// to zone configs.
+func (s *SystemConfig) NeedsSplit(startKey, endKey proto.Key) bool {
+	return len(s.ComputeSplitKeys(startKey, endKey)) > 0
 }

@@ -22,6 +22,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
@@ -55,7 +56,7 @@ func TestRunQuery(t *testing.T) {
 	}()
 
 	// Non-query statement.
-	if err := runQuery(db, `SET DATABASE=system`); err != nil {
+	if err := runPrettyQuery(db, `SET DATABASE=system`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -68,18 +69,37 @@ OK
 	b.Reset()
 
 	// Use system database for sample query/output as they are fairly fixed.
-	if err := runQuery(db, `SHOW COLUMNS FROM system.namespace`); err != nil {
+	cols, rows, err := runQuery(db, `SHOW COLUMNS FROM system.namespace`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedCols := []string{"Field", "Type", "Null", "Default"}
+	if !reflect.DeepEqual(expectedCols, cols) {
+		t.Fatalf("expected:\n%v\ngot:\n%v", expectedCols, cols)
+	}
+
+	expectedRows := [][]string{
+		{`"parentID"`, `"INT"`, `true`, `NULL`},
+		{`"name"`, `"STRING"`, `true`, `NULL`},
+		{`"id"`, `"INT"`, `true`, `NULL`},
+	}
+	if !reflect.DeepEqual(expectedRows, rows) {
+		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
+	}
+
+	if err := runPrettyQuery(db, `SHOW COLUMNS FROM system.namespace`); err != nil {
 		t.Fatal(err)
 	}
 
 	expected = `
-+------------+----------+------+
-|   Field    |   Type   | Null |
-+------------+----------+------+
-| "parentID" | "INT"    | true |
-| "name"     | "STRING" | true |
-| "id"       | "INT"    | true |
-+------------+----------+------+
++------------+----------+------+---------+
+|   Field    |   Type   | Null | Default |
++------------+----------+------+---------+
+| "parentID" | "INT"    | true | NULL    |
+| "name"     | "STRING" | true | NULL    |
+| "id"       | "INT"    | true | NULL    |
++------------+----------+------+---------+
 `
 
 	if a, e := b.String(), expected[1:]; a != e {
@@ -88,7 +108,7 @@ OK
 	b.Reset()
 
 	// Test placeholders.
-	if err := runQuery(db, `SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
+	if err := runPrettyQuery(db, `SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -103,4 +123,27 @@ OK
 		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
 	}
 	b.Reset()
+
+	// Test custom formatting.
+	newFormat := func(val interface{}) string {
+		return fmt.Sprintf("--> %#v <--", val)
+	}
+
+	if err := runPrettyQueryWithFormat(db, fmtMap{"name": newFormat},
+		`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
+		t.Fatal(err)
+	}
+
+	expected = `
++----------+----------------------+----+
+| parentID |         name         | id |
++----------+----------------------+----+
+| 1        | --> "descriptor" <-- | 3  |
++----------+----------------------+----+
+`
+	if a, e := b.String(), expected[1:]; a != e {
+		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
+	}
+	b.Reset()
+
 }

@@ -41,10 +41,15 @@ func (node *Insert) String() string {
 	if node.Columns != nil {
 		fmt.Fprintf(&buf, "(%s)", node.Columns)
 	}
-	if node.Rows == nil {
-		_, _ = buf.WriteString(" DEFAULT VALUES")
+	if node.DefaultValues() {
+		buf.WriteString(" DEFAULT VALUES")
 	} else {
 		fmt.Fprintf(&buf, " %s", node.Rows)
 	}
 	return buf.String()
+}
+
+// DefaultValues returns true iff only default values are being inserted.
+func (node *Insert) DefaultValues() bool {
+	return node.Rows == nil
 }

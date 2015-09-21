@@ -40,11 +40,9 @@ func (*RangeCond) expr()      {}
 func (*IsExpr) expr()         {}
 func (*IsOfTypeExpr) expr()   {}
 func (*ExistsExpr) expr()     {}
-func (StrVal) expr()          {}
-func (BytesVal) expr()        {}
 func (IntVal) expr()          {}
 func (NumVal) expr()          {}
-func (BoolVal) expr()         {}
+func (DefaultVal) expr()      {}
 func (ValArg) expr()          {}
 func (*QualifiedName) expr()  {}
 func (Tuple) expr()           {}
@@ -60,6 +58,7 @@ func (DBool) expr()           {}
 func (DInt) expr()            {}
 func (DFloat) expr()          {}
 func (DString) expr()         {}
+func (DBytes) expr()          {}
 func (DDate) expr()           {}
 func (DTimestamp) expr()      {}
 func (DInterval) expr()       {}
@@ -223,19 +222,19 @@ type IsOfTypeExpr struct {
 
 func (node *IsOfTypeExpr) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString(node.Expr.String())
-	_, _ = buf.WriteString(" IS")
+	buf.WriteString(node.Expr.String())
+	buf.WriteString(" IS")
 	if node.Not {
-		_, _ = buf.WriteString(" NOT")
+		buf.WriteString(" NOT")
 	}
-	_, _ = buf.WriteString(" OF (")
+	buf.WriteString(" OF (")
 	for i, t := range node.Types {
 		if i > 0 {
-			_, _ = buf.WriteString(", ")
+			buf.WriteString(", ")
 		}
-		_, _ = buf.WriteString(t.String())
+		buf.WriteString(t.String())
 	}
-	_, _ = buf.WriteString(")")
+	buf.WriteString(")")
 	return buf.String()
 }
 
@@ -246,22 +245,6 @@ type ExistsExpr struct {
 
 func (node *ExistsExpr) String() string {
 	return fmt.Sprintf("EXISTS %s", node.Subquery)
-}
-
-// StrVal represents a string value.
-type StrVal string
-
-func (node StrVal) String() string {
-	var scratch [64]byte
-	return string(encodeSQLString(scratch[0:0], []byte(node)))
-}
-
-// BytesVal represents a string of unprintable value.
-type BytesVal string
-
-func (node BytesVal) String() string {
-	var scratch [64]byte
-	return string(encodeSQLBytes(scratch[0:0], []byte(node)))
 }
 
 // IntVal represents an integer.
@@ -285,14 +268,11 @@ func (node NumVal) String() string {
 	return string(node)
 }
 
-// BoolVal represents a boolean.
-type BoolVal bool
+// DefaultVal represents the DEFAULT expression.
+type DefaultVal struct{}
 
-func (node BoolVal) String() string {
-	if node {
-		return "true"
-	}
-	return "false"
+func (node DefaultVal) String() string {
+	return "DEFAULT"
 }
 
 // ValArg represents a named bind var argument.
@@ -518,9 +498,9 @@ func (n QualifiedNames) String() string {
 	var buf bytes.Buffer
 	for i, e := range n {
 		if i > 0 {
-			_, _ = buf.WriteString(", ")
+			buf.WriteString(", ")
 		}
-		_, _ = buf.WriteString(e.String())
+		buf.WriteString(e.String())
 	}
 	return buf.String()
 }

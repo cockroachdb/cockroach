@@ -78,6 +78,9 @@ func markDebug(plan planNode, mode explainMode) (planNode, error) {
 		t.explain = mode
 		return t, nil
 
+	case *indexJoinNode:
+		return markDebug(t.index, mode)
+
 	case *sortNode:
 		return markDebug(t.plan, mode)
 

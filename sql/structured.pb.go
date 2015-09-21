@@ -5,15 +5,16 @@
 package sql
 
 import proto "github.com/gogo/protobuf/proto"
+import fmt "fmt"
 import math "math"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
-import fmt "fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
+var _ = fmt.Errorf
 var _ = math.Inf
 
 // These mirror the types supported by the sql/parser. See
@@ -110,6 +111,9 @@ type ColumnDescriptor struct {
 	ID       ColumnID   `protobuf:"varint,2,opt,name=id,casttype=ColumnID" json:"id"`
 	Type     ColumnType `protobuf:"bytes,3,opt,name=type" json:"type"`
 	Nullable bool       `protobuf:"varint,4,opt,name=nullable" json:"nullable"`
+	// Default expression to use to populate the column on insert if no
+	// value is provided.
+	DefaultExpr *string `protobuf:"bytes,5,opt,name=default_expr" json:"default_expr,omitempty"`
 }
 
 func (m *ColumnDescriptor) Reset()         { *m = ColumnDescriptor{} }
@@ -142,6 +146,13 @@ func (m *ColumnDescriptor) GetNullable() bool {
 		return m.Nullable
 	}
 	return false
+}
+
+func (m *ColumnDescriptor) GetDefaultExpr() string {
+	if m != nil && m.DefaultExpr != nil {
+		return *m.DefaultExpr
+	}
+	return ""
 }
 
 type IndexDescriptor struct {
@@ -419,6 +430,12 @@ func (m *ColumnDescriptor) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
+	if m.DefaultExpr != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintStructured(data, i, uint64(len(*m.DefaultExpr)))
+		i += copy(data[i:], *m.DefaultExpr)
+	}
 	return i, nil
 }
 
@@ -659,6 +676,10 @@ func (m *ColumnDescriptor) Size() (n int) {
 	l = m.Type.Size()
 	n += 1 + l + sovStructured(uint64(l))
 	n += 2
+	if m.DefaultExpr != nil {
+		l = len(*m.DefaultExpr)
+		n += 1 + l + sovStructured(uint64(l))
+	}
 	return n
 }
 
@@ -756,8 +777,12 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStructured
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -770,6 +795,12 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ColumnType: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ColumnType: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
@@ -777,6 +808,9 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 			}
 			m.Kind = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -793,6 +827,9 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 			}
 			m.Width = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -809,6 +846,9 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 			}
 			m.Precision = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -820,15 +860,7 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 				}
 			}
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])
 			if err != nil {
 				return err
@@ -843,14 +875,21 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStructured
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -863,6 +902,12 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ColumnDescriptor: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ColumnDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -870,6 +915,9 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -896,6 +944,9 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			}
 			m.ID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -912,6 +963,9 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -939,6 +993,9 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -950,16 +1007,38 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			m.Nullable = bool(v != 0)
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DefaultExpr", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
 					break
 				}
 			}
-			iNdEx -= sizeOfWire
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(data[iNdEx:postIndex])
+			m.DefaultExpr = &s
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])
 			if err != nil {
 				return err
@@ -974,14 +1053,21 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *IndexDescriptor) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStructured
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -994,6 +1080,12 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: IndexDescriptor: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: IndexDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -1001,6 +1093,9 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1027,6 +1122,9 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			}
 			m.ID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1043,6 +1141,9 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1060,6 +1161,9 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1086,6 +1190,9 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1112,6 +1219,9 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			}
 			var v ColumnID
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1129,6 +1239,9 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			}
 			var v ColumnID
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1141,15 +1254,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			}
 			m.ImplicitColumnIDs = append(m.ImplicitColumnIDs, v)
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1164,14 +1269,21 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *TableDescriptor) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStructured
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1184,6 +1296,12 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TableDescriptor: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TableDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -1191,6 +1309,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1217,6 +1338,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1243,6 +1367,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 			m.ID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1259,6 +1386,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 			m.ParentID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1275,6 +1405,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1303,6 +1436,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 			m.NextColumnID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1319,6 +1455,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1346,6 +1485,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1374,6 +1516,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 			m.NextIndexID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1390,6 +1535,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1415,15 +1563,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1438,14 +1578,21 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStructured
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1458,6 +1605,12 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DatabaseDescriptor: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DatabaseDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
@@ -1465,6 +1618,9 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1491,6 +1647,9 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 			}
 			m.ID = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1507,6 +1666,9 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1532,15 +1694,7 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])
 			if err != nil {
 				return err
@@ -1555,6 +1709,9 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 func skipStructured(data []byte) (n int, err error) {
@@ -1563,6 +1720,9 @@ func skipStructured(data []byte) (n int, err error) {
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowStructured
+			}
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
@@ -1576,7 +1736,10 @@ func skipStructured(data []byte) (n int, err error) {
 		wireType := int(wire & 0x7)
 		switch wireType {
 		case 0:
-			for {
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -1592,6 +1755,9 @@ func skipStructured(data []byte) (n int, err error) {
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowStructured
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -1612,6 +1778,9 @@ func skipStructured(data []byte) (n int, err error) {
 				var innerWire uint64
 				var start int = iNdEx
 				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return 0, ErrIntOverflowStructured
+					}
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
@@ -1647,4 +1816,5 @@ func skipStructured(data []byte) (n int, err error) {
 
 var (
 	ErrInvalidLengthStructured = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowStructured   = fmt.Errorf("proto: integer overflow")
 )

@@ -19,7 +19,6 @@ syntax = "proto2";
 package cockroach.driver;
 option go_package = "driver";
 
-import "cockroach/proto/errors.proto";
 import "gogoproto/gogo.proto";
 
 option (gogoproto.sizer_all) = true;
@@ -28,8 +27,6 @@ option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_unrecognized_all) = false;
 
 message Datum {
-  option (gogoproto.goproto_stringer) = false;
-  
   // Timestamp represents an absolute timestamp devoid of time-zone.
   message Timestamp {
     // The time in seconds since, January 1, 1970 UTC (Unix time).
@@ -42,17 +39,15 @@ message Datum {
   // Using explicit proto types provides convenient access when using json. If
   // we used a Kind+Bytes approach the json interface would involve base64
   // encoded data.
-  option (gogoproto.onlyone) = true;
-  oneof value {
+  oneof payload {
     bool bool_val = 1;
     int64 int_val = 2;
     double float_val = 3;
     bytes bytes_val = 4;
     string string_val = 5;
-    Timestamp time_val = 6;
-    // TODO(vivek): Add additional types like Date and Interval that are
-    // supported by Cockroach but not supported by the Go sql driver. These
-    // will be useful for drivers in other languages.
+    Timestamp date_val = 6;
+    Timestamp time_val = 7;
+    int64 interval_val = 8;
   }
 
   // TODO(pmattis): How to add end-to-end checksumming? Just adding a checksum
@@ -67,7 +62,7 @@ message Result {
     repeated Datum values = 1 [(gogoproto.nullable) = false];
   }
   // Error is non-nil if an error occurred while executing the statement.
-  optional proto.Error error = 1;
+  optional string error = 1;
   // The names of the columns returned in the result set in the order specified
   // in the SQL statement. The number of columns will equal the number of
   // values in each Row.

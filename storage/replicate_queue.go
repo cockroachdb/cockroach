@@ -20,6 +20,7 @@ package storage
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -40,20 +41,19 @@ const (
 // additional replica to their range.
 type replicateQueue struct {
 	*baseQueue
-	gossip    *gossip.Gossip
 	allocator Allocator
 	clock     *hlc.Clock
 }
 
 // makeReplicateQueue returns a new instance of replicateQueue.
-func makeReplicateQueue(gossip *gossip.Gossip, allocator Allocator, clock *hlc.Clock) replicateQueue {
+func makeReplicateQueue(gossip *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
+	options RebalancingOptions) replicateQueue {
 	rq := replicateQueue{
-		gossip:    gossip,
 		allocator: allocator,
 		clock:     clock,
 	}
 	// rq must be a pointer in order to setup the reference cycle.
-	rq.baseQueue = newBaseQueue("replicate", &rq, replicateQueueMaxSize)
+	rq.baseQueue = newBaseQueue("replicate", &rq, gossip, replicateQueueMaxSize)
 	return rq
 }
 
@@ -61,55 +61,45 @@ func (rq replicateQueue) needsLeaderLease() bool {
 	return true
 }
 
-func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica) (shouldQ bool, priority float64) {
-	// Load the system config.
-	cfg, err := rq.gossip.GetSystemConfig()
-	if err != nil {
-		log.Error(err)
-		return
-	}
+// acceptsUnsplitRanges is false because the proper replication
+// policy cannot be determined for ranges that span zone configs.
+func (rq *replicateQueue) acceptsUnsplitRanges() bool {
+	return false
+}
+
+func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica,
+	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := repl.Desc()
-	if len(cfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
+	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
 		// If the replica's range needs splitting, wait until done.
 		return
 	}
 
 	// Find the zone config for this range.
-	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	action, priority := rq.allocator.ComputeAction(*zone, repl.Desc())
-	if action == aaNoop {
-		return false, 0
+	action, priority := rq.allocator.ComputeAction(*zone, desc)
+	if action != aaNoop {
+		return true, priority
 	}
-	return true, priority
+	// See if there is a rebalancing opportunity present.
+	shouldRebalance := rq.allocator.shouldRebalance(repl.rm.StoreID())
+	return shouldRebalance, 0
 }
 
-func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
-	// Load the system config.
-	cfg, err := rq.gossip.GetSystemConfig()
-	if err != nil {
-		return err
-	}
-
-	// TODO(marc): shouldn't we be checking whether the range needs to be split?
-
+func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *config.SystemConfig) error {
 	desc := repl.Desc()
 	// Find the zone config for this range.
-	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		return err
 	}
-
 	action, _ := rq.allocator.ComputeAction(*zone, desc)
-	if action == aaNoop {
-		// No action to take, return without re-queueing.
-		return nil
-	}
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
@@ -141,6 +131,10 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 		if err = repl.ChangeReplicas(proto.REMOVE_REPLICA, removeReplica, desc); err != nil {
 			return err
 		}
+		// Do not requeue if we removed ourselves.
+		if removeReplica.StoreID == repl.rm.StoreID() {
+			return nil
+		}
 	case aaRemoveDead:
 		if len(deadReplicas) == 0 {
 			if log.V(1) {
@@ -149,6 +143,22 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica) error {
 			break
 		}
 		if err = repl.ChangeReplicas(proto.REMOVE_REPLICA, deadReplicas[0], desc); err != nil {
+			return err
+		}
+	case aaNoop:
+		// The Noop case will result if this replica was queued in order to
+		// rebalance. Attempt to find a rebalancing target.
+		rebalanceStore := rq.allocator.RebalanceTarget(zone.ReplicaAttrs[0], desc.Replicas)
+		if rebalanceStore == nil {
+			// No action was necessary and no rebalance target was found. Return
+			// without re-queueing this replica.
+			return nil
+		}
+		rebalanceReplica := proto.Replica{
+			NodeID:  rebalanceStore.Node.NodeID,
+			StoreID: rebalanceStore.StoreID,
+		}
+		if err = repl.ChangeReplicas(proto.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err
 		}
 	}

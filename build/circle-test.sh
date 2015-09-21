@@ -85,7 +85,7 @@ trap prepare_artifacts EXIT
 
 # 1. Run "make check" to verify coding guidelines.
 echo "make check"
-time ${builder} make GITHOOKS= check | tee "${outdir}/check.log"
+time ${builder} make check | tee "${outdir}/check.log"
 
 # 2. Verify that "go generate" was run.
 echo "verifying generated files"
@@ -93,7 +93,7 @@ time ${builder} /bin/bash -c "(go generate ./... && git ls-files --modified --de
 
 # 3. Run "make test".
 echo "make test"
-time ${builder} make GITHOOKS= test \
+time ${builder} make test \
   TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
   tr -d '\r' | tee "${outdir}/test.log" | \
   grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
@@ -101,7 +101,7 @@ time ${builder} make GITHOOKS= test \
 
 # 4. Run "make testrace".
 echo "make testrace"
-time ${builder} make GITHOOKS= testrace \
+time ${builder} make testrace \
   TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
   tr -d '\r' | tee "${outdir}/testrace.log" | \
   grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |

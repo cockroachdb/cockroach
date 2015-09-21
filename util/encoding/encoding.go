@@ -38,7 +38,9 @@ var crc32Pool = sync.Pool{
 // NewCRC32Checksum returns a CRC32 checksum computed from the input byte slice.
 func NewCRC32Checksum(b []byte) hash.Hash32 {
 	crc := crc32Pool.Get().(hash.Hash32)
-	crc.Write(b)
+	if _, err := crc.Write(b); err != nil {
+		panic(err)
+	}
 	return crc
 }
 

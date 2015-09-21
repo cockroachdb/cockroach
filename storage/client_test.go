@@ -189,22 +189,11 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	// Always create the first sender.
 	m.senders = append(m.senders, kv.NewLocalSender())
 
-	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
-		getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message,
-		_ *rpc.Context) ([]gogoproto.Message, error) {
-		call := proto.Call{
-			Args:  getArgs(nil /* net.Addr */).(proto.Request),
-			Reply: getReply().(proto.Response),
-		}
-		m.senders[0].Send(context.Background(), call)
-		return []gogoproto.Message{call.Reply}, call.Reply.Header().GoError()
-	}
-
 	if m.db == nil {
 		distSender := kv.NewDistSender(&kv.DistSenderContext{
 			Clock:             m.clock,
 			RangeDescriptorDB: m.senders[0],
-			RPCSend:           rpcSend,
+			RPCSend:           m.rpcSend,
 		}, m.gossip)
 		sender := kv.NewTxnCoordSender(distSender, m.clock, false, nil, m.clientStopper)
 		m.db = client.NewDB(sender)
@@ -232,6 +221,75 @@ func (m *multiTestContext) Stop() {
 	for _, e := range m.engines {
 		e.Close()
 	}
+}
+
+// rpcSend implements the client.rpcSender interface. This implementation of "rpcSend" is
+// used to multiplex calls between many local senders in a simple way; It sends
+// the request to each localSender of a multiTestContext in order, stopping if
+// the request succeeds or any error other than RangeKeyMismatch is returned.
+//
+// TODO(mrtracy): remove once #2141 is merged and multiTestContext begins using
+// DistSender. This simple implementation will likely be incorrect in some
+// untested cases and is a temporary measure until DistSender is hooked up.
+func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, _ []net.Addr,
+	getArgs func(addr net.Addr) gogoproto.Message,
+	getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
+	maxRetries := len(m.senders) * 2
+	// Iterate over all stores in the test context, looking for a suitable
+	// replica. In the case of a RangeKeyMismatchError, retry the request on the
+	// next store. In the case of a NotLeaderError, attempt the new leader next.
+	// Because NotLeaderErrors will adjust the index of our loop, a second
+	// "maxRetries" count is used to bound the number of retries.
+	nextIdx := 0
+	var call proto.Call
+	for total := 0; total < maxRetries; total++ {
+		call = proto.Call{
+			Args:  getArgs(nil /* net.Addr */).(proto.Request),
+			Reply: getReply().(proto.Response),
+		}
+		m.senders[nextIdx].Send(context.Background(), call)
+		if err := call.Reply.Header().GoError(); err != nil {
+			switch err := err.(type) {
+			case *proto.RangeKeyMismatchError:
+				// Try the next localSender if this localSender did not have the
+				// requested range.
+				nextIdx++
+				nextIdx %= len(m.senders)
+				continue
+			case *proto.NotLeaderError:
+				// localSender has the range, is *not* the Leader, but the
+				// Leader is not known; this can happen if the leader is removed
+				// from the group. Move the manual clock forward in an attempt to
+				// expire the lease. Also increment nextIdx: the discovered replica might be
+				// a removed copy which has not been GCed.
+				if err.Leader == nil {
+					m.expireLeaderLeases()
+					nextIdx++
+					nextIdx %= len(m.senders)
+					continue
+				}
+				// If the leader IS known, retry the request against the leader.
+				foundLeader := false
+				for i, s := range m.stores {
+					if s.StoreID() == err.Leader.StoreID {
+						nextIdx = i
+						foundLeader = true
+						break
+					}
+				}
+				// If the current leader was known but wasn't found in our
+				// collection of stores, break out of the loop; this should
+				// never happen in a correctly configured test.
+				if !foundLeader {
+					m.t.Fatalf("leader %s was not part of known set of stores in multiTestContext",
+						err.Leader)
+				}
+				continue
+			}
+		}
+		break
+	}
+	return []gogoproto.Message{call.Reply}, call.Reply.Header().GoError()
 }
 
 func (m *multiTestContext) makeContext(i int) storage.StoreContext {
@@ -394,6 +452,13 @@ func (m *multiTestContext) unreplicateRange(rangeID proto.RangeID, source, dest 
 	// Removing a range doesn't have any immediately-visible side
 	// effects, (and the removed node may be stopped) so return as soon
 	// as the removal has committed on the leader.
+}
+
+// expireLeaderLeases increments the context's manual clock far enough into the
+// future that current leader leases are expired. Useful for tests which modify
+// replica sets.
+func (m *multiTestContext) expireLeaderLeases() {
+	m.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration) + 1)
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to

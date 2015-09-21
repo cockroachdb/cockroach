@@ -77,7 +77,7 @@ func monotonicUnixNano() int64 {
 func (is *infoStore) String() string {
 	buf := bytes.Buffer{}
 	if infoCount := len(is.Infos); infoCount > 0 {
-		buf.WriteString(fmt.Sprintf("infostore with %d info(s): ", infoCount))
+		fmt.Fprintf(&buf, "infostore with %d info(s): ", infoCount)
 	} else {
 		return "infostore (empty)"
 	}
@@ -85,10 +85,9 @@ func (is *infoStore) String() string {
 	prepend := ""
 
 	if err := is.visitInfos(func(key string, i *info) error {
-		str := fmt.Sprintf("%sinfo %q: %+v", prepend, key, i.Value)
+		fmt.Fprintf(&buf, "%sinfo %q: %+v", prepend, key, i.Value)
 		prepend = ", "
-		_, err := buf.WriteString(str)
-		return err
+		return nil
 	}); err != nil {
 		log.Errorf("failed to properly construct string representation of infoStore: %s", err)
 	}

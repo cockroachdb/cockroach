@@ -66,22 +66,6 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* ErrorDetail_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   ErrorDetail_reflection_ = NULL;
-struct ErrorDetailOneofInstance {
-  const ::cockroach::proto::NotLeaderError* not_leader_;
-  const ::cockroach::proto::RangeNotFoundError* range_not_found_;
-  const ::cockroach::proto::RangeKeyMismatchError* range_key_mismatch_;
-  const ::cockroach::proto::ReadWithinUncertaintyIntervalError* read_within_uncertainty_interval_;
-  const ::cockroach::proto::TransactionAbortedError* transaction_aborted_;
-  const ::cockroach::proto::TransactionPushError* transaction_push_;
-  const ::cockroach::proto::TransactionRetryError* transaction_retry_;
-  const ::cockroach::proto::TransactionStatusError* transaction_status_;
-  const ::cockroach::proto::WriteIntentError* write_intent_;
-  const ::cockroach::proto::WriteTooOldError* write_too_old_;
-  const ::cockroach::proto::OpRequiresTxnError* op_requires_txn_;
-  const ::cockroach::proto::ConditionFailedError* condition_failed_;
-  const ::cockroach::proto::LeaseRejectedError* lease_rejected_;
-  const ::cockroach::proto::NodeUnavailableError* node_unavailable_;
-}* ErrorDetail_default_oneof_instance_ = NULL;
 const ::google::protobuf::Descriptor* Error_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   Error_reflection_ = NULL;
@@ -317,22 +301,21 @@ void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaseRejectedError, _internal_metadata_),
       -1);
   ErrorDetail_descriptor_ = file->message_type(14);
-  static const int ErrorDetail_offsets_[15] = {
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, not_leader_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, range_not_found_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, range_key_mismatch_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, read_within_uncertainty_interval_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, transaction_aborted_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, transaction_push_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, transaction_retry_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, transaction_status_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, write_intent_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, write_too_old_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, op_requires_txn_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, condition_failed_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, lease_rejected_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, node_unavailable_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, value_),
+  static const int ErrorDetail_offsets_[14] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, not_leader_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, range_not_found_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, range_key_mismatch_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, read_within_uncertainty_interval_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, transaction_aborted_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, transaction_push_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, transaction_retry_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, transaction_status_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, write_intent_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, write_too_old_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, op_requires_txn_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, condition_failed_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, lease_rejected_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, node_unavailable_),
   };
   ErrorDetail_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -342,8 +325,6 @@ void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, _has_bits_[0]),
       -1,
       -1,
-      ErrorDetail_default_oneof_instance_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, _oneof_case_[0]),
       sizeof(ErrorDetail),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, _internal_metadata_),
       -1);
@@ -444,7 +425,6 @@ void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto() {
   delete LeaseRejectedError::default_instance_;
   delete LeaseRejectedError_reflection_;
   delete ErrorDetail::default_instance_;
-  delete ErrorDetail_default_oneof_instance_;
   delete ErrorDetail_reflection_;
   delete Error::default_instance_;
   delete Error_reflection_;
@@ -499,38 +479,37 @@ void protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto() {
     "oto.Value\"u\n\022LeaseRejectedError\022/\n\tReque"
     "sted\030\001 \001(\0132\026.cockroach.proto.LeaseB\004\310\336\037\000"
     "\022.\n\010Existing\030\002 \001(\0132\026.cockroach.proto.Lea"
-    "seB\004\310\336\037\000\"\316\007\n\013ErrorDetail\0225\n\nnot_leader\030\001"
-    " \001(\0132\037.cockroach.proto.NotLeaderErrorH\000\022"
-    ">\n\017range_not_found\030\002 \001(\0132#.cockroach.pro"
-    "to.RangeNotFoundErrorH\000\022D\n\022range_key_mis"
-    "match\030\003 \001(\0132&.cockroach.proto.RangeKeyMi"
-    "smatchErrorH\000\022_\n read_within_uncertainty"
-    "_interval\030\004 \001(\01323.cockroach.proto.ReadWi"
-    "thinUncertaintyIntervalErrorH\000\022G\n\023transa"
-    "ction_aborted\030\005 \001(\0132(.cockroach.proto.Tr"
-    "ansactionAbortedErrorH\000\022A\n\020transaction_p"
-    "ush\030\006 \001(\0132%.cockroach.proto.TransactionP"
-    "ushErrorH\000\022C\n\021transaction_retry\030\007 \001(\0132&."
-    "cockroach.proto.TransactionRetryErrorH\000\022"
-    "E\n\022transaction_status\030\010 \001(\0132\'.cockroach."
-    "proto.TransactionStatusErrorH\000\0229\n\014write_"
-    "intent\030\t \001(\0132!.cockroach.proto.WriteInte"
-    "ntErrorH\000\022:\n\rwrite_too_old\030\n \001(\0132!.cockr"
-    "oach.proto.WriteTooOldErrorH\000\022>\n\017op_requ"
-    "ires_txn\030\013 \001(\0132#.cockroach.proto.OpRequi"
-    "resTxnErrorH\000\022A\n\020condition_failed\030\014 \001(\0132"
-    "%.cockroach.proto.ConditionFailedErrorH\000"
-    "\022=\n\016lease_rejected\030\r \001(\0132#.cockroach.pro"
-    "to.LeaseRejectedErrorH\000\022A\n\020node_unavaila"
-    "ble\030\016 \001(\0132%.cockroach.proto.NodeUnavaila"
-    "bleErrorH\000:\004\310\240\037\001B\007\n\005value\"\255\001\n\005Error\022\025\n\007m"
-    "essage\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310"
-    "\336\037\000\022F\n\023transaction_restart\030\004 \001(\0162#.cockr"
-    "oach.proto.TransactionRestartB\004\310\336\037\000\022,\n\006d"
-    "etail\030\003 \001(\0132\034.cockroach.proto.ErrorDetai"
-    "l*;\n\022TransactionRestart\022\t\n\005ABORT\020\000\022\013\n\007BA"
-    "CKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\033Z\005proto\330\341\036\000\340\342\036\001\310"
-    "\342\036\001\320\342\036\001\220\343\036\000", 2811);
+    "seB\004\310\336\037\000\"\251\007\n\013ErrorDetail\0223\n\nnot_leader\030\001"
+    " \001(\0132\037.cockroach.proto.NotLeaderError\022<\n"
+    "\017range_not_found\030\002 \001(\0132#.cockroach.proto"
+    ".RangeNotFoundError\022B\n\022range_key_mismatc"
+    "h\030\003 \001(\0132&.cockroach.proto.RangeKeyMismat"
+    "chError\022]\n read_within_uncertainty_inter"
+    "val\030\004 \001(\01323.cockroach.proto.ReadWithinUn"
+    "certaintyIntervalError\022E\n\023transaction_ab"
+    "orted\030\005 \001(\0132(.cockroach.proto.Transactio"
+    "nAbortedError\022\?\n\020transaction_push\030\006 \001(\0132"
+    "%.cockroach.proto.TransactionPushError\022A"
+    "\n\021transaction_retry\030\007 \001(\0132&.cockroach.pr"
+    "oto.TransactionRetryError\022C\n\022transaction"
+    "_status\030\010 \001(\0132\'.cockroach.proto.Transact"
+    "ionStatusError\0227\n\014write_intent\030\t \001(\0132!.c"
+    "ockroach.proto.WriteIntentError\0228\n\rwrite"
+    "_too_old\030\n \001(\0132!.cockroach.proto.WriteTo"
+    "oOldError\022<\n\017op_requires_txn\030\013 \001(\0132#.coc"
+    "kroach.proto.OpRequiresTxnError\022\?\n\020condi"
+    "tion_failed\030\014 \001(\0132%.cockroach.proto.Cond"
+    "itionFailedError\022;\n\016lease_rejected\030\r \001(\013"
+    "2#.cockroach.proto.LeaseRejectedError\022\?\n"
+    "\020node_unavailable\030\016 \001(\0132%.cockroach.prot"
+    "o.NodeUnavailableError:\004\310\240\037\001\"\255\001\n\005Error\022\025"
+    "\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010"
+    "B\004\310\336\037\000\022F\n\023transaction_restart\030\004 \001(\0162#.co"
+    "ckroach.proto.TransactionRestartB\004\310\336\037\000\022,"
+    "\n\006detail\030\003 \001(\0132\034.cockroach.proto.ErrorDe"
+    "tail*;\n\022TransactionRestart\022\t\n\005ABORT\020\000\022\013\n"
+    "\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\033Z\005proto\330\341\036\000\340\342"
+    "\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 2774);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -548,7 +527,6 @@ void protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto() {
   ConditionFailedError::default_instance_ = new ConditionFailedError();
   LeaseRejectedError::default_instance_ = new LeaseRejectedError();
   ErrorDetail::default_instance_ = new ErrorDetail();
-  ErrorDetail_default_oneof_instance_ = new ErrorDetailOneofInstance();
   Error::default_instance_ = new Error();
   NotLeaderError::default_instance_->InitAsDefaultInstance();
   NodeUnavailableError::default_instance_->InitAsDefaultInstance();
@@ -5404,20 +5382,20 @@ ErrorDetail::ErrorDetail()
 }
 
 void ErrorDetail::InitAsDefaultInstance() {
-  ErrorDetail_default_oneof_instance_->not_leader_ = const_cast< ::cockroach::proto::NotLeaderError*>(&::cockroach::proto::NotLeaderError::default_instance());
-  ErrorDetail_default_oneof_instance_->range_not_found_ = const_cast< ::cockroach::proto::RangeNotFoundError*>(&::cockroach::proto::RangeNotFoundError::default_instance());
-  ErrorDetail_default_oneof_instance_->range_key_mismatch_ = const_cast< ::cockroach::proto::RangeKeyMismatchError*>(&::cockroach::proto::RangeKeyMismatchError::default_instance());
-  ErrorDetail_default_oneof_instance_->read_within_uncertainty_interval_ = const_cast< ::cockroach::proto::ReadWithinUncertaintyIntervalError*>(&::cockroach::proto::ReadWithinUncertaintyIntervalError::default_instance());
-  ErrorDetail_default_oneof_instance_->transaction_aborted_ = const_cast< ::cockroach::proto::TransactionAbortedError*>(&::cockroach::proto::TransactionAbortedError::default_instance());
-  ErrorDetail_default_oneof_instance_->transaction_push_ = const_cast< ::cockroach::proto::TransactionPushError*>(&::cockroach::proto::TransactionPushError::default_instance());
-  ErrorDetail_default_oneof_instance_->transaction_retry_ = const_cast< ::cockroach::proto::TransactionRetryError*>(&::cockroach::proto::TransactionRetryError::default_instance());
-  ErrorDetail_default_oneof_instance_->transaction_status_ = const_cast< ::cockroach::proto::TransactionStatusError*>(&::cockroach::proto::TransactionStatusError::default_instance());
-  ErrorDetail_default_oneof_instance_->write_intent_ = const_cast< ::cockroach::proto::WriteIntentError*>(&::cockroach::proto::WriteIntentError::default_instance());
-  ErrorDetail_default_oneof_instance_->write_too_old_ = const_cast< ::cockroach::proto::WriteTooOldError*>(&::cockroach::proto::WriteTooOldError::default_instance());
-  ErrorDetail_default_oneof_instance_->op_requires_txn_ = const_cast< ::cockroach::proto::OpRequiresTxnError*>(&::cockroach::proto::OpRequiresTxnError::default_instance());
-  ErrorDetail_default_oneof_instance_->condition_failed_ = const_cast< ::cockroach::proto::ConditionFailedError*>(&::cockroach::proto::ConditionFailedError::default_instance());
-  ErrorDetail_default_oneof_instance_->lease_rejected_ = const_cast< ::cockroach::proto::LeaseRejectedError*>(&::cockroach::proto::LeaseRejectedError::default_instance());
-  ErrorDetail_default_oneof_instance_->node_unavailable_ = const_cast< ::cockroach::proto::NodeUnavailableError*>(&::cockroach::proto::NodeUnavailableError::default_instance());
+  not_leader_ = const_cast< ::cockroach::proto::NotLeaderError*>(&::cockroach::proto::NotLeaderError::default_instance());
+  range_not_found_ = const_cast< ::cockroach::proto::RangeNotFoundError*>(&::cockroach::proto::RangeNotFoundError::default_instance());
+  range_key_mismatch_ = const_cast< ::cockroach::proto::RangeKeyMismatchError*>(&::cockroach::proto::RangeKeyMismatchError::default_instance());
+  read_within_uncertainty_interval_ = const_cast< ::cockroach::proto::ReadWithinUncertaintyIntervalError*>(&::cockroach::proto::ReadWithinUncertaintyIntervalError::default_instance());
+  transaction_aborted_ = const_cast< ::cockroach::proto::TransactionAbortedError*>(&::cockroach::proto::TransactionAbortedError::default_instance());
+  transaction_push_ = const_cast< ::cockroach::proto::TransactionPushError*>(&::cockroach::proto::TransactionPushError::default_instance());
+  transaction_retry_ = const_cast< ::cockroach::proto::TransactionRetryError*>(&::cockroach::proto::TransactionRetryError::default_instance());
+  transaction_status_ = const_cast< ::cockroach::proto::TransactionStatusError*>(&::cockroach::proto::TransactionStatusError::default_instance());
+  write_intent_ = const_cast< ::cockroach::proto::WriteIntentError*>(&::cockroach::proto::WriteIntentError::default_instance());
+  write_too_old_ = const_cast< ::cockroach::proto::WriteTooOldError*>(&::cockroach::proto::WriteTooOldError::default_instance());
+  op_requires_txn_ = const_cast< ::cockroach::proto::OpRequiresTxnError*>(&::cockroach::proto::OpRequiresTxnError::default_instance());
+  condition_failed_ = const_cast< ::cockroach::proto::ConditionFailedError*>(&::cockroach::proto::ConditionFailedError::default_instance());
+  lease_rejected_ = const_cast< ::cockroach::proto::LeaseRejectedError*>(&::cockroach::proto::LeaseRejectedError::default_instance());
+  node_unavailable_ = const_cast< ::cockroach::proto::NodeUnavailableError*>(&::cockroach::proto::NodeUnavailableError::default_instance());
 }
 
 ErrorDetail::ErrorDetail(const ErrorDetail& from)
@@ -5430,8 +5408,21 @@ ErrorDetail::ErrorDetail(const ErrorDetail& from)
 
 void ErrorDetail::SharedCtor() {
   _cached_size_ = 0;
+  not_leader_ = NULL;
+  range_not_found_ = NULL;
+  range_key_mismatch_ = NULL;
+  read_within_uncertainty_interval_ = NULL;
+  transaction_aborted_ = NULL;
+  transaction_push_ = NULL;
+  transaction_retry_ = NULL;
+  transaction_status_ = NULL;
+  write_intent_ = NULL;
+  write_too_old_ = NULL;
+  op_requires_txn_ = NULL;
+  condition_failed_ = NULL;
+  lease_rejected_ = NULL;
+  node_unavailable_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
-  clear_has_value();
 }
 
 ErrorDetail::~ErrorDetail() {
@@ -5440,10 +5431,21 @@ ErrorDetail::~ErrorDetail() {
 }
 
 void ErrorDetail::SharedDtor() {
-  if (has_value()) {
-    clear_value();
-  }
   if (this != default_instance_) {
+    delete not_leader_;
+    delete range_not_found_;
+    delete range_key_mismatch_;
+    delete read_within_uncertainty_interval_;
+    delete transaction_aborted_;
+    delete transaction_push_;
+    delete transaction_retry_;
+    delete transaction_status_;
+    delete write_intent_;
+    delete write_too_old_;
+    delete op_requires_txn_;
+    delete condition_failed_;
+    delete lease_rejected_;
+    delete node_unavailable_;
   }
 }
 
@@ -5472,74 +5474,53 @@ ErrorDetail* ErrorDetail::New(::google::protobuf::Arena* arena) const {
   return n;
 }
 
-void ErrorDetail::clear_value() {
-  switch(value_case()) {
-    case kNotLeader: {
-      delete value_.not_leader_;
-      break;
+void ErrorDetail::Clear() {
+  if (_has_bits_[0 / 32] & 255u) {
+    if (has_not_leader()) {
+      if (not_leader_ != NULL) not_leader_->::cockroach::proto::NotLeaderError::Clear();
     }
-    case kRangeNotFound: {
-      delete value_.range_not_found_;
-      break;
+    if (has_range_not_found()) {
+      if (range_not_found_ != NULL) range_not_found_->::cockroach::proto::RangeNotFoundError::Clear();
     }
-    case kRangeKeyMismatch: {
-      delete value_.range_key_mismatch_;
-      break;
+    if (has_range_key_mismatch()) {
+      if (range_key_mismatch_ != NULL) range_key_mismatch_->::cockroach::proto::RangeKeyMismatchError::Clear();
     }
-    case kReadWithinUncertaintyInterval: {
-      delete value_.read_within_uncertainty_interval_;
-      break;
+    if (has_read_within_uncertainty_interval()) {
+      if (read_within_uncertainty_interval_ != NULL) read_within_uncertainty_interval_->::cockroach::proto::ReadWithinUncertaintyIntervalError::Clear();
     }
-    case kTransactionAborted: {
-      delete value_.transaction_aborted_;
-      break;
+    if (has_transaction_aborted()) {
+      if (transaction_aborted_ != NULL) transaction_aborted_->::cockroach::proto::TransactionAbortedError::Clear();
     }
-    case kTransactionPush: {
-      delete value_.transaction_push_;
-      break;
+    if (has_transaction_push()) {
+      if (transaction_push_ != NULL) transaction_push_->::cockroach::proto::TransactionPushError::Clear();
     }
-    case kTransactionRetry: {
-      delete value_.transaction_retry_;
-      break;
+    if (has_transaction_retry()) {
+      if (transaction_retry_ != NULL) transaction_retry_->::cockroach::proto::TransactionRetryError::Clear();
     }
-    case kTransactionStatus: {
-      delete value_.transaction_status_;
-      break;
-    }
-    case kWriteIntent: {
-      delete value_.write_intent_;
-      break;
-    }
-    case kWriteTooOld: {
-      delete value_.write_too_old_;
-      break;
-    }
-    case kOpRequiresTxn: {
-      delete value_.op_requires_txn_;
-      break;
-    }
-    case kConditionFailed: {
-      delete value_.condition_failed_;
-      break;
-    }
-    case kLeaseRejected: {
-      delete value_.lease_rejected_;
-      break;
-    }
-    case kNodeUnavailable: {
-      delete value_.node_unavailable_;
-      break;
-    }
-    case VALUE_NOT_SET: {
-      break;
+    if (has_transaction_status()) {
+      if (transaction_status_ != NULL) transaction_status_->::cockroach::proto::TransactionStatusError::Clear();
     }
   }
-  _oneof_case_[0] = VALUE_NOT_SET;
-}
-
-
-void ErrorDetail::Clear() {
-  clear_value();
+  if (_has_bits_[8 / 32] & 16128u) {
+    if (has_write_intent()) {
+      if (write_intent_ != NULL) write_intent_->::cockroach::proto::WriteIntentError::Clear();
+    }
+    if (has_write_too_old()) {
+      if (write_too_old_ != NULL) write_too_old_->::cockroach::proto::WriteTooOldError::Clear();
+    }
+    if (has_op_requires_txn()) {
+      if (op_requires_txn_ != NULL) op_requires_txn_->::cockroach::proto::OpRequiresTxnError::Clear();
+    }
+    if (has_condition_failed()) {
+      if (condition_failed_ != NULL) condition_failed_->::cockroach::proto::ConditionFailedError::Clear();
+    }
+    if (has_lease_rejected()) {
+      if (lease_rejected_ != NULL) lease_rejected_->::cockroach::proto::LeaseRejectedError::Clear();
+    }
+    if (has_node_unavailable()) {
+      if (node_unavailable_ != NULL) node_unavailable_->::cockroach::proto::NodeUnavailableError::Clear();
+    }
+  }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->Clear();
@@ -5765,85 +5746,85 @@ void ErrorDetail::SerializeWithCachedSizes(
   // optional .cockroach.proto.NotLeaderError not_leader = 1;
   if (has_not_leader()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, *value_.not_leader_, output);
+      1, *this->not_leader_, output);
   }
 
   // optional .cockroach.proto.RangeNotFoundError range_not_found = 2;
   if (has_range_not_found()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      2, *value_.range_not_found_, output);
+      2, *this->range_not_found_, output);
   }
 
   // optional .cockroach.proto.RangeKeyMismatchError range_key_mismatch = 3;
   if (has_range_key_mismatch()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      3, *value_.range_key_mismatch_, output);
+      3, *this->range_key_mismatch_, output);
   }
 
   // optional .cockroach.proto.ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
   if (has_read_within_uncertainty_interval()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      4, *value_.read_within_uncertainty_interval_, output);
+      4, *this->read_within_uncertainty_interval_, output);
   }
 
   // optional .cockroach.proto.TransactionAbortedError transaction_aborted = 5;
   if (has_transaction_aborted()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      5, *value_.transaction_aborted_, output);
+      5, *this->transaction_aborted_, output);
   }
 
   // optional .cockroach.proto.TransactionPushError transaction_push = 6;
   if (has_transaction_push()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      6, *value_.transaction_push_, output);
+      6, *this->transaction_push_, output);
   }
 
   // optional .cockroach.proto.TransactionRetryError transaction_retry = 7;
   if (has_transaction_retry()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      7, *value_.transaction_retry_, output);
+      7, *this->transaction_retry_, output);
   }
 
   // optional .cockroach.proto.TransactionStatusError transaction_status = 8;
   if (has_transaction_status()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      8, *value_.transaction_status_, output);
+      8, *this->transaction_status_, output);
   }
 
   // optional .cockroach.proto.WriteIntentError write_intent = 9;
   if (has_write_intent()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      9, *value_.write_intent_, output);
+      9, *this->write_intent_, output);
   }
 
   // optional .cockroach.proto.WriteTooOldError write_too_old = 10;
   if (has_write_too_old()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      10, *value_.write_too_old_, output);
+      10, *this->write_too_old_, output);
   }
 
   // optional .cockroach.proto.OpRequiresTxnError op_requires_txn = 11;
   if (has_op_requires_txn()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      11, *value_.op_requires_txn_, output);
+      11, *this->op_requires_txn_, output);
   }
 
   // optional .cockroach.proto.ConditionFailedError condition_failed = 12;
   if (has_condition_failed()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      12, *value_.condition_failed_, output);
+      12, *this->condition_failed_, output);
   }
 
   // optional .cockroach.proto.LeaseRejectedError lease_rejected = 13;
   if (has_lease_rejected()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      13, *value_.lease_rejected_, output);
+      13, *this->lease_rejected_, output);
   }
 
   // optional .cockroach.proto.NodeUnavailableError node_unavailable = 14;
   if (has_node_unavailable()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      14, *value_.node_unavailable_, output);
+      14, *this->node_unavailable_, output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -5860,98 +5841,98 @@ void ErrorDetail::SerializeWithCachedSizes(
   if (has_not_leader()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        1, *value_.not_leader_, target);
+        1, *this->not_leader_, target);
   }
 
   // optional .cockroach.proto.RangeNotFoundError range_not_found = 2;
   if (has_range_not_found()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        2, *value_.range_not_found_, target);
+        2, *this->range_not_found_, target);
   }
 
   // optional .cockroach.proto.RangeKeyMismatchError range_key_mismatch = 3;
   if (has_range_key_mismatch()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        3, *value_.range_key_mismatch_, target);
+        3, *this->range_key_mismatch_, target);
   }
 
   // optional .cockroach.proto.ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
   if (has_read_within_uncertainty_interval()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        4, *value_.read_within_uncertainty_interval_, target);
+        4, *this->read_within_uncertainty_interval_, target);
   }
 
   // optional .cockroach.proto.TransactionAbortedError transaction_aborted = 5;
   if (has_transaction_aborted()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        5, *value_.transaction_aborted_, target);
+        5, *this->transaction_aborted_, target);
   }
 
   // optional .cockroach.proto.TransactionPushError transaction_push = 6;
   if (has_transaction_push()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        6, *value_.transaction_push_, target);
+        6, *this->transaction_push_, target);
   }
 
   // optional .cockroach.proto.TransactionRetryError transaction_retry = 7;
   if (has_transaction_retry()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        7, *value_.transaction_retry_, target);
+        7, *this->transaction_retry_, target);
   }
 
   // optional .cockroach.proto.TransactionStatusError transaction_status = 8;
   if (has_transaction_status()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        8, *value_.transaction_status_, target);
+        8, *this->transaction_status_, target);
   }
 
   // optional .cockroach.proto.WriteIntentError write_intent = 9;
   if (has_write_intent()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        9, *value_.write_intent_, target);
+        9, *this->write_intent_, target);
   }
 
   // optional .cockroach.proto.WriteTooOldError write_too_old = 10;
   if (has_write_too_old()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        10, *value_.write_too_old_, target);
+        10, *this->write_too_old_, target);
   }
 
   // optional .cockroach.proto.OpRequiresTxnError op_requires_txn = 11;
   if (has_op_requires_txn()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        11, *value_.op_requires_txn_, target);
+        11, *this->op_requires_txn_, target);
   }
 
   // optional .cockroach.proto.ConditionFailedError condition_failed = 12;
   if (has_condition_failed()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        12, *value_.condition_failed_, target);
+        12, *this->condition_failed_, target);
   }
 
   // optional .cockroach.proto.LeaseRejectedError lease_rejected = 13;
   if (has_lease_rejected()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        13, *value_.lease_rejected_, target);
+        13, *this->lease_rejected_, target);
   }
 
   // optional .cockroach.proto.NodeUnavailableError node_unavailable = 14;
   if (has_node_unavailable()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        14, *value_.node_unavailable_, target);
+        14, *this->node_unavailable_, target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -5965,108 +5946,107 @@ void ErrorDetail::SerializeWithCachedSizes(
 int ErrorDetail::ByteSize() const {
   int total_size = 0;
 
-  switch (value_case()) {
+  if (_has_bits_[0 / 32] & 255) {
     // optional .cockroach.proto.NotLeaderError not_leader = 1;
-    case kNotLeader: {
+    if (has_not_leader()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.not_leader_);
-      break;
+          *this->not_leader_);
     }
+
     // optional .cockroach.proto.RangeNotFoundError range_not_found = 2;
-    case kRangeNotFound: {
+    if (has_range_not_found()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.range_not_found_);
-      break;
+          *this->range_not_found_);
     }
+
     // optional .cockroach.proto.RangeKeyMismatchError range_key_mismatch = 3;
-    case kRangeKeyMismatch: {
+    if (has_range_key_mismatch()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.range_key_mismatch_);
-      break;
+          *this->range_key_mismatch_);
     }
+
     // optional .cockroach.proto.ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
-    case kReadWithinUncertaintyInterval: {
+    if (has_read_within_uncertainty_interval()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.read_within_uncertainty_interval_);
-      break;
+          *this->read_within_uncertainty_interval_);
     }
+
     // optional .cockroach.proto.TransactionAbortedError transaction_aborted = 5;
-    case kTransactionAborted: {
+    if (has_transaction_aborted()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.transaction_aborted_);
-      break;
+          *this->transaction_aborted_);
     }
+
     // optional .cockroach.proto.TransactionPushError transaction_push = 6;
-    case kTransactionPush: {
+    if (has_transaction_push()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.transaction_push_);
-      break;
+          *this->transaction_push_);
     }
+
     // optional .cockroach.proto.TransactionRetryError transaction_retry = 7;
-    case kTransactionRetry: {
+    if (has_transaction_retry()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.transaction_retry_);
-      break;
+          *this->transaction_retry_);
     }
+
     // optional .cockroach.proto.TransactionStatusError transaction_status = 8;
-    case kTransactionStatus: {
+    if (has_transaction_status()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.transaction_status_);
-      break;
+          *this->transaction_status_);
     }
+
+  }
+  if (_has_bits_[8 / 32] & 16128) {
     // optional .cockroach.proto.WriteIntentError write_intent = 9;
-    case kWriteIntent: {
+    if (has_write_intent()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.write_intent_);
-      break;
+          *this->write_intent_);
     }
+
     // optional .cockroach.proto.WriteTooOldError write_too_old = 10;
-    case kWriteTooOld: {
+    if (has_write_too_old()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.write_too_old_);
-      break;
+          *this->write_too_old_);
     }
+
     // optional .cockroach.proto.OpRequiresTxnError op_requires_txn = 11;
-    case kOpRequiresTxn: {
+    if (has_op_requires_txn()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.op_requires_txn_);
-      break;
+          *this->op_requires_txn_);
     }
+
     // optional .cockroach.proto.ConditionFailedError condition_failed = 12;
-    case kConditionFailed: {
+    if (has_condition_failed()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.condition_failed_);
-      break;
+          *this->condition_failed_);
     }
+
     // optional .cockroach.proto.LeaseRejectedError lease_rejected = 13;
-    case kLeaseRejected: {
+    if (has_lease_rejected()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.lease_rejected_);
-      break;
+          *this->lease_rejected_);
     }
+
     // optional .cockroach.proto.NodeUnavailableError node_unavailable = 14;
-    case kNodeUnavailable: {
+    if (has_node_unavailable()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *value_.node_unavailable_);
-      break;
+          *this->node_unavailable_);
     }
-    case VALUE_NOT_SET: {
-      break;
-    }
+
   }
   if (_internal_metadata_.have_unknown_fields()) {
     total_size +=
@@ -6093,65 +6073,50 @@ void ErrorDetail::MergeFrom(const ::google::protobuf::Message& from) {
 
 void ErrorDetail::MergeFrom(const ErrorDetail& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
-  switch (from.value_case()) {
-    case kNotLeader: {
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_not_leader()) {
       mutable_not_leader()->::cockroach::proto::NotLeaderError::MergeFrom(from.not_leader());
-      break;
     }
-    case kRangeNotFound: {
+    if (from.has_range_not_found()) {
       mutable_range_not_found()->::cockroach::proto::RangeNotFoundError::MergeFrom(from.range_not_found());
-      break;
     }
-    case kRangeKeyMismatch: {
+    if (from.has_range_key_mismatch()) {
       mutable_range_key_mismatch()->::cockroach::proto::RangeKeyMismatchError::MergeFrom(from.range_key_mismatch());
-      break;
     }
-    case kReadWithinUncertaintyInterval: {
+    if (from.has_read_within_uncertainty_interval()) {
       mutable_read_within_uncertainty_interval()->::cockroach::proto::ReadWithinUncertaintyIntervalError::MergeFrom(from.read_within_uncertainty_interval());
-      break;
     }
-    case kTransactionAborted: {
+    if (from.has_transaction_aborted()) {
       mutable_transaction_aborted()->::cockroach::proto::TransactionAbortedError::MergeFrom(from.transaction_aborted());
-      break;
     }
-    case kTransactionPush: {
+    if (from.has_transaction_push()) {
       mutable_transaction_push()->::cockroach::proto::TransactionPushError::MergeFrom(from.transaction_push());
-      break;
     }
-    case kTransactionRetry: {
+    if (from.has_transaction_retry()) {
       mutable_transaction_retry()->::cockroach::proto::TransactionRetryError::MergeFrom(from.transaction_retry());
-      break;
     }
-    case kTransactionStatus: {
+    if (from.has_transaction_status()) {
       mutable_transaction_status()->::cockroach::proto::TransactionStatusError::MergeFrom(from.transaction_status());
-      break;
     }
-    case kWriteIntent: {
+  }
+  if (from._has_bits_[8 / 32] & (0xffu << (8 % 32))) {
+    if (from.has_write_intent()) {
       mutable_write_intent()->::cockroach::proto::WriteIntentError::MergeFrom(from.write_intent());
-      break;
     }
-    case kWriteTooOld: {
+    if (from.has_write_too_old()) {
       mutable_write_too_old()->::cockroach::proto::WriteTooOldError::MergeFrom(from.write_too_old());
-      break;
     }
-    case kOpRequiresTxn: {
+    if (from.has_op_requires_txn()) {
       mutable_op_requires_txn()->::cockroach::proto::OpRequiresTxnError::MergeFrom(from.op_requires_txn());
-      break;
     }
-    case kConditionFailed: {
+    if (from.has_condition_failed()) {
       mutable_condition_failed()->::cockroach::proto::ConditionFailedError::MergeFrom(from.condition_failed());
-      break;
     }
-    case kLeaseRejected: {
+    if (from.has_lease_rejected()) {
       mutable_lease_rejected()->::cockroach::proto::LeaseRejectedError::MergeFrom(from.lease_rejected());
-      break;
     }
-    case kNodeUnavailable: {
+    if (from.has_node_unavailable()) {
       mutable_node_unavailable()->::cockroach::proto::NodeUnavailableError::MergeFrom(from.node_unavailable());
-      break;
-    }
-    case VALUE_NOT_SET: {
-      break;
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -6181,8 +6146,20 @@ void ErrorDetail::Swap(ErrorDetail* other) {
   InternalSwap(other);
 }
 void ErrorDetail::InternalSwap(ErrorDetail* other) {
-  std::swap(value_, other->value_);
-  std::swap(_oneof_case_[0], other->_oneof_case_[0]);
+  std::swap(not_leader_, other->not_leader_);
+  std::swap(range_not_found_, other->range_not_found_);
+  std::swap(range_key_mismatch_, other->range_key_mismatch_);
+  std::swap(read_within_uncertainty_interval_, other->read_within_uncertainty_interval_);
+  std::swap(transaction_aborted_, other->transaction_aborted_);
+  std::swap(transaction_push_, other->transaction_push_);
+  std::swap(transaction_retry_, other->transaction_retry_);
+  std::swap(transaction_status_, other->transaction_status_);
+  std::swap(write_intent_, other->write_intent_);
+  std::swap(write_too_old_, other->write_too_old_);
+  std::swap(op_requires_txn_, other->op_requires_txn_);
+  std::swap(condition_failed_, other->condition_failed_);
+  std::swap(lease_rejected_, other->lease_rejected_);
+  std::swap(node_unavailable_, other->node_unavailable_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -6201,657 +6178,606 @@ void ErrorDetail::InternalSwap(ErrorDetail* other) {
 
 // optional .cockroach.proto.NotLeaderError not_leader = 1;
 bool ErrorDetail::has_not_leader() const {
-  return value_case() == kNotLeader;
+  return (_has_bits_[0] & 0x00000001u) != 0;
 }
 void ErrorDetail::set_has_not_leader() {
-  _oneof_case_[0] = kNotLeader;
+  _has_bits_[0] |= 0x00000001u;
+}
+void ErrorDetail::clear_has_not_leader() {
+  _has_bits_[0] &= ~0x00000001u;
 }
 void ErrorDetail::clear_not_leader() {
-  if (has_not_leader()) {
-    delete value_.not_leader_;
-    clear_has_value();
-  }
+  if (not_leader_ != NULL) not_leader_->::cockroach::proto::NotLeaderError::Clear();
+  clear_has_not_leader();
 }
  const ::cockroach::proto::NotLeaderError& ErrorDetail::not_leader() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.not_leader)
-  return has_not_leader() ? *value_.not_leader_
-                      : ::cockroach::proto::NotLeaderError::default_instance();
+  return not_leader_ != NULL ? *not_leader_ : *default_instance_->not_leader_;
 }
  ::cockroach::proto::NotLeaderError* ErrorDetail::mutable_not_leader() {
-  if (!has_not_leader()) {
-    clear_value();
-    set_has_not_leader();
-    value_.not_leader_ = new ::cockroach::proto::NotLeaderError;
+  set_has_not_leader();
+  if (not_leader_ == NULL) {
+    not_leader_ = new ::cockroach::proto::NotLeaderError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.not_leader)
-  return value_.not_leader_;
+  return not_leader_;
 }
  ::cockroach::proto::NotLeaderError* ErrorDetail::release_not_leader() {
-  if (has_not_leader()) {
-    clear_has_value();
-    ::cockroach::proto::NotLeaderError* temp = value_.not_leader_;
-    value_.not_leader_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_not_leader();
+  ::cockroach::proto::NotLeaderError* temp = not_leader_;
+  not_leader_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_not_leader(::cockroach::proto::NotLeaderError* not_leader) {
-  clear_value();
+  delete not_leader_;
+  not_leader_ = not_leader;
   if (not_leader) {
     set_has_not_leader();
-    value_.not_leader_ = not_leader;
+  } else {
+    clear_has_not_leader();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.not_leader)
 }
 
 // optional .cockroach.proto.RangeNotFoundError range_not_found = 2;
 bool ErrorDetail::has_range_not_found() const {
-  return value_case() == kRangeNotFound;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 void ErrorDetail::set_has_range_not_found() {
-  _oneof_case_[0] = kRangeNotFound;
+  _has_bits_[0] |= 0x00000002u;
+}
+void ErrorDetail::clear_has_range_not_found() {
+  _has_bits_[0] &= ~0x00000002u;
 }
 void ErrorDetail::clear_range_not_found() {
-  if (has_range_not_found()) {
-    delete value_.range_not_found_;
-    clear_has_value();
-  }
+  if (range_not_found_ != NULL) range_not_found_->::cockroach::proto::RangeNotFoundError::Clear();
+  clear_has_range_not_found();
 }
  const ::cockroach::proto::RangeNotFoundError& ErrorDetail::range_not_found() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.range_not_found)
-  return has_range_not_found() ? *value_.range_not_found_
-                      : ::cockroach::proto::RangeNotFoundError::default_instance();
+  return range_not_found_ != NULL ? *range_not_found_ : *default_instance_->range_not_found_;
 }
  ::cockroach::proto::RangeNotFoundError* ErrorDetail::mutable_range_not_found() {
-  if (!has_range_not_found()) {
-    clear_value();
-    set_has_range_not_found();
-    value_.range_not_found_ = new ::cockroach::proto::RangeNotFoundError;
+  set_has_range_not_found();
+  if (range_not_found_ == NULL) {
+    range_not_found_ = new ::cockroach::proto::RangeNotFoundError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.range_not_found)
-  return value_.range_not_found_;
+  return range_not_found_;
 }
  ::cockroach::proto::RangeNotFoundError* ErrorDetail::release_range_not_found() {
-  if (has_range_not_found()) {
-    clear_has_value();
-    ::cockroach::proto::RangeNotFoundError* temp = value_.range_not_found_;
-    value_.range_not_found_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_range_not_found();
+  ::cockroach::proto::RangeNotFoundError* temp = range_not_found_;
+  range_not_found_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_range_not_found(::cockroach::proto::RangeNotFoundError* range_not_found) {
-  clear_value();
+  delete range_not_found_;
+  range_not_found_ = range_not_found;
   if (range_not_found) {
     set_has_range_not_found();
-    value_.range_not_found_ = range_not_found;
+  } else {
+    clear_has_range_not_found();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.range_not_found)
 }
 
 // optional .cockroach.proto.RangeKeyMismatchError range_key_mismatch = 3;
 bool ErrorDetail::has_range_key_mismatch() const {
-  return value_case() == kRangeKeyMismatch;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 void ErrorDetail::set_has_range_key_mismatch() {
-  _oneof_case_[0] = kRangeKeyMismatch;
+  _has_bits_[0] |= 0x00000004u;
+}
+void ErrorDetail::clear_has_range_key_mismatch() {
+  _has_bits_[0] &= ~0x00000004u;
 }
 void ErrorDetail::clear_range_key_mismatch() {
-  if (has_range_key_mismatch()) {
-    delete value_.range_key_mismatch_;
-    clear_has_value();
-  }
+  if (range_key_mismatch_ != NULL) range_key_mismatch_->::cockroach::proto::RangeKeyMismatchError::Clear();
+  clear_has_range_key_mismatch();
 }
  const ::cockroach::proto::RangeKeyMismatchError& ErrorDetail::range_key_mismatch() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.range_key_mismatch)
-  return has_range_key_mismatch() ? *value_.range_key_mismatch_
-                      : ::cockroach::proto::RangeKeyMismatchError::default_instance();
+  return range_key_mismatch_ != NULL ? *range_key_mismatch_ : *default_instance_->range_key_mismatch_;
 }
  ::cockroach::proto::RangeKeyMismatchError* ErrorDetail::mutable_range_key_mismatch() {
-  if (!has_range_key_mismatch()) {
-    clear_value();
-    set_has_range_key_mismatch();
-    value_.range_key_mismatch_ = new ::cockroach::proto::RangeKeyMismatchError;
+  set_has_range_key_mismatch();
+  if (range_key_mismatch_ == NULL) {
+    range_key_mismatch_ = new ::cockroach::proto::RangeKeyMismatchError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.range_key_mismatch)
-  return value_.range_key_mismatch_;
+  return range_key_mismatch_;
 }
  ::cockroach::proto::RangeKeyMismatchError* ErrorDetail::release_range_key_mismatch() {
-  if (has_range_key_mismatch()) {
-    clear_has_value();
-    ::cockroach::proto::RangeKeyMismatchError* temp = value_.range_key_mismatch_;
-    value_.range_key_mismatch_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_range_key_mismatch();
+  ::cockroach::proto::RangeKeyMismatchError* temp = range_key_mismatch_;
+  range_key_mismatch_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_range_key_mismatch(::cockroach::proto::RangeKeyMismatchError* range_key_mismatch) {
-  clear_value();
+  delete range_key_mismatch_;
+  range_key_mismatch_ = range_key_mismatch;
   if (range_key_mismatch) {
     set_has_range_key_mismatch();
-    value_.range_key_mismatch_ = range_key_mismatch;
+  } else {
+    clear_has_range_key_mismatch();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.range_key_mismatch)
 }
 
 // optional .cockroach.proto.ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
 bool ErrorDetail::has_read_within_uncertainty_interval() const {
-  return value_case() == kReadWithinUncertaintyInterval;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 void ErrorDetail::set_has_read_within_uncertainty_interval() {
-  _oneof_case_[0] = kReadWithinUncertaintyInterval;
+  _has_bits_[0] |= 0x00000008u;
+}
+void ErrorDetail::clear_has_read_within_uncertainty_interval() {
+  _has_bits_[0] &= ~0x00000008u;
 }
 void ErrorDetail::clear_read_within_uncertainty_interval() {
-  if (has_read_within_uncertainty_interval()) {
-    delete value_.read_within_uncertainty_interval_;
-    clear_has_value();
-  }
+  if (read_within_uncertainty_interval_ != NULL) read_within_uncertainty_interval_->::cockroach::proto::ReadWithinUncertaintyIntervalError::Clear();
+  clear_has_read_within_uncertainty_interval();
 }
  const ::cockroach::proto::ReadWithinUncertaintyIntervalError& ErrorDetail::read_within_uncertainty_interval() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.read_within_uncertainty_interval)
-  return has_read_within_uncertainty_interval() ? *value_.read_within_uncertainty_interval_
-                      : ::cockroach::proto::ReadWithinUncertaintyIntervalError::default_instance();
+  return read_within_uncertainty_interval_ != NULL ? *read_within_uncertainty_interval_ : *default_instance_->read_within_uncertainty_interval_;
 }
  ::cockroach::proto::ReadWithinUncertaintyIntervalError* ErrorDetail::mutable_read_within_uncertainty_interval() {
-  if (!has_read_within_uncertainty_interval()) {
-    clear_value();
-    set_has_read_within_uncertainty_interval();
-    value_.read_within_uncertainty_interval_ = new ::cockroach::proto::ReadWithinUncertaintyIntervalError;
+  set_has_read_within_uncertainty_interval();
+  if (read_within_uncertainty_interval_ == NULL) {
+    read_within_uncertainty_interval_ = new ::cockroach::proto::ReadWithinUncertaintyIntervalError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.read_within_uncertainty_interval)
-  return value_.read_within_uncertainty_interval_;
+  return read_within_uncertainty_interval_;
 }
  ::cockroach::proto::ReadWithinUncertaintyIntervalError* ErrorDetail::release_read_within_uncertainty_interval() {
-  if (has_read_within_uncertainty_interval()) {
-    clear_has_value();
-    ::cockroach::proto::ReadWithinUncertaintyIntervalError* temp = value_.read_within_uncertainty_interval_;
-    value_.read_within_uncertainty_interval_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_read_within_uncertainty_interval();
+  ::cockroach::proto::ReadWithinUncertaintyIntervalError* temp = read_within_uncertainty_interval_;
+  read_within_uncertainty_interval_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_read_within_uncertainty_interval(::cockroach::proto::ReadWithinUncertaintyIntervalError* read_within_uncertainty_interval) {
-  clear_value();
+  delete read_within_uncertainty_interval_;
+  read_within_uncertainty_interval_ = read_within_uncertainty_interval;
   if (read_within_uncertainty_interval) {
     set_has_read_within_uncertainty_interval();
-    value_.read_within_uncertainty_interval_ = read_within_uncertainty_interval;
+  } else {
+    clear_has_read_within_uncertainty_interval();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.read_within_uncertainty_interval)
 }
 
 // optional .cockroach.proto.TransactionAbortedError transaction_aborted = 5;
 bool ErrorDetail::has_transaction_aborted() const {
-  return value_case() == kTransactionAborted;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 void ErrorDetail::set_has_transaction_aborted() {
-  _oneof_case_[0] = kTransactionAborted;
+  _has_bits_[0] |= 0x00000010u;
+}
+void ErrorDetail::clear_has_transaction_aborted() {
+  _has_bits_[0] &= ~0x00000010u;
 }
 void ErrorDetail::clear_transaction_aborted() {
-  if (has_transaction_aborted()) {
-    delete value_.transaction_aborted_;
-    clear_has_value();
-  }
+  if (transaction_aborted_ != NULL) transaction_aborted_->::cockroach::proto::TransactionAbortedError::Clear();
+  clear_has_transaction_aborted();
 }
  const ::cockroach::proto::TransactionAbortedError& ErrorDetail::transaction_aborted() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.transaction_aborted)
-  return has_transaction_aborted() ? *value_.transaction_aborted_
-                      : ::cockroach::proto::TransactionAbortedError::default_instance();
+  return transaction_aborted_ != NULL ? *transaction_aborted_ : *default_instance_->transaction_aborted_;
 }
  ::cockroach::proto::TransactionAbortedError* ErrorDetail::mutable_transaction_aborted() {
-  if (!has_transaction_aborted()) {
-    clear_value();
-    set_has_transaction_aborted();
-    value_.transaction_aborted_ = new ::cockroach::proto::TransactionAbortedError;
+  set_has_transaction_aborted();
+  if (transaction_aborted_ == NULL) {
+    transaction_aborted_ = new ::cockroach::proto::TransactionAbortedError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.transaction_aborted)
-  return value_.transaction_aborted_;
+  return transaction_aborted_;
 }
  ::cockroach::proto::TransactionAbortedError* ErrorDetail::release_transaction_aborted() {
-  if (has_transaction_aborted()) {
-    clear_has_value();
-    ::cockroach::proto::TransactionAbortedError* temp = value_.transaction_aborted_;
-    value_.transaction_aborted_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_transaction_aborted();
+  ::cockroach::proto::TransactionAbortedError* temp = transaction_aborted_;
+  transaction_aborted_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_transaction_aborted(::cockroach::proto::TransactionAbortedError* transaction_aborted) {
-  clear_value();
+  delete transaction_aborted_;
+  transaction_aborted_ = transaction_aborted;
   if (transaction_aborted) {
     set_has_transaction_aborted();
-    value_.transaction_aborted_ = transaction_aborted;
+  } else {
+    clear_has_transaction_aborted();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.transaction_aborted)
 }
 
 // optional .cockroach.proto.TransactionPushError transaction_push = 6;
 bool ErrorDetail::has_transaction_push() const {
-  return value_case() == kTransactionPush;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 void ErrorDetail::set_has_transaction_push() {
-  _oneof_case_[0] = kTransactionPush;
+  _has_bits_[0] |= 0x00000020u;
+}
+void ErrorDetail::clear_has_transaction_push() {
+  _has_bits_[0] &= ~0x00000020u;
 }
 void ErrorDetail::clear_transaction_push() {
-  if (has_transaction_push()) {
-    delete value_.transaction_push_;
-    clear_has_value();
-  }
+  if (transaction_push_ != NULL) transaction_push_->::cockroach::proto::TransactionPushError::Clear();
+  clear_has_transaction_push();
 }
  const ::cockroach::proto::TransactionPushError& ErrorDetail::transaction_push() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.transaction_push)
-  return has_transaction_push() ? *value_.transaction_push_
-                      : ::cockroach::proto::TransactionPushError::default_instance();
+  return transaction_push_ != NULL ? *transaction_push_ : *default_instance_->transaction_push_;
 }
  ::cockroach::proto::TransactionPushError* ErrorDetail::mutable_transaction_push() {
-  if (!has_transaction_push()) {
-    clear_value();
-    set_has_transaction_push();
-    value_.transaction_push_ = new ::cockroach::proto::TransactionPushError;
+  set_has_transaction_push();
+  if (transaction_push_ == NULL) {
+    transaction_push_ = new ::cockroach::proto::TransactionPushError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.transaction_push)
-  return value_.transaction_push_;
+  return transaction_push_;
 }
  ::cockroach::proto::TransactionPushError* ErrorDetail::release_transaction_push() {
-  if (has_transaction_push()) {
-    clear_has_value();
-    ::cockroach::proto::TransactionPushError* temp = value_.transaction_push_;
-    value_.transaction_push_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_transaction_push();
+  ::cockroach::proto::TransactionPushError* temp = transaction_push_;
+  transaction_push_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_transaction_push(::cockroach::proto::TransactionPushError* transaction_push) {
-  clear_value();
+  delete transaction_push_;
+  transaction_push_ = transaction_push;
   if (transaction_push) {
     set_has_transaction_push();
-    value_.transaction_push_ = transaction_push;
+  } else {
+    clear_has_transaction_push();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.transaction_push)
 }
 
 // optional .cockroach.proto.TransactionRetryError transaction_retry = 7;
 bool ErrorDetail::has_transaction_retry() const {
-  return value_case() == kTransactionRetry;
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
 void ErrorDetail::set_has_transaction_retry() {
-  _oneof_case_[0] = kTransactionRetry;
+  _has_bits_[0] |= 0x00000040u;
+}
+void ErrorDetail::clear_has_transaction_retry() {
+  _has_bits_[0] &= ~0x00000040u;
 }
 void ErrorDetail::clear_transaction_retry() {
-  if (has_transaction_retry()) {
-    delete value_.transaction_retry_;
-    clear_has_value();
-  }
+  if (transaction_retry_ != NULL) transaction_retry_->::cockroach::proto::TransactionRetryError::Clear();
+  clear_has_transaction_retry();
 }
  const ::cockroach::proto::TransactionRetryError& ErrorDetail::transaction_retry() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.transaction_retry)
-  return has_transaction_retry() ? *value_.transaction_retry_
-                      : ::cockroach::proto::TransactionRetryError::default_instance();
+  return transaction_retry_ != NULL ? *transaction_retry_ : *default_instance_->transaction_retry_;
 }
  ::cockroach::proto::TransactionRetryError* ErrorDetail::mutable_transaction_retry() {
-  if (!has_transaction_retry()) {
-    clear_value();
-    set_has_transaction_retry();
-    value_.transaction_retry_ = new ::cockroach::proto::TransactionRetryError;
+  set_has_transaction_retry();
+  if (transaction_retry_ == NULL) {
+    transaction_retry_ = new ::cockroach::proto::TransactionRetryError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.transaction_retry)
-  return value_.transaction_retry_;
+  return transaction_retry_;
 }
  ::cockroach::proto::TransactionRetryError* ErrorDetail::release_transaction_retry() {
-  if (has_transaction_retry()) {
-    clear_has_value();
-    ::cockroach::proto::TransactionRetryError* temp = value_.transaction_retry_;
-    value_.transaction_retry_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_transaction_retry();
+  ::cockroach::proto::TransactionRetryError* temp = transaction_retry_;
+  transaction_retry_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_transaction_retry(::cockroach::proto::TransactionRetryError* transaction_retry) {
-  clear_value();
+  delete transaction_retry_;
+  transaction_retry_ = transaction_retry;
   if (transaction_retry) {
     set_has_transaction_retry();
-    value_.transaction_retry_ = transaction_retry;
+  } else {
+    clear_has_transaction_retry();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.transaction_retry)
 }
 
 // optional .cockroach.proto.TransactionStatusError transaction_status = 8;
 bool ErrorDetail::has_transaction_status() const {
-  return value_case() == kTransactionStatus;
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
 void ErrorDetail::set_has_transaction_status() {
-  _oneof_case_[0] = kTransactionStatus;
+  _has_bits_[0] |= 0x00000080u;
+}
+void ErrorDetail::clear_has_transaction_status() {
+  _has_bits_[0] &= ~0x00000080u;
 }
 void ErrorDetail::clear_transaction_status() {
-  if (has_transaction_status()) {
-    delete value_.transaction_status_;
-    clear_has_value();
-  }
+  if (transaction_status_ != NULL) transaction_status_->::cockroach::proto::TransactionStatusError::Clear();
+  clear_has_transaction_status();
 }
  const ::cockroach::proto::TransactionStatusError& ErrorDetail::transaction_status() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.transaction_status)
-  return has_transaction_status() ? *value_.transaction_status_
-                      : ::cockroach::proto::TransactionStatusError::default_instance();
+  return transaction_status_ != NULL ? *transaction_status_ : *default_instance_->transaction_status_;
 }
  ::cockroach::proto::TransactionStatusError* ErrorDetail::mutable_transaction_status() {
-  if (!has_transaction_status()) {
-    clear_value();
-    set_has_transaction_status();
-    value_.transaction_status_ = new ::cockroach::proto::TransactionStatusError;
+  set_has_transaction_status();
+  if (transaction_status_ == NULL) {
+    transaction_status_ = new ::cockroach::proto::TransactionStatusError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.transaction_status)
-  return value_.transaction_status_;
+  return transaction_status_;
 }
  ::cockroach::proto::TransactionStatusError* ErrorDetail::release_transaction_status() {
-  if (has_transaction_status()) {
-    clear_has_value();
-    ::cockroach::proto::TransactionStatusError* temp = value_.transaction_status_;
-    value_.transaction_status_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_transaction_status();
+  ::cockroach::proto::TransactionStatusError* temp = transaction_status_;
+  transaction_status_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_transaction_status(::cockroach::proto::TransactionStatusError* transaction_status) {
-  clear_value();
+  delete transaction_status_;
+  transaction_status_ = transaction_status;
   if (transaction_status) {
     set_has_transaction_status();
-    value_.transaction_status_ = transaction_status;
+  } else {
+    clear_has_transaction_status();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.transaction_status)
 }
 
 // optional .cockroach.proto.WriteIntentError write_intent = 9;
 bool ErrorDetail::has_write_intent() const {
-  return value_case() == kWriteIntent;
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
 void ErrorDetail::set_has_write_intent() {
-  _oneof_case_[0] = kWriteIntent;
+  _has_bits_[0] |= 0x00000100u;
+}
+void ErrorDetail::clear_has_write_intent() {
+  _has_bits_[0] &= ~0x00000100u;
 }
 void ErrorDetail::clear_write_intent() {
-  if (has_write_intent()) {
-    delete value_.write_intent_;
-    clear_has_value();
-  }
+  if (write_intent_ != NULL) write_intent_->::cockroach::proto::WriteIntentError::Clear();
+  clear_has_write_intent();
 }
  const ::cockroach::proto::WriteIntentError& ErrorDetail::write_intent() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.write_intent)
-  return has_write_intent() ? *value_.write_intent_
-                      : ::cockroach::proto::WriteIntentError::default_instance();
+  return write_intent_ != NULL ? *write_intent_ : *default_instance_->write_intent_;
 }
  ::cockroach::proto::WriteIntentError* ErrorDetail::mutable_write_intent() {
-  if (!has_write_intent()) {
-    clear_value();
-    set_has_write_intent();
-    value_.write_intent_ = new ::cockroach::proto::WriteIntentError;
+  set_has_write_intent();
+  if (write_intent_ == NULL) {
+    write_intent_ = new ::cockroach::proto::WriteIntentError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.write_intent)
-  return value_.write_intent_;
+  return write_intent_;
 }
  ::cockroach::proto::WriteIntentError* ErrorDetail::release_write_intent() {
-  if (has_write_intent()) {
-    clear_has_value();
-    ::cockroach::proto::WriteIntentError* temp = value_.write_intent_;
-    value_.write_intent_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_write_intent();
+  ::cockroach::proto::WriteIntentError* temp = write_intent_;
+  write_intent_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_write_intent(::cockroach::proto::WriteIntentError* write_intent) {
-  clear_value();
+  delete write_intent_;
+  write_intent_ = write_intent;
   if (write_intent) {
     set_has_write_intent();
-    value_.write_intent_ = write_intent;
+  } else {
+    clear_has_write_intent();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.write_intent)
 }
 
 // optional .cockroach.proto.WriteTooOldError write_too_old = 10;
 bool ErrorDetail::has_write_too_old() const {
-  return value_case() == kWriteTooOld;
+  return (_has_bits_[0] & 0x00000200u) != 0;
 }
 void ErrorDetail::set_has_write_too_old() {
-  _oneof_case_[0] = kWriteTooOld;
+  _has_bits_[0] |= 0x00000200u;
+}
+void ErrorDetail::clear_has_write_too_old() {
+  _has_bits_[0] &= ~0x00000200u;
 }
 void ErrorDetail::clear_write_too_old() {
-  if (has_write_too_old()) {
-    delete value_.write_too_old_;
-    clear_has_value();
-  }
+  if (write_too_old_ != NULL) write_too_old_->::cockroach::proto::WriteTooOldError::Clear();
+  clear_has_write_too_old();
 }
  const ::cockroach::proto::WriteTooOldError& ErrorDetail::write_too_old() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.write_too_old)
-  return has_write_too_old() ? *value_.write_too_old_
-                      : ::cockroach::proto::WriteTooOldError::default_instance();
+  return write_too_old_ != NULL ? *write_too_old_ : *default_instance_->write_too_old_;
 }
  ::cockroach::proto::WriteTooOldError* ErrorDetail::mutable_write_too_old() {
-  if (!has_write_too_old()) {
-    clear_value();
-    set_has_write_too_old();
-    value_.write_too_old_ = new ::cockroach::proto::WriteTooOldError;
+  set_has_write_too_old();
+  if (write_too_old_ == NULL) {
+    write_too_old_ = new ::cockroach::proto::WriteTooOldError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.write_too_old)
-  return value_.write_too_old_;
+  return write_too_old_;
 }
  ::cockroach::proto::WriteTooOldError* ErrorDetail::release_write_too_old() {
-  if (has_write_too_old()) {
-    clear_has_value();
-    ::cockroach::proto::WriteTooOldError* temp = value_.write_too_old_;
-    value_.write_too_old_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_write_too_old();
+  ::cockroach::proto::WriteTooOldError* temp = write_too_old_;
+  write_too_old_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_write_too_old(::cockroach::proto::WriteTooOldError* write_too_old) {
-  clear_value();
+  delete write_too_old_;
+  write_too_old_ = write_too_old;
   if (write_too_old) {
     set_has_write_too_old();
-    value_.write_too_old_ = write_too_old;
+  } else {
+    clear_has_write_too_old();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.write_too_old)
 }
 
 // optional .cockroach.proto.OpRequiresTxnError op_requires_txn = 11;
 bool ErrorDetail::has_op_requires_txn() const {
-  return value_case() == kOpRequiresTxn;
+  return (_has_bits_[0] & 0x00000400u) != 0;
 }
 void ErrorDetail::set_has_op_requires_txn() {
-  _oneof_case_[0] = kOpRequiresTxn;
+  _has_bits_[0] |= 0x00000400u;
+}
+void ErrorDetail::clear_has_op_requires_txn() {
+  _has_bits_[0] &= ~0x00000400u;
 }
 void ErrorDetail::clear_op_requires_txn() {
-  if (has_op_requires_txn()) {
-    delete value_.op_requires_txn_;
-    clear_has_value();
-  }
+  if (op_requires_txn_ != NULL) op_requires_txn_->::cockroach::proto::OpRequiresTxnError::Clear();
+  clear_has_op_requires_txn();
 }
  const ::cockroach::proto::OpRequiresTxnError& ErrorDetail::op_requires_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.op_requires_txn)
-  return has_op_requires_txn() ? *value_.op_requires_txn_
-                      : ::cockroach::proto::OpRequiresTxnError::default_instance();
+  return op_requires_txn_ != NULL ? *op_requires_txn_ : *default_instance_->op_requires_txn_;
 }
  ::cockroach::proto::OpRequiresTxnError* ErrorDetail::mutable_op_requires_txn() {
-  if (!has_op_requires_txn()) {
-    clear_value();
-    set_has_op_requires_txn();
-    value_.op_requires_txn_ = new ::cockroach::proto::OpRequiresTxnError;
+  set_has_op_requires_txn();
+  if (op_requires_txn_ == NULL) {
+    op_requires_txn_ = new ::cockroach::proto::OpRequiresTxnError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.op_requires_txn)
-  return value_.op_requires_txn_;
+  return op_requires_txn_;
 }
  ::cockroach::proto::OpRequiresTxnError* ErrorDetail::release_op_requires_txn() {
-  if (has_op_requires_txn()) {
-    clear_has_value();
-    ::cockroach::proto::OpRequiresTxnError* temp = value_.op_requires_txn_;
-    value_.op_requires_txn_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_op_requires_txn();
+  ::cockroach::proto::OpRequiresTxnError* temp = op_requires_txn_;
+  op_requires_txn_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_op_requires_txn(::cockroach::proto::OpRequiresTxnError* op_requires_txn) {
-  clear_value();
+  delete op_requires_txn_;
+  op_requires_txn_ = op_requires_txn;
   if (op_requires_txn) {
     set_has_op_requires_txn();
-    value_.op_requires_txn_ = op_requires_txn;
+  } else {
+    clear_has_op_requires_txn();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.op_requires_txn)
 }
 
 // optional .cockroach.proto.ConditionFailedError condition_failed = 12;
 bool ErrorDetail::has_condition_failed() const {
-  return value_case() == kConditionFailed;
+  return (_has_bits_[0] & 0x00000800u) != 0;
 }
 void ErrorDetail::set_has_condition_failed() {
-  _oneof_case_[0] = kConditionFailed;
+  _has_bits_[0] |= 0x00000800u;
+}
+void ErrorDetail::clear_has_condition_failed() {
+  _has_bits_[0] &= ~0x00000800u;
 }
 void ErrorDetail::clear_condition_failed() {
-  if (has_condition_failed()) {
-    delete value_.condition_failed_;
-    clear_has_value();
-  }
+  if (condition_failed_ != NULL) condition_failed_->::cockroach::proto::ConditionFailedError::Clear();
+  clear_has_condition_failed();
 }
  const ::cockroach::proto::ConditionFailedError& ErrorDetail::condition_failed() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.condition_failed)
-  return has_condition_failed() ? *value_.condition_failed_
-                      : ::cockroach::proto::ConditionFailedError::default_instance();
+  return condition_failed_ != NULL ? *condition_failed_ : *default_instance_->condition_failed_;
 }
  ::cockroach::proto::ConditionFailedError* ErrorDetail::mutable_condition_failed() {
-  if (!has_condition_failed()) {
-    clear_value();
-    set_has_condition_failed();
-    value_.condition_failed_ = new ::cockroach::proto::ConditionFailedError;
+  set_has_condition_failed();
+  if (condition_failed_ == NULL) {
+    condition_failed_ = new ::cockroach::proto::ConditionFailedError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.condition_failed)
-  return value_.condition_failed_;
+  return condition_failed_;
 }
  ::cockroach::proto::ConditionFailedError* ErrorDetail::release_condition_failed() {
-  if (has_condition_failed()) {
-    clear_has_value();
-    ::cockroach::proto::ConditionFailedError* temp = value_.condition_failed_;
-    value_.condition_failed_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_condition_failed();
+  ::cockroach::proto::ConditionFailedError* temp = condition_failed_;
+  condition_failed_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_condition_failed(::cockroach::proto::ConditionFailedError* condition_failed) {
-  clear_value();
+  delete condition_failed_;
+  condition_failed_ = condition_failed;
   if (condition_failed) {
     set_has_condition_failed();
-    value_.condition_failed_ = condition_failed;
+  } else {
+    clear_has_condition_failed();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.condition_failed)
 }
 
 // optional .cockroach.proto.LeaseRejectedError lease_rejected = 13;
 bool ErrorDetail::has_lease_rejected() const {
-  return value_case() == kLeaseRejected;
+  return (_has_bits_[0] & 0x00001000u) != 0;
 }
 void ErrorDetail::set_has_lease_rejected() {
-  _oneof_case_[0] = kLeaseRejected;
+  _has_bits_[0] |= 0x00001000u;
+}
+void ErrorDetail::clear_has_lease_rejected() {
+  _has_bits_[0] &= ~0x00001000u;
 }
 void ErrorDetail::clear_lease_rejected() {
-  if (has_lease_rejected()) {
-    delete value_.lease_rejected_;
-    clear_has_value();
-  }
+  if (lease_rejected_ != NULL) lease_rejected_->::cockroach::proto::LeaseRejectedError::Clear();
+  clear_has_lease_rejected();
 }
  const ::cockroach::proto::LeaseRejectedError& ErrorDetail::lease_rejected() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.lease_rejected)
-  return has_lease_rejected() ? *value_.lease_rejected_
-                      : ::cockroach::proto::LeaseRejectedError::default_instance();
+  return lease_rejected_ != NULL ? *lease_rejected_ : *default_instance_->lease_rejected_;
 }
  ::cockroach::proto::LeaseRejectedError* ErrorDetail::mutable_lease_rejected() {
-  if (!has_lease_rejected()) {
-    clear_value();
-    set_has_lease_rejected();
-    value_.lease_rejected_ = new ::cockroach::proto::LeaseRejectedError;
+  set_has_lease_rejected();
+  if (lease_rejected_ == NULL) {
+    lease_rejected_ = new ::cockroach::proto::LeaseRejectedError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.lease_rejected)
-  return value_.lease_rejected_;
+  return lease_rejected_;
 }
  ::cockroach::proto::LeaseRejectedError* ErrorDetail::release_lease_rejected() {
-  if (has_lease_rejected()) {
-    clear_has_value();
-    ::cockroach::proto::LeaseRejectedError* temp = value_.lease_rejected_;
-    value_.lease_rejected_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_lease_rejected();
+  ::cockroach::proto::LeaseRejectedError* temp = lease_rejected_;
+  lease_rejected_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_lease_rejected(::cockroach::proto::LeaseRejectedError* lease_rejected) {
-  clear_value();
+  delete lease_rejected_;
+  lease_rejected_ = lease_rejected;
   if (lease_rejected) {
     set_has_lease_rejected();
-    value_.lease_rejected_ = lease_rejected;
+  } else {
+    clear_has_lease_rejected();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.lease_rejected)
 }
 
 // optional .cockroach.proto.NodeUnavailableError node_unavailable = 14;
 bool ErrorDetail::has_node_unavailable() const {
-  return value_case() == kNodeUnavailable;
+  return (_has_bits_[0] & 0x00002000u) != 0;
 }
 void ErrorDetail::set_has_node_unavailable() {
-  _oneof_case_[0] = kNodeUnavailable;
+  _has_bits_[0] |= 0x00002000u;
+}
+void ErrorDetail::clear_has_node_unavailable() {
+  _has_bits_[0] &= ~0x00002000u;
 }
 void ErrorDetail::clear_node_unavailable() {
-  if (has_node_unavailable()) {
-    delete value_.node_unavailable_;
-    clear_has_value();
-  }
+  if (node_unavailable_ != NULL) node_unavailable_->::cockroach::proto::NodeUnavailableError::Clear();
+  clear_has_node_unavailable();
 }
  const ::cockroach::proto::NodeUnavailableError& ErrorDetail::node_unavailable() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.node_unavailable)
-  return has_node_unavailable() ? *value_.node_unavailable_
-                      : ::cockroach::proto::NodeUnavailableError::default_instance();
+  return node_unavailable_ != NULL ? *node_unavailable_ : *default_instance_->node_unavailable_;
 }
  ::cockroach::proto::NodeUnavailableError* ErrorDetail::mutable_node_unavailable() {
-  if (!has_node_unavailable()) {
-    clear_value();
-    set_has_node_unavailable();
-    value_.node_unavailable_ = new ::cockroach::proto::NodeUnavailableError;
+  set_has_node_unavailable();
+  if (node_unavailable_ == NULL) {
+    node_unavailable_ = new ::cockroach::proto::NodeUnavailableError;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.node_unavailable)
-  return value_.node_unavailable_;
+  return node_unavailable_;
 }
  ::cockroach::proto::NodeUnavailableError* ErrorDetail::release_node_unavailable() {
-  if (has_node_unavailable()) {
-    clear_has_value();
-    ::cockroach::proto::NodeUnavailableError* temp = value_.node_unavailable_;
-    value_.node_unavailable_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
+  clear_has_node_unavailable();
+  ::cockroach::proto::NodeUnavailableError* temp = node_unavailable_;
+  node_unavailable_ = NULL;
+  return temp;
 }
  void ErrorDetail::set_allocated_node_unavailable(::cockroach::proto::NodeUnavailableError* node_unavailable) {
-  clear_value();
+  delete node_unavailable_;
+  node_unavailable_ = node_unavailable;
   if (node_unavailable) {
     set_has_node_unavailable();
-    value_.node_unavailable_ = node_unavailable;
+  } else {
+    clear_has_node_unavailable();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.node_unavailable)
 }
 
-bool ErrorDetail::has_value() const {
-  return value_case() != VALUE_NOT_SET;
-}
-void ErrorDetail::clear_has_value() {
-  _oneof_case_[0] = VALUE_NOT_SET;
-}
-ErrorDetail::ValueCase ErrorDetail::value_case() const {
-  return ErrorDetail::ValueCase(_oneof_case_[0]);
-}
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // ===================================================================

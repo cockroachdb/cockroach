@@ -62,6 +62,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT PRIMARY KEY)`},
 		{`CREATE TABLE a (b INT UNIQUE)`},
 		{`CREATE TABLE a (b INT NULL PRIMARY KEY)`},
+		{`CREATE TABLE a (b INT DEFAULT 1)`},
+		{`CREATE TABLE a (b INT DEFAULT now())`},
 		// "0" lost quotes previously.
 		{`CREATE TABLE a (b INT, c TEXT, PRIMARY KEY (b, c, "0"))`},
 		{`CREATE TABLE a (b INT, c TEXT, INDEX (b, c))`},
@@ -84,6 +86,8 @@ func TestParse(t *testing.T) {
 		{`DROP TABLE a.b`},
 		{`DROP TABLE a, b`},
 		{`DROP TABLE IF EXISTS a`},
+		{`DROP INDEX a.b@c`},
+		{`DROP INDEX IF EXISTS a.b@c`},
 
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN (DEBUG) SELECT 1`},
@@ -136,6 +140,7 @@ func TestParse(t *testing.T) {
 		{`INSERT INTO a VALUES (1)`},
 		{`INSERT INTO a.b VALUES (1)`},
 		{`INSERT INTO a VALUES (1, 2)`},
+		{`INSERT INTO a VALUES (1, DEFAULT)`},
 		{`INSERT INTO a VALUES (1, 2), (3, 4)`},
 		{`INSERT INTO a VALUES (a + 1, 2 * 3)`},
 		{`INSERT INTO a(a, b) VALUES (1, 2)`},
@@ -209,7 +214,6 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t AS t1`},
 		{`SELECT FROM s.t`},
 
-		{`SELECT DISTINCT 1 FROM t`},
 		{`SELECT COUNT(DISTINCT a) FROM t`},
 
 		{`SELECT FROM t WHERE b = - 2`},
@@ -275,12 +279,18 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t ORDER BY a ASC`},
 		{`SELECT FROM t ORDER BY a DESC`},
 
+		{`SELECT 1 FROM t GROUP BY a`},
+		{`SELECT 1 FROM t GROUP BY a, b`},
+
 		{`SELECT FROM t HAVING a = b`},
 
 		{`SELECT FROM t UNION SELECT 1 FROM t`},
 		{`SELECT FROM t UNION SELECT 1 FROM t UNION SELECT 1 FROM t`},
+		{`SELECT FROM t UNION ALL SELECT 1 FROM t`},
 		{`SELECT FROM t EXCEPT SELECT 1 FROM t`},
+		{`SELECT FROM t EXCEPT ALL SELECT 1 FROM t`},
 		{`SELECT FROM t INTERSECT SELECT 1 FROM t`},
+		{`SELECT FROM t INTERSECT ALL SELECT 1 FROM t`},
 
 		{`SELECT FROM t1 JOIN t2 ON a = b`},
 		{`SELECT FROM t1 JOIN t2 USING (a)`},
@@ -295,7 +305,8 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t LIMIT a`},
 		{`SELECT FROM t OFFSET b`},
 		{`SELECT FROM t LIMIT a OFFSET b`},
-
+		{`SELECT DISTINCT * FROM t`},
+		{`SELECT DISTINCT a, b FROM t`},
 		{`SET a = 3`},
 		{`SET a = 3, 4`},
 		{`SET a = '3'`},
@@ -313,9 +324,9 @@ func TestParse(t *testing.T) {
 		{`UPDATE a SET b = 3`},
 		{`UPDATE a.b SET b = 3`},
 		{`UPDATE a SET b.c = 3`},
-		{`UPDATE a SET b = 3, c = 4`},
+		{`UPDATE a SET b = 3, c = DEFAULT`},
 		{`UPDATE a SET b = 3 + 4`},
-		{`UPDATE a SET (b, c) = (3, 4)`},
+		{`UPDATE a SET (b, c) = (3, DEFAULT)`},
 		{`UPDATE a SET (b, c) = (SELECT 3, 4)`},
 		{`UPDATE a SET b = 3 WHERE a = b`},
 		{`UPDATE T AS "0" SET K = ''`},                 // "0" lost its quotes
@@ -337,6 +348,15 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE a ADD COLUMN IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
+
+		{`ALTER TABLE a DROP b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE a DROP IF EXISTS b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE IF EXISTS a DROP b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE IF EXISTS a DROP IF EXISTS b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE a DROP COLUMN b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE a DROP COLUMN IF EXISTS b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE IF EXISTS a DROP COLUMN b, DROP CONSTRAINT a_idx`},
+		{`ALTER TABLE IF EXISTS a DROP COLUMN IF EXISTS b, DROP CONSTRAINT a_idx`},
 	}
 	for _, d := range testData {
 		stmts, err := ParseTraditional(d.sql)
@@ -407,9 +427,6 @@ func TestParse2(t *testing.T) {
 			`SELECT FROM t1 LEFT JOIN t2 ON a = b`},
 		{`SELECT FROM t1 RIGHT OUTER JOIN t2 ON a = b`,
 			`SELECT FROM t1 RIGHT JOIN t2 ON a = b`},
-		// TODO(pmattis): Handle UNION ALL.
-		{`SELECT FROM t UNION ALL SELECT 1 FROM t`,
-			`SELECT FROM t UNION SELECT 1 FROM t`},
 		// We allow OFFSET before LIMIT, but always output LIMIT first.
 		{`SELECT FROM t OFFSET a LIMIT b`,
 			`SELECT FROM t LIMIT b OFFSET a`},
@@ -432,6 +449,12 @@ func TestParse2(t *testing.T) {
 			`SELECT + y[ARRAY[]]`},
 		{`SELECT(0)FROM y[array[]]`,
 			`SELECT (0) FROM y[ARRAY[]]`},
+		{`SELECT FROM t UNION DISTINCT SELECT 1 FROM t`,
+			`SELECT FROM t UNION SELECT 1 FROM t`},
+		{`SELECT FROM t EXCEPT DISTINCT SELECT 1 FROM t`,
+			`SELECT FROM t EXCEPT SELECT 1 FROM t`},
+		{`SELECT FROM t INTERSECT DISTINCT SELECT 1 FROM t`,
+			`SELECT FROM t INTERSECT SELECT 1 FROM t`},
 	}
 	for _, d := range testData {
 		stmts, err := ParseTraditional(d.sql)
@@ -459,9 +482,6 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT ((1)) FROM t WHERE ((a)) IN (((1))) AND ((a, b)) IN ((((1, 1))), ((2, 2)))`},
 		{`SELECT e'\'\"\b\n\r\t\\' FROM t`},
 		{`SELECT '\x' FROM t`},
-		{`SELECT 1 FROM t GROUP BY a`},
-		{`DROP INDEX a`},
-		{`DROP INDEX IF EXISTS a`},
 	}
 	for _, d := range testData {
 		if _, err := ParseTraditional(d.sql); err != nil {
@@ -538,6 +558,20 @@ SELECT foo''
 			`invalid hexadecimal literal
 SELECT 0x FROM t
        ^
+`,
+		},
+		{
+			`CREATE TABLE a (b INT DEFAULT c)`,
+			`default expression contains a variable at or near ")"
+CREATE TABLE a (b INT DEFAULT c)
+                               ^
+`,
+		},
+		{
+			`CREATE TABLE a (b INT DEFAULT (SELECT 1))`,
+			`default expression contains a subquery at or near ")"
+CREATE TABLE a (b INT DEFAULT (SELECT 1))
+                                        ^
 `,
 		},
 	}

@@ -18,15 +18,16 @@
 package storage
 
 import (
+	"fmt"
 	"math"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -63,9 +64,9 @@ type gcQueue struct {
 }
 
 // newGCQueue returns a new instance of gcQueue.
-func newGCQueue() *gcQueue {
+func newGCQueue(gossip *gossip.Gossip) *gcQueue {
 	gcq := &gcQueue{}
-	gcq.baseQueue = newBaseQueue("gc", gcq, gcQueueMaxSize)
+	gcq.baseQueue = newBaseQueue("gc", gcq, gossip, gcQueueMaxSize)
 	return gcq
 }
 
@@ -73,16 +74,26 @@ func (gcq *gcQueue) needsLeaderLease() bool {
 	return true
 }
 
+// acceptsUnsplitRanges is false because the proper GC
+// policy cannot be determined for ranges that span zone configs.
+func (gcq *gcQueue) acceptsUnsplitRanges() bool {
+	return false
+}
+
 // shouldQueue determines whether a replica should be queued for garbage
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
-func (gcq *gcQueue) shouldQueue(now proto.Timestamp, repl *Replica) (shouldQ bool, priority float64) {
-	policy, err := gcq.lookupGCPolicy(repl)
+func (gcq *gcQueue) shouldQueue(now proto.Timestamp, repl *Replica,
+	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
+
+	desc := repl.Desc()
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Errorf("GC policy: %s", err)
+		log.Errorf("could not find GC policy for range %s: %s", repl, err)
 		return
 	}
+	policy := zone.GC
 
 	// GC score is the total GC'able bytes age normalized by 1 MB * the replica's TTL in seconds.
 	gcScore := float64(repl.stats.GetGCBytesAge(now.WallTime)) / float64(policy.TTLSeconds) / float64(gcByteCountNormalization)
@@ -106,7 +117,9 @@ func (gcq *gcQueue) shouldQueue(now proto.Timestamp, repl *Replica) (shouldQ boo
 // collector for each key and associated set of values. GC'd keys are batched
 // into GC calls. Extant intents are resolved if intents are older than
 // intentAgeThreshold.
-func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
+func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
+	sysCfg *config.SystemConfig) error {
+
 	snap := repl.rm.Engine().NewSnapshot()
 	desc := repl.Desc()
 	iter := newRangeDataIterator(desc, snap)
@@ -114,10 +127,11 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica) error {
 	defer snap.Close()
 
 	// Lookup the GC policy for the zone containing this key range.
-	policy, err := gcq.lookupGCPolicy(repl)
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not find GC policy for range %s: %s", repl, err)
 	}
+	policy := zone.GC
 
 	gcMeta := proto.NewGCMetadata(now.WallTime)
 	gc := engine.NewGarbageCollector(now, *policy)
@@ -306,29 +320,5 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 		return
 	}
 	// Update the supplied txn on successful push.
-	*txn = *br.Responses[0].GetValue().(*proto.PushTxnResponse).PusheeTxn
-}
-
-// lookupGCPolicy finds the GC policy for 'repl'.
-// If the range needs to be split, aborts.
-func (gcq *gcQueue) lookupGCPolicy(repl *Replica) (*config.GCPolicy, error) {
-	// Load the system config.
-	cfg, err := repl.rm.Gossip().GetSystemConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	desc := repl.Desc()
-	if len(cfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
-		// If the replica's range needs splitting, error out.
-		return nil, util.Errorf("%v spans multiple ranges, must be split first", desc)
-	}
-
-	// Find the zone config for this range.
-	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		return nil, err
-	}
-
-	return zone.GC, nil
+	*txn = *br.Responses[0].GetInner().(*proto.PushTxnResponse).PusheeTxn
 }

@@ -21,6 +21,10 @@
 %{
 package parser
 import "github.com/cockroachdb/cockroach/sql/privilege"
+
+func unimplemented() {
+  panic("TODO(pmattis): unimplemented")
+}
 %}
 
 %union {
@@ -42,8 +46,8 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   constraintDef  ConstraintTableDef
   tblDef         TableDef
   tblDefs        []TableDef
-  colConstraint  ColumnConstraint
-  colConstraints []ColumnConstraint
+  colQual        ColumnQualification
+  colQuals       []ColumnQualification
   colType        ColumnType
   colTypes       []ColumnType
   expr           Expr
@@ -65,6 +69,7 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
   orderBy        OrderBy
   orders         []*Order
   order          *Order
+  groupBy        GroupBy
   dir            Direction
   alterTableCmd  AlterTableCmd
   alterTableCmds AlterTableCmds
@@ -126,7 +131,8 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> opt_encoding
 
 %type <tblDefs> opt_table_elem_list table_elem_list
-%type <empty> distinct_clause opt_all_clause
+%type <empty> opt_all_clause
+%type <boolVal> distinct_clause
 %type <strs> opt_column_list
 %type <orderBy> sort_clause opt_sort_clause
 %type <orders> sortby_list
@@ -144,16 +150,11 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <updateExpr> set_clause multiple_set_clause
 %type <indirect> indirection
 %type <exprs> ctext_expr_list ctext_row
-%type <empty> group_clause
+%type <groupBy> group_clause
 %type <limit> select_limit
-%type <empty> table_func_elem_list
 %type <qnames> relation_expr_list
 
-%type <empty> group_by_list
-%type <empty> group_by_item empty_grouping_set
-
-%type <empty> all_or_distinct
-
+%type <boolVal> all_or_distinct
 %type <empty> join_outer
 %type <joinCond> join_qual
 %type <str> join_type
@@ -163,15 +164,15 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <empty> opt_interval interval_second
 %type <empty> overlay_placing substr_from substr_for
 
-%type <boolVal> opt_unique
+%type <boolVal> opt_unique opt_column
 
-%type <empty> opt_column opt_set_data
-%type <empty> drop_type
+%type <empty> opt_set_data
 
 %type <limit> limit_clause offset_clause
 %type <expr>  select_limit_value
-%type <empty> opt_select_fetch_first_value
-%type <empty> row_or_rows first_or_next
+// %type <empty> opt_select_fetch_first_value
+%type <empty> row_or_rows
+// %type <empty> first_or_next
 
 %type <stmt>  insert_rest
 %type <empty> opt_conf_expr
@@ -182,16 +183,12 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <strs> opt_storing
 %type <colDef> column_def
 %type <tblDef> table_elem
-%type <empty> table_func_elem
 %type <expr>  where_clause
 %type <indirectElem> indirection_elem
 %type <expr>  a_expr b_expr c_expr a_expr_const
 %type <expr>  in_expr
 %type <expr>  having_clause
-%type <empty> func_table
 %type <expr>  array_expr
-%type <empty> rowsfrom_item rowsfrom_list opt_col_def_list
-%type <empty> opt_ordinality
 %type <colTypes> type_list
 %type <exprs> array_expr_list
 %type <expr>  row explicit_row implicit_row
@@ -202,7 +199,6 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 %type <expr> ctext_expr
 %type <expr> numeric_only
 %type <str> alias_clause opt_alias_clause
-%type <empty> func_alias_clause
 %type <order> sortby
 %type <str> index_elem
 %type <tblExpr> table_ref
@@ -241,8 +237,8 @@ import "github.com/cockroachdb/cockroach/sql/privilege"
 
 %type <constraintDef> table_constraint constraint_elem
 %type <tblDef> index_def
-%type <colConstraints> col_qual_list
-%type <colConstraint> col_constraint col_constraint_elem
+%type <colQuals> col_qual_list
+%type <colQual> col_qualification col_qualification_elem
 %type <empty> key_actions key_delete key_match key_update key_action
 
 %type <expr>  func_application func_expr_common_subexpr
@@ -530,15 +526,21 @@ alter_table_cmd:
     $$ = &AlterTableAddColumn{columnKeyword: true, IfNotExists: true, ColumnDef: $6}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> {SET DEFAULT <expr>|DROP DEFAULT}
-| ALTER opt_column name alter_column_default {}
+| ALTER opt_column name alter_column_default { unimplemented() }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
-| ALTER opt_column name DROP NOT NULL {}
+| ALTER opt_column name DROP NOT NULL { unimplemented() }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
-| ALTER opt_column name SET NOT NULL {}
+| ALTER opt_column name SET NOT NULL { unimplemented() }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
-| DROP opt_column IF EXISTS name opt_drop_behavior {}
+| DROP opt_column IF EXISTS name opt_drop_behavior
+  {
+    $$ = &AlterTableDropColumn{columnKeyword: $2, IfExists: true, Column: $5}
+  }
   // ALTER TABLE <name> DROP [COLUMN] <colname> [RESTRICT|CASCADE]
-| DROP opt_column name opt_drop_behavior {}
+| DROP opt_column name opt_drop_behavior
+  {
+    $$ = &AlterTableDropColumn{columnKeyword: $2, IfExists: false, Column: $3}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> [SET DATA] TYPE <typename>
   //     [ USING <expression> ]
 | ALTER opt_column name opt_set_data TYPE typename opt_collate_clause alter_using {}
@@ -548,29 +550,35 @@ alter_table_cmd:
     $$ = &AlterTableAddConstraint{ConstraintDef: $2}
   }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
-| ALTER CONSTRAINT name {}
+| ALTER CONSTRAINT name { unimplemented() }
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
-| VALIDATE CONSTRAINT name {}
+| VALIDATE CONSTRAINT name { unimplemented() }
   // ALTER TABLE <name> DROP CONSTRAINT IF EXISTS <name> [RESTRICT|CASCADE]
-| DROP CONSTRAINT IF EXISTS name opt_drop_behavior {}
+| DROP CONSTRAINT IF EXISTS name opt_drop_behavior
+  {
+    $$ = &AlterTableDropConstraint{IfExists: true, Constraint: $5}
+  }
   // ALTER TABLE <name> DROP CONSTRAINT <name> [RESTRICT|CASCADE]
-| DROP CONSTRAINT name opt_drop_behavior {}
+| DROP CONSTRAINT name opt_drop_behavior
+  {
+    $$ = &AlterTableDropConstraint{IfExists: false, Constraint: $3}
+  }
 
 alter_column_default:
-  SET DEFAULT a_expr {}
-| DROP DEFAULT {}
+  SET DEFAULT a_expr { unimplemented() }
+| DROP DEFAULT { unimplemented() }
 
 opt_drop_behavior:
-  CASCADE {}
-| RESTRICT {}
+  CASCADE { unimplemented() }
+| RESTRICT { unimplemented() }
 | /* EMPTY */ {}
 
 opt_collate_clause:
-  COLLATE any_name {}
+  COLLATE any_name { unimplemented() }
 | /* EMPTY */ {}
 
 alter_using:
-  USING a_expr {}
+  USING a_expr { unimplemented() }
 | /* EMPTY */ {}
 
 // CREATE [DATABASE|INDEX|TABLE|TABLE AS]
@@ -588,21 +596,21 @@ delete_stmt:
 
 // DROP itemtype [ IF EXISTS ] itemname [, itemname ...] [ RESTRICT | CASCADE ]
 drop_stmt:
-  DROP drop_type IF EXISTS any_name_list opt_drop_behavior
-  {
-    $$ = nil
-  }
-| DROP drop_type any_name_list opt_drop_behavior
-  {
-    $$ = nil
-  }
-| DROP DATABASE name
+  DROP DATABASE name
   {
     $$ = &DropDatabase{Name: Name($3), IfExists: false}
   }
 | DROP DATABASE IF EXISTS name
   {
     $$ = &DropDatabase{Name: Name($5), IfExists: true}
+  }
+| DROP INDEX qualified_name_list opt_drop_behavior
+  {
+    $$ = &DropIndex{Names: $3, IfExists: false}
+  }
+| DROP INDEX IF EXISTS qualified_name_list opt_drop_behavior
+  {
+    $$ = &DropIndex{Names: $5, IfExists: true}
   }
 | DROP TABLE any_name_list
   {
@@ -612,9 +620,6 @@ drop_stmt:
   {
     $$ = &DropTable{Names: $5, IfExists: true}
   }
-
-drop_type:
-  INDEX {}
 
 any_name_list:
   any_name
@@ -815,10 +820,10 @@ generic_set:
 set_rest_more:
   // Generic SET syntaxes:
   generic_set
-| var_name FROM CURRENT {}
+| var_name FROM CURRENT { unimplemented() }
   // Special syntaxes mandated by SQL standard:
-| TIME ZONE zone_value {}
-| NAMES opt_encoding {}
+| TIME ZONE zone_value { unimplemented() }
+| NAMES opt_encoding { unimplemented() }
 
 var_name:
   any_name
@@ -869,15 +874,15 @@ iso_level:
 opt_boolean_or_string:
   TRUE
   {
-    $$ = BoolVal(true)
+    $$ = DBool(true)
   }
 | FALSE
   {
-    $$ = BoolVal(false)
+    $$ = DBool(false)
   }
 | ON
   {
-    $$ = StrVal($1)
+    $$ = DString($1)
   }
   // OFF is also accepted as a boolean value, but is handled by the
   // non_reserved_word rule. The action for booleans and strings is the same,
@@ -892,27 +897,27 @@ opt_boolean_or_string:
 // name gives reduce/reduce errors against const_interval and LOCAL, so use
 // IDENT (meaning we reject anything that is a key word).
 zone_value:
-  SCONST {}
-| IDENT {}
-| const_interval SCONST opt_interval {}
-| const_interval '(' ICONST ')' SCONST {}
-| numeric_only {}
-| DEFAULT {}
-| LOCAL {}
+  SCONST { unimplemented() }
+| IDENT { unimplemented() }
+| const_interval SCONST opt_interval { unimplemented() }
+| const_interval '(' ICONST ')' SCONST { unimplemented() }
+| numeric_only { unimplemented() }
+| DEFAULT { unimplemented() }
+| LOCAL { unimplemented() }
 
 opt_encoding:
-  SCONST {}
-| DEFAULT {}
+  SCONST { unimplemented() }
+| DEFAULT { unimplemented() }
 | /* EMPTY */ {}
 
 non_reserved_word_or_sconst:
   non_reserved_word
   {
-    $$ = StrVal($1)
+    $$ = DString($1)
   }
 | SCONST
   {
-    $$ = StrVal($1)
+    $$ = DString($1)
   }
 
 show_stmt:
@@ -1034,7 +1039,7 @@ column_def:
   }
 
 col_qual_list:
-  col_qual_list col_constraint
+  col_qual_list col_qualification
   {
     $$ = append($1, $2)
   }
@@ -1043,14 +1048,14 @@ col_qual_list:
     $$ = nil
   }
 
-col_constraint:
-  CONSTRAINT name col_constraint_elem
+col_qualification:
+  CONSTRAINT name col_qualification_elem
   {
     // TODO(pmattis): Handle constraint name.
     $$ = $3
   }
-| col_constraint_elem
-| COLLATE any_name {}
+| col_qualification_elem
+| COLLATE any_name { unimplemented() }
 
 // DEFAULT NULL is already the default for Postgres. But define it here and
 // carry it forward into the system to make it explicit.
@@ -1064,7 +1069,7 @@ col_constraint:
 // DEFAULT expression must be b_expr not a_expr to prevent shift/reduce
 // conflict on NOT (since NOT might start a subsequent NOT NULL constraint, or
 // be part of a_expr NOT LIKE or similar constructs).
-col_constraint_elem:
+col_qualification_elem:
   NOT NULL
   {
     $$ = NotNullConstraint{}
@@ -1081,9 +1086,20 @@ col_constraint_elem:
   {
     $$ = PrimaryKeyConstraint{}
   }
-| CHECK '(' a_expr ')' {}
-| DEFAULT b_expr {}
-| REFERENCES qualified_name opt_column_list key_match key_actions {}
+| CHECK '(' a_expr ')' { unimplemented() }
+| DEFAULT b_expr
+  {
+    if ContainsVars($2) {
+      sqllex.Error("default expression contains a variable")
+      return 1
+    }
+    if containsSubquery($2) {
+      sqllex.Error("default expression contains a subquery")
+      return 1
+    }
+    $$ = &ColumnDefault{Expr: $2}
+  }
+| REFERENCES qualified_name opt_column_list key_match key_actions { unimplemented() }
 
 index_def:
   INDEX opt_name '(' name_list ')' opt_storing
@@ -1106,7 +1122,7 @@ index_def:
   }
 
 // constraint_elem specifies constraint syntax which is not embedded into a
-// column definition. col_constraint_elem specifies the embedded form.
+// column definition. col_qualification_elem specifies the embedded form.
 // - thomas 1997-12-03
 table_constraint:
   CONSTRAINT name constraint_elem
@@ -1120,7 +1136,7 @@ table_constraint:
   }
 
 constraint_elem:
-  CHECK '(' a_expr ')' {}
+  CHECK '(' a_expr ')' { unimplemented() }
 | UNIQUE '(' name_list ')' opt_storing
   {
     $$ = &UniqueConstraintTableDef{
@@ -1140,7 +1156,7 @@ constraint_elem:
     }
   }
 | FOREIGN KEY '(' name_list ')' REFERENCES qualified_name
-    opt_column_list key_match key_actions {}
+    opt_column_list key_match key_actions { unimplemented() }
 
 storing:
   COVERING
@@ -1176,9 +1192,9 @@ opt_column_list:
   }
 
 key_match:
-  MATCH FULL {}
-| MATCH PARTIAL {}
-| MATCH SIMPLE {}
+  MATCH FULL { unimplemented() }
+| MATCH PARTIAL { unimplemented() }
+| MATCH SIMPLE { unimplemented() }
 | /* EMPTY */ {}
 
 // We combine the update and delete actions into one value temporarily for
@@ -1186,24 +1202,24 @@ key_match:
 // production. update is in the left 8 bits, delete in the right. Note that
 // NOACTION is the default.
 key_actions:
-  key_update {}
-| key_delete {}
-| key_update key_delete {}
-| key_delete key_update {}
+  key_update { unimplemented() }
+| key_delete { unimplemented() }
+| key_update key_delete { unimplemented() }
+| key_delete key_update { unimplemented() }
 | /* EMPTY */ {}
 
 key_update:
-  ON UPDATE key_action {}
+  ON UPDATE key_action { unimplemented() }
 
 key_delete:
-  ON DELETE key_action {}
+  ON DELETE key_action { unimplemented() }
 
 key_action:
-  NO ACTION {}
-| RESTRICT {}
-| CASCADE {}
-| SET NULL {}
-| SET DEFAULT {}
+  NO ACTION { unimplemented() }
+| RESTRICT { unimplemented() }
+| CASCADE { unimplemented() }
+| SET NULL { unimplemented() }
+| SET DEFAULT { unimplemented() }
 
 numeric_only:
   FCONST
@@ -1279,13 +1295,11 @@ index_elem:
     // TODO(pmattis): Support opt_asc_desc.
     $$ = $1
   }
-| func_expr_windowless opt_collate opt_asc_desc
-  {}
-| '(' a_expr ')' opt_collate opt_asc_desc
-  {}
+| func_expr_windowless opt_collate opt_asc_desc { unimplemented() }
+| '(' a_expr ')' opt_collate opt_asc_desc { unimplemented() }
 
 opt_collate:
-  COLLATE any_name {}
+  COLLATE any_name { unimplemented() }
 | /* EMPTY */ {}
 
 opt_asc_desc:
@@ -1342,8 +1356,14 @@ rename_stmt:
   }
 
 opt_column:
-  COLUMN {}
-| /* EMPTY */ {}
+  COLUMN
+  {
+    $$ = true
+  }
+| /* EMPTY */
+  {
+    $$ = false
+  }
 
 opt_set_data:
   SET DATA {}
@@ -1422,13 +1442,13 @@ insert_rest:
   }
 
 opt_on_conflict:
-  ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list where_clause {}
-| ON CONFLICT opt_conf_expr DO NOTHING {}
+  ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list where_clause { unimplemented() }
+| ON CONFLICT opt_conf_expr DO NOTHING { unimplemented() }
 | /* EMPTY */ {}
 
 opt_conf_expr:
-  '(' index_params ')' where_clause {}
-| ON CONSTRAINT name {}
+  '(' index_params ')' where_clause { unimplemented() }
+| ON CONSTRAINT name { unimplemented() }
 | /* EMPTY */ {}
 
 update_stmt:
@@ -1450,7 +1470,7 @@ set_clause_list:
 
 set_clause:
   single_set_clause
-| multiple_set_clause {}
+| multiple_set_clause
 
 single_set_clause:
   qualified_name '=' ctext_expr
@@ -1603,22 +1623,23 @@ simple_select:
     group_clause having_clause window_clause
   {
     $$ = &Select{
-      Exprs:  $3,
-      From:   $4,
-      Where:  newWhere(astWhere, $5),
-      Having: newWhere(astHaving, $7),
+      Exprs:   $3,
+      From:    $4,
+      Where:   newWhere(astWhere, $5),
+      GroupBy: $6,
+      Having:  newWhere(astHaving, $7),
     }
   }
 | SELECT distinct_clause target_list
     from_clause where_clause
     group_clause having_clause window_clause
   {
-    // TODO(pmattis): Support DISTINCT ON?
     $$ = &Select{
-      Distinct: astDistinct,
+      Distinct: $2,
       Exprs:    $3,
       From:     $4,
       Where:    newWhere(astWhere, $5),
+      GroupBy:  $6,
       Having:   newWhere(astHaving, $7),
     }
   }
@@ -1633,29 +1654,29 @@ simple_select:
   }
 | select_clause UNION all_or_distinct select_clause
   {
-    // TODO(pmattis): Support all/distinct
     $$ = &Union{
       Type:  astUnion,
       Left:  $1,
       Right: $4,
+      All:   $3,
     }
   }
 | select_clause INTERSECT all_or_distinct select_clause
   {
-    // TODO(pmattis): Support all/distinct
     $$ = &Union{
       Type:  astIntersect,
       Left:  $1,
       Right: $4,
+      All:   $3,
     }
   }
 | select_clause EXCEPT all_or_distinct select_clause
   {
-    // TODO(pmattis): Support all/distinct
     $$ = &Union{
       Type:  astExcept,
       Left:  $1,
       Right: $4,
+      All:   $3,
     }
   }
 
@@ -1668,16 +1689,16 @@ simple_select:
 //
 // Recognizing WITH_LA here allows a CTE to be named TIME or ORDINALITY.
 with_clause:
-  WITH cte_list {}
-| WITH_LA cte_list {}
-| WITH RECURSIVE cte_list {}
+WITH cte_list { unimplemented() }
+| WITH_LA cte_list { unimplemented() }
+| WITH RECURSIVE cte_list { unimplemented() }
 
 cte_list:
-  common_table_expr {}
-| cte_list ',' common_table_expr {}
+  common_table_expr { unimplemented() }
+| cte_list ',' common_table_expr { unimplemented() }
 
 common_table_expr:
-  name opt_name_list AS '(' preparable_stmt ')' {}
+  name opt_name_list AS '(' preparable_stmt ')' { unimplemented() }
 
 preparable_stmt:
   select_stmt
@@ -1689,7 +1710,7 @@ preparable_stmt:
 | delete_stmt
 
 opt_with_clause:
-  with_clause {}
+  with_clause { unimplemented() }
 | /* EMPTY */ {}
 
 opt_table:
@@ -1697,15 +1718,24 @@ opt_table:
 | /* EMPTY */ {}
 
 all_or_distinct:
-  ALL {}
-| DISTINCT {}
-| /* EMPTY */ {}
+  ALL
+  {
+    $$ = true
+  }
+| DISTINCT
+  {
+    $$ = false
+  }
+| /* EMPTY */
+  {
+    $$ = false
+  }
 
-// We use (NIL) as a placeholder to indicate that all target expressions should
-// be placed in the DISTINCT list during parsetree analysis.
 distinct_clause:
-  DISTINCT {}
-| DISTINCT ON '(' expr_list ')' {}
+  DISTINCT
+  {
+    $$ = true
+  }
 
 opt_all_clause:
   ALL {}
@@ -1774,8 +1804,9 @@ limit_clause:
       $$ = &Limit{Count: $2}
     }
   }
-  // SQL:2008 syntax
-| FETCH first_or_next opt_select_fetch_first_value row_or_rows ONLY {}
+// SQL:2008 syntax
+// TODO(pmattis): Should we support this?
+// | FETCH first_or_next opt_select_fetch_first_value row_or_rows ONLY { unimplemented() }
 
 offset_clause:
   OFFSET a_expr
@@ -1800,19 +1831,19 @@ select_limit_value:
 // Allowing full expressions without parentheses causes various parsing
 // problems with the trailing ROW/ROWS key words. SQL only calls for constants,
 // so we allow the rest only with parentheses. If omitted, default to 1.
-opt_select_fetch_first_value:
-  signed_iconst {}
-| '(' a_expr ')' {}
-| /* EMPTY */ {}
+// opt_select_fetch_first_value:
+//   signed_iconst { unimplemented() }
+// | '(' a_expr ')' { unimplemented() }
+// | /* EMPTY */ {}
 
 // noise words
 row_or_rows:
   ROW {}
 | ROWS {}
 
-first_or_next:
-  FIRST {}
-| NEXT {}
+// first_or_next:
+//   FIRST { unimplemented() }
+// | NEXT { unimplemented() }
 
 // This syntax for group_clause tries to follow the spec quite closely.
 // However, the spec allows only column references, not expressions,
@@ -1833,19 +1864,14 @@ first_or_next:
 // Each item in the group_clause list is either an expression tree or a
 // GroupingSet node of some type.
 group_clause:
-  GROUP BY group_by_list {}
-| /* EMPTY */ {}
-
-group_by_list:
-  group_by_item {}
-| group_by_list ',' group_by_item {}
-
-group_by_item:
-  a_expr {}
-| empty_grouping_set {}
-
-empty_grouping_set:
-  '(' ')' {}
+  GROUP BY expr_list
+  {
+    $$ = GroupBy($3)
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 having_clause:
   HAVING a_expr
@@ -1897,15 +1923,12 @@ table_ref:
   {
     $$ = &AliasedTableExpr{Expr: $1, As: Name($2)}
   }
-| func_table func_alias_clause {}
-| LATERAL func_table func_alias_clause {}
 | select_with_parens opt_alias_clause
   {
     $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1}, As: Name($2)}
   }
-| LATERAL select_with_parens opt_alias_clause {}
 | joined_table
-| '(' joined_table ')' alias_clause {}
+| '(' joined_table ')' alias_clause { unimplemented() }
 
 // It may seem silly to separate joined_table from table_ref, but there is
 // method in SQL's madness: if you don't do it this way you get reduce- reduce
@@ -1948,12 +1971,12 @@ joined_table:
   }
 
 alias_clause:
-  AS name '(' name_list ')' {}
+  AS name '(' name_list ')' { unimplemented() }
 | AS name
   {
     $$ = $2
   }
-| name '(' name_list ')' {}
+| name '(' name_list ')' { unimplemented() }
 | name
   {
     $$ = $1
@@ -1965,15 +1988,6 @@ opt_alias_clause:
   {
     $$ = ""
   }
-
-// func_alias_clause can include both an Alias and a coldeflist, so we make it
-// return a 2-element list that gets disassembled by calling production.
-func_alias_clause:
-  alias_clause {}
-| AS '(' table_func_elem_list ')' {}
-| AS name '(' table_func_elem_list ')' {}
-| name '(' table_func_elem_list ')' {}
-| /* EMPTY */ {}
 
 join_type:
   FULL join_outer
@@ -2067,34 +2081,6 @@ relation_expr_opt_alias:
     $$ = &AliasedTableExpr{Expr: $1, As: Name($3)}
   }
 
-// func_table represents a function invocation in a FROM list. It can be a
-// plain function call, like "foo(...)", or a ROWS FROM expression with one or
-// more function calls, "ROWS FROM (foo(...), bar(...))", optionally with WITH
-// ORDINALITY attached. In the ROWS FROM syntax, a column definition list can
-// be given for each function, for example:
-//     ROWS FROM (foo() AS (foo_res_a text, foo_res_b text),
-//                bar() AS (bar_res_a text, bar_res_b text))
-// It's also possible to attach a column definition list to the RangeFunction
-// as a whole, but that's handled by the table_ref production.
-func_table:
-  func_expr_windowless opt_ordinality {}
-| ROWS FROM '(' rowsfrom_list ')' opt_ordinality {}
-
-rowsfrom_item:
-  func_expr_windowless opt_col_def_list {}
-
-rowsfrom_list:
-  rowsfrom_item {}
-| rowsfrom_list ',' rowsfrom_item {}
-
-opt_col_def_list:
-  AS '(' table_func_elem_list ')' {}
-| /* EMPTY */ {}
-
-opt_ordinality:
-  WITH_LA ORDINALITY {}
-| /* EMPTY */ {}
-
 where_clause:
   WHERE a_expr
   {
@@ -2104,13 +2090,6 @@ where_clause:
   {
     $$ = nil
   }
-
-table_func_elem_list:
-  table_func_elem {}
-| table_func_elem_list ',' table_func_elem {}
-
-table_func_elem:
-  name typename opt_collate_clause {}
 
 // Type syntax
 //   SQL introduces a large amount of type-specific syntax.
@@ -2124,12 +2103,12 @@ typename:
     $$ = $1
   }
   // SQL standard syntax, currently only one-dimensional
-| simple_typename ARRAY '[' ICONST ']' {}
-| simple_typename ARRAY {}
+| simple_typename ARRAY '[' ICONST ']' { unimplemented() }
+| simple_typename ARRAY { unimplemented() }
 
 opt_array_bounds:
-  opt_array_bounds '[' ']' {}
-| opt_array_bounds '[' ICONST ']' {}
+  opt_array_bounds '[' ']' { unimplemented() }
+| opt_array_bounds '[' ICONST ']' { unimplemented() }
 | /* EMPTY */ {}
 
 simple_typename:
@@ -2137,8 +2116,8 @@ simple_typename:
 | bit
 | character
 | const_datetime
-| const_interval opt_interval {}
-| const_interval '(' ICONST ')' {}
+| const_interval opt_interval // TODO(pmattis): Support opt_interval?
+| const_interval '(' ICONST ')' { unimplemented() }
 | BLOB
   {
     $$ = &BytesType{Name: "BLOB"}
@@ -2335,24 +2314,24 @@ const_interval:
   }
 
 opt_interval:
-  YEAR {}
-| MONTH {}
-| DAY {}
-| HOUR {}
-| MINUTE {}
-| interval_second {}
-| YEAR TO MONTH {}
-| DAY TO HOUR {}
-| DAY TO MINUTE {}
-| DAY TO interval_second {}
-| HOUR TO MINUTE {}
-| HOUR TO interval_second {}
-| MINUTE TO interval_second {}
+  YEAR { unimplemented() }
+| MONTH { unimplemented() }
+| DAY { unimplemented() }
+| HOUR { unimplemented() }
+| MINUTE { unimplemented() }
+| interval_second { unimplemented() }
+| YEAR TO MONTH { unimplemented() }
+| DAY TO HOUR { unimplemented() }
+| DAY TO MINUTE { unimplemented() }
+| DAY TO interval_second { unimplemented() }
+| HOUR TO MINUTE { unimplemented() }
+| HOUR TO interval_second { unimplemented() }
+| MINUTE TO interval_second { unimplemented() }
 | /* EMPTY */ {}
 
 interval_second:
-  SECOND {}
-| SECOND '(' ICONST ')' {}
+  SECOND { unimplemented() }
+| SECOND '(' ICONST ')' { unimplemented() }
 
 // General expressions. This is the heart of the expression syntax.
 //
@@ -2379,8 +2358,8 @@ a_expr:
   {
     $$ = &CastExpr{Expr: $1, Type: $3}
   }
-| a_expr COLLATE any_name {}
-| a_expr AT TIME ZONE a_expr %prec AT {}
+| a_expr COLLATE any_name { unimplemented() }
+| a_expr AT TIME ZONE a_expr %prec AT { unimplemented() }
   // These operators must be called out explicitly in order to make use of
   // bison's automatic operator-precedence handling. All other operator names
   // are handled by the generic productions using "OP", below; and all those
@@ -2512,10 +2491,7 @@ a_expr:
   {
     $$ = &IsExpr{Operator: IsNotNull, Expr: $1}
   }
-| row OVERLAPS row
-  {
-    panic("TODO(pmattis): unimplemented)")
-  }
+| row OVERLAPS row { unimplemented() }
 | a_expr IS TRUE %prec IS
   {
     $$ = &IsExpr{Operator: IsTrue, Expr: $1}
@@ -2580,9 +2556,9 @@ a_expr:
   {
     $$ = &ComparisonExpr{Operator: NotIn, Left: $1, Right: $4}
   }
-| a_expr subquery_op sub_type select_with_parens %prec CONCAT {}
-| a_expr subquery_op sub_type '(' a_expr ')' %prec CONCAT {}
-| UNIQUE select_with_parens {}
+| a_expr subquery_op sub_type select_with_parens %prec CONCAT { unimplemented() }
+| a_expr subquery_op sub_type '(' a_expr ')' %prec CONCAT { unimplemented() }
+| UNIQUE select_with_parens { unimplemented() }
 
 // Restricted expressions
 //
@@ -2733,7 +2709,7 @@ c_expr:
     $$ = &ExistsExpr{Subquery: &Subquery{Select: $2}}
   }
 // TODO(pmattis): Support this notation?
-// | ARRAY select_with_parens {}
+// | ARRAY select_with_parens { unimplemented() }
 | ARRAY array_expr
   {
     $$ = $2
@@ -2747,7 +2723,7 @@ c_expr:
     $$ = $1
   }
 // TODO(pmattis): Support this notation?
-// | GROUPING '(' expr_list ')' {}
+// | GROUPING '(' expr_list ')' { unimplemented() }
 
 func_application:
   func_name '(' ')'
@@ -2759,18 +2735,9 @@ func_application:
     // TODO(pmattis): Support opt_sort_clause or remove it?
     $$ = &FuncExpr{Name: $1, Exprs: $3}
   }
-| func_name '(' VARIADIC a_expr opt_sort_clause ')'
-  {
-    panic("TODO(pmattis): unimplemented)")
-  }
-| func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')'
-  {
-    panic("TODO(pmattis): unimplemented)")
-  }
-| func_name '(' ALL expr_list opt_sort_clause ')'
-  {
-    panic("TODO(pmattis): unimplemented)")
-  }
+| func_name '(' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
+| func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
+| func_name '(' ALL expr_list opt_sort_clause ')' { unimplemented() }
 | func_name '(' DISTINCT expr_list opt_sort_clause ')'
   {
     // TODO(pmattis): Support opt_sort_clause or remove it?
@@ -2805,12 +2772,12 @@ func_expr:
 // expressions are not allowed, where needed to disambiguate the grammar
 // (e.g. in CREATE INDEX).
 func_expr_windowless:
-  func_application {}
-| func_expr_common_subexpr {}
+  func_application { unimplemented() }
+| func_expr_common_subexpr { unimplemented() }
 
 // Special expressions that are considered to be functions.
 func_expr_common_subexpr:
-  COLLATION FOR '(' a_expr ')' {}
+  COLLATION FOR '(' a_expr ')' { unimplemented() }
 | CURRENT_DATE
   {
     $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
@@ -2819,10 +2786,10 @@ func_expr_common_subexpr:
   {
     $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
   }
-| CURRENT_ROLE {}
-| CURRENT_USER {}
-| SESSION_USER {}
-| USER {}
+| CURRENT_ROLE { unimplemented() }
+| CURRENT_USER { unimplemented() }
+| SESSION_USER { unimplemented() }
+| USER { unimplemented() }
 | CAST '(' a_expr AS typename ')'
   {
     $$ = &CastExpr{Expr: $3, Type: $5}
@@ -2831,48 +2798,48 @@ func_expr_common_subexpr:
   {
     $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
   }
-| OVERLAY '(' overlay_list ')' {}
-| POSITION '(' position_list ')' {}
-| SUBSTRING '(' substr_list ')' {}
-| TREAT '(' a_expr AS typename ')' {}
-| TRIM '(' BOTH trim_list ')' {}
-| TRIM '(' LEADING trim_list ')' {}
-| TRIM '(' TRAILING trim_list ')' {}
-| TRIM '(' trim_list ')' {}
-| NULLIF '(' a_expr ',' a_expr ')' {}
-| COALESCE '(' expr_list ')' {}
-| GREATEST '(' expr_list ')' {}
-| LEAST '(' expr_list ')' {}
+| OVERLAY '(' overlay_list ')' { unimplemented() }
+| POSITION '(' position_list ')' { unimplemented() }
+| SUBSTRING '(' substr_list ')' { unimplemented() }
+| TREAT '(' a_expr AS typename ')' { unimplemented() }
+| TRIM '(' BOTH trim_list ')' { unimplemented() }
+| TRIM '(' LEADING trim_list ')' { unimplemented() }
+| TRIM '(' TRAILING trim_list ')' { unimplemented() }
+| TRIM '(' trim_list ')' { unimplemented() }
+| NULLIF '(' a_expr ',' a_expr ')' { unimplemented() }
+| COALESCE '(' expr_list ')' { unimplemented() }
+| GREATEST '(' expr_list ')' { unimplemented() }
+| LEAST '(' expr_list ')' { unimplemented() }
 
 // Aggregate decoration clauses
 within_group_clause:
-  WITHIN GROUP '(' sort_clause ')' {}
+WITHIN GROUP '(' sort_clause ')' { unimplemented() }
 | /* EMPTY */ {}
 
 filter_clause:
-  FILTER '(' WHERE a_expr ')' {}
+  FILTER '(' WHERE a_expr ')' { unimplemented() }
 | /* EMPTY */ {}
 
 // Window Definitions
 window_clause:
-  WINDOW window_definition_list {}
+  WINDOW window_definition_list { unimplemented() }
 | /* EMPTY */ {}
 
 window_definition_list:
-  window_definition {}
-| window_definition_list ',' window_definition {}
+  window_definition { unimplemented() }
+| window_definition_list ',' window_definition { unimplemented() }
 
 window_definition:
-  name AS window_specification {}
+  name AS window_specification { unimplemented() }
 
 over_clause:
-  OVER window_specification {}
-| OVER name {}
+  OVER window_specification { unimplemented() }
+| OVER name { unimplemented() }
 | /* EMPTY */ {}
 
 window_specification:
   '(' opt_existing_window_name opt_partition_clause
-    opt_sort_clause opt_frame_clause ')' {}
+    opt_sort_clause opt_frame_clause ')' { unimplemented() }
 
 // If we see PARTITION, RANGE, or ROWS as the first token after the '(' of a
 // window_specification, we want the assumption to be that there is no
@@ -2883,11 +2850,11 @@ window_specification:
 // keywords are thus precluded from being an existing_window_name but are not
 // reserved for any other purpose.
 opt_existing_window_name:
-  name {}
+  name { unimplemented() }
 | /* EMPTY */ %prec CONCAT {}
 
 opt_partition_clause:
-  PARTITION BY expr_list {}
+  PARTITION BY expr_list { unimplemented() }
 | /* EMPTY */ {}
 
 // For frame clauses, we return a WindowDef, but only some fields are used:
@@ -2896,23 +2863,23 @@ opt_partition_clause:
 // This is only a subset of the full SQL:2008 frame_clause grammar. We don't
 // support <window frame exclusion> yet.
 opt_frame_clause:
-  RANGE frame_extent {}
-| ROWS frame_extent {}
+  RANGE frame_extent { unimplemented() }
+| ROWS frame_extent { unimplemented() }
 | /* EMPTY */ {}
 
 frame_extent:
-  frame_bound {}
-| BETWEEN frame_bound AND frame_bound {}
+  frame_bound { unimplemented() }
+| BETWEEN frame_bound AND frame_bound { unimplemented() }
 
 // This is used for both frame start and frame end, with output set up on the
 // assumption it's frame start; the frame_extent productions must reject
 // invalid cases.
 frame_bound:
-  UNBOUNDED PRECEDING {}
-| UNBOUNDED FOLLOWING {}
-| CURRENT ROW {}
-| a_expr PRECEDING {}
-| a_expr FOLLOWING {}
+  UNBOUNDED PRECEDING { unimplemented() }
+| UNBOUNDED FOLLOWING { unimplemented() }
+| CURRENT ROW { unimplemented() }
+| a_expr PRECEDING { unimplemented() }
+| a_expr FOLLOWING { unimplemented() }
 
 // Supporting nonterminals for expressions.
 
@@ -2952,32 +2919,32 @@ implicit_row:
   }
 
 sub_type:
-  ANY {}
-| SOME {}
-| ALL {}
+  ANY { unimplemented() }
+| SOME { unimplemented() }
+| ALL { unimplemented() }
 
 math_op:
-  '+' {}
-| '-' {}
-| '*' {}
-| '/' {}
-| '%' {}
-| '&' {}
-| '|' {}
-| '^' {}
-| '#' {}
-| '<' {}
-| '>' {}
-| '=' {}
-| CONCAT {}
-| LESS_EQUALS {}
-| GREATER_EQUALS {}
-| NOT_EQUALS {}
+  '+' { unimplemented() }
+| '-' { unimplemented() }
+| '*' { unimplemented() }
+| '/' { unimplemented() }
+| '%' { unimplemented() }
+| '&' { unimplemented() }
+| '|' { unimplemented() }
+| '^' { unimplemented() }
+| '#' { unimplemented() }
+| '<' { unimplemented() }
+| '>' { unimplemented() }
+| '=' { unimplemented() }
+| CONCAT { unimplemented() }
+| LESS_EQUALS { unimplemented() }
+| GREATER_EQUALS { unimplemented() }
+| NOT_EQUALS { unimplemented() }
 
 subquery_op:
-  math_op {}
-| LIKE {}
-| NOT_LA LIKE {}
+  math_op { unimplemented() }
+| LIKE { unimplemented() }
+| NOT_LA LIKE { unimplemented() }
   // cannot put SIMILAR TO here, because SIMILAR TO is a hack.
   // the regular expression is preprocessed by a function (similar_escape),
   // and the ~ operator for posix regular expressions is used.
@@ -3033,7 +3000,7 @@ array_expr_list:
 extract_list:
   extract_arg FROM a_expr
   {
-    $$ = Exprs{StrVal($1), $3}
+    $$ = Exprs{DString($1), $3}
   }
 
 // TODO(vivek): Narrow down to just IDENT once the other
@@ -3053,15 +3020,15 @@ extract_arg:
 //   - overlay(text placing text from int)
 // and similarly for binary strings
 overlay_list:
-  a_expr overlay_placing substr_from substr_for {}
-| a_expr overlay_placing substr_from {}
+  a_expr overlay_placing substr_from substr_for { unimplemented() }
+| a_expr overlay_placing substr_from { unimplemented() }
 
 overlay_placing:
-  PLACING a_expr {}
+  PLACING a_expr { unimplemented() }
 
 // position_list uses b_expr not a_expr to avoid conflict with general IN
 position_list:
-  b_expr IN b_expr {}
+  b_expr IN b_expr { unimplemented() }
 | /* EMPTY */ {}
 
 // SUBSTRING() arguments
@@ -3076,23 +3043,23 @@ position_list:
 // here, and convert the SQL9x style to the generic list for further
 // processing. - thomas 2000-11-28
 substr_list:
-  a_expr substr_from substr_for {}
-| a_expr substr_for substr_from {}
-| a_expr substr_from {}
-| a_expr substr_for {}
-| expr_list {}
+  a_expr substr_from substr_for { unimplemented() }
+| a_expr substr_for substr_from { unimplemented() }
+| a_expr substr_from { unimplemented() }
+| a_expr substr_for { unimplemented() }
+| expr_list { unimplemented() }
 | /* EMPTY */ {}
 
 substr_from:
-  FROM a_expr {}
+  FROM a_expr { unimplemented() }
 
 substr_for:
-  FOR a_expr {}
+  FOR a_expr { unimplemented() }
 
 trim_list:
-  a_expr FROM expr_list {}
-| FROM expr_list {}
-| expr_list {}
+  a_expr FROM expr_list { unimplemented() }
+| FROM expr_list { unimplemented() }
+| expr_list { unimplemented() }
 
 in_expr:
   select_with_parens
@@ -3193,7 +3160,7 @@ ctext_expr:
   a_expr
 | DEFAULT
   {
-    $$ = nil
+    $$ = DefaultVal{}
   }
 
 ctext_expr_list:
@@ -3328,35 +3295,34 @@ a_expr_const:
   }
 | SCONST
   {
-    $$ = StrVal($1)
+    $$ = DString($1)
   }
 | BCONST
   {
-    // TODO(pmattis): bytes literal.
-    $$ = StrVal($1)
+    $$ = DBytes($1)
   }
-| func_name '(' expr_list opt_sort_clause ')' SCONST {}
+| func_name '(' expr_list opt_sort_clause ')' SCONST { unimplemented() }
 | const_typename SCONST
   {
-    $$ = &CastExpr{Expr: StrVal($2), Type: $1}
+    $$ = &CastExpr{Expr: DString($2), Type: $1}
   }
 | const_interval SCONST opt_interval
   {
     // TODO(pmattis): support opt_interval?
-    $$ = &CastExpr{Expr: StrVal($2), Type: $1}
+    $$ = &CastExpr{Expr: DString($2), Type: $1}
   }
 | const_interval '(' ICONST ')' SCONST
   {
     // TODO(pmattis): Support the precision specification?
-    $$ = &CastExpr{Expr: StrVal($5), Type: $1}
+    $$ = &CastExpr{Expr: DString($5), Type: $1}
   }
 | TRUE
   {
-    $$ = BoolVal(true)
+    $$ = DBool(true)
   }
 | FALSE
   {
-    $$ = BoolVal(false)
+    $$ = DBool(false)
   }
 | NULL
   {

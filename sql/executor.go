@@ -165,26 +165,47 @@ func (e Executor) execStmt(stmt parser.Statement, params parameters, planMaker *
 				} else {
 					switch vt := val.(type) {
 					case parser.DBool:
-						row.Values = append(row.Values, driver.Datum{BoolVal: (*bool)(&vt)})
+						row.Values = append(row.Values, driver.Datum{
+							Payload: &driver.Datum_BoolVal{BoolVal: bool(vt)},
+						})
 					case parser.DInt:
-						row.Values = append(row.Values, driver.Datum{IntVal: (*int64)(&vt)})
+						row.Values = append(row.Values, driver.Datum{
+							Payload: &driver.Datum_IntVal{IntVal: int64(vt)},
+						})
 					case parser.DFloat:
-						row.Values = append(row.Values, driver.Datum{FloatVal: (*float64)(&vt)})
+						row.Values = append(row.Values, driver.Datum{
+							Payload: &driver.Datum_FloatVal{FloatVal: float64(vt)},
+						})
+					case parser.DBytes:
+						row.Values = append(row.Values, driver.Datum{
+							Payload: &driver.Datum_BytesVal{BytesVal: []byte(vt)},
+						})
 					case parser.DString:
-						row.Values = append(row.Values, driver.Datum{StringVal: (*string)(&vt)})
+						row.Values = append(row.Values, driver.Datum{
+							Payload: &driver.Datum_StringVal{StringVal: string(vt)},
+						})
 					case parser.DDate:
-						row.Values = append(row.Values, driver.Datum{TimeVal: &driver.Datum_Timestamp{
-							Sec:  vt.Unix(),
-							Nsec: uint32(vt.Nanosecond()),
-						}})
+						row.Values = append(row.Values, driver.Datum{
+							Payload: &driver.Datum_DateVal{
+								DateVal: &driver.Datum_Timestamp{
+									Sec:  vt.Unix(),
+									Nsec: uint32(vt.Nanosecond()),
+								},
+							},
+						})
 					case parser.DTimestamp:
-						row.Values = append(row.Values, driver.Datum{TimeVal: &driver.Datum_Timestamp{
-							Sec:  vt.Unix(),
-							Nsec: uint32(vt.Nanosecond()),
-						}})
+						row.Values = append(row.Values, driver.Datum{
+							Payload: &driver.Datum_TimeVal{
+								TimeVal: &driver.Datum_Timestamp{
+									Sec:  vt.Unix(),
+									Nsec: uint32(vt.Nanosecond()),
+								},
+							},
+						})
 					case parser.DInterval:
-						s := vt.String()
-						row.Values = append(row.Values, driver.Datum{StringVal: &s})
+						row.Values = append(row.Values, driver.Datum{
+							Payload: &driver.Datum_IntervalVal{IntervalVal: vt.Nanoseconds()},
+						})
 					default:
 						return util.Errorf("unsupported datum: %T", val)
 					}
@@ -222,9 +243,8 @@ func makeResultFromError(planMaker *planner, err error) driver.Result {
 			planMaker.txn.Cleanup(err)
 		}
 	}
-	var errProto proto.Error
-	errProto.SetResponseGoError(err)
-	return driver.Result{Error: &errProto}
+	errString := err.Error()
+	return driver.Result{Error: &errString}
 }
 
 // parameters implements the parser.Args interface.
@@ -249,23 +269,27 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 	if i < 1 || int(i) > len(p) {
 		return nil, false
 	}
-	arg := p[i-1].GetValue()
+	arg := p[i-1].Payload
 	if arg == nil {
 		return parser.DNull, true
 	}
 	switch t := arg.(type) {
-	case *bool:
-		return parser.DBool(*t), true
-	case *int64:
-		return parser.DInt(*t), true
-	case *float64:
-		return parser.DFloat(*t), true
-	case []byte:
-		return parser.DString(t), true
-	case *string:
-		return parser.DString(*t), true
-	case *driver.Datum_Timestamp:
-		return parser.DTimestamp{Time: time.Unix((*t).Sec, int64((*t).Nsec)).UTC()}, true
+	case *driver.Datum_BoolVal:
+		return parser.DBool(t.BoolVal), true
+	case *driver.Datum_IntVal:
+		return parser.DInt(t.IntVal), true
+	case *driver.Datum_FloatVal:
+		return parser.DFloat(t.FloatVal), true
+	case *driver.Datum_BytesVal:
+		return parser.DBytes(t.BytesVal), true
+	case *driver.Datum_StringVal:
+		return parser.DString(t.StringVal), true
+	case *driver.Datum_DateVal:
+		return parser.DTimestamp{Time: t.DateVal.GoTime().UTC()}, true
+	case *driver.Datum_TimeVal:
+		return parser.DTimestamp{Time: t.TimeVal.GoTime().UTC()}, true
+	case *driver.Datum_IntervalVal:
+		return parser.DInterval{Duration: time.Duration(t.IntervalVal)}, true
 	default:
 		panic(fmt.Sprintf("unexpected type %T", t))
 	}

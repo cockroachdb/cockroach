@@ -33,11 +33,27 @@ type DropDatabase struct {
 
 func (node *DropDatabase) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("DROP DATABASE ")
+	buf.WriteString("DROP DATABASE ")
 	if node.IfExists {
-		_, _ = buf.WriteString("IF EXISTS ")
+		buf.WriteString("IF EXISTS ")
 	}
-	_, _ = buf.WriteString(node.Name.String())
+	buf.WriteString(node.Name.String())
+	return buf.String()
+}
+
+// DropIndex represents a DROP DATABASE statement.
+type DropIndex struct {
+	Names    QualifiedNames
+	IfExists bool
+}
+
+func (node *DropIndex) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("DROP INDEX ")
+	if node.IfExists {
+		buf.WriteString("IF EXISTS ")
+	}
+	buf.WriteString(node.Names.String())
 	return buf.String()
 }
 
@@ -49,10 +65,10 @@ type DropTable struct {
 
 func (node *DropTable) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("DROP TABLE ")
+	buf.WriteString("DROP TABLE ")
 	if node.IfExists {
-		_, _ = buf.WriteString("IF EXISTS ")
+		buf.WriteString("IF EXISTS ")
 	}
-	_, _ = buf.WriteString(node.Names.String())
+	buf.WriteString(node.Names.String())
 	return buf.String()
 }

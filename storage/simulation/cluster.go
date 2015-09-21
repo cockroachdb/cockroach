@@ -19,6 +19,7 @@ package main
 
 import (
 	"bytes"
+	"math/rand"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -44,11 +46,14 @@ type Cluster struct {
 	nodes         map[proto.NodeID]*Node
 	stores        map[proto.StoreID]*Store
 	ranges        map[proto.RangeID]*Range
+	rand          *rand.Rand
+	seed          int64
 }
 
 // createCluster generates a new cluster using the provided stopper and the
 // number of nodes supplied. Each node will have one store to start.
 func createCluster(stopper *stop.Stopper, nodeCount int) *Cluster {
+	rand, seed := randutil.NewPseudoRand()
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
@@ -59,11 +64,13 @@ func createCluster(stopper *stop.Stopper, nodeCount int) *Cluster {
 		rpc:           rpcContext,
 		gossip:        g,
 		storePool:     storePool,
-		allocator:     storage.MakeAllocator(storePool),
+		allocator:     storage.MakeAllocator(storePool, storage.RebalancingOptions{}),
 		storeGossiper: gossiputil.NewStoreGossiper(g),
 		nodes:         make(map[proto.NodeID]*Node),
 		stores:        make(map[proto.StoreID]*Store),
 		ranges:        make(map[proto.RangeID]*Range),
+		rand:          rand,
+		seed:          seed,
 	}
 
 	// Add the nodes.
@@ -100,6 +107,22 @@ func (c *Cluster) addRange() *Range {
 	newRng := newRange(rangeID)
 	c.ranges[rangeID] = newRng
 	return newRng
+}
+
+func (c *Cluster) splitRangeRandom() {
+	rangeID := proto.RangeID(c.rand.Int63n(int64(len(c.ranges))))
+	c.splitRange(rangeID)
+}
+
+func (c *Cluster) splitRangeLast() {
+	rangeID := proto.RangeID(len(c.ranges) - 1)
+	c.splitRange(rangeID)
+}
+
+func (c *Cluster) splitRange(rangeID proto.RangeID) {
+	newRange := c.addRange()
+	originalRange := c.ranges[rangeID]
+	newRange.splitRange(originalRange)
 }
 
 // String prints out the current status of the cluster.

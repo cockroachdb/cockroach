@@ -561,7 +561,7 @@ func TestStoreExecuteNoop(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	reply = reply.(*proto.BatchResponse).Responses[1].GetValue().(proto.Response)
+	reply = reply.(*proto.BatchResponse).Responses[1].GetInner()
 	if _, ok := reply.(*proto.NoopResponse); !ok {
 		t.Errorf("expected *proto.NoopResponse, got %T", reply)
 	}

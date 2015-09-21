@@ -76,11 +76,11 @@ func prettySpans(spans []span, desc *TableDescriptor, index *IndexDescriptor) st
 	var buf bytes.Buffer
 	for i, span := range spans {
 		if i > 0 {
-			_, _ = buf.WriteString(" ")
+			buf.WriteString(" ")
 		}
 		for j, key := range []proto.Key{span.start, span.end} {
 			if j == 1 {
-				_, _ = buf.WriteString("-")
+				buf.WriteString("-")
 			}
 			if !bytes.HasPrefix(key, prefix) {
 				if j == 1 {
@@ -96,7 +96,7 @@ func prettySpans(spans []span, desc *TableDescriptor, index *IndexDescriptor) st
 					break
 				}
 			}
-			_, _ = buf.WriteString(prettyKeyVals(vals[:k]))
+			buf.WriteString(prettyKeyVals(vals[:k]))
 		}
 	}
 	return buf.String()
@@ -310,25 +310,27 @@ func (n *scanNode) initScan() bool {
 		}
 	}
 
-	// Prepare our index key vals slice.
-	if n.valTypes, n.err = makeKeyVals(n.desc, n.columnIDs); n.err != nil {
-		return false
-	}
-	n.vals = make([]parser.Datum, len(n.valTypes))
-
-	if n.isSecondaryIndex && n.index.Unique {
-		// Unique secondary indexes have a value that is the primary index
-		// key. Prepare implicitVals for use in decoding this value.
-		if n.implicitValTypes, n.err = makeKeyVals(n.desc, n.index.ImplicitColumnIDs); n.err != nil {
+	if n.valTypes == nil {
+		// Prepare our index key vals slice.
+		if n.valTypes, n.err = makeKeyVals(n.desc, n.columnIDs); n.err != nil {
 			return false
 		}
-		n.implicitVals = make([]parser.Datum, len(n.implicitValTypes))
-	}
+		n.vals = make([]parser.Datum, len(n.valTypes))
 
-	// Prepare a map from column ID to column kind used for unmarshalling values.
-	n.colKind = make(colKindMap, len(n.desc.Columns))
-	for _, col := range n.desc.Columns {
-		n.colKind[col.ID] = col.Type.Kind
+		if n.isSecondaryIndex && n.index.Unique {
+			// Unique secondary indexes have a value that is the primary index
+			// key. Prepare implicitVals for use in decoding this value.
+			if n.implicitValTypes, n.err = makeKeyVals(n.desc, n.index.ImplicitColumnIDs); n.err != nil {
+				return false
+			}
+			n.implicitVals = make([]parser.Datum, len(n.implicitValTypes))
+		}
+
+		// Prepare a map from column ID to column kind used for unmarshalling values.
+		n.colKind = make(colKindMap, len(n.desc.Columns))
+		for _, col := range n.desc.Columns {
+			n.colKind[col.ID] = col.Type.Kind
+		}
 	}
 	return true
 }
@@ -704,8 +706,10 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 			return parser.DBool(kv.ValueInt() != 0), true
 		case ColumnType_FLOAT:
 			return parser.DFloat(math.Float64frombits(uint64(kv.ValueInt()))), true
-		case ColumnType_STRING, ColumnType_BYTES:
+		case ColumnType_STRING:
 			return parser.DString(kv.ValueBytes()), true
+		case ColumnType_BYTES:
+			return parser.DBytes(kv.ValueBytes()), true
 		case ColumnType_DATE:
 			var t time.Time
 			if err := t.UnmarshalBinary(kv.ValueBytes()); err != nil {
@@ -745,8 +749,10 @@ func (n *scanNode) getQVal(col ColumnDescriptor) *qvalue {
 			qval.datum = parser.DummyBool
 		case ColumnType_FLOAT:
 			qval.datum = parser.DummyFloat
-		case ColumnType_STRING, ColumnType_BYTES:
+		case ColumnType_STRING:
 			qval.datum = parser.DummyString
+		case ColumnType_BYTES:
+			qval.datum = parser.DummyBytes
 		case ColumnType_DATE:
 			qval.datum = parser.DummyDate
 		case ColumnType_TIMESTAMP:

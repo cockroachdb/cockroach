@@ -96,13 +96,13 @@ CREATE TABLE test.users (
   UNIQUE INDEX bar (id, name)
 )
 
-query TTT colnames
+query TTTT colnames
 SHOW COLUMNS FROM test.users
 ----
-Field Type   Null
-id    INT    true
-name  STRING false
-title STRING true
+Field Type   Null  Default
+id    INT    true  NULL
+name  STRING false NULL
+title STRING true  NULL
 
 query TTTTT colnames
 SHOW INDEX FROM test.users

@@ -108,6 +108,24 @@ func TestEvalExpr(t *testing.T) {
 		// Comparisons against NULL result in NULL.
 		{`0 = NULL`, `NULL`},
 		{`NULL = NULL`, `NULL`},
+		// LIKE and NOT LIKE
+		{`'TEST' LIKE 'TEST'`, `true`},
+		{`'TEST' LIKE 'TE%'`, `true`},
+		{`'TEST' LIKE '%E%'`, `true`},
+		{`'TEST' LIKE 'TES_'`, `true`},
+		{`'TEST' LIKE 'TE_'`, `false`},
+		{`'TEST' LIKE '%R'`, `false`},
+		{`'TEST' LIKE 'TESTER'`, `false`},
+		{`'TEST' NOT LIKE '%E%'`, `false`},
+		{`'TEST' NOT LIKE 'TES_'`, `false`},
+		{`'TEST' NOT LIKE 'TE_'`, `true`},
+		// SIMILAR TO and NOT SIMILAR TO
+		{`'abc' SIMILAR TO 'abc'`, `true`},
+		{`'abc' SIMILAR TO 'a'`, `false`},
+		{`'abc' SIMILAR TO '%(b|d)%'`, `true`},
+		{`'abc' SIMILAR TO '(b|c)%'`, `false`},
+		{`'abc' NOT SIMILAR TO '%(b|d)%'`, `false`},
+		{`'abc' NOT SIMILAR TO '(b|c)%'`, `true`},
 		// IS DISTINCT FROM can be used to compare NULLs "safely".
 		{`0 IS DISTINCT FROM 0`, `false`},
 		{`0 IS DISTINCT FROM 1`, `true`},
@@ -143,7 +161,9 @@ func TestEvalExpr(t *testing.T) {
 		{`1 IS OF (INT)`, `true`},
 		{`1.0 IS OF (FLOAT)`, `true`},
 		{`'hello' IS OF (STRING)`, `true`},
-		{`'hello' IS OF (BYTES)`, `true`},
+		{`'hello' IS OF (BYTES)`, `false`},
+		{`b'hello' IS OF (STRING)`, `false`},
+		{`b'hello' IS OF (BYTES)`, `true`},
 		{`'2012-09-21'::date IS OF (DATE)`, `true`},
 		{`'2010-09-28 12:00:00.1'::timestamp IS OF (TIMESTAMP)`, `true`},
 		{`'34h'::interval IS OF (INTERVAL)`, `true`},
@@ -221,6 +241,9 @@ func TestEvalExpr(t *testing.T) {
 		{`'hello'::text`, `'hello'`},
 		{`CAST('123' AS int) + 1`, `124`},
 		{`'hello'::char(2)`, `'he'`},
+		{`'hello'::bytes`, `b'hello'`},
+		{`b'hello'::string`, `'hello'`},
+		{`b'\xff'`, `b'\xff'`},
 		{`123::text`, `'123'`},
 		{`'2010-09-28'::date`, `2010-09-28`},
 		{`'2010-09-28'::timestamp`, `2010-09-28 00:00:00+00:00`},
@@ -276,6 +299,8 @@ func TestEvalExprError(t *testing.T) {
 		{`'2010-09-28 12:00:00.1'::date`, `parsing time "2010-09-28 12:00:00.1": extra text`},
 		{`'2010-09-28 12:00:00.1 MST'::timestamp`, `named time zone input not supported`},
 		{`'11h2m'::interval / 0`, `division by zero`},
+		{`'hello' || b'world'`, `unsupported binary operator: <string> || <bytes>`},
+		{`b'\xff\xfe\xfd'::string`, `invalid utf8: "\xff\xfe\xfd"`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`},
 	}
@@ -287,6 +312,28 @@ func TestEvalExprError(t *testing.T) {
 		expr := q[0].(*Select).Exprs[0].Expr
 		if _, err := EvalExpr(expr); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
+		}
+	}
+}
+
+func TestSimilarEscape(t *testing.T) {
+	testData := []struct {
+		expr     string
+		expected string
+	}{
+		{`test`, `test`},
+		{`test%`, `test.*`},
+		{`_test_`, `.test.`},
+		{`_%*`, `..**`},
+		{`[_%]*`, `[_%]*`},
+		{`.^$`, `\.\^\$`},
+		{`%(b|d)%`, `.*(?:b|d).*`},
+		{`se\"arch\"[\"]`, `se(arch)[\"]`},
+	}
+	for _, d := range testData {
+		s := SimilarEscape(d.expr)
+		if s != d.expected {
+			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, s)
 		}
 	}
 }

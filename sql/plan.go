@@ -54,6 +54,8 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 		return p.Delete(n)
 	case *parser.DropDatabase:
 		return p.DropDatabase(n)
+	case *parser.DropIndex:
+		return p.DropIndex(n)
 	case *parser.DropTable:
 		return p.DropTable(n)
 	case *parser.Explain:
@@ -147,10 +149,10 @@ type planNode interface {
 	ExplainPlan() (name, description string, children []planNode)
 }
 
+var _ planNode = &distinctNode{}
 var _ planNode = &groupNode{}
+var _ planNode = &indexJoinNode{}
 var _ planNode = &limitNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
-
-// TODO(pmattis): joinNode.

@@ -105,7 +105,7 @@ func (tm *testModel) assertModelCorrect() {
 		// readable information about any keys which differ in value between the
 		// two data sets.
 		var buf bytes.Buffer
-		_, _ = buf.WriteString("Found unexpected differences in model data and actual data:\n")
+		buf.WriteString("Found unexpected differences in model data and actual data:\n")
 		for k, vActual := range actualData {
 			n, s, r, ts := DecodeDataKey([]byte(k))
 			if vModel, ok := tm.modelData[k]; !ok {

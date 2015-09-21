@@ -19,7 +19,6 @@ package driver
 
 import (
 	"database/sql/driver"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -39,23 +38,24 @@ func makeDatum(val driver.Value) (Datum, error) {
 	if val == nil {
 		return datum, nil
 	}
-
 	switch t := val.(type) {
-	case int64:
-		datum.IntVal = &t
-	case float64:
-		datum.FloatVal = &t
 	case bool:
-		datum.BoolVal = &t
+		datum.Payload = &Datum_BoolVal{t}
+	case int64:
+		datum.Payload = &Datum_IntVal{t}
+	case float64:
+		datum.Payload = &Datum_FloatVal{t}
 	case []byte:
-		datum.BytesVal = t
+		datum.Payload = &Datum_BytesVal{t}
 	case string:
-		datum.StringVal = &t
+		datum.Payload = &Datum_StringVal{t}
 	case time.Time:
 		// Send absolute time devoid of time-zone.
-		datum.TimeVal = &Datum_Timestamp{
-			Sec:  t.Unix(),
-			Nsec: uint32(t.Nanosecond()),
+		datum.Payload = &Datum_TimeVal{
+			&Datum_Timestamp{
+				Sec:  t.Unix(),
+				Nsec: uint32(t.Nanosecond()),
+			},
 		}
 	default:
 		return datum, util.Errorf("unsupported type %T", t)
@@ -66,44 +66,37 @@ func makeDatum(val driver.Value) (Datum, error) {
 
 // Value implements the driver.Valuer interface.
 func (d Datum) Value() (driver.Value, error) {
-	val := d.GetValue()
+	var val driver.Value
 
-	switch t := val.(type) {
-	case *bool:
-		val = *t
-	case *int64:
-		val = *t
-	case *float64:
-		val = *t
-	case []byte:
+	switch t := d.Payload.(type) {
+	case nil:
 		val = t
-	case *string:
-		val = *t
-	case *Datum_Timestamp:
-		val = time.Unix((*t).Sec, int64((*t).Nsec)).UTC()
+	case *Datum_BoolVal:
+		val = t.BoolVal
+	case *Datum_IntVal:
+		val = t.IntVal
+	case *Datum_FloatVal:
+		val = t.FloatVal
+	case *Datum_BytesVal:
+		val = t.BytesVal
+	case *Datum_StringVal:
+		val = t.StringVal
+	case *Datum_DateVal:
+		val = t.DateVal.GoTime().UTC()
+	case *Datum_TimeVal:
+		val = t.TimeVal.GoTime().UTC()
+	case *Datum_IntervalVal:
+		val = time.Duration(t.IntervalVal)
+	default:
+		return nil, util.Errorf("unsupported type %T", t)
 	}
 
-	if driver.IsValue(val) {
-		return val, nil
-	}
-	return nil, util.Errorf("unsupported type %T", val)
+	return val, nil
 }
 
-func (d Datum) String() string {
-	v, err := d.Value()
-	if err != nil {
-		panic(err)
-	}
-
-	if v == nil {
-		return "NULL"
-	}
-
-	if bytes, ok := v.([]byte); ok {
-		return string(bytes)
-	}
-
-	return fmt.Sprint(v)
+// GoTime converts the timestamp to a time.Time.
+func (t Datum_Timestamp) GoTime() time.Time {
+	return time.Unix(t.Sec, int64(t.Nsec))
 }
 
 // Method returns the method.

@@ -49,7 +49,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 // CreateIndex creates an index.
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
-//          mysql requires ALTER, CREATE, INSERT on the table.
+//          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	tableDesc, err := p.getTableDesc(n.Table)
 	if err != nil {

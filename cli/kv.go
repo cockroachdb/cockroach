@@ -77,7 +77,7 @@ Fetches and displays the value for <key>.
 
 func runGet(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	kvDB, stopper := makeDBClient()
@@ -111,7 +111,7 @@ in pairs on the command line.
 
 func runPut(cmd *cobra.Command, args []string) {
 	if len(args) == 0 || len(args)%2 == 1 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 
@@ -147,7 +147,7 @@ pass nil for expValue. The expValue defaults to 1 if not specified.
 
 func runCPut(cmd *cobra.Command, args []string) {
 	if len(args) != 2 && len(args) != 3 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 
@@ -184,7 +184,7 @@ flags.
 
 func runInc(cmd *cobra.Command, args []string) {
 	if len(args) > 2 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 
@@ -222,7 +222,7 @@ Deletes the values of one or more keys.
 
 func runDel(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 
@@ -254,7 +254,7 @@ Deletes the values for the range of keys [startKey, endKey).
 
 func runDelRange(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 
@@ -286,7 +286,7 @@ are retrieved.
 
 func runScan(cmd *cobra.Command, args []string) {
 	if len(args) > 2 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	startKey, endKey := initScanArgs(args)
@@ -319,7 +319,7 @@ are retrieved.
 
 func runReverseScan(cmd *cobra.Command, args []string) {
 	if len(args) > 2 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 	startKey, endKey := initScanArgs(args)
@@ -386,7 +386,7 @@ the double-quoted Go string literal rules (see
 https://golang.org/ref/spec#String_literals).
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Usage()
+		mustUsage(cmd)
 	},
 }
 

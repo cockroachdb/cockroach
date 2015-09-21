@@ -16,6 +16,7 @@ RUN apt-get update -y && \
  rm -rf /tmp/* && \
  ln -s /usr/bin/nodejs /usr/bin/node
 RUN go get golang.org/x/tools/cmd/vet
+ENV SKIP_BOOTSTRAP=1
 
 CMD ["/bin/bash"]
 EOF

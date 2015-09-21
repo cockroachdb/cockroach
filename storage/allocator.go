@@ -26,21 +26,30 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
-	// maxFractionUsedThreshold: if the fraction used of a store
-	// descriptor capacity is greater than this, it will not be used as
-	// a rebalance target.
+	// maxFractionUsedThreshold: if the fraction used of a store descriptor
+	// capacity is greater than this value, it will never be used as a rebalance
+	// target and it will always be eligible to rebalance replicas to other
+	// stores.
 	maxFractionUsedThreshold = 0.95
-	// minFractionUsedThreshold: if the mean fraction used of a list of
-	// store descriptors is less than this, then range count will be used
-	// to make rebalancing decisions instead of fraction of bytes used.
+	// minFractionUsedThreshold: if the mean fraction used of a list of store
+	// descriptors is less than this, then range count will be used to make
+	// rebalancing decisions instead of the fraction of bytes used. This is
+	// useful for distributing load evenly on nascent deployments.
 	minFractionUsedThreshold = 0.02
-	// rebalanceFromMean: if the fraction of bytes used of a store
-	// is within rebalanceFromMean of the mean, it is considered a
-	// viable target to rebalance to.
+	// rebalanceFromMean is used to declare a range above and below the average
+	// used capacity of the cluster. If a store's usage is below this range, it
+	// is a rebalancing target and can accept new replicas; if usage is above
+	// this range, the store is eligible to rebalance replicas to other stores.
 	rebalanceFromMean = 0.025 // 2.5%
+	// rebalanceShouldRebalanceChance represents a chance that an individual
+	// replica should attempt to rebalance. This helps introduce some
+	// probabilistic "jitter" to shouldRebalance() function: the store will not
+	// take every rebalancing opportunity available.
+	rebalanceShouldRebalanceChance = 0.05
 
 	// priorities for various repair operations.
 	removeDeadReplicaPriority  float64 = 10000
@@ -59,6 +68,20 @@ const (
 	aaRemoveDead
 )
 
+// RebalancingOptions are configurable options which effect the way that the
+// replicate queue will handle rebalancing opportunities.
+type RebalancingOptions struct {
+	// AllowRebalance allows this store to attempt to rebalance its own
+	// replicas to other stores.
+	AllowRebalance bool
+
+	// Deterministic makes rebalance decisions deterministic, based on
+	// current cluster statistics. If this flag is not set, rebalance operations
+	// will have random behavior. This flag is intended to be set for testing
+	// purposes only.
+	Deterministic bool
+}
+
 // Allocator makes allocation decisions based on available capacity
 // in other stores which match the required attributes for a desired
 // range replica.
@@ -76,16 +99,17 @@ const (
 // amongst the set of stores with fraction of bytes within
 // rebalanceFromMean from the mean.
 type Allocator struct {
-	storePool     *StorePool
-	randGen       *rand.Rand
-	deterministic bool // Set deterministic for unittests
+	storePool *StorePool
+	randGen   *rand.Rand
+	options   RebalancingOptions
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
-func MakeAllocator(storePool *StorePool) Allocator {
+func MakeAllocator(storePool *StorePool, options RebalancingOptions) Allocator {
 	return Allocator{
 		storePool: storePool,
 		randGen:   rand.New(rand.NewSource(rand.Int63())),
+		options:   options,
 	}
 }
 
@@ -184,41 +208,6 @@ func (a *Allocator) AllocateTarget(required proto.Attributes, existing []proto.R
 	}
 }
 
-// RebalanceTarget returns a suitable store for a rebalance target
-// with required attributes. Rebalance targets are selected via the
-// same mechanism as AllocateTarget(), except the chosen target must
-// follow some additional criteria. Namely, if chosen, it must further
-// the goal of balancing the cluster.
-//
-// Simply ignoring a rebalance opportunity in the event that the
-// target chosen by AllocateTarget() doesn't fit balancing criteria
-// is perfectly fine, as other stores in the cluster will also be
-// doing their probabilistic best to rebalance. This helps prevent
-// a stampeding herd targeting an abnormally under-utilized store.
-func (a Allocator) RebalanceTarget(required proto.Attributes, existing []proto.Replica) *proto.StoreDescriptor {
-	filter := func(s *proto.StoreDescriptor, count, used *stat) bool {
-		// Use counts instead of capacities if the cluster has mean
-		// fraction used below a threshold level. This is primarily useful
-		// for balancing load evenly in nascent deployments.
-		if used.mean < minFractionUsedThreshold {
-			return float64(s.Capacity.RangeCount) < count.mean
-		}
-		maxFractionUsed := used.mean * (1 - rebalanceFromMean)
-		if maxFractionUsedThreshold < maxFractionUsed {
-			maxFractionUsed = maxFractionUsedThreshold
-		}
-		return s.Capacity.FractionUsed() < maxFractionUsed
-	}
-	// Note that relaxConstraints is false; on a rebalance, there is
-	// no sense in relaxing constraints; wait until a better option
-	// is available.
-	s, err := a.AllocateTarget(required, existing, false /* relaxConstraints */, filter)
-	if err != nil {
-		return nil
-	}
-	return s
-}
-
 // RemoveTarget returns a suitable replica to remove from the provided replica
 // set. It attempts to consider which of the provided replicas would be the best
 // candidate for removal.
@@ -273,15 +262,90 @@ func (a Allocator) RemoveTarget(existing []proto.Replica) (proto.Replica, error)
 	return worst.repl, nil
 }
 
-// shouldRebalance returns whether the specified store is overweight
-// according to the cluster mean and should rebalance a range.
-func (a Allocator) shouldRebalance(s *proto.StoreDescriptor) bool {
-	sl := a.storePool.getStoreList(*s.CombinedAttrs(), a.deterministic)
-
-	if sl.used.mean < minFractionUsedThreshold {
-		return s.Capacity.RangeCount > int32(math.Ceil(sl.count.mean))
+// RebalanceTarget returns a suitable store for a rebalance target
+// with required attributes. Rebalance targets are selected via the
+// same mechanism as AllocateTarget(), except the chosen target must
+// follow some additional criteria. Namely, if chosen, it must further
+// the goal of balancing the cluster.
+//
+// Simply ignoring a rebalance opportunity in the event that the
+// target chosen by AllocateTarget() doesn't fit balancing criteria
+// is perfectly fine, as other stores in the cluster will also be
+// doing their probabilistic best to rebalance. This helps prevent
+// a stampeding herd targeting an abnormally under-utilized store.
+func (a Allocator) RebalanceTarget(required proto.Attributes, existing []proto.Replica) *proto.StoreDescriptor {
+	filter := func(s *proto.StoreDescriptor, count, used *stat) bool {
+		// In clusters with very low disk usage, a store is eligible to be a
+		// rebalancing target if the number of ranges on that store is below
+		// average. This is primarily useful for distributing load evenly in a
+		// nascent deployment.
+		if used.mean < minFractionUsedThreshold {
+			return float64(s.Capacity.RangeCount) < count.mean
+		}
+		// A store is eligible to be a rebalancing target if its disk usage is
+		// sufficiently below the mean usage for stores with matching
+		// attributes.
+		maxFractionUsed := used.mean * (1 - rebalanceFromMean)
+		if maxFractionUsedThreshold < maxFractionUsed {
+			// In clusters with very high average usage, rebalancing is clamped
+			// at maxFractionUsedThreshold: even if a store's usage is below
+			// average, it will not be a rebalancing target if usage is above
+			// this maximum threshold.
+			maxFractionUsed = maxFractionUsedThreshold
+		}
+		return s.Capacity.FractionUsed() < maxFractionUsed
 	}
-	return s.Capacity.FractionUsed() > sl.used.mean
+	if !a.options.AllowRebalance {
+		return nil
+	}
+	// Note that relaxConstraints is false; on a rebalance, there is
+	// no sense in relaxing constraints; wait until a better option
+	// is available.
+	s, err := a.AllocateTarget(required, existing, false /* relaxConstraints */, filter)
+	if err != nil {
+		return nil
+	}
+	return s
+}
+
+// shouldRebalance returns whether the specified store should attempt to
+// rebalance a replica to another store.
+func (a Allocator) shouldRebalance(storeID proto.StoreID) bool {
+	if !a.options.AllowRebalance {
+		return false
+	}
+	// In production, add some random jitter to shouldRebalance.
+	if !a.options.Deterministic && a.randGen.Float32() > rebalanceShouldRebalanceChance {
+		return false
+	}
+	storeDesc := a.storePool.getStoreDescriptor(storeID)
+	if storeDesc == nil {
+		if log.V(1) {
+			log.Warningf(
+				"shouldRebalance couldn't find store with id %d in StorePool",
+				storeID)
+		}
+		return false
+	}
+
+	sl := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), a.options.Deterministic)
+
+	// In clusters with very low disk usage, a store is eligible for rebalancing
+	// if the number of ranges on the store is above average. This is primarily
+	// useful for distributing load in a nascent deployment.
+	if sl.used.mean < minFractionUsedThreshold {
+		return float64(storeDesc.Capacity.RangeCount) > math.Ceil(sl.count.mean)
+	}
+	// A store is eligible for rebalancing if its disk usage is sufficiently above
+	// the mean usage for stores with matching attributes.
+	minFractionUsed := sl.used.mean * (1 + rebalanceFromMean)
+	if maxFractionUsedThreshold < minFractionUsed {
+		// In clusters with very high usage, we will allow replicas to seek
+		// rebalancing opportunities even if they are below the cluster's average
+		// usage.
+		minFractionUsed = maxFractionUsedThreshold
+	}
+	return storeDesc.Capacity.FractionUsed() > minFractionUsed
 }
 
 // selectRandom chooses count random store descriptors which match the
@@ -291,7 +355,7 @@ func (a Allocator) shouldRebalance(s *proto.StoreDescriptor) bool {
 // required attributes.
 func (a Allocator) selectRandom(count int, required proto.Attributes, existing []proto.Replica) ([]*proto.StoreDescriptor, *StoreList) {
 	var descs []*proto.StoreDescriptor
-	sl := a.storePool.getStoreList(required, a.deterministic)
+	sl := a.storePool.getStoreList(required, a.options.Deterministic)
 	used := getUsedNodes(existing)
 
 	// Randomly permute available stores matching the required attributes.

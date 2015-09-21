@@ -72,19 +72,13 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 	case *ExistsExpr:
 		WalkStmt(v, t.Subquery.Select)
 
-	case BytesVal:
-		// Terminal node: nothing to do.
-
-	case StrVal:
-		// Terminal node: nothing to do.
-
 	case IntVal:
 		// Terminal node: nothing to do.
 
 	case NumVal:
 		// Terminal node: nothing to do.
 
-	case BoolVal:
+	case DefaultVal:
 		// Terminal node: nothing to do.
 
 	case ValArg:
@@ -244,4 +238,28 @@ func WalkStmt(v Visitor, stmt Statement) {
 			stmt[i] = WalkExpr(v, tuple).(Tuple)
 		}
 	}
+}
+
+type containsSubqueryVisitor struct {
+	containsSubquery bool
+}
+
+var _ Visitor = &containsSubqueryVisitor{}
+
+func (v *containsSubqueryVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
+	if pre && !v.containsSubquery {
+		switch expr.(type) {
+		case *Subquery:
+			v.containsSubquery = true
+			return nil, expr
+		}
+	}
+	return v, expr
+}
+
+// containsSubquery returns true if the expression contains a subquery.
+func containsSubquery(expr Expr) bool {
+	v := containsSubqueryVisitor{containsSubquery: false}
+	expr = WalkExpr(&v, expr)
+	return v.containsSubquery
 }

@@ -125,7 +125,7 @@ check:
 	@echo "checking for \"path\" imports"
 	@! git grep -F '"path"' -- '*.go'
 	@echo "errcheck"
-	@! errcheck -ignore 'bytes:Write.*,io:(Close|Write),net:Close,net/http:(Close|Write),net/rpc:Close,os:Close,database/sql:Close,github.com/spf13/cobra:Usage' $(PKG) | grep -vE 'yacc\.go:'
+	@errcheck -ignore 'bytes:Write.*,io:Close,net:Close,net/http:Close,net/rpc:Close,os:Close,database/sql:Close' $(PKG)
 	@echo "vet"
 	@! go tool vet . 2>&1 | \
 	  grep -vE '^vet: cannot process directory .git'
@@ -150,6 +150,8 @@ clean:
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -rf build/deploy/build
 
+ifneq ($(SKIP_BOOTSTRAP),1)
+
 GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
 .git/hooks/%: githooks/%
 	@echo installing $<
@@ -157,10 +159,21 @@ GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
 	@mkdir -p $(dir $@)
 	@ln -s ../../$(basename $<) $(dir $@)
 
+GLOCK := ../../../../bin/glock
+#        ^  ^  ^  ^~ GOPATH
+#        |  |  |~ GOPATH/src
+#        |  |~ GOPATH/src/github.com
+#        |~ GOPATH/src/github.com/cockroachdb
+
+$(GLOCK):
+	go get github.com/robfig/glock
+
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) build/devbase/deps.sh GLOCKFILE
-	@build/devbase/deps.sh
-	@touch $@
+.bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE
+	@glock sync github.com/cockroachdb/cockroach
+	touch $@
 
 -include .bootstrap
+
+endif

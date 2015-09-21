@@ -217,18 +217,22 @@ func TestLeaderElectionEvent(t *testing.T) {
 
 	// Process a Ready with a new leader but no new commits.
 	// This happens while an election is in progress.
-	cluster.nodes[1].maybeSendLeaderEvent(groupID, cluster.nodes[1].groups[groupID],
-		&raft.Ready{
-			SoftState: &raft.SoftState{
-				Lead: 3,
-			},
-		})
-
+	// This may be dirty, but it seems this is the only way to make testrace pass.
+	cluster.nodes[1].callbackChan <- func() {
+		cluster.nodes[1].maybeSendLeaderEvent(groupID, cluster.nodes[1].groups[groupID],
+			&raft.Ready{
+				SoftState: &raft.SoftState{
+					Lead: 3,
+				},
+			})
+	}
+	// Trigger multiraft another round select
+	cluster.tickers[1].Tick()
 	// No events are sent.
 	select {
 	case e := <-cluster.events[1].LeaderElection:
 		t.Fatalf("got unexpected event %v", e)
-	case <-time.After(time.Millisecond):
+	case <-time.After(200 * time.Millisecond):
 	}
 
 	// Now there are new committed entries. A new leader always commits an entry
@@ -237,11 +241,15 @@ func TestLeaderElectionEvent(t *testing.T) {
 		Index: 42,
 		Term:  42,
 	}
-	cluster.nodes[1].maybeSendLeaderEvent(groupID, cluster.nodes[1].groups[groupID],
-		&raft.Ready{
-			Entries:          []raftpb.Entry{entry},
-			CommittedEntries: []raftpb.Entry{entry},
-		})
+	// This may be dirty, but it seems this is the only way to make testrace pass.
+	cluster.nodes[1].callbackChan <- func() {
+		cluster.nodes[1].maybeSendLeaderEvent(groupID, cluster.nodes[1].groups[groupID],
+			&raft.Ready{
+				Entries:          []raftpb.Entry{entry},
+				CommittedEntries: []raftpb.Entry{entry},
+			})
+	}
+	cluster.tickers[1].Tick()
 
 	// Now we get an event.
 	select {
@@ -253,7 +261,7 @@ func TestLeaderElectionEvent(t *testing.T) {
 		}) {
 			t.Errorf("election event did not match expectations: %+v", e)
 		}
-	case <-time.After(time.Millisecond):
+	case <-time.After(200 * time.Millisecond):
 		t.Fatal("didn't get expected event")
 	}
 }

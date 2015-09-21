@@ -95,32 +95,57 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		Name:     string(d.Name),
 		Nullable: (d.Nullable != parser.NotNull),
 	}
+
+	var colDatumType parser.Datum
 	switch t := d.Type.(type) {
 	case *parser.BoolType:
 		col.Type.Kind = ColumnType_BOOL
+		colDatumType = parser.DummyBool
 	case *parser.IntType:
 		col.Type.Kind = ColumnType_INT
 		col.Type.Width = int32(t.N)
+		colDatumType = parser.DummyInt
 	case *parser.FloatType:
 		col.Type.Kind = ColumnType_FLOAT
 		col.Type.Precision = int32(t.Prec)
+		colDatumType = parser.DummyFloat
 	case *parser.DecimalType:
 		col.Type.Kind = ColumnType_DECIMAL
 		col.Type.Width = int32(t.Scale)
 		col.Type.Precision = int32(t.Prec)
 	case *parser.DateType:
 		col.Type.Kind = ColumnType_DATE
+		colDatumType = parser.DummyDate
 	case *parser.TimestampType:
 		col.Type.Kind = ColumnType_TIMESTAMP
+		colDatumType = parser.DummyTimestamp
 	case *parser.IntervalType:
 		col.Type.Kind = ColumnType_INTERVAL
+		colDatumType = parser.DummyInterval
 	case *parser.StringType:
 		col.Type.Kind = ColumnType_STRING
 		col.Type.Width = int32(t.N)
+		colDatumType = parser.DummyString
 	case *parser.BytesType:
 		col.Type.Kind = ColumnType_BYTES
+		colDatumType = parser.DummyBytes
 	default:
 		return nil, nil, util.Errorf("unexpected type %T", t)
+	}
+
+	if d.DefaultExpr != nil {
+		// Verify the default expression type is compatible with the column type.
+		defaultType, err := parser.TypeCheckExpr(d.DefaultExpr)
+		if err != nil {
+			return nil, nil, err
+		}
+		if colDatumType != defaultType {
+			return nil, nil, fmt.Errorf("incompatible column type and default expression: %s vs %s",
+				col.Type.Kind, defaultType.Type())
+		}
+
+		s := d.DefaultExpr.String()
+		col.DefaultExpr = &s
 	}
 
 	var idx *IndexDescriptor
@@ -217,6 +242,8 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 		return encoding.EncodeFloat(b, float64(t)), nil
 	case parser.DString:
 		return encoding.EncodeString(b, string(t)), nil
+	case parser.DBytes:
+		return encoding.EncodeString(b, string(t)), nil
 	case parser.DDate:
 		return encoding.EncodeTime(b, t.Time), nil
 	case parser.DTimestamp:
@@ -241,8 +268,10 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 			vals[i] = parser.DummyInt
 		case ColumnType_FLOAT:
 			vals[i] = parser.DummyFloat
-		case ColumnType_STRING, ColumnType_BYTES:
+		case ColumnType_STRING:
 			vals[i] = parser.DummyString
+		case ColumnType_BYTES:
+			vals[i] = parser.DummyBytes
 		case ColumnType_DATE:
 			vals[i] = parser.DummyDate
 		case ColumnType_TIMESTAMP:
@@ -332,6 +361,10 @@ func decodeTableKey(valType parser.Datum, key []byte) (parser.Datum, []byte, err
 		var r string
 		key, r = encoding.DecodeString(key, nil)
 		return parser.DString(r), key, nil
+	case parser.DBytes:
+		var r string
+		key, r = encoding.DecodeString(key, nil)
+		return parser.DBytes(r), key, nil
 	case parser.DDate:
 		var t time.Time
 		key, t = encoding.DecodeTime(key)
@@ -413,8 +446,12 @@ func convertDatum(col ColumnDescriptor, val parser.Datum) (interface{}, error) {
 		if v, ok := val.(parser.DFloat); ok {
 			return float64(v), nil
 		}
-	case ColumnType_STRING, ColumnType_BYTES:
+	case ColumnType_STRING:
 		if v, ok := val.(parser.DString); ok {
+			return string(v), nil
+		}
+	case ColumnType_BYTES:
+		if v, ok := val.(parser.DBytes); ok {
 			return string(v), nil
 		}
 	case ColumnType_DATE:

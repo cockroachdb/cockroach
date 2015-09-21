@@ -28,6 +28,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -315,6 +316,10 @@ type StoreContext struct {
 	// information about a store, it can be considered dead.
 	TimeUntilStoreDead time.Duration
 
+	// RebalancingOptions configures how the store will attempt to rebalance its
+	// replicas to other stores.
+	RebalancingOptions RebalancingOptions
+
 	// EventFeed is a feed to which this store will publish events.
 	EventFeed *util.Feed
 
@@ -361,7 +366,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 		ctx:               ctx,
 		db:                ctx.DB, // TODO(tschottdorf) remove redundancy.
 		engine:            eng,
-		_allocator:        MakeAllocator(ctx.StorePool),
+		_allocator:        MakeAllocator(ctx.StorePool, ctx.RebalancingOptions),
 		replicas:          map[proto.RangeID]*Replica{},
 		replicasByKey:     btree.New(64 /* degree */),
 		uninitReplicas:    map[proto.RangeID]*Replica{},
@@ -372,11 +377,11 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 
 	// Add range scanner and configure with queues.
 	s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
-	s.gcQueue = newGCQueue()
+	s.gcQueue = newGCQueue(s.ctx.Gossip)
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
-	s.verifyQueue = newVerifyQueue(s.ReplicaCount)
-	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
-	s._rangeGCQueue = newRangeGCQueue(s.db)
+	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
+	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock, s.ctx.RebalancingOptions)
+	s._rangeGCQueue = newRangeGCQueue(s.db, s.ctx.Gossip)
 	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue)
 
 	return s
@@ -469,10 +474,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		ElectionTimeoutTicks:   s.ctx.RaftElectionTimeoutTicks,
 		HeartbeatIntervalTicks: s.ctx.RaftHeartbeatIntervalTicks,
 		EntryFormatter:         raftEntryFormatter,
-		// TODO(bdarnell): Multiraft deadlocks if the Events channel is
-		// unbuffered. Temporarily give it some breathing room until the underlying
-		// deadlock is fixed. See #1185, #1193.
-		EventBufferSize: 1000,
 	}, s.stopper); err != nil {
 		return err
 	}
@@ -528,7 +529,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// Register callbacks for any changes to the system config.
 		// This may trigger splits along structured boundaries,
 		// and update max range bytes.
-		s.ctx.Gossip.RegisterCallback(gossip.KeySystemConfig, s.systemGossipUpdate)
+		s.ctx.Gossip.RegisterSystemConfigCallback(s.systemGossipUpdate)
 
 		// Start a single goroutine in charge of periodically gossiping the
 		// sentinel and first range metadata if we have a first range.
@@ -641,14 +642,7 @@ func (s *Store) maybeGossipSystemConfig() error {
 
 // systemGossipUpdate is a callback for gossip updates to
 // the system config which affect range split boundaries.
-func (s *Store) systemGossipUpdate(key string, _ []byte) {
-	// Load the system config.
-	cfg, err := s.Gossip().GetSystemConfig()
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
+func (s *Store) systemGossipUpdate(cfg *config.SystemConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// For every range, update its MaxBytes and check if it needs to be split.
@@ -1219,7 +1213,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		}
 	} else {
 		for _, union := range args.(*proto.BatchRequest).Requests {
-			arg := union.GetValue().(proto.Request)
+			arg := union.GetInner()
 			header := arg.Header()
 			if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(arg)); err != nil {
 				return nil, err
@@ -1428,7 +1422,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	wiErr.Resolved = true // success!
 
 	for i, intent := range pushIntents {
-		intent.Txn = *(br.Responses[i].PushTxn.PusheeTxn)
+		intent.Txn = *(br.Responses[i].GetInner().(*proto.PushTxnResponse).PusheeTxn)
 		resolveIntents = append(resolveIntents, intent)
 	}
 
@@ -1468,7 +1462,7 @@ func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd proto.RaftCommand) <-
 		log.Fatal(err)
 	}
 	for _, union := range cmd.Cmd.Requests {
-		args := union.GetValue().(proto.Request)
+		args := union.GetInner()
 		etr, ok := args.(*proto.EndTransactionRequest)
 		if ok && etr.InternalCommitTrigger != nil && etr.InternalCommitTrigger.ChangeReplicasTrigger != nil {
 			// TODO(tschottdorf): the real check is that EndTransaction needs
@@ -1497,57 +1491,59 @@ func (s *Store) processRaft() {
 	s.stopper.RunWorker(func() {
 		for {
 			select {
-			case e := <-s.multiraft.Events:
-				var cmd proto.RaftCommand
-				var groupID proto.RangeID
-				var commandID string
-				var index uint64
-				var callback func(error)
+			case events := <-s.multiraft.Events:
+				for _, e := range events {
+					var cmd proto.RaftCommand
+					var groupID proto.RangeID
+					var commandID string
+					var index uint64
+					var callback func(error)
 
-				switch e := e.(type) {
-				case *multiraft.EventCommandCommitted:
-					groupID = e.GroupID
-					commandID = e.CommandID
-					index = e.Index
-					err := gogoproto.Unmarshal(e.Command, &cmd)
-					if err != nil {
-						log.Fatal(err)
+					switch e := e.(type) {
+					case *multiraft.EventCommandCommitted:
+						groupID = e.GroupID
+						commandID = e.CommandID
+						index = e.Index
+						err := gogoproto.Unmarshal(e.Command, &cmd)
+						if err != nil {
+							log.Fatal(err)
+						}
+						if log.V(6) {
+							log.Infof("store %s: new committed command at index %d", s, e.Index)
+						}
+
+					case *multiraft.EventMembershipChangeCommitted:
+						groupID = e.GroupID
+						commandID = e.CommandID
+						index = e.Index
+						callback = e.Callback
+						err := gogoproto.Unmarshal(e.Payload, &cmd)
+						if err != nil {
+							log.Fatal(err)
+						}
+
+					default:
+						continue
 					}
-					if log.V(6) {
-						log.Infof("store %s: new committed command at index %d", s, e.Index)
+
+					if groupID != cmd.RangeID {
+						log.Fatalf("e.GroupID (%d) should == cmd.RangeID (%d)", groupID, cmd.RangeID)
 					}
 
-				case *multiraft.EventMembershipChangeCommitted:
-					groupID = e.GroupID
-					commandID = e.CommandID
-					index = e.Index
-					callback = e.Callback
-					err := gogoproto.Unmarshal(e.Payload, &cmd)
-					if err != nil {
-						log.Fatal(err)
+					s.mu.RLock()
+					r, ok := s.replicas[groupID]
+					s.mu.RUnlock()
+					var err error
+					if !ok {
+						err = util.Errorf("got committed raft command for %d but have no range with that ID: %+v",
+							groupID, cmd)
+						log.Error(err)
+					} else {
+						err = r.processRaftCommand(cmdIDKey(commandID), index, cmd)
 					}
-
-				default:
-					continue
-				}
-
-				if groupID != cmd.RangeID {
-					log.Fatalf("e.GroupID (%d) should == cmd.RangeID (%d)", groupID, cmd.RangeID)
-				}
-
-				s.mu.RLock()
-				r, ok := s.replicas[groupID]
-				s.mu.RUnlock()
-				var err error
-				if !ok {
-					err = util.Errorf("got committed raft command for %d but have no range with that ID: %+v",
-						groupID, cmd)
-					log.Error(err)
-				} else {
-					err = r.processRaftCommand(cmdIDKey(commandID), index, cmd)
-				}
-				if callback != nil {
-					callback(err)
+					if callback != nil {
+						callback(err)
+					}
 				}
 
 			case op := <-s.removeReplicaChan:
@@ -1640,9 +1636,9 @@ func (s *Store) GetStatus() (*StoreStatus, error) {
 func (s *Store) computeReplicationStatus(now int64) (
 	leaderRangeCount, replicatedRangeCount, availableRangeCount int32) {
 	// Load the system config.
-	cfg, err := s.Gossip().GetSystemConfig()
-	if err != nil {
-		log.Error(err)
+	cfg := s.Gossip().GetSystemConfig()
+	if cfg == nil {
+		log.Infof("system config not yet available")
 		return
 	}
 

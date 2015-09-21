@@ -31,10 +31,10 @@ type eventDemux struct {
 	CommandCommitted          chan *EventCommandCommitted
 	MembershipChangeCommitted chan *EventMembershipChangeCommitted
 
-	events <-chan interface{}
+	events <-chan []interface{}
 }
 
-func newEventDemux(events <-chan interface{}) *eventDemux {
+func newEventDemux(events <-chan []interface{}) *eventDemux {
 	return &eventDemux{
 		make(chan *EventLeaderElection, 1000),
 		make(chan *EventCommandCommitted, 1000),
@@ -47,21 +47,22 @@ func (e *eventDemux) start(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		for {
 			select {
-			case event := <-e.events:
-				switch event := event.(type) {
-				case *EventLeaderElection:
-					e.LeaderElection <- event
+			case events := <-e.events:
+				for _, event := range events {
+					switch event := event.(type) {
+					case *EventLeaderElection:
+						e.LeaderElection <- event
 
-				case *EventCommandCommitted:
-					e.CommandCommitted <- event
+					case *EventCommandCommitted:
+						e.CommandCommitted <- event
 
-				case *EventMembershipChangeCommitted:
-					e.MembershipChangeCommitted <- event
+					case *EventMembershipChangeCommitted:
+						e.MembershipChangeCommitted <- event
 
-				default:
-					panic(fmt.Sprintf("got unknown event type %T", event))
+					default:
+						panic(fmt.Sprintf("got unknown event type %T", event))
+					}
 				}
-
 			case <-stopper.ShouldStop():
 				close(e.CommandCommitted)
 				close(e.MembershipChangeCommitted)

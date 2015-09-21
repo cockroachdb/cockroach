@@ -604,9 +604,14 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 				if log.V(1) {
 					log.Warning(err)
 				}
-				// For the remainder of this call, we'll assume that intents
-				// are fair game. This replaces more complex logic based on
-				// the type of request.
+				// On retries, allow [uncommitted] intents on range descriptor
+				// lookups to be returned 50% of the time in order to succeed
+				// at finding the transaction record pointed to by the intent
+				// itself. The 50% probability of returning either the current
+				// intent or the previously committed value balances between
+				// the two cases where the intent's txn hasn't yet been
+				// committed (the previous value is correct), or the intent's
+				// txn has been committed (the intent value is correct).
 				options.considerIntents = true
 				continue
 			case *proto.NotLeaderError:
@@ -682,7 +687,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 				ba.Requests = append([]proto.RequestUnion(nil), ba.Requests...)
 			}
 			for i, union := range ba.Requests {
-				args := union.GetValue()
+				args := union.GetInner()
 				if _, ok := args.(*proto.NoopRequest); ok {
 					// NoopRequests are skipped.
 					continue
@@ -694,7 +699,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 					continue
 				}
 				prevBound := boundedArg.GetBound()
-				cReply, ok := curReply.Responses[i].GetValue().(proto.Countable)
+				cReply, ok := curReply.Responses[i].GetInner().(proto.Countable)
 				if !ok || prevBound <= 0 {
 					// Request bounded, but without max results. Again, will
 					// need to query everything we can. The case in which the reply

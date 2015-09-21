@@ -20,12 +20,12 @@ user root
 statement ok
 ALTER TABLE t ADD b INT
 
-query TTTTT colnames
+query TTTT colnames
 SHOW COLUMNS FROM t
 ----
-Field Type Null
-a     INT  true
-b     INT  true
+Field Type Null Default
+a     INT  true NULL
+b     INT  true NULL
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)

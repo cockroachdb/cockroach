@@ -20,7 +20,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -63,6 +62,7 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	// TODO(pmattis): Consider aggregation functions during index
 	// selection. Specifically, MIN(k) and MAX(k) where k is the first column in
 	// an index can be satisfied with a single read.
@@ -70,7 +70,8 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	limit, err := p.limit(n, sort.wrap(group.wrap(plan)))
+
+	limit, err := p.limit(n, p.distinct(n, sort.wrap(group.wrap(plan))))
 	if err != nil {
 		return nil, err
 	}
@@ -181,14 +182,18 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 	s.spans = makeSpans(c.constraints, c.desc.ID, c.index.ID)
 	s.reverse = c.reverse
-	s.initOrdering()
 
 	if log.V(3) {
 		for i, span := range s.spans {
 			log.Infof("%s/%d: start=%s end=%s", c.index.Name, i, span.start, span.end)
 		}
 	}
-	return s, nil
+
+	if c.covering {
+		s.initOrdering()
+		return s, nil
+	}
+	return makeIndexJoin(s)
 }
 
 type indexConstraint struct {
@@ -208,22 +213,22 @@ type indexConstraints []indexConstraint
 
 func (c indexConstraints) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("[")
+	buf.WriteString("[")
 	for i := range c {
 		if i > 0 {
-			_, _ = buf.WriteString(", ")
+			buf.WriteString(", ")
 		}
 		if c[i].start != nil {
 			fmt.Fprintf(&buf, "%s", c[i].start)
 		}
 		if c[i].end != nil && c[i].end != c[i].start {
 			if c[i].start != nil {
-				_, _ = buf.WriteString(", ")
+				buf.WriteString(", ")
 			}
 			fmt.Fprintf(&buf, "%s", c[i].end)
 		}
 	}
-	_, _ = buf.WriteString("]")
+	buf.WriteString("]")
 	return buf.String()
 }
 
@@ -238,11 +243,6 @@ type indexInfo struct {
 
 func (v *indexInfo) init(s *scanNode) {
 	v.covering = v.isCoveringIndex(s.qvals)
-	if !v.covering {
-		// TODO(pmattis): Support non-coverying indexes.
-		v.cost = math.Inf(+1)
-		return
-	}
 
 	// The base cost is the number of keys per row.
 	if v.index == &v.desc.PrimaryIndex {
@@ -251,16 +251,18 @@ func (v *indexInfo) init(s *scanNode) {
 		v.cost = float64(1 + len(v.desc.Columns) - len(v.desc.PrimaryIndex.ColumnIDs))
 	} else {
 		v.cost = 1
+		if !v.covering {
+			v.cost += float64(1 + len(v.desc.Columns) - len(v.desc.PrimaryIndex.ColumnIDs))
+			// Non-covering indexes are significantly more expensive than covering
+			// indexes.
+			v.cost *= 10
+		}
 	}
 }
 
 // analyzeRanges examines the range map to determine the cost of using the
 // index.
 func (v *indexInfo) analyzeRanges(exprs []parser.Exprs) {
-	if !v.covering {
-		return
-	}
-
 	v.makeConstraints(exprs)
 
 	// Count the number of elements used to limit the start and end keys. We then
@@ -279,10 +281,6 @@ func (v *indexInfo) analyzeRanges(exprs []parser.Exprs) {
 // if it matches the ordering requested by the query. Non-matching orderings
 // increase the cost of using the index.
 func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
-	if !v.covering {
-		return
-	}
-
 	// Compute the ordering provided by the index.
 	indexOrdering := scan.computeOrdering(v.index.fullColumnIDs())
 

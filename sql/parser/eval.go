@@ -22,8 +22,11 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -288,6 +291,12 @@ var binOps = map[binArgs]binOp{
 			return left.(DString) + right.(DString), nil
 		},
 	},
+	binArgs{Concat, bytesType, bytesType}: {
+		returnType: DummyBytes,
+		fn: func(left Datum, right Datum) (Datum, error) {
+			return left.(DBytes) + right.(DBytes), nil
+		},
+	},
 
 	// TODO(pmattis): Check that the shift is valid.
 	binArgs{LShift, intType, intType}: {
@@ -318,6 +327,9 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 	cmpArgs{EQ, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DString) == right.(DString)), nil
 	},
+	cmpArgs{EQ, bytesType, bytesType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DBytes) == right.(DBytes)), nil
+	},
 	cmpArgs{EQ, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DBool) == right.(DBool)), nil
 	},
@@ -339,6 +351,9 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 
 	cmpArgs{LT, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DString) < right.(DString)), nil
+	},
+	cmpArgs{LT, bytesType, bytesType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DBytes) < right.(DBytes)), nil
 	},
 	cmpArgs{LT, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(!left.(DBool) && right.(DBool)), nil
@@ -362,6 +377,9 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 	cmpArgs{LE, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DString) <= right.(DString)), nil
 	},
+	cmpArgs{LE, bytesType, bytesType}: func(left Datum, right Datum) (DBool, error) {
+		return DBool(left.(DBytes) <= right.(DBytes)), nil
+	},
 	cmpArgs{LE, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(!left.(DBool) || right.(DBool)), nil
 	},
@@ -375,10 +393,35 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
 		return DBool(right.(DDate).Before(left.(DDate).Time)), nil
 	},
 	cmpArgs{LE, timestampType, timestampType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(right.(DTimestamp).Before(left.(DTimestamp).Time)), nil
+		return !DBool(right.(DTimestamp).Before(left.(DTimestamp).Time)), nil
 	},
 	cmpArgs{LE, intervalType, intervalType}: func(left Datum, right Datum) (DBool, error) {
 		return DBool(left.(DInterval).Duration <= right.(DInterval).Duration), nil
+	},
+
+	cmpArgs{Like, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
+		pattern := regexp.QuoteMeta(string(right.(DString)))
+		// Replace LIKE specific wildcards with standard wildcards
+		pattern = strings.Replace(pattern, "%", ".*", -1)
+		pattern = strings.Replace(pattern, "_", ".", -1)
+		pattern = anchorPattern(pattern, false)
+
+		// TODO(pmattis): Can we cache this regexp compilation?
+		re := regexp.MustCompile(pattern)
+		return DBool(re.MatchString(string(left.(DString)))), nil
+	},
+
+	cmpArgs{SimilarTo, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
+		pattern := SimilarEscape(string(right.(DString)))
+		pattern = anchorPattern(pattern, false)
+
+		// TODO(pmattis): Can we cache this regexp compilation?
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return DBool(false), err
+		}
+
+		return DBool(re.MatchString(string(left.(DString)))), nil
 	},
 }
 
@@ -392,6 +435,7 @@ func init() {
 	cmpOps[cmpArgs{In, intType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, floatType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, stringType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, bytesType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, dateType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, timestampType, tupleType}] = evalTupleIN
 	cmpOps[cmpArgs{In, intervalType, tupleType}] = evalTupleIN
@@ -439,12 +483,6 @@ func EvalExpr(expr Expr) (Datum, error) {
 		// The subquery within the exists should have been executed before
 		// expression evaluation and the exists nodes replaced with the result.
 
-	case BytesVal:
-		return DString(t), nil
-
-	case StrVal:
-		return DString(t), nil
-
 	case IntVal:
 		if t < 0 {
 			return DNull, fmt.Errorf("integer value out of range: %s", t)
@@ -457,9 +495,6 @@ func EvalExpr(expr Expr) (Datum, error) {
 			return DNull, err
 		}
 		return DFloat(v), nil
-
-	case BoolVal:
-		return DBool(t), nil
 
 	case ValArg:
 		// Placeholders should have been replaced before expression evaluation.
@@ -643,6 +678,10 @@ func evalIsOfTypeExpr(expr *IsOfTypeExpr) (Datum, error) {
 			if _, ok := t.(*StringType); ok {
 				return result, nil
 			}
+		}
+
+	case DBytes:
+		for _, t := range expr.Types {
 			if _, ok := t.(*BytesType); ok {
 				return result, nil
 			}
@@ -715,6 +754,14 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 		// NotIn(left, right) is implemented as !IN(left, right)
 		not = true
 		op = In
+	case NotLike:
+		// NotLike(left, right) is implemented as !Like(left, right)
+		not = true
+		op = Like
+	case NotSimilarTo:
+		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
+		not = true
+		op = SimilarTo
 	case IsDistinctFrom:
 		// IsDistinctFrom(left, right) is implemented as !EQ(left, right)
 		//
@@ -736,11 +783,6 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 			return !d, nil
 		}
 		return d, err
-	}
-
-	switch op {
-	case Like, NotLike, SimilarTo, NotSimilarTo:
-		return DNull, util.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 
 	return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
@@ -1000,13 +1042,18 @@ func evalCastExpr(expr *CastExpr) (Datum, error) {
 			return DFloat(f), nil
 		}
 
-	case *StringType, *BytesType:
+	case *StringType:
 		var s DString
-		switch d.(type) {
+		switch t := d.(type) {
 		case DBool, DInt, DFloat, dNull:
 			s = DString(d.String())
 		case DString:
-			s = d.(DString)
+			s = t
+		case DBytes:
+			if !utf8.ValidString(string(t)) {
+				return DNull, fmt.Errorf("invalid utf8: %q", string(t))
+			}
+			s = DString(t)
 		}
 		if c, ok := expr.Type.(*StringType); ok {
 			// If the CHAR type specifies a limit we truncate to that limit:
@@ -1016,6 +1063,14 @@ func evalCastExpr(expr *CastExpr) (Datum, error) {
 			}
 		}
 		return s, nil
+
+	case *BytesType:
+		switch t := d.(type) {
+		case DString:
+			return DBytes(t), nil
+		case DBytes:
+			return d, nil
+		}
 
 	case *DateType:
 		switch d := d.(type) {
@@ -1101,4 +1156,83 @@ func ParseTimestamp(s DString) (DTimestamp, error) {
 	}
 	// Parse other formats in the future.
 	return DummyTimestamp, err
+}
+
+// SimilarEscape converts a SQL:2008 regexp pattern to POSIX style, so it can
+// be used by our regexp engine.
+func SimilarEscape(pattern string) string {
+	return similarEscapeCustomChar(pattern, '\\')
+}
+
+// similarEscapeCustomChar converts a SQL:2008 regexp pattern to POSIX style,
+// so it can be used by our regexp engine. This version of the function allows
+// for a custom escape character.
+func similarEscapeCustomChar(pattern string, escapeChar rune) string {
+	patternBuilder := make([]rune, 0, utf8.RuneCountInString(pattern))
+
+	inCharClass := false
+	afterEscape := false
+	numQuotes := 0
+	for _, c := range pattern {
+		switch {
+		case afterEscape:
+			// For SUBSTRING patterns
+			if c == '"' && !inCharClass {
+				if numQuotes%2 == 0 {
+					patternBuilder = append(patternBuilder, '(')
+				} else {
+					patternBuilder = append(patternBuilder, ')')
+				}
+				numQuotes++
+			} else {
+				patternBuilder = append(patternBuilder, '\\', c)
+			}
+			afterEscape = false
+		case utf8.ValidRune(escapeChar) && c == escapeChar:
+			// SQL99 escape character; do not immediately send to output
+			afterEscape = true
+		case inCharClass:
+			if c == '\\' {
+				patternBuilder = append(patternBuilder, '\\')
+			}
+			patternBuilder = append(patternBuilder, c)
+			if c == ']' {
+				inCharClass = false
+			}
+		case c == '[':
+			patternBuilder = append(patternBuilder, c)
+			inCharClass = true
+		case c == '%':
+			patternBuilder = append(patternBuilder, '.', '*')
+		case c == '_':
+			patternBuilder = append(patternBuilder, '.')
+		case c == '(':
+			// Convert to non-capturing parenthesis
+			patternBuilder = append(patternBuilder, '(', '?', ':')
+		case c == '\\', c == '.', c == '^', c == '$':
+			// Escape these characters because they are NOT
+			// metacharacters for SQL-style regexp
+			patternBuilder = append(patternBuilder, '\\', c)
+		default:
+			patternBuilder = append(patternBuilder, c)
+		}
+	}
+
+	return string(patternBuilder)
+}
+
+// anchorPattern surrounds the transformed input string with
+//   ^(?: ... )$
+// which requires some explanation.  We need "^" and "$" to force
+// the pattern to match the entire input string as per SQL99 spec.
+// The "(?:" and ")" are a non-capturing set of parens; we have to have
+// parens in case the string contains "|", else the "^" and "$" will
+// be bound into the first and last alternatives which is not what we
+// want, and the parens must be non capturing because we don't want them
+// to count when selecting output for SUBSTRING.
+func anchorPattern(pattern string, caseInsensitive bool) string {
+	if caseInsensitive {
+		return fmt.Sprintf("^(?i:%s)$", pattern)
+	}
+	return fmt.Sprintf("^(?:%s)$", pattern)
 }

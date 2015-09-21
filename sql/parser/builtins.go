@@ -27,12 +27,16 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
-var errEmptyInputString = errors.New("the input string should not be empty")
+var errEmptyInputString = errors.New("the input string must not be empty")
 var errAbsOfMinInt64 = errors.New("abs of min integer value (-9223372036854775808) not defined")
+var errRoundNumberDigits = errors.New("number of digits must be greater than 0")
 
 type typeList []reflect.Type
 
@@ -66,9 +70,16 @@ func (b builtin) match(types typeList) bool {
 // sorted please.
 var builtins = map[string][]builtin{
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
-	"length": {stringBuiltin1(func(s string) (Datum, error) {
-		return DInt(len(s)), nil
-	}, DummyInt)},
+	"length": {
+		stringBuiltin1(func(s string) (Datum, error) {
+			return DInt(utf8.RuneCountInString(s)), nil
+		}, DummyInt),
+		bytesBuiltin1(func(s string) (Datum, error) {
+			return DInt(len(s)), nil
+		}, DummyInt),
+	},
+
+	// TODO(pmattis): What string functions should also support bytesType?
 
 	"lower": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(strings.ToLower(s)), nil
@@ -196,7 +207,12 @@ var builtins = map[string][]builtin{
 
 	// TODO(XisiHuang): support the position(substring in string) syntax.
 	"strpos": {stringBuiltin2(func(s, substring string) (Datum, error) {
-		return DInt(strings.Index(s, substring) + 1), nil
+		index := strings.Index(s, substring)
+		if index < 0 {
+			return DInt(0), nil
+		}
+
+		return DInt(utf8.RuneCountInString(s[:index]) + 1), nil
 	}, DummyInt)},
 
 	// TODO(XisiHuang): support the trim([leading|trailing|both] [characters]
@@ -206,7 +222,7 @@ var builtins = map[string][]builtin{
 			return DString(strings.Trim(s, chars)), nil
 		}, DummyString),
 		stringBuiltin1(func(s string) (Datum, error) {
-			return DString(strings.Trim(s, " ")), nil
+			return DString(strings.TrimSpace(s)), nil
 		}, DummyString),
 	},
 
@@ -215,7 +231,7 @@ var builtins = map[string][]builtin{
 			return DString(strings.TrimLeft(s, chars)), nil
 		}, DummyString),
 		stringBuiltin1(func(s string) (Datum, error) {
-			return DString(strings.TrimLeft(s, " ")), nil
+			return DString(strings.TrimLeftFunc(s, unicode.IsSpace)), nil
 		}, DummyString),
 	},
 
@@ -224,7 +240,7 @@ var builtins = map[string][]builtin{
 			return DString(strings.TrimRight(s, chars)), nil
 		}, DummyString),
 		stringBuiltin1(func(s string) (Datum, error) {
-			return DString(strings.Trim(s, " ")), nil
+			return DString(strings.TrimRightFunc(s, unicode.IsSpace)), nil
 		}, DummyString),
 	},
 
@@ -240,6 +256,32 @@ var builtins = map[string][]builtin{
 		return DString(strings.Replace(s, from, to, -1)), nil
 	}, DummyString)},
 
+	"translate": {stringBuiltin3(func(s, from, to string) (Datum, error) {
+		const deletionRune = utf8.MaxRune + 1
+		translation := make(map[rune]rune, len(from))
+		for _, fromRune := range from {
+			toRune, size := utf8.DecodeRuneInString(to)
+			if toRune == utf8.RuneError {
+				toRune = deletionRune
+			} else {
+				to = to[size:]
+			}
+			translation[fromRune] = toRune
+		}
+
+		runes := make([]rune, 0, len(s))
+		for _, c := range s {
+			if t, ok := translation[c]; ok {
+				if t != deletionRune {
+					runes = append(runes, t)
+				}
+			} else {
+				runes = append(runes, c)
+			}
+		}
+		return DString(string(runes)), nil
+	}, DummyString)},
+
 	"initcap": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(strings.Title(strings.ToLower(s))), nil
 	}, DummyString)},
@@ -249,17 +291,17 @@ var builtins = map[string][]builtin{
 			types:      typeList{stringType, intType},
 			returnType: DummyString,
 			fn: func(args DTuple) (Datum, error) {
-				str := string(args[0].(DString))
+				runes := []rune(string(args[0].(DString)))
 				n := int(args[1].(DInt))
 
-				if n < -len(str) {
+				if n < -len(runes) {
 					n = 0
 				} else if n < 0 {
-					n = len(str) + n
-				} else if n > len(str) {
-					n = len(str)
+					n = len(runes) + n
+				} else if n > len(runes) {
+					n = len(runes)
 				}
-				return DString(str[:n]), nil
+				return DString(runes[:n]), nil
 			},
 		},
 	},
@@ -269,17 +311,17 @@ var builtins = map[string][]builtin{
 			types:      typeList{stringType, intType},
 			returnType: DummyString,
 			fn: func(args DTuple) (Datum, error) {
-				str := string(args[0].(DString))
+				runes := []rune(string(args[0].(DString)))
 				n := int(args[1].(DInt))
 
-				if n < -len(str) {
+				if n < -len(runes) {
 					n = 0
 				} else if n < 0 {
-					n = len(str) + n
-				} else if n > len(str) {
-					n = len(str)
+					n = len(runes) + n
+				} else if n > len(runes) {
+					n = len(runes)
 				}
-				return DString(str[len(str)-n:]), nil
+				return DString(runes[len(runes)-n:]), nil
 			},
 		},
 	},
@@ -413,8 +455,8 @@ var builtins = map[string][]builtin{
 
 	"count": countImpls(),
 
-	"max": aggregateImpls(boolType, intType, floatType, stringType),
-	"min": aggregateImpls(boolType, intType, floatType, stringType),
+	"max": aggregateImpls(boolType, intType, floatType, stringType, bytesType),
+	"min": aggregateImpls(boolType, intType, floatType, stringType, bytesType),
 	"sum": aggregateImpls(intType, floatType),
 
 	// Math functions
@@ -464,6 +506,12 @@ var builtins = map[string][]builtin{
 	"atan2": {
 		floatBuiltin2(func(x, y float64) (Datum, error) {
 			return DFloat(math.Atan2(x, y)), nil
+		}),
+	},
+
+	"cbrt": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Cbrt(x)), nil
 		}),
 	},
 
@@ -549,7 +597,18 @@ var builtins = map[string][]builtin{
 		}),
 	},
 
-	// TODO(thschroeter): implement round
+	"round": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return round(x, 0)
+		}),
+		builtin{
+			returnType: DummyFloat,
+			types:      typeList{floatType, intType},
+			fn: func(args DTuple) (Datum, error) {
+				return round(float64(args[0].(DFloat)), int64(args[1].(DInt)))
+			},
+		},
+	},
 
 	"sin": {
 		floatBuiltin1(func(x float64) (Datum, error) {
@@ -620,7 +679,7 @@ func aggregateImpls(types ...reflect.Type) []builtin {
 
 func countImpls() []builtin {
 	var r []builtin
-	types := typeList{boolType, intType, floatType, stringType, tupleType}
+	types := typeList{boolType, intType, floatType, stringType, bytesType, tupleType}
 	for _, t := range types {
 		r = append(r, builtin{
 			types:      typeList{t},
@@ -657,7 +716,7 @@ var substringImpls = []builtin{
 	},
 	{
 		types:      typeList{stringType, intType, intType},
-		returnType: DummyFloat,
+		returnType: DummyString,
 		fn: func(args DTuple) (Datum, error) {
 			str := args[0].(DString)
 			// SQL strings are 1-indexed.
@@ -754,10 +813,46 @@ func stringBuiltin3(f func(string, string, string) (Datum, error), returnType Da
 	}
 }
 
+func bytesBuiltin1(f func(string) (Datum, error), returnType Datum) builtin {
+	return builtin{
+		types:      typeList{bytesType},
+		returnType: returnType,
+		fn: func(args DTuple) (Datum, error) {
+			return f(string(args[0].(DBytes)))
+		},
+	}
+}
+
 func datumToRawString(datum Datum) (string, error) {
 	if dString, ok := datum.(DString); ok {
 		return string(dString), nil
 	}
 
 	return "", fmt.Errorf("argument type unsupported: %s", datum.Type())
+}
+
+func round(x float64, n int64) (Datum, error) {
+	switch {
+	case n < 0:
+		return DNull, errRoundNumberDigits
+	case n > 323:
+		// When rounding to more than 323 digits after the decimal
+		// point, the original number is returned, because rounding has
+		// no effect at scales smaller than 1e-323.
+		//
+		// 323 is the sum of
+		//
+		// 15, the maximum number of significant digits in a decimal
+		// string that can be converted to the IEEE 754 double precision
+		// representation and back to a string that matches the
+		// original; and
+		//
+		// 308, the largest exponent. The significant digits can be
+		// right shifted by 308 positions at most, by setting the
+		// exponent to -308.
+		return DFloat(x), nil
+	}
+	const b = 64
+	y, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', int(n), b), b)
+	return DFloat(y), err
 }

@@ -23,12 +23,42 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
+	stopper := stop.NewStopper()
+
+	// Setup fake zone config handler.
+	config.TestingSetupZoneConfigHook(stopper)
+
+	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
+	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+
+	// Put an empty system config into gossip.
+	if err := g.AddInfoProto(gossip.KeySystemConfig,
+		&config.SystemConfig{}, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for SystemConfig.
+	if err := util.IsTrueWithin(func() bool {
+		return g.GetSystemConfig() != nil
+	}, 100*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+
+	return g, stopper
+}
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
 type testQueueImpl struct {
@@ -36,15 +66,17 @@ type testQueueImpl struct {
 	processed     int32
 	duration      time.Duration
 	blocker       chan struct{} // timer() blocks on this if not nil
+	acceptUnsplit bool
 }
 
-func (tq *testQueueImpl) needsLeaderLease() bool { return false }
+func (tq *testQueueImpl) needsLeaderLease() bool     { return false }
+func (tq *testQueueImpl) acceptsUnsplitRanges() bool { return tq.acceptUnsplit }
 
-func (tq *testQueueImpl) shouldQueue(now proto.Timestamp, r *Replica) (bool, float64) {
+func (tq *testQueueImpl) shouldQueue(now proto.Timestamp, r *Replica, _ *config.SystemConfig) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(now proto.Timestamp, r *Replica) error {
+func (tq *testQueueImpl) process(now proto.Timestamp, r *Replica, _ *config.SystemConfig) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return nil
 }
@@ -101,6 +133,9 @@ func TestQueuePriorityQueue(t *testing.T) {
 // queued, updating an existing range, and removing a range.
 func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	g, stopper := gossipForTest(t)
+	defer stopper.Stop()
+
 	r1 := &Replica{}
 	if err := r1.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
@@ -122,7 +157,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 			return shouldAddMap[r], priorityMap[r]
 		},
 	}
-	bq := newBaseQueue("test", testQueue, 2)
+	bq := newBaseQueue("test", testQueue, g, 2)
 	bq.MaybeAdd(r1, proto.ZeroTimestamp)
 	bq.MaybeAdd(r2, proto.ZeroTimestamp)
 	if bq.Length() != 2 {
@@ -187,6 +222,9 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 // ShouldQueue method.
 func TestBaseQueueAdd(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	g, stopper := gossipForTest(t)
+	defer stopper.Stop()
+
 	r := &Replica{}
 	if err := r.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
@@ -196,7 +234,7 @@ func TestBaseQueueAdd(t *testing.T) {
 			return false, 0.0
 		},
 	}
-	bq := newBaseQueue("test", testQueue, 1)
+	bq := newBaseQueue("test", testQueue, g, 1)
 	bq.MaybeAdd(r, proto.ZeroTimestamp)
 	if bq.Length() != 0 {
 		t.Fatalf("expected length 0; got %d", bq.Length())
@@ -213,6 +251,9 @@ func TestBaseQueueAdd(t *testing.T) {
 // processed according to the timer function.
 func TestBaseQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	g, stopper := gossipForTest(t)
+	defer stopper.Stop()
+
 	r1 := &Replica{}
 	if err := r1.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
@@ -229,12 +270,10 @@ func TestBaseQueueProcess(t *testing.T) {
 			return
 		},
 	}
-	bq := newBaseQueue("test", testQueue, 2)
-	stopper := stop.NewStopper()
+	bq := newBaseQueue("test", testQueue, g, 2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
-	defer stopper.Stop()
 
 	bq.MaybeAdd(r1, proto.ZeroTimestamp)
 	bq.MaybeAdd(r2, proto.ZeroTimestamp)
@@ -261,6 +300,9 @@ func TestBaseQueueProcess(t *testing.T) {
 // not processed.
 func TestBaseQueueAddRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	g, stopper := gossipForTest(t)
+	defer stopper.Stop()
+
 	r := &Replica{}
 	if err := r.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
@@ -273,12 +315,10 @@ func TestBaseQueueAddRemove(t *testing.T) {
 			return
 		},
 	}
-	bq := newBaseQueue("test", testQueue, 2)
-	stopper := stop.NewStopper()
+	bq := newBaseQueue("test", testQueue, g, 2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
-	defer stopper.Stop()
 
 	bq.MaybeAdd(r, proto.ZeroTimestamp)
 	bq.MaybeRemove(r)
@@ -294,5 +334,101 @@ func TestBaseQueueAddRemove(t *testing.T) {
 
 	if pc := atomic.LoadInt32(&testQueue.processed); pc > 0 {
 		t.Errorf("expected processed count of 0; got %d", pc)
+	}
+}
+
+// TestAcceptsUnsplitRanges verifies that ranges that need to split are properly
+// rejected when the queue has 'acceptsUnsplitRanges = false'.
+func TestAcceptsUnsplitRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	g, stopper := gossipForTest(t)
+	defer stopper.Stop()
+
+	// This range can never be split due to zone configs boundaries.
+	neverSplits := &Replica{}
+	if err := neverSplits.setDesc(&proto.RangeDescriptor{
+		RangeID:  1,
+		StartKey: proto.KeyMin,
+		EndKey:   keys.UserTableDataMin,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// This range will need to be split after user db/table entries are created.
+	willSplit := &Replica{}
+	if err := willSplit.setDesc(&proto.RangeDescriptor{
+		RangeID:  2,
+		StartKey: keys.UserTableDataMin,
+		EndKey:   proto.KeyMax,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var queued int32
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now proto.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			// Always queue ranges if they make it past the base queue's logic.
+			atomic.AddInt32(&queued, 1)
+			return true, float64(r.Desc().RangeID)
+		},
+		acceptUnsplit: false,
+	}
+
+	bq := newBaseQueue("test", testQueue, g, 2)
+	mc := hlc.NewManualClock(0)
+	clock := hlc.NewClock(mc.UnixNano)
+	bq.Start(clock, stopper)
+
+	// Check our config.
+	sysCfg := g.GetSystemConfig()
+	if sysCfg == nil {
+		t.Fatal("nil config")
+	}
+	if sysCfg.NeedsSplit(neverSplits.Desc().StartKey, neverSplits.Desc().EndKey) {
+		t.Fatal("System config says range needs to be split")
+	}
+	if sysCfg.NeedsSplit(willSplit.Desc().StartKey, willSplit.Desc().EndKey) {
+		t.Fatal("System config says range needs to be split")
+	}
+
+	// There are no user db/table entries, everything should be added and
+	// processed as usual.
+	bq.MaybeAdd(neverSplits, proto.ZeroTimestamp)
+	bq.MaybeAdd(willSplit, proto.ZeroTimestamp)
+
+	if err := util.IsTrueWithin(func() bool {
+		return atomic.LoadInt32(&testQueue.processed) == 2
+	}, 250*time.Millisecond); err != nil {
+		t.Error(err)
+	}
+
+	if pc := atomic.LoadInt32(&queued); pc != 2 {
+		t.Errorf("expected queued count of 2; got %d", pc)
+	}
+
+	// Now add a user object, it will trigger a split.
+	// The range willSplit starts begins at the beginning of the user data range,
+	// which means keys.MaxReservedDescID+1.
+	config.TestingSetZoneConfig(keys.MaxReservedDescID+10, &config.ZoneConfig{RangeMaxBytes: 1 << 20})
+
+	// Check our config.
+	if sysCfg.NeedsSplit(neverSplits.Desc().StartKey, neverSplits.Desc().EndKey) {
+		t.Fatal("System config says range needs to be split")
+	}
+	if !sysCfg.NeedsSplit(willSplit.Desc().StartKey, willSplit.Desc().EndKey) {
+		t.Fatal("System config says range does not need to be split")
+	}
+
+	bq.MaybeAdd(neverSplits, proto.ZeroTimestamp)
+	bq.MaybeAdd(willSplit, proto.ZeroTimestamp)
+
+	if err := util.IsTrueWithin(func() bool {
+		return atomic.LoadInt32(&testQueue.processed) == 3
+	}, 250*time.Millisecond); err != nil {
+		t.Error(err)
+	}
+
+	if pc := atomic.LoadInt32(&queued); pc != 3 {
+		t.Errorf("expected queued count of 3; got %d", pc)
 	}
 }

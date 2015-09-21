@@ -4,11 +4,16 @@ SELECT foo.bar()
 query error unknown function: defaults
 SELECT defaults()
 
-query I colnames
-SELECT LENGTH('roach7')
+query II colnames
+SELECT LENGTH('roach7'), LENGTH(b'roach77')
 ----
-LENGTH('roach7')
-6
+LENGTH('roach7') LENGTH(b'roach77')
+6                7
+
+query II
+SELECT LENGTH('Hello, 世界'), LENGTH(b'Hello, 世界')
+----
+9 13
 
 statement error unknown signature for LENGTH: LENGTH\(int\)
 SELECT LENGTH(23)
@@ -129,7 +134,7 @@ select ascii('禅');
 ----
 31109
 
-query error ascii: the input string should not be empty
+query error ascii: the input string must not be empty
 select ascii('');
 
 query T
@@ -152,10 +157,20 @@ SELECT to_hex(2147483647)
 ----
 7fffffff
 
-query T
+query I
+SELECT strpos('high', 'a')
+----
+0
+
+query I
 SELECT strpos('high', 'ig')
 ----
 2
+
+query I
+SELECT strpos('💩high', 'ig')
+----
+3
 
 query T
 SELECT btrim('xyxtrimyyx', 'xy')
@@ -178,14 +193,14 @@ SELECT ltrim('   trimxyz')
 trimxyz
 
 query T
-SELECT rtrim('zzzytrimxyz', 'xyz')
+SELECT rtrim('xyzzzzytrimxyz', 'xyz')
 ----
-zzzytrim
+xyzzzzytrim
 
 query T
-SELECT rtrim('zzzytrimxyz   ')
+SELECT 'a' || rtrim(' zzzytrimxyz   ')
 ----
-zzzytrimxyz
+a zzzytrimxyz
 
 query T
 SELECT reverse('abcde')
@@ -208,14 +223,14 @@ SELECT initcap('THOMAS')
 Thomas
 
 query T
-SELECT left('abcde', 2)
+SELECT left('💩abcde', 2)
 ----
-ab
+💩a
 
 query T
-SELECT right('abcde', 2)
+SELECT right('abcde💩', 2)
 ----
-de
+e💩
 
 # TIMESTAMP/DATE builtins.
 
@@ -477,6 +492,46 @@ SELECT radians(-45.0), radians(45.0)
 ----
 -0.7853981633974483 0.7853981633974483
 
+# Our implementation of round is not fully Postgres-compatible because we do
+# not allow negative numbers of digits.
+
+query error round: number of digits must be greater than 0
+SELECT round(41.2, -1)
+
+query T
+SELECT round(4.2, 0), round(4.2, 50)
+----
+4 4.2
+
+query T
+SELECT round(1e-308, 324)
+----
+1e-308
+
+# round to nearest even
+query T
+SELECT round(-2.5, 0), round(-1.5, 0), round(1.5, 0), round(2.5, 0)
+----
+-2 -2 2 2
+
+query T
+SELECT round(-2.5), round(-1.5), round(-0.0), round(0.0), round(1.5), round(2.5)
+----
+-2 -2 -0 0 2 2
+
+# Test rounding to 14 digits, because the logic test itself
+# formats floats rounded to 15 digits behind the decimal point.
+
+query T
+SELECT round(-2.123456789, 5), round(2.123456789, 5), round(2.12345678901234567890, 14)
+----
+-2.12346 2.12346 2.12345678901235
+
+query T
+SELECT round(-1.7976931348623157e+308, 1), round(1.7976931348623157e+308, 1)
+----
+-1.7976931348623157e+308 1.7976931348623157e+308
+
 query T
 SELECT sign(-2), sign(0), sign(2)
 ----
@@ -498,6 +553,11 @@ SELECT sqrt(-1.0), sqrt(4.0)
 NaN 2
 
 query T
+SELECT cbrt(-1.0), cbrt(27.0)
+----
+-1 3
+
+query T
 SELECT tan(-5.0), tan(0.0), tan(5.0)
 ----
 3.3805150062465854 0 -3.3805150062465854
@@ -506,3 +566,23 @@ query T
 SELECT trunc(-0.0), trunc(0.0), trunc(1.9)
 ----
 -0 0 1
+
+query T
+SELECT translate('Techonthenet.com', 'e.to', '456')
+----
+T4chn6h4n465cm
+
+query T
+SELECT translate('12345', '143', 'ax')
+----
+a2x5
+
+query T
+SELECT translate('12345', 'abc', 'ax')
+----
+12345
+
+query T
+SELECT translate('a‰ÒÁ', 'aÒ', '∏p')
+----
+∏‰pÁ

@@ -45,7 +45,7 @@ Open a sql shell running against the cockroach database at --addr.
 
 func runTerm(cmd *cobra.Command, args []string) {
 	if len(args) != 0 {
-		cmd.Usage()
+		mustUsage(cmd)
 		return
 	}
 
@@ -111,7 +111,7 @@ func runTerm(cmd *cobra.Command, args []string) {
 		fullStmt := strings.Join(stmt, "\n")
 		liner.AppendHistory(fullStmt)
 
-		if err := runQuery(db, fullStmt); err != nil {
+		if err := runPrettyQuery(db, fullStmt); err != nil {
 			fmt.Fprintln(osStdout, err)
 		}
 

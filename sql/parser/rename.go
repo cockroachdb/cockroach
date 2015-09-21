@@ -47,11 +47,11 @@ type RenameTable struct {
 
 func (node *RenameTable) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("ALTER TABLE ")
+	buf.WriteString("ALTER TABLE ")
 	if node.IfExists {
-		_, _ = buf.WriteString("IF EXISTS ")
+		buf.WriteString("IF EXISTS ")
 	}
-	_, _ = buf.WriteString(fmt.Sprintf("%s RENAME TO %s", node.Name, node.NewName))
+	fmt.Fprintf(&buf, "%s RENAME TO %s", node.Name, node.NewName)
 	return buf.String()
 }
 
@@ -64,11 +64,11 @@ type RenameIndex struct {
 
 func (node *RenameIndex) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("ALTER INDEX ")
+	buf.WriteString("ALTER INDEX ")
 	if node.IfExists {
-		_, _ = buf.WriteString("IF EXISTS ")
+		buf.WriteString("IF EXISTS ")
 	}
-	_, _ = buf.WriteString(fmt.Sprintf("%s RENAME TO %s", node.Name, node.NewName))
+	fmt.Fprintf(&buf, "%s RENAME TO %s", node.Name, node.NewName)
 	return buf.String()
 }
 
@@ -83,10 +83,10 @@ type RenameColumn struct {
 
 func (node *RenameColumn) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("ALTER TABLE ")
+	buf.WriteString("ALTER TABLE ")
 	if node.IfExists {
-		_, _ = buf.WriteString("IF EXISTS ")
+		buf.WriteString("IF EXISTS ")
 	}
-	_, _ = buf.WriteString(fmt.Sprintf("%s RENAME COLUMN %s TO %s", node.Table, node.Name, node.NewName))
+	fmt.Fprintf(&buf, "%s RENAME COLUMN %s TO %s", node.Table, node.Name, node.NewName)
 	return buf.String()
 }
