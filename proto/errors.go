@@ -59,6 +59,40 @@ func (e *Error) Error() string {
 	return e.Message
 }
 
+// GoError returns the non-nil error from the proto.Error union.
+func (e *Error) GoError() error {
+	if e == nil {
+		return nil
+	}
+	if e.Detail == nil {
+		return e
+	}
+	err := e.getDetail()
+	if err == nil {
+		// Unknown error detail; return the generic error.
+		return e
+	}
+	// Make sure that the flags in the generic portion of the error
+	// match the methods of the specific error type.
+	if e.Retryable {
+		if r, ok := err.(retry.Retryable); !ok || !r.CanRetry() {
+			panic(fmt.Sprintf("inconsistent error proto; expected %T to be retryable", err))
+		}
+	}
+	if r, ok := err.(TransactionRestartError); ok {
+		if r.CanRestartTransaction() != e.TransactionRestart {
+			panic(fmt.Sprintf("inconsistent error proto; expected %T to have restart mode %v",
+				err, e.TransactionRestart))
+		}
+	} else {
+		// Error type doesn't implement TransactionRestartError, so expect it to have the default.
+		if e.TransactionRestart != TransactionRestart_ABORT {
+			panic(fmt.Sprintf("inconsistent error proto; expected %T to have restart mode ABORT", err))
+		}
+	}
+	return err
+}
+
 // CanRetry implements the retry.Retryable interface.
 func (e *Error) CanRetry() bool {
 	return e.Retryable
