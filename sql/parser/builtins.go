@@ -22,6 +22,7 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
@@ -341,13 +342,24 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	"unique_id": {
+	"unique_bytes": {
 		builtin{
 			types:      typeList{},
 			returnType: DummyBytes,
 			impure:     true,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
-				return generateUniqueID(ctx.NodeID), nil
+				return generateUniqueBytes(ctx.NodeID), nil
+			},
+		},
+	},
+
+	"unique_int": {
+		builtin{
+			types:      typeList{},
+			returnType: DummyInt,
+			impure:     true,
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				return generateUniqueInt(ctx.NodeID), nil
 			},
 		},
 	},
@@ -883,47 +895,71 @@ func round(x float64, n int64) (Datum, error) {
 	return DFloat(y), err
 }
 
-var uniqueIDState struct {
+var uniqueBytesState struct {
 	sync.Mutex
-	millis uint64
-	rand   uint32
+	nanos uint64
 }
 
-func generateUniqueID(nodeID uint32) DBytes {
-	// Unique IDs are composed of the current time in milliseconds, a 31-bit
-	// random number and a 32-bit node-id. If two unique IDs are generated within
-	// the same millisecond on a server, the random number is incremented instead
-	// of being generated fresh. This ensures that unique ID generation is
-	// monotonic on a single server and k-sorted across servers.
-	//
-	// Note that rand.Int31 returns a 32-bit positive signed integer. We cast
-	// this to a uint32. There are at least 1<<31 increments we can perform on
-	// this number before it wraps to 0, so such wrapping is not a concern within
-	// a given millisecond.
-	//
-	// TODO(pmattis): We could squeeze a bit more space out of the encoding. For
-	// example, we could limit the node-id to 16-bits and the random component to
-	// 16-bits and handle overflow of the rand value by incrementing the
-	// millisecond component.
+func generateUniqueBytes(nodeID uint32) DBytes {
+	// Unique bytes are composed of the current time in nanoseconds and the
+	// node-id. If the nanosecond value is the same on two consecutive calls to
+	// time.Now() the nanoseconds value is incremented. The node-id is varint
+	// encoded. Since node-ids are allocated consecutively starting at 1, the
+	// node-id field will consume 1 or 2 bytes for any reasonably sized cluster.
 	//
 	// TODO(pmattis): Do we have to worry about persisting the milliseconds value
 	// periodically to avoid the clock ever going backwards (e.g. due to NTP
 	// adjustment)?
-	millis := uint64(time.Now().UnixNano() / int64(time.Millisecond))
-	uniqueIDState.Lock()
-	if millis <= uniqueIDState.millis {
-		millis = uniqueIDState.millis
-		uniqueIDState.rand++
-	} else {
-		uniqueIDState.millis = millis
-		uniqueIDState.rand = uint32(rand.Int31())
+	nanos := uint64(time.Now().UnixNano())
+	uniqueBytesState.Lock()
+	if nanos <= uniqueBytesState.nanos {
+		nanos = uniqueBytesState.nanos + 1
 	}
-	rand := uniqueIDState.rand
-	uniqueIDState.Unlock()
+	uniqueBytesState.nanos = nanos
+	uniqueBytesState.Unlock()
 
-	b := make([]byte, 0, 16)
-	b = encoding.EncodeUvarint(b, millis)
-	b = encoding.EncodeUint32(b, rand)
-	b = encoding.EncodeUvarint(b, uint64(nodeID))
-	return DBytes(b)
+	b := make([]byte, 0, 8+binary.MaxVarintLen32)
+	b = encoding.EncodeUint64(b, nanos)
+	// We use binary.PutUvarint instead of encoding.EncodeUvarint because the
+	// former uses less space for values < 128 which is a common occurrence for
+	// node IDs.
+	n := binary.PutUvarint(b[len(b):len(b)+binary.MaxVarintLen32], uint64(nodeID))
+	return DBytes(b[:len(b)+n])
+}
+
+var uniqueIntState struct {
+	sync.Mutex
+	timestamp uint64
+}
+
+var uniqueIDEpoch = time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
+
+func generateUniqueInt(nodeID uint32) DInt {
+	// Unique ints are composed of the current time at a 10-microsecond
+	// granularity and the node-id. The node-id is stored in the lower 15 bits of
+	// the returned value and the timestamp is stored in the upper 48 bits. The
+	// top-bit is left empty so that negative values are not returned. The 48-bit
+	// timestamp field provides for 89 years of timestamps. We use a custom epoch
+	// (Jan 1, 2015) in order to utilize the entire timestamp range.
+	//
+	// Note that generateUniqueInt() imposes a limit on node IDs while
+	// generateUniqueBytes() does not.
+	//
+	// TODO(pmattis): Do we have to worry about persisting the milliseconds value
+	// periodically to avoid the clock ever going backwards (e.g. due to NTP
+	// adjustment)?
+	const precision = uint64(10 * time.Microsecond)
+	const nodeIDBits = 15
+
+	id := uint64(time.Now().UnixNano()-uniqueIDEpoch) / precision
+
+	uniqueIntState.Lock()
+	if id <= uniqueIntState.timestamp {
+		id = uniqueIntState.timestamp + 1
+	}
+	uniqueIntState.timestamp = id
+	uniqueIntState.Unlock()
+
+	id = (id << nodeIDBits) | uint64(nodeID)
+	return DInt(id)
 }

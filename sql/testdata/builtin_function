@@ -588,9 +588,14 @@ SELECT translate('a‰ÒÁ', 'aÒ', '∏p')
 ∏‰pÁ
 
 query B
-SELECT unique_id() < unique_id(), length(unique_id())
+SELECT unique_bytes() < unique_bytes(), length(unique_bytes())
 ----
-true 13
+true 9
+
+query B
+SELECT unique_int() < unique_int()
+----
+true
 
 query B
 SELECT uuid_v4() != uuid_v4(), length(uuid_v4())
