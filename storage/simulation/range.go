@@ -145,7 +145,7 @@ func (r *Range) getNextAction() (storage.AllocatorAction, bool) {
 	defer r.RUnlock()
 	var topReplica replica
 	if len(r.replicas) == 0 {
-		return storage.AANoop, false
+		return storage.AllocatorNoop, false
 	}
 	// TODO(bram): This is random. Might want to make it deterministic for
 	// repeatability.
