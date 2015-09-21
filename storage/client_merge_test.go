@@ -45,8 +45,8 @@ func adminMergeArgs(key []byte, rangeID proto.RangeID, storeID proto.StoreID) pr
 
 func createSplitRanges(store *storage.Store) (*proto.RangeDescriptor, *proto.RangeDescriptor, error) {
 	args := adminSplitArgs(proto.KeyMin, []byte("b"), 1, store.StoreID())
-	if _, err := store.ExecuteCmd(context.Background(), &args); err != nil {
-		return nil, nil, err
+	if _, pErr := store.ExecuteCmd(context.Background(), &args); pErr != nil {
+		return nil, nil, pErr.GoError()
 	}
 
 	rangeA := store.LookupReplica([]byte("a"), nil)
@@ -66,14 +66,13 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	_, _, err := createSplitRanges(store)
-	if err != nil {
+	if _, _, err := createSplitRanges(store); err != nil {
 		t.Fatal(err)
 	}
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
-	_, err = store.ExecuteCmd(context.Background(), &args)
+	_, err := store.ExecuteCmd(context.Background(), &args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,11 +167,11 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	// Put new values after the merge on both sides.
 	pArgs = putArgs([]byte("aaaa"), content, rangeA.Desc().RangeID, store.StoreID())
-	if _, err = store.ExecuteCmd(context.Background(), &pArgs); err != nil {
+	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 	pArgs = putArgs([]byte("cccc"), content, rangeB.Desc().RangeID, store.StoreID())
-	if _, err = store.ExecuteCmd(context.Background(), &pArgs); err != nil {
+	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -200,8 +199,8 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 
 	// Merge last range.
 	args := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
-	if _, err := store.ExecuteCmd(context.Background(), &args); !testutils.IsError(err, "cannot merge final range") {
-		t.Fatalf("expected 'cannot merge final range' error; got %s", err)
+	if _, pErr := store.ExecuteCmd(context.Background(), &args); !testutils.IsError(pErr.GoError(), "cannot merge final range") {
+		t.Fatalf("expected 'cannot merge final range' error; got %s", pErr)
 	}
 }
 

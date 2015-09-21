@@ -64,6 +64,11 @@ func NewError(err error) *Error {
 	return e
 }
 
+// String implements fmt.Stringer.
+func (e *Error) String() string {
+	return e.GoError().Error()
+}
+
 // GoError returns the non-nil error from the proto.Error union.
 func (e *Error) GoError() error {
 	if e == nil {

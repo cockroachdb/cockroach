@@ -1164,7 +1164,7 @@ func (s *Store) ReplicaCount() int {
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
+func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Response, *proto.Error) {
 	ctx = s.Context(ctx)
 	trace := tracer.FromCtx(ctx)
 	// If the request has a zero timestamp, initialize to this node's clock.
@@ -1172,14 +1172,14 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 	// TODO(tschottdorf): remove this first branch when we only have batches here.
 	if args.Method() != proto.Batch {
 		if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {
-			return nil, err
+			return nil, proto.NewError(err)
 		}
 	} else {
 		for _, union := range args.(*proto.BatchRequest).Requests {
 			arg := union.GetInner()
 			header := arg.Header()
 			if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(arg)); err != nil {
-				return nil, err
+				return nil, proto.NewError(err)
 			}
 		}
 	}
@@ -1191,8 +1191,8 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			// before we reach that point.
 			offset := time.Duration(header.Timestamp.WallTime - s.Clock().PhysicalNow())
 			if offset > s.Clock().MaxOffset() {
-				return nil, util.Errorf("Rejecting command with timestamp in the future: %d (%s ahead)",
-					header.Timestamp.WallTime, offset)
+				return nil, proto.NewError(util.Errorf("Rejecting command with timestamp in the future: %d (%s ahead)",
+					header.Timestamp.WallTime, offset))
 			}
 		}
 		// Update our clock with the incoming request timestamp. This
@@ -1218,7 +1218,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		// Get range and add command to the range for execution.
 		rng, err = s.GetReplica(header.RangeID)
 		if err != nil {
-			return nil, err
+			return nil, proto.NewError(err)
 		}
 
 		var reply proto.Response
@@ -1286,7 +1286,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			}
 			continue
 		}
-		return nil, err
+		return nil, proto.NewError(err)
 	}
 
 	// By default, retries are indefinite. However, some unittests set a
@@ -1294,9 +1294,9 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 	// and the original error otherwise.
 	trace.Event("store retry limit exceeded") // good to check for if tests fail
 	if header.Txn != nil {
-		return nil, proto.NewTransactionRetryError(header.Txn)
+		return nil, proto.NewError(proto.NewTransactionRetryError(header.Txn))
 	}
-	return nil, err
+	return nil, proto.NewError(err)
 }
 
 // resolveWriteIntentError tries to push the conflicting transaction (if

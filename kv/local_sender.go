@@ -148,8 +148,9 @@ func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*p
 		}
 		{
 			var tmpR proto.Response
+			var tmpErr *proto.Error
 			// TODO(tschottdorf): &ba -> ba
-			tmpR, err = store.ExecuteCmd(ctx, &ba)
+			tmpR, tmpErr = store.ExecuteCmd(ctx, &ba)
 			// TODO(tschottdorf): remove this dance once BatchResponse is returned.
 			if tmpR != nil {
 				br = tmpR.(*proto.BatchResponse)
@@ -157,6 +158,7 @@ func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*p
 					panic(proto.ErrorUnexpectedlySet)
 				}
 			}
+			err = tmpErr.GoError()
 		}
 	}
 	// TODO(tschottdorf): Later error needs to be associated to an index
