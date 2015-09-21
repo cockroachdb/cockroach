@@ -65,13 +65,6 @@ func testRangeDescriptor() *proto.RangeDescriptor {
 	}
 }
 
-func unwrapIndexedError(err error) error {
-	if iErr, ok := err.(*errWithIndex); ok {
-		return iErr.err
-	}
-	return err
-}
-
 // boostrapMode controls how the first range is created in testContext.
 type bootstrapMode int
 
