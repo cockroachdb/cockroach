@@ -58,12 +58,17 @@ are already part of a pre-existing cluster, the bootstrap will fail.
 
 // runInit initializes the engine based on the first
 // store. The bootstrap engine may not be an in-memory type.
-func runInit(cmd *cobra.Command, args []string) {
+func runInit(_ *cobra.Command, _ []string) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	initCluster(stopper)
+}
+
+func initCluster(stopper *stop.Stopper) {
 	// Default user for servers.
 	context.User = security.NodeUser
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
 	if err := context.InitStores(stopper); err != nil {
 		log.Errorf("failed to initialize stores: %s", err)
 		return
@@ -104,7 +109,7 @@ additional details.`,
 // storage devices ("stores") on this machine and --gossip as the list
 // of "well-known" hosts used to join this node to the cockroach
 // cluster via the gossip network.
-func runStart(cmd *cobra.Command, args []string) {
+func runStart(_ *cobra.Command, _ []string) {
 	info := util.GetBuildInfo()
 	log.Infof("build Vers: %s", info.Vers)
 	log.Infof("build Tag:  %s", info.Tag)
@@ -119,7 +124,7 @@ func runStart(cmd *cobra.Command, args []string) {
 		context.Stores = "mem=1073741824"
 		context.GossipBootstrap = server.SelfGossipAddr
 
-		runInit(cmd, args)
+		initCluster(stopper)
 	} else {
 		if err := context.InitStores(stopper); err != nil {
 			log.Errorf("failed to initialize stores: %s", err)
@@ -205,7 +210,7 @@ node, cycling through each store specified by the --stores flag.
 }
 
 // runExterminate destroys the data held in the specified stores.
-func runExterminate(cmd *cobra.Command, args []string) {
+func runExterminate(_ *cobra.Command, _ []string) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	if err := context.InitStores(stopper); err != nil {
@@ -249,7 +254,7 @@ completed, the server exits.
 }
 
 // runQuit accesses the quit shutdown path.
-func runQuit(cmd *cobra.Command, args []string) {
+func runQuit(_ *cobra.Command, _ []string) {
 	admin := client.NewAdminClient(&context.Context, context.Addr, client.Quit)
 	body, err := admin.Get()
 	if err != nil {
