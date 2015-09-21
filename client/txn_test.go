@@ -304,10 +304,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 					t.Fatal(err)
 				}
 				ok = true
-				return &proto.Error{
-					Message:            "boom",
-					TransactionRestart: proto.TransactionRestart_IMMEDIATE,
-				}
+				return &proto.TransactionRetryError{} // immediate txn retry
 			}
 			if !success {
 				return errors.New("aborting on purpose")
@@ -360,7 +357,6 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 		{&proto.TransactionAbortedError{}, true},
 		{&proto.TransactionPushError{}, true},
 		{&proto.TransactionRetryError{}, true},
-		{&proto.Error{}, false},
 		{&proto.RangeNotFoundError{}, false},
 		{&proto.RangeKeyMismatchError{}, false},
 		{&proto.TransactionStatusError{}, false},
@@ -411,7 +407,6 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 		{&proto.TransactionAbortedError{}, false},
 		{&proto.TransactionPushError{}, true},
 		{&proto.TransactionRetryError{}, true},
-		{&proto.Error{}, true},
 		{&proto.RangeNotFoundError{}, true},
 		{&proto.RangeKeyMismatchError{}, true},
 		{&proto.TransactionStatusError{}, true},

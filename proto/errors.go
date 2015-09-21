@@ -18,6 +18,7 @@
 package proto
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -50,13 +51,7 @@ func (e Error) getDetail() error {
 	if e.Detail == nil {
 		return nil
 	}
-
 	return e.Detail.GetValue().(error)
-}
-
-// Error implements the Go error interface.
-func (e *Error) Error() string {
-	return e.Message
 }
 
 // GoError returns the non-nil error from the proto.Error union.
@@ -65,12 +60,12 @@ func (e *Error) GoError() error {
 		return nil
 	}
 	if e.Detail == nil {
-		return e
+		return errors.New(e.Message)
 	}
 	err := e.getDetail()
 	if err == nil {
 		// Unknown error detail; return the generic error.
-		return e
+		return errors.New(e.Message)
 	}
 	// Make sure that the flags in the generic portion of the error
 	// match the methods of the specific error type.
@@ -91,24 +86,6 @@ func (e *Error) GoError() error {
 		}
 	}
 	return err
-}
-
-// CanRetry implements the retry.Retryable interface.
-func (e *Error) CanRetry() bool {
-	return e.Retryable
-}
-
-// CanRestartTransaction implements the TransactionRestartError interface.
-func (e *Error) CanRestartTransaction() TransactionRestart {
-	return e.TransactionRestart
-}
-
-// Transaction implements the TransactionRestartError interface.
-func (e *Error) Transaction() *Transaction {
-	if txnErr, ok := e.getDetail().(TransactionRestartError); ok {
-		return txnErr.Transaction()
-	}
-	return nil
 }
 
 // SetResponseGoError sets Error using err.

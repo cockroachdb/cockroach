@@ -1512,7 +1512,6 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	br := proto.BatchResponse{}
 	br.Add(&incReply)
 	pastError := errors.New("boom")
-	var expError error = &proto.Error{Message: pastError.Error()}
 	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID,
 		proto.ResponseWithError{Reply: &br, Err: pastError})
 
@@ -1521,10 +1520,8 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	_, err := tc.rng.AddCmd(tc.rng.context(), &args)
 	if err == nil {
 		t.Fatal("expected to see cached error but got nil")
-	} else if ge, ok := err.(*proto.Error); !ok {
-		t.Fatalf("expected proto.Error but got %s", err)
-	} else if !reflect.DeepEqual(ge, expError) {
-		t.Fatalf("expected <%T> %+v but got <%T> %+v", expError, expError, ge, ge)
+	} else if !testutils.IsError(err, pastError.Error()) {
+		t.Fatalf("expected '%s', but got %s", pastError, err)
 	}
 }
 
