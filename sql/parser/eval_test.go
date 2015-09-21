@@ -119,6 +119,13 @@ func TestEvalExpr(t *testing.T) {
 		{`'TEST' NOT LIKE '%E%'`, `false`},
 		{`'TEST' NOT LIKE 'TES_'`, `false`},
 		{`'TEST' NOT LIKE 'TE_'`, `true`},
+		// SIMILAR TO and NOT SIMILAR TO
+		{`'abc' SIMILAR TO 'abc'`, `true`},
+		{`'abc' SIMILAR TO 'a'`, `false`},
+		{`'abc' SIMILAR TO '%(b|d)%'`, `true`},
+		{`'abc' SIMILAR TO '(b|c)%'`, `false`},
+		{`'abc' NOT SIMILAR TO '%(b|d)%'`, `false`},
+		{`'abc' NOT SIMILAR TO '(b|c)%'`, `true`},
 		// IS DISTINCT FROM can be used to compare NULLs "safely".
 		{`0 IS DISTINCT FROM 0`, `false`},
 		{`0 IS DISTINCT FROM 1`, `true`},
@@ -305,6 +312,28 @@ func TestEvalExprError(t *testing.T) {
 		expr := q[0].(*Select).Exprs[0].Expr
 		if _, err := EvalExpr(expr); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
+		}
+	}
+}
+
+func TestSimilarEscape(t *testing.T) {
+	testData := []struct {
+		expr     string
+		expected string
+	}{
+		{`test`, `test`},
+		{`test%`, `test.*`},
+		{`_test_`, `.test.`},
+		{`_%*`, `..**`},
+		{`[_%]*`, `[_%]*`},
+		{`.^$`, `\.\^\$`},
+		{`%(b|d)%`, `.*(?:b|d).*`},
+		{`se\"arch\"[\"]`, `se(arch)[\"]`},
+	}
+	for _, d := range testData {
+		s := SimilarEscape(d.expr)
+		if s != d.expected {
+			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, s)
 		}
 	}
 }

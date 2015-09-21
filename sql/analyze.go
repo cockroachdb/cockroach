@@ -1084,7 +1084,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 	// simplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
 	if isVar(n.Left) && isDatum(n.Right) {
 		// All of the comparison operators have the property that when comparing to
-		// NULL they evaulate to NULL (see evalComparisonOp). NULL is not the same
+		// NULL they evaluate to NULL (see evalComparisonOp). NULL is not the same
 		// as false, but in the context of a WHERE clause, NULL is considered
 		// not-true which is the same as false.
 		if n.Right == parser.DNull {
@@ -1132,7 +1132,8 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 		case parser.SimilarTo:
 			// a SIMILAR TO "foo.*" -> a >= "foo" AND a < "fop"
 			if d, ok := n.Right.(parser.DString); ok {
-				if re, err := regexp.Compile(string(d)); err == nil {
+				pattern := parser.SimilarEscape(string(d))
+				if re, err := regexp.Compile(pattern); err == nil {
 					prefix, complete := re.LiteralPrefix()
 					return makePrefixRange(parser.DString(prefix), n.Left, complete)
 				}
