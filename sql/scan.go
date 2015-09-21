@@ -343,7 +343,7 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	if n.err == nil {
 		// Normalize the expression (this will also evaluate any branches that are
 		// constant).
-		n.filter, n.err = parser.NormalizeExpr(n.filter)
+		n.filter, n.err = n.planner.evalCtx.NormalizeExpr(n.filter)
 	}
 	if n.err == nil {
 		var whereType parser.Datum
@@ -468,7 +468,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	}
 	// Type check the expression to memoize operators and functions.
 	var normalized parser.Expr
-	if normalized, n.err = parser.NormalizeAndTypeCheckExpr(resolved); n.err != nil {
+	if normalized, n.err = n.planner.evalCtx.NormalizeAndTypeCheckExpr(resolved); n.err != nil {
 		return n.err
 	}
 	if normalized, n.err = n.planner.expandSubqueries(normalized, 1); n.err != nil {
@@ -619,7 +619,7 @@ func (n *scanNode) filterRow() bool {
 	}
 
 	var d parser.Datum
-	d, n.err = parser.EvalExpr(n.filter)
+	d, n.err = n.planner.evalCtx.EvalExpr(n.filter)
 	if n.err != nil {
 		return false
 	}
@@ -639,7 +639,7 @@ func (n *scanNode) renderRow() {
 		n.row = make([]parser.Datum, len(n.render))
 	}
 	for i, e := range n.render {
-		n.row[i], n.err = parser.EvalExpr(e)
+		n.row[i], n.err = n.planner.evalCtx.EvalExpr(e)
 		if n.err != nil {
 			return
 		}

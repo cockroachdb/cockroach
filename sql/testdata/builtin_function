@@ -586,3 +586,18 @@ query T
 SELECT translate('a‰ÒÁ', 'aÒ', '∏p')
 ----
 ∏‰pÁ
+
+query B
+SELECT experimental_unique_bytes() < experimental_unique_bytes(), length(experimental_unique_bytes())
+----
+true 9
+
+query B
+SELECT experimental_unique_int() < experimental_unique_int()
+----
+true
+
+query B
+SELECT experimental_uuid_v4() != experimental_uuid_v4(), length(experimental_uuid_v4())
+----
+true 16

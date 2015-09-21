@@ -72,6 +72,7 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 	}
 
 	group := &groupNode{
+		planner: p,
 		columns: s.columns,
 		render:  s.render,
 		funcs:   funcs,
@@ -93,6 +94,7 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 }
 
 type groupNode struct {
+	planner   *planner
 	plan      planNode
 	columns   []string
 	row       parser.DTuple
@@ -146,7 +148,7 @@ func (n *groupNode) Next() bool {
 	// Render the results.
 	n.row = make([]parser.Datum, len(n.render))
 	for i, r := range n.render {
-		n.row[i], n.err = parser.EvalExpr(r)
+		n.row[i], n.err = n.planner.evalCtx.EvalExpr(r)
 		if n.err != nil {
 			return false
 		}

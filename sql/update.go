@@ -88,7 +88,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		}
 	}
 
-	defaultExprs, err := makeDefaultExprs(cols)
+	defaultExprs, err := p.makeDefaultExprs(cols)
 	if err != nil {
 		return nil, err
 	}

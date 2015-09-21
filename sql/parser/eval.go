@@ -442,6 +442,14 @@ func init() {
 	cmpOps[cmpArgs{In, tupleType, tupleType}] = evalTupleIN
 }
 
+// EvalContext defines the context in which to evaluate an expression, allowing
+// the retrieval of state such as the node ID or statement start time.
+type EvalContext struct {
+	NodeID uint32
+}
+
+var defaultContext EvalContext
+
 // EvalExpr evaluates an SQL expression. Expression evaluation is a mostly
 // straightforward walk over the parse tree. The only significant complexity is
 // the handling of types and implicit conversions. See binOps and cmpOps for
@@ -450,16 +458,16 @@ func init() {
 // should be replaced prior to expression evaluation by an appropriate
 // WalkExpr. For example, ValArg should be replace by the argument passed from
 // the client.
-func EvalExpr(expr Expr) (Datum, error) {
+func (ctx EvalContext) EvalExpr(expr Expr) (Datum, error) {
 	switch t := expr.(type) {
 	case *AndExpr:
-		return evalAndExpr(t)
+		return ctx.evalAndExpr(t)
 
 	case *OrExpr:
-		return evalOrExpr(t)
+		return ctx.evalOrExpr(t)
 
 	case *NotExpr:
-		return evalNotExpr(t)
+		return ctx.evalNotExpr(t)
 
 	case Row:
 		// NormalizeExpr transforms this into Tuple.
@@ -468,16 +476,16 @@ func EvalExpr(expr Expr) (Datum, error) {
 		// NormalizeExpr unwraps this.
 
 	case *ComparisonExpr:
-		return evalComparisonExpr(t)
+		return ctx.evalComparisonExpr(t)
 
 	case *RangeCond:
 		// NormalizeExpr transforms this into an AndExpr.
 
 	case *IsExpr:
-		return evalIsExpr(t)
+		return ctx.evalIsExpr(t)
 
 	case *IsOfTypeExpr:
-		return evalIsOfTypeExpr(t)
+		return ctx.evalIsOfTypeExpr(t)
 
 	case *ExistsExpr:
 		// The subquery within the exists should have been executed before
@@ -505,7 +513,7 @@ func EvalExpr(expr Expr) (Datum, error) {
 	case Tuple:
 		tuple := make(DTuple, 0, len(t))
 		for _, v := range t {
-			d, err := EvalExpr(v)
+			d, err := ctx.EvalExpr(v)
 			if err != nil {
 				return DNull, err
 			}
@@ -524,19 +532,19 @@ func EvalExpr(expr Expr) (Datum, error) {
 		// the result placed into the expression tree.
 
 	case *BinaryExpr:
-		return evalBinaryExpr(t)
+		return ctx.evalBinaryExpr(t)
 
 	case *UnaryExpr:
-		return evalUnaryExpr(t)
+		return ctx.evalUnaryExpr(t)
 
 	case *FuncExpr:
-		return evalFuncExpr(t)
+		return ctx.evalFuncExpr(t)
 
 	case *CaseExpr:
-		return evalCaseExpr(t)
+		return ctx.evalCaseExpr(t)
 
 	case *CastExpr:
-		return evalCastExpr(t)
+		return ctx.evalCastExpr(t)
 
 	default:
 		return DNull, util.Errorf("eval: unsupported expression: %T", expr)
@@ -545,8 +553,8 @@ func EvalExpr(expr Expr) (Datum, error) {
 	return DNull, util.Errorf("eval: unexpected expression: %T", expr)
 }
 
-func evalAndExpr(expr *AndExpr) (Datum, error) {
-	left, err := EvalExpr(expr.Left)
+func (ctx EvalContext) evalAndExpr(expr *AndExpr) (Datum, error) {
+	left, err := ctx.EvalExpr(expr.Left)
 	if err != nil {
 		return DNull, err
 	}
@@ -557,7 +565,7 @@ func evalAndExpr(expr *AndExpr) (Datum, error) {
 			return v, nil
 		}
 	}
-	right, err := EvalExpr(expr.Right)
+	right, err := ctx.EvalExpr(expr.Right)
 	if err != nil {
 		return DNull, err
 	}
@@ -572,8 +580,8 @@ func evalAndExpr(expr *AndExpr) (Datum, error) {
 	return left, nil
 }
 
-func evalOrExpr(expr *OrExpr) (Datum, error) {
-	left, err := EvalExpr(expr.Left)
+func (ctx EvalContext) evalOrExpr(expr *OrExpr) (Datum, error) {
+	left, err := ctx.EvalExpr(expr.Left)
 	if err != nil {
 		return DNull, err
 	}
@@ -584,7 +592,7 @@ func evalOrExpr(expr *OrExpr) (Datum, error) {
 			return v, nil
 		}
 	}
-	right, err := EvalExpr(expr.Right)
+	right, err := ctx.EvalExpr(expr.Right)
 	if err != nil {
 		return DNull, err
 	}
@@ -602,8 +610,8 @@ func evalOrExpr(expr *OrExpr) (Datum, error) {
 	return DBool(false), nil
 }
 
-func evalNotExpr(expr *NotExpr) (Datum, error) {
-	d, err := EvalExpr(expr.Expr)
+func (ctx EvalContext) evalNotExpr(expr *NotExpr) (Datum, error) {
+	d, err := ctx.EvalExpr(expr.Expr)
 	if err != nil {
 		return DNull, err
 	}
@@ -617,8 +625,8 @@ func evalNotExpr(expr *NotExpr) (Datum, error) {
 	return !v, nil
 }
 
-func evalIsExpr(expr *IsExpr) (Datum, error) {
-	d, err := EvalExpr(expr.Expr)
+func (ctx EvalContext) evalIsExpr(expr *IsExpr) (Datum, error) {
+	d, err := ctx.EvalExpr(expr.Expr)
 	if err != nil {
 		return DNull, err
 	}
@@ -640,8 +648,8 @@ func evalIsExpr(expr *IsExpr) (Datum, error) {
 	}
 }
 
-func evalIsOfTypeExpr(expr *IsOfTypeExpr) (Datum, error) {
-	d, err := EvalExpr(expr.Expr)
+func (ctx EvalContext) evalIsOfTypeExpr(expr *IsOfTypeExpr) (Datum, error) {
+	d, err := ctx.EvalExpr(expr.Expr)
 	if err != nil {
 		return DNull, err
 	}
@@ -712,12 +720,12 @@ func evalIsOfTypeExpr(expr *IsOfTypeExpr) (Datum, error) {
 	return !result, nil
 }
 
-func evalComparisonExpr(expr *ComparisonExpr) (Datum, error) {
-	left, err := EvalExpr(expr.Left)
+func (ctx EvalContext) evalComparisonExpr(expr *ComparisonExpr) (Datum, error) {
+	left, err := ctx.EvalExpr(expr.Left)
 	if err != nil {
 		return DNull, err
 	}
-	right, err := EvalExpr(expr.Right)
+	right, err := ctx.EvalExpr(expr.Right)
 	if err != nil {
 		return DNull, err
 	}
@@ -789,12 +797,12 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 		left.Type(), op, right.Type())
 }
 
-func evalBinaryExpr(expr *BinaryExpr) (Datum, error) {
-	left, err := EvalExpr(expr.Left)
+func (ctx EvalContext) evalBinaryExpr(expr *BinaryExpr) (Datum, error) {
+	left, err := ctx.EvalExpr(expr.Left)
 	if err != nil {
 		return DNull, err
 	}
-	right, err := EvalExpr(expr.Right)
+	right, err := ctx.EvalExpr(expr.Right)
 	if err != nil {
 		return DNull, err
 	}
@@ -815,8 +823,8 @@ func evalBinaryExpr(expr *BinaryExpr) (Datum, error) {
 	return expr.fn.fn(left, right)
 }
 
-func evalUnaryExpr(expr *UnaryExpr) (Datum, error) {
-	d, err := EvalExpr(expr.Expr)
+func (ctx EvalContext) evalUnaryExpr(expr *UnaryExpr) (Datum, error) {
+	d, err := ctx.EvalExpr(expr.Expr)
 	if err != nil {
 		return DNull, err
 	}
@@ -835,11 +843,11 @@ func evalUnaryExpr(expr *UnaryExpr) (Datum, error) {
 	return expr.fn.fn(d)
 }
 
-func evalFuncExpr(expr *FuncExpr) (Datum, error) {
+func (ctx EvalContext) evalFuncExpr(expr *FuncExpr) (Datum, error) {
 	args := make(DTuple, 0, len(expr.Exprs))
 	types := make(typeList, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
-		arg, err := EvalExpr(e)
+		arg, err := ctx.EvalExpr(e)
 		if err != nil {
 			return DNull, err
 		}
@@ -862,25 +870,25 @@ func evalFuncExpr(expr *FuncExpr) (Datum, error) {
 		return DNull, nil
 	}
 
-	res, err := expr.fn.fn(args)
+	res, err := expr.fn.fn(ctx, args)
 	if err != nil {
 		return DNull, fmt.Errorf("%s: %v", expr.Name, err)
 	}
 	return res, nil
 }
 
-func evalCaseExpr(expr *CaseExpr) (Datum, error) {
+func (ctx EvalContext) evalCaseExpr(expr *CaseExpr) (Datum, error) {
 	if expr.Expr != nil {
 		// CASE <val> WHEN <expr> THEN ...
 		//
 		// For each "when" expression we compare for equality to <val>.
-		val, err := EvalExpr(expr.Expr)
+		val, err := ctx.EvalExpr(expr.Expr)
 		if err != nil {
 			return DNull, err
 		}
 
 		for _, when := range expr.Whens {
-			arg, err := EvalExpr(when.Cond)
+			arg, err := ctx.EvalExpr(when.Cond)
 			if err != nil {
 				return DNull, err
 			}
@@ -891,26 +899,26 @@ func evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			if v, err := getBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return EvalExpr(when.Val)
+				return ctx.EvalExpr(when.Val)
 			}
 		}
 	} else {
 		// CASE WHEN <bool-expr> THEN ...
 		for _, when := range expr.Whens {
-			d, err := EvalExpr(when.Cond)
+			d, err := ctx.EvalExpr(when.Cond)
 			if err != nil {
 				return DNull, err
 			}
 			if v, err := getBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return EvalExpr(when.Val)
+				return ctx.EvalExpr(when.Val)
 			}
 		}
 	}
 
 	if expr.Else != nil {
-		return EvalExpr(expr.Else)
+		return ctx.EvalExpr(expr.Else)
 	}
 	return DNull, nil
 }
@@ -979,8 +987,8 @@ func evalTupleIN(arg, values Datum) (DBool, error) {
 	return DBool(false), nil
 }
 
-func evalCastExpr(expr *CastExpr) (Datum, error) {
-	d, err := EvalExpr(expr.Expr)
+func (ctx EvalContext) evalCastExpr(expr *CastExpr) (Datum, error) {
+	d, err := ctx.EvalExpr(expr.Expr)
 	if err != nil {
 		return DNull, err
 	}
