@@ -209,13 +209,13 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		for i, val := range newVals {
 			col := cols[i]
 
-			primitive, err := convertDatum(col, val)
+			marshalled, err := marshalColumnValue(col, val)
 			if err != nil {
 				return nil, err
 			}
 
 			key := MakeColumnKey(col.ID, primaryIndexKey)
-			if primitive != nil {
+			if marshalled != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
@@ -223,7 +223,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 					log.Infof("Put %q -> %v", key, val)
 				}
 
-				b.Put(key, primitive)
+				b.Put(key, marshalled)
 			} else {
 				// The column might have already existed but is being set to NULL, so
 				// delete it.

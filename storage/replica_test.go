@@ -548,7 +548,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 	var val proto.Value
-	val.SetInteger(42)
+	val.SetInt(42)
 	if err := engine.MVCCPut(tc.engine, nil, key, proto.MinTimestamp, val, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -2309,7 +2309,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS := engine.MVCCStats{LiveBytes: 39, KeyBytes: 15, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 58, SysCount: 1}
+	expMS := engine.MVCCStats{LiveBytes: 41, KeyBytes: 15, ValBytes: 26, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 60, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Put a 2nd value transactionally.
@@ -2320,7 +2320,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 130, KeyBytes: 30, ValBytes: 100, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 58, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 134, KeyBytes: 30, ValBytes: 104, IntentBytes: 26, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 60, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -2337,7 +2337,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 78, KeyBytes: 30, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 58, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 82, KeyBytes: 30, ValBytes: 52, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 60, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Delete the 1st value.
@@ -2347,7 +2347,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &dArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 39, KeyBytes: 42, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 58, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 41, KeyBytes: 42, ValBytes: 54, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 60, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 }
 

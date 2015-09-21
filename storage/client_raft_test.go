@@ -47,10 +47,13 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
-// mustGetInteger decodes an int64 value from the bytes field of the receiver
+// mustGetInt decodes an int64 value from the bytes field of the receiver
 // and panics if the bytes field is not 0 or 8 bytes in length.
-func mustGetInteger(v *proto.Value) int64 {
-	i, err := v.GetInteger()
+func mustGetInt(v *proto.Value) int64 {
+	if v == nil {
+		return 0
+	}
+	i, err := v.GetInt()
 	if err != nil {
 		panic(err)
 	}
@@ -79,7 +82,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return mustGetInteger(resp.(*proto.GetResponse).Value)
+		return mustGetInt(resp.(*proto.GetResponse).Value)
 	}
 	validate := func(store *storage.Store) {
 		if val := get(store, rangeID, key1); val != 13 {
@@ -257,7 +260,7 @@ func TestReplicateRange(t *testing.T) {
 		getArgs.ReadConsistency = proto.INCONSISTENT
 		if reply, err := mtc.stores[1].ExecuteCmd(context.Background(), &getArgs); err != nil {
 			return util.Errorf("failed to read data")
-		} else if v := mustGetInteger(reply.(*proto.GetResponse).Value); v != 5 {
+		} else if v := mustGetInt(reply.(*proto.GetResponse).Value); v != 5 {
 			return util.Errorf("failed to read correct data: %d", v)
 		}
 		return nil
@@ -330,7 +333,7 @@ func TestRestoreReplicas(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		return mustGetInteger(reply.(*proto.GetResponse).Value) == 39
+		return mustGetInt(reply.(*proto.GetResponse).Value) == 39
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}
@@ -487,9 +490,9 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		}
 		getResp := reply.(*proto.GetResponse)
 		if log.V(1) {
-			log.Infof("read value %d", mustGetInteger(getResp.Value))
+			log.Infof("read value %d", mustGetInt(getResp.Value))
 		}
-		return mustGetInteger(getResp.Value) == 16
+		return mustGetInt(getResp.Value) == 16
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}
@@ -517,8 +520,8 @@ func TestReplicateAfterTruncation(t *testing.T) {
 			return false
 		}
 		getResp := reply.(*proto.GetResponse)
-		log.Infof("read value %d", mustGetInteger(getResp.Value))
-		return mustGetInteger(getResp.Value) == 39
+		log.Infof("read value %d", mustGetInt(getResp.Value))
+		return mustGetInt(getResp.Value) == 39
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}
@@ -802,7 +805,7 @@ func TestProgressWithDownNode(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				values = append(values, mustGetInteger(val))
+				values = append(values, mustGetInt(val))
 			}
 			if !reflect.DeepEqual(expected, values) {
 				return util.Errorf("expected %v, got %v", expected, values)
@@ -853,7 +856,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					values = append(values, mustGetInteger(val))
+					values = append(values, mustGetInt(val))
 				}
 				if !reflect.DeepEqual(expected, values) {
 					return util.Errorf("addFirst: %t, expected %v, got %v", addFirst, expected, values)
@@ -984,9 +987,9 @@ func TestReplicateAfterSplit(t *testing.T) {
 		}
 		getResp := reply.(*proto.GetResponse)
 		if log.V(1) {
-			log.Infof("read value %d", mustGetInteger(getResp.Value))
+			log.Infof("read value %d", mustGetInt(getResp.Value))
 		}
-		return mustGetInteger(getResp.Value) == 11
+		return mustGetInt(getResp.Value) == 11
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}

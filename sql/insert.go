@@ -155,7 +155,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			col := cols[i]
 
 			// Make sure the value can be written to the column before proceeding.
-			primitive, err := convertDatum(col, val)
+			marshalled, err := marshalColumnValue(col, val)
 			if err != nil {
 				return nil, err
 			}
@@ -167,17 +167,17 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 				continue
 			}
 
-			if primitive != nil {
+			if marshalled != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
 
 				key := MakeColumnKey(col.ID, primaryIndexKey)
 				if log.V(2) {
-					log.Infof("CPut %q -> %v", key, primitive)
+					log.Infof("CPut %q -> %v", key, val)
 				}
 
-				b.CPut(key, primitive, nil)
+				b.CPut(key, marshalled, nil)
 			}
 		}
 	}

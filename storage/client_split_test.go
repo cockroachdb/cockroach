@@ -517,7 +517,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if err := txn.Put(k, v.Value); err != nil {
+			if err := txn.Put(k, v.ValueBytes()); err != nil {
 				return err
 			}
 		}
@@ -558,7 +558,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return txn.Put(k, v.Value)
+		return txn.Put(k, v.ValueBytes())
 	}); err != nil {
 		t.Fatal(err)
 	}

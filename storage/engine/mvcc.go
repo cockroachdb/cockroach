@@ -835,9 +835,12 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.
 		return 0, err
 	}
 
-	int64Val, err := value.GetInteger()
-	if err != nil {
-		return 0, util.Errorf("key %q does not contain an integer value", key)
+	var int64Val int64
+	if value != nil {
+		int64Val, err = value.GetInt()
+		if err != nil {
+			return 0, util.Errorf("key %q does not contain an integer value", key)
+		}
 	}
 
 	// Check for overflow and underflow.
@@ -852,7 +855,7 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.
 
 	r := int64Val + inc
 	newValue := proto.Value{}
-	newValue.SetInteger(r)
+	newValue.SetInt(r)
 	newValue.InitChecksum(key)
 	return r, MVCCPut(engine, ms, key, timestamp, newValue, txn)
 }

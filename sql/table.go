@@ -425,10 +425,10 @@ func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 	return secondaryIndexEntries, nil
 }
 
-// convertDatum returns a Go primitive value equivalent of val, of the
+// marshalColumnValue returns a Go primitive value equivalent of val, of the
 // type expected by col. If val's type is incompatible with col, or if
 // col's type is not yet implemented, an error is returned.
-func convertDatum(col ColumnDescriptor, val parser.Datum) (interface{}, error) {
+func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, error) {
 	if val == parser.DNull {
 		return nil, nil
 	}
@@ -472,4 +472,66 @@ func convertDatum(col ColumnDescriptor, val parser.Datum) (interface{}, error) {
 	}
 	return nil, fmt.Errorf("value type %s doesn't match type %s of column %q",
 		val.Type(), col.Type.Kind, col.Name)
+}
+
+// unmarshalColumnValue decodes the value from a key-value pair using the type
+// expected by the column. An error is returned if the value's type does not
+// match the column's type.
+func unmarshalColumnValue(kind ColumnType_Kind, value *proto.Value) (parser.Datum, error) {
+	if value == nil {
+		return parser.DNull, nil
+	}
+
+	switch kind {
+	case ColumnType_BOOL:
+		v, err := value.GetInt()
+		if err != nil {
+			return nil, err
+		}
+		return parser.DBool(v != 0), nil
+	case ColumnType_INT:
+		v, err := value.GetInt()
+		if err != nil {
+			return nil, err
+		}
+		return parser.DInt(v), nil
+	case ColumnType_FLOAT:
+		v, err := value.GetFloat()
+		if err != nil {
+			return nil, err
+		}
+		return parser.DFloat(v), nil
+	case ColumnType_STRING:
+		v, err := value.GetBytesChecked()
+		if err != nil {
+			return nil, err
+		}
+		return parser.DString(v), nil
+	case ColumnType_BYTES:
+		v, err := value.GetBytesChecked()
+		if err != nil {
+			return nil, err
+		}
+		return parser.DBytes(v), nil
+	case ColumnType_DATE:
+		v, err := value.GetTime()
+		if err != nil {
+			return nil, err
+		}
+		return parser.DDate{Time: v}, nil
+	case ColumnType_TIMESTAMP:
+		v, err := value.GetTime()
+		if err != nil {
+			return nil, err
+		}
+		return parser.DTimestamp{Time: v}, nil
+	case ColumnType_INTERVAL:
+		v, err := value.GetInt()
+		if err != nil {
+			return nil, err
+		}
+		return parser.DInterval{Duration: time.Duration(v)}, nil
+	default:
+		return nil, fmt.Errorf("unsupported type: %s", kind)
+	}
 }

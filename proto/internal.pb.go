@@ -17,42 +17,6 @@ var _ = proto1.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
-// InternalValueType defines a set of string constants placed in the
-// "tag" field of Value messages which are created internally. These
-// are defined as a protocol buffer enumeration so that they can be
-// used portably between our Go and C code. The tags are used by the
-// RocksDB Merge Operator to perform specialized merges.
-type InternalValueType int32
-
-const (
-	// _CR_TS is applied to values which contain InternalTimeSeriesData.
-	_CR_TS InternalValueType = 1
-)
-
-var InternalValueType_name = map[int32]string{
-	1: "_CR_TS",
-}
-var InternalValueType_value = map[string]int32{
-	"_CR_TS": 1,
-}
-
-func (x InternalValueType) Enum() *InternalValueType {
-	p := new(InternalValueType)
-	*p = x
-	return p
-}
-func (x InternalValueType) String() string {
-	return proto1.EnumName(InternalValueType_name, int32(x))
-}
-func (x *InternalValueType) UnmarshalJSON(data []byte) error {
-	value, err := proto1.UnmarshalJSONEnum(InternalValueType_value, data, "InternalValueType")
-	if err != nil {
-		return err
-	}
-	*x = InternalValueType(value)
-	return nil
-}
-
 // A RaftCommand is a command which can be serialized and sent via
 // raft.
 type RaftCommand struct {
@@ -291,9 +255,6 @@ func (m *RaftSnapshotData_KeyValue) GetValue() []byte {
 	return nil
 }
 
-func init() {
-	proto1.RegisterEnum("cockroach.proto.InternalValueType", InternalValueType_name, InternalValueType_value)
-}
 func (m *RaftCommand) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

@@ -20,9 +20,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
@@ -698,35 +696,9 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 		n.err = fmt.Errorf("column-id \"%d\" does not exist", n.colID)
 		return nil, false
 	}
-	if kv.Exists() {
-		switch kind {
-		case ColumnType_INT:
-			return parser.DInt(kv.ValueInt()), true
-		case ColumnType_BOOL:
-			return parser.DBool(kv.ValueInt() != 0), true
-		case ColumnType_FLOAT:
-			return parser.DFloat(math.Float64frombits(uint64(kv.ValueInt()))), true
-		case ColumnType_STRING:
-			return parser.DString(kv.ValueBytes()), true
-		case ColumnType_BYTES:
-			return parser.DBytes(kv.ValueBytes()), true
-		case ColumnType_DATE:
-			var t time.Time
-			if err := t.UnmarshalBinary(kv.ValueBytes()); err != nil {
-				return nil, false
-			}
-			return parser.DDate{Time: t}, true
-		case ColumnType_TIMESTAMP:
-			var t time.Time
-			if err := t.UnmarshalBinary(kv.ValueBytes()); err != nil {
-				return nil, false
-			}
-			return parser.DTimestamp{Time: t}, true
-		case ColumnType_INTERVAL:
-			return parser.DInterval{Duration: time.Duration(kv.ValueInt())}, true
-		}
-	}
-	return parser.DNull, true
+	var d parser.Datum
+	d, n.err = unmarshalColumnValue(kind, kv.Value)
+	return d, n.err == nil
 }
 
 func (n *scanNode) getQVal(col ColumnDescriptor) *qvalue {

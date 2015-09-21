@@ -264,7 +264,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if a, e := mustGetInteger(val), int64(5); a != e {
+			if a, e := mustGetInt(val), int64(5); a != e {
 				return util.Errorf("expected aa = %d, got %d", e, a)
 			}
 		}

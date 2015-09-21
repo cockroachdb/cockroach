@@ -39,7 +39,6 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* RaftSnapshotData_KeyValue_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   RaftSnapshotData_KeyValue_reflection_ = NULL;
-const ::google::protobuf::EnumDescriptor* InternalValueType_descriptor_ = NULL;
 
 }  // namespace
 
@@ -151,7 +150,6 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
       sizeof(RaftSnapshotData_KeyValue),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KeyValue, _internal_metadata_),
       -1);
-  InternalValueType_descriptor_ = file->enum_type(0);
 }
 
 namespace {
@@ -225,9 +223,8 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "tor\030\001 \001(\0132 .cockroach.proto.RangeDescrip"
     "torB\004\310\336\037\000\022>\n\002KV\030\002 \003(\0132*.cockroach.proto."
     "RaftSnapshotData.KeyValueB\006\342\336\037\002KV\032&\n\010Key"
-    "Value\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001(\014*%\n\021Int"
-    "ernalValueType\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000B\027Z\005prot"
-    "o\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 897);
+    "Value\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001(\014B\027Z\005pro"
+    "to\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 858);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/internal.proto", &protobuf_RegisterTypes);
   RaftCommand::default_instance_ = new RaftCommand();
@@ -251,19 +248,6 @@ struct StaticDescriptorInitializer_cockroach_2fproto_2finternal_2eproto {
     protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   }
 } static_descriptor_initializer_cockroach_2fproto_2finternal_2eproto_;
-const ::google::protobuf::EnumDescriptor* InternalValueType_descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return InternalValueType_descriptor_;
-}
-bool InternalValueType_IsValid(int value) {
-  switch(value) {
-    case 1:
-      return true;
-    default:
-      return false;
-  }
-}
-
 
 namespace {
 

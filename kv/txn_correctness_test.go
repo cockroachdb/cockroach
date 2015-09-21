@@ -147,7 +147,7 @@ func readCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 	}
 	if r.Value != nil {
 		c.env[c.key] = r.ValueInt()
-		c.debug = fmt.Sprintf("[%d ts=%d]", r.ValueInt(), r.Timestamp)
+		c.debug = fmt.Sprintf("[%d ts=%d]", r.ValueInt(), r.Timestamp())
 	}
 	return nil
 }
@@ -196,7 +196,7 @@ func sumCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 		}
 	}
 	r, err := txn.Inc(c.getKey(), sum)
-	c.debug = fmt.Sprintf("[%d ts=%d]", sum, r.Timestamp)
+	c.debug = fmt.Sprintf("[%d ts=%d]", sum, r.Timestamp())
 	return err
 }
 

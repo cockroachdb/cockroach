@@ -30,30 +30,22 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
-	roachencoding "github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// KeyValue represents a single key/value pair and corresponding timestamp.
+// KeyValue represents a single key/value pair and corresponding
+// timestamp. This is similar to proto.KeyValue except that the value may be
+// nil.
 type KeyValue struct {
-	Key       []byte
-	Value     interface{}
-	Timestamp time.Time
+	Key   []byte
+	Value *proto.Value
 }
 
 func (kv *KeyValue) String() string {
-	switch t := kv.Value.(type) {
-	case nil:
-		return string(kv.Key) + "=nil"
-	case []byte:
-		return string(kv.Key) + "=" + string(t)
-	case *int64:
-		return string(kv.Key) + "=" + strconv.FormatInt(*t, 10)
-	}
-	return string(kv.Key) + fmt.Sprintf("=<ERROR:%T>", kv.Value)
+	return string(kv.Key) + "=" + kv.PrettyValue()
 }
 
 // Exists returns true iff the value exists.
@@ -61,20 +53,52 @@ func (kv *KeyValue) Exists() bool {
 	return kv.Value != nil
 }
 
-func (kv *KeyValue) setValue(v *proto.Value) {
-	if v == nil {
-		return
+// PrettyValue returns a human-readable version of the value as a string.
+func (kv *KeyValue) PrettyValue() string {
+	if kv.Value == nil {
+		return "nil"
 	}
-	if v.Bytes != nil {
-		kv.Value = v.Bytes
+	switch kv.Value.Tag {
+	case proto.ValueType_INT:
+		v, err := kv.Value.GetInt()
+		if err != nil {
+			return fmt.Sprintf("%v", err)
+		}
+		return fmt.Sprintf("%d", v)
+	case proto.ValueType_FLOAT:
+		v, err := kv.Value.GetFloat()
+		if err != nil {
+			return fmt.Sprintf("%v", err)
+		}
+		return fmt.Sprintf("%v", v)
+	case proto.ValueType_BYTES:
+		v, err := kv.Value.GetBytesChecked()
+		if err != nil {
+			return fmt.Sprintf("%v", err)
+		}
+		return fmt.Sprintf("%q", v)
+	case proto.ValueType_TIME:
+		v, err := kv.Value.GetTime()
+		if err != nil {
+			return fmt.Sprintf("%v", err)
+		}
+		return fmt.Sprintf("%s", v)
 	}
-	if v.Timestamp != nil {
-		kv.Timestamp = v.Timestamp.GoTime()
-	}
+	return fmt.Sprintf("%q", kv.Value.Bytes)
 }
 
 func (kv *KeyValue) setTimestamp(t proto.Timestamp) {
-	kv.Timestamp = t.GoTime()
+	if kv.Value != nil {
+		kv.Value.Timestamp = &t
+	}
+}
+
+// Timestamp returns the timestamp the value was written at.
+func (kv *KeyValue) Timestamp() time.Time {
+	if kv.Value == nil || kv.Value.Timestamp == nil {
+		return time.Time{}
+	}
+	return kv.Value.Timestamp.GoTime()
 }
 
 // ValueBytes returns the value as a byte slice. This method will panic if the
@@ -83,7 +107,7 @@ func (kv *KeyValue) ValueBytes() []byte {
 	if kv.Value == nil {
 		return nil
 	}
-	return kv.Value.([]byte)
+	return kv.Value.Bytes
 }
 
 // ValueInt returns the value decoded as an int64. This method will panic if
@@ -92,27 +116,20 @@ func (kv *KeyValue) ValueInt() int64 {
 	if kv.Value == nil {
 		return 0
 	}
-	if i, ok := kv.Value.(*int64); ok {
-		return *i
+	i, err := kv.Value.GetInt()
+	if err != nil {
+		panic(err)
 	}
-	b := kv.ValueBytes()
-	if len(b) == 0 {
-		return 0
-	}
-	_, uint64val := roachencoding.DecodeUint64(b)
-	return int64(uint64val)
+	return i
 }
 
 // ValueProto parses the byte slice value as a proto message.
 func (kv *KeyValue) ValueProto(msg gogoproto.Message) error {
-	switch val := kv.Value.(type) {
-	case nil:
+	if kv.Value == nil || kv.Value.Bytes == nil {
 		msg.Reset()
 		return nil
-	case []byte:
-		return gogoproto.Unmarshal(val, msg)
 	}
-	return fmt.Errorf("unable to unmarshal proto: %T", kv.Value)
+	return gogoproto.Unmarshal(kv.Value.Bytes, msg)
 }
 
 // Result holds the result for a single DB or Txn operation (e.g. Get, Put,
@@ -256,8 +273,7 @@ func (db *DB) NewBatch() *Batch {
 //   r, err := db.Get("a")
 //   // string(r.Key) == "a"
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (db *DB) Get(key interface{}) (KeyValue, error) {
 	b := db.NewBatch()
 	b.Get(key)
@@ -267,8 +283,7 @@ func (db *DB) Get(key interface{}) (KeyValue, error) {
 // GetProto retrieves the value for a key and decodes the result as a proto
 // message.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (db *DB) GetProto(key interface{}, msg gogoproto.Message) error {
 	r, err := db.Get(key)
 	if err != nil {
@@ -279,8 +294,8 @@ func (db *DB) GetProto(key interface{}, msg gogoproto.Message) error {
 
 // Put sets the value for a key.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc).
 func (db *DB) Put(key, value interface{}) error {
 	b := db.NewBatch()
 	b.Put(key, value)
@@ -292,8 +307,8 @@ func (db *DB) Put(key, value interface{}) error {
 // to expValue. To conditionally set a value only if there is no existing entry
 // pass nil for expValue.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc).
 func (db *DB) CPut(key, value, expValue interface{}) error {
 	b := db.NewBatch()
 	b.CPut(key, value, expValue)
@@ -305,8 +320,7 @@ func (db *DB) CPut(key, value, expValue interface{}) error {
 // be created with an initial value of 0 which will then be incremented. If the
 // key exists but was set using Put or CPut an error will be returned.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
 	b := db.NewBatch()
 	b.Inc(key, value)
@@ -329,8 +343,7 @@ func (db *DB) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]Key
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 	return db.scan(begin, end, maxRows, false)
 }
@@ -340,16 +353,14 @@ func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 	return db.scan(begin, end, maxRows, true)
 }
 
 // Del deletes one or more keys.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (db *DB) Del(keys ...interface{}) error {
 	b := db.NewBatch()
 	b.Del(keys...)
@@ -361,8 +372,7 @@ func (db *DB) Del(keys ...interface{}) error {
 //
 // TODO(pmattis): Perhaps the result should return which rows were deleted.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (db *DB) DelRange(begin, end interface{}) error {
 	b := db.NewBatch()
 	b.DelRange(begin, end)
@@ -375,8 +385,7 @@ func (db *DB) DelRange(begin, end interface{}) error {
 // key will contain all of the key/value pairs of the subsequent range
 // and the subsequent range will no longer exist.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (db *DB) AdminMerge(key interface{}) error {
 	b := db.NewBatch()
 	b.adminMerge(key)
@@ -386,8 +395,7 @@ func (db *DB) AdminMerge(key interface{}) error {
 
 // AdminSplit splits the range at splitkey.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (db *DB) AdminSplit(splitKey interface{}) error {
 	b := db.NewBatch()
 	b.adminSplit(splitKey)
