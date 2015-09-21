@@ -135,35 +135,29 @@ func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*p
 	}
 
 	var br *proto.BatchResponse
-	// TODO(tschottdorf): handle err != nil first.
-	if err == nil {
-		// For calls that read data within a txn, we can avoid uncertainty
-		// related retries in certain situations. If the node is in
-		// "CertainNodes", we need not worry about uncertain reads any
-		// more. Setting MaxTimestamp=Timestamp for the operation
-		// accomplishes that. See proto.Transaction.CertainNodes for details.
-		if ba.Txn != nil && ba.Txn.CertainNodes.Contains(ba.Replica.NodeID) {
-			// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
-			trace.Event("read has no clock uncertainty")
-			ba.Txn.MaxTimestamp = ba.Txn.Timestamp
-		}
-		{
-			// TODO(tschottdorf): &ba -> ba
-			tmpR, pErr := store.ExecuteCmd(ctx, &ba)
-			// TODO(tschottdorf): remove this dance once BatchResponse is returned.
-			if tmpR != nil {
-				br = tmpR.(*proto.BatchResponse)
-				if br.Error != nil {
-					panic(proto.ErrorUnexpectedlySet)
-				}
-			}
-			return br, pErr
+	if err != nil {
+		return nil, proto.NewError(err)
+	}
+	// For calls that read data within a txn, we can avoid uncertainty
+	// related retries in certain situations. If the node is in
+	// "CertainNodes", we need not worry about uncertain reads any
+	// more. Setting MaxTimestamp=Timestamp for the operation
+	// accomplishes that. See proto.Transaction.CertainNodes for details.
+	if ba.Txn != nil && ba.Txn.CertainNodes.Contains(ba.Replica.NodeID) {
+		// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
+		trace.Event("read has no clock uncertainty")
+		ba.Txn.MaxTimestamp = ba.Txn.Timestamp
+	}
+	// TODO(tschottdorf): &ba -> ba
+	tmpR, pErr := store.ExecuteCmd(ctx, &ba)
+	// TODO(tschottdorf): remove this dance once BatchResponse is returned.
+	if tmpR != nil {
+		br = tmpR.(*proto.BatchResponse)
+		if br.Error != nil {
+			panic(proto.ErrorUnexpectedlySet)
 		}
 	}
-	// TODO(tschottdorf): Later error needs to be associated to an index
-	// and ideally individual requests don't even have an error in their
-	// header. See #1891.
-	return br, proto.NewError(err)
+	return br, pErr
 }
 
 // Send implements the client.Sender interface. The store is looked
