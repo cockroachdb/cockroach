@@ -2,8 +2,6 @@
 
 set -euo pipefail
 
-export SKIP_BOOTSTRAP=1
-
 if [ -n "${CIRCLE_ARTIFACTS-}" ]; then
   outdir="${CIRCLE_ARTIFACTS}"
 elif [ -n "${TMPDIR-}" ]; then
