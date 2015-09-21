@@ -19,7 +19,6 @@ package main
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
@@ -35,7 +34,6 @@ const (
 // Store is a simulated cockroach store. To access the replicas in a store, use
 // the ranges directly instead.
 type Store struct {
-	sync.RWMutex
 	desc   proto.StoreDescriptor
 	gossip *gossip.Gossip
 }
@@ -54,16 +52,12 @@ func newStore(storeID proto.StoreID, nodeDesc proto.NodeDescriptor, gossip *goss
 
 // getIDs returns the store's ID and its node's IDs.
 func (s *Store) getIDs() (proto.StoreID, proto.NodeID) {
-	s.RLock()
-	defer s.RUnlock()
 	return s.desc.StoreID, s.desc.Node.NodeID
 }
 
 // getDesc returns the store descriptor. The rangeCount is required to
 // determine the current capacity.
 func (s *Store) getDesc(rangeCount int) proto.StoreDescriptor {
-	s.RLock()
-	defer s.RUnlock()
 	desc := s.desc
 	desc.Capacity = s.getCapacity(rangeCount)
 	return desc
@@ -73,8 +67,6 @@ func (s *Store) getDesc(rangeCount int) proto.StoreDescriptor {
 // located in the store.
 // TODO(bram): Change this to take the actual ranges for real counts.
 func (s *Store) getCapacity(rangeCount int) proto.StoreCapacity {
-	s.RLock()
-	defer s.RUnlock()
 	return proto.StoreCapacity{
 		Capacity:   capacityPerStore,
 		Available:  capacityPerStore - int64(rangeCount)*bytesPerRange,
@@ -86,8 +78,6 @@ func (s *Store) getCapacity(rangeCount int) proto.StoreCapacity {
 // Like the getDesc and getCapacity, it requires the number of ranges currently
 // housed in the store.
 func (s *Store) String(rangeCount int) string {
-	s.RLock()
-	defer s.RUnlock()
 	desc := s.getDesc(rangeCount)
 	return fmt.Sprintf("Store %d - Node:%d, Replicas:%d, AvailableReplicas:%d, Capacity:%d, Available:%d",
 		desc.StoreID, desc.Node.NodeID, desc.Capacity.RangeCount, desc.Capacity.Available/bytesPerRange,
@@ -96,8 +86,6 @@ func (s *Store) String(rangeCount int) string {
 
 // GossipStore broadcasts the store on the gossip network.
 func (s *Store) gossipStore(rangeCount int) error {
-	s.RLock()
-	defer s.RUnlock()
 	desc := s.getDesc(rangeCount)
 	// Unique gossip key per store.
 	gossipKey := gossip.MakeStoreKey(desc.StoreID)

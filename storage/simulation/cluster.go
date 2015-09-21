@@ -186,7 +186,6 @@ func (c *Cluster) gossipStores() {
 // required using the allocator.
 func (c *Cluster) prepareActions() {
 	for _, r := range c.ranges {
-		r.Lock()
 		for storeID, replica := range r.replicas {
 			replica.action, replica.priority = r.allocator.ComputeAction(r.zone, &r.desc)
 			if replica.action == storage.AANoop {
@@ -197,7 +196,6 @@ func (c *Cluster) prepareActions() {
 			}
 			r.replicas[storeID] = replica
 		}
-		r.Unlock()
 	}
 }
 
