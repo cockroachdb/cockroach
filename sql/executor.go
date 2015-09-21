@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -207,7 +206,7 @@ func (e Executor) execStmt(stmt parser.Statement, params parameters, planMaker *
 							Payload: &driver.Datum_IntervalVal{IntervalVal: vt.Nanoseconds()},
 						})
 					default:
-						return util.Errorf("unsupported datum: %T", val)
+						return fmt.Errorf("unsupported result type: %s", val.Type())
 					}
 				}
 			}
