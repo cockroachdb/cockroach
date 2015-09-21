@@ -117,12 +117,12 @@ func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte) {
 			if prefix == nil {
 				prefix = make([]byte, 0, 100)
 			}
-			prefix, n.err = encodeTableKey(prefix, val)
+			prefix, n.err = encodeDatum(prefix, val)
 		} else {
 			if suffix == nil {
 				suffix = make([]byte, 0, 100)
 			}
-			suffix, n.err = encodeTableKey(suffix, val)
+			suffix, n.err = encodeDatum(suffix, val)
 		}
 		if n.err != nil {
 			break

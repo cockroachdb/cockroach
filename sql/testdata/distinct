@@ -145,3 +145,6 @@ SELECT DISTINCT y,z FROM xyz
 3 5
 2 9
 2 NULL
+
+query error unsupported result type: tuple
+SELECT DISTINCT (y,z) FROM xyz

@@ -5,10 +5,14 @@ CREATE TABLE kv (
 )
 
 statement OK
-INSERT INTO kv VALUES (1, 2), (3, 4), (5, NULL)
+INSERT INTO kv VALUES (1, 2), (3, 4), (5, NULL), (6, 2), (7, 2), (8, 4)
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT COUNT(*), k FROM kv
+
+# TODO(pmattis): fix
+query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT COUNT(*), k FROM kv GROUP BY k
 
 query error syntax error at or near ","
 SELECT COUNT(*, 1) FROM kv
@@ -23,47 +27,66 @@ query I colnames
 SELECT COUNT(*), COUNT(kv.*), COUNT(k), COUNT(kv.v) FROM kv
 ----
 COUNT(*) COUNT(kv.*) COUNT(k) COUNT(kv.v)
-3        3           3        2
+6        6           6        5
+
+query III
+SELECT COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv
+----
+6 2 2
 
 query I
 SELECT COUNT((k, v)) FROM kv
 ----
-3
+6
+
+query I
+SELECT COUNT(DISTINCT (k, v)) FROM kv
+----
+6
+
+query I
+SELECT COUNT(DISTINCT (k, (v))) FROM kv
+----
+6
 
 query I
 SELECT COUNT((k, v)) FROM kv LIMIT 1
 ----
-3
+6
 
 query I
 SELECT COUNT((k, v)) FROM kv OFFSET 1
 ----
 
-
 query I
 SELECT COUNT(k)+COUNT(kv.v) FROM kv
 ----
-5
+11
 
 query IIII
 SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv
 ----
-1 5 2 4
+1 8 2 4
 
 query IIII
-SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv WHERE k > 5
+SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv WHERE k > 8
 ----
 NULL NULL NULL NULL
 
 query RRII
 SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM kv
 ----
-3 3 9 6
+5 2.8 30 14
+
+query RRII
+SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM kv
+----
+5 3 30 6
 
 query R
 SELECT AVG(k) * 2.0 + MAX(v)::float FROM kv
 ----
-10
+14
 
 query ITT
 EXPLAIN SELECT COUNT(k) FROM kv
