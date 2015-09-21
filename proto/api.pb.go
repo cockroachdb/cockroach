@@ -93,6 +93,7 @@
 		OpRequiresTxnError
 		ConditionFailedError
 		LeaseRejectedError
+		SendError
 		ErrorDetail
 		Error
 		RemoteOffset

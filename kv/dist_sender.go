@@ -565,7 +565,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 				ba.Key, ba.EndKey = nil, nil
 
 				if err != nil {
-					if log.V(0 /* TODO(tschottdorf): 1 */) {
+					if log.V(1) {
 						log.Warningf("failed to invoke %s: %s", ba, err)
 					}
 				}
@@ -581,7 +581,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 			// key mismatch errors, we don't backoff on the retry,
 			// but reset the backoff loop so we can retry immediately.
 			switch tErr := err.(type) {
-			case *rpc.SendError:
+			case *proto.SendError:
 				// For an RPC error to occur, we must've been unable to contact
 				// any replicas. In this case, likely all nodes are down (or
 				// not getting back to us within a reasonable amount of time).

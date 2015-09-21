@@ -387,6 +387,30 @@ func (m *LeaseRejectedError) GetExisting() Lease {
 	return Lease{}
 }
 
+// A SendError indicates that a message could not be delivered to
+// the desired recipient(s).
+type SendError struct {
+	Message   string `protobuf:"bytes,1,opt,name=message" json:"message"`
+	Retryable bool   `protobuf:"varint,2,opt,name=retryable" json:"retryable"`
+}
+
+func (m *SendError) Reset()      { *m = SendError{} }
+func (*SendError) ProtoMessage() {}
+
+func (m *SendError) GetMessage() string {
+	if m != nil {
+		return m.Message
+	}
+	return ""
+}
+
+func (m *SendError) GetRetryable() bool {
+	if m != nil {
+		return m.Retryable
+	}
+	return false
+}
+
 // ErrorDetail is a union type containing all available errors.
 type ErrorDetail struct {
 	NotLeader                     *NotLeaderError                     `protobuf:"bytes,1,opt,name=not_leader" json:"not_leader,omitempty"`
@@ -403,6 +427,7 @@ type ErrorDetail struct {
 	ConditionFailed               *ConditionFailedError               `protobuf:"bytes,12,opt,name=condition_failed" json:"condition_failed,omitempty"`
 	LeaseRejected                 *LeaseRejectedError                 `protobuf:"bytes,13,opt,name=lease_rejected" json:"lease_rejected,omitempty"`
 	NodeUnavailable               *NodeUnavailableError               `protobuf:"bytes,14,opt,name=node_unavailable" json:"node_unavailable,omitempty"`
+	Send                          *SendError                          `protobuf:"bytes,15,opt,name=send" json:"send,omitempty"`
 }
 
 func (m *ErrorDetail) Reset()      { *m = ErrorDetail{} }
@@ -502,6 +527,13 @@ func (m *ErrorDetail) GetLeaseRejected() *LeaseRejectedError {
 func (m *ErrorDetail) GetNodeUnavailable() *NodeUnavailableError {
 	if m != nil {
 		return m.NodeUnavailable
+	}
+	return nil
+}
+
+func (m *ErrorDetail) GetSend() *SendError {
+	if m != nil {
+		return m.Send
 	}
 	return nil
 }
@@ -991,6 +1023,36 @@ func (m *LeaseRejectedError) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *SendError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *SendError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintErrors(data, i, uint64(len(m.Message)))
+	i += copy(data[i:], m.Message)
+	data[i] = 0x10
+	i++
+	if m.Retryable {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	return i, nil
+}
+
 func (m *ErrorDetail) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -1146,6 +1208,16 @@ func (m *ErrorDetail) MarshalTo(data []byte) (int, error) {
 		}
 		i += n30
 	}
+	if m.Send != nil {
+		data[i] = 0x7a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Send.Size()))
+		n31, err := m.Send.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n31
+	}
 	return i, nil
 }
 
@@ -1180,11 +1252,11 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
-		n31, err := m.Detail.MarshalTo(data[i:])
+		n32, err := m.Detail.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n31
+		i += n32
 	}
 	data[i] = 0x20
 	i++
@@ -1365,6 +1437,15 @@ func (m *LeaseRejectedError) Size() (n int) {
 	return n
 }
 
+func (m *SendError) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Message)
+	n += 1 + l + sovErrors(uint64(l))
+	n += 2
+	return n
+}
+
 func (m *ErrorDetail) Size() (n int) {
 	var l int
 	_ = l
@@ -1422,6 +1503,10 @@ func (m *ErrorDetail) Size() (n int) {
 	}
 	if m.NodeUnavailable != nil {
 		l = m.NodeUnavailable.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.Send != nil {
+		l = m.Send.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
 	return n
@@ -1497,6 +1582,9 @@ func (this *ErrorDetail) GetValue() interface{} {
 	if this.NodeUnavailable != nil {
 		return this.NodeUnavailable
 	}
+	if this.Send != nil {
+		return this.Send
+	}
 	return nil
 }
 
@@ -1530,6 +1618,8 @@ func (this *ErrorDetail) SetValue(value interface{}) bool {
 		this.LeaseRejected = vt
 	case *NodeUnavailableError:
 		this.NodeUnavailable = vt
+	case *SendError:
+		this.Send = vt
 	default:
 		return false
 	}
@@ -2923,6 +3013,105 @@ func (m *LeaseRejectedError) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+func (m *SendError) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowErrors
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SendError: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SendError: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Message", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Message = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Retryable", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Retryable = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipErrors(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthErrors
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *ErrorDetail) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -3411,6 +3600,39 @@ func (m *ErrorDetail) Unmarshal(data []byte) error {
 				m.NodeUnavailable = &NodeUnavailableError{}
 			}
 			if err := m.NodeUnavailable.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 15:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Send", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Send == nil {
+				m.Send = &SendError{}
+			}
+			if err := m.Send.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

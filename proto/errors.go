@@ -54,6 +54,16 @@ func (e Error) getDetail() error {
 	return e.Detail.GetValue().(error)
 }
 
+// NewError creates an Error from the given error.
+func NewError(err error) *Error {
+	if err == nil {
+		return nil
+	}
+	e := &Error{}
+	e.SetResponseGoError(err)
+	return e
+}
+
 // GoError returns the non-nil error from the proto.Error union.
 func (e *Error) GoError() error {
 	if e == nil {
@@ -124,6 +134,14 @@ func (e *LeaseRejectedError) Error() string {
 func (e *LeaseRejectedError) CanRetry() bool {
 	return false
 }
+
+// Error formats error.
+func (s SendError) Error() string {
+	return "failed to send RPC: " + s.Message
+}
+
+// CanRetry implements the Retryable interface.
+func (s SendError) CanRetry() bool { return s.Retryable }
 
 // NewRangeNotFoundError initializes a new RangeNotFoundError.
 func NewRangeNotFoundError(rangeID RangeID) *RangeNotFoundError {
