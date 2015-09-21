@@ -342,7 +342,7 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	"unique_bytes": {
+	"experimental_unique_bytes": {
 		builtin{
 			types:      typeList{},
 			returnType: DummyBytes,
@@ -353,7 +353,7 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	"unique_int": {
+	"experimental_unique_int": {
 		builtin{
 			types:      typeList{},
 			returnType: DummyInt,
@@ -364,7 +364,7 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	"uuid_v4": {
+	"experimental_uuid_v4": {
 		builtin{
 			types:      typeList{},
 			returnType: DummyBytes,
