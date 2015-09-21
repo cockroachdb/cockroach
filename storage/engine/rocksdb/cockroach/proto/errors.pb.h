@@ -55,6 +55,7 @@ class WriteTooOldError;
 class OpRequiresTxnError;
 class ConditionFailedError;
 class LeaseRejectedError;
+class SendError;
 class ErrorDetail;
 class Error;
 
@@ -1476,6 +1477,110 @@ class LeaseRejectedError : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class SendError : public ::google::protobuf::Message {
+ public:
+  SendError();
+  virtual ~SendError();
+
+  SendError(const SendError& from);
+
+  inline SendError& operator=(const SendError& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const SendError& default_instance();
+
+  void Swap(SendError* other);
+
+  // implements Message ----------------------------------------------
+
+  inline SendError* New() const { return New(NULL); }
+
+  SendError* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const SendError& from);
+  void MergeFrom(const SendError& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(SendError* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional string message = 1;
+  bool has_message() const;
+  void clear_message();
+  static const int kMessageFieldNumber = 1;
+  const ::std::string& message() const;
+  void set_message(const ::std::string& value);
+  void set_message(const char* value);
+  void set_message(const char* value, size_t size);
+  ::std::string* mutable_message();
+  ::std::string* release_message();
+  void set_allocated_message(::std::string* message);
+
+  // optional bool retryable = 2;
+  bool has_retryable() const;
+  void clear_retryable();
+  static const int kRetryableFieldNumber = 2;
+  bool retryable() const;
+  void set_retryable(bool value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.SendError)
+ private:
+  inline void set_has_message();
+  inline void clear_has_message();
+  inline void set_has_retryable();
+  inline void clear_has_retryable();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::internal::ArenaStringPtr message_;
+  bool retryable_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
+
+  void InitAsDefaultInstance();
+  static SendError* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class ErrorDetail : public ::google::protobuf::Message {
  public:
   ErrorDetail();
@@ -1666,6 +1771,15 @@ class ErrorDetail : public ::google::protobuf::Message {
   ::cockroach::proto::NodeUnavailableError* release_node_unavailable();
   void set_allocated_node_unavailable(::cockroach::proto::NodeUnavailableError* node_unavailable);
 
+  // optional .cockroach.proto.SendError send = 15;
+  bool has_send() const;
+  void clear_send();
+  static const int kSendFieldNumber = 15;
+  const ::cockroach::proto::SendError& send() const;
+  ::cockroach::proto::SendError* mutable_send();
+  ::cockroach::proto::SendError* release_send();
+  void set_allocated_send(::cockroach::proto::SendError* send);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.ErrorDetail)
  private:
   inline void set_has_not_leader();
@@ -1696,6 +1810,8 @@ class ErrorDetail : public ::google::protobuf::Message {
   inline void clear_has_lease_rejected();
   inline void set_has_node_unavailable();
   inline void clear_has_node_unavailable();
+  inline void set_has_send();
+  inline void clear_has_send();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -1714,6 +1830,7 @@ class ErrorDetail : public ::google::protobuf::Message {
   ::cockroach::proto::ConditionFailedError* condition_failed_;
   ::cockroach::proto::LeaseRejectedError* lease_rejected_;
   ::cockroach::proto::NodeUnavailableError* node_unavailable_;
+  ::cockroach::proto::SendError* send_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
@@ -2882,6 +2999,87 @@ inline void LeaseRejectedError::set_allocated_existing(::cockroach::proto::Lease
 
 // -------------------------------------------------------------------
 
+// SendError
+
+// optional string message = 1;
+inline bool SendError::has_message() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void SendError::set_has_message() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void SendError::clear_has_message() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void SendError::clear_message() {
+  message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_message();
+}
+inline const ::std::string& SendError::message() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.SendError.message)
+  return message_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void SendError::set_message(const ::std::string& value) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.SendError.message)
+}
+inline void SendError::set_message(const char* value) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.SendError.message)
+}
+inline void SendError::set_message(const char* value, size_t size) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.SendError.message)
+}
+inline ::std::string* SendError::mutable_message() {
+  set_has_message();
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.SendError.message)
+  return message_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* SendError::release_message() {
+  clear_has_message();
+  return message_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void SendError::set_allocated_message(::std::string* message) {
+  if (message != NULL) {
+    set_has_message();
+  } else {
+    clear_has_message();
+  }
+  message_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), message);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.SendError.message)
+}
+
+// optional bool retryable = 2;
+inline bool SendError::has_retryable() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void SendError::set_has_retryable() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void SendError::clear_has_retryable() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void SendError::clear_retryable() {
+  retryable_ = false;
+  clear_has_retryable();
+}
+inline bool SendError::retryable() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.SendError.retryable)
+  return retryable_;
+}
+inline void SendError::set_retryable(bool value) {
+  set_has_retryable();
+  retryable_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.SendError.retryable)
+}
+
+// -------------------------------------------------------------------
+
 // ErrorDetail
 
 // optional .cockroach.proto.NotLeaderError not_leader = 1;
@@ -3486,6 +3684,49 @@ inline void ErrorDetail::set_allocated_node_unavailable(::cockroach::proto::Node
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.node_unavailable)
 }
 
+// optional .cockroach.proto.SendError send = 15;
+inline bool ErrorDetail::has_send() const {
+  return (_has_bits_[0] & 0x00004000u) != 0;
+}
+inline void ErrorDetail::set_has_send() {
+  _has_bits_[0] |= 0x00004000u;
+}
+inline void ErrorDetail::clear_has_send() {
+  _has_bits_[0] &= ~0x00004000u;
+}
+inline void ErrorDetail::clear_send() {
+  if (send_ != NULL) send_->::cockroach::proto::SendError::Clear();
+  clear_has_send();
+}
+inline const ::cockroach::proto::SendError& ErrorDetail::send() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.send)
+  return send_ != NULL ? *send_ : *default_instance_->send_;
+}
+inline ::cockroach::proto::SendError* ErrorDetail::mutable_send() {
+  set_has_send();
+  if (send_ == NULL) {
+    send_ = new ::cockroach::proto::SendError;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.send)
+  return send_;
+}
+inline ::cockroach::proto::SendError* ErrorDetail::release_send() {
+  clear_has_send();
+  ::cockroach::proto::SendError* temp = send_;
+  send_ = NULL;
+  return temp;
+}
+inline void ErrorDetail::set_allocated_send(::cockroach::proto::SendError* send) {
+  delete send_;
+  send_ = send;
+  if (send) {
+    set_has_send();
+  } else {
+    clear_has_send();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.send)
+}
+
 // -------------------------------------------------------------------
 
 // Error
@@ -3636,6 +3877,8 @@ inline void Error::set_allocated_detail(::cockroach::proto::ErrorDetail* detail)
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

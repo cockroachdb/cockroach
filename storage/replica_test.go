@@ -3040,7 +3040,10 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	// Force the read command request a new lease.
 	clock := tc.clock
 	gArgs.Header().Timestamp = clock.Update(clock.Now().Add(int64(DefaultLeaderLeaseDuration), 0))
-	_, err = tc.store.ExecuteCmd(context.Background(), &gArgs)
+	{
+		_, pErr := tc.store.ExecuteCmd(context.Background(), &gArgs)
+		err = pErr.GoError()
+	}
 	if _, ok := err.(*proto.RangeNotFoundError); !ok {
 		t.Fatalf("expected a RangeNotFoundError, get %s", err)
 	}

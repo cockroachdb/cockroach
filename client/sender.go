@@ -46,7 +46,7 @@ var defaultRetryOptions = retry.Options{
 // TODO(tschottdorf): do away with client.Sender.
 // TODO(tschottdorf) s/Batch// when client.Sender is out of the way.
 type BatchSender interface {
-	SendBatch(context.Context, proto.BatchRequest) (*proto.BatchResponse, error)
+	SendBatch(context.Context, proto.BatchRequest) (*proto.BatchResponse, *proto.Error)
 }
 
 // Sender is an interface for sending a request to a Key-Value

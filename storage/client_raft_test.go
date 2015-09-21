@@ -99,8 +99,8 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 		increment := func(rangeID proto.RangeID, key proto.Key, value int64) (*proto.IncrementResponse, error) {
 			args := incrementArgs(key, value, rangeID, store.StoreID())
-			resp, err := store.ExecuteCmd(context.Background(), &args)
-			return resp.(*proto.IncrementResponse), err
+			resp, pErr := store.ExecuteCmd(context.Background(), &args)
+			return resp.(*proto.IncrementResponse), pErr.GoError()
 		}
 
 		if _, err := increment(rangeID, key1, 2); err != nil {
@@ -312,9 +312,11 @@ func TestRestoreReplicas(t *testing.T) {
 	// The follower will return a not leader error, indicating the command
 	// should be forwarded to the leader.
 	incArgs = incrementArgs([]byte("a"), 11, 1, mtc.stores[1].StoreID())
-	_, err = mtc.stores[1].ExecuteCmd(context.Background(), &incArgs)
-	if _, ok := err.(*proto.NotLeaderError); !ok {
-		t.Fatalf("expected not leader error; got %s", err)
+	{
+		_, pErr := mtc.stores[1].ExecuteCmd(context.Background(), &incArgs)
+		if _, ok := pErr.GoError().(*proto.NotLeaderError); !ok {
+			t.Fatalf("expected not leader error; got %s", pErr)
+		}
 	}
 	incArgs.Replica.StoreID = mtc.stores[0].StoreID()
 	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {

@@ -479,9 +479,14 @@ func TestEvictCacheOnError(t *testing.T) {
 				return []gogoproto.Message{getReply()}, nil
 			}
 			first = false
-			err := rpc.NewSendError("boom", tc.retryable)
 			if tc.rpcError {
-				return nil, err
+				return nil, rpc.NewSendError("boom", tc.retryable)
+			}
+			var err error
+			if tc.retryable {
+				err = &proto.RangeKeyMismatchError{}
+			} else {
+				err = errors.New("boom")
 			}
 			reply := getReply()
 			reply.(proto.Response).Header().SetGoError(err)

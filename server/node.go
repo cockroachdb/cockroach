@@ -484,15 +484,15 @@ func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
 	ctx := tracer.ToCtx((*Node)(n).context(), trace)
 
 	ba, unwrap := client.MaybeWrap(args)
-	br, err := n.lSender.SendBatch(ctx, *ba)
-	if err != nil {
+	br, pErr := n.lSender.SendBatch(ctx, *ba)
+	if pErr != nil {
 		br = &proto.BatchResponse{}
-		trace.Event(fmt.Sprintf("error: %T", err))
+		trace.Event(fmt.Sprintf("error: %T", pErr.GoError()))
 	}
-	if br.GoError() != nil {
+	if br.Error != nil {
 		panic(proto.ErrorUnexpectedlySet)
 	}
-	br.SetGoError(err)
+	br.Error = pErr
 	n.feed.CallComplete(ba, br)
 	return unwrap(br), nil
 }

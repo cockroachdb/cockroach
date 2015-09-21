@@ -45,7 +45,7 @@ func SendCallConverted(sender BatchSender, ctx context.Context, call proto.Call)
 		}
 	}
 
-	reply, err := sender.SendBatch(ctx, *call.Args.(*proto.BatchRequest))
+	reply, pErr := sender.SendBatch(ctx, *call.Args.(*proto.BatchRequest))
 
 	if reply != nil {
 		call.Reply.Reset() // required for BatchRequest (concats response otherwise)
@@ -54,8 +54,8 @@ func SendCallConverted(sender BatchSender, ctx context.Context, call proto.Call)
 	if call.Reply.Header().GoError() != nil {
 		panic(proto.ErrorUnexpectedlySet)
 	}
-	if err != nil {
-		call.Reply.Header().SetGoError(err)
+	if pErr != nil {
+		call.Reply.Header().Error = pErr
 	}
 }
 

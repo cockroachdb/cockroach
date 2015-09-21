@@ -296,8 +296,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		UserPriority: &priority,
 		Timestamp:    clock.Now(),
 	}
-	_, err = store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader})
-	if err != nil {
+	if _, err := store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader}); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
 
@@ -312,8 +311,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	requestHeader.Timestamp = clock.Now()
-	_, err = store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader})
-	if err == nil {
+	if _, err := store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
 	}
 
@@ -354,8 +352,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		},
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
-		_, err := store.ExecuteCmd(context.Background(), &scanArgs)
-		return err
+		_, pErr := store.ExecuteCmd(context.Background(), &scanArgs)
+		return pErr.GoError()
 	})
 
 	revScanArgs := func(key []byte, maxResults int32) *proto.RangeLookupRequest {

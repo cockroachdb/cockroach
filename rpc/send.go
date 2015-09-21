@@ -85,26 +85,10 @@ func (r rpcError) CanRetry() bool { return true }
 // sendOneFn is overwritten in tests to mock sendOne.
 var sendOneFn = sendOne
 
-// A SendError indicates that too many RPCs to the replica
-// set failed to achieve requested number of successful responses.
-// canRetry is set depending on the types of errors encountered.
-type SendError struct {
-	errMsg   string
-	canRetry bool
-}
-
 // NewSendError creates a SendError.
-func NewSendError(msg string, canRetry bool) *SendError {
-	return &SendError{errMsg: msg, canRetry: canRetry}
+func NewSendError(msg string, canRetry bool) *proto.SendError {
+	return &proto.SendError{Message: msg, Retryable: canRetry}
 }
-
-// Error implements the error interface.
-func (s SendError) Error() string {
-	return "failed to send RPC: " + s.errMsg
-}
-
-// CanRetry implements the Retryable interface.
-func (s SendError) CanRetry() bool { return s.canRetry }
 
 // Send sends one or more method RPCs to clients specified by the
 // slice of endpoint addrs. Arguments for methods are obtained using
@@ -119,17 +103,13 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 	trace := opts.Trace // not thread safe!
 
 	if opts.N <= 0 {
-		return nil, SendError{
-			errMsg:   fmt.Sprintf("opts.N must be positive: %d", opts.N),
-			canRetry: false,
-		}
+		return nil, NewSendError(fmt.Sprintf("opts.N must be positive: %d", opts.N), false)
 	}
 
 	if len(addrs) < opts.N {
-		return nil, SendError{
-			errMsg:   fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d", len(addrs), opts.N),
-			canRetry: false,
-		}
+		return nil, NewSendError(
+			fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d",
+				len(addrs), opts.N), false)
 	}
 
 	done := make(chan *rpc.Call, len(addrs))
@@ -229,10 +209,9 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			}
 
 			if remainingNonErrorRPCs := len(addrs) - errors; remainingNonErrorRPCs < opts.N {
-				return nil, SendError{
-					errMsg:   fmt.Sprintf("too many errors encountered (%d of %d total): %v", errors, len(clients), err),
-					canRetry: remainingNonErrorRPCs+retryableErrors >= opts.N,
-				}
+				return nil, NewSendError(
+					fmt.Sprintf("too many errors encountered (%d of %d total): %v",
+						errors, len(clients), err), remainingNonErrorRPCs+retryableErrors >= opts.N)
 			}
 			// Send to additional replicas if available.
 			if len(tail) > 0 {
