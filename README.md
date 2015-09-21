@@ -9,7 +9,7 @@
 
 - [What is CockroachDB](#what-is-cockroachdb)
 - [Status](#status)
-- [Running CockroachDB Locally](#running-cockroach-locally)
+- [Running CockroachDB Locally](#running-cockroachdb-locally)
 - [Deploying CockroachDB in production](#deploying-cockroachdb-in-production)
 - [Getting in touch and contributing](#get-in-touch)
 - [Talks](#talks)
