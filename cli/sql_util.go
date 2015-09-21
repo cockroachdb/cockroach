@@ -20,12 +20,10 @@ package cli
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/olekukonko/tablewriter"
 
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
 func makeSQLClient() *sql.DB {
@@ -159,10 +157,9 @@ func formatVal(val interface{}) string {
 	switch t := val.(type) {
 	case nil:
 		return "NULL"
-	case time.Time:
-		return t.Format(parser.TimestampWithOffsetZoneFormat)
+	case string:
+		// Ensure that binary protobufs print escaped.
+		return fmt.Sprintf("%q", t)
 	}
-	// Note that this prints a Go-syntax representation of the value.
-	// This is to ensure that binary protobufs print escaped.
-	return fmt.Sprintf("%#v", val)
+	return fmt.Sprint(val)
 }
