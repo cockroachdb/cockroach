@@ -432,6 +432,99 @@ func TestStoreRangeSet(t *testing.T) {
 	<-done
 }
 
+func generateMetadatem(repl * Replica, t *testing.T) []proto.EncodedKey {
+	ts0 := proto.ZeroTimestamp
+	ts := proto.Timestamp{WallTime: 1}
+
+	metadata := []struct{
+	  name 		string
+	  key   	proto.Key
+	  ts 		proto.Timestamp
+	}{
+	  {"cache", keys.ResponseCacheKey(rangeID, nil), ts0},
+	  {"logprefix", keys.RaftLogPrefix(rangeID), ts0},
+	  {"hardstate", keys.RaftHardStateKey(rangeID), ts0},
+	  {"gcmeta", keys.RangeGCMetadataKey(rangeID), ts0},
+	  {"verifytimestamp", keys.RangeLastVerificationTimestampKey(rangeID), ts0},
+	  {"truncatestate", keys.RaftTruncatedStateKey(rangeID), ts0},
+	  {"appliedindex", keys.RaftAppliedIndexKey(rangeID), ts0},
+	  {"leaderlease", keys.RaftLeaderLeaseKey(rangeID), ts0},
+	  {"lastindex", keys.RaftLastIndexKey(rangeID), ts0},
+	  {"stats", keys.RangeStatsKey(rangeID), ts0},
+	  {"rangedescriptor", keys.RangeDescriptorKey(rangeStart), ts0},
+	}
+
+	metaKeys := []proto.EncodedKey{}
+	for _, metadatum := range metadata {
+		if err := engine.MVCCPut(r.rm.Engine(), nil, metadatum.key, metadatum.ts, proto.Value{Bytes: []byte("value")}, nil); err != nil {
+			t.Fatal(err)
+		}
+		metaKeys = append(metaKeys, engine.MVCCEncodeKey(metadatum.key))
+		if !metadatum.ts.Equal(ts0) {
+			metaKeys = append(metaKeys, engine.MVCCEncodeVersionKey(metadatum.key, metadatum.ts))
+		}
+	}
+	return metaKeys
+}
+
+
+func TestMetaRangeSet(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	rng1, err := store.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+
+	rng2, err := store.GetReplica(2)
+	if err != nil {
+		t.Error(err)
+	}
+
+	const newCount = 10
+	for i := 0; i < newCount; i++ {
+		rng := createRange(store, proto.RangeID(i+2), proto.Key(fmt.Sprintf("a%02d", i)), proto.Key(fmt.Sprintf("a%02d", i+1)))
+		if err := store.AddReplicaTest(rng); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	metaKeys := generateMetadatem()
+	orgMetaNum := len(metaKeys)
+	tmpMetaKeys := proto.EncodedKey{}
+
+	measureMeta := func() int {
+		countdown := orgMetaNum
+		if countdown > len(metaKeys) {
+			countdown = len(metaKeys)
+		} else if countdown == len(metaKeys) {
+			t.Errorf("expected meta range would be removed but got %v out of %v", countdown, orgMetaNum)
+		}
+		return countdown
+	}
+
+	store.engine.Defer(func () {
+		if err := store.MergeRange(rng1, proto.Key("a01"), rng2); err != nil {
+			t.Fatal(err)
+		}
+		// since 2 replicas are merged, count should be 5 - 1
+		if ec := rng1.EstimatedCount(); ec != 9 {
+			t.Fatal(err)
+		}
+	})
+
+	if err := util.IsTrueWithin(func() bool {
+		if num := measureMeta(); num != 0 {
+			return false
+		}
+		return true
+	}, 500 * time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestStoreExecuteCmd verifies straightforward command execution
 // of both a read-only and a read-write command.
 func TestStoreExecuteCmd(t *testing.T) {
