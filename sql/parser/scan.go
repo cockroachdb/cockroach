@@ -87,7 +87,7 @@ func (s *scanner) Lex(lval *sqlSymType) int {
 
 	case NULLS:
 		switch s.nextTok.id {
-		case FIRST, LAST:
+		case FIRST:
 			lval.id = NULLS_LA
 		}
 

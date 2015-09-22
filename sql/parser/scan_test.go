@@ -84,7 +84,6 @@ func TestScanner(t *testing.T) {
 		{`NOT SIMILAR`, []int{NOT_LA, SIMILAR}},
 		{`NULLS`, []int{NULLS}},
 		{`NULLS FIRST`, []int{NULLS_LA, FIRST}},
-		{`NULLS LAST`, []int{NULLS_LA, LAST}},
 		{`WITH`, []int{WITH}},
 		{`WITH TIME`, []int{WITH_LA, TIME}},
 		{`WITH ORDINALITY`, []int{WITH_LA, ORDINALITY}},
