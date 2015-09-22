@@ -1923,21 +1923,28 @@ class Error : public ::google::protobuf::Message {
   bool retryable() const;
   void set_retryable(bool value);
 
-  // optional .cockroach.proto.TransactionRestart transaction_restart = 4;
+  // optional .cockroach.proto.TransactionRestart transaction_restart = 3;
   bool has_transaction_restart() const;
   void clear_transaction_restart();
-  static const int kTransactionRestartFieldNumber = 4;
+  static const int kTransactionRestartFieldNumber = 3;
   ::cockroach::proto::TransactionRestart transaction_restart() const;
   void set_transaction_restart(::cockroach::proto::TransactionRestart value);
 
-  // optional .cockroach.proto.ErrorDetail detail = 3;
+  // optional .cockroach.proto.ErrorDetail detail = 4;
   bool has_detail() const;
   void clear_detail();
-  static const int kDetailFieldNumber = 3;
+  static const int kDetailFieldNumber = 4;
   const ::cockroach::proto::ErrorDetail& detail() const;
   ::cockroach::proto::ErrorDetail* mutable_detail();
   ::cockroach::proto::ErrorDetail* release_detail();
   void set_allocated_detail(::cockroach::proto::ErrorDetail* detail);
+
+  // optional int32 index = 5 [default = -1];
+  bool has_index() const;
+  void clear_index();
+  static const int kIndexFieldNumber = 5;
+  ::google::protobuf::int32 index() const;
+  void set_index(::google::protobuf::int32 value);
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.Error)
  private:
@@ -1949,6 +1956,8 @@ class Error : public ::google::protobuf::Message {
   inline void clear_has_transaction_restart();
   inline void set_has_detail();
   inline void clear_has_detail();
+  inline void set_has_index();
+  inline void clear_has_index();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -1957,6 +1966,7 @@ class Error : public ::google::protobuf::Message {
   bool retryable_;
   int transaction_restart_;
   ::cockroach::proto::ErrorDetail* detail_;
+  ::google::protobuf::int32 index_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
@@ -3808,7 +3818,7 @@ inline void Error::set_retryable(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.proto.Error.retryable)
 }
 
-// optional .cockroach.proto.TransactionRestart transaction_restart = 4;
+// optional .cockroach.proto.TransactionRestart transaction_restart = 3;
 inline bool Error::has_transaction_restart() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
@@ -3833,7 +3843,7 @@ inline void Error::set_transaction_restart(::cockroach::proto::TransactionRestar
   // @@protoc_insertion_point(field_set:cockroach.proto.Error.transaction_restart)
 }
 
-// optional .cockroach.proto.ErrorDetail detail = 3;
+// optional .cockroach.proto.ErrorDetail detail = 4;
 inline bool Error::has_detail() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -3874,6 +3884,30 @@ inline void Error::set_allocated_detail(::cockroach::proto::ErrorDetail* detail)
     clear_has_detail();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Error.detail)
+}
+
+// optional int32 index = 5 [default = -1];
+inline bool Error::has_index() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void Error::set_has_index() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void Error::clear_has_index() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void Error::clear_index() {
+  index_ = -1;
+  clear_has_index();
+}
+inline ::google::protobuf::int32 Error::index() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Error.index)
+  return index_;
+}
+inline void Error::set_index(::google::protobuf::int32 value) {
+  set_has_index();
+  index_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.Error.index)
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS

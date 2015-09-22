@@ -548,14 +548,19 @@ type Error struct {
 	Retryable bool `protobuf:"varint,2,opt,name=retryable" json:"retryable"`
 	// If transaction_restart is not ABORT, the error condition may be handled by
 	// restarting the transaction (with or without a backoff).
-	TransactionRestart TransactionRestart `protobuf:"varint,4,opt,name=transaction_restart,enum=cockroach.proto.TransactionRestart" json:"transaction_restart"`
+	TransactionRestart TransactionRestart `protobuf:"varint,3,opt,name=transaction_restart,enum=cockroach.proto.TransactionRestart" json:"transaction_restart"`
 	// If an ErrorDetail is present, it may contain additional structured data
 	// about the error.
-	Detail *ErrorDetail `protobuf:"bytes,3,opt,name=detail" json:"detail,omitempty"`
+	Detail *ErrorDetail `protobuf:"bytes,4,opt,name=detail" json:"detail,omitempty"`
+	// The Index, if given, contains the index of the request (in the batch)
+	// whose execution caused the error.
+	Index *int32 `protobuf:"varint,5,opt,name=index,def=-1" json:"index,omitempty"`
 }
 
 func (m *Error) Reset()      { *m = Error{} }
 func (*Error) ProtoMessage() {}
+
+const Default_Error_Index int32 = -1
 
 func (m *Error) GetMessage() string {
 	if m != nil {
@@ -583,6 +588,13 @@ func (m *Error) GetDetail() *ErrorDetail {
 		return m.Detail
 	}
 	return nil
+}
+
+func (m *Error) GetIndex() int32 {
+	if m != nil && m.Index != nil {
+		return *m.Index
+	}
+	return Default_Error_Index
 }
 
 func init() {
@@ -1248,8 +1260,11 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
+	data[i] = 0x18
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.TransactionRestart))
 	if m.Detail != nil {
-		data[i] = 0x1a
+		data[i] = 0x22
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
 		n32, err := m.Detail.MarshalTo(data[i:])
@@ -1258,9 +1273,11 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		}
 		i += n32
 	}
-	data[i] = 0x20
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.TransactionRestart))
+	if m.Index != nil {
+		data[i] = 0x28
+		i++
+		i = encodeVarintErrors(data, i, uint64(*m.Index))
+	}
 	return i, nil
 }
 
@@ -1518,11 +1535,14 @@ func (m *Error) Size() (n int) {
 	l = len(m.Message)
 	n += 1 + l + sovErrors(uint64(l))
 	n += 2
+	n += 1 + sovErrors(uint64(m.TransactionRestart))
 	if m.Detail != nil {
 		l = m.Detail.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
-	n += 1 + sovErrors(uint64(m.TransactionRestart))
+	if m.Index != nil {
+		n += 1 + sovErrors(uint64(*m.Index))
+	}
 	return n
 }
 
@@ -3736,6 +3756,25 @@ func (m *Error) Unmarshal(data []byte) error {
 			}
 			m.Retryable = bool(v != 0)
 		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TransactionRestart", wireType)
+			}
+			m.TransactionRestart = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.TransactionRestart |= (TransactionRestart(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Detail", wireType)
 			}
@@ -3768,11 +3807,11 @@ func (m *Error) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 4:
+		case 5:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TransactionRestart", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
 			}
-			m.TransactionRestart = 0
+			var v int32
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowErrors
@@ -3782,11 +3821,12 @@ func (m *Error) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.TransactionRestart |= (TransactionRestart(b) & 0x7F) << shift
+				v |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			m.Index = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipErrors(data[iNdEx:])

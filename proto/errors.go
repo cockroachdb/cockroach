@@ -105,6 +105,9 @@ func (e *Error) GoError() error {
 
 // SetResponseGoError sets Error using err.
 func (e *Error) SetResponseGoError(err error) {
+	if e.Message != "" {
+		panic("cannot re-use proto.Error")
+	}
 	e.Message = err.Error()
 	if r, ok := err.(retry.Retryable); ok {
 		e.Retryable = r.CanRetry()

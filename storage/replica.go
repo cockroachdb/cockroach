@@ -1179,7 +1179,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *pr
 		}
 
 		if err != nil {
-			return nil, intents, &errWithIndex{err: err, index: index}
+			return nil, intents, &errWithIndex{err: err, index: int32(index)}
 		}
 
 		// Add the response to the batch, updating the timestamp.

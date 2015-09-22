@@ -204,9 +204,13 @@ message Error {
 
   // If transaction_restart is not ABORT, the error condition may be handled by
   // restarting the transaction (with or without a backoff).
-  optional TransactionRestart transaction_restart = 4 [(gogoproto.nullable) = false];
+  optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false];
 
   // If an ErrorDetail is present, it may contain additional structured data
   // about the error.
-  optional ErrorDetail detail = 3;
+  optional ErrorDetail detail = 4;
+
+  // The Index, if given, contains the index of the request (in the batch)
+  // whose execution caused the error.
+  optional int32 index = 5 [default=-1];
 }
