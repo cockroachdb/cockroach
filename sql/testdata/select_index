@@ -45,6 +45,11 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE (d, c) IN (('foo', 11), ('bar', 22))
 1 /t/dc/'foo'/11/1/'one' NULL true
 
 query ITTB
+EXPLAIN (DEBUG) SELECT * FROM t WHERE (d, c) = ('foo', 11)
+----
+0 /t/dc/'foo'/11/1/'one' NULL true
+
+query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a < 2
 ----
 0 /t/primary/1/'one'   NULL  NULL

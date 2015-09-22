@@ -388,6 +388,10 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 					// Give-up when we encounter a != expression.
 					return
 				}
+				if tupleMap != nil && c.Operator != parser.In {
+					// We can only handle tuples in IN expressions.
+					continue
+				}
 
 				switch c.Operator {
 				case parser.EQ:
@@ -503,10 +507,6 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 		lastEnd := c.end != nil &&
 			(i+1 == len(constraints) || constraints[i+1].end == nil)
 
-		// TODO(pmattis): The end constraint might also be an IN operator.
-		//
-		// TODO(pmattis): For tuple comparisons use the index constraint mapping
-		// from tuple order to index order.
 		if (c.start != nil && c.start.Operator == parser.In) ||
 			(c.end != nil && c.end.Operator == parser.In) {
 			var e *parser.ComparisonExpr
@@ -519,10 +519,6 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 			// Special handling of IN exprssions. Such expressions apply to both the
 			// start and end key, but also cause an explosion in the number of spans
 			// searched within an index.
-			//
-			// TODO(pmattis): Handle IN expressions of the form:
-			//
-			//   (a, b, c) IN ((1, 2, 3), (4, 5, 6))
 			tuple, ok := e.Right.(parser.DTuple)
 			if !ok {
 				break
