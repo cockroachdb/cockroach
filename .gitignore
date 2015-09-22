@@ -40,6 +40,8 @@ _testmain.go
 
 # NPM node modules
 node_modules
+bower_components
+typings
 npm.installed
 
 .bootstrap

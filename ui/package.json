@@ -12,7 +12,10 @@
   "devDependencies": {
     "gulp": "^3.9.0",
     "gulp-gobin": "^0.1.2",
+    "gulp-plumber": "^1.0.1",
+    "gulp-sourcemaps": "^1.5.2",
     "gulp-stylus": "^2.0.7",
-    "gulp-typescript": "^2.9.0"
+    "gulp-typescript": "^2.9.0",
+    "tsd": "^0.6.4"
   }
 }
