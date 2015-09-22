@@ -58,6 +58,7 @@ class LeaseRejectedError;
 class SendError;
 class ErrorDetail;
 class Error;
+class Error_Index;
 
 enum TransactionRestart {
   ABORT = 0,
@@ -1840,6 +1841,95 @@ class ErrorDetail : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class Error_Index : public ::google::protobuf::Message {
+ public:
+  Error_Index();
+  virtual ~Error_Index();
+
+  Error_Index(const Error_Index& from);
+
+  inline Error_Index& operator=(const Error_Index& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const Error_Index& default_instance();
+
+  void Swap(Error_Index* other);
+
+  // implements Message ----------------------------------------------
+
+  inline Error_Index* New() const { return New(NULL); }
+
+  Error_Index* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const Error_Index& from);
+  void MergeFrom(const Error_Index& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(Error_Index* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional int32 index = 1;
+  bool has_index() const;
+  void clear_index();
+  static const int kIndexFieldNumber = 1;
+  ::google::protobuf::int32 index() const;
+  void set_index(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.Error.Index)
+ private:
+  inline void set_has_index();
+  inline void clear_has_index();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::int32 index_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
+
+  void InitAsDefaultInstance();
+  static Error_Index* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class Error : public ::google::protobuf::Message {
  public:
   Error();
@@ -1902,6 +1992,8 @@ class Error : public ::google::protobuf::Message {
 
   // nested types ----------------------------------------------------
 
+  typedef Error_Index Index;
+
   // accessors -------------------------------------------------------
 
   // optional string message = 1;
@@ -1939,12 +2031,14 @@ class Error : public ::google::protobuf::Message {
   ::cockroach::proto::ErrorDetail* release_detail();
   void set_allocated_detail(::cockroach::proto::ErrorDetail* detail);
 
-  // optional int32 index = 5 [default = -1];
+  // optional .cockroach.proto.Error.Index index = 5;
   bool has_index() const;
   void clear_index();
   static const int kIndexFieldNumber = 5;
-  ::google::protobuf::int32 index() const;
-  void set_index(::google::protobuf::int32 value);
+  const ::cockroach::proto::Error_Index& index() const;
+  ::cockroach::proto::Error_Index* mutable_index();
+  ::cockroach::proto::Error_Index* release_index();
+  void set_allocated_index(::cockroach::proto::Error_Index* index);
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.Error)
  private:
@@ -1966,7 +2060,7 @@ class Error : public ::google::protobuf::Message {
   bool retryable_;
   int transaction_restart_;
   ::cockroach::proto::ErrorDetail* detail_;
-  ::google::protobuf::int32 index_;
+  ::cockroach::proto::Error_Index* index_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
@@ -3739,6 +3833,34 @@ inline void ErrorDetail::set_allocated_send(::cockroach::proto::SendError* send)
 
 // -------------------------------------------------------------------
 
+// Error_Index
+
+// optional int32 index = 1;
+inline bool Error_Index::has_index() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void Error_Index::set_has_index() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void Error_Index::clear_has_index() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void Error_Index::clear_index() {
+  index_ = 0;
+  clear_has_index();
+}
+inline ::google::protobuf::int32 Error_Index::index() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Error.Index.index)
+  return index_;
+}
+inline void Error_Index::set_index(::google::protobuf::int32 value) {
+  set_has_index();
+  index_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.Error.Index.index)
+}
+
+// -------------------------------------------------------------------
+
 // Error
 
 // optional string message = 1;
@@ -3886,7 +4008,7 @@ inline void Error::set_allocated_detail(::cockroach::proto::ErrorDetail* detail)
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Error.detail)
 }
 
-// optional int32 index = 5 [default = -1];
+// optional .cockroach.proto.Error.Index index = 5;
 inline bool Error::has_index() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
@@ -3897,20 +4019,41 @@ inline void Error::clear_has_index() {
   _has_bits_[0] &= ~0x00000010u;
 }
 inline void Error::clear_index() {
-  index_ = -1;
+  if (index_ != NULL) index_->::cockroach::proto::Error_Index::Clear();
   clear_has_index();
 }
-inline ::google::protobuf::int32 Error::index() const {
+inline const ::cockroach::proto::Error_Index& Error::index() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.Error.index)
+  return index_ != NULL ? *index_ : *default_instance_->index_;
+}
+inline ::cockroach::proto::Error_Index* Error::mutable_index() {
+  set_has_index();
+  if (index_ == NULL) {
+    index_ = new ::cockroach::proto::Error_Index;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Error.index)
   return index_;
 }
-inline void Error::set_index(::google::protobuf::int32 value) {
-  set_has_index();
-  index_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.Error.index)
+inline ::cockroach::proto::Error_Index* Error::release_index() {
+  clear_has_index();
+  ::cockroach::proto::Error_Index* temp = index_;
+  index_ = NULL;
+  return temp;
+}
+inline void Error::set_allocated_index(::cockroach::proto::Error_Index* index) {
+  delete index_;
+  index_ = index;
+  if (index) {
+    set_has_index();
+  } else {
+    clear_has_index();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Error.index)
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

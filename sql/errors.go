@@ -45,11 +45,12 @@ func (e errUniquenessConstraintViolation) Error() string {
 
 func convertBatchError(tableDesc *TableDescriptor, b client.Batch, pErr *proto.Error) error {
 	err := pErr.GoError()
-	index := pErr.GetIndex()
-	if index < 0 {
+	if pErr.Index == nil {
 		return err
-	} else if index >= int32(len(b.Results)) {
-		panic(fmt.Sprintf("%d outside of results: %+v", index, b.Results))
+	}
+	index := pErr.Index.Index
+	if index >= int32(len(b.Results)) {
+		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
 	}
 	result := b.Results[index]
 	if _, ok := err.(*proto.ConditionFailedError); ok {

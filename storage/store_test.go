@@ -504,7 +504,7 @@ func TestStoreErrorWithIndex(t *testing.T) {
 	if pErr == nil {
 		t.Fatal("expected an error")
 	}
-	if pErr.Index == nil || *pErr.Index != 1 {
+	if pErr.GetIndex().GetIndex() != 1 {
 		t.Fatalf("proto.Error has no index: %+v", pErr)
 	}
 }

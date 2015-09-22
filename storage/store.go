@@ -1234,7 +1234,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			// clients will retry.
 			err = proto.NewRangeNotFoundError(rng.Desc().RangeID)
 		} else if iErr, ok := err.(*errWithIndex); ok {
-			err, index = iErr.err, &iErr.index
+			err, index = iErr.err, gogoproto.Int32(iErr.index)
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
@@ -1288,7 +1288,9 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			continue
 		}
 		pErr := proto.NewError(err)
-		pErr.Index = index
+		if index != nil {
+			pErr.Index = &proto.Error_Index{Index: *index}
+		}
 		return nil, pErr
 	}
 

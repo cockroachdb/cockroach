@@ -210,7 +210,12 @@ message Error {
   // about the error.
   optional ErrorDetail detail = 4;
 
+  message Index {
+    optional int32 index = 1 [(gogoproto.nullable) = false];
+  }
   // The Index, if given, contains the index of the request (in the batch)
   // whose execution caused the error.
-  optional int32 index = 5 [default=-1];
+  // It is wrapped in a sub-message for compatibility with proto3, which does
+  // not permit nullable primitive fields.
+  optional Index index = 5;
 }

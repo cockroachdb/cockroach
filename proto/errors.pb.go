@@ -554,13 +554,13 @@ type Error struct {
 	Detail *ErrorDetail `protobuf:"bytes,4,opt,name=detail" json:"detail,omitempty"`
 	// The Index, if given, contains the index of the request (in the batch)
 	// whose execution caused the error.
-	Index *int32 `protobuf:"varint,5,opt,name=index,def=-1" json:"index,omitempty"`
+	// It is wrapped in a sub-message for compatibility with proto3, which does
+	// not permit nullable primitive fields.
+	Index *Error_Index `protobuf:"bytes,5,opt,name=index" json:"index,omitempty"`
 }
 
 func (m *Error) Reset()      { *m = Error{} }
 func (*Error) ProtoMessage() {}
-
-const Default_Error_Index int32 = -1
 
 func (m *Error) GetMessage() string {
 	if m != nil {
@@ -590,11 +590,25 @@ func (m *Error) GetDetail() *ErrorDetail {
 	return nil
 }
 
-func (m *Error) GetIndex() int32 {
-	if m != nil && m.Index != nil {
-		return *m.Index
+func (m *Error) GetIndex() *Error_Index {
+	if m != nil {
+		return m.Index
 	}
-	return Default_Error_Index
+	return nil
+}
+
+type Error_Index struct {
+	Index int32 `protobuf:"varint,1,opt,name=index" json:"index"`
+}
+
+func (m *Error_Index) Reset()      { *m = Error_Index{} }
+func (*Error_Index) ProtoMessage() {}
+
+func (m *Error_Index) GetIndex() int32 {
+	if m != nil {
+		return m.Index
+	}
+	return 0
 }
 
 func init() {
@@ -1274,10 +1288,36 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		i += n32
 	}
 	if m.Index != nil {
-		data[i] = 0x28
+		data[i] = 0x2a
 		i++
-		i = encodeVarintErrors(data, i, uint64(*m.Index))
+		i = encodeVarintErrors(data, i, uint64(m.Index.Size()))
+		n33, err := m.Index.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n33
 	}
+	return i, nil
+}
+
+func (m *Error_Index) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Error_Index) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Index))
 	return i, nil
 }
 
@@ -1541,8 +1581,16 @@ func (m *Error) Size() (n int) {
 		n += 1 + l + sovErrors(uint64(l))
 	}
 	if m.Index != nil {
-		n += 1 + sovErrors(uint64(*m.Index))
+		l = m.Index.Size()
+		n += 1 + l + sovErrors(uint64(l))
 	}
+	return n
+}
+
+func (m *Error_Index) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovErrors(uint64(m.Index))
 	return n
 }
 
@@ -3808,10 +3856,10 @@ func (m *Error) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		case 5:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
 			}
-			var v int32
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowErrors
@@ -3821,12 +3869,94 @@ func (m *Error) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				v |= (int32(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.Index = &v
+			if msglen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Index == nil {
+				m.Index = &Error_Index{}
+			}
+			if err := m.Index.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipErrors(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthErrors
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Error_Index) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowErrors
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Index: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Index: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
+			}
+			m.Index = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Index |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipErrors(data[iNdEx:])
