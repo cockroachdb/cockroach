@@ -384,7 +384,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	}
 	defer trace.Epoch("request leader lease")()
 	// Otherwise, no active lease: Request renewal.
-	err := r.requestLeaderLease(timestamp)
+	err := unwrapIndexedError(r.requestLeaderLease(timestamp))
 
 	// Getting a LeaseRejectedError back means someone else got there first;
 	// we can redirect if they cover our timestamp. Note that it can't be us,
@@ -1338,9 +1338,9 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// still be careful though, a retry could happen and race with args.
 		args := gogoproto.Clone(item.args).(proto.Request)
 		stopper.RunAsyncTask(func() {
-			err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
+			err := unwrapIndexedError(r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
 				Intents: item.intents,
-			}, r, args, proto.CLEANUP_TXN)
+			}, r, args, proto.CLEANUP_TXN))
 			if wiErr, ok := err.(*proto.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 			}
