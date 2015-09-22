@@ -1373,7 +1373,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	}
 
 	// Run all pushes in parallel.
-	if pushErr := s.db.Run(b); pushErr != nil {
+	if pushErr := s.db.Run(b).GoError(); pushErr != nil {
 		if log.V(1) {
 			log.Infoc(ctx, "on %s: %s", args.Method(), pushErr)
 		}

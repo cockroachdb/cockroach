@@ -43,7 +43,8 @@ func (e errUniquenessConstraintViolation) Error() string {
 		e.index.Name)
 }
 
-func convertBatchError(tableDesc *TableDescriptor, b client.Batch, err error) error {
+func convertBatchError(tableDesc *TableDescriptor, b client.Batch, pErr *proto.Error) error {
+	err := pErr.GoError()
 	for _, result := range b.Results {
 		if _, ok := result.Err.(*proto.ConditionFailedError); ok {
 			for _, row := range result.Rows {

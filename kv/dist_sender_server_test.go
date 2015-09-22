@@ -122,7 +122,7 @@ func TestMultiRangeBatchBounded(t *testing.T) {
 	b.Scan("aaa", "dd", 3)
 	b.Scan("a", "z", 2)
 	b.Scan("cc", "ff", 3)
-	if err := db.Run(b); err != nil {
+	if err := db.Run(b).GoError(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -233,7 +233,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	for _, key := range keys {
 		b.Put(key, "value")
 	}
-	if err := db.Run(b); err != nil {
+	if err := db.Run(b).GoError(); err != nil {
 		t.Fatal(err)
 	}
 	for i := range keys {
