@@ -4,7 +4,6 @@
   "private": true,
   "dependencies": {
     "chai": ">=3.2.0",
-    "gulp-typescript": "^2.9.0",
     "mocha": ">=2.2.5",
     "stylus": ">=0.51.1",
     "tslint": ">=2.3.1-beta",
@@ -12,6 +11,8 @@
   },
   "devDependencies": {
     "gulp": "^3.9.0",
-    "gulp-gobin": "^0.1.2"
+    "gulp-gobin": "^0.1.2",
+    "gulp-stylus": "^2.0.7",
+    "gulp-typescript": "^2.9.0"
   }
 }
