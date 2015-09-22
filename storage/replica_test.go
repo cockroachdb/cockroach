@@ -1079,6 +1079,7 @@ func TestRangeCommandQueue(t *testing.T) {
 	// Intercept commands with matching command IDs and block them.
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
+	defer close(blockingDone) // make sure teardown can happen
 	TestingCommandFilter = func(args proto.Request) error {
 		if args.Header().GetUserPriority() == 42 {
 			blockingStart <- struct{}{}
@@ -1100,12 +1101,14 @@ func TestRangeCommandQueue(t *testing.T) {
 		{false, false, true},
 	}
 
+	tooLong := 5 * time.Second
+
 	for i, test := range testCases {
 		key1 := proto.Key(fmt.Sprintf("key1-%d", i))
 		key2 := proto.Key(fmt.Sprintf("key2-%d", i))
 		// Asynchronously put a value to the rng with blocking enabled.
 		cmd1Done := make(chan struct{})
-		go func() {
+		tc.stopper.RunAsyncTask(func() {
 			args := readOrWriteArgs(key1, test.cmd1Read, tc.rng.Desc().RangeID, tc.store.StoreID())
 			args.Header().UserPriority = gogoproto.Int32(42)
 
@@ -1115,13 +1118,13 @@ func TestRangeCommandQueue(t *testing.T) {
 				t.Fatalf("test %d: %s", i, err)
 			}
 			close(cmd1Done)
-		}()
+		})
 		// Wait for cmd1 to get into the command queue.
 		<-blockingStart
 
 		// First, try a command for same key as cmd1 to verify it blocks.
 		cmd2Done := make(chan struct{})
-		go func() {
+		tc.stopper.RunAsyncTask(func() {
 			args := readOrWriteArgs(key1, test.cmd2Read, tc.rng.Desc().RangeID, tc.store.StoreID())
 
 			_, err := tc.rng.AddCmd(tc.rng.context(), args)
@@ -1130,11 +1133,11 @@ func TestRangeCommandQueue(t *testing.T) {
 				t.Fatalf("test %d: %s", i, err)
 			}
 			close(cmd2Done)
-		}()
+		})
 
 		// Next, try read for a non-impacted key--should go through immediately.
 		cmd3Done := make(chan struct{})
-		go func() {
+		tc.stopper.RunAsyncTask(func() {
 			args := readOrWriteArgs(key2, true, tc.rng.Desc().RangeID, tc.store.StoreID())
 
 			_, err := tc.rng.AddCmd(tc.rng.context(), args)
@@ -1143,7 +1146,7 @@ func TestRangeCommandQueue(t *testing.T) {
 				t.Fatalf("test %d: %s", i, err)
 			}
 			close(cmd3Done)
-		}()
+		})
 
 		if test.expWait {
 			// Verify cmd3 finishes but not cmd2.
@@ -1154,8 +1157,8 @@ func TestRangeCommandQueue(t *testing.T) {
 				// success.
 			case <-cmd1Done:
 				t.Fatalf("test %d: should not have been able execute cmd1 while blocked", i)
-			case <-time.After(500 * time.Millisecond):
-				t.Fatalf("test %d: waited 500ms for cmd3 of key2", i)
+			case <-time.After(tooLong):
+				t.Fatalf("test %d: waited %s for cmd3 of key2", i, tooLong)
 			}
 		} else {
 			select {
@@ -1163,8 +1166,8 @@ func TestRangeCommandQueue(t *testing.T) {
 				// success.
 			case <-cmd1Done:
 				t.Fatalf("test %d: should not have been able to execute cmd1 while blocked", i)
-			case <-time.After(500 * time.Millisecond):
-				t.Fatalf("test %d: waited 500ms for cmd2 of key1", i)
+			case <-time.After(tooLong):
+				t.Fatalf("test %d: waited %s for cmd2 of key1", i, tooLong)
 			}
 			<-cmd3Done
 		}
@@ -1173,8 +1176,8 @@ func TestRangeCommandQueue(t *testing.T) {
 		select {
 		case <-cmd2Done:
 			// success.
-		case <-time.After(500 * time.Millisecond):
-			t.Fatalf("test %d: waited 500ms for cmd2 of key1", i)
+		case <-time.After(tooLong):
+			t.Fatalf("test %d: waited %s for cmd2 of key1", i, tooLong)
 		}
 	}
 }
