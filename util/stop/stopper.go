@@ -126,8 +126,8 @@ func (s *Stopper) RunAsyncTask(f func()) bool {
 	}
 	// Call f.
 	go func() {
+		defer s.runPostlude(taskKey)
 		f()
-		s.runPostlude(taskKey)
 	}()
 	return true
 }
