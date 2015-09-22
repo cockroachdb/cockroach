@@ -260,9 +260,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 		return reply, nil, util.Errorf("request key %s should match txn key %s", args.Key, args.Txn.Key)
 	}
 
-	// Make a copy of the transaction in case it's mutated below.
-	txn := *args.Txn
-	key := keys.TransactionKey(txn.Key, txn.ID)
+	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	// Fetch existing transaction if possible.
 	reply.Txn = &proto.Transaction{}
@@ -270,9 +268,12 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 	if err != nil {
 		return reply, nil, err
 	}
+
 	if !ok {
 		// The transaction doesn't exist yet on disk; use the supplied version.
-		reply.Txn = &txn
+		// Copying avoids a race (#2537): the txn in the args may be re-used
+		// for retries, but the one in the reply can end up in a goroutine.
+		reply.Txn = gogoproto.Clone(args.Txn).(*proto.Transaction)
 	}
 
 	for i := range args.Intents {
@@ -296,30 +297,30 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 			// resolution (we're currently not able to write on error, but
 			// see #1989).
 			return reply, args.Intents, proto.NewTransactionAbortedError(reply.Txn)
-		} else if txn.Epoch < reply.Txn.Epoch {
+		} else if args.Txn.Epoch < reply.Txn.Epoch {
 			// TODO(tschottdorf): this leaves the Txn record (and more
 			// importantly, intents) dangling; we can't currently write on
 			// error. Would panic, but that makes TestEndTransactionWithErrors
 			// awkward.
-			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("epoch regression: %d", txn.Epoch))
-		} else if txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(txn.OrigTimestamp) {
+			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch))
+		} else if args.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(args.Txn.OrigTimestamp) {
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
 			// than the original transaction timestamp.
 
 			// TODO(tschottdorf): see above comment on epoch regression.
-			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("timestamp regression: %s", txn.OrigTimestamp))
+			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("timestamp regression: %s", args.Txn.OrigTimestamp))
 		}
 
 		// Take max of requested epoch and existing epoch. The requester
 		// may have incremented the epoch on retries.
-		if reply.Txn.Epoch < txn.Epoch {
-			reply.Txn.Epoch = txn.Epoch
+		if reply.Txn.Epoch < args.Txn.Epoch {
+			reply.Txn.Epoch = args.Txn.Epoch
 		}
 		// Take max of requested priority and existing priority. This isn't
 		// terribly useful, but we do it for completeness.
-		if reply.Txn.Priority < txn.Priority {
-			reply.Txn.Priority = txn.Priority
+		if reply.Txn.Priority < args.Txn.Priority {
+			reply.Txn.Priority = args.Txn.Priority
 		}
 	}
 
