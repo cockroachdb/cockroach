@@ -1,0 +1,13 @@
+# NPM node modules
+node_modules
+npm.installed
+
+#bower components
+bower_components/
+
+#typings
+typings/
+
+#build
+build/
+

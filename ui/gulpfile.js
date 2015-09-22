@@ -14,43 +14,57 @@ gulp.task('styles', function () {
         .pipe(stylus({
             compress: true
         }))
-        .pipe(gulp.dest('css'));
+        .pipe(gulp.dest('build/css'));
 
+});
+
+var paths = {
+    js: [
+        'bower_components/d3/d3.min.js',
+        'bower_components/mithril/mithril.min.js',
+        'bower_components/lodash/lodash.js',
+        'bower_components/nvd3/build/nv.d3.min.js'
+    ],
+    css: [
+        'bower_components/nvd3/build/nv.d3.min.css'
+    ],
+    typings: [
+        'typings/*'
+    ]
+};
+
+/* copy bower js libs */
+gulp.task('bowerjs', function () {
+    return gulp.src(paths.js)
+        .pipe(gulp.dest('build/js/libs'));
+});
+
+/* copy bower css libs */
+gulp.task('bowercss', function () {
+    return gulp.src(paths.css)
+        .pipe(gulp.dest('build/css/libs'));
+});
+
+gulp.task('bower', ['bowerjs', 'bowercss']);
+
+/* copy type defs */
+gulp.task('typings', function () {
+    return gulp.src(paths.typings)
+        .pipe(gulp.dest('build/ts/typings'));
+});
+
+/* copy ts files */
+gulp.task('copyts', function () {
+    return gulp.src('ts/**/*.ts')
+        .pipe(gulp.dest('build/ts/'));
 });
 
 /* typescript */
-gulp.task('typescript', function () {
-    return gulp.src(['ts/app.ts', 'ts/header.ts'])
+gulp.task('typescript', ['copyts', 'typings'], function () {
+    return gulp.src(['build/ts/app.ts', 'build/ts/header.ts'])
         .pipe(typescript(require('./ts/tsconfig.json').compilerOptions))
-        .pipe(gulp.dest('js/app.js'));
+        .pipe(gulp.dest('build/js'));
 
-});
-
-/* copy bower, tsd components */
-gulp.task('bower', function () {
-    var paths = {
-        js: [
-            'bower_components/d3/d3.min.js',
-            'bower_components/mithril/mithril.min.js',
-            'bower_components/lodash/lodash.js',
-            'bower_components/nvd3/build/nv.d3.min.js'
-        ],
-        css: [
-            'bower_components/nvd3/build/nv.d3.min.css'
-        ],
-        typings: [
-            'typings/*'
-        ]
-    };
-
-    gulp.src(paths.js)
-        .pipe(gulp.dest('js/libs'));
-
-    gulp.src(paths.css)
-        .pipe(gulp.dest('css/libs'));
-
-    gulp.src(paths.typings)
-        .pipe(gulp.dest('ts/typings'));
 });
 
 /* watch */
