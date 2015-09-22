@@ -74,9 +74,7 @@ EXPLAIN (DEBUG) SELECT * FROM kv2@a
 3  /kv2/a/'g'  /'f'  true
 
 
-# TODO(tschottdorf): #1891, then:
-# statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
-statement error unexpected value.*
+statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
 UPDATE kv2 SET v = 'g' WHERE k IN ('a')
 
 query ITTB

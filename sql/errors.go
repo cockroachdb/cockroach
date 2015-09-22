@@ -45,28 +45,33 @@ func (e errUniquenessConstraintViolation) Error() string {
 
 func convertBatchError(tableDesc *TableDescriptor, b client.Batch, pErr *proto.Error) error {
 	err := pErr.GoError()
-	for _, result := range b.Results {
-		if _, ok := result.Err.(*proto.ConditionFailedError); ok {
-			for _, row := range result.Rows {
-				indexID, key, err := decodeIndexKeyPrefix(tableDesc, row.Key)
-				if err != nil {
-					return err
-				}
-				index, err := tableDesc.FindIndexByID(indexID)
-				if err != nil {
-					return err
-				}
-				valTypes, err := makeKeyVals(tableDesc, index.ColumnIDs)
-				if err != nil {
-					return err
-				}
-				vals := make([]parser.Datum, len(valTypes))
-				if _, err := decodeKeyVals(valTypes, vals, key); err != nil {
-					return err
-				}
-
-				return errUniquenessConstraintViolation{index: index, vals: vals}
+	index := pErr.GetIndex()
+	if index < 0 {
+		return err
+	} else if index >= int32(len(b.Results)) {
+		panic(fmt.Sprintf("%d outside of results: %+v", index, b.Results))
+	}
+	result := b.Results[index]
+	if _, ok := err.(*proto.ConditionFailedError); ok {
+		for _, row := range result.Rows {
+			indexID, key, err := decodeIndexKeyPrefix(tableDesc, row.Key)
+			if err != nil {
+				return err
 			}
+			index, err := tableDesc.FindIndexByID(indexID)
+			if err != nil {
+				return err
+			}
+			valTypes, err := makeKeyVals(tableDesc, index.ColumnIDs)
+			if err != nil {
+				return err
+			}
+			vals := make([]parser.Datum, len(valTypes))
+			if _, err := decodeKeyVals(valTypes, vals, key); err != nil {
+				return err
+			}
+
+			return errUniquenessConstraintViolation{index: index, vals: vals}
 		}
 	}
 	return err
