@@ -56,6 +56,12 @@ func NodeStatusKey(nodeID int32) proto.Key {
 	return MakeKey(StatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID)))
 }
 
+// MakeLocalRangeKeyPrefix creates a range-local key prefix from
+// rangeID.
+func MakeLocalRangeKeyPrefix(rangeID proto.RangeID) proto.Key {
+	return MakeKey(LocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(rangeID)))
+}
+
 // MakeRangeIDKey creates a range-local key based on the range's
 // Range ID, metadata key suffix, and optional detail (e.g. the
 // encoded command ID for a response cache entry, etc.).
@@ -63,8 +69,7 @@ func MakeRangeIDKey(rangeID proto.RangeID, suffix, detail proto.Key) proto.Key {
 	if len(suffix) != LocalSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, LocalSuffixLength))
 	}
-	return MakeKey(LocalRangeIDPrefix,
-		encoding.EncodeUvarint(nil, uint64(rangeID)), suffix, detail)
+	return MakeKey(MakeLocalRangeKeyPrefix(rangeID), suffix, detail)
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
