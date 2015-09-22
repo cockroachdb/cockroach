@@ -83,14 +83,8 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 		return []gogoproto.Message{call.Reply}, call.Reply.Header().GoError()
 	}
 
-	// Mostly makes sure that we don't see a warning per request.
-	{
-		if err := sCtx.Gossip.AddInfoProto(gossip.MakeNodeIDKey(nodeDesc.NodeID), nodeDesc, time.Hour); err != nil {
-			t.Fatal(err)
-		}
-		if err := sCtx.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
-			t.Fatal(err)
-		}
+	if err := gossipNodeDesc(sCtx.Gossip, nodeDesc.NodeID); err != nil {
+		t.Fatal(err)
 	}
 	distSender := kv.NewDistSender(&kv.DistSenderContext{
 		Clock:             clock,
@@ -332,7 +326,8 @@ func (m *multiTestContext) addStore() {
 
 	stopper := stop.NewStopper()
 	ctx := m.makeContext(idx)
-	store := storage.NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: proto.NodeID(idx + 1)})
+	nodeID := proto.NodeID(idx + 1)
+	store := storage.NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap {
 		err := store.Bootstrap(proto.StoreIdent{
 			NodeID:  proto.NodeID(idx + 1),
@@ -358,10 +353,26 @@ func (m *multiTestContext) addStore() {
 		m.senders = append(m.senders, kv.NewLocalSender())
 	}
 	m.senders[idx].AddStore(store)
+	if err := gossipNodeDesc(m.gossip, nodeID); err != nil {
+		m.t.Fatal(err)
+	}
 	// Save the store identities for later so we can use them in
 	// replication operations even while the store is stopped.
 	m.idents = append(m.idents, store.Ident)
 	m.stoppers = append(m.stoppers, stopper)
+}
+
+// gossipNodeDesc adds the node descriptor to the gossip network.
+// Mostly makes sure that we don't see a warning per request.
+func gossipNodeDesc(g *gossip.Gossip, nodeID proto.NodeID) error {
+	nodeDesc := &proto.NodeDescriptor{NodeID: nodeID}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID), nodeDesc, time.Hour); err != nil {
+		return err
+	}
+	if err := g.SetNodeDescriptor(nodeDesc); err != nil {
+		return err
+	}
+	return nil
 }
 
 // StopStore stops a store but leaves the engine intact.
