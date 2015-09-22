@@ -367,9 +367,9 @@ func unimplemented() {
 //
 // NOT_LA exists so that productions such as NOT LIKE can be given the same
 // precedence as LIKE; otherwise they'd effectively have the same precedence as
-// NOT, at least with respect to their left-hand subexpression. NULLS_LA and
-// WITH_LA are needed to make the grammar LALR(1).
-%token     NOT_LA NULLS_LA WITH_LA
+// NOT, at least with respect to their left-hand subexpression. WITH_LA is
+// needed to make the grammar LALR(1).
+%token     NOT_LA WITH_LA
 
 // Precedence: lowest to highest
 %nonassoc  SET                 // see relation_expr_opt_alias
