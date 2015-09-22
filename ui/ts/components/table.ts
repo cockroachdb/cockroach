@@ -1,5 +1,5 @@
 // source: components/table.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/mithril/mithril.d.ts" />
 /// <reference path="../typings/lodash/lodash.d.ts" />
 /// <reference path="../util/property.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)

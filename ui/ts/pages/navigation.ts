@@ -1,5 +1,5 @@
 // source: pages/nodes.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/mithril/mithril.d.ts" />
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/navbar.ts" />

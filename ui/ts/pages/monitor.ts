@@ -1,5 +1,5 @@
 // source: pages/monitor.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/mithril/mithril.d.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 // Author: Matt Tracy (matt@cockroachlabs.com)

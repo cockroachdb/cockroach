@@ -1,5 +1,5 @@
 // source: pages/graph.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/mithril/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="../components/metrics.ts" />

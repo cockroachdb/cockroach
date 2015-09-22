@@ -1,5 +1,5 @@
 // source: app.ts
-/// <reference path="typings/mithriljs/mithril.d.ts" />
+/// <reference path="typings/mithril/mithril.d.ts" />
 
 /// <reference path="pages/navigation.ts" />
 /// <reference path="pages/graph.ts" />

@@ -1,6 +1,6 @@
 // source: models/status.ts
 /// <reference path="../typings/lodash/lodash.d.ts" />
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/mithril/mithril.d.ts" />
 /// <reference path="../util/http.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="proto.ts" />

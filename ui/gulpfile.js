@@ -47,36 +47,33 @@ gulp.task('bowercss', function () {
 
 gulp.task('bower', ['bowerjs', 'bowercss']);
 
-/* copy type defs */
-gulp.task('typings', function () {
-    return gulp.src(paths.typings)
-        .pipe(gulp.dest('build/ts/typings'));
-});
-
-/* copy ts files */
-gulp.task('copyts', function () {
-    return gulp.src('ts/**/*.ts')
-        .pipe(gulp.dest('build/ts/'));
-});
-
 /* typescript */
-gulp.task('typescript', ['copyts', 'typings'], function () {
-    return gulp.src(['build/ts/app.ts', 'build/ts/header.ts'])
+gulp.task('typescript', function () {
+    return gulp.src(['ts/app.ts', 'build/ts/header.ts'])
         .pipe(typescript(require('./ts/tsconfig.json').compilerOptions))
         .pipe(gulp.dest('build/js'));
-
 });
 
+/* copy index */
+gulp.task('copyindex', function () {
+    return gulp.src('index.html')
+        .pipe(gulp.dest('build'));
+});
+
+
 /* watch */
-gulp.task('watch', ['bower'], function () {
+gulp.task('watch', ['bower', 'copyindex'], function () {
 
     gulp.watch('styl/**/*.styl', ['styles']);
 
     gulp.watch('ts/**/*.ts', ['typescript']);
+
+    gulp.watch('index.html', ['copyindex']);
+
 });
 
 /* build */
-gulp.task('build', ['styles', 'bower', 'typescript']);
+gulp.task('build', ['styles', 'bower', 'copyindex', 'typescript']);
 
 /* default */
 gulp.task('default', function () {
