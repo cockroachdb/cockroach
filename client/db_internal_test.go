@@ -29,11 +29,12 @@ import (
 func TestClientCommandID(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	count := 0
-	db := NewDB(newTestSender(func(call proto.Call) {
+	db := NewDB(newTestSender(func(ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 		count++
-		if call.Args.Header().CmdID.WallTime == 0 {
+		if ba.CmdID.WallTime == 0 {
 			t.Errorf("expected client command ID to be initialized")
 		}
+		return &proto.BatchResponse{}, nil
 	}, nil))
 	if err := db.Put("a", "b"); err != nil {
 		t.Error(err)

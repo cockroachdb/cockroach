@@ -163,7 +163,7 @@ func (r Result) String() string {
 // DB is a database handle to a single cockroach cluster. A DB is safe for
 // concurrent use by multiple goroutines.
 type DB struct {
-	sender Sender
+	sender BatchSender
 
 	// userPriority is the default user priority to set on API calls. If
 	// userPriority is set non-zero in call arguments, this value is
@@ -173,12 +173,12 @@ type DB struct {
 }
 
 // GetSender returns the underlying Sender. Only exported for tests.
-func (db *DB) GetSender() Sender {
+func (db *DB) GetSender() BatchSender {
 	return db.sender
 }
 
 // NewDB returns a new DB.
-func NewDB(sender Sender) *DB {
+func NewDB(sender BatchSender) *DB {
 	return &DB{
 		sender:          sender,
 		txnRetryOptions: DefaultTxnRetryOptions,
@@ -186,7 +186,7 @@ func NewDB(sender Sender) *DB {
 }
 
 // NewDBWithPriority returns a new DB.
-func NewDBWithPriority(sender Sender, userPriority int32) *DB {
+func NewDBWithPriority(sender BatchSender, userPriority int32) *DB {
 	db := NewDB(sender)
 	db.userPriority = userPriority
 	return db
@@ -469,7 +469,7 @@ func (db *DB) send(calls ...proto.Call) (pErr *proto.Error) {
 				c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
 			}
 			resetClientCmdID(c.Args)
-			db.sender.Send(context.TODO(), c)
+			SendCallConverted(db.sender, context.TODO(), c) // TODO(tschottdorf)
 			pErr = c.Reply.Header().Error
 			if pErr != nil {
 				if log.V(1) {

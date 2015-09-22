@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Jiajia Han (hanjia18@gmail.com)
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package kv

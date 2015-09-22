@@ -34,7 +34,7 @@ import (
 )
 
 func init() {
-	f := func(u *url.URL, ctx *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (Sender, error) {
+	f := func(u *url.URL, ctx *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (BatchSender, error) {
 		ctx.Insecure = (u.Scheme != "rpcs")
 		return newRPCSender(u.Host, ctx, retryOpts, stopper)
 	}
@@ -74,16 +74,17 @@ func newRPCSender(server string, context *base.Context, retryOpts retry.Options,
 	}, nil
 }
 
-// Send sends call to Cockroach via an RPC request. Errors which are retryable
+// SendBatch send a request to Cockroach via RPC. Errors which are retryable
 // are retried with backoff in a loop using the default retry options. Other
 // errors sending the request are retried indefinitely using the same client
 // command ID to avoid reporting failure when in fact the command may have gone
 // through and been executed successfully. We retry here to eventually get
 // through with the same client command ID and be given the cached response.
-func (s *rpcSender) Send(_ context.Context, call proto.Call) {
-	method := fmt.Sprintf("Server.%s", call.Args.Method())
+func (s *rpcSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+	method := fmt.Sprintf("Server.%s", proto.Batch)
 
 	var err error
+	var br *proto.BatchResponse
 	for r := retry.Start(s.retryOpts); r.Next(); {
 		select {
 		case <-s.client.Healthy():
@@ -93,7 +94,8 @@ func (s *rpcSender) Send(_ context.Context, call proto.Call) {
 			continue
 		}
 
-		if err = s.client.Call(method, call.Args, call.Reply); err != nil {
+		br = &proto.BatchResponse{}
+		if err = s.client.Call(method, &ba, br); err != nil {
 			// Assume all errors sending request are retryable. The actual
 			// number of things that could go wrong is vast, but we don't
 			// want to miss any which should in theory be retried with the
@@ -109,6 +111,9 @@ func (s *rpcSender) Send(_ context.Context, call proto.Call) {
 		break
 	}
 	if err != nil {
-		call.Reply.Header().SetGoError(err)
+		return nil, proto.NewError(err)
 	}
+	pErr := br.Error
+	br.Error = nil
+	return br, pErr
 }

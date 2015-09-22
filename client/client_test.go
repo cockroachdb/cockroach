@@ -56,7 +56,7 @@ var testUser = server.TestUser
 // being sent.
 type notifyingSender struct {
 	waiter  *sync.WaitGroup
-	wrapped client.Sender
+	wrapped client.BatchSender
 }
 
 func (ss *notifyingSender) reset(waiter *sync.WaitGroup) {
@@ -69,11 +69,16 @@ func (ss *notifyingSender) wait() {
 	ss.waiter = nil
 }
 
-func (ss *notifyingSender) Send(ctx context.Context, call proto.Call) {
-	ss.wrapped.Send(ctx, call)
+func (ss *notifyingSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+	br, pErr := ss.wrapped.SendBatch(ctx, ba)
+	if br != nil && br.Error != nil {
+		log.Warningf("culprit is %T", ss.wrapped)
+		panic(proto.ErrorUnexpectedlySet)
+	}
 	if ss.waiter != nil {
 		ss.waiter.Done()
 	}
+	return br, pErr
 }
 
 func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.DB {

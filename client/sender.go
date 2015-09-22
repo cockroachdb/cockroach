@@ -59,15 +59,15 @@ type Sender interface {
 
 // SenderFunc is an adapter to allow the use of ordinary functions
 // as Senders.
-type SenderFunc func(context.Context, proto.Call)
+type SenderFunc func(context.Context, proto.BatchRequest) (*proto.BatchResponse, *proto.Error)
 
 // Send calls f(ctx, c).
-func (f SenderFunc) Send(ctx context.Context, c proto.Call) {
-	f(ctx, c)
+func (f SenderFunc) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+	return f(ctx, ba)
 }
 
 // NewSenderFunc creates a new sender for the registered scheme.
-type NewSenderFunc func(u *url.URL, ctx *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (Sender, error)
+type NewSenderFunc func(u *url.URL, ctx *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (BatchSender, error)
 
 var sendersMu sync.Mutex
 var senders = map[string]NewSenderFunc{}
@@ -86,7 +86,7 @@ func RegisterSender(scheme string, f NewSenderFunc) {
 	senders[scheme] = f
 }
 
-func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stopper *stop.Stopper) (Sender, error) {
+func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stopper *stop.Stopper) (BatchSender, error) {
 	sendersMu.Lock()
 	defer sendersMu.Unlock()
 	f := senders[u.Scheme]
