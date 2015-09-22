@@ -143,8 +143,8 @@ func (e *Executor) execStmts(sql string, params parameters, planMaker *planner) 
 	return resp
 }
 
-func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker *planner) (driver.Result, error) {
-	var result driver.Result
+func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker *planner) (driver.Response_Result, error) {
+	var result driver.Response_Result
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
 		if planMaker.txn != nil {
@@ -190,10 +190,16 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 			return err
 		}
 
-		result.Columns = plan.Columns()
+		resultRows := &driver.Response_Result_Rows{
+			Columns: plan.Columns(),
+		}
+
+		result.Union = &driver.Response_Result_Rows_{
+			Rows: resultRows,
+		}
 		for plan.Next() {
 			values := plan.Values()
-			row := driver.Result_Row{Values: make([]driver.Datum, 0, len(values))}
+			row := driver.Response_Result_Rows_Row{Values: make([]driver.Datum, 0, len(values))}
 			for _, val := range values {
 				if val == parser.DNull {
 					row.Values = append(row.Values, driver.Datum{})
@@ -242,7 +248,7 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 					}
 				}
 			}
-			result.Rows = append(result.Rows, row)
+			resultRows.Rows = append(resultRows.Rows, row)
 		}
 
 		return plan.Err()
@@ -269,14 +275,14 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 // If we hit an error and there is a pending transaction, rollback
 // the transaction before returning. The client does not have to
 // deal with cleaning up transaction state.
-func makeResultFromError(planMaker *planner, err error) driver.Result {
+func makeResultFromError(planMaker *planner, err error) driver.Response_Result {
 	if planMaker.txn != nil {
 		if err != errTransactionAborted {
 			planMaker.txn.Cleanup(err)
 		}
 	}
 	errString := err.Error()
-	return driver.Result{Error: &errString}
+	return driver.Response_Result{Error: &errString}
 }
 
 // parameters implements the parser.Args interface.
