@@ -40,7 +40,7 @@ func TestInvalidAddrLength(t *testing.T) {
 	ret, err := Send(Options{N: 1}, "", nil, nil, nil, nil)
 
 	// the expected return is nil and SendError
-	if _, ok := err.(SendError); !ok || ret != nil {
+	if _, ok := err.(*proto.SendError); !ok || ret != nil {
 		t.Fatalf("Shorter addrs should return nil and SendError.")
 	}
 }
@@ -349,10 +349,7 @@ func TestComplexScenarios(t *testing.T) {
 				Reply: reply,
 			}
 			if addrID < numErrors {
-				call.Error = SendError{
-					errMsg:   "test",
-					canRetry: addrID < numRetryableErrors,
-				}
+				call.Error = NewSendError("test", addrID < numRetryableErrors)
 			}
 			done <- &call
 		}

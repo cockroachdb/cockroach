@@ -58,23 +58,28 @@ are already part of a pre-existing cluster, the bootstrap will fail.
 
 // runInit initializes the engine based on the first
 // store. The bootstrap engine may not be an in-memory type.
-func runInit(cmd *cobra.Command, args []string) {
+func runInit(_ *cobra.Command, _ []string) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	initCluster(stopper)
+}
+
+func initCluster(stopper *stop.Stopper) {
 	// Default user for servers.
 	context.User = security.NodeUser
 
-	if err := context.InitStores(); err != nil {
+	if err := context.InitStores(stopper); err != nil {
 		log.Errorf("failed to initialize stores: %s", err)
 		return
 	}
 
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.NewUUID4().String()
-	stopper := stop.NewStopper()
 	if _, err := server.BootstrapCluster(clusterID, context.Engines, stopper); err != nil {
 		log.Errorf("unable to bootstrap cluster: %s", err)
 		return
 	}
-	stopper.Stop()
 
 	log.Infof("cockroach cluster %s has been initialized", clusterID)
 }
@@ -104,7 +109,7 @@ additional details.`,
 // storage devices ("stores") on this machine and --gossip as the list
 // of "well-known" hosts used to join this node to the cockroach
 // cluster via the gossip network.
-func runStart(cmd *cobra.Command, args []string) {
+func runStart(_ *cobra.Command, _ []string) {
 	info := util.GetBuildInfo()
 	log.Infof("build Vers: %s", info.Vers)
 	log.Infof("build Tag:  %s", info.Tag)
@@ -114,13 +119,14 @@ func runStart(cmd *cobra.Command, args []string) {
 	// Default user for servers.
 	context.User = security.NodeUser
 
+	stopper := stop.NewStopper()
 	if context.EphemeralSingleNode {
 		context.Stores = "mem=1073741824"
 		context.GossipBootstrap = server.SelfGossipAddr
 
-		runInit(cmd, args)
+		initCluster(stopper)
 	} else {
-		if err := context.InitStores(); err != nil {
+		if err := context.InitStores(stopper); err != nil {
 			log.Errorf("failed to initialize stores: %s", err)
 			return
 		}
@@ -132,7 +138,6 @@ func runStart(cmd *cobra.Command, args []string) {
 	}
 
 	log.Info("starting cockroach cluster")
-	stopper := stop.NewStopper()
 	s, err := server.NewServer(context, stopper)
 	if err != nil {
 		log.Errorf("failed to start Cockroach server: %s", err)
@@ -205,8 +210,10 @@ node, cycling through each store specified by the --stores flag.
 }
 
 // runExterminate destroys the data held in the specified stores.
-func runExterminate(cmd *cobra.Command, args []string) {
-	if err := context.InitStores(); err != nil {
+func runExterminate(_ *cobra.Command, _ []string) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	if err := context.InitStores(stopper); err != nil {
 		log.Errorf("failed to initialize context: %s", err)
 		return
 	}
@@ -247,7 +254,7 @@ completed, the server exits.
 }
 
 // runQuit accesses the quit shutdown path.
-func runQuit(cmd *cobra.Command, args []string) {
+func runQuit(_ *cobra.Command, _ []string) {
 	admin := client.NewAdminClient(&context.Context, context.Addr, client.Quit)
 	body, err := admin.Get()
 	if err != nil {

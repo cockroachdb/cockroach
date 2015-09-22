@@ -49,6 +49,8 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 	call.Args.Header().Txn = &ts.Proto
 	ts.wrapped.Send(ctx, call)
 
+	// TODO(tschottdorf): see about using only the top-level *proto.Error
+	// information for this restart logic (includes adding the Txn).
 	err := call.Reply.Header().GoError()
 	// Only successful requests can carry an updated Txn in their response
 	// header. Any error (e.g. a restart) can have a Txn attached to them as
@@ -151,8 +153,7 @@ func (txn *Txn) NewBatch() *Batch {
 //   r, err := db.Get("a")
 //   // string(r.Key) == "a"
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (txn *Txn) Get(key interface{}) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Get(key)
@@ -162,8 +163,7 @@ func (txn *Txn) Get(key interface{}) (KeyValue, error) {
 // GetProto retrieves the value for a key and decodes the result as a proto
 // message.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (txn *Txn) GetProto(key interface{}, msg gogoproto.Message) error {
 	r, err := txn.Get(key)
 	if err != nil {
@@ -174,8 +174,8 @@ func (txn *Txn) GetProto(key interface{}, msg gogoproto.Message) error {
 
 // Put sets the value for a key
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc).
 func (txn *Txn) Put(key, value interface{}) error {
 	b := txn.NewBatch()
 	b.Put(key, value)
@@ -187,8 +187,8 @@ func (txn *Txn) Put(key, value interface{}) error {
 // to expValue. To conditionally set a value only if there is no existing entry
 // pass nil for expValue.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc).
 func (txn *Txn) CPut(key, value, expValue interface{}) error {
 	b := txn.NewBatch()
 	b.CPut(key, value, expValue)
@@ -203,8 +203,7 @@ func (txn *Txn) CPut(key, value, expValue interface{}) error {
 // The returned Result will contain a single row and Result.Err will indicate
 // success or failure.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Inc(key, value)
@@ -227,8 +226,7 @@ func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]K
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 	return txn.scan(begin, end, maxRows, false)
 }
@@ -238,16 +236,14 @@ func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) 
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (txn *Txn) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 	return txn.scan(begin, end, maxRows, true)
 }
 
 // Del deletes one or more keys.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (txn *Txn) Del(keys ...interface{}) error {
 	b := txn.NewBatch()
 	b.Del(keys...)
@@ -260,8 +256,7 @@ func (txn *Txn) Del(keys ...interface{}) error {
 // The returned Result will contain 0 rows and Result.Err will indicate success
 // or failure.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (txn *Txn) DelRange(begin, end interface{}) error {
 	b := txn.NewBatch()
 	b.DelRange(begin, end)

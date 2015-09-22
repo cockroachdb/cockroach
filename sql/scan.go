@@ -20,9 +20,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
@@ -343,7 +341,7 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	if n.err == nil {
 		// Normalize the expression (this will also evaluate any branches that are
 		// constant).
-		n.filter, n.err = parser.NormalizeExpr(n.filter)
+		n.filter, n.err = n.planner.evalCtx.NormalizeExpr(n.filter)
 	}
 	if n.err == nil {
 		var whereType parser.Datum
@@ -468,7 +466,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	}
 	// Type check the expression to memoize operators and functions.
 	var normalized parser.Expr
-	if normalized, n.err = parser.NormalizeAndTypeCheckExpr(resolved); n.err != nil {
+	if normalized, n.err = n.planner.evalCtx.NormalizeAndTypeCheckExpr(resolved); n.err != nil {
 		return n.err
 	}
 	if normalized, n.err = n.planner.expandSubqueries(normalized, 1); n.err != nil {
@@ -619,7 +617,7 @@ func (n *scanNode) filterRow() bool {
 	}
 
 	var d parser.Datum
-	d, n.err = parser.EvalExpr(n.filter)
+	d, n.err = n.planner.evalCtx.EvalExpr(n.filter)
 	if n.err != nil {
 		return false
 	}
@@ -639,7 +637,7 @@ func (n *scanNode) renderRow() {
 		n.row = make([]parser.Datum, len(n.render))
 	}
 	for i, e := range n.render {
-		n.row[i], n.err = parser.EvalExpr(e)
+		n.row[i], n.err = n.planner.evalCtx.EvalExpr(e)
 		if n.err != nil {
 			return
 		}
@@ -698,35 +696,9 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 		n.err = fmt.Errorf("column-id \"%d\" does not exist", n.colID)
 		return nil, false
 	}
-	if kv.Exists() {
-		switch kind {
-		case ColumnType_INT:
-			return parser.DInt(kv.ValueInt()), true
-		case ColumnType_BOOL:
-			return parser.DBool(kv.ValueInt() != 0), true
-		case ColumnType_FLOAT:
-			return parser.DFloat(math.Float64frombits(uint64(kv.ValueInt()))), true
-		case ColumnType_STRING:
-			return parser.DString(kv.ValueBytes()), true
-		case ColumnType_BYTES:
-			return parser.DBytes(kv.ValueBytes()), true
-		case ColumnType_DATE:
-			var t time.Time
-			if err := t.UnmarshalBinary(kv.ValueBytes()); err != nil {
-				return nil, false
-			}
-			return parser.DDate{Time: t}, true
-		case ColumnType_TIMESTAMP:
-			var t time.Time
-			if err := t.UnmarshalBinary(kv.ValueBytes()); err != nil {
-				return nil, false
-			}
-			return parser.DTimestamp{Time: t}, true
-		case ColumnType_INTERVAL:
-			return parser.DInterval{Duration: time.Duration(kv.ValueInt())}, true
-		}
-	}
-	return parser.DNull, true
+	var d parser.Datum
+	d, n.err = unmarshalColumnValue(kind, kv.Value)
+	return d, n.err == nil
 }
 
 func (n *scanNode) getQVal(col ColumnDescriptor) *qvalue {

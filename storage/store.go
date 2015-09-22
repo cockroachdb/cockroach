@@ -139,6 +139,24 @@ func verifyKeys(start, end proto.Key, checkEndKey bool) error {
 	return nil
 }
 
+type errWithIndex struct {
+	index int
+	err   error
+}
+
+func (ewi *errWithIndex) Error() string {
+	return fmt.Sprintf("at %d: %s", ewi.index, ewi.err)
+}
+
+// unwrapIndexedError returns the wrapped error for an *errWithIndex, and
+// the given error otherwise.
+func unwrapIndexedError(err error) error {
+	if iErr, ok := err.(*errWithIndex); ok {
+		return iErr.err
+	}
+	return err
+}
+
 type rangeAlreadyExists struct {
 	rng *Replica
 }
@@ -423,7 +441,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		if err := s.engine.Open(); err != nil {
 			return err
 		}
-		s.stopper.AddCloser(s.engine)
 
 		// Read store ident and return a not-bootstrapped error if necessary.
 		ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), proto.ZeroTimestamp, true,
@@ -711,7 +728,6 @@ func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *stop.Stopper) error {
 	if err := s.engine.Open(); err != nil {
 		return err
 	}
-	stopper.AddCloser(s.engine)
 	s.Ident = ident
 	kvs, err := engine.Scan(s.engine, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 1)
 	if err != nil {
@@ -1201,7 +1217,7 @@ func (s *Store) ReplicaCount() int {
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
+func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Response, *proto.Error) {
 	ctx = s.Context(ctx)
 	trace := tracer.FromCtx(ctx)
 	// If the request has a zero timestamp, initialize to this node's clock.
@@ -1209,14 +1225,14 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 	// TODO(tschottdorf): remove this first branch when we only have batches here.
 	if args.Method() != proto.Batch {
 		if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {
-			return nil, err
+			return nil, proto.NewError(err)
 		}
 	} else {
 		for _, union := range args.(*proto.BatchRequest).Requests {
 			arg := union.GetInner()
 			header := arg.Header()
 			if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(arg)); err != nil {
-				return nil, err
+				return nil, proto.NewError(err)
 			}
 		}
 	}
@@ -1228,8 +1244,8 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			// before we reach that point.
 			offset := time.Duration(header.Timestamp.WallTime - s.Clock().PhysicalNow())
 			if offset > s.Clock().MaxOffset() {
-				return nil, util.Errorf("Rejecting command with timestamp in the future: %d (%s ahead)",
-					header.Timestamp.WallTime, offset)
+				return nil, proto.NewError(util.Errorf("Rejecting command with timestamp in the future: %d (%s ahead)",
+					header.Timestamp.WallTime, offset))
 			}
 		}
 		// Update our clock with the incoming request timestamp. This
@@ -1255,10 +1271,11 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		// Get range and add command to the range for execution.
 		rng, err = s.GetReplica(header.RangeID)
 		if err != nil {
-			return nil, err
+			return nil, proto.NewError(err)
 		}
 
 		var reply proto.Response
+		index := -1
 		reply, err = rng.AddCmd(ctx, args)
 		if err == nil {
 			return reply, nil
@@ -1266,6 +1283,10 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			// This error needs to be converted appropriately so that
 			// clients will retry.
 			err = proto.NewRangeNotFoundError(rng.Desc().RangeID)
+		} else if iErr, ok := err.(*errWithIndex); ok {
+			err, index = iErr.err, iErr.index
+			// TODO(tschottdorf): propagate the index up. See #1891.
+			_ = index
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
@@ -1318,7 +1339,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			}
 			continue
 		}
-		return nil, err
+		return nil, proto.NewError(err)
 	}
 
 	// By default, retries are indefinite. However, some unittests set a
@@ -1326,9 +1347,9 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 	// and the original error otherwise.
 	trace.Event("store retry limit exceeded") // good to check for if tests fail
 	if header.Txn != nil {
-		return nil, proto.NewTransactionRetryError(header.Txn)
+		return nil, proto.NewError(proto.NewTransactionRetryError(header.Txn))
 	}
-	return nil, err
+	return nil, proto.NewError(err)
 }
 
 // resolveWriteIntentError tries to push the conflicting transaction (if

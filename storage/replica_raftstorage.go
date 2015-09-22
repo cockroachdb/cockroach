@@ -142,6 +142,9 @@ func (r *Replica) LastIndex() (uint64, error) {
 // current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
 func (r *Replica) raftTruncatedState() (proto.RaftTruncatedState, error) {
+	if ts := r.getCachedTruncatedState(); ts != nil {
+		return *ts, nil
+	}
 	ts := proto.RaftTruncatedState{}
 	ok, err := engine.MVCCGetProto(r.rm.Engine(), keys.RaftTruncatedStateKey(r.Desc().RangeID),
 		proto.ZeroTimestamp, true, nil, &ts)
@@ -159,6 +162,10 @@ func (r *Replica) raftTruncatedState() (proto.RaftTruncatedState, error) {
 			ts.Index = 0
 			ts.Term = 0
 		}
+	}
+
+	if ts.Index != 0 {
+		r.setCachedTruncatedState(&ts)
 	}
 	return ts, nil
 }

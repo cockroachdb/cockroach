@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -38,19 +37,30 @@ var errTransactionInProgress = errors.New("there is already a transaction in pro
 
 // An Executor executes SQL statements.
 type Executor struct {
-	db client.DB
+	db     client.DB
+	nodeID uint32
 }
 
 // NewExecutor creates an Executor.
 func NewExecutor(db client.DB) Executor {
-	return Executor{db}
+	return Executor{db: db}
+}
+
+// SetNodeID sets the node ID for the SQL server.
+func (e *Executor) SetNodeID(nodeID proto.NodeID) {
+	e.nodeID = uint32(nodeID)
 }
 
 // Execute the statement(s) in the given request and return a response.
 // On error, the returned integer is an HTTP error code.
 func (e Executor) Execute(args driver.Request) (driver.Response, int, error) {
+	planMaker := planner{
+		user: args.GetUser(),
+		evalCtx: parser.EvalContext{
+			NodeID: e.nodeID,
+		},
+	}
 	// Pick up current session state.
-	planMaker := planner{user: args.GetUser()}
 	if err := gogoproto.Unmarshal(args.Session, &planMaker.session); err != nil {
 		return args.CreateReply(), http.StatusBadRequest, err
 	}
@@ -207,7 +217,7 @@ func (e Executor) execStmt(stmt parser.Statement, params parameters, planMaker *
 							Payload: &driver.Datum_IntervalVal{IntervalVal: vt.Nanoseconds()},
 						})
 					default:
-						return util.Errorf("unsupported datum: %T", val)
+						return fmt.Errorf("unsupported result type: %s", val.Type())
 					}
 				}
 			}

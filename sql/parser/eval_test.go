@@ -276,10 +276,10 @@ func TestEvalExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		expr := q[0].(*Select).Exprs[0].Expr
-		if expr, err = NormalizeExpr(expr); err != nil {
+		if expr, err = defaultContext.NormalizeExpr(expr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		r, err := EvalExpr(expr)
+		r, err := defaultContext.EvalExpr(expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -310,7 +310,7 @@ func TestEvalExprError(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		expr := q[0].(*Select).Exprs[0].Expr
-		if _, err := EvalExpr(expr); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+		if _, err := defaultContext.EvalExpr(expr); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}

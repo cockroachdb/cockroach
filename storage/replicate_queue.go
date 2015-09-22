@@ -84,11 +84,11 @@ func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica,
 	}
 
 	action, priority := rq.allocator.ComputeAction(*zone, desc)
-	if action != aaNoop {
+	if action != AllocatorNoop {
 		return true, priority
 	}
 	// See if there is a rebalancing opportunity present.
-	shouldRebalance := rq.allocator.shouldRebalance(repl.rm.StoreID())
+	shouldRebalance := rq.allocator.ShouldRebalance(repl.rm.StoreID())
 	return shouldRebalance, 0
 }
 
@@ -111,7 +111,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *con
 	}
 
 	switch action {
-	case aaAdd:
+	case AllocatorAdd:
 		newStore, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true, nil)
 		if err != nil {
 			return err
@@ -123,7 +123,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *con
 		if err = repl.ChangeReplicas(proto.ADD_REPLICA, newReplica, desc); err != nil {
 			return err
 		}
-	case aaRemove:
+	case AllocatorRemove:
 		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas)
 		if err != nil {
 			return err
@@ -135,7 +135,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *con
 		if removeReplica.StoreID == repl.rm.StoreID() {
 			return nil
 		}
-	case aaRemoveDead:
+	case AllocatorRemoveDead:
 		if len(deadReplicas) == 0 {
 			if log.V(1) {
 				log.Warningf("Range of replica %s was identified as having dead replicas, but no dead replicas were found.", repl)
@@ -145,7 +145,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *con
 		if err = repl.ChangeReplicas(proto.REMOVE_REPLICA, deadReplicas[0], desc); err != nil {
 			return err
 		}
-	case aaNoop:
+	case AllocatorNoop:
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
 		rebalanceStore := rq.allocator.RebalanceTarget(zone.ReplicaAttrs[0], desc.Replicas)

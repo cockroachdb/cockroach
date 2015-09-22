@@ -389,7 +389,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 // Note that `from` and `to` are not necessarily Key and EndKey from a
 // RequestHeader; it's assumed that they've been translated to key addresses
 // already (via KeyAddress).
-func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) (*proto.RangeDescriptor, bool, func(), error) {
+func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) (*proto.RangeDescriptor, bool, func(), *proto.Error) {
 	var desc *proto.RangeDescriptor
 	var err error
 	var descKey proto.Key
@@ -401,7 +401,7 @@ func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) 
 	desc, err = ds.rangeCache.LookupRangeDescriptor(descKey, options)
 
 	if err != nil {
-		return nil, false, nil, err
+		return nil, false, nil, proto.NewError(err)
 	}
 
 	// Checks whether need to get next range descriptor. If so, returns true.
@@ -420,7 +420,7 @@ func (ds *DistSender) getDescriptors(from, to proto.Key, options lookupOptions) 
 }
 
 // sendAttempt gathers and rearranges the replicas, and makes an RPC call.
-func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba proto.BatchRequest, desc *proto.RangeDescriptor) (*proto.BatchResponse, error) {
+func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba proto.BatchRequest, desc *proto.RangeDescriptor) (*proto.BatchResponse, *proto.Error) {
 	defer trace.Epoch("sending RPC")()
 
 	leader := ds.leaderCache.Lookup(proto.RangeID(desc.RangeID))
@@ -446,20 +446,20 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba proto.BatchRequest, de
 	// TODO(tschottdorf) &ba -> ba
 	resp, err := ds.sendRPC(trace, desc.RangeID, replicas, order, &ba)
 	if err != nil {
-		return nil, err
+		return nil, proto.NewError(err)
 	}
 	// Untangle the error from the received response.
 	br := resp.(*proto.BatchResponse)
-	err = br.GoError()
-	br.Error = nil
-	return br, err
+	pErr := br.Error
+	br.Error = nil // scrub the response error
+	return br, pErr
 }
 
 // SendBatch implements the batch.Sender interface. It subdivides
 // the Batch into batches admissible for sending (preventing certain
 // illegal mixtures of requests), executes each individual part
 // (which may span multiple ranges), and recombines the response.
-func (ds *DistSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
+func (ds *DistSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
 	// TODO(tschottdorf): right place for this?
@@ -478,7 +478,7 @@ func (ds *DistSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*pr
 // sendChunk is in charge of sending an "admissible" piece of batch, i.e. one
 // which doesn't need to be subdivided further before going to a range (so no
 // mixing of forward and reverse scans, etc).
-func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
+func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	// TODO(tschottdorf): prepare for removing Key and EndKey from BatchRequest,
 	// making sure that anything that relies on them goes bust.
 	ba.Key, ba.EndKey = nil, nil
@@ -502,23 +502,22 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 		var curReply *proto.BatchResponse
 		var desc *proto.RangeDescriptor
 		var needAnother bool
-		var err error
+		var pErr *proto.Error
 		for r := retry.Start(ds.rpcRetryOptions); r.Next(); {
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
 			descDone := trace.Epoch("meta descriptor lookup")
 			var evictDesc func()
-
-			desc, needAnother, evictDesc, err = ds.getDescriptors(from, to, options)
+			desc, needAnother, evictDesc, pErr = ds.getDescriptors(from, to, options)
 			descDone()
 
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
-			if err != nil {
-				if rErr, ok := err.(retry.Retryable); ok && rErr.CanRetry() {
+			if pErr != nil {
+				if rErr, ok := pErr.GoError().(retry.Retryable); ok && rErr.CanRetry() {
 					if log.V(1) {
-						log.Warning(err)
+						log.Warning(pErr)
 					}
 					continue
 				}
@@ -531,7 +530,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 			// consistency is not required.
 			if needAnother && ba.Txn == nil && ba.IsRange() &&
 				ba.ReadConsistency != proto.INCONSISTENT {
-				return nil, &proto.OpRequiresTxnError{}
+				return nil, proto.NewError(&proto.OpRequiresTxnError{})
 			}
 
 			// It's possible that the returned descriptor misses parts of the
@@ -544,19 +543,19 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 				continue
 			}
 
-			curReply, err = func() (*proto.BatchResponse, error) {
+			curReply, pErr = func() (*proto.BatchResponse, *proto.Error) {
 				// Truncate the request to our current key range.
 				untruncate, numActive, trErr := truncate(&ba, desc, from, to)
-				if numActive == 0 {
+				if numActive == 0 && trErr == nil {
 					untruncate()
 					// This shouldn't happen in the wild, but some tests
 					// exercise it.
-					return nil, util.Errorf("truncation resulted in empty batch on [%s,%s): %s",
-						from, to, ba)
+					return nil, proto.NewError(util.Errorf("truncation resulted in empty batch on [%s,%s): %s",
+						from, to, ba))
 				}
 				defer untruncate()
 				if trErr != nil {
-					return nil, trErr
+					return nil, proto.NewError(trErr)
 				}
 				// TODO(tschottdorf): make key range on batch redundant. The
 				// requests within dictate it anyways.
@@ -565,14 +564,14 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 				ba.Key, ba.EndKey = nil, nil
 
 				if err != nil {
-					if log.V(0 /* TODO(tschottdorf): 1 */) {
-						log.Warningf("failed to invoke %s: %s", ba, err)
+					if log.V(1) {
+						log.Warningf("failed to invoke %s: %s", ba, pErr)
 					}
 				}
 				return reply, err
 			}()
 			// If sending succeeded, break this loop.
-			if err == nil {
+			if pErr == nil {
 				break
 			}
 
@@ -580,8 +579,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 			// If retryable, allow retry. For range not found or range
 			// key mismatch errors, we don't backoff on the retry,
 			// but reset the backoff loop so we can retry immediately.
-			switch tErr := err.(type) {
-			case *rpc.SendError:
+			switch tErr := pErr.GoError().(type) {
+			case *proto.SendError:
 				// For an RPC error to occur, we must've been unable to contact
 				// any replicas. In this case, likely all nodes are down (or
 				// not getting back to us within a reasonable amount of time).
@@ -596,13 +595,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 					continue
 				}
 			case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
-				trace.Event(fmt.Sprintf("reply error: %T", err))
+				trace.Event(fmt.Sprintf("reply error: %T", tErr))
 				// Range descriptor might be out of date - evict it.
 				evictDesc()
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
 				if log.V(1) {
-					log.Warning(err)
+					log.Warning(tErr)
 				}
 				// On retries, allow [uncommitted] intents on range descriptor
 				// lookups to be returned 50% of the time in order to succeed
@@ -615,7 +614,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 				options.considerIntents = true
 				continue
 			case *proto.NotLeaderError:
-				trace.Event(fmt.Sprintf("reply error: %T", err))
+				trace.Event(fmt.Sprintf("reply error: %T", tErr))
 				newLeader := tErr.GetLeader()
 				// Verify that leader is a known replica according to the
 				// descriptor. If not, we've got a stale replica; evict cache.
@@ -632,16 +631,16 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 				}
 				ds.updateLeaderCache(proto.RangeID(desc.RangeID), *newLeader)
 				if log.V(1) {
-					log.Warning(err)
+					log.Warning(tErr)
 				}
 				r.Reset()
 				continue
 			case retry.Retryable:
 				if tErr.CanRetry() {
 					if log.V(1) {
-						log.Warning(err)
+						log.Warning(tErr)
 					}
-					trace.Event(fmt.Sprintf("reply error: %T", err))
+					trace.Event(fmt.Sprintf("reply error: %T", tErr))
 					continue
 				}
 			}
@@ -649,8 +648,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 		}
 
 		// Immediately return if querying a range failed non-retryably.
-		if err != nil {
-			return nil, err
+		if pErr != nil {
+			return nil, pErr
 		}
 
 		first := br == nil
@@ -661,8 +660,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 			// This was the second or later call in a cross-Range request.
 			// Combine the new response with the existing one.
 			if err := br.Combine(curReply); err != nil {
+				// TODO(tschottdorf): return nil, proto.NewError(err)
 				panic(err)
-				// TODO(tschottdorf): return nil, err
 			}
 		}
 

@@ -17,7 +17,10 @@
 
 package engine
 
-import "github.com/cockroachdb/cockroach/proto"
+import (
+	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/stop"
+)
 
 // InMem wraps RocksDB and configures it for in-memory only storage.
 type InMem struct {
@@ -25,9 +28,9 @@ type InMem struct {
 }
 
 // NewInMem allocates and returns a new, opened InMem engine.
-func NewInMem(attrs proto.Attributes, cacheSize int64) InMem {
+func NewInMem(attrs proto.Attributes, cacheSize int64, stopper *stop.Stopper) InMem {
 	db := InMem{
-		RocksDB: newMemRocksDB(attrs, cacheSize),
+		RocksDB: newMemRocksDB(attrs, cacheSize, stopper),
 	}
 	if err := db.Open(); err != nil {
 		panic(err)

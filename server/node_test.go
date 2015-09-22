@@ -111,7 +111,7 @@ func formatKeys(keys []proto.Key) string {
 func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
-	e := engine.NewInMem(proto.Attributes{}, 1<<20)
+	e := engine.NewInMem(proto.Attributes{}, 1<<20, stopper)
 	localDB, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
 	if err != nil {
 		t.Fatal(err)
@@ -153,8 +153,10 @@ func TestBootstrapCluster(t *testing.T) {
 // stores and verifies both stores are added and started.
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	engineStopper := stop.NewStopper()
+	defer engineStopper.Stop()
+	e := engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
 	eagerStopper := stop.NewStopper()
-	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	if _, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper); err != nil {
 		t.Fatal(err)
 	}
@@ -163,8 +165,8 @@ func TestBootstrapNewStore(t *testing.T) {
 	// Start a new node with two new stores which will require bootstrapping.
 	engines := []engine.Engine{
 		e,
-		engine.NewInMem(proto.Attributes{}, 1<<20),
-		engine.NewInMem(proto.Attributes{}, 1<<20),
+		engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper),
+		engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper),
 	}
 	_, node, stopper := createAndStartTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
 	defer stopper.Stop()
@@ -192,8 +194,10 @@ func TestBootstrapNewStore(t *testing.T) {
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	engineStopper := stop.NewStopper()
+	defer engineStopper.Stop()
+	e := engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
 	stopper := stop.NewStopper()
-	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
 	if err != nil {
 		t.Fatal(err)
@@ -209,7 +213,7 @@ func TestNodeJoin(t *testing.T) {
 	defer stopper1.Stop()
 
 	// Create a new node.
-	engines2 := []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}
+	engines2 := []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)}
 	server2, node2, stopper2 := createAndStartTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
 	defer stopper2.Stop()
 
@@ -246,8 +250,10 @@ func TestNodeJoin(t *testing.T) {
 // store's cluster ID is empty.
 func TestCorruptedClusterID(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	engineStopper := stop.NewStopper()
+	e := engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
+	defer engineStopper.Stop()
 	eagerStopper := stop.NewStopper()
-	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper)
 	if err != nil {
 		t.Fatal(err)

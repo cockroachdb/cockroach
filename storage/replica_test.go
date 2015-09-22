@@ -117,7 +117,7 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.clock = hlc.NewClock(tc.manualClock.UnixNano)
 	}
 	if tc.engine == nil {
-		tc.engine = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+		tc.engine = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, tc.stopper)
 	}
 	if tc.transport == nil {
 		tc.transport = multiraft.NewLocalRPCTransport(tc.stopper)
@@ -236,12 +236,12 @@ func TestRangeContains(t *testing.T) {
 		EndKey:   proto.Key("b"),
 	}
 
-	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, stopper)
 	clock := hlc.NewClock(hlc.UnixNano)
 	ctx := TestStoreContext
 	ctx.Clock = clock
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	defer ctx.Transport.Close()
 	store := NewStore(ctx, e, &proto.NodeDescriptor{NodeID: 1})
@@ -548,7 +548,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 	var val proto.Value
-	val.SetInteger(42)
+	val.SetInt(42)
 	if err := engine.MVCCPut(tc.engine, nil, key, proto.MinTimestamp, val, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -1512,7 +1512,6 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	br := proto.BatchResponse{}
 	br.Add(&incReply)
 	pastError := errors.New("boom")
-	var expError error = &proto.Error{Message: pastError.Error()}
 	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID,
 		proto.ResponseWithError{Reply: &br, Err: pastError})
 
@@ -1521,10 +1520,8 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	_, err := tc.rng.AddCmd(tc.rng.context(), &args)
 	if err == nil {
 		t.Fatal("expected to see cached error but got nil")
-	} else if ge, ok := err.(*proto.Error); !ok {
-		t.Fatalf("expected proto.Error but got %s", err)
-	} else if !reflect.DeepEqual(ge, expError) {
-		t.Fatalf("expected <%T> %+v but got <%T> %+v", expError, expError, ge, ge)
+	} else if !testutils.IsError(err, pastError.Error()) {
+		t.Fatalf("expected '%s', but got %s", pastError, err)
 	}
 }
 
@@ -1682,6 +1679,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 		args.Timestamp = tc.clock.Now()
 
 		resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		err = unwrapIndexedError(err)
 
 		if test.expErr {
 			if err == nil {
@@ -1889,6 +1887,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	// Check if the intent in the other range has not yet been resolved.
 	gArgs := getArgs(splitKey, newRng.Desc().RangeID, tc.store.StoreID())
 	_, err := newRng.AddCmd(newRng.context(), &gArgs)
+	err = unwrapIndexedError(err)
 	if _, ok := err.(*proto.WriteIntentError); !ok {
 		t.Errorf("expected write intent error, but got %s", err)
 	}
@@ -2094,6 +2093,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
 		}
 		if err != nil {
+			err = unwrapIndexedError(err)
 			if _, ok := err.(*proto.TransactionPushError); !ok {
 				t.Errorf("expected txn push error: %s", err)
 			}
@@ -2159,6 +2159,7 @@ func TestPushTxnPriorities(t *testing.T) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
 		}
 		if err != nil {
+			err = unwrapIndexedError(err)
 			if _, ok := err.(*proto.TransactionPushError); !ok {
 				t.Errorf("expected txn push error: %s", err)
 			}
@@ -2308,7 +2309,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS := engine.MVCCStats{LiveBytes: 39, KeyBytes: 15, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 58, SysCount: 1}
+	expMS := engine.MVCCStats{LiveBytes: 41, KeyBytes: 15, ValBytes: 26, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 60, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Put a 2nd value transactionally.
@@ -2319,7 +2320,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 130, KeyBytes: 30, ValBytes: 100, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 58, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 134, KeyBytes: 30, ValBytes: 104, IntentBytes: 26, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 60, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -2336,7 +2337,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 78, KeyBytes: 30, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 58, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 82, KeyBytes: 30, ValBytes: 52, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 60, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Delete the 1st value.
@@ -2346,7 +2347,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &dArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 39, KeyBytes: 42, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 58, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 41, KeyBytes: 42, ValBytes: 54, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 60, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 }
 
@@ -2461,9 +2462,11 @@ func TestTruncateLog(t *testing.T) {
 func TestRaftStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	var eng engine.Engine
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 	storagetest.RunTests(t,
 		func(t *testing.T) storagetest.WriteableStorage {
-			eng = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+			eng = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, stopper)
 			// Fake store to house the engine.
 			store := &Store{
 				ctx: StoreContext{
@@ -2482,7 +2485,7 @@ func TestRaftStorage(t *testing.T) {
 			return rng
 		},
 		func(t *testing.T, r storagetest.WriteableStorage) {
-			eng.Close()
+			// Do nothing
 		})
 }
 
@@ -2517,6 +2520,8 @@ func TestConditionFailedError(t *testing.T) {
 	}
 
 	_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+
+	err = unwrapIndexedError(err)
 
 	if cErr, ok := err.(*proto.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
@@ -3035,7 +3040,10 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	// Force the read command request a new lease.
 	clock := tc.clock
 	gArgs.Header().Timestamp = clock.Update(clock.Now().Add(int64(DefaultLeaderLeaseDuration), 0))
-	_, err = tc.store.ExecuteCmd(context.Background(), &gArgs)
+	{
+		_, pErr := tc.store.ExecuteCmd(context.Background(), &gArgs)
+		err = pErr.GoError()
+	}
 	if _, ok := err.(*proto.RangeNotFoundError); !ok {
 		t.Fatalf("expected a RangeNotFoundError, get %s", err)
 	}
@@ -3104,4 +3112,40 @@ func TestIntentIntersect(t *testing.T) {
 			t.Errorf("%d: wanted %v, got %v", i, tc.exp, all)
 		}
 	}
+}
+
+// TestBatchErrorWithIndex tests that when an individual entry in a batch
+// results in an error, the index of this command is propagated along with
+// the error.
+func TestBatchErrorWithIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	ba := &proto.BatchRequest{}
+	ba.RangeID = tc.rng.Desc().RangeID
+	ba.Replica.StoreID = tc.store.StoreID()
+	ba.Add(&proto.PutRequest{
+		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
+		Value:         proto.Value{Bytes: []byte("not nil")},
+	})
+	ba.Add(&proto.ConditionalPutRequest{
+		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
+		Value:         proto.Value{Bytes: []byte("irrelevant")},
+		ExpValue:      nil, // not true after above Put
+	})
+	// This one is never executed.
+	ba.Add(&proto.GetRequest{
+		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
+	})
+
+	if _, err := tc.rng.AddCmd(tc.rng.context(), ba); err == nil {
+		t.Fatal("expected an error")
+	} else if iErr, ok := err.(*errWithIndex); !ok {
+		t.Fatalf("expected indexed error, got %s", err)
+	} else if iErr.index != 1 || !testutils.IsError(err, "unexpected value") {
+		t.Fatalf("invalid index or error type: %s", iErr)
+	}
+
 }

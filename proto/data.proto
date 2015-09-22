@@ -42,6 +42,23 @@ message Timestamp {
   optional int32 logical = 2 [(gogoproto.nullable) = false];
 }
 
+// ValueType defines a set of type constants placed in the "tag" field of Value
+// messages. These are defined as a protocol buffer enumeration so that they
+// can be used portably between our Go and C code. The tags are used by the
+// RocksDB Merge Operator to perform specialized merges.
+enum ValueType {
+  // This is a subset of the SQL column type values, representing the
+  // underlying storage for various types.
+  UNKNOWN = 0;
+  INT = 1;
+  FLOAT = 2;
+  BYTES = 3;
+  TIME = 4;
+  
+  // TIMESERIES is applied to values which contain InternalTimeSeriesData.
+  TIMESERIES = 100;
+}
+
 // Value specifies the value at a key. Multiple values at the same key
 // are supported based on timestamp.
 message Value {
@@ -56,10 +73,8 @@ message Value {
   optional fixed32 checksum = 3;
   // Timestamp of value.
   optional Timestamp timestamp = 4;
-  // Tag is an optional string value which can be used to add additional
-  // metadata to this value. For example, Tag might provide information on how
-  // the bytes in the "bytes" field should be interpreted.
-  optional string tag = 5;
+  // Tag is the optional type of the value.
+  optional ValueType tag = 5 [(gogoproto.nullable) = false];
 }
 
 // KeyValue is a pair of Key and Value for returned Key/Value pairs

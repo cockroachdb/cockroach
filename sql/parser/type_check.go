@@ -29,9 +29,9 @@ import (
 // TypeCheckExpr. It returns returns an error if either of
 // NormalizeExpr or TypeCheckExpr return one, and otherwise returns
 // the Expr returned by NormalizeExpr.
-func NormalizeAndTypeCheckExpr(expr Expr) (Expr, error) {
+func (ctx EvalContext) NormalizeAndTypeCheckExpr(expr Expr) (Expr, error) {
 	var err error
-	expr, err = NormalizeExpr(expr)
+	expr, err = ctx.NormalizeExpr(expr)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +321,7 @@ func typeCheckFuncExpr(expr *FuncExpr) (Datum, error) {
 
 	// Function lookup succeeded but `fn` doesn't encode its return type.
 	// We need to call the function with dummy arguments.
-	res, err := expr.fn.fn(dummyArgs)
+	res, err := expr.fn.fn(defaultContext, dummyArgs)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v", expr.Name, err)
 	}

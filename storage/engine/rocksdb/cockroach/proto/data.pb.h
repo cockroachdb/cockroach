@@ -56,6 +56,29 @@ class Lease;
 class Intent;
 class GCMetadata;
 
+enum ValueType {
+  UNKNOWN = 0,
+  INT = 1,
+  FLOAT = 2,
+  BYTES = 3,
+  TIME = 4,
+  TIMESERIES = 100
+};
+bool ValueType_IsValid(int value);
+const ValueType ValueType_MIN = UNKNOWN;
+const ValueType ValueType_MAX = TIMESERIES;
+const int ValueType_ARRAYSIZE = ValueType_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* ValueType_descriptor();
+inline const ::std::string& ValueType_Name(ValueType value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    ValueType_descriptor(), value);
+}
+inline bool ValueType_Parse(
+    const ::std::string& name, ValueType* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<ValueType>(
+    ValueType_descriptor(), name, value);
+}
 enum ReplicaChangeType {
   ADD_REPLICA = 0,
   REMOVE_REPLICA = 1
@@ -307,17 +330,12 @@ class Value : public ::google::protobuf::Message {
   ::cockroach::proto::Timestamp* release_timestamp();
   void set_allocated_timestamp(::cockroach::proto::Timestamp* timestamp);
 
-  // optional string tag = 5;
+  // optional .cockroach.proto.ValueType tag = 5;
   bool has_tag() const;
   void clear_tag();
   static const int kTagFieldNumber = 5;
-  const ::std::string& tag() const;
-  void set_tag(const ::std::string& value);
-  void set_tag(const char* value);
-  void set_tag(const char* value, size_t size);
-  ::std::string* mutable_tag();
-  ::std::string* release_tag();
-  void set_allocated_tag(::std::string* tag);
+  ::cockroach::proto::ValueType tag() const;
+  void set_tag(::cockroach::proto::ValueType value);
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.Value)
  private:
@@ -335,8 +353,8 @@ class Value : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr bytes_;
   ::cockroach::proto::Timestamp* timestamp_;
-  ::google::protobuf::internal::ArenaStringPtr tag_;
   ::google::protobuf::uint32 checksum_;
+  int tag_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
@@ -2077,7 +2095,7 @@ inline void Value::set_allocated_timestamp(::cockroach::proto::Timestamp* timest
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Value.timestamp)
 }
 
-// optional string tag = 5;
+// optional .cockroach.proto.ValueType tag = 5;
 inline bool Value::has_tag() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -2088,46 +2106,18 @@ inline void Value::clear_has_tag() {
   _has_bits_[0] &= ~0x00000008u;
 }
 inline void Value::clear_tag() {
-  tag_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  tag_ = 0;
   clear_has_tag();
 }
-inline const ::std::string& Value::tag() const {
+inline ::cockroach::proto::ValueType Value::tag() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.Value.tag)
-  return tag_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  return static_cast< ::cockroach::proto::ValueType >(tag_);
 }
-inline void Value::set_tag(const ::std::string& value) {
+inline void Value::set_tag(::cockroach::proto::ValueType value) {
+  assert(::cockroach::proto::ValueType_IsValid(value));
   set_has_tag();
-  tag_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  tag_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.Value.tag)
-}
-inline void Value::set_tag(const char* value) {
-  set_has_tag();
-  tag_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.proto.Value.tag)
-}
-inline void Value::set_tag(const char* value, size_t size) {
-  set_has_tag();
-  tag_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.Value.tag)
-}
-inline ::std::string* Value::mutable_tag() {
-  set_has_tag();
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.Value.tag)
-  return tag_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* Value::release_tag() {
-  clear_has_tag();
-  return tag_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void Value::set_allocated_tag(::std::string* tag) {
-  if (tag != NULL) {
-    set_has_tag();
-  } else {
-    clear_has_tag();
-  }
-  tag_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), tag);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Value.tag)
 }
 
 // -------------------------------------------------------------------
@@ -3876,6 +3866,11 @@ inline void GCMetadata::set_oldest_intent_nanos(::google::protobuf::int64 value)
 namespace google {
 namespace protobuf {
 
+template <> struct is_proto_enum< ::cockroach::proto::ValueType> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::proto::ValueType>() {
+  return ::cockroach::proto::ValueType_descriptor();
+}
 template <> struct is_proto_enum< ::cockroach::proto::ReplicaChangeType> : ::google::protobuf::internal::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::proto::ReplicaChangeType>() {

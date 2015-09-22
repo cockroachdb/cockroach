@@ -112,10 +112,10 @@ func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to prot
 }
 
 // SenderFn is a function that implements a Sender.
-type senderFn func(context.Context, proto.BatchRequest) (*proto.BatchResponse, error)
+type senderFn func(context.Context, proto.BatchRequest) (*proto.BatchResponse, *proto.Error)
 
 // SendBatch implements batch.Sender.
-func (f senderFn) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
+func (f senderFn) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	return f(ctx, ba)
 }
 
@@ -138,7 +138,7 @@ func newChunkingSender(f senderFn) client.BatchSender {
 // that you're multi-range. In those cases, the wrapped sender should return an
 // error so that we split and retry once the chunk which contains
 // EndTransaction (i.e. the last one).
-func (cs *chunkingSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
+func (cs *chunkingSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	if len(ba.Requests) < 1 {
 		panic("empty batch")
 	}

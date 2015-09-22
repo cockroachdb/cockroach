@@ -76,7 +76,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 	// Construct the default expressions. The returned slice will be nil if no
 	// column in the table has a default expression.
-	defaultExprs, err := makeDefaultExprs(cols)
+	defaultExprs, err := p.makeDefaultExprs(cols)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 				rowVals = append(rowVals, parser.DNull)
 				continue
 			}
-			d, err := parser.EvalExpr(defaultExprs[i])
+			d, err := p.evalCtx.EvalExpr(defaultExprs[i])
 			if err != nil {
 				return nil, err
 			}
@@ -155,7 +155,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			col := cols[i]
 
 			// Make sure the value can be written to the column before proceeding.
-			primitive, err := convertDatum(col, val)
+			marshalled, err := marshalColumnValue(col, val)
 			if err != nil {
 				return nil, err
 			}
@@ -167,17 +167,17 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 				continue
 			}
 
-			if primitive != nil {
+			if marshalled != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
 
 				key := MakeColumnKey(col.ID, primaryIndexKey)
 				if log.V(2) {
-					log.Infof("CPut %q -> %v", key, primitive)
+					log.Infof("CPut %q -> %v", key, val)
 				}
 
-				b.CPut(key, primitive, nil)
+				b.CPut(key, marshalled, nil)
 			}
 		}
 	}
@@ -256,7 +256,7 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 	return rows, nil
 }
 
-func makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
+func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there are
 	// no DEFAULT expressions, we don't bother with constructing the defaults map
 	// as the defaults are all NULL.
@@ -282,7 +282,7 @@ func makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		expr, err = parser.NormalizeExpr(expr)
+		expr, err = p.evalCtx.NormalizeExpr(expr)
 		if err != nil {
 			return nil, err
 		}

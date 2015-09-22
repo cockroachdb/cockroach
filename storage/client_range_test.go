@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // TestRangeCommandClockUpdate verifies that followers update their
@@ -75,7 +76,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			values = append(values, mustGetInteger(val))
+			values = append(values, mustGetInt(val))
 		}
 		if !reflect.DeepEqual(values, []int64{5, 5, 5}) {
 			return util.Errorf("expected (5, 5, 5), got %v", values)
@@ -152,7 +153,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := mustGetInteger(val); v != 15 {
+	if v := mustGetInt(val); v != 15 {
 		t.Errorf("expected 15, got %v", v)
 	}
 }
@@ -208,12 +209,14 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	manualClock := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manualClock.UnixNano)
-	store, stopper := createTestStoreWithEngine(t,
-		engine.NewInMem(proto.Attributes{}, 10<<20),
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	store := createTestStoreWithEngine(t,
+		engine.NewInMem(proto.Attributes{}, 10<<20, stopper),
 		clock,
 		true,
-		nil)
-	defer stopper.Stop()
+		nil,
+		stopper)
 
 	// Put an initial value.
 	initVal := []byte("initVal")
@@ -293,8 +296,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		UserPriority: &priority,
 		Timestamp:    clock.Now(),
 	}
-	_, err = store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader})
-	if err != nil {
+	if _, err := store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader}); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
 
@@ -309,8 +311,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	requestHeader.Timestamp = clock.Now()
-	_, err = store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader})
-	if err == nil {
+	if _, err := store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
 	}
 
@@ -351,8 +352,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		},
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
-		_, err := store.ExecuteCmd(context.Background(), &scanArgs)
-		return err
+		_, pErr := store.ExecuteCmd(context.Background(), &scanArgs)
+		return pErr.GoError()
 	})
 
 	revScanArgs := func(key []byte, maxResults int32) *proto.RangeLookupRequest {

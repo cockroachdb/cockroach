@@ -24,7 +24,7 @@ CockroachDB is a distributed SQL database built on top of a transactional and co
 
 CockroachDB is currently in alpha. See our
 [Roadmap](https://github.com/cockroachdb/cockroach/issues/2132) and
-[Issues](https://github.com/cockroachdb/cockroach/issues) for a list of features planned or in development. 
+[Issues](https://github.com/cockroachdb/cockroach/issues) for a list of features planned or in development.
 
 ## Running CockroachDB Locally
 
@@ -50,17 +50,22 @@ docker run -t -i -p 8080:8080 cockroachdb/cockroach shell
 
 If the docker command fails but Docker is installed, you probably need to initialize it. Here's a common error message:
 ```bash
-FATA[0000] Post http:///var/run/docker.sock/v1.17/images/create?fromImage=cockroachdb%2Fcockroach%3Alatest: dial unix /var/run/docker.sock: no such file or directory
+Get http:///var/run/docker.sock/v1.20/containers/json: dial unix /var/run/docker.sock: no such file or directory.
+* Are you trying to connect to a TLS-enabled daemon without TLS?
+* Is your docker daemon up and running?
 ```
-On OSX:
+On OSX ([official docs](https://docs.docker.com/installation/mac/#from-your-shell)):
 ```bash
-# After installing [Docker Toolbox](https://www.docker.com/toolbox), start the VM (docker host):
+# install docker and docker-machine:
+$ brew install docker docker-machine
+# install VirtualBox:
+$ brew cask install virtualbox
+# create the VM (this will also start it):
+$ docker-machine create --driver virtualbox default
+# if the VM exists but isn't running, start it:
 $ docker-machine start default
-# then fire the following command to setup docker environment variables:
+# set up the environment for the docker client:
 $ eval $(docker-machine env default)
-# The previous command sets "default" as the active docker host VM.
-# To list the VMs (and check out which one is marked as Active):
-$ docker-machine ls
 ```
 Other operating systems will have a similar set of commands. Please check Docker's documentation for more info.
 
@@ -82,33 +87,32 @@ This initializes and starts a single-node cluster in the background.
 
 ##### Built-in client
 
-Now let's talk to this node. The easiest way to do that is to use the `cockroach` binary - it comes with a simple built-in client:
+Now let's talk to this node. The easiest way to do that is to use the `cockroach` binary - it comes with a built-in sql client:
 
 ```bash
-# Put the values a->1, b->2, c->3, d->4.
-./cockroach kv put a 1 b 2 c 3 d 4
-./cockroach kv scan
-# "a"     1
-# "b"     2
-# "c"     3
-# "d"     4
-# Scans do not include the end key.
-./cockroach kv scan b d
-# "b"     2
-# "c"     3
-./cockroach kv del c
-./cockroach kv scan
-# "a"     1
-# "b"     2
-# "d"     4
-# Counters are also available:
-./cockroach kv inc mycnt 5
-# 5
-./cockroach kv inc mycnt -- -3
-#2
-./cockroach kv get mycnt
-#"\x00\x00\x00\x00\x00\x00\x00\x02"
+$ ./cockroach sql --addr $(docker-machine ip default):8080
+# Welcome to the cockroach SQL interface.
+# All statements must be terminated by a semicolon.
+# To exit: CTRL + D.
+192.168.99.100:8080> show databases;
++----------+
+| Database |
++----------+
+| "system" |
++----------+
+192.168.99.100:8080> SET database = system;
+OK
+192.168.99.100:8080> show tables;
++--------------+
+|    Table     |
++--------------+
+| "descriptor" |
+| "namespace"  |
+| "users"      |
+| "zones"      |
++--------------+
 ```
+Note that this example assumes you're running the cockroach server on a docker-machine as described above.
 
 Check out `./cockroach help` to see all available commands.
 
@@ -123,9 +127,9 @@ see [cockroach-prod](https://github.com/cockroachdb/cockroach-prod)
 
 We spend almost all of our time here on GitHub, and use the [issue
 tracker](https://github.com/cockroachdb/cockroach/issues) for
-bug reports and development-related questions.
+bug reports.
 
-For anything else, message our mailing list at [cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db). We recommend joining before posting, or your messages may be held back for moderation.
+For development related questions and anything else, message our mailing list at [cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db). We recommend joining before posting, or your messages may be held back for moderation.
 
 ### Contributing
 

@@ -108,7 +108,7 @@ func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
 }
 
 // SendBatch implements batch.Sender.
-func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
+func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	trace := tracer.FromCtx(ctx)
 	var store *storage.Store
 	var err error
@@ -135,34 +135,29 @@ func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*p
 	}
 
 	var br *proto.BatchResponse
-	if err == nil {
-		// For calls that read data within a txn, we can avoid uncertainty
-		// related retries in certain situations. If the node is in
-		// "CertainNodes", we need not worry about uncertain reads any
-		// more. Setting MaxTimestamp=Timestamp for the operation
-		// accomplishes that. See proto.Transaction.CertainNodes for details.
-		if ba.Txn != nil && ba.Txn.CertainNodes.Contains(ba.Replica.NodeID) {
-			// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
-			trace.Event("read has no clock uncertainty")
-			ba.Txn.MaxTimestamp = ba.Txn.Timestamp
-		}
-		{
-			var tmpR proto.Response
-			// TODO(tschottdorf): &ba -> ba
-			tmpR, err = store.ExecuteCmd(ctx, &ba)
-			// TODO(tschottdorf): remove this dance once BatchResponse is returned.
-			if tmpR != nil {
-				br = tmpR.(*proto.BatchResponse)
-				if br.Error != nil {
-					panic(proto.ErrorUnexpectedlySet)
-				}
-			}
+	if err != nil {
+		return nil, proto.NewError(err)
+	}
+	// For calls that read data within a txn, we can avoid uncertainty
+	// related retries in certain situations. If the node is in
+	// "CertainNodes", we need not worry about uncertain reads any
+	// more. Setting MaxTimestamp=Timestamp for the operation
+	// accomplishes that. See proto.Transaction.CertainNodes for details.
+	if ba.Txn != nil && ba.Txn.CertainNodes.Contains(ba.Replica.NodeID) {
+		// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
+		trace.Event("read has no clock uncertainty")
+		ba.Txn.MaxTimestamp = ba.Txn.Timestamp
+	}
+	// TODO(tschottdorf): &ba -> ba
+	tmpR, pErr := store.ExecuteCmd(ctx, &ba)
+	// TODO(tschottdorf): remove this dance once BatchResponse is returned.
+	if tmpR != nil {
+		br = tmpR.(*proto.BatchResponse)
+		if br.Error != nil {
+			panic(proto.ErrorUnexpectedlySet)
 		}
 	}
-	// TODO(tschottdorf): Later error needs to be associated to an index
-	// and ideally individual requests don't even have an error in their
-	// header. See #1891.
-	return br, err
+	return br, pErr
 }
 
 // Send implements the client.Sender interface. The store is looked
@@ -239,7 +234,7 @@ func (ls *LocalSender) rangeLookup(key proto.Key, options lookupOptions, _ *prot
 	})
 	br, err := ls.SendBatch(context.Background(), *ba)
 	if err != nil {
-		return nil, err
+		return nil, err.GoError()
 	}
 	return unwrap(br).(*proto.RangeLookupResponse).Ranges, nil
 }

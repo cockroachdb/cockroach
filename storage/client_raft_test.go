@@ -47,10 +47,13 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
-// mustGetInteger decodes an int64 value from the bytes field of the receiver
+// mustGetInt decodes an int64 value from the bytes field of the receiver
 // and panics if the bytes field is not 0 or 8 bytes in length.
-func mustGetInteger(v *proto.Value) int64 {
-	i, err := v.GetInteger()
+func mustGetInt(v *proto.Value) int64 {
+	if v == nil {
+		return 0
+	}
+	i, err := v.GetInt()
 	if err != nil {
 		panic(err)
 	}
@@ -68,7 +71,9 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+	engineStopper := stop.NewStopper()
+	defer engineStopper.Stop()
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
 	var rangeID2 proto.RangeID
 
 	get := func(store *storage.Store, rangeID proto.RangeID, key proto.Key) int64 {
@@ -77,7 +82,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return mustGetInteger(resp.(*proto.GetResponse).Value)
+		return mustGetInt(resp.(*proto.GetResponse).Value)
 	}
 	validate := func(store *storage.Store) {
 		if val := get(store, rangeID, key1); val != 13 {
@@ -91,13 +96,14 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// First, populate the store with data across two ranges. Each range contains commands
 	// that both predate and postdate the split.
 	func() {
-		store, stopper := createTestStoreWithEngine(t, eng, clock, true, nil)
+		stopper := stop.NewStopper()
 		defer stopper.Stop()
+		store := createTestStoreWithEngine(t, eng, clock, true, nil, stopper)
 
 		increment := func(rangeID proto.RangeID, key proto.Key, value int64) (*proto.IncrementResponse, error) {
 			args := incrementArgs(key, value, rangeID, store.StoreID())
-			resp, err := store.ExecuteCmd(context.Background(), &args)
-			return resp.(*proto.IncrementResponse), err
+			resp, pErr := store.ExecuteCmd(context.Background(), &args)
+			return resp.(*proto.IncrementResponse), pErr.GoError()
 		}
 
 		if _, err := increment(rangeID, key1, 2); err != nil {
@@ -126,8 +132,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Now create a new store with the same engine and make sure the expected data is present.
 	// We must use the same clock because a newly-created manual clock will be behind the one
 	// we wrote with and so will see stale MVCC data.
-	store, stopper := createTestStoreWithEngine(t, eng, clock, false, nil)
-	defer stopper.Stop()
+	store := createTestStoreWithEngine(t, eng, clock, false, nil, engineStopper)
 
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
 	// ensure that is has been started.
@@ -150,7 +155,9 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	defer func() { storage.TestingCommandFilter = nil }()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+	engineStopper := stop.NewStopper()
+	defer engineStopper.Stop()
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
 
 	numIncrements := 0
 
@@ -162,8 +169,9 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	}
 
 	func() {
-		store, stopper := createTestStoreWithEngine(t, eng, clock, true, nil)
+		stopper := stop.NewStopper()
 		defer stopper.Stop()
+		store := createTestStoreWithEngine(t, eng, clock, true, nil, stopper)
 
 		// Write a bytes value so the increment will fail.
 		putArgs := putArgs(proto.Key("a"), []byte("asdf"), 1, store.StoreID())
@@ -184,8 +192,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	}
 
 	// Recover from the engine.
-	store, stopper := createTestStoreWithEngine(t, eng, clock, false, nil)
-	defer stopper.Stop()
+	store := createTestStoreWithEngine(t, eng, clock, false, nil, engineStopper)
 
 	// Issue a no-op write to lazily initialize raft on the range.
 	incArgs := incrementArgs(proto.Key("b"), 0, 1, store.StoreID())
@@ -253,7 +260,7 @@ func TestReplicateRange(t *testing.T) {
 		getArgs.ReadConsistency = proto.INCONSISTENT
 		if reply, err := mtc.stores[1].ExecuteCmd(context.Background(), &getArgs); err != nil {
 			return util.Errorf("failed to read data")
-		} else if v := mustGetInteger(reply.(*proto.GetResponse).Value); v != 5 {
+		} else if v := mustGetInt(reply.(*proto.GetResponse).Value); v != 5 {
 			return util.Errorf("failed to read correct data: %d", v)
 		}
 		return nil
@@ -308,9 +315,11 @@ func TestRestoreReplicas(t *testing.T) {
 	// The follower will return a not leader error, indicating the command
 	// should be forwarded to the leader.
 	incArgs = incrementArgs([]byte("a"), 11, 1, mtc.stores[1].StoreID())
-	_, err = mtc.stores[1].ExecuteCmd(context.Background(), &incArgs)
-	if _, ok := err.(*proto.NotLeaderError); !ok {
-		t.Fatalf("expected not leader error; got %s", err)
+	{
+		_, pErr := mtc.stores[1].ExecuteCmd(context.Background(), &incArgs)
+		if _, ok := pErr.GoError().(*proto.NotLeaderError); !ok {
+			t.Fatalf("expected not leader error; got %s", pErr)
+		}
 	}
 	incArgs.Replica.StoreID = mtc.stores[0].StoreID()
 	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
@@ -324,7 +333,7 @@ func TestRestoreReplicas(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		return mustGetInteger(reply.(*proto.GetResponse).Value) == 39
+		return mustGetInt(reply.(*proto.GetResponse).Value) == 39
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}
@@ -481,9 +490,9 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		}
 		getResp := reply.(*proto.GetResponse)
 		if log.V(1) {
-			log.Infof("read value %d", mustGetInteger(getResp.Value))
+			log.Infof("read value %d", mustGetInt(getResp.Value))
 		}
-		return mustGetInteger(getResp.Value) == 16
+		return mustGetInt(getResp.Value) == 16
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}
@@ -511,8 +520,8 @@ func TestReplicateAfterTruncation(t *testing.T) {
 			return false
 		}
 		getResp := reply.(*proto.GetResponse)
-		log.Infof("read value %d", mustGetInteger(getResp.Value))
-		return mustGetInteger(getResp.Value) == 39
+		log.Infof("read value %d", mustGetInt(getResp.Value))
+		return mustGetInt(getResp.Value) == 39
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}
@@ -796,7 +805,7 @@ func TestProgressWithDownNode(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				values = append(values, mustGetInteger(val))
+				values = append(values, mustGetInt(val))
 			}
 			if !reflect.DeepEqual(expected, values) {
 				return util.Errorf("expected %v, got %v", expected, values)
@@ -847,7 +856,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					values = append(values, mustGetInteger(val))
+					values = append(values, mustGetInt(val))
 				}
 				if !reflect.DeepEqual(expected, values) {
 					return util.Errorf("addFirst: %t, expected %v, got %v", addFirst, expected, values)
@@ -978,9 +987,9 @@ func TestReplicateAfterSplit(t *testing.T) {
 		}
 		getResp := reply.(*proto.GetResponse)
 		if log.V(1) {
-			log.Infof("read value %d", mustGetInteger(getResp.Value))
+			log.Infof("read value %d", mustGetInt(getResp.Value))
 		}
-		return mustGetInteger(getResp.Value) == 11
+		return mustGetInt(getResp.Value) == 11
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}

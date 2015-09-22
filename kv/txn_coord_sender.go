@@ -323,7 +323,7 @@ func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 // key ranges for eventual cleanup via resolved write intents; they're
 // tagged to an outgoing EndTransaction request, with the receiving
 // replica in charge of resolving them.
-func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, error) {
+func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	tc.maybeBeginTxn(&ba)
 	ba.CmdID = ba.GetOrCreateCmdID(tc.clock.PhysicalNow())
 	var startNS int64
@@ -341,7 +341,7 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) 
 	for _, arg := range ba.Requests {
 		trace.Event(fmt.Sprintf("%T", arg.GetValue()))
 		if err := updateForBatch(arg.GetInner(), ba.RequestHeader); err != nil {
-			return nil, err
+			return nil, proto.NewError(err)
 		}
 	}
 
@@ -357,7 +357,7 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) 
 			_, ok := tc.txns[id]
 			tc.Unlock()
 			if !ok {
-				return nil, util.Errorf("transaction must not write on multiple coordinators")
+				return nil, proto.NewError(util.Errorf("transaction must not write on multiple coordinators"))
 			}
 		}
 
@@ -383,7 +383,7 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) 
 				// TODO(tschottdorf): it may be useful to allow this later.
 				// That would be part of a possible plan to allow txns which
 				// write on multiple coordinators.
-				return nil, util.Errorf("client must not pass intents to EndTransaction")
+				return nil, proto.NewError(util.Errorf("client must not pass intents to EndTransaction"))
 			}
 			tc.Lock()
 			txnMeta, metaOK := tc.txns[id]
@@ -410,13 +410,13 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) 
 				// TODO(bdarnell): if we had a GetTransactionStatus API then
 				// we could lookup the transaction and return either nil or
 				// TransactionAbortedError instead of this ambivalent error.
-				return nil, util.Errorf("transaction is already committed or aborted")
+				return nil, proto.NewError(util.Errorf("transaction is already committed or aborted"))
 			}
 			if len(et.Intents) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state in
 				// the client.
-				return nil, util.Errorf("cannot commit a read-only transaction")
+				return nil, proto.NewError(util.Errorf("cannot commit a read-only transaction"))
 			}
 			// TODO(tschottdorf): V(1)
 			for _, intent := range et.Intents {
@@ -429,15 +429,15 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) 
 	// on error.
 	var br *proto.BatchResponse
 	{
-		var err error
-		br, err = tc.wrapped.SendBatch(ctx, ba)
+		var pErr *proto.Error
+		br, pErr = tc.wrapped.SendBatch(ctx, ba)
 
-		if _, ok := err.(*proto.OpRequiresTxnError); ok {
-			br, err = tc.resendWithTxn(ba)
+		if _, ok := pErr.GoError().(*proto.OpRequiresTxnError); ok {
+			br, pErr = tc.resendWithTxn(ba)
 		}
 
-		if err := tc.updateState(ctx, ba, br, err); err != nil {
-			return nil, err
+		if err := tc.updateState(ctx, ba, br, pErr.GoError()); err != nil {
+			return nil, proto.NewError(err)
 		}
 	}
 
@@ -773,7 +773,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 // give this error back to the client, our options are limited. We'll have to
 // run the whole thing for them, or any restart will still end up at the client
 // which will not be prepared to be handed a Txn.
-func (tc *TxnCoordSender) resendWithTxn(ba proto.BatchRequest) (*proto.BatchResponse, error) {
+func (tc *TxnCoordSender) resendWithTxn(ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	// Run a one-off transaction with that single command.
 	if log.V(1) {
 		log.Infof("%s: auto-wrapping in txn and re-executing: ", ba)
@@ -791,7 +791,7 @@ func (tc *TxnCoordSender) resendWithTxn(ba proto.BatchRequest) (*proto.BatchResp
 		}
 		return txn.CommitInBatch(b)
 	}); err != nil {
-		return nil, err
+		return nil, proto.NewError(err)
 	}
 	return br, nil
 }

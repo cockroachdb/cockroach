@@ -145,7 +145,7 @@ func GetInitialSystemValues() []proto.KeyValue {
 
 	// Descriptor ID generator.
 	value := proto.Value{}
-	value.SetInteger(int64(keys.MaxReservedDescID + 1))
+	value.SetInt(int64(keys.MaxReservedDescID + 1))
 	ret[i] = proto.KeyValue{
 		Key:   keys.DescIDGenerator,
 		Value: value,
@@ -155,7 +155,7 @@ func GetInitialSystemValues() []proto.KeyValue {
 	// System database and tables.
 	for _, d := range systemData {
 		value = proto.Value{}
-		value.SetInteger(int64(d.desc.GetID()))
+		value.SetInt(int64(d.desc.GetID()))
 		ret[i] = proto.KeyValue{
 			Key:   MakeNameMetadataKey(d.parentID, d.desc.GetName()),
 			Value: value,

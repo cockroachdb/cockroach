@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // Context defaults.
@@ -148,7 +149,7 @@ var storesRE = regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
 
 // InitStores interprets the stores parameter to initialize a slice of
 // engine.Engine objects.
-func (ctx *Context) InitStores() error {
+func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 	storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
 	// Error if regexp doesn't match.
 	if storeSpecs == nil {
@@ -163,7 +164,7 @@ func (ctx *Context) InitStores() error {
 		attrs, path := storeSpec[1], storeSpec[2]
 		// There are two matches for each store specification: the colon-separated
 		// list of attributes and the path.
-		engine, err := ctx.initEngine(attrs, path)
+		engine, err := ctx.initEngine(attrs, path, stopper)
 		if err != nil {
 			return util.Errorf("unable to init engine for store %q: %s", name, err)
 		}
@@ -200,15 +201,15 @@ var errUnsizedInMemStore = errors.New("unable to initialize an in-memory store w
 // and instantiates an engine based on the dir parameter. If dir parses
 // to an integer, it's taken to mean an in-memory engine; otherwise,
 // dir is treated as a path and a RocksDB engine is created.
-func (ctx *Context) initEngine(attrsStr, path string) (engine.Engine, error) {
+func (ctx *Context) initEngine(attrsStr, path string, stopper *stop.Stopper) (engine.Engine, error) {
 	attrs := parseAttributes(attrsStr)
 	if size, err := strconv.ParseUint(path, 10, 64); err == nil {
 		if size == 0 {
 			return nil, errUnsizedInMemStore
 		}
-		return engine.NewInMem(attrs, int64(size)), nil
+		return engine.NewInMem(attrs, int64(size), stopper), nil
 	}
-	return engine.NewRocksDB(attrs, path, ctx.CacheSize), nil
+	return engine.NewRocksDB(attrs, path, ctx.CacheSize, stopper), nil
 }
 
 // SelfGossipAddr is a special flag that configures a node to gossip

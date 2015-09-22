@@ -31,6 +31,13 @@ import (
 // NodeID is a custom type for a cockroach node ID. (not a raft node ID)
 type NodeID int32
 
+// NodeIDSlice implements sort.Interface.
+type NodeIDSlice []NodeID
+
+func (n NodeIDSlice) Len() int           { return len(n) }
+func (n NodeIDSlice) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
+func (n NodeIDSlice) Less(i, j int) bool { return n[i] < n[j] }
+
 // String implements the fmt.Stringer interface.
 // It is used to format the ID for use in Gossip keys.
 func (n NodeID) String() string {
@@ -39,6 +46,13 @@ func (n NodeID) String() string {
 
 // StoreID is a custom type for a cockroach store ID.
 type StoreID int32
+
+// StoreIDSlice implements sort.Interface.
+type StoreIDSlice []StoreID
+
+func (s StoreIDSlice) Len() int           { return len(s) }
+func (s StoreIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s StoreIDSlice) Less(i, j int) bool { return s[i] < s[j] }
 
 // String implements the fmt.Stringer interface.
 // It is used to format the ID for use in Gossip keys.

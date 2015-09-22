@@ -148,6 +148,13 @@ message LeaseRejectedError {
   optional Lease Existing = 2 [(gogoproto.nullable) = false];
 }
 
+// A SendError indicates that a message could not be delivered to
+// the desired recipient(s).
+message SendError {
+  optional string message = 1 [(gogoproto.nullable) = false];
+  optional bool retryable = 2 [(gogoproto.nullable) = false];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
@@ -166,6 +173,7 @@ message ErrorDetail {
   optional ConditionFailedError condition_failed = 12;
   optional LeaseRejectedError lease_rejected = 13;
   optional NodeUnavailableError node_unavailable = 14;
+  optional SendError send = 15;
 }
 
 // TransactionRestart indicates how an error should be handled in a

@@ -171,6 +171,9 @@ SELECT * FROM xyzw OFFSET a
 query error unsupported binary operator: <int> \+ <float>
 SELECT * FROM xyzw OFFSET 1 + 0.0
 
+query error unsupported result type: tuple
+SELECT (x,y) FROM xyzw
+
 query III
 SELECT * FROM xyzw LIMIT 0
 ----
