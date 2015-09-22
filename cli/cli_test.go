@@ -118,10 +118,10 @@ func Example_basic() {
 	// 42
 	// kv scan
 	// "b"	"2"
-	// "c"	"\x00\x00\x00\x00\x00\x00\x00*"
+	// "c"	42
 	// 2 result(s)
 	// kv revscan
-	// "c"	"\x00\x00\x00\x00\x00\x00\x00*"
+	// "c"	42
 	// "b"	"2"
 	// 2 result(s)
 	// kv inc c b
@@ -161,7 +161,7 @@ func Example_quoted() {
 	// kv inc 1\x01
 	// 1
 	// kv get 1\x01
-	// "\x00\x00\x00\x00\x00\x00\x00\x01"
+	// 1
 	// quit
 	// node drained and shutdown: ok
 }

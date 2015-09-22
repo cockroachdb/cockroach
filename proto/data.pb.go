@@ -17,6 +17,58 @@ var _ = proto1.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// ValueType defines a set of type constants placed in the "tag" field of Value
+// messages. These are defined as a protocol buffer enumeration so that they
+// can be used portably between our Go and C code. The tags are used by the
+// RocksDB Merge Operator to perform specialized merges.
+type ValueType int32
+
+const (
+	// This is a subset of the SQL column type values, representing the
+	// underlying storage for various types.
+	ValueType_UNKNOWN ValueType = 0
+	ValueType_INT     ValueType = 1
+	ValueType_FLOAT   ValueType = 2
+	ValueType_BYTES   ValueType = 3
+	ValueType_TIME    ValueType = 4
+	// TIMESERIES is applied to values which contain InternalTimeSeriesData.
+	ValueType_TIMESERIES ValueType = 100
+)
+
+var ValueType_name = map[int32]string{
+	0:   "UNKNOWN",
+	1:   "INT",
+	2:   "FLOAT",
+	3:   "BYTES",
+	4:   "TIME",
+	100: "TIMESERIES",
+}
+var ValueType_value = map[string]int32{
+	"UNKNOWN":    0,
+	"INT":        1,
+	"FLOAT":      2,
+	"BYTES":      3,
+	"TIME":       4,
+	"TIMESERIES": 100,
+}
+
+func (x ValueType) Enum() *ValueType {
+	p := new(ValueType)
+	*p = x
+	return p
+}
+func (x ValueType) String() string {
+	return proto1.EnumName(ValueType_name, int32(x))
+}
+func (x *ValueType) UnmarshalJSON(data []byte) error {
+	value, err := proto1.UnmarshalJSONEnum(ValueType_value, data, "ValueType")
+	if err != nil {
+		return err
+	}
+	*x = ValueType(value)
+	return nil
+}
+
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
 type ReplicaChangeType int32
 
@@ -180,10 +232,8 @@ type Value struct {
 	Checksum *uint32 `protobuf:"fixed32,3,opt,name=checksum" json:"checksum,omitempty"`
 	// Timestamp of value.
 	Timestamp *Timestamp `protobuf:"bytes,4,opt,name=timestamp" json:"timestamp,omitempty"`
-	// Tag is an optional string value which can be used to add additional
-	// metadata to this value. For example, Tag might provide information on how
-	// the bytes in the "bytes" field should be interpreted.
-	Tag *string `protobuf:"bytes,5,opt,name=tag" json:"tag,omitempty"`
+	// Tag is the optional type of the value.
+	Tag ValueType `protobuf:"varint,5,opt,name=tag,enum=cockroach.proto.ValueType" json:"tag"`
 }
 
 func (m *Value) Reset()         { *m = Value{} }
@@ -211,11 +261,11 @@ func (m *Value) GetTimestamp() *Timestamp {
 	return nil
 }
 
-func (m *Value) GetTag() string {
-	if m != nil && m.Tag != nil {
-		return *m.Tag
+func (m *Value) GetTag() ValueType {
+	if m != nil {
+		return m.Tag
 	}
-	return ""
+	return ValueType_UNKNOWN
 }
 
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
@@ -743,6 +793,7 @@ func (m *GCMetadata) GetOldestIntentNanos() int64 {
 }
 
 func init() {
+	proto1.RegisterEnum("cockroach.proto.ValueType", ValueType_name, ValueType_value)
 	proto1.RegisterEnum("cockroach.proto.ReplicaChangeType", ReplicaChangeType_name, ReplicaChangeType_value)
 	proto1.RegisterEnum("cockroach.proto.IsolationType", IsolationType_name, IsolationType_value)
 	proto1.RegisterEnum("cockroach.proto.TransactionStatus", TransactionStatus_name, TransactionStatus_value)
@@ -807,12 +858,9 @@ func (m *Value) MarshalTo(data []byte) (int, error) {
 		}
 		i += n1
 	}
-	if m.Tag != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintData(data, i, uint64(len(*m.Tag)))
-		i += copy(data[i:], *m.Tag)
-	}
+	data[i] = 0x28
+	i++
+	i = encodeVarintData(data, i, uint64(m.Tag))
 	return i, nil
 }
 
@@ -1385,10 +1433,7 @@ func (m *Value) Size() (n int) {
 		l = m.Timestamp.Size()
 		n += 1 + l + sovData(uint64(l))
 	}
-	if m.Tag != nil {
-		l = len(*m.Tag)
-		n += 1 + l + sovData(uint64(l))
-	}
+	n += 1 + sovData(uint64(m.Tag))
 	return n
 }
 
@@ -1783,10 +1828,10 @@ func (m *Value) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		case 5:
-			if wireType != 2 {
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Tag", wireType)
 			}
-			var stringLen uint64
+			m.Tag = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowData
@@ -1796,22 +1841,11 @@ func (m *Value) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				m.Tag |= (ValueType(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthData
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			s := string(data[iNdEx:postIndex])
-			m.Tag = &s
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])

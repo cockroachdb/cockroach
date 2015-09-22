@@ -292,7 +292,7 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 
 	// Override the non-integer value.
 	val := proto.Value{}
-	val.SetInteger(1)
+	val.SetInt(1)
 	err = MVCCPut(engine, nil, testKey1, makeTS(3, 0), val, nil)
 	if err != nil {
 		t.Fatal(err)

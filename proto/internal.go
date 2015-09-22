@@ -34,14 +34,14 @@ func (ts *InternalTimeSeriesData) ToValue() (*Value, error) {
 	}
 	return &Value{
 		Bytes: b,
-		Tag:   gogoproto.String(_CR_TS.String()),
+		Tag:   ValueType_TIMESERIES,
 	}, nil
 }
 
 // InternalTimeSeriesDataFromValue attempts to extract an InternalTimeSeriesData
 // message from the "bytes" field of the given value.
 func InternalTimeSeriesDataFromValue(value *Value) (*InternalTimeSeriesData, error) {
-	if value.GetTag() != _CR_TS.String() {
+	if value.GetTag() != ValueType_TIMESERIES {
 		return nil, fmt.Errorf("value is not tagged as containing TimeSeriesData: %v", value)
 	}
 	var ts InternalTimeSeriesData

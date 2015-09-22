@@ -95,7 +95,7 @@ func runGet(cmd *cobra.Command, args []string) {
 		osExit(1)
 		return
 	}
-	fmt.Printf("%q\n", r.Value)
+	fmt.Printf("%s\n", r.PrettyValue())
 }
 
 // A putCmd sets the value for one or more keys.
@@ -361,7 +361,7 @@ func showResult(rows []client.KeyValue) {
 		}
 
 		key := proto.Key(row.Key)
-		fmt.Printf("%s\t%q\n", key, row.Value)
+		fmt.Printf("%s\t%s\n", key, row.PrettyValue())
 	}
 	fmt.Printf("%d result(s)\n", len(rows))
 }

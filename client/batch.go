@@ -19,9 +19,9 @@ package client
 
 import (
 	"fmt"
-	"reflect"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -94,14 +94,14 @@ func (b *Batch) fillResults() error {
 				row := &result.Rows[k]
 				row.Key = []byte(call.Args.(*proto.GetRequest).Key)
 				if result.Err == nil {
-					row.setValue(t.Value)
+					row.Value = t.Value
 				}
 			case *proto.PutResponse:
 				req := call.Args.(*proto.PutRequest)
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
-					row.setValue(&req.Value)
+					row.Value = &req.Value
 					row.setTimestamp(t.Timestamp)
 				}
 			case *proto.ConditionalPutResponse:
@@ -109,31 +109,34 @@ func (b *Batch) fillResults() error {
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
-					row.setValue(&req.Value)
+					row.Value = &req.Value
 					row.setTimestamp(t.Timestamp)
 				}
 			case *proto.IncrementResponse:
 				row := &result.Rows[k]
 				row.Key = []byte(call.Args.(*proto.IncrementRequest).Key)
 				if result.Err == nil {
-					// TODO(pmattis): This is odd. KeyValue.Value is otherwise always a
-					// []byte except for setting it to a *int64 here.
-					row.Value = &t.NewValue
+					row.Value = &proto.Value{
+						Bytes: encoding.EncodeUint64(nil, uint64(t.NewValue)),
+						Tag:   proto.ValueType_INT,
+					}
 					row.setTimestamp(t.Timestamp)
 				}
 			case *proto.ScanResponse:
 				result.Rows = make([]KeyValue, len(t.Rows))
-				for j, kv := range t.Rows {
-					row := &result.Rows[j]
-					row.Key = kv.Key
-					row.setValue(&kv.Value)
+				for j := range t.Rows {
+					src := &t.Rows[j]
+					dst := &result.Rows[j]
+					dst.Key = src.Key
+					dst.Value = &src.Value
 				}
 			case *proto.ReverseScanResponse:
 				result.Rows = make([]KeyValue, len(t.Rows))
-				for j, kv := range t.Rows {
-					row := &result.Rows[j]
-					row.Key = kv.Key
-					row.setValue(&kv.Value)
+				for j := range t.Rows {
+					src := &t.Rows[j]
+					dst := &result.Rows[j]
+					dst.Key = src.Key
+					dst.Value = &src.Value
 				}
 			case *proto.DeleteResponse:
 				row := &result.Rows[k]
@@ -196,15 +199,14 @@ func (b *Batch) InternalAddCall(call proto.Call) {
 //   r, err := db.Get("a")
 //   // string(r.Rows[0].Key) == "a"
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (b *Batch) Get(key interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.GetCall(proto.Key(k)))
+	b.calls = append(b.calls, proto.GetCall(k))
 	b.initResult(1, 1, nil)
 }
 
@@ -213,15 +215,14 @@ func (b *Batch) Get(key interface{}) {
 // single row. Note that the proto will not be decoded until after the batch is
 // executed using DB.Run or Txn.Run.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (b *Batch) GetProto(key interface{}, msg gogoproto.Message) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.GetProtoCall(proto.Key(k), msg))
+	b.calls = append(b.calls, proto.GetProtoCall(k, msg))
 	b.initResult(1, 1, nil)
 }
 
@@ -230,20 +231,20 @@ func (b *Batch) GetProto(key interface{}, msg gogoproto.Message) {
 // A new result will be appended to the batch which will contain a single row
 // and Result.Err will indicate success or failure.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc).
 func (b *Batch) Put(key, value interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, err)
 		return
 	}
-	v, err := marshalValue(reflect.ValueOf(value))
+	v, err := marshalValue(value)
 	if err != nil {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.PutCall(proto.Key(k), v))
+	b.calls = append(b.calls, proto.PutCall(k, v))
 	b.initResult(1, 1, nil)
 }
 
@@ -254,25 +255,25 @@ func (b *Batch) Put(key, value interface{}) {
 // A new result will be appended to the batch which will contain a single row
 // and Result.Err will indicate success or failure.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc).
 func (b *Batch) CPut(key, value, expValue interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, err)
 		return
 	}
-	v, err := marshalValue(reflect.ValueOf(value))
+	v, err := marshalValue(value)
 	if err != nil {
 		b.initResult(0, 1, err)
 		return
 	}
-	ev, err := marshalValue(reflect.ValueOf(expValue))
+	ev, err := marshalValue(expValue)
 	if err != nil {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.ConditionalPutCall(proto.Key(k), v.Bytes, ev.Bytes))
+	b.calls = append(b.calls, proto.ConditionalPutCall(k, v, ev))
 	b.initResult(1, 1, nil)
 }
 
@@ -283,15 +284,14 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 // A new result will be appended to the batch which will contain a single row
 // and Result.Err will indicate success or failure.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (b *Batch) Inc(key interface{}, value int64) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.IncrementCall(proto.Key(k), value))
+	b.calls = append(b.calls, proto.IncrementCall(k, value))
 	b.initResult(1, 1, nil)
 }
 
@@ -320,8 +320,7 @@ func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
 // A new result will be appended to the batch which will contain up to maxRows
 // rows and Result.Err will indicate success or failure.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (b *Batch) Scan(s, e interface{}, maxRows int64) {
 	b.scan(s, e, maxRows, false)
 }
@@ -332,8 +331,7 @@ func (b *Batch) Scan(s, e interface{}, maxRows int64) {
 // A new result will be appended to the batch which will contain up to maxRows
 // rows and Result.Err will indicate success or failure.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (b *Batch) ReverseScan(s, e interface{}, maxRows int64) {
 	b.scan(s, e, maxRows, true)
 }
@@ -343,8 +341,7 @@ func (b *Batch) ReverseScan(s, e interface{}, maxRows int64) {
 // A new result will be appended to the batch and each key will have a
 // corresponding row in the returned Result.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (b *Batch) Del(keys ...interface{}) {
 	var calls []proto.Call
 	for _, key := range keys {
@@ -353,7 +350,7 @@ func (b *Batch) Del(keys ...interface{}) {
 			b.initResult(0, len(keys), err)
 			return
 		}
-		calls = append(calls, proto.DeleteCall(proto.Key(k)))
+		calls = append(calls, proto.DeleteCall(k))
 	}
 	b.calls = append(b.calls, calls...)
 	b.initResult(len(calls), len(calls), nil)
@@ -364,8 +361,7 @@ func (b *Batch) Del(keys ...interface{}) {
 // A new result will be appended to the batch which will contain 0 rows and
 // Result.Err will indicate success or failure.
 //
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
+// key can be either a byte slice or a string.
 func (b *Batch) DelRange(s, e interface{}) {
 	begin, err := marshalKey(s)
 	if err != nil {
@@ -391,7 +387,7 @@ func (b *Batch) adminMerge(key interface{}) {
 	}
 	req := &proto.AdminMergeRequest{
 		RequestHeader: proto.RequestHeader{
-			Key: proto.Key(k),
+			Key: k,
 		},
 	}
 	resp := &proto.AdminMergeResponse{}
@@ -409,10 +405,10 @@ func (b *Batch) adminSplit(splitKey interface{}) {
 	}
 	req := &proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
-			Key: proto.Key(k),
+			Key: k,
 		},
 	}
-	req.SplitKey = proto.Key(k)
+	req.SplitKey = k
 	resp := &proto.AdminSplitResponse{}
 	b.calls = append(b.calls, proto.Call{Args: req, Reply: resp})
 	b.initResult(1, 0, nil)

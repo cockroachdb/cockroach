@@ -91,12 +91,11 @@ func PutCall(key Key, value Value) Call {
 
 // ConditionalPutCall returns a Call object initialized to put value as a byte
 // slice at key if the existing value at key equals expValueBytes.
-func ConditionalPutCall(key Key, valueBytes, expValueBytes []byte) Call {
-	value := Value{Bytes: valueBytes}
+func ConditionalPutCall(key Key, value, expValue Value) Call {
 	value.InitChecksum(key)
-	var expValue *Value
-	if expValueBytes != nil {
-		expValue = &Value{Bytes: expValueBytes}
+	var expValuePtr *Value
+	if expValue.Bytes != nil {
+		expValuePtr = &expValue
 		expValue.InitChecksum(key)
 	}
 	return Call{
@@ -105,7 +104,7 @@ func ConditionalPutCall(key Key, valueBytes, expValueBytes []byte) Call {
 				Key: key,
 			},
 			Value:    value,
-			ExpValue: expValue,
+			ExpValue: expValuePtr,
 		},
 		Reply: &ConditionalPutResponse{},
 	}

@@ -237,8 +237,8 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := range keys {
-		ts = append(ts, b.Results[i].Rows[0].Timestamp)
-		log.Infof("%d: %s", i, b.Results[i].Rows[0].Timestamp)
+		ts = append(ts, b.Results[i].Rows[0].Timestamp())
+		log.Infof("%d: %s", i, b.Results[i].Rows[0].Timestamp())
 	}
 
 	// Do an inconsistent Scan/ReverseScan from a new DistSender and verify

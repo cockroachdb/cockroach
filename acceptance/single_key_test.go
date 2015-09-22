@@ -20,8 +20,6 @@
 package acceptance
 
 import (
-	"encoding"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -30,25 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util/log"
 )
-
-type testVal int64
-
-var _ encoding.BinaryMarshaler = testVal(0)
-var _ encoding.BinaryUnmarshaler = new(testVal)
-
-func (v testVal) MarshalBinary() ([]byte, error) {
-	b := strconv.AppendInt(nil, int64(v), 10)
-	return b, nil
-}
-
-func (v *testVal) UnmarshalBinary(data []byte) error {
-	i, err := strconv.ParseInt(string(data), 10, 64)
-	if err != nil {
-		return err
-	}
-	*v = testVal(i)
-	return nil
-}
 
 // TestSingleKey stresses the transaction retry machinery by starting
 // up an N node cluster and running N workers that are all
@@ -64,7 +43,7 @@ func TestSingleKey(t *testing.T) {
 	const key = "test-key"
 	db, initDBStopper := makeDBClient(t, l, 0)
 	defer initDBStopper.Stop()
-	if err := db.Put(key, testVal(0)); err != nil {
+	if err := db.Put(key, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -93,12 +72,8 @@ func TestSingleKey(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					var v testVal
-					if err := v.UnmarshalBinary(r.ValueBytes()); err != nil {
-						return err
-					}
 					b := &client.Batch{}
-					b.Put(key, v+1)
+					b.Put(key, r.ValueInt()+1)
 					return txn.CommitInBatch(b)
 				})
 				if err != nil {
@@ -139,11 +114,8 @@ func TestSingleKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var v testVal
-	if err := v.UnmarshalBinary(r.ValueBytes()); err != nil {
-		t.Fatal(err)
-	}
-	if expected != int64(v) {
+	v := r.ValueInt()
+	if expected != v {
 		t.Fatalf("expected %d, but found %d", expected, v)
 	}
 	var maxLatency []time.Duration

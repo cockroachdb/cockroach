@@ -26,7 +26,6 @@
 #include <google/protobuf/message.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/extension_set.h>
-#include <google/protobuf/generated_enum_reflection.h>
 #include <google/protobuf/unknown_field_set.h>
 #include "cockroach/proto/api.pb.h"
 #include "cockroach/proto/metadata.pb.h"
@@ -48,24 +47,6 @@ class RaftTruncatedState;
 class RaftSnapshotData;
 class RaftSnapshotData_KeyValue;
 
-enum InternalValueType {
-  _CR_TS = 1
-};
-bool InternalValueType_IsValid(int value);
-const InternalValueType InternalValueType_MIN = _CR_TS;
-const InternalValueType InternalValueType_MAX = _CR_TS;
-const int InternalValueType_ARRAYSIZE = InternalValueType_MAX + 1;
-
-const ::google::protobuf::EnumDescriptor* InternalValueType_descriptor();
-inline const ::std::string& InternalValueType_Name(InternalValueType value) {
-  return ::google::protobuf::internal::NameOfEnum(
-    InternalValueType_descriptor(), value);
-}
-inline bool InternalValueType_Parse(
-    const ::std::string& name, InternalValueType* value) {
-  return ::google::protobuf::internal::ParseNamedEnum<InternalValueType>(
-    InternalValueType_descriptor(), name, value);
-}
 // ===================================================================
 
 class RaftCommand : public ::google::protobuf::Message {
@@ -1292,20 +1273,6 @@ RaftSnapshotData::mutable_kv() {
 
 }  // namespace proto
 }  // namespace cockroach
-
-#ifndef SWIG
-namespace google {
-namespace protobuf {
-
-template <> struct is_proto_enum< ::cockroach::proto::InternalValueType> : ::google::protobuf::internal::true_type {};
-template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::proto::InternalValueType>() {
-  return ::cockroach::proto::InternalValueType_descriptor();
-}
-
-}  // namespace protobuf
-}  // namespace google
-#endif  // SWIG
 
 // @@protoc_insertion_point(global_scope)
 

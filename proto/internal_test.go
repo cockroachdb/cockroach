@@ -52,7 +52,7 @@ func TestTimeSeriesToValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error marshaling InternalTimeSeriesData: %s", err.Error())
 	}
-	if a, e := valueOriginal.GetTag(), _CR_TS.String(); a != e {
+	if a, e := valueOriginal.GetTag(), ValueType_TIMESERIES; a != e {
 		t.Errorf("Value did not have expected tag value of %s, had %s", e, a)
 	}
 

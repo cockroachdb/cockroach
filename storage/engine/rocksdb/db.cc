@@ -314,7 +314,7 @@ bool TimeSeriesSampleOrdering(const cockroach::proto::InternalTimeSeriesSample* 
 // TimeSeriesData message.
 bool IsTimeSeriesData(const cockroach::proto::Value *val) {
     return val->has_tag()
-        && val->tag() == cockroach::proto::InternalValueType_Name(cockroach::proto::_CR_TS);
+        && val->tag() == cockroach::proto::TIMESERIES;
 }
 
 double GetMax(const cockroach::proto::InternalTimeSeriesSample *sample) {

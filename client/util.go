@@ -18,10 +18,9 @@
 package client
 
 import (
-	"encoding"
 	"fmt"
-	"math"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -29,161 +28,76 @@ import (
 
 // TODO(pmattis): The methods in this file needs tests.
 
-func marshalKey(k interface{}) ([]byte, error) {
-	// Note that the ordering here is important. In particular, proto.Key is also
-	// a fmt.Stringer.
+func marshalKey(k interface{}) (proto.Key, error) {
 	switch t := k.(type) {
 	case string:
-		return []byte(t), nil
+		return proto.Key(t), nil
 	case proto.Key:
-		return []byte(t), nil
-	case []byte:
 		return t, nil
-	case encoding.BinaryMarshaler:
-		return t.MarshalBinary()
-	case fmt.Stringer:
-		return []byte(t.String()), nil
+	case []byte:
+		return proto.Key(t), nil
 	}
 	return nil, fmt.Errorf("unable to marshal key: %T", k)
 }
 
 // marshalValue returns a proto.Value initialized from the source
 // reflect.Value, returning an error if the types are not compatible.
-func marshalValue(v reflect.Value) (proto.Value, error) {
+func marshalValue(v interface{}) (proto.Value, error) {
 	var r proto.Value
-	if !v.IsValid() {
+	if v == nil {
 		return r, nil
 	}
 
-	switch t := v.Interface().(type) {
+	switch t := v.(type) {
 	case nil:
 		return r, nil
 
 	case string:
-		r.Bytes = []byte(t)
+		r.SetBytes([]byte(t))
 		return r, nil
 
 	case []byte:
-		r.Bytes = t
+		r.SetBytes(t)
 		return r, nil
 
 	case proto.Key:
-		r.Bytes = []byte(t)
+		r.SetBytes([]byte(t))
 		return r, nil
 
-	case gogoproto.Message:
-		var err error
-		r.Bytes, err = gogoproto.Marshal(t)
+	case time.Time:
+		err := r.SetTime(t)
 		return r, err
 
-	case encoding.BinaryMarshaler:
-		var err error
-		r.Bytes, err = t.MarshalBinary()
+	case gogoproto.Message:
+		err := r.SetProto(t)
 		return r, err
 	}
 
-	switch v.Kind() {
+	switch v := reflect.ValueOf(v); v.Kind() {
 	case reflect.Bool:
 		i := int64(0)
 		if v.Bool() {
 			i = 1
 		}
-		r.SetInteger(i)
+		r.SetInt(i)
 		return r, nil
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		r.SetInteger(v.Int())
+		r.SetInt(v.Int())
 		return r, nil
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		r.SetInteger(int64(v.Uint()))
+		r.SetInt(int64(v.Uint()))
 		return r, nil
 
 	case reflect.Float32, reflect.Float64:
-		r.SetInteger(int64(math.Float64bits(v.Float())))
+		r.SetFloat(v.Float())
 		return r, nil
 
 	case reflect.String:
-		r.Bytes = []byte(v.String())
+		r.SetBytes([]byte(v.String()))
 		return r, nil
 	}
 
 	return r, fmt.Errorf("unable to marshal value: %s", v)
-}
-
-// unmarshalValue sets the destination reflect.Value contents from the source
-// proto.Value, returning an error if the types are not compatible.
-func unmarshalValue(src *proto.Value, dest reflect.Value) error {
-	if src == nil {
-		dest.Set(reflect.Zero(dest.Type()))
-		return nil
-	}
-
-	switch d := dest.Addr().Interface().(type) {
-	case *string:
-		if src.Bytes != nil {
-			*d = string(src.Bytes)
-		} else {
-			*d = ""
-		}
-		return nil
-
-	case *[]byte:
-		if src.Bytes != nil {
-			*d = src.Bytes
-		} else {
-			*d = nil
-		}
-		return nil
-
-	case *gogoproto.Message:
-		panic("TODO(pmattis): unimplemented")
-
-	case *encoding.BinaryUnmarshaler:
-		return (*d).UnmarshalBinary(src.Bytes)
-	}
-
-	switch dest.Kind() {
-	case reflect.Bool:
-		i, err := src.GetInteger()
-		if err != nil {
-			return err
-		}
-		dest.SetBool(i != 0)
-		return nil
-
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := src.GetInteger()
-		if err != nil {
-			return err
-		}
-		dest.SetInt(i)
-		return nil
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		i, err := src.GetInteger()
-		if err != nil {
-			return err
-		}
-		dest.SetUint(uint64(i))
-		return nil
-
-	case reflect.Float32, reflect.Float64:
-		i, err := src.GetInteger()
-		if err != nil {
-			return err
-		}
-		dest.SetFloat(math.Float64frombits(uint64(i)))
-		return nil
-
-	case reflect.String:
-		if src == nil || src.Bytes == nil {
-			dest.SetString("")
-			return nil
-		}
-		dest.SetString(string(src.Bytes))
-		return nil
-	}
-
-	return fmt.Errorf("unable to unmarshal value: %s", dest.Type())
 }
