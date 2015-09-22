@@ -37,7 +37,6 @@ type LocalSender struct {
 	storeMap map[proto.StoreID]*storage.Store // Map from StoreID to Store
 }
 
-var _ client.Sender = &LocalSender{}
 var _ client.BatchSender = &LocalSender{}
 var _ rangeDescriptorDB = &LocalSender{}
 
