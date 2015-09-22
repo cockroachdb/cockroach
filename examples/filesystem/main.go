@@ -27,34 +27,59 @@ import (
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
 	_ "bazil.org/fuse/fs/fstestutil"
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/server"
 	_ "github.com/cockroachdb/cockroach/sql/driver"
 )
 
-var Usage = func() {
+var usage = func() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s <mountpoint> <cockroachDB url>\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "  %s <mountpoint>\n", os.Args[0])
 	flag.PrintDefaults()
 }
 
-var db *sql.DB
-
 func main() {
-	flag.Usage = Usage
+	flag.Usage = usage
 	flag.Parse()
 
-	if flag.NArg() != 2 {
-		Usage()
+	if flag.NArg() != 1 {
+		usage()
 		os.Exit(2)
 	}
 	mountpoint := flag.Arg(0)
-	url := flag.Arg(1)
+
+	security.SetReadFileFn(securitytest.Asset)
+	serv := server.StartTestServer(nil)
+	defer serv.Stop()
+	url := "https://root@" + serv.ServingAddr() + "?certs=test_certs"
 
 	// Open DB connection first.
-	var err error
-	if db, err = sql.Open("cockroach", url+"&database=bank"); err != nil {
+	db, err := sql.Open("cockroach", url)
+	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	// defer db.Close()
+
+	cfs := CFS{db}
+	if err := cfs.initSchema(); err != nil {
+		log.Fatal(err)
+	}
+
+	{
+		// For testing only.
+		if err := cfs.create(0, "hello", "foo"); err != nil {
+			log.Fatal(err)
+		}
+		if err := cfs.create(0, "world", "bar"); err != nil {
+			log.Fatal(err)
+		}
+		results, err := cfs.list(0)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Print(results)
+	}
 
 	// Mount filesystem.
 	c, err := fuse.Mount(
@@ -67,10 +92,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close()
+	// defer c.Close()
 
 	// Serve root.
-	err = fs.Serve(c, CFS{})
+	err = fs.Serve(c, cfs)
 	if err != nil {
 		log.Fatal(err)
 	}
