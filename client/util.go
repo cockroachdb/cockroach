@@ -41,16 +41,21 @@ func marshalKey(k interface{}) (proto.Key, error) {
 }
 
 // marshalValue returns a proto.Value initialized from the source
-// reflect.Value, returning an error if the types are not compatible.
+// interface{}, returning an error if the types are not compatible.
 func marshalValue(v interface{}) (proto.Value, error) {
 	var r proto.Value
-	if v == nil {
-		return r, nil
-	}
 
 	// Handle a few common types via a type switch.
 	switch t := v.(type) {
 	case nil:
+		return r, nil
+
+	case bool:
+		i := int64(0)
+		if t {
+			i = 1
+		}
+		r.SetInt(i)
 		return r, nil
 
 	case string:
