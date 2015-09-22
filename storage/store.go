@@ -993,11 +993,6 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsu
 		return util.Errorf("cannot remove range %s", err)
 	}
 
-	localRangeKeyPrefix := keys.MakeRangeIDPrefix(subsumedDesc.RangeID)
-	if _, err := engine.MVCCDeleteRange(s.engine, nil, localRangeKeyPrefix, localRangeKeyPrefix.PrefixEnd(), 0, proto.ZeroTimestamp, nil); err != nil {
-		return util.Errorf("cannot remove range metadata %s", err)
-	}
-
 	// Update the end key of the subsuming range.
 	copy := *subsumingDesc
 	copy.EndKey = updatedEndKey
