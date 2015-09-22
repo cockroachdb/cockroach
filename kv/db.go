@@ -49,11 +49,11 @@ var allExternalMethods = [...]proto.Request{
 // It accepts either JSON or serialized protobuf content types.
 type DBServer struct {
 	context *base.Context
-	sender  client.Sender
+	sender  client.BatchSender
 }
 
 // NewDBServer allocates and returns a new DBServer.
-func NewDBServer(ctx *base.Context, sender client.Sender) *DBServer {
+func NewDBServer(ctx *base.Context, sender client.BatchSender) *DBServer {
 	return &DBServer{context: ctx, sender: sender}
 }
 
@@ -76,12 +76,19 @@ func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
 // executeCmd creates a proto.Call struct and sends it via our local sender.
 func (s *DBServer) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
 	args := argsI.(proto.Request)
-	reply := args.CreateReply()
+	ba, unwrap := client.MaybeWrap(args)
 	if err := verifyRequest(args); err != nil {
 		return nil, err
 	}
-	s.sender.Send(context.TODO(), proto.Call{Args: args, Reply: reply})
-	return reply, nil
+	br, pErr := s.sender.SendBatch(context.TODO(), *ba)
+	if pErr != nil {
+		br = &proto.BatchResponse{}
+	}
+	if br.Error != nil {
+		panic(proto.ErrorUnexpectedlySet)
+	}
+	br.Error = pErr
+	return unwrap(br), nil
 }
 
 // verifyRequest checks for illegal inputs in request proto and
