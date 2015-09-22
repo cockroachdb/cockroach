@@ -27,9 +27,6 @@ var paths = {
     ],
     css: [
         'bower_components/nvd3/build/nv.d3.min.css'
-    ],
-    typings: [
-        'typings/*'
     ]
 };
 
@@ -49,7 +46,7 @@ gulp.task('bower', ['bowerjs', 'bowercss']);
 
 /* typescript */
 gulp.task('typescript', function () {
-    return gulp.src(['ts/app.ts', 'build/ts/header.ts'])
+    return gulp.src(['ts/app.ts', 'ts/header.ts'])
         .pipe(typescript(require('./ts/tsconfig.json').compilerOptions))
         .pipe(gulp.dest('build/js'));
 });
@@ -60,9 +57,11 @@ gulp.task('copyindex', function () {
         .pipe(gulp.dest('build'));
 });
 
+/* build */
+gulp.task('build', ['styles', 'bower', 'copyindex', 'typescript']);
 
 /* watch */
-gulp.task('watch', ['bower', 'copyindex'], function () {
+gulp.task('watch', ['build'], function () {
 
     gulp.watch('styl/**/*.styl', ['styles']);
 
@@ -71,9 +70,6 @@ gulp.task('watch', ['bower', 'copyindex'], function () {
     gulp.watch('index.html', ['copyindex']);
 
 });
-
-/* build */
-gulp.task('build', ['styles', 'bower', 'copyindex', 'typescript']);
 
 /* default */
 gulp.task('default', function () {
