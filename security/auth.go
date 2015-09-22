@@ -82,6 +82,12 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	return tlsState.PeerCertificates[0].Subject.CommonName, nil
 }
 
+// RequestWithUser must be implemented by `proto.Request`s which are
+// arguments to methods that are not permitted to skip user checks.
+type RequestWithUser interface {
+	GetUser() string
+}
+
 // AuthenticationHook builds an authentication hook based on the
 // security mode and client certificate.
 // Must be called at connection time and passed the TLS state.
@@ -90,9 +96,9 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
 	func(request proto.Message, public bool) error, error) {
 	var certUser string
-	var err error
 
 	if !insecureMode {
+		var err error
 		certUser, err = GetCertificateUser(tlsState)
 		if err != nil {
 			return nil, err
@@ -100,14 +106,8 @@ func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
 	}
 
 	return func(request proto.Message, public bool) error {
-		// userRequest is an interface for RPC requests that have a "requested user".
-		type userRequest interface {
-			// GetUser returns the user from the request.
-			GetUser() string
-		}
-
-		// userRequest must be implemented.
-		requestWithUser, ok := request.(userRequest)
+		// RequestWithUser must be implemented.
+		requestWithUser, ok := request.(RequestWithUser)
 		if !ok {
 			return util.Errorf("unknown request type: %T", request)
 		}
@@ -128,10 +128,13 @@ func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
 			return nil
 		}
 
-		// The client certificate user must either be "node", or match the requested used.
-		if certUser == NodeUser || certUser == requestedUser {
-			return nil
+		// The client certificate user must match the requested user,
+		// except if the certificate user is NodeUser, which is allowed to
+		// act on behalf of all other users.
+		if !(certUser == NodeUser || certUser == requestedUser) {
+			return util.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUser)
 		}
-		return util.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUser)
+
+		return nil
 	}, nil
 }
