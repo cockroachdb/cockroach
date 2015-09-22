@@ -18,13 +18,96 @@
 package main
 
 import (
+	"database/sql"
+
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
 	"golang.org/x/net/context"
 )
 
+const (
+	fsSchema = `
+CREATE DATABASE fs;
+
+CREATE TABLE fs.namespace (
+  parentID INT,
+  name     STRING,
+  id       INT,
+  PRIMARY KEY (parentID, name)
+);
+
+CREATE TABLE fs.inode (
+  id    INT PRIMARY KEY,
+  inode STRING
+);
+`
+)
+
 // CFS implements a filesystem on top of cockroach.
-type CFS struct{}
+type CFS struct {
+	db *sql.DB
+}
+
+func (fs CFS) initSchema() error {
+	_, err := fs.db.Exec(fsSchema)
+	return err
+}
+
+func (fs CFS) create(parentID uint64, name, inode string) error {
+	var id int64
+	if err := fs.db.QueryRow(`SELECT experimental_unique_int()`).Scan(&id); err != nil {
+		return err
+	}
+	tx, err := fs.db.Begin()
+	if err != nil {
+		return err
+	}
+	const sql = `
+INSERT INTO fs.inode VALUES ($1, $2);
+INSERT INTO fs.namespace VALUES ($3, $4, $1);
+`
+	if _, err := tx.Exec(sql, id, inode, parentID, name); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+func (fs CFS) lookup(parentID uint64, name string) (string, error) {
+	const sql = `
+SELECT inode FROM fs.inode WHERE id =
+  (SELECT id FROM fs.namespace WHERE (parentID, name) = ($1, $2))
+`
+	var inode string
+	if err := fs.db.QueryRow(`sql`, parentID, name).Scan(&inode); err != nil {
+		return "", err
+	}
+	return inode, nil
+}
+
+func (fs CFS) list(parentID uint64) ([]string, error) {
+	rows, err := fs.db.Query(`SELECT name, id FROM fs.namespace WHERE parentID = $1`, parentID)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []string
+	for rows.Next() {
+		var name string
+		var id int64
+		if err := rows.Scan(&name, &id); err != nil {
+			return nil, err
+		}
+		results = append(results, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// TODO(pmattis): Lookup all of the inodes for all of the ids in single
+	// "SELECT ... WHERE id IN" statement.
+	return results, nil
+}
 
 // Root returns the filesystem's root node.
 func (CFS) Root() (fs.Node, error) {
@@ -49,7 +132,7 @@ func (Node) Lookup(ctx context.Context, name string) (fs.Node, error) {
 	return nil, fuse.ENOSYS
 }
 
-// ReadDirALl returns the list of child inodes.
+// ReadDirAll returns the list of child inodes.
 func (Node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	return nil, fuse.ENOSYS
 }
