@@ -140,7 +140,7 @@ func verifyKeys(start, end proto.Key, checkEndKey bool) error {
 }
 
 type errWithIndex struct {
-	index int
+	index int32
 	err   error
 }
 
@@ -1225,7 +1225,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		}
 
 		var reply proto.Response
-		index := -1
+		var index *int32
 		reply, err = rng.AddCmd(ctx, args)
 		if err == nil {
 			return reply, nil
@@ -1234,9 +1234,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			// clients will retry.
 			err = proto.NewRangeNotFoundError(rng.Desc().RangeID)
 		} else if iErr, ok := err.(*errWithIndex); ok {
-			err, index = iErr.err, iErr.index
-			// TODO(tschottdorf): propagate the index up. See #1891.
-			_ = index
+			err, index = iErr.err, gogoproto.Int32(iErr.index)
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
@@ -1289,7 +1287,11 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			}
 			continue
 		}
-		return nil, proto.NewError(err)
+		pErr := proto.NewError(err)
+		if index != nil {
+			pErr.Index = &proto.Error_Index{Index: *index}
+		}
+		return nil, pErr
 	}
 
 	// By default, retries are indefinite. However, some unittests set a
@@ -1373,7 +1375,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	}
 
 	// Run all pushes in parallel.
-	if pushErr := s.db.Run(b); pushErr != nil {
+	if pushErr := s.db.Run(b).GoError(); pushErr != nil {
 		if log.V(1) {
 			log.Infoc(ctx, "on %s: %s", args.Method(), pushErr)
 		}

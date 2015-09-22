@@ -1179,7 +1179,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *pr
 		}
 
 		if err != nil {
-			return nil, intents, &errWithIndex{err: err, index: index}
+			return nil, intents, &errWithIndex{err: err, index: int32(index)}
 		}
 
 		// Add the response to the batch, updating the timestamp.
@@ -1505,7 +1505,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		b.InternalAddCall(proto.Call{Args: ba, Reply: &proto.BatchResponse{}})
 		action := func() {
 			// TODO(tschottdorf): no tracing here yet.
-			if err := r.rm.DB().Run(b); err != nil {
+			if err := r.rm.DB().Run(b).GoError(); err != nil {
 				log.Warningf("unable to resolve intent: %s", err)
 			}
 		}

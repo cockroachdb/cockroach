@@ -406,18 +406,21 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
-func sendAndFill(send func(...proto.Call) error, b *Batch) error {
+func sendAndFill(send func(...proto.Call) *proto.Error, b *Batch) *proto.Error {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call
 	// fails. But send() also returns its own errors, so there's some dancing
 	// here to do because we want to run fillResults() so that the individual
 	// result gets initialized with an error from the corresponding call.
-	err1 := send(b.calls...)
-	err2 := b.fillResults()
-	if err2 != nil {
-		return err2
+	pErr := send(b.calls...)
+	if pErr != nil {
+		// TODO(tschottdorf): give the error to fillResults or make sure in
+		// some other way that fillResults knows it's only called to set the
+		// keys.
+		_ = b.fillResults()
+		return pErr
 	}
-	return err1
+	return proto.NewError(b.fillResults())
 }
 
 // Run executes the operations queued up within a batch. Before executing any
@@ -431,9 +434,9 @@ func sendAndFill(send func(...proto.Call) error, b *Batch) error {
 // Upon completion, Batch.Results will contain the results for each
 // operation. The order of the results matches the order the operations were
 // added to the batch.
-func (db *DB) Run(b *Batch) error {
+func (db *DB) Run(b *Batch) *proto.Error {
 	if err := b.prepare(); err != nil {
-		return err
+		return proto.NewError(err)
 	}
 	return sendAndFill(db.send, b)
 }
@@ -453,7 +456,7 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 
 // send runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (db *DB) send(calls ...proto.Call) (err error) {
+func (db *DB) send(calls ...proto.Call) (pErr *proto.Error) {
 	if len(calls) == 0 {
 		return nil
 	}
@@ -467,13 +470,13 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 			}
 			resetClientCmdID(c.Args)
 			db.sender.Send(context.TODO(), c)
-			err = c.Reply.Header().GoError()
-			if err != nil {
+			pErr = c.Reply.Header().Error
+			if pErr != nil {
 				if log.V(1) {
-					log.Infof("failed %s: %s", c.Method(), err)
+					log.Infof("failed %s: %s", c.Method(), pErr)
 				}
 			} else if c.Post != nil {
-				err = c.Post()
+				pErr = proto.NewError(c.Post())
 			}
 			return
 		}
@@ -483,7 +486,7 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 	for _, call := range calls {
 		ba.Add(call.Args)
 	}
-	err = db.send(proto.Call{Args: ba, Reply: br})
+	pErr = db.send(proto.Call{Args: ba, Reply: br})
 
 	// Recover from protobuf merge panics.
 	defer func() {
@@ -492,8 +495,8 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 			// already been set.
 			mergeErr := util.Errorf("unable to merge response: %s", r)
 			log.Error(mergeErr)
-			if err == nil {
-				err = mergeErr
+			if pErr == nil {
+				pErr = proto.NewError(mergeErr)
 			}
 		}
 	}()
@@ -503,8 +506,8 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 		c := calls[i]
 		gogoproto.Merge(c.Reply, reply.GetInner())
 		if c.Post != nil {
-			if e := c.Post(); e != nil && err != nil {
-				err = e
+			if e := c.Post(); e != nil && pErr != nil {
+				pErr = proto.NewError(e)
 			}
 		}
 	}
@@ -513,20 +516,20 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 
 // Runner only exports the Run method on a batch of operations.
 type Runner interface {
-	Run(b *Batch) error
+	Run(b *Batch) *proto.Error
 }
 
 func runOneResult(r Runner, b *Batch) (Result, error) {
-	if err := r.Run(b); err != nil {
-		return Result{Err: err}, err
+	if pErr := r.Run(b); pErr != nil {
+		return Result{Err: pErr.GoError()}, pErr.GoError()
 	}
 	res := b.Results[0]
 	return res, res.Err
 }
 
 func runOneRow(r Runner, b *Batch) (KeyValue, error) {
-	if err := r.Run(b); err != nil {
-		return KeyValue{}, err
+	if pErr := r.Run(b); pErr != nil {
+		return KeyValue{}, pErr.GoError()
 	}
 	res := b.Results[0]
 	return res.Rows[0], res.Err

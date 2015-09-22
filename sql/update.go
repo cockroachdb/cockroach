@@ -239,8 +239,8 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(tableDesc, b, err)
+	if pErr := p.txn.Run(&b); pErr != nil {
+		return nil, convertBatchError(tableDesc, b, pErr)
 	}
 
 	// TODO(tamird/pmattis): return the number of affected rows.

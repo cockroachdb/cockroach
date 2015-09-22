@@ -436,8 +436,8 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) 
 			br, pErr = tc.resendWithTxn(ba)
 		}
 
-		if err := tc.updateState(ctx, ba, br, pErr.GoError()); err != nil {
-			return nil, proto.NewError(err)
+		if pErr := tc.updateState(ctx, ba, br, pErr); pErr != nil {
+			return nil, pErr
 		}
 	}
 
@@ -649,10 +649,11 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 // error cases, applying those updates to the corresponding txnMeta
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
-func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest, br *proto.BatchResponse, err error) error {
+func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest, br *proto.BatchResponse, pErr *proto.Error) *proto.Error {
 	trace := tracer.FromCtx(ctx)
 	newTxn := &proto.Transaction{}
 	newTxn.Update(ba.GetTxn())
+	err := pErr.GoError()
 	switch t := err.(type) {
 	case nil:
 		newTxn.Update(br.GetTxn())
@@ -741,7 +742,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 					// In principle, we can relax this as needed though.
 					tc.Unlock()
 					tc.unregisterTxn(id)
-					return &proto.NodeUnavailableError{}
+					return proto.NewError(&proto.NodeUnavailableError{})
 				}
 			}
 			for _, intent := range intents {
@@ -766,7 +767,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 			*br.Txn = *newTxn
 		}
 	}
-	return err
+	return pErr
 }
 
 // TODO(tschottdorf): this method is somewhat awkward but unless we want to
