@@ -34,7 +34,7 @@ import (
 )
 
 func init() {
-	f := func(u *url.URL, ctx *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (BatchSender, error) {
+	f := func(u *url.URL, ctx *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (Sender, error) {
 		ctx.Insecure = (u.Scheme != "rpcs")
 		return newRPCSender(u.Host, ctx, retryOpts, stopper)
 	}
@@ -74,13 +74,13 @@ func newRPCSender(server string, context *base.Context, retryOpts retry.Options,
 	}, nil
 }
 
-// SendBatch send a request to Cockroach via RPC. Errors which are retryable
-// are retried with backoff in a loop using the default retry options. Other
-// errors sending the request are retried indefinitely using the same client
-// command ID to avoid reporting failure when in fact the command may have gone
-// through and been executed successfully. We retry here to eventually get
-// through with the same client command ID and be given the cached response.
-func (s *rpcSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+// Batch sends a request to Cockroach via RPC. Errors which are retryable are
+// retried with backoff in a loop using the default retry options. Other errors
+// sending the request are retried indefinitely using the same client command
+// ID to avoid reporting failure when in fact the command may have gone through
+// and been executed successfully. We retry here to eventually get through with
+// the same client command ID and be given the cached response.
+func (s *rpcSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	method := fmt.Sprintf("Server.%s", proto.Batch)
 
 	var err error

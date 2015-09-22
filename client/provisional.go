@@ -28,10 +28,24 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// SendCallConverted is a wrapped to go from the (ctx,call) interface to the
+// SendCall is a convenience function for old tests that still use proto.Call.
+// It will disassemble the call, wrap the request in a BatchRequest if
+// necessary, send via the provided Sender and re-assemble the call
+// transparently.
+// TODO(tschottdorf): get rid of proto.Call, change this to
+// SendWrapped(proto.BatchRequest).
+func SendCall(sender Sender, call proto.Call) error {
+	call, unwrap := MaybeWrapCall(call)
+	defer unwrap(call)
+	// TODO(tschottdorf): remove this crutch.
+	sendCallConverted(sender, context.TODO(), call)
+	return call.Reply.Header().GoError()
+}
+
+// sendCallConverted is a wrapped to go from the (ctx,call) interface to the
 // one used by batch.Sender.
 // TODO(tschottdorf): remove when new proto.Call is gone.
-func SendCallConverted(sender BatchSender, ctx context.Context, call proto.Call) {
+func sendCallConverted(sender Sender, ctx context.Context, call proto.Call) {
 	call, unwrap := MaybeWrapCall(call)
 	defer unwrap(call)
 
@@ -46,7 +60,7 @@ func SendCallConverted(sender BatchSender, ctx context.Context, call proto.Call)
 		}
 	}
 
-	reply, pErr := sender.SendBatch(ctx, *call.Args.(*proto.BatchRequest))
+	reply, pErr := sender.Send(ctx, *call.Args.(*proto.BatchRequest))
 
 	if reply != nil {
 		call.Reply.Reset() // required for BatchRequest (concats response otherwise)

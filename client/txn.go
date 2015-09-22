@@ -44,14 +44,10 @@ var DefaultTxnRetryOptions = retry.Options{
 // method out of the Txn method set.
 type txnSender Txn
 
-func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
-	SendCallConverted(ts, context.TODO(), call)
-}
-
-func (ts *txnSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (ts *txnSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	// Send call through wrapped sender.
 	ba.Txn = &ts.Proto
-	br, pErr := ts.wrapped.SendBatch(ctx, ba)
+	br, pErr := ts.wrapped.Send(ctx, ba)
 	if br != nil && br.Error != nil {
 		log.Warningf("culprit is %T", ts.wrapped)
 		panic(proto.ErrorUnexpectedlySet)
@@ -86,7 +82,7 @@ func (ts *txnSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*pro
 // concurrent use by multiple goroutines.
 type Txn struct {
 	db      DB
-	wrapped BatchSender
+	wrapped Sender
 	Proto   proto.Transaction
 	// systemDBTrigger is set to true when modifying keys from the
 	// SystemDB span. This sets the SystemDBTrigger on EndTransactionRequest.

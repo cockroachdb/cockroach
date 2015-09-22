@@ -39,16 +39,16 @@ var (
 	testPutResp = &proto.PutResponse{ResponseHeader: proto.ResponseHeader{Timestamp: testTS}}
 )
 
-func sendCall(sender BatchSender, args proto.Request) (proto.Response, *proto.Error) {
+func send(sender Sender, args proto.Request) (proto.Response, *proto.Error) {
 	ba, unwrap := MaybeWrap(args)
-	br, pErr := sender.SendBatch(context.Background(), *ba)
+	br, pErr := sender.Send(context.Background(), *ba)
 	if pErr != nil {
 		return nil, pErr
 	}
 	return unwrap(br), nil
 }
 
-func newDB(sender BatchSender) *DB {
+func newDB(sender Sender) *DB {
 	return &DB{
 		sender:          sender,
 		txnRetryOptions: DefaultTxnRetryOptions,
@@ -142,7 +142,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	txn := NewTxn(*db)
 
 	for testIdx = range testCases {
-		if _, err := sendCall(txn.db.sender, testPutReq); err != nil {
+		if _, err := send(txn.db.sender, testPutReq); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -158,7 +158,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	}, nil))
 
 	txn := NewTxn(*db)
-	_, pErr := sendCall(txn.db.sender, testPutReq)
+	_, pErr := send(txn.db.sender, testPutReq)
 	err := pErr.GoError()
 	if _, ok := err.(*proto.TransactionAbortedError); !ok {
 		t.Fatalf("expected TransactionAbortedError, got %v", err)
@@ -442,9 +442,8 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				if t.Commit {
 					commit = true
 					return nil, proto.NewError(test.err)
-				} else {
-					abort = true
 				}
+				abort = true
 			}
 			return &proto.BatchResponse{}, nil
 		}, nil))

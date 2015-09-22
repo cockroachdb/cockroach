@@ -37,7 +37,7 @@ type LocalSender struct {
 	storeMap map[proto.StoreID]*storage.Store // Map from StoreID to Store
 }
 
-var _ client.BatchSender = &LocalSender{}
+var _ client.Sender = &LocalSender{}
 var _ rangeDescriptorDB = &LocalSender{}
 
 // NewLocalSender returns a local-only sender which directly accesses
@@ -106,8 +106,11 @@ func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
 	return nil
 }
 
-// SendBatch implements batch.Sender.
-func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+// Send implements the client.Sender interface. The store is looked up from the
+// store map if specified by the request; otherwise, the command is being
+// executed locally, and the replica is determined via lookup through each
+// store's LookupRange method. The latter path is taken only by unit tests.
+func (ls *LocalSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	trace := tracer.FromCtx(ctx)
 	var store *storage.Store
 	var err error
@@ -157,15 +160,6 @@ func (ls *LocalSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*p
 		}
 	}
 	return br, pErr
-}
-
-// Send implements the client.Sender interface. The store is looked
-// up from the store map if specified by header.Replica; otherwise,
-// the command is being executed locally, and the replica is
-// determined via lookup through each store's LookupRange method.
-func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
-	client.SendCallConverted(ls, ctx, call)
-	return
 }
 
 // lookupReplica looks up replica by key [range]. Lookups are done
@@ -231,7 +225,7 @@ func (ls *LocalSender) rangeLookup(key proto.Key, options lookupOptions, _ *prot
 		ConsiderIntents: options.considerIntents,
 		Reverse:         options.useReverseScan,
 	})
-	br, err := ls.SendBatch(context.Background(), *ba)
+	br, err := ls.Send(context.Background(), *ba)
 	if err != nil {
 		return nil, err.GoError()
 	}

@@ -81,12 +81,16 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	var rpcSend rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message,
 		_ *rpc.Context) ([]gogoproto.Message, error) {
-		call := proto.Call{
-			Args:  getArgs(nil /* net.Addr */).(proto.Request),
-			Reply: getReply().(proto.Response),
+		// TODO(tschottdorf): remove getReply().
+		br, pErr := ltc.localSender.Send(context.Background(), *getArgs(nil).(*proto.BatchRequest))
+		if br == nil {
+			br = &proto.BatchResponse{}
 		}
-		ltc.localSender.Send(context.Background(), call)
-		return []gogoproto.Message{call.Reply}, call.Reply.Header().GoError()
+		if br.Error != nil {
+			panic(proto.ErrorUnexpectedlySet)
+		}
+		br.Error = pErr
+		return []gogoproto.Message{br}, nil
 	}
 	ltc.distSender = NewDistSender(&DistSenderContext{
 		Clock: ltc.Clock,

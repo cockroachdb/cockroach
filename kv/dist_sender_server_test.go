@@ -22,8 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
@@ -254,8 +252,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	sr := call.Reply.(*proto.ScanResponse)
 	sa := call.Args.(*proto.ScanRequest)
 	sa.ReadConsistency = proto.INCONSISTENT
-	client.SendCallConverted(ds, context.Background(), call)
-	if err := sr.GoError(); err != nil {
+	if err := client.SendCall(ds, call); err != nil {
 		t.Fatal(err)
 	}
 	if l := len(sr.Rows); l != 1 {
@@ -270,8 +267,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	rsr := call.Reply.(*proto.ReverseScanResponse)
 	rsa := call.Args.(*proto.ReverseScanRequest)
 	rsa.ReadConsistency = proto.INCONSISTENT
-	client.SendCallConverted(ds, context.Background(), call)
-	if err := rsr.GoError(); err != nil {
+	if err := client.SendCall(ds, call); err != nil {
 		t.Fatal(err)
 	}
 	if l := len(rsr.Rows); l != 1 {

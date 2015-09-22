@@ -88,7 +88,7 @@ type responseAdder interface {
 // Since kv/ depends on storage/, we can't get access to a
 // TxnCoordSender from here.
 // TODO(tschottdorf): {kv->storage}.LocalSender
-func (db *testSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (db *testSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	if et, ok := ba.GetArg(proto.EndTransaction); ok {
 		return nil, proto.NewError(util.Errorf("%s method not supported", et.Method()))
 	}

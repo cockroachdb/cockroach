@@ -49,11 +49,11 @@ var allExternalMethods = [...]proto.Request{
 // It accepts either JSON or serialized protobuf content types.
 type DBServer struct {
 	context *base.Context
-	sender  client.BatchSender
+	sender  client.Sender
 }
 
 // NewDBServer allocates and returns a new DBServer.
-func NewDBServer(ctx *base.Context, sender client.BatchSender) *DBServer {
+func NewDBServer(ctx *base.Context, sender client.Sender) *DBServer {
 	return &DBServer{context: ctx, sender: sender}
 }
 
@@ -80,7 +80,7 @@ func (s *DBServer) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error
 	if err := verifyRequest(args); err != nil {
 		return nil, err
 	}
-	br, pErr := s.sender.SendBatch(context.TODO(), *ba)
+	br, pErr := s.sender.Send(context.TODO(), *ba)
 	if pErr != nil {
 		br = &proto.BatchResponse{}
 	}

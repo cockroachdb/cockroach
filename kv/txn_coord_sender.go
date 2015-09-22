@@ -172,7 +172,7 @@ type txnCoordStats struct {
 // transaction. When the transaction is committed or aborted, it
 // clears accumulated write intents for the transaction.
 type TxnCoordSender struct {
-	wrapped           client.BatchSender
+	wrapped           client.Sender
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	clientTimeout     time.Duration
@@ -184,11 +184,11 @@ type TxnCoordSender struct {
 	stopper           *stop.Stopper
 }
 
-var _ client.BatchSender = &TxnCoordSender{}
+var _ client.Sender = &TxnCoordSender{}
 
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
 // distributed DB instance.
-func NewTxnCoordSender(wrapped client.BatchSender, clock *hlc.Clock, linearizable bool, tracer *tracer.Tracer, stopper *stop.Stopper) *TxnCoordSender {
+func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, tracer *tracer.Tracer, stopper *stop.Stopper) *TxnCoordSender {
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
 		clock:             clock,
@@ -287,14 +287,6 @@ func (tc *TxnCoordSender) startStats() {
 	}
 }
 
-// Send implements the client.Sender interface. If the call is part
-// of a transaction, the coordinator will initialize the transaction
-// if it's not nil but has an empty ID.
-// TODO(tschottdorf): remove in favor of SendBatch.
-func (tc *TxnCoordSender) Send(ctx context.Context, call proto.Call) {
-	client.SendCallConverted(tc, ctx, call)
-}
-
 // UpdateForBatch updates the first argument (the header of a request contained
 // in a batch) from the second one (the batch header), returning an error when
 // inconsistencies are found.
@@ -313,17 +305,16 @@ func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 	return nil
 }
 
-// SendBatch implements the batch.Sender interface. If the request is
-// part of a transaction, the TxnCoordSender adds the transaction to a
-// map of active transactions and begins heartbeating it. Every
-// subsequent request for the same transaction updates the lastUpdate
-// timestamp to prevent live transactions from being considered
-// abandoned and garbage collected. Read/write mutating requests have
-// their key or key range added to the transaction's interval tree of
-// key ranges for eventual cleanup via resolved write intents; they're
-// tagged to an outgoing EndTransaction request, with the receiving
-// replica in charge of resolving them.
-func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+// Send implements the batch.Sender interface. If the request is part of a
+// transaction, the TxnCoordSender adds the transaction to a map of active
+// transactions and begins heartbeating it. Every subsequent request for the
+// same transaction updates the lastUpdate timestamp to prevent live
+// transactions from being considered abandoned and garbage collected.
+// Read/write mutating requests have their key or key range added to the
+// transaction's interval tree of key ranges for eventual cleanup via resolved
+// write intents; they're tagged to an outgoing EndTransaction request, with
+// the receiving replica in charge of resolving them.
+func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	tc.maybeBeginTxn(&ba)
 	ba.CmdID = ba.GetOrCreateCmdID(tc.clock.PhysicalNow())
 	var startNS int64
@@ -430,7 +421,7 @@ func (tc *TxnCoordSender) SendBatch(ctx context.Context, ba proto.BatchRequest) 
 	var br *proto.BatchResponse
 	{
 		var pErr *proto.Error
-		br, pErr = tc.wrapped.SendBatch(ctx, ba)
+		br, pErr = tc.wrapped.Send(ctx, ba)
 
 		if _, ok := pErr.GoError().(*proto.OpRequiresTxnError); ok {
 			br, pErr = tc.resendWithTxn(ba)
@@ -625,7 +616,7 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	ba.Add(hb)
 
 	epochEnds := trace.Epoch("heartbeat")
-	_, err := tc.wrapped.SendBatch(ctx, ba)
+	_, err := tc.wrapped.Send(ctx, ba)
 	epochEnds()
 	// If the transaction is not in pending state, then we can stop
 	// the heartbeat. It's either aborted or committed, and we resolve

@@ -118,7 +118,7 @@ type DistSender struct {
 	rpcRetryOptions retry.Options
 }
 
-var _ client.BatchSender = &DistSender{}
+var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(rpc.Options, string, []net.Addr,
@@ -205,7 +205,7 @@ type lookupOptions struct {
 // stale data is not a correctness problem but instead may
 // infrequently result in additional latency as additional range
 // lookups may be required. Note also that rangeLookup bypasses the
-// DistSender's SendBatch() method, so there is no error inspection and
+// DistSender's Send() method, so there is no error inspection and
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
 func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
@@ -455,11 +455,11 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba proto.BatchRequest, de
 	return br, pErr
 }
 
-// SendBatch implements the batch.Sender interface. It subdivides
+// Send implements the batch.Sender interface. It subdivides
 // the Batch into batches admissible for sending (preventing certain
 // illegal mixtures of requests), executes each individual part
 // (which may span multiple ranges), and recombines the response.
-func (ds *DistSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (ds *DistSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
 	// TODO(tschottdorf): right place for this?
@@ -472,7 +472,7 @@ func (ds *DistSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*pr
 	}
 
 	// TODO(tschottdorf): provisional instantiation.
-	return newChunkingSender(ds.sendChunk).SendBatch(ctx, ba)
+	return newChunkingSender(ds.sendChunk).Send(ctx, ba)
 }
 
 // sendChunk is in charge of sending an "admissible" piece of batch, i.e. one
