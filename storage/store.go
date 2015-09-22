@@ -989,11 +989,14 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsu
 
 	// Remove and destroy the subsumed range. Note that we are on the
 	// processRaft goroutine so we can call removeReplicaImpl directly.
-	if err = s.removeReplicaImpl(subsumedRng); err != nil {
+	if err := s.removeReplicaImpl(subsumedRng); err != nil {
 		return util.Errorf("cannot remove range %s", err)
 	}
 
-	// TODO(bram): The removed range needs to have all of its metadata removed.
+	localRangeKeyPrefix := keys.MakeLocalRangeKeyPrefix(subsumedDesc.RangeID)
+	if _, err := engine.MVCCDeleteRange(s.engine, nil, localRangeKeyPrefix, localRangeKeyPrefix.PrefixEnd(), 0, proto.ZeroTimestamp, nil); err != nil {
+		return util.Errorf("cannot remove range metadata %s", err)
+	}
 
 	// Update the end key of the subsuming range.
 	copy := *subsumingDesc

@@ -19,7 +19,9 @@ package storage_test
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -83,6 +85,81 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 
 	if !reflect.DeepEqual(rangeA, rangeB) {
 		t.Fatalf("ranges were not merged %+v=%+v", rangeA.Desc(), rangeB.Desc())
+	}
+}
+
+// TestStoreRangeMergeMetadataCleanup tests that all metadata of a
+// subsumed range is cleaned up on merge.
+func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	scan := func(f func(proto.KeyValue) (bool, error)) {
+		if _, err := engine.MVCCIterate(store.Engine(), proto.KeyMin, proto.KeyMax, proto.ZeroTimestamp, true, nil, false, f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	content := proto.Key("testing!")
+
+	// Write some values left of the proposed split key.
+	pArgs := putArgs([]byte("aaa"), content, 1, store.StoreID())
+	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Collect all the keys.
+	preKeys := make(map[string]struct{})
+	scan(func(kv proto.KeyValue) (bool, error) {
+		preKeys[string(kv.Key)] = struct{}{}
+		return false, nil
+	})
+
+	// Split the range.
+	_, bDesc, err := createSplitRanges(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Write some values right of the split key.
+	pArgs = putArgs([]byte("ccc"), content, bDesc.RangeID, store.StoreID())
+	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Merge the b range back into the a range.
+	args := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
+	if _, err := store.ExecuteCmd(context.Background(), &args); err != nil {
+		t.Fatal(err)
+	}
+
+	// Collect all the keys again.
+	postKeys := make(map[string]struct{})
+	scan(func(kv proto.KeyValue) (bool, error) {
+		postKeys[string(kv.Key)] = struct{}{}
+		return false, nil
+	})
+
+	// Compute the new keys.
+	for k := range preKeys {
+		delete(postKeys, k)
+	}
+
+	// Keep only the subsumed range's local keys.
+	localRangeKeyPrefix := string(keys.MakeLocalRangeKeyPrefix(bDesc.RangeID))
+	for k := range postKeys {
+		if !strings.HasPrefix(k, localRangeKeyPrefix) {
+			delete(postKeys, k)
+		}
+	}
+
+	if numKeys := len(postKeys); numKeys > 0 {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "%d keys were not cleaned up:\n", numKeys)
+		for k := range postKeys {
+			fmt.Fprintf(&buf, "%q\n", k)
+		}
+		t.Fatal(buf.String())
 	}
 }
 
