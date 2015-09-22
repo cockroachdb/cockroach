@@ -319,13 +319,9 @@ func (v *Value) SetProto(msg gogoproto.Message) error {
 
 // SetTime encodes the specified time value into the bytes field of the
 // receiver and sets the tag.
-func (v *Value) SetTime(t time.Time) error {
-	var err error
-	if v.Bytes, err = t.MarshalBinary(); err != nil {
-		return err
-	}
+func (v *Value) SetTime(t time.Time) {
+	v.Bytes = encoding.EncodeTime(nil, t)
 	v.Tag = ValueType_TIME
-	return nil
 }
 
 // GetBytesChecked retrieves the bytes value from receiver returning an error
@@ -372,12 +368,11 @@ func (v *Value) GetInt() (int64, error) {
 // GetTime decodes a time value from the bytes field of the receiver. If the
 // tag is not TIME an error will be returned.
 func (v *Value) GetTime() (time.Time, error) {
-	var t time.Time
 	if v.GetTag() != ValueType_TIME {
-		return t, fmt.Errorf("value type is not TIME: %s", v.GetTag())
+		return time.Time{}, fmt.Errorf("value type is not TIME: %s", v.GetTag())
 	}
-	err := t.UnmarshalBinary(v.Bytes)
-	return t, err
+	_, t := encoding.DecodeTime(v.Bytes)
+	return t, nil
 }
 
 // computeChecksum computes a checksum based on the provided key and

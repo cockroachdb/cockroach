@@ -66,8 +66,8 @@ func marshalValue(v interface{}) (proto.Value, error) {
 		return r, nil
 
 	case time.Time:
-		err := r.SetTime(t)
-		return r, err
+		r.SetTime(t)
+		return r, nil
 
 	case gogoproto.Message:
 		err := r.SetProto(t)
