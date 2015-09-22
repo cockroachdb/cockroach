@@ -48,6 +48,7 @@ func marshalValue(v interface{}) (proto.Value, error) {
 		return r, nil
 	}
 
+	// Handle a few common types via a type switch.
 	switch t := v.(type) {
 	case nil:
 		return r, nil
@@ -73,6 +74,9 @@ func marshalValue(v interface{}) (proto.Value, error) {
 		return r, err
 	}
 
+	// Handle all of the Go primitive types besides struct and pointers. This
+	// switch also handles types based on a primitive type (e.g. "type MyInt
+	// int").
 	switch v := reflect.ValueOf(v); v.Kind() {
 	case reflect.Bool:
 		i := int64(0)

@@ -466,9 +466,8 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, er
 		if v, ok := val.(parser.DInterval); ok {
 			return v.Duration, nil
 		}
-		// case ColumnType_DECIMAL:
 	default:
-		return nil, fmt.Errorf("unsupported type: %s", val.Type())
+		return nil, util.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
 	return nil, fmt.Errorf("value type %s doesn't match type %s of column %q",
 		val.Type(), col.Type.Kind, col.Name)
@@ -532,6 +531,6 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *proto.Value) (parser.Datu
 		}
 		return parser.DInterval{Duration: time.Duration(v)}, nil
 	default:
-		return nil, fmt.Errorf("unsupported type: %s", kind)
+		return nil, util.Errorf("unsupported column type: %s", kind)
 	}
 }
