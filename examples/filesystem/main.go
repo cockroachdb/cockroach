@@ -27,31 +27,36 @@ import (
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
 	_ "bazil.org/fuse/fs/fstestutil"
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/server"
 	_ "github.com/cockroachdb/cockroach/sql/driver"
 )
 
+// Usage prints the usage.
 var Usage = func() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s <mountpoint> <cockroachDB url>\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "  %s <mountpoint>\n", os.Args[0])
 	flag.PrintDefaults()
 }
-
-var db *sql.DB
 
 func main() {
 	flag.Usage = Usage
 	flag.Parse()
 
-	if flag.NArg() != 2 {
+	if flag.NArg() != 1 {
 		Usage()
 		os.Exit(2)
 	}
 	mountpoint := flag.Arg(0)
-	url := flag.Arg(1)
 
 	// Open DB connection first.
-	var err error
-	if db, err = sql.Open("cockroach", url+"&database=bank"); err != nil {
+	security.SetReadFileFn(securitytest.Asset)
+	serv := server.StartTestServer(nil)
+	defer serv.Stop()
+	url := "https://root@" + serv.ServingAddr() + "?certs=test_certs"
+	db, err := sql.Open("cockroach", url)
+	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
@@ -67,10 +72,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close()
+	defer func() {
+		_ = c.Close()
+	}()
 
 	// Serve root.
-	err = fs.Serve(c, CFS{})
+	err = fs.Serve(c, CFS{db})
 	if err != nil {
 		log.Fatal(err)
 	}
