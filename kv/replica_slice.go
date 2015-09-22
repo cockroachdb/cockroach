@@ -103,8 +103,6 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 		return 0
 	}
 	topIndex := len(rs) - 1
-	rand.Seed(time.Now().UTC().UnixNano())
-
 	for bucket := 0; bucket < len(attrs); bucket++ {
 		firstNotOrdered := 0
 		for i := 0; i <= topIndex; i++ {
@@ -114,11 +112,6 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 				// This packs all matching replicas together.
 				rs.Swap(firstNotOrdered, i)
 				firstNotOrdered++
-			} else {
-				rnd := rs.GetRandomReplica(firstNotOrdered + 1, topIndex)
-				if rnd != -1 {
-					rs.Swap(rnd, i)
-				}
 			}
 		}
 		if firstNotOrdered == 0 {
@@ -127,13 +120,6 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 		topIndex = firstNotOrdered - 1
 	}
 	return len(attrs)
-}
-
-func (rs replicaSlice) GetRandomReplica(start, end int) int {
-	if end - start < 0 {
-		panic("out of bound index")
-	}
-	return start + rand.Intn(end - start)
 }
 
 // MoveToFront moves the replica at the given index to the front
