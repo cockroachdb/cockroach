@@ -49,8 +49,7 @@ func (ts *txnSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.Ba
 	ba.Txn = &ts.Proto
 	br, pErr := ts.wrapped.Send(ctx, ba)
 	if br != nil && br.Error != nil {
-		log.Warningf("culprit is %T", ts.wrapped)
-		panic(proto.ErrorUnexpectedlySet)
+		panic(proto.ErrorUnexpectedlySet(ts.wrapped, br))
 	}
 
 	// TODO(tschottdorf): see about using only the top-level *proto.Error

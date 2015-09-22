@@ -72,8 +72,7 @@ func (ss *notifyingSender) wait() {
 func (ss *notifyingSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	br, pErr := ss.wrapped.Send(ctx, ba)
 	if br != nil && br.Error != nil {
-		log.Warningf("culprit is %T", ss.wrapped)
-		panic(proto.ErrorUnexpectedlySet)
+		panic(proto.ErrorUnexpectedlySet(ss.wrapped, br))
 	}
 	if ss.waiter != nil {
 		ss.waiter.Done()

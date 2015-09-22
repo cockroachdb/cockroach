@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/log"
 	"golang.org/x/net/context"
 
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -67,8 +66,7 @@ func sendCallConverted(sender Sender, ctx context.Context, call proto.Call) {
 		gogoproto.Merge(call.Reply, reply)
 	}
 	if call.Reply.Header().GoError() != nil {
-		log.Warningf("culprit is %T", sender)
-		panic(proto.ErrorUnexpectedlySet)
+		panic(proto.ErrorUnexpectedlySet(sender, call.Reply))
 	}
 	if pErr != nil {
 		call.Reply.Header().Error = pErr

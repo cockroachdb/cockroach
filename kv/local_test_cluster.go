@@ -87,7 +87,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 			br = &proto.BatchResponse{}
 		}
 		if br.Error != nil {
-			panic(proto.ErrorUnexpectedlySet)
+			panic(proto.ErrorUnexpectedlySet(ltc.localSender, br))
 		}
 		br.Error = pErr
 		return []gogoproto.Message{br}, nil

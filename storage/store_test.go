@@ -107,7 +107,7 @@ func (db *testSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.B
 	reply, pErr := db.store.ExecuteCmd(ctx, &ba)
 	br, _ := reply.(*proto.BatchResponse)
 	if br != nil && br.Error != nil {
-		panic(proto.ErrorUnexpectedlySet)
+		panic(proto.ErrorUnexpectedlySet(db.store, br))
 	}
 	if pErr != nil {
 		return nil, pErr

@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -32,7 +33,7 @@ func TestClientCommandID(t *testing.T) {
 	db := NewDB(newTestSender(func(ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 		count++
 		if ba.CmdID.WallTime == 0 {
-			t.Errorf("expected client command ID to be initialized")
+			return nil, proto.NewError(util.Errorf("expected client command ID to be initialized"))
 		}
 		return &proto.BatchResponse{}, nil
 	}, nil))

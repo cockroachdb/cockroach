@@ -190,7 +190,7 @@ func (rc *ResponseCache) PutResponse(e engine.Engine, cmdID proto.ClientCmdID, r
 // cache in the hopes of retrying to a successful outcome.
 func (rc *ResponseCache) shouldCacheResponse(replyWithErr proto.ResponseWithError) bool {
 	if err := replyWithErr.Reply.Header().Error; err != nil {
-		panic(proto.ErrorUnexpectedlySet)
+		panic(proto.ErrorUnexpectedlySet(rc, replyWithErr.Reply))
 	}
 
 	switch replyWithErr.Err.(type) {

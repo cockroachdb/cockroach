@@ -42,6 +42,8 @@ func init() {
 	RegisterSender("rpcs", f)
 }
 
+var method = fmt.Sprintf("Server.%s", proto.Batch)
+
 // rpcSender is an implementation of Sender which exposes the
 // Key-Value database provided by a Cockroach cluster by connecting
 // via RPC to a Cockroach node. Overly-busy nodes will redirect this
@@ -81,10 +83,8 @@ func newRPCSender(server string, context *base.Context, retryOpts retry.Options,
 // and been executed successfully. We retry here to eventually get through with
 // the same client command ID and be given the cached response.
 func (s *rpcSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
-	method := fmt.Sprintf("Server.%s", proto.Batch)
-
 	var err error
-	var br *proto.BatchResponse
+	var br proto.BatchResponse
 	for r := retry.Start(s.retryOpts); r.Next(); {
 		select {
 		case <-s.client.Healthy():
@@ -94,8 +94,8 @@ func (s *rpcSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.Bat
 			continue
 		}
 
-		br = &proto.BatchResponse{}
-		if err = s.client.Call(method, &ba, br); err != nil {
+		if err = s.client.Call(method, &ba, &br); err != nil {
+			br.Reset() // don't trust anyone.
 			// Assume all errors sending request are retryable. The actual
 			// number of things that could go wrong is vast, but we don't
 			// want to miss any which should in theory be retried with the
@@ -115,5 +115,5 @@ func (s *rpcSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.Bat
 	}
 	pErr := br.Error
 	br.Error = nil
-	return br, pErr
+	return &br, pErr
 }

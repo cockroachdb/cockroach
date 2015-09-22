@@ -33,10 +33,11 @@ type ResponseWithError struct {
 	Err   error
 }
 
-// ErrorUnexpectedlySet is the string we panic on when we assert
-// `ResponseHeader.Error == nil` before calling
-// `ResponseHeader.SetGoError()`.
-const ErrorUnexpectedlySet = "error is unexpectedly set"
+// ErrorUnexpectedlySet creates a string to panic with when a response (typically
+// a proto.BatchResponse) unexpectedly has Error set in its response header.
+func ErrorUnexpectedlySet(culprit, response interface{}) string {
+	return fmt.Sprintf("error is unexpectedly set, culprit is %T:\n%+v", culprit, response)
+}
 
 // TransactionRestartError is an interface implemented by errors that cause
 // a transaction to be restarted.

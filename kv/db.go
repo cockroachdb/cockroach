@@ -85,7 +85,7 @@ func (s *DBServer) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error
 		br = &proto.BatchResponse{}
 	}
 	if br.Error != nil {
-		panic(proto.ErrorUnexpectedlySet)
+		panic(proto.ErrorUnexpectedlySet(s.sender, br))
 	}
 	br.Error = pErr
 	return unwrap(br), nil

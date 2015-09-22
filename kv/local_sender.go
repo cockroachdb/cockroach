@@ -156,7 +156,7 @@ func (ls *LocalSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.
 	if tmpR != nil {
 		br = tmpR.(*proto.BatchResponse)
 		if br.Error != nil {
-			panic(proto.ErrorUnexpectedlySet)
+			panic(proto.ErrorUnexpectedlySet(store, br))
 		}
 	}
 	return br, pErr
