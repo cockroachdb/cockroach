@@ -25,8 +25,6 @@ import (
 	"strconv"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -469,7 +467,7 @@ func (db *DB) send(calls ...proto.Call) (pErr *proto.Error) {
 				c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
 			}
 			resetClientCmdID(c.Args)
-			db.sender.Send(context.TODO(), c)
+			_ = SendCall(db.sender, c)
 			pErr = c.Reply.Header().Error
 			if pErr != nil {
 				if log.V(1) {
@@ -478,7 +476,7 @@ func (db *DB) send(calls ...proto.Call) (pErr *proto.Error) {
 			} else if c.Post != nil {
 				pErr = proto.NewError(c.Post())
 			}
-			return
+			return pErr
 		}
 	}
 

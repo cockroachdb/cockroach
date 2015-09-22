@@ -27,8 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
@@ -337,8 +335,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
 		call := proto.Call{Args: args, Reply: args.CreateReply()}
-		client.SendCallConverted(ds, context.Background(), call)
-		if err := call.Reply.Header().GoError(); err != nil {
+		if err := client.SendCall(ds, call); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
 	}
@@ -392,9 +389,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
-	reply := call.Reply.(*proto.PutResponse)
-	client.SendCallConverted(ds, context.Background(), call)
-	if err := reply.GoError(); err != nil {
+	if err := client.SendCall(ds, call); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
 	if first {
@@ -437,15 +432,12 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
-	reply := call.Reply.(*proto.PutResponse)
 	// Fatal error on descriptor lookup, propagated to reply.
-	client.SendCallConverted(ds, context.Background(), call)
-	if err := reply.Header().GoError(); err.Error() != "fatal boom" {
+	if err := client.SendCall(ds, call); err.Error() != "fatal boom" {
 		t.Errorf("unexpected error: %s", err)
 	}
 	// Retryable error on descriptor lookup, second attempt successful.
-	client.SendCallConverted(ds, context.Background(), call)
-	if err := reply.GoError(); err != nil {
+	if err := client.SendCall(ds, call); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
 	if len(errors) != 0 {
@@ -503,9 +495,8 @@ func TestEvictCacheOnError(t *testing.T) {
 		ds.updateLeaderCache(1, leader)
 
 		call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
-		reply := call.Reply.(*proto.PutResponse)
-		client.SendCallConverted(ds, context.Background(), call)
-		if err := reply.GoError(); err != nil && !testutils.IsError(err, "boom") {
+
+		if err := client.SendCall(ds, call); err != nil && !testutils.IsError(err, "boom") {
 			t.Errorf("put encountered unexpected error: %s", err)
 		}
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &proto.Replica{}) && !tc.shouldClearLeader {
@@ -569,9 +560,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 0)
-	sr := call.Reply.(*proto.ScanResponse)
-	client.SendCallConverted(ds, context.Background(), call)
-	if err := sr.GoError(); err != nil {
+	if err := client.SendCall(ds, call); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
 }
@@ -666,8 +655,7 @@ func TestSendRPCRetry(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 1)
 	sr := call.Reply.(*proto.ScanResponse)
-	client.SendCallConverted(ds, context.Background(), call)
-	if err := sr.GoError(); err != nil {
+	if err := client.SendCall(ds, call); err != nil {
 		t.Fatal(err)
 	}
 	if l := len(sr.Rows); l != 1 {
@@ -768,8 +756,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	call.Args.Header().Txn = &proto.Transaction{}
 	reply := call.Reply.(*proto.ScanResponse)
-	client.SendCallConverted(ds, context.Background(), call)
-	if err := reply.GoError(); err != nil {
+	if err := client.SendCall(ds, call); err != nil {
 		t.Fatalf("scan encountered error: %s", err)
 	}
 	if !reflect.DeepEqual(existingKVs, reply.Rows) {
@@ -800,9 +787,11 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	call := proto.Call{
 		Args: &proto.ReverseScanRequest{
-			RequestHeader: proto.RequestHeader{EndKey: proto.Key("a")},
+			RequestHeader: proto.RequestHeader{Key: proto.Key("a"), EndKey: proto.Key("b")},
 		},
 		Reply: &proto.ReverseScanResponse{},
 	}
-	client.SendCallConverted(ds, context.Background(), call)
+	if err := client.SendCall(ds, call); err != nil {
+		t.Fatal(err)
+	}
 }

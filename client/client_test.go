@@ -69,11 +69,15 @@ func (ss *notifyingSender) wait() {
 	ss.waiter = nil
 }
 
-func (ss *notifyingSender) Send(ctx context.Context, call proto.Call) {
-	ss.wrapped.Send(ctx, call)
+func (ss *notifyingSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+	br, pErr := ss.wrapped.Send(ctx, ba)
+	if br != nil && br.Error != nil {
+		panic(proto.ErrorUnexpectedlySet(ss.wrapped, br))
+	}
 	if ss.waiter != nil {
 		ss.waiter.Done()
 	}
+	return br, pErr
 }
 
 func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.DB {

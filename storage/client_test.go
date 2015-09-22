@@ -30,8 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -79,8 +77,8 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 			Args:  getArgs(nil /* net.Addr */).(proto.Request),
 			Reply: getReply().(proto.Response),
 		}
-		localSender.Send(context.Background(), call)
-		return []gogoproto.Message{call.Reply}, call.Reply.Header().GoError()
+		_ = client.SendCall(localSender, call)
+		return []gogoproto.Message{call.Reply}, nil
 	}
 
 	// Mostly makes sure that we don't see a warning per request.
@@ -247,8 +245,7 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, _ []net.Addr,
 			Args:  getArgs(nil /* net.Addr */).(proto.Request),
 			Reply: getReply().(proto.Response),
 		}
-		m.senders[nextIdx].Send(context.Background(), call)
-		if err := call.Reply.Header().GoError(); err != nil {
+		if err := client.SendCall(m.senders[nextIdx], call); err != nil {
 			switch err := err.(type) {
 			case *proto.RangeKeyMismatchError:
 				// Try the next localSender if this localSender did not have the

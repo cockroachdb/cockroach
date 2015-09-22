@@ -44,21 +44,25 @@ var DefaultTxnRetryOptions = retry.Options{
 // method out of the Txn method set.
 type txnSender Txn
 
-func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
+func (ts *txnSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	// Send call through wrapped sender.
-	call.Args.Header().Txn = &ts.Proto
-	ts.wrapped.Send(ctx, call)
+	ba.Txn = &ts.Proto
+	br, pErr := ts.wrapped.Send(ctx, ba)
+	if br != nil && br.Error != nil {
+		panic(proto.ErrorUnexpectedlySet(ts.wrapped, br))
+	}
 
 	// TODO(tschottdorf): see about using only the top-level *proto.Error
 	// information for this restart logic (includes adding the Txn).
-	err := call.Reply.Header().GoError()
+	err := pErr.GoError()
 	// Only successful requests can carry an updated Txn in their response
 	// header. Any error (e.g. a restart) can have a Txn attached to them as
 	// well; those update our local state in the same way for the next attempt.
 	// The exception is if our transaction was aborted and needs to restart
 	// from scratch, in which case we do just that.
 	if err == nil {
-		ts.Proto.Update(call.Reply.Header().Txn)
+		ts.Proto.Update(br.Txn)
+		return br, nil
 	} else if abrtErr, ok := err.(*proto.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
 		ts.Proto = proto.Transaction{
@@ -70,6 +74,7 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 	} else if txnErr, ok := err.(proto.TransactionRestartError); ok {
 		ts.Proto.Update(txnErr.Transaction())
 	}
+	return nil, pErr
 }
 
 // Txn is an in-progress distributed database transaction. A Txn is not safe for

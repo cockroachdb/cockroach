@@ -29,8 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -317,23 +315,20 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		Reply: &proto.GetResponse{},
 	}
 	get.Args.Header().EndKey = writes[len(writes)-1]
-	tds.Send(context.Background(), get)
-	if err := get.Reply.Header().GoError(); err == nil {
+	if err := client.SendCall(tds, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
 	var call proto.Call
 	for i, k := range writes {
 		call = proto.PutCall(k, proto.Value{Bytes: k})
-		tds.Send(context.Background(), call)
-		if err := call.Reply.Header().GoError(); err != nil {
+		if err := client.SendCall(tds, call); err != nil {
 			t.Fatal(err)
 		}
 		scan := proto.ScanCall(writes[0], writes[len(writes)-1].Next(), 0)
 		// The Put ts may have been pushed by tsCache,
 		// so make sure we see their values in our Scan.
 		scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
-		tds.Send(context.Background(), scan)
-		if err := scan.Reply.Header().GoError(); err != nil {
+		if err := client.SendCall(tds, scan); err != nil {
 			t.Fatal(err)
 		}
 		if scan.Reply.Header().Txn != nil {
@@ -356,8 +351,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		},
 		Reply: &proto.DeleteRangeResponse{},
 	}
-	tds.Send(context.Background(), del)
-	if err := del.Reply.Header().GoError(); err != nil {
+	if err := client.SendCall(tds, del); err != nil {
 		t.Fatal(err)
 	}
 	if del.Reply.Header().Txn != nil {
@@ -371,8 +365,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	scan := proto.ScanCall(writes[0], writes[len(writes)-1].Next(), 0)
 	scan.Args.Header().Timestamp = del.Reply.Header().Timestamp
 	scan.Args.Header().Txn = &proto.Transaction{Name: "MyTxn"}
-	tds.Send(context.Background(), scan)
-	if err := scan.Reply.Header().GoError(); err != nil {
+	if err := client.SendCall(tds, scan); err != nil {
 		t.Fatal(err)
 	}
 	if txn := scan.Reply.Header().Txn; txn == nil || txn.Name != "MyTxn" {
@@ -412,8 +405,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		var call proto.Call
 		for _, k := range tc.keys {
 			call = proto.PutCall(k, proto.Value{Bytes: k})
-			tds.Send(context.Background(), call)
-			if err := call.Reply.Header().GoError(); err != nil {
+			if err := client.SendCall(tds, call); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -425,8 +417,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 				scan := proto.ScanCall(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
 					int64(maxResults))
 				scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
-				tds.Send(context.Background(), scan)
-				if err := scan.Reply.Header().GoError(); err != nil {
+				if err := client.SendCall(tds, scan); err != nil {
 					t.Fatal(err)
 				}
 				rows := scan.Reply.(*proto.ScanResponse).Rows

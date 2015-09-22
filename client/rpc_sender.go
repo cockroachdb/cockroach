@@ -42,6 +42,8 @@ func init() {
 	RegisterSender("rpcs", f)
 }
 
+var method = fmt.Sprintf("Server.%s", proto.Batch)
+
 // rpcSender is an implementation of Sender which exposes the
 // Key-Value database provided by a Cockroach cluster by connecting
 // via RPC to a Cockroach node. Overly-busy nodes will redirect this
@@ -74,16 +76,15 @@ func newRPCSender(server string, context *base.Context, retryOpts retry.Options,
 	}, nil
 }
 
-// Send sends call to Cockroach via an RPC request. Errors which are retryable
-// are retried with backoff in a loop using the default retry options. Other
-// errors sending the request are retried indefinitely using the same client
-// command ID to avoid reporting failure when in fact the command may have gone
-// through and been executed successfully. We retry here to eventually get
-// through with the same client command ID and be given the cached response.
-func (s *rpcSender) Send(_ context.Context, call proto.Call) {
-	method := fmt.Sprintf("Server.%s", call.Args.Method())
-
+// Batch sends a request to Cockroach via RPC. Errors which are retryable are
+// retried with backoff in a loop using the default retry options. Other errors
+// sending the request are retried indefinitely using the same client command
+// ID to avoid reporting failure when in fact the command may have gone through
+// and been executed successfully. We retry here to eventually get through with
+// the same client command ID and be given the cached response.
+func (s *rpcSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	var err error
+	var br proto.BatchResponse
 	for r := retry.Start(s.retryOpts); r.Next(); {
 		select {
 		case <-s.client.Healthy():
@@ -93,7 +94,8 @@ func (s *rpcSender) Send(_ context.Context, call proto.Call) {
 			continue
 		}
 
-		if err = s.client.Call(method, call.Args, call.Reply); err != nil {
+		if err = s.client.Call(method, &ba, &br); err != nil {
+			br.Reset() // don't trust anyone.
 			// Assume all errors sending request are retryable. The actual
 			// number of things that could go wrong is vast, but we don't
 			// want to miss any which should in theory be retried with the
@@ -109,6 +111,9 @@ func (s *rpcSender) Send(_ context.Context, call proto.Call) {
 		break
 	}
 	if err != nil {
-		call.Reply.Header().SetGoError(err)
+		return nil, proto.NewError(err)
 	}
+	pErr := br.Error
+	br.Error = nil
+	return &br, pErr
 }
