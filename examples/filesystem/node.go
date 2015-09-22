@@ -18,13 +18,17 @@
 package main
 
 import (
+	"database/sql"
+
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
 	"golang.org/x/net/context"
 )
 
 // CFS implements a filesystem on top of cockroach.
-type CFS struct{}
+type CFS struct {
+	db *sql.DB
+}
 
 // Root returns the filesystem's root node.
 func (CFS) Root() (fs.Node, error) {
@@ -49,7 +53,7 @@ func (Node) Lookup(ctx context.Context, name string) (fs.Node, error) {
 	return nil, fuse.ENOSYS
 }
 
-// ReadDirALl returns the list of child inodes.
+// ReadDirAll returns the list of child inodes.
 func (Node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	return nil, fuse.ENOSYS
 }
