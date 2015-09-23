@@ -44,21 +44,25 @@ var DefaultTxnRetryOptions = retry.Options{
 // method out of the Txn method set.
 type txnSender Txn
 
-func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
+func (ts *txnSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	// Send call through wrapped sender.
-	call.Args.Header().Txn = &ts.Proto
-	ts.wrapped.Send(ctx, call)
+	ba.Txn = &ts.Proto
+	br, pErr := ts.wrapped.Send(ctx, ba)
+	if br != nil && br.Error != nil {
+		panic(proto.ErrorUnexpectedlySet(ts.wrapped, br))
+	}
 
 	// TODO(tschottdorf): see about using only the top-level *proto.Error
 	// information for this restart logic (includes adding the Txn).
-	err := call.Reply.Header().GoError()
+	err := pErr.GoError()
 	// Only successful requests can carry an updated Txn in their response
 	// header. Any error (e.g. a restart) can have a Txn attached to them as
 	// well; those update our local state in the same way for the next attempt.
 	// The exception is if our transaction was aborted and needs to restart
 	// from scratch, in which case we do just that.
 	if err == nil {
-		ts.Proto.Update(call.Reply.Header().Txn)
+		ts.Proto.Update(br.Txn)
+		return br, nil
 	} else if abrtErr, ok := err.(*proto.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
 		ts.Proto = proto.Transaction{
@@ -70,6 +74,7 @@ func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 	} else if txnErr, ok := err.(proto.TransactionRestartError); ok {
 		ts.Proto.Update(txnErr.Transaction())
 	}
+	return nil, pErr
 }
 
 // Txn is an in-progress distributed database transaction. A Txn is not safe for
@@ -275,9 +280,9 @@ func (txn *Txn) DelRange(begin, end interface{}) error {
 // Upon completion, Batch.Results will contain the results for each
 // operation. The order of the results matches the order the operations were
 // added to the batch.
-func (txn *Txn) Run(b *Batch) error {
+func (txn *Txn) Run(b *Batch) *proto.Error {
 	if err := b.prepare(); err != nil {
-		return err
+		return proto.NewError(err)
 	}
 	return sendAndFill(txn.send, b)
 }
@@ -309,7 +314,7 @@ func (txn *Txn) CommitNoCleanup() error {
 func (txn *Txn) CommitInBatch(b *Batch) error {
 	b.calls = append(b.calls, endTxnCall(true /* commit */, txn.systemDBTrigger))
 	b.initResult(1, 0, nil)
-	return txn.Run(b)
+	return txn.Run(b).GoError()
 }
 
 // Commit sends an EndTransactionRequest with Commit=true.
@@ -325,7 +330,7 @@ func (txn *Txn) Rollback() error {
 }
 
 func (txn *Txn) sendEndTxnCall(commit bool) error {
-	return txn.send(endTxnCall(commit, txn.systemDBTrigger))
+	return txn.send(endTxnCall(commit, txn.systemDBTrigger)).GoError()
 }
 
 func endTxnCall(commit bool, hasTrigger bool) proto.Call {
@@ -381,9 +386,9 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous).
-func (txn *Txn) send(calls ...proto.Call) error {
+func (txn *Txn) send(calls ...proto.Call) *proto.Error {
 	if txn.Proto.Status != proto.PENDING {
-		return util.Errorf("attempting to use %s transaction", txn.Proto.Status)
+		return proto.NewError(util.Errorf("attempting to use %s transaction", txn.Proto.Status))
 	}
 
 	lastIndex := len(calls) - 1
@@ -402,7 +407,7 @@ func (txn *Txn) send(calls ...proto.Call) error {
 		request := call.Args
 
 		if req, ok := request.(*proto.EndTransactionRequest); ok {
-			return util.Errorf("%s sent as non-terminal call", req.Method())
+			return proto.NewError(util.Errorf("%s sent as non-terminal call", req.Method()))
 		}
 
 		if !haveTxnWrite {
@@ -418,8 +423,8 @@ func (txn *Txn) send(calls ...proto.Call) error {
 		calls = calls[:lastIndex]
 	}
 
-	err := txn.db.send(calls...)
-	if elideEndTxn && err == nil {
+	pErr := txn.db.send(calls...)
+	if elideEndTxn && pErr == nil {
 		// This normally happens on the server and sent back in response
 		// headers, but this transaction was optimized away. The caller may
 		// still inspect the transaction struct, so we manually update it
@@ -430,5 +435,5 @@ func (txn *Txn) send(calls ...proto.Call) error {
 			txn.Proto.Status = proto.ABORTED
 		}
 	}
-	return err
+	return pErr
 }

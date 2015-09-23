@@ -1092,7 +1092,18 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 		}
 
 		switch n.Operator {
-		case parser.EQ, parser.NE, parser.GE, parser.LE:
+		case parser.EQ:
+			// Translate "(a, b) = (1, 2)" to "(a, b) IN ((1, 2))".
+			switch n.Left.(type) {
+			case parser.Tuple:
+				return &parser.ComparisonExpr{
+					Operator: parser.In,
+					Left:     n.Left,
+					Right:    parser.DTuple{n.Right.(parser.Datum)},
+				}
+			}
+			return n
+		case parser.NE, parser.GE, parser.LE:
 			return n
 		case parser.GT:
 			// This simplification is necessary so that subsequent transformation of

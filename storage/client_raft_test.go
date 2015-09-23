@@ -579,7 +579,7 @@ func getRangeMetadata(key proto.Key, mtc *multiTestContext, t *testing.T) proto.
 		},
 		Reply: &reply,
 	})
-	if err := mtc.db.Run(b); err != nil {
+	if err := mtc.db.Run(b).GoError(); err != nil {
 		t.Fatalf("error getting range metadata: %s", err)
 	}
 	if a, e := len(reply.Ranges), 1; a != e {

@@ -112,7 +112,7 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 			batchRead := &client.Batch{}
 			batchRead.Get(from)
 			batchRead.Get(to)
-			if err := runner.Run(batchRead); err != nil {
+			if err := runner.Run(batchRead).GoError(); err != nil {
 				return err
 			}
 			// Read from value.
@@ -143,7 +143,7 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 				batchWrite.Put(from, fromValue)
 				batchWrite.Put(to, toValue)
 			}
-			return runner.Run(batchWrite)
+			return runner.Run(batchWrite).GoError()
 		}
 		var err error
 		if *useTransaction {
@@ -198,7 +198,7 @@ func (bank *Bank) initBankAccounts(cash int64) int64 {
 				newCash += cash
 			}
 		}
-		return txn.Run(batch)
+		return txn.Run(batch).GoError()
 	}); err != nil {
 		log.Fatal(err)
 	}

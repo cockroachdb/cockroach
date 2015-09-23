@@ -84,7 +84,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	b.Del(MakeZoneKey(desc.ID))
 	// Mark transaction as operating on the system DB.
 	p.txn.SetSystemDBTrigger()
-	if err := p.txn.Run(b); err != nil {
+	if err := p.txn.Run(b).GoError(); err != nil {
 		return nil, err
 	}
 	return &valuesNode{}, nil
@@ -156,7 +156,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		p.txn.SetSystemDBTrigger()
 	}
 
-	if err := p.txn.Run(&b); err != nil {
+	if err := p.txn.Run(&b).GoError(); err != nil {
 		return nil, err
 	}
 
@@ -221,7 +221,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		b.Del(MakeZoneKey(tableDesc.ID))
 		// Mark transaction as operating on the system DB.
 		p.txn.SetSystemDBTrigger()
-		if err := p.txn.Run(b); err != nil {
+		if err := p.txn.Run(b).GoError(); err != nil {
 			return nil, err
 		}
 	}

@@ -384,7 +384,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	}
 	defer trace.Epoch("request leader lease")()
 	// Otherwise, no active lease: Request renewal.
-	err := r.requestLeaderLease(timestamp)
+	err := unwrapIndexedError(r.requestLeaderLease(timestamp))
 
 	// Getting a LeaseRejectedError back means someone else got there first;
 	// we can redirect if they cover our timestamp. Note that it can't be us,
@@ -1179,7 +1179,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *pr
 		}
 
 		if err != nil {
-			return nil, intents, &errWithIndex{err: err, index: index}
+			return nil, intents, &errWithIndex{err: err, index: int32(index)}
 		}
 
 		// Add the response to the batch, updating the timestamp.
@@ -1338,9 +1338,9 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// still be careful though, a retry could happen and race with args.
 		args := gogoproto.Clone(item.args).(proto.Request)
 		stopper.RunAsyncTask(func() {
-			err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
+			err := unwrapIndexedError(r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
 				Intents: item.intents,
-			}, r, args, proto.CLEANUP_TXN)
+			}, r, args, proto.CLEANUP_TXN))
 			if wiErr, ok := err.(*proto.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 			}
@@ -1505,7 +1505,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		b.InternalAddCall(proto.Call{Args: ba, Reply: &proto.BatchResponse{}})
 		action := func() {
 			// TODO(tschottdorf): no tracing here yet.
-			if err := r.rm.DB().Run(b); err != nil {
+			if err := r.rm.DB().Run(b).GoError(); err != nil {
 				log.Warningf("unable to resolve intent: %s", err)
 			}
 		}

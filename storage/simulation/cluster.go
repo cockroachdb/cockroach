@@ -20,8 +20,11 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math/rand"
+	"os"
 	"sort"
+	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -48,14 +51,17 @@ type Cluster struct {
 	stores        map[proto.StoreID]*Store
 	storeIDs      proto.StoreIDSlice // sorted
 	ranges        map[proto.RangeID]*Range
+	rangeIDs      proto.RangeIDSlice // sorted
 	rand          *rand.Rand
 	seed          int64
 	epoch         int
+	epochWriter   *tabwriter.Writer
+	actionWriter  io.Writer
 }
 
 // createCluster generates a new cluster using the provided stopper and the
 // number of nodes supplied. Each node will have one store to start.
-func createCluster(stopper *stop.Stopper, nodeCount int) *Cluster {
+func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWriter io.Writer) *Cluster {
 	rand, seed := randutil.NewPseudoRand()
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
@@ -74,6 +80,8 @@ func createCluster(stopper *stop.Stopper, nodeCount int) *Cluster {
 		ranges:        make(map[proto.RangeID]*Range),
 		rand:          rand,
 		seed:          seed,
+		epochWriter:   tabwriter.NewWriter(os.Stdout, 8, 1, 2, ' ', 0),
+		actionWriter:  actionWriter,
 	}
 
 	// Add the nodes.
@@ -84,6 +92,11 @@ func createCluster(stopper *stop.Stopper, nodeCount int) *Cluster {
 	// Add a single range and add to this first node's first store.
 	firstRange := c.addRange()
 	firstRange.addReplica(c.stores[0])
+
+	// Output the first epoch header.
+	c.OutputEpochHeader()
+	c.OutputEpoch()
+
 	return c
 }
 
@@ -91,11 +104,11 @@ func createCluster(stopper *stop.Stopper, nodeCount int) *Cluster {
 func (c *Cluster) addNewNodeWithStore() {
 	nodeID := proto.NodeID(len(c.nodes))
 	c.nodes[nodeID] = newNode(nodeID, c.gossip)
-	c.addStore(nodeID)
+	c.addStore(nodeID, false)
 }
 
 // addStore adds a new store to the node with the provided nodeID.
-func (c *Cluster) addStore(nodeID proto.NodeID) *Store {
+func (c *Cluster) addStore(nodeID proto.NodeID, output bool) *Store {
 	n := c.nodes[nodeID]
 	s := n.addNewStore()
 	storeID, _ := s.getIDs()
@@ -104,8 +117,11 @@ func (c *Cluster) addStore(nodeID proto.NodeID) *Store {
 	// Save a sorted array of store IDs to avoid having to calculate them
 	// multiple times.
 	c.storeIDs = append(c.storeIDs, storeID)
-	sort.Sort(proto.StoreIDSlice(c.storeIDs))
+	sort.Sort(c.storeIDs)
 
+	if output {
+		c.OutputEpochHeader()
+	}
 	return s
 }
 
@@ -115,6 +131,12 @@ func (c *Cluster) addRange() *Range {
 	rangeID := proto.RangeID(len(c.ranges))
 	newRng := newRange(rangeID, c.allocator)
 	c.ranges[rangeID] = newRng
+
+	// Save a sorted array of range IDs to avoid having to calculate them
+	// multiple times.
+	c.rangeIDs = append(c.rangeIDs, rangeID)
+	sort.Sort(c.rangeIDs)
+
 	return newRng
 }
 
@@ -161,7 +183,7 @@ func (c *Cluster) runEpoch() {
 	c.performActions()
 
 	// Output the update.
-	fmt.Println(c.StringEpoch())
+	c.OutputEpoch()
 }
 
 // gossipStores gossips all the most recent status for all stores.
@@ -176,7 +198,7 @@ func (c *Cluster) gossipStores() {
 	c.storeGossiper.GossipWithFunction(c.storeIDs, func() {
 		for storeID, store := range c.stores {
 			if err := store.gossipStore(storesRangeCounts[storeID]); err != nil {
-				fmt.Printf("Error gossiping store %d: %s\n", storeID, err)
+				fmt.Fprintf(c.actionWriter, "Error gossiping store %d: %s\n", storeID, err)
 			}
 		}
 	})
@@ -201,26 +223,30 @@ func (c *Cluster) prepareActions() {
 
 // performActions performs a single action, if required, for each range.
 func (c *Cluster) performActions() {
-	for rangeID, r := range c.ranges {
+	// TODO(Bram): convert this to run a single action per store instead of a
+	// single action per range.
+	for _, rangeID := range c.rangeIDs {
+		r := c.ranges[rangeID]
 		nextAction, rebalance := r.getNextAction()
 		switch nextAction {
 		case storage.AllocatorAdd:
 			newStoreID, err := r.getAllocateTarget()
 			if err != nil {
-				fmt.Printf("Error: %s\n", err)
+				fmt.Fprintf(c.actionWriter, "Error: %s\n", err)
 				continue
 			}
+			fmt.Fprintf(c.actionWriter, "%d: Range:%d - Add:%d\n", c.epoch, rangeID, newStoreID)
 			r.addReplica(c.stores[newStoreID])
 		case storage.AllocatorRemoveDead:
 			// TODO(bram): implement this.
-			fmt.Printf("Range %d - Repair\n", rangeID)
+			fmt.Fprintf(c.actionWriter, "%d: Range:%d - Repair\n", c.epoch, rangeID)
 		case storage.AllocatorRemove:
 			// TODO(bram): implement this.
-			fmt.Printf("Range %d - Remove\n", rangeID)
+			fmt.Fprintf(c.actionWriter, "%d: Range:%d - Remove\n", c.epoch, rangeID)
 		case storage.AllocatorNoop:
 			if rebalance {
 				// TODO(bram): implement this.
-				fmt.Printf("Range %d - Rebalance\n", rangeID)
+				fmt.Fprintf(c.actionWriter, "%d: Range:%d - Rebalance\n", c.epoch, rangeID)
 			}
 		}
 	}
@@ -272,21 +298,20 @@ func (c *Cluster) String() string {
 	return buf.String()
 }
 
-// StringEpochHeader creates the string header for epoch outputs based on all
-// of the current stores.
-func (c *Cluster) StringEpochHeader() string {
-	var buf bytes.Buffer
-	buf.WriteString("Store:\t")
+// OutputEpochHeader outputs to the epoch writer the header for epoch outputs
+// based on all of the current stores.
+func (c *Cluster) OutputEpochHeader() {
+	fmt.Fprintf(c.epochWriter, "Store:\t")
 	for _, storeID := range c.storeIDs {
-		fmt.Fprintf(&buf, "%d\t", storeID)
+		fmt.Fprintf(c.epochWriter, "%d\t", storeID)
 	}
-	return buf.String()
+	fmt.Fprintf(c.epochWriter, "\n")
 }
 
-// StringEpoch create a string with the current free capacity for all stores.
-func (c *Cluster) StringEpoch() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%d:\t", c.epoch)
+// OutputEpoch writes to the epochWRiter the current free capacity for all
+// stores.
+func (c *Cluster) OutputEpoch() {
+	fmt.Fprintf(c.epochWriter, "%d:\t", c.epoch)
 
 	// TODO(bram): Consider saving this map in the cluster instead of
 	// recalculating it each time.
@@ -300,7 +325,7 @@ func (c *Cluster) StringEpoch() string {
 	for _, storeID := range c.storeIDs {
 		store := c.stores[proto.StoreID(storeID)]
 		capacity := store.getCapacity(storesRangeCounts[proto.StoreID(storeID)])
-		fmt.Fprintf(&buf, "%.0f%%\t", float64(capacity.Available)/float64(capacity.Capacity)*100)
+		fmt.Fprintf(c.epochWriter, "%.0f%%\t", float64(capacity.Available)/float64(capacity.Capacity)*100)
 	}
-	return buf.String()
+	fmt.Fprintf(c.epochWriter, "\n")
 }

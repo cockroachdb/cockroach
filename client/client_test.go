@@ -69,11 +69,15 @@ func (ss *notifyingSender) wait() {
 	ss.waiter = nil
 }
 
-func (ss *notifyingSender) Send(ctx context.Context, call proto.Call) {
-	ss.wrapped.Send(ctx, call)
+func (ss *notifyingSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+	br, pErr := ss.wrapped.Send(ctx, ba)
+	if br != nil && br.Error != nil {
+		panic(proto.ErrorUnexpectedlySet(ss.wrapped, br))
+	}
 	if ss.waiter != nil {
 		ss.waiter.Done()
 	}
+	return br, pErr
 }
 
 func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.DB {
@@ -403,7 +407,7 @@ func TestClientBatch(t *testing.T) {
 			b.Inc(key, int64(i))
 		}
 
-		if err := db.Run(b); err != nil {
+		if err := db.Run(b).GoError(); err != nil {
 			t.Error(err)
 		}
 
@@ -419,7 +423,7 @@ func TestClientBatch(t *testing.T) {
 		b := &client.Batch{}
 		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
 		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
-		if err := db.Run(b); err != nil {
+		if err := db.Run(b).GoError(); err != nil {
 			t.Error(err)
 		}
 
@@ -450,7 +454,7 @@ func TestClientBatch(t *testing.T) {
 		b := &client.Batch{}
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
-		if err := db.Run(b); err != nil {
+		if err := db.Run(b).GoError(); err != nil {
 			t.Error(err)
 		}
 
@@ -488,7 +492,7 @@ func TestClientBatch(t *testing.T) {
 
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
-		if err := db.Run(b); err == nil {
+		if err := db.Run(b).GoError(); err == nil {
 			t.Error("unexpected success")
 		} else {
 			var foundError bool
@@ -514,7 +518,7 @@ func TestClientBatch(t *testing.T) {
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
 		if err := db.Txn(func(txn *client.Txn) error {
-			return txn.Run(b)
+			return txn.Run(b).GoError()
 		}); err == nil {
 			t.Error("unexpected success")
 		} else {

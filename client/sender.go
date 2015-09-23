@@ -41,29 +41,19 @@ var defaultRetryOptions = retry.Options{
 	MaxRetries:     5,
 }
 
-// BatchSender is a new incarnation of client.Sender which only supports batches
-// and uses a request-response pattern.
-// TODO(tschottdorf): do away with client.Sender.
-// TODO(tschottdorf) s/Batch// when client.Sender is out of the way.
-type BatchSender interface {
-	SendBatch(context.Context, proto.BatchRequest) (*proto.BatchResponse, *proto.Error)
-}
-
-// Sender is an interface for sending a request to a Key-Value
-// database backend.
+// Sender is the interface used to call into a Cockroach instance.
+// If the returned *proto.Error is not nil, no response should be returned.
 type Sender interface {
-	// Send invokes the Call.Method with Call.Args and sets the result
-	// in Call.Reply.
-	Send(context.Context, proto.Call)
+	Send(context.Context, proto.BatchRequest) (*proto.BatchResponse, *proto.Error)
 }
 
 // SenderFunc is an adapter to allow the use of ordinary functions
 // as Senders.
-type SenderFunc func(context.Context, proto.Call)
+type SenderFunc func(context.Context, proto.BatchRequest) (*proto.BatchResponse, *proto.Error)
 
 // Send calls f(ctx, c).
-func (f SenderFunc) Send(ctx context.Context, c proto.Call) {
-	f(ctx, c)
+func (f SenderFunc) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+	return f(ctx, ba)
 }
 
 // NewSenderFunc creates a new sender for the registered scheme.

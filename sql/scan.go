@@ -296,7 +296,7 @@ func (n *scanNode) initScan() bool {
 			b.Scan(n.spans[i].start, n.spans[i].end, 0)
 		}
 	}
-	if n.err = n.txn.Run(b); n.err != nil {
+	if n.err = n.txn.Run(b).GoError(); n.err != nil {
 		return false
 	}
 

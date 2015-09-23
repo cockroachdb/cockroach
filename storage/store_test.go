@@ -82,46 +82,37 @@ type responseAdder interface {
 	Add(reply proto.Response)
 }
 
-func safeSetGoError(reply proto.Response, err error) {
-	if reply.Header().Error != nil {
-		panic(proto.ErrorUnexpectedlySet)
-	}
-	reply.Header().SetGoError(err)
-}
-
 // Send forwards the call to the single store. This is a poor man's
-// version of kv/txn_coord_sender, but it serves the purposes of
+// version of kv.TxnCoordSender, but it serves the purposes of
 // supporting tests in this package. Transactions are not supported.
 // Since kv/ depends on storage/, we can't get access to a
-// txn_coord_sender from here.
-func (db *testSender) Send(_ context.Context, call proto.Call) {
-	switch call.Args.(type) {
-	case *proto.EndTransactionRequest:
-		safeSetGoError(call.Reply, util.Errorf("%s method not supported", call.Method()))
-		return
+// TxnCoordSender from here.
+// TODO(tschottdorf): {kv->storage}.LocalSender
+func (db *testSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+	if et, ok := ba.GetArg(proto.EndTransaction); ok {
+		return nil, proto.NewError(util.Errorf("%s method not supported", et.Method()))
 	}
 	// Lookup range and direct request.
-	header := call.Args.Header()
-	if rng := db.store.LookupReplica(header.Key, header.EndKey); rng != nil {
-		header.RangeID = rng.Desc().RangeID
-		replica := rng.GetReplica()
-		if replica == nil {
-			safeSetGoError(call.Reply, util.Errorf("own replica missing in range"))
-		}
-		header.Replica = *replica
-		reply, err := db.store.ExecuteCmd(context.Background(), call.Args)
-		if reply != nil {
-			gogoproto.Merge(call.Reply, reply)
-		}
-		if call.Reply.Header().Error != nil {
-			panic(proto.ErrorUnexpectedlySet)
-		}
-		if err != nil {
-			call.Reply.Header().Error = err
-		}
-	} else {
-		safeSetGoError(call.Reply, proto.NewRangeKeyMismatchError(header.Key, header.EndKey, nil))
+	key, endKey := keys.Range(ba)
+	rng := db.store.LookupReplica(key, endKey)
+	if rng == nil {
+		return nil, proto.NewError(proto.NewRangeKeyMismatchError(key, endKey, nil))
 	}
+	ba.RangeID = rng.Desc().RangeID
+	replica := rng.GetReplica()
+	if replica == nil {
+		return nil, proto.NewError(util.Errorf("own replica missing in range"))
+	}
+	ba.Replica = *replica
+	reply, pErr := db.store.ExecuteCmd(ctx, &ba)
+	br, _ := reply.(*proto.BatchResponse)
+	if br != nil && br.Error != nil {
+		panic(proto.ErrorUnexpectedlySet(db.store, br))
+	}
+	if pErr != nil {
+		return nil, pErr
+	}
+	return br, nil
 }
 
 // createTestStoreWithoutStart creates a test store using an in-memory
@@ -471,6 +462,41 @@ func TestStoreExecuteNoop(t *testing.T) {
 	reply = reply.(*proto.BatchResponse).Responses[1].GetInner()
 	if _, ok := reply.(*proto.NoopResponse); !ok {
 		t.Errorf("expected *proto.NoopResponse, got %T", reply)
+	}
+}
+
+// TestStoreErrorWithIndex verifies that an *errWithIndex returned from the
+// replica is correctly translated into a *proto.Error with a corresponding
+// Index. See the companion test TestBatchWithError.
+func TestStoreErrorWithIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	ba := &proto.BatchRequest{}
+	ba.RangeID = tc.rng.Desc().RangeID
+	ba.Replica.StoreID = tc.store.StoreID()
+	ba.Add(&proto.PutRequest{
+		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
+		Value:         proto.Value{Bytes: []byte("not nil")},
+	})
+	ba.Add(&proto.ConditionalPutRequest{
+		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
+		Value:         proto.Value{Bytes: []byte("irrelevant")},
+		ExpValue:      nil, // not true after above Put
+	})
+	// This one is never executed.
+	ba.Add(&proto.GetRequest{
+		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
+	})
+
+	_, pErr := tc.store.ExecuteCmd(context.Background(), ba)
+	if pErr == nil {
+		t.Fatal("expected an error")
+	}
+	if pErr.GetIndex().GetIndex() != 1 {
+		t.Fatalf("proto.Error has no index: %+v", pErr)
 	}
 }
 

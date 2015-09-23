@@ -56,9 +56,9 @@ func NodeStatusKey(nodeID int32) proto.Key {
 	return MakeKey(StatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID)))
 }
 
-// MakeLocalRangeKeyPrefix creates a range-local key prefix from
+// MakeRangeIDPrefix creates a range-local key prefix from
 // rangeID.
-func MakeLocalRangeKeyPrefix(rangeID proto.RangeID) proto.Key {
+func MakeRangeIDPrefix(rangeID proto.RangeID) proto.Key {
 	return MakeKey(LocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(rangeID)))
 }
 
@@ -69,7 +69,7 @@ func MakeRangeIDKey(rangeID proto.RangeID, suffix, detail proto.Key) proto.Key {
 	if len(suffix) != LocalSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, LocalSuffixLength))
 	}
-	return MakeKey(MakeLocalRangeKeyPrefix(rangeID), suffix, detail)
+	return MakeKey(MakeRangeIDPrefix(rangeID), suffix, detail)
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
@@ -342,10 +342,10 @@ func MakeTablePrefix(tableID uint32) []byte {
 // through the cracks.
 // TODO(tschottdorf): ideally method on *BatchRequest. See #2198.
 // TODO(tschottdorf): return a keys.Span?
-func Range(br proto.BatchRequest) (proto.Key, proto.Key) {
+func Range(ba proto.BatchRequest) (proto.Key, proto.Key) {
 	from := proto.KeyMax
 	to := proto.KeyMin
-	for _, arg := range br.Requests {
+	for _, arg := range ba.Requests {
 		req := arg.GetInner()
 		if req.Method() == proto.Noop {
 			continue

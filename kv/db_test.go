@@ -171,7 +171,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		}
 		b := &client.Batch{}
 		b.InternalAddCall(proto.Call{Args: args, Reply: args.CreateReply()})
-		err := db.Run(b)
+		err := db.Run(b).GoError()
 		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())
 		} else if !testutils.IsError(err, "(couldn't find method|contains commit trigger)") {
@@ -184,7 +184,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		b = &client.Batch{}
 		b.InternalAddCall(proto.Call{Args: ba, Reply: &proto.BatchResponse{}})
 
-		if err := db.Run(b); err == nil {
+		if err := db.Run(b).GoError(); err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())
 		} else if !testutils.IsError(err, "(contains an internal request|contains commit trigger)") {
 			t.Errorf("%d: expected disallowed method error %s; got %s", i, args.Method(), err)
@@ -255,14 +255,14 @@ func TestAuthentication(t *testing.T) {
 	// Create a "node" client and call Run() on it which lets us build
 	// our own request, specifying the user.
 	db1 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
-	if err := db1.Run(b); err != nil {
+	if err := db1.Run(b).GoError(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Try again, but this time with certs for a non-node user (even the root
 	// user has no KV permissions).
 	db2 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
-	if err := db2.Run(b); err == nil {
+	if err := db2.Run(b).GoError(); err == nil {
 		t.Fatal("Expected error!")
 	}
 }

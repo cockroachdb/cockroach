@@ -1165,7 +1165,7 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 		if err := splitRangeAddressing(b, newDesc, &updatedDesc); err != nil {
 			return err
 		}
-		if err := txn.Run(b); err != nil {
+		if err := txn.Run(b).GoError(); err != nil {
 			return err
 		}
 		// Update the RangeTree.
@@ -1188,7 +1188,7 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return txn.Run(b)
+		return txn.Run(b).GoError()
 	}); err != nil {
 		return reply, util.Errorf("split at key %s failed: %s", splitKey, err)
 	}
@@ -1325,7 +1325,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.R
 			}
 			// Commit this batch on its own to ensure that the transaction record
 			// is created in the right place (our triggers rely on this).
-			if err := txn.Run(b); err != nil {
+			if err := txn.Run(b).GoError(); err != nil {
 				return err
 			}
 		}
@@ -1351,8 +1351,9 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.R
 			return util.Errorf("ranges not collocated")
 		}
 
-		// Remove the range descriptor for the deleted range.
 		b := &client.Batch{}
+
+		// Remove the range descriptor for the deleted range.
 		b.Del(rightDescKey)
 
 		if err := mergeRangeAddressing(b, origLeftDesc, &updatedLeftDesc); err != nil {
@@ -1379,7 +1380,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.R
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return txn.Run(b)
+		return txn.Run(b).GoError()
 	}); err != nil {
 		return reply, util.Errorf("merge of range into %d failed: %s", origLeftDesc.RangeID, err)
 	}
@@ -1408,6 +1409,12 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) e
 	// Copy the subsumed range's response cache to the subsuming one.
 	if err := r.respCache.CopyFrom(batch, merge.SubsumedRangeID); err != nil {
 		return util.Errorf("unable to copy response cache to new split range: %s", err)
+	}
+
+	// Remove the subsumed range's metadata.
+	localRangeKeyPrefix := keys.MakeRangeIDPrefix(merge.SubsumedRangeID)
+	if _, err := engine.MVCCDeleteRange(batch, nil, localRangeKeyPrefix, localRangeKeyPrefix.PrefixEnd(), 0, proto.ZeroTimestamp, nil); err != nil {
+		return util.Errorf("cannot remove range metadata %s", err)
 	}
 
 	// Compute stats for updated range.
@@ -1532,7 +1539,7 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return txn.Run(b)
+		return txn.Run(b).GoError()
 	})
 	if err != nil {
 		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, err)

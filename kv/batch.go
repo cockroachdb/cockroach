@@ -114,8 +114,8 @@ func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to prot
 // SenderFn is a function that implements a Sender.
 type senderFn func(context.Context, proto.BatchRequest) (*proto.BatchResponse, *proto.Error)
 
-// SendBatch implements batch.Sender.
-func (f senderFn) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+// Send implements batch.Sender.
+func (f senderFn) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	return f(ctx, ba)
 }
 
@@ -126,11 +126,11 @@ type chunkingSender struct {
 
 // NewChunkingSender returns a new chunking sender which sends through the supplied
 // SenderFn.
-func newChunkingSender(f senderFn) client.BatchSender {
+func newChunkingSender(f senderFn) client.Sender {
 	return &chunkingSender{f: f}
 }
 
-// SendBatch implements Sender.
+// Send implements Sender.
 // TODO(tschottdorf): We actually don't want to chop EndTransaction off for
 // single-range requests (but that happens now since EndTransaction has the
 // isAlone flag). Whether it is one or not is unknown right now (you can only
@@ -138,7 +138,7 @@ func newChunkingSender(f senderFn) client.BatchSender {
 // that you're multi-range. In those cases, the wrapped sender should return an
 // error so that we split and retry once the chunk which contains
 // EndTransaction (i.e. the last one).
-func (cs *chunkingSender) SendBatch(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (cs *chunkingSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	if len(ba.Requests) < 1 {
 		panic("empty batch")
 	}
