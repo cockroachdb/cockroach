@@ -1351,8 +1351,9 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.R
 			return util.Errorf("ranges not collocated")
 		}
 
-		// Remove the range descriptor for the deleted range.
 		b := &client.Batch{}
+
+		// Remove the range descriptor for the deleted range.
 		b.Del(rightDescKey)
 
 		if err := mergeRangeAddressing(b, origLeftDesc, &updatedLeftDesc); err != nil {
@@ -1408,6 +1409,12 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) e
 	// Copy the subsumed range's response cache to the subsuming one.
 	if err := r.respCache.CopyFrom(batch, merge.SubsumedRangeID); err != nil {
 		return util.Errorf("unable to copy response cache to new split range: %s", err)
+	}
+
+	// Remove the subsumed range's metadata.
+	localRangeKeyPrefix := keys.MakeRangeIDPrefix(merge.SubsumedRangeID)
+	if _, err := engine.MVCCDeleteRange(batch, nil, localRangeKeyPrefix, localRangeKeyPrefix.PrefixEnd(), 0, proto.ZeroTimestamp, nil); err != nil {
+		return util.Errorf("cannot remove range metadata %s", err)
 	}
 
 	// Compute stats for updated range.

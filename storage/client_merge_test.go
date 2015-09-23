@@ -146,7 +146,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 
 	// Keep only the subsumed range's local keys.
-	localRangeKeyPrefix := string(keys.MakeLocalRangeKeyPrefix(bDesc.RangeID))
+	localRangeKeyPrefix := string(keys.MakeRangeIDPrefix(bDesc.RangeID))
 	for k := range postKeys {
 		if !strings.HasPrefix(k, localRangeKeyPrefix) {
 			delete(postKeys, k)
