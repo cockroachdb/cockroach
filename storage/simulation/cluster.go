@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"os"
 	"sort"
 	"text/tabwriter"
 
@@ -40,23 +39,24 @@ import (
 // Cluster maintains a list of all nodes, stores and ranges as well as any
 // shared resources.
 type Cluster struct {
-	stopper       *stop.Stopper
-	clock         *hlc.Clock
-	rpc           *rpc.Context
-	gossip        *gossip.Gossip
-	storePool     *storage.StorePool
-	allocator     storage.Allocator
-	storeGossiper *gossiputil.StoreGossiper
-	nodes         map[proto.NodeID]*Node
-	stores        map[proto.StoreID]*Store
-	storeIDs      proto.StoreIDSlice // sorted
-	ranges        map[proto.RangeID]*Range
-	rangeIDs      proto.RangeIDSlice // sorted
-	rand          *rand.Rand
-	seed          int64
-	epoch         int
-	epochWriter   *tabwriter.Writer
-	actionWriter  io.Writer
+	stopper         *stop.Stopper
+	clock           *hlc.Clock
+	rpc             *rpc.Context
+	gossip          *gossip.Gossip
+	storePool       *storage.StorePool
+	allocator       storage.Allocator
+	storeGossiper   *gossiputil.StoreGossiper
+	nodes           map[proto.NodeID]*Node
+	stores          map[proto.StoreID]*Store
+	storeIDs        proto.StoreIDSlice // sorted
+	ranges          map[proto.RangeID]*Range
+	rangeIDs        proto.RangeIDSlice // sorted
+	rangeIDsByStore map[proto.StoreID]proto.RangeIDSlice
+	rand            *rand.Rand
+	seed            int64
+	epoch           int
+	epochWriter     *tabwriter.Writer
+	actionWriter    *tabwriter.Writer
 }
 
 // createCluster generates a new cluster using the provided stopper and the
@@ -68,20 +68,21 @@ func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWrit
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	storePool := storage.NewStorePool(g, storage.TestTimeUntilStoreDeadOff, stopper)
 	c := &Cluster{
-		stopper:       stopper,
-		clock:         clock,
-		rpc:           rpcContext,
-		gossip:        g,
-		storePool:     storePool,
-		allocator:     storage.MakeAllocator(storePool, storage.RebalancingOptions{}),
-		storeGossiper: gossiputil.NewStoreGossiper(g),
-		nodes:         make(map[proto.NodeID]*Node),
-		stores:        make(map[proto.StoreID]*Store),
-		ranges:        make(map[proto.RangeID]*Range),
-		rand:          rand,
-		seed:          seed,
-		epochWriter:   tabwriter.NewWriter(os.Stdout, 8, 1, 2, ' ', 0),
-		actionWriter:  actionWriter,
+		stopper:         stopper,
+		clock:           clock,
+		rpc:             rpcContext,
+		gossip:          g,
+		storePool:       storePool,
+		allocator:       storage.MakeAllocator(storePool, storage.RebalancingOptions{}),
+		storeGossiper:   gossiputil.NewStoreGossiper(g),
+		nodes:           make(map[proto.NodeID]*Node),
+		stores:          make(map[proto.StoreID]*Store),
+		ranges:          make(map[proto.RangeID]*Range),
+		rangeIDsByStore: make(map[proto.StoreID]proto.RangeIDSlice),
+		rand:            rand,
+		seed:            seed,
+		epochWriter:     tabwriter.NewWriter(epochWriter, 8, 1, 2, ' ', 0),
+		actionWriter:    tabwriter.NewWriter(actionWriter, 12, 1, 2, ' ', 0),
 	}
 
 	// Add the nodes.
@@ -92,6 +93,8 @@ func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWrit
 	// Add a single range and add to this first node's first store.
 	firstRange := c.addRange()
 	firstRange.addReplica(c.stores[0])
+
+	c.calculateRangeIDsByStore()
 
 	// Output the first epoch header.
 	c.OutputEpochHeader()
@@ -167,7 +170,8 @@ func (c *Cluster) splitRange(rangeID proto.RangeID) {
 // 2) Each replica on every range calls the allocator to determine if there are
 //    any actions required.
 // 3) The replica on each range with the highest priority executes it's action.
-// 4) The current status of the cluster is output.
+// 4) The rangesByStore map is recalculated.
+// 5) The current status of the cluster is output.
 func (c *Cluster) runEpoch() {
 	c.epoch++
 
@@ -182,23 +186,19 @@ func (c *Cluster) runEpoch() {
 	// Execute the determined operations.
 	c.performActions()
 
+	// Recalculate the ranges IDs by store map.
+	c.calculateRangeIDsByStore()
+
 	// Output the update.
 	c.OutputEpoch()
 }
 
 // gossipStores gossips all the most recent status for all stores.
 func (c *Cluster) gossipStores() {
-	storesRangeCounts := make(map[proto.StoreID]int)
-	for _, r := range c.ranges {
-		for _, storeID := range r.getStoreIDs() {
-			storesRangeCounts[storeID]++
-		}
-	}
-
 	c.storeGossiper.GossipWithFunction(c.storeIDs, func() {
 		for storeID, store := range c.stores {
-			if err := store.gossipStore(storesRangeCounts[storeID]); err != nil {
-				fmt.Fprintf(c.actionWriter, "Error gossiping store %d: %s\n", storeID, err)
+			if err := store.gossipStore(len(c.rangeIDsByStore[storeID])); err != nil {
+				fmt.Fprintf(c.actionWriter, "%d:\tError gossiping store %d: %s\n", c.epoch, storeID, err)
 			}
 		}
 	})
@@ -223,32 +223,90 @@ func (c *Cluster) prepareActions() {
 
 // performActions performs a single action, if required, for each range.
 func (c *Cluster) performActions() {
-	// TODO(Bram): convert this to run a single action per store instead of a
-	// single action per range.
-	for _, rangeID := range c.rangeIDs {
-		r := c.ranges[rangeID]
-		nextAction, rebalance := r.getNextAction()
-		switch nextAction {
-		case storage.AllocatorAdd:
-			newStoreID, err := r.getAllocateTarget()
-			if err != nil {
-				fmt.Fprintf(c.actionWriter, "Error: %s\n", err)
-				continue
-			}
-			fmt.Fprintf(c.actionWriter, "%d: Range:%d - Add:%d\n", c.epoch, rangeID, newStoreID)
-			r.addReplica(c.stores[newStoreID])
-		case storage.AllocatorRemoveDead:
-			// TODO(bram): implement this.
-			fmt.Fprintf(c.actionWriter, "%d: Range:%d - Repair\n", c.epoch, rangeID)
-		case storage.AllocatorRemove:
-			// TODO(bram): implement this.
-			fmt.Fprintf(c.actionWriter, "%d: Range:%d - Remove\n", c.epoch, rangeID)
-		case storage.AllocatorNoop:
-			if rebalance {
-				// TODO(bram): implement this.
-				fmt.Fprintf(c.actionWriter, "%d: Range:%d - Rebalance\n", c.epoch, rangeID)
+	// Once a store has started performing an action on a range, it "locks" the
+	// range and any subsequent store that tries to perform another action
+	// on the range will encounter a conflict and forfeit its action for the
+	// epoch. This is designed to be similar to what will occur when two or
+	// more stores try to perform actions against the same range descriptor. In
+	// our case, the first store numerically will always be the one that
+	// succeeds. In a real cluster, the transaction with the higher
+	// transactional priority will succeed and the others will abort.
+	usedRanges := make(map[proto.RangeID]proto.StoreID)
+	// Each store can perform a single action per epoch.
+	for _, storeID := range c.storeIDs {
+		// Find the range with the highest priority action for the replica on
+		// the store.
+		var topRangeID proto.RangeID
+		var topReplica replica
+		for _, rangeID := range c.rangeIDsByStore[storeID] {
+			replica := c.ranges[rangeID].replicas[storeID]
+			if replica.priority > topReplica.priority {
+				topRangeID = rangeID
+				topReplica = replica
 			}
 		}
+
+		if conflictStoreID, ok := usedRanges[topRangeID]; ok {
+			switch topReplica.action {
+			case storage.AllocatorAdd:
+				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tADD:conflict:%d\n",
+					c.epoch, storeID, topRangeID, conflictStoreID)
+			case storage.AllocatorRemove:
+				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREMOVE:conflict:%d\n",
+					c.epoch, storeID, topRangeID, conflictStoreID)
+			case storage.AllocatorRemoveDead:
+				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREPAIR:conflict:%d\n",
+					c.epoch, storeID, topRangeID, conflictStoreID)
+			case storage.AllocatorNoop:
+				if topReplica.rebalance {
+					fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREBALANCE:conflict:%d\n",
+						c.epoch, storeID, topRangeID, conflictStoreID)
+				}
+			}
+		} else {
+			r := c.ranges[topRangeID]
+			switch topReplica.action {
+			case storage.AllocatorAdd:
+				newStoreID, err := r.getAllocateTarget()
+				if err != nil {
+					fmt.Fprintf(c.actionWriter, "%d:\tError: %s\n", c.epoch, err)
+					continue
+				}
+				r.addReplica(c.stores[newStoreID])
+				usedRanges[topRangeID] = storeID
+				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tADD:%d\n",
+					c.epoch, storeID, topRangeID, newStoreID)
+			case storage.AllocatorRemoveDead:
+				// TODO(bram): implement this.
+				usedRanges[topRangeID] = storeID
+				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREPAIR\n", c.epoch, storeID, topRangeID)
+			case storage.AllocatorRemove:
+				// TODO(bram): implement this.
+				usedRanges[topRangeID] = storeID
+				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREMOVE\n", c.epoch, storeID, topRangeID)
+			case storage.AllocatorNoop:
+				if topReplica.rebalance {
+					// TODO(bram): implement this.
+					usedRanges[topRangeID] = storeID
+					fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREBLANCE\n", c.epoch, storeID, topRangeID)
+				}
+			}
+		}
+	}
+}
+
+// calculateRangeIDsByStore fills in the list of range ids mapped to each
+// store. This map is used for determining which operation to run for each store
+// and outputs.  It should only be run once at the end of each epoch.
+func (c *Cluster) calculateRangeIDsByStore() {
+	c.rangeIDsByStore = make(map[proto.StoreID]proto.RangeIDSlice)
+	for rangeID, r := range c.ranges {
+		for _, storeID := range r.getStoreIDs() {
+			c.rangeIDsByStore[storeID] = append(c.rangeIDsByStore[storeID], rangeID)
+		}
+	}
+	for storeID := range c.rangeIDsByStore {
+		sort.Sort(c.rangeIDsByStore[storeID])
 	}
 }
 
@@ -256,12 +314,6 @@ func (c *Cluster) performActions() {
 func (c *Cluster) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "Cluster Info:\nSeed - %d\tEpoch - %d\n", c.seed, c.epoch)
-	storesRangeCounts := make(map[proto.StoreID]int)
-	for _, r := range c.ranges {
-		for _, storeID := range r.getStoreIDs() {
-			storesRangeCounts[storeID]++
-		}
-	}
 
 	var nodeIDs proto.NodeIDSlice
 	for nodeID := range c.nodes {
@@ -279,7 +331,7 @@ func (c *Cluster) String() string {
 	buf.WriteString("Store Info:\n")
 	for _, storeID := range c.storeIDs {
 		s := c.stores[storeID]
-		buf.WriteString(s.String(storesRangeCounts[storeID]))
+		buf.WriteString(s.String(len(c.rangeIDsByStore[storeID])))
 		buf.WriteString("\n")
 	}
 
@@ -313,19 +365,15 @@ func (c *Cluster) OutputEpochHeader() {
 func (c *Cluster) OutputEpoch() {
 	fmt.Fprintf(c.epochWriter, "%d:\t", c.epoch)
 
-	// TODO(bram): Consider saving this map in the cluster instead of
-	// recalculating it each time.
-	storesRangeCounts := make(map[proto.StoreID]int)
-	for _, r := range c.ranges {
-		for _, storeID := range r.getStoreIDs() {
-			storesRangeCounts[storeID]++
-		}
-	}
-
 	for _, storeID := range c.storeIDs {
 		store := c.stores[proto.StoreID(storeID)]
-		capacity := store.getCapacity(storesRangeCounts[proto.StoreID(storeID)])
-		fmt.Fprintf(c.epochWriter, "%.0f%%\t", float64(capacity.Available)/float64(capacity.Capacity)*100)
+		capacity := store.getCapacity(len(c.rangeIDsByStore[storeID]))
+		fmt.Fprintf(c.epochWriter, "%d/%.0f%%\t", len(c.rangeIDsByStore[storeID]), float64(capacity.Available)/float64(capacity.Capacity)*100)
 	}
 	fmt.Fprintf(c.epochWriter, "\n")
+}
+
+func (c *Cluster) flush() {
+	_ = c.actionWriter.Flush()
+	_ = c.epochWriter.Flush()
 }
