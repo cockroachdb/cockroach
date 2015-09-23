@@ -11,8 +11,32 @@ var gulp = require('gulp'),
     ;
 
 
+gulp.task('clean:styles', function (cb) {
+    return del('build/css/**');
+});
+
+gulp.task('clean:js', function (cb) {
+    return del('build/js/**');
+});
+
+gulp.task('clean:index', function (cb) {
+    return del('build/index.html');
+});
+
+/* copy bower js libs */
+gulp.task('bowerjs', ['clean:js'], function () {
+    return gulp.src(paths.js)
+        .pipe(gulp.dest('build/js/libs'));
+});
+
+/* copy bower css libs */
+gulp.task('bowercss', ['clean:styles'], function () {
+    return gulp.src(paths.css)
+        .pipe(gulp.dest('build/css/libs'));
+});
+
 /* styles */
-gulp.task('styles', function () {
+gulp.task('styles', ['clean:styles', 'bowercss'], function () {
     return gulp.src('styl/app.styl')
         .pipe(stylus({
             compress: true
@@ -33,42 +57,26 @@ var paths = {
     ]
 };
 
-/* copy bower js libs */
-gulp.task('bowerjs', function () {
-    return gulp.src(paths.js)
-        .pipe(gulp.dest('build/js/libs'));
-});
-
-/* copy bower css libs */
-gulp.task('bowercss', function () {
-    return gulp.src(paths.css)
-        .pipe(gulp.dest('build/css/libs'));
-});
-
 gulp.task('bower', ['bowerjs', 'bowercss']);
 
 /* typescript */
-gulp.task('typescript', function () {
+gulp.task('typescript', ['clean:js', 'bowerjs'], function () {
     return gulp.src(['ts/app.ts', 'ts/header.ts'])
         .pipe(typescript(require('./ts/tsconfig.json').compilerOptions))
         .pipe(gulp.dest('build'));
 });
 
 /* copy index */
-gulp.task('copyindex', function () {
+gulp.task('copyindex', ['clean:index'], function () {
     return gulp.src('index.html')
         .pipe(gulp.dest('build'));
 });
 
-gulp.task('clean:build', function() {
-    return del('build/**');
+gulp.task('clean:embedded', function () {
+    return del('embedded.go');
 });
 
-gulp.task('clean:embedded', function() {
-        return del('embedded.go');
-});
-
-gulp.task('bindata', ['clean:embedded'], shell.task([
+gulp.task('bindata:dist', ['clean:embedded'], shell.task([
     'go-bindata -mode 0644 -modtime 1400000000 -pkg ui -o embedded.go build/...',
     'gofmt -s -w embedded.go',
     'goimports -w embedded.go'
@@ -79,14 +87,19 @@ gulp.task('bindata:debug', ['clean:embedded'], shell.task([
 ]));
 
 /* build */
-gulp.task('build', ['clean:build', 'styles', 'bower', 'copyindex', 'typescript' ]);
+gulp.task('build', ['styles', 'typescript', 'copyindex'], function(cb) {
+    cb();
+});
 
 /* compile */
-gulp.task('compile', ['build', 'bindata']);
+gulp.task('compile', ['build'], function () {
+    return gulp.start('bindata:dist')
+});
 
 /* debug */
-gulp.task('compile', ['build', 'bindata:debug']);
-
+gulp.task('debug', ['build'], function () {
+    return gulp.start('bindata:debug')
+});
 /* watch */
 gulp.task('watch', ['build'], function () {
     gulp.watch('styl/**/*.styl', ['styles', 'bindata']);
@@ -98,5 +111,5 @@ gulp.task('watch', ['build'], function () {
 
 /* default */
 gulp.task('default', function () {
-    gulp.start('watch');
+    return gulp.start('watch');
 });
