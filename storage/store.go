@@ -139,24 +139,6 @@ func verifyKeys(start, end proto.Key, checkEndKey bool) error {
 	return nil
 }
 
-type errWithIndex struct {
-	index int32
-	err   error
-}
-
-func (ewi *errWithIndex) Error() string {
-	return fmt.Sprintf("at %d: %s", ewi.index, ewi.err)
-}
-
-// unwrapIndexedError returns the wrapped error for an *errWithIndex, and
-// the given error otherwise.
-func unwrapIndexedError(err error) error {
-	if iErr, ok := err.(*errWithIndex); ok {
-		return iErr.err
-	}
-	return err
-}
-
 type rangeAlreadyExists struct {
 	rng *Replica
 }
@@ -1228,8 +1210,6 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			// This error needs to be converted appropriately so that
 			// clients will retry.
 			err = proto.NewRangeNotFoundError(rng.Desc().RangeID)
-		} else if iErr, ok := err.(*errWithIndex); ok {
-			err, index = iErr.err, gogoproto.Int32(iErr.index)
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
@@ -1284,7 +1264,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		}
 		pErr := proto.NewError(err)
 		if index != nil {
-			pErr.Index = &proto.Error_Index{Index: *index}
+			pErr.Index = &proto.ErrPosition{Index: *index}
 		}
 		return nil, pErr
 	}
@@ -1370,7 +1350,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	}
 
 	// Run all pushes in parallel.
-	if pushErr := s.db.Run(b).GoError(); pushErr != nil {
+	if pushErr := s.db.Run(b); pushErr != nil {
 		if log.V(1) {
 			log.Infoc(ctx, "on %s: %s", args.Method(), pushErr)
 		}

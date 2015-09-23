@@ -280,11 +280,11 @@ func (txn *Txn) DelRange(begin, end interface{}) error {
 // Upon completion, Batch.Results will contain the results for each
 // operation. The order of the results matches the order the operations were
 // added to the batch.
-func (txn *Txn) Run(b *Batch) *proto.Error {
+func (txn *Txn) Run(b *Batch) error {
 	if err := b.prepare(); err != nil {
-		return proto.NewError(err)
+		return err
 	}
-	return sendAndFill(txn.send, b)
+	return sendAndFill(txn.send, b).GoError()
 }
 
 func (txn *Txn) commit() error {
@@ -314,7 +314,7 @@ func (txn *Txn) CommitNoCleanup() error {
 func (txn *Txn) CommitInBatch(b *Batch) error {
 	b.calls = append(b.calls, endTxnCall(true /* commit */, txn.systemDBTrigger))
 	b.initResult(1, 0, nil)
-	return txn.Run(b).GoError()
+	return txn.Run(b)
 }
 
 // Commit sends an EndTransactionRequest with Commit=true.

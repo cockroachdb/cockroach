@@ -465,41 +465,6 @@ func TestStoreExecuteNoop(t *testing.T) {
 	}
 }
 
-// TestStoreErrorWithIndex verifies that an *errWithIndex returned from the
-// replica is correctly translated into a *proto.Error with a corresponding
-// Index. See the companion test TestBatchWithError.
-func TestStoreErrorWithIndex(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-
-	ba := &proto.BatchRequest{}
-	ba.RangeID = tc.rng.Desc().RangeID
-	ba.Replica.StoreID = tc.store.StoreID()
-	ba.Add(&proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
-		Value:         proto.Value{Bytes: []byte("not nil")},
-	})
-	ba.Add(&proto.ConditionalPutRequest{
-		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
-		Value:         proto.Value{Bytes: []byte("irrelevant")},
-		ExpValue:      nil, // not true after above Put
-	})
-	// This one is never executed.
-	ba.Add(&proto.GetRequest{
-		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
-	})
-
-	_, pErr := tc.store.ExecuteCmd(context.Background(), ba)
-	if pErr == nil {
-		t.Fatal("expected an error")
-	}
-	if pErr.GetIndex().GetIndex() != 1 {
-		t.Fatalf("proto.Error has no index: %+v", pErr)
-	}
-}
-
 // TestStoreVerifyKeys checks that key length is enforced and
 // that end keys must sort >= start.
 func TestStoreVerifyKeys(t *testing.T) {

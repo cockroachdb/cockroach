@@ -432,11 +432,11 @@ func sendAndFill(send func(...proto.Call) *proto.Error, b *Batch) *proto.Error {
 // Upon completion, Batch.Results will contain the results for each
 // operation. The order of the results matches the order the operations were
 // added to the batch.
-func (db *DB) Run(b *Batch) *proto.Error {
+func (db *DB) Run(b *Batch) error {
 	if err := b.prepare(); err != nil {
-		return proto.NewError(err)
+		return err
 	}
-	return sendAndFill(db.send, b)
+	return sendAndFill(db.send, b).GoError()
 }
 
 // Txn executes retryable in the context of a distributed transaction. The
@@ -514,20 +514,20 @@ func (db *DB) send(calls ...proto.Call) (pErr *proto.Error) {
 
 // Runner only exports the Run method on a batch of operations.
 type Runner interface {
-	Run(b *Batch) *proto.Error
+	Run(b *Batch) error
 }
 
 func runOneResult(r Runner, b *Batch) (Result, error) {
-	if pErr := r.Run(b); pErr != nil {
-		return Result{Err: pErr.GoError()}, pErr.GoError()
+	if err := r.Run(b); err != nil {
+		return Result{Err: err}, err
 	}
 	res := b.Results[0]
 	return res, res.Err
 }
 
 func runOneRow(r Runner, b *Batch) (KeyValue, error) {
-	if pErr := r.Run(b); pErr != nil {
-		return KeyValue{}, pErr.GoError()
+	if err := r.Run(b); err != nil {
+		return KeyValue{}, err
 	}
 	res := b.Results[0]
 	return res.Rows[0], res.Err

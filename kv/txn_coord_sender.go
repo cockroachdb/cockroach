@@ -20,7 +20,6 @@ package kv
 
 import (
 	"fmt"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -694,10 +693,12 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 		newTxn.Timestamp.Forward(t.Txn.Timestamp)
 		newTxn.Restart(ba.GetUserPriority(), t.Txn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
-	}
-	// TODO(tschottdorf): temporary assertion.
-	if txnErr, ok := err.(proto.TransactionRestartError); ok && txnErr.Transaction() != nil && !reflect.DeepEqual(txnErr.Transaction(), newTxn) {
-		panic(fmt.Sprintf("%T did not have the latest transaction updates", txnErr))
+	case proto.TransactionRestartError:
+		// Assertion: The above cases should exhaust all ErrorDetails which
+		// carry a Transaction.
+		if pErr.Detail != nil {
+			panic(fmt.Sprintf("unhandled TransactionRestartError %T", err))
+		}
 	}
 
 	if len(newTxn.ID) > 0 {

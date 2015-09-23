@@ -515,7 +515,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
 			if pErr != nil {
-				if rErr, ok := pErr.GoError().(retry.Retryable); ok && rErr.CanRetry() {
+				if pErr.Retryable {
 					if log.V(1) {
 						log.Warning(pErr)
 					}
