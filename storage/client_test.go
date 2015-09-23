@@ -26,7 +26,9 @@ client_*.go.
 package storage_test
 
 import (
+	"fmt"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -219,68 +221,31 @@ func (m *multiTestContext) Stop() {
 
 // rpcSend implements the client.rpcSender interface. This implementation of "rpcSend" is
 // used to multiplex calls between many local senders in a simple way; It sends
-// the request to each localSender of a multiTestContext in order, stopping if
-// the request succeeds or any error other than RangeKeyMismatch is returned.
-//
-// TODO(mrtracy): remove once #2141 is merged and multiTestContext begins using
-// DistSender. This simple implementation will likely be incorrect in some
-// untested cases and is a temporary measure until DistSender is hooked up.
-func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, _ []net.Addr,
+// the request to multiTestContext's localSenders specified in addrs. The request is
+// sent in order until no error is returned.
+func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 	getArgs func(addr net.Addr) gogoproto.Message,
 	getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-	maxRetries := len(m.senders) * 2
-	// Iterate over all stores in the test context, looking for a suitable
-	// replica. In the case of a RangeKeyMismatchError, retry the request on the
-	// next store. In the case of a NotLeaderError, attempt the new leader next.
-	// Because NotLeaderErrors will adjust the index of our loop, a second
-	// "maxRetries" count is used to bound the number of retries.
-	nextIdx := 0
 	var reply proto.Response
 	var err error
-	for total := 0; total < maxRetries; total++ {
+	for _, addr := range addrs {
 		args := getArgs(nil /* net.Addr */).(proto.Request)
-		reply, err = batchutil.SendWrapped(m.senders[nextIdx], args)
+		// Node ID is encoded in the address.
+		nodeID, stErr := strconv.Atoi(addr.String())
+		if stErr != nil {
+			m.t.Fatal(stErr)
+		}
+		reply, err = batchutil.SendWrapped(m.senders[nodeID-1], args)
 		if err == nil {
 			return []gogoproto.Message{reply}, nil
 		}
-		switch err := err.(type) {
-		case *proto.RangeKeyMismatchError:
-			// Try the next localSender if this localSender did not have the
-			// requested range.
-			nextIdx++
-			nextIdx %= len(m.senders)
-			continue
-		case *proto.NotLeaderError:
+		if nlErr, ok := err.(*proto.NotLeaderError); ok && nlErr.Leader == nil {
 			// localSender has the range, is *not* the Leader, but the
 			// Leader is not known; this can happen if the leader is removed
 			// from the group. Move the manual clock forward in an attempt to
-			// expire the lease. Also increment nextIdx: the discovered replica might be
-			// a removed copy which has not been GCed.
-			if err.Leader == nil {
-				m.expireLeaderLeases()
-				nextIdx++
-				nextIdx %= len(m.senders)
-				continue
-			}
-			// If the leader IS known, retry the request against the leader.
-			foundLeader := false
-			for i, s := range m.stores {
-				if s.StoreID() == err.Leader.StoreID {
-					nextIdx = i
-					foundLeader = true
-					break
-				}
-			}
-			// If the current leader was known but wasn't found in our
-			// collection of stores, break out of the loop; this should
-			// never happen in a correctly configured test.
-			if !foundLeader {
-				m.t.Fatalf("leader %s was not part of known set of stores in multiTestContext",
-					err.Leader)
-			}
-			continue
+			// expire the lease.
+			m.expireLeaderLeases()
 		}
-		break
 	}
 	if err == nil {
 		panic("err must not be nil here")
@@ -367,7 +332,12 @@ func (m *multiTestContext) addStore() {
 // gossipNodeDesc adds the node descriptor to the gossip network.
 // Mostly makes sure that we don't see a warning per request.
 func gossipNodeDesc(g *gossip.Gossip, nodeID proto.NodeID) error {
-	nodeDesc := &proto.NodeDescriptor{NodeID: nodeID}
+	nodeDesc := &proto.NodeDescriptor{
+		NodeID: nodeID,
+		// Encode the node ID in the address so that rpcSend
+		// can figure out where requests must be sent.
+		Address: util.MakeUnresolvedAddr("localhost", fmt.Sprintf("%d", nodeID)),
+	}
 	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID), nodeDesc, time.Hour); err != nil {
 		return err
 	}
