@@ -368,6 +368,9 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 	// and just write to it at any time.
 	// args.CreateReply() should be cheaper than gogoproto.Clone which use reflect.
 	getReply := func() gogoproto.Message {
+		if _, isBatch := args.(*proto.BatchRequest); isBatch {
+			return &proto.BatchResponse{}
+		}
 		return args.CreateReply()
 	}
 

@@ -25,9 +25,10 @@ import (
 	"strconv"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -404,21 +405,26 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
-func sendAndFill(send func(...proto.Call) *proto.Error, b *Batch) *proto.Error {
+func sendAndFill(send func(...proto.Request) (*proto.BatchResponse, *proto.Error), b *Batch) (*proto.BatchResponse, error) {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call
 	// fails. But send() also returns its own errors, so there's some dancing
 	// here to do because we want to run fillResults() so that the individual
 	// result gets initialized with an error from the corresponding call.
-	pErr := send(b.calls...)
+	br, pErr := send(b.reqs...)
 	if pErr != nil {
 		// TODO(tschottdorf): give the error to fillResults or make sure in
 		// some other way that fillResults knows it's only called to set the
 		// keys.
-		_ = b.fillResults()
-		return pErr
+		_ = b.fillResults(nil, pErr)
+		return nil, pErr.GoError()
 	}
-	return proto.NewError(b.fillResults())
+	err := b.fillResults(br, nil)
+
+	if err != nil {
+		return nil, err
+	}
+	return br, nil
 }
 
 // Run executes the operations queued up within a batch. Before executing any
@@ -433,10 +439,16 @@ func sendAndFill(send func(...proto.Call) *proto.Error, b *Batch) *proto.Error {
 // operation. The order of the results matches the order the operations were
 // added to the batch.
 func (db *DB) Run(b *Batch) error {
+	_, err := db.RunWithResponse(b)
+	return err
+}
+
+// RunWithResponse is a version of Run that returns the BatchResponse.
+func (db *DB) RunWithResponse(b *Batch) (*proto.BatchResponse, error) {
 	if err := b.prepare(); err != nil {
-		return err
+		return nil, err
 	}
-	return sendAndFill(db.send, b).GoError()
+	return sendAndFill(db.send, b)
 }
 
 // Txn executes retryable in the context of a distributed transaction. The
@@ -454,62 +466,38 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 
 // send runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (db *DB) send(calls ...proto.Call) (pErr *proto.Error) {
-	if len(calls) == 0 {
-		return nil
+func (db *DB) send(reqs ...proto.Request) (*proto.BatchResponse, *proto.Error) {
+	if len(reqs) == 0 {
+		return &proto.BatchResponse{}, nil
 	}
 
-	if len(calls) == 1 {
-		c := calls[0]
+	if len(reqs) == 1 {
 		// We only send BatchRequest. Everything else needs to go into one.
-		if _, ok := calls[0].Args.(*proto.BatchRequest); ok {
-			if c.Args.Header().UserPriority == nil && db.userPriority != 0 {
-				c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
+		if ba, ok := reqs[0].(*proto.BatchRequest); ok {
+			if ba.UserPriority == nil && db.userPriority != 0 {
+				ba.UserPriority = gogoproto.Int32(db.userPriority)
 			}
-			resetClientCmdID(c.Args)
-			_ = SendCall(db.sender, c)
-			pErr = c.Reply.Header().Error
+			resetClientCmdID(ba)
+			br, pErr := db.sender.Send(context.TODO(), *ba)
 			if pErr != nil {
 				if log.V(1) {
-					log.Infof("failed %s: %s", c.Method(), pErr)
+					log.Infof("failed %s: %s", ba.Method(), pErr)
 				}
-			} else if c.Post != nil {
-				pErr = proto.NewError(c.Post())
+				return nil, pErr
 			}
-			return pErr
+			return br, nil
 		}
 	}
 
-	ba, br := &proto.BatchRequest{}, &proto.BatchResponse{}
-	for _, call := range calls {
-		ba.Add(call.Args)
-	}
-	pErr = db.send(proto.Call{Args: ba, Reply: br})
+	ba := proto.BatchRequest{}
+	ba.Add(reqs...)
 
-	// Recover from protobuf merge panics.
-	defer func() {
-		if r := recover(); r != nil {
-			// Take care to log merge error and to return it if no error has
-			// already been set.
-			mergeErr := util.Errorf("unable to merge response: %s", r)
-			log.Error(mergeErr)
-			if pErr == nil {
-				pErr = proto.NewError(mergeErr)
-			}
-		}
-	}()
+	br, pErr := db.send(&ba)
 
-	// Transfer individual responses from batch response to prepared replies.
-	for i, reply := range br.Responses {
-		c := calls[i]
-		gogoproto.Merge(c.Reply, reply.GetInner())
-		if c.Post != nil {
-			if e := c.Post(); e != nil && pErr != nil {
-				pErr = proto.NewError(e)
-			}
-		}
+	if pErr != nil {
+		return nil, pErr
 	}
-	return
+	return br, nil
 }
 
 // Runner only exports the Run method on a batch of operations.

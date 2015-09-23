@@ -306,72 +306,72 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	writes := []proto.Key{proto.Key("a"), proto.Key("z")}
-	get := proto.Call{
-		Args: &proto.GetRequest{
-			RequestHeader: proto.RequestHeader{
-				Key: writes[0],
-			},
-		},
-		Reply: &proto.GetResponse{},
+	get := &proto.GetRequest{
+		RequestHeader: proto.RequestHeader{Key: writes[0]},
 	}
-	get.Args.Header().EndKey = writes[len(writes)-1]
-	if err := client.SendCall(tds, get); err == nil {
+	get.EndKey = writes[len(writes)-1]
+	if _, err := client.SendCall(tds, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
-	var call proto.Call
+	var delTS proto.Timestamp
 	for i, k := range writes {
-		call = proto.PutCall(k, proto.Value{Bytes: k})
-		if err := client.SendCall(tds, call); err != nil {
+		put := proto.NewPut(k, proto.Value{Bytes: k})
+		reply, err := client.SendCall(tds, put)
+		if err != nil {
 			t.Fatal(err)
 		}
-		scan := proto.ScanCall(writes[0], writes[len(writes)-1].Next(), 0)
+		scan := proto.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*proto.ScanRequest)
 		// The Put ts may have been pushed by tsCache,
 		// so make sure we see their values in our Scan.
-		scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
-		if err := client.SendCall(tds, scan); err != nil {
+		delTS = reply.(*proto.PutResponse).Timestamp
+		scan.Timestamp = delTS
+		reply, err = client.SendCall(tds, scan)
+		if err != nil {
 			t.Fatal(err)
 		}
-		if scan.Reply.Header().Txn != nil {
+		sr := reply.(*proto.ScanResponse)
+		if sr.Txn != nil {
 			// This was the other way around at some point in the past.
 			// Same below for Delete, etc.
 			t.Errorf("expected no transaction in response header")
 		}
-		if rows := scan.Reply.(*proto.ScanResponse).Rows; len(rows) != i+1 {
+		if rows := sr.Rows; len(rows) != i+1 {
 			t.Fatalf("expected %d rows, but got %d", i+1, len(rows))
 		}
 	}
 
-	del := proto.Call{
-		Args: &proto.DeleteRangeRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:       writes[0],
-				EndKey:    proto.Key(writes[len(writes)-1]).Next(),
-				Timestamp: call.Reply.Header().Timestamp,
-			},
+	del := &proto.DeleteRangeRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:       writes[0],
+			EndKey:    proto.Key(writes[len(writes)-1]).Next(),
+			Timestamp: delTS,
 		},
-		Reply: &proto.DeleteRangeResponse{},
 	}
-	if err := client.SendCall(tds, del); err != nil {
+	reply, err := client.SendCall(tds, del)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if del.Reply.Header().Txn != nil {
+	dr := reply.(*proto.DeleteRangeResponse)
+	if dr.Txn != nil {
 		t.Errorf("expected no transaction in response header")
 	}
-	if n := del.Reply.(*proto.DeleteRangeResponse).NumDeleted; n != int64(len(writes)) {
+	if n := dr.NumDeleted; n != int64(len(writes)) {
 		t.Errorf("expected %d keys to be deleted, but got %d instead",
 			len(writes), n)
 	}
 
-	scan := proto.ScanCall(writes[0], writes[len(writes)-1].Next(), 0)
-	scan.Args.Header().Timestamp = del.Reply.Header().Timestamp
-	scan.Args.Header().Txn = &proto.Transaction{Name: "MyTxn"}
-	if err := client.SendCall(tds, scan); err != nil {
+	scan := proto.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*proto.ScanRequest)
+	scan.Timestamp = dr.Timestamp
+	scan.Txn = &proto.Transaction{Name: "MyTxn"}
+	reply, err = client.SendCall(tds, scan)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if txn := scan.Reply.Header().Txn; txn == nil || txn.Name != "MyTxn" {
+	sr := reply.(*proto.ScanResponse)
+	if txn := sr.Txn; txn == nil || txn.Name != "MyTxn" {
 		t.Errorf("wanted Txn to persist, but it changed to %v", txn)
 	}
-	if rows := scan.Reply.(*proto.ScanResponse).Rows; len(rows) > 0 {
+	if rows := sr.Rows; len(rows) > 0 {
 		t.Fatalf("scan after delete returned rows: %v", rows)
 	}
 }
@@ -402,10 +402,12 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			}
 		}
 
-		var call proto.Call
+		var reply proto.Response
 		for _, k := range tc.keys {
-			call = proto.PutCall(k, proto.Value{Bytes: k})
-			if err := client.SendCall(tds, call); err != nil {
+			put := proto.NewPut(k, proto.Value{Bytes: k})
+			var err error
+			reply, err = client.SendCall(tds, put)
+			if err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -414,13 +416,14 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		for start := 0; start < len(tc.keys); start++ {
 			// Try every possible maxResults, from 1 to beyond the size of key array.
 			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
-				scan := proto.ScanCall(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
+				scan := proto.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
 					int64(maxResults))
-				scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
-				if err := client.SendCall(tds, scan); err != nil {
+				scan.Header().Timestamp = reply.Header().Timestamp
+				reply, err := client.SendCall(tds, scan)
+				if err != nil {
 					t.Fatal(err)
 				}
-				rows := scan.Reply.(*proto.ScanResponse).Rows
+				rows := reply.(*proto.ScanResponse).Rows
 				if start+maxResults <= len(tc.keys) && len(rows) != maxResults {
 					t.Errorf("%d: start=%s: expected %d rows, but got %d", i, tc.keys[start], maxResults, len(rows))
 				} else if start+maxResults == len(tc.keys)+1 && len(rows) != maxResults-1 {

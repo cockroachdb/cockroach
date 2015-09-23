@@ -1503,9 +1503,9 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 	// Resolve all of the intents which aren't local to the Range.
 	if len(ba.Requests) > 0 {
 		// TODO(tschottdorf): should be able use the Batch normally and do
-		// without InternalAddCall.
+		// without InternalAddRequest.
 		b := &client.Batch{}
-		b.InternalAddCall(proto.Call{Args: ba, Reply: &proto.BatchResponse{}})
+		b.InternalAddRequest(ba)
 		action := func() {
 			// TODO(tschottdorf): no tracing here yet.
 			if err := r.rm.DB().Run(b); err != nil {

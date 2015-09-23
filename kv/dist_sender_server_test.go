@@ -248,13 +248,14 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, s.Gossip())
 
 	// Scan.
-	call := proto.ScanCall(proto.Key("a"), proto.Key("c"), 0)
-	sr := call.Reply.(*proto.ScanResponse)
-	sa := call.Args.(*proto.ScanRequest)
+	sa := proto.NewScan(proto.Key("a"), proto.Key("c"), 0).(*proto.ScanRequest)
 	sa.ReadConsistency = proto.INCONSISTENT
-	if err := client.SendCall(ds, call); err != nil {
+	reply, err := client.SendCall(ds, sa)
+	if err != nil {
 		t.Fatal(err)
 	}
+	sr := reply.(*proto.ScanResponse)
+
 	if l := len(sr.Rows); l != 1 {
 		t.Fatalf("expected 1 row; got %d", l)
 	}
@@ -263,13 +264,13 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	}
 
 	// ReverseScan.
-	call = proto.ReverseScanCall(proto.Key("a"), proto.Key("c"), 0)
-	rsr := call.Reply.(*proto.ReverseScanResponse)
-	rsa := call.Args.(*proto.ReverseScanRequest)
+	rsa := proto.NewReverseScan(proto.Key("a"), proto.Key("c"), 0).(*proto.ReverseScanRequest)
 	rsa.ReadConsistency = proto.INCONSISTENT
-	if err := client.SendCall(ds, call); err != nil {
+	reply, err = client.SendCall(ds, rsa)
+	if err != nil {
 		t.Fatal(err)
 	}
+	rsr := reply.(*proto.ReverseScanResponse)
 	if l := len(rsr.Rows); l != 1 {
 		t.Fatalf("expected 1 row; got %d", l)
 	}

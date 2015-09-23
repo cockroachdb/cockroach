@@ -467,22 +467,24 @@ func (ru ResponseUnion) GetInner() Response {
 
 // Add adds a request to the batch request. The batch key range is
 // expanded to include the key ranges of all requests which it comprises.
-func (ba *BatchRequest) Add(args Request) {
-	union := RequestUnion{}
-	if !union.SetValue(args) {
-		panic(fmt.Sprintf("unable to add %T to batch request", args))
-	}
+func (ba *BatchRequest) Add(requests ...Request) {
+	for _, args := range requests {
+		union := RequestUnion{}
+		if !union.SetValue(args) {
+			panic(fmt.Sprintf("unable to add %T to batch request", args))
+		}
 
-	h := args.Header()
-	if ba.Key == nil || !ba.Key.Less(h.Key) {
-		ba.Key = h.Key
-	} else if ba.EndKey.Less(h.Key) && !ba.Key.Equal(h.Key) {
-		ba.EndKey = h.Key
+		h := args.Header()
+		if ba.Key == nil || !ba.Key.Less(h.Key) {
+			ba.Key = h.Key
+		} else if ba.EndKey.Less(h.Key) && !ba.Key.Equal(h.Key) {
+			ba.EndKey = h.Key
+		}
+		if ba.EndKey == nil || (h.EndKey != nil && ba.EndKey.Less(h.EndKey)) {
+			ba.EndKey = h.EndKey
+		}
+		ba.Requests = append(ba.Requests, union)
 	}
-	if ba.EndKey == nil || (h.EndKey != nil && ba.EndKey.Less(h.EndKey)) {
-		ba.EndKey = h.EndKey
-	}
-	ba.Requests = append(ba.Requests, union)
 }
 
 // Add adds a response to the batch response.
@@ -678,8 +680,16 @@ func (*TruncateLogRequest) CreateReply() Response { return &TruncateLogResponse{
 // CreateReply implements the Request interface.
 func (*LeaderLeaseRequest) CreateReply() Response { return &LeaderLeaseResponse{} }
 
-// CreateReply implements the Request interface.
-func (*BatchRequest) CreateReply() Response { return &BatchResponse{} }
+// CreateReply implements the Request interface. It's slightly different from
+// the other implementations: It creates replies for each of the contained
+// requests, wrapped in a BatchResponse.
+func (ba *BatchRequest) CreateReply() Response {
+	br := &BatchResponse{}
+	for _, union := range ba.Requests {
+		br.Add(union.GetInner().CreateReply())
+	}
+	return br
+}
 
 func (*GetRequest) flags() int                { return isRead }
 func (*PutRequest) flags() int                { return isWrite | isTxnWrite }

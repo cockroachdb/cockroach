@@ -33,12 +33,13 @@ import (
 // transparently.
 // TODO(tschottdorf): get rid of proto.Call, change this to
 // SendWrapped(proto.BatchRequest).
-func SendCall(sender Sender, call proto.Call) error {
-	call, unwrap := MaybeWrapCall(call)
-	defer unwrap(call)
-	// TODO(tschottdorf): remove this crutch.
-	sendCallConverted(sender, context.TODO(), call)
-	return call.Reply.Header().GoError()
+func SendCall(sender Sender, args proto.Request) (proto.Response, error) {
+	ba, unwrap := MaybeWrap(args)
+	br, pErr := sender.Send(context.TODO(), *ba)
+	if err := pErr.GoError(); err != nil {
+		return nil, err
+	}
+	return unwrap(br), nil
 }
 
 // sendCallConverted is a wrapped to go from the (ctx,call) interface to the

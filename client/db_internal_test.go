@@ -35,7 +35,7 @@ func TestClientCommandID(t *testing.T) {
 		if ba.CmdID.WallTime == 0 {
 			return nil, proto.NewError(util.Errorf("expected client command ID to be initialized"))
 		}
-		return &proto.BatchResponse{}, nil
+		return ba.CreateReply().(*proto.BatchResponse), nil
 	}, nil))
 	if err := db.Put("a", "b"); err != nil {
 		t.Error(err)

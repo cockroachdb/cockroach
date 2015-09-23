@@ -61,7 +61,7 @@ func TestNodeEventFeed(t *testing.T) {
 		{
 			name: "Get",
 			publishTo: func(nef status.NodeEventFeed) {
-				call := proto.GetCall(proto.Key("abc"))
+				call := proto.Call{Args: proto.NewGet(proto.Key("abc")), Reply: &proto.PutResponse{}}
 				nef.CallComplete(call.Args, call.Reply)
 			},
 			expected: &status.CallSuccessEvent{
@@ -72,7 +72,7 @@ func TestNodeEventFeed(t *testing.T) {
 		{
 			name: "Put",
 			publishTo: func(nef status.NodeEventFeed) {
-				call := proto.PutCall(proto.Key("abc"), proto.Value{Bytes: []byte("def")})
+				call := proto.Call{Args: proto.NewPut(proto.Key("abc"), proto.Value{Bytes: []byte("def")}), Reply: &proto.PutResponse{}}
 				nef.CallComplete(call.Args, call.Reply)
 			},
 			expected: &status.CallSuccessEvent{
@@ -83,7 +83,7 @@ func TestNodeEventFeed(t *testing.T) {
 		{
 			name: "Get Error",
 			publishTo: func(nef status.NodeEventFeed) {
-				call := proto.GetCall(proto.Key("abc"))
+				call := proto.Call{Args: proto.NewGet(proto.Key("abc")), Reply: &proto.BatchResponse{}}
 				call.Reply.Header().SetGoError(util.Errorf("error"))
 				nef.CallComplete(call.Args, call.Reply)
 			},

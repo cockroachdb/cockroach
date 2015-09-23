@@ -88,20 +88,18 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica, _ *config.Syst
 	// want to do a consistent read here. This is important when we are
 	// considering one of the metadata ranges: we must not do an
 	// inconsistent lookup in our own copy of the range.
-	reply := proto.RangeLookupResponse{}
 	b := &client.Batch{}
-	b.InternalAddCall(proto.Call{
-		Args: &proto.RangeLookupRequest{
-			RequestHeader: proto.RequestHeader{
-				Key: keys.RangeMetaKey(desc.StartKey),
-			},
-			MaxRanges: 1,
+	b.InternalAddRequest(&proto.RangeLookupRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: keys.RangeMetaKey(desc.StartKey),
 		},
-		Reply: &reply,
+		MaxRanges: 1,
 	})
-	if err := q.db.Run(b); err != nil {
+	br, err := q.db.RunWithResponse(b)
+	if err != nil {
 		return err
 	}
+	reply := br.Responses[0].GetInner().(*proto.RangeLookupResponse)
 
 	if len(reply.Ranges) != 1 {
 		return util.Errorf("expected 1 range descriptor, got %d", len(reply.Ranges))

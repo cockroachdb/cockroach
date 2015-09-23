@@ -17,12 +17,6 @@
 
 package proto
 
-import (
-	"fmt"
-
-	gogoproto "github.com/gogo/protobuf/proto"
-)
-
 // A Call is a pending database API call.
 type Call struct {
 	Args  Request      // The argument to the command
@@ -35,133 +29,95 @@ func (c *Call) Method() Method {
 	return c.Args.Method()
 }
 
-// GetCall returns a Call object initialized to get the value at key.
-func GetCall(key Key) Call {
-	return Call{
-		Args: &GetRequest{
-			RequestHeader: RequestHeader{
-				Key: key,
-			},
+// NewGet returns a Request initialized to get the value at key.
+func NewGet(key Key) Request {
+	return &GetRequest{
+		RequestHeader: RequestHeader{
+			Key: key,
 		},
-		Reply: &GetResponse{},
 	}
 }
 
-// GetProtoCall returns a Call object initialized to get the value at key and
-// then to decode it as a protobuf message.
-func GetProtoCall(key Key, msg gogoproto.Message) Call {
-	c := GetCall(key)
-	c.Post = func() error {
-		reply := c.Reply.(*GetResponse)
-		if reply.Value == nil {
-			return fmt.Errorf("%s: no value present", key)
-		}
-		return gogoproto.Unmarshal(reply.Value.Bytes, msg)
-	}
-	return c
-}
-
-// IncrementCall returns a Call object initialized to increment the value at
+// NewIncrement returns a Request initialized to increment the value at
 // key by increment.
-func IncrementCall(key Key, increment int64) Call {
-	return Call{
-		Args: &IncrementRequest{
-			RequestHeader: RequestHeader{
-				Key: key,
-			},
-			Increment: increment,
+func NewIncrement(key Key, increment int64) Request {
+	return &IncrementRequest{
+		RequestHeader: RequestHeader{
+			Key: key,
 		},
-		Reply: &IncrementResponse{},
+		Increment: increment,
 	}
 }
 
-// PutCall returns a Call object initialized to put the value at key.
-func PutCall(key Key, value Value) Call {
+// NewPut returns a Request initialized to put the value at key.
+func NewPut(key Key, value Value) Request {
 	value.InitChecksum(key)
-	return Call{
-		Args: &PutRequest{
-			RequestHeader: RequestHeader{
-				Key: key,
-			},
-			Value: value,
+	return &PutRequest{
+		RequestHeader: RequestHeader{
+			Key: key,
 		},
-		Reply: &PutResponse{},
+		Value: value,
 	}
 }
 
-// ConditionalPutCall returns a Call object initialized to put value as a byte
+// NewConditionalPut returns a Request initialized to put value as a byte
 // slice at key if the existing value at key equals expValueBytes.
-func ConditionalPutCall(key Key, value, expValue Value) Call {
+func NewConditionalPut(key Key, value, expValue Value) Request {
 	value.InitChecksum(key)
 	var expValuePtr *Value
 	if expValue.Bytes != nil {
 		expValuePtr = &expValue
 		expValue.InitChecksum(key)
 	}
-	return Call{
-		Args: &ConditionalPutRequest{
-			RequestHeader: RequestHeader{
-				Key: key,
-			},
-			Value:    value,
-			ExpValue: expValuePtr,
+	return &ConditionalPutRequest{
+		RequestHeader: RequestHeader{
+			Key: key,
 		},
-		Reply: &ConditionalPutResponse{},
+		Value:    value,
+		ExpValue: expValuePtr,
 	}
 }
 
-// DeleteCall returns a Call object initialized to delete the value at key.
-func DeleteCall(key Key) Call {
-	return Call{
-		Args: &DeleteRequest{
-			RequestHeader: RequestHeader{
-				Key: key,
-			},
+// NewDelete returns a Request initialized to delete the value at key.
+func NewDelete(key Key) Request {
+	return &DeleteRequest{
+		RequestHeader: RequestHeader{
+			Key: key,
 		},
-		Reply: &DeleteResponse{},
 	}
 }
 
-// DeleteRangeCall returns a Call object initialized to delete the values in
+// NewDeleteRange returns a Request initialized to delete the values in
 // the given key range (excluding the endpoint).
-func DeleteRangeCall(startKey, endKey Key) Call {
-	return Call{
-		Args: &DeleteRangeRequest{
-			RequestHeader: RequestHeader{
-				Key:    startKey,
-				EndKey: endKey,
-			},
+func NewDeleteRange(startKey, endKey Key) Request {
+	return &DeleteRangeRequest{
+		RequestHeader: RequestHeader{
+			Key:    startKey,
+			EndKey: endKey,
 		},
-		Reply: &DeleteRangeResponse{},
 	}
 }
 
-// ScanCall returns a Call object initialized to scan from start to end keys
+// NewScan returns a Request initialized to scan from start to end keys
 // with max results.
-func ScanCall(key, endKey Key, maxResults int64) Call {
-	return Call{
-		Args: &ScanRequest{
-			RequestHeader: RequestHeader{
-				Key:    key,
-				EndKey: endKey,
-			},
-			MaxResults: maxResults,
+func NewScan(key, endKey Key, maxResults int64) Request {
+	return &ScanRequest{
+		RequestHeader: RequestHeader{
+			Key:    key,
+			EndKey: endKey,
 		},
-		Reply: &ScanResponse{},
+		MaxResults: maxResults,
 	}
 }
 
-// ReverseScanCall returns a Call object initialized to reverse scan from end to
+// NewReverseScan returns a Request initialized to reverse scan from end to
 // start keys with max results.
-func ReverseScanCall(key, endKey Key, maxResults int64) Call {
-	return Call{
-		Args: &ReverseScanRequest{
-			RequestHeader: RequestHeader{
-				Key:    key,
-				EndKey: endKey,
-			},
-			MaxResults: maxResults,
+func NewReverseScan(key, endKey Key, maxResults int64) Request {
+	return &ReverseScanRequest{
+		RequestHeader: RequestHeader{
+			Key:    key,
+			EndKey: endKey,
 		},
-		Reply: &ReverseScanResponse{},
+		MaxResults: maxResults,
 	}
 }

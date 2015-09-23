@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -116,18 +115,18 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	defer teardownHeartbeats(s.Sender)
 
 	txn := newTxn(s.Clock, proto.Key("a"))
-	putReq := createPutRequest(proto.Key("a"), []byte("value"), txn)
+	put := createPutRequest(proto.Key("a"), []byte("value"), txn)
 
 	// Put request will create a new transaction.
-	call := proto.Call{Args: putReq, Reply: &proto.PutResponse{}}
-	if err := client.SendCall(s.Sender, call); err != nil {
+	reply, err := client.SendCall(s.Sender, put)
+	if err != nil {
 		t.Fatal(err)
 	}
 	txnMeta, ok := s.Sender.txns[string(txn.ID)]
 	if !ok {
 		t.Fatal("expected a transaction to be created on coordinator")
 	}
-	if !call.Reply.Header().Txn.Writing {
+	if !reply.Header().Txn.Writing {
 		t.Fatal("response Txn is not marked as writing")
 	}
 	ts := atomic.LoadInt64(&txnMeta.lastUpdateNanos)
@@ -137,9 +136,8 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	s.Sender.Lock()
 	s.Manual.Set(1)
 	s.Sender.Unlock()
-	putReq.Txn.Writing = true
-	call = proto.Call{Args: putReq, Reply: &proto.PutResponse{}}
-	if err := client.SendCall(s.Sender, call); err != nil {
+	put.Txn.Writing = true
+	if _, err := client.SendCall(s.Sender, put); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.Sender.txns) != 1 {
@@ -159,34 +157,32 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	reply := &proto.PutResponse{}
 	key := proto.Key("key")
-	if err := client.SendCall(s.Sender, proto.Call{
-		Args: &proto.PutRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:          key,
-				UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
-				Txn: &proto.Transaction{
-					Name:      "test txn",
-					Isolation: proto.SNAPSHOT,
-				},
+	reply, err := client.SendCall(s.Sender, &proto.PutRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:          key,
+			UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
+			Txn: &proto.Transaction{
+				Name:      "test txn",
+				Isolation: proto.SNAPSHOT,
 			},
 		},
-		Reply: reply,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if reply.Txn.Name != "test txn" {
-		t.Errorf("expected txn name to be %q; got %q", "test txn", reply.Txn.Name)
+	pr := reply.(*proto.PutResponse)
+	if pr.Txn.Name != "test txn" {
+		t.Errorf("expected txn name to be %q; got %q", "test txn", pr.Txn.Name)
 	}
-	if reply.Txn.Priority != 10 {
-		t.Errorf("expected txn priority 10; got %d", reply.Txn.Priority)
+	if pr.Txn.Priority != 10 {
+		t.Errorf("expected txn priority 10; got %d", pr.Txn.Priority)
 	}
-	if !bytes.Equal(reply.Txn.Key, key) {
-		t.Errorf("expected txn Key to match %q != %q", key, reply.Txn.Key)
+	if !bytes.Equal(pr.Txn.Key, key) {
+		t.Errorf("expected txn Key to match %q != %q", key, pr.Txn.Key)
 	}
-	if reply.Txn.Isolation != proto.SNAPSHOT {
-		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", reply.Txn.Isolation)
+	if pr.Txn.Isolation != proto.SNAPSHOT {
+		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", pr.Txn.Isolation)
 	}
 }
 
@@ -198,25 +194,22 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	reply := &proto.PutResponse{}
-	if err := client.SendCall(s.Sender, proto.Call{
-		Args: &proto.PutRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:          proto.Key("key"),
-				UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
-				Txn: &proto.Transaction{
-					Name:      "test txn",
-					Isolation: proto.SNAPSHOT,
-					Priority:  11,
-				},
+	reply, err := client.SendCall(s.Sender, &proto.PutRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:          proto.Key("key"),
+			UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
+			Txn: &proto.Transaction{
+				Name:      "test txn",
+				Isolation: proto.SNAPSHOT,
+				Priority:  11,
 			},
 		},
-		Reply: reply,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if reply.Txn.Priority != 11 {
-		t.Errorf("expected txn priority 11; got %d", reply.Txn.Priority)
+	if prio := reply.(*proto.PutResponse).Txn.Priority; prio != 11 {
+		t.Errorf("expected txn priority 11; got %d", prio)
 	}
 }
 
@@ -244,14 +237,12 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	for _, rng := range ranges {
 		if rng.end != nil {
 			delRangeReq := createDeleteRangeRequest(rng.start, rng.end, txn)
-			call := proto.Call{Args: delRangeReq, Reply: &proto.DeleteRangeResponse{}}
-			if err := client.SendCall(s.Sender, call); err != nil {
+			if _, err := client.SendCall(s.Sender, delRangeReq); err != nil {
 				t.Fatal(err)
 			}
 		} else {
 			putReq := createPutRequest(rng.start, []byte("value"), txn)
-			call := proto.Call{Args: putReq, Reply: &proto.PutResponse{}}
-			if err := client.SendCall(s.Sender, call); err != nil {
+			if _, err := client.SendCall(s.Sender, putReq); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -279,16 +270,12 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 
 	txn1 := newTxn(s.Clock, proto.Key("a"))
 	txn2 := newTxn(s.Clock, proto.Key("b"))
-	call := proto.Call{
-		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn1),
-		Reply: &proto.PutResponse{}}
-	if err := client.SendCall(s.Sender, call); err != nil {
+	put1 := createPutRequest(proto.Key("a"), []byte("value"), txn1)
+	if _, err := client.SendCall(s.Sender, put1); err != nil {
 		t.Fatal(err)
 	}
-	call = proto.Call{
-		Args:  createPutRequest(proto.Key("b"), []byte("value"), txn2),
-		Reply: &proto.PutResponse{}}
-	if err := client.SendCall(s.Sender, call); err != nil {
+	put2 := createPutRequest(proto.Key("b"), []byte("value"), txn2)
+	if _, err := client.SendCall(s.Sender, put2); err != nil {
 		t.Fatal(err)
 	}
 
@@ -309,13 +296,12 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
 	initialTxn := newTxn(s.Clock, proto.Key("a"))
-	call := proto.Call{
-		Args:  createPutRequest(proto.Key("a"), []byte("value"), initialTxn),
-		Reply: &proto.PutResponse{}}
-	if err := client.SendCall(s.Sender, call); err != nil {
+	put := createPutRequest(proto.Key("a"), []byte("value"), initialTxn)
+	if reply, err := client.SendCall(s.Sender, put); err != nil {
 		t.Fatal(err)
+	} else {
+		*initialTxn = *reply.Header().Txn
 	}
-	*initialTxn = *call.Reply.Header().Txn
 
 	// Verify 3 heartbeats.
 	var heartbeatTS proto.Timestamp
@@ -343,20 +329,17 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 
 // getTxn fetches the requested key and returns the transaction info.
 func getTxn(coord *TxnCoordSender, txn *proto.Transaction) (bool, *proto.Transaction, error) {
-	hr := &proto.HeartbeatTxnResponse{}
-	call := proto.Call{
-		Args: &proto.HeartbeatTxnRequest{
-			RequestHeader: proto.RequestHeader{
-				Key: txn.Key,
-				Txn: txn,
-			},
+	hb := &proto.HeartbeatTxnRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: txn.Key,
+			Txn: txn,
 		},
-		Reply: hr,
 	}
-	if err := client.SendCall(coord, call); err != nil {
+	reply, err := client.SendCall(coord, hb)
+	if err != nil {
 		return false, nil, err
 	}
-	return true, hr.Txn, nil
+	return true, reply.(*proto.HeartbeatTxnResponse).Txn, nil
 }
 
 func verifyCleanup(key proto.Key, coord *TxnCoordSender, eng engine.Engine, t *testing.T) {
@@ -388,29 +371,20 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	defer s.Stop()
 
 	txn := newTxn(s.Clock, proto.Key("a"))
-	pReply := &proto.PutResponse{}
 	key := proto.Key("a")
-	call := proto.Call{
-		Args:  createPutRequest(key, []byte("value"), txn),
-		Reply: pReply,
-	}
-	if err := client.SendCall(s.Sender, call); err != nil {
+	put := createPutRequest(key, []byte("value"), txn)
+	reply, err := client.SendCall(s.Sender, put)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if pReply.GoError() != nil {
-		t.Fatal(pReply.GoError())
-	}
-	etReply := &proto.EndTransactionResponse{}
-	if err := client.SendCall(s.Sender, proto.Call{
-		Args: &proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:       txn.Key,
-				Timestamp: txn.Timestamp,
-				Txn:       pReply.Header().Txn,
-			},
-			Commit: true,
+	pReply := reply.(*proto.PutResponse)
+	if _, err := client.SendCall(s.Sender, &proto.EndTransactionRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:       txn.Key,
+			Timestamp: txn.Timestamp,
+			Txn:       pReply.Header().Txn,
 		},
-		Reply: etReply,
+		Commit: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -428,14 +402,12 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	key := proto.Key("a")
 	txn := newTxn(s.Clock, key)
 	txn.Priority = 1
-	call := proto.Call{
-		Args:  createPutRequest(key, []byte("value"), txn),
-		Reply: &proto.PutResponse{},
-	}
-	if err := client.SendCall(s.Sender, call); err != nil {
+	put := createPutRequest(key, []byte("value"), txn)
+	if reply, err := client.SendCall(s.Sender, put); err != nil {
 		t.Fatal(err)
+	} else {
+		txn = reply.Header().Txn
 	}
-	txn = call.Reply.Header().Txn
 
 	// Push the transaction to abort it.
 	txn2 := newTxn(s.Clock, key)
@@ -449,11 +421,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}
-	call = proto.Call{
-		Args:  pushArgs,
-		Reply: &proto.PushTxnResponse{},
-	}
-	if err := client.SendCall(s.Sender, call); err != nil {
+	if _, err := client.SendCall(s.Sender, pushArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -467,11 +435,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 		},
 		Commit: true,
 	}
-	call = proto.Call{
-		Args:  etArgs,
-		Reply: &proto.EndTransactionResponse{},
-	}
-	err := client.SendCall(s.Sender, call)
+	_, err := client.SendCall(s.Sender, etArgs)
 	switch err.(type) {
 	case *proto.TransactionAbortedError:
 		// Expected
@@ -492,11 +456,8 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
 	txn := newTxn(s.Clock, proto.Key("a"))
-	call := proto.Call{
-		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn),
-		Reply: &proto.PutResponse{},
-	}
-	if err := client.SendCall(s.Sender, call); err != nil {
+	put := createPutRequest(proto.Key("a"), []byte("value"), txn)
+	if _, err := client.SendCall(s.Sender, put); err != nil {
 		t.Fatal(err)
 	}
 
@@ -567,9 +528,11 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 			return nil, proto.NewError(test.err)
 		}), clock, false, nil, stopper)
-		reply := &proto.PutResponse{}
-		if err := client.SendCall(ts, proto.Call{Args: gogoproto.Clone(testPutReq).(proto.Request), Reply: reply}); err != nil {
+		var reply *proto.PutResponse
+		if r, err := client.SendCall(ts, gogoproto.Clone(testPutReq).(proto.Request)); err != nil {
 			t.Fatal(err)
+		} else {
+			reply = r.(*proto.PutResponse)
 		}
 		teardownHeartbeats(ts)
 		stopper.Stop()
@@ -649,7 +612,6 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 		called = false
 		tc.req.Reset()
 		ba := &proto.BatchRequest{}
-		br := &proto.BatchResponse{}
 
 		if tc.arg {
 			tc.req.Header().Txn = txn1
@@ -659,7 +621,7 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 			ba.Txn = txn2
 		}
 		called = false
-		err := client.SendCall(ts, proto.Call{Args: ba, Reply: br})
+		_, err := client.SendCall(ts, ba)
 		if !tc.ok && err == alwaysError {
 			t.Fatalf("%d: expected error%s", i, err)
 		} else if tc.ok != called {
@@ -686,32 +648,21 @@ func TestTxnDrainingNode(t *testing.T) {
 	txn := newTxn(s.Clock, proto.Key("a"))
 	key := proto.Key("a")
 	beginTxn := func() {
-		pReply := &proto.PutResponse{}
-		call := proto.Call{
-			Args:  createPutRequest(key, []byte("value"), txn),
-			Reply: pReply,
-		}
-		if err := client.SendCall(s.Sender, call); err != nil {
+		put := createPutRequest(key, []byte("value"), txn)
+		if reply, err := client.SendCall(s.Sender, put); err != nil {
 			t.Fatal(err)
+		} else {
+			txn = reply.Header().Txn
 		}
-		if pReply.GoError() != nil {
-			t.Fatal(pReply.GoError())
-		}
-		txn = pReply.Txn
 	}
 	endTxn := func() {
-		etReply := &proto.EndTransactionResponse{}
-		if err := client.SendCall(s.Sender, proto.Call{
-			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{
-					Key:       txn.Key,
-					Timestamp: txn.Timestamp,
-					Txn:       txn,
-				},
-				Commit: true,
+		if _, err := client.SendCall(s.Sender, &proto.EndTransactionRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:       txn.Key,
+				Timestamp: txn.Timestamp,
+				Txn:       txn,
 			},
-			Reply: etReply,
-		}); err != nil {
+			Commit: true}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -732,16 +683,13 @@ func TestTxnDrainingNode(t *testing.T) {
 
 	// Attempt to start another transaction, but it should be too late.
 	key = proto.Key("key")
-	err := client.SendCall(s.Sender, proto.Call{
-		Args: &proto.PutRequest{
-			RequestHeader: proto.RequestHeader{
-				Key: key,
-				Txn: &proto.Transaction{
-					Name: "test txn",
-				},
+	_, err := client.SendCall(s.Sender, &proto.PutRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: key,
+			Txn: &proto.Transaction{
+				Name: "test txn",
 			},
 		},
-		Reply: &proto.PutResponse{},
 	})
 	if _, ok := err.(*proto.NodeUnavailableError); !ok {
 		teardownHeartbeats(s.Sender)
@@ -758,31 +706,19 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	defer s.Stop()
 
 	txn := newTxn(s.Clock, proto.Key("a"))
-	pReply := &proto.PutResponse{}
 	key := proto.Key("a")
-	call := proto.Call{
-		Args:  createPutRequest(key, []byte("value"), txn),
-		Reply: pReply,
-	}
-	if err := client.SendCall(s.Sender, call); err != nil {
+	put := createPutRequest(key, []byte("value"), txn)
+	if _, err := client.SendCall(s.Sender, put); err != nil {
 		t.Fatal(err)
 	}
-
-	if pReply.Error != nil {
-		t.Fatal(pReply.GoError())
-	}
 	s.Sender.cleanupTxn(nil, *txn) // first call
-	etReply := &proto.EndTransactionResponse{}
-	if err := client.SendCall(s.Sender, proto.Call{
-		Args: &proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:       txn.Key,
-				Timestamp: txn.Timestamp,
-				Txn:       txn,
-			},
-			Commit: true,
+	if _, err := client.SendCall(s.Sender, &proto.EndTransactionRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:       txn.Key,
+			Timestamp: txn.Timestamp,
+			Txn:       txn,
 		},
-		Reply: etReply,
+		Commit: true,
 	}); /* second call */ err != nil {
 		t.Fatal(err)
 	}
@@ -796,33 +732,33 @@ func TestTxnMultipleCoord(t *testing.T) {
 	defer s.Stop()
 
 	for i, tc := range []struct {
-		call    proto.Call
+		args    proto.Request
 		writing bool
 		ok      bool
 	}{
-		{proto.GetCall(proto.Key("a")), true, true},
-		{proto.GetCall(proto.Key("a")), false, true},
-		{proto.PutCall(proto.Key("a"), proto.Value{}), false, true},
-		{proto.PutCall(proto.Key("a"), proto.Value{}), true, false},
+		{proto.NewGet(proto.Key("a")), true, true},
+		{proto.NewGet(proto.Key("a")), false, true},
+		{proto.NewPut(proto.Key("a"), proto.Value{}), false, true},
+		{proto.NewPut(proto.Key("a"), proto.Value{}), true, false},
 	} {
 		{
 			txn := newTxn(s.Clock, proto.Key("a"))
 			txn.Writing = tc.writing
-			tc.call.Args.Header().Txn = txn
+			tc.args.Header().Txn = txn
 		}
-		err := client.SendCall(s.Sender, tc.call)
+		reply, err := client.SendCall(s.Sender, tc.args)
 		if err == nil != tc.ok {
 			t.Errorf("%d: %T (writing=%t): success_expected=%t, but got: %v",
-				i, tc.call.Args, tc.writing, tc.ok, err)
+				i, tc.args, tc.writing, tc.ok, err)
 		}
 		if err != nil {
 			continue
 		}
 
-		txn := tc.call.Reply.Header().Txn
+		txn := reply.Header().Txn
 		// The transaction should come back rw if it started rw or if we just
 		// wrote.
-		isWrite := proto.IsTransactionWrite(tc.call.Args)
+		isWrite := proto.IsTransactionWrite(tc.args)
 		if (tc.writing || isWrite) != txn.Writing {
 			t.Errorf("%d: unexpected writing state: %s", i, txn)
 		}
@@ -830,19 +766,14 @@ func TestTxnMultipleCoord(t *testing.T) {
 			continue
 		}
 		// Abort for clean shutdown.
-		etReply := &proto.EndTransactionResponse{}
-		if err := client.SendCall(s.Sender, proto.Call{
-			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{
-					Key:       txn.Key,
-					Timestamp: txn.Timestamp,
-					Txn:       txn,
-				},
-				Commit: false,
+		if _, err := client.SendCall(s.Sender, &proto.EndTransactionRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:       txn.Key,
+				Timestamp: txn.Timestamp,
+				Txn:       txn,
 			},
-			Reply: etReply,
+			Commit: false,
 		}); err != nil {
-			log.Warning(err)
 			t.Fatal(err)
 		}
 	}
