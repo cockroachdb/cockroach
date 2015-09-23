@@ -21,6 +21,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -1548,5 +1549,21 @@ func TestMaybeRemove(t *testing.T) {
 	removedRng := <-fq.maybeRemovedRngs
 	if removedRng != rng {
 		t.Errorf("Unexpected removed range %v", removedRng)
+	}
+}
+
+func TestErrWithIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	ind := int32(99)
+	err := error(&errWithIndex{err: errors.New("foo"), index: ind})
+	i1, ok1 := err.(proto.IndexedError).ErrorIndex()
+	pErr := &proto.Error{}
+	pErr.SetResponseGoError(err)
+	if pErr.GetIndex().GetIndex() != ind {
+		log.Warningf("proto.Error lost index information")
+	}
+	i2, ok2 := pErr.GoError().(proto.IndexedError).ErrorIndex()
+	if i1 != i2 || ok1 != ok2 {
+		t.Fatalf("information loss after GoError(): (%d,%t) -> (%d,%t)", i1, ok1, i2, ok2)
 	}
 }

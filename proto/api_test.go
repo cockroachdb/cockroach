@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 func TestClientCmdIDIsEmpty(t *testing.T) {
@@ -37,11 +39,12 @@ func TestClientCmdIDIsEmpty(t *testing.T) {
 
 type testError struct{}
 
-func (t *testError) Error() string  { return "test" }
-func (t *testError) CanRetry() bool { return true }
+func (t *testError) Error() string             { return "test" }
+func (t *testError) CanRetry() bool            { return true }
+func (t *testError) ErrorIndex() (int32, bool) { return 99, true }
 
 // TestResponseHeaderSetGoError verifies that a test error that
-// implements retryable is converted properly into a generic error.
+// implements retryable or indexed is converted properly into a generic error.
 func TestResponseHeaderSetGoError(t *testing.T) {
 	rh := ResponseHeader{}
 	rh.SetGoError(&testError{})
@@ -51,6 +54,16 @@ func TestResponseHeaderSetGoError(t *testing.T) {
 	}
 	if !rh.Error.Retryable {
 		t.Error("expected generic error to be retryable")
+	}
+	if rErr, ok := rh.Error.GoError().(retry.Retryable); !ok || !rErr.CanRetry() {
+		t.Error("generated GoError is not retryable")
+	}
+	if rh.Error.GetIndex().GetIndex() != 99 {
+		t.Errorf("expected generic error to have index set")
+	}
+	if iErr, ok := rh.Error.GoError().(IndexedError); !ok ||
+		func() int32 { i, _ := iErr.ErrorIndex(); return i }() != 99 {
+		t.Errorf("generated GoError lost the index")
 	}
 }
 

@@ -139,13 +139,23 @@ func verifyKeys(start, end proto.Key, checkEndKey bool) error {
 	return nil
 }
 
+// errWithIndex is returned when an individual request in a Batch results in
+// an error, wrapping the original error and its location within the Batch.
 type errWithIndex struct {
 	index int32
 	err   error
 }
 
+// Error implements error.
 func (ewi *errWithIndex) Error() string {
 	return fmt.Sprintf("at %d: %s", ewi.index, ewi.err)
+}
+
+// ErrorIndex implements proto.IndexedError.
+// It's currently un-used but its presence is mandatory should errWithIndex
+// ever be added to proto.ErrorDetail.
+func (ewi *errWithIndex) ErrorIndex() (int32, bool) {
+	return ewi.index, true
 }
 
 // unwrapIndexedError returns the wrapped error for an *errWithIndex, and
@@ -1229,6 +1239,8 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			// clients will retry.
 			err = proto.NewRangeNotFoundError(rng.Desc().RangeID)
 		} else if iErr, ok := err.(*errWithIndex); ok {
+			// Note that we're not using the proto.IndexedError interface here
+			// because we need to unwrap the error anyways.
 			err, index = iErr.err, gogoproto.Int32(iErr.index)
 		}
 

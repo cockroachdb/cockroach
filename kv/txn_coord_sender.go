@@ -20,7 +20,6 @@ package kv
 
 import (
 	"fmt"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -694,10 +693,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 		newTxn.Timestamp.Forward(t.Txn.Timestamp)
 		newTxn.Restart(ba.GetUserPriority(), t.Txn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
-	}
-	// TODO(tschottdorf): temporary assertion.
-	if txnErr, ok := err.(proto.TransactionRestartError); ok && txnErr.Transaction() != nil && !reflect.DeepEqual(txnErr.Transaction(), newTxn) {
-		panic(fmt.Sprintf("%T did not have the latest transaction updates", txnErr))
 	}
 
 	if len(newTxn.ID) > 0 {

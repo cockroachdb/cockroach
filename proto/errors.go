@@ -18,7 +18,6 @@
 package proto
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -48,6 +47,12 @@ type TransactionRestartError interface {
 	Transaction() *Transaction
 }
 
+// IndexedError is an interface implemented by errors which are associated
+// with a failed request in a Batch.
+type IndexedError interface {
+	ErrorIndex() (int32, bool) // bool is false iff no index associated
+}
+
 func (e Error) getDetail() error {
 	if e.Detail == nil {
 		return nil
@@ -67,7 +72,42 @@ func NewError(err error) *Error {
 
 // String implements fmt.Stringer.
 func (e *Error) String() string {
-	return e.GoError().Error()
+	return e.Message
+}
+
+type internalError Error
+
+// Error implements error.
+func (e *internalError) Error() string {
+	return (*Error)(e).String()
+}
+
+// CanRetry implements the retry.Retryable interface.
+func (e *internalError) CanRetry() bool {
+	return e.Retryable
+}
+
+// CanRestartTransaction implements the TransactionRestartError interface.
+func (e *internalError) CanRestartTransaction() TransactionRestart {
+	return e.TransactionRestart
+}
+
+// Transaction implements the TransactionRestartError interface by returning
+// nil. The idea is that an error which isn't an ErrorDetail can't hold a
+// transaction.
+// TODO(tschottdorf): If that assumption changes, this methods needs to as
+// well, and the transaction should be added as a field on Error. Probably
+// worth doing this right right away.
+func (e *internalError) Transaction() *Transaction {
+	return nil
+}
+
+// ErrorIndex implements IndexedError.
+func (e *internalError) ErrorIndex() (int32, bool) {
+	if e.Index == nil {
+		return 0, false
+	}
+	return e.Index.Index, true
 }
 
 // GoError returns the non-nil error from the proto.Error union.
@@ -76,12 +116,12 @@ func (e *Error) GoError() error {
 		return nil
 	}
 	if e.Detail == nil {
-		return errors.New(e.Message)
+		return (*internalError)(e)
 	}
 	err := e.getDetail()
 	if err == nil {
 		// Unknown error detail; return the generic error.
-		return errors.New(e.Message)
+		return (*internalError)(e)
 	}
 	// Make sure that the flags in the generic portion of the error
 	// match the methods of the specific error type.
@@ -115,6 +155,11 @@ func (e *Error) SetResponseGoError(err error) {
 	}
 	if r, ok := err.(TransactionRestartError); ok {
 		e.TransactionRestart = r.CanRestartTransaction()
+	}
+	if r, ok := err.(IndexedError); ok {
+		if index, ok := r.ErrorIndex(); ok {
+			e.Index = &Error_Index{Index: index}
+		}
 	}
 	// If the specific error type exists in the detail union, set it.
 	detail := &ErrorDetail{}
