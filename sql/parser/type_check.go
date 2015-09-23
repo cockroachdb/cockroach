@@ -330,7 +330,6 @@ func typeCheckFuncExpr(expr *FuncExpr) (Datum, error) {
 
 func typeCheckCaseExpr(expr *CaseExpr) (Datum, error) {
 	var dummyCond, dummyVal Datum
-	var condType, valType reflect.Type
 
 	if expr.Expr != nil {
 		var err error
@@ -338,7 +337,6 @@ func typeCheckCaseExpr(expr *CaseExpr) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		condType = reflect.TypeOf(dummyCond)
 	}
 
 	if expr.Else != nil {
@@ -347,7 +345,6 @@ func typeCheckCaseExpr(expr *CaseExpr) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		valType = reflect.TypeOf(dummyVal)
 	}
 
 	for _, when := range expr.Whens {
@@ -355,11 +352,9 @@ func typeCheckCaseExpr(expr *CaseExpr) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		nextCondType := reflect.TypeOf(nextDummyCond)
-		if condType == nil || condType == nullType {
+		if dummyCond == nil || dummyCond == DNull {
 			dummyCond = nextDummyCond
-			condType = nextCondType
-		} else if !(nextCondType == nullType || nextCondType == condType) {
+		} else if !(nextDummyCond == DNull || nextDummyCond == dummyCond) {
 			return nil, fmt.Errorf("incompatible condition types %s, %s", dummyCond.Type(), nextDummyCond.Type())
 		}
 
@@ -367,11 +362,9 @@ func typeCheckCaseExpr(expr *CaseExpr) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		nextValType := reflect.TypeOf(nextDummyVal)
-		if valType == nil || valType == nullType {
+		if dummyVal == nil || dummyVal == DNull {
 			dummyVal = nextDummyVal
-			valType = nextValType
-		} else if !(nextValType == nullType || nextValType == valType) {
+		} else if !(nextDummyVal == DNull || nextDummyVal == dummyVal) {
 			return nil, fmt.Errorf("incompatible value types %s, %s", dummyVal.Type(), nextDummyVal.Type())
 		}
 	}
