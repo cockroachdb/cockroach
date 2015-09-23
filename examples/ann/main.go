@@ -18,6 +18,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -39,9 +40,23 @@ var totalIterations = flag.Int("iterations", 100, "Number of iterations.")
 
 var rng *rand.Rand
 var maxInput int64
-var totalLayers int
-var db *sql.DB
+var testServer *server.TestServer
 
+func createConnection(database bool) *sql.DB {
+	url := fmt.Sprintf("https://root@%s?certs=test_certs", testServer.ServingAddr())
+	if database {
+		url += "&database=ann"
+	}
+	var db *sql.DB
+	var err error
+	if db, err = sql.Open("cockroach", url); err != nil {
+		log.Fatal(err)
+	}
+	return db
+}
+
+// getNodeID returns a node id based on it's level and index into its layer.
+// This way, we can store all nodes in a single table on the db.
 func getNodeID(layer, num int) int {
 	return (layer * 100000) + num
 }
@@ -50,7 +65,7 @@ func getLayerNodeCount(layer int) int {
 	if layer == 0 {
 		return *inputLayerNodes
 	}
-	if layer == totalLayers-1 {
+	if layer == 1+*hiddenLayers {
 		return *outputLayerNodes
 	}
 	return *hiddenLayerNodes
@@ -59,7 +74,9 @@ func getLayerNodeCount(layer int) int {
 func addInput() int64 {
 	newInput := rng.Int63n(maxInput)
 	tempInput := newInput
-	var binary string
+	var binary bytes.Buffer
+	db := createConnection(true)
+	defer db.Close()
 	tx, err := db.Begin()
 	if err != nil {
 		log.Fatal(err)
@@ -68,35 +85,38 @@ func addInput() int64 {
 		bit := tempInput & 1
 		tempInput = tempInput >> 1
 		if bit == 0 {
-			binary += "0"
+			binary.WriteString("0")
 		} else {
-			binary += "1"
+			binary.WriteString("1")
 		}
 		if _, err := tx.Exec(`UPDATE nodes SET value=$1 WHERE id=$2`, float64(bit), getNodeID(0, i)); err != nil {
 			log.Fatal(err)
 		}
-		// TODO(bram): Obviously, remove this once we have feed forward working.
-		if _, err := tx.Exec(`UPDATE nodes SET value=$1 WHERE id=$2`, float64(bit), getNodeID(totalLayers-1, i)); err != nil {
+		// TODO(bram): Remove this once we have the feed forward network step working. This is only temporary to test
+		// parsing the output nodes.
+		if _, err := tx.Exec(`UPDATE nodes SET value=$1 WHERE id=$2`, float64(bit), getNodeID(*hiddenLayers+1, i)); err != nil {
 			log.Fatal(err)
 		}
 	}
 	if err = tx.Commit(); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Input: %d or %s\n", newInput, binary)
+	fmt.Printf("Input: %d or %s\n", newInput, binary.String())
 	return newInput
 }
 
 func getOutput() int64 {
 	var result int64
-	var binary string
+	var binary bytes.Buffer
+	db := createConnection(true)
+	defer db.Close()
 	rows, err := db.Query(`
 SELECT id, value
 FROM nodes
 WHERE id >= $1
 AND id < $2
 ORDER BY id DESC
-		`, getNodeID(totalLayers-1, 0), getNodeID(totalLayers-1, *outputLayerNodes))
+		`, getNodeID(*hiddenLayers+1, 0), getNodeID(*hiddenLayers+1, *outputLayerNodes))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -112,31 +132,29 @@ ORDER BY id DESC
 		result = result << 1
 		if bit {
 			result = result | 1
-			binary = "1" + binary
+			binary.WriteString("1")
 		} else {
-			binary = "0" + binary
+			binary.WriteString("0")
 		}
 	}
 	if length != *outputLayerNodes {
 		log.Fatalf("Incorrect output nodes in query. Expected %d, got %d.\n", *outputLayerNodes, length)
 	}
-	fmt.Printf("Output: %d or %s\n", result, binary)
+	fmt.Printf("Output: %d or %s\n", result, binary.String())
 	return result
 }
 
 func main() {
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 	flag.Parse()
-	var err error
-	var url string
 	security.SetReadFileFn(securitytest.Asset)
-	serv := server.StartTestServer(nil)
-	defer serv.Stop()
-	url = "https://root@" + serv.ServingAddr() + "?certs=test_certs"
-	if db, err = sql.Open("cockroach", url); err != nil {
-		log.Fatal(err)
-	}
+	testServer = server.StartTestServer(nil)
+	defer testServer.Stop()
+	db := createConnection(false)
 
+	// This calculates the maximum sized input based on the each input and
+	// output node representing a single bit.
+	// TODO(bram): Refine this so that output and input are treated correctly.
 	if *inputLayerNodes <= *outputLayerNodes {
 		maxInput = int64(math.Sqrt(math.Exp2(float64(*inputLayerNodes))))
 	} else {
@@ -144,49 +162,43 @@ func main() {
 	}
 
 	var widestLayer int
-	if *inputLayerNodes >= *hiddenLayerNodes && *inputLayerNodes >= *outputLayerNodes {
-		widestLayer = *inputLayerNodes
-	} else if *hiddenLayerNodes >= *inputLayerNodes && *hiddenLayerNodes >= *outputLayerNodes {
-		widestLayer = *hiddenLayerNodes
-	} else {
-		widestLayer = *outputLayerNodes
+	for _, layer := range []int{*inputLayerNodes, *hiddenLayerNodes, *outputLayerNodes} {
+		if layer > widestLayer {
+			widestLayer = layer
+		}
 	}
 	db.SetMaxOpenConns(widestLayer + 1)
-	totalLayers = 2 + *hiddenLayers
 
 	fmt.Printf("Artificial Neural Network Simulator\n")
 	fmt.Printf("Input Nodes: %d\n", *inputLayerNodes)
 	fmt.Printf("Hidden Layers: %d\n", *hiddenLayers)
 	fmt.Printf("Hidden Nodes per Layer: %d\n", *hiddenLayerNodes)
 	fmt.Printf("Output Nodes: %d\n", *outputLayerNodes)
-	fmt.Printf("Total Layers: %d\n", totalLayers)
+	fmt.Printf("Total Layers: %d\n", 2+*hiddenLayers)
 	fmt.Printf("Max Input: %d\n", maxInput)
 	fmt.Printf("Concurrent Connections: %d\n", widestLayer+1)
 	fmt.Printf("Total Iterations: %d\n", *totalIterations)
 	// Create the database.
-	if _, err := db.Exec("CREATE DATABASE ann"); err != nil {
+	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS ann"); err != nil {
 		log.Fatal(err)
 	}
 	db.Close()
 
-	// Open db client with database settings.
-	if db, err = sql.Open("cockroach", url+"&database=ann"); err != nil {
-		log.Fatal(err)
-	}
-
+	db = createConnection(true)
+	defer db.Close()
 	// Create the node and connection tables.
-	if _, err = db.Exec(`
+	if _, err := db.Exec(`
 	   CREATE TABLE IF NOT EXISTS nodes (
 	   	id BIGINT PRIMARY KEY,
 	   	value FLOAT NOT NULL
 	   )`); err != nil {
 		log.Fatal(err)
 	}
-	if _, err = db.Exec("TRUNCATE TABLE nodes"); err != nil {
+	if _, err := db.Exec("TRUNCATE TABLE nodes"); err != nil {
 		log.Fatal(err)
 	}
 
-	if _, err = db.Exec(`
+	if _, err := db.Exec(`
 	   CREATE TABLE IF NOT EXISTS connections (
 	   	node1 BIGINT NOT NULL,
 	   	node2 BIGINT NOT NULL,
@@ -195,34 +207,34 @@ func main() {
 	   )`); err != nil {
 		log.Fatal(err)
 	}
-	if _, err = db.Exec("TRUNCATE TABLE connections"); err != nil {
+	if _, err := db.Exec("TRUNCATE TABLE connections"); err != nil {
 		log.Fatal(err)
 	}
 
 	// Populate the nodes with random values.
 	for i := 0; i < *inputLayerNodes; i++ {
-		if _, err = db.Exec(`INSERT INTO nodes (id, value) VALUES ($1, $2)`, getNodeID(0, i), float64(0)); err != nil {
+		if _, err := db.Exec(`INSERT INTO nodes (id, value) VALUES ($1, $2)`, getNodeID(0, i), float64(0)); err != nil {
 			log.Fatal(err)
 		}
 	}
 	for i := 0; i < *hiddenLayers; i++ {
 		for j := 0; j < *hiddenLayerNodes; j++ {
-			if _, err = db.Exec(`INSERT INTO nodes (id, value) VALUES ($1, $2)`, getNodeID(i+1, j), float64(0)); err != nil {
+			if _, err := db.Exec(`INSERT INTO nodes (id, value) VALUES ($1, $2)`, getNodeID(i+1, j), float64(0)); err != nil {
 				log.Fatal(err)
 			}
 		}
 	}
 	for i := 0; i < *outputLayerNodes; i++ {
-		if _, err = db.Exec(`INSERT INTO nodes (id, value) VALUES ($1, $2)`, getNodeID(1+*hiddenLayers, i), float64(0)); err != nil {
+		if _, err := db.Exec(`INSERT INTO nodes (id, value) VALUES ($1, $2)`, getNodeID(1+*hiddenLayers, i), float64(0)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	// Populate the connections with random weights.
-	for i := 1; i < totalLayers; i++ {
+	for i := 1; i < *hiddenLayers+2; i++ {
 		for j := 0; j < getLayerNodeCount(i); j++ {
 			for k := 0; k < getLayerNodeCount(i-1); k++ {
-				if _, err = db.Exec(`INSERT INTO connections (node1, node2, weight) VALUES ($1, $2, $3)`, getNodeID(i-1, k), getNodeID(i, j), rng.Float64()); err != nil {
+				if _, err := db.Exec(`INSERT INTO connections (node1, node2, weight) VALUES ($1, $2, $3)`, getNodeID(i-1, k), getNodeID(i, j), rng.Float64()); err != nil {
 					log.Fatal(err)
 				}
 			}
@@ -233,6 +245,8 @@ func main() {
 	for i := 0; i < *totalIterations; i++ {
 		fmt.Printf("------ Iteration %d -------\n", i)
 		addInput()
+		// TODO(bram): Add feed forward propagation here.
 		getOutput()
+		// TODO(bram): Add training of weights here.
 	}
 }
