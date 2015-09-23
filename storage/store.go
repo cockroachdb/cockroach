@@ -1783,6 +1783,26 @@ func (s *Store) computeReplicationStatus(now int64) (
 	}
 
 	timestamp := roachpb.Timestamp{WallTime: now}
+	// s.RaftStatus will call s.multiraft.Status, so we should not hold the s.mu
+	// before call it, otherwise this may cause deadlock. Consider the following
+	// deadlock scenario:
+	// 1. hold s.mu, then call s.RaftStatus, it will call s.multiraft.Status
+	// 2. at the same time MultiRaft.state.run call s.createGroup, it will try
+	// to hold s.mu
+	raftStatusMap := make(map[roachpb.RangeID]*raft.Status)
+	s.mu.Lock()
+	for rangeID := range s.replicas {
+		raftStatusMap[rangeID] = nil
+	}
+	s.mu.Unlock()
+	for rangeID := range raftStatusMap {
+		raftStatus := s.RaftStatus(rangeID)
+		if raftStatus == nil {
+			delete(raftStatusMap, rangeID)
+			continue
+		}
+		raftStatusMap[rangeID] = raftStatus
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for rangeID, rng := range s.replicas {
@@ -1791,8 +1811,8 @@ func (s *Store) computeReplicationStatus(now int64) (
 			log.Error(err)
 			continue
 		}
-		raftStatus := s.RaftStatus(rangeID)
-		if raftStatus == nil {
+		raftStatus, ok := raftStatusMap[rangeID]
+		if !ok {
 			continue
 		}
 		if raftStatus.SoftState.RaftState == raft.StateLeader {
