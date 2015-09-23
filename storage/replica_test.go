@@ -3112,8 +3112,8 @@ func TestIntentIntersect(t *testing.T) {
 }
 
 // TestBatchErrorWithIndex tests that when an individual entry in a batch
-// results in an error, the index of this command is propagated along with
-// the error.
+// results in an error which implements proto.IndexedError, the index of this
+// command is stored into the error.
 func TestBatchErrorWithIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}

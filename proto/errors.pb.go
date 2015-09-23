@@ -546,7 +546,9 @@ func (m *ErrorDetail) GetSend() *SendError {
 	return nil
 }
 
-// ErrPosition describes the position of an error in a Batch.
+// ErrPosition describes the position of an error in a Batch. A simple nullable
+// primitive field would break compatibility with proto3, where primitive fields
+// are no longer allowed to be nullable.
 type ErrPosition struct {
 	Index int32 `protobuf:"varint,1,opt,name=index" json:"index"`
 }
@@ -577,8 +579,6 @@ type Error struct {
 	Detail *ErrorDetail `protobuf:"bytes,4,opt,name=detail" json:"detail,omitempty"`
 	// The Index, if given, contains the index of the request (in the batch)
 	// whose execution caused the error.
-	// It is wrapped in a sub-message for compatibility with proto3, which does
-	// not permit nullable primitive fields.
 	Index *ErrPosition `protobuf:"bytes,5,opt,name=index" json:"index,omitempty"`
 }
 

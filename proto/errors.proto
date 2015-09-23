@@ -193,7 +193,9 @@ enum TransactionRestart {
   IMMEDIATE = 2;
 }
 
-// ErrPosition describes the position of an error in a Batch.
+// ErrPosition describes the position of an error in a Batch. A simple nullable
+// primitive field would break compatibility with proto3, where primitive fields
+// are no longer allowed to be nullable.
 message ErrPosition {
   optional int32 index = 1 [(gogoproto.nullable) = false];
 }
@@ -218,7 +220,5 @@ message Error {
 
   // The Index, if given, contains the index of the request (in the batch)
   // whose execution caused the error.
-  // It is wrapped in a sub-message for compatibility with proto3, which does
-  // not permit nullable primitive fields.
   optional ErrPosition index = 5;
 }
