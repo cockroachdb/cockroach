@@ -101,7 +101,7 @@ gulp.task('debug', ['build'], function () {
     return gulp.start('bindata:debug')
 });
 /* watch */
-gulp.task('watch', ['build'], function () {
+gulp.task('watch', ['debug'], function () {
     gulp.watch('styl/**/*.styl', ['styles', 'bindata']);
 
     gulp.watch('ts/**/*.ts', ['typescript', 'bindata']);
