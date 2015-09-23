@@ -1783,6 +1783,20 @@ func (s *Store) computeReplicationStatus(now int64) (
 	}
 
 	timestamp := roachpb.Timestamp{WallTime: now}
+	raftStatusMap := make(map[roachpb.RangeID]*raft.Status)
+	s.mu.Lock()
+	for rangeID := range s.replicas {
+		raftStatusMap[rangeID] = &raft.Status{}
+	}
+	s.mu.Unlock()
+	for rangeID := range raftStatusMap {
+		raftStatus := s.RaftStatus(rangeID)
+		if raftStatus == nil {
+			delete(raftStatusMap, rangeID)
+			continue
+		}
+		raftStatusMap[rangeID] = raftStatus
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for rangeID, rng := range s.replicas {
@@ -1791,8 +1805,8 @@ func (s *Store) computeReplicationStatus(now int64) (
 			log.Error(err)
 			continue
 		}
-		raftStatus := s.RaftStatus(rangeID)
-		if raftStatus == nil {
+		raftStatus, ok := raftStatusMap[rangeID]
+		if !ok {
 			continue
 		}
 		if raftStatus.SoftState.RaftState == raft.StateLeader {
