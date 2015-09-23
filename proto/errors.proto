@@ -139,6 +139,7 @@ message OpRequiresTxnError {
 // contain the actual value found.
 message ConditionFailedError {
   optional Value actual_value = 1;
+  optional ErrPosition index = 2;
 }
 
 // A LeaseRejectedError indicates that the requested replica could
@@ -192,6 +193,11 @@ enum TransactionRestart {
   IMMEDIATE = 2;
 }
 
+// ErrPosition describes the position of an error in a Batch.
+message ErrPosition {
+  optional int32 index = 1 [(gogoproto.nullable) = false];
+}
+
 // Error is a generic representation including a string message
 // and information about retryability.
 message Error {
@@ -210,12 +216,9 @@ message Error {
   // about the error.
   optional ErrorDetail detail = 4;
 
-  message Index {
-    optional int32 index = 1 [(gogoproto.nullable) = false];
-  }
   // The Index, if given, contains the index of the request (in the batch)
   // whose execution caused the error.
   // It is wrapped in a sub-message for compatibility with proto3, which does
   // not permit nullable primitive fields.
-  optional Index index = 5;
+  optional ErrPosition index = 5;
 }

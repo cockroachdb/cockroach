@@ -1682,7 +1682,6 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 		args.Timestamp = tc.clock.Now()
 
 		resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
-		err = unwrapIndexedError(err)
 
 		if test.expErr {
 			if err == nil {
@@ -1890,7 +1889,6 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	// Check if the intent in the other range has not yet been resolved.
 	gArgs := getArgs(splitKey, newRng.Desc().RangeID, tc.store.StoreID())
 	_, err := newRng.AddCmd(newRng.context(), &gArgs)
-	err = unwrapIndexedError(err)
 	if _, ok := err.(*proto.WriteIntentError); !ok {
 		t.Errorf("expected write intent error, but got %s", err)
 	}
@@ -2096,7 +2094,6 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
 		}
 		if err != nil {
-			err = unwrapIndexedError(err)
 			if _, ok := err.(*proto.TransactionPushError); !ok {
 				t.Errorf("expected txn push error: %s", err)
 			}
@@ -2162,7 +2159,6 @@ func TestPushTxnPriorities(t *testing.T) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
 		}
 		if err != nil {
-			err = unwrapIndexedError(err)
 			if _, ok := err.(*proto.TransactionPushError); !ok {
 				t.Errorf("expected txn push error: %s", err)
 			}
@@ -2523,8 +2519,6 @@ func TestConditionFailedError(t *testing.T) {
 	}
 
 	_, err := tc.rng.AddCmd(tc.rng.context(), &args)
-
-	err = unwrapIndexedError(err)
 
 	if cErr, ok := err.(*proto.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
@@ -3133,6 +3127,8 @@ func TestBatchErrorWithIndex(t *testing.T) {
 		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
 		Value:         proto.Value{Bytes: []byte("not nil")},
 	})
+	// This one fails with a ConditionalPutError, which implements
+	// proto.IndexedError.
 	ba.Add(&proto.ConditionalPutRequest{
 		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
 		Value:         proto.Value{Bytes: []byte("irrelevant")},
@@ -3145,9 +3141,9 @@ func TestBatchErrorWithIndex(t *testing.T) {
 
 	if _, err := tc.rng.AddCmd(tc.rng.context(), ba); err == nil {
 		t.Fatal("expected an error")
-	} else if iErr, ok := err.(*errWithIndex); !ok {
+	} else if iErr, ok := err.(proto.IndexedError); !ok {
 		t.Fatalf("expected indexed error, got %s", err)
-	} else if iErr.index != 1 || !testutils.IsError(err, "unexpected value") {
+	} else if index, ok := iErr.ErrorIndex(); !ok || index != 1 || !testutils.IsError(err, "unexpected value") {
 		t.Fatalf("invalid index or error type: %s", iErr)
 	}
 

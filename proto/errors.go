@@ -47,10 +47,27 @@ type TransactionRestartError interface {
 	Transaction() *Transaction
 }
 
-// IndexedError is an interface implemented by errors which are associated
+// IndexedError is an interface implemented by errors which can be associated
 // with a failed request in a Batch.
 type IndexedError interface {
 	ErrorIndex() (int32, bool) // bool is false iff no index associated
+	SetErrorIndex(int32)
+}
+
+var _ IndexedError = &ConditionFailedError{}
+var _ IndexedError = &internalError{}
+
+// ErrorIndex implements IndexedError.
+func (e *ConditionFailedError) ErrorIndex() (int32, bool) {
+	if e.Index != nil {
+		return e.Index.Index, true
+	}
+	return 0, false
+}
+
+// SetErrorIndex implements IndexedError.
+func (e *ConditionFailedError) SetErrorIndex(index int32) {
+	e.Index = &ErrPosition{Index: index}
 }
 
 func (e Error) getDetail() error {
@@ -110,6 +127,10 @@ func (e *internalError) ErrorIndex() (int32, bool) {
 	return e.Index.Index, true
 }
 
+func (e *internalError) SetErrorIndex(index int32) {
+	e.Index = &ErrPosition{Index: index}
+}
+
 // GoError returns the non-nil error from the proto.Error union.
 func (e *Error) GoError() error {
 	if e == nil {
@@ -158,7 +179,7 @@ func (e *Error) SetGoError(err error) {
 	}
 	if r, ok := err.(IndexedError); ok {
 		if index, ok := r.ErrorIndex(); ok {
-			e.Index = &Error_Index{Index: index}
+			e.Index = &ErrPosition{Index: index}
 		}
 	}
 	// If the specific error type exists in the detail union, set it.

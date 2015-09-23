@@ -384,7 +384,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	}
 	defer trace.Epoch("request leader lease")()
 	// Otherwise, no active lease: Request renewal.
-	err := unwrapIndexedError(r.requestLeaderLease(timestamp))
+	err := r.requestLeaderLease(timestamp)
 
 	// Getting a LeaseRejectedError back means someone else got there first;
 	// we can redirect if they cover our timestamp. Note that it can't be us,
@@ -1179,7 +1179,10 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *pr
 		}
 
 		if err != nil {
-			return nil, intents, &errWithIndex{err: err, index: int32(index)}
+			if iErr, ok := err.(proto.IndexedError); ok {
+				iErr.SetErrorIndex(int32(index))
+			}
+			return nil, intents, err
 		}
 
 		// Add the response to the batch, updating the timestamp.
@@ -1338,9 +1341,9 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// still be careful though, a retry could happen and race with args.
 		args := gogoproto.Clone(item.args).(proto.Request)
 		stopper.RunAsyncTask(func() {
-			err := unwrapIndexedError(r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
+			err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
 				Intents: item.intents,
-			}, r, args, proto.CLEANUP_TXN))
+			}, r, args, proto.CLEANUP_TXN)
 			if wiErr, ok := err.(*proto.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 			}
@@ -1481,7 +1484,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 				if log.V(1) {
 					log.Warningc(ctx, "batch resolve failed: %s", err)
 				}
-				if _, ok := unwrapIndexedError(err).(*proto.RangeKeyMismatchError); !ok {
+				if _, ok := err.(*proto.RangeKeyMismatchError); !ok {
 					// TODO(tschottdorf)
 					panic(fmt.Sprintf("intent resolution failed, error: %s", err.Error()))
 				}
