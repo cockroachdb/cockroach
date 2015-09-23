@@ -18,7 +18,6 @@
 package sql
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -116,7 +115,7 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 	case parser.Values:
 		return p.Values(n)
 	default:
-		return nil, fmt.Errorf("unknown statement type: %T", stmt)
+		return nil, util.Errorf("unknown statement type: %T", stmt)
 	}
 }
 
