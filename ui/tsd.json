@@ -1,6 +1,6 @@
 {
   "version": "v4",
-  "repo": "borisyankov/DefinitelyTyped",
+  "repo": "maxlang/DefinitelyTyped",
   "ref": "master",
   "path": "ts/typings",
   "bundle": "ts/typings/tsd.d.ts",
