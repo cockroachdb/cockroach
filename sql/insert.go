@@ -195,8 +195,8 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		// Mark transaction as operating on the system DB.
 		p.txn.SetSystemDBTrigger()
 	}
-	if pErr := p.txn.Run(&b); pErr != nil {
-		return nil, convertBatchError(tableDesc, b, pErr)
+	if err := p.txn.Run(&b); err != nil {
+		return nil, convertBatchError(tableDesc, b, err)
 	}
 	// TODO(tamird/pmattis): return the number of affected rows
 	return &valuesNode{}, nil

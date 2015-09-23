@@ -104,7 +104,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.txn.Run(&b).GoError(); err != nil {
+	if err := p.txn.Run(&b); err != nil {
 		return nil, err
 	}
 

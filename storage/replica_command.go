@@ -1165,7 +1165,7 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 		if err := splitRangeAddressing(b, newDesc, &updatedDesc); err != nil {
 			return err
 		}
-		if err := txn.Run(b).GoError(); err != nil {
+		if err := txn.Run(b); err != nil {
 			return err
 		}
 		// Update the RangeTree.
@@ -1188,7 +1188,7 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return txn.Run(b).GoError()
+		return txn.Run(b)
 	}); err != nil {
 		return reply, util.Errorf("split at key %s failed: %s", splitKey, err)
 	}
@@ -1325,7 +1325,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.R
 			}
 			// Commit this batch on its own to ensure that the transaction record
 			// is created in the right place (our triggers rely on this).
-			if err := txn.Run(b).GoError(); err != nil {
+			if err := txn.Run(b); err != nil {
 				return err
 			}
 		}
@@ -1380,7 +1380,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.R
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return txn.Run(b).GoError()
+		return txn.Run(b)
 	}); err != nil {
 		return reply, util.Errorf("merge of range into %d failed: %s", origLeftDesc.RangeID, err)
 	}
@@ -1539,7 +1539,7 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return txn.Run(b).GoError()
+		return txn.Run(b)
 	})
 	if err != nil {
 		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, err)

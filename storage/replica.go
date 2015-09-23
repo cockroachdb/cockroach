@@ -1508,7 +1508,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		b.InternalAddCall(proto.Call{Args: ba, Reply: &proto.BatchResponse{}})
 		action := func() {
 			// TODO(tschottdorf): no tracing here yet.
-			if err := r.rm.DB().Run(b).GoError(); err != nil {
+			if err := r.rm.DB().Run(b); err != nil {
 				log.Warningf("unable to resolve intent: %s", err)
 			}
 		}

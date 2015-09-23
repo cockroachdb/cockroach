@@ -314,7 +314,7 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 	br := &proto.BatchResponse{}
 	b := &client.Batch{}
 	b.InternalAddCall(proto.Call{Args: ba, Reply: br})
-	if err := repl.rm.DB().Run(b).GoError(); err != nil {
+	if err := repl.rm.DB().Run(b); err != nil {
 		log.Warningf("push of txn %s failed: %s", txn, err)
 		updateOldestIntent(txn.OrigTimestamp.WallTime)
 		return
