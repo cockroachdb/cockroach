@@ -100,7 +100,7 @@ module Models {
        * _url return the url used for queries to the status server.
        */
       private _url(): string {
-        return "/_status" + this.getURL() + "?" + m.route.buildQueryString(this.getParams());
+        return "http://localhost:8080/_status" + this.getURL() + "?" + m.route.buildQueryString(this.getParams());
       }
 
       constructor() {

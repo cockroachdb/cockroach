@@ -22,7 +22,7 @@ var paths = {
     js: [
         'bower_components/d3/d3.min.js',
         'bower_components/mithril/mithril.min.js',
-        'bower_components/lodash/lodash.js',
+        'bower_components/lodash/lodash.min.js',
         'bower_components/nvd3/build/nv.d3.min.js'
     ],
     css: [
@@ -48,7 +48,7 @@ gulp.task('bower', ['bowerjs', 'bowercss']);
 gulp.task('typescript', function () {
     return gulp.src(['ts/app.ts', 'ts/header.ts'])
         .pipe(typescript(require('./ts/tsconfig.json').compilerOptions))
-        .pipe(gulp.dest('build/js'));
+        .pipe(gulp.dest('build'));
 });
 
 /* copy index */

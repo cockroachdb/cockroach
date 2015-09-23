@@ -33,7 +33,7 @@ module Models {
       public totalStatus: Utils.ReadOnlyProperty<Proto.Status>;
 
       private _data: Utils.QueryCache<Proto.StoreStatus[]> = new Utils.QueryCache((): promise<Proto.StoreStatus[]> => {
-        return Utils.Http.Get("/_status/stores/")
+        return Utils.Http.Get("http://localhost:8080/_status/stores/")
           .then((results: StoreStatusResponseSet) => {
             return results.d;
           });
@@ -78,7 +78,7 @@ module Models {
       public totalStatus: Utils.ReadOnlyProperty<Proto.Status>;
 
       private _data: Utils.QueryCache<Proto.NodeStatus[]> = new Utils.QueryCache((): promise<Proto.NodeStatus[]> => {
-        return Utils.Http.Get("/_status/nodes/")
+        return Utils.Http.Get("http://localhost:8080/_status/nodes/")
           .then((results: NodeStatusResponseSet) => {
             return results.d;
           });

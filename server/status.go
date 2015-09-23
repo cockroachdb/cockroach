@@ -104,6 +104,14 @@ type statusServer struct {
 	proxyClient *http.Client
 }
 
+//type myHandler struct {}
+//
+//func (h *myHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+//	w.Header().Set("Access-Control-Allow-Origin", "*")
+//}
+//
+//var sm *http.ServeMux = http.NewServeMux();
+
 // newStatusServer allocates and returns a statusServer.
 func newStatusServer(db *client.DB, gossip *gossip.Gossip, ctx *Context) *statusServer {
 	// Create an http client with a timeout
@@ -124,6 +132,8 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, ctx *Context) *status
 		ctx:         ctx,
 		proxyClient: httpClient,
 	}
+
+//	sm.Handle("*", myHandler{})
 
 	server.router.GET(statusGossipPattern, server.handleGossip)
 	server.router.GET(statusDetailsPattern, server.handleDetails)
