@@ -146,7 +146,7 @@ func ExampleBatch() {
 	b := &client.Batch{}
 	b.Get("aa")
 	b.Put("bb", "2")
-	if err := db.Run(b).GoError(); err != nil {
+	if err := db.Run(b); err != nil {
 		panic(err)
 	}
 	for _, result := range b.Results {
@@ -168,7 +168,7 @@ func ExampleDB_Scan() {
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if err := db.Run(b).GoError(); err != nil {
+	if err := db.Run(b); err != nil {
 		panic(err)
 	}
 	rows, err := db.Scan("a", "b", 100)
@@ -192,7 +192,7 @@ func ExampleDB_ReverseScan() {
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if err := db.Run(b).GoError(); err != nil {
+	if err := db.Run(b); err != nil {
 		panic(err)
 	}
 	rows, err := db.ReverseScan("ab", "c", 100)
@@ -216,7 +216,7 @@ func ExampleDB_Del() {
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("ac", "3")
-	if err := db.Run(b).GoError(); err != nil {
+	if err := db.Run(b); err != nil {
 		panic(err)
 	}
 	if err := db.Del("ab"); err != nil {
@@ -252,7 +252,7 @@ func ExampleTx_Commit() {
 	b := &client.Batch{}
 	b.Get("aa")
 	b.Get("ab")
-	if err := db.Run(b).GoError(); err != nil {
+	if err := db.Run(b); err != nil {
 		panic(err)
 	}
 	for i, result := range b.Results {

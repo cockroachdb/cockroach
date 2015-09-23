@@ -19,12 +19,14 @@ package rpc
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -44,5 +46,16 @@ func init() {
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
+	defer func(hbInterval time.Duration, retryOpts retry.Options) {
+		heartbeatInterval = hbInterval
+		clientRetryOptions = retryOpts
+	}(heartbeatInterval, clientRetryOptions)
+
+	heartbeatInterval = 10 * time.Millisecond
+	clientRetryOptions = retry.Options{
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     1 * time.Millisecond,
+	}
+
 	leaktest.TestMainWithLeakCheck(m)
 }

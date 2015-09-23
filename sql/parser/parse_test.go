@@ -273,6 +273,10 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t WHERE a = B(c)`},
 		{`SELECT FROM t WHERE a = B(c, d)`},
 		{`SELECT FROM t WHERE a = COUNT(*)`},
+		{`SELECT FROM t WHERE a = IF(b, c, d)`},
+		{`SELECT FROM t WHERE a = IFNULL(b, c)`},
+		{`SELECT FROM t WHERE a = NULLIF(b, c)`},
+		{`SELECT FROM t WHERE a = COALESCE(a, b, c, d, e)`},
 		{`SELECT (a.b) FROM t WHERE (b.c) = 2`},
 
 		{`SELECT FROM t ORDER BY a`},

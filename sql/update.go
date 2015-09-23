@@ -157,6 +157,8 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		}
 	}
 
+	marshalled := make([]interface{}, len(cols))
+
 	// Update all the rows.
 	var b client.Batch
 	for rows.Next() {
@@ -184,12 +186,24 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			}
 			rowVals[colIDtoRowIndex[col.ID]] = val
 		}
+
+		// Check that the new value types match the column types. This needs to
+		// happen before index encoding because certain datum types (i.e. tuple)
+		// cannot be used as index values.
+		for i, val := range newVals {
+			var err error
+			if marshalled[i], err = marshalColumnValue(cols[i], val); err != nil {
+				return nil, err
+			}
+		}
+
 		// Compute the new secondary index key:value pairs for this row.
 		newSecondaryIndexEntries, err := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
 		if err != nil {
 			return nil, err
 		}
+
 		// Update secondary indexes.
 		for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
 			secondaryIndexEntry := secondaryIndexEntries[i]
@@ -209,13 +223,8 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		for i, val := range newVals {
 			col := cols[i]
 
-			marshalled, err := marshalColumnValue(col, val)
-			if err != nil {
-				return nil, err
-			}
-
 			key := MakeColumnKey(col.ID, primaryIndexKey)
-			if marshalled != nil {
+			if marshalled[i] != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
@@ -223,7 +232,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 					log.Infof("Put %q -> %v", key, val)
 				}
 
-				b.Put(key, marshalled)
+				b.Put(key, marshalled[i])
 			} else {
 				// The column might have already existed but is being set to NULL, so
 				// delete it.
@@ -239,8 +248,8 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if pErr := p.txn.Run(&b); pErr != nil {
-		return nil, convertBatchError(tableDesc, b, pErr)
+	if err := p.txn.Run(&b); err != nil {
+		return nil, convertBatchError(tableDesc, b, err)
 	}
 
 	// TODO(tamird/pmattis): return the number of affected rows.

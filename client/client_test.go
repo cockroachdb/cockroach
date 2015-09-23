@@ -407,7 +407,7 @@ func TestClientBatch(t *testing.T) {
 			b.Inc(key, int64(i))
 		}
 
-		if err := db.Run(b).GoError(); err != nil {
+		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
 
@@ -423,7 +423,7 @@ func TestClientBatch(t *testing.T) {
 		b := &client.Batch{}
 		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
 		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
-		if err := db.Run(b).GoError(); err != nil {
+		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
 
@@ -454,7 +454,7 @@ func TestClientBatch(t *testing.T) {
 		b := &client.Batch{}
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
-		if err := db.Run(b).GoError(); err != nil {
+		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
 
@@ -492,7 +492,7 @@ func TestClientBatch(t *testing.T) {
 
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
-		if err := db.Run(b).GoError(); err == nil {
+		if err := db.Run(b); err == nil {
 			t.Error("unexpected success")
 		} else {
 			var foundError bool
@@ -518,7 +518,7 @@ func TestClientBatch(t *testing.T) {
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
 		if err := db.Txn(func(txn *client.Txn) error {
-			return txn.Run(b).GoError()
+			return txn.Run(b)
 		}); err == nil {
 			t.Error("unexpected success")
 		} else {

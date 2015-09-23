@@ -95,6 +95,7 @@
 		LeaseRejectedError
 		SendError
 		ErrorDetail
+		ErrPosition
 		Error
 		RemoteOffset
 		PingRequest

@@ -350,7 +350,8 @@ func (*OpRequiresTxnError) ProtoMessage() {}
 // because it was missing or was not equal. The error will
 // contain the actual value found.
 type ConditionFailedError struct {
-	ActualValue *Value `protobuf:"bytes,1,opt,name=actual_value" json:"actual_value,omitempty"`
+	ActualValue *Value       `protobuf:"bytes,1,opt,name=actual_value" json:"actual_value,omitempty"`
+	Index       *ErrPosition `protobuf:"bytes,2,opt,name=index" json:"index,omitempty"`
 }
 
 func (m *ConditionFailedError) Reset()      { *m = ConditionFailedError{} }
@@ -359,6 +360,13 @@ func (*ConditionFailedError) ProtoMessage() {}
 func (m *ConditionFailedError) GetActualValue() *Value {
 	if m != nil {
 		return m.ActualValue
+	}
+	return nil
+}
+
+func (m *ConditionFailedError) GetIndex() *ErrPosition {
+	if m != nil {
+		return m.Index
 	}
 	return nil
 }
@@ -538,6 +546,23 @@ func (m *ErrorDetail) GetSend() *SendError {
 	return nil
 }
 
+// ErrPosition describes the position of an error in a Batch. A simple nullable
+// primitive field would break compatibility with proto3, where primitive fields
+// are no longer allowed to be nullable.
+type ErrPosition struct {
+	Index int32 `protobuf:"varint,1,opt,name=index" json:"index"`
+}
+
+func (m *ErrPosition) Reset()      { *m = ErrPosition{} }
+func (*ErrPosition) ProtoMessage() {}
+
+func (m *ErrPosition) GetIndex() int32 {
+	if m != nil {
+		return m.Index
+	}
+	return 0
+}
+
 // Error is a generic representation including a string message
 // and information about retryability.
 type Error struct {
@@ -554,9 +579,7 @@ type Error struct {
 	Detail *ErrorDetail `protobuf:"bytes,4,opt,name=detail" json:"detail,omitempty"`
 	// The Index, if given, contains the index of the request (in the batch)
 	// whose execution caused the error.
-	// It is wrapped in a sub-message for compatibility with proto3, which does
-	// not permit nullable primitive fields.
-	Index *Error_Index `protobuf:"bytes,5,opt,name=index" json:"index,omitempty"`
+	Index *ErrPosition `protobuf:"bytes,5,opt,name=index" json:"index,omitempty"`
 }
 
 func (m *Error) Reset()      { *m = Error{} }
@@ -590,25 +613,11 @@ func (m *Error) GetDetail() *ErrorDetail {
 	return nil
 }
 
-func (m *Error) GetIndex() *Error_Index {
+func (m *Error) GetIndex() *ErrPosition {
 	if m != nil {
 		return m.Index
 	}
 	return nil
-}
-
-type Error_Index struct {
-	Index int32 `protobuf:"varint,1,opt,name=index" json:"index"`
-}
-
-func (m *Error_Index) Reset()      { *m = Error_Index{} }
-func (*Error_Index) ProtoMessage() {}
-
-func (m *Error_Index) GetIndex() int32 {
-	if m != nil {
-		return m.Index
-	}
-	return 0
 }
 
 func init() {
@@ -1012,6 +1021,16 @@ func (m *ConditionFailedError) MarshalTo(data []byte) (int, error) {
 		}
 		i += n14
 	}
+	if m.Index != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Index.Size()))
+		n15, err := m.Index.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n15
+	}
 	return i, nil
 }
 
@@ -1033,19 +1052,19 @@ func (m *LeaseRejectedError) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Requested.Size()))
-	n15, err := m.Requested.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n15
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Existing.Size()))
-	n16, err := m.Existing.MarshalTo(data[i:])
+	n16, err := m.Requested.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n16
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Existing.Size()))
+	n17, err := m.Existing.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n17
 	return i, nil
 }
 
@@ -1098,152 +1117,173 @@ func (m *ErrorDetail) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.NotLeader.Size()))
-		n17, err := m.NotLeader.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n17
-	}
-	if m.RangeNotFound != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.RangeNotFound.Size()))
-		n18, err := m.RangeNotFound.MarshalTo(data[i:])
+		n18, err := m.NotLeader.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n18
 	}
-	if m.RangeKeyMismatch != nil {
-		data[i] = 0x1a
+	if m.RangeNotFound != nil {
+		data[i] = 0x12
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.RangeKeyMismatch.Size()))
-		n19, err := m.RangeKeyMismatch.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.RangeNotFound.Size()))
+		n19, err := m.RangeNotFound.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n19
 	}
-	if m.ReadWithinUncertaintyInterval != nil {
-		data[i] = 0x22
+	if m.RangeKeyMismatch != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.ReadWithinUncertaintyInterval.Size()))
-		n20, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.RangeKeyMismatch.Size()))
+		n20, err := m.RangeKeyMismatch.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n20
 	}
-	if m.TransactionAborted != nil {
-		data[i] = 0x2a
+	if m.ReadWithinUncertaintyInterval != nil {
+		data[i] = 0x22
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionAborted.Size()))
-		n21, err := m.TransactionAborted.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.ReadWithinUncertaintyInterval.Size()))
+		n21, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n21
 	}
-	if m.TransactionPush != nil {
-		data[i] = 0x32
+	if m.TransactionAborted != nil {
+		data[i] = 0x2a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionPush.Size()))
-		n22, err := m.TransactionPush.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionAborted.Size()))
+		n22, err := m.TransactionAborted.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n22
 	}
-	if m.TransactionRetry != nil {
-		data[i] = 0x3a
+	if m.TransactionPush != nil {
+		data[i] = 0x32
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionRetry.Size()))
-		n23, err := m.TransactionRetry.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionPush.Size()))
+		n23, err := m.TransactionPush.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n23
 	}
-	if m.TransactionStatus != nil {
-		data[i] = 0x42
+	if m.TransactionRetry != nil {
+		data[i] = 0x3a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionStatus.Size()))
-		n24, err := m.TransactionStatus.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionRetry.Size()))
+		n24, err := m.TransactionRetry.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n24
 	}
-	if m.WriteIntent != nil {
-		data[i] = 0x4a
+	if m.TransactionStatus != nil {
+		data[i] = 0x42
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.WriteIntent.Size()))
-		n25, err := m.WriteIntent.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionStatus.Size()))
+		n25, err := m.TransactionStatus.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n25
 	}
-	if m.WriteTooOld != nil {
-		data[i] = 0x52
+	if m.WriteIntent != nil {
+		data[i] = 0x4a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.WriteTooOld.Size()))
-		n26, err := m.WriteTooOld.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.WriteIntent.Size()))
+		n26, err := m.WriteIntent.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n26
 	}
-	if m.OpRequiresTxn != nil {
-		data[i] = 0x5a
+	if m.WriteTooOld != nil {
+		data[i] = 0x52
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.OpRequiresTxn.Size()))
-		n27, err := m.OpRequiresTxn.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.WriteTooOld.Size()))
+		n27, err := m.WriteTooOld.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n27
 	}
-	if m.ConditionFailed != nil {
-		data[i] = 0x62
+	if m.OpRequiresTxn != nil {
+		data[i] = 0x5a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.ConditionFailed.Size()))
-		n28, err := m.ConditionFailed.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.OpRequiresTxn.Size()))
+		n28, err := m.OpRequiresTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n28
 	}
-	if m.LeaseRejected != nil {
-		data[i] = 0x6a
+	if m.ConditionFailed != nil {
+		data[i] = 0x62
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.LeaseRejected.Size()))
-		n29, err := m.LeaseRejected.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.ConditionFailed.Size()))
+		n29, err := m.ConditionFailed.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n29
 	}
-	if m.NodeUnavailable != nil {
-		data[i] = 0x72
+	if m.LeaseRejected != nil {
+		data[i] = 0x6a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.NodeUnavailable.Size()))
-		n30, err := m.NodeUnavailable.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.LeaseRejected.Size()))
+		n30, err := m.LeaseRejected.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n30
 	}
-	if m.Send != nil {
-		data[i] = 0x7a
+	if m.NodeUnavailable != nil {
+		data[i] = 0x72
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.Send.Size()))
-		n31, err := m.Send.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.NodeUnavailable.Size()))
+		n31, err := m.NodeUnavailable.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n31
 	}
+	if m.Send != nil {
+		data[i] = 0x7a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Send.Size()))
+		n32, err := m.Send.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n32
+	}
+	return i, nil
+}
+
+func (m *ErrPosition) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ErrPosition) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Index))
 	return i, nil
 }
 
@@ -1281,43 +1321,22 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x22
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
-		n32, err := m.Detail.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n32
-	}
-	if m.Index != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.Index.Size()))
-		n33, err := m.Index.MarshalTo(data[i:])
+		n33, err := m.Detail.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n33
 	}
-	return i, nil
-}
-
-func (m *Error_Index) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
+	if m.Index != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Index.Size()))
+		n34, err := m.Index.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n34
 	}
-	return data[:n], nil
-}
-
-func (m *Error_Index) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Index))
 	return i, nil
 }
 
@@ -1481,6 +1500,10 @@ func (m *ConditionFailedError) Size() (n int) {
 		l = m.ActualValue.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
+	if m.Index != nil {
+		l = m.Index.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
 	return n
 }
 
@@ -1569,6 +1592,13 @@ func (m *ErrorDetail) Size() (n int) {
 	return n
 }
 
+func (m *ErrPosition) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovErrors(uint64(m.Index))
+	return n
+}
+
 func (m *Error) Size() (n int) {
 	var l int
 	_ = l
@@ -1584,13 +1614,6 @@ func (m *Error) Size() (n int) {
 		l = m.Index.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
-	return n
-}
-
-func (m *Error_Index) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovErrors(uint64(m.Index))
 	return n
 }
 
@@ -2950,6 +2973,39 @@ func (m *ConditionFailedError) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Index == nil {
+				m.Index = &ErrPosition{}
+			}
+			if err := m.Index.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipErrors(data[iNdEx:])
@@ -3725,6 +3781,75 @@ func (m *ErrorDetail) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+func (m *ErrPosition) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowErrors
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ErrPosition: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ErrPosition: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
+			}
+			m.Index = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Index |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipErrors(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthErrors
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *Error) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -3882,81 +4007,12 @@ func (m *Error) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Index == nil {
-				m.Index = &Error_Index{}
+				m.Index = &ErrPosition{}
 			}
 			if err := m.Index.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipErrors(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthErrors
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *Error_Index) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowErrors
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Index: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Index: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
-			}
-			m.Index = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Index |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipErrors(data[iNdEx:])

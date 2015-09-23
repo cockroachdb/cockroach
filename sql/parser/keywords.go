@@ -92,6 +92,7 @@ var keywords = map[string]int{
 	"HAVING":            HAVING,
 	"HOUR":              HOUR,
 	"IF":                IF,
+	"IFNULL":            IFNULL,
 	"IN":                IN,
 	"INDEX":             INDEX,
 	"INITIALLY":         INITIALLY,
