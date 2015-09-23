@@ -4,7 +4,10 @@
 
 var gulp = require('gulp'),
     stylus = require('gulp-stylus'),
-    typescript = require('gulp-typescript')
+    typescript = require('gulp-typescript'),
+    bindata = require('gulp-gobin'),
+    del = require('del'),
+    shell = require('gulp-shell')
     ;
 
 
@@ -57,18 +60,40 @@ gulp.task('copyindex', function () {
         .pipe(gulp.dest('build'));
 });
 
+gulp.task('clean:build', function() {
+    return del('build/**');
+});
+
+gulp.task('clean:embedded', function() {
+        return del('embedded.go');
+});
+
+gulp.task('bindata', ['clean:embedded'], shell.task([
+    'go-bindata -mode 0644 -modtime 1400000000 -pkg ui -o embedded.go build/...',
+    'gofmt -s -w embedded.go',
+    'goimports -w embedded.go'
+]));
+
+gulp.task('bindata:debug', ['clean:embedded'], shell.task([
+    'go-bindata -pkg ui -o embedded.go -debug build/...'
+]));
+
 /* build */
-gulp.task('build', ['styles', 'bower', 'copyindex', 'typescript']);
+gulp.task('build', ['clean:build', 'styles', 'bower', 'copyindex', 'typescript' ]);
+
+/* compile */
+gulp.task('compile', ['build', 'bindata']);
+
+/* debug */
+gulp.task('compile', ['build', 'bindata:debug']);
 
 /* watch */
 gulp.task('watch', ['build'], function () {
+    gulp.watch('styl/**/*.styl', ['styles', 'bindata']);
 
-    gulp.watch('styl/**/*.styl', ['styles']);
+    gulp.watch('ts/**/*.ts', ['typescript', 'bindata']);
 
-    gulp.watch('ts/**/*.ts', ['typescript']);
-
-    gulp.watch('index.html', ['copyindex']);
-
+    gulp.watch('index.html', ['copyindex', 'bindata']);
 });
 
 /* default */
