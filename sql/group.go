@@ -90,18 +90,20 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 		s.render = append(s.render, f.val.Exprs[0])
 	}
 
+	group.desiredOrdering = desiredAggregateOrdering(group.funcs)
 	return group, nil
 }
 
 type groupNode struct {
-	planner   *planner
-	plan      planNode
-	columns   []string
-	row       parser.DTuple
-	render    []parser.Expr
-	funcs     []*aggregateFunc
-	needGroup bool
-	err       error
+	planner         *planner
+	plan            planNode
+	columns         []string
+	row             parser.DTuple
+	render          []parser.Expr
+	funcs           []*aggregateFunc
+	desiredOrdering []int
+	needGroup       bool
+	err             error
 }
 
 func (n *groupNode) Columns() []string {
@@ -179,6 +181,39 @@ func (n *groupNode) wrap(plan planNode) planNode {
 	n.plan = plan
 	n.needGroup = true
 	return n
+}
+
+// desiredAggregateOrdering computes the desired output ordering from the
+// scan. It looks for an output column index containing a simple MIN/MAX
+// aggregation. If zero or multiple MIN/MAX aggregations are requested then no
+// ordering will be requested. A negative index indicates a MAX aggregation was
+// requested for the output column.
+func desiredAggregateOrdering(funcs []*aggregateFunc) []int {
+	var limit int
+	for i, f := range funcs {
+		switch f.impl.(type) {
+		case *maxAggregate, *minAggregate:
+			if limit != 0 || len(f.val.Exprs) != 1 {
+				return nil
+			}
+			switch f.val.Exprs[0].(type) {
+			case *qvalue:
+				limit = i + 1
+				if _, ok := f.impl.(*maxAggregate); ok {
+					limit = -limit
+				}
+			default:
+				return nil
+			}
+
+		default:
+			return nil
+		}
+	}
+	if limit == 0 {
+		return nil
+	}
+	return []int{limit}
 }
 
 type extractAggregatesVisitor struct {

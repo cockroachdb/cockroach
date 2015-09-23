@@ -63,10 +63,13 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		return nil, err
 	}
 
-	// TODO(pmattis): Consider aggregation functions during index
-	// selection. Specifically, MIN(k) and MAX(k) where k is the first column in
-	// an index can be satisfied with a single read.
-	plan, err := p.selectIndex(scan, sort.Ordering())
+	var ordering []int
+	if group != nil {
+		ordering = group.desiredOrdering
+	} else if sort != nil {
+		ordering = sort.Ordering()
+	}
+	plan, err := p.selectIndex(scan, ordering)
 	if err != nil {
 		return nil, err
 	}
@@ -284,18 +287,46 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 	// Compute the ordering provided by the index.
 	indexOrdering := scan.computeOrdering(v.index.fullColumnIDs())
 
+	// Compute the prefix of the index for which we have exact constraints. This
+	// prefix is inconsequential for ordering because the values are identical.
+	prefix := exactPrefix(v.constraints)
+
 	// Compute how much of the index ordering matches the requested ordering for
 	// both forward and reverse scans.
-	fwdMatch, revMatch := 0, 0
-	for ; fwdMatch < len(ordering); fwdMatch++ {
-		if fwdMatch >= len(indexOrdering) || ordering[fwdMatch] != indexOrdering[fwdMatch] {
+	fwdMatch, fwdPrefix, fwdIndexOrdering := 0, prefix, indexOrdering
+	for fwdMatch < len(ordering) && fwdMatch < len(fwdIndexOrdering) {
+		if ordering[fwdMatch] == fwdIndexOrdering[fwdMatch] {
+			// The index ordering matched the desired ordering.
+			fwdPrefix = 0
+			fwdMatch++
+			continue
+		}
+		// The index ordering did not match the desired ordering. Check if we're
+		// still considering a prefix of the index for which there was an exact
+		// match (and thus ordering is inconsequential).
+		if fwdPrefix == 0 {
 			break
 		}
+		fwdPrefix--
+		fwdIndexOrdering = fwdIndexOrdering[1:]
 	}
-	for ; revMatch < len(ordering); revMatch++ {
-		if revMatch >= len(indexOrdering) || ordering[revMatch] != -indexOrdering[revMatch] {
+
+	revMatch, revPrefix, revIndexOrdering := 0, prefix, indexOrdering
+	for revMatch < len(ordering) && revMatch < len(revIndexOrdering) {
+		if ordering[revMatch] == -revIndexOrdering[revMatch] {
+			// The index ordering matched the desired ordering.
+			revPrefix = 0
+			revMatch++
+			continue
+		}
+		// The index ordering did not match the desired ordering. Check if we're
+		// still considering a prefix of the index for which there was an exact
+		// match (and thus ordering is inconsequential).
+		if revPrefix == 0 {
 			break
 		}
+		revPrefix--
+		revIndexOrdering = revIndexOrdering[1:]
 	}
 
 	// Weight the cost by how much of the ordering matched.
@@ -624,4 +655,34 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 	}
 
 	return spans
+}
+
+// exactPrefix returns the count of the columns of the index for which an exact
+// prefix match was requested. For example, if an index was defined on the
+// columns (a, b, c) and the WHERE clause was "(a, b) = (1, 2)", exactPrefix()
+// would return 2.
+func exactPrefix(constraints []indexConstraint) int {
+	prefix := 0
+	for _, c := range constraints {
+		if c.start == nil || c.end == nil || c.start != c.end {
+			return prefix
+		}
+		switch c.start.Operator {
+		case parser.EQ:
+			prefix++
+			continue
+		case parser.In:
+			if tuple, ok := c.start.Right.(parser.DTuple); !ok || len(tuple) != 1 {
+				return prefix
+			}
+			if _, ok := c.start.Left.(parser.Tuple); ok {
+				prefix += len(c.tupleMap)
+			} else {
+				prefix++
+			}
+		default:
+			return prefix
+		}
+	}
+	return prefix
 }

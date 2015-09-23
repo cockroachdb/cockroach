@@ -37,6 +37,9 @@ func (*planner) distinct(n *parser.Select, p planNode) planNode {
 		d.columnsInOrder = make([]bool, len(p.Columns()))
 	}
 	for _, p := range p.Ordering() {
+		if p == 0 {
+			break
+		}
 		if p < 0 {
 			p = -p
 		}

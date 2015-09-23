@@ -386,11 +386,13 @@ func (n *scanNode) initOrdering() {
 }
 
 // computeOrdering computes the ordering information for the specified set of
-// columns.
+// columns. The returned slice will be the same length as the input slice. If a
+// column is not part of the output 0 will be returned in the corresponding
+// field of the output.
 func (n *scanNode) computeOrdering(columnIDs []ColumnID) []int {
 	// Loop over the column IDs and determine if they are used for any of the
 	// render targets.
-	var ordering []int
+	ordering := make([]int, 0, len(columnIDs))
 	for _, colID := range columnIDs {
 		found := false
 		for i, r := range n.render {
@@ -403,7 +405,7 @@ func (n *scanNode) computeOrdering(columnIDs []ColumnID) []int {
 		if !found {
 			// Exit if the column ID in the index is not one of the output
 			// expressions.
-			break
+			ordering = append(ordering, 0)
 		}
 	}
 	return ordering
