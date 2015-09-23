@@ -269,6 +269,21 @@ func TestEvalExpr(t *testing.T) {
 		{`'1h'::interval - '12h2m1s23ms'::interval`, `-11h2m1.023s`},
 		{`3 * '1h2m'::interval * 3`, `9h18m0s`},
 		{`'3h'::interval / 2`, `1h30m0s`},
+		// Conditional expressions.
+		{`IF(true, 1, 2/0)`, `1`},
+		{`IF(false, 1/0, 2)`, `2`},
+		{`IF(NULL, 1/0, 2)`, `2`},
+		{`NULLIF(1, 1)`, `NULL`},
+		{`NULLIF(1, 2)`, `1`},
+		{`NULLIF(2, 1)`, `2`},
+		{`IFNULL(1, 2/0)`, `1`},
+		{`IFNULL(NULL, 2)`, `2`},
+		{`IFNULL(1, NULL)`, `1`},
+		{`IFNULL(NULL, NULL)`, `NULL`},
+		{`COALESCE(1, 2, 3, 4/0)`, `1`},
+		{`COALESCE(NULL, 2, 3, 4/0)`, `2`},
+		{`COALESCE(NULL, NULL, NULL, 4)`, `4`},
+		{`COALESCE(NULL, NULL, NULL, NULL)`, `NULL`},
 	}
 	for _, d := range testData {
 		q, err := ParseTraditional("SELECT " + d.expr)

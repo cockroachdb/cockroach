@@ -40,6 +40,9 @@ func (*RangeCond) expr()      {}
 func (*IsExpr) expr()         {}
 func (*IsOfTypeExpr) expr()   {}
 func (*ExistsExpr) expr()     {}
+func (*IfExpr) expr()         {}
+func (*NullIfExpr) expr()     {}
+func (*CoalesceExpr) expr()   {}
 func (IntVal) expr()          {}
 func (NumVal) expr()          {}
 func (DefaultVal) expr()      {}
@@ -245,6 +248,37 @@ type ExistsExpr struct {
 
 func (node *ExistsExpr) String() string {
 	return fmt.Sprintf("EXISTS %s", node.Subquery)
+}
+
+// IfExpr represents an IF expression.
+type IfExpr struct {
+	Cond Expr
+	True Expr
+	Else Expr
+}
+
+func (node *IfExpr) String() string {
+	return fmt.Sprintf("IF(%s, %s, %s)", node.Cond, node.True, node.Else)
+}
+
+// NullIfExpr represents a NULLIF expression.
+type NullIfExpr struct {
+	Expr1 Expr
+	Expr2 Expr
+}
+
+func (node *NullIfExpr) String() string {
+	return fmt.Sprintf("NULLIF(%s, %s)", node.Expr1, node.Expr2)
+}
+
+// CoalesceExpr represents a COALESCE or IFNULL expression.
+type CoalesceExpr struct {
+	Name  string
+	Exprs Exprs
+}
+
+func (node *CoalesceExpr) String() string {
+	return fmt.Sprintf("%s(%s)", node.Name, node.Exprs)
 }
 
 // IntVal represents an integer.
