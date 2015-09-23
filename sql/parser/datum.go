@@ -71,7 +71,6 @@ var (
 	timestampType = reflect.TypeOf(DummyTimestamp)
 	intervalType  = reflect.TypeOf(DummyInterval)
 	tupleType     = reflect.TypeOf(DummyTuple)
-	nullType      = reflect.TypeOf(DNull)
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
