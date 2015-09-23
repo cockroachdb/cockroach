@@ -122,8 +122,8 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 	// Mark transaction as operating on the system DB.
 	p.txn.SetSystemDBTrigger()
 
-	if pErr := p.txn.Run(&b); pErr != nil {
-		return nil, convertBatchError(tableDesc, b, pErr)
+	if err := p.txn.Run(&b); err != nil {
+		return nil, convertBatchError(tableDesc, b, err)
 	}
 
 	return &valuesNode{}, nil

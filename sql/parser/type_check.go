@@ -82,6 +82,15 @@ func TypeCheckExpr(expr Expr) (Datum, error) {
 	case *ExistsExpr:
 		return TypeCheckExpr(t.Subquery)
 
+	case *IfExpr:
+		return typeCheckIfExpr(t)
+
+	case *NullIfExpr:
+		return typeCheckNullIfExpr(t)
+
+	case *CoalesceExpr:
+		return typeCheckCoalesceExpr(t)
+
 	case DString:
 		return DummyString, nil
 
@@ -228,6 +237,68 @@ func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum,
 		dummyLeft.Type(), op, dummyRight.Type())
 }
 
+func typeCheckIfExpr(expr *IfExpr) (Datum, error) {
+	cond, err := TypeCheckExpr(expr.Cond)
+	if err != nil {
+		return nil, err
+	}
+	if cond != DNull && cond != DummyBool {
+		return nil, fmt.Errorf("IF condition must be a boolean: %s", cond.Type())
+	}
+	dummyTrue, err := TypeCheckExpr(expr.True)
+	if err != nil {
+		return nil, err
+	}
+	dummyElse, err := TypeCheckExpr(expr.Else)
+	if err != nil {
+		return nil, err
+	}
+	if dummyTrue == DNull {
+		return dummyElse, nil
+	}
+	if dummyElse == DNull {
+		return dummyTrue, nil
+	}
+	if dummyTrue != dummyElse {
+		return nil, fmt.Errorf("incompatible IF expressions %s, %s", dummyTrue.Type(), dummyElse.Type())
+	}
+	return dummyTrue, nil
+}
+
+func typeCheckNullIfExpr(expr *NullIfExpr) (Datum, error) {
+	expr1, err := TypeCheckExpr(expr.Expr1)
+	if err != nil {
+		return nil, err
+	}
+	expr2, err := TypeCheckExpr(expr.Expr2)
+	if err != nil {
+		return nil, err
+	}
+	if expr1 == DNull {
+		return expr2, nil
+	}
+	if expr2 != DNull && expr1 != expr2 {
+		return nil, fmt.Errorf("incompatible NULLIF expressions %s, %s", expr1.Type(), expr2.Type())
+	}
+	return expr1, nil
+}
+
+func typeCheckCoalesceExpr(expr *CoalesceExpr) (Datum, error) {
+	var dummyArg Datum
+	for _, e := range expr.Exprs {
+		arg, err := TypeCheckExpr(e)
+		if err != nil {
+			return nil, err
+		}
+		if dummyArg == nil || dummyArg == DNull {
+			dummyArg = arg
+		} else if dummyArg != arg && arg != DNull {
+			return nil, fmt.Errorf("incompatible %s expressions %s, %s", expr.Name, dummyArg.Type(), arg.Type())
+		}
+	}
+	return dummyArg, nil
+}
+
 func typeCheckBinaryExpr(expr *BinaryExpr) (Datum, error) {
 	dummyLeft, err := TypeCheckExpr(expr.Left)
 	if err != nil {
@@ -330,7 +401,6 @@ func typeCheckFuncExpr(expr *FuncExpr) (Datum, error) {
 
 func typeCheckCaseExpr(expr *CaseExpr) (Datum, error) {
 	var dummyCond, dummyVal Datum
-	var condType, valType reflect.Type
 
 	if expr.Expr != nil {
 		var err error
@@ -338,7 +408,6 @@ func typeCheckCaseExpr(expr *CaseExpr) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		condType = reflect.TypeOf(dummyCond)
 	}
 
 	if expr.Else != nil {
@@ -347,7 +416,6 @@ func typeCheckCaseExpr(expr *CaseExpr) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		valType = reflect.TypeOf(dummyVal)
 	}
 
 	for _, when := range expr.Whens {
@@ -355,11 +423,9 @@ func typeCheckCaseExpr(expr *CaseExpr) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		nextCondType := reflect.TypeOf(nextDummyCond)
-		if condType == nil || condType == nullType {
+		if dummyCond == nil || dummyCond == DNull {
 			dummyCond = nextDummyCond
-			condType = nextCondType
-		} else if !(nextCondType == nullType || nextCondType == condType) {
+		} else if !(nextDummyCond == DNull || nextDummyCond == dummyCond) {
 			return nil, fmt.Errorf("incompatible condition types %s, %s", dummyCond.Type(), nextDummyCond.Type())
 		}
 
@@ -367,11 +433,9 @@ func typeCheckCaseExpr(expr *CaseExpr) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		nextValType := reflect.TypeOf(nextDummyVal)
-		if valType == nil || valType == nullType {
+		if dummyVal == nil || dummyVal == DNull {
 			dummyVal = nextDummyVal
-			valType = nextValType
-		} else if !(nextValType == nullType || nextValType == valType) {
+		} else if !(nextDummyVal == DNull || nextDummyVal == dummyVal) {
 			return nil, fmt.Errorf("incompatible value types %s, %s", dummyVal.Type(), nextDummyVal.Type())
 		}
 	}

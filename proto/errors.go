@@ -18,7 +18,6 @@
 package proto
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -48,6 +47,29 @@ type TransactionRestartError interface {
 	Transaction() *Transaction
 }
 
+// IndexedError is an interface implemented by errors which can be associated
+// with a failed request in a Batch.
+type IndexedError interface {
+	ErrorIndex() (int32, bool) // bool is false iff no index associated
+	SetErrorIndex(int32)
+}
+
+var _ IndexedError = &ConditionFailedError{}
+var _ IndexedError = &internalError{}
+
+// ErrorIndex implements IndexedError.
+func (e *ConditionFailedError) ErrorIndex() (int32, bool) {
+	if e.Index != nil {
+		return e.Index.Index, true
+	}
+	return 0, false
+}
+
+// SetErrorIndex implements IndexedError.
+func (e *ConditionFailedError) SetErrorIndex(index int32) {
+	e.Index = &ErrPosition{Index: index}
+}
+
 func (e Error) getDetail() error {
 	if e.Detail == nil {
 		return nil
@@ -61,13 +83,53 @@ func NewError(err error) *Error {
 		return nil
 	}
 	e := &Error{}
-	e.SetResponseGoError(err)
+	if intErr, ok := err.(*internalError); ok {
+		*e = *(*Error)(intErr)
+	} else {
+		e.SetGoError(err)
+	}
 	return e
 }
 
 // String implements fmt.Stringer.
 func (e *Error) String() string {
-	return e.GoError().Error()
+	return e.Message
+}
+
+type internalError Error
+
+// Error implements error.
+func (e *internalError) Error() string {
+	return (*Error)(e).String()
+}
+
+// CanRetry implements the retry.Retryable interface.
+func (e *internalError) CanRetry() bool {
+	return e.Retryable
+}
+
+// CanRestartTransaction implements the TransactionRestartError interface.
+func (e *internalError) CanRestartTransaction() TransactionRestart {
+	return e.TransactionRestart
+}
+
+// Transaction implements the TransactionRestartError interface by returning
+// nil. The idea is that an error which isn't an ErrorDetail can't hold a
+// transaction (this is asserted by SetGoError()).
+func (e *internalError) Transaction() *Transaction {
+	return nil
+}
+
+// ErrorIndex implements IndexedError.
+func (e *internalError) ErrorIndex() (int32, bool) {
+	if e.Index == nil {
+		return 0, false
+	}
+	return e.Index.Index, true
+}
+
+func (e *internalError) SetErrorIndex(index int32) {
+	e.Index = &ErrPosition{Index: index}
 }
 
 // GoError returns the non-nil error from the proto.Error union.
@@ -76,12 +138,12 @@ func (e *Error) GoError() error {
 		return nil
 	}
 	if e.Detail == nil {
-		return errors.New(e.Message)
+		return (*internalError)(e)
 	}
 	err := e.getDetail()
 	if err == nil {
 		// Unknown error detail; return the generic error.
-		return errors.New(e.Message)
+		return (*internalError)(e)
 	}
 	// Make sure that the flags in the generic portion of the error
 	// match the methods of the specific error type.
@@ -104,8 +166,8 @@ func (e *Error) GoError() error {
 	return err
 }
 
-// SetResponseGoError sets Error using err.
-func (e *Error) SetResponseGoError(err error) {
+// SetGoError sets Error using err.
+func (e *Error) SetGoError(err error) {
 	if e.Message != "" {
 		panic("cannot re-use proto.Error")
 	}
@@ -113,13 +175,22 @@ func (e *Error) SetResponseGoError(err error) {
 	if r, ok := err.(retry.Retryable); ok {
 		e.Retryable = r.CanRetry()
 	}
+	var isTxnError bool
 	if r, ok := err.(TransactionRestartError); ok {
+		isTxnError = true
 		e.TransactionRestart = r.CanRestartTransaction()
+	}
+	if r, ok := err.(IndexedError); ok {
+		if index, ok := r.ErrorIndex(); ok {
+			e.Index = &ErrPosition{Index: index}
+		}
 	}
 	// If the specific error type exists in the detail union, set it.
 	detail := &ErrorDetail{}
 	if detail.SetValue(err) {
 		e.Detail = detail
+	} else if isTxnError {
+		panic(fmt.Sprintf("TransactionRestartError %T must be an ErrorDetail", err))
 	}
 }
 

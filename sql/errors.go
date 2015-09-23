@@ -43,12 +43,15 @@ func (e errUniquenessConstraintViolation) Error() string {
 		e.index.Name)
 }
 
-func convertBatchError(tableDesc *TableDescriptor, b client.Batch, pErr *proto.Error) error {
-	err := pErr.GoError()
-	if pErr.Index == nil {
+func convertBatchError(tableDesc *TableDescriptor, b client.Batch, err error) error {
+	iErr, ok := err.(proto.IndexedError)
+	if !ok {
 		return err
 	}
-	index := pErr.Index.Index
+	index, ok := iErr.ErrorIndex()
+	if !ok {
+		return err
+	}
 	if index >= int32(len(b.Results)) {
 		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
 	}

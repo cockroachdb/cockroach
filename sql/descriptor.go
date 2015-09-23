@@ -111,7 +111,7 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 	b.CPut(descKey, descriptor, nil)
 	// Mark transaction as operating on the system DB.
 	p.txn.SetSystemDBTrigger()
-	return p.txn.Run(&b).GoError()
+	return p.txn.Run(&b)
 }
 
 // getDescriptor looks up the descriptor for `key`, validates it,

@@ -32,6 +32,17 @@ func (p *planner) Values(n parser.Values) (planNode, error) {
 
 	nCols := 0
 	for _, tuple := range n {
+		for i := range tuple {
+			var err error
+			tuple[i], err = p.evalCtx.NormalizeAndTypeCheckExpr(tuple[i])
+			if err != nil {
+				return nil, err
+			}
+			tuple[i], err = p.expandSubqueries(tuple[i], 1)
+			if err != nil {
+				return nil, err
+			}
+		}
 		data, err := p.evalCtx.EvalExpr(tuple)
 		if err != nil {
 			return nil, err

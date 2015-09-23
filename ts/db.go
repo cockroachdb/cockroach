@@ -142,7 +142,7 @@ func (db *DB) StoreData(r Resolution, data []proto.TimeSeriesData) error {
 			},
 			Reply: &proto.MergeResponse{},
 		})
-		if err := db.db.Run(b).GoError(); err != nil {
+		if err := db.db.Run(b); err != nil {
 			return err
 		}
 	}

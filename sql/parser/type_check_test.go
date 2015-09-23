@@ -31,6 +31,18 @@ func TestTypeCheckExpr(t *testing.T) {
 		`true AND NULL`,
 		`NULL OR false`,
 		`1 IN (SELECT 1)`,
+		`IF(true, 2, 3)`,
+		`IF(false, 2, 3)`,
+		`IF(NULL, 2, 3)`,
+		`IFNULL(1, 2)`,
+		`IFNULL(NULL, 2)`,
+		`IFNULL(2, NULL)`,
+		`NULLIF(1, 2)`,
+		`NULLIF(NULL, 2)`,
+		`NULLIF(2, NULL)`,
+		`COALESCE(1, 2, 3, 4, 5)`,
+		`COALESCE(NULL, 2)`,
+		`COALESCE(2, NULL)`,
 	}
 	for _, d := range testData {
 		q, err := ParseTraditional("SELECT " + d)
@@ -73,6 +85,12 @@ func TestTypeCheckExprError(t *testing.T) {
 		{`(1, 2) = (1, 'a')`, `unsupported comparison operator`},
 		{`1 IN ('a', 'b')`, `unsupported comparison operator:`},
 		{`1 IN (1, 'a')`, `unsupported comparison operator`},
+		{`IF(1, 2, 3)`, `IF condition must be a boolean: int`},
+		{`IF(true, 2, 3.0)`, `incompatible IF expressions int, float`},
+		{`IFNULL(1, 2.0)`, `incompatible IFNULL expressions int, float`},
+		{`NULLIF(1, 2.0)`, `incompatible NULLIF expressions int, float`},
+		{`COALESCE(1, 2.0)`, `incompatible COALESCE expressions int, float`},
+		{`COALESCE(1, 2, 3, 4, '5')`, `incompatible COALESCE expressions int, string`},
 	}
 	for _, d := range testData {
 		q, err := ParseTraditional("SELECT " + d.expr)

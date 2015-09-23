@@ -96,6 +96,8 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	primaryIndex := tableDesc.PrimaryIndex
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
+	marshalled := make([]interface{}, len(cols))
+
 	var b client.Batch
 	for rows.Next() {
 		rowVals := rows.Values()
@@ -121,6 +123,17 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 				if i, ok := colIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
 					return nil, fmt.Errorf("null value in column %q violates not-null constraint", col.Name)
 				}
+			}
+		}
+
+		// Check that the row value types match the column types. This needs to
+		// happen before index encoding because certain datum types (i.e. tuple)
+		// cannot be used as index values.
+		for i, val := range rowVals {
+			// Make sure the value can be written to the column before proceeding.
+			var err error
+			if marshalled[i], err = marshalColumnValue(cols[i], val); err != nil {
+				return nil, err
 			}
 		}
 
@@ -153,13 +166,6 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		// Write the row columns.
 		for i, val := range rowVals {
 			col := cols[i]
-
-			// Make sure the value can be written to the column before proceeding.
-			marshalled, err := marshalColumnValue(col, val)
-			if err != nil {
-				return nil, err
-			}
-
 			if _, ok := primaryKeyCols[col.ID]; ok {
 				// Skip primary key columns as their values are encoded in the row
 				// sentinel key which is guaranteed to exist for as long as the row
@@ -167,7 +173,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 				continue
 			}
 
-			if marshalled != nil {
+			if marshalled[i] != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
@@ -177,7 +183,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 					log.Infof("CPut %q -> %v", key, val)
 				}
 
-				b.CPut(key, marshalled, nil)
+				b.CPut(key, marshalled[i], nil)
 			}
 		}
 	}
@@ -189,8 +195,8 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		// Mark transaction as operating on the system DB.
 		p.txn.SetSystemDBTrigger()
 	}
-	if pErr := p.txn.Run(&b); pErr != nil {
-		return nil, convertBatchError(tableDesc, b, pErr)
+	if err := p.txn.Run(&b); err != nil {
+		return nil, convertBatchError(tableDesc, b, err)
 	}
 	// TODO(tamird/pmattis): return the number of affected rows
 	return &valuesNode{}, nil

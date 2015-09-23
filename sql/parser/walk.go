@@ -72,6 +72,20 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 	case *ExistsExpr:
 		WalkStmt(v, t.Subquery.Select)
 
+	case *IfExpr:
+		t.Cond = WalkExpr(v, t.Cond)
+		t.True = WalkExpr(v, t.True)
+		t.Else = WalkExpr(v, t.Else)
+
+	case *NullIfExpr:
+		t.Expr1 = WalkExpr(v, t.Expr1)
+		t.Expr2 = WalkExpr(v, t.Expr2)
+
+	case *CoalesceExpr:
+		for i := range t.Exprs {
+			t.Exprs[i] = WalkExpr(v, t.Exprs[i])
+		}
+
 	case IntVal:
 		// Terminal node: nothing to do.
 

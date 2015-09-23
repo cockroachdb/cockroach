@@ -99,7 +99,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica, _ *config.Syst
 		},
 		Reply: &reply,
 	})
-	if err := q.db.Run(b).GoError(); err != nil {
+	if err := q.db.Run(b); err != nil {
 		return err
 	}
 
