@@ -491,6 +491,15 @@ func (ctx EvalContext) EvalExpr(expr Expr) (Datum, error) {
 		// The subquery within the exists should have been executed before
 		// expression evaluation and the exists nodes replaced with the result.
 
+	case *IfExpr:
+		return ctx.evalIfExpr(t)
+
+	case *NullIfExpr:
+		return ctx.evalNullIfExpr(t)
+
+	case *CoalesceExpr:
+		return ctx.evalCoalesceExpr(t)
+
 	case IntVal:
 		if t < 0 {
 			return DNull, fmt.Errorf("integer value out of range: %s", t)
@@ -718,6 +727,49 @@ func (ctx EvalContext) evalIsOfTypeExpr(expr *IsOfTypeExpr) (Datum, error) {
 	}
 
 	return !result, nil
+}
+
+func (ctx EvalContext) evalIfExpr(expr *IfExpr) (Datum, error) {
+	cond, err := ctx.EvalExpr(expr.Cond)
+	if err != nil {
+		return DNull, err
+	}
+	if cond == DBool(true) {
+		return ctx.EvalExpr(expr.True)
+	}
+	return ctx.EvalExpr(expr.Else)
+}
+
+func (ctx EvalContext) evalNullIfExpr(expr *NullIfExpr) (Datum, error) {
+	expr1, err := ctx.EvalExpr(expr.Expr1)
+	if err != nil {
+		return DNull, err
+	}
+	expr2, err := ctx.EvalExpr(expr.Expr2)
+	if err != nil {
+		return DNull, err
+	}
+	cond, err := evalComparisonOp(EQ, expr1, expr2)
+	if err != nil {
+		return DNull, err
+	}
+	if cond == DBool(true) {
+		return DNull, nil
+	}
+	return expr1, nil
+}
+
+func (ctx EvalContext) evalCoalesceExpr(expr *CoalesceExpr) (Datum, error) {
+	for _, e := range expr.Exprs {
+		d, err := ctx.EvalExpr(e)
+		if err != nil {
+			return DNull, err
+		}
+		if d != DNull {
+			return d, nil
+		}
+	}
+	return DNull, nil
 }
 
 func (ctx EvalContext) evalComparisonExpr(expr *ComparisonExpr) (Datum, error) {

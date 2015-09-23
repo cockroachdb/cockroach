@@ -81,6 +81,17 @@ func (v *normalizeVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 					return v, DInt(math.MinInt64)
 				}
 			}
+
+		case *CaseExpr, *IfExpr, *NullIfExpr, *CoalesceExpr:
+			// Conditional expressions need to be evaluated during the downward
+			// traversal in order to avoid evaluating sub-expressions which should
+			// not be evaluated due to the case/conditional.
+			if isConst(expr) {
+				expr, v.err = v.ctx.EvalExpr(expr)
+				if v.err != nil {
+					return nil, expr
+				}
+			}
 		}
 
 		return v, expr

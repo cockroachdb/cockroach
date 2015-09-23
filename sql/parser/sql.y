@@ -310,7 +310,7 @@ func unimplemented() {
 
 %token <str>   HAVING HOUR
 
-%token <str>   IF IN
+%token <str>   IF IFNULL IN
 %token <str>   INDEX INITIALLY
 %token <str>   INNER INSERT INT INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
@@ -2802,8 +2802,22 @@ func_expr_common_subexpr:
 | TRIM '(' LEADING trim_list ')' { unimplemented() }
 | TRIM '(' TRAILING trim_list ')' { unimplemented() }
 | TRIM '(' trim_list ')' { unimplemented() }
-| NULLIF '(' a_expr ',' a_expr ')' { unimplemented() }
-| COALESCE '(' expr_list ')' { unimplemented() }
+| IF '(' a_expr ',' a_expr ',' a_expr ')'
+  {
+    $$ = &IfExpr{Cond: $3, True: $5, Else: $7}
+  }
+| NULLIF '(' a_expr ',' a_expr ')'
+  {
+    $$ = &NullIfExpr{Expr1: $3, Expr2: $5}
+  }
+| IFNULL '(' a_expr ',' a_expr ')'
+  {
+    $$ = &CoalesceExpr{Name: "IFNULL", Exprs: Exprs{$3, $5}}
+  }
+| COALESCE '(' expr_list ')'
+  {
+    $$ = &CoalesceExpr{Name: "COALESCE", Exprs: $3}
+  }
 | GREATEST '(' expr_list ')' { unimplemented() }
 | LEAST '(' expr_list ')' { unimplemented() }
 
@@ -3422,7 +3436,6 @@ unreserved_keyword:
 | FOLLOWING
 | GRANTS
 | HOUR
-| IF
 | INSERT
 | ISOLATION
 | KEY
@@ -3511,6 +3524,8 @@ col_name_keyword:
 | FLOAT
 | GREATEST
 | GROUPING
+| IF
+| IFNULL
 | INT
 | INT64
 | INTEGER

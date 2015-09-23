@@ -82,6 +82,15 @@ func TypeCheckExpr(expr Expr) (Datum, error) {
 	case *ExistsExpr:
 		return TypeCheckExpr(t.Subquery)
 
+	case *IfExpr:
+		return typeCheckIfExpr(t)
+
+	case *NullIfExpr:
+		return typeCheckNullIfExpr(t)
+
+	case *CoalesceExpr:
+		return typeCheckCoalesceExpr(t)
+
 	case DString:
 		return DummyString, nil
 
@@ -226,6 +235,68 @@ func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum,
 
 	return nil, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
 		dummyLeft.Type(), op, dummyRight.Type())
+}
+
+func typeCheckIfExpr(expr *IfExpr) (Datum, error) {
+	cond, err := TypeCheckExpr(expr.Cond)
+	if err != nil {
+		return nil, err
+	}
+	if cond != DNull && cond != DummyBool {
+		return nil, fmt.Errorf("IF condition must be a boolean: %s", cond.Type())
+	}
+	dummyTrue, err := TypeCheckExpr(expr.True)
+	if err != nil {
+		return nil, err
+	}
+	dummyElse, err := TypeCheckExpr(expr.Else)
+	if err != nil {
+		return nil, err
+	}
+	if dummyTrue == DNull {
+		return dummyElse, nil
+	}
+	if dummyElse == DNull {
+		return dummyTrue, nil
+	}
+	if dummyTrue != dummyElse {
+		return nil, fmt.Errorf("incompatible IF expressions %s, %s", dummyTrue.Type(), dummyElse.Type())
+	}
+	return dummyTrue, nil
+}
+
+func typeCheckNullIfExpr(expr *NullIfExpr) (Datum, error) {
+	expr1, err := TypeCheckExpr(expr.Expr1)
+	if err != nil {
+		return nil, err
+	}
+	expr2, err := TypeCheckExpr(expr.Expr2)
+	if err != nil {
+		return nil, err
+	}
+	if expr1 == DNull {
+		return expr2, nil
+	}
+	if expr2 != DNull && expr1 != expr2 {
+		return nil, fmt.Errorf("incompatible NULLIF expressions %s, %s", expr1.Type(), expr2.Type())
+	}
+	return expr1, nil
+}
+
+func typeCheckCoalesceExpr(expr *CoalesceExpr) (Datum, error) {
+	var dummyArg Datum
+	for _, e := range expr.Exprs {
+		arg, err := TypeCheckExpr(e)
+		if err != nil {
+			return nil, err
+		}
+		if dummyArg == nil || dummyArg == DNull {
+			dummyArg = arg
+		} else if dummyArg != arg && arg != DNull {
+			return nil, fmt.Errorf("incompatible %s expressions %s, %s", expr.Name, dummyArg.Type(), arg.Type())
+		}
+	}
+	return dummyArg, nil
 }
 
 func typeCheckBinaryExpr(expr *BinaryExpr) (Datum, error) {
