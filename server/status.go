@@ -124,7 +124,7 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, ctx *Context) *status
 		ctx:         ctx,
 		proxyClient: httpClient,
 	}
-	
+
 	server.router.GET(statusGossipPattern, server.handleGossip)
 	server.router.GET(statusDetailsPattern, server.handleDetails)
 	server.router.GET(statusLogFilesListPattern, server.handleLogFilesList)
