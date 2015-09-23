@@ -66,7 +66,7 @@ func NewError(err error) *Error {
 		return nil
 	}
 	e := &Error{}
-	e.SetResponseGoError(err)
+	e.SetGoError(err)
 	return e
 }
 
@@ -144,8 +144,8 @@ func (e *Error) GoError() error {
 	return err
 }
 
-// SetResponseGoError sets Error using err.
-func (e *Error) SetResponseGoError(err error) {
+// SetGoError sets Error using err.
+func (e *Error) SetGoError(err error) {
 	if e.Message != "" {
 		panic("cannot re-use proto.Error")
 	}

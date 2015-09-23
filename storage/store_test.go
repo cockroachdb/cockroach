@@ -1558,7 +1558,7 @@ func TestErrWithIndex(t *testing.T) {
 	err := error(&errWithIndex{err: errors.New("foo"), index: ind})
 	i1, ok1 := err.(proto.IndexedError).ErrorIndex()
 	pErr := &proto.Error{}
-	pErr.SetResponseGoError(err)
+	pErr.SetGoError(err)
 	if pErr.GetIndex().GetIndex() != ind {
 		log.Warningf("proto.Error lost index information")
 	}

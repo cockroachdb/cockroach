@@ -424,7 +424,7 @@ func (rh *ResponseHeader) SetGoError(err error) {
 		return
 	}
 	rh.Error = &Error{}
-	rh.Error.SetResponseGoError(err)
+	rh.Error.SetGoError(err)
 }
 
 // Verify verifies the integrity of the get response value.
