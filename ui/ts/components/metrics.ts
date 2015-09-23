@@ -1,6 +1,7 @@
 // source: components/metrics.ts
 /// <reference path="../typings/mithril/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../util/types.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="../models/metrics.ts" />
 
@@ -41,7 +42,7 @@ module Components {
        * LineGraph.
        */
       class Controller {
-        static colors: D3.Scale.OrdinalScale = d3.scale.category10();
+        static colors: d3.scale.Ordinal<Domain, string> = d3.scale.category10();
 
         // nvd3 chart.
         chart: any = nv.models.lineChart()
