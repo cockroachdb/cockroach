@@ -83,7 +83,11 @@ func NewError(err error) *Error {
 		return nil
 	}
 	e := &Error{}
-	e.SetGoError(err)
+	if intErr, ok := err.(*internalError); ok {
+		*e = *(*Error)(intErr)
+	} else {
+		e.SetGoError(err)
+	}
 	return e
 }
 
@@ -111,10 +115,7 @@ func (e *internalError) CanRestartTransaction() TransactionRestart {
 
 // Transaction implements the TransactionRestartError interface by returning
 // nil. The idea is that an error which isn't an ErrorDetail can't hold a
-// transaction.
-// TODO(tschottdorf): If that assumption changes, this methods needs to as
-// well, and the transaction should be added as a field on Error. Probably
-// worth doing this right right away.
+// transaction (this is asserted by SetGoError()).
 func (e *internalError) Transaction() *Transaction {
 	return nil
 }
@@ -174,7 +175,9 @@ func (e *Error) SetGoError(err error) {
 	if r, ok := err.(retry.Retryable); ok {
 		e.Retryable = r.CanRetry()
 	}
+	var isTxnError bool
 	if r, ok := err.(TransactionRestartError); ok {
+		isTxnError = true
 		e.TransactionRestart = r.CanRestartTransaction()
 	}
 	if r, ok := err.(IndexedError); ok {
@@ -186,6 +189,8 @@ func (e *Error) SetGoError(err error) {
 	detail := &ErrorDetail{}
 	if detail.SetValue(err) {
 		e.Detail = detail
+	} else if isTxnError {
+		panic(fmt.Sprintf("TransactionRestartError %T must be an ErrorDetail", err))
 	}
 }
 

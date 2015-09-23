@@ -693,6 +693,12 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 		newTxn.Timestamp.Forward(t.Txn.Timestamp)
 		newTxn.Restart(ba.GetUserPriority(), t.Txn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
+	case proto.TransactionRestartError:
+		// Assertion: The above cases should exhaust all ErrorDetails which
+		// carry a Transaction.
+		if pErr.Detail != nil {
+			panic(fmt.Sprintf("unhandled TransactionRestartError %T", err))
+		}
 	}
 
 	if len(newTxn.ID) > 0 {
