@@ -67,8 +67,10 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	b := client.Batch{}
+	result := &valuesNode{}
 	for rows.Next() {
 		rowVals := rows.Values()
+		result.rows = append(result.rows, parser.DTuple(nil))
 
 		primaryIndexKey, _, err := encodeIndexKey(
 			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
@@ -107,6 +109,5 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		return nil, err
 	}
 
-	// TODO(tamird/pmattis): return the number of affected rows
-	return &valuesNode{}, nil
+	return result, nil
 }

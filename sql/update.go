@@ -160,8 +160,11 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	marshalled := make([]interface{}, len(cols))
 
 	b := client.Batch{}
+	result := &valuesNode{}
 	for rows.Next() {
 		rowVals := rows.Values()
+		result.rows = append(result.rows, parser.DTuple(nil))
+
 		primaryIndexKey, _, err := encodeIndexKey(
 			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
 		if err != nil {
@@ -251,8 +254,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		return nil, convertBatchError(tableDesc, b, err)
 	}
 
-	// TODO(tamird/pmattis): return the number of affected rows.
-	return &valuesNode{}, nil
+	return result, nil
 }
 
 func fillDefault(expr parser.Expr, index int, defaultExprs []parser.Expr) (parser.Expr, error) {
