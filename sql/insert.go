@@ -98,7 +98,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 	marshalled := make([]interface{}, len(cols))
 
-	var b client.Batch
+	b := client.Batch{}
 	for rows.Next() {
 		rowVals := rows.Values()
 

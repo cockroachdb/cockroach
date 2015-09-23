@@ -43,7 +43,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	// and decoding keys. Also, avoiding Select may provide more
 	// convenient access to index keys which we are not currently
 	// deleting.
-	node, err := p.Select(&parser.Select{
+	rows, err := p.Select(&parser.Select{
 		Exprs: parser.SelectExprs{parser.StarSelectExpr()},
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,
@@ -55,7 +55,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
 	colIDtoRowIndex := map[ColumnID]int{}
-	for i, name := range node.Columns() {
+	for i, name := range rows.Columns() {
 		c, err := tableDesc.FindColumnByName(name)
 		if err != nil {
 			return nil, err
@@ -67,19 +67,18 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	b := client.Batch{}
-
-	for node.Next() {
-		values := node.Values()
+	for rows.Next() {
+		rowVals := rows.Values()
 
 		primaryIndexKey, _, err := encodeIndexKey(
-			primaryIndex.ColumnIDs, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
 
 		// Delete the secondary indexes.
 		secondaryIndexEntries, err := encodeSecondaryIndexes(
-			tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, values)
+			tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, rowVals)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +99,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		b.DelRange(rowStartKey, rowEndKey)
 	}
 
-	if err := node.Err(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 

@@ -95,8 +95,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
-	var b client.Batch
-
+	b := client.Batch{}
 	for _, indexQualifiedName := range n.Names {
 		if err := indexQualifiedName.NormalizeTableName(p.session.Database); err != nil {
 			return nil, err

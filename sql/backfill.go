@@ -24,7 +24,7 @@ import (
 )
 
 func (p *planner) makeBackfillBatch(tableName *parser.QualifiedName, tableDesc *TableDescriptor, indexDescs ...IndexDescriptor) (client.Batch, error) {
-	var b client.Batch
+	b := client.Batch{}
 	// Get all the rows affected.
 	// TODO(vivek): Avoid going through Select.
 	// TODO(tamird): Support partial indexes?

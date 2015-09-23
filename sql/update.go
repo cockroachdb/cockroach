@@ -159,8 +159,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 
 	marshalled := make([]interface{}, len(cols))
 
-	// Update all the rows.
-	var b client.Batch
+	b := client.Batch{}
 	for rows.Next() {
 		rowVals := rows.Values()
 		primaryIndexKey, _, err := encodeIndexKey(
