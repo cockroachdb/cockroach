@@ -37,7 +37,7 @@ gulp.task('clean:bowerjs', function (cb) {
 
 // clean generated go file
 gulp.task('clean:embedded', function () {
-    return del('embedded.go');
+    return del(['embedded.go', 'embedded_debug.go']);
 });
 
 gulp.task('clean:index', function (cb) {
@@ -144,7 +144,7 @@ gulp.task('bindata:release', ['clean:embedded', 'build:release', 'build:test'], 
 
 // generate embedded go file for debugging (passes through to build folder)
 gulp.task('bindata:debug', ['clean:embedded', 'build:debug'], shell.task([
-    'go-bindata -pkg ui -o embedded.go -debug -prefix build build/...'
+    'go-bindata -pkg ui -o embedded_debug.go -debug -prefix build build/...'
 ]));
 
 //convenience tasks for generating debug/release versions of the embedded.go file
