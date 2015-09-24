@@ -210,7 +210,9 @@ type lookupOptions struct {
 // single inconsistent read only.
 func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
 	desc *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
-	args, unwrap := client.MaybeWrap(&proto.RangeLookupRequest{
+	ba := proto.BatchRequest{}
+	ba.ReadConsistency = proto.INCONSISTENT
+	ba.Add(&proto.RangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:             key,
 			ReadConsistency: proto.INCONSISTENT,
@@ -222,16 +224,15 @@ func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	reply, err := ds.sendRPC(nil /* Trace */, desc.RangeID, replicas, rpc.OrderRandom, args)
-	reply = unwrap(reply)
+	reply, err := ds.sendRPC(nil /* Trace */, desc.RangeID, replicas, rpc.OrderRandom, &ba)
 	if err != nil {
 		return nil, err
 	}
-	rlReply := reply.(*proto.RangeLookupResponse)
-	if rlReply.Error != nil {
-		return nil, rlReply.GoError()
+	br := reply.(*proto.BatchResponse)
+	if err := br.GoError(); err != nil {
+		return nil, err
 	}
-	return rlReply.Ranges, nil
+	return br.Responses[0].GetInner().(*proto.RangeLookupResponse).Ranges, nil
 }
 
 // firstRange returns the RangeDescriptor for the first range on the cluster,

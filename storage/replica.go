@@ -637,6 +637,11 @@ func (r *Replica) checkBatchRequest(ba *proto.BatchRequest) error {
 		if header.Txn != nil && !header.Txn.Equal(ba.Txn) {
 			return util.Errorf("conflicting transaction on call in transactional batch at position %d: %s", i, ba)
 		}
+		// This assertion should be made unnecessary by only having the field
+		// on BatchRequest.
+		if header.ReadConsistency != ba.ReadConsistency {
+			return util.Errorf("requests and batch must have same read consistency")
+		}
 		if proto.IsReadOnly(args) {
 			if header.ReadConsistency == proto.INCONSISTENT && header.Txn != nil {
 				// Disallow any inconsistent reads within txns.

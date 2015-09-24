@@ -28,9 +28,9 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -118,7 +118,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	put := createPutRequest(proto.Key("a"), []byte("value"), txn)
 
 	// Put request will create a new transaction.
-	reply, err := client.SendCall(s.Sender, put)
+	reply, err := batchutil.SendWrapped(s.Sender, put)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	s.Manual.Set(1)
 	s.Sender.Unlock()
 	put.Txn.Writing = true
-	if _, err := client.SendCall(s.Sender, put); err != nil {
+	if _, err := batchutil.SendWrapped(s.Sender, put); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.Sender.txns) != 1 {
@@ -158,7 +158,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	defer teardownHeartbeats(s.Sender)
 
 	key := proto.Key("key")
-	reply, err := client.SendCall(s.Sender, &proto.PutRequest{
+	reply, err := batchutil.SendWrapped(s.Sender, &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:          key,
 			UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
@@ -194,7 +194,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	reply, err := client.SendCall(s.Sender, &proto.PutRequest{
+	reply, err := batchutil.SendWrapped(s.Sender, &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:          proto.Key("key"),
 			UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
@@ -237,12 +237,12 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	for _, rng := range ranges {
 		if rng.end != nil {
 			delRangeReq := createDeleteRangeRequest(rng.start, rng.end, txn)
-			if _, err := client.SendCall(s.Sender, delRangeReq); err != nil {
+			if _, err := batchutil.SendWrapped(s.Sender, delRangeReq); err != nil {
 				t.Fatal(err)
 			}
 		} else {
 			putReq := createPutRequest(rng.start, []byte("value"), txn)
-			if _, err := client.SendCall(s.Sender, putReq); err != nil {
+			if _, err := batchutil.SendWrapped(s.Sender, putReq); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -271,11 +271,11 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 	txn1 := newTxn(s.Clock, proto.Key("a"))
 	txn2 := newTxn(s.Clock, proto.Key("b"))
 	put1 := createPutRequest(proto.Key("a"), []byte("value"), txn1)
-	if _, err := client.SendCall(s.Sender, put1); err != nil {
+	if _, err := batchutil.SendWrapped(s.Sender, put1); err != nil {
 		t.Fatal(err)
 	}
 	put2 := createPutRequest(proto.Key("b"), []byte("value"), txn2)
-	if _, err := client.SendCall(s.Sender, put2); err != nil {
+	if _, err := batchutil.SendWrapped(s.Sender, put2); err != nil {
 		t.Fatal(err)
 	}
 
@@ -297,7 +297,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 
 	initialTxn := newTxn(s.Clock, proto.Key("a"))
 	put := createPutRequest(proto.Key("a"), []byte("value"), initialTxn)
-	if reply, err := client.SendCall(s.Sender, put); err != nil {
+	if reply, err := batchutil.SendWrapped(s.Sender, put); err != nil {
 		t.Fatal(err)
 	} else {
 		*initialTxn = *reply.Header().Txn
@@ -335,7 +335,7 @@ func getTxn(coord *TxnCoordSender, txn *proto.Transaction) (bool, *proto.Transac
 			Txn: txn,
 		},
 	}
-	reply, err := client.SendCall(coord, hb)
+	reply, err := batchutil.SendWrapped(coord, hb)
 	if err != nil {
 		return false, nil, err
 	}
@@ -373,12 +373,12 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	txn := newTxn(s.Clock, proto.Key("a"))
 	key := proto.Key("a")
 	put := createPutRequest(key, []byte("value"), txn)
-	reply, err := client.SendCall(s.Sender, put)
+	reply, err := batchutil.SendWrapped(s.Sender, put)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pReply := reply.(*proto.PutResponse)
-	if _, err := client.SendCall(s.Sender, &proto.EndTransactionRequest{
+	if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
@@ -403,7 +403,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	txn := newTxn(s.Clock, key)
 	txn.Priority = 1
 	put := createPutRequest(key, []byte("value"), txn)
-	if reply, err := client.SendCall(s.Sender, put); err != nil {
+	if reply, err := batchutil.SendWrapped(s.Sender, put); err != nil {
 		t.Fatal(err)
 	} else {
 		txn = reply.Header().Txn
@@ -421,7 +421,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}
-	if _, err := client.SendCall(s.Sender, pushArgs); err != nil {
+	if _, err := batchutil.SendWrapped(s.Sender, pushArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -435,7 +435,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 		},
 		Commit: true,
 	}
-	_, err := client.SendCall(s.Sender, etArgs)
+	_, err := batchutil.SendWrapped(s.Sender, etArgs)
 	switch err.(type) {
 	case *proto.TransactionAbortedError:
 		// Expected
@@ -457,7 +457,7 @@ func TestTxnCoordSenderGC(t *testing.T) {
 
 	txn := newTxn(s.Clock, proto.Key("a"))
 	put := createPutRequest(proto.Key("a"), []byte("value"), txn)
-	if _, err := client.SendCall(s.Sender, put); err != nil {
+	if _, err := batchutil.SendWrapped(s.Sender, put); err != nil {
 		t.Fatal(err)
 	}
 
@@ -529,7 +529,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			return nil, proto.NewError(test.err)
 		}), clock, false, nil, stopper)
 		var reply *proto.PutResponse
-		if r, err := client.SendCall(ts, gogoproto.Clone(testPutReq).(proto.Request)); err != nil {
+		if r, err := batchutil.SendWrapped(ts, gogoproto.Clone(testPutReq).(proto.Request)); err != nil {
 			t.Fatal(err)
 		} else {
 			reply = r.(*proto.PutResponse)
@@ -621,7 +621,7 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 			ba.Txn = txn2
 		}
 		called = false
-		_, err := client.SendCall(ts, ba)
+		_, err := batchutil.SendWrapped(ts, ba)
 		if !tc.ok && err == alwaysError {
 			t.Fatalf("%d: expected error%s", i, err)
 		} else if tc.ok != called {
@@ -649,14 +649,14 @@ func TestTxnDrainingNode(t *testing.T) {
 	key := proto.Key("a")
 	beginTxn := func() {
 		put := createPutRequest(key, []byte("value"), txn)
-		if reply, err := client.SendCall(s.Sender, put); err != nil {
+		if reply, err := batchutil.SendWrapped(s.Sender, put); err != nil {
 			t.Fatal(err)
 		} else {
 			txn = reply.Header().Txn
 		}
 	}
 	endTxn := func() {
-		if _, err := client.SendCall(s.Sender, &proto.EndTransactionRequest{
+		if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:       txn.Key,
 				Timestamp: txn.Timestamp,
@@ -683,7 +683,7 @@ func TestTxnDrainingNode(t *testing.T) {
 
 	// Attempt to start another transaction, but it should be too late.
 	key = proto.Key("key")
-	_, err := client.SendCall(s.Sender, &proto.PutRequest{
+	_, err := batchutil.SendWrapped(s.Sender, &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: key,
 			Txn: &proto.Transaction{
@@ -708,11 +708,11 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	txn := newTxn(s.Clock, proto.Key("a"))
 	key := proto.Key("a")
 	put := createPutRequest(key, []byte("value"), txn)
-	if _, err := client.SendCall(s.Sender, put); err != nil {
+	if _, err := batchutil.SendWrapped(s.Sender, put); err != nil {
 		t.Fatal(err)
 	}
 	s.Sender.cleanupTxn(nil, *txn) // first call
-	if _, err := client.SendCall(s.Sender, &proto.EndTransactionRequest{
+	if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
@@ -746,7 +746,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 			txn.Writing = tc.writing
 			tc.args.Header().Txn = txn
 		}
-		reply, err := client.SendCall(s.Sender, tc.args)
+		reply, err := batchutil.SendWrapped(s.Sender, tc.args)
 		if err == nil != tc.ok {
 			t.Errorf("%d: %T (writing=%t): success_expected=%t, but got: %v",
 				i, tc.args, tc.writing, tc.ok, err)
@@ -766,7 +766,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 			continue
 		}
 		// Abort for clean shutdown.
-		if _, err := client.SendCall(s.Sender, &proto.EndTransactionRequest{
+		if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:       txn.Key,
 				Timestamp: txn.Timestamp,

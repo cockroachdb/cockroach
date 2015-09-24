@@ -35,18 +35,8 @@ import (
 var (
 	testKey     = proto.Key("a")
 	testTS      = proto.Timestamp{WallTime: 1, Logical: 1}
-	testPutReq  = &proto.PutRequest{RequestHeader: proto.RequestHeader{Timestamp: testTS, Key: testKey}}
 	testPutResp = &proto.PutResponse{ResponseHeader: proto.ResponseHeader{Timestamp: testTS}}
 )
-
-func send(sender Sender, args proto.Request) (proto.Response, *proto.Error) {
-	ba, unwrap := MaybeWrap(args)
-	br, pErr := sender.Send(context.Background(), *ba)
-	if pErr != nil {
-		return nil, pErr
-	}
-	return unwrap(br), nil
-}
 
 func newDB(sender Sender) *DB {
 	return &DB{
@@ -104,6 +94,15 @@ func newTestSender(pre, post func(proto.BatchRequest) (*proto.BatchResponse, *pr
 	}
 }
 
+func testPut() proto.BatchRequest {
+	var ba proto.BatchRequest
+	ba.Timestamp = testTS
+	put := &proto.PutRequest{}
+	put.Key = testKey
+	ba.Add(put)
+	return ba
+}
+
 // TestTxnRequestTxnTimestamp verifies response txn timestamp is
 // always upgraded on successive requests.
 func TestTxnRequestTxnTimestamp(t *testing.T) {
@@ -111,8 +110,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	makeTS := func(walltime int64, logical int32) proto.Timestamp {
 		return proto.ZeroTimestamp.Add(walltime, logical)
 	}
-
-	testPutReq := gogoproto.Clone(testPutReq).(*proto.PutRequest)
+	ba := testPut()
 
 	testCases := []struct {
 		expRequestTS, responseTS proto.Timestamp
@@ -142,8 +140,8 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	txn := NewTxn(*db)
 
 	for testIdx = range testCases {
-		if _, err := send(txn.db.sender, testPutReq); err != nil {
-			t.Fatal(err)
+		if _, pErr := txn.db.sender.Send(context.Background(), ba); pErr != nil {
+			t.Fatal(pErr)
 		}
 	}
 }
@@ -158,10 +156,9 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	}, nil))
 
 	txn := NewTxn(*db)
-	_, pErr := send(txn.db.sender, testPutReq)
-	err := pErr.GoError()
-	if _, ok := err.(*proto.TransactionAbortedError); !ok {
-		t.Fatalf("expected TransactionAbortedError, got %v", err)
+	_, pErr := txn.db.sender.Send(context.Background(), testPut())
+	if _, ok := pErr.GoError().(*proto.TransactionAbortedError); !ok {
+		t.Fatalf("expected TransactionAbortedError, got %v", pErr)
 	}
 
 	if len(txn.Proto.ID) != 0 {

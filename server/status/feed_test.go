@@ -33,8 +33,9 @@ import (
 )
 
 func wrap(args proto.Request) proto.BatchRequest {
-	ba, _ := client.MaybeWrap(args)
-	return *ba
+	var ba proto.BatchRequest
+	ba.Add(args)
+	return ba
 }
 
 func TestNodeEventFeed(t *testing.T) {

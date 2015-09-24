@@ -27,13 +27,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -334,7 +334,7 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		if _, err := client.SendCall(ds, args); err != nil {
+		if _, err := batchutil.SendWrapped(ds, args); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
 	}
@@ -388,7 +388,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	put := proto.NewPut(proto.Key("a"), proto.Value{Bytes: []byte("value")})
-	if _, err := client.SendCall(ds, put); err != nil {
+	if _, err := batchutil.SendWrapped(ds, put); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
 	if first {
@@ -432,11 +432,11 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	put := proto.NewPut(proto.Key("a"), proto.Value{Bytes: []byte("value")})
 	// Fatal error on descriptor lookup, propagated to reply.
-	if _, err := client.SendCall(ds, put); err.Error() != "fatal boom" {
+	if _, err := batchutil.SendWrapped(ds, put); err.Error() != "fatal boom" {
 		t.Errorf("unexpected error: %s", err)
 	}
 	// Retryable error on descriptor lookup, second attempt successful.
-	if _, err := client.SendCall(ds, put); err != nil {
+	if _, err := batchutil.SendWrapped(ds, put); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
 	if len(errors) != 0 {
@@ -495,7 +495,7 @@ func TestEvictCacheOnError(t *testing.T) {
 
 		put := proto.NewPut(proto.Key("a"), proto.Value{Bytes: []byte("value")}).(*proto.PutRequest)
 
-		if _, err := client.SendCall(ds, put); err != nil && !testutils.IsError(err, "boom") {
+		if _, err := batchutil.SendWrapped(ds, put); err != nil && !testutils.IsError(err, "boom") {
 			t.Errorf("put encountered unexpected error: %s", err)
 		}
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &proto.Replica{}) && !tc.shouldClearLeader {
@@ -559,7 +559,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	scan := proto.NewScan(proto.Key("a"), proto.Key("d"), 0)
-	if _, err := client.SendCall(ds, scan); err != nil {
+	if _, err := batchutil.SendWrapped(ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
 }
@@ -653,7 +653,7 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	scan := proto.NewScan(proto.Key("a"), proto.Key("d"), 1)
-	sr, err := client.SendCall(ds, scan)
+	sr, err := batchutil.SendWrapped(ds, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -754,7 +754,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	scan := proto.NewScan(proto.Key("a"), proto.Key("d"), 10).(*proto.ScanRequest)
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	scan.Txn = &proto.Transaction{}
-	reply, err := client.SendCall(ds, scan)
+	reply, err := batchutil.SendWrapped(ds, scan)
 	if err != nil {
 		t.Fatalf("scan encountered error: %s", err)
 	}
@@ -788,7 +788,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	rScan := &proto.ReverseScanRequest{
 		RequestHeader: proto.RequestHeader{Key: proto.Key("a"), EndKey: proto.Key("b")},
 	}
-	if _, err := client.SendCall(ds, rScan); err != nil {
+	if _, err := batchutil.SendWrapped(ds, rScan); err != nil {
 		t.Fatal(err)
 	}
 }

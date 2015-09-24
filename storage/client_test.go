@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -74,7 +75,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 		getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message,
 		_ *rpc.Context) ([]gogoproto.Message, error) {
 		args := getArgs(nil /* net.Addr */).(proto.Request)
-		reply, err := client.SendCall(localSender, args)
+		reply, err := batchutil.SendWrapped(localSender, args)
 		if reply == nil {
 			reply = getReply().(proto.Response)
 		}
@@ -238,7 +239,7 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, _ []net.Addr,
 	var err error
 	for total := 0; total < maxRetries; total++ {
 		args := getArgs(nil /* net.Addr */).(proto.Request)
-		reply, err = client.SendCall(m.senders[nextIdx], args)
+		reply, err = batchutil.SendWrapped(m.senders[nextIdx], args)
 		if err == nil {
 			return []gogoproto.Message{reply}, nil
 		}
