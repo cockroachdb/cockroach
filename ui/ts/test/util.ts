@@ -1,4 +1,4 @@
-/// <reference path="../../typescript_definitions/mithril/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../../typescript_definitions/mocha/mocha.d.ts" />
 /// <reference path="../../typescript_definitions/chai/chai.d.ts" />
 /// <reference path="../util/property.ts" />

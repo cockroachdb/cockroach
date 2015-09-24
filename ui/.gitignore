@@ -3,10 +3,13 @@ node_modules
 npm.installed
 
 #bower components
-bower_components/
+#bower_components/
 
 #typings
-typescript_definitions/
+#typescript_definitions/
 
 #build
-build/
+#build/
+
+#test
+#test/
