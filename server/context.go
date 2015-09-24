@@ -44,6 +44,7 @@ const (
 	defaultScanMaxIdleTime    = 5 * time.Second
 	defaultMetricsFrequency   = 10 * time.Second
 	defaultTimeUntilStoreDead = 5 * time.Minute
+	defaultAllowRebalancing   = false
 )
 
 // Context holds parameters needed to setup a server.
@@ -97,6 +98,9 @@ type Context struct {
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
 
+	// Enables this server to rebalance replicas to other servers.
+	AllowRebalancing bool
+
 	// Parsed values.
 
 	// Engines is the storage instances specified by Stores.
@@ -138,6 +142,7 @@ func NewContext() *Context {
 		ScanMaxIdleTime:    defaultScanMaxIdleTime,
 		MetricsFrequency:   defaultMetricsFrequency,
 		TimeUntilStoreDead: defaultTimeUntilStoreDead,
+		AllowRebalancing:   defaultAllowRebalancing,
 	}
 	// Initializes base context defaults.
 	ctx.InitDefaults()

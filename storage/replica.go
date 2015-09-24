@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -636,6 +637,11 @@ func (r *Replica) checkBatchRequest(ba *proto.BatchRequest) error {
 		//}
 		if header.Txn != nil && !header.Txn.Equal(ba.Txn) {
 			return util.Errorf("conflicting transaction on call in transactional batch at position %d: %s", i, ba)
+		}
+		// This assertion should be made unnecessary by only having the field
+		// on BatchRequest.
+		if header.ReadConsistency != ba.ReadConsistency {
+			return util.Errorf("requests and batch must have same read consistency")
 		}
 		if proto.IsReadOnly(args) {
 			if header.ReadConsistency == proto.INCONSISTENT && header.Txn != nil {
@@ -1484,9 +1490,21 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 				if log.V(1) {
 					log.Warningc(ctx, "batch resolve failed: %s", err)
 				}
-				if _, ok := err.(*proto.RangeKeyMismatchError); !ok {
-					// TODO(tschottdorf)
-					panic(fmt.Sprintf("intent resolution failed, error: %s", err.Error()))
+				// At this point, as long as the local Replica accepts the
+				// request it should never fail. However, the replica may reject
+				// the request in certain cases (for example, if the replica has
+				// been removed from its range via a rebalancing a command).
+				// Therefore, we inspect the returned error to detect cases
+				// where the command was rejected, and can safely ignore those
+				// errors.
+				if err != multiraft.ErrGroupDeleted {
+					switch err.(type) {
+					case *proto.RangeKeyMismatchError:
+					case *proto.NotLeaderError:
+					default:
+						// TODO(tschottdorf): Does this need to be a panic?
+						panic(fmt.Sprintf("intent resolution failed with unexpected error: %s", err))
+					}
 				}
 			}
 		}
@@ -1503,9 +1521,9 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 	// Resolve all of the intents which aren't local to the Range.
 	if len(ba.Requests) > 0 {
 		// TODO(tschottdorf): should be able use the Batch normally and do
-		// without InternalAddCall.
+		// without InternalAddRequest.
 		b := &client.Batch{}
-		b.InternalAddCall(proto.Call{Args: ba, Reply: &proto.BatchResponse{}})
+		b.InternalAddRequest(ba)
 		action := func() {
 			// TODO(tschottdorf): no tracing here yet.
 			if err := r.rm.DB().Run(b); err != nil {

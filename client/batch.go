@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // Batch provides for the parallel execution of a number of database
@@ -46,7 +45,7 @@ type Batch struct {
 	//   // string(b.Results[0].Rows[0].Key) == "a"
 	//   // string(b.Results[1].Rows[0].Key) == "b"
 	Results    []Result
-	calls      []proto.Call
+	reqs       []proto.Request
 	resultsBuf [8]Result
 	rowsBuf    [8]KeyValue
 	rowsIdx    int
@@ -62,6 +61,7 @@ func (b *Batch) prepare() error {
 }
 
 func (b *Batch) initResult(calls, numRows int, err error) {
+	// TODO(tschottdorf): assert that calls is 0 or 1?
 	r := Result{calls: calls, Err: err}
 	if numRows > 0 {
 		if b.rowsIdx+numRows <= len(b.rowsBuf) {
@@ -77,91 +77,108 @@ func (b *Batch) initResult(calls, numRows int, err error) {
 	b.Results = append(b.Results, r)
 }
 
-func (b *Batch) fillResults() error {
+func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
 	offset := 0
 	for i := range b.Results {
 		result := &b.Results[i]
 
 		for k := 0; k < result.calls; k++ {
-			call := b.calls[offset+k]
+			args := b.reqs[offset+k]
 
+			var reply proto.Response
 			if result.Err == nil {
-				result.Err = call.Reply.Header().GoError()
+				result.Err = pErr.GoError()
+				if result.Err == nil {
+					if offset+k < len(br.Responses) {
+						reply = br.Responses[offset+k].GetValue().(proto.Response)
+					} else if args.Method() != proto.EndTransaction {
+						// TODO(tschottdorf): EndTransaction is excepted here
+						// because it may be elided (r/o txns). Might prefer to
+						// simulate an EndTransaction response instead; this
+						// effectively just leaks here.
+						panic("not enough responses for calls")
+					}
+				}
 			}
 
-			switch t := call.Reply.(type) {
-			case *proto.GetResponse:
+			switch req := args.(type) {
+			case *proto.GetRequest:
 				row := &result.Rows[k]
-				row.Key = []byte(call.Args.(*proto.GetRequest).Key)
+				row.Key = []byte(req.Key)
 				if result.Err == nil {
-					row.Value = t.Value
+					row.Value = reply.(*proto.GetResponse).Value
 				}
-			case *proto.PutResponse:
-				req := call.Args.(*proto.PutRequest)
+			case *proto.PutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
 					row.Value = &req.Value
-					row.setTimestamp(t.Timestamp)
+					row.setTimestamp(reply.(*proto.PutResponse).Timestamp)
 				}
-			case *proto.ConditionalPutResponse:
-				req := call.Args.(*proto.ConditionalPutRequest)
+			case *proto.ConditionalPutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
 					row.Value = &req.Value
-					row.setTimestamp(t.Timestamp)
+					row.setTimestamp(reply.(*proto.ConditionalPutResponse).Timestamp)
 				}
-			case *proto.IncrementResponse:
+			case *proto.IncrementRequest:
 				row := &result.Rows[k]
-				row.Key = []byte(call.Args.(*proto.IncrementRequest).Key)
+				row.Key = []byte(req.Key)
 				if result.Err == nil {
+					t := reply.(*proto.IncrementResponse)
 					row.Value = &proto.Value{
 						Bytes: encoding.EncodeUint64(nil, uint64(t.NewValue)),
 						Tag:   proto.ValueType_INT,
 					}
 					row.setTimestamp(t.Timestamp)
 				}
-			case *proto.ScanResponse:
-				result.Rows = make([]KeyValue, len(t.Rows))
-				for j := range t.Rows {
-					src := &t.Rows[j]
-					dst := &result.Rows[j]
-					dst.Key = src.Key
-					dst.Value = &src.Value
+			case *proto.ScanRequest:
+				if result.Err == nil {
+					t := reply.(*proto.ScanResponse)
+					result.Rows = make([]KeyValue, len(t.Rows))
+					for j := range t.Rows {
+						src := &t.Rows[j]
+						dst := &result.Rows[j]
+						dst.Key = src.Key
+						dst.Value = &src.Value
+					}
 				}
-			case *proto.ReverseScanResponse:
-				result.Rows = make([]KeyValue, len(t.Rows))
-				for j := range t.Rows {
-					src := &t.Rows[j]
-					dst := &result.Rows[j]
-					dst.Key = src.Key
-					dst.Value = &src.Value
+			case *proto.ReverseScanRequest:
+				if result.Err == nil {
+					t := reply.(*proto.ReverseScanResponse)
+					result.Rows = make([]KeyValue, len(t.Rows))
+					for j := range t.Rows {
+						src := &t.Rows[j]
+						dst := &result.Rows[j]
+						dst.Key = src.Key
+						dst.Value = &src.Value
+					}
 				}
-			case *proto.DeleteResponse:
+			case *proto.DeleteRequest:
 				row := &result.Rows[k]
-				row.Key = []byte(call.Args.(*proto.DeleteRequest).Key)
+				row.Key = []byte(args.(*proto.DeleteRequest).Key)
 
-			case *proto.DeleteRangeResponse:
-			case *proto.EndTransactionResponse:
-			case *proto.AdminMergeResponse:
-			case *proto.AdminSplitResponse:
-			case *proto.HeartbeatTxnResponse:
-			case *proto.GCResponse:
-			case *proto.PushTxnResponse:
-			case *proto.RangeLookupResponse:
-			case *proto.ResolveIntentResponse:
-			case *proto.ResolveIntentRangeResponse:
-			case *proto.MergeResponse:
-			case *proto.TruncateLogResponse:
-			case *proto.LeaderLeaseResponse:
-			case *proto.BatchResponse:
+			case *proto.DeleteRangeRequest:
+			case *proto.EndTransactionRequest:
+			case *proto.AdminMergeRequest:
+			case *proto.AdminSplitRequest:
+			case *proto.HeartbeatTxnRequest:
+			case *proto.GCRequest:
+			case *proto.PushTxnRequest:
+			case *proto.RangeLookupRequest:
+			case *proto.ResolveIntentRequest:
+			case *proto.ResolveIntentRangeRequest:
+			case *proto.MergeRequest:
+			case *proto.TruncateLogRequest:
+			case *proto.LeaderLeaseRequest:
+			case *proto.BatchRequest:
 				// Nothing to do for these methods as they do not generate any
 				// rows.
 
 			default:
 				if result.Err == nil {
-					result.Err = fmt.Errorf("unsupported reply: %T", call.Reply)
+					result.Err = fmt.Errorf("unsupported reply: %T", reply)
 				}
 			}
 		}
@@ -177,11 +194,11 @@ func (b *Batch) fillResults() error {
 	return nil
 }
 
-// InternalAddCall adds the specified call to the batch. It is intended for
+// InternalAddRequest adds the specified call to the batch. It is intended for
 // internal use only.
-func (b *Batch) InternalAddCall(call proto.Call) {
+func (b *Batch) InternalAddRequest(args proto.Request) {
 	numRows := 0
-	switch call.Args.(type) {
+	switch args.(type) {
 	case *proto.GetRequest,
 		*proto.PutRequest,
 		*proto.ConditionalPutRequest,
@@ -189,7 +206,7 @@ func (b *Batch) InternalAddCall(call proto.Call) {
 		*proto.DeleteRequest:
 		numRows = 1
 	}
-	b.calls = append(b.calls, call)
+	b.reqs = append(b.reqs, args)
 	b.initResult(1 /* calls */, numRows, nil)
 }
 
@@ -206,23 +223,7 @@ func (b *Batch) Get(key interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.GetCall(k))
-	b.initResult(1, 1, nil)
-}
-
-// GetProto retrieves the value for a key and decodes the result as a proto
-// message. A new result will be appended to the batch which will contain a
-// single row. Note that the proto will not be decoded until after the batch is
-// executed using DB.Run or Txn.Run.
-//
-// key can be either a byte slice or a string.
-func (b *Batch) GetProto(key interface{}, msg gogoproto.Message) {
-	k, err := marshalKey(key)
-	if err != nil {
-		b.initResult(0, 1, err)
-		return
-	}
-	b.calls = append(b.calls, proto.GetProtoCall(k, msg))
+	b.reqs = append(b.reqs, proto.NewGet(k))
 	b.initResult(1, 1, nil)
 }
 
@@ -244,7 +245,7 @@ func (b *Batch) Put(key, value interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.PutCall(k, v))
+	b.reqs = append(b.reqs, proto.NewPut(k, v))
 	b.initResult(1, 1, nil)
 }
 
@@ -273,7 +274,7 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.ConditionalPutCall(k, v, ev))
+	b.reqs = append(b.reqs, proto.NewConditionalPut(k, v, ev))
 	b.initResult(1, 1, nil)
 }
 
@@ -291,7 +292,7 @@ func (b *Batch) Inc(key interface{}, value int64) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.IncrementCall(k, value))
+	b.reqs = append(b.reqs, proto.NewIncrement(k, value))
 	b.initResult(1, 1, nil)
 }
 
@@ -307,9 +308,9 @@ func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
 		return
 	}
 	if !isReverse {
-		b.calls = append(b.calls, proto.ScanCall(proto.Key(begin), proto.Key(end), maxRows))
+		b.reqs = append(b.reqs, proto.NewScan(proto.Key(begin), proto.Key(end), maxRows))
 	} else {
-		b.calls = append(b.calls, proto.ReverseScanCall(proto.Key(begin), proto.Key(end), maxRows))
+		b.reqs = append(b.reqs, proto.NewReverseScan(proto.Key(begin), proto.Key(end), maxRows))
 	}
 	b.initResult(1, 0, nil)
 }
@@ -343,17 +344,17 @@ func (b *Batch) ReverseScan(s, e interface{}, maxRows int64) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Del(keys ...interface{}) {
-	var calls []proto.Call
+	var reqs []proto.Request
 	for _, key := range keys {
 		k, err := marshalKey(key)
 		if err != nil {
 			b.initResult(0, len(keys), err)
 			return
 		}
-		calls = append(calls, proto.DeleteCall(k))
+		reqs = append(reqs, proto.NewDelete(k))
 	}
-	b.calls = append(b.calls, calls...)
-	b.initResult(len(calls), len(calls), nil)
+	b.reqs = append(b.reqs, reqs...)
+	b.initResult(len(reqs), len(reqs), nil)
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -373,7 +374,7 @@ func (b *Batch) DelRange(s, e interface{}) {
 		b.initResult(0, 0, err)
 		return
 	}
-	b.calls = append(b.calls, proto.DeleteRangeCall(proto.Key(begin), proto.Key(end)))
+	b.reqs = append(b.reqs, proto.NewDeleteRange(proto.Key(begin), proto.Key(end)))
 	b.initResult(1, 0, nil)
 }
 
@@ -390,8 +391,7 @@ func (b *Batch) adminMerge(key interface{}) {
 			Key: k,
 		},
 	}
-	resp := &proto.AdminMergeResponse{}
-	b.calls = append(b.calls, proto.Call{Args: req, Reply: resp})
+	b.reqs = append(b.reqs, req)
 	b.initResult(1, 0, nil)
 }
 
@@ -409,7 +409,6 @@ func (b *Batch) adminSplit(splitKey interface{}) {
 		},
 	}
 	req.SplitKey = k
-	resp := &proto.AdminSplitResponse{}
-	b.calls = append(b.calls, proto.Call{Args: req, Reply: resp})
+	b.reqs = append(b.reqs, req)
 	b.initResult(1, 0, nil)
 }

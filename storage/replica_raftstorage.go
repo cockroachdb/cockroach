@@ -18,7 +18,6 @@
 package storage
 
 import (
-	"fmt"
 	"sync/atomic"
 	"unsafe"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -358,7 +358,10 @@ func (r *Replica) updateRangeInfo() error {
 	// Load the system config.
 	cfg := r.rm.Gossip().GetSystemConfig()
 	if cfg == nil {
-		return fmt.Errorf("no system config available")
+		// This could be before the system config was ever gossiped,
+		// or it expired. Let the gossip callback set the info.
+		log.Warningf("no system config available, cannot determine range MaxBytes")
+		return nil
 	}
 
 	// Find zone config for this range.
@@ -462,6 +465,10 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 		return err
 	}
 	// Update other fields which are uninitialized or need updating.
+	// This may not happen if the system config has not yet been loaded.
+	// While config update will correctly set the fields, there is no order
+	// guarangee in ApplySnapshot.
+	// TODO: should go through the standard store lock when adding a replica.
 	if err := r.updateRangeInfo(); err != nil {
 		return err
 	}

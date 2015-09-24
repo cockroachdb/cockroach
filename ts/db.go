@@ -133,14 +133,11 @@ func (db *DB) StoreData(r Resolution, data []proto.TimeSeriesData) error {
 		// Note, this looks like a batch, but isn't a batch because we only add a
 		// single request to it.
 		b := &client.Batch{}
-		b.InternalAddCall(proto.Call{
-			Args: &proto.MergeRequest{
-				RequestHeader: proto.RequestHeader{
-					Key: kv.Key,
-				},
-				Value: kv.Value,
+		b.InternalAddRequest(&proto.MergeRequest{
+			RequestHeader: proto.RequestHeader{
+				Key: kv.Key,
 			},
-			Reply: &proto.MergeResponse{},
+			Value: kv.Value,
 		})
 		if err := db.db.Run(b); err != nil {
 			return err

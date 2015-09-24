@@ -18,6 +18,8 @@
 package status
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/tracer"
@@ -29,16 +31,31 @@ type StartNodeEvent struct {
 	StartedAt int64
 }
 
+// String implements fmt.Stringer.
+func (e StartNodeEvent) String() string {
+	return fmt.Sprintf("%d.start", e.Desc.NodeID)
+}
+
 // CallSuccessEvent is published when a call to a node completes without error.
 type CallSuccessEvent struct {
 	NodeID proto.NodeID
 	Method proto.Method
 }
 
+// String implements fmt.Stringer.
+func (e CallSuccessEvent) String() string {
+	return fmt.Sprintf("%d.ok.%s", e.NodeID, e.Method)
+}
+
 // CallErrorEvent is published when a call to a node returns an error.
 type CallErrorEvent struct {
 	NodeID proto.NodeID
 	Method proto.Method
+}
+
+// String implements fmt.Stringer.
+func (e CallErrorEvent) String() string {
+	return fmt.Sprintf("%d.err.%s", e.NodeID, e.Method)
 }
 
 // NodeEventFeed is a helper structure which publishes node-specific events to a
@@ -66,25 +83,28 @@ func (nef NodeEventFeed) StartNode(desc proto.NodeDescriptor, startedAt int64) {
 }
 
 // CallComplete is called by a node whenever it completes a request. This will
-// publish an appropriate event to the feed based on the results of the call.
-// TODO(tschottdorf): move to batch, account for multiple methods per batch.
-// In particular, on error want an error position to identify the failed
-// request.
-func (nef NodeEventFeed) CallComplete(args proto.Request, reply proto.Response) {
-	method := args.Method()
-	if ba, ok := args.(*proto.BatchRequest); ok && len(ba.Requests) > 0 {
-		method = ba.Requests[0].GetInner().Method()
-	}
-	if err := reply.Header().Error; err != nil &&
-		err.TransactionRestart == proto.TransactionRestart_ABORT {
+// publish appropriate events to the feed:
+// - For a successful request, a corresponding event for each request in the batch,
+// - on error without index information, a failure of the Batch, and
+// - on an indexed error a failure of the individual request.
+func (nef NodeEventFeed) CallComplete(ba proto.BatchRequest, pErr *proto.Error) {
+	if pErr != nil && pErr.TransactionRestart == proto.TransactionRestart_ABORT {
+		var method proto.Method
+		if pErr.Index == nil {
+			method = proto.Batch
+		} else {
+			method = ba.Requests[int(pErr.Index.Index)].GetInner().Method()
+		}
 		nef.f.Publish(&CallErrorEvent{
 			NodeID: nef.id,
 			Method: method,
 		})
-	} else {
+		return
+	}
+	for _, union := range ba.Requests {
 		nef.f.Publish(&CallSuccessEvent{
 			NodeID: nef.id,
-			Method: method,
+			Method: union.GetInner().Method(),
 		})
 	}
 }

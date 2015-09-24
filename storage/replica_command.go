@@ -1175,18 +1175,15 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
-		b.InternalAddCall(proto.Call{
-			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: newDesc.StartKey},
-				Commit:        true,
-				InternalCommitTrigger: &proto.InternalCommitTrigger{
-					SplitTrigger: &proto.SplitTrigger{
-						UpdatedDesc: updatedDesc,
-						NewDesc:     *newDesc,
-					},
+		b.InternalAddRequest(&proto.EndTransactionRequest{
+			RequestHeader: proto.RequestHeader{Key: newDesc.StartKey},
+			Commit:        true,
+			InternalCommitTrigger: &proto.InternalCommitTrigger{
+				SplitTrigger: &proto.SplitTrigger{
+					UpdatedDesc: updatedDesc,
+					NewDesc:     *newDesc,
 				},
 			},
-			Reply: &proto.EndTransactionResponse{},
 		})
 		return txn.Run(b)
 	}); err != nil {
@@ -1367,18 +1364,15 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.R
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
-		b.InternalAddCall(proto.Call{
-			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: updatedLeftDesc.StartKey},
-				Commit:        true,
-				InternalCommitTrigger: &proto.InternalCommitTrigger{
-					MergeTrigger: &proto.MergeTrigger{
-						UpdatedDesc:     updatedLeftDesc,
-						SubsumedRangeID: rightDesc.RangeID,
-					},
+		b.InternalAddRequest(&proto.EndTransactionRequest{
+			RequestHeader: proto.RequestHeader{Key: updatedLeftDesc.StartKey},
+			Commit:        true,
+			InternalCommitTrigger: &proto.InternalCommitTrigger{
+				MergeTrigger: &proto.MergeTrigger{
+					UpdatedDesc:     updatedLeftDesc,
+					SubsumedRangeID: rightDesc.RangeID,
 				},
 			},
-			Reply: &proto.EndTransactionResponse{},
 		})
 		return txn.Run(b)
 	}); err != nil {
@@ -1522,22 +1516,19 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
-		b.InternalAddCall(proto.Call{
-			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
-				Commit:        true,
-				InternalCommitTrigger: &proto.InternalCommitTrigger{
-					ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
-						NodeID:          replica.NodeID,
-						StoreID:         replica.StoreID,
-						ChangeType:      changeType,
-						Replica:         replica,
-						UpdatedReplicas: updatedDesc.Replicas,
-						NextReplicaID:   updatedDesc.NextReplicaID,
-					},
+		b.InternalAddRequest(&proto.EndTransactionRequest{
+			RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
+			Commit:        true,
+			InternalCommitTrigger: &proto.InternalCommitTrigger{
+				ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
+					NodeID:          replica.NodeID,
+					StoreID:         replica.StoreID,
+					ChangeType:      changeType,
+					Replica:         replica,
+					UpdatedReplicas: updatedDesc.Replicas,
+					NextReplicaID:   updatedDesc.NextReplicaID,
 				},
 			},
-			Reply: &proto.EndTransactionResponse{},
 		})
 		return txn.Run(b)
 	})

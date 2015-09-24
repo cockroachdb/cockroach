@@ -772,19 +772,21 @@ func (tc *TxnCoordSender) resendWithTxn(ba proto.BatchRequest) (*proto.BatchResp
 		log.Infof("%s: auto-wrapping in txn and re-executing: ", ba)
 	}
 	tmpDB := client.NewDBWithPriority(tc, ba.GetUserPriority())
-	br := &proto.BatchResponse{}
-	if err := tmpDB.Txn(func(txn *client.Txn) error {
+	var br *proto.BatchResponse
+	err := tmpDB.Txn(func(txn *client.Txn) error {
 		txn.SetDebugName("auto-wrap", 0)
 		b := &client.Batch{}
 		for _, arg := range ba.Requests {
 			req := arg.GetInner()
-			call := proto.Call{Args: req, Reply: req.CreateReply()}
-			b.InternalAddCall(call)
-			br.Add(call.Reply)
+			b.InternalAddRequest(req)
 		}
-		return txn.CommitInBatch(b)
-	}); err != nil {
+		var err error
+		br, err = txn.CommitInBatchWithResponse(b)
+		return err
+	})
+	if err != nil {
 		return nil, proto.NewError(err)
 	}
+	br.Txn = nil // hide the evidence
 	return br, nil
 }
