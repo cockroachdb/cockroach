@@ -20,6 +20,7 @@ package sql
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
@@ -79,4 +80,40 @@ func (p *planner) getStringVal(name string, values parser.Exprs) (string, error)
 			name, values[0], val.Type())
 	}
 	return string(s), nil
+}
+
+func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
+	d, err := p.evalCtx.EvalExpr(n.Value)
+	if err != nil {
+		return nil, err
+	}
+	var offset int64
+	switch v := d.(type) {
+	case parser.DString:
+		location := string(v)
+		if location == "DEFAULT" || location == "LOCAL" {
+			location = "UTC"
+		}
+		if _, err := time.LoadLocation(location); err != nil {
+			return nil, err
+		}
+		p.session.Timezone = &Session_Location{Location: location}
+
+	case parser.DInterval:
+		offset = int64(v.Duration / time.Second)
+
+	case parser.DInt:
+		offset = int64(v) * 60 * 60
+
+	case parser.DFloat:
+		offset = int64(float64(v) * 60.0 * 60.0)
+
+	default:
+		return nil, fmt.Errorf("bad time zone value: %v", n.Value)
+	}
+	if offset != 0 {
+		p.session.Timezone = &Session_Offset{Offset: offset}
+	}
+	p.evalCtx.GetLocation = p.session.getLocation
+	return &valuesNode{}, nil
 }

@@ -230,7 +230,7 @@ func unimplemented() {
 %type <str>   non_reserved_word
 %type <expr>  non_reserved_word_or_sconst
 %type <expr>  var_value
-%type <empty> zone_value
+%type <expr>  zone_value
 
 %type <str>   unreserved_keyword type_func_name_keyword
 %type <str>   col_name_keyword reserved_keyword
@@ -818,7 +818,10 @@ set_rest_more:
   generic_set
 | var_name FROM CURRENT { unimplemented() }
   // Special syntaxes mandated by SQL standard:
-| TIME ZONE zone_value { unimplemented() }
+| TIME ZONE zone_value
+  {
+    $$ = &SetTimeZone{Value: $3}
+  }
 | NAMES opt_encoding { unimplemented() }
 
 var_name:
@@ -890,16 +893,40 @@ opt_boolean_or_string:
 // - an identifier such as "pst8pdt"
 // - an integer or floating point number
 // - a time interval per SQL99
-// name gives reduce/reduce errors against const_interval and LOCAL, so use
-// IDENT (meaning we reject anything that is a key word).
 zone_value:
-  SCONST { unimplemented() }
-| IDENT { unimplemented() }
-| const_interval SCONST opt_interval { unimplemented() }
-| const_interval '(' ICONST ')' SCONST { unimplemented() }
-| numeric_only { unimplemented() }
-| DEFAULT { unimplemented() }
-| LOCAL { unimplemented() }
+  SCONST
+  {
+    $$ = DString($1)
+  }
+| IDENT
+  {
+    $$ = DString($1)
+  }
+| const_interval SCONST opt_interval
+  {
+    // TODO(pmattis): support opt_interval?
+    expr := &CastExpr{Expr: DString($2), Type: $1}
+    // Use an empty EvalContext.
+    var ctx EvalContext
+    d, err := ctx.EvalExpr(expr)
+    if err != nil {
+      sqllex.Error("cannot evaluate to an interval type")
+      return 1
+    }
+    if _, ok := d.(DInterval); !ok {
+      panic("not an interval type")
+    }
+    $$ = d
+  }
+| numeric_only
+| DEFAULT
+  {
+    $$ = DString($1)
+  }
+| LOCAL
+  {
+    $$ = DString($1)
+  }
 
 opt_encoding:
   SCONST { unimplemented() }
@@ -1228,7 +1255,7 @@ numeric_only:
   }
 | signed_iconst
   {
-    $$ = IntVal($1)
+    $$ = DInt($1)
   }
 
 // TRUNCATE table relname1, relname2, ...
