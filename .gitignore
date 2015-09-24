@@ -38,3 +38,7 @@ _testmain.go
 *.swp
 
 .bootstrap
+
+# NPM node modules
+node_modules
+npm.installed

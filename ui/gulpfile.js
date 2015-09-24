@@ -133,7 +133,7 @@ gulp.task('build:test', ['build:release'], function () {
 });
 
 // generate test js
-gulp.task('test', function(){
+gulp.task('test', ['build:test'], function(){
     gulp.src('./test.html')
         .pipe(open());
 });
