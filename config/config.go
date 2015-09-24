@@ -107,19 +107,42 @@ func ObjectIDForKey(key proto.Key) (uint32, bool) {
 	return uint32(id64), true
 }
 
-// Get searches the kv list for 'key' and returns its
+// GetValue searches the kv list for 'key' and returns its
 // raw byte value if found. ok is true only if the key is found.
-func (s *SystemConfig) Get(key proto.Key) ([]byte, bool) {
+func (s *SystemConfig) GetValue(key proto.Key) ([]byte, bool) {
+	kv, found := s.Get(key)
+	if !found {
+		return nil, false
+	}
+
+	return kv.Value.Bytes, true
+}
+
+// Get searches the kv list for 'key' and returns the key/value if found.
+func (s *SystemConfig) Get(key proto.Key) (proto.KeyValue, bool) {
+	index, found := s.GetIndex(key)
+	if !found {
+		return proto.KeyValue{}, false
+	}
+	// TODO(marc): I'm pretty sure a Value returned by MVCCScan can
+	// never be nil. Should check.
+	return s.Values[index], true
+}
+
+// GetIndex searches the kv list for 'key' and returns its index if found.
+func (s *SystemConfig) GetIndex(key proto.Key) (int, bool) {
+	if s == nil {
+		return 0, false
+	}
+
 	l := len(s.Values)
 	index := sort.Search(l, func(i int) bool {
 		return !s.Values[i].Key.Less(key)
 	})
 	if index == l || !key.Equal(s.Values[index].Key) {
-		return nil, false
+		return 0, false
 	}
-	// TODO(marc): I'm pretty sure a Value returned by MVCCScan can
-	// never be nil. Should check.
-	return s.Values[index].Value.Bytes, true
+	return index, true
 }
 
 // GetLargestObjectID returns the largest object ID found in the config.
@@ -137,7 +160,7 @@ func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
 	}
 
 	// Search for the first key after the descriptor table.
-	// We can't use Get as we don't mind if there is nothing after
+	// We can't use GetValue as we don't mind if there is nothing after
 	// the descriptor table.
 	key := proto.Key(keys.MakeTablePrefix(keys.DescriptorTableID + 1))
 	index := sort.Search(len(s.Values), func(i int) bool {

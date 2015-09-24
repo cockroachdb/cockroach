@@ -26,16 +26,22 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/server"
+	cockroachSql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in one transaction.")
 var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
+var skipCache = flag.Bool("skip-cache", false, "Do not use descriptor cache.")
 
 // BenchmarkBank mirrors the SQL performed by examples/sql_bank, but structured
 // as a benchmark for easier usage of the Go performance analysis tools like
 // pprof, memprof and trace.
 func BenchmarkBank(b *testing.B) {
+	prev := cockroachSql.TestingDisableDescriptorCache
+	cockroachSql.TestingDisableDescriptorCache = *skipCache
+	defer func() { cockroachSql.TestingDisableDescriptorCache = prev }()
+
 	s := server.StartTestServer(b)
 	defer s.Stop()
 

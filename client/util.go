@@ -108,5 +108,5 @@ func marshalValue(v interface{}) (proto.Value, error) {
 		return r, nil
 	}
 
-	return r, fmt.Errorf("unable to marshal value: %s", v)
+	return r, fmt.Errorf("unable to marshal value: %v", v)
 }

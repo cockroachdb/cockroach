@@ -137,7 +137,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
-	s.sqlServer = sql.MakeHTTPServer(&s.ctx.Context, *s.db)
+	s.sqlServer = sql.MakeHTTPServer(&s.ctx.Context, *s.db, s.gossip)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{

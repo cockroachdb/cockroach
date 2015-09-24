@@ -22,9 +22,12 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -39,11 +42,18 @@ var errTransactionInProgress = errors.New("there is already a transaction in pro
 type Executor struct {
 	db     client.DB
 	nodeID uint32
+
+	// System Config and mutex.
+	systemConfig   *config.SystemConfig
+	systemConfigMu sync.RWMutex
 }
 
-// NewExecutor creates an Executor.
-func NewExecutor(db client.DB) Executor {
-	return Executor{db: db}
+// NewExecutor creates an Executor and registers a callback on the
+// system config.
+func NewExecutor(db client.DB, gossip *gossip.Gossip) *Executor {
+	exec := &Executor{db: db}
+	gossip.RegisterSystemConfigCallback(exec.updateSystemConfig)
+	return exec
 }
 
 // SetNodeID sets the node ID for the SQL server.
@@ -51,14 +61,30 @@ func (e *Executor) SetNodeID(nodeID proto.NodeID) {
 	e.nodeID = uint32(nodeID)
 }
 
+// updateSystemConfig is called whenever the system config gossip entry is updated.
+func (e *Executor) updateSystemConfig(cfg *config.SystemConfig) {
+	e.systemConfigMu.Lock()
+	defer e.systemConfigMu.Unlock()
+	e.systemConfig = cfg
+}
+
+// getSystemConfig returns a pointer to the latest system config. May be nil,
+// if the gossip callback has not run.
+func (e *Executor) getSystemConfig() *config.SystemConfig {
+	e.systemConfigMu.RLock()
+	defer e.systemConfigMu.RUnlock()
+	return e.systemConfig
+}
+
 // Execute the statement(s) in the given request and return a response.
 // On error, the returned integer is an HTTP error code.
-func (e Executor) Execute(args driver.Request) (driver.Response, int, error) {
+func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	planMaker := planner{
 		user: args.GetUser(),
 		evalCtx: parser.EvalContext{
 			NodeID: e.nodeID,
 		},
+		systemConfig: e.getSystemConfig(),
 	}
 	// Pick up current session state.
 	if err := gogoproto.Unmarshal(args.Session, &planMaker.session); err != nil {
@@ -98,7 +124,7 @@ func (e Executor) Execute(args driver.Request) (driver.Response, int, error) {
 
 // exec executes the request. Any error encountered is returned; it is
 // the caller's responsibility to update the response.
-func (e Executor) execStmts(sql string, params parameters, planMaker *planner) driver.Response {
+func (e *Executor) execStmts(sql string, params parameters, planMaker *planner) driver.Response {
 	var resp driver.Response
 	stmts, err := parser.Parse(sql, parser.Syntax(planMaker.session.Syntax))
 	if err != nil {
@@ -117,7 +143,7 @@ func (e Executor) execStmts(sql string, params parameters, planMaker *planner) d
 	return resp
 }
 
-func (e Executor) execStmt(stmt parser.Statement, params parameters, planMaker *planner) (driver.Result, error) {
+func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker *planner) (driver.Result, error) {
 	var result driver.Result
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
