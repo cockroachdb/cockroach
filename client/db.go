@@ -413,9 +413,6 @@ func sendAndFill(send func(...proto.Request) (*proto.BatchResponse, *proto.Error
 	// result gets initialized with an error from the corresponding call.
 	br, pErr := send(b.reqs...)
 	if pErr != nil {
-		// TODO(tschottdorf): give the error to fillResults or make sure in
-		// some other way that fillResults knows it's only called to set the
-		// keys.
 		_ = b.fillResults(nil, pErr)
 		return nil, pErr.GoError()
 	}

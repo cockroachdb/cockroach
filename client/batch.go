@@ -87,7 +87,6 @@ func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
 
 			var reply proto.Response
 			if result.Err == nil {
-				// TODO(tschottdorf): always do this (no errors on individual requests).
 				result.Err = pErr.GoError()
 				if result.Err == nil {
 					if offset+k < len(br.Responses) {
