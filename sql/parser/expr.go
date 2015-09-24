@@ -37,7 +37,6 @@ func (*NotExpr) expr()        {}
 func (*ParenExpr) expr()      {}
 func (*ComparisonExpr) expr() {}
 func (*RangeCond) expr()      {}
-func (*IsExpr) expr()         {}
 func (*IsOfTypeExpr) expr()   {}
 func (*ExistsExpr) expr()     {}
 func (*IfExpr) expr()         {}
@@ -123,6 +122,8 @@ const (
 	NotSimilarTo
 	IsDistinctFrom
 	IsNotDistinctFrom
+	Is
+	IsNot
 )
 
 var comparisonOpName = [...]string{
@@ -140,6 +141,8 @@ var comparisonOpName = [...]string{
 	NotSimilarTo:      "NOT SIMILAR TO",
 	IsDistinctFrom:    "IS DISTINCT FROM",
 	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
+	Is:                "IS",
+	IsNot:             "IS NOT",
 }
 
 func (i ComparisonOp) String() string {
@@ -175,46 +178,6 @@ func (node *RangeCond) String() string {
 
 // IsOp represents an IS expression operator.
 type IsOp int
-
-// IsExpr.Operator
-const (
-	IsNull = iota
-	IsNotNull
-	IsTrue
-	IsNotTrue
-	IsFalse
-	IsNotFalse
-	IsUnknown
-	IsNotUnknown
-)
-
-var isOpName = [...]string{
-	IsNull:       "IS NULL",
-	IsNotNull:    "IS NOT NULL",
-	IsTrue:       "IS TRUE",
-	IsNotTrue:    "IS NOT TRUE",
-	IsFalse:      "IS FALSE",
-	IsNotFalse:   "IS NOT FALSE",
-	IsUnknown:    "IS UNKNOWN",
-	IsNotUnknown: "IS NOT UNKNOWN",
-}
-
-func (i IsOp) String() string {
-	if i < 0 || i > IsOp(len(isOpName)-1) {
-		return fmt.Sprintf("IsOp(%d)", i)
-	}
-	return isOpName[i]
-}
-
-// IsExpr represents an IS {,NOT} {NULL,TRUE,FALSE,UNKNOWN} expression.
-type IsExpr struct {
-	Operator IsOp
-	Expr     Expr
-}
-
-func (node *IsExpr) String() string {
-	return fmt.Sprintf("%s %s", node.Expr, node.Operator)
-}
 
 // IsOfTypeExpr represents an IS {,NOT} OF (type_list) expression.
 type IsOfTypeExpr struct {

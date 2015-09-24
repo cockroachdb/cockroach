@@ -212,6 +212,15 @@ func TestSimplifyExpr(t *testing.T) {
 		{`i SIMILAR TO 'foo'`, `i = 'foo'`},
 		{`i SIMILAR TO 'foo%'`, `i >= 'foo' AND i < 'fop'`},
 		{`i SIMILAR TO '(foo|foobar)%'`, `i >= 'foo' AND i < 'fop'`},
+
+		{`c IS NULL`, `true`},
+		{`c IS NOT NULL`, `c IS NOT NULL`},
+		{`c IS TRUE`, `true`},
+		{`c IS NOT TRUE`, `true`},
+		{`c IS FALSE`, `true`},
+		{`c IS NOT FALSE`, `true`},
+		{`c IS UNKNOWN`, `true`},
+		{`c IS NOT UNKNOWN`, `c IS NOT NULL`},
 	}
 	for _, d := range testData {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)

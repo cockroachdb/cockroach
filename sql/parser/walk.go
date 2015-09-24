@@ -63,9 +63,6 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 		t.From = WalkExpr(v, t.From)
 		t.To = WalkExpr(v, t.To)
 
-	case *IsExpr:
-		t.Expr = WalkExpr(v, t.Expr)
-
 	case *IsOfTypeExpr:
 		t.Expr = WalkExpr(v, t.Expr)
 

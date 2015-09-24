@@ -1083,12 +1083,27 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 	// <datum>" unless they could not be simplified further in which case
 	// simplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
 	if isVar(n.Left) && isDatum(n.Right) {
-		// All of the comparison operators have the property that when comparing to
-		// NULL they evaluate to NULL (see evalComparisonOp). NULL is not the same
-		// as false, but in the context of a WHERE clause, NULL is considered
-		// not-true which is the same as false.
 		if n.Right == parser.DNull {
-			return parser.DBool(false)
+			switch n.Operator {
+			case parser.Is, parser.IsDistinctFrom, parser.IsNotDistinctFrom:
+				// IS NULL or IS {,NOT} DISTINCT FROM NULL expressions. These are valid
+				// comparisons to NULL which return boolean true or false. We're not
+				// utilizing them in index selection (yet), so return true.
+				return parser.DBool(true)
+			case parser.IsNot:
+				switch n.Left.(type) {
+				case *qvalue:
+					// "a IS NOT NULL" can be used during index selection to restrict the
+					// range scanned to keys > NULL.
+					return n
+				}
+			default:
+				// All of the remaining comparison operators have the property that when
+				// comparing to NULL they evaluate to NULL (see evalComparisonOp). NULL is
+				// not the same as false, but in the context of a WHERE clause, NULL is
+				// considered not-true which is the same as false.
+				return parser.DBool(false)
+			}
 		}
 
 		switch n.Operator {
