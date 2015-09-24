@@ -32,6 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+func wrap(args proto.Request) proto.BatchRequest {
+	var ba proto.BatchRequest
+	ba.Add(args)
+	return ba
+}
+
 func TestNodeEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
@@ -44,12 +50,10 @@ func TestNodeEventFeed(t *testing.T) {
 	// and an expected result interface which should match the produced
 	// event.
 	testCases := []struct {
-		name      string
 		publishTo func(status.NodeEventFeed)
 		expected  interface{}
 	}{
 		{
-			name: "Start",
 			publishTo: func(nef status.NodeEventFeed) {
 				nef.StartNode(nodeDesc, 100)
 			},
@@ -59,10 +63,8 @@ func TestNodeEventFeed(t *testing.T) {
 			},
 		},
 		{
-			name: "Get",
 			publishTo: func(nef status.NodeEventFeed) {
-				call := proto.GetCall(proto.Key("abc"))
-				nef.CallComplete(call.Args, call.Reply)
+				nef.CallComplete(wrap(proto.NewGet(proto.Key("abc"))), nil)
 			},
 			expected: &status.CallSuccessEvent{
 				NodeID: proto.NodeID(1),
@@ -70,10 +72,8 @@ func TestNodeEventFeed(t *testing.T) {
 			},
 		},
 		{
-			name: "Put",
 			publishTo: func(nef status.NodeEventFeed) {
-				call := proto.PutCall(proto.Key("abc"), proto.Value{Bytes: []byte("def")})
-				nef.CallComplete(call.Args, call.Reply)
+				nef.CallComplete(wrap(proto.NewPut(proto.Key("abc"), proto.Value{Bytes: []byte("def")})), nil)
 			},
 			expected: &status.CallSuccessEvent{
 				NodeID: proto.NodeID(1),
@@ -81,11 +81,20 @@ func TestNodeEventFeed(t *testing.T) {
 			},
 		},
 		{
-			name: "Get Error",
 			publishTo: func(nef status.NodeEventFeed) {
-				call := proto.GetCall(proto.Key("abc"))
-				call.Reply.Header().SetGoError(util.Errorf("error"))
-				nef.CallComplete(call.Args, call.Reply)
+				nef.CallComplete(wrap(proto.NewGet(proto.Key("abc"))), proto.NewError(util.Errorf("error")))
+			},
+			expected: &status.CallErrorEvent{
+				NodeID: proto.NodeID(1),
+				Method: proto.Batch,
+			},
+		},
+		{
+			publishTo: func(nef status.NodeEventFeed) {
+				nef.CallComplete(wrap(proto.NewGet(proto.Key("abc"))), &proto.Error{
+					Index:   &proto.ErrPosition{Index: 0},
+					Message: "boo",
+				})
 			},
 			expected: &status.CallErrorEvent{
 				NodeID: proto.NodeID(1),
@@ -285,26 +294,16 @@ func TestNodeEventFeedTransactionRestart(t *testing.T) {
 	ner := nodeEventReader{}
 	ner.readEvents(feed)
 
-	nodefeed.CallComplete(&proto.GetRequest{}, &proto.GetResponse{
-		ResponseHeader: proto.ResponseHeader{
-			Error: &proto.Error{
-				TransactionRestart: proto.TransactionRestart_BACKOFF,
-			},
-		},
-	})
-	nodefeed.CallComplete(&proto.GetRequest{}, &proto.GetResponse{
-		ResponseHeader: proto.ResponseHeader{
-			Error: &proto.Error{
-				TransactionRestart: proto.TransactionRestart_IMMEDIATE,
-			},
-		},
-	})
-	nodefeed.CallComplete(&proto.PutRequest{}, &proto.PutResponse{
-		ResponseHeader: proto.ResponseHeader{
-			Error: &proto.Error{
-				TransactionRestart: proto.TransactionRestart_ABORT,
-			},
-		},
+	get := wrap(&proto.GetRequest{})
+	nodefeed.CallComplete(get, &proto.Error{
+		TransactionRestart: proto.TransactionRestart_BACKOFF})
+	nodefeed.CallComplete(get, &proto.Error{
+		TransactionRestart: proto.TransactionRestart_IMMEDIATE})
+	nodefeed.CallComplete(wrap(&proto.PutRequest{}), &proto.Error{
+		TransactionRestart: proto.TransactionRestart_ABORT})
+	nodefeed.CallComplete(wrap(&proto.PutRequest{}), &proto.Error{
+		Index:              &proto.ErrPosition{Index: 0},
+		TransactionRestart: proto.TransactionRestart_ABORT,
 	})
 
 	feed.Flush()
@@ -313,6 +312,7 @@ func TestNodeEventFeedTransactionRestart(t *testing.T) {
 	exp := []string{
 		"Get",
 		"Get",
+		"failed Batch",
 		"failed Put",
 	}
 

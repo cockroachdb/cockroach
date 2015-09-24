@@ -637,6 +637,11 @@ func (r *Replica) checkBatchRequest(ba *proto.BatchRequest) error {
 		if header.Txn != nil && !header.Txn.Equal(ba.Txn) {
 			return util.Errorf("conflicting transaction on call in transactional batch at position %d: %s", i, ba)
 		}
+		// This assertion should be made unnecessary by only having the field
+		// on BatchRequest.
+		if header.ReadConsistency != ba.ReadConsistency {
+			return util.Errorf("requests and batch must have same read consistency")
+		}
 		if proto.IsReadOnly(args) {
 			if header.ReadConsistency == proto.INCONSISTENT && header.Txn != nil {
 				// Disallow any inconsistent reads within txns.
@@ -1503,9 +1508,9 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 	// Resolve all of the intents which aren't local to the Range.
 	if len(ba.Requests) > 0 {
 		// TODO(tschottdorf): should be able use the Batch normally and do
-		// without InternalAddCall.
+		// without InternalAddRequest.
 		b := &client.Batch{}
-		b.InternalAddCall(proto.Call{Args: ba, Reply: &proto.BatchResponse{}})
+		b.InternalAddRequest(ba)
 		action := func() {
 			// TODO(tschottdorf): no tracing here yet.
 			if err := r.rm.DB().Run(b); err != nil {

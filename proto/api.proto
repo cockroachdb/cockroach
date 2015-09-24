@@ -283,7 +283,7 @@ message EndTransactionRequest {
 message EndTransactionResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Remaining time (ns).
-  optional int64 commit_wait = 2 [(gogoproto.nullable) = false];
+  optional int64 commit_wait = 2 [(gogoproto.nullable) = false]; // TODO(tschottdorf): remove this
   // List of intents resolved by EndTransaction call.
   repeated bytes resolved = 3 [(gogoproto.casttype) = "Key"];
 }

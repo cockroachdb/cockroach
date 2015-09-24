@@ -27,13 +27,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -334,8 +334,7 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		call := proto.Call{Args: args, Reply: args.CreateReply()}
-		if err := client.SendCall(ds, call); err != nil {
+		if _, err := batchutil.SendWrapped(ds, args); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
 	}
@@ -388,8 +387,8 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
-	if err := client.SendCall(ds, call); err != nil {
+	put := proto.NewPut(proto.Key("a"), proto.Value{Bytes: []byte("value")})
+	if _, err := batchutil.SendWrapped(ds, put); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
 	if first {
@@ -431,13 +430,13 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
+	put := proto.NewPut(proto.Key("a"), proto.Value{Bytes: []byte("value")})
 	// Fatal error on descriptor lookup, propagated to reply.
-	if err := client.SendCall(ds, call); err.Error() != "fatal boom" {
+	if _, err := batchutil.SendWrapped(ds, put); err.Error() != "fatal boom" {
 		t.Errorf("unexpected error: %s", err)
 	}
 	// Retryable error on descriptor lookup, second attempt successful.
-	if err := client.SendCall(ds, call); err != nil {
+	if _, err := batchutil.SendWrapped(ds, put); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
 	if len(errors) != 0 {
@@ -494,15 +493,15 @@ func TestEvictCacheOnError(t *testing.T) {
 		ds := NewDistSender(ctx, g)
 		ds.updateLeaderCache(1, leader)
 
-		call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
+		put := proto.NewPut(proto.Key("a"), proto.Value{Bytes: []byte("value")}).(*proto.PutRequest)
 
-		if err := client.SendCall(ds, call); err != nil && !testutils.IsError(err, "boom") {
+		if _, err := batchutil.SendWrapped(ds, put); err != nil && !testutils.IsError(err, "boom") {
 			t.Errorf("put encountered unexpected error: %s", err)
 		}
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &proto.Replica{}) && !tc.shouldClearLeader {
 			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %v", i, tc.shouldClearLeader, cur)
 		}
-		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(call.Args.Header().Key, false /* !inclusive */)
+		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(put.Key, false /* !inclusive */)
 		if cachedDesc == nil != tc.shouldClearReplica {
 			t.Errorf("%d: unexpected second replica lookup behaviour: wanted=%t", i, tc.shouldClearReplica)
 		}
@@ -552,15 +551,15 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			return nil, &proto.RangeKeyMismatchError{RequestStartKey: ba.Key,
 				RequestEndKey: ba.EndKey}
 		}
-		return []gogoproto.Message{getReply()}, nil
+		return []gogoproto.Message{ba.CreateReply().(*proto.BatchResponse)}, nil
 	}
 
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
 	}
 	ds := NewDistSender(ctx, g)
-	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 0)
-	if err := client.SendCall(ds, call); err != nil {
+	scan := proto.NewScan(proto.Key("a"), proto.Key("d"), 0)
+	if _, err := batchutil.SendWrapped(ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
 }
@@ -653,12 +652,12 @@ func TestSendRPCRetry(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 1)
-	sr := call.Reply.(*proto.ScanResponse)
-	if err := client.SendCall(ds, call); err != nil {
+	scan := proto.NewScan(proto.Key("a"), proto.Key("d"), 1)
+	sr, err := batchutil.SendWrapped(ds, scan)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if l := len(sr.Rows); l != 1 {
+	if l := len(sr.(*proto.ScanResponse).Rows); l != 1 {
 		t.Fatalf("expected 1 row; got %d", l)
 	}
 }
@@ -752,15 +751,16 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 10)
+	scan := proto.NewScan(proto.Key("a"), proto.Key("d"), 10).(*proto.ScanRequest)
 	// Set the Txn info to avoid an OpRequiresTxnError.
-	call.Args.Header().Txn = &proto.Transaction{}
-	reply := call.Reply.(*proto.ScanResponse)
-	if err := client.SendCall(ds, call); err != nil {
+	scan.Txn = &proto.Transaction{}
+	reply, err := batchutil.SendWrapped(ds, scan)
+	if err != nil {
 		t.Fatalf("scan encountered error: %s", err)
 	}
-	if !reflect.DeepEqual(existingKVs, reply.Rows) {
-		t.Fatalf("expect get %v, actual get %v", existingKVs, reply.Rows)
+	sr := reply.(*proto.ScanResponse)
+	if !reflect.DeepEqual(existingKVs, sr.Rows) {
+		t.Fatalf("expect get %v, actual get %v", existingKVs, sr.Rows)
 	}
 }
 
@@ -785,13 +785,10 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	call := proto.Call{
-		Args: &proto.ReverseScanRequest{
-			RequestHeader: proto.RequestHeader{Key: proto.Key("a"), EndKey: proto.Key("b")},
-		},
-		Reply: &proto.ReverseScanResponse{},
+	rScan := &proto.ReverseScanRequest{
+		RequestHeader: proto.RequestHeader{Key: proto.Key("a"), EndKey: proto.Key("b")},
 	}
-	if err := client.SendCall(ds, call); err != nil {
+	if _, err := batchutil.SendWrapped(ds, rScan); err != nil {
 		t.Fatal(err)
 	}
 }

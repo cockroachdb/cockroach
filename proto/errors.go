@@ -189,7 +189,7 @@ func (e *Error) SetGoError(err error) {
 	detail := &ErrorDetail{}
 	if detail.SetValue(err) {
 		e.Detail = detail
-	} else if isTxnError {
+	} else if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
 		panic(fmt.Sprintf("TransactionRestartError %T must be an ErrorDetail", err))
 	}
 }

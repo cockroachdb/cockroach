@@ -568,19 +568,18 @@ func getRangeMetadata(key proto.Key, mtc *multiTestContext, t *testing.T) proto.
 	// want to do a consistent read here. This is important when we are
 	// considering one of the metadata ranges: we must not do an
 	// inconsistent lookup in our own copy of the range.
-	reply := proto.RangeLookupResponse{}
 	b := &client.Batch{}
-	b.InternalAddCall(proto.Call{
-		Args: &proto.RangeLookupRequest{
-			RequestHeader: proto.RequestHeader{
-				Key: keys.RangeMetaKey(key),
-			},
-			MaxRanges: 1,
+	b.InternalAddRequest(&proto.RangeLookupRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: keys.RangeMetaKey(key),
 		},
-		Reply: &reply,
+		MaxRanges: 1,
 	})
-	if err := mtc.db.Run(b); err != nil {
+	var reply *proto.RangeLookupResponse
+	if br, err := mtc.db.RunWithResponse(b); err != nil {
 		t.Fatalf("error getting range metadata: %s", err)
+	} else {
+		reply = br.Responses[0].GetInner().(*proto.RangeLookupResponse)
 	}
 	if a, e := len(reply.Ranges), 1; a != e {
 		t.Fatalf("expected %d range descriptor, got %d", e, a)

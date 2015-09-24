@@ -35,18 +35,8 @@ import (
 var (
 	testKey     = proto.Key("a")
 	testTS      = proto.Timestamp{WallTime: 1, Logical: 1}
-	testPutReq  = &proto.PutRequest{RequestHeader: proto.RequestHeader{Timestamp: testTS, Key: testKey}}
 	testPutResp = &proto.PutResponse{ResponseHeader: proto.ResponseHeader{Timestamp: testTS}}
 )
-
-func send(sender Sender, args proto.Request) (proto.Response, *proto.Error) {
-	ba, unwrap := MaybeWrap(args)
-	br, pErr := sender.Send(context.Background(), *ba)
-	if pErr != nil {
-		return nil, pErr
-	}
-	return unwrap(br), nil
-}
 
 func newDB(sender Sender) *DB {
 	return &DB{
@@ -71,7 +61,7 @@ func newTestSender(pre, post func(proto.BatchRequest) (*proto.BatchResponse, *pr
 		if pre != nil {
 			br, pErr = pre(ba)
 		} else {
-			br = &proto.BatchResponse{}
+			br = ba.CreateReply().(*proto.BatchResponse)
 		}
 		if pErr != nil {
 			return nil, pErr
@@ -104,6 +94,15 @@ func newTestSender(pre, post func(proto.BatchRequest) (*proto.BatchResponse, *pr
 	}
 }
 
+func testPut() proto.BatchRequest {
+	var ba proto.BatchRequest
+	ba.Timestamp = testTS
+	put := &proto.PutRequest{}
+	put.Key = testKey
+	ba.Add(put)
+	return ba
+}
+
 // TestTxnRequestTxnTimestamp verifies response txn timestamp is
 // always upgraded on successive requests.
 func TestTxnRequestTxnTimestamp(t *testing.T) {
@@ -111,8 +110,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	makeTS := func(walltime int64, logical int32) proto.Timestamp {
 		return proto.ZeroTimestamp.Add(walltime, logical)
 	}
-
-	testPutReq := gogoproto.Clone(testPutReq).(*proto.PutRequest)
+	ba := testPut()
 
 	testCases := []struct {
 		expRequestTS, responseTS proto.Timestamp
@@ -142,8 +140,8 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	txn := NewTxn(*db)
 
 	for testIdx = range testCases {
-		if _, err := send(txn.db.sender, testPutReq); err != nil {
-			t.Fatal(err)
+		if _, pErr := txn.db.sender.Send(context.Background(), ba); pErr != nil {
+			t.Fatal(pErr)
 		}
 	}
 }
@@ -158,10 +156,9 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	}, nil))
 
 	txn := NewTxn(*db)
-	_, pErr := send(txn.db.sender, testPutReq)
-	err := pErr.GoError()
-	if _, ok := err.(*proto.TransactionAbortedError); !ok {
-		t.Fatalf("expected TransactionAbortedError, got %v", err)
+	_, pErr := txn.db.sender.Send(context.Background(), testPut())
+	if _, ok := pErr.GoError().(*proto.TransactionAbortedError); !ok {
+		t.Fatalf("expected TransactionAbortedError, got %v", pErr)
 	}
 
 	if len(txn.Proto.ID) != 0 {
@@ -195,7 +192,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 	var calls []proto.Method
 	db := newDB(newTestSender(func(ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 		calls = append(calls, ba.Methods()...)
-		return &proto.BatchResponse{}, nil
+		return ba.CreateReply().(*proto.BatchResponse), nil
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		_, err := txn.Get("a")
@@ -218,7 +215,7 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 		var calls []proto.Method
 		db := newDB(newTestSender(func(ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 			calls = append(calls, ba.Methods()...)
-			return &proto.BatchResponse{}, nil
+			return ba.CreateReply().(*proto.BatchResponse), nil
 		}, nil))
 		if err := db.Txn(func(txn *Txn) error {
 			b := &Batch{}
@@ -249,7 +246,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 		if et, ok := ba.GetArg(proto.EndTransaction); ok && !et.(*proto.EndTransactionRequest).Commit {
 			t.Errorf("expected commit to be true")
 		}
-		return &proto.BatchResponse{}, nil
+		return ba.CreateReply().(*proto.BatchResponse), nil
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		return txn.Put("a", "b")
@@ -270,7 +267,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 	count := 0
 	db := NewDB(newTestSender(func(ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 		count++
-		return &proto.BatchResponse{}, nil
+		return ba.CreateReply().(*proto.BatchResponse), nil
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		b := &Batch{}
@@ -292,7 +289,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 		if _, ok := ba.GetArg(proto.EndTransaction); ok {
 			t.Errorf("did not expect EndTransaction")
 		}
-		return &proto.BatchResponse{}, nil
+		return ba.CreateReply().(*proto.BatchResponse), nil
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		return errors.New("foo")
@@ -313,7 +310,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		var calls []proto.Method
 		db := newDB(newTestSender(func(ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 			calls = append(calls, ba.Methods()...)
-			return &proto.BatchResponse{}, nil
+			return ba.CreateReply().(*proto.BatchResponse), nil
 		}, nil))
 		ok := false
 		if err := db.Txn(func(txn *Txn) error {
@@ -347,7 +344,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 		if et, ok := ba.GetArg(proto.EndTransaction); ok && et.(*proto.EndTransactionRequest).Commit {
 			t.Errorf("expected commit to be false")
 		}
-		return &proto.BatchResponse{}, nil
+		return ba.CreateReply().(*proto.BatchResponse), nil
 	}, nil))
 
 	if err := db.Txn(func(txn *Txn) error {
@@ -391,7 +388,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 					return nil, proto.NewError(test.err)
 				}
 			}
-			return &proto.BatchResponse{}, nil
+			return ba.CreateReply().(*proto.BatchResponse), nil
 		}, nil))
 		db.txnRetryOptions.InitialBackoff = 1 * time.Millisecond
 		err := db.Txn(func(txn *Txn) error {
@@ -445,7 +442,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				}
 				abort = true
 			}
-			return &proto.BatchResponse{}, nil
+			return ba.CreateReply().(*proto.BatchResponse), nil
 		}, nil))
 
 		txn := NewTxn(*db)

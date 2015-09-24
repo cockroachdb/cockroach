@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -73,12 +74,13 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message,
 		_ *rpc.Context) ([]gogoproto.Message, error) {
-		call := proto.Call{
-			Args:  getArgs(nil /* net.Addr */).(proto.Request),
-			Reply: getReply().(proto.Response),
+		args := getArgs(nil /* net.Addr */).(proto.Request)
+		reply, err := batchutil.SendWrapped(localSender, args)
+		if reply == nil {
+			reply = getReply().(proto.Response)
 		}
-		_ = client.SendCall(localSender, call)
-		return []gogoproto.Message{call.Reply}, nil
+		reply.Header().SetGoError(err)
+		return []gogoproto.Message{reply}, nil
 	}
 
 	if err := gossipNodeDesc(sCtx.Gossip, nodeDesc.NodeID); err != nil {
@@ -233,54 +235,57 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, _ []net.Addr,
 	// Because NotLeaderErrors will adjust the index of our loop, a second
 	// "maxRetries" count is used to bound the number of retries.
 	nextIdx := 0
-	var call proto.Call
+	var reply proto.Response
+	var err error
 	for total := 0; total < maxRetries; total++ {
-		call = proto.Call{
-			Args:  getArgs(nil /* net.Addr */).(proto.Request),
-			Reply: getReply().(proto.Response),
+		args := getArgs(nil /* net.Addr */).(proto.Request)
+		reply, err = batchutil.SendWrapped(m.senders[nextIdx], args)
+		if err == nil {
+			return []gogoproto.Message{reply}, nil
 		}
-		if err := client.SendCall(m.senders[nextIdx], call); err != nil {
-			switch err := err.(type) {
-			case *proto.RangeKeyMismatchError:
-				// Try the next localSender if this localSender did not have the
-				// requested range.
+		switch err := err.(type) {
+		case *proto.RangeKeyMismatchError:
+			// Try the next localSender if this localSender did not have the
+			// requested range.
+			nextIdx++
+			nextIdx %= len(m.senders)
+			continue
+		case *proto.NotLeaderError:
+			// localSender has the range, is *not* the Leader, but the
+			// Leader is not known; this can happen if the leader is removed
+			// from the group. Move the manual clock forward in an attempt to
+			// expire the lease. Also increment nextIdx: the discovered replica might be
+			// a removed copy which has not been GCed.
+			if err.Leader == nil {
+				m.expireLeaderLeases()
 				nextIdx++
 				nextIdx %= len(m.senders)
 				continue
-			case *proto.NotLeaderError:
-				// localSender has the range, is *not* the Leader, but the
-				// Leader is not known; this can happen if the leader is removed
-				// from the group. Move the manual clock forward in an attempt to
-				// expire the lease. Also increment nextIdx: the discovered replica might be
-				// a removed copy which has not been GCed.
-				if err.Leader == nil {
-					m.expireLeaderLeases()
-					nextIdx++
-					nextIdx %= len(m.senders)
-					continue
-				}
-				// If the leader IS known, retry the request against the leader.
-				foundLeader := false
-				for i, s := range m.stores {
-					if s.StoreID() == err.Leader.StoreID {
-						nextIdx = i
-						foundLeader = true
-						break
-					}
-				}
-				// If the current leader was known but wasn't found in our
-				// collection of stores, break out of the loop; this should
-				// never happen in a correctly configured test.
-				if !foundLeader {
-					m.t.Fatalf("leader %s was not part of known set of stores in multiTestContext",
-						err.Leader)
-				}
-				continue
 			}
+			// If the leader IS known, retry the request against the leader.
+			foundLeader := false
+			for i, s := range m.stores {
+				if s.StoreID() == err.Leader.StoreID {
+					nextIdx = i
+					foundLeader = true
+					break
+				}
+			}
+			// If the current leader was known but wasn't found in our
+			// collection of stores, break out of the loop; this should
+			// never happen in a correctly configured test.
+			if !foundLeader {
+				m.t.Fatalf("leader %s was not part of known set of stores in multiTestContext",
+					err.Leader)
+			}
+			continue
 		}
 		break
 	}
-	return []gogoproto.Message{call.Reply}, call.Reply.Header().GoError()
+	if err == nil {
+		panic("err must not be nil here")
+	}
+	return nil, err
 }
 
 func (m *multiTestContext) makeContext(i int) storage.StoreContext {

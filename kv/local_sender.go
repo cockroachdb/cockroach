@@ -216,7 +216,9 @@ func (ls *LocalSender) firstRange() (*proto.RangeDescriptor, error) {
 // rangeLookup implements the rangeDescriptorDB interface. It looks up
 // the descriptors for the given (meta) key.
 func (ls *LocalSender) rangeLookup(key proto.Key, options lookupOptions, _ *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
-	ba, unwrap := client.MaybeWrap(&proto.RangeLookupRequest{
+	ba := proto.BatchRequest{}
+	ba.ReadConsistency = proto.INCONSISTENT
+	ba.Add(&proto.RangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:             key,
 			ReadConsistency: proto.INCONSISTENT,
@@ -225,9 +227,9 @@ func (ls *LocalSender) rangeLookup(key proto.Key, options lookupOptions, _ *prot
 		ConsiderIntents: options.considerIntents,
 		Reverse:         options.useReverseScan,
 	})
-	br, err := ls.Send(context.Background(), *ba)
-	if err != nil {
-		return nil, err.GoError()
+	br, pErr := ls.Send(context.Background(), ba)
+	if pErr != nil {
+		return nil, pErr.GoError()
 	}
-	return unwrap(br).(*proto.RangeLookupResponse).Ranges, nil
+	return br.Responses[0].GetInner().(*proto.RangeLookupResponse).Ranges, nil
 }
