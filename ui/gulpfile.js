@@ -2,10 +2,12 @@
 
 // imports
 var del = require('del'),
-    gulp = require('gulp');
+    gulp = require('gulp')
+    ;
 
+// gulp modules
 var stylus = require('gulp-stylus'),
-    typescript = require('gulp-typescript'),
+    ts = require('gulp-typescript'),
     shell = require('gulp-shell')
     ;
 
@@ -71,7 +73,7 @@ gulp.task('styles', ['clean:styles'], function () {
 });
 
 // generate js from typescript
-var tsProject = typescript.createProject('./ts/tsconfig.json');
+var tsProject = ts.createProject('./ts/tsconfig.json');
 gulp.task('typescript', ['clean:js'], function () {
     return tsProject.src()
         .pipe(ts(tsProject))
