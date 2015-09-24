@@ -11,6 +11,7 @@ var stylus = require('gulp-stylus')
     ,shell = require('gulp-shell')
     ,tslint = require('gulp-tslint')
     ,open = require('gulp-open')
+    ,livereload = require('gulp-livereload')
     ;
 
 // clean build files
@@ -74,7 +75,8 @@ gulp.task('styles', ['clean:styles'], function () {
         .pipe(stylus({
             compress: true
         }))
-        .pipe(gulp.dest('build/css'));
+        .pipe(gulp.dest('build/css'))
+        .pipe(livereload());
 
 });
 
@@ -82,13 +84,6 @@ gulp.task('styles', ['clean:styles'], function () {
 var tsProject = ts.createProject('./ts/tsconfig.json');
 
 //tslint
-gulp.task('tslint', function(){
-    return tsProject.src()
-        .pipe(tslint())
-        .pipe(tslint.report('verbose'));
-});
-
-//tests
 gulp.task('tslint', function(){
     return tsProject.src()
         .pipe(tslint())
@@ -108,13 +103,15 @@ gulp.task('typescript:debug', ['clean:js'], function () {
     return tsProject.src()
         .pipe(ts(tsProject))
         .js
-        .pipe(gulp.dest('build'));
+        .pipe(gulp.dest('build'))
+        .pipe(livereload());
 });
 
 // copy index.html
 gulp.task('copyindex', ['clean:index'], function () {
     return gulp.src('index.html')
-        .pipe(gulp.dest('build'));
+        .pipe(gulp.dest('build'))
+        .pipe(livereload());
 });
 
 // generate all frontend files - debug ignores tslint
@@ -156,6 +153,9 @@ gulp.task('debug', ['bindata:debug']);
 
 // watch files for changes
 gulp.task('watch', ['debug'], function () {
+
+    livereload.listen();
+
     gulp.watch('styl/**/*.styl', ['styles']);
     gulp.watch('ts/**/*.ts', ['typescript:debug']);
     gulp.watch('index.html', ['copyindex']);

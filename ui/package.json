@@ -13,6 +13,7 @@
   "devDependencies": {
     "del": "^2.0.2",
     "gulp": "^3.9.0",
+    "gulp-livereload": "^3.8.0",
     "gulp-shell": "^0.4.3",
     "gulp-stylus": "^2.0.7",
     "gulp-tslint": "^3.2.0",
