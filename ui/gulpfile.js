@@ -1,50 +1,41 @@
 'use strict';
 
-// Initially copied from: https://www.npmjs.com/package/generator-gulp-mithril
+// imports
+var del = require('del'),
+    gulp = require('gulp');
 
-var gulp = require('gulp'),
-    stylus = require('gulp-stylus'),
+var stylus = require('gulp-stylus'),
     typescript = require('gulp-typescript'),
-    bindata = require('gulp-gobin'),
-    del = require('del'),
     shell = require('gulp-shell')
     ;
 
-
+// clean build files
 gulp.task('clean:styles', function (cb) {
-    return del('build/css/**');
+    return del('build/css/app.css');
 });
 
 gulp.task('clean:js', function (cb) {
-    return del('build/js/**');
+    return del('build/js/app.js');
+});
+
+gulp.task('clean:bowerstyles', function (cb) {
+    return del('build/css/lib/**');
+});
+
+gulp.task('clean:bowerjs', function (cb) {
+    return del('build/js/lib/**');
+});
+
+// clean generated go file
+gulp.task('clean:embedded', function () {
+    return del('embedded.go');
 });
 
 gulp.task('clean:index', function (cb) {
     return del('build/index.html');
 });
 
-/* copy bower js libs */
-gulp.task('bowerjs', ['clean:js'], function () {
-    return gulp.src(paths.js)
-        .pipe(gulp.dest('build/js/libs'));
-});
-
-/* copy bower css libs */
-gulp.task('bowercss', ['clean:styles'], function () {
-    return gulp.src(paths.css)
-        .pipe(gulp.dest('build/css/libs'));
-});
-
-/* styles */
-gulp.task('styles', ['clean:styles', 'bowercss'], function () {
-    return gulp.src('styl/app.styl')
-        .pipe(stylus({
-            compress: true
-        }))
-        .pipe(gulp.dest('build/css'));
-
-});
-
+// copy over bower dependencies
 var paths = {
     js: [
         'bower_components/d3/d3.min.js',
@@ -57,59 +48,68 @@ var paths = {
     ]
 };
 
+gulp.task('bowerjs', ['clean:bowerjs'], function () {
+    return gulp.src(paths.js)
+        .pipe(gulp.dest('build/js/libs'));
+});
+
+gulp.task('bowercss', ['clean:bowerstyles'], function () {
+    return gulp.src(paths.css)
+        .pipe(gulp.dest('build/css/libs'));
+});
+
 gulp.task('bower', ['bowerjs', 'bowercss']);
 
-/* typescript */
-gulp.task('typescript', ['clean:js', 'bowerjs'], function () {
-    return gulp.src(['ts/app.ts', 'ts/header.ts'])
-        .pipe(typescript(require('./ts/tsconfig.json').compilerOptions))
+// generate css from styl files
+gulp.task('styles', ['clean:styles'], function () {
+    return gulp.src('styl/app.styl')
+        .pipe(stylus({
+            compress: true
+        }))
+        .pipe(gulp.dest('build/css'));
+
+});
+
+// generate js from typescript
+var tsProject = typescript.createProject('./ts/tsconfig.json');
+gulp.task('typescript', ['clean:js'], function () {
+    return tsProject.src()
+        .pipe(ts(tsProject))
+        .js
         .pipe(gulp.dest('build'));
 });
 
-/* copy index */
+// copy index.html
 gulp.task('copyindex', ['clean:index'], function () {
     return gulp.src('index.html')
         .pipe(gulp.dest('build'));
 });
 
-gulp.task('clean:embedded', function () {
-    return del('embedded.go');
-});
+// generate all frontend files
+gulp.task('build', ['styles', 'typescript', 'copyindex', 'bower']);
 
-gulp.task('bindata:dist', ['clean:embedded'], shell.task([
+// generate embedded go file
+gulp.task('bindata:dist', ['clean:embedded', 'build'], shell.task([
     'go-bindata -mode 0644 -modtime 1400000000 -pkg ui -o embedded.go build/...',
     'gofmt -s -w embedded.go',
     'goimports -w embedded.go'
 ]));
 
-gulp.task('bindata:debug', ['clean:embedded'], shell.task([
+// generate embedded go file for debugging (passes through to build folder)
+gulp.task('bindata:debug', ['clean:embedded', 'build'], shell.task([
     'go-bindata -pkg ui -o embedded.go -debug build/...'
 ]));
 
-/* build */
-gulp.task('build', ['styles', 'typescript', 'copyindex'], function(cb) {
-    cb();
-});
+//convenience tasks for generating debug/dist versions of the embedded.go file
+gulp.task('debug', ['bindata:debug']);
+gulp.task('dist', ['bindata:dist']);
 
-/* compile */
-gulp.task('compile', ['build'], function () {
-    return gulp.start('bindata:dist')
-});
-
-/* debug */
-gulp.task('debug', ['build'], function () {
-    return gulp.start('bindata:debug')
-});
-/* watch */
+// watch files for changes
 gulp.task('watch', ['debug'], function () {
-    gulp.watch('styl/**/*.styl', ['styles', 'bindata']);
-
-    gulp.watch('ts/**/*.ts', ['typescript', 'bindata']);
-
-    gulp.watch('index.html', ['copyindex', 'bindata']);
+    gulp.watch('styl/**/*.styl', ['styles']);
+    gulp.watch('ts/**/*.ts', ['typescript']);
+    gulp.watch('index.html', ['copyindex']);
 });
 
-/* default */
-gulp.task('default', function () {
-    return gulp.start('watch');
-});
+// default task is watch
+gulp.task('default', ['watch']);

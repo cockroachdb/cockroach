@@ -6,7 +6,7 @@ npm.installed
 bower_components/
 
 #typings
-typings/
+typescript_definitions/
 
 #build
 build/

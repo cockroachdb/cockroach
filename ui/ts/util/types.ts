@@ -1,5 +1,5 @@
 // source: util/types.ts
-/// <reference path="../typings/mithril/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 // Author: Max Lang (max@cockroachlabs.com)
 //
 

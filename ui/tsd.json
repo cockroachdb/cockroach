@@ -1,9 +1,9 @@
 {
   "version": "v4",
-  "repo": "maxlang/DefinitelyTyped",
+  "repo": "borisyankov/DefinitelyTyped",
   "ref": "master",
-  "path": "ts/typings",
-  "bundle": "ts/typings/tsd.d.ts",
+  "path": "typescript_definitions",
+  "bundle": "typescript_definitions/tsd.d.ts",
   "installed": {
     "jquery/jquery.d.ts": {
       "commit": "68d9d43ce884e1ffb6ec0daf4ee7be9392c5b7bc"
@@ -22,9 +22,6 @@
     },
     "lodash/lodash.d.ts": {
       "commit": "68d9d43ce884e1ffb6ec0daf4ee7be9392c5b7bc"
-    },
-    "mithril/mithril.d.ts": {
-      "commit": "cbaa7aa666e6cb1f44297f72d90249b152c8ca3b"
     }
   }
 }

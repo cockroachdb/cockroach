@@ -1,7 +1,7 @@
 // source: models/log.ts
 /// <reference path="../models/proto.ts" />
-/// <reference path="../typings/d3/d3.d.ts" />
-/// <reference path="../typings/mithril/mithril.d.ts" />
+/// <reference path="../../typescript_definitions/d3/d3.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/format.ts" />
 /// <reference path="../util/querycache.ts" />

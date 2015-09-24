@@ -1,5 +1,5 @@
 // source: util/query.ts
-/// <reference path="../typings/mithril/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 module Utils {

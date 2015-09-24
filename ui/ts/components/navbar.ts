@@ -1,6 +1,6 @@
 // source: pages/nodes.ts
-/// <reference path="../typings/mithril/mithril.d.ts" />
-/// <reference path="../typings/lodash/lodash.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../typescript_definitions/lodash/lodash.d.ts" />
 /// <reference path="../util/property.ts" />
 
 // Author: Matt Tracy (matt@cockroachlabs.com)
