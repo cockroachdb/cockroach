@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -415,10 +416,6 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 				if _, ok := c.Right.(parser.Datum); !ok {
 					continue
 				}
-				if c.Operator == parser.NE {
-					// Give-up when we encounter a != expression.
-					return
-				}
 				if tupleMap != nil && c.Operator != parser.In {
 					// We can only handle tuples in IN expressions.
 					continue
@@ -431,6 +428,13 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 					}
 					if !endDone {
 						constraint.end = c
+					}
+				case parser.NE:
+					// Note that makeSpans treats "a != x" the same as "a IS NOT
+					// NULL". We don't simplify "a != x" to "a IS NOT NULL" in
+					// simplifyExpr because doing so affects other simplifications.
+					if !startDone {
+						constraint.start = c
 					}
 				case parser.In:
 					if !startDone && (constraint.start == nil || constraint.start.Operator != parser.EQ) {
@@ -448,6 +452,14 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 				case parser.LT, parser.LE:
 					if !endDone && constraint.end == nil {
 						constraint.end = c
+					}
+				case parser.Is:
+					if c.Right == parser.DNull && !endDone {
+						constraint.end = c
+					}
+				case parser.IsNot:
+					if c.Right == parser.DNull && !startDone {
+						constraint.start = c
 					}
 				}
 			}
@@ -618,31 +630,57 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 
 		if c.start != nil {
 			// We have a start constraint.
-			if datum, ok := c.start.Right.(parser.Datum); ok {
-				key, err := encodeTableKey(buf[:0], datum)
-				if err != nil {
-					panic(err)
-				}
-				// Append the constraint to all of the existing spans.
+			switch c.start.Operator {
+			case parser.NE, parser.IsNot:
+				// A != or IS NOT NULL expression allows us to constrain the start of
+				// the range to not include NULL.
 				for i := range spans {
-					spans[i].start = append(spans[i].start, key...)
+					spans[i].start = encoding.EncodeNotNull(spans[i].start)
+				}
+			default:
+				if datum, ok := c.start.Right.(parser.Datum); ok {
+					key, err := encodeTableKey(buf[:0], datum)
+					if err != nil {
+						panic(err)
+					}
+					// Append the constraint to all of the existing spans.
+					for i := range spans {
+						spans[i].start = append(spans[i].start, key...)
+					}
 				}
 			}
 		}
 
 		if c.end != nil {
 			// We have an end constraint.
-			if datum, ok := c.end.Right.(parser.Datum); ok {
-				if lastEnd && c.end.Operator != parser.LT {
-					datum = datum.Next()
-				}
-				key, err := encodeTableKey(buf[:0], datum)
-				if err != nil {
-					panic(err)
-				}
-				// Append the constraint to all of the existing spans.
+			switch c.end.Operator {
+			case parser.Is:
+				// An IS NULL expressions allows us to constrain the end of the range
+				// to stop at NULL.
 				for i := range spans {
-					spans[i].end = append(spans[i].end, key...)
+					spans[i].end = encoding.EncodeNotNull(spans[i].end)
+				}
+			default:
+				if datum, ok := c.end.Right.(parser.Datum); ok {
+					if lastEnd && c.end.Operator != parser.LT {
+						datum = datum.Next()
+					}
+					key, err := encodeTableKey(buf[:0], datum)
+					if err != nil {
+						panic(err)
+					}
+					// Append the constraint to all of the existing spans.
+					for i := range spans {
+						spans[i].end = append(spans[i].end, key...)
+					}
+				}
+
+				if c.start == nil && (i == 0 || constraints[i-1].start != nil) {
+					// This is the first constraint for which we don't have a start
+					// constraint. Add a not-NULL endpoint.
+					for i := range spans {
+						spans[i].start = encoding.EncodeNotNull(spans[i].start)
+					}
 				}
 			}
 		}

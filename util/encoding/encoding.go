@@ -478,7 +478,8 @@ func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string) {
 }
 
 var (
-	encodedNull = []byte{0x00, 0x00}
+	encodedNull    = []byte{0x00, 0x00}
+	encodedNotNull = []byte{0x00, 0x01}
 )
 
 // EncodeNull encodes a NULL value. The encodes bytes are appended to the
@@ -489,6 +490,13 @@ func EncodeNull(b []byte) []byte {
 	return append(b, encodedNull...)
 }
 
+// EncodeNotNull encodes a value that is larger than the NULL marker encoded by
+// EncodeNull but less than any encoded value returned by EncodeVarint,
+// EncodeFloat, EncodeBytes or EncodeString.
+func EncodeNotNull(b []byte) []byte {
+	return append(b, encodedNotNull...)
+}
+
 // DecodeIfNull decodes a NULL value from the input buffer. If the input buffer
 // contains a null at the start of the buffer then it is removed from the
 // buffer and true is returned for the second result. Otherwise, the buffer is
@@ -497,10 +505,20 @@ func EncodeNull(b []byte) []byte {
 // EncodeVarint, EncodeFloat, EncodeBytes and EncodeString encodings, it is
 // safe to call DecodeIfNull on their encoded values.
 func DecodeIfNull(b []byte) ([]byte, bool) {
-	if len(b) >= 2 && b[0] == 0x00 && b[1] == 0x00 {
-		return b[2:], true
-	}
-	return b, false
+	r := bytes.TrimPrefix(b, encodedNull)
+	return r, len(r) < len(b)
+}
+
+// DecodeIfNotNull decodes a not-NULL value from the input buffer. If the input
+// buffer contains a not-NULL marker at the start of the buffer then it is
+// removed from the buffer and true is returned for the second
+// result. Otherwise, the buffer is returned unchanged and false is returned
+// for the second result. Note that the not-NULL marker is identical to the
+// empty string encoding, so do not use this routine where it is necessary to
+// distinguish not-NULL from the empty string.
+func DecodeIfNotNull(b []byte) ([]byte, bool) {
+	r := bytes.TrimPrefix(b, encodedNotNull)
+	return r, len(r) < len(b)
 }
 
 // EncodeTime encodes a time value, appends it to the supplied buffer,

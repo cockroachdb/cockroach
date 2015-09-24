@@ -89,6 +89,13 @@ func prettySpans(spans []span, desc *TableDescriptor, index *IndexDescriptor) st
 			key = key[len(prefix):]
 			k := 0
 			for ; k < len(valTypes) && len(key) > 0; k++ {
+				// Not-NULL markers only occur in spans. Perform special decoding of
+				// these markers which are equivalent to the empty string encoding.
+				var ok bool
+				if key, ok = encoding.DecodeIfNotNull(key); ok {
+					vals[k] = parser.DString("")
+					continue
+				}
 				vals[k], key, err = decodeTableKey(valTypes[k], key)
 				if err != nil {
 					break
