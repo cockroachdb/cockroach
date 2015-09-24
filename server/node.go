@@ -492,7 +492,7 @@ func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
 	if br.Error != nil {
 		panic(proto.ErrorUnexpectedlySet(n.lSender, br))
 	}
+	n.feed.CallComplete(*ba, pErr)
 	br.Error = pErr
-	n.feed.CallComplete(ba, br)
 	return unwrap(br), nil
 }
