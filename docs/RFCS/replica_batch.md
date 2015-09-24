@@ -1,7 +1,7 @@
 - Feature Name: replica_batch
-- Status: draft
+- Status: completed
 - Start Date: 2015-08-11
-- RFC PR:
+- RFC PR: #2340
 - Cockroach Issue:
 
 # Summary
