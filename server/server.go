@@ -150,6 +150,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		EventFeed:       feed,
 		Tracer:          tracer,
 		StorePool:       s.storePool,
+		RebalancingOptions: storage.RebalancingOptions{
+			AllowRebalance: s.ctx.AllowRebalancing,
+		},
 	}
 	s.node = NewNode(nCtx)
 	s.admin = newAdminServer(s.db, s.stopper)
