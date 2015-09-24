@@ -91,20 +91,20 @@ gulp.task('copyindex', ['clean:index'], function () {
 gulp.task('build', ['styles', 'typescript', 'copyindex', 'bower']);
 
 // generate embedded go file
-gulp.task('bindata:dist', ['clean:embedded', 'build'], shell.task([
-    'go-bindata -mode 0644 -modtime 1400000000 -pkg ui -o embedded.go build/...',
+gulp.task('bindata:release', ['clean:embedded', 'build'], shell.task([
+    'go-bindata -mode 0644 -modtime 1400000000 -pkg ui -o embedded.go -prefix build build/...',
     'gofmt -s -w embedded.go',
     'goimports -w embedded.go'
 ]));
 
 // generate embedded go file for debugging (passes through to build folder)
 gulp.task('bindata:debug', ['clean:embedded', 'build'], shell.task([
-    'go-bindata -pkg ui -o embedded.go -debug build/...'
+    'go-bindata -pkg ui -o embedded.go -debug -prefix build build/...'
 ]));
 
-//convenience tasks for generating debug/dist versions of the embedded.go file
+//convenience tasks for generating debug/release versions of the embedded.go file
 gulp.task('debug', ['bindata:debug']);
-gulp.task('dist', ['bindata:dist']);
+gulp.task('release', ['bindata:release']);
 
 // watch files for changes
 gulp.task('watch', ['debug'], function () {
