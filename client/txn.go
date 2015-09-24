@@ -281,14 +281,20 @@ func (txn *Txn) DelRange(begin, end interface{}) error {
 // operation. The order of the results matches the order the operations were
 // added to the batch.
 func (txn *Txn) Run(b *Batch) error {
+	_, err := txn.RunWithResponse(b)
+	return err
+}
+
+// RunWithResponse is a version of Run that returns the BatchResponse.
+func (txn *Txn) RunWithResponse(b *Batch) (*proto.BatchResponse, error) {
 	if err := b.prepare(); err != nil {
-		return err
+		return nil, err
 	}
-	return sendAndFill(txn.send, b).GoError()
+	return sendAndFill(txn.send, b)
 }
 
 func (txn *Txn) commit() error {
-	return txn.sendEndTxnCall(true /* commit */)
+	return txn.sendEndTxnReq(true /* commit */)
 }
 
 // Cleanup cleans up the transaction as appropriate based on err.
@@ -312,9 +318,16 @@ func (txn *Txn) CommitNoCleanup() error {
 // optional, but more efficient than relying on the implicit commit
 // performed when the transaction function returns without error.
 func (txn *Txn) CommitInBatch(b *Batch) error {
-	b.calls = append(b.calls, endTxnCall(true /* commit */, txn.systemDBTrigger))
+	_, err := txn.CommitInBatchWithResponse(b)
+	return err
+}
+
+// CommitInBatchWithResponse is a version of CommitInBatch that returns the
+// BatchResponse.
+func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*proto.BatchResponse, error) {
+	b.reqs = append(b.reqs, endTxnReq(true /* commit */, txn.systemDBTrigger))
 	b.initResult(1, 0, nil)
-	return txn.Run(b)
+	return txn.RunWithResponse(b)
 }
 
 // Commit sends an EndTransactionRequest with Commit=true.
@@ -326,14 +339,15 @@ func (txn *Txn) Commit() error {
 
 // Rollback sends an EndTransactionRequest with Commit=false.
 func (txn *Txn) Rollback() error {
-	return txn.sendEndTxnCall(false /* commit */)
+	return txn.sendEndTxnReq(false /* commit */)
 }
 
-func (txn *Txn) sendEndTxnCall(commit bool) error {
-	return txn.send(endTxnCall(commit, txn.systemDBTrigger)).GoError()
+func (txn *Txn) sendEndTxnReq(commit bool) error {
+	_, pErr := txn.send(endTxnReq(commit, txn.systemDBTrigger))
+	return pErr.GoError()
 }
 
-func endTxnCall(commit bool, hasTrigger bool) proto.Call {
+func endTxnReq(commit bool, hasTrigger bool) proto.Request {
 	var trigger *proto.InternalCommitTrigger
 	if hasTrigger {
 		trigger = &proto.InternalCommitTrigger{
@@ -342,12 +356,9 @@ func endTxnCall(commit bool, hasTrigger bool) proto.Call {
 			},
 		}
 	}
-	return proto.Call{
-		Args: &proto.EndTransactionRequest{
-			Commit:                commit,
-			InternalCommitTrigger: trigger,
-		},
-		Reply: &proto.EndTransactionResponse{},
+	return &proto.EndTransactionRequest{
+		Commit:                commit,
+		InternalCommitTrigger: trigger,
 	}
 }
 
@@ -386,32 +397,31 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous).
-func (txn *Txn) send(calls ...proto.Call) *proto.Error {
+func (txn *Txn) send(reqs ...proto.Request) (*proto.BatchResponse, *proto.Error) {
+
 	if txn.Proto.Status != proto.PENDING {
-		return proto.NewError(util.Errorf("attempting to use %s transaction", txn.Proto.Status))
+		return nil, proto.NewError(util.Errorf("attempting to use %s transaction", txn.Proto.Status))
 	}
 
-	lastIndex := len(calls) - 1
+	lastIndex := len(reqs) - 1
 	if lastIndex < 0 {
-		return nil
+		return &proto.BatchResponse{}, nil
 	}
 
-	lastReq := calls[lastIndex].Args
+	lastReq := reqs[lastIndex]
 	// haveTxnWrite tracks intention to write. This is in contrast to
 	// txn.Proto.Writing, which is set by the coordinator when the first
 	// intent has been created, and which lives for the life of the
 	// transaction.
 	haveTxnWrite := proto.IsTransactionWrite(lastReq)
 
-	for _, call := range calls[:lastIndex] {
-		request := call.Args
-
-		if req, ok := request.(*proto.EndTransactionRequest); ok {
-			return proto.NewError(util.Errorf("%s sent as non-terminal call", req.Method()))
+	for _, args := range reqs[:lastIndex] {
+		if _, ok := args.(*proto.EndTransactionRequest); ok {
+			return nil, proto.NewError(util.Errorf("%s sent as non-terminal call", args.Method()))
 		}
 
 		if !haveTxnWrite {
-			haveTxnWrite = proto.IsTransactionWrite(request)
+			haveTxnWrite = proto.IsTransactionWrite(args)
 		}
 	}
 
@@ -420,10 +430,10 @@ func (txn *Txn) send(calls ...proto.Call) *proto.Error {
 	elideEndTxn := haveEndTxn && !needEndTxn
 
 	if elideEndTxn {
-		calls = calls[:lastIndex]
+		reqs = reqs[:lastIndex]
 	}
 
-	pErr := txn.db.send(calls...)
+	br, pErr := txn.db.send(reqs...)
 	if elideEndTxn && pErr == nil {
 		// This normally happens on the server and sent back in response
 		// headers, but this transaction was optimized away. The caller may
@@ -435,5 +445,5 @@ func (txn *Txn) send(calls ...proto.Call) *proto.Error {
 			txn.Proto.Status = proto.ABORTED
 		}
 	}
-	return pErr
+	return br, pErr
 }

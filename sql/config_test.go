@@ -20,25 +20,13 @@ package sql_test
 import (
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
-
-func getLatestConfig(s *server.TestServer, expected int) (cfg *config.SystemConfig, err error) {
-	err = util.IsTrueWithin(func() bool {
-		cfg = s.Gossip().GetSystemConfig()
-		return cfg != nil && len(cfg.Values) == expected
-	}, 500*time.Millisecond)
-	return
-}
 
 // TestGetZoneConfig exercises config.GetZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
@@ -50,7 +38,6 @@ func TestGetZoneConfig(t *testing.T) {
 	s, sqlDB, _ := setup(t)
 	defer cleanup(s, sqlDB)
 
-	expectedLength := len(sql.GetInitialSystemValues()) - 1 /* ignore ID generator */
 	expectedCounter := uint32(keys.MaxReservedDescID + 1)
 
 	// Naming scheme for database and tables:
@@ -93,10 +80,7 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 	expectedCounter++
 
-	// We've created 2 databases at 2 key each, and 4 tables at 2 keys each.
-	expectedLength += 2*2 + 4*2
-
-	cfg, err := getLatestConfig(s, expectedLength)
+	cfg, err := forceNewConfig(t, s)
 	if err != nil {
 		t.Fatalf("failed to get latest system config: %s", err)
 	}
@@ -155,9 +139,7 @@ func TestGetZoneConfig(t *testing.T) {
 		}
 	}
 
-	// We wrote 3 zone entries with 2 keys each.
-	expectedLength += 3 * 2
-	cfg, err = getLatestConfig(s, expectedLength)
+	cfg, err = forceNewConfig(t, s)
 	if err != nil {
 		t.Fatalf("failed to get latest system config: %s", err)
 	}

@@ -471,19 +471,18 @@ func (n *Node) publishStoreStatuses() error {
 	})
 }
 
-// executeCmd creates a proto.Call struct and sends it via our local sender.
+// executeCmd interprets the given message as a *proto.BatchRequest and sends it
+// via the local sender.
 func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
-	args := argsI.(proto.Request)
+	ba := argsI.(*proto.BatchRequest)
 	// TODO(tschottdorf) get a hold of the client's ID, add it to the
 	// context before dispatching, and create an ID for tracing the request.
-	header := args.Header()
-	header.CmdID = header.GetOrCreateCmdID(n.ctx.Clock.PhysicalNow())
-	trace := n.ctx.Tracer.NewTrace(header)
+	ba.CmdID = ba.GetOrCreateCmdID(n.ctx.Clock.PhysicalNow())
+	trace := n.ctx.Tracer.NewTrace(ba)
 	defer trace.Finalize()
 	defer trace.Epoch("node")()
 	ctx := tracer.ToCtx((*Node)(n).context(), trace)
 
-	ba, unwrap := client.MaybeWrap(args)
 	br, pErr := n.lSender.Send(ctx, *ba)
 	if pErr != nil {
 		br = &proto.BatchResponse{}
@@ -492,7 +491,7 @@ func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
 	if br.Error != nil {
 		panic(proto.ErrorUnexpectedlySet(n.lSender, br))
 	}
+	n.feed.CallComplete(*ba, pErr)
 	br.Error = pErr
-	n.feed.CallComplete(ba, br)
-	return unwrap(br), nil
+	return br, nil
 }

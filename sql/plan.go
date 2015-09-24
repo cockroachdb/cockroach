@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -28,10 +29,11 @@ import (
 // planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution.
 type planner struct {
-	txn     *client.Txn
-	session Session
-	user    string
-	evalCtx parser.EvalContext
+	txn          *client.Txn
+	session      Session
+	user         string
+	evalCtx      parser.EvalContext
+	systemConfig *config.SystemConfig
 }
 
 // makePlan creates the query plan for a single SQL statement. The returned
@@ -108,6 +110,9 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 	}
 }
 
+// getAliasedTableDesc looks up the table descriptor for an alias table expression.
+// NOTE: it looks it up in the descriptor cache, so this should only be called
+// from frequent ops (INSERT, SELECT, DELETE, UPDATE).
 func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*TableDescriptor, error) {
 	ate, ok := n.(*parser.AliasedTableExpr)
 	if !ok {
@@ -117,7 +122,7 @@ func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*TableDescriptor, err
 	if !ok {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	desc, err := p.getTableDesc(table)
+	desc, _, err := p.getCachedTableDesc(table)
 	if err != nil {
 		return nil, err
 	}

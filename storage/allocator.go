@@ -320,9 +320,12 @@ func (a Allocator) ShouldRebalance(storeID proto.StoreID) bool {
 	if !a.options.Deterministic && a.randGen.Float32() > rebalanceShouldRebalanceChance {
 		return false
 	}
+	if log.V(2) {
+		log.Infof("Attempting to rebalance from store %d", storeID)
+	}
 	storeDesc := a.storePool.getStoreDescriptor(storeID)
 	if storeDesc == nil {
-		if log.V(1) {
+		if log.V(2) {
 			log.Warningf(
 				"shouldRebalance couldn't find store with id %d in StorePool",
 				storeID)
@@ -336,6 +339,9 @@ func (a Allocator) ShouldRebalance(storeID proto.StoreID) bool {
 	// if the number of ranges on the store is above average. This is primarily
 	// useful for distributing load in a nascent deployment.
 	if sl.used.mean < minFractionUsedThreshold {
+		if log.V(2) {
+			log.Infof("Attempting to rebalance using range counts, count = %d, mean = %f", storeDesc.Capacity.RangeCount, sl.count.mean)
+		}
 		return float64(storeDesc.Capacity.RangeCount) > math.Ceil(sl.count.mean)
 	}
 	// A store is eligible for rebalancing if its disk usage is sufficiently above
@@ -346,6 +352,9 @@ func (a Allocator) ShouldRebalance(storeID proto.StoreID) bool {
 		// rebalancing opportunities even if they are below the cluster's average
 		// usage.
 		minFractionUsed = maxFractionUsedThreshold
+	}
+	if log.V(2) {
+		log.Infof("Attempting to rebalance using total fraction used, threshold = %f, used = %f", minFractionUsed, storeDesc.Capacity.FractionUsed())
 	}
 	return storeDesc.Capacity.FractionUsed() > minFractionUsed
 }

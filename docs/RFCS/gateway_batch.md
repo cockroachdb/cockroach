@@ -1,7 +1,7 @@
 - Feature Name: gateway_batch
-- Status: draft
+- Status: completed
 - Start Date: 2015-08-06
-- RFC PR: #1998
+- RFC PR: #1998, #2141, #2406
 - Cockroach Issue:
 
 # Summary

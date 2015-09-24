@@ -939,6 +939,9 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	}
 
 	// Update the max bytes and other information of the new range.
+	// This may not happen if the system config has not yet been loaded.
+	// Since this is done under the store lock, system config update will
+	// properly set these fields.
 	if err := newRng.updateRangeInfo(); err != nil {
 		return err
 	}
@@ -1326,7 +1329,6 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			UserPriority: header.UserPriority,
 		},
 	}
-	br := &proto.BatchResponse{}
 	for _, intent := range pushIntents {
 		pushArgs := &proto.PushTxnRequest{
 			RequestHeader: proto.RequestHeader{
@@ -1346,26 +1348,28 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	}
 	b := &client.Batch{}
 	if len(ba.Requests) > 0 {
-		b.InternalAddCall(proto.Call{Args: ba, Reply: br})
+		b.InternalAddRequest(ba)
 	}
 
-	// Run all pushes in parallel.
-	if pushErr := s.db.Run(b); pushErr != nil {
-		if log.V(1) {
-			log.Infoc(ctx, "on %s: %s", args.Method(), pushErr)
-		}
+	br, pushErr := s.db.RunWithResponse(b)
+	if pushErr != nil {
+		if pushErr != nil {
+			if log.V(1) {
+				log.Infoc(ctx, "on %s: %s", args.Method(), pushErr)
+			}
 
-		// For write/write conflicts within a transaction, propagate the
-		// push failure, not the original write intent error. The push
-		// failure will instruct the client to restart the transaction
-		// with a backoff.
-		if header.Txn != nil && proto.IsWrite(args) {
-			return pushErr
+			// For write/write conflicts within a transaction, propagate the
+			// push failure, not the original write intent error. The push
+			// failure will instruct the client to restart the transaction
+			// with a backoff.
+			if header.Txn != nil && proto.IsWrite(args) {
+				return pushErr
+			}
+			// For read/write conflicts, return the write intent error which
+			// engages backoff/retry (with !Resolved). We don't need to
+			// restart the txn, only resend the read with a backoff.
+			return wiErr
 		}
-		// For read/write conflicts, return the write intent error which
-		// engages backoff/retry (with !Resolved). We don't need to
-		// restart the txn, only resend the read with a backoff.
-		return wiErr
 	}
 	wiErr.Resolved = true // success!
 

@@ -32,7 +32,7 @@ func init() {
 // GetZoneConfig returns the zone config for the object with 'id'.
 func GetZoneConfig(cfg *config.SystemConfig, id uint32) (*config.ZoneConfig, error) {
 	// Look in the zones table.
-	if val, ok := cfg.Get(MakeZoneKey(ID(id))); ok {
+	if val, ok := cfg.GetValue(MakeZoneKey(ID(id))); ok {
 		zone := &config.ZoneConfig{}
 		if err := gogoproto.Unmarshal(val, zone); err != nil {
 			return nil, err
@@ -43,7 +43,7 @@ func GetZoneConfig(cfg *config.SystemConfig, id uint32) (*config.ZoneConfig, err
 
 	// No zone config for this ID. We need to figure out if it's a database
 	// or table. Lookup its descriptor.
-	rawDesc, ok := cfg.Get(MakeDescMetadataKey(ID(id)))
+	rawDesc, ok := cfg.GetValue(MakeDescMetadataKey(ID(id)))
 	if !ok {
 		// No descriptor. This table/db could have been deleted,
 		// just return the default config.

@@ -73,11 +73,11 @@ func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
 	return nil
 }
 
-// executeCmd creates a proto.Call struct and sends it via our local sender.
+// executeCmd interprets the given message as a *proto.BatchRequest and sends it
+// via the local sender.
 func (s *DBServer) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
-	args := argsI.(proto.Request)
-	ba, unwrap := client.MaybeWrap(args)
-	if err := verifyRequest(args); err != nil {
+	ba := argsI.(*proto.BatchRequest)
+	if err := verifyRequest(ba); err != nil {
 		return nil, err
 	}
 	br, pErr := s.sender.Send(context.TODO(), *ba)
@@ -88,30 +88,25 @@ func (s *DBServer) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error
 		panic(proto.ErrorUnexpectedlySet(s.sender, br))
 	}
 	br.Error = pErr
-	return unwrap(br), nil
+	return br, nil
 }
 
 // verifyRequest checks for illegal inputs in request proto and
 // returns an error indicating which, if any, were found.
-func verifyRequest(args proto.Request) error {
-	switch t := args.(type) {
-	case *proto.EndTransactionRequest:
-		return verifyEndTransaction(t)
-	case *proto.BatchRequest:
-		for _, reqUnion := range t.Requests {
-			req := reqUnion.GetInner()
+func verifyRequest(ba *proto.BatchRequest) error {
+	for _, reqUnion := range ba.Requests {
+		req := reqUnion.GetInner()
 
-			if et, ok := req.(*proto.EndTransactionRequest); ok {
-				if err := verifyEndTransaction(et); err != nil {
-					return err
-				}
+		if et, ok := req.(*proto.EndTransactionRequest); ok {
+			if err := verifyEndTransaction(et); err != nil {
+				return err
 			}
+		}
 
-			method := req.Method()
+		method := req.Method()
 
-			if int(method) > len(allExternalMethods) || allExternalMethods[method] == nil {
-				return util.Errorf("Batch contains an internal request %s", method)
-			}
+		if int(method) > len(allExternalMethods) || allExternalMethods[method] == nil {
+			return util.Errorf("Batch contains an internal request %s", method)
 		}
 	}
 	return nil

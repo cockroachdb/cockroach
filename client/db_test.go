@@ -344,26 +344,37 @@ func TestCommonMethods(t *testing.T) {
 		method string
 	}
 	blacklist := map[key]struct{}{
-		key{batchType, "InternalAddCall"}:   {},
-		key{dbType, "AdminMerge"}:           {},
-		key{dbType, "AdminSplit"}:           {},
-		key{dbType, "NewBatch"}:             {},
-		key{dbType, "Run"}:                  {},
-		key{dbType, "Txn"}:                  {},
-		key{dbType, "GetSender"}:            {},
-		key{txnType, "Commit"}:              {},
-		key{txnType, "CommitInBatch"}:       {},
-		key{txnType, "CommitNoCleanup"}:     {},
-		key{txnType, "Rollback"}:            {},
-		key{txnType, "Cleanup"}:             {},
-		key{txnType, "DebugName"}:           {},
-		key{txnType, "InternalSetPriority"}: {},
-		key{txnType, "NewBatch"}:            {},
-		key{txnType, "Run"}:                 {},
-		key{txnType, "SetDebugName"}:        {},
-		key{txnType, "SetIsolation"}:        {},
-		key{txnType, "SetSystemDBTrigger"}:  {},
-		key{txnType, "SystemDBTrigger"}:     {},
+		// TODO(tschottdorf): removed GetProto from Batch, which necessitates
+		// these two exceptions. Batch.GetProto would require wrapping each
+		// request with the information that this particular Get must be
+		// unmarshaled, which didn't seem worth doing as we're not using
+		// Batch.GetProto at the moment.
+		key{dbType, "GetProto"}:  {},
+		key{txnType, "GetProto"}: {},
+
+		key{batchType, "InternalAddRequest"}:      {},
+		key{dbType, "AdminMerge"}:                 {},
+		key{dbType, "AdminSplit"}:                 {},
+		key{dbType, "NewBatch"}:                   {},
+		key{dbType, "Run"}:                        {},
+		key{dbType, "RunWithResponse"}:            {},
+		key{dbType, "Txn"}:                        {},
+		key{dbType, "GetSender"}:                  {},
+		key{txnType, "Commit"}:                    {},
+		key{txnType, "CommitInBatch"}:             {},
+		key{txnType, "CommitInBatchWithResponse"}: {},
+		key{txnType, "CommitNoCleanup"}:           {},
+		key{txnType, "Rollback"}:                  {},
+		key{txnType, "Cleanup"}:                   {},
+		key{txnType, "DebugName"}:                 {},
+		key{txnType, "InternalSetPriority"}:       {},
+		key{txnType, "NewBatch"}:                  {},
+		key{txnType, "Run"}:                       {},
+		key{txnType, "RunWithResponse"}:           {},
+		key{txnType, "SetDebugName"}:              {},
+		key{txnType, "SetIsolation"}:              {},
+		key{txnType, "SetSystemDBTrigger"}:        {},
+		key{txnType, "SystemDBTrigger"}:           {},
 	}
 
 	for b := range blacklist {

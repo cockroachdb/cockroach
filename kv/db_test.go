@@ -170,7 +170,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 			args.Header().EndKey = args.Header().Key.Next()
 		}
 		b := &client.Batch{}
-		b.InternalAddCall(proto.Call{Args: args, Reply: args.CreateReply()})
+		b.InternalAddRequest(args)
 		err := db.Run(b)
 		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())
@@ -182,7 +182,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		ba := &proto.BatchRequest{}
 		ba.Add(args)
 		b = &client.Batch{}
-		b.InternalAddCall(proto.Call{Args: ba, Reply: &proto.BatchResponse{}})
+		b.InternalAddRequest(ba)
 
 		if err := db.Run(b); err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())
@@ -248,9 +248,8 @@ func TestAuthentication(t *testing.T) {
 
 	arg := &proto.PutRequest{}
 	arg.Header().Key = proto.Key("a")
-	reply := &proto.PutResponse{}
 	b := &client.Batch{}
-	b.InternalAddCall(proto.Call{Args: arg, Reply: reply})
+	b.InternalAddRequest(arg)
 
 	// Create a "node" client and call Run() on it which lets us build
 	// our own request, specifying the user.

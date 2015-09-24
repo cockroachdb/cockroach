@@ -1,5 +1,5 @@
 - Feature Name: local_intent_resolution
-- Status: in-progress
+- Status: completed
 - Start Date: 2015-07-30
 - RFC PR: #1873
 - Cockroach Issue: #1821 (now obsolete)

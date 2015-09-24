@@ -32,7 +32,7 @@ import (
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(n *parser.Insert) (planNode, error) {
-	tableDesc, err := p.getTableDesc(n.Table)
+	tableDesc, _, err := p.getCachedTableDesc(n.Table)
 	if err != nil {
 		return nil, err
 	}
