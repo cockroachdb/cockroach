@@ -45,6 +45,7 @@ all: $(GOBINDATA_TARGET) $(TEST_TARGET)
 debug: $(GOBINDATA_DEBUG_TARGET)
 
 npm.installed: npm-shrinkwrap.json
+	npm install -g bower gulp tsd
 	npm install
 	touch $@
 
