@@ -629,30 +629,6 @@ func TestTxnDrainingNode(t *testing.T) {
 	<-s.Stopper.IsStopped()
 }
 
-// TestTxnCoordIdempotentCleanup verifies that cleanupTxn is idempotent.
-func TestTxnCoordIdempotentCleanup(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	s := createTestDB(t)
-	defer s.Stop()
-
-	txn := newTxn(s.Clock, proto.Key("a"))
-	key := proto.Key("a")
-	put := createPutRequest(key, []byte("value"), txn)
-	if _, err := batchutil.SendWrapped(s.Sender, put); err != nil {
-		t.Fatal(err)
-	}
-	s.Sender.cleanupTxn(nil, *txn) // first call
-	if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
-		RequestHeader: proto.RequestHeader{
-			Timestamp: txn.Timestamp,
-			Txn:       txn,
-		},
-		Commit: true,
-	}); /* second call */ err != nil {
-		t.Fatal(err)
-	}
-}
-
 // TestTxnMultipleCoord checks that a coordinator uses the Writing flag to
 // enforce that only one coordinator can be used for transactional writes.
 func TestTxnMultipleCoord(t *testing.T) {
