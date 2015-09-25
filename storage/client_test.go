@@ -338,9 +338,6 @@ func gossipNodeDesc(g *gossip.Gossip, nodeID proto.NodeID) error {
 		// can figure out where requests must be sent.
 		Address: util.MakeUnresolvedAddr("localhost", fmt.Sprintf("%d", nodeID)),
 	}
-	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID), nodeDesc, time.Hour); err != nil {
-		return err
-	}
 	if err := g.SetNodeDescriptor(nodeDesc); err != nil {
 		return err
 	}
