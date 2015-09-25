@@ -191,11 +191,6 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 		}
 
 		switch stmt.StatementType() {
-		case parser.Ack:
-			// Send back an empty response.
-			result.Union = &driver.Response_Result_Rows_{
-				Rows: &driver.Response_Result_Rows{},
-			}
 		case parser.DDL:
 			result.Union = &driver.Response_Result_DDL_{DDL: &driver.Response_Result_DDL{}}
 		case parser.RowsAffected:
