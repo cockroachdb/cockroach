@@ -68,8 +68,8 @@ namespace {
 // storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
 // kKeyLocalRangePrefix are the mvcc-encoded prefixes.
 const int kKeyLocalRangePrefixSize = 4;
-const rocksdb::Slice kKeyLocalRangeIDPrefix("\x00\xff\x00\xff\x00\xffi", 7);
-const rocksdb::Slice kKeyLocalRangePrefix("\x00\xff\x00\xff\x00\xffk", 7);
+const rocksdb::Slice kKeyLocalRangeIDPrefix("\x31\x00\xff\x00\xff\x00\xffi", 8);
+const rocksdb::Slice kKeyLocalRangePrefix("\x31\x00\xff\x00\xff\x00\xffk", 8);
 const rocksdb::Slice kKeyLocalResponseCacheSuffix("res-", 4);
 const rocksdb::Slice kKeyLocalTransactionSuffix("\x00\x01txn-", 6);
 

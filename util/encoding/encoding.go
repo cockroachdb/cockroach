@@ -292,6 +292,8 @@ const (
 	escapedTerm byte = 0x01
 	escaped00   byte = 0xff
 	escapedFF   byte = 0x00
+	// The prefix that is added to every encoded byte/string.
+	bytesMarker byte = 0x31
 )
 
 type escapes struct {
@@ -299,11 +301,12 @@ type escapes struct {
 	escapedTerm byte
 	escaped00   byte
 	escapedFF   byte
+	marker      byte
 }
 
 var (
-	ascendingEscapes  = escapes{escape, escapedTerm, escaped00, escapedFF}
-	descendingEscapes = escapes{^escape, ^escapedTerm, ^escaped00, ^escapedFF}
+	ascendingEscapes  = escapes{escape, escapedTerm, escaped00, escapedFF, bytesMarker}
+	descendingEscapes = escapes{^escape, ^escapedTerm, ^escaped00, ^escapedFF, ^bytesMarker}
 )
 
 // EncodeBytes encodes the []byte value using an escape-based
@@ -312,6 +315,7 @@ var (
 // encoded value. The encoded bytes are append to the supplied buffer
 // and the resulting buffer is returned.
 func EncodeBytes(b []byte, data []byte) []byte {
+	b = append(b, bytesMarker)
 	for {
 		// IndexByte is implemented by the go runtime in assembly and is
 		// much faster than looping over the bytes in the slice.
@@ -339,6 +343,11 @@ func EncodeBytesDecreasing(b []byte, data []byte) []byte {
 }
 
 func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte) {
+	if len(b) == 0 || b[0] != e.marker {
+		panic("did not find marker")
+	}
+	b = b[1:]
+
 	for {
 		i := bytes.IndexByte(b, e.escape)
 		if i == -1 {

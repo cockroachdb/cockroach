@@ -45,16 +45,21 @@ func TestNormalizeName(t *testing.T) {
 func TestKeyAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key, expAddress proto.Key
+		key proto.Key
 	}{
-		{MakeNameMetadataKey(0, "foo"), proto.Key("\xff\v\x02\v\x01\nfoo\x00\x01\v\x03")},
-		{MakeNameMetadataKey(0, "BAR"), proto.Key("\xff\v\x02\v\x01\nbar\x00\x01\v\x03")},
-		{MakeDescMetadataKey(123), proto.Key("\xff\v\x03\v\x01\v{\v\x02")},
+		{MakeNameMetadataKey(0, "BAR")},
+		{MakeNameMetadataKey(1, "BAR")},
+		{MakeNameMetadataKey(1, "foo")},
+		{MakeNameMetadataKey(2, "foo")},
+		{MakeDescMetadataKey(123)},
+		{MakeDescMetadataKey(124)},
 	}
+	var lastKey proto.Key
 	for i, test := range testCases {
 		result := keys.KeyAddress(test.key)
-		if !result.Equal(test.expAddress) {
-			t.Errorf("%d: expected address for key %q doesn't match %q", i, test.key, test.expAddress)
+		if result.Compare(lastKey) <= 0 {
+			t.Errorf("%d: key address %q is <= %q", i, result, lastKey)
 		}
+		lastKey = result
 	}
 }
