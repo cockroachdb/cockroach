@@ -10,6 +10,7 @@ import math "math"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 import cockroach_proto1 "github.com/cockroachdb/cockroach/proto"
+import cockroach_driver "github.com/cockroachdb/cockroach/sql/driver"
 
 import io "io"
 
@@ -22,7 +23,7 @@ type Session struct {
 	Database string `protobuf:"bytes,1,opt,name=database" json:"database"`
 	Syntax   int32  `protobuf:"varint,2,opt,name=syntax" json:"syntax"`
 	// Open transaction.
-	Txn *cockroach_proto1.Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
+	Txn *Session_Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
 	// Indicates that the above transaction is mutating keys in the
 	// SystemDB span.
 	MutatesSystemDB bool `protobuf:"varint,4,opt,name=mutates_system_db" json:"mutates_system_db"`
@@ -46,7 +47,7 @@ func (m *Session) GetSyntax() int32 {
 	return 0
 }
 
-func (m *Session) GetTxn() *cockroach_proto1.Transaction {
+func (m *Session) GetTxn() *Session_Transaction {
 	if m != nil {
 		return m.Txn
 	}
@@ -58,6 +59,31 @@ func (m *Session) GetMutatesSystemDB() bool {
 		return m.MutatesSystemDB
 	}
 	return false
+}
+
+type Session_Transaction struct {
+	Txn cockroach_proto1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
+	// Timestamp to be used by SQL in the above transaction. Note: this is not the
+	// transaction timestamp in proto.Transaction above.
+	Timestamp cockroach_driver.Datum_Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+}
+
+func (m *Session_Transaction) Reset()         { *m = Session_Transaction{} }
+func (m *Session_Transaction) String() string { return proto.CompactTextString(m) }
+func (*Session_Transaction) ProtoMessage()    {}
+
+func (m *Session_Transaction) GetTxn() cockroach_proto1.Transaction {
+	if m != nil {
+		return m.Txn
+	}
+	return cockroach_proto1.Transaction{}
+}
+
+func (m *Session_Transaction) GetTimestamp() cockroach_driver.Datum_Timestamp {
+	if m != nil {
+		return m.Timestamp
+	}
+	return cockroach_driver.Datum_Timestamp{}
 }
 
 func (m *Session) Marshal() (data []byte, err error) {
@@ -103,6 +129,40 @@ func (m *Session) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *Session_Transaction) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Session_Transaction) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintSession(data, i, uint64(m.Txn.Size()))
+	n2, err := m.Txn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	data[i] = 0x12
+	i++
+	i = encodeVarintSession(data, i, uint64(m.Timestamp.Size()))
+	n3, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	return i, nil
+}
+
 func encodeFixed64Session(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	data[offset+1] = uint8(v >> 8)
@@ -141,6 +201,16 @@ func (m *Session) Size() (n int) {
 		n += 1 + l + sovSession(uint64(l))
 	}
 	n += 2
+	return n
+}
+
+func (m *Session_Transaction) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Txn.Size()
+	n += 1 + l + sovSession(uint64(l))
+	l = m.Timestamp.Size()
+	n += 1 + l + sovSession(uint64(l))
 	return n
 }
 
@@ -261,7 +331,7 @@ func (m *Session) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Txn == nil {
-				m.Txn = &cockroach_proto1.Transaction{}
+				m.Txn = &Session_Transaction{}
 			}
 			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
@@ -287,6 +357,116 @@ func (m *Session) Unmarshal(data []byte) error {
 				}
 			}
 			m.MutatesSystemDB = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSession(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthSession
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Session_Transaction) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSession
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Transaction: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Transaction: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSession
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSession
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipSession(data[iNdEx:])

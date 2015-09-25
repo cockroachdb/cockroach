@@ -51,11 +51,9 @@ func makeDatum(val driver.Value) (Datum, error) {
 		datum.Payload = &Datum_StringVal{t}
 	case time.Time:
 		// Send absolute time devoid of time-zone.
+		timestamp := Timestamp(t)
 		datum.Payload = &Datum_TimeVal{
-			&Datum_Timestamp{
-				Sec:  t.Unix(),
-				Nsec: uint32(t.Nanosecond()),
-			},
+			&timestamp,
 		}
 	default:
 		return datum, util.Errorf("unsupported type %T", t)
@@ -97,6 +95,14 @@ func (d Datum) Value() (driver.Value, error) {
 // GoTime converts the timestamp to a time.Time.
 func (t Datum_Timestamp) GoTime() time.Time {
 	return time.Unix(t.Sec, int64(t.Nsec))
+}
+
+// Timestamp converts a time.Time to a timestamp.
+func Timestamp(t time.Time) Datum_Timestamp {
+	return Datum_Timestamp{
+		Sec:  t.Unix(),
+		Nsec: uint32(t.Nanosecond()),
+	}
 }
 
 // Method returns the method.

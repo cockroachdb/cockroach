@@ -21,6 +21,7 @@ option go_package = "sql";
 
 import "gogoproto/gogo.proto";
 import "cockroach/proto/data.proto";
+import "cockroach/sql/driver/wire.proto";
 
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
@@ -30,8 +31,14 @@ option (gogoproto.goproto_unrecognized_all) = false;
 message Session {
   optional string database = 1 [(gogoproto.nullable) = false];
   optional int32 syntax = 2 [(gogoproto.nullable) = false];
+  message Transaction {
+    optional proto.Transaction txn = 1 [(gogoproto.nullable) = false];
+    // Timestamp to be used by SQL in the above transaction. Note: this is not the
+    // transaction timestamp in proto.Transaction above.
+    optional driver.Datum.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  }
   // Open transaction.
-  optional proto.Transaction txn = 3;
+  optional Transaction txn = 3;
   // Indicates that the above transaction is mutating keys in the
   // SystemDB span.
   optional bool mutates_system_db = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "MutatesSystemDB"];

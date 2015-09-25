@@ -38,7 +38,7 @@ func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error)
 func (p *planner) CommitTransaction(n *parser.CommitTransaction) (planNode, error) {
 	err := p.txn.Commit()
 	// Reset transaction.
-	p.txn = nil
+	p.resetTxn()
 	return &valuesNode{}, err
 }
 
@@ -46,7 +46,7 @@ func (p *planner) CommitTransaction(n *parser.CommitTransaction) (planNode, erro
 func (p *planner) RollbackTransaction(n *parser.RollbackTransaction) (planNode, error) {
 	err := p.txn.Rollback()
 	// Reset transaction.
-	p.txn = nil
+	p.resetTxn()
 	return &valuesNode{}, err
 }
 
