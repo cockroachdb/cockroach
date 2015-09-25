@@ -31,16 +31,23 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		expr     string
 		ordering []int
 	}{
+		{`a`, nil},
 		{`MIN(a)`, []int{1}},
 		{`MAX(a)`, []int{-1}},
 		{`(MIN(a), MAX(a))`, nil},
 		{`(MIN(a), AVG(a))`, nil},
 		{`(MIN(a), COUNT(a))`, nil},
 		{`(MIN(a), SUM(a))`, nil},
+		// TODO(pmattis): This could/should return []int{1} (or perhaps []int{2}),
+		// since both aggregations are for the same function and the same column.
+		{`(MIN(a), MIN(a))`, nil},
+		{`(MIN(a+1), MIN(a))`, nil},
+		{`(COUNT(a), MIN(a))`, nil},
+		{`(MIN(a+1))`, nil},
 	}
 	for _, d := range testData {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
-		_, funcs, err := extractAggregateFuncs(expr)
+		expr, funcs, err := extractAggregateFuncs(expr)
 		if err != nil {
 			t.Fatal(err)
 		}
