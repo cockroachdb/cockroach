@@ -1085,11 +1085,21 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 	if isVar(n.Left) && isDatum(n.Right) {
 		if n.Right == parser.DNull {
 			switch n.Operator {
-			case parser.Is, parser.IsDistinctFrom, parser.IsNotDistinctFrom:
+			case parser.Is, parser.IsNotDistinctFrom:
 				// IS NULL or IS {,NOT} DISTINCT FROM NULL expressions. These are valid
 				// comparisons to NULL which return boolean true or false. We're not
 				// utilizing them in index selection (yet), so return true.
 				return parser.DBool(true)
+			case parser.IsDistinctFrom:
+				switch n.Left.(type) {
+				case *qvalue:
+					// Transform "a IS DISTINCT FROM NULL" into "a IS NOT NULL".
+					return &parser.ComparisonExpr{
+						Operator: parser.IsNot,
+						Left:     n.Left,
+						Right:    n.Right,
+					}
+				}
 			case parser.IsNot:
 				switch n.Left.(type) {
 				case *qvalue:

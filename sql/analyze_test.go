@@ -221,6 +221,7 @@ func TestSimplifyExpr(t *testing.T) {
 		{`c IS NOT FALSE`, `true`},
 		{`c IS UNKNOWN`, `true`},
 		{`c IS NOT UNKNOWN`, `c IS NOT NULL`},
+		{`a IS DISTINCT FROM NULL`, `a IS NOT NULL`},
 	}
 	for _, d := range testData {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
