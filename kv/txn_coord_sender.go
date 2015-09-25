@@ -514,10 +514,8 @@ func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction)
 }
 
 // unregisterTxn deletes a txnMetadata object from the sender
-// and collects its stats.
-func (tc *TxnCoordSender) unregisterTxn(id string) {
-	tc.Lock()
-	defer tc.Unlock()
+// and collects its stats. It assumes the lock is held.
+func (tc *TxnCoordSender) unregisterTxnLocked(id string) {
 	txnMeta := tc.txns[id] // guaranteed to exist
 	if txnMeta == nil {
 		panic("attempt to unregister non-existent transaction: " + id)
@@ -549,7 +547,11 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 		tickChan = ticker.C
 		defer ticker.Stop()
 	}
-	defer tc.unregisterTxn(id)
+	defer func() {
+		tc.Lock()
+		tc.unregisterTxnLocked(id)
+		tc.Unlock()
+	}()
 
 	var closer <-chan struct{}
 	var trace *tracer.Trace
@@ -702,9 +704,13 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 		}
 	}
 
-	if len(newTxn.ID) > 0 {
+	return func() *proto.Error {
+		if len(newTxn.ID) <= 0 {
+			return pErr
+		}
 		id := string(newTxn.ID)
 		tc.Lock()
+		defer tc.Unlock()
 		txnMeta := tc.txns[id]
 		// For successful transactional requests, keep the written intents and
 		// the updated transaction record to be sent along with the reply.
@@ -733,8 +739,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 					// heartbeat. We refuse new transactions for now because
 					// they're likely not going to have all intents committed.
 					// In principle, we can relax this as needed though.
-					tc.Unlock()
-					tc.unregisterTxn(id)
+					tc.unregisterTxnLocked(id)
 					return proto.NewError(&proto.NodeUnavailableError{})
 				}
 			}
@@ -750,7 +755,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 			}
 			txnMeta.setLastUpdate(tc.clock.PhysicalNow())
 		}
-		tc.Unlock()
 		if err == nil {
 			// For successful transactional requests, always send the updated txn
 			// record back.
@@ -759,8 +763,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 			}
 			*br.Txn = *newTxn
 		}
-	}
-	return pErr
+		return pErr
+	}()
 }
 
 // TODO(tschottdorf): this method is somewhat awkward but unless we want to
