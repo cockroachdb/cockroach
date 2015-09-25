@@ -706,3 +706,34 @@ func TestTxnMultipleCoord(t *testing.T) {
 		}
 	}
 }
+
+// TestTxnCoordSenderSingleRoundtripTxn checks that a batch which completely
+// holds the writing portion of a Txn (including EndTransaction) does not
+// launch a heartbeat goroutine at all.
+func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	clock.SetMaxOffset(20)
+
+	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+		return ba.CreateReply().(*proto.BatchResponse), nil
+	}), clock, false, nil, stopper)
+
+	// Stop the stopper manually, prior to trying the transaction. This has the
+	// effect of returning a NodeUnavailableError for any attempts at launching
+	// a heartbeat goroutine.
+	stopper.Stop()
+
+	var ba proto.BatchRequest
+	put := &proto.PutRequest{}
+	put.Key = proto.Key("test")
+	ba.Add(put)
+	ba.Add(&proto.EndTransactionRequest{})
+	ba.Txn = &proto.Transaction{Name: "test"}
+	_, pErr := ts.Send(context.Background(), ba)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+}

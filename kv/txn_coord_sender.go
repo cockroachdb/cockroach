@@ -718,11 +718,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 		// TODO(tschottdorf): already computed the intents prior to sending,
 		// consider re-using those.
 		if intents := ba.GetIntents(); len(intents) > 0 && err == nil {
-			// TODO(tschottdorf): avoid spawning one if EndTransaction is in
-			// the same batch.
 			if txnMeta == nil {
 				newTxn.Writing = true
-				trace.Event("coordinator spawns")
 				txnMeta = &txnMetadata{
 					txn:              *newTxn,
 					keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
@@ -732,15 +729,23 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 					txnEnd:           make(chan struct{}),
 				}
 				tc.txns[id] = txnMeta
-				if !tc.stopper.RunAsyncTask(func() {
-					tc.heartbeatLoop(id)
-				}) {
-					// The system is already draining and we can't start the
-					// heartbeat. We refuse new transactions for now because
-					// they're likely not going to have all intents committed.
-					// In principle, we can relax this as needed though.
-					tc.unregisterTxnLocked(id)
-					return proto.NewError(&proto.NodeUnavailableError{})
+				if _, isEnding := ba.GetArg(proto.EndTransaction); !isEnding {
+					trace.Event("coordinator spawns")
+					if !tc.stopper.RunAsyncTask(func() {
+						tc.heartbeatLoop(id)
+					}) {
+						// The system is already draining and we can't start the
+						// heartbeat. We refuse new transactions for now because
+						// they're likely not going to have all intents committed.
+						// In principle, we can relax this as needed though.
+						tc.unregisterTxnLocked(id)
+						return proto.NewError(&proto.NodeUnavailableError{})
+					}
+				} else {
+					// We omit starting a coordinator since the txn just ended
+					// anyway. This means we need to do the cleanup that the
+					// heartbeat would've carried out otherwise.
+					defer tc.unregisterTxnLocked(id)
 				}
 			}
 			for _, intent := range intents {
