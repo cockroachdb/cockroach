@@ -900,7 +900,7 @@ func scanArgs(start, end []byte, rangeID proto.RangeID, storeID proto.StoreID) p
 func endTxnArgs(txn *proto.Transaction, commit bool, rangeID proto.RangeID, storeID proto.StoreID) proto.EndTransactionRequest {
 	return proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     txn.Key,
+			Key:     txn.Key, // not allowed when going through TxnCoordSender, but we're not
 			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 			Txn:     txn,

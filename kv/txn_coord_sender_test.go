@@ -380,7 +380,6 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	pReply := reply.(*proto.PutResponse)
 	if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
 			Txn:       pReply.Header().Txn,
 		},
@@ -429,7 +428,6 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// end transaction failed.
 	etArgs := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
 			Txn:       txn,
 		},
@@ -658,7 +656,6 @@ func TestTxnDrainingNode(t *testing.T) {
 	endTxn := func() {
 		if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:       txn.Key,
 				Timestamp: txn.Timestamp,
 				Txn:       txn,
 			},
@@ -714,7 +711,6 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	s.Sender.cleanupTxn(nil, *txn) // first call
 	if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
 			Txn:       txn,
 		},
@@ -768,7 +764,6 @@ func TestTxnMultipleCoord(t *testing.T) {
 		// Abort for clean shutdown.
 		if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:       txn.Key,
 				Timestamp: txn.Timestamp,
 				Txn:       txn,
 			},

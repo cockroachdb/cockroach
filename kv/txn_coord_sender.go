@@ -365,16 +365,17 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 			// Remember when EndTransaction started in case we want to
 			// be linearizable.
 			startNS = tc.clock.PhysicalNow()
-			// EndTransaction must have its key set to that of the txn.
-			// TODO(tschottdorf): Should remove this here and make sure
-			// the client does it properly.
-			et.Key = ba.Txn.Key
 			if len(et.Intents) > 0 {
 				// TODO(tschottdorf): it may be useful to allow this later.
 				// That would be part of a possible plan to allow txns which
 				// write on multiple coordinators.
 				return nil, proto.NewError(util.Errorf("client must not pass intents to EndTransaction"))
 			}
+			if len(et.Key) != 0 {
+				return nil, proto.NewError(util.Errorf("EndTransaction must not have a Key set"))
+			}
+			et.Key = ba.Txn.Key
+
 			tc.Lock()
 			txnMeta, metaOK := tc.txns[id]
 			if id != "" && metaOK {
