@@ -1481,7 +1481,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 	tracer.ToCtx(ctx, nil) // we're doing async stuff below; those need new traces
 	trace.Event("resolving intents [async]")
 
-	ba := &proto.BatchRequest{}
+	var reqsRemote []proto.Request
 	baLocal := &proto.BatchRequest{}
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
@@ -1513,7 +1513,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		if local {
 			baLocal.Add(resolveArgs)
 		} else {
-			ba.Add(resolveArgs)
+			reqsRemote = append(reqsRemote, resolveArgs)
 		}
 	}
 
@@ -1556,11 +1556,9 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 	}
 
 	// Resolve all of the intents which aren't local to the Range.
-	if len(ba.Requests) > 0 {
-		// TODO(tschottdorf): should be able use the Batch normally and do
-		// without InternalAddRequest.
+	if len(reqsRemote) > 0 {
 		b := &client.Batch{}
-		b.InternalAddRequest(ba)
+		b.InternalAddRequest(reqsRemote...)
 		action := func() {
 			// TODO(tschottdorf): no tracing here yet.
 			if err := r.rm.DB().Run(b); err != nil {
