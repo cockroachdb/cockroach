@@ -798,6 +798,9 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, args proto.GCReq
 // with priority one less than the pushee's higher priority.
 func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.PushTxnRequest) (proto.PushTxnResponse, error) {
 	var reply proto.PushTxnResponse
+	if args.PusherTxn == nil {
+		return reply, util.Errorf("no pusher txn given")
+	}
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
 		return reply, util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
@@ -866,18 +869,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	// pusherWins bool is true in the event the pusher prevails.
 	var pusherWins bool
 
-	// If there's no incoming transaction, the pusher is non-transactional.
-	// We make a random priority, biased by specified
-	// args.Header().UserPriority in this case.
-	var priority int32
-	if args.PusherTxn != nil {
-		priority = args.PusherTxn.Priority
-	} else {
-		// Make sure we have a deterministic random number when generating
-		// a priority for this txn-less request, so all replicas see same priority.
-		randGen := rand.New(rand.NewSource(int64(reply.PusheeTxn.Priority) ^ args.Timestamp.WallTime))
-		priority = proto.MakePriority(randGen, args.GetUserPriority())
-	}
+	priority := args.PusherTxn.Priority
 
 	// Check for txn timeout.
 	if reply.PusheeTxn.LastHeartbeat == nil {
@@ -905,7 +897,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 		// If just attempting to cleanup old or already-committed txns, don't push.
 		pusherWins = false
 	} else if reply.PusheeTxn.Priority < priority ||
-		(reply.PusheeTxn.Priority == priority && args.PusherTxn != nil &&
+		(reply.PusheeTxn.Priority == priority && len(args.PusherTxn.ID) != 0 &&
 			args.PusherTxn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
 		// Pusher wins based on priority; if priorities are equal, order
 		// by lower txn timestamp.

@@ -290,6 +290,9 @@ func (*TransactionAbortedError) Transaction() *Transaction {
 // Txn is the transaction which will be retried. Both arguments are copied.
 // Transactions.
 func NewTransactionPushError(txn, pusheeTxn *Transaction) *TransactionPushError {
+	if len(txn.GetID()) == 0 {
+		txn = nil
+	}
 	return &TransactionPushError{Txn: txn.Clone(), PusheeTxn: *pusheeTxn.Clone()}
 }
 

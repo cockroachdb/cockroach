@@ -1331,11 +1331,19 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		},
 	}
 	for _, intent := range pushIntents {
+		pusherTxn := header.Txn
+		// If there's no pusher, we communicate a priority by sending an empty
+		// txn with only the priority set.
+		if pusherTxn == nil {
+			pusherTxn = &proto.Transaction{
+				Priority: proto.MakePriority(args.Header().GetUserPriority()),
+			}
+		}
 		pushArgs := &proto.PushTxnRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: intent.Txn.Key,
 			},
-			PusherTxn: header.Txn,
+			PusherTxn: pusherTxn,
 			PusheeTxn: intent.Txn,
 			// The timestamp is used by PushTxn for figuring out whether the
 			// transaction is abandoned. If we used the argument's timestamp

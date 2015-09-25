@@ -300,16 +300,13 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 	}
 
 	// Attempt to push the transaction which created the intent.
-	// TODO(tschottdorf): this Push was previously carried out with maximal
-	// UserPriority, presumably to increase the chances of it being successful
-	// should the transaction still be active.
 	pushArgs := &proto.PushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp: now,
 			Key:       txn.Key,
 		},
 		Now:       now,
-		PusherTxn: nil,
+		PusherTxn: &proto.Transaction{Priority: proto.MaxPriority},
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}
