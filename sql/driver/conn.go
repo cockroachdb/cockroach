@@ -75,22 +75,26 @@ func (c *conn) Query(stmt string, args []driver.Value) (driver.Rows, error) {
 		return nil, err
 	}
 
-	resultRows := result.GetRows()
+	driverRows := &rows{}
 
-	driverRows := &rows{
-		columns: resultRows.Columns,
-		rows:    make([][]driver.Value, 0, len(resultRows.Rows)),
-	}
-	for _, row := range resultRows.Rows {
-		values := make([]driver.Value, 0, len(row.Values))
-		for _, datum := range row.Values {
-			val, err := datum.Value()
-			if err != nil {
-				return nil, err
+	switch t := result.GetUnion().(type) {
+	case *Response_Result_Rows_:
+		resultRows := t.Rows
+
+		driverRows.columns = resultRows.Columns
+
+		driverRows.rows = make([][]driver.Value, 0, len(resultRows.Rows))
+		for _, row := range resultRows.Rows {
+			values := make([]driver.Value, 0, len(row.Values))
+			for _, datum := range row.Values {
+				val, err := datum.Value()
+				if err != nil {
+					return nil, err
+				}
+				values = append(values, val)
 			}
-			values = append(values, val)
+			driverRows.rows = append(driverRows.rows, values)
 		}
-		driverRows.rows = append(driverRows.rows, values)
 	}
 
 	return driverRows, nil
