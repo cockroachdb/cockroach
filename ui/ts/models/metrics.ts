@@ -1,6 +1,6 @@
 // source: models/metrics.ts
 /// <reference path="proto.ts" />
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/convert.ts" />
 /// <reference path="../util/http.ts" />

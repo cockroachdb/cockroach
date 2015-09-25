@@ -21,20 +21,20 @@ Author: Matt Tracy (matt@cockroachlabs.com)
   <head>
     <meta charset="utf-8">
     <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,900|Source+Code+Pro' rel='stylesheet' type='text/css'>
-    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="build/css/app.css">
     <link rel="stylesheet" href="node_modules/mocha/mocha.css">
     <title>Cockroach</title>
   </head>
   <body>
     <div id="mocha"></div>
 
-    <script src="js/libs/mithriljs/0.2.0/mithril.min.js"></script>
-    <script src="js/libs/lodash/3.10.0/lodash.min.js"></script>
+    <script src="build/js/libs/mithril.min.js"></script>
+    <script src="build/js/libs/lodash.min.js"></script>
     <script src="node_modules/mocha/mocha.js"></script>
     <script src="node_modules/chai/chai.js"></script>
 
     <script>mocha.setup('tdd')</script>
-    <script src="js/test.js"></script>
+    <script src="test/js/test.js"></script>
     <script>
       mocha.checkLeaks();
       mocha.run();

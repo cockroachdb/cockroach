@@ -1,7 +1,7 @@
 // source: models/log.ts
 /// <reference path="../models/proto.ts" />
-/// <reference path="../typings/d3/d3.d.ts" />
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../../typescript_definitions/d3/d3.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/format.ts" />
 /// <reference path="../util/querycache.ts" />
@@ -100,7 +100,7 @@ module Models {
        * _url return the url used for queries to the status server.
        */
       private _url(): string {
-        return "/_status" + this.getURL() + "?" + m.route.buildQueryString(this.getParams());
+        return "http://localhost:8080/_status" + this.getURL() + "?" + m.route.buildQueryString(this.getParams());
       }
 
       constructor() {

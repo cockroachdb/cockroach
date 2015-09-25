@@ -37,9 +37,8 @@ _testmain.go
 /cockroach
 *.swp
 
+.bootstrap
 
 # NPM node modules
 node_modules
 npm.installed
-
-.bootstrap

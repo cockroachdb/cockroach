@@ -4,9 +4,21 @@
   "private": true,
   "dependencies": {
     "chai": ">=3.2.0",
+    "gulp-open": "^1.0.0",
     "mocha": ">=2.2.5",
     "stylus": ">=0.51.1",
     "tslint": ">=2.3.1-beta",
     "typescript": ">=1.5.0-beta"
+  },
+  "devDependencies": {
+    "del": "^2.0.2",
+    "gulp": "^3.9.0",
+    "gulp-livereload": "^3.8.0",
+    "gulp-open": "^1.0.0",
+    "gulp-shell": "^0.4.3",
+    "gulp-stylus": "^2.0.7",
+    "gulp-tslint": "^3.2.0",
+    "gulp-typescript": "^2.9.0",
+    "tsd": "^0.6.4"
   }
 }
