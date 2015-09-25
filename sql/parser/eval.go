@@ -445,7 +445,9 @@ func init() {
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 type EvalContext struct {
-	NodeID uint32
+	NodeID        uint32
+	StmtTimestamp time.Time
+	TxnTimestamp  time.Time
 }
 
 var defaultContext EvalContext

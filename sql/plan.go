@@ -19,6 +19,7 @@ package sql
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -34,6 +35,15 @@ type planner struct {
 	user         string
 	evalCtx      parser.EvalContext
 	systemConfig *config.SystemConfig
+}
+
+func (p *planner) setTxn(txn *client.Txn, timestamp time.Time) {
+	p.txn = txn
+	p.evalCtx.TxnTimestamp = timestamp
+}
+
+func (p *planner) resetTxn() {
+	p.setTxn(nil, time.Time{})
 }
 
 // makePlan creates the query plan for a single SQL statement. The returned

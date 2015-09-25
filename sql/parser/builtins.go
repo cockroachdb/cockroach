@@ -50,8 +50,11 @@ type builtin struct {
 	// functions.
 	types      typeList
 	returnType Datum
-	// Set to true when a function returns a different value when called with
-	// the same parameters. e.g.: random(), now().
+	// Set to true when a function potentially returns a different value
+	// when called in the same statement with the same parameters.
+	// e.g.: random(), clock_timestamp(). Some functions like now()
+	// return the same value in the same statement, but different values
+	// in separate statements, and should not be marked as impure.
 	impure bool
 	fn     func(EvalContext, DTuple) (Datum, error)
 }
@@ -381,9 +384,8 @@ var builtins = map[string][]builtin{
 		builtin{
 			types:      typeList{timestampType},
 			returnType: DummyInterval,
-			impure:     true,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DInterval{Duration: time.Now().Sub(args[0].(DTimestamp).Time)}, nil
+			fn: func(e EvalContext, args DTuple) (Datum, error) {
+				return DInterval{Duration: nowTimestamp(e).Sub(args[0].(DTimestamp).Time)}, nil
 			},
 		},
 		builtin{
@@ -399,15 +401,36 @@ var builtins = map[string][]builtin{
 		builtin{
 			types:      typeList{},
 			returnType: DummyDate,
-			impure:     true,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DDate{Time: time.Now().Truncate(24 * time.Hour)}, nil
+			fn: func(e EvalContext, args DTuple) (Datum, error) {
+				return DDate{Time: nowTimestamp(e).Truncate(24 * time.Hour)}, nil
 			},
 		},
 	},
 
-	"current_timestamp": {nowImpl},
-	"now":               {nowImpl},
+	"statement_timestamp": {nowImpl},
+	"current_timestamp":   {nowImpl},
+	"now":                 {nowImpl},
+
+	"clock_timestamp": {
+		builtin{
+			types:      typeList{},
+			returnType: DummyTimestamp,
+			impure:     true,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				return DTimestamp{Time: time.Now()}, nil
+			},
+		},
+	},
+
+	"transaction_timestamp": {
+		builtin{
+			types:      typeList{},
+			returnType: DummyTimestamp,
+			fn: func(e EvalContext, args DTuple) (Datum, error) {
+				return DTimestamp{Time: e.TxnTimestamp}, nil
+			},
+		},
+	},
 
 	"extract": {
 		builtin{
@@ -493,8 +516,8 @@ var builtins = map[string][]builtin{
 
 	"count": countImpls(),
 
-	"max": aggregateImpls(boolType, intType, floatType, stringType, bytesType),
-	"min": aggregateImpls(boolType, intType, floatType, stringType, bytesType),
+	"max": aggregateImpls(boolType, intType, floatType, stringType, bytesType, dateType, timestampType, intervalType),
+	"min": aggregateImpls(boolType, intType, floatType, stringType, bytesType, dateType, timestampType, intervalType),
 	"sum": aggregateImpls(intType, floatType),
 
 	// Math functions
@@ -717,7 +740,7 @@ func aggregateImpls(types ...reflect.Type) []builtin {
 
 func countImpls() []builtin {
 	var r []builtin
-	types := typeList{boolType, intType, floatType, stringType, bytesType, tupleType}
+	types := typeList{boolType, intType, floatType, stringType, bytesType, dateType, timestampType, intervalType, tupleType}
 	for _, t := range types {
 		r = append(r, builtin{
 			types:      typeList{t},
@@ -790,10 +813,13 @@ var ceilImpl = floatBuiltin1(func(x float64) (Datum, error) {
 var nowImpl = builtin{
 	types:      typeList{},
 	returnType: DummyTimestamp,
-	impure:     true,
-	fn: func(_ EvalContext, args DTuple) (Datum, error) {
-		return DTimestamp{Time: time.Now()}, nil
+	fn: func(e EvalContext, args DTuple) (Datum, error) {
+		return nowTimestamp(e), nil
 	},
+}
+
+func nowTimestamp(e EvalContext) DTimestamp {
+	return DTimestamp{Time: e.StmtTimestamp}
 }
 
 var powImpl = floatBuiltin2(func(x, y float64) (Datum, error) {

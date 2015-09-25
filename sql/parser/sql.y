@@ -2778,7 +2778,15 @@ func_expr_common_subexpr:
   {
     $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
   }
+| CURRENT_DATE '(' ')'
+  {
+    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+  }
 | CURRENT_TIMESTAMP
+  {
+    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+  }
+| CURRENT_TIMESTAMP '(' ')'
   {
     $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
   }

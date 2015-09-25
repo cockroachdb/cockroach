@@ -93,11 +93,11 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	// Open a pending transaction if needed.
 	if planMaker.session.Txn != nil {
 		txn := client.NewTxn(e.db)
-		txn.Proto = *planMaker.session.Txn
+		txn.Proto = planMaker.session.Txn.Txn
 		if planMaker.session.MutatesSystemDB {
 			txn.SetSystemDBTrigger()
 		}
-		planMaker.txn = txn
+		planMaker.setTxn(txn, planMaker.session.Txn.Timestamp.GoTime())
 	}
 
 	// Send the Request for SQL execution and set the application-level error
@@ -107,7 +107,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
 	if planMaker.txn != nil {
-		planMaker.session.Txn = &planMaker.txn.Proto
+		planMaker.session.Txn = &Session_Transaction{Txn: planMaker.txn.Proto, Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp)}
 		planMaker.session.MutatesSystemDB = planMaker.txn.SystemDBTrigger()
 	} else {
 		planMaker.session.Txn = nil
@@ -152,13 +152,13 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 		}
 		// Start a transaction here and not in planMaker to prevent begin
 		// transaction from being called within an auto-transaction below.
-		planMaker.txn = client.NewTxn(e.db)
+		planMaker.setTxn(client.NewTxn(e.db), time.Now())
 		planMaker.txn.SetDebugName("sql", 0)
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if planMaker.txn != nil {
 			if planMaker.txn.Proto.Status == proto.ABORTED {
 				// Reset to allow starting a new transaction.
-				planMaker.txn = nil
+				planMaker.resetTxn()
 				return result, nil
 			}
 		} else {
@@ -185,7 +185,8 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 	// TODO(pmattis): Should this be a separate function? Perhaps we should move
 	// some of the common code back out into execStmts and have execStmt contain
 	// only the body of this closure.
-	f := func() error {
+	f := func(timestamp time.Time) error {
+		planMaker.evalCtx.StmtTimestamp = timestamp
 		plan, err := planMaker.makePlan(stmt)
 		if err != nil {
 			return err
@@ -221,21 +222,17 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 							Payload: &driver.Datum_StringVal{StringVal: string(vt)},
 						})
 					case parser.DDate:
+						wireTimestamp := driver.Timestamp(vt.Time)
 						row.Values = append(row.Values, driver.Datum{
 							Payload: &driver.Datum_DateVal{
-								DateVal: &driver.Datum_Timestamp{
-									Sec:  vt.Unix(),
-									Nsec: uint32(vt.Nanosecond()),
-								},
+								DateVal: &wireTimestamp,
 							},
 						})
 					case parser.DTimestamp:
+						wireTimestamp := driver.Timestamp(vt.Time)
 						row.Values = append(row.Values, driver.Datum{
 							Payload: &driver.Datum_TimeVal{
-								TimeVal: &driver.Datum_Timestamp{
-									Sec:  vt.Unix(),
-									Nsec: uint32(vt.Nanosecond()),
-								},
+								TimeVal: &wireTimestamp,
 							},
 						})
 					case parser.DInterval:
@@ -255,16 +252,17 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 
 	// If there is a pending transaction.
 	if planMaker.txn != nil {
-		err := f()
+		err := f(time.Now())
 		return result, err
 	}
 
 	// No transaction. Run the command as a retryable block in an
 	// auto-transaction.
 	err := e.db.Txn(func(txn *client.Txn) error {
-		planMaker.txn = txn
-		err := f()
-		planMaker.txn = nil
+		timestamp := time.Now()
+		planMaker.setTxn(txn, timestamp)
+		err := f(timestamp)
+		planMaker.resetTxn()
 		return err
 	})
 	return result, err
