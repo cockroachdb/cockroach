@@ -20,10 +20,13 @@ package proto
 import (
 	"bytes"
 	"fmt"
+	"hash"
+	"hash/crc32"
 	"math"
 	"math/rand"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/biogo/store/interval"
@@ -375,18 +378,28 @@ func (v *Value) GetTime() (time.Time, error) {
 	return t, nil
 }
 
+var crc32Pool = sync.Pool{
+	New: func() interface{} {
+		return crc32.NewIEEE()
+	},
+}
+
 // computeChecksum computes a checksum based on the provided key and
 // the contents of the value. If the value contains a byte slice, the
 // checksum includes it directly.
 func (v *Value) computeChecksum(key []byte) uint32 {
-	c := encoding.NewCRC32Checksum(key)
+	crc := crc32Pool.Get().(hash.Hash32)
+	if _, err := crc.Write(key); err != nil {
+		panic(err)
+	}
 	if v.Bytes != nil {
-		if _, err := c.Write(v.Bytes); err != nil {
+		if _, err := crc.Write(v.Bytes); err != nil {
 			panic(err)
 		}
 	}
-	sum := c.Sum32()
-	encoding.ReleaseCRC32Checksum(c)
+	sum := crc.Sum32()
+	crc.Reset()
+	crc32Pool.Put(crc)
 	return sum
 }
 

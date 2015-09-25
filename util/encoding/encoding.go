@@ -20,35 +20,11 @@ package encoding
 import (
 	"bytes"
 	"fmt"
-	"hash"
-	"hash/crc32"
 	"math"
 	"reflect"
-	"sync"
 	"time"
 	"unsafe"
 )
-
-var crc32Pool = sync.Pool{
-	New: func() interface{} {
-		return crc32.NewIEEE()
-	},
-}
-
-// NewCRC32Checksum returns a CRC32 checksum computed from the input byte slice.
-func NewCRC32Checksum(b []byte) hash.Hash32 {
-	crc := crc32Pool.Get().(hash.Hash32)
-	if _, err := crc.Write(b); err != nil {
-		panic(err)
-	}
-	return crc
-}
-
-// ReleaseCRC32Checksum releases a CRC32 back to the allocation pool.
-func ReleaseCRC32Checksum(crc hash.Hash32) {
-	crc.Reset()
-	crc32Pool.Put(crc)
-}
 
 // EncodeUint32 encodes the uint32 value using a big-endian 8 byte
 // representation. The bytes are appended to the supplied buffer and
