@@ -83,7 +83,8 @@ func checkEquivExpr(a, b parser.Expr, qvals qvalMap) error {
 	// The expressions above only use the values 1 and 2. Verify that the
 	// simplified expressions evaluate to the same value as the original
 	// expression for interesting values.
-	for _, v := range []parser.DInt{0, 1, 2, 3} {
+	zero := parser.DInt(0)
+	for _, v := range []parser.Datum{zero, zero + 1, zero + 2, zero + 3, parser.DNull} {
 		for _, q := range qvals {
 			q.datum = v
 		}
@@ -95,8 +96,11 @@ func checkEquivExpr(a, b parser.Expr, qvals qvalMap) error {
 		if err != nil {
 			return fmt.Errorf("%s: %v", b, err)
 		}
-		if da != db {
-			return fmt.Errorf("%s: %d: expected %s, but found %s", a, v, da, db)
+		// This is tricky: we don't require the expressions to produce identical
+		// results, but to either both return true or both return not true (either
+		// false or NULL).
+		if (da == parser.DBool(true)) != (db == parser.DBool(true)) {
+			return fmt.Errorf("%s: %s: expected %s, but found %s", a, v, da, db)
 		}
 	}
 	return nil
@@ -164,7 +168,7 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a < 1 OR a < 2 OR a < 3 OR a < 4 OR a < 5`, `a < 5`},
 		{`(a < 1 OR a > 1) AND a >= 1`, `a > 1`},
 		{`a < 1 AND (a > 2 AND a < 1)`, `false`},
-		{`a < 1 OR (a > 1 OR a < 2)`, `true`},
+		{`a < 1 OR (a > 1 OR a < 2)`, `a < 1 OR a IS NOT NULL`},
 		{`a < 1 AND length(i) > 0`, `a < 1`},
 		{`a < 1 OR length(i) > 0`, `true`},
 
@@ -213,15 +217,17 @@ func TestSimplifyExpr(t *testing.T) {
 		{`i SIMILAR TO 'foo%'`, `i >= 'foo' AND i < 'fop'`},
 		{`i SIMILAR TO '(foo|foobar)%'`, `i >= 'foo' AND i < 'fop'`},
 
-		{`c IS NULL`, `true`},
+		{`c IS NULL`, `c IS NULL`},
 		{`c IS NOT NULL`, `c IS NOT NULL`},
 		{`c IS TRUE`, `true`},
 		{`c IS NOT TRUE`, `true`},
 		{`c IS FALSE`, `true`},
 		{`c IS NOT FALSE`, `true`},
-		{`c IS UNKNOWN`, `true`},
+		{`c IS UNKNOWN`, `c IS NULL`},
 		{`c IS NOT UNKNOWN`, `c IS NOT NULL`},
 		{`a IS DISTINCT FROM NULL`, `a IS NOT NULL`},
+		{`a IS NOT DISTINCT FROM NULL`, `a IS NULL`},
+		{`c IS NOT NULL AND c IS NULL`, `false`},
 	}
 	for _, d := range testData {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
@@ -324,6 +330,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a = 1 AND a IN (2)`, `false`, true},
 		{`a = 2 AND a IN (1)`, `false`, true},
 		{`a = 2 AND a IN (0, 1, 2, 3, 4)`, `a = 2`, true},
+		{`a = 1 AND a IS NULL`, `false`, true},
+		{`a IS NULL AND a = 1`, `false`, true},
+		{`a = 1 AND a IS NOT NULL`, `a = 1`, true},
+		{`a IS NOT NULL AND a = 1`, `a = 1`, true},
 
 		{`a != 1 AND a = 1`, `false`, true},
 		{`a != 1 AND a = 2`, `a = 2`, true},
@@ -343,6 +353,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a != 1 AND a <= 1`, `a < 1`, true},
 		{`a != 1 AND a <= 2`, `a <= 2`, false},
 		{`a != 2 AND a <= 1`, `a <= 1`, true},
+		{`a != 1 AND a IS NULL`, `false`, true},
+		{`a IS NULL AND a != 1`, `false`, true},
+		{`a != 1 AND a IS NOT NULL`, `a != 1 AND a IS NOT NULL`, true},
+		{`a IS NOT NULL AND a != 1`, `a IS NOT NULL AND a != 1`, true},
 
 		{`a > 1 AND a = 1`, `false`, true},
 		{`a > 1 AND a = 2`, `a = 2`, true},
@@ -366,6 +380,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a > 1 AND a IN (2)`, `a IN (2)`, true},
 		{`a > 2 AND a IN (1)`, `false`, true},
 		{`a > 2 AND a IN (0, 1, 2, 3, 4)`, `a IN (3, 4)`, true},
+		{`a > 1 AND a IS NULL`, `false`, true},
+		{`a IS NULL AND a > 1`, `false`, true},
+		{`a > 1 AND a IS NOT NULL`, `a > 1`, true},
+		{`a IS NOT NULL AND a > 1`, `a > 1`, true},
 
 		{`a >= 1 AND a = 1`, `a = 1`, true},
 		{`a >= 1 AND a = 2`, `a = 2`, true},
@@ -389,6 +407,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a >= 1 AND a IN (2)`, `a IN (2)`, true},
 		{`a >= 2 AND a IN (1)`, `false`, true},
 		{`a >= 2 AND a IN (0, 1, 2, 3, 4)`, `a IN (2, 3, 4)`, true},
+		{`a >= 1 AND a IS NULL`, `false`, true},
+		{`a IS NULL AND a >= 1`, `false`, true},
+		{`a >= 1 AND a IS NOT NULL`, `a >= 1`, true},
+		{`a IS NOT NULL AND a >= 1`, `a >= 1`, true},
 
 		{`a < 1 AND a = 1`, `false`, true},
 		{`a < 1 AND a = 2`, `false`, true},
@@ -412,6 +434,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a < 1 AND a IN (2)`, `false`, true},
 		{`a < 2 AND a IN (1)`, `a IN (1)`, true},
 		{`a < 2 AND a IN (0, 1, 2, 3, 4)`, `a IN (0, 1)`, true},
+		{`a < 1 AND a IS NULL`, `false`, true},
+		{`a IS NULL AND a < 1`, `false`, true},
+		{`a < 1 AND a IS NOT NULL`, `a < 1`, true},
+		{`a IS NOT NULL AND a < 1`, `a < 1`, true},
 
 		{`a <= 1 AND a = 1`, `a = 1`, true},
 		{`a <= 1 AND a = 2`, `false`, true},
@@ -435,6 +461,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a <= 1 AND a IN (2)`, `false`, true},
 		{`a <= 2 AND a IN (1)`, `a IN (1)`, true},
 		{`a <= 2 AND a IN (0, 1, 2, 3, 4)`, `a IN (0, 1, 2)`, true},
+		{`a <= 1 AND a IS NULL`, `false`, true},
+		{`a IS NULL AND a <= 1`, `false`, true},
+		{`a <= 1 AND a IS NOT NULL`, `a <= 1`, true},
+		{`a IS NOT NULL AND a <= 1`, `a <= 1`, true},
 
 		{`a IN (1) AND a IN (1)`, `a IN (1)`, true},
 		{`a IN (1) AND a IN (2)`, `false`, true},
@@ -442,12 +472,19 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a IN (1) AND a IN (1, 2, 3, 4, 5)`, `a IN (1)`, true},
 		{`a IN (2, 4) AND a IN (1, 2, 3, 4, 5)`, `a IN (2, 4)`, true},
 		{`a IN (4, 2) AND a IN (5, 4, 3, 2, 1)`, `a IN (2, 4)`, true},
+		{`a IN (1) AND a IS NULL`, `false`, true},
+		{`a IS NULL AND a IN (1)`, `false`, true},
+		{`a IN (1) AND a IS NOT NULL`, `a IN (1)`, true},
+		{`a IS NOT NULL AND a IN (1)`, `a IN (1)`, true},
+
+		{`a IS NULL AND a IS NULL`, `a IS NULL`, true},
+		{`a IS NOT NULL AND a IS NOT NULL`, `a IS NOT NULL`, true},
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
 		expr2 := simplifyExpr(expr1)
 		if s := expr2.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			t.Fatalf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 
 		if d.checkEquiv {
@@ -508,7 +545,7 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a = 1 OR a = 1`, `a = 1`},
 		{`a = 1 OR a = 2`, `a IN (1, 2)`},
 		{`a = 2 OR a = 1`, `a IN (1, 2)`},
-		{`a = 1 OR a != 1`, `true`},
+		{`a = 1 OR a != 1`, `a IS NOT NULL`},
 		{`a = 1 OR a != 2`, `a != 2`},
 		{`a = 2 OR a != 1`, `a != 1`},
 		{`a = 1 OR a > 1`, `a >= 1`},
@@ -527,30 +564,30 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a = 1 OR a IN (2)`, `a IN (1, 2)`},
 		{`a = 2 OR a IN (1)`, `a IN (1, 2)`},
 
-		{`a != 1 OR a = 1`, `true`},
+		{`a != 1 OR a = 1`, `a IS NOT NULL`},
 		{`a != 1 OR a = 2`, `a != 1`},
 		{`a != 2 OR a = 1`, `a != 2`},
 		{`a != 1 OR a != 1`, `a != 1`},
-		{`a != 1 OR a != 2`, `true`},
-		{`a != 2 OR a != 1`, `true`},
+		{`a != 1 OR a != 2`, `a IS NOT NULL`},
+		{`a != 2 OR a != 1`, `a IS NOT NULL`},
 		{`a != 1 OR a > 1`, `a != 1`},
 		{`a != 1 OR a > 2`, `a != 1`},
-		{`a != 2 OR a > 1`, `true`},
-		{`a != 1 OR a >= 1`, `true`},
+		{`a != 2 OR a > 1`, `a IS NOT NULL`},
+		{`a != 1 OR a >= 1`, `a IS NOT NULL`},
 		{`a != 1 OR a >= 2`, `a != 1`},
-		{`a != 2 OR a >= 1`, `true`},
+		{`a != 2 OR a >= 1`, `a IS NOT NULL`},
 		{`a != 1 OR a < 1`, `a != 1`},
-		{`a != 1 OR a < 2`, `true`},
+		{`a != 1 OR a < 2`, `a IS NOT NULL`},
 		{`a != 2 OR a < 1`, `a != 2`},
-		{`a != 1 OR a <= 1`, `true`},
-		{`a != 1 OR a <= 2`, `true`},
+		{`a != 1 OR a <= 1`, `a IS NOT NULL`},
+		{`a != 1 OR a <= 2`, `a IS NOT NULL`},
 		{`a != 2 OR a <= 1`, `a != 2`},
 
 		{`a > 1 OR a = 1`, `a >= 1`},
 		{`a > 1 OR a = 2`, `a > 1`},
 		{`a > 2 OR a = 1`, `a > 2 OR a = 1`},
 		{`a > 1 OR a != 1`, `a != 1`},
-		{`a > 1 OR a != 2`, `true`},
+		{`a > 1 OR a != 2`, `a IS NOT NULL`},
 		{`a > 2 OR a != 1`, `a != 1`},
 		{`a > 1 OR a > 1`, `a > 1`},
 		{`a > 1 OR a > 2`, `a > 1`},
@@ -559,10 +596,10 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a > 1 OR a >= 2`, `a > 1`},
 		{`a > 2 OR a >= 1`, `a >= 1`},
 		{`a > 1 OR a < 1`, `a != 1`},
-		{`a > 1 OR a < 2`, `true`},
+		{`a > 1 OR a < 2`, `a IS NOT NULL`},
 		{`a > 2 OR a < 1`, `a > 2 OR a < 1`},
-		{`a > 1 OR a <= 1`, `true`},
-		{`a > 1 OR a <= 2`, `true`},
+		{`a > 1 OR a <= 1`, `a IS NOT NULL`},
+		{`a > 1 OR a <= 2`, `a IS NOT NULL`},
 		{`a > 2 OR a <= 1`, `a > 2 OR a <= 1`},
 		{`a > 1 OR a IN (1)`, `a >= 1`},
 		{`a > 1 OR a IN (2)`, `a > 1`},
@@ -571,8 +608,8 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a >= 1 OR a = 1`, `a >= 1`},
 		{`a >= 1 OR a = 2`, `a >= 1`},
 		{`a >= 2 OR a = 1`, `a >= 2 OR a = 1`},
-		{`a >= 1 OR a != 1`, `true`},
-		{`a >= 1 OR a != 2`, `true`},
+		{`a >= 1 OR a != 1`, `a IS NOT NULL`},
+		{`a >= 1 OR a != 2`, `a IS NOT NULL`},
 		{`a >= 2 OR a != 1`, `a != 1`},
 		{`a >= 1 OR a > 1`, `a >= 1`},
 		{`a >= 1 OR a > 2`, `a >= 1`},
@@ -580,11 +617,11 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a >= 1 OR a >= 1`, `a >= 1`},
 		{`a >= 1 OR a >= 2`, `a >= 1`},
 		{`a >= 2 OR a >= 1`, `a >= 1`},
-		{`a >= 1 OR a < 1`, `true`},
-		{`a >= 1 OR a < 2`, `true`},
+		{`a >= 1 OR a < 1`, `a IS NOT NULL`},
+		{`a >= 1 OR a < 2`, `a IS NOT NULL`},
 		{`a >= 2 OR a < 1`, `a >= 2 OR a < 1`},
-		{`a >= 1 OR a <= 1`, `true`},
-		{`a >= 1 OR a <= 2`, `true`},
+		{`a >= 1 OR a <= 1`, `a IS NOT NULL`},
+		{`a >= 1 OR a <= 2`, `a IS NOT NULL`},
 		{`a >= 2 OR a <= 1`, `a >= 2 OR a <= 1`},
 		{`a >= 1 OR a IN (1)`, `a >= 1`},
 		{`a >= 1 OR a IN (2)`, `a >= 1`},
@@ -595,13 +632,13 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a < 2 OR a = 1`, `a < 2`},
 		{`a < 1 OR a != 1`, `a != 1`},
 		{`a < 1 OR a != 2`, `a != 2`},
-		{`a < 2 OR a != 1`, `true`},
+		{`a < 2 OR a != 1`, `a IS NOT NULL`},
 		{`a < 1 OR a > 1`, `a != 1`},
 		{`a < 1 OR a > 2`, `a < 1 OR a > 2`},
-		{`a < 2 OR a > 1`, `true`},
-		{`a < 1 OR a >= 1`, `true`},
+		{`a < 2 OR a > 1`, `a IS NOT NULL`},
+		{`a < 1 OR a >= 1`, `a IS NOT NULL`},
 		{`a < 1 OR a >= 2`, `a < 1 OR a >= 2`},
-		{`a < 2 OR a >= 1`, `true`},
+		{`a < 2 OR a >= 1`, `a IS NOT NULL`},
 		{`a < 1 OR a < 1`, `a < 1`},
 		{`a < 1 OR a < 2`, `a < 2`},
 		{`a < 2 OR a < 1`, `a < 2`},
@@ -615,15 +652,15 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a <= 1 OR a = 1`, `a <= 1`},
 		{`a <= 1 OR a = 2`, `a <= 1 OR a = 2`},
 		{`a <= 2 OR a = 1`, `a <= 2`},
-		{`a <= 1 OR a != 1`, `true`},
+		{`a <= 1 OR a != 1`, `a IS NOT NULL`},
 		{`a <= 1 OR a != 2`, `a != 2`},
-		{`a <= 2 OR a != 1`, `true`},
-		{`a <= 1 OR a > 1`, `true`},
+		{`a <= 2 OR a != 1`, `a IS NOT NULL`},
+		{`a <= 1 OR a > 1`, `a IS NOT NULL`},
 		{`a <= 1 OR a > 2`, `a <= 1 OR a > 2`},
-		{`a <= 2 OR a > 1`, `true`},
-		{`a <= 1 OR a >= 1`, `true`},
+		{`a <= 2 OR a > 1`, `a IS NOT NULL`},
+		{`a <= 1 OR a >= 1`, `a IS NOT NULL`},
 		{`a <= 1 OR a >= 2`, `a <= 1 OR a >= 2`},
-		{`a <= 2 OR a >= 1`, `true`},
+		{`a <= 2 OR a >= 1`, `a IS NOT NULL`},
 		{`a <= 1 OR a < 1`, `a <= 1`},
 		{`a <= 1 OR a < 2`, `a < 2`},
 		{`a <= 2 OR a < 1`, `a <= 2`},
