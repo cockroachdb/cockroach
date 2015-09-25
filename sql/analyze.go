@@ -34,6 +34,15 @@ import (
 // (a.k.a. AND expressions). For example:
 //
 //   (a AND b) OR c -> [[a, b], c]
+//
+// Expression analysis should only be performed on the WHERE clause of SELECT
+// statements. The returned expressions are not guaranteed to be semantically
+// identical to the original. In particular, expressions that return NULL might
+// be transformed into expressions that return false. This is ok in the context
+// of WHERE clauses where we care about not-true for filtering
+// purposes. Additionally, expressions that analysis does not handle will be
+// transformed into true. The caller is required to use the original expression
+// (which will be unchanged by analyzeExpr) for filtering.
 func analyzeExpr(e parser.Expr) []parser.Exprs {
 	e = simplifyExpr(e)
 	orExprs := splitOrExpr(e, nil)
