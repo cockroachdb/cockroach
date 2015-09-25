@@ -495,12 +495,12 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *proto.BatchRequest) {
 // updated and the heartbeat goroutine signaled to clean up the transaction
 // gracefully.
 func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction) {
-	id := string(txn.ID)
+	trace.Event("coordinator stops")
 	tc.Lock()
 	defer tc.Unlock()
-	txnMeta, ok := tc.txns[id]
-	// Only clean up once per transaction.
-	if !ok || txnMeta.txnEnd == nil {
+	txnMeta, ok := tc.txns[string(txn.ID)]
+	// The heartbeat might've already removed the record.
+	if !ok {
 		return
 	}
 
@@ -508,9 +508,7 @@ func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction)
 	// for stats.
 	txnMeta.txn = txn
 	// Trigger heartbeat shutdown.
-	trace.Event("coordinator stops")
 	close(txnMeta.txnEnd)
-	txnMeta.txnEnd = nil // for idempotency; checked above
 }
 
 // unregisterTxn deletes a txnMetadata object from the sender
@@ -729,6 +727,9 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 					txnEnd:           make(chan struct{}),
 				}
 				tc.txns[id] = txnMeta
+				// If the transaction is already over, there's no point in
+				// launching a one-off coordinator which will shut down right
+				// away.
 				if _, isEnding := ba.GetArg(proto.EndTransaction); !isEnding {
 					trace.Event("coordinator spawns")
 					if !tc.stopper.RunAsyncTask(func() {
@@ -741,11 +742,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 						tc.unregisterTxnLocked(id)
 						return proto.NewError(&proto.NodeUnavailableError{})
 					}
-				} else {
-					// We omit starting a coordinator since the txn just ended
-					// anyway. This means we need to do the cleanup that the
-					// heartbeat would've carried out otherwise.
-					defer tc.unregisterTxnLocked(id)
 				}
 			}
 			for _, intent := range intents {
