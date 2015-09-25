@@ -92,7 +92,7 @@ func (*DropTable) StatementType() StatementType { return DDL }
 func (*Explain) StatementType() StatementType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Grant) StatementType() StatementType { return Ack }
+func (*Grant) StatementType() StatementType { return DDL }
 
 // StatementType implements the Statement interface.
 func (*Insert) StatementType() StatementType { return RowsAffected }
@@ -113,7 +113,7 @@ func (*RenameIndex) StatementType() StatementType { return DDL }
 func (*RenameTable) StatementType() StatementType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*Revoke) StatementType() StatementType { return Ack }
+func (*Revoke) StatementType() StatementType { return DDL }
 
 // StatementType implements the Statement interface.
 func (*RollbackTransaction) StatementType() StatementType { return Ack }
@@ -146,7 +146,7 @@ func (*ShowIndex) StatementType() StatementType { return Rows }
 func (*ShowTables) StatementType() StatementType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Truncate) StatementType() StatementType { return DDL }
+func (*Truncate) StatementType() StatementType { return Ack }
 
 // StatementType implements the Statement interface.
 func (*Update) StatementType() StatementType { return RowsAffected }
