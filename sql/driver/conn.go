@@ -20,6 +20,8 @@ package driver
 import (
 	"database/sql/driver"
 	"errors"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 var _ driver.Conn = &conn{}
@@ -53,7 +55,18 @@ func (c *conn) Exec(stmt string, args []driver.Value) (driver.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	return driver.RowsAffected(len(result.Rows)), nil
+	switch t := result.GetUnion().(type) {
+	case nil:
+		return nil, nil
+	case *Response_Result_DDL_:
+		return driver.ResultNoRows, nil
+	case *Response_Result_RowsAffected:
+		return driver.RowsAffected(int(t.RowsAffected)), nil
+	case *Response_Result_Rows_:
+		return driver.RowsAffected(len(t.Rows.Rows)), nil
+	default:
+		return nil, util.Errorf("unexpected result %s of type %T", t, t)
+	}
 }
 
 func (c *conn) Query(stmt string, args []driver.Value) (driver.Rows, error) {
@@ -62,11 +75,13 @@ func (c *conn) Query(stmt string, args []driver.Value) (driver.Rows, error) {
 		return nil, err
 	}
 
-	resultRows := &rows{
-		columns: result.Columns,
-		rows:    make([][]driver.Value, 0, len(result.Rows)),
+	resultRows := result.GetRows()
+
+	driverRows := &rows{
+		columns: resultRows.Columns,
+		rows:    make([][]driver.Value, 0, len(resultRows.Rows)),
 	}
-	for _, row := range result.Rows {
+	for _, row := range resultRows.Rows {
 		values := make([]driver.Value, 0, len(row.Values))
 		for _, datum := range row.Values {
 			val, err := datum.Value()
@@ -75,13 +90,13 @@ func (c *conn) Query(stmt string, args []driver.Value) (driver.Rows, error) {
 			}
 			values = append(values, val)
 		}
-		resultRows.rows = append(resultRows.rows, values)
+		driverRows.rows = append(driverRows.rows, values)
 	}
 
-	return resultRows, nil
+	return driverRows, nil
 }
 
-func (c *conn) internalQuery(stmt string, args []driver.Value) (*Result, error) {
+func (c *conn) internalQuery(stmt string, args []driver.Value) (*Response_Result, error) {
 	if c.beginTransaction {
 		stmt = "BEGIN TRANSACTION; " + stmt
 		c.beginTransaction = false
@@ -99,7 +114,7 @@ func (c *conn) internalQuery(stmt string, args []driver.Value) (*Result, error) 
 }
 
 // send sends the statement to the server.
-func (c *conn) send(stmt string, dArgs []Datum) (*Result, error) {
+func (c *conn) send(stmt string, dArgs []Datum) (*Response_Result, error) {
 	args := Request{
 		Session: c.session,
 		Sql:     stmt,

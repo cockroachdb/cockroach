@@ -53,8 +53,6 @@ func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
 	// TODO(marc): do this inside a transaction. This will be needed
 	// when modifying multiple descriptors in the same op.
 	descKey := MakeDescMetadataKey(descriptor.GetID())
-	// Mark transaction as operating on the system DB.
-	p.txn.SetSystemDBTrigger()
 	if err := p.txn.Put(descKey, descriptor); err != nil {
 		return nil, err
 	}

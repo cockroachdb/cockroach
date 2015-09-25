@@ -119,8 +119,6 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 	}
 
 	b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
-	// Mark transaction as operating on the system DB.
-	p.txn.SetSystemDBTrigger()
 
 	if err := p.txn.Run(&b); err != nil {
 		return nil, convertBatchError(tableDesc, b, err)

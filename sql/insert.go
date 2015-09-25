@@ -98,9 +98,11 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 	marshalled := make([]interface{}, len(cols))
 
-	var b client.Batch
+	b := client.Batch{}
+	result := &valuesNode{}
 	for rows.Next() {
 		rowVals := rows.Values()
+		result.rows = append(result.rows, parser.DTuple(nil))
 
 		// The values for the row may be shorter than the number of columns being
 		// inserted into. Generate default values for those columns using the
@@ -198,8 +200,8 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	if err := p.txn.Run(&b); err != nil {
 		return nil, convertBatchError(tableDesc, b, err)
 	}
-	// TODO(tamird/pmattis): return the number of affected rows
-	return &valuesNode{}, nil
+
+	return result, nil
 }
 
 func (p *planner) processColumns(tableDesc *TableDescriptor,

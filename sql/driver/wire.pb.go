@@ -10,7 +10,6 @@
 
 	It has these top-level messages:
 		Datum
-		Result
 		Request
 		Response
 */
@@ -303,59 +302,6 @@ func (m *Datum_Timestamp) GetNsec() uint32 {
 	return 0
 }
 
-// A Result is a collection of rows.
-type Result struct {
-	// Error is non-nil if an error occurred while executing the statement.
-	Error *string `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
-	// The names of the columns returned in the result set in the order specified
-	// in the SQL statement. The number of columns will equal the number of
-	// values in each Row.
-	Columns []string `protobuf:"bytes,2,rep,name=columns" json:"columns,omitempty"`
-	// The rows in the result set.
-	Rows []Result_Row `protobuf:"bytes,3,rep,name=rows" json:"rows"`
-}
-
-func (m *Result) Reset()         { *m = Result{} }
-func (m *Result) String() string { return proto.CompactTextString(m) }
-func (*Result) ProtoMessage()    {}
-
-func (m *Result) GetError() string {
-	if m != nil && m.Error != nil {
-		return *m.Error
-	}
-	return ""
-}
-
-func (m *Result) GetColumns() []string {
-	if m != nil {
-		return m.Columns
-	}
-	return nil
-}
-
-func (m *Result) GetRows() []Result_Row {
-	if m != nil {
-		return m.Rows
-	}
-	return nil
-}
-
-// A Row is a collection of values representing a row in a result.
-type Result_Row struct {
-	Values []Datum `protobuf:"bytes,1,rep,name=values" json:"values"`
-}
-
-func (m *Result_Row) Reset()         { *m = Result_Row{} }
-func (m *Result_Row) String() string { return proto.CompactTextString(m) }
-func (*Result_Row) ProtoMessage()    {}
-
-func (m *Result_Row) GetValues() []Datum {
-	if m != nil {
-		return m.Values
-	}
-	return nil
-}
-
 // An SQL request to cockroach. A transaction can consist of multiple
 // requests.
 type Request struct {
@@ -409,7 +355,7 @@ type Response struct {
 	Session []byte `protobuf:"bytes,1,opt,name=session" json:"session,omitempty"`
 	// The list of results. There is one result object per SQL statement in the
 	// request.
-	Results []Result `protobuf:"bytes,2,rep,name=results" json:"results"`
+	Results []Response_Result `protobuf:"bytes,2,rep,name=results" json:"results"`
 }
 
 func (m *Response) Reset()         { *m = Response{} }
@@ -423,9 +369,196 @@ func (m *Response) GetSession() []byte {
 	return nil
 }
 
-func (m *Response) GetResults() []Result {
+func (m *Response) GetResults() []Response_Result {
 	if m != nil {
 		return m.Results
+	}
+	return nil
+}
+
+// Result corresponds to the execution of a single SQL statement.
+type Response_Result struct {
+	// Error is non-nil if an error occurred while executing the statement.
+	Error *string `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	// Types that are valid to be assigned to Union:
+	//	*Response_Result_DDL_
+	//	*Response_Result_RowsAffected
+	//	*Response_Result_Rows_
+	Union isResponse_Result_Union `protobuf_oneof:"union"`
+}
+
+func (m *Response_Result) Reset()         { *m = Response_Result{} }
+func (m *Response_Result) String() string { return proto.CompactTextString(m) }
+func (*Response_Result) ProtoMessage()    {}
+
+type isResponse_Result_Union interface {
+	isResponse_Result_Union()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type Response_Result_DDL_ struct {
+	DDL *Response_Result_DDL `protobuf:"bytes,2,opt,name=ddl,oneof"`
+}
+type Response_Result_RowsAffected struct {
+	RowsAffected uint32 `protobuf:"varint,3,opt,name=rows_affected,oneof"`
+}
+type Response_Result_Rows_ struct {
+	Rows *Response_Result_Rows `protobuf:"bytes,4,opt,name=rows,oneof"`
+}
+
+func (*Response_Result_DDL_) isResponse_Result_Union()         {}
+func (*Response_Result_RowsAffected) isResponse_Result_Union() {}
+func (*Response_Result_Rows_) isResponse_Result_Union()        {}
+
+func (m *Response_Result) GetUnion() isResponse_Result_Union {
+	if m != nil {
+		return m.Union
+	}
+	return nil
+}
+
+func (m *Response_Result) GetError() string {
+	if m != nil && m.Error != nil {
+		return *m.Error
+	}
+	return ""
+}
+
+func (m *Response_Result) GetDDL() *Response_Result_DDL {
+	if x, ok := m.GetUnion().(*Response_Result_DDL_); ok {
+		return x.DDL
+	}
+	return nil
+}
+
+func (m *Response_Result) GetRowsAffected() uint32 {
+	if x, ok := m.GetUnion().(*Response_Result_RowsAffected); ok {
+		return x.RowsAffected
+	}
+	return 0
+}
+
+func (m *Response_Result) GetRows() *Response_Result_Rows {
+	if x, ok := m.GetUnion().(*Response_Result_Rows_); ok {
+		return x.Rows
+	}
+	return nil
+}
+
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*Response_Result) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), []interface{}) {
+	return _Response_Result_OneofMarshaler, _Response_Result_OneofUnmarshaler, []interface{}{
+		(*Response_Result_DDL_)(nil),
+		(*Response_Result_RowsAffected)(nil),
+		(*Response_Result_Rows_)(nil),
+	}
+}
+
+func _Response_Result_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*Response_Result)
+	// union
+	switch x := m.Union.(type) {
+	case *Response_Result_DDL_:
+		_ = b.EncodeVarint(2<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.DDL); err != nil {
+			return err
+		}
+	case *Response_Result_RowsAffected:
+		_ = b.EncodeVarint(3<<3 | proto.WireVarint)
+		_ = b.EncodeVarint(uint64(x.RowsAffected))
+	case *Response_Result_Rows_:
+		_ = b.EncodeVarint(4<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Rows); err != nil {
+			return err
+		}
+	case nil:
+	default:
+		return fmt.Errorf("Response_Result.Union has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _Response_Result_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*Response_Result)
+	switch tag {
+	case 2: // union.ddl
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Response_Result_DDL)
+		err := b.DecodeMessage(msg)
+		m.Union = &Response_Result_DDL_{msg}
+		return true, err
+	case 3: // union.rows_affected
+		if wire != proto.WireVarint {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeVarint()
+		m.Union = &Response_Result_RowsAffected{uint32(x)}
+		return true, err
+	case 4: // union.rows
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Response_Result_Rows)
+		err := b.DecodeMessage(msg)
+		m.Union = &Response_Result_Rows_{msg}
+		return true, err
+	default:
+		return false, nil
+	}
+}
+
+// DDL is an empty message that is used in Result's oneof. Its
+// presence indicates that the operation was a DDL statement.
+type Response_Result_DDL struct {
+}
+
+func (m *Response_Result_DDL) Reset()         { *m = Response_Result_DDL{} }
+func (m *Response_Result_DDL) String() string { return proto.CompactTextString(m) }
+func (*Response_Result_DDL) ProtoMessage()    {}
+
+// Rows encapsulates the result of an operation that returns rows.
+type Response_Result_Rows struct {
+	// The names of the columns returned in the result set in the order
+	// specified in the SQL statement. The number of columns will equal
+	// the number of values in each Row.
+	Columns []string `protobuf:"bytes,1,rep,name=columns" json:"columns,omitempty"`
+	// The rows in the result set.
+	Rows []Response_Result_Rows_Row `protobuf:"bytes,2,rep,name=rows" json:"rows"`
+}
+
+func (m *Response_Result_Rows) Reset()         { *m = Response_Result_Rows{} }
+func (m *Response_Result_Rows) String() string { return proto.CompactTextString(m) }
+func (*Response_Result_Rows) ProtoMessage()    {}
+
+func (m *Response_Result_Rows) GetColumns() []string {
+	if m != nil {
+		return m.Columns
+	}
+	return nil
+}
+
+func (m *Response_Result_Rows) GetRows() []Response_Result_Rows_Row {
+	if m != nil {
+		return m.Rows
+	}
+	return nil
+}
+
+// A Row is a collection of values representing a row in a result.
+type Response_Result_Rows_Row struct {
+	Values []Datum `protobuf:"bytes,1,rep,name=values" json:"values"`
+}
+
+func (m *Response_Result_Rows_Row) Reset()         { *m = Response_Result_Rows_Row{} }
+func (m *Response_Result_Rows_Row) String() string { return proto.CompactTextString(m) }
+func (*Response_Result_Rows_Row) ProtoMessage()    {}
+
+func (m *Response_Result_Rows_Row) GetValues() []Datum {
+	if m != nil {
+		return m.Values
 	}
 	return nil
 }
@@ -558,87 +691,6 @@ func (m *Datum_Timestamp) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Result) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Result) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Error != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintWire(data, i, uint64(len(*m.Error)))
-		i += copy(data[i:], *m.Error)
-	}
-	if len(m.Columns) > 0 {
-		for _, s := range m.Columns {
-			data[i] = 0x12
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
-	if len(m.Rows) > 0 {
-		for _, msg := range m.Rows {
-			data[i] = 0x1a
-			i++
-			i = encodeVarintWire(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func (m *Result_Row) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Result_Row) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Values) > 0 {
-		for _, msg := range m.Values {
-			data[i] = 0xa
-			i++
-			i = encodeVarintWire(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
 func (m *Request) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -707,6 +759,165 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 	if len(m.Results) > 0 {
 		for _, msg := range m.Results {
 			data[i] = 0x12
+			i++
+			i = encodeVarintWire(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *Response_Result) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Response_Result) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Error != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintWire(data, i, uint64(len(*m.Error)))
+		i += copy(data[i:], *m.Error)
+	}
+	if m.Union != nil {
+		nn4, err := m.Union.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += nn4
+	}
+	return i, nil
+}
+
+func (m *Response_Result_DDL_) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.DDL != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintWire(data, i, uint64(m.DDL.Size()))
+		n5, err := m.DDL.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n5
+	}
+	return i, nil
+}
+func (m *Response_Result_RowsAffected) MarshalTo(data []byte) (int, error) {
+	i := 0
+	data[i] = 0x18
+	i++
+	i = encodeVarintWire(data, i, uint64(m.RowsAffected))
+	return i, nil
+}
+func (m *Response_Result_Rows_) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.Rows != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintWire(data, i, uint64(m.Rows.Size()))
+		n6, err := m.Rows.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n6
+	}
+	return i, nil
+}
+func (m *Response_Result_DDL) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Response_Result_DDL) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func (m *Response_Result_Rows) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Response_Result_Rows) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			data[i] = 0xa
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if len(m.Rows) > 0 {
+		for _, msg := range m.Rows {
+			data[i] = 0x12
+			i++
+			i = encodeVarintWire(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *Response_Result_Rows_Row) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Response_Result_Rows_Row) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Values) > 0 {
+		for _, msg := range m.Values {
+			data[i] = 0xa
 			i++
 			i = encodeVarintWire(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -821,40 +1032,6 @@ func (m *Datum_Timestamp) Size() (n int) {
 	return n
 }
 
-func (m *Result) Size() (n int) {
-	var l int
-	_ = l
-	if m.Error != nil {
-		l = len(*m.Error)
-		n += 1 + l + sovWire(uint64(l))
-	}
-	if len(m.Columns) > 0 {
-		for _, s := range m.Columns {
-			l = len(s)
-			n += 1 + l + sovWire(uint64(l))
-		}
-	}
-	if len(m.Rows) > 0 {
-		for _, e := range m.Rows {
-			l = e.Size()
-			n += 1 + l + sovWire(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *Result_Row) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Values) > 0 {
-		for _, e := range m.Values {
-			l = e.Size()
-			n += 1 + l + sovWire(uint64(l))
-		}
-	}
-	return n
-}
-
 func (m *Request) Size() (n int) {
 	var l int
 	_ = l
@@ -884,6 +1061,79 @@ func (m *Response) Size() (n int) {
 	}
 	if len(m.Results) > 0 {
 		for _, e := range m.Results {
+			l = e.Size()
+			n += 1 + l + sovWire(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Response_Result) Size() (n int) {
+	var l int
+	_ = l
+	if m.Error != nil {
+		l = len(*m.Error)
+		n += 1 + l + sovWire(uint64(l))
+	}
+	if m.Union != nil {
+		n += m.Union.Size()
+	}
+	return n
+}
+
+func (m *Response_Result_DDL_) Size() (n int) {
+	var l int
+	_ = l
+	if m.DDL != nil {
+		l = m.DDL.Size()
+		n += 1 + l + sovWire(uint64(l))
+	}
+	return n
+}
+func (m *Response_Result_RowsAffected) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovWire(uint64(m.RowsAffected))
+	return n
+}
+func (m *Response_Result_Rows_) Size() (n int) {
+	var l int
+	_ = l
+	if m.Rows != nil {
+		l = m.Rows.Size()
+		n += 1 + l + sovWire(uint64(l))
+	}
+	return n
+}
+func (m *Response_Result_DDL) Size() (n int) {
+	var l int
+	_ = l
+	return n
+}
+
+func (m *Response_Result_Rows) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			l = len(s)
+			n += 1 + l + sovWire(uint64(l))
+		}
+	}
+	if len(m.Rows) > 0 {
+		for _, e := range m.Rows {
+			l = e.Size()
+			n += 1 + l + sovWire(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Response_Result_Rows_Row) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Values) > 0 {
+		for _, e := range m.Values {
 			l = e.Size()
 			n += 1 + l + sovWire(uint64(l))
 		}
@@ -1244,227 +1494,6 @@ func (m *Datum_Timestamp) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Result) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowWire
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Result: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Result: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowWire
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthWire
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			s := string(data[iNdEx:postIndex])
-			m.Error = &s
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowWire
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthWire
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Columns = append(m.Columns, string(data[iNdEx:postIndex]))
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Rows", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowWire
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthWire
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Rows = append(m.Rows, Result_Row{})
-			if err := m.Rows[len(m.Rows)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipWire(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthWire
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *Result_Row) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowWire
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Row: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Row: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Values", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowWire
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthWire
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Values = append(m.Values, Datum{})
-			if err := m.Values[len(m.Values)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipWire(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthWire
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
 func (m *Request) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -1715,8 +1744,413 @@ func (m *Response) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Results = append(m.Results, Result{})
+			m.Results = append(m.Results, Response_Result{})
 			if err := m.Results[len(m.Results)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipWire(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Response_Result) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Result: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Result: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(data[iNdEx:postIndex])
+			m.Error = &s
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DDL", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &Response_Result_DDL{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Union = &Response_Result_DDL_{v}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RowsAffected", wireType)
+			}
+			var v uint32
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Union = &Response_Result_RowsAffected{v}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Rows", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &Response_Result_Rows{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Union = &Response_Result_Rows_{v}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipWire(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Response_Result_DDL) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DDL: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DDL: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipWire(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Response_Result_Rows) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Rows: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Rows: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Columns = append(m.Columns, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Rows", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Rows = append(m.Rows, Response_Result_Rows_Row{})
+			if err := m.Rows[len(m.Rows)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipWire(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Response_Result_Rows_Row) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Row: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Row: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Values", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Values = append(m.Values, Datum{})
+			if err := m.Values[len(m.Values)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

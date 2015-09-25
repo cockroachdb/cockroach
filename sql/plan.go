@@ -18,7 +18,6 @@
 package sql
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -50,6 +49,15 @@ func (p *planner) resetTxn() {
 // plan needs to be iterated over using planNode.Next() and planNode.Values()
 // in order to retrieve matching rows.
 func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
+	// This will set the system DB trigger for transactions containing
+	// DDL statements that have no effect, such as
+	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
+	// where the table already exists. This will generate some false
+	// refreshes, but that's expected to be quite rare in practice.
+	if stmt.StatementType() == parser.DDL {
+		p.txn.SetSystemDBTrigger()
+	}
+
 	switch n := stmt.(type) {
 	case *parser.AlterTable:
 		return p.AlterTable(n)
@@ -116,7 +124,7 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 	case parser.Values:
 		return p.Values(n)
 	default:
-		return nil, fmt.Errorf("unknown statement type: %T", stmt)
+		return nil, util.Errorf("unknown statement type: %T", stmt)
 	}
 }
 

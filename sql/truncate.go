@@ -32,7 +32,6 @@ import (
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
 func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 	b := client.Batch{}
-
 	for _, tableQualifiedName := range n.Tables {
 		tableDesc, err := p.getTableDesc(tableQualifiedName)
 		if err != nil {
@@ -58,6 +57,5 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 		return nil, err
 	}
 
-	// TODO(tamird/pmattis): return the number of affected rows
 	return &valuesNode{}, nil
 }

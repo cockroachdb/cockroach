@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -55,9 +56,14 @@ func TestPlaceholders(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
+	if result, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
+	} else if _, err := result.LastInsertId(); !testutils.IsError(err, "no LastInsertId available after DDL statement") {
+		t.Error(err)
+	} else if _, err := result.RowsAffected(); !testutils.IsError(err, "no RowsAffected available after DDL statement") {
+		t.Error(err)
 	}
+
 	schema := `
 CREATE TABLE t.alltypes (
   a BIGINT PRIMARY KEY,
@@ -70,8 +76,12 @@ CREATE TABLE t.alltypes (
   h INTERVAL
 )
 `
-	if _, err := db.Exec(schema); err != nil {
+	if result, err := db.Exec(schema); err != nil {
 		t.Fatal(err)
+	} else if _, err := result.LastInsertId(); !testutils.IsError(err, "no LastInsertId available after DDL statement") {
+		t.Error(err)
+	} else if _, err := result.RowsAffected(); !testutils.IsError(err, "no RowsAffected available after DDL statement") {
+		t.Error(err)
 	}
 
 	var (
@@ -101,14 +111,22 @@ CREATE TABLE t.alltypes (
 	}
 
 	// Insert values for all the different types.
-	if _, err := db.Exec(`INSERT INTO t.alltypes VALUES ($1, $2, $3, $4, $5, $6, $6::DATE, $7::INTERVAL)`,
+	if result, err := db.Exec(`INSERT INTO t.alltypes VALUES ($1, $2, $3, $4, $5, $6, $6::DATE, $7::INTERVAL)`,
 		123, 3.4, "blah", []byte("foo"), true, timeVal, intervalVal); err != nil {
 		t.Fatal(err)
+	} else if got, err := result.RowsAffected(); err != nil {
+		t.Fatal(err)
+	} else if e := int64(1); got != e {
+		t.Fatalf("expected %d rows affected, got %d", e, a)
 	}
 	// Insert a row with NULL values
-	if _, err := db.Exec(`INSERT INTO t.alltypes VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+	if result, err := db.Exec(`INSERT INTO t.alltypes VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		456, nil, nil, nil, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
+	} else if got, err := result.RowsAffected(); err != nil {
+		t.Fatal(err)
+	} else if e := int64(1); got != e {
+		t.Fatalf("expected %d rows affected, got %d", e, a)
 	}
 	if _, err := db.Query("SELECT a, b FROM t.alltypes WHERE a IN ($1)", 123); err != nil {
 		t.Fatal(err)
@@ -171,8 +189,12 @@ CREATE TABLE t.alltypes (
 		}
 	}
 	// Delete a row using a placeholder param.
-	if _, err := db.Exec(`DELETE FROM t.alltypes WHERE a IN ($1)`, 123); err != nil {
+	if result, err := db.Exec(`DELETE FROM t.alltypes WHERE a IN ($1)`, 123); err != nil {
 		t.Fatal(err)
+	} else if got, err := result.RowsAffected(); err != nil {
+		t.Fatal(err)
+	} else if e := int64(1); got != e {
+		t.Fatalf("expected %d rows affected, got %d", e, a)
 	}
 	if rows, err := db.Query("SELECT * FROM t.alltypes"); err != nil {
 		t.Fatal(err)
