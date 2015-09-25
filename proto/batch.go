@@ -95,6 +95,8 @@ func (ba *BatchRequest) IsRange() bool {
 
 // GetArg returns the first request of the given type, if possible.
 func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
+	// TODO(tschottdorf): when looking for EndTransaction, just look at the
+	// last entry.
 	for _, arg := range ba.Requests {
 		if req := arg.GetInner(); req.Method() == method {
 			return req, true

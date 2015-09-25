@@ -365,16 +365,17 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 			// Remember when EndTransaction started in case we want to
 			// be linearizable.
 			startNS = tc.clock.PhysicalNow()
-			// EndTransaction must have its key set to that of the txn.
-			// TODO(tschottdorf): Should remove this here and make sure
-			// the client does it properly.
-			et.Key = ba.Txn.Key
 			if len(et.Intents) > 0 {
 				// TODO(tschottdorf): it may be useful to allow this later.
 				// That would be part of a possible plan to allow txns which
 				// write on multiple coordinators.
 				return nil, proto.NewError(util.Errorf("client must not pass intents to EndTransaction"))
 			}
+			if len(et.Key) != 0 {
+				return nil, proto.NewError(util.Errorf("EndTransaction must not have a Key set"))
+			}
+			et.Key = ba.Txn.Key
+
 			tc.Lock()
 			txnMeta, metaOK := tc.txns[id]
 			if id != "" && metaOK {
@@ -513,10 +514,8 @@ func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction)
 }
 
 // unregisterTxn deletes a txnMetadata object from the sender
-// and collects its stats.
-func (tc *TxnCoordSender) unregisterTxn(id string) {
-	tc.Lock()
-	defer tc.Unlock()
+// and collects its stats. It assumes the lock is held.
+func (tc *TxnCoordSender) unregisterTxnLocked(id string) {
 	txnMeta := tc.txns[id] // guaranteed to exist
 	if txnMeta == nil {
 		panic("attempt to unregister non-existent transaction: " + id)
@@ -548,7 +547,11 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 		tickChan = ticker.C
 		defer ticker.Stop()
 	}
-	defer tc.unregisterTxn(id)
+	defer func() {
+		tc.Lock()
+		tc.unregisterTxnLocked(id)
+		tc.Unlock()
+	}()
 
 	var closer <-chan struct{}
 	var trace *tracer.Trace
@@ -701,9 +704,13 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 		}
 	}
 
-	if len(newTxn.ID) > 0 {
+	return func() *proto.Error {
+		if len(newTxn.ID) <= 0 {
+			return pErr
+		}
 		id := string(newTxn.ID)
 		tc.Lock()
+		defer tc.Unlock()
 		txnMeta := tc.txns[id]
 		// For successful transactional requests, keep the written intents and
 		// the updated transaction record to be sent along with the reply.
@@ -711,11 +718,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 		// TODO(tschottdorf): already computed the intents prior to sending,
 		// consider re-using those.
 		if intents := ba.GetIntents(); len(intents) > 0 && err == nil {
-			// TODO(tschottdorf): avoid spawning one if EndTransaction is in
-			// the same batch.
 			if txnMeta == nil {
 				newTxn.Writing = true
-				trace.Event("coordinator spawns")
 				txnMeta = &txnMetadata{
 					txn:              *newTxn,
 					keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
@@ -725,16 +729,23 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 					txnEnd:           make(chan struct{}),
 				}
 				tc.txns[id] = txnMeta
-				if !tc.stopper.RunAsyncTask(func() {
-					tc.heartbeatLoop(id)
-				}) {
-					// The system is already draining and we can't start the
-					// heartbeat. We refuse new transactions for now because
-					// they're likely not going to have all intents committed.
-					// In principle, we can relax this as needed though.
-					tc.Unlock()
-					tc.unregisterTxn(id)
-					return proto.NewError(&proto.NodeUnavailableError{})
+				if _, isEnding := ba.GetArg(proto.EndTransaction); !isEnding {
+					trace.Event("coordinator spawns")
+					if !tc.stopper.RunAsyncTask(func() {
+						tc.heartbeatLoop(id)
+					}) {
+						// The system is already draining and we can't start the
+						// heartbeat. We refuse new transactions for now because
+						// they're likely not going to have all intents committed.
+						// In principle, we can relax this as needed though.
+						tc.unregisterTxnLocked(id)
+						return proto.NewError(&proto.NodeUnavailableError{})
+					}
+				} else {
+					// We omit starting a coordinator since the txn just ended
+					// anyway. This means we need to do the cleanup that the
+					// heartbeat would've carried out otherwise.
+					defer tc.unregisterTxnLocked(id)
 				}
 			}
 			for _, intent := range intents {
@@ -749,7 +760,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 			}
 			txnMeta.setLastUpdate(tc.clock.PhysicalNow())
 		}
-		tc.Unlock()
 		if err == nil {
 			// For successful transactional requests, always send the updated txn
 			// record back.
@@ -758,8 +768,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 			}
 			*br.Txn = *newTxn
 		}
-	}
-	return pErr
+		return pErr
+	}()
 }
 
 // TODO(tschottdorf): this method is somewhat awkward but unless we want to

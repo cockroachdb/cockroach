@@ -380,7 +380,6 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	pReply := reply.(*proto.PutResponse)
 	if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
 			Txn:       pReply.Header().Txn,
 		},
@@ -429,7 +428,6 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// end transaction failed.
 	etArgs := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
 			Txn:       txn,
 		},
@@ -563,73 +561,6 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	}
 }
 
-// TestTxnCoordSenderBatchTransaction tests that it is possible to send
-// one-off transactional calls within a batch under certain circumstances.
-func TestTxnCoordSenderBatchTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): remove this test; behavior is more transparent now")
-	defer leaktest.AfterTest(t)
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	clock := hlc.NewClock(hlc.UnixNano)
-	var called bool
-	var alwaysError = errors.New("success")
-	ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
-		called = true
-		// Returning this error is an easy way of preventing heartbeats
-		// to be started for otherwise "successful" calls.
-		return nil, proto.NewError(alwaysError)
-	}), clock, false, nil, stopper)
-
-	pushArg := &proto.PushTxnRequest{}
-	putArg := &proto.PutRequest{}
-	getArg := &proto.GetRequest{}
-	testCases := []struct {
-		req            proto.Request
-		batch, arg, ok bool
-	}{
-		// Lays intents: can't have this on individual calls at all.
-		{putArg, false, false, true},
-		{putArg, true, false, true},
-		{putArg, true, true, false},
-		{putArg, false, true, false},
-
-		// No intents: all ok, except when batch and arg have different txns.
-		{pushArg, false, false, true},
-		{pushArg, true, false, true},
-		{pushArg, true, true, false},
-		{pushArg, false, true, true},
-		{getArg, false, false, true},
-		{getArg, true, false, true},
-		{getArg, true, true, false},
-		{getArg, false, true, true},
-	}
-
-	txn1 := &proto.Transaction{ID: []byte("txn1")}
-	txn2 := &proto.Transaction{ID: []byte("txn2")}
-
-	for i, tc := range testCases {
-		called = false
-		tc.req.Reset()
-		ba := &proto.BatchRequest{}
-
-		if tc.arg {
-			tc.req.Header().Txn = txn1
-		}
-		ba.Add(tc.req)
-		if tc.batch {
-			ba.Txn = txn2
-		}
-		called = false
-		_, err := batchutil.SendWrapped(ts, ba)
-		if !tc.ok && err == alwaysError {
-			t.Fatalf("%d: expected error%s", i, err)
-		} else if tc.ok != called {
-			t.Fatalf("%d: wanted call: %t, got call: %t", i, tc.ok, called)
-		}
-	}
-}
-
 // TestTxnDrainingNode tests that pending transactions tasks' intents are resolved
 // if they commit while draining, and that a NodeUnavailableError is received
 // when attempting to run a new transaction on a draining node.
@@ -658,7 +589,6 @@ func TestTxnDrainingNode(t *testing.T) {
 	endTxn := func() {
 		if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:       txn.Key,
 				Timestamp: txn.Timestamp,
 				Txn:       txn,
 			},
@@ -714,7 +644,6 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	s.Sender.cleanupTxn(nil, *txn) // first call
 	if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
 			Txn:       txn,
 		},
@@ -768,7 +697,6 @@ func TestTxnMultipleCoord(t *testing.T) {
 		// Abort for clean shutdown.
 		if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:       txn.Key,
 				Timestamp: txn.Timestamp,
 				Txn:       txn,
 			},
@@ -776,5 +704,36 @@ func TestTxnMultipleCoord(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// TestTxnCoordSenderSingleRoundtripTxn checks that a batch which completely
+// holds the writing portion of a Txn (including EndTransaction) does not
+// launch a heartbeat goroutine at all.
+func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	clock.SetMaxOffset(20)
+
+	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+		return ba.CreateReply().(*proto.BatchResponse), nil
+	}), clock, false, nil, stopper)
+
+	// Stop the stopper manually, prior to trying the transaction. This has the
+	// effect of returning a NodeUnavailableError for any attempts at launching
+	// a heartbeat goroutine.
+	stopper.Stop()
+
+	var ba proto.BatchRequest
+	put := &proto.PutRequest{}
+	put.Key = proto.Key("test")
+	ba.Add(put)
+	ba.Add(&proto.EndTransactionRequest{})
+	ba.Txn = &proto.Transaction{Name: "test"}
+	_, pErr := ts.Send(context.Background(), ba)
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
 }

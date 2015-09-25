@@ -1176,8 +1176,7 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
 		b.InternalAddRequest(&proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{Key: newDesc.StartKey},
-			Commit:        true,
+			Commit: true,
 			InternalCommitTrigger: &proto.InternalCommitTrigger{
 				SplitTrigger: &proto.SplitTrigger{
 					UpdatedDesc: updatedDesc,
@@ -1365,8 +1364,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.R
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
 		b.InternalAddRequest(&proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{Key: updatedLeftDesc.StartKey},
-			Commit:        true,
+			Commit: true,
 			InternalCommitTrigger: &proto.InternalCommitTrigger{
 				MergeTrigger: &proto.MergeTrigger{
 					UpdatedDesc:     updatedLeftDesc,
@@ -1517,8 +1515,7 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
 		b.InternalAddRequest(&proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
-			Commit:        true,
+			Commit: true,
 			InternalCommitTrigger: &proto.InternalCommitTrigger{
 				ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
 					NodeID:          replica.NodeID,
