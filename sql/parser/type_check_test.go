@@ -43,6 +43,12 @@ func TestTypeCheckExpr(t *testing.T) {
 		`COALESCE(1, 2, 3, 4, 5)`,
 		`COALESCE(NULL, 2)`,
 		`COALESCE(2, NULL)`,
+		`true IS NULL`,
+		`true IS NOT NULL`,
+		`true IS TRUE`,
+		`true IS NOT TRUE`,
+		`true IS FALSE`,
+		`true IS NOT FALSE`,
 	}
 	for _, d := range testData {
 		q, err := ParseTraditional("SELECT " + d)

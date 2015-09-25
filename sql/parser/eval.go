@@ -483,9 +483,6 @@ func (ctx EvalContext) EvalExpr(expr Expr) (Datum, error) {
 	case *RangeCond:
 		// NormalizeExpr transforms this into an AndExpr.
 
-	case *IsExpr:
-		return ctx.evalIsExpr(t)
-
 	case *IsOfTypeExpr:
 		return ctx.evalIsOfTypeExpr(t)
 
@@ -636,29 +633,6 @@ func (ctx EvalContext) evalNotExpr(expr *NotExpr) (Datum, error) {
 	return !v, nil
 }
 
-func (ctx EvalContext) evalIsExpr(expr *IsExpr) (Datum, error) {
-	d, err := ctx.EvalExpr(expr.Expr)
-	if err != nil {
-		return DNull, err
-	}
-	switch expr.Operator {
-	case IsNull, IsUnknown:
-		return DBool(d == DNull), nil
-	case IsNotNull, IsNotUnknown:
-		return DBool(d != DNull), nil
-	case IsTrue:
-		return DBool(d == DBool(true)), nil
-	case IsNotTrue:
-		return DBool(d != DBool(true)), nil
-	case IsFalse:
-		return DBool(d == DBool(false)), nil
-	case IsNotFalse:
-		return DBool(d != DBool(false)), nil
-	default:
-		return DNull, util.Errorf("eval: unsupported IS operator: %d", expr.Operator)
-	}
-}
-
 func (ctx EvalContext) evalIsOfTypeExpr(expr *IsOfTypeExpr) (Datum, error) {
 	d, err := ctx.EvalExpr(expr.Expr)
 	if err != nil {
@@ -783,7 +757,6 @@ func (ctx EvalContext) evalComparisonExpr(expr *ComparisonExpr) (Datum, error) {
 	if err != nil {
 		return DNull, err
 	}
-
 	return evalComparisonOp(expr.Operator, left, right)
 }
 
@@ -794,8 +767,14 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 			return !DBool(left == DNull && right == DNull), nil
 		case IsNotDistinctFrom:
 			return DBool(left == DNull && right == DNull), nil
+		case Is:
+			// IS and IS NOT can compare against NULL.
+			return DBool(left == right), nil
+		case IsNot:
+			return DBool(left != right), nil
+		default:
+			return DNull, nil
 		}
-		return DNull, nil
 	}
 
 	not := false
@@ -834,6 +813,17 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 		// IsNotDistinctFrom(left, right) is implemented as EQ(left, right)
 		//
 		// Note the special handling of NULLs and IS NOT DISTINCT FROM above.
+		op = EQ
+	case Is:
+		// Is(left, right) is implemented as EQ(left, right)
+		//
+		// Note the special handling of NULLs and IS above.
+		op = EQ
+	case IsNot:
+		// IsNot(left, right) is implemented as !EQ(left, right)
+		//
+		// Note the special handling of NULLs and IS NOT above.
+		not = true
 		op = EQ
 	}
 

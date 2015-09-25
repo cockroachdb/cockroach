@@ -219,3 +219,31 @@ func TestMakeSpans(t *testing.T) {
 		}
 	}
 }
+
+func TestExactPrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	testData := []struct {
+		expr     string
+		columns  []string
+		expected int
+	}{
+		{`a = 1`, []string{"a"}, 1},
+		{`a != 1`, []string{"a"}, 0},
+		{`a IN (1)`, []string{"a"}, 1},
+		{`a = 1 AND b = 1`, []string{"a", "b"}, 2},
+		{`(a, b) IN ((1, 2))`, []string{"a", "b"}, 2},
+		{`(a, b) IN ((1, 2))`, []string{"a"}, 1},
+		{`(a, b) IN ((1, 2))`, []string{"b"}, 1},
+		{`(a, b) IN ((1, 2)) AND c = true`, []string{"a", "b", "c"}, 3},
+		{`a = 1 AND (b, c) IN ((2, true))`, []string{"a", "b", "c"}, 3},
+	}
+	for _, d := range testData {
+		desc, index := makeTestIndex(t, d.columns)
+		constraints := makeConstraints(t, d.expr, desc, index)
+		prefix := exactPrefix(constraints)
+		if d.expected != prefix {
+			t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
+		}
+	}
+}

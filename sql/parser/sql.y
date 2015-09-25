@@ -2481,36 +2481,36 @@ a_expr:
   }
 | a_expr IS NULL %prec IS
   {
-    $$ = &IsExpr{Operator: IsNull, Expr: $1}
+    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DNull}
   }
 | a_expr IS NOT NULL %prec IS
   {
-    $$ = &IsExpr{Operator: IsNotNull, Expr: $1}
+    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DNull}
   }
 | row OVERLAPS row { unimplemented() }
 | a_expr IS TRUE %prec IS
   {
-    $$ = &IsExpr{Operator: IsTrue, Expr: $1}
+    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DBool(true)}
   }
 | a_expr IS NOT TRUE %prec IS
   {
-    $$ = &IsExpr{Operator: IsNotTrue, Expr: $1}
+    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DBool(true)}
   }
 | a_expr IS FALSE %prec IS
   {
-    $$ = &IsExpr{Operator: IsFalse, Expr: $1}
+    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DBool(false)}
   }
 | a_expr IS NOT FALSE %prec IS
   {
-    $$ = &IsExpr{Operator: IsNotFalse, Expr: $1}
+    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DBool(false)}
   }
 | a_expr IS UNKNOWN %prec IS
   {
-    $$ = &IsExpr{Operator: IsUnknown, Expr: $1}
+    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DNull}
   }
 | a_expr IS NOT UNKNOWN %prec IS
   {
-    $$ = &IsExpr{Operator: IsNotUnknown, Expr: $1}
+    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DNull}
   }
 | a_expr IS DISTINCT FROM a_expr %prec IS
   {

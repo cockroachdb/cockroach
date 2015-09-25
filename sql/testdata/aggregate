@@ -136,3 +136,51 @@ SELECT SUM(c) FROM abc
 
 query error unknown signature for SUM: SUM\(tuple\)
 SELECT SUM((a,c)) FROM abc
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX xy (x, y),
+  INDEX zyx (z, y, x)
+)
+
+statement ok
+INSERT INTO xyz VALUES (1, 2, 3), (4, 5, 6)
+
+query ITT
+EXPLAIN SELECT MIN(x) FROM xyz
+----
+0 group MIN(x)
+1 scan  xyz@xy -
+
+query ITT
+EXPLAIN SELECT MAX(x) FROM xyz
+----
+0 group    MAX(x)
+1 revscan  xyz@xy -
+
+query ITT
+EXPLAIN SELECT MIN(y) FROM xyz WHERE x = 1
+----
+0 group MIN(y)
+1 scan  xyz@xy /1-/2
+
+query ITT
+EXPLAIN SELECT MAX(y) FROM xyz WHERE x = 1
+----
+0 group   MAX(y)
+1 revscan xyz@xy /1-/2
+
+query ITT
+EXPLAIN SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3)
+----
+0 group MIN(x)
+1 scan  xyz@zyx /3/2-/3/3
+
+query ITT
+EXPLAIN SELECT MAX(x) FROM xyz WHERE (y, z) = (2, 3)
+----
+0 group   MAX(x)
+1 revscan xyz@zyx /3/2-/3/3

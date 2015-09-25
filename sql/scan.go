@@ -386,24 +386,25 @@ func (n *scanNode) initOrdering() {
 }
 
 // computeOrdering computes the ordering information for the specified set of
-// columns.
+// columns. The returned slice will be the same length as the input slice. If a
+// column is not part of the output 0 will be returned in the corresponding
+// field of the output. Consider the query:
+//
+//   SELECT v FROM t WHERE k = 1
+//
+// If there is an index on (k, v) and we're asking for the ordering for those
+// columns, computeOrdering will return (0, 1). This indicates that column k is
+// not part of the output column set and column v is in ascending order.
 func (n *scanNode) computeOrdering(columnIDs []ColumnID) []int {
 	// Loop over the column IDs and determine if they are used for any of the
 	// render targets.
-	var ordering []int
-	for _, colID := range columnIDs {
-		found := false
+	ordering := make([]int, len(columnIDs))
+	for j, colID := range columnIDs {
 		for i, r := range n.render {
 			if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
-				found = true
-				ordering = append(ordering, i+1)
+				ordering[j] = i + 1
 				break
 			}
-		}
-		if !found {
-			// Exit if the column ID in the index is not one of the output
-			// expressions.
-			break
 		}
 	}
 	return ordering

@@ -67,12 +67,6 @@ func TypeCheckExpr(expr Expr) (Datum, error) {
 	case *RangeCond:
 		// NormalizeExpr transforms this into an AndExpr.
 
-	case *IsExpr:
-		if _, err := TypeCheckExpr(t.Expr); err != nil {
-			return nil, err
-		}
-		return DummyBool, nil
-
 	case *IsOfTypeExpr:
 		if _, err := TypeCheckExpr(t.Expr); err != nil {
 			return nil, err
@@ -188,7 +182,15 @@ func typeCheckComparisonExpr(expr *ComparisonExpr) (Datum, error) {
 
 func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, error) {
 	if dummyLeft == DNull || dummyRight == DNull {
-		return DNull, nil
+		switch op {
+		case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
+			// TODO(pmattis): For IS {UNKNOWN,TRUE,FALSE} we should be requiring that
+			// dummyLeft == DummyBool. We currently can't distinguish NULL from
+			// UNKNOWN. Is it important to do so?
+			return DummyBool, nil
+		default:
+			return DNull, nil
+		}
 	}
 
 	switch op {
@@ -212,6 +214,8 @@ func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum,
 	case NotSimilarTo:
 		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
 		op = SimilarTo
+	case Is, IsNot:
+		op = EQ
 	}
 
 	lType := reflect.TypeOf(dummyLeft)
