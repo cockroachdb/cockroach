@@ -47,9 +47,9 @@ func TestKeyAddress(t *testing.T) {
 	testCases := []struct {
 		key, expAddress proto.Key
 	}{
-		{MakeNameMetadataKey(0, "foo"), proto.Key("\xff\n\x02\n\x01\tfoo\x00\x01\n\x03")},
-		{MakeNameMetadataKey(0, "BAR"), proto.Key("\xff\n\x02\n\x01\tbar\x00\x01\n\x03")},
-		{MakeDescMetadataKey(123), proto.Key("\xff\n\x03\n\x01\n{\n\x02")},
+		{MakeNameMetadataKey(0, "foo"), proto.Key("\xff\v\x02\v\x01\nfoo\x00\x01\v\x03")},
+		{MakeNameMetadataKey(0, "BAR"), proto.Key("\xff\v\x02\v\x01\nbar\x00\x01\v\x03")},
+		{MakeDescMetadataKey(123), proto.Key("\xff\v\x03\v\x01\v{\v\x02")},
 	}
 	for i, test := range testCases {
 		result := keys.KeyAddress(test.key)

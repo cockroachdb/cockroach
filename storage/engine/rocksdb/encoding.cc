@@ -29,7 +29,7 @@ bool DecodeUvarint(rocksdb::Slice* buf, T* value) {
   if (buf->empty()) {
     return false;
   }
-  int len = (*buf)[0] - 9;
+  int len = (*buf)[0] - 10;
   if (len < 0) {
     return false;
   }
