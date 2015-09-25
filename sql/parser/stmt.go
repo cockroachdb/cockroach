@@ -34,42 +34,125 @@ import "fmt"
 // consolidate a set of types, define the function as typeName().
 // This will help avoid name collisions.
 
+// StatementType is the enumerated type for Statement return styles on
+// the wire.
+type StatementType int
+
+const (
+	// Ack indicates that the statement does not have a meaningful
+	// return. Examples include SET, BEGIN, COMMIT.
+	Ack StatementType = iota
+	// DDL indicates that the statement mutates the database schema.
+	DDL
+	// RowsAffected indicates that the statement returns the count of
+	// affected rows.
+	RowsAffected
+	// Rows indicates that the statement returns the affected rows after
+	// the statement was applied.
+	Rows
+)
+
 // Statement represents a statement.
 type Statement interface {
 	fmt.Stringer
-	statement()
+	StatementType() StatementType
 }
 
-func (*AlterTable) statement()          {}
-func (*BeginTransaction) statement()    {}
-func (*CommitTransaction) statement()   {}
-func (*CreateDatabase) statement()      {}
-func (*CreateIndex) statement()         {}
-func (*CreateTable) statement()         {}
-func (*Delete) statement()              {}
-func (*DropDatabase) statement()        {}
-func (*DropIndex) statement()           {}
-func (*DropTable) statement()           {}
-func (*Explain) statement()             {}
-func (*Grant) statement()               {}
-func (*Insert) statement()              {}
-func (*ParenSelect) statement()         {}
-func (*RenameColumn) statement()        {}
-func (*RenameDatabase) statement()      {}
-func (*RenameIndex) statement()         {}
-func (*RenameTable) statement()         {}
-func (*Revoke) statement()              {}
-func (*RollbackTransaction) statement() {}
-func (*Select) statement()              {}
-func (*Set) statement()                 {}
-func (*SetTransaction) statement()      {}
-func (*Show) statement()                {}
-func (*ShowColumns) statement()         {}
-func (*ShowDatabases) statement()       {}
-func (*ShowGrants) statement()          {}
-func (*ShowIndex) statement()           {}
-func (*ShowTables) statement()          {}
-func (*Truncate) statement()            {}
-func (*Union) statement()               {}
-func (*Update) statement()              {}
-func (Values) statement()               {}
+// StatementType implements the Statement interface.
+func (*AlterTable) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*BeginTransaction) StatementType() StatementType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*CommitTransaction) StatementType() StatementType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*CreateDatabase) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CreateIndex) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CreateTable) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*Delete) StatementType() StatementType { return RowsAffected }
+
+// StatementType implements the Statement interface.
+func (*DropDatabase) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*DropIndex) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*DropTable) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*Explain) StatementType() StatementType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*Grant) StatementType() StatementType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*Insert) StatementType() StatementType { return RowsAffected }
+
+// StatementType implements the Statement interface.
+func (*ParenSelect) StatementType() StatementType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*RenameColumn) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*RenameDatabase) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*RenameIndex) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*RenameTable) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*Revoke) StatementType() StatementType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*RollbackTransaction) StatementType() StatementType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*Select) StatementType() StatementType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*Set) StatementType() StatementType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*SetTransaction) StatementType() StatementType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*Show) StatementType() StatementType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowColumns) StatementType() StatementType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowDatabases) StatementType() StatementType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowGrants) StatementType() StatementType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowIndex) StatementType() StatementType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowTables) StatementType() StatementType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*Truncate) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*Update) StatementType() StatementType { return RowsAffected }
+
+// StatementType implements the Statement interface.
+func (*Union) StatementType() StatementType { return Rows }
+
+// StatementType implements the Statement interface.
+func (Values) StatementType() StatementType { return Rows }

@@ -190,20 +190,38 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 			return err
 		}
 
-		resultRows := &driver.Response_Result_Rows{
-			Columns: plan.Columns(),
-		}
+		switch stmt.StatementType() {
+		case parser.Ack:
+			// Send back an empty response.
+			result.Union = &driver.Response_Result_Rows_{
+				Rows: &driver.Response_Result_Rows{},
+			}
+		case parser.DDL:
+			result.Union = &driver.Response_Result_DDL_{DDL: &driver.Response_Result_DDL{}}
+		case parser.RowsAffected:
+			resultRowsAffected := driver.Response_Result_RowsAffected{}
+			result.Union = &resultRowsAffected
+			for plan.Next() {
+				resultRowsAffected.RowsAffected++
+			}
 
-		result.Union = &driver.Response_Result_Rows_{
-			Rows: resultRows,
-		}
-		for plan.Next() {
-			values := plan.Values()
-			row := driver.Response_Result_Rows_Row{Values: make([]driver.Datum, 0, len(values))}
-			for _, val := range values {
-				if val == parser.DNull {
-					row.Values = append(row.Values, driver.Datum{})
-				} else {
+		case parser.Rows:
+			resultRows := &driver.Response_Result_Rows{
+				Columns: plan.Columns(),
+			}
+
+			result.Union = &driver.Response_Result_Rows_{
+				Rows: resultRows,
+			}
+			for plan.Next() {
+				values := plan.Values()
+				row := driver.Response_Result_Rows_Row{Values: make([]driver.Datum, 0, len(values))}
+				for _, val := range values {
+					if val == parser.DNull {
+						row.Values = append(row.Values, driver.Datum{})
+						continue
+					}
+
 					switch vt := val.(type) {
 					case parser.DBool:
 						row.Values = append(row.Values, driver.Datum{
@@ -247,8 +265,8 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 						return fmt.Errorf("unsupported result type: %s", val.Type())
 					}
 				}
+				resultRows.Rows = append(resultRows.Rows, row)
 			}
-			resultRows.Rows = append(resultRows.Rows, row)
 		}
 
 		return plan.Err()

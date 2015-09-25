@@ -57,6 +57,5 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 		return nil, err
 	}
 
-	// TODO(tamird/pmattis): return the number of affected rows
 	return &valuesNode{}, nil
 }
