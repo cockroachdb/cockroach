@@ -90,7 +90,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	if err := gogoproto.Unmarshal(args.Session, &planMaker.session); err != nil {
 		return args.CreateReply(), http.StatusBadRequest, err
 	}
-	// Open a pending transaction if needed.
+	// Resume a pending transaction if present.
 	if planMaker.session.Txn != nil {
 		txn := client.NewTxn(e.db)
 		txn.Proto = planMaker.session.Txn.Txn
@@ -155,14 +155,12 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 		planMaker.setTxn(client.NewTxn(e.db), time.Now())
 		planMaker.txn.SetDebugName("sql", 0)
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
-		if planMaker.txn != nil {
-			if planMaker.txn.Proto.Status == proto.ABORTED {
-				// Reset to allow starting a new transaction.
-				planMaker.resetTxn()
-				return result, nil
-			}
-		} else {
+		if planMaker.txn == nil {
 			return result, errNoTransactionInProgress
+		} else if planMaker.txn.Proto.Status == proto.ABORTED {
+			// Reset to allow starting a new transaction.
+			planMaker.resetTxn()
+			return result, nil
 		}
 	case *parser.SetTransaction:
 		if planMaker.txn == nil {
