@@ -398,20 +398,13 @@ func (n *scanNode) initOrdering() {
 func (n *scanNode) computeOrdering(columnIDs []ColumnID) []int {
 	// Loop over the column IDs and determine if they are used for any of the
 	// render targets.
-	ordering := make([]int, 0, len(columnIDs))
-	for _, colID := range columnIDs {
-		found := false
+	ordering := make([]int, len(columnIDs))
+	for j, colID := range columnIDs {
 		for i, r := range n.render {
 			if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
-				found = true
-				ordering = append(ordering, i+1)
+				ordering[j] = i + 1
 				break
 			}
-		}
-		if !found {
-			// If the column ID is not part of the output columns, output a value of
-			// 0.
-			ordering = append(ordering, 0)
 		}
 	}
 	return ordering
