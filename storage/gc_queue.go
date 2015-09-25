@@ -300,23 +300,21 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 	}
 
 	// Attempt to push the transaction which created the intent.
-	ba := &proto.BatchRequest{}
-	ba.Timestamp = now
-	ba.UserPriority = gogoproto.Int32(proto.MaxPriority)
+	// TODO(tschottdorf): this Push was previously carried out with maximal
+	// UserPriority, presumably to increase the chances of it being successful
+	// should the transaction still be active.
 	pushArgs := &proto.PushTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Timestamp:    now,
-			Key:          txn.Key,
-			UserPriority: gogoproto.Int32(proto.MaxPriority),
+			Timestamp: now,
+			Key:       txn.Key,
 		},
 		Now:       now,
 		PusherTxn: nil,
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}
-	ba.Add(pushArgs)
 	b := &client.Batch{}
-	b.InternalAddRequest(ba)
+	b.InternalAddRequest(pushArgs)
 	br, err := repl.rm.DB().RunWithResponse(b)
 	if err != nil {
 		log.Warningf("push of txn %s failed: %s", txn, err)
