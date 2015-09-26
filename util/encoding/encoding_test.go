@@ -555,7 +555,7 @@ func TestEncodeDecodeNull(t *testing.T) {
 	const hello = "hello"
 
 	buf := EncodeNull([]byte(hello))
-	expected := []byte(hello + "\x00\x00")
+	expected := []byte(hello + "\x00")
 	if !bytes.Equal(expected, buf) {
 		t.Fatalf("expected %q, but found %q", expected, buf)
 	}
@@ -566,7 +566,7 @@ func TestEncodeDecodeNull(t *testing.T) {
 		t.Fatalf("expected %q, but found %q", hello, remaining)
 	}
 
-	if remaining, isNull := DecodeIfNull([]byte("\x00\x00" + hello)); !isNull {
+	if remaining, isNull := DecodeIfNull([]byte("\x00" + hello)); !isNull {
 		t.Fatalf("expected isNull=true, but found isNull=%v", isNull)
 	} else if hello != string(remaining) {
 		t.Fatalf("expected %q, but found %q", hello, remaining)

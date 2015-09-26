@@ -462,9 +462,9 @@ func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string) {
 	return b, string(r)
 }
 
-var (
-	encodedNull    = []byte{0x00, 0x00}
-	encodedNotNull = []byte{0x00, 0x01}
+const (
+	encodedNull    byte = 0x00
+	encodedNotNull byte = 0x01
 )
 
 // EncodeNull encodes a NULL value. The encodes bytes are appended to the
@@ -472,14 +472,14 @@ var (
 // NULL is guaranteed to not be a prefix for the EncodeVarint, EncodeFloat,
 // EncodeBytes and EncodeString encodings.
 func EncodeNull(b []byte) []byte {
-	return append(b, encodedNull...)
+	return append(b, encodedNull)
 }
 
 // EncodeNotNull encodes a value that is larger than the NULL marker encoded by
 // EncodeNull but less than any encoded value returned by EncodeVarint,
 // EncodeFloat, EncodeBytes or EncodeString.
 func EncodeNotNull(b []byte) []byte {
-	return append(b, encodedNotNull...)
+	return append(b, encodedNotNull)
 }
 
 // DecodeIfNull decodes a NULL value from the input buffer. If the input buffer
@@ -490,8 +490,10 @@ func EncodeNotNull(b []byte) []byte {
 // EncodeVarint, EncodeFloat, EncodeBytes and EncodeString encodings, it is
 // safe to call DecodeIfNull on their encoded values.
 func DecodeIfNull(b []byte) ([]byte, bool) {
-	r := bytes.TrimPrefix(b, encodedNull)
-	return r, len(r) < len(b)
+	if len(b) >= 1 && b[0] == encodedNull {
+		return b[1:], true
+	}
+	return b, false
 }
 
 // DecodeIfNotNull decodes a not-NULL value from the input buffer. If the input
@@ -502,8 +504,10 @@ func DecodeIfNull(b []byte) ([]byte, bool) {
 // empty string encoding, so do not use this routine where it is necessary to
 // distinguish not-NULL from the empty string.
 func DecodeIfNotNull(b []byte) ([]byte, bool) {
-	r := bytes.TrimPrefix(b, encodedNotNull)
-	return r, len(r) < len(b)
+	if len(b) >= 1 && b[0] == encodedNotNull {
+		return b[1:], true
+	}
+	return b, false
 }
 
 // EncodeTime encodes a time value, appends it to the supplied buffer,
