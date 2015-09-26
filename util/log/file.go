@@ -104,7 +104,7 @@ func logName(severity Severity, t time.Time) (name, link string) {
 		severity.Name(),
 		tFormatted,
 		pid)
-	return name, program + "." + severity.Name()
+	return name, removePeriods(program) + "." + severity.Name()
 }
 
 // A FileDetails holds all of the particulars that can be parsed by the name of
@@ -238,38 +238,30 @@ func ListLogFiles() ([]FileInfo, error) {
 	return results, nil
 }
 
-// GetLogReader returns a reader for the specified filename. Any
-// external requests (say from the admin UI via HTTP) must specify
-// allowAbsolute as false to prevent leakage of non-log
-// files. Absolute filenames are allowed for the case of the cockroach "log"
-// command, which provides human readable output from an arbitrary file,
-// and is intended to be run locally in a terminal.
-func GetLogReader(filename string, allowAbsolute bool) (io.ReadCloser, error) {
-	if filepath.IsAbs(filename) {
-		if !allowAbsolute {
-			return nil, fmt.Errorf("absolute pathnames are forbidden: %s", filename)
-		}
-		if verifyFile(filename) == nil {
-			return os.Open(filename)
+// GetLogReader returns a reader for the specified filename. In
+// restricted mode, the filename must be the base name of a file in
+// this process's log directory (this is safe for cases when the
+// filename comes from external sources, such as the admin UI via
+// HTTP). In unrestricted mode any path is allowed, with the added
+// feature that bare filenames will be searched in both the current
+// directory and this process's log directory.
+func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
+	if !restricted {
+		if resolved, err := filepath.EvalSymlinks(filename); err == nil {
+			if verifyFile(resolved) == nil {
+				return os.Open(resolved)
+			}
 		}
 	}
-	// Verify there are no path separators in the a non-absolute pathname.
+	// Verify there are no path separators in a restricted-mode pathname.
 	if filepath.Base(filename) != filename {
 		return nil, fmt.Errorf("pathnames must be basenames only: %s", filename)
 	}
-	if !logFileRE.MatchString(filename) {
-		return nil, fmt.Errorf("filename is not a cockroach log file: %s", filename)
-	}
-	var reader io.ReadCloser
-	var err error
 	filename = filepath.Join(*logDir, filename)
-	if verifyFile(filename) == nil {
-		reader, err = os.Open(filename)
-		if err == nil {
-			return reader, err
-		}
+	if err := verifyFile(filename); err != nil {
+		return nil, err
 	}
-	return nil, err
+	return os.Open(filename)
 }
 
 // sortableFileInfoSlice is required so we can sort FileInfos.
@@ -343,7 +335,7 @@ func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64
 // processed. If the number of entries returned exceeds 'maxEntries' then
 // processing of new entries is stopped immediately.
 func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp) ([]LogEntry, bool, error) {
-	reader, err := GetLogReader(file.Name, false)
+	reader, err := GetLogReader(file.Name, true /* restricted */)
 	defer reader.Close()
 	if reader == nil || err != nil {
 		return nil, false, err
