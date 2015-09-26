@@ -44,7 +44,7 @@ unless --color=off is specified.
 // log file named in arguments.
 func runLog(cmd *cobra.Command, args []string) {
 	for _, arg := range args {
-		reader, err := log.GetLogReader(arg, true /* allowAbsolute */)
+		reader, err := log.GetLogReader(arg, false /* !restricted */)
 		if err != nil {
 			log.Error(err)
 			break

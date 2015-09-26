@@ -316,7 +316,7 @@ func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request
 func (s *statusServer) handleLogFileLocal(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	log.Flush()
 	file := ps.ByName("file")
-	reader, err := log.GetLogReader(file, false /* !allowAbsolute */)
+	reader, err := log.GetLogReader(file, true /* restricted */)
 	if reader == nil || err != nil {
 		log.Errorf("log file %s could not be opened: %s", file, err)
 		http.NotFound(w, r)

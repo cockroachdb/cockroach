@@ -310,7 +310,6 @@ func TestVmoduleGlob(t *testing.T) {
 
 func TestListLogFiles(t *testing.T) {
 	setFlags()
-	*logDir = os.TempDir()
 
 	Info("x")    // Be sure we have a file.
 	Warning("x") // Be sure we have a file.
@@ -347,7 +346,6 @@ func TestListLogFiles(t *testing.T) {
 
 func TestGetLogReader(t *testing.T) {
 	setFlags()
-	*logDir = os.TempDir()
 	Warning("x")
 	warn, ok := logging.file[WarningLog].(*syncBuffer)
 	if !ok {
@@ -355,41 +353,76 @@ func TestGetLogReader(t *testing.T) {
 	}
 	warnName := filepath.Base(warn.file.Name())
 
+	curDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	relPath, err := filepath.Rel(curDir, warn.file.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	otherFile, err := os.Create(filepath.Join(*logDir, "other.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherFile.Close()
+
 	testCases := []struct {
-		filename string
-		allowAbs bool
-		expErr   bool
+		filename           string
+		expErrRestricted   string
+		expErrUnrestricted string
 	}{
 		// File is not specified (trying to open a directory instead).
-		{*logDir, false, true},
-		{*logDir, true, true},
+		{*logDir, "pathnames must be basenames", "not a regular file"},
 		// Absolute filename is specified.
-		{warn.file.Name(), false, true},
-		{warn.file.Name(), true, false},
-		// File not matching log RE.
-		{"cockroach.WARNING", false, true},
-		{"cockroach.WARNING", true, true},
-		{filepath.Join(*logDir, "cockroach.WARNING"), false, true},
-		{filepath.Join(*logDir, "cockroach.WARNING"), true, true},
-		// Relative filename is specified.
-		{warnName, true, false},
-		{warnName, false, false},
+		{warn.file.Name(), "pathnames must be basenames", ""},
+		// Symlink to a log file.
+		{filepath.Join(*logDir, "logtest.WARNING"), "pathnames must be basenames", ""},
+		// Symlink relative to logDir.
+		{"logtest.WARNING", "malformed log filename", ""},
+		// Non-log file.
+		{"other.txt", "malformed log filename", "malformed log filename"},
+		// Non-existent file matching RE.
+		{"cockroach.roach0.root.log.ERROR.2015-09-25T19_24_19Z.1", "no such file", "no such file"},
+		// Base filename is specified.
+		{warnName, "", ""},
+		// Relative path with directory components.
+		{relPath, "pathnames must be basenames", ""},
 	}
 
 	for i, test := range testCases {
-		reader, err := GetLogReader(test.filename, test.allowAbs)
-		if (err != nil) != test.expErr {
-			t.Errorf("%d: expected error %t; got %t: %s", i, test.expErr, err != nil, err)
-		}
-		if reader != nil {
-			reader.Close()
+		for _, restricted := range []bool{true, false} {
+			var expErr string
+			if restricted {
+				expErr = test.expErrRestricted
+			} else {
+				expErr = test.expErrUnrestricted
+			}
+			reader, err := GetLogReader(test.filename, restricted)
+			if expErr == "" {
+				if err != nil {
+					t.Errorf("%d (%s, restricted=%t): expected ok, got %s",
+						i, test.filename, restricted, err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("%d (%s, restricted=%t): expected error %s; got nil",
+						i, test.filename, restricted, expErr)
+				} else if matched, matchErr := regexp.MatchString(expErr, err.Error()); matchErr != nil || !matched {
+					t.Errorf("%d (%s, restricted=%t): expected error %s; got %v",
+						i, test.filename, restricted, expErr, err)
+				}
+			}
+			if reader != nil {
+				reader.Close()
+			}
 		}
 	}
 }
 
 func TestRollover(t *testing.T) {
 	setFlags()
-	*logDir = os.TempDir()
 	var err error
 	defer func(previous func(error)) { logExitFunc = previous }(logExitFunc)
 	logExitFunc = func(e error) {
