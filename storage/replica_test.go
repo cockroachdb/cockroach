@@ -210,8 +210,14 @@ func (tc *testContext) initConfigs(realRange bool) error {
 
 func newTransaction(name string, baseKey proto.Key, userPriority int32,
 	isolation proto.IsolationType, clock *hlc.Clock) *proto.Transaction {
+	var offset int64
+	var now proto.Timestamp
+	if clock != nil {
+		offset = clock.MaxOffset().Nanoseconds()
+		now = clock.Now()
+	}
 	return proto.NewTransaction(name, keys.KeyAddress(baseKey), userPriority,
-		isolation, clock.Now(), clock.MaxOffset().Nanoseconds())
+		isolation, now, offset)
 }
 
 // CreateReplicaSets creates new proto.ReplicaDescriptor protos based on an array of
@@ -947,12 +953,12 @@ func endTxnArgs(txn *proto.Transaction, commit bool, rangeID proto.RangeID, stor
 func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, rangeID proto.RangeID, storeID proto.StoreID) proto.PushTxnRequest {
 	return proto.PushTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       pushee.Key,
-			Timestamp: pusher.Timestamp,
-			RangeID:   rangeID,
-			Replica:   proto.ReplicaDescriptor{StoreID: storeID},
+			Key:     pushee.Key,
+			RangeID: rangeID,
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 		Now:       pusher.Timestamp,
+		PushTo:    pusher.Timestamp,
 		PusherTxn: pusher,
 		PusheeTxn: *pushee,
 		PushType:  pushType,
@@ -2070,56 +2076,52 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	ts := proto.Timestamp{WallTime: 1}
 	ns := DefaultHeartbeatInterval.Nanoseconds()
 	testCases := []struct {
-		heartbeat   *proto.Timestamp // nil indicates no heartbeat
-		currentTime int64            // nanoseconds
+		heartbeat   proto.Timestamp // zero value indicates no heartbeat
+		currentTime int64           // nanoseconds
 		pushType    proto.PushTxnType
 		expSuccess  bool
 	}{
-		{nil, 1, proto.PUSH_TIMESTAMP, false}, // using 0 as time is awkward
-		{nil, 1, proto.ABORT_TXN, false},
-		{nil, 1, proto.CLEANUP_TXN, false},
-		{nil, ns, proto.PUSH_TIMESTAMP, false},
-		{nil, ns, proto.ABORT_TXN, false},
-		{nil, ns, proto.CLEANUP_TXN, false},
-		{nil, ns*2 - 1, proto.PUSH_TIMESTAMP, false},
-		{nil, ns*2 - 1, proto.ABORT_TXN, false},
-		{nil, ns*2 - 1, proto.CLEANUP_TXN, false},
-		{nil, ns * 2, proto.PUSH_TIMESTAMP, false},
-		{nil, ns * 2, proto.ABORT_TXN, false},
-		{nil, ns * 2, proto.CLEANUP_TXN, false},
-		{&ts, ns*2 + 1, proto.PUSH_TIMESTAMP, false},
-		{&ts, ns*2 + 1, proto.ABORT_TXN, false},
-		{&ts, ns*2 + 1, proto.CLEANUP_TXN, false},
-		{&ts, ns*2 + 2, proto.PUSH_TIMESTAMP, true},
-		{&ts, ns*2 + 2, proto.ABORT_TXN, true},
-		{&ts, ns*2 + 2, proto.CLEANUP_TXN, true},
+		{proto.ZeroTimestamp, 1, proto.PUSH_TIMESTAMP, false}, // using 0 as time is awkward
+		{proto.ZeroTimestamp, 1, proto.ABORT_TXN, false},
+		{proto.ZeroTimestamp, 1, proto.CLEANUP_TXN, false},
+		{proto.ZeroTimestamp, ns, proto.PUSH_TIMESTAMP, false},
+		{proto.ZeroTimestamp, ns, proto.ABORT_TXN, false},
+		{proto.ZeroTimestamp, ns, proto.CLEANUP_TXN, false},
+		{proto.ZeroTimestamp, ns*2 - 1, proto.PUSH_TIMESTAMP, false},
+		{proto.ZeroTimestamp, ns*2 - 1, proto.ABORT_TXN, false},
+		{proto.ZeroTimestamp, ns*2 - 1, proto.CLEANUP_TXN, false},
+		{proto.ZeroTimestamp, ns * 2, proto.PUSH_TIMESTAMP, false},
+		{proto.ZeroTimestamp, ns * 2, proto.ABORT_TXN, false},
+		{proto.ZeroTimestamp, ns * 2, proto.CLEANUP_TXN, false},
+		{ts, ns*2 + 1, proto.PUSH_TIMESTAMP, false},
+		{ts, ns*2 + 1, proto.ABORT_TXN, false},
+		{ts, ns*2 + 1, proto.CLEANUP_TXN, false},
+		{ts, ns*2 + 2, proto.PUSH_TIMESTAMP, true},
+		{ts, ns*2 + 2, proto.ABORT_TXN, true},
+		{ts, ns*2 + 2, proto.CLEANUP_TXN, true},
 	}
 
 	for i, test := range testCases {
+		tc.manualClock.Set(0)
 		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, 1, proto.SERIALIZABLE, tc.clock)
-		pusher := newTransaction("pusher", key, 1, proto.SERIALIZABLE, tc.clock)
+		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, 1, proto.SERIALIZABLE, nil /* clock */)
+		pusher := newTransaction("pusher", key, 1, proto.SERIALIZABLE, nil /* clock */)
 		pushee.Priority = 2
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
 		// First, establish "start" of existing pushee's txn via heartbeat.
-		if test.heartbeat != nil {
+		if !test.heartbeat.Equal(proto.ZeroTimestamp) {
 			hBA := heartbeatArgs(pushee, 1, tc.store.StoreID())
-			hBA.Timestamp = *test.heartbeat
+			hBA.Timestamp = test.heartbeat
 
 			if _, err := tc.rng.AddCmd(tc.rng.context(), &hBA); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		// Now, attempt to push the transaction with clock set to "currentTime".
-		tc.manualClock.Set(test.currentTime)
+		// Now, attempt to push the transaction with Now set to our current time.
 		args := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
-		// Avoid logical ticks here, they make the borderline cases hard to
-		// test.
-		args.Timestamp = proto.Timestamp{WallTime: test.currentTime}
-		args.Now = args.Timestamp
-		args.Timestamp.Logical = 0
+		args.Now = proto.Timestamp{WallTime: test.currentTime}
 
 		_, err := tc.rng.AddCmd(tc.rng.context(), &args)
 

@@ -861,7 +861,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
-	if args.PushType == proto.PUSH_TIMESTAMP && args.Timestamp.Less(reply.PusheeTxn.Timestamp) {
+	if args.PushType == proto.PUSH_TIMESTAMP && args.PushTo.Less(reply.PusheeTxn.Timestamp) {
 		// Trivial noop.
 		return reply, nil
 	}
@@ -880,7 +880,6 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	}
 	// Compute heartbeat expiration (all replicas must see the same result).
 	expiry := args.Now
-	expiry.Forward(args.Timestamp) // if Timestamp is ahead, use that
 	expiry.WallTime -= 2 * DefaultHeartbeatInterval.Nanoseconds()
 
 	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
@@ -923,7 +922,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 		reply.PusheeTxn.Status = proto.ABORTED
 	} else if args.PushType == proto.PUSH_TIMESTAMP {
 		// Otherwise, update timestamp to be one greater than the request's timestamp.
-		reply.PusheeTxn.Timestamp = args.Timestamp
+		reply.PusheeTxn.Timestamp = args.PushTo
 		reply.PusheeTxn.Timestamp.Logical++
 	}
 

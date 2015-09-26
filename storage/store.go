@@ -1324,12 +1324,10 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	now := s.Clock().Now()
 	header := args.Header()
-	ba := &proto.BatchRequest{
-		RequestHeader: proto.RequestHeader{
-			Timestamp:    header.Timestamp,
-			UserPriority: header.UserPriority,
-		},
-	}
+
+	// TODO(tschottdorf): need deduplication here (many pushes for the same
+	// intent are awkward but even worse, could ratchet up the priority).
+	var pushReqs []proto.Request
 	for _, intent := range pushIntents {
 		pusherTxn := header.Txn
 		// If there's no pusher, we communicate a priority by sending an empty
@@ -1339,12 +1337,13 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 				Priority: proto.MakePriority(args.Header().GetUserPriority()),
 			}
 		}
-		pushArgs := &proto.PushTxnRequest{
+		pushReqs = append(pushReqs, &proto.PushTxnRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: intent.Txn.Key,
 			},
 			PusherTxn: pusherTxn,
 			PusheeTxn: intent.Txn,
+			PushTo:    header.Timestamp,
 			// The timestamp is used by PushTxn for figuring out whether the
 			// transaction is abandoned. If we used the argument's timestamp
 			// here, we would run into busy loops because that timestamp
@@ -1352,12 +1351,11 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			// that a transaction has timed out. See #877.
 			Now:      now,
 			PushType: pushType,
-		}
-		ba.Add(pushArgs)
+		})
 	}
 	b := &client.Batch{}
-	if len(ba.Requests) > 0 {
-		b.InternalAddRequest(ba)
+	if len(pushReqs) > 0 {
+		b.InternalAddRequest(pushReqs...)
 	}
 
 	br, pushErr := s.db.RunWithResponse(b)
