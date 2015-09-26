@@ -112,7 +112,7 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Replica,
 	// FIXME: why is this implementation not the same as the one above?
 	if float64(rng.stats.GetSize())/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof("splitting %s size=%d max=%d", rng, rng.stats.GetSize(), zone.RangeMaxBytes)
-		if _, err = rng.AddCmd(rng.context(), &proto.AdminSplitRequest{
+		if _, err = sendArg(rng, rng.context(), &proto.AdminSplitRequest{
 			RequestHeader: proto.RequestHeader{Key: desc.StartKey},
 		}); err != nil {
 			return err

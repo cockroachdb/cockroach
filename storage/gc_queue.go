@@ -270,7 +270,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
 	// Send GC request through range.
 	gcMeta.OldestIntentNanos = gogoproto.Int64(oldestIntentNanos)
 	gcArgs.GCMeta = *gcMeta
-	if _, err := repl.AddCmd(repl.context(), gcArgs); err != nil {
+	if _, err := sendArg(repl, repl.context(), gcArgs); err != nil {
 		return err
 	}
 

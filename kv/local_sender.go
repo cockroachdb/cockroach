@@ -150,14 +150,9 @@ func (ls *LocalSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.
 		trace.Event("read has no clock uncertainty")
 		ba.Txn.MaxTimestamp = ba.Txn.Timestamp
 	}
-	// TODO(tschottdorf): &ba -> ba
-	tmpR, pErr := store.ExecuteCmd(ctx, &ba)
-	// TODO(tschottdorf): remove this dance once BatchResponse is returned.
-	if tmpR != nil {
-		br = tmpR.(*proto.BatchResponse)
-		if br.Error != nil {
-			panic(proto.ErrorUnexpectedlySet(store, br))
-		}
+	br, pErr := store.Send(ctx, ba)
+	if br != nil && br.Error != nil {
+		panic(proto.ErrorUnexpectedlySet(store, br))
 	}
 	return br, pErr
 }

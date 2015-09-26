@@ -29,8 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -42,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -311,14 +310,14 @@ func TestRangeReadConsistency(t *testing.T) {
 
 	// Try consistent read and verify success.
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &gArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &gArgs); err != nil {
 		t.Errorf("expected success on consistent read: %s", err)
 	}
 
 	// Try a consensus read and verify error.
 	gArgs.ReadConsistency = proto.CONSENSUS
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &gArgs); err == nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &gArgs); err == nil {
 		t.Errorf("expected error on consensus read")
 	}
 
@@ -326,7 +325,7 @@ func TestRangeReadConsistency(t *testing.T) {
 	gArgs.ReadConsistency = proto.INCONSISTENT
 	gArgs.Txn = newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &gArgs); err == nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &gArgs); err == nil {
 		t.Errorf("expected error on inconsistent read within a txn")
 	}
 
@@ -346,14 +345,14 @@ func TestRangeReadConsistency(t *testing.T) {
 	gArgs.ReadConsistency = proto.CONSISTENT
 	gArgs.Txn = nil
 
-	_, err := tc.rng.AddCmd(tc.rng.context(), &gArgs)
+	_, err := sendArg(tc.rng, tc.rng.context(), &gArgs)
 	if _, ok := err.(*proto.NotLeaderError); !ok {
 		t.Errorf("expected not leader error; got %s", err)
 	}
 
 	gArgs.ReadConsistency = proto.INCONSISTENT
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &gArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &gArgs); err != nil {
 		t.Errorf("expected success reading with inconsistent: %s", err)
 	}
 }
@@ -420,7 +419,7 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 	splitTestRange(tc.store, proto.Key("a"), proto.Key("a"), t)
 	gArgs := getArgs(proto.Key("b"), 1, tc.store.StoreID())
 
-	_, err := tc.rng.AddCmd(tc.rng.context(), &gArgs)
+	_, err := sendArg(tc.rng, tc.rng.context(), &gArgs)
 
 	if _, ok := err.(*proto.RangeKeyMismatchError); !ok {
 		t.Errorf("expected range key mismatch error: %s", err)
@@ -540,7 +539,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		_, err := tc.rng.AddCmd(tc.rng.context(), test)
+		_, err := sendArg(tc.rng, tc.rng.context(), test)
 
 		if _, ok := err.(*proto.NotLeaderError); !ok {
 			t.Errorf("%d: expected not leader error: %s", i, err)
@@ -781,17 +780,14 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
 	req1 := putArgs(key, []byte("foo"), rangeID, tc.store.StoreID())
 	req1.Txn = txn
-	req1.Timestamp = txn.Timestamp
 
 	req2 := endTxnArgs(txn, true /* commit */, rangeID, tc.store.StoreID())
-	req2.Timestamp = txn.Timestamp
 	req2.Intents = []proto.Intent{{Key: key}}
 
 	req3 := getArgs(key, rangeID, tc.store.StoreID())
-	req3.Timestamp = txn.Timestamp
 
 	for i, req := range []proto.Request{&req1, &req2, &req3} {
-		if _, err := tc.store.ExecuteCmd(tc.rng.context(), req); err != nil {
+		if _, err := sendArg(tc.rng, tc.rng.context(), req); err != nil {
 			t.Fatal(err)
 		}
 
@@ -822,19 +818,19 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	req1 := putArgs(key, nil, rangeID, tc.store.StoreID())
 	req1.Txn = txn
 	req1.Timestamp = txn.Timestamp
-	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req1); err != nil {
+	if _, err := batchutil.SendWrapped(tc.store, &req1); err != nil {
 		t.Fatal(err)
 	}
 	req2 := endTxnArgs(txn, true /* commit */, rangeID, tc.store.StoreID())
 	req2.Timestamp = txn.Timestamp
 	req2.Intents = []proto.Intent{{Key: key}}
-	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req2); err != nil {
+	if _, err := batchutil.SendWrapped(tc.store, &req2); err != nil {
 		t.Fatal(err)
 	}
 	// Execute a get to resolve the intent.
 	req3 := getArgs(key, rangeID, tc.store.StoreID())
 	req3.Timestamp = txn.Timestamp
-	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req3); err != nil {
+	if _, err := batchutil.SendWrapped(tc.store, &req3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1040,7 +1036,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 
 		test.Header().Timestamp = tc.clock.Now()
 
-		if _, err := tc.rng.AddCmd(tc.rng.context(), test); err != nil {
+		if _, err := sendArg(tc.rng, tc.rng.context(), test); err != nil {
 			t.Fatal(err)
 		}
 		if held, expired := hasLease(tc.rng, test.Header().Timestamp); !held || expired {
@@ -1071,7 +1067,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	gArgs := getArgs([]byte("a"), 1, tc.store.StoreID())
 	gArgs.Timestamp = tc.clock.Now()
 
-	_, err := tc.rng.AddCmd(tc.rng.context(), &gArgs)
+	_, err := sendArg(tc.rng, tc.rng.context(), &gArgs)
 
 	if err != nil {
 		t.Error(err)
@@ -1082,7 +1078,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	pArgs := putArgs([]byte("b"), []byte("1"), 1, tc.store.StoreID())
 	pArgs.Timestamp = tc.clock.Now()
 
-	_, err = tc.rng.AddCmd(tc.rng.context(), &pArgs)
+	_, err = sendArg(tc.rng, tc.rng.context(), &pArgs)
 
 	if err != nil {
 		t.Error(err)
@@ -1151,7 +1147,7 @@ func TestRangeCommandQueue(t *testing.T) {
 			args := readOrWriteArgs(key1, test.cmd1Read, tc.rng.Desc().RangeID, tc.store.StoreID())
 			args.Header().UserPriority = gogoproto.Int32(42)
 
-			_, err := tc.rng.AddCmd(tc.rng.context(), args)
+			_, err := sendArg(tc.rng, tc.rng.context(), args)
 
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
@@ -1166,7 +1162,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		tc.stopper.RunAsyncTask(func() {
 			args := readOrWriteArgs(key1, test.cmd2Read, tc.rng.Desc().RangeID, tc.store.StoreID())
 
-			_, err := tc.rng.AddCmd(tc.rng.context(), args)
+			_, err := sendArg(tc.rng, tc.rng.context(), args)
 
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
@@ -1179,7 +1175,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		tc.stopper.RunAsyncTask(func() {
 			args := readOrWriteArgs(key2, true, tc.rng.Desc().RangeID, tc.store.StoreID())
 
-			_, err := tc.rng.AddCmd(tc.rng.context(), args)
+			_, err := sendArg(tc.rng, tc.rng.context(), args)
 
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
@@ -1246,7 +1242,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 		args := putArgs(key, []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
 		args.CmdID.Random = 1
 
-		_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
 		if err != nil {
 			t.Fatal(err)
@@ -1262,7 +1258,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 		args := getArgs(key, tc.rng.Desc().RangeID, tc.store.StoreID())
 		args.ReadConsistency = proto.INCONSISTENT
 
-		_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
 		if err != nil {
 			t.Fatal(err)
@@ -1301,14 +1297,14 @@ func TestRangeUseTSCache(t *testing.T) {
 	args := getArgs([]byte("a"), 1, tc.store.StoreID())
 	args.Timestamp = tc.clock.Now()
 
-	_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+	_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
 	if err != nil {
 		t.Error(err)
 	}
 	pArgs := putArgs([]byte("a"), []byte("value"), 1, tc.store.StoreID())
 
-	reply, err := tc.rng.AddCmd(tc.rng.context(), &pArgs)
+	reply, err := sendArg(tc.rng, tc.rng.context(), &pArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1332,14 +1328,14 @@ func TestRangeNoTSCacheInconsistent(t *testing.T) {
 	args.Timestamp = tc.clock.Now()
 	args.ReadConsistency = proto.INCONSISTENT
 
-	_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+	_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
 	if err != nil {
 		t.Error(err)
 	}
 	pArgs := putArgs([]byte("a"), []byte("value"), 1, tc.store.StoreID())
 
-	reply, err := tc.rng.AddCmd(tc.rng.context(), &pArgs)
+	reply, err := sendArg(tc.rng, tc.rng.context(), &pArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1367,7 +1363,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 		pArgs.Timestamp = pArgs.Txn.Timestamp
 
-		reply, err := tc.rng.AddCmd(tc.rng.context(), &pArgs)
+		reply, err := sendArg(tc.rng, tc.rng.context(), &pArgs)
 		if err != nil {
 			t.Fatalf("test %d: %s", i, err)
 		}
@@ -1377,13 +1373,13 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		args := readOrWriteArgs(key, read, tc.rng.Desc().RangeID, tc.store.StoreID())
 		args.Header().Timestamp = tc.clock.Now() // later timestamp
 
-		if _, err := tc.rng.AddCmd(tc.rng.context(), args); err == nil {
+		if _, err := sendArg(tc.rng, tc.rng.context(), args); err == nil {
 			t.Errorf("test %d: expected failure", i)
 		}
 
 		// Write the intent again -- should not have its timestamp upgraded!
 
-		if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+		if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 			t.Fatalf("test %d: %s", i, err)
 		}
 		if !pReply.Timestamp.Equal(pArgs.Timestamp) {
@@ -1410,7 +1406,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	gArgs.Txn = txn
 	gArgs.Timestamp = txn.Timestamp
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &gArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &gArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1419,7 +1415,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	pArgs.Txn = txn
 	pArgs.Timestamp = pArgs.Txn.Timestamp
 
-	reply, err := tc.rng.AddCmd(tc.rng.context(), &pArgs)
+	reply, err := sendArg(tc.rng, tc.rng.context(), &pArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1434,7 +1430,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 		IntentTxn:     *pArgs.Txn,
 	}
 	rArgs.IntentTxn.Status = proto.COMMITTED
-	if _, err := tc.rng.AddCmd(tc.rng.context(), rArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1443,7 +1439,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	expTS := pArgs.Timestamp
 	expTS.Logical++
 
-	if reply, err = tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+	if reply, err = sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
 	pReply = reply.(*proto.PutResponse)
@@ -1474,7 +1470,7 @@ func TestRangeIdempotence(t *testing.T) {
 		} else {
 			args.CmdID = proto.ClientCmdID{WallTime: 1, Random: int64(idx + 100)}
 		}
-		resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 		reply := resp.(*proto.IncrementResponse)
 		if err != nil {
 			t.Fatal(err)
@@ -1520,23 +1516,20 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 	args := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 	args.CmdID = proto.ClientCmdID{WallTime: 1, Random: 1}
 
-	_, err := tc.rng.AddCmd(tc.rng.context(), &args)
-
-	if err != nil {
-		t.Fatal(err)
+	if _, pErr := sendArg(tc.rng, tc.rng.context(), &args); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Overwrite repsonse cache entry with garbage for the last op.
 	key := keys.ResponseCacheKey(tc.rng.Desc().RangeID, &args.CmdID)
-	err = engine.MVCCPut(tc.engine, nil, key, proto.ZeroTimestamp, proto.Value{Bytes: []byte("\xff")}, nil)
+	err := engine.MVCCPut(tc.engine, nil, key, proto.ZeroTimestamp, proto.Value{Bytes: []byte("\xff")}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Now try increment again and verify error.
-	_, err = tc.rng.AddCmd(tc.rng.context(), &args)
-	if err == nil {
-		t.Fatal(err)
+	if _, pErr := sendArg(tc.rng, tc.rng.context(), &args); pErr == nil {
+		t.Fatal(pErr)
 	}
 }
 
@@ -1559,7 +1552,7 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 
 	args := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 	args.CmdID = cmdID
-	_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+	_, err := sendArg(tc.rng, tc.rng.context(), &args)
 	if err == nil {
 		t.Fatal("expected to see cached error but got nil")
 	} else if !testutils.IsError(err, pastError.Error()) {
@@ -1579,7 +1572,7 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 	pArgs := putArgs(key, []byte("only here to make this a rw transaction"), tc.rng.Desc().RangeID, tc.store.StoreID())
 	pArgs.Txn = txn
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1594,7 +1587,7 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 		},
 	}
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &args); !testutils.IsError(err, "range does not match splits") {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &args); !testutils.IsError(err, "range does not match splits") {
 		t.Errorf("expected range does not match splits error; got %s", err)
 	}
 }
@@ -1617,7 +1610,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		args := endTxnArgs(txn, commit, 1, tc.store.StoreID())
 		args.Timestamp = txn.Timestamp
 
-		resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 		if err != nil {
 			t.Error(err)
 		}
@@ -1634,7 +1627,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		// committed txn back, but without last heartbeat timestamp set.
 		hBA := heartbeatArgs(txn, 1, tc.store.StoreID())
 
-		resp, err = tc.rng.AddCmd(tc.rng.context(), &hBA)
+		resp, err = sendArg(tc.rng, tc.rng.context(), &hBA)
 		if err != nil {
 			t.Error(err)
 		}
@@ -1661,7 +1654,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		hBA := heartbeatArgs(txn, 1, tc.store.StoreID())
 		hBA.Timestamp = txn.Timestamp
 
-		resp, err := tc.rng.AddCmd(tc.rng.context(), &hBA)
+		resp, err := sendArg(tc.rng, tc.rng.context(), &hBA)
 		if err != nil {
 			t.Error(err)
 		}
@@ -1673,7 +1666,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		args := endTxnArgs(txn, commit, 1, tc.store.StoreID())
 		args.Timestamp = txn.Timestamp
 
-		resp, err = tc.rng.AddCmd(tc.rng.context(), &args)
+		resp, err = sendArg(tc.rng, tc.rng.context(), &args)
 		if err != nil {
 			t.Error(err)
 		}
@@ -1720,7 +1713,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 		tc.manualClock.Set(1)
 		args.Timestamp = tc.clock.Now()
 
-		resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 
 		if test.expErr {
 			if err == nil {
@@ -1760,7 +1753,7 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	hBA := heartbeatArgs(txn, 1, tc.store.StoreID())
 	hBA.Timestamp = txn.Timestamp
 
-	_, err := tc.rng.AddCmd(tc.rng.context(), &hBA)
+	_, err := sendArg(tc.rng, tc.rng.context(), &hBA)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1771,7 +1764,7 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	args.Txn.Epoch = txn.Epoch + 1
 	args.Txn.Priority = txn.Priority + 1
 
-	resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
+	resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1831,7 +1824,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		args := endTxnArgs(txn, true, 1, tc.store.StoreID())
 		args.Timestamp = txn.Timestamp
 
-		if _, err := tc.rng.AddCmd(tc.rng.context(), &args); !testutils.IsError(err, test.expErrRegexp) {
+		if _, err := sendArg(tc.rng, tc.rng.context(), &args); !testutils.IsError(err, test.expErrRegexp) {
 			t.Errorf("expected %s to match %s", err, test.expErrRegexp)
 		}
 	}
@@ -1868,7 +1861,7 @@ func TestEndTransactionGC(t *testing.T) {
 		args := endTxnArgs(txn, true, 1, tc.store.StoreID())
 		args.Timestamp = txn.Timestamp
 		args.Intents = test.intents
-		if _, err := tc.rng.AddCmd(tc.rng.context(), &args); err != nil {
+		if _, err := sendArg(tc.rng, tc.rng.context(), &args); err != nil {
 			t.Fatal(err)
 		}
 		var readTxn proto.Transaction
@@ -1907,13 +1900,13 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 	pArgs := putArgs(key, []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
 	pArgs.Txn = txn
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	pArgs = putArgs(splitKey, []byte("value"), newRng.Desc().RangeID, tc.store.StoreID())
 	pArgs.Txn = txn
-	if _, err := newRng.AddCmd(newRng.context(), &pArgs); err != nil {
+	if _, err := sendArg(newRng, newRng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1921,13 +1914,13 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	args := endTxnArgs(txn, true /* commit */, 1, tc.store.StoreID())
 	args.Timestamp = txn.Timestamp
 	args.Intents = []proto.Intent{{Key: key, EndKey: splitKey.Next()}}
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &args); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Check if the intent in the other range has not yet been resolved.
 	gArgs := getArgs(splitKey, newRng.Desc().RangeID, tc.store.StoreID())
-	_, err := newRng.AddCmd(newRng.context(), &gArgs)
+	_, err := sendArg(newRng, newRng.context(), &gArgs)
 	if _, ok := err.(*proto.WriteIntentError); !ok {
 		t.Errorf("expected write intent error, but got %s", err)
 	}
@@ -1946,7 +1939,7 @@ func TestPushTxnBadKey(t *testing.T) {
 	args := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
 	args.Key = pusher.Key
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &args); !testutils.IsError(err, ".*should match pushee.*") {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &args); !testutils.IsError(err, ".*should match pushee.*") {
 		t.Errorf("unexpected error %s", err)
 	}
 }
@@ -1976,14 +1969,14 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 		etArgs := endTxnArgs(pushee, status == proto.COMMITTED, 1, tc.store.StoreID())
 		etArgs.Timestamp = pushee.Timestamp
 
-		if _, err := tc.rng.AddCmd(tc.rng.context(), &etArgs); err != nil {
+		if _, err := sendArg(tc.rng, tc.rng.context(), &etArgs); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now try to push what's already committed or aborted.
 		args := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
 
-		resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2037,7 +2030,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		hBA := heartbeatArgs(pushee, 1, tc.store.StoreID())
 		hBA.Timestamp = pushee.Timestamp
 
-		if _, err := tc.rng.AddCmd(tc.rng.context(), &hBA); err != nil {
+		if _, err := sendArg(tc.rng, tc.rng.context(), &hBA); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2046,7 +2039,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		pushee.Timestamp = test.ts
 		args := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
 
-		resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2114,7 +2107,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			hBA := heartbeatArgs(pushee, 1, tc.store.StoreID())
 			hBA.Timestamp = test.heartbeat
 
-			if _, err := tc.rng.AddCmd(tc.rng.context(), &hBA); err != nil {
+			if _, err := sendArg(tc.rng, tc.rng.context(), &hBA); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -2123,7 +2116,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		args := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
 		args.Now = proto.Timestamp{WallTime: test.currentTime}
 
-		_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
@@ -2188,7 +2181,7 @@ func TestPushTxnPriorities(t *testing.T) {
 		// Now, attempt to push the transaction with intent epoch set appropriately.
 		args := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
 
-		_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
@@ -2221,7 +2214,7 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 	// Now, push the transaction with args.Abort=false.
 	args := pushTxnArgs(pusher, pushee, proto.PUSH_TIMESTAMP, 1, tc.store.StoreID())
 
-	resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
+	resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 	if err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}
@@ -2256,7 +2249,7 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	// Now, push the transaction with args.Abort=false.
 	args := pushTxnArgs(pusher, pushee, proto.PUSH_TIMESTAMP, 1, tc.store.StoreID())
 
-	resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
+	resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 	if err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}
@@ -2281,7 +2274,7 @@ func TestRangeResolveIntentRange(t *testing.T) {
 	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
 		pArgs := putArgs(key, []byte("value1"), 1, tc.store.StoreID())
 		pArgs.Txn = txn
-		if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+		if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -2297,13 +2290,13 @@ func TestRangeResolveIntentRange(t *testing.T) {
 		IntentTxn: *txn,
 	}
 	rArgs.IntentTxn.Status = proto.COMMITTED
-	if _, err := tc.rng.AddCmd(tc.rng.context(), rArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Do a consistent scan to verify intents have been cleared.
 	sArgs := scanArgs(proto.Key("a"), proto.Key("c"), 1, tc.store.StoreID())
-	reply, err := tc.store.ExecuteCmd(context.Background(), &sArgs)
+	reply, err := batchutil.SendWrapped(tc.store, &sArgs)
 	if err != nil {
 		t.Fatalf("unexpected error on scan: %s", err)
 	}
@@ -2340,7 +2333,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	pArgs := putArgs([]byte("a"), []byte("value1"), 1, tc.store.StoreID())
 	pArgs.Timestamp = tc.clock.Now()
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 	expMS := engine.MVCCStats{LiveBytes: 42, KeyBytes: 16, ValBytes: 26, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 63, SysCount: 1}
@@ -2351,7 +2344,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	pArgs.Timestamp = tc.clock.Now()
 	pArgs.Txn = &proto.Transaction{ID: uuid.NewUUID4(), Timestamp: pArgs.Timestamp}
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 136, KeyBytes: 32, ValBytes: 104, IntentBytes: 26, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 63, SysCount: 1}
@@ -2368,7 +2361,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	rArgs.IntentTxn.Status = proto.COMMITTED
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), rArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 84, KeyBytes: 32, ValBytes: 52, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 63, SysCount: 1}
@@ -2378,7 +2371,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	dArgs := deleteArgs([]byte("a"), 1, tc.store.StoreID())
 	dArgs.Timestamp = tc.clock.Now()
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &dArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &dArgs); err != nil {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 42, KeyBytes: 44, ValBytes: 54, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 63, SysCount: 1}
@@ -2402,14 +2395,14 @@ func TestMerge(t *testing.T) {
 	for _, str := range stringArgs {
 		mergeArgs := internalMergeArgs(key, proto.Value{Bytes: []byte(str)}, 1, tc.store.StoreID())
 
-		if _, err := tc.rng.AddCmd(tc.rng.context(), &mergeArgs); err != nil {
+		if _, err := sendArg(tc.rng, tc.rng.context(), &mergeArgs); err != nil {
 			t.Fatalf("unexpected error from Merge: %s", err.Error())
 		}
 	}
 
 	getArgs := getArgs(key, 1, tc.store.StoreID())
 
-	reply, err := tc.rng.AddCmd(tc.rng.context(), &getArgs)
+	reply, err := sendArg(tc.rng, tc.rng.context(), &getArgs)
 	if err != nil {
 		t.Fatalf("unexpected error from Get: %s", err)
 	}
@@ -2436,7 +2429,7 @@ func TestTruncateLog(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		args := incrementArgs([]byte("a"), int64(i), 1, tc.store.StoreID())
 
-		if _, err := tc.rng.AddCmd(tc.rng.context(), &args); err != nil {
+		if _, err := sendArg(tc.rng, tc.rng.context(), &args); err != nil {
 			t.Fatal(err)
 		}
 		idx, err := tc.rng.LastIndex()
@@ -2449,7 +2442,7 @@ func TestTruncateLog(t *testing.T) {
 	// Discard the first half of the log
 	truncateArgs := truncateLogArgs(indexes[5], 1, tc.store.StoreID())
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &truncateArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &truncateArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2535,7 +2528,7 @@ func TestConditionFailedError(t *testing.T) {
 	value := []byte("quack")
 	pArgs := putArgs(key, value, 1, tc.store.StoreID())
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 	args := proto.ConditionalPutRequest{
@@ -2553,7 +2546,7 @@ func TestConditionFailedError(t *testing.T) {
 		},
 	}
 
-	_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+	_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
 	if cErr, ok := err.(*proto.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
@@ -2604,7 +2597,7 @@ func TestAppliedIndex(t *testing.T) {
 	for i := int64(1); i <= 10; i++ {
 		args := incrementArgs([]byte("a"), i, 1, tc.store.StoreID())
 
-		resp, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2632,7 +2625,7 @@ func TestReplicaCorruption(t *testing.T) {
 	defer tc.Stop()
 
 	args := putArgs(proto.Key("test"), []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
-	_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+	_, err := sendArg(tc.rng, tc.rng.context(), &args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2646,7 +2639,7 @@ func TestReplicaCorruption(t *testing.T) {
 	}
 	// Should mark replica corrupt (and panic as a result) since we messed
 	// with the applied index.
-	_, err = tc.rng.AddCmd(tc.rng.context(), &args)
+	_, err = sendArg(tc.rng, tc.rng.context(), &args)
 
 	if err == nil || !strings.Contains(err.Error(), "replica corruption (processed=true)") {
 		t.Fatalf("unexpected error: %s", err)
@@ -2709,7 +2702,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	var rlReply *proto.RangeLookupResponse
 
-	reply, err := tc.rng.AddCmd(tc.rng.context(), rlArgs)
+	reply, err := sendArg(tc.rng, tc.rng.context(), rlArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2728,7 +2721,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 	pArgs.Timestamp = pArgs.Txn.Timestamp
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2737,7 +2730,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	rlArgs.Key = keys.RangeMetaKey(proto.Key("A"))
 	rlArgs.Timestamp = proto.ZeroTimestamp
 
-	reply, err = tc.rng.AddCmd(tc.rng.context(), rlArgs)
+	reply, err = sendArg(tc.rng, tc.rng.context(), rlArgs)
 	if err != nil {
 		t.Errorf("unexpected lookup error: %s", err)
 	}
@@ -2748,7 +2741,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	// Switch to consistent lookups, which should run into the intent.
 	rlArgs.ReadConsistency = proto.CONSISTENT
-	_, err = tc.rng.AddCmd(tc.rng.context(), rlArgs)
+	_, err = sendArg(tc.rng, tc.rng.context(), rlArgs)
 	if _, ok := err.(*proto.WriteIntentError); !ok {
 		t.Fatalf("expected WriteIntentError, not %s", err)
 	}
@@ -2756,7 +2749,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	// Try 100 lookups with IgnoreIntents. Expect to see each descriptor at least once.
 	// First, try this consistently, which should not be allowed.
 	rlArgs.ConsiderIntents = true
-	_, err = tc.rng.AddCmd(tc.rng.context(), rlArgs)
+	_, err = sendArg(tc.rng, tc.rng.context(), rlArgs)
 	if !testutils.IsError(err, "can not read consistently and skip intents") {
 		t.Fatalf("wanted specific error, not %s", err)
 	}
@@ -2770,7 +2763,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.RangeLookupRequest)
 		clonedRLArgs.Timestamp = proto.ZeroTimestamp
 
-		reply, err = tc.rng.AddCmd(tc.rng.context(), clonedRLArgs)
+		reply, err = sendArg(tc.rng, tc.rng.context(), clonedRLArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2838,7 +2831,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 				tc.rng.Desc().RangeID, tc.store.StoreID())
 			pArgs.Txn = txn
 
-			if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+			if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -2855,7 +2848,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 		IntentTxn: *txn,
 	}
 	rArgs.IntentTxn.Status = proto.COMMITTED
-	if _, err := tc.rng.AddCmd(tc.rng.context(), rArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2876,7 +2869,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.RangeLookupRequest)
 		clonedRLArgs.Timestamp = proto.ZeroTimestamp
 		clonedRLArgs.Key = keys.RangeMetaKey(proto.Key(c.key))
-		reply, err := tc.rng.AddCmd(tc.rng.context(), clonedRLArgs)
+		reply, err := sendArg(tc.rng, tc.rng.context(), clonedRLArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2896,7 +2889,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	pArgs := putArgs(keys.RangeMetaKey(intentRange.EndKey), data, 1, tc.store.StoreID())
 	pArgs.Txn = &proto.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
 	pArgs.Timestamp = pArgs.Txn.Timestamp
-	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2905,7 +2898,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.RangeLookupRequest)
 		clonedRLArgs.Timestamp = proto.ZeroTimestamp
 		clonedRLArgs.Key = keys.RangeMetaKey(proto.Key(c.key))
-		reply, err := tc.rng.AddCmd(tc.rng.context(), clonedRLArgs)
+		reply, err := sendArg(tc.rng, tc.rng.context(), clonedRLArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2944,7 +2937,7 @@ func TestRangeLookup(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		resp, err := tc.store.ExecuteCmd(context.Background(), &proto.RangeLookupRequest{
+		resp, err := batchutil.SendWrapped(tc.store, &proto.RangeLookupRequest{
 			RequestHeader: proto.RequestHeader{
 				RangeID: 1,
 				Key:     c.key,
@@ -2989,7 +2982,7 @@ func benchmarkEvents(b *testing.B, sendEvents, consumeEvents bool) {
 	args := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := tc.rng.AddCmd(tc.rng.context(), &args)
+		_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
 		if err != nil {
 			b.Fatal(err)
@@ -3072,10 +3065,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	// Force the read command request a new lease.
 	clock := tc.clock
 	gArgs.Header().Timestamp = clock.Update(clock.Now().Add(int64(DefaultLeaderLeaseDuration), 0))
-	{
-		_, pErr := tc.store.ExecuteCmd(context.Background(), &gArgs)
-		err = pErr.GoError()
-	}
+	_, err = batchutil.SendWrapped(tc.store, &gArgs)
 	if _, ok := err.(*proto.RangeNotFoundError); !ok {
 		t.Fatalf("expected a RangeNotFoundError, get %s", err)
 	}
@@ -3174,7 +3164,7 @@ func TestBatchErrorWithIndex(t *testing.T) {
 		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
 	})
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), ba); err == nil {
+	if _, err := sendArg(tc.rng, tc.rng.context(), ba); err == nil {
 		t.Fatal("expected an error")
 	} else if iErr, ok := err.(proto.IndexedError); !ok {
 		t.Fatalf("expected indexed error, got %s", err)

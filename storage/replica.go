@@ -563,6 +563,37 @@ func setBatchTimestamps(ba *proto.BatchRequest) {
 	}
 }
 
+// sendArg is an internal convenience function which transparently wraps and
+// unwraps in a BatchRequest.
+// TODO(tschottdorf): should use batchutil.SendWrapped. Need to figure out
+// the MultiRaft error first.
+func sendArg(r *Replica, ctx context.Context, args proto.Request) (proto.Response, error) {
+	ba, ok := args.(*proto.BatchRequest)
+	if ok {
+		return r.AddCmd(ctx, ba)
+	}
+	ba = &proto.BatchRequest{
+		RequestHeader: *args.Header(),
+	}
+	ba.Add(args)
+	// Unwrap reply via deferred function.
+	argsCpy := args
+	reply, err := r.AddCmd(ctx, ba)
+	if err == nil {
+		br, ok := reply.(*proto.BatchResponse)
+		if !ok {
+			panic(fmt.Sprintf("expected a BatchResponse, got a %T", reply))
+		}
+		if len(br.Responses) != 1 {
+			panic(fmt.Sprintf("expected a BatchResponse with a single wrapped response, got one with %d", len(br.Responses)))
+		}
+		reply = br.Responses[0].GetInner()
+	} else {
+		reply = argsCpy.CreateReply()
+	}
+	return reply, err
+}
+
 // AddCmd adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
@@ -570,35 +601,10 @@ func setBatchTimestamps(ba *proto.BatchRequest) {
 // command queue.
 // TODO(tschottdorf): once this receives a BatchRequest, make sure
 // we don't unecessarily use *BatchRequest in the request path.
-func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.Response, err error) {
+func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.Response, _ error) {
+	var err error
 	// Wrap non-batch requests in a batch if possible.
-	ba, ok := args.(*proto.BatchRequest)
-	// TODO(tschottdorf): everything should go into a Batch. Keeping some commands
-	// individual creates a lot of trouble on the coordinator side for nothing.
-	// Instead, just enforce that some commands must be alone in their batch.
-	// Then they can just be unwrapped hereabouts (admin commands).
-	if !ok {
-		ba = &proto.BatchRequest{
-			RequestHeader: *args.Header(),
-		}
-		ba.Add(args)
-		// Unwrap reply via deferred function.
-		argsCpy := args
-		defer func() {
-			if err == nil {
-				br, ok := reply.(*proto.BatchResponse)
-				if !ok {
-					panic(fmt.Sprintf("expected a BatchResponse, got a %T", reply))
-				}
-				if len(br.Responses) != 1 {
-					panic(fmt.Sprintf("expected a BatchResponse with a single wrapped response, got one with %d", len(br.Responses)))
-				}
-				reply = br.Responses[0].GetInner()
-			} else {
-				reply = argsCpy.CreateReply()
-			}
-		}()
-	}
+	ba := args.(*proto.BatchRequest)
 	args = nil // TODO(tschottdorf): make sure we don't use this by accident
 
 	// Fiddle with the timestamps to make sure that writes can overlap
@@ -636,7 +642,7 @@ func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.R
 	} else {
 		panic(fmt.Sprintf("don't know how to handle command %T: %+v", args, args))
 	}
-	return
+	return reply, err
 }
 
 func (r *Replica) checkCmdHeader(header *proto.RequestHeader) error {

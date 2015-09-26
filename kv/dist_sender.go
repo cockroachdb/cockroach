@@ -311,7 +311,7 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
 	args proto.Request) (proto.Response, error) {
 	if len(replicas) == 0 {
-		return nil, util.Errorf("%s: replicas set is empty", args.Method())
+		return nil, util.Errorf("replicas set is empty")
 	}
 
 	// Build a slice of replica addresses (if gossiped).

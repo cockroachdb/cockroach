@@ -277,6 +277,7 @@ type Store struct {
 	uninitReplicas    map[proto.RangeID]*Replica // Map of uninitialized replicas by Range ID
 }
 
+var _ client.Sender = &Store{}
 var _ multiraft.Storage = &Store{}
 
 // A StoreContext encompasses the auxiliary objects and configuration
@@ -742,6 +743,7 @@ func (s *Store) GetReplica(rangeID proto.RangeID) (*Replica, error) {
 	if rng, ok := s.replicas[rangeID]; ok {
 		return rng, nil
 	}
+	log.Warningf("AOU")
 	return nil, proto.NewRangeNotFoundError(rangeID)
 }
 
@@ -1145,26 +1147,19 @@ func (s *Store) ReplicaCount() int {
 	return len(s.replicas)
 }
 
-// ExecuteCmd fetches a range based on the header's replica, assembles
+// Send fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Response, *proto.Error) {
+func (s *Store) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	ctx = s.Context(ctx)
 	trace := tracer.FromCtx(ctx)
 	// If the request has a zero timestamp, initialize to this node's clock.
-	header := args.Header()
-	// TODO(tschottdorf): remove this first branch when we only have batches here.
-	if args.Method() != proto.Batch {
-		if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {
+	header := ba.Header()
+	for _, union := range ba.Requests {
+		arg := union.GetInner()
+		header := arg.Header()
+		if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(arg)); err != nil {
 			return nil, proto.NewError(err)
-		}
-	} else {
-		for _, union := range args.(*proto.BatchRequest).Requests {
-			arg := union.GetInner()
-			header := arg.Header()
-			if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(arg)); err != nil {
-				return nil, proto.NewError(err)
-			}
 		}
 	}
 	if !header.Timestamp.Equal(proto.ZeroTimestamp) {
@@ -1185,7 +1180,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		s.ctx.Clock.Update(header.Timestamp)
 	}
 
-	defer trace.Epoch("executing " + args.Method().String())()
+	defer trace.Epoch("executing " + ba.Method().String())()
 	// Backoff and retry loop for handling errors. Backoff times are measured
 	// in the Trace.
 	next := func(r *retry.Retry) bool {
@@ -1207,9 +1202,9 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 
 		var reply proto.Response
 		var index *int32
-		reply, err = rng.AddCmd(ctx, args)
+		reply, err = rng.AddCmd(ctx, &ba)
 		if err == nil {
-			return reply, nil
+			return reply.(*proto.BatchResponse), nil
 		} else if err == multiraft.ErrGroupDeleted {
 			// This error needs to be converted appropriately so that
 			// clients will retry.
@@ -1219,16 +1214,16 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		// Maybe resolve a potential write intent error. We do this here
 		// because this is the code path with the requesting client
 		// waiting. We don't want every replica to attempt to resolve the
-		// intent independently, so we can't do it in Replica.executeCmd.
+		// intent independently, so we can't do it there.
 		if wiErr, ok := err.(*proto.WriteIntentError); ok {
 			var pushType proto.PushTxnType
-			if proto.IsWrite(args) {
+			if ba.IsWrite() {
 				pushType = proto.ABORT_TXN
 			} else {
 				pushType = proto.PUSH_TIMESTAMP
 			}
 
-			err = s.resolveWriteIntentError(ctx, wiErr, rng, args, pushType)
+			err = s.resolveWriteIntentError(ctx, wiErr, rng, &ba, pushType)
 		}
 
 		switch t := err.(type) {
@@ -1257,7 +1252,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 
 			// Otherwise, update timestamp on read/write and backoff / retry.
 			for _, intent := range t.Intents {
-				if proto.IsWrite(args) && header.Timestamp.Less(intent.Txn.Timestamp) {
+				if ba.IsWrite() && header.Timestamp.Less(intent.Txn.Timestamp) {
 					header.Timestamp = intent.Txn.Timestamp.Next()
 				}
 			}
