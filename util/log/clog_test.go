@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	stdLog "log"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -140,7 +140,7 @@ func TestCopyStandardLogToPanic(t *testing.T) {
 func TestStandardLog(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
-	stdLog.Print("test")
+	log.Print("test")
 	if !contains(InfoLog, "I", t) {
 		t.Errorf("Info has wrong character: %q", contents(InfoLog))
 	}
@@ -153,7 +153,7 @@ func TestStandardLog(t *testing.T) {
 func TestJSONLogFormat(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
-	stdLog.Print("test")
+	log.Print("test")
 	json := jsonContents(InfoLog)
 	expPat := `{
   "severity": 0,
