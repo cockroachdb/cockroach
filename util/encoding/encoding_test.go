@@ -634,8 +634,29 @@ func TestEncodeDecodeTime(t *testing.T) {
 	}
 
 	// Check that the encoding hasn't changed.
-	if a, e := lastEncoded, []byte("\x0f\x01 \xbc\x0e\xae\x0e\r\xf2\x8e\x80"); !bytes.Equal(a, e) {
+	if a, e := lastEncoded, []byte("\x32\x0f\x01 \xbc\x0e\xae\x0e\r\xf2\x8e\x80"); !bytes.Equal(a, e) {
 		t.Errorf("encoding has changed:\nexpected %q\nactual %q", e, a)
+	}
+}
+
+func TestPeekType(t *testing.T) {
+	testCases := []struct {
+		enc []byte
+		typ Type
+	}{
+		{EncodeNull(nil), Null},
+		{EncodeNotNull(nil), NotNull},
+		{EncodeVarint(nil, 0), Int},
+		{EncodeUvarint(nil, 0), Int},
+		{EncodeFloat(nil, 0), Float},
+		{EncodeBytes(nil, []byte("")), Bytes},
+		{EncodeTime(nil, time.Now()), Time},
+	}
+	for i, c := range testCases {
+		typ := PeekType(c.enc)
+		if c.typ != typ {
+			t.Fatalf("%d: expected %d, but found %d", i, c.typ, typ)
+		}
 	}
 }
 

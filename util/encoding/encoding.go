@@ -94,6 +94,10 @@ func DecodeUint64Decreasing(b []byte) ([]byte, uint64) {
 	return leftover, ^v
 }
 
+const intMin = 0x02
+const intMid = intMin + 8
+const intMax = intMid + 8
+
 // EncodeVarint encodes the int64 value using a variable length
 // (length-prefixed) representation. The length is encoded as a single
 // byte. If the value to be encoded is negative the length is encoded
@@ -104,24 +108,24 @@ func EncodeVarint(b []byte, v int64) []byte {
 	if v < 0 {
 		switch {
 		case v >= -0xff:
-			return append(b, 9, byte(v))
+			return append(b, intMin+7, byte(v))
 		case v >= -0xffff:
-			return append(b, 8, byte(v>>8), byte(v))
+			return append(b, intMin+6, byte(v>>8), byte(v))
 		case v >= -0xffffff:
-			return append(b, 7, byte(v>>16), byte(v>>8), byte(v))
+			return append(b, intMin+5, byte(v>>16), byte(v>>8), byte(v))
 		case v >= -0xffffffff:
-			return append(b, 6, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+			return append(b, intMin+4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 		case v >= -0xffffffffff:
-			return append(b, 5, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+			return append(b, intMin+3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 				byte(v))
 		case v >= -0xffffffffffff:
-			return append(b, 4, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+			return append(b, intMin+2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 				byte(v>>8), byte(v))
 		case v >= -0xffffffffffffff:
-			return append(b, 3, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+			return append(b, intMin+1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 				byte(v>>16), byte(v>>8), byte(v))
 		default:
-			return append(b, 2, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+			return append(b, intMin, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 				byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 		}
 	}
@@ -142,7 +146,7 @@ func DecodeVarint(b []byte) ([]byte, int64) {
 	if len(b) == 0 {
 		panic("insufficient bytes to decode var uint64 int value")
 	}
-	length := int(b[0]) - 10
+	length := int(b[0]) - intMid
 	if length < 0 {
 		length = -length
 		remB := b[1:]
@@ -181,26 +185,26 @@ func DecodeVarintDecreasing(b []byte) ([]byte, int64) {
 func EncodeUvarint(b []byte, v uint64) []byte {
 	switch {
 	case v == 0:
-		return append(b, 10)
+		return append(b, intMax-8)
 	case v <= 0xff:
-		return append(b, 11, byte(v))
+		return append(b, intMax-7, byte(v))
 	case v <= 0xffff:
-		return append(b, 12, byte(v>>8), byte(v))
+		return append(b, intMax-6, byte(v>>8), byte(v))
 	case v <= 0xffffff:
-		return append(b, 13, byte(v>>16), byte(v>>8), byte(v))
+		return append(b, intMax-5, byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffff:
-		return append(b, 14, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		return append(b, intMax-4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffffff:
-		return append(b, 15, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+		return append(b, intMax-3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 			byte(v))
 	case v <= 0xffffffffffff:
-		return append(b, 16, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+		return append(b, intMax-2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 			byte(v>>8), byte(v))
 	case v <= 0xffffffffffffff:
-		return append(b, 17, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+		return append(b, intMax-1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 			byte(v>>16), byte(v>>8), byte(v))
 	default:
-		return append(b, 18, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+		return append(b, intMax, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
 }
@@ -210,34 +214,34 @@ func EncodeUvarint(b []byte, v uint64) []byte {
 func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
 	switch {
 	case v == 0:
-		return append(b, 10)
+		return append(b, intMin+8)
 	case v <= 0xff:
 		v = ^v
-		return append(b, 9, byte(v))
+		return append(b, intMin+7, byte(v))
 	case v <= 0xffff:
 		v = ^v
-		return append(b, 8, byte(v>>8), byte(v))
+		return append(b, intMin+6, byte(v>>8), byte(v))
 	case v <= 0xffffff:
 		v = ^v
-		return append(b, 7, byte(v>>16), byte(v>>8), byte(v))
+		return append(b, intMin+5, byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffff:
 		v = ^v
-		return append(b, 6, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		return append(b, intMin+4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffffff:
 		v = ^v
-		return append(b, 5, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+		return append(b, intMin+3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 			byte(v))
 	case v <= 0xffffffffffff:
 		v = ^v
-		return append(b, 4, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+		return append(b, intMin+2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 			byte(v>>8), byte(v))
 	case v <= 0xffffffffffffff:
 		v = ^v
-		return append(b, 3, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+		return append(b, intMin+1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 			byte(v>>16), byte(v>>8), byte(v))
 	default:
 		v = ^v
-		return append(b, 2, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+		return append(b, intMin, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
 }
@@ -249,7 +253,7 @@ func DecodeUvarint(b []byte) ([]byte, uint64) {
 	if len(b) == 0 {
 		panic("insufficient bytes to decode var uint64 int value")
 	}
-	length := int(b[0]) - 10
+	length := int(b[0]) - intMid
 	b = b[1:] // skip length byte
 	if length < 0 || length > 8 {
 		panic(fmt.Sprintf("invalid uvarint length of %d", length))
@@ -271,7 +275,7 @@ func DecodeUvarintDecreasing(b []byte) ([]byte, uint64) {
 	if len(b) == 0 {
 		panic("insufficient bytes to decode var uint64 int value")
 	}
-	length := 10 - int(b[0])
+	length := intMid - int(b[0])
 	b = b[1:] // skip length byte
 	if length < 0 || length > 8 {
 		panic(fmt.Sprintf("invalid uvarint length of %d", length))
@@ -490,7 +494,7 @@ func EncodeNotNull(b []byte) []byte {
 // EncodeVarint, EncodeFloat, EncodeBytes and EncodeString encodings, it is
 // safe to call DecodeIfNull on their encoded values.
 func DecodeIfNull(b []byte) ([]byte, bool) {
-	if len(b) >= 1 && b[0] == encodedNull {
+	if PeekType(b) == Null {
 		return b[1:], true
 	}
 	return b, false
@@ -504,11 +508,15 @@ func DecodeIfNull(b []byte) ([]byte, bool) {
 // empty string encoding, so do not use this routine where it is necessary to
 // distinguish not-NULL from the empty string.
 func DecodeIfNotNull(b []byte) ([]byte, bool) {
-	if len(b) >= 1 && b[0] == encodedNotNull {
+	if PeekType(b) == NotNull {
 		return b[1:], true
 	}
 	return b, false
 }
+
+const (
+	timeMarker byte = 0x32
+)
 
 // EncodeTime encodes a time value, appends it to the supplied buffer,
 // and returns the final buffer. The encoding is guaranteed to be ordered
@@ -518,17 +526,57 @@ func DecodeIfNotNull(b []byte) ([]byte, bool) {
 func EncodeTime(b []byte, t time.Time) []byte {
 	// Read the unix absolute time. This is the absolute time and is
 	// not time zone offset dependent.
-	sec := t.Unix()
-	nsec := t.Nanosecond()
-	b = EncodeVarint(b, sec)
-	b = EncodeVarint(b, int64(nsec))
+	b = append(b, timeMarker)
+	b = EncodeVarint(b, t.Unix())
+	b = EncodeVarint(b, int64(t.Nanosecond()))
 	return b
 }
 
 // DecodeTime converts an encoded time into a UTC time.Time type and
 // returns the rest of the buffer.
 func DecodeTime(b []byte) ([]byte, time.Time) {
+	if PeekType(b) != Time {
+		panic("did not find marker")
+	}
+	b = b[1:]
 	b, sec := DecodeVarint(b)
 	b, nsec := DecodeVarint(b)
 	return b, time.Unix(sec, nsec).UTC()
+}
+
+// Type represents the type of a value encoded by
+// Encode{Null,NotNull,Varint,Uvarint,Float,Bytes}.
+type Type int
+
+// Type values.
+const (
+	Unknown Type = iota
+	Null
+	NotNull
+	Int
+	Float
+	Bytes
+	Time
+)
+
+// PeekType peeks at the type of the value encoded at the start of b.
+func PeekType(b []byte) Type {
+	if len(b) >= 1 {
+		m := b[0]
+		switch {
+		case m == encodedNull:
+			return Null
+		case m == encodedNotNull:
+			return NotNull
+		case m == bytesMarker:
+			return Bytes
+		case m == timeMarker:
+			return Time
+		case m >= intMin && m <= intMax:
+			return Int
+		case m >= floatNaN && m <= floatInfinity:
+			return Float
+		}
+	}
+	return Unknown
 }
