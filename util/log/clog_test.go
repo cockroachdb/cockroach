@@ -369,44 +369,54 @@ func TestGetLogReader(t *testing.T) {
 	otherFile.Close()
 
 	testCases := []struct {
-		filename       string
-		okRestricted   bool
-		okUnrestricted bool
+		filename           string
+		expErrRestricted   string
+		expErrUnrestricted string
 	}{
 		// File is not specified (trying to open a directory instead).
-		{*logDir, false, false},
+		{*logDir, "pathnames must be basenames", "not a regular file"},
 		// Absolute filename is specified.
-		{warn.file.Name(), false, true},
+		{warn.file.Name(), "pathnames must be basenames", ""},
 		// Symlink to a log file.
-		{filepath.Join(*logDir, "logtest.WARNING"), false, true},
-		// Symlinks are only resolved when absolute or relative to $PWD.
-		{"logtest.WARNING", false, false},
+		{filepath.Join(*logDir, "logtest.WARNING"), "pathnames must be basenames", ""},
+		// Symlink relative to logDir.
+		{"logtest.WARNING", "malformed log filename", ""},
 		// Non-log file.
-		{"other.txt", false, false},
+		{"other.txt", "malformed log filename", "malformed log filename"},
 		// Non-existent file matching RE.
-		{"cockroach.roach0.root.log.ERROR.2015-09-25T19_24_19Z.1", false, false},
+		{"cockroach.roach0.root.log.ERROR.2015-09-25T19_24_19Z.1", "no such file", "no such file"},
 		// Base filename is specified.
-		{warnName, true, true},
+		{warnName, "", ""},
 		// Relative path with directory components.
-		{relPath, false, true},
+		{relPath, "pathnames must be basenames", ""},
 	}
 
 	for i, test := range testCases {
-		reader, err := GetLogReader(test.filename, true)
-		if (err == nil) != test.okRestricted {
-			t.Errorf("%d (%s, restricted): expected ok %t; got %t: %v",
-				i, test.filename, test.okRestricted, err == nil, err)
-		}
-		if reader != nil {
-			reader.Close()
-		}
-		reader, err = GetLogReader(test.filename, false)
-		if (err == nil) != test.okUnrestricted {
-			t.Errorf("%d (%s, unrestricted): expected ok %t; got %t: %v",
-				i, test.filename, test.okUnrestricted, err == nil, err)
-		}
-		if reader != nil {
-			reader.Close()
+		for _, restricted := range []bool{true, false} {
+			var expErr string
+			if restricted {
+				expErr = test.expErrRestricted
+			} else {
+				expErr = test.expErrUnrestricted
+			}
+			reader, err := GetLogReader(test.filename, restricted)
+			if expErr == "" {
+				if err != nil {
+					t.Errorf("%d (%s, restricted=%t): expected ok, got %s",
+						i, test.filename, restricted, err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("%d (%s, restricted=%t): expected error %s; got nil",
+						i, test.filename, restricted, expErr)
+				} else if matched, matchErr := regexp.MatchString(expErr, err.Error()); matchErr != nil || !matched {
+					t.Errorf("%d (%s, restricted=%t): expected error %s; got %v",
+						i, test.filename, restricted, expErr, err)
+				}
+			}
+			if reader != nil {
+				reader.Close()
+			}
 		}
 	}
 }

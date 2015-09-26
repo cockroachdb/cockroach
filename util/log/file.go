@@ -243,7 +243,7 @@ func ListLogFiles() ([]FileInfo, error) {
 // this process's log directory (this is safe for cases when the
 // filename comes from external sources, such as the admin UI via
 // HTTP). In unrestricted mode any path is allowed, with the added
-// feature that bare filenames will be searched in both the current
+// feature that relative paths will be searched in both the current
 // directory and this process's log directory.
 func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 	if !restricted {
@@ -254,10 +254,19 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 		}
 	}
 	// Verify there are no path separators in a restricted-mode pathname.
-	if filepath.Base(filename) != filename {
+	if restricted && filepath.Base(filename) != filename {
 		return nil, fmt.Errorf("pathnames must be basenames only: %s", filename)
 	}
-	filename = filepath.Join(*logDir, filename)
+	if !filepath.IsAbs(filename) {
+		filename = filepath.Join(*logDir, filename)
+	}
+	if !restricted {
+		var err error
+		filename, err = filepath.EvalSymlinks(filename)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err := verifyFile(filename); err != nil {
 		return nil, err
 	}

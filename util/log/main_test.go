@@ -29,7 +29,9 @@ func TestMain(m *testing.M) {
 		Fatalf("could not create temporary directory: %s", err)
 	}
 	defer func() {
-		_ = os.RemoveAll(tmpDir)
+		if err := os.RemoveAll(tmpDir); err != nil {
+			Errorf("failed to clean up temp directory: %s", err)
+		}
 	}()
 	*logDir = tmpDir
 	os.Exit(m.Run())
