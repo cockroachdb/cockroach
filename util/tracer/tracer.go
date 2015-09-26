@@ -20,7 +20,6 @@ package tracer
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -29,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // A Traceable object has a Trace identifier attached to it.
@@ -126,7 +126,6 @@ func (t *Trace) Finalize() {
 	}
 	if r := recover(); r != nil {
 		t.Epoch(fmt.Sprintf("panic: %v", r))
-		log.Println(t)
 		panic(r)
 	}
 	if t.depth != 0 {
@@ -135,8 +134,8 @@ func (t *Trace) Finalize() {
 	t.depth = math.MinInt32
 	if t.tracer.feed != nil {
 		t.tracer.feed.Publish(t) // by reference
-	} else {
-		log.Println(t)
+	} else if log.V(2) {
+		log.Info(t)
 	}
 }
 
