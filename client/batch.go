@@ -172,7 +172,6 @@ func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
 			case *proto.MergeRequest:
 			case *proto.TruncateLogRequest:
 			case *proto.LeaderLeaseRequest:
-			case *proto.BatchRequest:
 				// Nothing to do for these methods as they do not generate any
 				// rows.
 

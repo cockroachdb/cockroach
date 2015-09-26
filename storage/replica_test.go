@@ -3145,7 +3145,7 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	ba := &proto.BatchRequest{}
+	ba := proto.BatchRequest{}
 	ba.RangeID = tc.rng.Desc().RangeID
 	ba.Replica.StoreID = tc.store.StoreID()
 	ba.Add(&proto.PutRequest{
@@ -3164,7 +3164,7 @@ func TestBatchErrorWithIndex(t *testing.T) {
 		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
 	})
 
-	if _, err := sendArg(tc.rng, tc.rng.context(), ba); err == nil {
+	if _, err := tc.rng.AddCmd(tc.rng.context(), ba); err == nil {
 		t.Fatal("expected an error")
 	} else if iErr, ok := err.(proto.IndexedError); !ok {
 		t.Fatalf("expected indexed error, got %s", err)

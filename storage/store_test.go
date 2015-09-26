@@ -445,7 +445,7 @@ func TestStoreExecuteNoop(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	ba := &proto.BatchRequest{
+	ba := proto.BatchRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     nil, // intentional
 			RangeID: 1,
@@ -455,11 +455,11 @@ func TestStoreExecuteNoop(t *testing.T) {
 	ba.Add(&proto.GetRequest{RequestHeader: proto.RequestHeader{Key: proto.Key("a")}})
 	ba.Add(&proto.NoopRequest{})
 
-	reply, err := batchutil.SendWrapped(store, ba)
-	if err != nil {
-		t.Error(err)
+	br, pErr := store.Send(context.Background(), ba)
+	if pErr != nil {
+		t.Error(pErr)
 	}
-	reply = reply.(*proto.BatchResponse).Responses[1].GetInner()
+	reply := br.Responses[1].GetInner()
 	if _, ok := reply.(*proto.NoopResponse); !ok {
 		t.Errorf("expected *proto.NoopResponse, got %T", reply)
 	}

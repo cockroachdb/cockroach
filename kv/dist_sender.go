@@ -224,7 +224,7 @@ func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	reply, err := ds.sendRPC(nil /* Trace */, desc.RangeID, replicas, rpc.OrderRandom, &ba)
+	reply, err := ds.sendRPC(nil /* Trace */, desc.RangeID, replicas, rpc.OrderRandom, ba)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +309,8 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
 func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
-	args proto.Request) (proto.Response, error) {
+	args proto.BatchRequest) (proto.Response, error) {
+	// TODO args->ba
 	if len(replicas) == 0 {
 		return nil, util.Errorf("replicas set is empty")
 	}
@@ -329,7 +330,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
 	// still route the request appropriately by key, but won't receive
 	// RangeNotFoundErrors.
-	args.Header().RangeID = rangeID
+	args.RangeID = rangeID
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := rpc.Options{
@@ -342,18 +343,18 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 	// getArgs clones the arguments on demand for all but the first replica.
 	firstArgs := true
 	getArgs := func(addr net.Addr) gogoproto.Message {
-		var a proto.Request
+		var a *proto.BatchRequest
 		// Use the supplied args proto if this is our first address.
 		if firstArgs {
 			firstArgs = false
-			a = args
+			a = &args
 		} else {
 			// Otherwise, copy the args value and set the replica in the header.
-			a = gogoproto.Clone(args).(proto.Request)
+			a = gogoproto.Clone(&args).(*proto.BatchRequest)
 		}
 		if addr != nil {
 			// TODO(tschottdorf): see len(replicas) above.
-			a.Header().Replica = *replicaMap[addr.String()]
+			a.Replica = *replicaMap[addr.String()]
 		}
 		return a
 	}
@@ -365,13 +366,10 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 	// and just write to it at any time.
 	// args.CreateReply() should be cheaper than gogoproto.Clone which use reflect.
 	getReply := func() gogoproto.Message {
-		if _, isBatch := args.(*proto.BatchRequest); isBatch {
-			return &proto.BatchResponse{}
-		}
-		return args.CreateReply()
+		return &proto.BatchResponse{}
 	}
 
-	replies, err := ds.rpcSend(rpcOpts, "Node."+args.Method().String(),
+	replies, err := ds.rpcSend(rpcOpts, "Node."+proto.Batch.String(),
 		addrs, getArgs, getReply, ds.gossip.RPCContext)
 	if err != nil {
 		return nil, err
@@ -435,7 +433,7 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba proto.BatchRequest, de
 
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front.
-	if !(proto.IsReadOnly(&ba) && ba.ReadConsistency == proto.INCONSISTENT) &&
+	if !(ba.IsReadOnly() && ba.ReadConsistency == proto.INCONSISTENT) &&
 		leader.StoreID > 0 {
 		if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 			replicas.MoveToFront(i)
@@ -444,7 +442,7 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba proto.BatchRequest, de
 	}
 
 	// TODO(tschottdorf) &ba -> ba
-	resp, err := ds.sendRPC(trace, desc.RangeID, replicas, order, &ba)
+	resp, err := ds.sendRPC(trace, desc.RangeID, replicas, order, ba)
 	if err != nil {
 		return nil, proto.NewError(err)
 	}

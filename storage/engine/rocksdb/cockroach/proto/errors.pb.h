@@ -1083,15 +1083,27 @@ class WriteIntentError : public ::google::protobuf::Message {
   bool resolved() const;
   void set_resolved(bool value);
 
+  // optional .cockroach.proto.ErrPosition index = 3;
+  bool has_index() const;
+  void clear_index();
+  static const int kIndexFieldNumber = 3;
+  const ::cockroach::proto::ErrPosition& index() const;
+  ::cockroach::proto::ErrPosition* mutable_index();
+  ::cockroach::proto::ErrPosition* release_index();
+  void set_allocated_index(::cockroach::proto::ErrPosition* index);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.WriteIntentError)
  private:
   inline void set_has_resolved();
   inline void clear_has_resolved();
+  inline void set_has_index();
+  inline void clear_has_index();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Intent > intents_;
+  ::cockroach::proto::ErrPosition* index_;
   bool resolved_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
@@ -2878,6 +2890,49 @@ inline void WriteIntentError::set_resolved(bool value) {
   set_has_resolved();
   resolved_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.WriteIntentError.resolved)
+}
+
+// optional .cockroach.proto.ErrPosition index = 3;
+inline bool WriteIntentError::has_index() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void WriteIntentError::set_has_index() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void WriteIntentError::clear_has_index() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void WriteIntentError::clear_index() {
+  if (index_ != NULL) index_->::cockroach::proto::ErrPosition::Clear();
+  clear_has_index();
+}
+inline const ::cockroach::proto::ErrPosition& WriteIntentError::index() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.WriteIntentError.index)
+  return index_ != NULL ? *index_ : *default_instance_->index_;
+}
+inline ::cockroach::proto::ErrPosition* WriteIntentError::mutable_index() {
+  set_has_index();
+  if (index_ == NULL) {
+    index_ = new ::cockroach::proto::ErrPosition;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.WriteIntentError.index)
+  return index_;
+}
+inline ::cockroach::proto::ErrPosition* WriteIntentError::release_index() {
+  clear_has_index();
+  ::cockroach::proto::ErrPosition* temp = index_;
+  index_ = NULL;
+  return temp;
+}
+inline void WriteIntentError::set_allocated_index(::cockroach::proto::ErrPosition* index) {
+  delete index_;
+  index_ = index;
+  if (index) {
+    set_has_index();
+  } else {
+    clear_has_index();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.WriteIntentError.index)
 }
 
 // -------------------------------------------------------------------

@@ -32,6 +32,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -42,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -74,15 +75,15 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sCtx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	localSender := kv.NewLocalSender()
 	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
-		getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message,
+		getArgs func(addr net.Addr) gogoproto.Message, _ func() gogoproto.Message,
 		_ *rpc.Context) ([]gogoproto.Message, error) {
-		args := getArgs(nil /* net.Addr */).(proto.Request)
-		reply, err := batchutil.SendWrapped(localSender, args)
-		if reply == nil {
-			reply = getReply().(proto.Response)
+		ba := getArgs(nil /* net.Addr */).(*proto.BatchRequest)
+		br, pErr := localSender.Send(context.Background(), *ba)
+		if br == nil {
+			br = &proto.BatchResponse{}
 		}
-		reply.Header().SetGoError(err)
-		return []gogoproto.Message{reply}, nil
+		br.Error = pErr
+		return []gogoproto.Message{br}, nil
 	}
 
 	if err := gossipNodeDesc(sCtx.Gossip, nodeDesc.NodeID); err != nil {
@@ -226,20 +227,20 @@ func (m *multiTestContext) Stop() {
 func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 	getArgs func(addr net.Addr) gogoproto.Message,
 	getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-	var reply proto.Response
-	var err error
+	var br *proto.BatchResponse
+	var pErr *proto.Error
 	for _, addr := range addrs {
-		args := getArgs(nil /* net.Addr */).(proto.Request)
+		ba := *getArgs(nil /* net.Addr */).(*proto.BatchRequest)
 		// Node ID is encoded in the address.
 		nodeID, stErr := strconv.Atoi(addr.String())
 		if stErr != nil {
 			m.t.Fatal(stErr)
 		}
-		reply, err = batchutil.SendWrapped(m.senders[nodeID-1], args)
-		if err == nil {
-			return []gogoproto.Message{reply}, nil
+		br, pErr = m.senders[nodeID-1].Send(context.Background(), ba)
+		if pErr == nil {
+			return []gogoproto.Message{br}, nil
 		}
-		if nlErr, ok := err.(*proto.NotLeaderError); ok && nlErr.Leader == nil {
+		if nlErr, ok := pErr.GoError().(*proto.NotLeaderError); ok && nlErr.Leader == nil {
 			// localSender has the range, is *not* the Leader, but the
 			// Leader is not known; this can happen if the leader is removed
 			// from the group. Move the manual clock forward in an attempt to
@@ -247,10 +248,10 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 			m.expireLeaderLeases()
 		}
 	}
-	if err == nil {
+	if pErr == nil {
 		panic("err must not be nil here")
 	}
-	return nil, err
+	return nil, pErr.GoError()
 }
 
 func (m *multiTestContext) makeContext(i int) storage.StoreContext {

@@ -546,9 +546,9 @@ func (r *Replica) SetLastVerificationTimestamp(timestamp proto.Timestamp) error 
 // This has the effect of allowing self-overlapping commands within the batch,
 // which would otherwise result in an endless loop of WriteTooOldErrors.
 // TODO(tschottdorf): discuss self-overlap.
-func setBatchTimestamps(ba *proto.BatchRequest) {
+func setBatchTimestamps(ba proto.BatchRequest) {
 	if ba.Txn != nil || ba.Timestamp.Equal(proto.ZeroTimestamp) ||
-		!proto.IsWrite(ba) {
+		!ba.IsWrite() {
 		return
 	}
 	for i, union := range ba.Requests {
@@ -568,11 +568,7 @@ func setBatchTimestamps(ba *proto.BatchRequest) {
 // TODO(tschottdorf): should use batchutil.SendWrapped. Need to figure out
 // the MultiRaft error first.
 func sendArg(r *Replica, ctx context.Context, args proto.Request) (proto.Response, error) {
-	ba, ok := args.(*proto.BatchRequest)
-	if ok {
-		return r.AddCmd(ctx, ba)
-	}
-	ba = &proto.BatchRequest{
+	ba := proto.BatchRequest{
 		RequestHeader: *args.Header(),
 	}
 	ba.Add(args)
@@ -601,12 +597,7 @@ func sendArg(r *Replica, ctx context.Context, args proto.Request) (proto.Respons
 // command queue.
 // TODO(tschottdorf): once this receives a BatchRequest, make sure
 // we don't unecessarily use *BatchRequest in the request path.
-func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.Response, _ error) {
-	var err error
-	// Wrap non-batch requests in a batch if possible.
-	ba := args.(*proto.BatchRequest)
-	args = nil // TODO(tschottdorf): make sure we don't use this by accident
-
+func (r *Replica) AddCmd(ctx context.Context, ba proto.BatchRequest) (reply proto.Response, err error) {
 	// Fiddle with the timestamps to make sure that writes can overlap
 	// within this batch.
 	// TODO(tschottdorf): provisional feature to get back to passing tests.
@@ -617,7 +608,7 @@ func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.R
 	// won't be traced.
 	trace := tracer.FromCtx(ctx)
 	// Differentiate between admin, read-only and write.
-	if proto.IsAdmin(ba) {
+	if ba.IsAdmin() {
 		defer trace.Epoch("admin path")()
 		args := ba.Requests[0].GetInner()
 		var iReply proto.Response
@@ -628,19 +619,19 @@ func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.R
 			*br.Header() = *iReply.Header()
 			reply = br
 		}
-	} else if proto.IsReadOnly(ba) {
+	} else if ba.IsReadOnly() {
 		defer trace.Epoch("read-only path")()
-		reply, err = r.addReadOnlyCmd(ctx, ba)
-	} else if proto.IsWrite(ba) {
+		reply, err = r.addReadOnlyCmd(ctx, &ba)
+	} else if ba.IsWrite() {
 		defer trace.Epoch("read-write path")()
-		reply, err = r.addWriteCmd(ctx, ba, nil)
-	} else if ba != nil && len(ba.Requests) == 0 {
+		reply, err = r.addWriteCmd(ctx, &ba, nil)
+	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
 		// from the header it won't be clear how to route those requests).
 		panic("empty batch")
 	} else {
-		panic(fmt.Sprintf("don't know how to handle command %T: %+v", args, args))
+		panic(fmt.Sprintf("don't know how to handle command %s", ba))
 	}
 	return reply, err
 }
@@ -707,7 +698,7 @@ func (r *Replica) beginCmds(ba *proto.BatchRequest) ([]interface{}, error) {
 		r.Lock()
 		var wg sync.WaitGroup
 		var spans []keys.Span
-		readOnly := proto.IsReadOnly(ba)
+		readOnly := ba.IsReadOnly()
 		for _, union := range ba.Requests {
 			h := union.GetInner().Header()
 			spans = append(spans, keys.Span{Start: h.Key, End: h.EndKey})
@@ -1061,11 +1052,11 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 
 	// On successful write commands, flush to event feed, and handle other
 	// write-related triggers including splitting and config gossip updates.
-	if rErr == nil && proto.IsWrite(ba) {
+	if rErr == nil && ba.IsWrite() {
 		// Publish update to event feed.
 		// TODO(spencer): we should be sending feed updates for each part
 		// of the batch.
-		r.rm.EventFeed().updateRange(r, ba.Method(), &ms)
+		r.rm.EventFeed().updateRange(r, proto.Batch, &ms)
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
 	}
@@ -1088,7 +1079,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	btch := r.rm.Engine().NewBatch()
 
 	// Check the response cache for this batch to ensure idempotency.
-	if proto.IsWrite(ba) {
+	if ba.IsWrite() {
 		if replyWithErr, readErr := r.respCache.GetResponse(btch, ba.CmdID); readErr != nil {
 			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
 		} else if replyWithErr.Reply != nil {
@@ -1153,7 +1144,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// a write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence, even if leadership changes.
-	if proto.IsWrite(ba) {
+	if ba.IsWrite() {
 		if err == nil {
 			// If command was successful, flush the MVCC stats to the batch.
 			if err := r.stats.MergeMVCCStats(btch, ms, ba.Timestamp.WallTime); err != nil {

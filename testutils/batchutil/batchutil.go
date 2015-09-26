@@ -39,9 +39,6 @@ func SendWrapped(sender client.Sender, args proto.Request) (proto.Response, erro
 
 // MaybeWrap wraps the given argument in a batch, unless it is already one.
 func maybeWrap(args proto.Request) (*proto.BatchRequest, func(*proto.BatchResponse) proto.Response) {
-	if ba, ok := args.(*proto.BatchRequest); ok {
-		return ba, func(br *proto.BatchResponse) proto.Response { return br }
-	}
 	ba := &proto.BatchRequest{}
 	ba.RequestHeader = *(gogoproto.Clone(args.Header()).(*proto.RequestHeader))
 	ba.Add(args)
@@ -54,7 +51,7 @@ func maybeWrap(args proto.Request) (*proto.BatchRequest, func(*proto.BatchRespon
 		}
 		// The ReplyTxn is propagated from one response to the next request,
 		// and we adopt the mechanism that whenever the Txn changes, it needs
-		// to be set in the reply, for example to ratched up the transaction
+		// to be set in the reply, for example to ratchet up the transaction
 		// timestamp on writes when necessary.
 		// This is internally necessary to sequentially execute the batch,
 		// so it makes some sense to take the burden of updating the Txn

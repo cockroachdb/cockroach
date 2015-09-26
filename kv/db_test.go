@@ -177,18 +177,6 @@ func TestKVDBInternalMethods(t *testing.T) {
 		} else if !testutils.IsError(err, "(couldn't find method|contains commit trigger)") {
 			t.Errorf("%d: expected missing method %s; got %s", i, args.Method(), err)
 		}
-
-		// Verify same but within a Batch request.
-		ba := &proto.BatchRequest{}
-		ba.Add(args)
-		b = &client.Batch{}
-		b.InternalAddRequest(ba)
-
-		if err := db.Run(b); err == nil {
-			t.Errorf("%d: unexpected success calling %s", i, args.Method())
-		} else if !testutils.IsError(err, "(contains an internal request|contains commit trigger)") {
-			t.Errorf("%d: expected disallowed method error %s; got %s", i, args.Method(), err)
-		}
 	}
 }
 

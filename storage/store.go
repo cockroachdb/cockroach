@@ -1180,7 +1180,7 @@ func (s *Store) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchRe
 		s.ctx.Clock.Update(header.Timestamp)
 	}
 
-	defer trace.Epoch("executing " + ba.Method().String())()
+	defer trace.Epoch(fmt.Sprintf("executing %d requests", len(ba.Requests)))()
 	// Backoff and retry loop for handling errors. Backoff times are measured
 	// in the Trace.
 	next := func(r *retry.Retry) bool {
@@ -1202,7 +1202,7 @@ func (s *Store) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchRe
 
 		var reply proto.Response
 		var index *int32
-		reply, err = rng.AddCmd(ctx, &ba)
+		reply, err = rng.AddCmd(ctx, ba)
 		if err == nil {
 			return reply.(*proto.BatchResponse), nil
 		} else if err == multiraft.ErrGroupDeleted {
@@ -1223,7 +1223,10 @@ func (s *Store) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchRe
 				pushType = proto.PUSH_TIMESTAMP
 			}
 
-			err = s.resolveWriteIntentError(ctx, wiErr, rng, &ba, pushType)
+			index, ok := wiErr.ErrorIndex()
+			if ok {
+				err = s.resolveWriteIntentError(ctx, wiErr, rng, ba.Requests[index].GetInner(), pushType)
+			}
 		}
 
 		switch t := err.(type) {
@@ -1364,7 +1367,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			// push failure, not the original write intent error. The push
 			// failure will instruct the client to restart the transaction
 			// with a backoff.
-			if header.Txn != nil && proto.IsWrite(args) {
+			if header.Txn != nil && !proto.IsReadOnly(args) {
 				return pushErr
 			}
 			// For read/write conflicts, return the write intent error which
