@@ -32,10 +32,16 @@ import (
 
 // Direct mappings or prefixes of encoded data dependent on the type.
 const (
-	floatNaN              = 0x06
-	floatNegativeInfinity = 0x07
-	floatZero             = 0x15
-	floatInfinity         = 0x23
+	floatNaN              = 0x13
+	floatNegativeInfinity = 0x14
+	floatZero             = 0x22
+	floatInfinity         = 0x30
+	floatNegLarge         = floatZero - 13
+	floatNegMedium        = floatZero - 2
+	floatNegSmall         = floatZero - 1
+	floatPosSmall         = floatZero + 1
+	floatPosMedium        = floatZero + 2
+	floatPosLarge         = floatZero + 13
 	floatTerminator       = 0x00
 )
 
@@ -90,7 +96,7 @@ func EncodeFloat(b []byte, f float64) []byte {
 // DecodeFloat returns the remaining byte slice after decoding and the decoded
 // float64 from buf.
 func DecodeFloat(buf []byte, tmp []byte) ([]byte, float64) {
-	if buf[0] == 0x15 {
+	if buf[0] == floatZero {
 		return buf[1:], 0
 	}
 	tmp = tmp[len(tmp):cap(tmp)]
@@ -102,27 +108,27 @@ func DecodeFloat(buf []byte, tmp []byte) ([]byte, float64) {
 		return buf[1:], math.Inf(1)
 	case buf[0] == floatNegativeInfinity:
 		return buf[1:], math.Inf(-1)
-	case buf[0] == 0x08:
+	case buf[0] == floatNegLarge:
 		// Negative large.
 		e, m := decodeLargeNumber(true, buf[:idx+1], tmp)
 		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp)
-	case buf[0] > 0x08 && buf[0] <= 0x13:
+	case buf[0] > floatNegLarge && buf[0] <= floatNegMedium:
 		// Negative medium.
 		e, m := decodeMediumNumber(true, buf[:idx+1], tmp)
 		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp)
-	case buf[0] == 0x14:
+	case buf[0] == floatNegSmall:
 		// Negative small.
 		e, m := decodeSmallNumber(true, buf[:idx+1], tmp)
 		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp)
-	case buf[0] == 0x22:
+	case buf[0] == floatPosLarge:
 		// Positive large.
 		e, m := decodeLargeNumber(false, buf[:idx+1], tmp)
 		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp)
-	case buf[0] >= 0x17 && buf[0] < 0x22:
+	case buf[0] >= floatPosMedium && buf[0] < floatPosLarge:
 		// Positive medium.
 		e, m := decodeMediumNumber(false, buf[:idx+1], tmp)
 		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp)
-	case buf[0] == 0x16:
+	case buf[0] == floatPosSmall:
 		// Positive small.
 		e, m := decodeSmallNumber(false, buf[:idx+1], tmp)
 		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp)
@@ -279,10 +285,10 @@ func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	copy(buf[n+1:], m)
 	l := 1 + n + len(m)
 	if negative {
-		buf[0] = 0x14
+		buf[0] = floatNegSmall
 		onesComplement(buf[1+n : l]) // ones complement of mantissa
 	} else {
-		buf[0] = 0x16
+		buf[0] = floatPosSmall
 		onesComplement(buf[1 : 1+n]) // ones complement of exponent
 	}
 	buf[l] = floatTerminator
@@ -293,10 +299,10 @@ func encodeMediumNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	copy(buf[1:], m)
 	l := 1 + len(m)
 	if negative {
-		buf[0] = 0x13 - byte(e)
+		buf[0] = floatNegMedium - byte(e)
 		onesComplement(buf[1:l])
 	} else {
-		buf[0] = 0x17 + byte(e)
+		buf[0] = floatPosMedium + byte(e)
 	}
 	buf[l] = floatTerminator
 	return buf[:l+1]
@@ -307,10 +313,10 @@ func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	copy(buf[n+1:], m)
 	l := 1 + n + len(m)
 	if negative {
-		buf[0] = 0x08
+		buf[0] = floatNegLarge
 		onesComplement(buf[1:l])
 	} else {
-		buf[0] = 0x22
+		buf[0] = floatPosLarge
 	}
 	buf[l] = floatTerminator
 	return buf[:l+1]
@@ -359,10 +365,10 @@ func decodeMediumNumber(negative bool, buf []byte, tmp []byte) (int, []byte) {
 
 	var e int
 	if negative {
-		e = 0x13 - int(buf[0])
+		e = floatNegMedium - int(buf[0])
 		onesComplement(m)
 	} else {
-		e = int(buf[0]) - 0x17
+		e = int(buf[0]) - floatPosMedium
 	}
 	return e, m
 }

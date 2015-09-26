@@ -23,13 +23,14 @@ namespace {
 const uint8_t kEscape      = 0x00;
 const uint8_t kEscapedTerm = 0x01;
 const uint8_t kEscapedNul  = 0xff;
+const uint8_t kMarker      = 0x31;
 
 template <typename T>
 bool DecodeUvarint(rocksdb::Slice* buf, T* value) {
   if (buf->empty()) {
     return false;
   }
-  int len = (*buf)[0] - 9;
+  int len = (*buf)[0] - 10;
   if (len < 0) {
     return false;
   }
@@ -57,8 +58,11 @@ bool DecodeUvarint(rocksdb::Slice* buf, T* value) {
 // difficult by "go test" because _test.go files cannot 'import "C"'.
 bool DecodeBytes(rocksdb::Slice* buf, std::string* decoded) {
   const uint8_t *data = reinterpret_cast<const uint8_t*>(buf->data());
-  int copyStart = 0;
-  for (int i = 0, n = int(buf->size()) - 1; i < n; ++i) {
+  if (buf->size() == 0 || data[0] != kMarker) {
+    return false;
+  }
+  int copyStart = 1;
+  for (int i = 1, n = int(buf->size()) - 1; i < n; ++i) {
     uint8_t v = data[i];
     if (v == kEscape) {
       decoded->append(buf->data() + copyStart, i-copyStart);

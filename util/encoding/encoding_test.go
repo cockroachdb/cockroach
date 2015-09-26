@@ -226,14 +226,14 @@ func TestEncodeDecodeUint64Decreasing(t *testing.T) {
 func TestEncodeDecodeVarint(t *testing.T) {
 	testBasicEncodeDecodeInt64(EncodeVarint, DecodeVarint, false, t)
 	testCases := []testCaseInt64{
-		{math.MinInt64, []byte{0x01, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
-		{math.MinInt64 + 1, []byte{0x01, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}},
-		{-1 << 8, []byte{0x07, 0xff, 0x00}},
-		{-1, []byte{0x08, 0xff}},
-		{0, []byte{0x09}},
-		{1, []byte{0x0a, 0x01}},
-		{1 << 8, []byte{0x0b, 0x01, 0x00}},
-		{math.MaxInt64, []byte{0x11, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
+		{math.MinInt64, []byte{0x02, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+		{math.MinInt64 + 1, []byte{0x02, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}},
+		{-1 << 8, []byte{0x08, 0xff, 0x00}},
+		{-1, []byte{0x09, 0xff}},
+		{0, []byte{0x0a}},
+		{1, []byte{0x0b, 0x01}},
+		{1 << 8, []byte{0x0c, 0x01, 0x00}},
+		{math.MaxInt64, []byte{0x12, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
 	}
 	testCustomEncodeInt64(testCases, EncodeVarint, t)
 }
@@ -241,14 +241,14 @@ func TestEncodeDecodeVarint(t *testing.T) {
 func TestEncodeDecodeVarintDecreasing(t *testing.T) {
 	testBasicEncodeDecodeInt64(EncodeVarintDecreasing, DecodeVarintDecreasing, true, t)
 	testCases := []testCaseInt64{
-		{math.MinInt64, []byte{0x11, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
-		{math.MinInt64 + 1, []byte{0x11, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
-		{-1 << 8, []byte{0x0a, 0xff}},
-		{-1, []byte{0x09}},
-		{0, []byte{0x08, 0xff}},
-		{1, []byte{0x08, 0xfe}},
-		{1 << 8, []byte{0x07, 0xfe, 0xff}},
-		{math.MaxInt64, []byte{0x01, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+		{math.MinInt64, []byte{0x12, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
+		{math.MinInt64 + 1, []byte{0x12, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
+		{-1 << 8, []byte{0x0b, 0xff}},
+		{-1, []byte{0x0a}},
+		{0, []byte{0x09, 0xff}},
+		{1, []byte{0x09, 0xfe}},
+		{1 << 8, []byte{0x08, 0xfe, 0xff}},
+		{math.MaxInt64, []byte{0x02, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
 	}
 	testCustomEncodeInt64(testCases, EncodeVarintDecreasing, t)
 }
@@ -256,10 +256,10 @@ func TestEncodeDecodeVarintDecreasing(t *testing.T) {
 func TestEncodeDecodeUvarint(t *testing.T) {
 	testBasicEncodeDecodeUint64(EncodeUvarint, DecodeUvarint, false, t)
 	testCases := []testCaseUint64{
-		{0, []byte{0x09}},
-		{1, []byte{0x0a, 0x01}},
-		{1 << 8, []byte{0x0b, 0x01, 0x00}},
-		{math.MaxUint64, []byte{0x11, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
+		{0, []byte{0x0a}},
+		{1, []byte{0x0b, 0x01}},
+		{1 << 8, []byte{0x0c, 0x01, 0x00}},
+		{math.MaxUint64, []byte{0x12, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
 	}
 	testCustomEncodeUint64(testCases, EncodeUvarint, t)
 }
@@ -274,61 +274,73 @@ func TestDecodeInvalid(t *testing.T) {
 	}{
 		{
 			name:    "DecodeUvarint, length of 9 bytes",
-			buf:     []byte{0x12, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01},
+			buf:     []byte{0x13, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01},
 			pattern: "invalid uvarint length of [0-9]+",
 			decode:  func(b []byte) { DecodeUvarint(b) },
 		},
 		{
 			name:    "DecodeVarint, overflows int64",
-			buf:     []byte{0x11, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+			buf:     []byte{0x12, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 			pattern: "varint [0-9]+ overflows int64",
 			decode:  func(b []byte) { DecodeVarint(b) },
 		},
 		{
-			name:    "Bytes, no terminator",
+			name:    "Bytes, no marker",
 			buf:     []byte{'a'},
+			pattern: "did not find marker",
+			decode:  func(b []byte) { DecodeBytes(b, nil) },
+		},
+		{
+			name:    "Bytes, no terminator",
+			buf:     []byte{0x31, 'a'},
 			pattern: "did not find terminator",
 			decode:  func(b []byte) { DecodeBytes(b, nil) },
 		},
 		{
 			name:    "Bytes, malformed escape",
-			buf:     []byte{'a', 0x00},
+			buf:     []byte{0x31, 'a', 0x00},
 			pattern: "malformed escape",
 			decode:  func(b []byte) { DecodeBytes(b, nil) },
 		},
 		{
 			name:    "Bytes, invalid escape 1",
-			buf:     []byte{'a', 0x00, 0x00},
+			buf:     []byte{0x31, 'a', 0x00, 0x00},
 			pattern: "unknown escape",
 			decode:  func(b []byte) { DecodeBytes(b, nil) },
 		},
 		{
 			name:    "Bytes, invalid escape 2",
-			buf:     []byte{'a', 0x00, 0x02},
+			buf:     []byte{0x31, 'a', 0x00, 0x02},
 			pattern: "unknown escape",
 			decode:  func(b []byte) { DecodeBytes(b, nil) },
 		},
 		{
+			name:    "BytesDecreasing, no marker",
+			buf:     []byte{'a'},
+			pattern: "did not find marker",
+			decode:  func(b []byte) { DecodeBytes(b, nil) },
+		},
+		{
 			name:    "BytesDecreasing, no terminator",
-			buf:     []byte{^byte('a')},
+			buf:     []byte{^byte(0x31), ^byte('a')},
 			pattern: "did not find terminator",
 			decode:  func(b []byte) { DecodeBytesDecreasing(b, nil) },
 		},
 		{
 			name:    "BytesDecreasing, malformed escape",
-			buf:     []byte{^byte('a'), 0xff},
+			buf:     []byte{^byte(0x31), ^byte('a'), 0xff},
 			pattern: "malformed escape",
 			decode:  func(b []byte) { DecodeBytesDecreasing(b, nil) },
 		},
 		{
 			name:    "BytesDecreasing, invalid escape 1",
-			buf:     []byte{^byte('a'), 0xff, 0xff},
+			buf:     []byte{^byte(0x31), ^byte('a'), 0xff, 0xff},
 			pattern: "unknown escape",
 			decode:  func(b []byte) { DecodeBytesDecreasing(b, nil) },
 		},
 		{
 			name:    "BytesDecreasing, invalid escape 2",
-			buf:     []byte{^byte('a'), 0xff, 0xfd},
+			buf:     []byte{^byte(0x31), ^byte('a'), 0xff, 0xfd},
 			pattern: "unknown escape",
 			decode:  func(b []byte) { DecodeBytesDecreasing(b, nil) },
 		},
@@ -354,11 +366,11 @@ func TestDecodeInvalid(t *testing.T) {
 func TestEncodeDecodeUvarintDecreasing(t *testing.T) {
 	testBasicEncodeDecodeUint64(EncodeUvarintDecreasing, DecodeUvarintDecreasing, true, t)
 	testCases := []testCaseUint64{
-		{0, []byte{0x09}},
-		{1, []byte{0x08, 0xfe}},
-		{1 << 8, []byte{0x07, 0xfe, 0xff}},
-		{math.MaxUint64 - 1, []byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}},
-		{math.MaxUint64, []byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+		{0, []byte{0x0a}},
+		{1, []byte{0x09, 0xfe}},
+		{1 << 8, []byte{0x08, 0xfe, 0xff}},
+		{math.MaxUint64 - 1, []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}},
+		{math.MaxUint64, []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
 	}
 	testCustomEncodeUint64(testCases, EncodeUvarintDecreasing, t)
 }
@@ -368,16 +380,16 @@ func TestEncodeDecodeBytes(t *testing.T) {
 		value   []byte
 		encoded []byte
 	}{
-		{[]byte{0, 1, 'a'}, []byte{0x00, 0xff, 1, 'a', 0x00, 0x01}},
-		{[]byte{0, 'a'}, []byte{0x00, 0xff, 'a', 0x00, 0x01}},
-		{[]byte{0, 0xff, 'a'}, []byte{0x00, 0xff, 0xff, 'a', 0x00, 0x01}},
-		{[]byte{'a'}, []byte{'a', 0x00, 0x01}},
-		{[]byte{'b'}, []byte{'b', 0x00, 0x01}},
-		{[]byte{'b', 0}, []byte{'b', 0x00, 0xff, 0x00, 0x01}},
-		{[]byte{'b', 0, 0}, []byte{'b', 0x00, 0xff, 0x00, 0xff, 0x00, 0x01}},
-		{[]byte{'b', 0, 0, 'a'}, []byte{'b', 0x00, 0xff, 0x00, 0xff, 'a', 0x00, 0x01}},
-		{[]byte{'b', 0xff}, []byte{'b', 0xff, 0x00, 0x01}},
-		{[]byte("hello"), []byte{'h', 'e', 'l', 'l', 'o', 0x00, 0x01}},
+		{[]byte{0, 1, 'a'}, []byte{0x31, 0x00, 0xff, 1, 'a', 0x00, 0x01}},
+		{[]byte{0, 'a'}, []byte{0x31, 0x00, 0xff, 'a', 0x00, 0x01}},
+		{[]byte{0, 0xff, 'a'}, []byte{0x31, 0x00, 0xff, 0xff, 'a', 0x00, 0x01}},
+		{[]byte{'a'}, []byte{0x31, 'a', 0x00, 0x01}},
+		{[]byte{'b'}, []byte{0x31, 'b', 0x00, 0x01}},
+		{[]byte{'b', 0}, []byte{0x31, 'b', 0x00, 0xff, 0x00, 0x01}},
+		{[]byte{'b', 0, 0}, []byte{0x31, 'b', 0x00, 0xff, 0x00, 0xff, 0x00, 0x01}},
+		{[]byte{'b', 0, 0, 'a'}, []byte{0x31, 'b', 0x00, 0xff, 0x00, 0xff, 'a', 0x00, 0x01}},
+		{[]byte{'b', 0xff}, []byte{0x31, 'b', 0xff, 0x00, 0x01}},
+		{[]byte("hello"), []byte{0x31, 'h', 'e', 'l', 'l', 'o', 0x00, 0x01}},
 	}
 	for i, c := range testCases {
 		enc := EncodeBytes(nil, c.value)
@@ -412,16 +424,16 @@ func TestEncodeDecodeBytesDecreasing(t *testing.T) {
 		value   []byte
 		encoded []byte
 	}{
-		{[]byte("hello"), []byte{^byte('h'), ^byte('e'), ^byte('l'), ^byte('l'), ^byte('o'), 0xff, 0xfe}},
-		{[]byte{'b', 0xff}, []byte{^byte('b'), 0x00, 0xff, 0xfe}},
-		{[]byte{'b', 0, 0, 'a'}, []byte{^byte('b'), 0xff, 0x00, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{[]byte{'b', 0, 0}, []byte{^byte('b'), 0xff, 0x00, 0xff, 0x00, 0xff, 0xfe}},
-		{[]byte{'b', 0}, []byte{^byte('b'), 0xff, 0x00, 0xff, 0xfe}},
-		{[]byte{'b'}, []byte{^byte('b'), 0xff, 0xfe}},
-		{[]byte{'a'}, []byte{^byte('a'), 0xff, 0xfe}},
-		{[]byte{0, 0xff, 'a'}, []byte{0xff, 0x00, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{[]byte{0, 'a'}, []byte{0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{[]byte{0, 1, 'a'}, []byte{0xff, 0x00, 0xfe, ^byte('a'), 0xff, 0xfe}},
+		{[]byte("hello"), []byte{^byte(0x31), ^byte('h'), ^byte('e'), ^byte('l'), ^byte('l'), ^byte('o'), 0xff, 0xfe}},
+		{[]byte{'b', 0xff}, []byte{^byte(0x31), ^byte('b'), 0x00, 0xff, 0xfe}},
+		{[]byte{'b', 0, 0, 'a'}, []byte{^byte(0x31), ^byte('b'), 0xff, 0x00, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{[]byte{'b', 0, 0}, []byte{^byte(0x31), ^byte('b'), 0xff, 0x00, 0xff, 0x00, 0xff, 0xfe}},
+		{[]byte{'b', 0}, []byte{^byte(0x31), ^byte('b'), 0xff, 0x00, 0xff, 0xfe}},
+		{[]byte{'b'}, []byte{^byte(0x31), ^byte('b'), 0xff, 0xfe}},
+		{[]byte{'a'}, []byte{^byte(0x31), ^byte('a'), 0xff, 0xfe}},
+		{[]byte{0, 0xff, 'a'}, []byte{^byte(0x31), 0xff, 0x00, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{[]byte{0, 'a'}, []byte{^byte(0x31), 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{[]byte{0, 1, 'a'}, []byte{^byte(0x31), 0xff, 0x00, 0xfe, ^byte('a'), 0xff, 0xfe}},
 	}
 	for i, c := range testCases {
 		enc := EncodeBytesDecreasing(nil, c.value)
@@ -456,16 +468,16 @@ func TestEncodeDecodeString(t *testing.T) {
 		value   string
 		encoded []byte
 	}{
-		{"\x00\x01a", []byte{0x00, 0xff, 1, 'a', 0x00, 0x01}},
-		{"\x00a", []byte{0x00, 0xff, 'a', 0x00, 0x01}},
-		{"\x00\xffa", []byte{0x00, 0xff, 0xff, 'a', 0x00, 0x01}},
-		{"a", []byte{'a', 0x00, 0x01}},
-		{"b", []byte{'b', 0x00, 0x01}},
-		{"b\x00", []byte{'b', 0x00, 0xff, 0x00, 0x01}},
-		{"b\x00\x00", []byte{'b', 0x00, 0xff, 0x00, 0xff, 0x00, 0x01}},
-		{"b\x00\x00a", []byte{'b', 0x00, 0xff, 0x00, 0xff, 'a', 0x00, 0x01}},
-		{"b\xff", []byte{'b', 0xff, 0x00, 0x01}},
-		{"hello", []byte{'h', 'e', 'l', 'l', 'o', 0x00, 0x01}},
+		{"\x00\x01a", []byte{0x31, 0x00, 0xff, 1, 'a', 0x00, 0x01}},
+		{"\x00a", []byte{0x31, 0x00, 0xff, 'a', 0x00, 0x01}},
+		{"\x00\xffa", []byte{0x31, 0x00, 0xff, 0xff, 'a', 0x00, 0x01}},
+		{"a", []byte{0x31, 'a', 0x00, 0x01}},
+		{"b", []byte{0x31, 'b', 0x00, 0x01}},
+		{"b\x00", []byte{0x31, 'b', 0x00, 0xff, 0x00, 0x01}},
+		{"b\x00\x00", []byte{0x31, 'b', 0x00, 0xff, 0x00, 0xff, 0x00, 0x01}},
+		{"b\x00\x00a", []byte{0x31, 'b', 0x00, 0xff, 0x00, 0xff, 'a', 0x00, 0x01}},
+		{"b\xff", []byte{0x31, 'b', 0xff, 0x00, 0x01}},
+		{"hello", []byte{0x31, 'h', 'e', 'l', 'l', 'o', 0x00, 0x01}},
 	}
 	for i, c := range testCases {
 		enc := EncodeString(nil, c.value)
@@ -500,16 +512,16 @@ func TestEncodeDecodeStringDecreasing(t *testing.T) {
 		value   string
 		encoded []byte
 	}{
-		{"hello", []byte{^byte('h'), ^byte('e'), ^byte('l'), ^byte('l'), ^byte('o'), 0xff, 0xfe}},
-		{"b\xff", []byte{^byte('b'), 0x00, 0xff, 0xfe}},
-		{"b\x00\x00a", []byte{^byte('b'), 0xff, 0x00, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{"b\x00\x00", []byte{^byte('b'), 0xff, 0x00, 0xff, 0x00, 0xff, 0xfe}},
-		{"b\x00", []byte{^byte('b'), 0xff, 0x00, 0xff, 0xfe}},
-		{"b", []byte{^byte('b'), 0xff, 0xfe}},
-		{"a", []byte{^byte('a'), 0xff, 0xfe}},
-		{"\x00\xffa", []byte{0xff, 0x00, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{"\x00a", []byte{0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{"\x00\x01a", []byte{0xff, 0x00, 0xfe, ^byte('a'), 0xff, 0xfe}},
+		{"hello", []byte{^byte(0x31), ^byte('h'), ^byte('e'), ^byte('l'), ^byte('l'), ^byte('o'), 0xff, 0xfe}},
+		{"b\xff", []byte{^byte(0x31), ^byte('b'), 0x00, 0xff, 0xfe}},
+		{"b\x00\x00a", []byte{^byte(0x31), ^byte('b'), 0xff, 0x00, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{"b\x00\x00", []byte{^byte(0x31), ^byte('b'), 0xff, 0x00, 0xff, 0x00, 0xff, 0xfe}},
+		{"b\x00", []byte{^byte(0x31), ^byte('b'), 0xff, 0x00, 0xff, 0xfe}},
+		{"b", []byte{^byte(0x31), ^byte('b'), 0xff, 0xfe}},
+		{"a", []byte{^byte(0x31), ^byte('a'), 0xff, 0xfe}},
+		{"\x00\xffa", []byte{^byte(0x31), 0xff, 0x00, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{"\x00a", []byte{^byte(0x31), 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{"\x00\x01a", []byte{^byte(0x31), 0xff, 0x00, 0xfe, ^byte('a'), 0xff, 0xfe}},
 	}
 	for i, c := range testCases {
 		enc := EncodeStringDecreasing(nil, c.value)
@@ -543,7 +555,7 @@ func TestEncodeDecodeNull(t *testing.T) {
 	const hello = "hello"
 
 	buf := EncodeNull([]byte(hello))
-	expected := []byte(hello + "\x00\x00")
+	expected := []byte(hello + "\x00")
 	if !bytes.Equal(expected, buf) {
 		t.Fatalf("expected %q, but found %q", expected, buf)
 	}
@@ -554,7 +566,7 @@ func TestEncodeDecodeNull(t *testing.T) {
 		t.Fatalf("expected %q, but found %q", hello, remaining)
 	}
 
-	if remaining, isNull := DecodeIfNull([]byte("\x00\x00" + hello)); !isNull {
+	if remaining, isNull := DecodeIfNull([]byte("\x00" + hello)); !isNull {
 		t.Fatalf("expected isNull=true, but found isNull=%v", isNull)
 	} else if hello != string(remaining) {
 		t.Fatalf("expected %q, but found %q", hello, remaining)
@@ -622,8 +634,29 @@ func TestEncodeDecodeTime(t *testing.T) {
 	}
 
 	// Check that the encoding hasn't changed.
-	if a, e := lastEncoded, []byte("\x0e\x01 \xbc\x0e\xae\r\r\xf2\x8e\x80"); !bytes.Equal(a, e) {
+	if a, e := lastEncoded, []byte("\x32\x0f\x01 \xbc\x0e\xae\x0e\r\xf2\x8e\x80"); !bytes.Equal(a, e) {
 		t.Errorf("encoding has changed:\nexpected %q\nactual %q", e, a)
+	}
+}
+
+func TestPeekType(t *testing.T) {
+	testCases := []struct {
+		enc []byte
+		typ Type
+	}{
+		{EncodeNull(nil), Null},
+		{EncodeNotNull(nil), NotNull},
+		{EncodeVarint(nil, 0), Int},
+		{EncodeUvarint(nil, 0), Int},
+		{EncodeFloat(nil, 0), Float},
+		{EncodeBytes(nil, []byte("")), Bytes},
+		{EncodeTime(nil, time.Now()), Time},
+	}
+	for i, c := range testCases {
+		typ := PeekType(c.enc)
+		if c.typ != typ {
+			t.Fatalf("%d: expected %d, but found %d", i, c.typ, typ)
+		}
 	}
 }
 

@@ -21,8 +21,10 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -63,46 +65,66 @@ type span struct {
 	end   proto.Key
 }
 
-func prettySpans(spans []span, desc *TableDescriptor, index *IndexDescriptor) string {
-	valTypes, err := makeKeyVals(desc, index.ColumnIDs)
-	if err != nil {
-		return err.Error()
+// prettyKey pretty-prints the specified key, skipping over the first skip
+// fields.
+func prettyKey(key proto.Key, skip int) string {
+	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
+		return fmt.Sprintf("index key missing table data prefix: %q vs %q",
+			key, keys.TableDataPrefix)
 	}
-	vals := make([]parser.Datum, len(valTypes))
-	prefix := proto.Key(MakeIndexKeyPrefix(desc.ID, index.ID))
+	key = key[len(keys.TableDataPrefix):]
 
+	var buf bytes.Buffer
+	for k := 0; len(key) > 0; k++ {
+		var d interface{}
+		switch encoding.PeekType(key) {
+		case encoding.Null:
+			key, _ = encoding.DecodeIfNull(key)
+			d = parser.DNull
+		case encoding.NotNull:
+			key, _ = encoding.DecodeIfNotNull(key)
+			d = "#"
+		case encoding.Int:
+			var i int64
+			key, i = encoding.DecodeVarint(key)
+			d = parser.DInt(i)
+		case encoding.Float:
+			var f float64
+			key, f = encoding.DecodeFloat(key, nil)
+			d = parser.DFloat(f)
+		case encoding.Bytes:
+			var s string
+			key, s = encoding.DecodeString(key, nil)
+			d = parser.DString(s)
+		case encoding.Time:
+			var t time.Time
+			key, t = encoding.DecodeTime(key)
+			d = parser.DTimestamp{Time: t}
+		default:
+			// This shouldn't ever happen, but if it does let the loop exit.
+			key = nil
+			d = "unknown"
+		}
+		if skip > 0 {
+			skip--
+			continue
+		}
+		fmt.Fprintf(&buf, "/%s", d)
+	}
+	return buf.String()
+}
+
+func prettySpan(span span, skip int) string {
+	return fmt.Sprintf("%s-%s", prettyKey(span.start, skip), prettyKey(span.end, skip))
+}
+
+func prettySpans(spans []span, skip int) string {
 	var buf bytes.Buffer
 	for i, span := range spans {
 		if i > 0 {
 			buf.WriteString(" ")
 		}
-		for j, key := range []proto.Key{span.start, span.end} {
-			if j == 1 {
-				buf.WriteString("-")
-			}
-			if !bytes.HasPrefix(key, prefix) {
-				if j == 1 {
-					continue
-				}
-				return fmt.Sprintf("index key missing index prefix: %q vs %q", prefix, key)
-			}
-			key = key[len(prefix):]
-			k := 0
-			for ; k < len(valTypes) && len(key) > 0; k++ {
-				// Not-NULL markers only occur in spans. Perform special decoding of
-				// these markers which are equivalent to the empty string encoding.
-				var ok bool
-				if key, ok = encoding.DecodeIfNotNull(key); ok {
-					vals[k] = parser.DString("")
-					continue
-				}
-				vals[k], key, err = decodeTableKey(valTypes[k], key)
-				if err != nil {
-					break
-				}
-			}
-			buf.WriteString(prettyKeyVals(vals[:k]))
-		}
+		buf.WriteString(prettySpan(span, skip))
 	}
 	return buf.String()
 }
@@ -197,7 +219,7 @@ func (n *scanNode) ExplainPlan() (name, description string, children []planNode)
 		description = "-"
 	} else {
 		description = fmt.Sprintf("%s@%s %s", n.desc.Name, n.index.Name,
-			prettySpans(n.spans, n.desc, n.index))
+			prettySpans(n.spans, 2))
 	}
 	return name, description, nil
 }
@@ -534,14 +556,14 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 			}
 			qval.datum = value
 			if log.V(2) {
-				log.Infof("Scan %q -> %v", kv.Key, value)
+				log.Infof("Scan %s -> %v", prettyKey(kv.Key, 0), value)
 			}
 		} else {
 			// No need to unmarshal the column value. Either the column was part of
 			// the index key or it isn't needed by any of the render or filter
 			// expressions.
 			if log.V(2) {
-				log.Infof("Scan %q -> [%d] (skipped)", kv.Key, n.colID)
+				log.Infof("Scan %s -> [%d] (skipped)", prettyKey(kv.Key, 0), n.colID)
 			}
 		}
 	} else {
@@ -557,7 +579,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 		}
 
 		if log.V(2) {
-			log.Infof("Scan %q", kv.Key)
+			log.Infof("Scan %s", prettyKey(kv.Key, 0))
 		}
 	}
 

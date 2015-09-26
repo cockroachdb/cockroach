@@ -87,7 +87,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 
 		for _, secondaryIndexEntry := range secondaryIndexEntries {
 			if log.V(2) {
-				log.Infof("Del %q", secondaryIndexEntry.key)
+				log.Infof("Del %s", prettyKey(secondaryIndexEntry.key, 0))
 			}
 			b.Del(secondaryIndexEntry.key)
 		}
@@ -96,7 +96,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		rowStartKey := proto.Key(primaryIndexKey)
 		rowEndKey := rowStartKey.PrefixEnd()
 		if log.V(2) {
-			log.Infof("DelRange %q - %q", rowStartKey, rowEndKey)
+			log.Infof("DelRange %s - %s", prettyKey(rowStartKey, 0), prettyKey(rowEndKey, 0))
 		}
 		b.DelRange(rowStartKey, rowEndKey)
 	}

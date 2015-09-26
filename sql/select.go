@@ -189,7 +189,7 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 
 	if log.V(3) {
 		for i, span := range s.spans {
-			log.Infof("%s/%d: start=%s end=%s", c.index.Name, i, span.start, span.end)
+			log.Infof("%s/%d: %s", c.index.Name, i, prettySpan(span, 0))
 		}
 	}
 
