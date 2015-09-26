@@ -211,11 +211,12 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			secondaryIndexEntry := secondaryIndexEntries[i]
 			if !bytes.Equal(newSecondaryIndexEntry.key, secondaryIndexEntry.key) {
 				if log.V(2) {
-					log.Infof("CPut %q -> %v", newSecondaryIndexEntry.key, newSecondaryIndexEntry.value)
+					log.Infof("CPut %s -> %v", prettyKey(newSecondaryIndexEntry.key, 0),
+						newSecondaryIndexEntry.value)
 				}
 				b.CPut(newSecondaryIndexEntry.key, newSecondaryIndexEntry.value, nil)
 				if log.V(2) {
-					log.Infof("Del %q", secondaryIndexEntry.key)
+					log.Infof("Del %s", prettyKey(secondaryIndexEntry.key, 0))
 				}
 				b.Del(secondaryIndexEntry.key)
 			}
@@ -231,7 +232,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
 				if log.V(2) {
-					log.Infof("Put %q -> %v", key, val)
+					log.Infof("Put %s -> %v", prettyKey(key, 0), val)
 				}
 
 				b.Put(key, marshalled[i])
@@ -239,7 +240,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				// The column might have already existed but is being set to NULL, so
 				// delete it.
 				if log.V(2) {
-					log.Infof("Del %q", key)
+					log.Infof("Del %s", prettyKey(key, 0))
 				}
 
 				b.Del(key)

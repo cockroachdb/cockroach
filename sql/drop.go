@@ -126,7 +126,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		indexStartKey := proto.Key(indexPrefix)
 		indexEndKey := indexStartKey.PrefixEnd()
 		if log.V(2) {
-			log.Infof("DelRange %q - %q", indexStartKey, indexEndKey)
+			log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))
 		}
 		b.DelRange(indexStartKey, indexEndKey)
 

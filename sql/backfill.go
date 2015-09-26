@@ -70,7 +70,8 @@ func (p *planner) makeBackfillBatch(tableName *parser.QualifiedName, tableDesc *
 
 			for _, secondaryIndexEntry := range secondaryIndexEntries {
 				if log.V(2) {
-					log.Infof("CPut %q -> %v", secondaryIndexEntry.key, secondaryIndexEntry.value)
+					log.Infof("CPut %s -> %v", prettyKey(secondaryIndexEntry.key, 0),
+						secondaryIndexEntry.value)
 				}
 				b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
 			}

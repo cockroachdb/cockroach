@@ -48,7 +48,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 		tableStartKey := proto.Key(tablePrefix)
 		tableEndKey := tableStartKey.PrefixEnd()
 		if log.V(2) {
-			log.Infof("DelRange %q - %q", tableStartKey, tableEndKey)
+			log.Infof("DelRange %s - %s", prettyKey(tableStartKey, 0), prettyKey(tableEndKey, 0))
 		}
 		b.DelRange(tableStartKey, tableEndKey)
 	}

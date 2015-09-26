@@ -114,18 +114,17 @@ func prettyKey(key proto.Key, skip int) string {
 	return buf.String()
 }
 
-func prettySpans(spans []span) string {
+func prettySpan(span span, skip int) string {
+	return fmt.Sprintf("%s-%s", prettyKey(span.start, skip), prettyKey(span.end, skip))
+}
+
+func prettySpans(spans []span, skip int) string {
 	var buf bytes.Buffer
 	for i, span := range spans {
 		if i > 0 {
 			buf.WriteString(" ")
 		}
-		for j, key := range []proto.Key{span.start, span.end} {
-			if j == 1 {
-				buf.WriteString("-")
-			}
-			buf.WriteString(prettyKey(key, 2))
-		}
+		buf.WriteString(prettySpan(span, skip))
 	}
 	return buf.String()
 }
@@ -219,7 +218,8 @@ func (n *scanNode) ExplainPlan() (name, description string, children []planNode)
 	if n.desc == nil {
 		description = "-"
 	} else {
-		description = fmt.Sprintf("%s@%s %s", n.desc.Name, n.index.Name, prettySpans(n.spans))
+		description = fmt.Sprintf("%s@%s %s", n.desc.Name, n.index.Name,
+			prettySpans(n.spans, 2))
 	}
 	return name, description, nil
 }
@@ -556,14 +556,14 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 			}
 			qval.datum = value
 			if log.V(2) {
-				log.Infof("Scan %q -> %v", kv.Key, value)
+				log.Infof("Scan %s -> %v", prettyKey(kv.Key, 0), value)
 			}
 		} else {
 			// No need to unmarshal the column value. Either the column was part of
 			// the index key or it isn't needed by any of the render or filter
 			// expressions.
 			if log.V(2) {
-				log.Infof("Scan %q -> [%d] (skipped)", kv.Key, n.colID)
+				log.Infof("Scan %s -> [%d] (skipped)", prettyKey(kv.Key, 0), n.colID)
 			}
 		}
 	} else {
@@ -579,7 +579,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 		}
 
 		if log.V(2) {
-			log.Infof("Scan %q", kv.Key)
+			log.Infof("Scan %s", prettyKey(kv.Key, 0))
 		}
 	}
 
