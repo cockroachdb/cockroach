@@ -843,7 +843,10 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	} else {
 		// Some sanity checks for case where we don't find a transaction record.
 		if args.PusheeTxn.Status != proto.PENDING {
-			return reply, proto.NewTransactionStatusError(&args.PusheeTxn,
+			// Copying avoids a race (#2537): the txn in the args may be re-used
+			// for retries, but the one in the reply can end up in a goroutine.
+			pusherTxn := gogoproto.Clone(args.PusherTxn).(*proto.Transaction)
+			return reply, proto.NewTransactionStatusError(pusherTxn,
 				fmt.Sprintf("no txn persisted, yet intent has status %s", args.PusheeTxn.Status))
 		}
 		// The transaction doesn't exist yet on disk; use the supplied version.
@@ -916,7 +919,10 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	}
 
 	if !pusherWins {
-		err := proto.NewTransactionPushError(args.PusherTxn, reply.PusheeTxn)
+		// Copying avoids a race (#2537): the txn in the args may be re-used
+		// for retries, but the one in the reply can end up in a goroutine.
+		pusherTxn := gogoproto.Clone(args.PusherTxn).(*proto.Transaction)
+		err := proto.NewTransactionPushError(pusherTxn, reply.PusheeTxn)
 		if log.V(1) {
 			log.Info(err)
 		}
