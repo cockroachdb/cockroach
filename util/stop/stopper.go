@@ -234,6 +234,7 @@ func (s *Stopper) Quiesce() {
 	defer s.mu.Unlock()
 	s.draining = true
 	for s.numTasks > 0 {
+		// Use stdlib "log" instead of "cockroach/util/log" due to import cycles.
 		log.Print("draining; tasks left:\n", s.runningTasksLocked())
 		// Unlock s.mu, wait for the signal, and lock s.mu.
 		s.drain.Wait()
