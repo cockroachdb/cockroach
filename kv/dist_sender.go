@@ -311,10 +311,7 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
 	args proto.Request) (proto.Response, error) {
 	if len(replicas) == 0 {
-		// TODO(tschottdorf): this gets in the way of some tests. Consider
-		// refactoring so that gossip is mocked out more easily. Provisional
-		// code. return nil, util.Errorf("%s: replicas set is empty",
-		// args.Method())
+		return nil, util.Errorf("%s: replicas set is empty", args.Method())
 	}
 
 	// Build a slice of replica addresses (if gossiped).
@@ -326,8 +323,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 		replicaMap[addr.String()] = &replicas[i].Replica
 	}
 	if len(addrs) == 0 {
-		// TODO(tschottdorf): see len(replicas) above.
-		// return nil, noNodeAddrsAvailError{}
+		return nil, noNodeAddrsAvailError{}
 	}
 
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll

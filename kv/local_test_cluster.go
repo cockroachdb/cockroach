@@ -68,7 +68,8 @@ type LocalTestCluster struct {
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t util.Tester) {
 
-	nodeDesc := &proto.NodeDescriptor{NodeID: 1}
+	nodeID := proto.NodeID(1)
+	nodeDesc := &proto.NodeDescriptor{NodeID: nodeID}
 	ltc.tester = t
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
@@ -114,7 +115,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ctx.Gossip = ltc.Gossip
 	ctx.Transport = transport
 	ltc.Store = storage.NewStore(ctx, ltc.Eng, nodeDesc)
-	if err := ltc.Store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, ltc.Stopper); err != nil {
+	if err := ltc.Store.Bootstrap(proto.StoreIdent{NodeID: nodeID, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	ltc.localSender.AddStore(ltc.Store)
@@ -123,6 +124,9 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	}
 	if err := ltc.Store.Start(ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
+	}
+	if err := ltc.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
+		t.Fatalf("unable to set node descriptor: %s", err)
 	}
 }
 
