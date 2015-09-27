@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/biogo/store/interval"
-	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -151,7 +150,7 @@ func (k EncodedKey) Equal(l EncodedKey) bool {
 	return bytes.Equal(k, l)
 }
 
-// Compare implements the llrb.Comparable interface for tree nodes.
+// Compare implements the interval.Comparable interface for tree nodes.
 func (k Key) Compare(b interval.Comparable) int {
 	return bytes.Compare(k, b.(Key))
 }
@@ -401,24 +400,6 @@ func (v *Value) computeChecksum(key []byte) uint32 {
 	crc.Reset()
 	crc32Pool.Put(crc)
 	return sum
-}
-
-// KeyGetter is a hack to allow Compare() to work for the batch
-// update structs which wrap RawKeyValue.
-// TODO(petermattis): Is there somehow a better way to do this?
-//   It kept dying at runtime in the previous version of Compare
-//   which type cast the llrb.Comparable to a RawKeyValue. Because
-//   I'm wrapping a RawKeyValue with BatchDelete/BatchPut/BatchMerge.
-type KeyGetter interface {
-	KeyGet() []byte
-}
-
-// KeyGet is an implementation for KeyGetter.
-func (kv RawKeyValue) KeyGet() []byte { return kv.Key }
-
-// Compare implements the llrb.Comparable interface for tree nodes.
-func (kv RawKeyValue) Compare(b llrb.Comparable) int {
-	return bytes.Compare(kv.Key, b.(KeyGetter).KeyGet())
 }
 
 // NewTransaction creates a new transaction. The transaction key is
