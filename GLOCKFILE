@@ -16,9 +16,9 @@ github.com/cockroachdb/c-protobuf 6a18bfcdd5169966cd1235edb71d749c950216e8
 github.com/cockroachdb/c-rocksdb 7fc876fe79b96de0e25069c9ae27e6444637bd54
 github.com/cockroachdb/c-snappy 618733f9e5bab8463b9049117a335a7a1bfc9fd5
 github.com/cockroachdb/yacc ebd0d590252fe4f6d9b5053511875810dd1f91a1
-github.com/coreos/etcd 06180be154083d0c15378e4703def03afac21bdc
+github.com/coreos/etcd c645ac23c0093e2b0a93fa5f07a947344d7ef779
 github.com/cpuguy83/go-md2man 71acacd42f85e5e82f70a55327789582a5200a90
-github.com/docker/docker 7d5603e7cbc8799789b356adf354c1859e4974e7
+github.com/docker/docker 2ed0739c7a47f5accfbae0c8cce2a7e6463dbdc6
 github.com/elazarl/go-bindata-assetfs d5cac425555ca5cf00694df246e04f05e6a55150
 github.com/gogo/protobuf 2093b57e5ca2ccbee4626814100bc1aada691b18
 github.com/golang/lint 7b7f4364ff76043e6c3610281525fabc0d90f0e4
@@ -38,10 +38,10 @@ github.com/russross/blackfriday 8cec3a854e68dba10faabbe31c089abf4a3e57a6
 github.com/samalba/dockerclient cfb489c624b635251a93e74e1e90eb0959c5367f
 github.com/shurcooL/sanitized_anchor_name 244f5ac324cb97e1987ef901a0081a77bfd8e845
 github.com/spf13/cobra 53d96508f5c9311f5dade714e1de7bd6a9d2af4a
-github.com/spf13/pflag 5a13a75b13d132dc7d07dd19fd260257cd9c0290
+github.com/spf13/pflag b084184666e02084b8ccb9b704bf0d79c466eb1d
 github.com/tebeka/go2xunit d45000af2242dd0e7b8c7b07d82a1068adc5fd40
-golang.org/x/crypto aedad9a179ec1ea11b7064c57cbc6dc30d7724ec
-golang.org/x/net db8e4de5b2d6653f66aea53094624468caad15d2
-golang.org/x/text cb9d3ff7b2c18e541cef9c43cf614d6d5b8fd6f9
-golang.org/x/tools 8049553ca8132354f07c71224d1bb579514725e6
+golang.org/x/crypto e74b0352e547e3830f8471e7ae9609239c52606f
+golang.org/x/net 7c302550d18cede73764b1d19a661d70e29b725d
+golang.org/x/text 601048ad6acbab6cedd582db09b8c4839ff25b15
+golang.org/x/tools 2b5f3dc0de528767ab621dce83fffeed88f4452e
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
