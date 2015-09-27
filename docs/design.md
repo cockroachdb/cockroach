@@ -1167,20 +1167,20 @@ configurable. Below are examples of each type of accounting value.
 - Total bytes of accounting
 
 
-**Load Occurences**
+**Load Occurrences**
 
- Get op count
- Get total MB
- Put op count
- Put total MB
- Delete op count
- Delete total MB
- Delete range op count
- Delete range total MB
- Scan op count
- Scan op MB
- Split count
- Merge count
+- Get op count
+- Get total MB
+- Put op count
+- Put total MB
+- Delete op count
+- Delete total MB
+- Delete range op count
+- Delete range total MB
+- Scan op count
+- Scan op MB
+- Split count
+- Merge count
 
 Because accounting information is kept as time series and over many
 possible metrics of interest, the data can become numerous. Accounting
