@@ -16,7 +16,7 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 syntax = "proto2";
-package cockroach.proto;
+package cockroach.util.log;
 option go_package = "log";
 
 import "gogoproto/gogo.proto";

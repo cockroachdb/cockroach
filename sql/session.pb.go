@@ -10,7 +10,7 @@ import math "math"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 import cockroach_proto1 "github.com/cockroachdb/cockroach/proto"
-import cockroach_driver "github.com/cockroachdb/cockroach/sql/driver"
+import cockroach_sql_driver "github.com/cockroachdb/cockroach/sql/driver"
 
 import io "io"
 
@@ -65,7 +65,7 @@ type Session_Transaction struct {
 	Txn cockroach_proto1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
 	// Timestamp to be used by SQL in the above transaction. Note: this is not the
 	// transaction timestamp in proto.Transaction above.
-	Timestamp cockroach_driver.Datum_Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	Timestamp cockroach_sql_driver.Datum_Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 }
 
 func (m *Session_Transaction) Reset()         { *m = Session_Transaction{} }
@@ -79,11 +79,11 @@ func (m *Session_Transaction) GetTxn() cockroach_proto1.Transaction {
 	return cockroach_proto1.Transaction{}
 }
 
-func (m *Session_Transaction) GetTimestamp() cockroach_driver.Datum_Timestamp {
+func (m *Session_Transaction) GetTimestamp() cockroach_sql_driver.Datum_Timestamp {
 	if m != nil {
 		return m.Timestamp
 	}
-	return cockroach_driver.Datum_Timestamp{}
+	return cockroach_sql_driver.Datum_Timestamp{}
 }
 
 func (m *Session) Marshal() (data []byte, err error) {

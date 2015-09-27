@@ -16,7 +16,7 @@
 // Author: Tamir Duberstein (tamird@gmail.com)
 
 syntax = "proto2";
-package cockroach.storage.config;
+package cockroach.config;
 option go_package = "config";
 
 import "cockroach/proto/metadata.proto";
