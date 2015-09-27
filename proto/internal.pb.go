@@ -20,9 +20,9 @@ var _ = math.Inf
 // A RaftCommand is a command which can be serialized and sent via
 // raft.
 type RaftCommand struct {
-	RangeID       RangeID      `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
-	OriginReplica Replica      `protobuf:"bytes,2,opt,name=origin_replica" json:"origin_replica"`
-	Cmd           BatchRequest `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
+	RangeID       RangeID           `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
+	OriginReplica ReplicaDescriptor `protobuf:"bytes,2,opt,name=origin_replica" json:"origin_replica"`
+	Cmd           BatchRequest      `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
 }
 
 func (m *RaftCommand) Reset()         { *m = RaftCommand{} }
@@ -36,11 +36,11 @@ func (m *RaftCommand) GetRangeID() RangeID {
 	return 0
 }
 
-func (m *RaftCommand) GetOriginReplica() Replica {
+func (m *RaftCommand) GetOriginReplica() ReplicaDescriptor {
 	if m != nil {
 		return m.OriginReplica
 	}
-	return Replica{}
+	return ReplicaDescriptor{}
 }
 
 func (m *RaftCommand) GetCmd() BatchRequest {

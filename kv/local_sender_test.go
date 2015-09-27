@@ -105,7 +105,7 @@ func TestLocalSenderGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ls := NewLocalSender()
 	store := storage.Store{}
-	replica := proto.Replica{StoreID: store.Ident.StoreID}
+	replica := proto.ReplicaDescriptor{StoreID: store.Ident.StoreID}
 	s, err := ls.GetStore(replica.StoreID)
 	if s != nil || err == nil {
 		t.Errorf("expected no stores in new local sender")
@@ -154,7 +154,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 			RangeID:  proto.RangeID(i),
 			StartKey: rng.start,
 			EndKey:   rng.end,
-			Replicas: []proto.Replica{{StoreID: rng.storeID}},
+			Replicas: []proto.ReplicaDescriptor{{StoreID: rng.storeID}},
 		}
 		newRng, err := storage.NewReplica(d[i], s[i])
 		if err != nil {

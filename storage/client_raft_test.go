@@ -225,7 +225,7 @@ func TestReplicateRange(t *testing.T) {
 	}
 
 	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
+		proto.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		}, rng.Desc()); err != nil {
@@ -287,7 +287,7 @@ func TestRestoreReplicas(t *testing.T) {
 	}
 
 	if err := firstRng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
+		proto.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		}, firstRng.Desc()); err != nil {
@@ -385,7 +385,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	}
 
 	err = rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
+		proto.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		}, rng.Desc())
@@ -408,7 +408,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	mtc.manualClock.Increment(10 * storage.DefaultHeartbeatInterval.Nanoseconds())
 
 	err = rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
+		proto.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		}, rng.Desc())
@@ -473,7 +473,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	// Now add the second replica.
 	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
+		proto.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		}, rng.Desc()); err != nil {
@@ -633,7 +633,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	// storeIDset is used to compare the replica sets from different views (i.e.
 	// local range descriptors)
 	type storeIDset map[proto.StoreID]struct{}
-	makeStoreIDset := func(replicas []proto.Replica) storeIDset {
+	makeStoreIDset := func(replicas []proto.ReplicaDescriptor) storeIDset {
 		idSet := make(storeIDset)
 		for _, r := range replicas {
 			idSet[r.StoreID] = struct{}{}
@@ -735,7 +735,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 
 	addReplica := func(storeNum int, desc *proto.RangeDescriptor) error {
 		return repl.ChangeReplicas(proto.ADD_REPLICA,
-			proto.Replica{
+			proto.ReplicaDescriptor{
 				NodeID:  mtc.stores[storeNum].Ident.NodeID,
 				StoreID: mtc.stores[storeNum].Ident.StoreID,
 			},
@@ -1092,12 +1092,12 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		return util.Errorf("range still exists")
 	})
 
-	replica1 := proto.Replica{
+	replica1 := proto.ReplicaDescriptor{
 		ReplicaID: proto.ReplicaID(mtc.stores[1].StoreID()),
 		NodeID:    proto.NodeID(mtc.stores[1].StoreID()),
 		StoreID:   mtc.stores[1].StoreID(),
 	}
-	replica2 := proto.Replica{
+	replica2 := proto.ReplicaDescriptor{
 		ReplicaID: proto.ReplicaID(mtc.stores[2].StoreID()),
 		NodeID:    proto.NodeID(mtc.stores[2].StoreID()),
 		StoreID:   mtc.stores[2].StoreID(),

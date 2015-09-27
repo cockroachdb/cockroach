@@ -453,55 +453,56 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "\000\"\213\001\n\014MergeTrigger\022<\n\014updated_desc\030\001 \001(\013"
     "2 .cockroach.proto.RangeDescriptorB\004\310\336\037\000"
     "\022=\n\021subsumed_range_id\030\002 \001(\003B\"\310\336\037\000\342\336\037\017Sub"
-    "sumedRangeID\372\336\037\007RangeID\"\327\002\n\025ChangeReplic"
+    "sumedRangeID\372\336\037\007RangeID\"\353\002\n\025ChangeReplic"
     "asTrigger\022)\n\007node_id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006Node"
     "ID\372\336\037\006NodeID\022,\n\010store_id\030\002 \001(\005B\032\310\336\037\000\342\336\037\007"
     "StoreID\372\336\037\007StoreID\022=\n\013change_type\030\003 \001(\0162"
     "\".cockroach.proto.ReplicaChangeTypeB\004\310\336\037"
-    "\000\022/\n\007replica\030\004 \001(\0132\030.cockroach.proto.Rep"
-    "licaB\004\310\336\037\000\0228\n\020updated_replicas\030\005 \003(\0132\030.c"
-    "ockroach.proto.ReplicaB\004\310\336\037\000\022;\n\017next_rep"
-    "lica_id\030\006 \001(\005B\"\310\336\037\000\342\336\037\rNextReplicaID\372\336\037\t"
-    "ReplicaID\"C\n\023ModifiedSpanTrigger\022,\n\016syst"
-    "em_db_span\030\001 \001(\010B\024\310\336\037\000\342\336\037\014SystemDBSpan\"\221"
-    "\002\n\025InternalCommitTrigger\0224\n\rsplit_trigge"
-    "r\030\001 \001(\0132\035.cockroach.proto.SplitTrigger\0224"
-    "\n\rmerge_trigger\030\002 \001(\0132\035.cockroach.proto."
-    "MergeTrigger\022G\n\027change_replicas_trigger\030"
-    "\003 \001(\0132&.cockroach.proto.ChangeReplicasTr"
-    "igger\022C\n\025modified_span_trigger\030\004 \001(\0132$.c"
-    "ockroach.proto.ModifiedSpanTrigger\"\035\n\010No"
-    "deList\022\021\n\005nodes\030\001 \003(\005B\002\020\001\"\234\004\n\013Transactio"
-    "n\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022\024\n\003key\030\002 \001(\014B\007\372\336\037\003"
-    "Key\022\022\n\002id\030\003 \001(\014B\006\342\336\037\002ID\022\026\n\010priority\030\004 \001("
-    "\005B\004\310\336\037\000\0227\n\tisolation\030\005 \001(\0162\036.cockroach.p"
-    "roto.IsolationTypeB\004\310\336\037\000\0228\n\006status\030\006 \001(\016"
-    "2\".cockroach.proto.TransactionStatusB\004\310\336"
-    "\037\000\022\023\n\005epoch\030\007 \001(\005B\004\310\336\037\000\0222\n\016last_heartbea"
-    "t\030\010 \001(\0132\032.cockroach.proto.Timestamp\0223\n\tt"
-    "imestamp\030\t \001(\0132\032.cockroach.proto.Timesta"
-    "mpB\004\310\336\037\000\0228\n\016orig_timestamp\030\n \001(\0132\032.cockr"
-    "oach.proto.TimestampB\004\310\336\037\000\0227\n\rmax_timest"
-    "amp\030\013 \001(\0132\032.cockroach.proto.TimestampB\004\310"
-    "\336\037\000\0226\n\rcertain_nodes\030\014 \001(\0132\031.cockroach.p"
-    "roto.NodeListB\004\310\336\037\000\022\025\n\007Writing\030\r \001(\010B\004\310\336"
-    "\037\000:\004\230\240\037\000\"\245\001\n\005Lease\022/\n\005start\030\001 \001(\0132\032.cock"
-    "roach.proto.TimestampB\004\310\336\037\000\0224\n\nexpiratio"
-    "n\030\002 \001(\0132\032.cockroach.proto.TimestampB\004\310\336\037"
-    "\000\022/\n\007replica\030\003 \001(\0132\030.cockroach.proto.Rep"
-    "licaB\004\310\336\037\000:\004\230\240\037\000\"i\n\006Intent\022\024\n\003key\030\001 \001(\014B"
-    "\007\372\336\037\003Key\022\030\n\007end_key\030\002 \001(\014B\007\372\336\037\003Key\022/\n\003tx"
-    "n\030\003 \001(\0132\034.cockroach.proto.TransactionB\004\310"
-    "\336\037\000\"H\n\nGCMetadata\022\035\n\017last_scan_nanos\030\001 \001"
-    "(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos\030\002 \001(\003*Q\n"
-    "\tValueType\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOA"
-    "T\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022\016\n\nTIMESERIES\020d"
-    "*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022"
-    "\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationTyp"
-    "e\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*"
-    "B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOM"
-    "MITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\027Z\005proto\340\342\036\001"
-    "\310\342\036\001\320\342\036\001\220\343\036\000", 2772);
+    "\000\0229\n\007replica\030\004 \001(\0132\".cockroach.proto.Rep"
+    "licaDescriptorB\004\310\336\037\000\022B\n\020updated_replicas"
+    "\030\005 \003(\0132\".cockroach.proto.ReplicaDescript"
+    "orB\004\310\336\037\000\022;\n\017next_replica_id\030\006 \001(\005B\"\310\336\037\000\342"
+    "\336\037\rNextReplicaID\372\336\037\tReplicaID\"C\n\023Modifie"
+    "dSpanTrigger\022,\n\016system_db_span\030\001 \001(\010B\024\310\336"
+    "\037\000\342\336\037\014SystemDBSpan\"\221\002\n\025InternalCommitTri"
+    "gger\0224\n\rsplit_trigger\030\001 \001(\0132\035.cockroach."
+    "proto.SplitTrigger\0224\n\rmerge_trigger\030\002 \001("
+    "\0132\035.cockroach.proto.MergeTrigger\022G\n\027chan"
+    "ge_replicas_trigger\030\003 \001(\0132&.cockroach.pr"
+    "oto.ChangeReplicasTrigger\022C\n\025modified_sp"
+    "an_trigger\030\004 \001(\0132$.cockroach.proto.Modif"
+    "iedSpanTrigger\"\035\n\010NodeList\022\021\n\005nodes\030\001 \003("
+    "\005B\002\020\001\"\234\004\n\013Transaction\022\022\n\004name\030\001 \001(\tB\004\310\336\037"
+    "\000\022\024\n\003key\030\002 \001(\014B\007\372\336\037\003Key\022\022\n\002id\030\003 \001(\014B\006\342\336\037"
+    "\002ID\022\026\n\010priority\030\004 \001(\005B\004\310\336\037\000\0227\n\tisolation"
+    "\030\005 \001(\0162\036.cockroach.proto.IsolationTypeB\004"
+    "\310\336\037\000\0228\n\006status\030\006 \001(\0162\".cockroach.proto.T"
+    "ransactionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001(\005B\004\310"
+    "\336\037\000\0222\n\016last_heartbeat\030\010 \001(\0132\032.cockroach."
+    "proto.Timestamp\0223\n\ttimestamp\030\t \001(\0132\032.coc"
+    "kroach.proto.TimestampB\004\310\336\037\000\0228\n\016orig_tim"
+    "estamp\030\n \001(\0132\032.cockroach.proto.Timestamp"
+    "B\004\310\336\037\000\0227\n\rmax_timestamp\030\013 \001(\0132\032.cockroac"
+    "h.proto.TimestampB\004\310\336\037\000\0226\n\rcertain_nodes"
+    "\030\014 \001(\0132\031.cockroach.proto.NodeListB\004\310\336\037\000\022"
+    "\025\n\007Writing\030\r \001(\010B\004\310\336\037\000:\004\230\240\037\000\"\257\001\n\005Lease\022/"
+    "\n\005start\030\001 \001(\0132\032.cockroach.proto.Timestam"
+    "pB\004\310\336\037\000\0224\n\nexpiration\030\002 \001(\0132\032.cockroach."
+    "proto.TimestampB\004\310\336\037\000\0229\n\007replica\030\003 \001(\0132\""
+    ".cockroach.proto.ReplicaDescriptorB\004\310\336\037\000"
+    ":\004\230\240\037\000\"i\n\006Intent\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\022\030"
+    "\n\007end_key\030\002 \001(\014B\007\372\336\037\003Key\022/\n\003txn\030\003 \001(\0132\034."
+    "cockroach.proto.TransactionB\004\310\336\037\000\"H\n\nGCM"
+    "etadata\022\035\n\017last_scan_nanos\030\001 \001(\003B\004\310\336\037\000\022\033"
+    "\n\023oldest_intent_nanos\030\002 \001(\003*Q\n\tValueType"
+    "\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYT"
+    "ES\020\003\022\010\n\004TIME\020\004\022\016\n\nTIMESERIES\020d*>\n\021Replic"
+    "aChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_R"
+    "EPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIA"
+    "LIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Transac"
+    "tionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013"
+    "\n\007ABORTED\020\002\032\004\210\243\036\000B\027Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001\220\343"
+    "\036\000", 2802);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -3446,7 +3447,7 @@ ChangeReplicasTrigger::ChangeReplicasTrigger()
 }
 
 void ChangeReplicasTrigger::InitAsDefaultInstance() {
-  replica_ = const_cast< ::cockroach::proto::Replica*>(&::cockroach::proto::Replica::default_instance());
+  replica_ = const_cast< ::cockroach::proto::ReplicaDescriptor*>(&::cockroach::proto::ReplicaDescriptor::default_instance());
 }
 
 ChangeReplicasTrigger::ChangeReplicasTrigger(const ChangeReplicasTrigger& from)
@@ -3516,7 +3517,7 @@ void ChangeReplicasTrigger::Clear() {
     ZR_(node_id_, store_id_);
     ZR_(change_type_, next_replica_id_);
     if (has_replica()) {
-      if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+      if (replica_ != NULL) replica_->::cockroach::proto::ReplicaDescriptor::Clear();
     }
   }
 
@@ -3589,7 +3590,7 @@ bool ChangeReplicasTrigger::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.proto.Replica replica = 4;
+      // optional .cockroach.proto.ReplicaDescriptor replica = 4;
       case 4: {
         if (tag == 34) {
          parse_replica:
@@ -3602,7 +3603,7 @@ bool ChangeReplicasTrigger::MergePartialFromCodedStream(
         break;
       }
 
-      // repeated .cockroach.proto.Replica updated_replicas = 5;
+      // repeated .cockroach.proto.ReplicaDescriptor updated_replicas = 5;
       case 5: {
         if (tag == 42) {
          parse_updated_replicas:
@@ -3675,13 +3676,13 @@ void ChangeReplicasTrigger::SerializeWithCachedSizes(
       3, this->change_type(), output);
   }
 
-  // optional .cockroach.proto.Replica replica = 4;
+  // optional .cockroach.proto.ReplicaDescriptor replica = 4;
   if (has_replica()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       4, *this->replica_, output);
   }
 
-  // repeated .cockroach.proto.Replica updated_replicas = 5;
+  // repeated .cockroach.proto.ReplicaDescriptor updated_replicas = 5;
   for (unsigned int i = 0, n = this->updated_replicas_size(); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       5, this->updated_replicas(i), output);
@@ -3718,14 +3719,14 @@ void ChangeReplicasTrigger::SerializeWithCachedSizes(
       3, this->change_type(), target);
   }
 
-  // optional .cockroach.proto.Replica replica = 4;
+  // optional .cockroach.proto.ReplicaDescriptor replica = 4;
   if (has_replica()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         4, *this->replica_, target);
   }
 
-  // repeated .cockroach.proto.Replica updated_replicas = 5;
+  // repeated .cockroach.proto.ReplicaDescriptor updated_replicas = 5;
   for (unsigned int i = 0, n = this->updated_replicas_size(); i < n; i++) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -3769,7 +3770,7 @@ int ChangeReplicasTrigger::ByteSize() const {
         ::google::protobuf::internal::WireFormatLite::EnumSize(this->change_type());
     }
 
-    // optional .cockroach.proto.Replica replica = 4;
+    // optional .cockroach.proto.ReplicaDescriptor replica = 4;
     if (has_replica()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -3784,7 +3785,7 @@ int ChangeReplicasTrigger::ByteSize() const {
     }
 
   }
-  // repeated .cockroach.proto.Replica updated_replicas = 5;
+  // repeated .cockroach.proto.ReplicaDescriptor updated_replicas = 5;
   total_size += 1 * this->updated_replicas_size();
   for (int i = 0; i < this->updated_replicas_size(); i++) {
     total_size +=
@@ -3829,7 +3830,7 @@ void ChangeReplicasTrigger::MergeFrom(const ChangeReplicasTrigger& from) {
       set_change_type(from.change_type());
     }
     if (from.has_replica()) {
-      mutable_replica()->::cockroach::proto::Replica::MergeFrom(from.replica());
+      mutable_replica()->::cockroach::proto::ReplicaDescriptor::MergeFrom(from.replica());
     }
     if (from.has_next_replica_id()) {
       set_next_replica_id(from.next_replica_id());
@@ -3957,7 +3958,7 @@ void ChangeReplicasTrigger::clear_change_type() {
   // @@protoc_insertion_point(field_set:cockroach.proto.ChangeReplicasTrigger.change_type)
 }
 
-// optional .cockroach.proto.Replica replica = 4;
+// optional .cockroach.proto.ReplicaDescriptor replica = 4;
 bool ChangeReplicasTrigger::has_replica() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -3968,28 +3969,28 @@ void ChangeReplicasTrigger::clear_has_replica() {
   _has_bits_[0] &= ~0x00000008u;
 }
 void ChangeReplicasTrigger::clear_replica() {
-  if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+  if (replica_ != NULL) replica_->::cockroach::proto::ReplicaDescriptor::Clear();
   clear_has_replica();
 }
- const ::cockroach::proto::Replica& ChangeReplicasTrigger::replica() const {
+ const ::cockroach::proto::ReplicaDescriptor& ChangeReplicasTrigger::replica() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ChangeReplicasTrigger.replica)
   return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
- ::cockroach::proto::Replica* ChangeReplicasTrigger::mutable_replica() {
+ ::cockroach::proto::ReplicaDescriptor* ChangeReplicasTrigger::mutable_replica() {
   set_has_replica();
   if (replica_ == NULL) {
-    replica_ = new ::cockroach::proto::Replica;
+    replica_ = new ::cockroach::proto::ReplicaDescriptor;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ChangeReplicasTrigger.replica)
   return replica_;
 }
- ::cockroach::proto::Replica* ChangeReplicasTrigger::release_replica() {
+ ::cockroach::proto::ReplicaDescriptor* ChangeReplicasTrigger::release_replica() {
   clear_has_replica();
-  ::cockroach::proto::Replica* temp = replica_;
+  ::cockroach::proto::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
   return temp;
 }
- void ChangeReplicasTrigger::set_allocated_replica(::cockroach::proto::Replica* replica) {
+ void ChangeReplicasTrigger::set_allocated_replica(::cockroach::proto::ReplicaDescriptor* replica) {
   delete replica_;
   replica_ = replica;
   if (replica) {
@@ -4000,31 +4001,31 @@ void ChangeReplicasTrigger::clear_replica() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ChangeReplicasTrigger.replica)
 }
 
-// repeated .cockroach.proto.Replica updated_replicas = 5;
+// repeated .cockroach.proto.ReplicaDescriptor updated_replicas = 5;
 int ChangeReplicasTrigger::updated_replicas_size() const {
   return updated_replicas_.size();
 }
 void ChangeReplicasTrigger::clear_updated_replicas() {
   updated_replicas_.Clear();
 }
- const ::cockroach::proto::Replica& ChangeReplicasTrigger::updated_replicas(int index) const {
+ const ::cockroach::proto::ReplicaDescriptor& ChangeReplicasTrigger::updated_replicas(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_.Get(index);
 }
- ::cockroach::proto::Replica* ChangeReplicasTrigger::mutable_updated_replicas(int index) {
+ ::cockroach::proto::ReplicaDescriptor* ChangeReplicasTrigger::mutable_updated_replicas(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_.Mutable(index);
 }
- ::cockroach::proto::Replica* ChangeReplicasTrigger::add_updated_replicas() {
+ ::cockroach::proto::ReplicaDescriptor* ChangeReplicasTrigger::add_updated_replicas() {
   // @@protoc_insertion_point(field_add:cockroach.proto.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >&
+ const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor >&
 ChangeReplicasTrigger::updated_replicas() const {
   // @@protoc_insertion_point(field_list:cockroach.proto.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_;
 }
- ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >*
+ ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor >*
 ChangeReplicasTrigger::mutable_updated_replicas() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.proto.ChangeReplicasTrigger.updated_replicas)
   return &updated_replicas_;
@@ -6446,7 +6447,7 @@ Lease::Lease()
 void Lease::InitAsDefaultInstance() {
   start_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
   expiration_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
-  replica_ = const_cast< ::cockroach::proto::Replica*>(&::cockroach::proto::Replica::default_instance());
+  replica_ = const_cast< ::cockroach::proto::ReplicaDescriptor*>(&::cockroach::proto::ReplicaDescriptor::default_instance());
 }
 
 Lease::Lease(const Lease& from)
@@ -6512,7 +6513,7 @@ void Lease::Clear() {
       if (expiration_ != NULL) expiration_->::cockroach::proto::Timestamp::Clear();
     }
     if (has_replica()) {
-      if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+      if (replica_ != NULL) replica_->::cockroach::proto::ReplicaDescriptor::Clear();
     }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -6556,7 +6557,7 @@ bool Lease::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.proto.Replica replica = 3;
+      // optional .cockroach.proto.ReplicaDescriptor replica = 3;
       case 3: {
         if (tag == 26) {
          parse_replica:
@@ -6606,7 +6607,7 @@ void Lease::SerializeWithCachedSizes(
       2, *this->expiration_, output);
   }
 
-  // optional .cockroach.proto.Replica replica = 3;
+  // optional .cockroach.proto.ReplicaDescriptor replica = 3;
   if (has_replica()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       3, *this->replica_, output);
@@ -6636,7 +6637,7 @@ void Lease::SerializeWithCachedSizes(
         2, *this->expiration_, target);
   }
 
-  // optional .cockroach.proto.Replica replica = 3;
+  // optional .cockroach.proto.ReplicaDescriptor replica = 3;
   if (has_replica()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -6669,7 +6670,7 @@ int Lease::ByteSize() const {
           *this->expiration_);
     }
 
-    // optional .cockroach.proto.Replica replica = 3;
+    // optional .cockroach.proto.ReplicaDescriptor replica = 3;
     if (has_replica()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -6710,7 +6711,7 @@ void Lease::MergeFrom(const Lease& from) {
       mutable_expiration()->::cockroach::proto::Timestamp::MergeFrom(from.expiration());
     }
     if (from.has_replica()) {
-      mutable_replica()->::cockroach::proto::Replica::MergeFrom(from.replica());
+      mutable_replica()->::cockroach::proto::ReplicaDescriptor::MergeFrom(from.replica());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -6845,7 +6846,7 @@ void Lease::clear_expiration() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Lease.expiration)
 }
 
-// optional .cockroach.proto.Replica replica = 3;
+// optional .cockroach.proto.ReplicaDescriptor replica = 3;
 bool Lease::has_replica() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
@@ -6856,28 +6857,28 @@ void Lease::clear_has_replica() {
   _has_bits_[0] &= ~0x00000004u;
 }
 void Lease::clear_replica() {
-  if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+  if (replica_ != NULL) replica_->::cockroach::proto::ReplicaDescriptor::Clear();
   clear_has_replica();
 }
- const ::cockroach::proto::Replica& Lease::replica() const {
+ const ::cockroach::proto::ReplicaDescriptor& Lease::replica() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.Lease.replica)
   return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
- ::cockroach::proto::Replica* Lease::mutable_replica() {
+ ::cockroach::proto::ReplicaDescriptor* Lease::mutable_replica() {
   set_has_replica();
   if (replica_ == NULL) {
-    replica_ = new ::cockroach::proto::Replica;
+    replica_ = new ::cockroach::proto::ReplicaDescriptor;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.Lease.replica)
   return replica_;
 }
- ::cockroach::proto::Replica* Lease::release_replica() {
+ ::cockroach::proto::ReplicaDescriptor* Lease::release_replica() {
   clear_has_replica();
-  ::cockroach::proto::Replica* temp = replica_;
+  ::cockroach::proto::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
   return temp;
 }
- void Lease::set_allocated_replica(::cockroach::proto::Replica* replica) {
+ void Lease::set_allocated_replica(::cockroach::proto::ReplicaDescriptor* replica) {
   delete replica_;
   replica_ = replica;
   if (replica) {

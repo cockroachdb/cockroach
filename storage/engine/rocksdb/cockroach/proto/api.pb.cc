@@ -1258,211 +1258,212 @@ void protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto() {
     "ckroach/proto/data.proto\032\034cockroach/prot"
     "o/errors.proto\032\024gogoproto/gogo.proto\"<\n\013"
     "ClientCmdID\022\027\n\twall_time\030\001 \001(\003B\004\310\336\037\000\022\024\n\006"
-    "random\030\002 \001(\003B\004\310\336\037\000\"\233\003\n\rRequestHeader\0223\n\t"
+    "random\030\002 \001(\003B\004\310\336\037\000\"\245\003\n\rRequestHeader\0223\n\t"
     "timestamp\030\001 \001(\0132\032.cockroach.proto.Timest"
     "ampB\004\310\336\037\000\022;\n\006cmd_id\030\002 \001(\0132\034.cockroach.pr"
     "oto.ClientCmdIDB\r\310\336\037\000\342\336\037\005CmdID\022\024\n\003key\030\003 "
-    "\001(\014B\007\372\336\037\003Key\022\030\n\007end_key\030\004 \001(\014B\007\372\336\037\003Key\022/"
-    "\n\007replica\030\005 \001(\0132\030.cockroach.proto.Replic"
-    "aB\004\310\336\037\000\022,\n\010range_id\030\006 \001(\003B\032\310\336\037\000\342\336\037\007Range"
-    "ID\372\336\037\007RangeID\022\030\n\ruser_priority\030\007 \001(\005:\0011\022"
-    ")\n\003txn\030\010 \001(\0132\034.cockroach.proto.Transacti"
-    "on\022D\n\020read_consistency\030\t \001(\0162$.cockroach"
-    ".proto.ReadConsistencyTypeB\004\310\336\037\000\"\227\001\n\016Res"
-    "ponseHeader\022%\n\005error\030\001 \001(\0132\026.cockroach.p"
-    "roto.Error\0223\n\ttimestamp\030\002 \001(\0132\032.cockroac"
-    "h.proto.TimestampB\004\310\336\037\000\022)\n\003txn\030\003 \001(\0132\034.c"
-    "ockroach.proto.Transaction\"F\n\nGetRequest"
-    "\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Reque"
-    "stHeaderB\010\310\336\037\000\320\336\037\001\"o\n\013GetResponse\0229\n\006hea"
+    "\001(\014B\007\372\336\037\003Key\022\030\n\007end_key\030\004 \001(\014B\007\372\336\037\003Key\0229"
+    "\n\007replica\030\005 \001(\0132\".cockroach.proto.Replic"
+    "aDescriptorB\004\310\336\037\000\022,\n\010range_id\030\006 \001(\003B\032\310\336\037"
+    "\000\342\336\037\007RangeID\372\336\037\007RangeID\022\030\n\ruser_priority"
+    "\030\007 \001(\005:\0011\022)\n\003txn\030\010 \001(\0132\034.cockroach.proto"
+    ".Transaction\022D\n\020read_consistency\030\t \001(\0162$"
+    ".cockroach.proto.ReadConsistencyTypeB\004\310\336"
+    "\037\000\"\227\001\n\016ResponseHeader\022%\n\005error\030\001 \001(\0132\026.c"
+    "ockroach.proto.Error\0223\n\ttimestamp\030\002 \001(\0132"
+    "\032.cockroach.proto.TimestampB\004\310\336\037\000\022)\n\003txn"
+    "\030\003 \001(\0132\034.cockroach.proto.Transaction\"F\n\n"
+    "GetRequest\0228\n\006header\030\001 \001(\0132\036.cockroach.p"
+    "roto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"o\n\013GetRespo"
+    "nse\0229\n\006header\030\001 \001(\0132\037.cockroach.proto.Re"
+    "sponseHeaderB\010\310\336\037\000\320\336\037\001\022%\n\005value\030\002 \001(\0132\026."
+    "cockroach.proto.Value\"s\n\nPutRequest\0228\n\006h"
+    "eader\030\001 \001(\0132\036.cockroach.proto.RequestHea"
+    "derB\010\310\336\037\000\320\336\037\001\022+\n\005value\030\002 \001(\0132\026.cockroach"
+    ".proto.ValueB\004\310\336\037\000\"H\n\013PutResponse\0229\n\006hea"
     "der\030\001 \001(\0132\037.cockroach.proto.ResponseHead"
-    "erB\010\310\336\037\000\320\336\037\001\022%\n\005value\030\002 \001(\0132\026.cockroach."
-    "proto.Value\"s\n\nPutRequest\0228\n\006header\030\001 \001("
-    "\0132\036.cockroach.proto.RequestHeaderB\010\310\336\037\000\320"
-    "\336\037\001\022+\n\005value\030\002 \001(\0132\026.cockroach.proto.Val"
-    "ueB\004\310\336\037\000\"H\n\013PutResponse\0229\n\006header\030\001 \001(\0132"
-    "\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336"
-    "\037\001\"\251\001\n\025ConditionalPutRequest\0228\n\006header\030\001"
-    " \001(\0132\036.cockroach.proto.RequestHeaderB\010\310\336"
-    "\037\000\320\336\037\001\022+\n\005value\030\002 \001(\0132\026.cockroach.proto."
-    "ValueB\004\310\336\037\000\022)\n\texp_value\030\003 \001(\0132\026.cockroa"
-    "ch.proto.Value\"S\n\026ConditionalPutResponse"
-    "\0229\n\006header\030\001 \001(\0132\037.cockroach.proto.Respo"
-    "nseHeaderB\010\310\336\037\000\320\336\037\001\"e\n\020IncrementRequest\022"
-    "8\n\006header\030\001 \001(\0132\036.cockroach.proto.Reques"
-    "tHeaderB\010\310\336\037\000\320\336\037\001\022\027\n\tincrement\030\002 \001(\003B\004\310\336"
-    "\037\000\"g\n\021IncrementResponse\0229\n\006header\030\001 \001(\0132"
-    "\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336"
-    "\037\001\022\027\n\tnew_value\030\002 \001(\003B\004\310\336\037\000\"I\n\rDeleteReq"
-    "uest\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.R"
-    "equestHeaderB\010\310\336\037\000\320\336\037\001\"K\n\016DeleteResponse"
-    "\0229\n\006header\030\001 \001(\0132\037.cockroach.proto.Respo"
-    "nseHeaderB\010\310\336\037\000\320\336\037\001\"s\n\022DeleteRangeReques"
-    "t\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Requ"
-    "estHeaderB\010\310\336\037\000\320\336\037\001\022#\n\025max_entries_to_de"
-    "lete\030\002 \001(\003B\004\310\336\037\000\"k\n\023DeleteRangeResponse\022"
-    "9\n\006header\030\001 \001(\0132\037.cockroach.proto.Respon"
-    "seHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013num_deleted\030\002 \001(\003B"
-    "\004\310\336\037\000\"b\n\013ScanRequest\0228\n\006header\030\001 \001(\0132\036.c"
-    "ockroach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\031"
-    "\n\013max_results\030\002 \001(\003B\004\310\336\037\000\"x\n\014ScanRespons"
-    "e\0229\n\006header\030\001 \001(\0132\037.cockroach.proto.Resp"
-    "onseHeaderB\010\310\336\037\000\320\336\037\001\022-\n\004rows\030\002 \003(\0132\031.coc"
-    "kroach.proto.KeyValueB\004\310\336\037\000\"i\n\022ReverseSc"
-    "anRequest\0228\n\006header\030\001 \001(\0132\036.cockroach.pr"
-    "oto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013max_resul"
-    "ts\030\002 \001(\003B\004\310\336\037\000\"\177\n\023ReverseScanResponse\0229\n"
-    "\006header\030\001 \001(\0132\037.cockroach.proto.Response"
-    "HeaderB\010\310\336\037\000\320\336\037\001\022-\n\004rows\030\002 \003(\0132\031.cockroa"
-    "ch.proto.KeyValueB\004\310\336\037\000\"\340\001\n\025EndTransacti"
-    "onRequest\0228\n\006header\030\001 \001(\0132\036.cockroach.pr"
-    "oto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\024\n\006commit\030\002 "
-    "\001(\010B\004\310\336\037\000\022G\n\027internal_commit_trigger\030\003 \001"
-    "(\0132&.cockroach.proto.InternalCommitTrigg"
-    "er\022.\n\007intents\030\004 \003(\0132\027.cockroach.proto.In"
-    "tentB\004\310\336\037\000\"\211\001\n\026EndTransactionResponse\0229\n"
-    "\006header\030\001 \001(\0132\037.cockroach.proto.Response"
-    "HeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013commit_wait\030\002 \001(\003B\004\310"
-    "\336\037\000\022\031\n\010resolved\030\003 \003(\014B\007\372\336\037\003Key\"i\n\021AdminS"
-    "plitRequest\0228\n\006header\030\001 \001(\0132\036.cockroach."
-    "proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\032\n\tsplit_k"
-    "ey\030\002 \001(\014B\007\372\336\037\003Key\"O\n\022AdminSplitResponse\022"
-    "9\n\006header\030\001 \001(\0132\037.cockroach.proto.Respon"
-    "seHeaderB\010\310\336\037\000\320\336\037\001\"M\n\021AdminMergeRequest\022"
-    "8\n\006header\030\001 \001(\0132\036.cockroach.proto.Reques"
-    "tHeaderB\010\310\336\037\000\320\336\037\001\"O\n\022AdminMergeResponse\022"
-    "9\n\006header\030\001 \001(\0132\037.cockroach.proto.Respon"
-    "seHeaderB\010\310\336\037\000\320\336\037\001\"\237\001\n\022RangeLookupReques"
-    "t\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Requ"
-    "estHeaderB\010\310\336\037\000\320\336\037\001\022\030\n\nmax_ranges\030\002 \001(\005B"
-    "\004\310\336\037\000\022\036\n\020consider_intents\030\003 \001(\010B\004\310\336\037\000\022\025\n"
-    "\007reverse\030\004 \001(\010B\004\310\336\037\000\"\210\001\n\023RangeLookupResp"
-    "onse\0229\n\006header\030\001 \001(\0132\037.cockroach.proto.R"
-    "esponseHeaderB\010\310\336\037\000\320\336\037\001\0226\n\006ranges\030\002 \003(\0132"
-    " .cockroach.proto.RangeDescriptorB\004\310\336\037\000\""
-    "O\n\023HeartbeatTxnRequest\0228\n\006header\030\001 \001(\0132\036"
-    ".cockroach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001"
-    "\"Q\n\024HeartbeatTxnResponse\0229\n\006header\030\001 \001(\013"
-    "2\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000\320"
-    "\336\037\001\"\215\002\n\tGCRequest\0228\n\006header\030\001 \001(\0132\036.cock"
-    "roach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022<\n\007g"
-    "c_meta\030\002 \001(\0132\033.cockroach.proto.GCMetadat"
-    "aB\016\310\336\037\000\342\336\037\006GCMeta\0224\n\004keys\030\003 \003(\0132 .cockro"
-    "ach.proto.GCRequest.GCKeyB\004\310\336\037\000\032R\n\005GCKey"
-    "\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\0223\n\ttimestamp\030\002 \001("
-    "\0132\032.cockroach.proto.TimestampB\004\310\336\037\000\"G\n\nG"
-    "CResponse\0229\n\006header\030\001 \001(\0132\037.cockroach.pr"
-    "oto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\232\002\n\016PushTxn"
-    "Request\0228\n\006header\030\001 \001(\0132\036.cockroach.prot"
-    "o.RequestHeaderB\010\310\336\037\000\320\336\037\001\0220\n\npusher_txn\030"
-    "\002 \001(\0132\034.cockroach.proto.Transaction\0226\n\np"
-    "ushee_txn\030\003 \001(\0132\034.cockroach.proto.Transa"
-    "ctionB\004\310\336\037\000\022-\n\003now\030\004 \001(\0132\032.cockroach.pro"
-    "to.TimestampB\004\310\336\037\000\0225\n\tpush_type\030\005 \001(\0162\034."
-    "cockroach.proto.PushTxnTypeB\004\310\336\037\000\"~\n\017Pus"
-    "hTxnResponse\0229\n\006header\030\001 \001(\0132\037.cockroach"
-    ".proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\0220\n\npushe"
-    "e_txn\030\002 \001(\0132\034.cockroach.proto.Transactio"
-    "n\"\210\001\n\024ResolveIntentRequest\0228\n\006header\030\001 \001"
-    "(\0132\036.cockroach.proto.RequestHeaderB\010\310\336\037\000"
-    "\320\336\037\001\0226\n\nintent_txn\030\002 \001(\0132\034.cockroach.pro"
-    "to.TransactionB\004\310\336\037\000\"R\n\025ResolveIntentRes"
-    "ponse\0229\n\006header\030\001 \001(\0132\037.cockroach.proto."
-    "ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\215\001\n\031ResolveInte"
-    "ntRangeRequest\0228\n\006header\030\001 \001(\0132\036.cockroa"
-    "ch.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\0226\n\ninte"
-    "nt_txn\030\002 \001(\0132\034.cockroach.proto.Transacti"
-    "onB\004\310\336\037\000\"I\n\014NoopResponse\0229\n\006header\030\001 \001(\013"
-    "2\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000\320"
-    "\336\037\001\"G\n\013NoopRequest\0228\n\006header\030\001 \001(\0132\036.coc"
-    "kroach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"W\n\032"
-    "ResolveIntentRangeResponse\0229\n\006header\030\001 \001"
-    "(\0132\037.cockroach.proto.ResponseHeaderB\010\310\336\037"
-    "\000\320\336\037\001\"u\n\014MergeRequest\0228\n\006header\030\001 \001(\0132\036."
+    "erB\010\310\336\037\000\320\336\037\001\"\251\001\n\025ConditionalPutRequest\0228"
+    "\n\006header\030\001 \001(\0132\036.cockroach.proto.Request"
+    "HeaderB\010\310\336\037\000\320\336\037\001\022+\n\005value\030\002 \001(\0132\026.cockro"
+    "ach.proto.ValueB\004\310\336\037\000\022)\n\texp_value\030\003 \001(\013"
+    "2\026.cockroach.proto.Value\"S\n\026ConditionalP"
+    "utResponse\0229\n\006header\030\001 \001(\0132\037.cockroach.p"
+    "roto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"e\n\020Increme"
+    "ntRequest\0228\n\006header\030\001 \001(\0132\036.cockroach.pr"
+    "oto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\027\n\tincrement"
+    "\030\002 \001(\003B\004\310\336\037\000\"g\n\021IncrementResponse\0229\n\006hea"
+    "der\030\001 \001(\0132\037.cockroach.proto.ResponseHead"
+    "erB\010\310\336\037\000\320\336\037\001\022\027\n\tnew_value\030\002 \001(\003B\004\310\336\037\000\"I\n"
+    "\rDeleteRequest\0228\n\006header\030\001 \001(\0132\036.cockroa"
+    "ch.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"K\n\016Dele"
+    "teResponse\0229\n\006header\030\001 \001(\0132\037.cockroach.p"
+    "roto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"s\n\022DeleteR"
+    "angeRequest\0228\n\006header\030\001 \001(\0132\036.cockroach."
+    "proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022#\n\025max_ent"
+    "ries_to_delete\030\002 \001(\003B\004\310\336\037\000\"k\n\023DeleteRang"
+    "eResponse\0229\n\006header\030\001 \001(\0132\037.cockroach.pr"
+    "oto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013num_dele"
+    "ted\030\002 \001(\003B\004\310\336\037\000\"b\n\013ScanRequest\0228\n\006header"
+    "\030\001 \001(\0132\036.cockroach.proto.RequestHeaderB\010"
+    "\310\336\037\000\320\336\037\001\022\031\n\013max_results\030\002 \001(\003B\004\310\336\037\000\"x\n\014S"
+    "canResponse\0229\n\006header\030\001 \001(\0132\037.cockroach."
+    "proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022-\n\004rows\030\002"
+    " \003(\0132\031.cockroach.proto.KeyValueB\004\310\336\037\000\"i\n"
+    "\022ReverseScanRequest\0228\n\006header\030\001 \001(\0132\036.co"
+    "ckroach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\031\n"
+    "\013max_results\030\002 \001(\003B\004\310\336\037\000\"\177\n\023ReverseScanR"
+    "esponse\0229\n\006header\030\001 \001(\0132\037.cockroach.prot"
+    "o.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022-\n\004rows\030\002 \003(\013"
+    "2\031.cockroach.proto.KeyValueB\004\310\336\037\000\"\340\001\n\025En"
+    "dTransactionRequest\0228\n\006header\030\001 \001(\0132\036.co"
+    "ckroach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\024\n"
+    "\006commit\030\002 \001(\010B\004\310\336\037\000\022G\n\027internal_commit_t"
+    "rigger\030\003 \001(\0132&.cockroach.proto.InternalC"
+    "ommitTrigger\022.\n\007intents\030\004 \003(\0132\027.cockroac"
+    "h.proto.IntentB\004\310\336\037\000\"\211\001\n\026EndTransactionR"
+    "esponse\0229\n\006header\030\001 \001(\0132\037.cockroach.prot"
+    "o.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013commit_wai"
+    "t\030\002 \001(\003B\004\310\336\037\000\022\031\n\010resolved\030\003 \003(\014B\007\372\336\037\003Key"
+    "\"i\n\021AdminSplitRequest\0228\n\006header\030\001 \001(\0132\036."
     "cockroach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022"
-    "+\n\005value\030\002 \001(\0132\026.cockroach.proto.ValueB\004"
-    "\310\336\037\000\"J\n\rMergeResponse\0229\n\006header\030\001 \001(\0132\037."
+    "\032\n\tsplit_key\030\002 \001(\014B\007\372\336\037\003Key\"O\n\022AdminSpli"
+    "tResponse\0229\n\006header\030\001 \001(\0132\037.cockroach.pr"
+    "oto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"M\n\021AdminMer"
+    "geRequest\0228\n\006header\030\001 \001(\0132\036.cockroach.pr"
+    "oto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"O\n\022AdminMerg"
+    "eResponse\0229\n\006header\030\001 \001(\0132\037.cockroach.pr"
+    "oto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\237\001\n\022RangeLo"
+    "okupRequest\0228\n\006header\030\001 \001(\0132\036.cockroach."
+    "proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\030\n\nmax_ran"
+    "ges\030\002 \001(\005B\004\310\336\037\000\022\036\n\020consider_intents\030\003 \001("
+    "\010B\004\310\336\037\000\022\025\n\007reverse\030\004 \001(\010B\004\310\336\037\000\"\210\001\n\023Range"
+    "LookupResponse\0229\n\006header\030\001 \001(\0132\037.cockroa"
+    "ch.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\0226\n\006ran"
+    "ges\030\002 \003(\0132 .cockroach.proto.RangeDescrip"
+    "torB\004\310\336\037\000\"O\n\023HeartbeatTxnRequest\0228\n\006head"
+    "er\030\001 \001(\0132\036.cockroach.proto.RequestHeader"
+    "B\010\310\336\037\000\320\336\037\001\"Q\n\024HeartbeatTxnResponse\0229\n\006he"
+    "ader\030\001 \001(\0132\037.cockroach.proto.ResponseHea"
+    "derB\010\310\336\037\000\320\336\037\001\"\215\002\n\tGCRequest\0228\n\006header\030\001 "
+    "\001(\0132\036.cockroach.proto.RequestHeaderB\010\310\336\037"
+    "\000\320\336\037\001\022<\n\007gc_meta\030\002 \001(\0132\033.cockroach.proto"
+    ".GCMetadataB\016\310\336\037\000\342\336\037\006GCMeta\0224\n\004keys\030\003 \003("
+    "\0132 .cockroach.proto.GCRequest.GCKeyB\004\310\336\037"
+    "\000\032R\n\005GCKey\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\0223\n\ttime"
+    "stamp\030\002 \001(\0132\032.cockroach.proto.TimestampB"
+    "\004\310\336\037\000\"G\n\nGCResponse\0229\n\006header\030\001 \001(\0132\037.co"
+    "ckroach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\232"
+    "\002\n\016PushTxnRequest\0228\n\006header\030\001 \001(\0132\036.cock"
+    "roach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\0220\n\np"
+    "usher_txn\030\002 \001(\0132\034.cockroach.proto.Transa"
+    "ction\0226\n\npushee_txn\030\003 \001(\0132\034.cockroach.pr"
+    "oto.TransactionB\004\310\336\037\000\022-\n\003now\030\004 \001(\0132\032.coc"
+    "kroach.proto.TimestampB\004\310\336\037\000\0225\n\tpush_typ"
+    "e\030\005 \001(\0162\034.cockroach.proto.PushTxnTypeB\004\310"
+    "\336\037\000\"~\n\017PushTxnResponse\0229\n\006header\030\001 \001(\0132\037"
+    ".cockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037"
+    "\001\0220\n\npushee_txn\030\002 \001(\0132\034.cockroach.proto."
+    "Transaction\"\210\001\n\024ResolveIntentRequest\0228\n\006"
+    "header\030\001 \001(\0132\036.cockroach.proto.RequestHe"
+    "aderB\010\310\336\037\000\320\336\037\001\0226\n\nintent_txn\030\002 \001(\0132\034.coc"
+    "kroach.proto.TransactionB\004\310\336\037\000\"R\n\025Resolv"
+    "eIntentResponse\0229\n\006header\030\001 \001(\0132\037.cockro"
+    "ach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\215\001\n\031R"
+    "esolveIntentRangeRequest\0228\n\006header\030\001 \001(\013"
+    "2\036.cockroach.proto.RequestHeaderB\010\310\336\037\000\320\336"
+    "\037\001\0226\n\nintent_txn\030\002 \001(\0132\034.cockroach.proto"
+    ".TransactionB\004\310\336\037\000\"I\n\014NoopResponse\0229\n\006he"
+    "ader\030\001 \001(\0132\037.cockroach.proto.ResponseHea"
+    "derB\010\310\336\037\000\320\336\037\001\"G\n\013NoopRequest\0228\n\006header\030\001"
+    " \001(\0132\036.cockroach.proto.RequestHeaderB\010\310\336"
+    "\037\000\320\336\037\001\"W\n\032ResolveIntentRangeResponse\0229\n\006"
+    "header\030\001 \001(\0132\037.cockroach.proto.ResponseH"
+    "eaderB\010\310\336\037\000\320\336\037\001\"u\n\014MergeRequest\0228\n\006heade"
+    "r\030\001 \001(\0132\036.cockroach.proto.RequestHeaderB"
+    "\010\310\336\037\000\320\336\037\001\022+\n\005value\030\002 \001(\0132\026.cockroach.pro"
+    "to.ValueB\004\310\336\037\000\"J\n\rMergeResponse\0229\n\006heade"
+    "r\030\001 \001(\0132\037.cockroach.proto.ResponseHeader"
+    "B\010\310\336\037\000\320\336\037\001\"c\n\022TruncateLogRequest\0228\n\006head"
+    "er\030\001 \001(\0132\036.cockroach.proto.RequestHeader"
+    "B\010\310\336\037\000\320\336\037\001\022\023\n\005index\030\002 \001(\004B\004\310\336\037\000\"P\n\023Trunc"
+    "ateLogResponse\0229\n\006header\030\001 \001(\0132\037.cockroa"
+    "ch.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"{\n\022Lea"
+    "derLeaseRequest\0228\n\006header\030\001 \001(\0132\036.cockro"
+    "ach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005lea"
+    "se\030\002 \001(\0132\026.cockroach.proto.LeaseB\004\310\336\037\000\"P"
+    "\n\023LeaderLeaseResponse\0229\n\006header\030\001 \001(\0132\037."
     "cockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001"
-    "\"c\n\022TruncateLogRequest\0228\n\006header\030\001 \001(\0132\036"
-    ".cockroach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001"
-    "\022\023\n\005index\030\002 \001(\004B\004\310\336\037\000\"P\n\023TruncateLogResp"
-    "onse\0229\n\006header\030\001 \001(\0132\037.cockroach.proto.R"
-    "esponseHeaderB\010\310\336\037\000\320\336\037\001\"{\n\022LeaderLeaseRe"
-    "quest\0228\n\006header\030\001 \001(\0132\036.cockroach.proto."
-    "RequestHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005lease\030\002 \001(\0132\026"
-    ".cockroach.proto.LeaseB\004\310\336\037\000\"P\n\023LeaderLe"
-    "aseResponse\0229\n\006header\030\001 \001(\0132\037.cockroach."
-    "proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\220\t\n\014Reque"
-    "stUnion\022(\n\003get\030\001 \001(\0132\033.cockroach.proto.G"
-    "etRequest\022(\n\003put\030\002 \001(\0132\033.cockroach.proto"
-    ".PutRequest\022\?\n\017conditional_put\030\003 \001(\0132&.c"
-    "ockroach.proto.ConditionalPutRequest\0224\n\t"
-    "increment\030\004 \001(\0132!.cockroach.proto.Increm"
-    "entRequest\022.\n\006delete\030\005 \001(\0132\036.cockroach.p"
-    "roto.DeleteRequest\0229\n\014delete_range\030\006 \001(\013"
-    "2#.cockroach.proto.DeleteRangeRequest\022*\n"
-    "\004scan\030\007 \001(\0132\034.cockroach.proto.ScanReques"
-    "t\022\?\n\017end_transaction\030\010 \001(\0132&.cockroach.p"
-    "roto.EndTransactionRequest\0227\n\013admin_spli"
-    "t\030\t \001(\0132\".cockroach.proto.AdminSplitRequ"
-    "est\0227\n\013admin_merge\030\n \001(\0132\".cockroach.pro"
-    "to.AdminMergeRequest\022;\n\rheartbeat_txn\030\013 "
-    "\001(\0132$.cockroach.proto.HeartbeatTxnReques"
-    "t\022&\n\002gc\030\014 \001(\0132\032.cockroach.proto.GCReques"
-    "t\0221\n\010push_txn\030\r \001(\0132\037.cockroach.proto.Pu"
-    "shTxnRequest\0229\n\014range_lookup\030\016 \001(\0132#.coc"
-    "kroach.proto.RangeLookupRequest\022=\n\016resol"
-    "ve_intent\030\017 \001(\0132%.cockroach.proto.Resolv"
-    "eIntentRequest\022H\n\024resolve_intent_range\030\020"
-    " \001(\0132*.cockroach.proto.ResolveIntentRang"
-    "eRequest\022,\n\005merge\030\021 \001(\0132\035.cockroach.prot"
-    "o.MergeRequest\0229\n\014truncate_log\030\022 \001(\0132#.c"
-    "ockroach.proto.TruncateLogRequest\0229\n\014lea"
-    "der_lease\030\023 \001(\0132#.cockroach.proto.Leader"
-    "LeaseRequest\0229\n\014reverse_scan\030\024 \001(\0132#.coc"
-    "kroach.proto.ReverseScanRequest\022*\n\004noop\030"
-    "\025 \001(\0132\034.cockroach.proto.NoopRequest:\004\310\240\037"
-    "\001\"\246\t\n\rResponseUnion\022)\n\003get\030\001 \001(\0132\034.cockr"
-    "oach.proto.GetResponse\022)\n\003put\030\002 \001(\0132\034.co"
-    "ckroach.proto.PutResponse\022@\n\017conditional"
-    "_put\030\003 \001(\0132\'.cockroach.proto.Conditional"
-    "PutResponse\0225\n\tincrement\030\004 \001(\0132\".cockroa"
-    "ch.proto.IncrementResponse\022/\n\006delete\030\005 \001"
-    "(\0132\037.cockroach.proto.DeleteResponse\022:\n\014d"
-    "elete_range\030\006 \001(\0132$.cockroach.proto.Dele"
-    "teRangeResponse\022+\n\004scan\030\007 \001(\0132\035.cockroac"
-    "h.proto.ScanResponse\022@\n\017end_transaction\030"
-    "\010 \001(\0132\'.cockroach.proto.EndTransactionRe"
-    "sponse\0228\n\013admin_split\030\t \001(\0132#.cockroach."
-    "proto.AdminSplitResponse\0228\n\013admin_merge\030"
-    "\n \001(\0132#.cockroach.proto.AdminMergeRespon"
-    "se\022<\n\rheartbeat_txn\030\013 \001(\0132%.cockroach.pr"
-    "oto.HeartbeatTxnResponse\022\'\n\002gc\030\014 \001(\0132\033.c"
-    "ockroach.proto.GCResponse\0222\n\010push_txn\030\r "
-    "\001(\0132 .cockroach.proto.PushTxnResponse\022:\n"
-    "\014range_lookup\030\016 \001(\0132$.cockroach.proto.Ra"
-    "ngeLookupResponse\022>\n\016resolve_intent\030\017 \001("
-    "\0132&.cockroach.proto.ResolveIntentRespons"
-    "e\022I\n\024resolve_intent_range\030\020 \001(\0132+.cockro"
-    "ach.proto.ResolveIntentRangeResponse\022-\n\005"
-    "merge\030\021 \001(\0132\036.cockroach.proto.MergeRespo"
-    "nse\022:\n\014truncate_log\030\022 \001(\0132$.cockroach.pr"
-    "oto.TruncateLogResponse\022:\n\014leader_lease\030"
-    "\023 \001(\0132$.cockroach.proto.LeaderLeaseRespo"
-    "nse\022:\n\014reverse_scan\030\024 \001(\0132$.cockroach.pr"
-    "oto.ReverseScanResponse\022+\n\004noop\030\025 \001(\0132\035."
-    "cockroach.proto.NoopResponse:\004\310\240\037\001\"\205\001\n\014B"
-    "atchRequest\0228\n\006header\030\001 \001(\0132\036.cockroach."
-    "proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\0225\n\010request"
-    "s\030\002 \003(\0132\035.cockroach.proto.RequestUnionB\004"
-    "\310\336\037\000:\004\230\240\037\000\"\203\001\n\rBatchResponse\0229\n\006header\030\001"
-    " \001(\0132\037.cockroach.proto.ResponseHeaderB\010\310"
-    "\336\037\000\320\336\037\001\0227\n\tresponses\030\002 \003(\0132\036.cockroach.p"
-    "roto.ResponseUnionB\004\310\336\037\000*L\n\023ReadConsiste"
-    "ncyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020"
-    "\n\014INCONSISTENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n"
-    "\016PUSH_TIMESTAMP\020\000\022\r\n\tABORT_TXN\020\001\022\017\n\013CLEA"
-    "NUP_TXN\020\002\032\004\210\243\036\000B\027Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 8400);
+    "\"\220\t\n\014RequestUnion\022(\n\003get\030\001 \001(\0132\033.cockroa"
+    "ch.proto.GetRequest\022(\n\003put\030\002 \001(\0132\033.cockr"
+    "oach.proto.PutRequest\022\?\n\017conditional_put"
+    "\030\003 \001(\0132&.cockroach.proto.ConditionalPutR"
+    "equest\0224\n\tincrement\030\004 \001(\0132!.cockroach.pr"
+    "oto.IncrementRequest\022.\n\006delete\030\005 \001(\0132\036.c"
+    "ockroach.proto.DeleteRequest\0229\n\014delete_r"
+    "ange\030\006 \001(\0132#.cockroach.proto.DeleteRange"
+    "Request\022*\n\004scan\030\007 \001(\0132\034.cockroach.proto."
+    "ScanRequest\022\?\n\017end_transaction\030\010 \001(\0132&.c"
+    "ockroach.proto.EndTransactionRequest\0227\n\013"
+    "admin_split\030\t \001(\0132\".cockroach.proto.Admi"
+    "nSplitRequest\0227\n\013admin_merge\030\n \001(\0132\".coc"
+    "kroach.proto.AdminMergeRequest\022;\n\rheartb"
+    "eat_txn\030\013 \001(\0132$.cockroach.proto.Heartbea"
+    "tTxnRequest\022&\n\002gc\030\014 \001(\0132\032.cockroach.prot"
+    "o.GCRequest\0221\n\010push_txn\030\r \001(\0132\037.cockroac"
+    "h.proto.PushTxnRequest\0229\n\014range_lookup\030\016"
+    " \001(\0132#.cockroach.proto.RangeLookupReques"
+    "t\022=\n\016resolve_intent\030\017 \001(\0132%.cockroach.pr"
+    "oto.ResolveIntentRequest\022H\n\024resolve_inte"
+    "nt_range\030\020 \001(\0132*.cockroach.proto.Resolve"
+    "IntentRangeRequest\022,\n\005merge\030\021 \001(\0132\035.cock"
+    "roach.proto.MergeRequest\0229\n\014truncate_log"
+    "\030\022 \001(\0132#.cockroach.proto.TruncateLogRequ"
+    "est\0229\n\014leader_lease\030\023 \001(\0132#.cockroach.pr"
+    "oto.LeaderLeaseRequest\0229\n\014reverse_scan\030\024"
+    " \001(\0132#.cockroach.proto.ReverseScanReques"
+    "t\022*\n\004noop\030\025 \001(\0132\034.cockroach.proto.NoopRe"
+    "quest:\004\310\240\037\001\"\246\t\n\rResponseUnion\022)\n\003get\030\001 \001"
+    "(\0132\034.cockroach.proto.GetResponse\022)\n\003put\030"
+    "\002 \001(\0132\034.cockroach.proto.PutResponse\022@\n\017c"
+    "onditional_put\030\003 \001(\0132\'.cockroach.proto.C"
+    "onditionalPutResponse\0225\n\tincrement\030\004 \001(\013"
+    "2\".cockroach.proto.IncrementResponse\022/\n\006"
+    "delete\030\005 \001(\0132\037.cockroach.proto.DeleteRes"
+    "ponse\022:\n\014delete_range\030\006 \001(\0132$.cockroach."
+    "proto.DeleteRangeResponse\022+\n\004scan\030\007 \001(\0132"
+    "\035.cockroach.proto.ScanResponse\022@\n\017end_tr"
+    "ansaction\030\010 \001(\0132\'.cockroach.proto.EndTra"
+    "nsactionResponse\0228\n\013admin_split\030\t \001(\0132#."
+    "cockroach.proto.AdminSplitResponse\0228\n\013ad"
+    "min_merge\030\n \001(\0132#.cockroach.proto.AdminM"
+    "ergeResponse\022<\n\rheartbeat_txn\030\013 \001(\0132%.co"
+    "ckroach.proto.HeartbeatTxnResponse\022\'\n\002gc"
+    "\030\014 \001(\0132\033.cockroach.proto.GCResponse\0222\n\010p"
+    "ush_txn\030\r \001(\0132 .cockroach.proto.PushTxnR"
+    "esponse\022:\n\014range_lookup\030\016 \001(\0132$.cockroac"
+    "h.proto.RangeLookupResponse\022>\n\016resolve_i"
+    "ntent\030\017 \001(\0132&.cockroach.proto.ResolveInt"
+    "entResponse\022I\n\024resolve_intent_range\030\020 \001("
+    "\0132+.cockroach.proto.ResolveIntentRangeRe"
+    "sponse\022-\n\005merge\030\021 \001(\0132\036.cockroach.proto."
+    "MergeResponse\022:\n\014truncate_log\030\022 \001(\0132$.co"
+    "ckroach.proto.TruncateLogResponse\022:\n\014lea"
+    "der_lease\030\023 \001(\0132$.cockroach.proto.Leader"
+    "LeaseResponse\022:\n\014reverse_scan\030\024 \001(\0132$.co"
+    "ckroach.proto.ReverseScanResponse\022+\n\004noo"
+    "p\030\025 \001(\0132\035.cockroach.proto.NoopResponse:\004"
+    "\310\240\037\001\"\205\001\n\014BatchRequest\0228\n\006header\030\001 \001(\0132\036."
+    "cockroach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022"
+    "5\n\010requests\030\002 \003(\0132\035.cockroach.proto.Requ"
+    "estUnionB\004\310\336\037\000:\004\230\240\037\000\"\203\001\n\rBatchResponse\0229"
+    "\n\006header\030\001 \001(\0132\037.cockroach.proto.Respons"
+    "eHeaderB\010\310\336\037\000\320\336\037\001\0227\n\tresponses\030\002 \003(\0132\036.c"
+    "ockroach.proto.ResponseUnionB\004\310\336\037\000*L\n\023Re"
+    "adConsistencyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCON"
+    "SENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000*G\n\013Push"
+    "TxnType\022\022\n\016PUSH_TIMESTAMP\020\000\022\r\n\tABORT_TXN"
+    "\020\001\022\017\n\013CLEANUP_TXN\020\002\032\004\210\243\036\000B\027Z\005proto\340\342\036\001\310\342"
+    "\036\001\320\342\036\001\220\343\036\000", 8410);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/api.proto", &protobuf_RegisterTypes);
   ClientCmdID::default_instance_ = new ClientCmdID();
@@ -1973,7 +1974,7 @@ RequestHeader::RequestHeader()
 void RequestHeader::InitAsDefaultInstance() {
   timestamp_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
   cmd_id_ = const_cast< ::cockroach::proto::ClientCmdID*>(&::cockroach::proto::ClientCmdID::default_instance());
-  replica_ = const_cast< ::cockroach::proto::Replica*>(&::cockroach::proto::Replica::default_instance());
+  replica_ = const_cast< ::cockroach::proto::ReplicaDescriptor*>(&::cockroach::proto::ReplicaDescriptor::default_instance());
   txn_ = const_cast< ::cockroach::proto::Transaction*>(&::cockroach::proto::Transaction::default_instance());
 }
 
@@ -2056,7 +2057,7 @@ void RequestHeader::Clear() {
       end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
     if (has_replica()) {
-      if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+      if (replica_ != NULL) replica_->::cockroach::proto::ReplicaDescriptor::Clear();
     }
     range_id_ = GOOGLE_LONGLONG(0);
     user_priority_ = 1;
@@ -2132,7 +2133,7 @@ bool RequestHeader::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.proto.Replica replica = 5;
+      // optional .cockroach.proto.ReplicaDescriptor replica = 5;
       case 5: {
         if (tag == 42) {
          parse_replica:
@@ -2257,7 +2258,7 @@ void RequestHeader::SerializeWithCachedSizes(
       4, this->end_key(), output);
   }
 
-  // optional .cockroach.proto.Replica replica = 5;
+  // optional .cockroach.proto.ReplicaDescriptor replica = 5;
   if (has_replica()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       5, *this->replica_, output);
@@ -2323,7 +2324,7 @@ void RequestHeader::SerializeWithCachedSizes(
         4, this->end_key(), target);
   }
 
-  // optional .cockroach.proto.Replica replica = 5;
+  // optional .cockroach.proto.ReplicaDescriptor replica = 5;
   if (has_replica()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -2393,7 +2394,7 @@ int RequestHeader::ByteSize() const {
           this->end_key());
     }
 
-    // optional .cockroach.proto.Replica replica = 5;
+    // optional .cockroach.proto.ReplicaDescriptor replica = 5;
     if (has_replica()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -2469,7 +2470,7 @@ void RequestHeader::MergeFrom(const RequestHeader& from) {
       end_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.end_key_);
     }
     if (from.has_replica()) {
-      mutable_replica()->::cockroach::proto::Replica::MergeFrom(from.replica());
+      mutable_replica()->::cockroach::proto::ReplicaDescriptor::MergeFrom(from.replica());
     }
     if (from.has_range_id()) {
       set_range_id(from.range_id());
@@ -2730,7 +2731,7 @@ void RequestHeader::clear_end_key() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.end_key)
 }
 
-// optional .cockroach.proto.Replica replica = 5;
+// optional .cockroach.proto.ReplicaDescriptor replica = 5;
 bool RequestHeader::has_replica() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
@@ -2741,28 +2742,28 @@ void RequestHeader::clear_has_replica() {
   _has_bits_[0] &= ~0x00000010u;
 }
 void RequestHeader::clear_replica() {
-  if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+  if (replica_ != NULL) replica_->::cockroach::proto::ReplicaDescriptor::Clear();
   clear_has_replica();
 }
- const ::cockroach::proto::Replica& RequestHeader::replica() const {
+ const ::cockroach::proto::ReplicaDescriptor& RequestHeader::replica() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.replica)
   return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
- ::cockroach::proto::Replica* RequestHeader::mutable_replica() {
+ ::cockroach::proto::ReplicaDescriptor* RequestHeader::mutable_replica() {
   set_has_replica();
   if (replica_ == NULL) {
-    replica_ = new ::cockroach::proto::Replica;
+    replica_ = new ::cockroach::proto::ReplicaDescriptor;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestHeader.replica)
   return replica_;
 }
- ::cockroach::proto::Replica* RequestHeader::release_replica() {
+ ::cockroach::proto::ReplicaDescriptor* RequestHeader::release_replica() {
   clear_has_replica();
-  ::cockroach::proto::Replica* temp = replica_;
+  ::cockroach::proto::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
   return temp;
 }
- void RequestHeader::set_allocated_replica(::cockroach::proto::Replica* replica) {
+ void RequestHeader::set_allocated_replica(::cockroach::proto::ReplicaDescriptor* replica) {
   delete replica_;
   replica_ = replica;
   if (replica) {

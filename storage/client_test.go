@@ -386,7 +386,7 @@ func (m *multiTestContext) replicateRange(rangeID proto.RangeID, sourceStoreInde
 
 	for _, dest := range dests {
 		err = rng.ChangeReplicas(proto.ADD_REPLICA,
-			proto.Replica{
+			proto.ReplicaDescriptor{
 				NodeID:  m.stores[dest].Ident.NodeID,
 				StoreID: m.stores[dest].Ident.StoreID,
 			}, rng.Desc())
@@ -417,7 +417,7 @@ func (m *multiTestContext) unreplicateRange(rangeID proto.RangeID, source, dest 
 	}
 
 	err = rng.ChangeReplicas(proto.REMOVE_REPLICA,
-		proto.Replica{
+		proto.ReplicaDescriptor{
 			NodeID:  m.idents[dest].NodeID,
 			StoreID: m.idents[dest].StoreID,
 		}, rng.Desc())
@@ -444,7 +444,7 @@ func getArgs(key []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.Get
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 	}
 }
@@ -456,7 +456,7 @@ func putArgs(key, value []byte, rangeID proto.RangeID, storeID proto.StoreID) pr
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 		Value: proto.Value{
 			Bytes: value,
@@ -471,7 +471,7 @@ func incrementArgs(key []byte, inc int64, rangeID proto.RangeID, storeID proto.S
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 		Increment: inc,
 	}
@@ -481,7 +481,7 @@ func truncateLogArgs(index uint64, rangeID proto.RangeID, storeID proto.StoreID)
 	return proto.TruncateLogRequest{
 		RequestHeader: proto.RequestHeader{
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 		Index: index,
 	}

@@ -36,8 +36,8 @@ var _ = math.Inf
 // protobuf-based RPC codec.
 type RaftMessageRequest struct {
 	GroupID     github_com_cockroachdb_cockroach_proto.RangeID `protobuf:"varint,1,opt,name=group_id,casttype=github.com/cockroachdb/cockroach/proto.RangeID" json:"group_id"`
-	FromReplica cockroach_proto.Replica                        `protobuf:"bytes,2,opt,name=from_replica" json:"from_replica"`
-	ToReplica   cockroach_proto.Replica                        `protobuf:"bytes,3,opt,name=to_replica" json:"to_replica"`
+	FromReplica cockroach_proto.ReplicaDescriptor              `protobuf:"bytes,2,opt,name=from_replica" json:"from_replica"`
+	ToReplica   cockroach_proto.ReplicaDescriptor              `protobuf:"bytes,3,opt,name=to_replica" json:"to_replica"`
 	Message     raftpb.Message                                 `protobuf:"bytes,4,opt,name=message" json:"message"`
 }
 
@@ -52,18 +52,18 @@ func (m *RaftMessageRequest) GetGroupID() github_com_cockroachdb_cockroach_proto
 	return 0
 }
 
-func (m *RaftMessageRequest) GetFromReplica() cockroach_proto.Replica {
+func (m *RaftMessageRequest) GetFromReplica() cockroach_proto.ReplicaDescriptor {
 	if m != nil {
 		return m.FromReplica
 	}
-	return cockroach_proto.Replica{}
+	return cockroach_proto.ReplicaDescriptor{}
 }
 
-func (m *RaftMessageRequest) GetToReplica() cockroach_proto.Replica {
+func (m *RaftMessageRequest) GetToReplica() cockroach_proto.ReplicaDescriptor {
 	if m != nil {
 		return m.ToReplica
 	}
-	return cockroach_proto.Replica{}
+	return cockroach_proto.ReplicaDescriptor{}
 }
 
 func (m *RaftMessageRequest) GetMessage() raftpb.Message {
@@ -89,7 +89,7 @@ type ConfChangeContext struct {
 	// proto.EndTransactionRequest).
 	Payload []byte `protobuf:"bytes,2,opt,name=payload" json:"payload,omitempty"`
 	// Replica contians full details about the replica being added or removed.
-	Replica cockroach_proto.Replica `protobuf:"bytes,3,opt,name=replica" json:"replica"`
+	Replica cockroach_proto.ReplicaDescriptor `protobuf:"bytes,3,opt,name=replica" json:"replica"`
 }
 
 func (m *ConfChangeContext) Reset()         { *m = ConfChangeContext{} }
@@ -110,11 +110,11 @@ func (m *ConfChangeContext) GetPayload() []byte {
 	return nil
 }
 
-func (m *ConfChangeContext) GetReplica() cockroach_proto.Replica {
+func (m *ConfChangeContext) GetReplica() cockroach_proto.ReplicaDescriptor {
 	if m != nil {
 		return m.Replica
 	}
-	return cockroach_proto.Replica{}
+	return cockroach_proto.ReplicaDescriptor{}
 }
 
 func (m *RaftMessageRequest) Marshal() (data []byte, err error) {

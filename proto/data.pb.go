@@ -411,10 +411,10 @@ type ChangeReplicasTrigger struct {
 	StoreID    StoreID           `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
 	ChangeType ReplicaChangeType `protobuf:"varint,3,opt,name=change_type,enum=cockroach.proto.ReplicaChangeType" json:"change_type"`
 	// The replica being modified.
-	Replica Replica `protobuf:"bytes,4,opt,name=replica" json:"replica"`
+	Replica ReplicaDescriptor `protobuf:"bytes,4,opt,name=replica" json:"replica"`
 	// The new replica list with this change applied.
-	UpdatedReplicas []Replica `protobuf:"bytes,5,rep,name=updated_replicas" json:"updated_replicas"`
-	NextReplicaID   ReplicaID `protobuf:"varint,6,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
+	UpdatedReplicas []ReplicaDescriptor `protobuf:"bytes,5,rep,name=updated_replicas" json:"updated_replicas"`
+	NextReplicaID   ReplicaID           `protobuf:"varint,6,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
 }
 
 func (m *ChangeReplicasTrigger) Reset()         { *m = ChangeReplicasTrigger{} }
@@ -442,14 +442,14 @@ func (m *ChangeReplicasTrigger) GetChangeType() ReplicaChangeType {
 	return ADD_REPLICA
 }
 
-func (m *ChangeReplicasTrigger) GetReplica() Replica {
+func (m *ChangeReplicasTrigger) GetReplica() ReplicaDescriptor {
 	if m != nil {
 		return m.Replica
 	}
-	return Replica{}
+	return ReplicaDescriptor{}
 }
 
-func (m *ChangeReplicasTrigger) GetUpdatedReplicas() []Replica {
+func (m *ChangeReplicasTrigger) GetUpdatedReplicas() []ReplicaDescriptor {
 	if m != nil {
 		return m.UpdatedReplicas
 	}
@@ -705,7 +705,7 @@ type Lease struct {
 	// The expiration is a timestamp at which the lease will expire.
 	Expiration Timestamp `protobuf:"bytes,2,opt,name=expiration" json:"expiration"`
 	// The address of the would-be lease holder.
-	Replica Replica `protobuf:"bytes,3,opt,name=replica" json:"replica"`
+	Replica ReplicaDescriptor `protobuf:"bytes,3,opt,name=replica" json:"replica"`
 }
 
 func (m *Lease) Reset()      { *m = Lease{} }
@@ -725,11 +725,11 @@ func (m *Lease) GetExpiration() Timestamp {
 	return Timestamp{}
 }
 
-func (m *Lease) GetReplica() Replica {
+func (m *Lease) GetReplica() ReplicaDescriptor {
 	if m != nil {
 		return m.Replica
 	}
-	return Replica{}
+	return ReplicaDescriptor{}
 }
 
 // Intent is used to communicate the location of an intent.
@@ -2555,7 +2555,7 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.UpdatedReplicas = append(m.UpdatedReplicas, Replica{})
+			m.UpdatedReplicas = append(m.UpdatedReplicas, ReplicaDescriptor{})
 			if err := m.UpdatedReplicas[len(m.UpdatedReplicas)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}

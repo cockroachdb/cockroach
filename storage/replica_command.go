@@ -1463,7 +1463,7 @@ func (r *Replica) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) err
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
-func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.Replica, desc *proto.RangeDescriptor) error {
+func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.ReplicaDescriptor, desc *proto.RangeDescriptor) error {
 	r.Lock()
 	for r.pendingReplica.value.ReplicaID != 0 {
 		r.pendingReplica.Wait()
@@ -1471,7 +1471,7 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 
 	// Validate the request and prepare the new descriptor.
 	updatedDesc := *desc
-	updatedDesc.Replicas = append([]proto.Replica{}, desc.Replicas...)
+	updatedDesc.Replicas = append([]proto.ReplicaDescriptor{}, desc.Replicas...)
 	found := -1       // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
 	for i, existingRep := range desc.Replicas {
@@ -1550,14 +1550,14 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 
 func (r *Replica) clearPendingChangeReplicas() {
 	r.Lock()
-	r.pendingReplica.value = proto.Replica{}
+	r.pendingReplica.value = proto.ReplicaDescriptor{}
 	r.pendingReplica.Broadcast()
 	r.Unlock()
 }
 
 // replicaSetsEqual is used in AdminMerge to ensure that the ranges are
 // all collocate on the same set of replicas.
-func replicaSetsEqual(a, b []proto.Replica) bool {
+func replicaSetsEqual(a, b []proto.ReplicaDescriptor) bool {
 	if len(a) != len(b) {
 		return false
 	}

@@ -375,7 +375,7 @@ func TestMembershipChange(t *testing.T) {
 	for i := 1; i < 4; i++ {
 		ch := cluster.nodes[0].ChangeGroupMembership(groupID, makeCommandID(),
 			raftpb.ConfChangeAddNode,
-			proto.Replica{
+			proto.ReplicaDescriptor{
 				NodeID:    cluster.nodes[i].nodeID,
 				StoreID:   proto.StoreID(cluster.nodes[i].nodeID),
 				ReplicaID: proto.ReplicaID(cluster.nodes[i].nodeID),
@@ -463,7 +463,7 @@ func TestRemoveLeader(t *testing.T) {
 		log.Infof("adding node %d", i+groupSize)
 		ch := cluster.nodes[i].ChangeGroupMembership(groupID, makeCommandID(),
 			raftpb.ConfChangeAddNode,
-			proto.Replica{
+			proto.ReplicaDescriptor{
 				NodeID:    cluster.nodes[i+groupSize].nodeID,
 				StoreID:   proto.StoreID(cluster.nodes[i+groupSize].nodeID),
 				ReplicaID: proto.ReplicaID(cluster.nodes[i+groupSize].nodeID),
@@ -475,7 +475,7 @@ func TestRemoveLeader(t *testing.T) {
 		log.Infof("removing node %d", i)
 		ch = cluster.nodes[i].ChangeGroupMembership(groupID, makeCommandID(),
 			raftpb.ConfChangeRemoveNode,
-			proto.Replica{
+			proto.ReplicaDescriptor{
 				NodeID:    cluster.nodes[i].nodeID,
 				StoreID:   proto.StoreID(cluster.nodes[i].nodeID),
 				ReplicaID: proto.ReplicaID(cluster.nodes[i].nodeID),

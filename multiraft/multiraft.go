@@ -376,7 +376,7 @@ func (m *MultiRaft) SubmitCommand(groupID proto.RangeID, commandID string, comma
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 // Payload is an opaque blob that will be returned in EventMembershipChangeCommitted.
 func (m *MultiRaft) ChangeGroupMembership(groupID proto.RangeID, commandID string,
-	changeType raftpb.ConfChangeType, replica proto.Replica, payload []byte) <-chan error {
+	changeType raftpb.ConfChangeType, replica proto.ReplicaDescriptor, payload []byte) <-chan error {
 	if log.V(6) {
 		log.Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
 	}
@@ -433,7 +433,7 @@ type group struct {
 
 	// leader is the last known leader for this group, or all zeros
 	// if an election is in progress.
-	leader proto.Replica
+	leader proto.ReplicaDescriptor
 
 	// pending contains all commands that have been proposed but not yet
 	// committed in the current term. When a proposal is committed, nil
@@ -790,7 +790,7 @@ func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) er
 		return util.Errorf("couldn't find replica ID for this store (%s) in range %d",
 			s.storeID, groupID)
 	}
-	s.CacheReplicaAddress(groupID, proto.Replica{
+	s.CacheReplicaAddress(groupID, proto.ReplicaDescriptor{
 		ReplicaID: replicaID,
 		NodeID:    s.nodeID,
 		StoreID:   s.storeID,
@@ -1087,8 +1087,8 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 			raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
 	}
 	groupID := noGroup
-	var toReplica proto.Replica
-	var fromReplica proto.Replica
+	var toReplica proto.ReplicaDescriptor
+	var fromReplica proto.ReplicaDescriptor
 	if g == nil {
 		// No group (a coalesced heartbeat): To/From fields are NodeIDs.
 		// TODO(bdarnell): test transports route by store ID, not node ID.
@@ -1156,12 +1156,12 @@ func (s *state) maybeSendLeaderEvent(groupID proto.RangeID, g *group, ready *raf
 		// Always save the leader whenever it changes.
 		if proto.ReplicaID(ready.SoftState.Lead) != g.leader.ReplicaID {
 			if ready.SoftState.Lead == 0 {
-				g.leader = proto.Replica{}
+				g.leader = proto.ReplicaDescriptor{}
 			} else {
 				if repl, err := s.ReplicaAddress(g.id, proto.ReplicaID(ready.SoftState.Lead)); err != nil {
 					log.Warningf("node %s: failed to look up address of replica %d in group %d: %s",
 						s.nodeID, ready.SoftState.Lead, g.id, err)
-					g.leader = proto.Replica{}
+					g.leader = proto.ReplicaDescriptor{}
 				} else {
 					g.leader = repl
 				}
@@ -1267,9 +1267,9 @@ type replicaDescCacheKey struct {
 	replicaID proto.ReplicaID
 }
 
-func (s *state) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.Replica, error) {
+func (s *state) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
 	if rep, ok := s.replicaDescCache.Get(replicaDescCacheKey{groupID, replicaID}); ok {
-		return rep.(proto.Replica), nil
+		return rep.(proto.ReplicaDescriptor), nil
 	}
 	rep, err := s.Storage.ReplicaAddress(groupID, replicaID)
 	if err == nil {
@@ -1278,6 +1278,6 @@ func (s *state) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID)
 	return rep, err
 }
 
-func (s *state) CacheReplicaAddress(groupID proto.RangeID, replica proto.Replica) {
+func (s *state) CacheReplicaAddress(groupID proto.RangeID, replica proto.ReplicaDescriptor) {
 	s.replicaDescCache.Add(replicaDescCacheKey{groupID, replica.ReplicaID}, replica)
 }

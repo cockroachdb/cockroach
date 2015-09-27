@@ -316,11 +316,11 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 
 	// Build a slice of replica addresses (if gossiped).
 	var addrs []net.Addr
-	replicaMap := map[string]*proto.Replica{}
+	replicaMap := map[string]*proto.ReplicaDescriptor{}
 	for i := range replicas {
 		addr := replicas[i].NodeDesc.Address
 		addrs = append(addrs, addr)
-		replicaMap[addr.String()] = &replicas[i].Replica
+		replicaMap[addr.String()] = &replicas[i].ReplicaDescriptor
 	}
 	if len(addrs) == 0 {
 		return nil, noNodeAddrsAvailError{}
@@ -627,7 +627,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 						evictDesc()
 					}
 				} else {
-					newLeader = &proto.Replica{}
+					newLeader = &proto.ReplicaDescriptor{}
 				}
 				ds.updateLeaderCache(proto.RangeID(desc.RangeID), *newLeader)
 				if log.V(1) {
@@ -752,7 +752,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 
 // updateLeaderCache updates the cached leader for the given range,
 // evicting any previous value in the process.
-func (ds *DistSender) updateLeaderCache(rid proto.RangeID, leader proto.Replica) {
+func (ds *DistSender) updateLeaderCache(rid proto.RangeID, leader proto.ReplicaDescriptor) {
 	oldLeader := ds.leaderCache.Lookup(rid)
 	if leader.StoreID != oldLeader.StoreID {
 		if log.V(1) {

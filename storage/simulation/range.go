@@ -61,7 +61,7 @@ func newRange(rangeID proto.RangeID, allocator storage.Allocator) *Range {
 // both the range descriptor and the store map.
 func (r *Range) addReplica(s *Store) {
 	storeID, nodeID := s.getIDs()
-	r.desc.Replicas = append(r.desc.Replicas, proto.Replica{
+	r.desc.Replicas = append(r.desc.Replicas, proto.ReplicaDescriptor{
 		NodeID:  nodeID,
 		StoreID: storeID,
 	})
@@ -93,7 +93,7 @@ func (r *Range) getStores() map[proto.StoreID]*Store {
 // replicas in the range.
 func (r *Range) splitRange(originalRange *Range) {
 	stores := originalRange.getStores()
-	r.desc.Replicas = append([]proto.Replica(nil), originalRange.desc.Replicas...)
+	r.desc.Replicas = append([]proto.ReplicaDescriptor(nil), originalRange.desc.Replicas...)
 	for storeID, store := range stores {
 		r.replicas[storeID] = replica{
 			store: store,

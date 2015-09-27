@@ -263,8 +263,8 @@ func (sp *StorePool) getStoreDescriptor(storeID proto.StoreID) *proto.StoreDescr
 
 // findDeadReplicas returns any replicas from the supplied slice that are
 // located on dead stores.
-func (sp *StorePool) deadReplicas(repls []proto.Replica) []proto.Replica {
-	var deadReplicas []proto.Replica
+func (sp *StorePool) deadReplicas(repls []proto.ReplicaDescriptor) []proto.ReplicaDescriptor {
+	var deadReplicas []proto.ReplicaDescriptor
 	for _, repl := range repls {
 		if sp.getStoreDetail(repl.StoreID).dead {
 			deadReplicas = append(deadReplicas, repl)

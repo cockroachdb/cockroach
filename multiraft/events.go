@@ -52,7 +52,7 @@ type EventMembershipChangeCommitted struct {
 	GroupID    proto.RangeID
 	CommandID  string
 	Index      uint64
-	Replica    proto.Replica
+	Replica    proto.ReplicaDescriptor
 	ChangeType raftpb.ConfChangeType
 	Payload    []byte
 

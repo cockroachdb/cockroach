@@ -164,7 +164,7 @@ type RangeManager interface {
 	// Range and replica manipulation methods.
 	LookupReplica(start, end proto.Key) *Replica
 	MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRangeID proto.RangeID) error
-	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
+	NewRangeDescriptor(start, end proto.Key, replicas []proto.ReplicaDescriptor) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, proto.RaftCommand) <-chan error
 	RemoveReplica(rng *Replica) error
@@ -208,7 +208,7 @@ type Replica struct {
 	// pendingReplica.value changes to zero.
 	pendingReplica struct {
 		*sync.Cond
-		value proto.Replica
+		value proto.ReplicaDescriptor
 	}
 	truncatedState unsafe.Pointer // *proto.RaftTruancatedState
 }
@@ -463,13 +463,13 @@ func (r *Replica) setCachedTruncatedState(state *proto.RaftTruncatedState) {
 
 // GetReplica returns the replica for this range from the range descriptor.
 // Returns nil if the replica is not found.
-func (r *Replica) GetReplica() *proto.Replica {
+func (r *Replica) GetReplica() *proto.ReplicaDescriptor {
 	_, replica := r.Desc().FindReplica(r.rm.StoreID())
 	return replica
 }
 
 // ReplicaAddress returns information about the given member of this replica's range.
-func (r *Replica) ReplicaAddress(replicaID proto.ReplicaID) (proto.Replica, error) {
+func (r *Replica) ReplicaAddress(replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
 	r.RLock()
 	defer r.RUnlock()
 
@@ -482,7 +482,7 @@ func (r *Replica) ReplicaAddress(replicaID proto.ReplicaID) (proto.Replica, erro
 	if r.pendingReplica.value.ReplicaID == replicaID {
 		return r.pendingReplica.value, nil
 	}
-	return proto.Replica{}, util.Errorf("replica %d not found in range %d",
+	return proto.ReplicaDescriptor{}, util.Errorf("replica %d not found in range %d",
 		replicaID, r.Desc().RangeID)
 }
 
@@ -1019,7 +1019,7 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto
 // underlying state machine (i.e. the engine).
 // When certain critical operations fail, a replicaCorruptionError may be
 // returned and must be handled by the caller.
-func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originReplica proto.Replica,
+func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originReplica proto.ReplicaDescriptor,
 	ba *proto.BatchRequest) (*proto.BatchResponse, error) {
 	if index <= 0 {
 		log.Fatalc(ctx, "raft command index is <= 0")
@@ -1076,7 +1076,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 // applyRaftCommandInBatch executes the command in a batch engine and
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
-func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, originReplica proto.Replica,
+func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, originReplica proto.ReplicaDescriptor,
 	ba *proto.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *proto.BatchResponse, []intentsWithArg, error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.rm.Engine().NewBatch()

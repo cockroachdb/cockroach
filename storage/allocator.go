@@ -117,7 +117,7 @@ func MakeAllocator(storePool *StorePool, options RebalancingOptions) Allocator {
 
 // getUsedNodes returns a set of node IDs which are already being used
 // to store replicas.
-func getUsedNodes(existing []proto.Replica) map[proto.NodeID]struct{} {
+func getUsedNodes(existing []proto.ReplicaDescriptor) map[proto.NodeID]struct{} {
 	usedNodes := map[proto.NodeID]struct{}{}
 	for _, replica := range existing {
 		usedNodes[replica.NodeID] = struct{}{}
@@ -169,7 +169,7 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *proto.RangeDescr
 // filter the results. The function will be passed the storeDesc and the used
 // and new counts. It returns a bool indicating inclusion or exclusion from the
 // set of stores being considered.
-func (a *Allocator) AllocateTarget(required proto.Attributes, existing []proto.Replica, relaxConstraints bool,
+func (a *Allocator) AllocateTarget(required proto.Attributes, existing []proto.ReplicaDescriptor, relaxConstraints bool,
 	filter func(storeDesc *proto.StoreDescriptor, count, used *stat) bool) (*proto.StoreDescriptor, error) {
 	// Because more redundancy is better than less, if relaxConstraints, the
 	// matching here is lenient, and tries to find a target by relaxing an
@@ -218,14 +218,14 @@ func (a *Allocator) AllocateTarget(required proto.Attributes, existing []proto.R
 // the zone config associated with the provided replicas. This will allow it to
 // make correct decisions in the case of ranges with heterogeneous replica
 // requirements (i.e. multiple data centers).
-func (a Allocator) RemoveTarget(existing []proto.Replica) (proto.Replica, error) {
+func (a Allocator) RemoveTarget(existing []proto.ReplicaDescriptor) (proto.ReplicaDescriptor, error) {
 	if len(existing) == 0 {
-		return proto.Replica{}, util.Errorf("must supply at least one replica to allocator.RemoveTarget()")
+		return proto.ReplicaDescriptor{}, util.Errorf("must supply at least one replica to allocator.RemoveTarget()")
 	}
 
 	// Retrieve store descriptors for the provided replicas from the StorePool.
 	type replStore struct {
-		repl  proto.Replica
+		repl  proto.ReplicaDescriptor
 		store *proto.StoreDescriptor
 	}
 	replStores := make([]replStore, len(existing))
@@ -275,7 +275,7 @@ func (a Allocator) RemoveTarget(existing []proto.Replica) (proto.Replica, error)
 // is perfectly fine, as other stores in the cluster will also be
 // doing their probabilistic best to rebalance. This helps prevent
 // a stampeding herd targeting an abnormally under-utilized store.
-func (a Allocator) RebalanceTarget(required proto.Attributes, existing []proto.Replica) *proto.StoreDescriptor {
+func (a Allocator) RebalanceTarget(required proto.Attributes, existing []proto.ReplicaDescriptor) *proto.StoreDescriptor {
 	filter := func(s *proto.StoreDescriptor, count, used *stat) bool {
 		// In clusters with very low disk usage, a store is eligible to be a
 		// rebalancing target if the number of ranges on that store is below
@@ -364,7 +364,7 @@ func (a Allocator) ShouldRebalance(storeID proto.StoreID) bool {
 // replicas. If the supplied filter is nil, it is ignored. Returns the
 // list of matching descriptors, and the store list matching the
 // required attributes.
-func (a Allocator) selectRandom(count int, required proto.Attributes, existing []proto.Replica) ([]*proto.StoreDescriptor, *StoreList) {
+func (a Allocator) selectRandom(count int, required proto.Attributes, existing []proto.ReplicaDescriptor) ([]*proto.StoreDescriptor, *StoreList) {
 	var descs []*proto.StoreDescriptor
 	sl := a.storePool.getStoreList(required, a.options.Deterministic)
 	used := getUsedNodes(existing)

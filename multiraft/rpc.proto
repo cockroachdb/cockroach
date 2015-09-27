@@ -35,8 +35,8 @@ message RaftMessageRequest {
       (gogoproto.customname) = "GroupID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.RangeID"];
 
-  optional proto.Replica from_replica = 2 [(gogoproto.nullable) = false];
-  optional proto.Replica to_replica = 3 [(gogoproto.nullable) = false];
+  optional proto.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
+  optional proto.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
 
   optional raftpb.Message message = 4 [(gogoproto.nullable) = false];
 }
@@ -56,5 +56,5 @@ message ConfChangeContext {
   optional bytes payload = 2;
 
   // Replica contians full details about the replica being added or removed.
-  optional proto.Replica replica = 3 [(gogoproto.nullable) = false];
+  optional proto.ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
 }

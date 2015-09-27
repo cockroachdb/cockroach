@@ -46,7 +46,7 @@ func adminSplitArgs(key, splitKey []byte, rangeID proto.RangeID, storeID proto.S
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 		SplitKey: splitKey,
 	}

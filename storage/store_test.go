@@ -449,7 +449,7 @@ func TestStoreExecuteNoop(t *testing.T) {
 		RequestHeader: proto.RequestHeader{
 			Key:     nil, // intentional
 			RangeID: 1,
-			Replica: proto.Replica{StoreID: store.StoreID()},
+			Replica: proto.ReplicaDescriptor{StoreID: store.StoreID()},
 		},
 	}
 	ba.Add(&proto.GetRequest{RequestHeader: proto.RequestHeader{Key: proto.Key("a")}})
@@ -670,7 +670,7 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 	// Range IDs should be allocated from ID 2 (first alloc'd range)
 	// to rangeIDAllocCount * 3 + 1.
 	for i := 0; i < rangeIDAllocCount*3; i++ {
-		replicas := []proto.Replica{{StoreID: store.StoreID()}}
+		replicas := []proto.ReplicaDescriptor{{StoreID: store.StoreID()}}
 		desc, err := store.NewRangeDescriptor(proto.Key(fmt.Sprintf("%03d", i)), proto.Key(fmt.Sprintf("%03d", i+1)), replicas)
 		if err != nil {
 			t.Fatal(err)

@@ -42,9 +42,9 @@ var _ WriteableGroupStorage = (*raft.MemoryStorage)(nil)
 // of raft data.
 type Storage interface {
 	GroupStorage(groupID proto.RangeID) WriteableGroupStorage
-	ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.Replica, error)
+	ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error)
 	ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) (proto.ReplicaID, error)
-	ReplicasFromSnapshot(snap raftpb.Snapshot) ([]proto.Replica, error)
+	ReplicasFromSnapshot(snap raftpb.Snapshot) ([]proto.ReplicaDescriptor, error)
 }
 
 // The StateMachine interface is supplied by the application to manage a persistent
@@ -86,8 +86,8 @@ func (m *MemoryStorage) GroupStorage(groupID proto.RangeID) WriteableGroupStorag
 
 // ReplicaAddress implements the Storage interface by returning a
 // dummy address.
-func (m *MemoryStorage) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.Replica, error) {
-	return proto.Replica{
+func (m *MemoryStorage) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
+	return proto.ReplicaDescriptor{
 		ReplicaID: replicaID,
 		NodeID:    proto.NodeID(replicaID),
 		StoreID:   proto.StoreID(replicaID),
@@ -100,7 +100,7 @@ func (m *MemoryStorage) ReplicaIDForStore(groupID proto.RangeID, storeID proto.S
 }
 
 // ReplicasFromSnapshot implements the Storage interface.
-func (m *MemoryStorage) ReplicasFromSnapshot(_ raftpb.Snapshot) ([]proto.Replica, error) {
+func (m *MemoryStorage) ReplicasFromSnapshot(_ raftpb.Snapshot) ([]proto.ReplicaDescriptor, error) {
 	return nil, nil
 }
 

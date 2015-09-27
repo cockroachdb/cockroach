@@ -120,14 +120,14 @@ class RaftCommand : public ::google::protobuf::Message {
   ::google::protobuf::int64 range_id() const;
   void set_range_id(::google::protobuf::int64 value);
 
-  // optional .cockroach.proto.Replica origin_replica = 2;
+  // optional .cockroach.proto.ReplicaDescriptor origin_replica = 2;
   bool has_origin_replica() const;
   void clear_origin_replica();
   static const int kOriginReplicaFieldNumber = 2;
-  const ::cockroach::proto::Replica& origin_replica() const;
-  ::cockroach::proto::Replica* mutable_origin_replica();
-  ::cockroach::proto::Replica* release_origin_replica();
-  void set_allocated_origin_replica(::cockroach::proto::Replica* origin_replica);
+  const ::cockroach::proto::ReplicaDescriptor& origin_replica() const;
+  ::cockroach::proto::ReplicaDescriptor* mutable_origin_replica();
+  ::cockroach::proto::ReplicaDescriptor* release_origin_replica();
+  void set_allocated_origin_replica(::cockroach::proto::ReplicaDescriptor* origin_replica);
 
   // optional .cockroach.proto.BatchRequest cmd = 3;
   bool has_cmd() const;
@@ -151,7 +151,7 @@ class RaftCommand : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::int64 range_id_;
-  ::cockroach::proto::Replica* origin_replica_;
+  ::cockroach::proto::ReplicaDescriptor* origin_replica_;
   ::cockroach::proto::BatchRequest* cmd_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
@@ -747,7 +747,7 @@ inline void RaftCommand::set_range_id(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.proto.RaftCommand.range_id)
 }
 
-// optional .cockroach.proto.Replica origin_replica = 2;
+// optional .cockroach.proto.ReplicaDescriptor origin_replica = 2;
 inline bool RaftCommand::has_origin_replica() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -758,28 +758,28 @@ inline void RaftCommand::clear_has_origin_replica() {
   _has_bits_[0] &= ~0x00000002u;
 }
 inline void RaftCommand::clear_origin_replica() {
-  if (origin_replica_ != NULL) origin_replica_->::cockroach::proto::Replica::Clear();
+  if (origin_replica_ != NULL) origin_replica_->::cockroach::proto::ReplicaDescriptor::Clear();
   clear_has_origin_replica();
 }
-inline const ::cockroach::proto::Replica& RaftCommand::origin_replica() const {
+inline const ::cockroach::proto::ReplicaDescriptor& RaftCommand::origin_replica() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.RaftCommand.origin_replica)
   return origin_replica_ != NULL ? *origin_replica_ : *default_instance_->origin_replica_;
 }
-inline ::cockroach::proto::Replica* RaftCommand::mutable_origin_replica() {
+inline ::cockroach::proto::ReplicaDescriptor* RaftCommand::mutable_origin_replica() {
   set_has_origin_replica();
   if (origin_replica_ == NULL) {
-    origin_replica_ = new ::cockroach::proto::Replica;
+    origin_replica_ = new ::cockroach::proto::ReplicaDescriptor;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftCommand.origin_replica)
   return origin_replica_;
 }
-inline ::cockroach::proto::Replica* RaftCommand::release_origin_replica() {
+inline ::cockroach::proto::ReplicaDescriptor* RaftCommand::release_origin_replica() {
   clear_has_origin_replica();
-  ::cockroach::proto::Replica* temp = origin_replica_;
+  ::cockroach::proto::ReplicaDescriptor* temp = origin_replica_;
   origin_replica_ = NULL;
   return temp;
 }
-inline void RaftCommand::set_allocated_origin_replica(::cockroach::proto::Replica* origin_replica) {
+inline void RaftCommand::set_allocated_origin_replica(::cockroach::proto::ReplicaDescriptor* origin_replica) {
   delete origin_replica_;
   origin_replica_ = origin_replica;
   if (origin_replica) {

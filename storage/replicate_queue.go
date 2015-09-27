@@ -116,7 +116,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *con
 		if err != nil {
 			return err
 		}
-		newReplica := proto.Replica{
+		newReplica := proto.ReplicaDescriptor{
 			NodeID:  newStore.Node.NodeID,
 			StoreID: newStore.StoreID,
 		}
@@ -154,7 +154,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *con
 			// without re-queueing this replica.
 			return nil
 		}
-		rebalanceReplica := proto.Replica{
+		rebalanceReplica := proto.ReplicaDescriptor{
 			NodeID:  rebalanceStore.Node.NodeID,
 			StoreID: rebalanceStore.StoreID,
 		}

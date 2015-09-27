@@ -124,12 +124,12 @@ func TestSendAndReceive(t *testing.T) {
 					To:   uint64(nodeIDs[to]),
 					Type: raftpb.MsgHeartbeat,
 				},
-				FromReplica: proto.Replica{
+				FromReplica: proto.ReplicaDescriptor{
 					NodeID:    nodeIDs[from],
 					StoreID:   proto.StoreID(nodeIDs[from]),
 					ReplicaID: proto.ReplicaID(nodeIDs[from]),
 				},
-				ToReplica: proto.Replica{
+				ToReplica: proto.ReplicaDescriptor{
 					NodeID:    nodeIDs[to],
 					StoreID:   proto.StoreID(nodeIDs[to]),
 					ReplicaID: proto.ReplicaID(nodeIDs[to]),
@@ -217,12 +217,12 @@ func TestInOrderDelivery(t *testing.T) {
 				From:   uint64(clientNodeID),
 				Commit: uint64(i),
 			},
-			ToReplica: proto.Replica{
+			ToReplica: proto.ReplicaDescriptor{
 				NodeID:    nodeID,
 				StoreID:   proto.StoreID(nodeID),
 				ReplicaID: proto.ReplicaID(nodeID),
 			},
-			FromReplica: proto.Replica{
+			FromReplica: proto.ReplicaDescriptor{
 				NodeID:    clientNodeID,
 				StoreID:   proto.StoreID(clientNodeID),
 				ReplicaID: proto.ReplicaID(clientNodeID),

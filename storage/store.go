@@ -787,7 +787,7 @@ func (s *Store) BootstrapRange(initialValues []proto.KeyValue) error {
 		StartKey:      proto.KeyMin,
 		EndKey:        proto.KeyMax,
 		NextReplicaID: 2,
-		Replicas: []proto.Replica{
+		Replicas: []proto.ReplicaDescriptor{
 			{
 				NodeID:    1,
 				StoreID:   1,
@@ -890,7 +890,7 @@ func (s *Store) Tracer() *tracer.Tracer { return s.ctx.Tracer }
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied proto.Replicas slice. It allocates new
 // replica IDs to fill out the supplied replicas.
-func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error) {
+func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.ReplicaDescriptor) (*proto.RangeDescriptor, error) {
 	id, err := s.rangeIDAlloc.Allocate()
 	if err != nil {
 		return nil, err
@@ -899,7 +899,7 @@ func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replic
 		RangeID:       proto.RangeID(id),
 		StartKey:      start,
 		EndKey:        end,
-		Replicas:      append([]proto.Replica(nil), replicas...),
+		Replicas:      append([]proto.ReplicaDescriptor(nil), replicas...),
 		NextReplicaID: proto.ReplicaID(len(replicas) + 1),
 	}
 	for i := range desc.Replicas {
@@ -1539,10 +1539,10 @@ func (s *Store) GroupStorage(groupID proto.RangeID) multiraft.WriteableGroupStor
 }
 
 // ReplicaAddress implements the multiraft.Storage interface.
-func (s *Store) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.Replica, error) {
+func (s *Store) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
 	rep, err := s.GetReplica(groupID)
 	if err != nil {
-		return proto.Replica{}, err
+		return proto.ReplicaDescriptor{}, err
 	}
 	return rep.ReplicaAddress(replicaID)
 }
@@ -1562,7 +1562,7 @@ func (s *Store) ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) 
 }
 
 // ReplicasFromSnapshot implements the multiraft.Storage interface.
-func (s *Store) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]proto.Replica, error) {
+func (s *Store) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]proto.ReplicaDescriptor, error) {
 	// TODO(bdarnell): can we avoid parsing this twice?
 	var parsedSnap proto.RaftSnapshotData
 	if err := parsedSnap.Unmarshal(snap.Data); err != nil {

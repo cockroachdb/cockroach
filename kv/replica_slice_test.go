@@ -92,7 +92,7 @@ func TestReplicaSetMoveToFront(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rs := replicaSlice(nil)
 	for i := 0; i < 5; i++ {
-		rs = append(rs, replicaInfo{Replica: proto.Replica{StoreID: proto.StoreID(i + 1)}})
+		rs = append(rs, replicaInfo{ReplicaDescriptor: proto.ReplicaDescriptor{StoreID: proto.StoreID(i + 1)}})
 	}
 	rs.MoveToFront(0)
 	exp := []proto.StoreID{1, 2, 3, 4, 5}

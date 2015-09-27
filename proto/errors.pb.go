@@ -64,22 +64,22 @@ func (x *TransactionRestart) UnmarshalJSON(data []byte) error {
 // A NotLeaderError indicates that the current range is not the
 // leader. If the leader is known, its Replica is set in the error.
 type NotLeaderError struct {
-	Replica *Replica `protobuf:"bytes,1,opt,name=replica" json:"replica,omitempty"`
-	Leader  *Replica `protobuf:"bytes,2,opt,name=leader" json:"leader,omitempty"`
-	RangeID RangeID  `protobuf:"varint,3,opt,name=range_id,casttype=RangeID" json:"range_id"`
+	Replica *ReplicaDescriptor `protobuf:"bytes,1,opt,name=replica" json:"replica,omitempty"`
+	Leader  *ReplicaDescriptor `protobuf:"bytes,2,opt,name=leader" json:"leader,omitempty"`
+	RangeID RangeID            `protobuf:"varint,3,opt,name=range_id,casttype=RangeID" json:"range_id"`
 }
 
 func (m *NotLeaderError) Reset()      { *m = NotLeaderError{} }
 func (*NotLeaderError) ProtoMessage() {}
 
-func (m *NotLeaderError) GetReplica() *Replica {
+func (m *NotLeaderError) GetReplica() *ReplicaDescriptor {
 	if m != nil {
 		return m.Replica
 	}
 	return nil
 }
 
-func (m *NotLeaderError) GetLeader() *Replica {
+func (m *NotLeaderError) GetLeader() *ReplicaDescriptor {
 	if m != nil {
 		return m.Leader
 	}
@@ -1772,7 +1772,7 @@ func (m *NotLeaderError) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Replica == nil {
-				m.Replica = &Replica{}
+				m.Replica = &ReplicaDescriptor{}
 			}
 			if err := m.Replica.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
@@ -1805,7 +1805,7 @@ func (m *NotLeaderError) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Leader == nil {
-				m.Leader = &Replica{}
+				m.Leader = &ReplicaDescriptor{}
 			}
 			if err := m.Leader.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
