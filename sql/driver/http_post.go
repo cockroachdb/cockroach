@@ -24,14 +24,14 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"time"
 
-	"github.com/golang/snappy"
+	"github.com/cockroachdb/c-snappy"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -103,9 +103,7 @@ func httpPost(c postContext, request, response gogoproto.Message, method fmt.Str
 
 		resp, err = client.Do(req)
 		if err != nil {
-			if log.V(1) {
-				log.Warning(err)
-			}
+			log.Println(err)
 			continue
 		}
 		defer resp.Body.Close()
@@ -129,15 +127,11 @@ func httpPost(c postContext, request, response gogoproto.Message, method fmt.Str
 
 		b, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
-			if log.V(1) {
-				log.Warning(err)
-			}
+			log.Println(err)
 			continue
 		}
 		if err = gogoproto.Unmarshal(b, response); err != nil {
-			if log.V(1) {
-				log.Warning(err)
-			}
+			log.Println(err)
 			continue
 		}
 

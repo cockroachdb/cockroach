@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -40,41 +41,23 @@ func TestStdFlagToPflag(t *testing.T) {
 	})
 }
 
-func TestNoLinkTesting(t *testing.T) {
+func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	if build.Default.GOPATH == "" {
 		t.Skip("GOPATH isn't set")
 	}
 
-	imports := make(map[string]struct{})
-
-	var addImports func(string)
-	addImports = func(root string) {
-		pkg, err := build.Import(root, build.Default.GOPATH, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		for _, imp := range pkg.Imports {
-			// https://github.com/golang/tools/blob/master/refactor/importgraph/graph.go#L115
-			if imp == "C" {
-				continue // "C" is fake
-			}
-			if _, ok := imports[imp]; !ok {
-				imports[imp] = struct{}{}
-				addImports(imp)
-			}
-		}
+	imports, err := testutils.TransitiveImports("github.com/cockroachdb/cockroach", true)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	addImports("github.com/cockroachdb/cockroach")
-
 	for _, forbidden := range []string{
-		"testing",
-		"github.com/cockroachdb/cockroach/security/securitytest",
+		"testing", // defines flags
+		"github.com/cockroachdb/cockroach/security/securitytest", // contains certificates
 	} {
 		if _, ok := imports[forbidden]; ok {
-			t.Errorf("%s is included in the main cockroach binary!", forbidden)
+			t.Errorf("The cockroach binary includes %s, which is forbidden", forbidden)
 		}
 	}
 }

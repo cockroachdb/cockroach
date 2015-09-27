@@ -21,50 +21,28 @@ import (
 	"go/build"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)
-
-	context := build.Default
-	// We only care about the cgo disabled case. If it's enabled, cgo
-	// dependencies are obviously OK.
-	context.CgoEnabled = false
-
-	if context.GOPATH == "" {
+	if build.Default.GOPATH == "" {
 		t.Skip("GOPATH isn't set")
 	}
 
-	imports := make(map[string]struct{})
-
-	var addImports func(string)
-	addImports = func(root string) {
-		pkg, err := context.Import(root, context.GOPATH, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		for _, imp := range pkg.Imports {
-			// https://github.com/golang/tools/blob/master/refactor/importgraph/graph.go#L115
-			if imp == "C" {
-				t.Errorf("sql/driver depends on cgo via %s", pkg.ImportPath)
-				continue // "C" is fake
-			}
-			if _, ok := imports[imp]; !ok {
-				imports[imp] = struct{}{}
-				addImports(imp)
-			}
-		}
+	imports, err := testutils.TransitiveImports("github.com/cockroachdb/cockroach/sql/driver", false)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	addImports("github.com/cockroachdb/cockroach/sql/driver")
-
 	for _, forbidden := range []string{
-		"testing",
+		"C",       // cross compilation
+		"testing", // defines flags
+		"github.com/cockroachdb/cockroach/util/log", // defines flags
 	} {
 		if _, ok := imports[forbidden]; ok {
-			t.Errorf("sql/driver includes %s, which defines flags", forbidden)
+			t.Errorf("sql/driver includes %s, which is forbidden", forbidden)
 		}
 	}
 }

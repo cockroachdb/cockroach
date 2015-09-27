@@ -182,7 +182,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Infof("rpc hijacking %s: %s", r.RemoteAddr, err)
 		return
 	}
-	security.LogTLSState("RPC", r.TLS)
+	if log.V(3) {
+		security.LogTLSState("RPC", r.TLS)
+	}
 	if _, err := io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n"); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return

@@ -123,7 +123,7 @@ check:
 	@echo "checking for tabs in shell scripts"
 	@! git grep -F '	' -- '*.sh'
 	@echo "checking for forbidden imports"
-	@! go list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | grep -E ' (path|log)$$' | grep -Ev 'util/(log|stop): log$$'
+	@! go list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | grep -E ' (path|log)$$' | grep -Ev '(base|security|sql/driver|util/(log|stop)): log$$'
 	@echo "errcheck"
 	@errcheck -ignore 'bytes:Write.*,io:Close,net:Close,net/http:Close,net/rpc:Close,os:Close,database/sql:Close' $(PKG)
 	@echo "vet"
