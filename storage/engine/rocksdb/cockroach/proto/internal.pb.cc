@@ -52,7 +52,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
   RaftCommand_descriptor_ = file->message_type(0);
   static const int RaftCommand_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftCommand, range_id_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftCommand, origin_node_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftCommand, origin_replica_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftCommand, cmd_),
   };
   RaftCommand_reflection_ =
@@ -206,25 +206,25 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "\n\036cockroach/proto/internal.proto\022\017cockro"
     "ach.proto\032\031cockroach/proto/api.proto\032\036co"
     "ckroach/proto/metadata.proto\032\024gogoproto/"
-    "gogo.proto\"\251\001\n\013RaftCommand\022,\n\010range_id\030\001"
-    " \001(\003B\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007RangeID\022:\n\016orig"
-    "in_node_id\030\002 \001(\004B\"\310\336\037\000\342\336\037\014OriginNodeID\372\336"
-    "\037\nRaftNodeID\0220\n\003cmd\030\003 \001(\0132\035.cockroach.pr"
-    "oto.BatchRequestB\004\310\336\037\000\"\236\001\n\026InternalTimeS"
-    "eriesData\022#\n\025start_timestamp_nanos\030\001 \001(\003"
-    "B\004\310\336\037\000\022#\n\025sample_duration_nanos\030\002 \001(\003B\004\310"
-    "\336\037\000\022:\n\007samples\030\003 \003(\0132).cockroach.proto.I"
-    "nternalTimeSeriesSample\"r\n\030InternalTimeS"
-    "eriesSample\022\024\n\006offset\030\001 \001(\005B\004\310\336\037\000\022\023\n\005cou"
-    "nt\030\006 \001(\rB\004\310\336\037\000\022\021\n\003sum\030\007 \001(\001B\004\310\336\037\000\022\013\n\003max"
-    "\030\010 \001(\001\022\013\n\003min\030\t \001(\001\"=\n\022RaftTruncatedStat"
-    "e\022\023\n\005index\030\001 \001(\004B\004\310\336\037\000\022\022\n\004term\030\002 \001(\004B\004\310\336"
-    "\037\000\"\274\001\n\020RaftSnapshotData\022@\n\020range_descrip"
-    "tor\030\001 \001(\0132 .cockroach.proto.RangeDescrip"
-    "torB\004\310\336\037\000\022>\n\002KV\030\002 \003(\0132*.cockroach.proto."
-    "RaftSnapshotData.KeyValueB\006\342\336\037\002KV\032&\n\010Key"
-    "Value\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001(\014B\027Z\005pro"
-    "to\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 858);
+    "gogo.proto\"\245\001\n\013RaftCommand\022,\n\010range_id\030\001"
+    " \001(\003B\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007RangeID\0226\n\016orig"
+    "in_replica\030\002 \001(\0132\030.cockroach.proto.Repli"
+    "caB\004\310\336\037\000\0220\n\003cmd\030\003 \001(\0132\035.cockroach.proto."
+    "BatchRequestB\004\310\336\037\000\"\236\001\n\026InternalTimeSerie"
+    "sData\022#\n\025start_timestamp_nanos\030\001 \001(\003B\004\310\336"
+    "\037\000\022#\n\025sample_duration_nanos\030\002 \001(\003B\004\310\336\037\000\022"
+    ":\n\007samples\030\003 \003(\0132).cockroach.proto.Inter"
+    "nalTimeSeriesSample\"r\n\030InternalTimeSerie"
+    "sSample\022\024\n\006offset\030\001 \001(\005B\004\310\336\037\000\022\023\n\005count\030\006"
+    " \001(\rB\004\310\336\037\000\022\021\n\003sum\030\007 \001(\001B\004\310\336\037\000\022\013\n\003max\030\010 \001"
+    "(\001\022\013\n\003min\030\t \001(\001\"=\n\022RaftTruncatedState\022\023\n"
+    "\005index\030\001 \001(\004B\004\310\336\037\000\022\022\n\004term\030\002 \001(\004B\004\310\336\037\000\"\274"
+    "\001\n\020RaftSnapshotData\022@\n\020range_descriptor\030"
+    "\001 \001(\0132 .cockroach.proto.RangeDescriptorB"
+    "\004\310\336\037\000\022>\n\002KV\030\002 \003(\0132*.cockroach.proto.Raft"
+    "SnapshotData.KeyValueB\006\342\336\037\002KV\032&\n\010KeyValu"
+    "e\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001(\014B\027Z\005proto\340\342"
+    "\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 854);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/internal.proto", &protobuf_RegisterTypes);
   RaftCommand::default_instance_ = new RaftCommand();
@@ -263,7 +263,7 @@ static void MergeFromFail(int line) {
 
 #ifndef _MSC_VER
 const int RaftCommand::kRangeIdFieldNumber;
-const int RaftCommand::kOriginNodeIdFieldNumber;
+const int RaftCommand::kOriginReplicaFieldNumber;
 const int RaftCommand::kCmdFieldNumber;
 #endif  // !_MSC_VER
 
@@ -274,6 +274,7 @@ RaftCommand::RaftCommand()
 }
 
 void RaftCommand::InitAsDefaultInstance() {
+  origin_replica_ = const_cast< ::cockroach::proto::Replica*>(&::cockroach::proto::Replica::default_instance());
   cmd_ = const_cast< ::cockroach::proto::BatchRequest*>(&::cockroach::proto::BatchRequest::default_instance());
 }
 
@@ -288,7 +289,7 @@ RaftCommand::RaftCommand(const RaftCommand& from)
 void RaftCommand::SharedCtor() {
   _cached_size_ = 0;
   range_id_ = GOOGLE_LONGLONG(0);
-  origin_node_id_ = GOOGLE_ULONGLONG(0);
+  origin_replica_ = NULL;
   cmd_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
@@ -300,6 +301,7 @@ RaftCommand::~RaftCommand() {
 
 void RaftCommand::SharedDtor() {
   if (this != default_instance_) {
+    delete origin_replica_;
     delete cmd_;
   }
 }
@@ -330,24 +332,15 @@ RaftCommand* RaftCommand::New(::google::protobuf::Arena* arena) const {
 }
 
 void RaftCommand::Clear() {
-#define ZR_HELPER_(f) reinterpret_cast<char*>(\
-  &reinterpret_cast<RaftCommand*>(16)->f)
-
-#define ZR_(first, last) do {\
-  ::memset(&first, 0,\
-           ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
-} while (0)
-
   if (_has_bits_[0 / 32] & 7u) {
-    ZR_(range_id_, origin_node_id_);
+    range_id_ = GOOGLE_LONGLONG(0);
+    if (has_origin_replica()) {
+      if (origin_replica_ != NULL) origin_replica_->::cockroach::proto::Replica::Clear();
+    }
     if (has_cmd()) {
       if (cmd_ != NULL) cmd_->::cockroach::proto::BatchRequest::Clear();
     }
   }
-
-#undef ZR_HELPER_
-#undef ZR_
-
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->Clear();
@@ -374,18 +367,16 @@ bool RaftCommand::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(16)) goto parse_origin_node_id;
+        if (input->ExpectTag(18)) goto parse_origin_replica;
         break;
       }
 
-      // optional uint64 origin_node_id = 2;
+      // optional .cockroach.proto.Replica origin_replica = 2;
       case 2: {
-        if (tag == 16) {
-         parse_origin_node_id:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
-                 input, &origin_node_id_)));
-          set_has_origin_node_id();
+        if (tag == 18) {
+         parse_origin_replica:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_origin_replica()));
         } else {
           goto handle_unusual;
         }
@@ -436,9 +427,10 @@ void RaftCommand::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->range_id(), output);
   }
 
-  // optional uint64 origin_node_id = 2;
-  if (has_origin_node_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt64(2, this->origin_node_id(), output);
+  // optional .cockroach.proto.Replica origin_replica = 2;
+  if (has_origin_replica()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      2, *this->origin_replica_, output);
   }
 
   // optional .cockroach.proto.BatchRequest cmd = 3;
@@ -462,9 +454,11 @@ void RaftCommand::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->range_id(), target);
   }
 
-  // optional uint64 origin_node_id = 2;
-  if (has_origin_node_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(2, this->origin_node_id(), target);
+  // optional .cockroach.proto.Replica origin_replica = 2;
+  if (has_origin_replica()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        2, *this->origin_replica_, target);
   }
 
   // optional .cockroach.proto.BatchRequest cmd = 3;
@@ -493,11 +487,11 @@ int RaftCommand::ByteSize() const {
           this->range_id());
     }
 
-    // optional uint64 origin_node_id = 2;
-    if (has_origin_node_id()) {
+    // optional .cockroach.proto.Replica origin_replica = 2;
+    if (has_origin_replica()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::UInt64Size(
-          this->origin_node_id());
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->origin_replica_);
     }
 
     // optional .cockroach.proto.BatchRequest cmd = 3;
@@ -537,8 +531,8 @@ void RaftCommand::MergeFrom(const RaftCommand& from) {
     if (from.has_range_id()) {
       set_range_id(from.range_id());
     }
-    if (from.has_origin_node_id()) {
-      set_origin_node_id(from.origin_node_id());
+    if (from.has_origin_replica()) {
+      mutable_origin_replica()->::cockroach::proto::Replica::MergeFrom(from.origin_replica());
     }
     if (from.has_cmd()) {
       mutable_cmd()->::cockroach::proto::BatchRequest::MergeFrom(from.cmd());
@@ -572,7 +566,7 @@ void RaftCommand::Swap(RaftCommand* other) {
 }
 void RaftCommand::InternalSwap(RaftCommand* other) {
   std::swap(range_id_, other->range_id_);
-  std::swap(origin_node_id_, other->origin_node_id_);
+  std::swap(origin_replica_, other->origin_replica_);
   std::swap(cmd_, other->cmd_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
@@ -614,28 +608,47 @@ void RaftCommand::clear_range_id() {
   // @@protoc_insertion_point(field_set:cockroach.proto.RaftCommand.range_id)
 }
 
-// optional uint64 origin_node_id = 2;
-bool RaftCommand::has_origin_node_id() const {
+// optional .cockroach.proto.Replica origin_replica = 2;
+bool RaftCommand::has_origin_replica() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-void RaftCommand::set_has_origin_node_id() {
+void RaftCommand::set_has_origin_replica() {
   _has_bits_[0] |= 0x00000002u;
 }
-void RaftCommand::clear_has_origin_node_id() {
+void RaftCommand::clear_has_origin_replica() {
   _has_bits_[0] &= ~0x00000002u;
 }
-void RaftCommand::clear_origin_node_id() {
-  origin_node_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_origin_node_id();
+void RaftCommand::clear_origin_replica() {
+  if (origin_replica_ != NULL) origin_replica_->::cockroach::proto::Replica::Clear();
+  clear_has_origin_replica();
 }
- ::google::protobuf::uint64 RaftCommand::origin_node_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RaftCommand.origin_node_id)
-  return origin_node_id_;
+ const ::cockroach::proto::Replica& RaftCommand::origin_replica() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RaftCommand.origin_replica)
+  return origin_replica_ != NULL ? *origin_replica_ : *default_instance_->origin_replica_;
 }
- void RaftCommand::set_origin_node_id(::google::protobuf::uint64 value) {
-  set_has_origin_node_id();
-  origin_node_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.RaftCommand.origin_node_id)
+ ::cockroach::proto::Replica* RaftCommand::mutable_origin_replica() {
+  set_has_origin_replica();
+  if (origin_replica_ == NULL) {
+    origin_replica_ = new ::cockroach::proto::Replica;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftCommand.origin_replica)
+  return origin_replica_;
+}
+ ::cockroach::proto::Replica* RaftCommand::release_origin_replica() {
+  clear_has_origin_replica();
+  ::cockroach::proto::Replica* temp = origin_replica_;
+  origin_replica_ = NULL;
+  return temp;
+}
+ void RaftCommand::set_allocated_origin_replica(::cockroach::proto::Replica* origin_replica) {
+  delete origin_replica_;
+  origin_replica_ = origin_replica;
+  if (origin_replica) {
+    set_has_origin_replica();
+  } else {
+    clear_has_origin_replica();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftCommand.origin_replica)
 }
 
 // optional .cockroach.proto.BatchRequest cmd = 3;

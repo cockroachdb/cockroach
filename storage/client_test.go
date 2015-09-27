@@ -396,7 +396,7 @@ func (m *multiTestContext) replicateRange(rangeID proto.RangeID, sourceStoreInde
 	}
 
 	// Wait for the replication to complete on all destination nodes.
-	util.SucceedsWithin(m.t, time.Second, func() error {
+	util.SucceedsWithin(m.t, 3*time.Second, func() error {
 		for _, dest := range dests {
 			// Use LookupRange(keys) instead of GetRange(rangeID) to ensure that the
 			// snapshot has been transferred and the descriptor initialized.

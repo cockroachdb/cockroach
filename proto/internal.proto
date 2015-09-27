@@ -33,8 +33,7 @@ option (gogoproto.goproto_unrecognized_all) = false;
 message RaftCommand {
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
-  optional uint64 origin_node_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "OriginNodeID", (gogoproto.casttype) = "RaftNodeID"];
+  optional Replica origin_replica = 2 [(gogoproto.nullable) = false];
   optional BatchRequest cmd = 3 [(gogoproto.nullable) = false];
 }
 

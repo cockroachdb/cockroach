@@ -294,7 +294,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
   static const int Lease_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, start_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, expiration_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, raft_node_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, replica_),
   };
   Lease_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -485,23 +485,23 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "amp\030\013 \001(\0132\032.cockroach.proto.TimestampB\004\310"
     "\336\037\000\0226\n\rcertain_nodes\030\014 \001(\0132\031.cockroach.p"
     "roto.NodeListB\004\310\336\037\000\022\025\n\007Writing\030\r \001(\010B\004\310\336"
-    "\037\000:\004\230\240\037\000\"\254\001\n\005Lease\022/\n\005start\030\001 \001(\0132\032.cock"
+    "\037\000:\004\230\240\037\000\"\245\001\n\005Lease\022/\n\005start\030\001 \001(\0132\032.cock"
     "roach.proto.TimestampB\004\310\336\037\000\0224\n\nexpiratio"
     "n\030\002 \001(\0132\032.cockroach.proto.TimestampB\004\310\336\037"
-    "\000\0226\n\014raft_node_id\030\003 \001(\004B \310\336\037\000\342\336\037\nRaftNod"
-    "eID\372\336\037\nRaftNodeID:\004\230\240\037\000\"i\n\006Intent\022\024\n\003key"
-    "\030\001 \001(\014B\007\372\336\037\003Key\022\030\n\007end_key\030\002 \001(\014B\007\372\336\037\003Ke"
-    "y\022/\n\003txn\030\003 \001(\0132\034.cockroach.proto.Transac"
-    "tionB\004\310\336\037\000\"H\n\nGCMetadata\022\035\n\017last_scan_na"
-    "nos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos\030\002"
-    " \001(\003*Q\n\tValueType\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022"
-    "\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022\016\n\nTIMES"
-    "ERIES\020d*>\n\021ReplicaChangeType\022\017\n\013ADD_REPL"
-    "ICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsola"
-    "tionType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001"
-    "\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000"
-    "\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\027Z\005pr"
-    "oto\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 2779);
+    "\000\022/\n\007replica\030\003 \001(\0132\030.cockroach.proto.Rep"
+    "licaB\004\310\336\037\000:\004\230\240\037\000\"i\n\006Intent\022\024\n\003key\030\001 \001(\014B"
+    "\007\372\336\037\003Key\022\030\n\007end_key\030\002 \001(\014B\007\372\336\037\003Key\022/\n\003tx"
+    "n\030\003 \001(\0132\034.cockroach.proto.TransactionB\004\310"
+    "\336\037\000\"H\n\nGCMetadata\022\035\n\017last_scan_nanos\030\001 \001"
+    "(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos\030\002 \001(\003*Q\n"
+    "\tValueType\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOA"
+    "T\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022\016\n\nTIMESERIES\020d"
+    "*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022"
+    "\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationTyp"
+    "e\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*"
+    "B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOM"
+    "MITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\027Z\005proto\340\342\036\001"
+    "\310\342\036\001\320\342\036\001\220\343\036\000", 2772);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -6434,7 +6434,7 @@ void Transaction::clear_writing() {
 #ifndef _MSC_VER
 const int Lease::kStartFieldNumber;
 const int Lease::kExpirationFieldNumber;
-const int Lease::kRaftNodeIdFieldNumber;
+const int Lease::kReplicaFieldNumber;
 #endif  // !_MSC_VER
 
 Lease::Lease()
@@ -6446,6 +6446,7 @@ Lease::Lease()
 void Lease::InitAsDefaultInstance() {
   start_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
   expiration_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
+  replica_ = const_cast< ::cockroach::proto::Replica*>(&::cockroach::proto::Replica::default_instance());
 }
 
 Lease::Lease(const Lease& from)
@@ -6460,7 +6461,7 @@ void Lease::SharedCtor() {
   _cached_size_ = 0;
   start_ = NULL;
   expiration_ = NULL;
-  raft_node_id_ = GOOGLE_ULONGLONG(0);
+  replica_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -6473,6 +6474,7 @@ void Lease::SharedDtor() {
   if (this != default_instance_) {
     delete start_;
     delete expiration_;
+    delete replica_;
   }
 }
 
@@ -6509,7 +6511,9 @@ void Lease::Clear() {
     if (has_expiration()) {
       if (expiration_ != NULL) expiration_->::cockroach::proto::Timestamp::Clear();
     }
-    raft_node_id_ = GOOGLE_ULONGLONG(0);
+    if (has_replica()) {
+      if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+    }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -6548,18 +6552,16 @@ bool Lease::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(24)) goto parse_raft_node_id;
+        if (input->ExpectTag(26)) goto parse_replica;
         break;
       }
 
-      // optional uint64 raft_node_id = 3;
+      // optional .cockroach.proto.Replica replica = 3;
       case 3: {
-        if (tag == 24) {
-         parse_raft_node_id:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
-                 input, &raft_node_id_)));
-          set_has_raft_node_id();
+        if (tag == 26) {
+         parse_replica:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_replica()));
         } else {
           goto handle_unusual;
         }
@@ -6604,9 +6606,10 @@ void Lease::SerializeWithCachedSizes(
       2, *this->expiration_, output);
   }
 
-  // optional uint64 raft_node_id = 3;
-  if (has_raft_node_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt64(3, this->raft_node_id(), output);
+  // optional .cockroach.proto.Replica replica = 3;
+  if (has_replica()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      3, *this->replica_, output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -6633,9 +6636,11 @@ void Lease::SerializeWithCachedSizes(
         2, *this->expiration_, target);
   }
 
-  // optional uint64 raft_node_id = 3;
-  if (has_raft_node_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(3, this->raft_node_id(), target);
+  // optional .cockroach.proto.Replica replica = 3;
+  if (has_replica()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        3, *this->replica_, target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -6664,11 +6669,11 @@ int Lease::ByteSize() const {
           *this->expiration_);
     }
 
-    // optional uint64 raft_node_id = 3;
-    if (has_raft_node_id()) {
+    // optional .cockroach.proto.Replica replica = 3;
+    if (has_replica()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::UInt64Size(
-          this->raft_node_id());
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->replica_);
     }
 
   }
@@ -6704,8 +6709,8 @@ void Lease::MergeFrom(const Lease& from) {
     if (from.has_expiration()) {
       mutable_expiration()->::cockroach::proto::Timestamp::MergeFrom(from.expiration());
     }
-    if (from.has_raft_node_id()) {
-      set_raft_node_id(from.raft_node_id());
+    if (from.has_replica()) {
+      mutable_replica()->::cockroach::proto::Replica::MergeFrom(from.replica());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -6737,7 +6742,7 @@ void Lease::Swap(Lease* other) {
 void Lease::InternalSwap(Lease* other) {
   std::swap(start_, other->start_);
   std::swap(expiration_, other->expiration_);
-  std::swap(raft_node_id_, other->raft_node_id_);
+  std::swap(replica_, other->replica_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -6840,28 +6845,47 @@ void Lease::clear_expiration() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Lease.expiration)
 }
 
-// optional uint64 raft_node_id = 3;
-bool Lease::has_raft_node_id() const {
+// optional .cockroach.proto.Replica replica = 3;
+bool Lease::has_replica() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-void Lease::set_has_raft_node_id() {
+void Lease::set_has_replica() {
   _has_bits_[0] |= 0x00000004u;
 }
-void Lease::clear_has_raft_node_id() {
+void Lease::clear_has_replica() {
   _has_bits_[0] &= ~0x00000004u;
 }
-void Lease::clear_raft_node_id() {
-  raft_node_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_raft_node_id();
+void Lease::clear_replica() {
+  if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+  clear_has_replica();
 }
- ::google::protobuf::uint64 Lease::raft_node_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.raft_node_id)
-  return raft_node_id_;
+ const ::cockroach::proto::Replica& Lease::replica() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.replica)
+  return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
- void Lease::set_raft_node_id(::google::protobuf::uint64 value) {
-  set_has_raft_node_id();
-  raft_node_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.Lease.raft_node_id)
+ ::cockroach::proto::Replica* Lease::mutable_replica() {
+  set_has_replica();
+  if (replica_ == NULL) {
+    replica_ = new ::cockroach::proto::Replica;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Lease.replica)
+  return replica_;
+}
+ ::cockroach::proto::Replica* Lease::release_replica() {
+  clear_has_replica();
+  ::cockroach::proto::Replica* temp = replica_;
+  replica_ = NULL;
+  return temp;
+}
+ void Lease::set_allocated_replica(::cockroach::proto::Replica* replica) {
+  delete replica_;
+  replica_ = replica;
+  if (replica) {
+    set_has_replica();
+  } else {
+    clear_has_replica();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Lease.replica)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

@@ -58,8 +58,9 @@ func testRangeDescriptor() *proto.RangeDescriptor {
 		EndKey:   proto.KeyMax,
 		Replicas: []proto.Replica{
 			{
-				NodeID:  1,
-				StoreID: 1,
+				ReplicaID: 1,
+				NodeID:    1,
+				StoreID:   1,
 			},
 		},
 	}
@@ -330,7 +331,11 @@ func TestRangeReadConsistency(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      start,
 		Expiration: start.Add(10, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2), // a different node
+		Replica: proto.Replica{ // a different node
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	})
 	gArgs.ReadConsistency = proto.CONSISTENT
 	gArgs.Txn = nil
@@ -381,7 +386,11 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      start,
 		Expiration: start.Add(10, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2), // a different node
+		Replica: proto.Replica{ // a different node
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	})
 
 	// Submit a proposal to Raft.
@@ -416,7 +425,7 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 // range replica and whether it's expired for the given timestamp.
 func hasLease(rng *Replica, timestamp proto.Timestamp) (bool, bool) {
 	l := rng.getLease()
-	return l.OwnedBy(rng.rm.RaftNodeID()), !l.Covers(timestamp)
+	return l.OwnedBy(rng.rm.StoreID()), !l.Covers(timestamp)
 }
 
 func TestRangeLeaderLease(t *testing.T) {
@@ -446,7 +455,11 @@ func TestRangeLeaderLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now.Add(10, 0),
 		Expiration: now.Add(20, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2),
+		Replica: proto.Replica{
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	})
 	if held, expired := hasLease(tc.rng, tc.clock.Now().Add(15, 0)); held || expired {
 		t.Errorf("expected another replica to have leader lease")
@@ -488,7 +501,11 @@ func TestRangeNotLeaderError(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2),
+		Replica: proto.Replica{
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	})
 
 	header := proto.RequestHeader{
@@ -579,7 +596,11 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2),
+		Replica: proto.Replica{
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	})
 
 	// Expire that lease.
@@ -590,7 +611,11 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now.Add(11, 0),
 		Expiration: now.Add(20, 0),
-		RaftNodeID: tc.store.RaftNodeID(),
+		Replica: proto.Replica{
+			ReplicaID: 1,
+			NodeID:    1,
+			StoreID:   1,
+		},
 	})
 	if !verifySystem() {
 		t.Errorf("expected gossip of new config")
@@ -627,28 +652,32 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	baseLowWater := baseRTS.WallTime
 
 	testCases := []struct {
-		nodeID      proto.RaftNodeID
+		storeID     proto.StoreID
 		start       proto.Timestamp
 		expiration  proto.Timestamp
 		expLowWater int64
 	}{
 		// Grant the lease fresh.
-		{tc.store.RaftNodeID(), now, now.Add(10, 0), baseLowWater},
+		{tc.store.StoreID(), now, now.Add(10, 0), baseLowWater},
 		// Renew the lease.
-		{tc.store.RaftNodeID(), now.Add(15, 0), now.Add(30, 0), baseLowWater},
+		{tc.store.StoreID(), now.Add(15, 0), now.Add(30, 0), baseLowWater},
 		// Renew the lease but shorten expiration.
-		{tc.store.RaftNodeID(), now.Add(16, 0), now.Add(25, 0), baseLowWater},
+		{tc.store.StoreID(), now.Add(16, 0), now.Add(25, 0), baseLowWater},
 		// Lease is held by another.
-		{proto.MakeRaftNodeID(2, 2), now.Add(29, 0), now.Add(50, 0), baseLowWater},
+		{tc.store.StoreID() + 1, now.Add(29, 0), now.Add(50, 0), baseLowWater},
 		// Lease is regranted to this replica.
-		{tc.store.RaftNodeID(), now.Add(60, 0), now.Add(70, 0), now.Add(50, 0).WallTime + int64(maxClockOffset) + baseLowWater},
+		{tc.store.StoreID(), now.Add(60, 0), now.Add(70, 0), now.Add(50, 0).WallTime + int64(maxClockOffset) + baseLowWater},
 	}
 
 	for i, test := range testCases {
 		setLeaderLease(t, tc.rng, &proto.Lease{
 			Start:      test.start,
 			Expiration: test.expiration,
-			RaftNodeID: test.nodeID,
+			Replica: proto.Replica{
+				ReplicaID: proto.ReplicaID(test.storeID),
+				NodeID:    proto.NodeID(test.storeID),
+				StoreID:   test.storeID,
+			},
 		})
 		// Verify expected low water mark.
 		rTS, wTS := tc.rng.tsCache.GetMax(proto.Key("a"), nil, nil)
@@ -673,7 +702,11 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	lease := &proto.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2),
+		Replica: proto.Replica{
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	}
 	args := &proto.BatchRequest{}
 	args.Add(&proto.LeaderLeaseRequest{Lease: *lease})
@@ -2284,7 +2317,7 @@ func verifyRangeStats(eng engine.Engine, rangeID proto.RangeID, expMS engine.MVC
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(expMS, ms) {
-		t.Errorf("expected stats %+v; got %+v", expMS, ms)
+		t.Errorf("expected stats \n  %+v;\ngot \n  %+v", expMS, ms)
 	}
 }
 
@@ -2308,7 +2341,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS := engine.MVCCStats{LiveBytes: 42, KeyBytes: 16, ValBytes: 26, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 61, SysCount: 1}
+	expMS := engine.MVCCStats{LiveBytes: 42, KeyBytes: 16, ValBytes: 26, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Put a 2nd value transactionally.
@@ -2319,7 +2352,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 136, KeyBytes: 32, ValBytes: 104, IntentBytes: 26, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 61, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 136, KeyBytes: 32, ValBytes: 104, IntentBytes: 26, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -2336,7 +2369,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 84, KeyBytes: 32, ValBytes: 52, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 61, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 84, KeyBytes: 32, ValBytes: 52, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Delete the 1st value.
@@ -2346,7 +2379,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &dArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 42, KeyBytes: 44, ValBytes: 54, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 61, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 42, KeyBytes: 44, ValBytes: 54, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 }
 

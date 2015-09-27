@@ -19,6 +19,7 @@ syntax = "proto2";
 package cockroach.multiraft;
 option go_package = "multiraft";
 
+import "cockroach/proto/metadata.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
@@ -34,10 +35,26 @@ message RaftMessageRequest {
       (gogoproto.customname) = "GroupID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.RangeID"];
 
-  optional raftpb.Message message = 2 [(gogoproto.nullable) = false];
+  optional proto.Replica from_replica = 2 [(gogoproto.nullable) = false];
+  optional proto.Replica to_replica = 3 [(gogoproto.nullable) = false];
+
+  optional raftpb.Message message = 4 [(gogoproto.nullable) = false];
 }
 
 // RaftMessageResponse is an empty message returned by raft RPCs. If a
 // response is needed it will be sent as a separate message.
 message RaftMessageResponse {
+}
+
+// ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
+message ConfChangeContext {
+  optional string command_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "CommandID"];
+
+  // Payload is the application-level command (i.e. an encoded
+  // proto.EndTransactionRequest).
+  optional bytes payload = 2;
+
+  // Replica contians full details about the replica being added or removed.
+  optional proto.Replica replica = 3 [(gogoproto.nullable) = false];
 }

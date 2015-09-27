@@ -34,17 +34,14 @@ import (
 
 // The Transport interface is supplied by the application to manage communication with
 // other nodes. It is responsible for mapping from IDs to some communication channel
-// (in the simplest case, a host:port pair could be used as an ID, although this would
-// make it impossible to move an instance from one host to another except by syncing
-// up a new node from scratch).
 type Transport interface {
-	// Listen informs the Transport of the local node's ID and callback interface.
+	// Listen informs the Transport of a local store's ID and callback interface.
 	// The Transport should associate the given id with the server object so other Transport's
 	// Connect methods can find it.
-	Listen(id proto.RaftNodeID, server ServerInterface) error
+	Listen(id proto.StoreID, server ServerInterface) error
 
 	// Stop undoes a previous Listen.
-	Stop(id proto.RaftNodeID)
+	Stop(id proto.StoreID)
 
 	// Send a message to the node specified in the request's To field.
 	Send(req *RaftMessageRequest) error
@@ -64,8 +61,8 @@ var (
 
 type localRPCTransport struct {
 	mu      sync.Mutex
-	servers map[proto.RaftNodeID]*crpc.Server
-	clients map[proto.RaftNodeID]*netrpc.Client
+	servers map[proto.StoreID]*crpc.Server
+	clients map[proto.StoreID]*netrpc.Client
 	conns   map[net.Conn]struct{}
 	closed  chan struct{}
 	stopper *stop.Stopper
@@ -78,15 +75,15 @@ type localRPCTransport struct {
 // Because this is just for local testing, it doesn't use TLS.
 func NewLocalRPCTransport(stopper *stop.Stopper) Transport {
 	return &localRPCTransport{
-		servers: make(map[proto.RaftNodeID]*crpc.Server),
-		clients: make(map[proto.RaftNodeID]*netrpc.Client),
+		servers: make(map[proto.StoreID]*crpc.Server),
+		clients: make(map[proto.StoreID]*netrpc.Client),
 		conns:   make(map[net.Conn]struct{}),
 		closed:  make(chan struct{}),
 		stopper: stopper,
 	}
 }
 
-func (lt *localRPCTransport) Listen(id proto.RaftNodeID, server ServerInterface) error {
+func (lt *localRPCTransport) Listen(id proto.StoreID, server ServerInterface) error {
 	addr := util.CreateTestAddr("tcp")
 	rpcServer := crpc.NewServer(addr, &crpc.Context{
 		Context: base.Context{
@@ -115,7 +112,7 @@ func (lt *localRPCTransport) Listen(id proto.RaftNodeID, server ServerInterface)
 	return rpcServer.Start()
 }
 
-func (lt *localRPCTransport) Stop(id proto.RaftNodeID) {
+func (lt *localRPCTransport) Stop(id proto.StoreID) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	lt.servers[id].Close()
@@ -126,7 +123,7 @@ func (lt *localRPCTransport) Stop(id proto.RaftNodeID) {
 	}
 }
 
-func (lt *localRPCTransport) getClient(id proto.RaftNodeID) (*netrpc.Client, error) {
+func (lt *localRPCTransport) getClient(id proto.StoreID) (*netrpc.Client, error) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 
@@ -158,7 +155,7 @@ func (lt *localRPCTransport) getClient(id proto.RaftNodeID) (*netrpc.Client, err
 }
 
 func (lt *localRPCTransport) Send(req *RaftMessageRequest) error {
-	client, err := lt.getClient(proto.RaftNodeID(req.Message.To))
+	client, err := lt.getClient(req.ToReplica.StoreID)
 	if err != nil {
 		return err
 	}

@@ -20,9 +20,9 @@ var _ = math.Inf
 // A RaftCommand is a command which can be serialized and sent via
 // raft.
 type RaftCommand struct {
-	RangeID      RangeID      `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
-	OriginNodeID RaftNodeID   `protobuf:"varint,2,opt,name=origin_node_id,casttype=RaftNodeID" json:"origin_node_id"`
-	Cmd          BatchRequest `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
+	RangeID       RangeID      `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
+	OriginReplica Replica      `protobuf:"bytes,2,opt,name=origin_replica" json:"origin_replica"`
+	Cmd           BatchRequest `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
 }
 
 func (m *RaftCommand) Reset()         { *m = RaftCommand{} }
@@ -36,11 +36,11 @@ func (m *RaftCommand) GetRangeID() RangeID {
 	return 0
 }
 
-func (m *RaftCommand) GetOriginNodeID() RaftNodeID {
+func (m *RaftCommand) GetOriginReplica() Replica {
 	if m != nil {
-		return m.OriginNodeID
+		return m.OriginReplica
 	}
-	return 0
+	return Replica{}
 }
 
 func (m *RaftCommand) GetCmd() BatchRequest {
@@ -273,17 +273,22 @@ func (m *RaftCommand) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintInternal(data, i, uint64(m.RangeID))
-	data[i] = 0x10
+	data[i] = 0x12
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.OriginNodeID))
-	data[i] = 0x1a
-	i++
-	i = encodeVarintInternal(data, i, uint64(m.Cmd.Size()))
-	n1, err := m.Cmd.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.OriginReplica.Size()))
+	n1, err := m.OriginReplica.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n1
+	data[i] = 0x1a
+	i++
+	i = encodeVarintInternal(data, i, uint64(m.Cmd.Size()))
+	n2, err := m.Cmd.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
 	return i, nil
 }
 
@@ -402,11 +407,11 @@ func (m *RaftSnapshotData) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintInternal(data, i, uint64(m.RangeDescriptor.Size()))
-	n2, err := m.RangeDescriptor.MarshalTo(data[i:])
+	n3, err := m.RangeDescriptor.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n2
+	i += n3
 	if len(m.KV) > 0 {
 		for _, msg := range m.KV {
 			data[i] = 0x12
@@ -483,7 +488,8 @@ func (m *RaftCommand) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovInternal(uint64(m.RangeID))
-	n += 1 + sovInternal(uint64(m.OriginNodeID))
+	l = m.OriginReplica.Size()
+	n += 1 + l + sovInternal(uint64(l))
 	l = m.Cmd.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	return n
@@ -616,10 +622,10 @@ func (m *RaftCommand) Unmarshal(data []byte) error {
 				}
 			}
 		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field OriginNodeID", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OriginReplica", wireType)
 			}
-			m.OriginNodeID = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowInternal
@@ -629,11 +635,22 @@ func (m *RaftCommand) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.OriginNodeID |= (RaftNodeID(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.OriginReplica.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Cmd", wireType)

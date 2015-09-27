@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
@@ -35,6 +36,14 @@ const (
 	noGroup = proto.RangeID(0)
 
 	reqBufferSize = 100
+
+	// TODO(bdarnell): Determine the right size for this cache. Should
+	// the cache be partitioned so that replica descriptors from the
+	// range descriptors (which are the bulk of the data and can be
+	// reloaded from disk as needed) don't crowd out the
+	// message/snapshot descriptors (whose necessity is short-lived but
+	// cannot be recovered through other means if evicted)?
+	maxReplicaDescCacheSize = 1000
 )
 
 // An ErrGroupDeleted is returned for commands which are pending while their
@@ -95,7 +104,8 @@ type MultiRaft struct {
 	stopper         *stop.Stopper
 	multiNode       raft.MultiNode
 	Events          chan []interface{}
-	nodeID          proto.RaftNodeID
+	nodeID          proto.NodeID
+	storeID         proto.StoreID
 	reqChan         chan *RaftMessageRequest
 	createGroupChan chan *createGroupOp
 	removeGroupChan chan *removeGroupOp
@@ -109,9 +119,12 @@ type MultiRaft struct {
 type multiraftServer MultiRaft
 
 // NewMultiRaft creates a MultiRaft object.
-func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *stop.Stopper) (*MultiRaft, error) {
+func NewMultiRaft(nodeID proto.NodeID, storeID proto.StoreID, config *Config, stopper *stop.Stopper) (*MultiRaft, error) {
 	if nodeID == 0 {
-		return nil, util.Errorf("Invalid RaftNodeID")
+		return nil, util.Errorf("invalid NodeID")
+	}
+	if storeID == 0 {
+		return nil, util.Errorf("invalid StoreID")
 	}
 	if err := config.validate(); err != nil {
 		return nil, err
@@ -138,8 +151,9 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *stop.Stopper
 	m := &MultiRaft{
 		Config:    *config,
 		stopper:   stopper,
-		multiNode: raft.StartMultiNode(uint64(nodeID)),
+		multiNode: raft.StartMultiNode(0),
 		nodeID:    nodeID,
+		storeID:   storeID,
 
 		// Output channel.
 		Events: make(chan []interface{}),
@@ -152,7 +166,7 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *stop.Stopper
 		callbackChan:    make(chan func()),
 	}
 
-	if err := m.Transport.Listen(nodeID, (*multiraftServer)(m)); err != nil {
+	if err := m.Transport.Listen(storeID, (*multiraftServer)(m)); err != nil {
 		return nil, err
 	}
 
@@ -185,7 +199,7 @@ func (s *state) sendEvent(event interface{}) {
 func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 	// A heartbeat message is expanded into a heartbeat for each group
 	// that the remote node is a part of.
-	fromID := proto.RaftNodeID(req.Message.From)
+	fromID := proto.NodeID(req.Message.From)
 	groupCount := 0
 	followerCount := 0
 	if originNode, ok := s.nodes[fromID]; ok {
@@ -193,15 +207,40 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 			groupCount++
 			// If we don't think that the sending node is leading that group, don't
 			// propagate.
-			if s.groups[groupID].leader != fromID || fromID == s.nodeID {
+			if s.groups[groupID].leader.NodeID != fromID || fromID == s.nodeID {
 				if log.V(8) {
-					log.Infof("node %v: not fanning out heartbeat to %v, msg is from %d and leader is %d",
-						s.nodeID, req.Message.To, fromID, s.groups[groupID].leader)
+					log.Infof("node %s: not fanning out heartbeat to %s, msg is from %s and leader is %s",
+						s.nodeID, groupID, fromID, s.groups[groupID].leader)
+				}
+				continue
+			}
+
+			fromRepID, err := s.Storage.ReplicaIDForStore(groupID, req.FromReplica.StoreID)
+			if err != nil {
+				if log.V(3) {
+					log.Infof("node %s: not fanning out heartbeat to %s, could not find replica id for sending store %s",
+						s.nodeID, groupID, req.FromReplica.StoreID)
+				}
+				continue
+			}
+
+			toRepID, err := s.Storage.ReplicaIDForStore(groupID, req.ToReplica.StoreID)
+			if err != nil {
+				if log.V(3) {
+					log.Infof("node %s: not fanning out heartbeat to %s, could not find replica id for receiving store %s",
+						s.nodeID, groupID, req.ToReplica.StoreID)
 				}
 				continue
 			}
 			followerCount++
-			if err := s.multiNode.Step(context.Background(), uint64(groupID), req.Message); err != nil {
+
+			groupMsg := raftpb.Message{
+				Type: raftpb.MsgHeartbeat,
+				To:   uint64(toRepID),
+				From: uint64(fromRepID),
+			}
+
+			if err := s.multiNode.Step(context.Background(), uint64(groupID), groupMsg); err != nil {
 				if log.V(4) {
 					log.Infof("node %v: coalesced heartbeat step to group %v failed for message %s", s.nodeID, groupID,
 						raft.DescribeMessage(req.Message, s.EntryFormatter))
@@ -230,33 +269,51 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 
 // fanoutHeartbeatResponse sends the given heartbeat response to all groups
 // which overlap with the sender's groups and consider themselves leader.
-func (s *state) fanoutHeartbeatResponse(fromID proto.RaftNodeID) {
+func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
+	fromID := proto.NodeID(req.Message.From)
 	originNode, ok := s.nodes[fromID]
 	if !ok {
 		log.Warningf("node %v: not fanning out heartbeat response from unknown node %v",
 			s.nodeID, fromID)
 		return
 	}
-	// Term in HeartbeatResponse is no meaning in fanouting. Otherwise it
-	// will cause Leader change to Follower if another group's term is
-	// greater than this.
-	req := raftpb.Message{
-		From: uint64(fromID),
-		To:   uint64(s.nodeID),
-		Type: raftpb.MsgHeartbeatResp,
-	}
 
 	cnt := 0
 	for groupID := range originNode.groupIDs {
 		// If we don't think that the local node is leader, don't propagate.
-		if s.groups[groupID].leader != s.nodeID || fromID == s.nodeID {
+		if s.groups[groupID].leader.NodeID != s.nodeID || fromID == s.nodeID {
 			if log.V(8) {
 				log.Infof("node %v: not fanning out heartbeat response to %v, msg is from %v and leader is %v",
 					s.nodeID, groupID, fromID, s.groups[groupID].leader)
 			}
 			continue
 		}
-		if err := s.multiNode.Step(context.Background(), uint64(groupID), req); err != nil {
+
+		fromRepID, err := s.Storage.ReplicaIDForStore(groupID, req.FromReplica.StoreID)
+		if err != nil {
+			if log.V(3) {
+				log.Infof("node %s: not fanning out heartbeat to %s, could not find replica id for sending store %s",
+					s.nodeID, groupID, req.FromReplica.StoreID)
+			}
+			continue
+		}
+
+		toRepID, err := s.Storage.ReplicaIDForStore(groupID, req.ToReplica.StoreID)
+		if err != nil {
+			if log.V(3) {
+				log.Infof("node %s: not fanning out heartbeat to %s, could not find replica id for receiving store %s",
+					s.nodeID, groupID, req.ToReplica.StoreID)
+			}
+			continue
+		}
+
+		msg := raftpb.Message{
+			Type: raftpb.MsgHeartbeatResp,
+			From: uint64(fromRepID),
+			To:   uint64(toRepID),
+		}
+
+		if err := s.multiNode.Step(context.Background(), uint64(groupID), msg); err != nil {
 			if log.V(4) {
 				log.Infof("node %v: coalesced heartbeat response step to group %v failed", s.nodeID, groupID)
 			}
@@ -319,7 +376,7 @@ func (m *MultiRaft) SubmitCommand(groupID proto.RangeID, commandID string, comma
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 // Payload is an opaque blob that will be returned in EventMembershipChangeCommitted.
 func (m *MultiRaft) ChangeGroupMembership(groupID proto.RangeID, commandID string,
-	changeType raftpb.ConfChangeType, nodeID proto.RaftNodeID, payload []byte) <-chan error {
+	changeType raftpb.ConfChangeType, replica proto.Replica, payload []byte) <-chan error {
 	if log.V(6) {
 		log.Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
 	}
@@ -328,17 +385,27 @@ func (m *MultiRaft) ChangeGroupMembership(groupID proto.RangeID, commandID strin
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
+			ctx := ConfChangeContext{
+				CommandID: commandID,
+				Payload:   payload,
+				Replica:   replica,
+			}
+			encodedCtx, err := ctx.Marshal()
+			if err != nil {
+				log.Errorf("node %v: error encoding context protobuf", m.nodeID)
+				return
+			}
 			if err := m.multiNode.ProposeConfChange(context.Background(), uint64(groupID),
 				raftpb.ConfChange{
 					Type:    changeType,
-					NodeID:  uint64(nodeID),
-					Context: encodeCommand(commandID, payload),
+					NodeID:  uint64(replica.ReplicaID),
+					Context: encodedCtx,
 				},
 			); err != nil {
 				log.Errorf("node %v: error proposing membership change to node %v: %s", m.nodeID,
 					groupID, err)
+				return
 			}
-
 		},
 		ch: ch,
 	}
@@ -364,9 +431,9 @@ type group struct {
 	// committedTerm is the term of the most recently committed entry.
 	committedTerm uint64
 
-	// leader is the node ID of the last known leader for this group, or
-	// 0 if an election is in progress.
-	leader proto.RaftNodeID
+	// leader is the last known leader for this group, or all zeros
+	// if an election is in progress.
+	leader proto.Replica
 
 	// pending contains all commands that have been proposed but not yet
 	// committed in the current term. When a proposal is committed, nil
@@ -379,7 +446,7 @@ type group struct {
 	// an earlier incarnation to be fed into a later one.
 	writing bool
 	// nodeIDs track the remote nodes associated with this group.
-	nodeIDs []proto.RaftNodeID
+	nodeIDs []proto.NodeID
 	// waitForCallback is true while a configuration change callback
 	// is waiting to be called. It's a bool other than a counter
 	// as only one configuration change should be pending in range leader.
@@ -398,7 +465,7 @@ type removeGroupOp struct {
 
 // node represents a connection to a remote node.
 type node struct {
-	nodeID   proto.RaftNodeID
+	nodeID   proto.NodeID
 	groupIDs map[proto.RangeID]struct{}
 }
 
@@ -418,9 +485,10 @@ func (n *node) unregisterGroup(groupID proto.RangeID) {
 // synchronization.
 type state struct {
 	*MultiRaft
-	groups    map[proto.RangeID]*group
-	nodes     map[proto.RaftNodeID]*node
-	writeTask *writeTask
+	groups           map[proto.RangeID]*group
+	nodes            map[proto.NodeID]*node
+	writeTask        *writeTask
+	replicaDescCache *cache.UnorderedCache
 	// Buffer the events and send them in batch to avoid the deadlock
 	// between s.Events channel and callbackChan.
 	pendingEvents []interface{}
@@ -430,8 +498,14 @@ func newState(m *MultiRaft) *state {
 	return &state{
 		MultiRaft: m,
 		groups:    make(map[proto.RangeID]*group),
-		nodes:     make(map[proto.RaftNodeID]*node),
+		nodes:     make(map[proto.NodeID]*node),
 		writeTask: newWriteTask(m.Storage),
+		replicaDescCache: cache.NewUnorderedCache(cache.Config{
+			Policy: cache.CacheLRU,
+			ShouldEvict: func(size int, key, value interface{}) bool {
+				return size > maxReplicaDescCacheSize
+			},
+		}),
 	}
 }
 
@@ -498,8 +572,10 @@ func (s *state) start() {
 				case raftpb.MsgHeartbeat:
 					s.fanoutHeartbeat(req)
 				case raftpb.MsgHeartbeatResp:
-					s.fanoutHeartbeatResponse(proto.RaftNodeID(req.Message.From))
+					s.fanoutHeartbeatResponse(req)
 				default:
+					s.CacheReplicaAddress(req.GroupID, req.FromReplica)
+					s.CacheReplicaAddress(req.GroupID, req.ToReplica)
 					// We only want to lazily create the group if it's not heartbeat-related;
 					// our heartbeats are coalesced and contain a dummy GroupID.
 					// TODO(tschottdorf) still shouldn't hurt to move this part outside,
@@ -508,7 +584,7 @@ func (s *state) start() {
 						if log.V(1) {
 							log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
 						}
-						if err := s.createGroup(req.GroupID); err != nil {
+						if err := s.createGroup(req.GroupID, req.ToReplica.ReplicaID); err != nil {
 							log.Warningf("Error creating group %d: %s", req.GroupID, err)
 							break
 						}
@@ -525,7 +601,7 @@ func (s *state) start() {
 				if log.V(6) {
 					log.Infof("node %v: got op %#v", s.nodeID, op)
 				}
-				op.ch <- s.createGroup(op.groupID)
+				op.ch <- s.createGroup(op.groupID, 0)
 
 			case op := <-s.removeGroupChan:
 				if log.V(6) {
@@ -627,15 +703,15 @@ func (s *state) coalescedHeartbeat() {
 
 func (s *state) stop() {
 	if log.V(6) {
-		log.Infof("node %v stopping", s.nodeID)
+		log.Infof("store %s stopping", s.storeID)
 	}
 	s.MultiRaft.multiNode.Stop()
-	s.MultiRaft.Transport.Stop(s.nodeID)
+	s.MultiRaft.Transport.Stop(s.storeID)
 }
 
 // addNode creates a node and registers the given group (if not nil)
 // for that node.
-func (s *state) addNode(nodeID proto.RaftNodeID, g *group) error {
+func (s *state) addNode(nodeID proto.NodeID, g *group) error {
 	newNode, ok := s.nodes[nodeID]
 	if !ok {
 		s.nodes[nodeID] = &node{
@@ -653,7 +729,7 @@ func (s *state) addNode(nodeID proto.RaftNodeID, g *group) error {
 }
 
 // removeNode removes a node from a group.
-func (s *state) removeNode(nodeID proto.RaftNodeID, g *group) error {
+func (s *state) removeNode(nodeID proto.NodeID, g *group) error {
 	node, ok := s.nodes[nodeID]
 	if !ok {
 		return util.Errorf("cannot remove unknown node %s", nodeID)
@@ -679,7 +755,7 @@ func (s *state) removeNode(nodeID proto.RaftNodeID, g *group) error {
 	return nil
 }
 
-func (s *state) createGroup(groupID proto.RangeID) error {
+func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) error {
 	if _, ok := s.groups[groupID]; ok {
 		return nil
 	}
@@ -693,6 +769,33 @@ func (s *state) createGroup(groupID proto.RangeID) error {
 		return err
 	}
 
+	// Find our store ID in the replicas list.
+	for _, r := range cs.Nodes {
+		repDesc, err := s.ReplicaAddress(groupID, proto.ReplicaID(r))
+		if err != nil {
+			return err
+		}
+		if repDesc.StoreID == s.storeID {
+			if replicaID == 0 {
+				replicaID = repDesc.ReplicaID
+			} else if replicaID != repDesc.ReplicaID {
+				return util.Errorf("inconsistent replica ID: passed %s, but found %s by scanning ConfState for store %s",
+					replicaID, repDesc.ReplicaID, s.storeID)
+			}
+			replicaID = repDesc.ReplicaID
+			break
+		}
+	}
+	if replicaID == 0 {
+		return util.Errorf("couldn't find replica ID for this store (%s) in range %d",
+			s.storeID, groupID)
+	}
+	s.CacheReplicaAddress(groupID, proto.Replica{
+		ReplicaID: replicaID,
+		NodeID:    s.nodeID,
+		StoreID:   s.storeID,
+	})
+
 	var appliedIndex uint64
 	if s.StateMachine != nil {
 		appliedIndex, err = s.StateMachine.AppliedIndex(groupID)
@@ -702,6 +805,7 @@ func (s *state) createGroup(groupID proto.RangeID) error {
 	}
 
 	raftCfg := &raft.Config{
+		ID:            uint64(replicaID),
 		Applied:       appliedIndex,
 		ElectionTick:  s.ElectionTimeoutTicks,
 		HeartbeatTick: s.HeartbeatIntervalTicks,
@@ -720,8 +824,14 @@ func (s *state) createGroup(groupID proto.RangeID) error {
 	}
 	s.groups[groupID] = g
 
-	for _, nodeID := range cs.Nodes {
-		if err := s.addNode(proto.RaftNodeID(nodeID), g); err != nil {
+	for _, id := range cs.Nodes {
+		replicaID := proto.ReplicaID(id)
+		replica, err := s.ReplicaAddress(groupID, replicaID)
+		if err != nil {
+			return err
+		}
+
+		if err := s.addNode(replica.NodeID, g); err != nil {
 			return err
 		}
 	}
@@ -742,8 +852,17 @@ func (s *state) createGroup(groupID proto.RangeID) error {
 	// could happen is both nodes ending up in candidate state, timing
 	// out and then voting again. This is expected to be an extremely
 	// rare event.
-	if len(cs.Nodes) == 1 && s.MultiRaft.nodeID == proto.RaftNodeID(cs.Nodes[0]) {
-		return s.multiNode.Campaign(context.Background(), uint64(groupID))
+	if len(cs.Nodes) == 1 {
+		replica, err := s.ReplicaAddress(groupID, proto.ReplicaID(cs.Nodes[0]))
+		if err != nil {
+			return err
+		}
+		if replica.StoreID == s.storeID {
+			log.Infof("node %s campaigning because initial confstate is %v", s.nodeID, cs.Nodes)
+			if err := s.multiNode.Campaign(context.Background(), uint64(groupID)); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -896,14 +1015,27 @@ func (s *state) processCommittedEntry(groupID proto.RangeID, g *group, entry raf
 		}
 		var payload []byte
 		if len(cc.Context) > 0 {
-			commandID, payload = decodeCommand(cc.Context)
+			var ctx ConfChangeContext
+			if err := ctx.Unmarshal(cc.Context); err != nil {
+				log.Fatalf("invalid ConfChangeContext: %s", err)
+			}
+			commandID = ctx.CommandID
+			payload = ctx.Payload
+			s.CacheReplicaAddress(groupID, ctx.Replica)
+		}
+		replica, err := s.ReplicaAddress(groupID, proto.ReplicaID(cc.NodeID))
+		if err != nil {
+			// TODO(bdarnell): stash Replica information somewhere so we can have it here
+			// with no chance of failure.
+			log.Fatalf("could not look up replica info (node %s, group %d, replica %d): %s",
+				s.nodeID, groupID, cc.NodeID, err)
 		}
 		g.waitForCallback = true
 		s.sendEvent(&EventMembershipChangeCommitted{
 			GroupID:    groupID,
 			CommandID:  commandID,
 			Index:      entry.Index,
-			NodeID:     proto.RaftNodeID(cc.NodeID),
+			Replica:    replica,
 			ChangeType: cc.Type,
 			Payload:    payload,
 			Callback: func(err error) {
@@ -916,9 +1048,9 @@ func (s *state) processCommittedEntry(groupID proto.RangeID, g *group, entry raf
 						// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
 						switch cc.Type {
 						case raftpb.ConfChangeAddNode:
-							err = s.addNode(proto.RaftNodeID(cc.NodeID), g)
+							err = s.addNode(replica.NodeID, g)
 						case raftpb.ConfChangeRemoveNode:
-							err = s.removeNode(proto.RaftNodeID(cc.NodeID), g)
+							err = s.removeNode(replica.NodeID, g)
 						case raftpb.ConfChangeUpdateNode:
 							// Updates don't concern multiraft, they are simply passed through.
 						}
@@ -954,24 +1086,53 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 		log.Infof("node %v sending message %.200s to %v", s.nodeID,
 			raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
 	}
-	nodeID := proto.RaftNodeID(msg.To)
 	groupID := noGroup
-	if g != nil {
+	var toReplica proto.Replica
+	var fromReplica proto.Replica
+	if g == nil {
+		// No group (a coalesced heartbeat): To/From fields are NodeIDs.
+		// TODO(bdarnell): test transports route by store ID, not node ID.
+		// In tests they're always the same, so we can hack it here but
+		// it would be better to fix the transports.
+		// I think we need to fix this before we can support a range
+		// with two replicas on different stores of the same node.
+		toReplica.NodeID = proto.NodeID(msg.To)
+		toReplica.StoreID = proto.StoreID(msg.To)
+		fromReplica.NodeID = proto.NodeID(msg.From)
+		fromReplica.StoreID = proto.StoreID(msg.From)
+	} else {
+		// Regular message: To/From fields are replica IDs.
 		groupID = g.id
+		var err error
+		toReplica, err = s.ReplicaAddress(groupID, proto.ReplicaID(msg.To))
+		if err != nil {
+			log.Warningf("failed to lookup recipient replica %d in group %d: %s", msg.To, groupID, err)
+			return
+		}
+		fromReplica, err = s.ReplicaAddress(groupID, proto.ReplicaID(msg.From))
+		if err != nil {
+			log.Warningf("failed to lookup sending replica %d in group %d: %s", msg.From, groupID, err)
+			return
+		}
 	}
-	if _, ok := s.nodes[nodeID]; !ok {
+	if _, ok := s.nodes[toReplica.NodeID]; !ok {
 		if log.V(4) {
-			log.Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
+			log.Infof("node %v: connecting to new node %v", s.nodeID, toReplica.NodeID)
 		}
-		if err := s.addNode(nodeID, g); err != nil {
+		if err := s.addNode(toReplica.NodeID, g); err != nil {
 			log.Errorf("node %v: error adding group %v to node %v: %v",
-				s.nodeID, groupID, nodeID, err)
+				s.nodeID, groupID, toReplica.NodeID, err)
 		}
 	}
-	err := s.Transport.Send(&RaftMessageRequest{groupID, msg})
+	err := s.Transport.Send(&RaftMessageRequest{
+		GroupID:     groupID,
+		ToReplica:   toReplica,
+		FromReplica: fromReplica,
+		Message:     msg,
+	})
 	snapStatus := raft.SnapshotFinish
 	if err != nil {
-		log.Warningf("node %v failed to send message to %v: %s", s.nodeID, nodeID, err)
+		log.Warningf("node %v failed to send message to %v: %s", s.nodeID, toReplica.NodeID, err)
 		if groupID != noGroup {
 			s.multiNode.ReportUnreachable(msg.To, uint64(groupID))
 		}
@@ -992,20 +1153,32 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 func (s *state) maybeSendLeaderEvent(groupID proto.RangeID, g *group, ready *raft.Ready) {
 	term := g.committedTerm
 	if ready.SoftState != nil {
-		// Always save the leader whenever we get a SoftState.
-		g.leader = proto.RaftNodeID(ready.SoftState.Lead)
+		// Always save the leader whenever it changes.
+		if proto.ReplicaID(ready.SoftState.Lead) != g.leader.ReplicaID {
+			if ready.SoftState.Lead == 0 {
+				g.leader = proto.Replica{}
+			} else {
+				if repl, err := s.ReplicaAddress(g.id, proto.ReplicaID(ready.SoftState.Lead)); err != nil {
+					log.Warningf("node %s: failed to look up address of replica %d in group %d: %s",
+						s.nodeID, ready.SoftState.Lead, g.id, err)
+					g.leader = proto.Replica{}
+				} else {
+					g.leader = repl
+				}
+			}
+		}
 	}
 	if len(ready.CommittedEntries) > 0 {
 		term = ready.CommittedEntries[len(ready.CommittedEntries)-1].Term
 	}
-	if term != g.committedTerm && g.leader != 0 {
+	if term != g.committedTerm && g.leader.ReplicaID != 0 {
 		// Whenever the committed term has advanced and we know our leader,
 		// emit an event.
 		g.committedTerm = term
 		s.sendEvent(&EventLeaderElection{
-			GroupID: groupID,
-			NodeID:  proto.RaftNodeID(g.leader),
-			Term:    g.committedTerm,
+			GroupID:   groupID,
+			ReplicaID: g.leader.ReplicaID,
+			Term:      g.committedTerm,
 		})
 
 		// Re-submit all pending proposals
@@ -1053,11 +1226,15 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 
 		if !raft.IsEmptySnap(ready.Snapshot) {
 			// Sync the group/node mapping with the information contained in the snapshot.
-			for _, nodeID := range ready.Snapshot.Metadata.ConfState.Nodes {
+			replicas, err := s.Storage.ReplicasFromSnapshot(ready.Snapshot)
+			if err != nil {
+				log.Fatalf("failed to parse snapshot: %s", err)
+			}
+			for _, rep := range replicas {
 				// TODO(bdarnell): if we had any information that predated this snapshot
 				// we must remove those nodes.
-				if err := s.addNode(proto.RaftNodeID(nodeID), g); err != nil {
-					log.Errorf("node %v: error adding node %v", s.nodeID, nodeID)
+				if err := s.addNode(rep.NodeID, g); err != nil {
+					log.Errorf("node %v: error adding node %v", s.nodeID, rep.NodeID)
 				}
 			}
 		}
@@ -1083,4 +1260,24 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			}
 		}
 	}
+}
+
+type replicaDescCacheKey struct {
+	groupID   proto.RangeID
+	replicaID proto.ReplicaID
+}
+
+func (s *state) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.Replica, error) {
+	if rep, ok := s.replicaDescCache.Get(replicaDescCacheKey{groupID, replicaID}); ok {
+		return rep.(proto.Replica), nil
+	}
+	rep, err := s.Storage.ReplicaAddress(groupID, replicaID)
+	if err == nil {
+		s.replicaDescCache.Add(replicaDescCacheKey{groupID, replicaID}, rep)
+	}
+	return rep, err
+}
+
+func (s *state) CacheReplicaAddress(groupID proto.RangeID, replica proto.Replica) {
+	s.replicaDescCache.Add(replicaDescCacheKey{groupID, replica.ReplicaID}, replica)
 }

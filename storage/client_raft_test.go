@@ -848,7 +848,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		}
 
 		verify := func(expected []int64) {
-			util.SucceedsWithin(t, time.Second, func() error {
+			util.SucceedsWithin(t, 3*time.Second, func() error {
 				values := []int64{}
 				for _, eng := range mtc.engines {
 					val, _, err := engine.MVCCGet(eng, proto.Key("a"), mtc.clock.Now(), true, nil)
@@ -1092,11 +1092,23 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		return util.Errorf("range still exists")
 	})
 
+	replica1 := proto.Replica{
+		ReplicaID: proto.ReplicaID(mtc.stores[1].StoreID()),
+		NodeID:    proto.NodeID(mtc.stores[1].StoreID()),
+		StoreID:   mtc.stores[1].StoreID(),
+	}
+	replica2 := proto.Replica{
+		ReplicaID: proto.ReplicaID(mtc.stores[2].StoreID()),
+		NodeID:    proto.NodeID(mtc.stores[2].StoreID()),
+		StoreID:   mtc.stores[2].StoreID(),
+	}
 	if err := mtc.transport.Send(&multiraft.RaftMessageRequest{
-		GroupID: proto.RangeID(0),
+		GroupID:     0,
+		ToReplica:   replica1,
+		FromReplica: replica2,
 		Message: raftpb.Message{
-			From: uint64(mtc.stores[2].RaftNodeID()),
-			To:   uint64(mtc.stores[1].RaftNodeID()),
+			From: uint64(replica2.ReplicaID),
+			To:   uint64(replica1.ReplicaID),
 			Type: raftpb.MsgHeartbeat,
 		}}); err != nil {
 		t.Fatal(err)
@@ -1113,6 +1125,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // number of repetitions adds an unacceptable amount of test runtime).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(bdarnell): #768")
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 

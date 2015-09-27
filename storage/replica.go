@@ -149,7 +149,6 @@ type RangeManager interface {
 	// Accessors for shared state.
 	ClusterID() string
 	StoreID() proto.StoreID
-	RaftNodeID() proto.RaftNodeID
 	Clock() *hlc.Clock
 	Engine() engine.Engine
 	DB() *client.DB
@@ -195,10 +194,22 @@ type Replica struct {
 	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
 	respCache    *ResponseCache // Provides idempotence for retries
 
-	sync.RWMutex                   // Protects the following fields:
-	cmdQ           *CommandQueue   // Enforce at most one command is running per key(s)
-	tsCache        *TimestampCache // Most recent timestamps for keys / key ranges
-	pendingCmds    map[cmdIDKey]*pendingCmd
+	sync.RWMutex                 // Protects the following fields:
+	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
+	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
+	pendingCmds  map[cmdIDKey]*pendingCmd
+
+	// pendingReplica houses a replica that is not yet in the range
+	// descriptor, since we must be able to look up a replica's
+	// descriptor in order to add it to the range. It is protected by
+	// the RWMutex and once it has taken on a non-zero value it must not
+	// be changed until that operation has completed and it has been
+	// reset to a zero value. The sync.Cond is signaled whenever
+	// pendingReplica.value changes to zero.
+	pendingReplica struct {
+		*sync.Cond
+		value proto.Replica
+	}
 	truncatedState unsafe.Pointer // *proto.RaftTruancatedState
 }
 
@@ -211,6 +222,7 @@ func NewReplica(desc *proto.RangeDescriptor, rm RangeManager) (*Replica, error) 
 		respCache:   NewResponseCache(desc.RangeID),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
+	r.pendingReplica.Cond = sync.NewCond(r)
 	r.setDescWithoutProcessUpdate(desc)
 
 	lastIndex, err := r.loadLastIndex()
@@ -299,16 +311,14 @@ func (r *Replica) getLease() *proto.Lease {
 
 // newNotLeaderError returns a NotLeaderError initialized with the
 // replica for the holder (if any) of the given lease.
-func (r *Replica) newNotLeaderError(l *proto.Lease, originNode proto.RaftNodeID) error {
+func (r *Replica) newNotLeaderError(l *proto.Lease, originStoreID proto.StoreID) error {
 	err := &proto.NotLeaderError{}
-	if l != nil && l.RaftNodeID != 0 {
+	if l != nil && l.Replica.ReplicaID != 0 {
 		desc := r.Desc()
 
 		err.RangeID = desc.RangeID
-		_, originStoreID := proto.DecodeRaftNodeID(originNode)
 		_, err.Replica = desc.FindReplica(originStoreID)
-		_, storeID := proto.DecodeRaftNodeID(proto.RaftNodeID(l.RaftNodeID))
-		_, err.Leader = desc.FindReplica(storeID)
+		_, err.Leader = desc.FindReplica(l.Replica.StoreID)
 	}
 	return err
 }
@@ -323,6 +333,10 @@ func (r *Replica) requestLeaderLease(timestamp proto.Timestamp) error {
 	// Prepare a Raft command to get a leader lease for this replica.
 	expiration := timestamp.Add(duration, 0)
 	desc := r.Desc()
+	_, replica := desc.FindReplica(r.rm.StoreID())
+	if replica == nil {
+		return util.Errorf("can't find store %s in descriptor %+v", r.rm.StoreID(), desc)
+	}
 	args := &proto.LeaderLeaseRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       desc.StartKey,
@@ -336,7 +350,7 @@ func (r *Replica) requestLeaderLease(timestamp proto.Timestamp) error {
 		Lease: proto.Lease{
 			Start:      timestamp,
 			Expiration: expiration,
-			RaftNodeID: r.rm.RaftNodeID(),
+			Replica:    *replica,
 		},
 	}
 	ba := &proto.BatchRequest{}
@@ -373,15 +387,13 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 
-	raftNodeID := r.rm.RaftNodeID()
-
 	if lease := r.getLease(); lease.Covers(timestamp) {
-		if lease.OwnedBy(raftNodeID) {
+		if lease.OwnedBy(r.rm.StoreID()) {
 			// Happy path: We have an active lease, nothing to do.
 			return nil
 		}
 		// If lease is currently held by another, redirect to holder.
-		return r.newNotLeaderError(lease, raftNodeID)
+		return r.newNotLeaderError(lease, r.rm.StoreID())
 	}
 	defer trace.Epoch("request leader lease")()
 	// Otherwise, no active lease: Request renewal.
@@ -393,7 +405,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	// extra round-trip.
 	if _, ok := err.(*proto.LeaseRejectedError); ok {
 		if lease := r.getLease(); lease.Covers(timestamp) {
-			return r.newNotLeaderError(lease, raftNodeID)
+			return r.newNotLeaderError(lease, r.rm.StoreID())
 		}
 	}
 	return err
@@ -454,6 +466,24 @@ func (r *Replica) setCachedTruncatedState(state *proto.RaftTruncatedState) {
 func (r *Replica) GetReplica() *proto.Replica {
 	_, replica := r.Desc().FindReplica(r.rm.StoreID())
 	return replica
+}
+
+// ReplicaAddress returns information about the given member of this replica's range.
+func (r *Replica) ReplicaAddress(replicaID proto.ReplicaID) (proto.Replica, error) {
+	r.RLock()
+	defer r.RUnlock()
+
+	desc := r.Desc()
+	for _, repAddress := range desc.Replicas {
+		if repAddress.ReplicaID == replicaID {
+			return repAddress, nil
+		}
+	}
+	if r.pendingReplica.value.ReplicaID == replicaID {
+		return r.pendingReplica.value, nil
+	}
+	return proto.Replica{}, util.Errorf("replica %d not found in range %d",
+		replicaID, r.Desc().RangeID)
 }
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
@@ -919,10 +949,17 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba *proto.BatchRequest
 		ctx:  ctx,
 		done: make(chan proto.ResponseWithError, 1),
 	}
+	desc := r.Desc()
+	_, replica := desc.FindReplica(r.rm.StoreID())
+	if replica == nil {
+		errChan := make(chan error, 1)
+		errChan <- util.Errorf("could not find own replica in descriptor")
+		return errChan, pendingCmd
+	}
 	raftCmd := proto.RaftCommand{
-		RangeID:      r.Desc().RangeID,
-		OriginNodeID: r.rm.RaftNodeID(),
-		Cmd:          *ba,
+		RangeID:       r.Desc().RangeID,
+		OriginReplica: *replica,
+		Cmd:           *ba,
 	}
 	cmdID := ba.GetOrCreateCmdID(r.rm.Clock().PhysicalNow())
 	idKey := makeCmdIDKey(cmdID)
@@ -962,7 +999,7 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
-	br, err := r.applyRaftCommand(ctx, index, proto.RaftNodeID(raftCmd.OriginNodeID), &raftCmd.Cmd)
+	br, err := r.applyRaftCommand(ctx, index, raftCmd.OriginReplica, &raftCmd.Cmd)
 	err = r.maybeSetCorrupt(err)
 	execDone()
 	if err != nil {
@@ -982,7 +1019,7 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto
 // underlying state machine (i.e. the engine).
 // When certain critical operations fail, a replicaCorruptionError may be
 // returned and must be handled by the caller.
-func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode proto.RaftNodeID,
+func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originReplica proto.Replica,
 	ba *proto.BatchRequest) (*proto.BatchResponse, error) {
 	if index <= 0 {
 		log.Fatalc(ctx, "raft command index is <= 0")
@@ -997,7 +1034,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode
 	// Call the helper, which returns a batch containing data written
 	// during command execution and any associated error.
 	ms := engine.MVCCStats{}
-	batch, br, intents, rErr := r.applyRaftCommandInBatch(ctx, index, originNode, ba, &ms)
+	batch, br, intents, rErr := r.applyRaftCommandInBatch(ctx, index, originReplica, ba, &ms)
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
@@ -1029,7 +1066,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode
 
 	// On the replica on which this command originated, resolve skipped intents
 	// asynchronously - even on failure.
-	if originNode == r.rm.RaftNodeID() {
+	if originReplica.StoreID == r.rm.StoreID() {
 		r.handleSkippedIntents(intents)
 	}
 
@@ -1039,7 +1076,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode
 // applyRaftCommandInBatch executes the command in a batch engine and
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
-func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, originNode proto.RaftNodeID,
+func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, originReplica proto.Replica,
 	ba *proto.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *proto.BatchResponse, []intentsWithArg, error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.rm.Engine().NewBatch()
@@ -1082,7 +1119,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		// TODO(tschottdorf): shouldn't be in the loop. Currently is because
 		// we haven't cleaned up the timestamp handling fully.
 		if lease := r.getLease(); args.Method() != proto.LeaderLease &&
-			(!lease.OwnedBy(originNode) || !lease.Covers(args.Header().Timestamp)) {
+			(!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(args.Header().Timestamp)) {
 			// Verify the leader lease is held, unless this command is trying to
 			// obtain it. Any other Raft command has had the leader lease held
 			// by the replica at proposal time, but this may no longer be the case.
@@ -1099,7 +1136,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// same ClientCmdID and would get the distributed sender stuck in an
 			// infinite loop, retrieving a stale NotLeaderError over and over
 			// again, even when proposing at the correct replica.
-			return btch, nil, nil, r.newNotLeaderError(lease, originNode)
+			return btch, nil, nil, r.newNotLeaderError(lease, originReplica.StoreID)
 		}
 	}
 
@@ -1304,7 +1341,7 @@ func (r *Replica) maybeGossipSystemConfigLocked() {
 		return
 	}
 
-	if lease := r.getLease(); !lease.OwnedBy(r.rm.RaftNodeID()) || !lease.Covers(r.rm.Clock().Now()) {
+	if lease := r.getLease(); !lease.OwnedBy(r.rm.StoreID()) || !lease.Covers(r.rm.Clock().Now()) {
 		// Do not gossip when a leader lease is not held.
 		return
 	}

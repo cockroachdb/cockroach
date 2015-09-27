@@ -20,12 +20,18 @@ package proto
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
 
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // A RangeID is a unique ID associated to a Raft consensus group.
 type RangeID int64
+
+// String implements the fmt.Stringer interface.
+func (r RangeID) String() string {
+	return strconv.FormatInt(int64(r), 10)
+}
 
 // RangeIDSlice implements sort.Interface.
 type RangeIDSlice []RangeID

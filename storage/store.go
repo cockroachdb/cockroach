@@ -468,7 +468,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	start := keys.RangeDescriptorKey(proto.KeyMin)
 	end := keys.RangeDescriptorKey(proto.KeyMax)
 
-	if s.multiraft, err = multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
+	if s.multiraft, err = multiraft.NewMultiRaft(s.Ident.NodeID, s.Ident.StoreID, &multiraft.Config{
 		Transport:              s.ctx.Transport,
 		Storage:                s,
 		StateMachine:           s,
@@ -856,11 +856,6 @@ func (s *Store) ClusterID() string { return s.Ident.ClusterID }
 
 // StoreID accessor.
 func (s *Store) StoreID() proto.StoreID { return s.Ident.StoreID }
-
-// RaftNodeID accessor.
-func (s *Store) RaftNodeID() proto.RaftNodeID {
-	return proto.MakeRaftNodeID(s.Ident.NodeID, s.Ident.StoreID)
-}
 
 // Clock accessor.
 func (s *Store) Clock() *hlc.Clock { return s.ctx.Clock }
@@ -1434,7 +1429,7 @@ func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd proto.RaftCommand) <-
 			crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
 			return s.multiraft.ChangeGroupMembership(cmd.RangeID, string(idKey),
 				changeTypeInternalToRaft[crt.ChangeType],
-				proto.MakeRaftNodeID(crt.NodeID, crt.StoreID),
+				crt.Replica,
 				data)
 		}
 	}
@@ -1541,6 +1536,39 @@ func (s *Store) GroupStorage(groupID proto.RangeID) multiraft.WriteableGroupStor
 		s.uninitReplicas[r.Desc().RangeID] = r
 	}
 	return r
+}
+
+// ReplicaAddress implements the multiraft.Storage interface.
+func (s *Store) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.Replica, error) {
+	rep, err := s.GetReplica(groupID)
+	if err != nil {
+		return proto.Replica{}, err
+	}
+	return rep.ReplicaAddress(replicaID)
+}
+
+// ReplicaIDForStore implements the multiraft.Storage interface.
+func (s *Store) ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) (proto.ReplicaID, error) {
+	r, err := s.GetReplica(groupID)
+	if err != nil {
+		return 0, err
+	}
+	for _, rep := range r.Desc().Replicas {
+		if rep.StoreID == storeID {
+			return rep.ReplicaID, nil
+		}
+	}
+	return 0, util.Errorf("store %s not found as replica of range %s", storeID, groupID)
+}
+
+// ReplicasFromSnapshot implements the multiraft.Storage interface.
+func (s *Store) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]proto.Replica, error) {
+	// TODO(bdarnell): can we avoid parsing this twice?
+	var parsedSnap proto.RaftSnapshotData
+	if err := parsedSnap.Unmarshal(snap.Data); err != nil {
+		return nil, err
+	}
+	return parsedSnap.RangeDescriptor.Replicas, nil
 }
 
 // AppliedIndex implements the multiraft.StateMachine interface.

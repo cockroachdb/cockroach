@@ -63,7 +63,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	// For uninitalized ranges, membership is unknown at this point.
 	if found || r.isInitialized() {
 		for _, rep := range desc.Replicas {
-			cs.Nodes = append(cs.Nodes, uint64(proto.MakeRaftNodeID(rep.NodeID, rep.StoreID)))
+			cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 		}
 	}
 
@@ -293,7 +293,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// Synthesize our raftpb.ConfState from desc.
 	var cs raftpb.ConfState
 	for _, rep := range desc.Replicas {
-		cs.Nodes = append(cs.Nodes, uint64(proto.MakeRaftNodeID(rep.NodeID, rep.StoreID)))
+		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 	}
 
 	term, err := r.Term(appliedIndex)

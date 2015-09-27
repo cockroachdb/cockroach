@@ -1370,51 +1370,6 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	})
 }
 
-func TestRaftNodeID(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	cases := []struct {
-		nodeID   proto.NodeID
-		storeID  proto.StoreID
-		expected proto.RaftNodeID
-	}{
-		{0, 1, 1},
-		{1, 1, 0x100000001},
-		{2, 3, 0x200000003},
-		{math.MaxInt32, math.MaxInt32, 0x7fffffff7fffffff},
-	}
-	for _, c := range cases {
-		x := proto.MakeRaftNodeID(c.nodeID, c.storeID)
-		if x != c.expected {
-			t.Errorf("makeRaftNodeID(%v, %v) returned %v; expected %v",
-				c.nodeID, c.storeID, x, c.expected)
-		}
-		n, s := proto.DecodeRaftNodeID(x)
-		if n != c.nodeID || s != c.storeID {
-			t.Errorf("decodeRaftNodeID(%v) returned %v, %v; expected %v, %v",
-				x, n, s, c.nodeID, c.storeID)
-		}
-	}
-
-	panicCases := []struct {
-		nodeID  proto.NodeID
-		storeID proto.StoreID
-	}{
-		{1, 0},
-		{1, -1},
-		{-1, 1},
-	}
-	for _, c := range panicCases {
-		func() {
-			defer func() {
-				_ = recover()
-			}()
-			x := proto.MakeRaftNodeID(c.nodeID, c.storeID)
-			t.Errorf("makeRaftNodeID(%v, %v) returned %v; expected panic",
-				c.nodeID, c.storeID, x)
-		}()
-	}
-}
-
 // TestStoreBadRequests verifies that ExecuteCmd returns errors for
 // bad requests that do not pass key verification.
 //

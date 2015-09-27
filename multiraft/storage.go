@@ -42,6 +42,9 @@ var _ WriteableGroupStorage = (*raft.MemoryStorage)(nil)
 // of raft data.
 type Storage interface {
 	GroupStorage(groupID proto.RangeID) WriteableGroupStorage
+	ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.Replica, error)
+	ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) (proto.ReplicaID, error)
+	ReplicasFromSnapshot(snap raftpb.Snapshot) ([]proto.Replica, error)
 }
 
 // The StateMachine interface is supplied by the application to manage a persistent
@@ -79,6 +82,26 @@ func (m *MemoryStorage) GroupStorage(groupID proto.RangeID) WriteableGroupStorag
 		m.groups[groupID] = g
 	}
 	return g
+}
+
+// ReplicaAddress implements the Storage interface by returning a
+// dummy address.
+func (m *MemoryStorage) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.Replica, error) {
+	return proto.Replica{
+		ReplicaID: replicaID,
+		NodeID:    proto.NodeID(replicaID),
+		StoreID:   proto.StoreID(replicaID),
+	}, nil
+}
+
+// ReplicaIDForStore implements the Storage interface.
+func (m *MemoryStorage) ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) (proto.ReplicaID, error) {
+	return proto.ReplicaID(storeID), nil
+}
+
+// ReplicasFromSnapshot implements the Storage interface.
+func (m *MemoryStorage) ReplicasFromSnapshot(_ raftpb.Snapshot) ([]proto.Replica, error) {
+	return nil, nil
 }
 
 // groupWriteRequest represents a set of changes to make to a group.

@@ -1666,12 +1666,14 @@ class Lease : public ::google::protobuf::Message {
   ::cockroach::proto::Timestamp* release_expiration();
   void set_allocated_expiration(::cockroach::proto::Timestamp* expiration);
 
-  // optional uint64 raft_node_id = 3;
-  bool has_raft_node_id() const;
-  void clear_raft_node_id();
-  static const int kRaftNodeIdFieldNumber = 3;
-  ::google::protobuf::uint64 raft_node_id() const;
-  void set_raft_node_id(::google::protobuf::uint64 value);
+  // optional .cockroach.proto.Replica replica = 3;
+  bool has_replica() const;
+  void clear_replica();
+  static const int kReplicaFieldNumber = 3;
+  const ::cockroach::proto::Replica& replica() const;
+  ::cockroach::proto::Replica* mutable_replica();
+  ::cockroach::proto::Replica* release_replica();
+  void set_allocated_replica(::cockroach::proto::Replica* replica);
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.Lease)
  private:
@@ -1679,15 +1681,15 @@ class Lease : public ::google::protobuf::Message {
   inline void clear_has_start();
   inline void set_has_expiration();
   inline void clear_has_expiration();
-  inline void set_has_raft_node_id();
-  inline void clear_has_raft_node_id();
+  inline void set_has_replica();
+  inline void clear_has_replica();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::proto::Timestamp* start_;
   ::cockroach::proto::Timestamp* expiration_;
-  ::google::protobuf::uint64 raft_node_id_;
+  ::cockroach::proto::Replica* replica_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
@@ -3598,28 +3600,47 @@ inline void Lease::set_allocated_expiration(::cockroach::proto::Timestamp* expir
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Lease.expiration)
 }
 
-// optional uint64 raft_node_id = 3;
-inline bool Lease::has_raft_node_id() const {
+// optional .cockroach.proto.Replica replica = 3;
+inline bool Lease::has_replica() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void Lease::set_has_raft_node_id() {
+inline void Lease::set_has_replica() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void Lease::clear_has_raft_node_id() {
+inline void Lease::clear_has_replica() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline void Lease::clear_raft_node_id() {
-  raft_node_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_raft_node_id();
+inline void Lease::clear_replica() {
+  if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+  clear_has_replica();
 }
-inline ::google::protobuf::uint64 Lease::raft_node_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.raft_node_id)
-  return raft_node_id_;
+inline const ::cockroach::proto::Replica& Lease::replica() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.replica)
+  return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
-inline void Lease::set_raft_node_id(::google::protobuf::uint64 value) {
-  set_has_raft_node_id();
-  raft_node_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.Lease.raft_node_id)
+inline ::cockroach::proto::Replica* Lease::mutable_replica() {
+  set_has_replica();
+  if (replica_ == NULL) {
+    replica_ = new ::cockroach::proto::Replica;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Lease.replica)
+  return replica_;
+}
+inline ::cockroach::proto::Replica* Lease::release_replica() {
+  clear_has_replica();
+  ::cockroach::proto::Replica* temp = replica_;
+  replica_ = NULL;
+  return temp;
+}
+inline void Lease::set_allocated_replica(::cockroach::proto::Replica* replica) {
+  delete replica_;
+  replica_ = replica;
+  if (replica) {
+    set_has_replica();
+  } else {
+    clear_has_replica();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Lease.replica)
 }
 
 // -------------------------------------------------------------------

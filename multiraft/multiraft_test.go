@@ -76,7 +76,7 @@ func newTestCluster(transport Transport, size int, stopper *stop.Stopper, t *tes
 			HeartbeatIntervalTicks: 1,
 			TickInterval:           time.Hour, // not in use
 		}
-		mr, err := NewMultiRaft(proto.RaftNodeID(i+1), config, stopper)
+		mr, err := NewMultiRaft(proto.NodeID(i+1), proto.StoreID(i+1), config, stopper)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -155,7 +155,7 @@ func (c *testCluster) waitForElection(i int) *EventLeaderElection {
 			panic("got nil LeaderElection event, channel likely closed")
 		}
 		// Ignore events with NodeID 0; these mark elections that are in progress.
-		if e.NodeID != 0 {
+		if e.ReplicaID != 0 {
 			return e
 		}
 	}
@@ -168,7 +168,8 @@ func (c *testCluster) elect(leaderIndex int, groupID proto.RangeID) {
 	c.triggerElection(leaderIndex, groupID)
 	for _, i := range c.groups[groupID] {
 		el := c.waitForElection(i)
-		if el.NodeID != c.nodes[leaderIndex].nodeID {
+		// With the in-memory storage used in these tests, replica and node IDs are interchangeable.
+		if el.ReplicaID != proto.ReplicaID(c.nodes[leaderIndex].nodeID) {
 			c.t.Fatalf("wrong leader elected; wanted node %d but got event %v", leaderIndex, el)
 		}
 		if el.GroupID != groupID {
@@ -255,9 +256,9 @@ func TestLeaderElectionEvent(t *testing.T) {
 	select {
 	case e := <-cluster.events[1].LeaderElection:
 		if !reflect.DeepEqual(e, &EventLeaderElection{
-			GroupID: groupID,
-			NodeID:  3,
-			Term:    42,
+			GroupID:   groupID,
+			ReplicaID: 3,
+			Term:      42,
 		}) {
 			t.Errorf("election event did not match expectations: %+v", e)
 		}
@@ -374,7 +375,11 @@ func TestMembershipChange(t *testing.T) {
 	for i := 1; i < 4; i++ {
 		ch := cluster.nodes[0].ChangeGroupMembership(groupID, makeCommandID(),
 			raftpb.ConfChangeAddNode,
-			cluster.nodes[i].nodeID, nil)
+			proto.Replica{
+				NodeID:    cluster.nodes[i].nodeID,
+				StoreID:   proto.StoreID(cluster.nodes[i].nodeID),
+				ReplicaID: proto.ReplicaID(cluster.nodes[i].nodeID),
+			}, nil)
 		<-ch
 	}
 
@@ -458,7 +463,11 @@ func TestRemoveLeader(t *testing.T) {
 		log.Infof("adding node %d", i+groupSize)
 		ch := cluster.nodes[i].ChangeGroupMembership(groupID, makeCommandID(),
 			raftpb.ConfChangeAddNode,
-			cluster.nodes[i+groupSize].nodeID, nil)
+			proto.Replica{
+				NodeID:    cluster.nodes[i+groupSize].nodeID,
+				StoreID:   proto.StoreID(cluster.nodes[i+groupSize].nodeID),
+				ReplicaID: proto.ReplicaID(cluster.nodes[i+groupSize].nodeID),
+			}, nil)
 		if err := <-ch; err != nil {
 			t.Fatal(err)
 		}
@@ -466,7 +475,11 @@ func TestRemoveLeader(t *testing.T) {
 		log.Infof("removing node %d", i)
 		ch = cluster.nodes[i].ChangeGroupMembership(groupID, makeCommandID(),
 			raftpb.ConfChangeRemoveNode,
-			cluster.nodes[i].nodeID, nil)
+			proto.Replica{
+				NodeID:    cluster.nodes[i].nodeID,
+				StoreID:   proto.StoreID(cluster.nodes[i].nodeID),
+				ReplicaID: proto.ReplicaID(cluster.nodes[i].nodeID),
+			}, nil)
 		if err := <-ch; err != nil {
 			t.Fatal(err)
 		}
