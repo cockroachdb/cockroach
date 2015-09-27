@@ -1342,7 +1342,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			RequestHeader: proto.RequestHeader{
 				Key: intent.Txn.Key,
 			},
-			PusherTxn: pusherTxn,
+			PusherTxn: *pusherTxn,
 			PusheeTxn: intent.Txn,
 			PushTo:    header.Timestamp,
 			// The timestamp is used by PushTxn for figuring out whether the
@@ -1355,10 +1355,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		})
 	}
 	b := &client.Batch{}
-	if len(pushReqs) > 0 {
-		b.InternalAddRequest(pushReqs...)
-	}
-
+	b.InternalAddRequest(pushReqs...)
 	br, pushErr := s.db.RunWithResponse(b)
 	if pushErr != nil {
 		if pushErr != nil {

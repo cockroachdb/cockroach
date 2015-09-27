@@ -289,7 +289,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 	// Timestamp and Epoch have not suffered regression.
 	if ok {
 		if reply.Txn.Status == proto.COMMITTED {
-			return reply, nil, proto.NewTransactionStatusError(reply.Txn, "already committed")
+			return reply, nil, proto.NewTransactionStatusError(*reply.Txn, "already committed")
 		} else if reply.Txn.Status == proto.ABORTED {
 			// If the transaction was previously aborted by a concurrent
 			// writer's push, any intents written are still open. It's only now
@@ -302,14 +302,14 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 			// importantly, intents) dangling; we can't currently write on
 			// error. Would panic, but that makes TestEndTransactionWithErrors
 			// awkward.
-			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch))
+			return reply, nil, proto.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch))
 		} else if args.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(args.Txn.OrigTimestamp) {
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
 			// than the original transaction timestamp.
 
 			// TODO(tschottdorf): see above comment on epoch regression.
-			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("timestamp regression: %s", args.Txn.OrigTimestamp))
+			return reply, nil, proto.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("timestamp regression: %s", args.Txn.OrigTimestamp))
 		}
 
 		// Take max of requested epoch and existing epoch. The requester
@@ -798,9 +798,6 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, args proto.GCReq
 // with priority one less than the pushee's higher priority.
 func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.PushTxnRequest) (proto.PushTxnResponse, error) {
 	var reply proto.PushTxnResponse
-	if args.PusherTxn == nil {
-		return reply, util.Errorf("no pusher txn given")
-	}
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
 		return reply, util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
@@ -907,7 +904,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	}
 
 	if !pusherWins {
-		err := proto.NewTransactionPushError(args.PusherTxn, reply.PusheeTxn)
+		err := proto.NewTransactionPushError(&args.PusherTxn, reply.PusheeTxn)
 		if log.V(1) {
 			log.Info(err)
 		}

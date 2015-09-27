@@ -306,7 +306,7 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 			Key:       txn.Key,
 		},
 		Now:       now,
-		PusherTxn: &proto.Transaction{Priority: proto.MaxPriority},
+		PusherTxn: proto.Transaction{Priority: proto.MaxPriority},
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}

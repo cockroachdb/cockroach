@@ -342,7 +342,7 @@ func (e *TransactionRetryError) Transaction() *Transaction {
 
 // NewTransactionStatusError initializes a new TransactionStatusError from
 // the given Transaction (which is copied) and a message.
-func NewTransactionStatusError(txn *Transaction, msg string) *TransactionStatusError {
+func NewTransactionStatusError(txn Transaction, msg string) *TransactionStatusError {
 	return &TransactionStatusError{Txn: *txn.Clone(), Msg: msg}
 }
 

@@ -985,8 +985,9 @@ func (*GCResponse) ProtoMessage()    {}
 // readers or writers which have encountered an "intent" laid down by
 // another transaction. The goal is to resolve the conflict. Note that
 // args.Key should be set to the txn ID of args.PusheeTxn, not
-// args.PusherTxn (which might be nil in any case). This RPC is
-// addressed to the range which owns the pushee's txn record.
+// args.PusherTxn. This RPC is addressed to the range which owns the pushee's
+// txn record. If the pusher is not transactional, it must be set to a
+// Transaction record with only the Priority present.
 //
 // Resolution is trivial if the txn which owns the intent has either
 // been committed or aborted already. Otherwise, the existing txn can
@@ -999,7 +1000,7 @@ type PushTxnRequest struct {
 	// Transaction which encountered the intent, if applicable. For a
 	// non-transactional operation, pusher_txn will be nil. Used to
 	// compare priorities and timestamps if priorities are equal.
-	PusherTxn *Transaction `protobuf:"bytes,2,opt,name=pusher_txn" json:"pusher_txn,omitempty"`
+	PusherTxn Transaction `protobuf:"bytes,2,opt,name=pusher_txn" json:"pusher_txn"`
 	// Transaction to be pushed, as specified at the intent which led to
 	// the push transaction request. Note that this may not be the most
 	// up-to-date value of the transaction record, but will be set or
@@ -1024,11 +1025,11 @@ func (m *PushTxnRequest) Reset()         { *m = PushTxnRequest{} }
 func (m *PushTxnRequest) String() string { return proto1.CompactTextString(m) }
 func (*PushTxnRequest) ProtoMessage()    {}
 
-func (m *PushTxnRequest) GetPusherTxn() *Transaction {
+func (m *PushTxnRequest) GetPusherTxn() Transaction {
 	if m != nil {
 		return m.PusherTxn
 	}
-	return nil
+	return Transaction{}
 }
 
 func (m *PushTxnRequest) GetPusheeTxn() Transaction {
@@ -2755,16 +2756,14 @@ func (m *PushTxnRequest) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n43
-	if m.PusherTxn != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintApi(data, i, uint64(m.PusherTxn.Size()))
-		n44, err := m.PusherTxn.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n44
+	data[i] = 0x12
+	i++
+	i = encodeVarintApi(data, i, uint64(m.PusherTxn.Size()))
+	n44, err := m.PusherTxn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
 	}
+	i += n44
 	data[i] = 0x1a
 	i++
 	i = encodeVarintApi(data, i, uint64(m.PusheeTxn.Size()))
@@ -4124,10 +4123,8 @@ func (m *PushTxnRequest) Size() (n int) {
 	_ = l
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.PusherTxn != nil {
-		l = m.PusherTxn.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
+	l = m.PusherTxn.Size()
+	n += 1 + l + sovApi(uint64(l))
 	l = m.PusheeTxn.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.PushTo.Size()
@@ -8274,9 +8271,6 @@ func (m *PushTxnRequest) Unmarshal(data []byte) error {
 			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
-			}
-			if m.PusherTxn == nil {
-				m.PusherTxn = &Transaction{}
 			}
 			if err := m.PusherTxn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err

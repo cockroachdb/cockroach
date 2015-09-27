@@ -955,7 +955,7 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, 
 		},
 		Now:       pusher.Timestamp,
 		PushTo:    pusher.Timestamp,
-		PusherTxn: pusher,
+		PusherTxn: *pusher,
 		PusheeTxn: *pushee,
 		PushType:  pushType,
 	}

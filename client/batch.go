@@ -193,8 +193,8 @@ func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
 	return nil
 }
 
-// InternalAddRequest adds the specified call to the batch. It is intended for
-// internal use only.
+// InternalAddRequest adds the specified requests to the batch. It is intended
+// for internal use only.
 func (b *Batch) InternalAddRequest(reqs ...proto.Request) {
 	for _, args := range reqs {
 		numRows := 0

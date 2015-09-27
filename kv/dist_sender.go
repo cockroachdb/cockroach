@@ -440,7 +440,6 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba proto.BatchRequest, de
 		}
 	}
 
-	// TODO(tschottdorf) &ba -> ba
 	resp, err := ds.sendRPC(trace, desc.RangeID, replicas, order, ba)
 	if err != nil {
 		return nil, proto.NewError(err)
