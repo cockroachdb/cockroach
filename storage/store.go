@@ -1538,13 +1538,13 @@ func (s *Store) GroupStorage(groupID proto.RangeID) multiraft.WriteableGroupStor
 	return r
 }
 
-// ReplicaAddress implements the multiraft.Storage interface.
-func (s *Store) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
+// ReplicaDescriptor implements the multiraft.Storage interface.
+func (s *Store) ReplicaDescriptor(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
 	rep, err := s.GetReplica(groupID)
 	if err != nil {
 		return proto.ReplicaDescriptor{}, err
 	}
-	return rep.ReplicaAddress(replicaID)
+	return rep.ReplicaDescriptor(replicaID)
 }
 
 // ReplicaIDForStore implements the multiraft.Storage interface.

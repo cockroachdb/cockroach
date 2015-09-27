@@ -468,8 +468,8 @@ func (r *Replica) GetReplica() *proto.ReplicaDescriptor {
 	return replica
 }
 
-// ReplicaAddress returns information about the given member of this replica's range.
-func (r *Replica) ReplicaAddress(replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
+// ReplicaDescriptor returns information about the given member of this replica's range.
+func (r *Replica) ReplicaDescriptor(replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
 	r.RLock()
 	defer r.RUnlock()
 

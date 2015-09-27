@@ -42,7 +42,7 @@ var _ WriteableGroupStorage = (*raft.MemoryStorage)(nil)
 // of raft data.
 type Storage interface {
 	GroupStorage(groupID proto.RangeID) WriteableGroupStorage
-	ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error)
+	ReplicaDescriptor(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error)
 	ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) (proto.ReplicaID, error)
 	ReplicasFromSnapshot(snap raftpb.Snapshot) ([]proto.ReplicaDescriptor, error)
 }
@@ -84,9 +84,9 @@ func (m *MemoryStorage) GroupStorage(groupID proto.RangeID) WriteableGroupStorag
 	return g
 }
 
-// ReplicaAddress implements the Storage interface by returning a
-// dummy address.
-func (m *MemoryStorage) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
+// ReplicaDescriptor implements the Storage interface by returning a
+// dummy descriptor.
+func (m *MemoryStorage) ReplicaDescriptor(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
 	return proto.ReplicaDescriptor{
 		ReplicaID: replicaID,
 		NodeID:    proto.NodeID(replicaID),

@@ -574,8 +574,8 @@ func (s *state) start() {
 				case raftpb.MsgHeartbeatResp:
 					s.fanoutHeartbeatResponse(req)
 				default:
-					s.CacheReplicaAddress(req.GroupID, req.FromReplica)
-					s.CacheReplicaAddress(req.GroupID, req.ToReplica)
+					s.CacheReplicaDescriptor(req.GroupID, req.FromReplica)
+					s.CacheReplicaDescriptor(req.GroupID, req.ToReplica)
 					// We only want to lazily create the group if it's not heartbeat-related;
 					// our heartbeats are coalesced and contain a dummy GroupID.
 					// TODO(tschottdorf) still shouldn't hurt to move this part outside,
@@ -771,7 +771,7 @@ func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) er
 
 	// Find our store ID in the replicas list.
 	for _, r := range cs.Nodes {
-		repDesc, err := s.ReplicaAddress(groupID, proto.ReplicaID(r))
+		repDesc, err := s.ReplicaDescriptor(groupID, proto.ReplicaID(r))
 		if err != nil {
 			return err
 		}
@@ -790,7 +790,7 @@ func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) er
 		return util.Errorf("couldn't find replica ID for this store (%s) in range %d",
 			s.storeID, groupID)
 	}
-	s.CacheReplicaAddress(groupID, proto.ReplicaDescriptor{
+	s.CacheReplicaDescriptor(groupID, proto.ReplicaDescriptor{
 		ReplicaID: replicaID,
 		NodeID:    s.nodeID,
 		StoreID:   s.storeID,
@@ -826,7 +826,7 @@ func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) er
 
 	for _, id := range cs.Nodes {
 		replicaID := proto.ReplicaID(id)
-		replica, err := s.ReplicaAddress(groupID, replicaID)
+		replica, err := s.ReplicaDescriptor(groupID, replicaID)
 		if err != nil {
 			return err
 		}
@@ -853,7 +853,7 @@ func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) er
 	// out and then voting again. This is expected to be an extremely
 	// rare event.
 	if len(cs.Nodes) == 1 {
-		replica, err := s.ReplicaAddress(groupID, proto.ReplicaID(cs.Nodes[0]))
+		replica, err := s.ReplicaDescriptor(groupID, proto.ReplicaID(cs.Nodes[0]))
 		if err != nil {
 			return err
 		}
@@ -1021,9 +1021,9 @@ func (s *state) processCommittedEntry(groupID proto.RangeID, g *group, entry raf
 			}
 			commandID = ctx.CommandID
 			payload = ctx.Payload
-			s.CacheReplicaAddress(groupID, ctx.Replica)
+			s.CacheReplicaDescriptor(groupID, ctx.Replica)
 		}
-		replica, err := s.ReplicaAddress(groupID, proto.ReplicaID(cc.NodeID))
+		replica, err := s.ReplicaDescriptor(groupID, proto.ReplicaID(cc.NodeID))
 		if err != nil {
 			// TODO(bdarnell): stash Replica information somewhere so we can have it here
 			// with no chance of failure.
@@ -1104,12 +1104,12 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 		// Regular message: To/From fields are replica IDs.
 		groupID = g.id
 		var err error
-		toReplica, err = s.ReplicaAddress(groupID, proto.ReplicaID(msg.To))
+		toReplica, err = s.ReplicaDescriptor(groupID, proto.ReplicaID(msg.To))
 		if err != nil {
 			log.Warningf("failed to lookup recipient replica %d in group %d: %s", msg.To, groupID, err)
 			return
 		}
-		fromReplica, err = s.ReplicaAddress(groupID, proto.ReplicaID(msg.From))
+		fromReplica, err = s.ReplicaDescriptor(groupID, proto.ReplicaID(msg.From))
 		if err != nil {
 			log.Warningf("failed to lookup sending replica %d in group %d: %s", msg.From, groupID, err)
 			return
@@ -1158,7 +1158,7 @@ func (s *state) maybeSendLeaderEvent(groupID proto.RangeID, g *group, ready *raf
 			if ready.SoftState.Lead == 0 {
 				g.leader = proto.ReplicaDescriptor{}
 			} else {
-				if repl, err := s.ReplicaAddress(g.id, proto.ReplicaID(ready.SoftState.Lead)); err != nil {
+				if repl, err := s.ReplicaDescriptor(g.id, proto.ReplicaID(ready.SoftState.Lead)); err != nil {
 					log.Warningf("node %s: failed to look up address of replica %d in group %d: %s",
 						s.nodeID, ready.SoftState.Lead, g.id, err)
 					g.leader = proto.ReplicaDescriptor{}
@@ -1267,17 +1267,17 @@ type replicaDescCacheKey struct {
 	replicaID proto.ReplicaID
 }
 
-func (s *state) ReplicaAddress(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
+func (s *state) ReplicaDescriptor(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
 	if rep, ok := s.replicaDescCache.Get(replicaDescCacheKey{groupID, replicaID}); ok {
 		return rep.(proto.ReplicaDescriptor), nil
 	}
-	rep, err := s.Storage.ReplicaAddress(groupID, replicaID)
+	rep, err := s.Storage.ReplicaDescriptor(groupID, replicaID)
 	if err == nil {
 		s.replicaDescCache.Add(replicaDescCacheKey{groupID, replicaID}, rep)
 	}
 	return rep, err
 }
 
-func (s *state) CacheReplicaAddress(groupID proto.RangeID, replica proto.ReplicaDescriptor) {
+func (s *state) CacheReplicaDescriptor(groupID proto.RangeID, replica proto.ReplicaDescriptor) {
 	s.replicaDescCache.Add(replicaDescCacheKey{groupID, replica.ReplicaID}, replica)
 }
