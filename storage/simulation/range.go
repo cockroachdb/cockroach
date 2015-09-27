@@ -101,23 +101,6 @@ func (r *Range) splitRange(originalRange *Range) {
 	}
 }
 
-// getNextAction returns the action and rebalance from the replica with the
-// highest action priority.
-func (r *Range) getNextAction() (storage.AllocatorAction, bool) {
-	var topReplica replica
-	if len(r.replicas) == 0 {
-		return storage.AllocatorNoop, false
-	}
-	// TODO(bram): This is random. Might want to make it deterministic for
-	// repeatability.
-	for _, replica := range r.replicas {
-		if replica.priority > topReplica.priority {
-			topReplica = replica
-		}
-	}
-	return topReplica.action, topReplica.rebalance
-}
-
 // getAllocateTarget calls allocateTarget for the range and returns the top
 // target store.
 func (r *Range) getAllocateTarget() (proto.StoreID, error) {

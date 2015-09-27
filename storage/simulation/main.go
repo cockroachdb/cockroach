@@ -42,10 +42,10 @@ func main() {
 	}
 
 	// TODO(bram): only flush when on manual stepping (once that enabled).
-	_ = c.epochWriter.Flush()
+	c.flush()
 	for i := 0; i < 100; i++ {
 		c.runEpoch()
-		_ = c.epochWriter.Flush()
+		c.flush()
 	}
 
 	fmt.Println(c)
