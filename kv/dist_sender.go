@@ -309,8 +309,7 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
 func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
-	args proto.BatchRequest) (proto.Response, error) {
-	// TODO args->ba
+	ba proto.BatchRequest) (proto.Response, error) {
 	if len(replicas) == 0 {
 		return nil, util.Errorf("replicas set is empty")
 	}
@@ -330,7 +329,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
 	// still route the request appropriately by key, but won't receive
 	// RangeNotFoundErrors.
-	args.RangeID = rangeID
+	ba.RangeID = rangeID
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := rpc.Options{
@@ -347,10 +346,10 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 		// Use the supplied args proto if this is our first address.
 		if firstArgs {
 			firstArgs = false
-			a = &args
+			a = &ba
 		} else {
 			// Otherwise, copy the args value and set the replica in the header.
-			a = gogoproto.Clone(&args).(*proto.BatchRequest)
+			a = gogoproto.Clone(&ba).(*proto.BatchRequest)
 		}
 		if addr != nil {
 			// TODO(tschottdorf): see len(replicas) above.
@@ -526,8 +525,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 			// re-run as part of a transaction for consistency. The
 			// case where we don't need to re-run is if the read
 			// consistency is not required.
-			if needAnother && ba.Txn == nil && ba.IsRange() &&
-				ba.ReadConsistency != proto.INCONSISTENT {
+			if needAnother && ba.Txn == nil && ba.ReadConsistency != proto.INCONSISTENT {
 				return nil, proto.NewError(&proto.OpRequiresTxnError{})
 			}
 

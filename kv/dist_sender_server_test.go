@@ -228,16 +228,14 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	// second range.
 	keys := []string{"a", "b"}
 	ts := []time.Time{}
-	b := &client.Batch{}
-	for _, key := range keys {
+	for i, key := range keys {
+		b := &client.Batch{}
 		b.Put(key, "value")
-	}
-	if err := db.Run(b); err != nil {
-		t.Fatal(err)
-	}
-	for i := range keys {
-		ts = append(ts, b.Results[i].Rows[0].Timestamp())
-		log.Infof("%d: %s", i, b.Results[i].Rows[0].Timestamp())
+		if err := db.Run(b); err != nil {
+			t.Fatal(err)
+		}
+		ts = append(ts, b.Results[0].Rows[0].Timestamp())
+		log.Infof("%d: %s", i, b.Results[0].Rows[0].Timestamp())
 	}
 
 	// Do an inconsistent Scan/ReverseScan from a new DistSender and verify

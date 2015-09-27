@@ -34,7 +34,6 @@ func (ba *BatchRequest) IsWrite() bool {
 }
 
 // IsReadOnly returns true if all requests within are read-only.
-// TODO(tschottdorf): unify with proto.IsReadOnly
 func (ba *BatchRequest) IsReadOnly() bool {
 	flags := ba.flags()
 	return (flags&isRead) != 0 && (flags&isWrite) == 0
