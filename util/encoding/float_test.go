@@ -137,7 +137,11 @@ func TestEncodeFloat(t *testing.T) {
 					c.Value, testCases[i-1].Encoding, enc)
 			}
 		}
-		_, dec := DecodeFloat(enc, nil)
+		_, dec, err := DecodeFloat(enc, nil)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
 		if math.IsNaN(c.Value) {
 			if !math.IsNaN(dec) {
 				t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
@@ -149,7 +153,7 @@ func TestEncodeFloat(t *testing.T) {
 
 	// Test that appending the float to an existing buffer works.
 	enc := EncodeFloat([]byte("hello"), 1.23)
-	if _, dec := DecodeFloat(enc[5:], nil); dec != 1.23 {
+	if _, dec, _ := DecodeFloat(enc[5:], nil); dec != 1.23 {
 		t.Errorf("unexpected mismatch for %v. got %v", 1.23, dec)
 	}
 }
@@ -182,6 +186,6 @@ func BenchmarkDecodeFloat(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = DecodeFloat(vals[i%len(vals)], buf)
+		_, _, _ = DecodeFloat(vals[i%len(vals)], buf)
 	}
 }

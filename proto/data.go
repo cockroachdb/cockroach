@@ -349,7 +349,10 @@ func (v *Value) GetFloat() (float64, error) {
 	if len(v.Bytes) != 8 {
 		return 0, fmt.Errorf("float64 value should be exactly 8 bytes: %d", len(v.Bytes))
 	}
-	_, u := encoding.DecodeUint64(v.Bytes)
+	_, u, err := encoding.DecodeUint64(v.Bytes)
+	if err != nil {
+		return 0, err
+	}
 	return math.Float64frombits(u), nil
 }
 
@@ -363,7 +366,10 @@ func (v *Value) GetInt() (int64, error) {
 	if len(v.Bytes) != 8 {
 		return 0, fmt.Errorf("uint64 value should be exactly 8 bytes: %d", len(v.Bytes))
 	}
-	_, u := encoding.DecodeUint64(v.Bytes)
+	_, u, err := encoding.DecodeUint64(v.Bytes)
+	if err != nil {
+		return 0, err
+	}
 	return int64(u), nil
 }
 
@@ -373,7 +379,10 @@ func (v *Value) GetTime() (time.Time, error) {
 	if tag := v.GetTag(); tag != ValueType_TIME {
 		return time.Time{}, fmt.Errorf("value type is not TIME: %s", tag)
 	}
-	_, t := encoding.DecodeTime(v.Bytes)
+	_, t, err := encoding.DecodeTime(v.Bytes)
+	if err != nil {
+		return t, err
+	}
 	return t, nil
 }
 

@@ -184,7 +184,10 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 
 	var qualifiedNames parser.QualifiedNames
 	for _, row := range sr {
-		_, tableName := encoding.DecodeString(bytes.TrimPrefix(row.Key, prefix), nil)
+		_, tableName, err := encoding.DecodeString(bytes.TrimPrefix(row.Key, prefix), nil)
+		if err != nil {
+			return nil, err
+		}
 		qname := &parser.QualifiedName{
 			Base:     parser.Name(dbDesc.Name),
 			Indirect: parser.Indirection{parser.NameIndirection(tableName)},
@@ -286,15 +289,19 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 }
 
 func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, error) {
-	var tableID, indexID uint64
-
 	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
-		return IndexID(indexID), nil, util.Errorf("%s: invalid key prefix: %q", desc.Name, key)
+		return 0, nil, util.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
 
 	key = bytes.TrimPrefix(key, keys.TableDataPrefix)
-	key, tableID = encoding.DecodeUvarint(key)
-	key, indexID = encoding.DecodeUvarint(key)
+	key, tableID, err := encoding.DecodeUvarint(key)
+	if err != nil {
+		return 0, nil, err
+	}
+	key, indexID, err := encoding.DecodeUvarint(key)
+	if err != nil {
+		return 0, nil, err
+	}
 
 	if ID(tableID) != desc.ID {
 		return IndexID(indexID), nil, util.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
@@ -346,37 +353,29 @@ func decodeTableKey(valType parser.Datum, key []byte) (parser.Datum, []byte, err
 	}
 	switch valType.(type) {
 	case parser.DBool:
-		var i int64
-		key, i = encoding.DecodeVarint(key)
-		return parser.DBool(i != 0), key, nil
+		rkey, i, err := encoding.DecodeVarint(key)
+		return parser.DBool(i != 0), rkey, err
 	case parser.DInt:
-		var i int64
-		key, i = encoding.DecodeVarint(key)
-		return parser.DInt(i), key, nil
+		rkey, i, err := encoding.DecodeVarint(key)
+		return parser.DInt(i), rkey, err
 	case parser.DFloat:
-		var f float64
-		key, f = encoding.DecodeFloat(key, nil)
-		return parser.DFloat(f), key, nil
+		rkey, f, err := encoding.DecodeFloat(key, nil)
+		return parser.DFloat(f), rkey, err
 	case parser.DString:
-		var r string
-		key, r = encoding.DecodeString(key, nil)
-		return parser.DString(r), key, nil
+		rkey, r, err := encoding.DecodeString(key, nil)
+		return parser.DString(r), rkey, err
 	case parser.DBytes:
-		var r string
-		key, r = encoding.DecodeString(key, nil)
-		return parser.DBytes(r), key, nil
+		rkey, r, err := encoding.DecodeString(key, nil)
+		return parser.DBytes(r), rkey, err
 	case parser.DDate:
-		var t time.Time
-		key, t = encoding.DecodeTime(key)
-		return parser.DDate{Time: t}, key, nil
+		rkey, t, err := encoding.DecodeTime(key)
+		return parser.DDate{Time: t}, rkey, err
 	case parser.DTimestamp:
-		var t time.Time
-		key, t = encoding.DecodeTime(key)
-		return parser.DTimestamp{Time: t}, key, nil
+		rkey, t, err := encoding.DecodeTime(key)
+		return parser.DTimestamp{Time: t}, rkey, err
 	case parser.DInterval:
-		var d int64
-		key, d = encoding.DecodeVarint(key)
-		return parser.DInterval{Duration: time.Duration(d)}, key, nil
+		rkey, d, err := encoding.DecodeVarint(key)
+		return parser.DInterval{Duration: time.Duration(d)}, rkey, err
 	default:
 		return nil, nil, util.Errorf("TODO(pmattis): decoded index key: %s", valType.Type())
 	}
