@@ -565,8 +565,8 @@ func setBatchTimestamps(ba proto.BatchRequest) {
 
 // sendArg is an internal convenience function which transparently wraps and
 // unwraps in a BatchRequest.
-// TODO(tschottdorf): should use batchutil.SendWrapped. Need to figure out
-// the MultiRaft error first.
+// TODO(tschottdorf): should use batchutil.SendWrapped when AddCmd turns into
+// client.Sender#Send.
 func sendArg(r *Replica, ctx context.Context, args proto.Request) (proto.Response, error) {
 	ba := proto.BatchRequest{
 		RequestHeader: *args.Header(),
@@ -574,7 +574,8 @@ func sendArg(r *Replica, ctx context.Context, args proto.Request) (proto.Respons
 	ba.Add(args)
 	// Unwrap reply via deferred function.
 	argsCpy := args
-	reply, err := r.AddCmd(ctx, ba)
+	reply, pErr := r.AddCmd(ctx, ba)
+	err := pErr.GoError()
 	if err == nil {
 		br, ok := reply.(*proto.BatchResponse)
 		if !ok {
@@ -595,9 +596,10 @@ func sendArg(r *Replica, ctx context.Context, args proto.Request) (proto.Respons
 // range's leadership is confirmed. The command is then dispatched
 // either along the read-only execution path or the read-write Raft
 // command queue.
-// TODO(tschottdorf): once this receives a BatchRequest, make sure
-// we don't unecessarily use *BatchRequest in the request path.
-func (r *Replica) AddCmd(ctx context.Context, ba proto.BatchRequest) (reply proto.Response, err error) {
+// TODO(tschottdorf): use BatchRequest w/o pointer receiver.
+func (r *Replica) AddCmd(ctx context.Context, ba proto.BatchRequest) (proto.Response, *proto.Error) {
+	var reply proto.Response
+	var err error
 	// Fiddle with the timestamps to make sure that writes can overlap
 	// within this batch.
 	// TODO(tschottdorf): provisional feature to get back to passing tests.
@@ -633,7 +635,12 @@ func (r *Replica) AddCmd(ctx context.Context, ba proto.BatchRequest) (reply prot
 	} else {
 		panic(fmt.Sprintf("don't know how to handle command %s", ba))
 	}
-	return reply, err
+	if err == multiraft.ErrGroupDeleted {
+		// This error needs to be converted appropriately so that
+		// clients will retry.
+		err = proto.NewRangeNotFoundError(r.Desc().RangeID)
+	}
+	return reply, proto.NewError(err)
 }
 
 func (r *Replica) checkCmdHeader(header *proto.RequestHeader) error {

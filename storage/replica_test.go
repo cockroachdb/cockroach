@@ -3164,11 +3164,11 @@ func TestBatchErrorWithIndex(t *testing.T) {
 		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
 	})
 
-	if _, err := tc.rng.AddCmd(tc.rng.context(), ba); err == nil {
+	if _, pErr := tc.rng.AddCmd(tc.rng.context(), ba); pErr == nil {
 		t.Fatal("expected an error")
-	} else if iErr, ok := err.(proto.IndexedError); !ok {
-		t.Fatalf("expected indexed error, got %s", err)
-	} else if index, ok := iErr.ErrorIndex(); !ok || index != 1 || !testutils.IsError(err, "unexpected value") {
+	} else if iErr, ok := pErr.GoError().(proto.IndexedError); !ok {
+		t.Fatalf("expected indexed error, got %s", pErr)
+	} else if index, ok := iErr.ErrorIndex(); !ok || index != 1 || !testutils.IsError(pErr.GoError(), "unexpected value") {
 		t.Fatalf("invalid index or error type: %s", iErr)
 	}
 

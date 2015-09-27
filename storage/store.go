@@ -1201,14 +1201,14 @@ func (s *Store) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchRe
 		}
 
 		var reply proto.Response
-		var index *int32
-		reply, err = rng.AddCmd(ctx, ba)
+		{
+			var pErr *proto.Error
+			reply, pErr = rng.AddCmd(ctx, ba)
+			err = pErr.GoError()
+		}
+
 		if err == nil {
 			return reply.(*proto.BatchResponse), nil
-		} else if err == multiraft.ErrGroupDeleted {
-			// This error needs to be converted appropriately so that
-			// clients will retry.
-			err = proto.NewRangeNotFoundError(rng.Desc().RangeID)
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
@@ -1226,6 +1226,13 @@ func (s *Store) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchRe
 			index, ok := wiErr.ErrorIndex()
 			if ok {
 				err = s.resolveWriteIntentError(ctx, wiErr, rng, ba.Requests[index].GetInner(), pushType)
+				// Make sure that if an index is carried in the error, it
+				// remains the one corresponding to the batch here.
+				if iErr, ok := err.(proto.IndexedError); ok {
+					if _, ok := iErr.ErrorIndex(); ok {
+						iErr.SetErrorIndex(index)
+					}
+				}
 			}
 		}
 
@@ -1264,11 +1271,7 @@ func (s *Store) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchRe
 			}
 			continue
 		}
-		pErr := proto.NewError(err)
-		if index != nil {
-			pErr.Index = &proto.ErrPosition{Index: *index}
-		}
-		return nil, pErr
+		return nil, proto.NewError(err)
 	}
 
 	// By default, retries are indefinite. However, some unittests set a
