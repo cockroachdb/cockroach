@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	snappy "github.com/cockroachdb/c-snappy"
+	"github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"

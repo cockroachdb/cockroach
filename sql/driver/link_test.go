@@ -13,36 +13,26 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Peter Mattis (peter@cockroachlabs.com)
+// Author: Tamir Duberstein (tamird@gmail.com)
 
-package cli
+package driver
 
 import (
-	"flag"
 	"go/build"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func TestStdFlagToPflag(t *testing.T) {
+func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cf := cockroachCmd.PersistentFlags()
-	flag.VisitAll(func(f *flag.Flag) {
-		if strings.HasPrefix(f.Name, "test.") {
-			return
-		}
-		n := normalizeStdFlagName(f.Name)
-		if pf := cf.Lookup(n); pf == nil {
-			t.Errorf("unable to find \"%s\"", n)
-		}
-	})
-}
 
-func TestNoLinkTesting(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	if build.Default.GOPATH == "" {
+	context := build.Default
+	// We only care about the cgo disabled case. If it's enabled, cgo
+	// dependencies are obviously OK.
+	context.CgoEnabled = false
+
+	if context.GOPATH == "" {
 		t.Skip("GOPATH isn't set")
 	}
 
@@ -50,7 +40,7 @@ func TestNoLinkTesting(t *testing.T) {
 
 	var addImports func(string)
 	addImports = func(root string) {
-		pkg, err := build.Import(root, build.Default.GOPATH, 0)
+		pkg, err := context.Import(root, context.GOPATH, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,6 +48,7 @@ func TestNoLinkTesting(t *testing.T) {
 		for _, imp := range pkg.Imports {
 			// https://github.com/golang/tools/blob/master/refactor/importgraph/graph.go#L115
 			if imp == "C" {
+				t.Errorf("sql/driver depends on cgo via %s", pkg.ImportPath)
 				continue // "C" is fake
 			}
 			if _, ok := imports[imp]; !ok {
@@ -67,14 +58,13 @@ func TestNoLinkTesting(t *testing.T) {
 		}
 	}
 
-	addImports("github.com/cockroachdb/cockroach")
+	addImports("github.com/cockroachdb/cockroach/sql/driver")
 
 	for _, forbidden := range []string{
 		"testing",
-		"github.com/cockroachdb/cockroach/security/securitytest",
 	} {
 		if _, ok := imports[forbidden]; ok {
-			t.Errorf("%s is included in the main cockroach binary!", forbidden)
+			t.Errorf("sql/driver includes %s, which defines flags", forbidden)
 		}
 	}
 }

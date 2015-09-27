@@ -27,7 +27,8 @@ import (
 	"net/http"
 	"time"
 
-	snappy "github.com/cockroachdb/c-snappy"
+	"github.com/golang/snappy"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
