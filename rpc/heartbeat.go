@@ -13,16 +13,34 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
+// Author: Kathy Spradlin (kathyspradlin@gmail.com)
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package rpc
 
 import (
-	"github.com/cockroachdb/cockroach/proto"
+	"fmt"
+	"time"
+
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
+
+var _ security.RequestWithUser = &PingRequest{}
+
+// GetUser implements security.RequestWithUser.
+// Heartbeat messages are always sent by the node user.
+func (*PingRequest) GetUser() string {
+	return security.NodeUser
+}
+
+// String formats the RemoteOffset for human readability.
+func (r RemoteOffset) String() string {
+	t := time.Unix(r.MeasuredAt/1E9, 0).UTC()
+	return fmt.Sprintf("off=%.9fs, err=%.9fs, at=%s", float64(r.Offset)/1E9, float64(r.Uncertainty)/1E9, t)
+}
 
 // A HeartbeatService exposes a method to echo its request params. It doubles
 // as a way to measure the offset of the server from other nodes. It uses the
@@ -38,8 +56,7 @@ type HeartbeatService struct {
 
 // Register this service on the given RPC server.
 func (hs *HeartbeatService) Register(server *Server) error {
-	if err := server.Register("Heartbeat.Ping", hs.Ping,
-		&proto.PingRequest{}); err != nil {
+	if err := server.Register("Heartbeat.Ping", hs.Ping, &PingRequest{}); err != nil {
 		return err
 	}
 	return nil
@@ -50,8 +67,8 @@ func (hs *HeartbeatService) Register(server *Server) error {
 // The requester should also estimate its offset from this server along
 // with the requester's address.
 func (hs *HeartbeatService) Ping(argsI gogoproto.Message) (gogoproto.Message, error) {
-	args := argsI.(*proto.PingRequest)
-	reply := &proto.PingResponse{}
+	args := argsI.(*PingRequest)
+	reply := &PingResponse{}
 	reply.Pong = args.Ping
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
@@ -73,8 +90,7 @@ type ManualHeartbeatService struct {
 
 // Register this service on the given RPC server.
 func (mhs *ManualHeartbeatService) Register(server *Server) error {
-	if err := server.Register("Heartbeat.Ping", mhs.Ping,
-		&proto.PingRequest{}); err != nil {
+	if err := server.Register("Heartbeat.Ping", mhs.Ping, &PingRequest{}); err != nil {
 		return err
 	}
 	return nil

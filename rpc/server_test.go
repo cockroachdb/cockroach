@@ -21,7 +21,6 @@ import (
 	"net"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -73,10 +72,10 @@ func TestDuplicateRegistration(t *testing.T) {
 
 	s := NewServer(util.CreateTestAddr("tcp"), NewNodeTestContext(nil, stopper))
 	heartbeat := &Heartbeat{}
-	if err := s.RegisterPublic("Foo.Bar", heartbeat.Ping, &proto.PingRequest{}); err != nil {
+	if err := s.RegisterPublic("Foo.Bar", heartbeat.Ping, &PingRequest{}); err != nil {
 		t.Fatalf("unexpected failure on first registration: %s", err)
 	}
-	if err := s.RegisterPublic("Foo.Bar", heartbeat.Ping, &proto.PingRequest{}); err == nil {
+	if err := s.RegisterPublic("Foo.Bar", heartbeat.Ping, &PingRequest{}); err == nil {
 		t.Fatalf("unexpected success on second registration")
 	}
 }
@@ -96,7 +95,7 @@ func TestUnregisteredMethod(t *testing.T) {
 	// Sending an invalid method fails cleanly, but leaves the connection
 	// in a valid state.
 	_, err := sendRPC(opts, []net.Addr{s.Addr()}, nodeContext, "Foo.Bar",
-		&proto.PingRequest{}, &proto.PingResponse{})
+		&PingRequest{}, &PingResponse{})
 	if !testutils.IsError(err, ".*rpc: couldn't find method: Foo.Bar") {
 		t.Fatalf("expected 'couldn't find method' but got %s", err)
 	}

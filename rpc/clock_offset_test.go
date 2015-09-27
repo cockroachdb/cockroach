@@ -23,7 +23,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -35,38 +36,38 @@ func TestUpdateOffset(t *testing.T) {
 	monitor := newRemoteClockMonitor(hlc.NewClock(hlc.UnixNano))
 
 	// Case 1: There is no prior offset for the address.
-	offset1 := proto.RemoteOffset{}
+	offset1 := RemoteOffset{}
 	monitor.UpdateOffset("addr", offset1)
-	if o := monitor.offsets["addr"]; !o.Equal(offset1) {
+	if o := monitor.offsets["addr"]; !gogoproto.Equal(&o, &offset1) {
 		t.Errorf("expected offset %v, instead %v", offset1, o)
 	}
 
 	// Case 2: The old offset for addr was measured before lastMonitoredAt.
 	monitor.lastMonitoredAt = 5
-	offset2 := proto.RemoteOffset{
+	offset2 := RemoteOffset{
 		Offset:      0,
 		Uncertainty: 20,
 		MeasuredAt:  6,
 	}
 	monitor.UpdateOffset("addr", offset2)
-	if o := monitor.offsets["addr"]; !o.Equal(offset2) {
+	if o := monitor.offsets["addr"]; !gogoproto.Equal(&o, &offset2) {
 		t.Errorf("expected offset %v, instead %v", offset2, o)
 	}
 
 	// Case 3: The new offset's error is smaller.
-	offset3 := proto.RemoteOffset{
+	offset3 := RemoteOffset{
 		Offset:      0,
 		Uncertainty: 10,
 		MeasuredAt:  8,
 	}
 	monitor.UpdateOffset("addr", offset3)
-	if o := monitor.offsets["addr"]; !o.Equal(offset3) {
+	if o := monitor.offsets["addr"]; !gogoproto.Equal(&o, &offset3) {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
 
 	// Larger error and offset3.MeasuredAt > lastMonitoredAt, so no update.
 	monitor.UpdateOffset("addr", offset2)
-	if o := monitor.offsets["addr"]; !o.Equal(offset3) {
+	if o := monitor.offsets["addr"]; !gogoproto.Equal(&o, &offset3) {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
 }
@@ -109,7 +110,7 @@ func TestEndpointListSort(t *testing.T) {
 func TestBuildEndpointList(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Build the offsets we will turn into an endpoint list.
-	offsets := map[string]proto.RemoteOffset{
+	offsets := map[string]RemoteOffset{
 		"0": {Offset: 0, Uncertainty: 10},
 		"1": {Offset: 1, Uncertainty: 10},
 		"2": {Offset: 2, Uncertainty: 10},
@@ -154,7 +155,7 @@ func TestBuildEndpointList(t *testing.T) {
 // older offsets when we build an endpoint list.
 func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	offsets := map[string]proto.RemoteOffset{
+	offsets := map[string]RemoteOffset{
 		"0":         {Offset: 0, Uncertainty: 10, MeasuredAt: 11},
 		"stagnant0": {Offset: 1, Uncertainty: 10, MeasuredAt: 0},
 		"1":         {Offset: 2, Uncertainty: 10, MeasuredAt: 20},
@@ -189,7 +190,7 @@ func TestFindOffsetInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
-	offsets := map[string]proto.RemoteOffset{
+	offsets := map[string]RemoteOffset{
 		"0": {Offset: 20, Uncertainty: 10},
 		"1": {Offset: 58, Uncertainty: 20},
 		"2": {Offset: 71, Uncertainty: 25},
@@ -213,7 +214,7 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
-	offsets := map[string]proto.RemoteOffset{
+	offsets := map[string]RemoteOffset{
 		"0": {Offset: 0, Uncertainty: 1},
 		"1": {Offset: 1, Uncertainty: 1},
 		"2": {Offset: 3, Uncertainty: 1},
@@ -234,7 +235,7 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 // no recent remote clock readings.
 func TestFindOffsetIntervalNoRemotes(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	offsets := map[string]proto.RemoteOffset{}
+	offsets := map[string]RemoteOffset{}
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(10 * time.Nanosecond)
@@ -250,7 +251,7 @@ func TestFindOffsetIntervalNoRemotes(t *testing.T) {
 // of the single remote clock.
 func TestFindOffsetIntervalOneClock(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	offsets := map[string]proto.RemoteOffset{
+	offsets := map[string]RemoteOffset{
 		"0": {Offset: 0, Uncertainty: 10},
 	}
 
@@ -270,7 +271,7 @@ func TestFindOffsetIntervalOneClock(t *testing.T) {
 // TestFindOffsetIntervalTwoClocks tests the edge case of two remote clocks.
 func TestFindOffsetIntervalTwoClocks(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	offsets := map[string]proto.RemoteOffset{}
+	offsets := map[string]RemoteOffset{}
 
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -281,14 +282,14 @@ func TestFindOffsetIntervalTwoClocks(t *testing.T) {
 	}
 
 	// Two intervals overlap.
-	offsets["0"] = proto.RemoteOffset{Offset: 0, Uncertainty: 10}
-	offsets["1"] = proto.RemoteOffset{Offset: 20, Uncertainty: 10}
+	offsets["0"] = RemoteOffset{Offset: 0, Uncertainty: 10}
+	offsets["1"] = RemoteOffset{Offset: 20, Uncertainty: 10}
 	expectedInterval := ClusterOffsetInterval{Lowerbound: 10, Upperbound: 10}
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 
 	// Two intervals don't overlap.
-	offsets["0"] = proto.RemoteOffset{Offset: 0, Uncertainty: 10}
-	offsets["1"] = proto.RemoteOffset{Offset: 30, Uncertainty: 10}
+	offsets["0"] = RemoteOffset{Offset: 0, Uncertainty: 10}
+	offsets["1"] = RemoteOffset{Offset: 30, Uncertainty: 10}
 	assertMajorityIntervalError(remoteClocks, t)
 }
 
@@ -302,11 +303,11 @@ func TestFindOffsetWithLargeError(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxOffset)
-	offsets := map[string]proto.RemoteOffset{}
+	offsets := map[string]RemoteOffset{}
 	// Offsets are bigger than maxOffset, but Errors are also bigger than Offset.
-	offsets["0"] = proto.RemoteOffset{Offset: 110, Uncertainty: 300}
-	offsets["1"] = proto.RemoteOffset{Offset: 120, Uncertainty: 300}
-	offsets["2"] = proto.RemoteOffset{Offset: 130, Uncertainty: 300}
+	offsets["0"] = RemoteOffset{Offset: 110, Uncertainty: 300}
+	offsets["1"] = RemoteOffset{Offset: 120, Uncertainty: 300}
+	offsets["2"] = RemoteOffset{Offset: 130, Uncertainty: 300}
 
 	remoteClocks := &RemoteClockMonitor{
 		offsets: offsets,

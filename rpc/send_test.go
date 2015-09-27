@@ -190,7 +190,7 @@ type Heartbeat struct{}
 
 func (h *Heartbeat) Ping(args gogoproto.Message) (gogoproto.Message, error) {
 	time.Sleep(50 * time.Millisecond)
-	return &proto.PingResponse{}, nil
+	return &PingResponse{}, nil
 }
 
 // TestClientNotReady verifies that Send gets an RPC error when a client
@@ -211,7 +211,7 @@ func TestClientNotReady(t *testing.T) {
 		addr:    addr,
 		methods: map[string]method{},
 	}
-	if err := s.RegisterPublic("Heartbeat.Ping", (&Heartbeat{}).Ping, &proto.PingRequest{}); err != nil {
+	if err := s.RegisterPublic("Heartbeat.Ping", (&Heartbeat{}).Ping, &PingRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Start(); err != nil {
@@ -326,10 +326,10 @@ func TestComplexScenarios(t *testing.T) {
 			Timeout:         1 * time.Second,
 		}
 		getArgs := func(addr net.Addr) gogoproto.Message {
-			return &proto.PingRequest{}
+			return &PingRequest{}
 		}
 		getReply := func() gogoproto.Message {
-			return &proto.PingResponse{}
+			return &PingResponse{}
 		}
 
 		// Mock sendOne.
@@ -385,7 +385,7 @@ func createAndStartNewServer(t *testing.T, ctx *Context) *Server {
 // sendPing sends Ping requests to specified addresses using Send.
 func sendPing(opts Options, addrs []net.Addr, rpcContext *Context) ([]gogoproto.Message, error) {
 	return sendRPC(opts, addrs, rpcContext, "Heartbeat.Ping",
-		&proto.PingRequest{}, &proto.PingResponse{})
+		&PingRequest{}, &PingResponse{})
 }
 
 func sendRPC(opts Options, addrs []net.Addr, rpcContext *Context, name string,

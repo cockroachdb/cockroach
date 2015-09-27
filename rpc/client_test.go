@@ -21,7 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -137,14 +138,14 @@ func TestOffsetMeasurement(t *testing.T) {
 	c := NewClient(s.Addr(), context)
 	<-c.Healthy()
 
-	expectedOffset := proto.RemoteOffset{Offset: 5, Uncertainty: 5, MeasuredAt: 10}
-	if o := c.remoteOffset; !o.Equal(expectedOffset) {
+	expectedOffset := RemoteOffset{Offset: 5, Uncertainty: 5, MeasuredAt: 10}
+	if o := c.remoteOffset; !gogoproto.Equal(&o, &expectedOffset) {
 		t.Errorf("expected offset %v, actual %v", expectedOffset, o)
 	}
 
 	// Ensure the offsets map was updated properly too.
 	context.RemoteClocks.mu.Lock()
-	if o := context.RemoteClocks.offsets[c.RemoteAddr().String()]; !o.Equal(expectedOffset) {
+	if o := context.RemoteClocks.offsets[c.RemoteAddr().String()]; !gogoproto.Equal(&o, &expectedOffset) {
 		t.Errorf("expected offset %v, actual %v", expectedOffset, o)
 	}
 	context.RemoteClocks.mu.Unlock()
@@ -185,8 +186,8 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 	// Since the reply took too long, we should have a zero offset, even
 	// though the client is still healthy because it received a heartbeat
 	// reply.
-	if o := c.remoteOffset; !o.Equal(proto.RemoteOffset{}) {
-		t.Errorf("expected offset %v, actual %v", proto.RemoteOffset{}, o)
+	if o := c.remoteOffset; !gogoproto.Equal(&o, &RemoteOffset{}) {
+		t.Errorf("expected offset %v, actual %v", RemoteOffset{}, o)
 	}
 
 	// Ensure the general offsets map was updated properly too.
@@ -235,9 +236,9 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	}, heartbeatInterval*10); err != nil {
 		t.Fatal(err)
 	}
-	if !c.remoteOffset.Equal(proto.RemoteOffset{}) {
+	if !gogoproto.Equal(&c.remoteOffset, &RemoteOffset{}) {
 		t.Errorf("expected offset %v, actual %v",
-			proto.RemoteOffset{}, c.remoteOffset)
+			RemoteOffset{}, c.remoteOffset)
 	}
 }
 

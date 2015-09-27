@@ -28,7 +28,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc/codec"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -85,7 +84,7 @@ type Client struct {
 
 	clock        *hlc.Clock
 	remoteClocks *RemoteClockMonitor
-	remoteOffset proto.RemoteOffset
+	remoteOffset RemoteOffset
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -268,8 +267,8 @@ func (c *Client) RemoteAddr() net.Addr {
 // it measures the clock of the remote to determine the node's clock offset
 // from the remote.
 func (c *Client) heartbeat() error {
-	request := &proto.PingRequest{Offset: c.remoteOffset, Addr: c.LocalAddr().String()}
-	response := &proto.PingResponse{}
+	request := &PingRequest{Offset: c.remoteOffset, Addr: c.LocalAddr().String()}
+	response := &PingResponse{}
 	sendTime := c.clock.PhysicalNow()
 
 	call := c.Go("Heartbeat.Ping", request, response, nil)

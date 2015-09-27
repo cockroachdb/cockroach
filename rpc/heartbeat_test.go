@@ -20,12 +20,26 @@ package rpc
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+func TestRemoteOffsetString(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	ro := RemoteOffset{
+		Offset:      -501584461,
+		Uncertainty: 351698,
+		MeasuredAt:  1430348776127420269,
+	}
+	expStr := "off=-0.501584461s, err=0.000351698s, at=2015-04-29 23:06:16 +0000 UTC"
+	if str := ro.String(); str != expStr {
+		t.Errorf("expected %s; got %s", expStr, str)
+	}
+}
 
 func TestHeartbeatReply(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -36,14 +50,14 @@ func TestHeartbeatReply(t *testing.T) {
 		remoteClockMonitor: newRemoteClockMonitor(clock),
 	}
 
-	request := &proto.PingRequest{
+	request := &PingRequest{
 		Ping: "testPing",
 	}
-	var response *proto.PingResponse
+	var response *PingResponse
 	if responseI, err := heartbeat.Ping(request); err != nil {
 		t.Fatal(err)
 	} else {
-		response = responseI.(*proto.PingResponse)
+		response = responseI.(*PingResponse)
 	}
 
 	if response.Pong != request.Ping {
@@ -69,21 +83,21 @@ func TestManualHeartbeat(t *testing.T) {
 		remoteClockMonitor: newRemoteClockMonitor(clock),
 	}
 
-	request := &proto.PingRequest{
+	request := &PingRequest{
 		Ping: "testManual",
 	}
 	manualHeartbeat.ready <- struct{}{}
-	var manualResponse *proto.PingResponse
-	var regularResponse *proto.PingResponse
+	var manualResponse *PingResponse
+	var regularResponse *PingResponse
 	if resp, err := regularHeartbeat.Ping(request); err != nil {
 		t.Fatal(err)
 	} else {
-		regularResponse = resp.(*proto.PingResponse)
+		regularResponse = resp.(*PingResponse)
 	}
 	if resp, err := manualHeartbeat.Ping(request); err != nil {
 		t.Fatal(err)
 	} else {
-		manualResponse = resp.(*proto.PingResponse)
+		manualResponse = resp.(*PingResponse)
 	}
 
 	// Ensure that the response is the same as with a normal heartbeat.
@@ -124,7 +138,7 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 		tlsConfig:    tlsConfig,
 		clock:        nodeContext.localClock,
 		remoteClocks: nodeContext.RemoteClocks,
-		remoteOffset: proto.RemoteOffset{
+		remoteOffset: RemoteOffset{
 			Offset:      10,
 			Uncertainty: 5,
 			MeasuredAt:  20,
@@ -138,8 +152,8 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	remoteAddr := client.RemoteAddr().String()
 	o := nodeContext.RemoteClocks.offsets[remoteAddr]
 	nodeContext.RemoteClocks.mu.Unlock()
-	expServerOffset := proto.RemoteOffset{Offset: -10, Uncertainty: 5, MeasuredAt: 20}
-	if o.Equal(expServerOffset) {
+	expServerOffset := RemoteOffset{Offset: -10, Uncertainty: 5, MeasuredAt: 20}
+	if gogoproto.Equal(&o, &expServerOffset) {
 		t.Errorf("expected updated offset %v, instead %v", expServerOffset, o)
 	}
 	s.Close()
