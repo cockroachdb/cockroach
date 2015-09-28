@@ -2,17 +2,6 @@
 // source: cockroach/sql/driver/wire.proto
 // DO NOT EDIT!
 
-/*
-	Package driver is a generated protocol buffer package.
-
-	It is generated from these files:
-		cockroach/sql/driver/wire.proto
-
-	It has these top-level messages:
-		Datum
-		Request
-		Response
-*/
 package driver
 
 import proto "github.com/gogo/protobuf/proto"

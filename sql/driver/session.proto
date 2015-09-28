@@ -16,8 +16,8 @@
 // Author: Vivek Menezes (vivek@cockroachlabs.com)
 
 syntax = "proto2";
-package cockroach.sql;
-option go_package = "sql";
+package cockroach.sql.driver;
+option go_package = "driver";
 
 import "gogoproto/gogo.proto";
 import "cockroach/proto/data.proto";
@@ -35,7 +35,7 @@ message Session {
     optional proto.Transaction txn = 1 [(gogoproto.nullable) = false];
     // Timestamp to be used by SQL in the above transaction. Note: this is not the
     // transaction timestamp in proto.Transaction above.
-    optional driver.Datum.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+    optional Datum.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
   // Open transaction.
   optional Transaction txn = 3;

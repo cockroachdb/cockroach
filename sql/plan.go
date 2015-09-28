@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -30,7 +31,7 @@ import (
 // state and database state with the logic for SQL execution.
 type planner struct {
 	txn          *client.Txn
-	session      Session
+	session      driver.Session
 	user         string
 	evalCtx      parser.EvalContext
 	systemConfig *config.SystemConfig
