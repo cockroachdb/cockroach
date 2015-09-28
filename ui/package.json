@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "bower": ">=1.5.3",
     "chai": ">=3.2.0",
     "mocha": ">=2.2.5",
     "stylus": ">=0.51.1",
