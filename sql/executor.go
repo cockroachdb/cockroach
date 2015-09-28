@@ -107,7 +107,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
 	if planMaker.txn != nil {
-		planMaker.session.Txn = &driver.Session_Transaction{Txn: planMaker.txn.Proto, Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp)}
+		planMaker.session.Txn = &Session_Transaction{Txn: planMaker.txn.Proto, Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp)}
 		planMaker.session.MutatesSystemDB = planMaker.txn.SystemDBTrigger()
 	} else {
 		planMaker.session.Txn = nil
