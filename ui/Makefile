@@ -37,7 +37,7 @@ TYPESCRIPT_TARGET       := build/app.js
 TEST_TARGET             := build/test.js
 CSS_TARGET              := build/app.css
 STYL_OPTIONS            :=
-GOBINDATA_SOURCES       := $(TYPESCRIPT_TARGET) $(CSS_TARGET) index.html $(BOWER_COMPONENTS)/*/*.min.* $(BOWER_COMPONENTS)/*/*/*.min.*
+GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
 GOBINDATA_TARGET        := ./embedded.go
 GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
 
@@ -75,10 +75,10 @@ $(TEST_TARGET): $(shell find $(TS_ROOT)) deps
 $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
 	$(NODE_MODULES)/.bin/stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out build/
 
-$(GOBINDATA_TARGET): $(GOBINDATA_SOURCES) bower.installed
-	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $^
+$(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed
+	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $(GOBINDATA_DEPS) index.html $(shell find $(BOWER_COMPONENTS) -name *.min.* | sort)
 	gofmt -s -w $@
 	goimports -w $@
 
-$(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_SOURCES) bower.installed
-	$(GO_BINDATA) -pkg ui -o $@ -debug $^
+$(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEPS) bower.installed
+	$(GO_BINDATA) -pkg ui -o $@ -debug $(GOBINDATA_DEPS) index.html $(shell find $(BOWER_COMPONENTS) -name *.min.* | sort)

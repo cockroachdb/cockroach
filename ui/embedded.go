@@ -9,7 +9,6 @@
 // bower_components/mithril/mithril.min.js.map
 // bower_components/nvd3/build/nv.d3.min.css
 // bower_components/nvd3/build/nv.d3.min.js
-// bower.installed
 // DO NOT EDIT!
 
 package ui
@@ -257,26 +256,6 @@ func bower_componentsNvd3BuildNvD3MinJs() (*asset, error) {
 	return a, nil
 }
 
-var _bowerInstalled = []byte("\x1f\x8b\x08\x00\x00\x09\x6e\x88\x00\xff\x01\x00\x00\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00")
-
-func bowerInstalledBytes() ([]byte, error) {
-	return bindataRead(
-		_bowerInstalled,
-		"bower.installed",
-	)
-}
-
-func bowerInstalled() (*asset, error) {
-	bytes, err := bowerInstalledBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "bower.installed", size: 0, mode: os.FileMode(420), modTime: time.Unix(1400000000, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
 // Asset loads and returns the asset for the given name.
 // It returns an error if the asset could not be found or
 // could not be loaded.
@@ -338,7 +317,6 @@ var _bindata = map[string]func() (*asset, error){
 	"bower_components/mithril/mithril.min.js.map": bower_componentsMithrilMithrilMinJsMap,
 	"bower_components/nvd3/build/nv.d3.min.css":   bower_componentsNvd3BuildNvD3MinCss,
 	"bower_components/nvd3/build/nv.d3.min.js":    bower_componentsNvd3BuildNvD3MinJs,
-	"bower.installed":                             bowerInstalled,
 }
 
 // AssetDir returns the file names below a certain
@@ -382,7 +360,6 @@ type bintree struct {
 }
 
 var _bintree = &bintree{nil, map[string]*bintree{
-	"bower.installed": {bowerInstalled, map[string]*bintree{}},
 	"bower_components": {nil, map[string]*bintree{
 		"d3": {nil, map[string]*bintree{
 			"d3.min.js": {bower_componentsD3D3MinJs, map[string]*bintree{}},
