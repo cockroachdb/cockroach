@@ -396,7 +396,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 		var err error
 		if txnAutoGC && len(externalIntents) == 0 {
 			if log.V(1) {
-				log.Infof("auto-gc'ed %s", args.Txn.Short())
+				log.Infof("auto-gc'ed %s (%d intents)", args.Txn.Short(), len(args.Intents))
 			}
 			err = engine.MVCCDelete(batch, ms, key, proto.ZeroTimestamp, nil /* txn */)
 		} else {

@@ -561,7 +561,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba proto.BatchRequest) (*pr
 
 				if err != nil {
 					if log.V(1) {
-						log.Warningf("failed to invoke %s: %s", ba, pErr)
+						log.Warningf("failed to invoke %s: %s", ba, err)
 					}
 				}
 				return reply, err

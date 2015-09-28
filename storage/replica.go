@@ -89,7 +89,10 @@ var TestingCommandFilter func(proto.Request) error
 // upon EndTransaction if they only have local intents (which can be
 // resolved synchronously with EndTransaction). Certain tests become
 // simpler with this being turned off.
-var txnAutoGC = true
+// TODO(tschottdorf): Push after removal can happen if txn is not
+// single-roundtrip, and pusher will recreate a PENDING entry, getting
+// stuck. Since txn gc story is not done yet (#2062), disabled for now.
+var txnAutoGC = false
 
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
