@@ -1,5 +1,5 @@
 // source: util/query.ts
-/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 module Utils {
@@ -23,7 +23,7 @@ module Utils {
      * a mithril promise for the results of the request. Provided data is
      * encoded as JSON before being sent as the body of the request.
      */
-    export function Post(url: string, data: any): _mithril.MithrilPromise< {}> {
+    export function Post(url: string, data: any): _mithril.MithrilPromise<{}> {
       return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: data });
     }
 
@@ -31,7 +31,7 @@ module Utils {
      * nonJsonErrors ensures that error messages returned from the server
      * are parseable as JSON strings.
      */
-    function nonJsonErrors(xhr: XMLHttpRequest, opts: _mithril.MithrilXHROptions): string {
+    function nonJsonErrors(xhr: XMLHttpRequest, opts: _mithril.MithrilXHROptions<{}>): string {
       return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
     }
   }

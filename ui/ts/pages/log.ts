@@ -3,7 +3,7 @@
 /// <reference path="../components/table.ts" />
 /// <reference path="../models/log.ts" />
 /// <reference path="../models/proto.ts" />
-/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../util/format.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)

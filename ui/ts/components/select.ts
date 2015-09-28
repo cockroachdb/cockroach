@@ -1,5 +1,5 @@
 // source: components/select.ts
-/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 //
 
