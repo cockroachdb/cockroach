@@ -94,7 +94,7 @@ time ${builder} /bin/bash -c "(go generate ./... && git ls-files --modified --de
 # 3. Run "make test".
 echo "make test"
 time ${builder} make test \
-  TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
+  TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2,tracer=2' | \
   tr -d '\r' | tee "${outdir}/test.log" | \
   grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
   awk '{print "test:", $0}'
