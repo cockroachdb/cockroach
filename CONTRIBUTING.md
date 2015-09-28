@@ -29,12 +29,7 @@ Note that if you edit a `.proto` or `.ts` file, you will need to manually regene
 `go generate` requires a collection of node modules which are installed via npm. If you don't have npm, it typically comes with node. To get it via homebrew:
 `brew install node`
 If you're not using homebrew, make sure you install both [node.js](https://nodejs.org/) and [npm](https://www.npmjs.com/).
-To install the modules, in the `/ui` directory call `npm install`.
-If you need to add or update an npm dependency, in the `ui/` directory:
-- `npm install --save NEWDEP` - installs the new or updated dependency and also updates the `package.json` file
-- `npm shrinkwrap` - locks the versions
-- create a PR with all the changes
-More details on this can be found in the [shrinkwrap docs](https://docs.npmjs.com/cli/shrinkwrap).
+If you plan on working on the UI, check out [the ui readme](ui).
 
 To add or update a go dependency:
 - `(cd $GOPATH/src && go get -u ./...)` to update the dependencies or `go get {package}` to add a dependency
