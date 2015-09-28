@@ -438,6 +438,14 @@ func NewTransaction(name string, baseKey Key, userPriority int32,
 	}
 }
 
+// Clone creates a deep copy of the given transaction.
+func (t *Transaction) Clone() *Transaction {
+	if t == nil {
+		return nil
+	}
+	return gogoproto.Clone(t).(*Transaction)
+}
+
 // Equal tests two transactions for equality. They are equal if they are
 // either simultaneously nil or their IDs match.
 func (t *Transaction) Equal(s *Transaction) bool {
