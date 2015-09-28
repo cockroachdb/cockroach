@@ -263,9 +263,10 @@ func (e *RangeKeyMismatchError) CanRetry() bool {
 	return true
 }
 
-// NewTransactionAbortedError initializes a new TransactionAbortedError.
+// NewTransactionAbortedError initializes a new TransactionAbortedError. It
+// creates a copy of the given Transaction.
 func NewTransactionAbortedError(txn *Transaction) *TransactionAbortedError {
-	return &TransactionAbortedError{Txn: *txn}
+	return &TransactionAbortedError{Txn: *txn.Clone()}
 }
 
 // Error formats error.
@@ -286,9 +287,10 @@ func (*TransactionAbortedError) Transaction() *Transaction {
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
-// Txn is the transaction which will be retried.
+// Txn is the transaction which will be retried. Both arguments are copied.
+// Transactions.
 func NewTransactionPushError(txn, pusheeTxn *Transaction) *TransactionPushError {
-	return &TransactionPushError{Txn: txn, PusheeTxn: *pusheeTxn}
+	return &TransactionPushError{Txn: txn.Clone(), PusheeTxn: *pusheeTxn.Clone()}
 }
 
 // Error formats error.
@@ -312,9 +314,9 @@ func (*TransactionPushError) Transaction() *Transaction {
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
-// Txn is the transaction which will be retried.
+// Txn is the transaction which will be retried (a copy is taken).
 func NewTransactionRetryError(txn *Transaction) *TransactionRetryError {
-	return &TransactionRetryError{Txn: *txn}
+	return &TransactionRetryError{Txn: *txn.Clone()}
 }
 
 // Error formats error.
@@ -334,12 +336,10 @@ func (e *TransactionRetryError) Transaction() *Transaction {
 	return &e.Txn
 }
 
-// NewTransactionStatusError initializes a new TransactionStatusError.
+// NewTransactionStatusError initializes a new TransactionStatusError from
+// the given Transaction (which is copied) and a message.
 func NewTransactionStatusError(txn *Transaction, msg string) *TransactionStatusError {
-	return &TransactionStatusError{
-		Txn: *txn,
-		Msg: msg,
-	}
+	return &TransactionStatusError{Txn: *txn.Clone(), Msg: msg}
 }
 
 // Error formats error.

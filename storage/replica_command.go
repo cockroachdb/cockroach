@@ -271,9 +271,9 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 
 	if !ok {
 		// The transaction doesn't exist yet on disk; use the supplied version.
-		// Copying avoids a race (#2537): the txn in the args may be re-used
-		// for retries, but the one in the reply can end up in a goroutine.
-		reply.Txn = gogoproto.Clone(args.Txn).(*proto.Transaction)
+		// The cloning shouldn't be strictly necessary since it's only passed
+		// to error constructors which itself make a copy, but let's be safe.
+		reply.Txn = args.Txn.Clone()
 	}
 
 	for i := range args.Intents {
@@ -831,7 +831,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	// has open intents (which is likely if someone pushes it).
 	if ok {
 		// Start with the persisted transaction record as final transaction.
-		reply.PusheeTxn = gogoproto.Clone(existTxn).(*proto.Transaction)
+		reply.PusheeTxn = existTxn.Clone()
 		// Upgrade the epoch, timestamp and priority as necessary.
 		if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
 			reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
@@ -843,14 +843,11 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	} else {
 		// Some sanity checks for case where we don't find a transaction record.
 		if args.PusheeTxn.Status != proto.PENDING {
-			// Copying avoids a race (#2537): the txn in the args may be re-used
-			// for retries, but the one in the reply can end up in a goroutine.
-			pusherTxn := gogoproto.Clone(args.PusherTxn).(*proto.Transaction)
-			return reply, proto.NewTransactionStatusError(pusherTxn,
+			return reply, proto.NewTransactionStatusError(args.PusherTxn,
 				fmt.Sprintf("no txn persisted, yet intent has status %s", args.PusheeTxn.Status))
 		}
 		// The transaction doesn't exist yet on disk; use the supplied version.
-		reply.PusheeTxn = gogoproto.Clone(&args.PusheeTxn).(*proto.Transaction)
+		reply.PusheeTxn = args.PusheeTxn.Clone()
 	}
 
 	// If already committed or aborted, return success.
@@ -919,10 +916,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	}
 
 	if !pusherWins {
-		// Copying avoids a race (#2537): the txn in the args may be re-used
-		// for retries, but the one in the reply can end up in a goroutine.
-		pusherTxn := gogoproto.Clone(args.PusherTxn).(*proto.Transaction)
-		err := proto.NewTransactionPushError(pusherTxn, reply.PusheeTxn)
+		err := proto.NewTransactionPushError(args.PusherTxn, reply.PusheeTxn)
 		if log.V(1) {
 			log.Info(err)
 		}
