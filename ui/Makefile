@@ -51,7 +51,7 @@ debug: $(GOBINDATA_DEBUG_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
 bower.installed: bower.json npm.installed
-	$(NODE_MODULES)/.bin/bower install
+	$(NODE_MODULES)/.bin/bower install --allow-root
 	touch $@
 
 npm.installed: npm-shrinkwrap.json
