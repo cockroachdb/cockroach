@@ -77,6 +77,7 @@ func prettyKey(key proto.Key, skip int) string {
 	var buf bytes.Buffer
 	for k := 0; len(key) > 0; k++ {
 		var d interface{}
+		var err error
 		switch encoding.PeekType(key) {
 		case encoding.Null:
 			key, _ = encoding.DecodeIfNull(key)
@@ -86,19 +87,19 @@ func prettyKey(key proto.Key, skip int) string {
 			d = "#"
 		case encoding.Int:
 			var i int64
-			key, i = encoding.DecodeVarint(key)
+			key, i, err = encoding.DecodeVarint(key)
 			d = parser.DInt(i)
 		case encoding.Float:
 			var f float64
-			key, f = encoding.DecodeFloat(key, nil)
+			key, f, err = encoding.DecodeFloat(key, nil)
 			d = parser.DFloat(f)
 		case encoding.Bytes:
 			var s string
-			key, s = encoding.DecodeString(key, nil)
+			key, s, err = encoding.DecodeString(key, nil)
 			d = parser.DString(s)
 		case encoding.Time:
 			var t time.Time
-			key, t = encoding.DecodeTime(key)
+			key, t, err = encoding.DecodeTime(key)
 			d = parser.DTimestamp{Time: t}
 		default:
 			// This shouldn't ever happen, but if it does let the loop exit.
@@ -107,6 +108,10 @@ func prettyKey(key proto.Key, skip int) string {
 		}
 		if skip > 0 {
 			skip--
+			continue
+		}
+		if err != nil {
+			fmt.Fprintf(&buf, "/<%v>", err)
 			continue
 		}
 		fmt.Fprintf(&buf, "/%s", d)
@@ -547,7 +552,11 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 	n.colID = 0
 
 	if !n.isSecondaryIndex && len(remaining) > 0 {
-		_, v := encoding.DecodeUvarint(remaining)
+		var v uint64
+		_, v, n.err = encoding.DecodeUvarint(remaining)
+		if n.err != nil {
+			return false
+		}
 		n.colID = ColumnID(v)
 		if qval, ok := n.qvals[n.colID]; ok && qval.datum == nil {
 			value, ok = n.unmarshalValue(kv)

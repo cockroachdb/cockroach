@@ -28,6 +28,8 @@ import (
 	"math"
 	"strconv"
 	"unsafe"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // Direct mappings or prefixes of encoded data dependent on the type.
@@ -95,45 +97,45 @@ func EncodeFloat(b []byte, f float64) []byte {
 
 // DecodeFloat returns the remaining byte slice after decoding and the decoded
 // float64 from buf.
-func DecodeFloat(buf []byte, tmp []byte) ([]byte, float64) {
+func DecodeFloat(buf []byte, tmp []byte) ([]byte, float64, error) {
 	if buf[0] == floatZero {
-		return buf[1:], 0
+		return buf[1:], 0, nil
 	}
 	tmp = tmp[len(tmp):cap(tmp)]
 	idx := bytes.Index(buf, []byte{floatTerminator})
 	switch {
 	case buf[0] == floatNaN:
-		return buf[1:], math.NaN()
+		return buf[1:], math.NaN(), nil
 	case buf[0] == floatInfinity:
-		return buf[1:], math.Inf(1)
+		return buf[1:], math.Inf(1), nil
 	case buf[0] == floatNegativeInfinity:
-		return buf[1:], math.Inf(-1)
+		return buf[1:], math.Inf(-1), nil
 	case buf[0] == floatNegLarge:
 		// Negative large.
 		e, m := decodeLargeNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp)
+		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp), nil
 	case buf[0] > floatNegLarge && buf[0] <= floatNegMedium:
 		// Negative medium.
 		e, m := decodeMediumNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp)
+		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp), nil
 	case buf[0] == floatNegSmall:
 		// Negative small.
 		e, m := decodeSmallNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp)
+		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp), nil
 	case buf[0] == floatPosLarge:
 		// Positive large.
 		e, m := decodeLargeNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp)
+		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp), nil
 	case buf[0] >= floatPosMedium && buf[0] < floatPosLarge:
 		// Positive medium.
 		e, m := decodeMediumNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp)
+		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp), nil
 	case buf[0] == floatPosSmall:
 		// Positive small.
 		e, m := decodeSmallNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp)
+		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp), nil
 	default:
-		panic(fmt.Sprintf("unknown prefix of the encoded byte slice: %q", buf))
+		return nil, 0, util.Errorf("unknown prefix of the encoded byte slice: %q", buf)
 	}
 }
 

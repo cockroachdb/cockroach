@@ -211,7 +211,10 @@ func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.
 	}
 	// Cut the prefix and the Range ID.
 	b := key[len(keys.LocalRangeIDPrefix):]
-	b, _ = encoding.DecodeUvarint(b)
+	b, _, err := encoding.DecodeUvarint(b)
+	if err != nil {
+		return ret, err
+	}
 	if !bytes.HasPrefix(b, keys.LocalResponseCacheSuffix) {
 		return ret, util.Errorf("key %s does not contain the response cache suffix %s",
 			key, keys.LocalResponseCacheSuffix)
@@ -219,8 +222,14 @@ func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.
 	// Cut the response cache suffix.
 	b = b[len(keys.LocalResponseCacheSuffix):]
 	// Now, decode the command ID.
-	b, wt := encoding.DecodeUvarint(b)
-	b, rd := encoding.DecodeUint64(b)
+	b, wt, err := encoding.DecodeUvarint(b)
+	if err != nil {
+		return ret, err
+	}
+	b, rd, err := encoding.DecodeUint64(b)
+	if err != nil {
+		return ret, err
+	}
 	if len(b) > 0 {
 		return ret, util.Errorf("key %s has leftover bytes after decode: %s; indicates corrupt key",
 			encKey, b)

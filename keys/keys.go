@@ -95,7 +95,7 @@ func DecodeRaftStateKey(key proto.Key) proto.RangeID {
 	}
 	// Cut the prefix and the Range ID.
 	b := key[len(LocalRangeIDPrefix):]
-	_, rangeID := encoding.DecodeUvarint(b)
+	_, rangeID := encoding.MustDecodeUvarint(b)
 	return proto.RangeID(rangeID)
 }
 
@@ -158,7 +158,7 @@ func DecodeRangeKey(key proto.Key) (startKey, suffix, detail proto.Key) {
 	}
 	// Cut the prefix and the Range ID.
 	b := key[len(LocalRangePrefix):]
-	b, startKey = encoding.DecodeBytes(b, nil)
+	b, startKey = encoding.MustDecodeBytes(b, nil)
 	if len(b) < LocalSuffixLength {
 		panic(fmt.Sprintf("key %q does not have suffix of length %d",
 			key, LocalSuffixLength))
@@ -224,7 +224,7 @@ func KeyAddress(k proto.Key) proto.Key {
 	}
 	if bytes.HasPrefix(k, LocalRangePrefix) {
 		k = k[len(LocalRangePrefix):]
-		_, k = encoding.DecodeBytes(k, nil)
+		_, k = encoding.MustDecodeBytes(k, nil)
 		return k
 	}
 	log.Fatalf("local key %q malformed; should contain prefix %q",

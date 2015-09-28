@@ -19,11 +19,12 @@ package encoding
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 	"reflect"
 	"time"
 	"unsafe"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // EncodeUint32 encodes the uint32 value using a big-endian 8 byte
@@ -42,20 +43,30 @@ func EncodeUint32Decreasing(b []byte, v uint32) []byte {
 // DecodeUint32 decodes a uint32 from the input buffer, treating
 // the input as a big-endian 8 byte uint32 representation. The remainder
 // of the input buffer and the decoded uint32 are returned.
-func DecodeUint32(b []byte) ([]byte, uint32) {
+func DecodeUint32(b []byte) ([]byte, uint32, error) {
 	if len(b) < 4 {
-		panic("insufficient bytes to decode uint32 int value")
+		return nil, 0, util.Errorf("insufficient bytes to decode uint32 int value")
 	}
 	v := (uint32(b[0]) << 24) | (uint32(b[1]) << 16) |
 		(uint32(b[2]) << 8) | uint32(b[3])
-	return b[4:], v
+	return b[4:], v, nil
+}
+
+// MustDecodeUint32Decreasing is a wrapper around DecodeUint32Decreasing which
+// panics if an error occurs.
+func MustDecodeUint32Decreasing(b []byte) ([]byte, uint32) {
+	b, u, err := DecodeUint32Decreasing(b)
+	if err != nil {
+		panic(err)
+	}
+	return b, u
 }
 
 // DecodeUint32Decreasing decodes a uint32 value which was encoded
 // using EncodeUint32Decreasing.
-func DecodeUint32Decreasing(b []byte) ([]byte, uint32) {
-	leftover, v := DecodeUint32(b)
-	return leftover, ^v
+func DecodeUint32Decreasing(b []byte) ([]byte, uint32, error) {
+	leftover, v, err := DecodeUint32(b)
+	return leftover, ^v, err
 }
 
 // EncodeUint64 encodes the uint64 value using a big-endian 8 byte
@@ -76,22 +87,32 @@ func EncodeUint64Decreasing(b []byte, v uint64) []byte {
 // DecodeUint64 decodes a uint64 from the input buffer, treating
 // the input as a big-endian 8 byte uint64 representation. The remainder
 // of the input buffer and the decoded uint64 are returned.
-func DecodeUint64(b []byte) ([]byte, uint64) {
+func DecodeUint64(b []byte) ([]byte, uint64, error) {
 	if len(b) < 8 {
-		panic("insufficient bytes to decode uint64 int value")
+		return nil, 0, util.Errorf("insufficient bytes to decode uint64 int value")
 	}
 	v := (uint64(b[0]) << 56) | (uint64(b[1]) << 48) |
 		(uint64(b[2]) << 40) | (uint64(b[3]) << 32) |
 		(uint64(b[4]) << 24) | (uint64(b[5]) << 16) |
 		(uint64(b[6]) << 8) | uint64(b[7])
-	return b[8:], v
+	return b[8:], v, nil
+}
+
+// MustDecodeUint64Decreasing is a wrapper around DecodeUint64Decreasing which
+// panics if an error occurs.
+func MustDecodeUint64Decreasing(b []byte) ([]byte, uint64) {
+	b, u, err := DecodeUint64Decreasing(b)
+	if err != nil {
+		panic(err)
+	}
+	return b, u
 }
 
 // DecodeUint64Decreasing decodes a uint64 value which was encoded
 // using EncodeUint64Decreasing.
-func DecodeUint64Decreasing(b []byte) ([]byte, uint64) {
-	leftover, v := DecodeUint64(b)
-	return leftover, ^v
+func DecodeUint64Decreasing(b []byte) ([]byte, uint64, error) {
+	leftover, v, err := DecodeUint64(b)
+	return leftover, ^v, err
 }
 
 const intMin = 0x02
@@ -139,19 +160,29 @@ func EncodeVarintDecreasing(b []byte, v int64) []byte {
 	return EncodeVarint(b, ^v)
 }
 
+// MustDecodeVarint is a wrapper around DecodeVarint which panics if an error
+// occurs.
+func MustDecodeVarint(b []byte) ([]byte, int64) {
+	b, i, err := DecodeVarint(b)
+	if err != nil {
+		panic(err)
+	}
+	return b, i
+}
+
 // DecodeVarint decodes a varint encoded int64 from the input
 // buffer. The remainder of the input buffer and the decoded int64
 // are returned.
-func DecodeVarint(b []byte) ([]byte, int64) {
+func DecodeVarint(b []byte) ([]byte, int64, error) {
 	if len(b) == 0 {
-		panic("insufficient bytes to decode var uint64 int value")
+		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
 	}
 	length := int(b[0]) - intMid
 	if length < 0 {
 		length = -length
 		remB := b[1:]
 		if len(remB) < length {
-			panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %s", remB))
+			return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value: %s", remB)
 		}
 		var v int64
 		// Use the ones-complement of each encoded byte in order to build
@@ -160,21 +191,24 @@ func DecodeVarint(b []byte) ([]byte, int64) {
 		for _, t := range remB[:length] {
 			v = (v << 8) | int64(^t)
 		}
-		return remB[length:], ^v
+		return remB[length:], ^v, nil
 	}
 
-	remB, v := DecodeUvarint(b)
-	if v > math.MaxInt64 {
-		panic(fmt.Sprintf("varint %d overflows int64", v))
+	remB, v, err := DecodeUvarint(b)
+	if err != nil {
+		return remB, 0, err
 	}
-	return remB, int64(v)
+	if v > math.MaxInt64 {
+		return nil, 0, util.Errorf("varint %d overflows int64", v)
+	}
+	return remB, int64(v), nil
 }
 
 // DecodeVarintDecreasing decodes a uint64 value which was encoded
 // using EncodeVarintDecreasing.
-func DecodeVarintDecreasing(b []byte) ([]byte, int64) {
-	leftover, v := DecodeVarint(b)
-	return leftover, ^v
+func DecodeVarintDecreasing(b []byte) ([]byte, int64, error) {
+	leftover, v, err := DecodeVarint(b)
+	return leftover, ^v, err
 }
 
 // EncodeUvarint encodes the uint64 value using a variable length
@@ -246,19 +280,29 @@ func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
 	}
 }
 
+// MustDecodeUvarint is a wrapper around DecodeUvarint which panics if an error
+// occurs.
+func MustDecodeUvarint(b []byte) ([]byte, uint64) {
+	b, u, err := DecodeUvarint(b)
+	if err != nil {
+		panic(err)
+	}
+	return b, u
+}
+
 // DecodeUvarint decodes a varint encoded uint64 from the input
 // buffer. The remainder of the input buffer and the decoded uint64
 // are returned.
-func DecodeUvarint(b []byte) ([]byte, uint64) {
+func DecodeUvarint(b []byte) ([]byte, uint64, error) {
 	if len(b) == 0 {
-		panic("insufficient bytes to decode var uint64 int value")
+		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
 	}
 	length := int(b[0]) - intMid
 	b = b[1:] // skip length byte
 	if length < 0 || length > 8 {
-		panic(fmt.Sprintf("invalid uvarint length of %d", length))
+		return nil, 0, util.Errorf("invalid uvarint length of %d", length)
 	} else if len(b) < length {
-		panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %v", b))
+		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value: %v", b)
 	}
 	var v uint64
 	// It is faster to range over the elements in a slice than to index
@@ -266,27 +310,27 @@ func DecodeUvarint(b []byte) ([]byte, uint64) {
 	for _, t := range b[:length] {
 		v = (v << 8) | uint64(t)
 	}
-	return b[length:], v
+	return b[length:], v, nil
 }
 
 // DecodeUvarintDecreasing decodes a uint64 value which was encoded
 // using EncodeUvarintDecreasing.
-func DecodeUvarintDecreasing(b []byte) ([]byte, uint64) {
+func DecodeUvarintDecreasing(b []byte) ([]byte, uint64, error) {
 	if len(b) == 0 {
-		panic("insufficient bytes to decode var uint64 int value")
+		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
 	}
 	length := intMid - int(b[0])
 	b = b[1:] // skip length byte
 	if length < 0 || length > 8 {
-		panic(fmt.Sprintf("invalid uvarint length of %d", length))
+		return nil, 0, util.Errorf("invalid uvarint length of %d", length)
 	} else if len(b) < length {
-		panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %v", b))
+		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value: %v", b)
 	}
 	var x uint64
 	for _, t := range b[:length] {
 		x = (x << 8) | uint64(^t)
 	}
-	return b[length:], x
+	return b[length:], x, nil
 }
 
 const (
@@ -346,19 +390,19 @@ func EncodeBytesDecreasing(b []byte, data []byte) []byte {
 	return b
 }
 
-func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte) {
+func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte, error) {
 	if len(b) == 0 || b[0] != e.marker {
-		panic("did not find marker")
+		return nil, nil, util.Errorf("did not find marker")
 	}
 	b = b[1:]
 
 	for {
 		i := bytes.IndexByte(b, e.escape)
 		if i == -1 {
-			panic("did not find terminator")
+			return nil, nil, util.Errorf("did not find terminator")
 		}
 		if i+1 >= len(b) {
-			panic("malformed escape")
+			return nil, nil, util.Errorf("malformed escape")
 		}
 
 		v := b[i+1]
@@ -368,24 +412,34 @@ func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte) {
 			} else {
 				r = append(r, b[:i]...)
 			}
-			return b[i+2:], r
+			return b[i+2:], r, nil
 		}
 
 		if v == e.escaped00 {
 			r = append(r, b[:i]...)
 			r = append(r, e.escapedFF)
 		} else {
-			panic("unknown escape")
+			return nil, nil, util.Errorf("unknown escape")
 		}
 
 		b = b[i+2:]
 	}
 }
 
+// MustDecodeBytes is a wrapper around DecodeBytes which panics if an error
+// occurs.
+func MustDecodeBytes(b []byte, r []byte) ([]byte, []byte) {
+	b, r, err := DecodeBytes(b, r)
+	if err != nil {
+		panic(err)
+	}
+	return b, r
+}
+
 // DecodeBytes decodes a []byte value from the input buffer which was
 // encoded using EncodeBytes. The decoded bytes are appended to r. The
 // remainder of the input buffer and the decoded []byte are returned.
-func DecodeBytes(b []byte, r []byte) ([]byte, []byte) {
+func DecodeBytes(b []byte, r []byte) ([]byte, []byte, error) {
 	return decodeBytes(b, r, ascendingEscapes)
 }
 
@@ -393,13 +447,13 @@ func DecodeBytes(b []byte, r []byte) ([]byte, []byte) {
 // which was encoded using EncodeBytesDecreasing. The decoded bytes
 // are appended to r. The remainder of the input buffer and the
 // decoded []byte are returned.
-func DecodeBytesDecreasing(b []byte, r []byte) ([]byte, []byte) {
+func DecodeBytesDecreasing(b []byte, r []byte) ([]byte, []byte, error) {
 	if r == nil {
 		r = []byte{}
 	}
-	b, r = decodeBytes(b, r, descendingEscapes)
+	b, r, err := decodeBytes(b, r, descendingEscapes)
 	onesComplement(r)
-	return b, r
+	return b, r, err
 }
 
 // EncodeString encodes the string value using an escape-based encoding. See
@@ -444,9 +498,9 @@ func EncodeStringDecreasing(b []byte, s string) []byte {
 // using EncodeString or EncodeBytes. The r []byte is used as a temporary
 // buffer in order to avoid memory allocations. The remainder of the input
 // buffer and the decoded string are returned.
-func DecodeString(b []byte, r []byte) ([]byte, string) {
-	b, r = decodeBytes(b, r, ascendingEscapes)
-	return b, string(r)
+func DecodeString(b []byte, r []byte) ([]byte, string, error) {
+	b, r, err := decodeBytes(b, r, ascendingEscapes)
+	return b, string(r), err
 }
 
 // DecodeStringDecreasing decodes a string value from the input buffer which
@@ -454,16 +508,16 @@ func DecodeString(b []byte, r []byte) ([]byte, string) {
 // []byte is used as a temporary buffer in order to avoid memory
 // allocations. The remainder of the input buffer and the decoded string are
 // returned.
-func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string) {
+func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string, error) {
 	// We need to pass in a non-nil "r" parameter here so that the output is
 	// always copied to a new string instead of just returning the input when
 	// when there are no embedded escapes.
 	if r == nil {
 		r = []byte{}
 	}
-	b, r = decodeBytes(b, r, descendingEscapes)
+	b, r, err := decodeBytes(b, r, descendingEscapes)
 	onesComplement(r)
-	return b, string(r)
+	return b, string(r), err
 }
 
 const (
@@ -534,14 +588,20 @@ func EncodeTime(b []byte, t time.Time) []byte {
 
 // DecodeTime converts an encoded time into a UTC time.Time type and
 // returns the rest of the buffer.
-func DecodeTime(b []byte) ([]byte, time.Time) {
+func DecodeTime(b []byte) ([]byte, time.Time, error) {
 	if PeekType(b) != Time {
-		panic("did not find marker")
+		return nil, time.Time{}, util.Errorf("did not find marker")
 	}
 	b = b[1:]
-	b, sec := DecodeVarint(b)
-	b, nsec := DecodeVarint(b)
-	return b, time.Unix(sec, nsec).UTC()
+	b, sec, err := DecodeVarint(b)
+	if err != nil {
+		return b, time.Time{}, err
+	}
+	b, nsec, err := DecodeVarint(b)
+	if err != nil {
+		return b, time.Time{}, err
+	}
+	return b, time.Unix(sec, nsec).UTC(), nil
 }
 
 // Type represents the type of a value encoded by

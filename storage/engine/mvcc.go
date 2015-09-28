@@ -1663,7 +1663,7 @@ func mvccEncodeTimestamp(key proto.EncodedKey, timestamp proto.Timestamp) proto.
 // The decoded key, timestamp and true are returned to indicate the
 // key is for an MVCC versioned value.
 func MVCCDecodeKey(encodedKey proto.EncodedKey) (proto.Key, proto.Timestamp, bool) {
-	tsBytes, key := encoding.DecodeBytes(encodedKey, nil)
+	tsBytes, key := encoding.MustDecodeBytes(encodedKey, nil)
 	if len(tsBytes) == 0 {
 		return key, proto.Timestamp{}, false
 	} else if len(tsBytes) != 12 {
@@ -1671,8 +1671,8 @@ func MVCCDecodeKey(encodedKey proto.EncodedKey) (proto.Key, proto.Timestamp, boo
 	}
 	var walltime uint64
 	var logical uint32
-	tsBytes, walltime = encoding.DecodeUint64Decreasing(tsBytes)
-	tsBytes, logical = encoding.DecodeUint32Decreasing(tsBytes)
+	tsBytes, walltime = encoding.MustDecodeUint64Decreasing(tsBytes)
+	tsBytes, logical = encoding.MustDecodeUint32Decreasing(tsBytes)
 	return key, proto.Timestamp{WallTime: int64(walltime), Logical: int32(logical)}, true
 }
 

@@ -103,7 +103,7 @@ func ObjectIDForKey(key proto.Key) (uint32, bool) {
 		// definitely the case if DecodeUvarint panics.
 		_ = recover()
 	}()
-	_, id64 := encoding.DecodeUvarint(remaining)
+	_, id64 := encoding.MustDecodeUvarint(remaining)
 	return uint32(id64), true
 }
 
@@ -184,9 +184,15 @@ func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
 		return 0, fmt.Errorf("descriptor table not found in system config of %d values", len(s.Values))
 	}
 	// DescriptorTable.PrimaryIndex.ID
-	remaining, _ = encoding.DecodeUvarint(remaining)
+	remaining, _, err := encoding.DecodeUvarint(remaining)
+	if err != nil {
+		return 0, err
+	}
 	// descID
-	_, id := encoding.DecodeUvarint(remaining)
+	_, id, err := encoding.DecodeUvarint(remaining)
+	if err != nil {
+		return 0, err
+	}
 	return uint32(id), nil
 }
 

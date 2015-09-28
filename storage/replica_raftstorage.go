@@ -193,7 +193,11 @@ func (r *Replica) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 		return 0, err
 	}
 	if v != nil {
-		_, appliedIndex = encoding.DecodeUint64(v.Bytes)
+		var err error
+		_, appliedIndex, err = encoding.DecodeUint64(v.Bytes)
+		if err != nil {
+			return 0, err
+		}
 	}
 	return appliedIndex, nil
 }
@@ -217,7 +221,11 @@ func (r *Replica) loadLastIndex() (uint64, error) {
 		return 0, err
 	}
 	if v != nil {
-		_, lastIndex = encoding.DecodeUint64(v.Bytes)
+		var err error
+		_, lastIndex, err = encoding.DecodeUint64(v.Bytes)
+		if err != nil {
+			return 0, err
+		}
 	} else {
 		// The log is empty, which means we are either starting from scratch
 		// or the entire log has been truncated away. raftTruncatedState

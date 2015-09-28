@@ -94,12 +94,12 @@ func DecodeDataKey(key proto.Key) (string, string, Resolution, int64) {
 	remainder = remainder[len(keyDataPrefix):]
 
 	// Decode series name.
-	remainder, name = encoding.DecodeBytes(remainder, nil)
+	remainder, name = encoding.MustDecodeBytes(remainder, nil)
 	// Decode resolution.
-	remainder, resolutionInt = encoding.DecodeVarint(remainder)
+	remainder, resolutionInt = encoding.MustDecodeVarint(remainder)
 	resolution := Resolution(resolutionInt)
 	// Decode timestamp.
-	remainder, timeslot = encoding.DecodeVarint(remainder)
+	remainder, timeslot = encoding.MustDecodeVarint(remainder)
 	timestamp := timeslot * resolution.KeyDuration()
 	// The remaining bytes are the source.
 	source = remainder
