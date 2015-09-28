@@ -33,9 +33,9 @@ GOPATH_BIN := $(GOPATH)/bin
 
 GO_BINDATA := $(GOPATH_BIN)/go-bindata
 
-TYPESCRIPT_TARGET       := js/app.js
-TEST_TARGET             := js/test.js
-CSS_TARGET              := css/app.css
+TYPESCRIPT_TARGET       := build/app.js
+TEST_TARGET             := build/test.js
+CSS_TARGET              := build/app.css
 STYL_OPTIONS            :=
 GOBINDATA_SOURCES       := $(TYPESCRIPT_TARGET) $(CSS_TARGET) index.html $(BOWER_COMPONENTS)/*/*.min.* $(BOWER_COMPONENTS)/*/*/*.min.*
 GOBINDATA_TARGET        := ./embedded.go
@@ -73,7 +73,7 @@ $(TEST_TARGET): $(shell find $(TS_ROOT)) deps
 	$(NODE_MODULES)/.bin/tsc -p $(TEST_ROOT)
 
 $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
-	$(NODE_MODULES)/.bin/stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out css
+	$(NODE_MODULES)/.bin/stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out build/
 
 $(GOBINDATA_TARGET): $(GOBINDATA_SOURCES) bower.installed
 	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $^

@@ -9,3 +9,6 @@ bower.installed
 # Typescript definitions
 typings
 tsd.installed
+
+# Generated intermediates
+build/
