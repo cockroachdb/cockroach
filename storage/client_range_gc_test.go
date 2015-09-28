@@ -57,6 +57,7 @@ func TestRangeGCQueueDropReplica(t *testing.T) {
 // removes a range from a store that no longer should have a replica.
 func TestRangeGCQueueDropReplicaGCOnScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(bdarnell): #768")
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
