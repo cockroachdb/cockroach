@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -227,6 +228,11 @@ func (m *multiTestContext) Stop() {
 func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 	getArgs func(addr net.Addr) gogoproto.Message,
 	getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
+	fail := func(pErr *proto.Error) ([]gogoproto.Message, error) {
+		br := &proto.BatchResponse{}
+		br.Error = pErr
+		return []gogoproto.Message{br}, nil
+	}
 	var br *proto.BatchResponse
 	var pErr *proto.Error
 	for _, addr := range addrs {
@@ -240,18 +246,30 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 		if pErr == nil {
 			return []gogoproto.Message{br}, nil
 		}
-		if nlErr, ok := pErr.GoError().(*proto.NotLeaderError); ok && nlErr.Leader == nil {
-			// localSender has the range, is *not* the Leader, but the
-			// Leader is not known; this can happen if the leader is removed
-			// from the group. Move the manual clock forward in an attempt to
-			// expire the lease.
-			m.expireLeaderLeases()
+		switch tErr := pErr.GoError().(type) {
+		case *proto.RangeKeyMismatchError:
+		case *proto.NotLeaderError:
+			if tErr.Leader == nil {
+				// localSender has the range, is *not* the Leader, but the
+				// Leader is not known; this can happen if the leader is removed
+				// from the group. Move the manual clock forward in an attempt to
+				// expire the lease.
+				m.expireLeaderLeases()
+			}
+		default:
+			if testutils.IsError(tErr, `store \d+ not found`) {
+				break
+			}
+			// If any store fails with an error that doesn't indicate we simply
+			// sent to the wrong store, it must have been the correct one and
+			// the command failed.
+			return fail(pErr)
 		}
 	}
 	if pErr == nil {
 		panic("err must not be nil here")
 	}
-	return nil, pErr.GoError()
+	return fail(pErr)
 }
 
 func (m *multiTestContext) makeContext(i int) storage.StoreContext {

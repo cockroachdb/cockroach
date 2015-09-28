@@ -770,16 +770,18 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, args proto.GCReq
 // reader trying to push a conflicting txn's commit timestamp
 // forward), who attempts to resolve a conflict with a "pushee"
 // (args.PushTxn -- the pushee txn whose intent(s) caused the
-// conflict).
+// conflict). A pusher is either transactional, in which case
+// PushTxn is completely initialized, or not, in which case the
+// PushTxn has only the priority set.
 //
 // Txn already committed/aborted: If pushee txn is committed or
 // aborted return success.
 //
 // Txn Timeout: If pushee txn entry isn't present or its LastHeartbeat
-// timestamp isn't set, use PushTxn.Timestamp as LastHeartbeat. If
-// current time - LastHeartbeat > 2 * DefaultHeartbeatInterval, then
-// the pushee txn should be either pushed forward, aborted, or
-// confirmed not pending, depending on value of Request.PushType.
+// timestamp isn't set, use its as LastHeartbeat. If current time -
+// LastHeartbeat > 2 * DefaultHeartbeatInterval, then the pushee txn
+// should be either pushed forward, aborted, or confirmed not pending,
+// depending on value of Request.PushType.
 //
 // Old Txn Epoch: If persisted pushee txn entry has a newer Epoch than
 // PushTxn.Epoch, return success, as older epoch may be removed.
@@ -789,9 +791,7 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, args proto.GCReq
 // args.PushType. If args.PushType is ABORT_TXN, set txn.Status to
 // ABORTED, and priority to one less than the pusher's priority and
 // return success. If args.PushType is PUSH_TIMESTAMP, set
-// txn.Timestamp to pusher's Timestamp + 1 (note that we use the
-// pusher's Args.Timestamp, not Txn.Timestamp because the args
-// timestamp can advance during the txn).
+// txn.Timestamp to just after PushTo.
 //
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionPushError. Transaction will be retried

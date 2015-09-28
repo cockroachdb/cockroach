@@ -1006,7 +1006,10 @@ type PushTxnRequest struct {
 	// up-to-date value of the transaction record, but will be set or
 	// merged as appropriate.
 	PusheeTxn Transaction `protobuf:"bytes,3,opt,name=pushee_txn" json:"pushee_txn"`
-	PushTo    Timestamp   `protobuf:"bytes,4,opt,name=push_to" json:"push_to"`
+	// PushTo is the timestamp just after which PusheeTxn is attempted to be
+	// pushed. During conflict resolution, it should be set to the timestamp
+	// of the its conflicting write.
+	PushTo Timestamp `protobuf:"bytes,4,opt,name=push_to" json:"push_to"`
 	// Now holds the timestamp used to compare the last heartbeat of the pushee
 	// against. This is necessary since the request header's timestamp does not
 	// necessarily advance with the node clock across retries and hence cannot

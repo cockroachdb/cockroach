@@ -245,7 +245,7 @@ func (ba BatchRequest) String() string {
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
 		h := req.Header()
-		str = append(str, fmt.Sprintf("%T [%s,%s)", req, h.Key, h.EndKey))
+		str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Key, h.EndKey))
 	}
 	return strings.Join(str, ", ")
 }

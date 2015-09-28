@@ -1327,17 +1327,17 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	header := args.Header()
 
 	// TODO(tschottdorf): need deduplication here (many pushes for the same
-	// intent are awkward but even worse, could ratchet up the priority).
+	// txn are awkward but even worse, could ratchet up the priority).
+	pusherTxn := header.Txn
+	// If there's no pusher, we communicate a priority by sending an empty
+	// txn with only the priority set.
+	if pusherTxn == nil {
+		pusherTxn = &proto.Transaction{
+			Priority: proto.MakePriority(args.Header().GetUserPriority()),
+		}
+	}
 	var pushReqs []proto.Request
 	for _, intent := range pushIntents {
-		pusherTxn := header.Txn
-		// If there's no pusher, we communicate a priority by sending an empty
-		// txn with only the priority set.
-		if pusherTxn == nil {
-			pusherTxn = &proto.Transaction{
-				Priority: proto.MakePriority(args.Header().GetUserPriority()),
-			}
-		}
 		pushReqs = append(pushReqs, &proto.PushTxnRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: intent.Txn.Key,
@@ -1358,23 +1358,21 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	b.InternalAddRequest(pushReqs...)
 	br, pushErr := s.db.RunWithResponse(b)
 	if pushErr != nil {
-		if pushErr != nil {
-			if log.V(1) {
-				log.Infoc(ctx, "on %s: %s", args.Method(), pushErr)
-			}
-
-			// For write/write conflicts within a transaction, propagate the
-			// push failure, not the original write intent error. The push
-			// failure will instruct the client to restart the transaction
-			// with a backoff.
-			if header.Txn != nil && !proto.IsReadOnly(args) {
-				return pushErr
-			}
-			// For read/write conflicts, return the write intent error which
-			// engages backoff/retry (with !Resolved). We don't need to
-			// restart the txn, only resend the read with a backoff.
-			return wiErr
+		if log.V(1) {
+			log.Infoc(ctx, "on %s: %s", args.Method(), pushErr)
 		}
+
+		// For write/write conflicts within a transaction, propagate the
+		// push failure, not the original write intent error. The push
+		// failure will instruct the client to restart the transaction
+		// with a backoff.
+		if header.Txn != nil && !proto.IsReadOnly(args) {
+			return pushErr
+		}
+		// For read/write conflicts, return the write intent error which
+		// engages backoff/retry (with !Resolved). We don't need to
+		// restart the txn, only resend the read with a backoff.
+		return wiErr
 	}
 	wiErr.Resolved = true // success!
 
