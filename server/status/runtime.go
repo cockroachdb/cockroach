@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -56,12 +57,12 @@ func NewRuntimeStatRecorder(nodeID proto.NodeID, clock *hlc.Clock) *RuntimeStatR
 }
 
 // recordFloat records a single float64 value recorded from a runtime statistic as a
-// proto.TimeSeriesData object.
+// ts.TimeSeriesData object.
 func (rsr *RuntimeStatRecorder) record(timestampNanos int64, name string,
-	data float64) proto.TimeSeriesData {
-	return proto.TimeSeriesData{
+	data float64) ts.TimeSeriesData {
+	return ts.TimeSeriesData{
 		Name: fmt.Sprintf(runtimeStatTimeSeriesNameFmt, name, rsr.nodeID),
-		Datapoints: []*proto.TimeSeriesDatapoint{
+		Datapoints: []*ts.TimeSeriesDatapoint{
 			{
 				TimestampNanos: timestampNanos,
 				Value:          data,
@@ -78,8 +79,8 @@ func (rsr *RuntimeStatRecorder) record(timestampNanos int64, name string,
 // one method because it is convenient; however, in the future querying and
 // recording can be easily separated, similar to the way that NodeStatus is
 // separated into a monitor and a recorder.
-func (rsr *RuntimeStatRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
-	data := make([]proto.TimeSeriesData, 0, rsr.lastDataCount)
+func (rsr *RuntimeStatRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
+	data := make([]ts.TimeSeriesData, 0, rsr.lastDataCount)
 
 	// Record memory and call stats from the runtime package.
 	// TODO(mrtracy): memory statistics will not include usage from RocksDB.

@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
@@ -40,11 +39,11 @@ func TestHttpQuery(t *testing.T) {
 
 	// Populate data directly.
 	tsdb := tsrv.TsDB()
-	if err := tsdb.StoreData(ts.Resolution10s, []proto.TimeSeriesData{
+	if err := tsdb.StoreData(ts.Resolution10s, []ts.TimeSeriesData{
 		{
 			Name:   "test.metric",
 			Source: "source1",
-			Datapoints: []*proto.TimeSeriesDatapoint{
+			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
 					Value:          100.0,
@@ -62,7 +61,7 @@ func TestHttpQuery(t *testing.T) {
 		{
 			Name:   "test.metric",
 			Source: "source2",
-			Datapoints: []*proto.TimeSeriesDatapoint{
+			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
 					Value:          100.0,
@@ -83,7 +82,7 @@ func TestHttpQuery(t *testing.T) {
 		},
 		{
 			Name: "other.metric",
-			Datapoints: []*proto.TimeSeriesDatapoint{
+			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
 					Value:          100.0,
@@ -102,12 +101,12 @@ func TestHttpQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedResult := &proto.TimeSeriesQueryResponse{
-		Results: []*proto.TimeSeriesQueryResponse_Result{
+	expectedResult := &ts.TimeSeriesQueryResponse{
+		Results: []*ts.TimeSeriesQueryResponse_Result{
 			{
 				Name:    "test.metric",
 				Sources: []string{"source1", "source2"},
-				Datapoints: []*proto.TimeSeriesDatapoint{
+				Datapoints: []*ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
 						Value:          400.0,
@@ -125,7 +124,7 @@ func TestHttpQuery(t *testing.T) {
 			{
 				Name:    "other.metric",
 				Sources: []string{""},
-				Datapoints: []*proto.TimeSeriesDatapoint{
+				Datapoints: []*ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
 						Value:          200.0,
@@ -139,12 +138,12 @@ func TestHttpQuery(t *testing.T) {
 		},
 	}
 
-	response := &proto.TimeSeriesQueryResponse{}
+	response := &ts.TimeSeriesQueryResponse{}
 	session := testutils.NewTestHTTPSession(t, &base.Context{}, tsrv.ServingAddr())
-	session.PostProto(ts.URLQuery, &proto.TimeSeriesQueryRequest{
+	session.PostProto(ts.URLQuery, &ts.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,
-		Queries: []proto.TimeSeriesQueryRequest_Query{
+		Queries: []ts.TimeSeriesQueryRequest_Query{
 			{
 				Name: "test.metric",
 			},

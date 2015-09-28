@@ -15,12 +15,15 @@
 //
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
-package proto
+package ts
 
 import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func ts(name string, dps ...*TimeSeriesDatapoint) *TimeSeriesData {
@@ -40,12 +43,13 @@ func tsdp(ts time.Duration, val float64) *TimeSeriesDatapoint {
 // TestToInternal verifies the conversion of TimeSeriesData to internal storage
 // format is correct.
 func TestToInternal(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tcases := []struct {
 		keyDuration    int64
 		sampleDuration int64
 		expectsError   bool
 		input          *TimeSeriesData
-		expected       []*InternalTimeSeriesData
+		expected       []*proto.InternalTimeSeriesData
 	}{
 		{
 			time.Minute.Nanoseconds(),
@@ -73,11 +77,11 @@ func TestToInternal(t *testing.T) {
 				tsdp((time.Hour*15)+(time.Minute*22)+1, 5.0),
 				tsdp((time.Hour*52)+(time.Minute*15), 0.0),
 			),
-			[]*InternalTimeSeriesData{
+			[]*proto.InternalTimeSeriesData{
 				{
 					StartTimestampNanos: 0,
 					SampleDurationNanos: int64(time.Minute * 20),
-					Samples: []*InternalTimeSeriesSample{
+					Samples: []*proto.InternalTimeSeriesSample{
 						{
 							Offset: 15,
 							Count:  1,
@@ -98,7 +102,7 @@ func TestToInternal(t *testing.T) {
 				{
 					StartTimestampNanos: int64(time.Hour * 24),
 					SampleDurationNanos: int64(time.Minute * 20),
-					Samples: []*InternalTimeSeriesSample{
+					Samples: []*proto.InternalTimeSeriesSample{
 						{
 							Offset: 1,
 							Count:  1,
@@ -109,7 +113,7 @@ func TestToInternal(t *testing.T) {
 				{
 					StartTimestampNanos: int64(time.Hour * 48),
 					SampleDurationNanos: int64(time.Minute * 20),
-					Samples: []*InternalTimeSeriesSample{
+					Samples: []*proto.InternalTimeSeriesSample{
 						{
 							Offset: 0,
 							Count:  1,

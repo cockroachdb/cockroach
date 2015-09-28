@@ -21,7 +21,6 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/julienschmidt/httprouter"
 )
@@ -61,7 +60,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // for one or more metrics over a specific time span. Query requests have a
 // significant body and thus are POST requests.
 func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	request := &proto.TimeSeriesQueryRequest{}
+	request := &TimeSeriesQueryRequest{}
 
 	// Unmarshal query request.
 	reqBody, err := ioutil.ReadAll(r.Body)
@@ -80,8 +79,8 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 		return
 	}
 
-	response := &proto.TimeSeriesQueryResponse{
-		Results: make([]*proto.TimeSeriesQueryResponse_Result, 0, len(request.Queries)),
+	response := &TimeSeriesQueryResponse{
+		Results: make([]*TimeSeriesQueryResponse_Result, 0, len(request.Queries)),
 	}
 	for _, q := range request.Queries {
 		datapoints, sources, err := s.db.Query(q, Resolution10s, request.StartNanos, request.EndNanos)
@@ -89,7 +88,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		response.Results = append(response.Results, &proto.TimeSeriesQueryResponse_Result{
+		response.Results = append(response.Results, &TimeSeriesQueryResponse_Result{
 			Name:       q.Name,
 			Sources:    sources,
 			Datapoints: datapoints,

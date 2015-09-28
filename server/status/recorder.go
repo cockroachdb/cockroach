@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -66,12 +67,12 @@ func NewNodeStatusRecorder(monitor *NodeStatusMonitor, clock *hlc.Clock) *NodeSt
 }
 
 // recordInt records a single int64 value from the NodeStatusMonitor as a
-// proto.TimeSeriesData object.
+// ts.TimeSeriesData object.
 func (nsr *NodeStatusRecorder) recordInt(timestampNanos int64, name string,
-	data int64) proto.TimeSeriesData {
-	return proto.TimeSeriesData{
+	data int64) ts.TimeSeriesData {
+	return ts.TimeSeriesData{
 		Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, nsr.desc.NodeID),
-		Datapoints: []*proto.TimeSeriesDatapoint{
+		Datapoints: []*ts.TimeSeriesDatapoint{
 			{
 				TimestampNanos: timestampNanos,
 				Value:          float64(data),
@@ -82,7 +83,7 @@ func (nsr *NodeStatusRecorder) recordInt(timestampNanos int64, name string,
 
 // GetTimeSeriesData returns a slice of interesting TimeSeriesData from the
 // encapsulated NodeStatusMonitor.
-func (nsr *NodeStatusRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
+func (nsr *NodeStatusRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	nsr.RLock()
 	defer nsr.RUnlock()
 
@@ -94,7 +95,7 @@ func (nsr *NodeStatusRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
 		return nil
 	}
 
-	data := make([]proto.TimeSeriesData, 0, nsr.lastDataCount)
+	data := make([]ts.TimeSeriesData, 0, nsr.lastDataCount)
 
 	// Record node stats.
 	now := nsr.clock.PhysicalNow()
@@ -198,11 +199,11 @@ type storeStatusRecorder struct {
 }
 
 // recordInt records a single int64 value from the StoreStatusMonitor as a
-// proto.TimeSeriesData object.
-func (ssr *storeStatusRecorder) recordInt(name string, data int64) proto.TimeSeriesData {
-	return proto.TimeSeriesData{
+// ts.TimeSeriesData object.
+func (ssr *storeStatusRecorder) recordInt(name string, data int64) ts.TimeSeriesData {
+	return ts.TimeSeriesData{
 		Name: fmt.Sprintf(storeTimeSeriesNameFmt, name, ssr.ID),
-		Datapoints: []*proto.TimeSeriesDatapoint{
+		Datapoints: []*ts.TimeSeriesDatapoint{
 			{
 				TimestampNanos: ssr.timestampNanos,
 				Value:          float64(data),

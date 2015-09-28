@@ -11,7 +11,6 @@
 		cockroach/proto/errors.proto
 		cockroach/proto/internal.proto
 		cockroach/proto/metadata.proto
-		cockroach/proto/timeseries.proto
 
 	It has these top-level messages:
 		ClientCmdID
@@ -109,10 +108,6 @@
 		StoreCapacity
 		NodeDescriptor
 		StoreDescriptor
-		TimeSeriesDatapoint
-		TimeSeriesData
-		TimeSeriesQueryRequest
-		TimeSeriesQueryResponse
 */
 package proto
 
