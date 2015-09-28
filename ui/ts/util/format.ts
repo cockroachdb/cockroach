@@ -1,5 +1,5 @@
 // source: util/format.ts
-/// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../../typings/d3/d3.d.ts" />
 /// <reference path="../models/proto.ts" />
 /// <reference path="../util/convert.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
@@ -18,7 +18,7 @@ module Utils {
     /**
      * Date formats a Date object into a human readable date string.
      */
-    const _datetimeFormatter: D3.Time.TimeFormat = d3.time.format("%Y-%m-%d %H:%M:%S");
+    const _datetimeFormatter: d3.time.Format = d3.time.format("%Y-%m-%d %H:%M:%S");
     export function Date(datetime: Date): string {
       return _datetimeFormatter(datetime);
     };

@@ -70,7 +70,7 @@ var Utils;
     }
     Utils.Computed = Computed;
 })(Utils || (Utils = {}));
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../util/property.ts" />
 var Utils;
 (function (Utils) {
@@ -110,9 +110,9 @@ var Utils;
     })();
     Utils.QueryCache = QueryCache;
 })(Utils || (Utils = {}));
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/mocha/mocha.d.ts" />
-/// <reference path="../typings/chai/chai.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../typings/mocha/mocha.d.ts" />
+/// <reference path="../../typings/chai/chai.d.ts" />
 /// <reference path="../util/property.ts" />
 /// <reference path="../util/querycache.ts" />
 suite("Properties", function () {
@@ -320,8 +320,8 @@ suite("QueryCache", function () {
     });
 });
 // source: components/table.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/lodash/lodash.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../typings/lodash/lodash.d.ts" />
 /// <reference path="../util/property.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Components;
@@ -411,10 +411,10 @@ var Components;
         Table.create = create;
     })(Table = Components.Table || (Components.Table = {}));
 })(Components || (Components = {}));
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/lodash/lodash.d.ts" />
-/// <reference path="../typings/mocha/mocha.d.ts" />
-/// <reference path="../typings/chai/chai.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../typings/lodash/lodash.d.ts" />
+/// <reference path="../../typings/mocha/mocha.d.ts" />
+/// <reference path="../../typings/chai/chai.d.ts" />
 /// <reference path="../components/table.ts" />
 /// <reference path="../util/property.ts" />
 var TestData;

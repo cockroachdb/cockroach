@@ -1,6 +1,6 @@
 // source: components/table.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/lodash/lodash.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../typings/lodash/lodash.d.ts" />
 /// <reference path="../util/property.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
@@ -53,14 +53,14 @@ module Components {
       /**
        * columns is a function which returns a array of TableColumn objects
        * describing the columns of the table. Each TableColumn must accept the
-       * same row data type as the TableData itself. 
+       * same row data type as the TableData itself.
        *
        * The columns in the table will be displayed in the same order as the
        * returned array.
        */
       columns: Utils.ReadOnlyProperty<TableColumn<T>[]>;
       /* rows is a function that returns an array of row data for display in the
-       * table. 
+       * table.
        */
       rows: Utils.ReadOnlyProperty<T[]>;
     }
@@ -96,7 +96,7 @@ module Components {
 
       /**
        * SetSortColumn sets the column which is currently used for sorting
-       * purposes. 
+       * purposes.
        *
        * When setting a new sort column, the sort direction is always ascending.
        * If the same column is set again, the sort direction is reversed to

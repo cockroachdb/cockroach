@@ -5,3 +5,7 @@ npm.installed
 # Bower components
 bower_components
 bower.installed
+
+# Typescript definitions
+typings
+tsd.installed

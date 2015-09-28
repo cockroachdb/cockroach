@@ -22,7 +22,7 @@
 //
 var headerDescription = "This file is designed to add the header to the top of the combined js file.";
 // source: util/query.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Utils;
 (function (Utils) {
@@ -91,7 +91,7 @@ var Utils;
     }
     Utils.Computed = Computed;
 })(Utils || (Utils = {}));
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../util/property.ts" />
 var Utils;
 (function (Utils) {
@@ -190,8 +190,8 @@ var Models;
     })(Proto = Models.Proto || (Models.Proto = {}));
 })(Models || (Models = {}));
 // source: models/status.ts
-/// <reference path="../typings/lodash/lodash.d.ts" />
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../../typings/lodash/lodash.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../util/http.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="proto.ts" />
@@ -280,6 +280,9 @@ var Models;
         Status.Nodes = Nodes;
     })(Status = Models.Status || (Models.Status = {}));
 })(Models || (Models = {}));
+// source: util/types.ts
+// Author: Max Lang (max@cockroachlabs.com)
+//
 // source: util/chainprop.ts
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Utils;
@@ -317,7 +320,7 @@ var Utils;
 })(Utils || (Utils = {}));
 // source: models/metrics.ts
 /// <reference path="proto.ts" />
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/convert.ts" />
 /// <reference path="../util/http.ts" />
@@ -501,8 +504,9 @@ var Models;
     })(Metrics = Models.Metrics || (Models.Metrics = {}));
 })(Models || (Models = {}));
 // source: components/metrics.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../typings/d3/d3.d.ts" />
+/// <reference path="../util/types.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="../models/metrics.ts" />
 var Components;
@@ -596,8 +600,8 @@ var Components;
     })(Metrics = Components.Metrics || (Components.Metrics = {}));
 })(Components || (Components = {}));
 // source: pages/nodes.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/lodash/lodash.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../typings/lodash/lodash.d.ts" />
 /// <reference path="../util/property.ts" />
 var Components;
 (function (Components) {
@@ -620,7 +624,7 @@ var Components;
     })(NavigationBar = Components.NavigationBar || (Components.NavigationBar = {}));
 })(Components || (Components = {}));
 // source: pages/nodes.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/navbar.ts" />
@@ -672,8 +676,8 @@ var AdminViews;
     })(SubModules = AdminViews.SubModules || (AdminViews.SubModules = {}));
 })(AdminViews || (AdminViews = {}));
 // source: pages/graph.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../typings/d3/d3.d.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="../components/metrics.ts" />
 var AdminViews;
@@ -747,7 +751,7 @@ var AdminViews;
     })(Graph = AdminViews.Graph || (AdminViews.Graph = {}));
 })(AdminViews || (AdminViews = {}));
 // source: components/select.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 //
 var Components;
@@ -770,8 +774,8 @@ var Components;
     })(Select = Components.Select || (Components.Select = {}));
 })(Components || (Components = {}));
 // source: components/table.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/lodash/lodash.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../typings/lodash/lodash.d.ts" />
 /// <reference path="../util/property.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Components;
@@ -862,7 +866,7 @@ var Components;
     })(Table = Components.Table || (Components.Table = {}));
 })(Components || (Components = {}));
 // source: util/format.ts
-/// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../../typings/d3/d3.d.ts" />
 /// <reference path="../models/proto.ts" />
 /// <reference path="../util/convert.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
@@ -934,8 +938,8 @@ var Utils;
 })(Utils || (Utils = {}));
 // source: models/log.ts
 /// <reference path="../models/proto.ts" />
-/// <reference path="../typings/d3/d3.d.ts" />
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../../typings/d3/d3.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/format.ts" />
 /// <reference path="../util/querycache.ts" />
@@ -1017,7 +1021,7 @@ var Models;
 /// <reference path="../components/table.ts" />
 /// <reference path="../models/log.ts" />
 /// <reference path="../models/proto.ts" />
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../util/format.ts" />
 var AdminViews;
 (function (AdminViews) {
@@ -1169,7 +1173,7 @@ var AdminViews;
     })(Log = AdminViews.Log || (AdminViews.Log = {}));
 })(AdminViews || (AdminViews = {}));
 // source: pages/monitor.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 var AdminViews;
 (function (AdminViews) {
     "use strict";
@@ -1187,7 +1191,7 @@ var AdminViews;
     })(Monitor = AdminViews.Monitor || (AdminViews.Monitor = {}));
 })(AdminViews || (AdminViews = {}));
 // source: pages/nodes.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
@@ -1434,7 +1438,7 @@ var AdminViews;
     })(Nodes = AdminViews.Nodes || (AdminViews.Nodes = {}));
 })(AdminViews || (AdminViews = {}));
 // source: pages/stores.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
@@ -1696,7 +1700,7 @@ var AdminViews;
     })(Stores = AdminViews.Stores || (AdminViews.Stores = {}));
 })(AdminViews || (AdminViews = {}));
 // source: app.ts
-/// <reference path="typings/mithriljs/mithril.d.ts" />
+/// <reference path="external/mithril/mithril.d.ts" />
 /// <reference path="pages/navigation.ts" />
 /// <reference path="pages/graph.ts" />
 /// <reference path="pages/log.ts" />

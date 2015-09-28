@@ -1,6 +1,6 @@
 // source: pages/nodes.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/lodash/lodash.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../typings/lodash/lodash.d.ts" />
 /// <reference path="../util/property.ts" />
 
 // Author: Matt Tracy (matt@cockroachlabs.com)
@@ -23,7 +23,7 @@ module Components {
       targets: Utils.ReadOnlyProperty<Target[]>;
       /**
        * isActive is a function which determines whether a given target is
-       * active. 
+       * active.
        */
       isActive: (t: Target) => boolean;
     }

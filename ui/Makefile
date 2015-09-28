@@ -58,11 +58,18 @@ npm.installed: npm-shrinkwrap.json
 	npm install
 	touch $@
 
-$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) npm.installed bower.installed
-	$(NODE_MODULES)/.bin/tsc -p $(TS_ROOT)
-	$(NODE_MODULES)/.bin/tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts' -not -path '*typings*')
+tsd.installed: tsd.json npm.installed
+	$(NODE_MODULES)/.bin/tsd install
+	touch $@
 
-$(TEST_TARGET): $(shell find $(TS_ROOT)) npm.installed bower.installed
+.PHONY:
+deps: npm.installed bower.installed tsd.installed
+
+$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) deps
+	$(NODE_MODULES)/.bin/tsc -p $(TS_ROOT)
+	$(NODE_MODULES)/.bin/tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts' -not -path '*external*')
+
+$(TEST_TARGET): $(shell find $(TS_ROOT)) deps
 	$(NODE_MODULES)/.bin/tsc -p $(TEST_ROOT)
 
 $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
