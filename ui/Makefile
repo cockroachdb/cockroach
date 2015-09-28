@@ -37,7 +37,20 @@ TYPESCRIPT_TARGET       := build/app.js
 TEST_TARGET             := build/test.js
 CSS_TARGET              := build/app.css
 STYL_OPTIONS            :=
-GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
+REMOTE_DEPS             := npm.installed bower.installed tsd.installed
+GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET) index.html
+GOBINDATA_SOURCES       := $(BOWER_COMPONENTS)/d3/d3.min.js \
+                           $(BOWER_COMPONENTS)/lodash/lodash.min.js \
+                           $(BOWER_COMPONENTS)/mithril/mithril.js \
+                           $(BOWER_COMPONENTS)/mithril/mithril.min.js \
+                           $(BOWER_COMPONENTS)/mithril/mithril.min.js.map \
+                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.min.css \
+                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.min.js
+GOBINDATA_DEBUG_SOURCES := $(BOWER_COMPONENTS)/d3/d3.js \
+                           $(BOWER_COMPONENTS)/lodash/lodash.js \
+                           $(BOWER_COMPONENTS)/mithril/mithril.js \
+                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.css \
+                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.js
 GOBINDATA_TARGET        := ./embedded.go
 GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
 
@@ -62,23 +75,20 @@ tsd.installed: tsd.json npm.installed
 	$(NODE_MODULES)/.bin/tsd install
 	touch $@
 
-.PHONY:
-deps: npm.installed bower.installed tsd.installed
-
-$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) deps
+$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	$(NODE_MODULES)/.bin/tsc -p $(TS_ROOT)
 	$(NODE_MODULES)/.bin/tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts' -not -path '*external*')
 
-$(TEST_TARGET): $(shell find $(TS_ROOT)) deps
+$(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	$(NODE_MODULES)/.bin/tsc -p $(TEST_ROOT)
 
 $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
 	$(NODE_MODULES)/.bin/stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out build/
 
 $(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed
-	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $(GOBINDATA_DEPS) index.html $(shell find $(BOWER_COMPONENTS) -name *.min.* | sort)
+	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $(GOBINDATA_DEPS) $(GOBINDATA_SOURCES)
 	gofmt -s -w $@
 	goimports -w $@
 
 $(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEPS) bower.installed
-	$(GO_BINDATA) -pkg ui -o $@ -debug $(GOBINDATA_DEPS) index.html $(shell find $(BOWER_COMPONENTS) -name *.min.* | sort)
+	$(GO_BINDATA) -pkg ui -o $@ -debug $(GOBINDATA_DEPS) $(GOBINDATA_DEBUG_SOURCES)
