@@ -24,8 +24,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/util"
@@ -41,8 +39,8 @@ type HTTPServer struct {
 }
 
 // MakeHTTPServer creates an HTTPServer.
-func MakeHTTPServer(ctx *base.Context, db client.DB, gossip *gossip.Gossip) HTTPServer {
-	return HTTPServer{context: ctx, Executor: NewExecutor(db, gossip)}
+func MakeHTTPServer(ctx *base.Context, executor *Executor) HTTPServer {
+	return HTTPServer{context: ctx, Executor: executor}
 }
 
 // ServeHTTP serves the SQL API by treating the request URL path

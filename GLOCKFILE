@@ -22,6 +22,7 @@ github.com/docker/docker 2ed0739c7a47f5accfbae0c8cce2a7e6463dbdc6
 github.com/elazarl/go-bindata-assetfs d5cac425555ca5cf00694df246e04f05e6a55150
 github.com/gogo/protobuf 2093b57e5ca2ccbee4626814100bc1aada691b18
 github.com/golang/lint 7b7f4364ff76043e6c3610281525fabc0d90f0e4
+github.com/golang/protobuf 8df8a93c670173cd1d8737a507a253b94f2d0b5a
 github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 github.com/jteeuwen/go-bindata bfe36d3254337b7cc18024805dfab2106613abdf
@@ -44,4 +45,5 @@ golang.org/x/crypto e74b0352e547e3830f8471e7ae9609239c52606f
 golang.org/x/net 7c302550d18cede73764b1d19a661d70e29b725d
 golang.org/x/text 601048ad6acbab6cedd582db09b8c4839ff25b15
 golang.org/x/tools 2b5f3dc0de528767ab621dce83fffeed88f4452e
+google.golang.org/grpc f31066359017b605a0c7ad4d969508047a65a99b
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de

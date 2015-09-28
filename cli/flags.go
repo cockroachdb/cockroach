@@ -238,6 +238,7 @@ func initFlags(ctx *server.Context) {
 		f.BoolVar(&context.EphemeralSingleNode, "dev", isEnvRoachDev, flagUsage["dev"])
 
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
+		f.Var(&ctx.Protocol, "protocol", "")
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, flagUsage["insecure"])
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
 	}

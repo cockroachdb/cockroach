@@ -37,6 +37,8 @@ const (
 	rpcsScheme      = "rpcs"
 	httpScheme      = "http"
 	httpsScheme     = "https"
+	grpcScheme      = "grpc"
+	grpcsScheme     = "grpcs"
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
@@ -93,6 +95,14 @@ func (ctx *Context) HTTPRequestScheme() string {
 		return httpScheme
 	}
 	return httpsScheme
+}
+
+// GRPCRequestScheme returns "http" or "https" based on the value of Insecure.
+func (ctx *Context) GRPCRequestScheme() string {
+	if ctx.Insecure {
+		return grpcScheme
+	}
+	return grpcsScheme
 }
 
 // GetClientTLSConfig returns the context client TLS config, initializing it if needed.

@@ -108,3 +108,7 @@ message Response {
   // request.
   repeated Result results = 2 [(gogoproto.nullable) = false];
 }
+
+service SqlService {
+  rpc Execute (Request) returns (Response);
+}

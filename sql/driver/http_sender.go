@@ -61,11 +61,11 @@ func newHTTPSender(server string, ctx *base.Context, retryOpts retry.Options) (*
 // Send sends call to Cockroach via an HTTP post. HTTP response codes
 // which are retryable are retried with backoff in a loop using the
 // default retry options.
-func (s *httpSender) Send(args Request) (Response, error) {
+func (s *httpSender) Send(args Request) (*Response, error) {
 	// Prepare the args.
 	if args.GetUser() == "" {
 		args.User = s.ctx.Context.User
 	}
 	reply := args.CreateReply()
-	return reply, httpPost(s.ctx, &args, &reply, args.Method())
+	return &reply, httpPost(s.ctx, &args, &reply, args.Method())
 }

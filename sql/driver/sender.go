@@ -41,7 +41,7 @@ var defaultRetryOptions = retry.Options{
 type Sender interface {
 	// Send dispatches a `Request` and returns the resulting `Response` with an
 	// optional transmission error.
-	Send(Request) (Response, error)
+	Send(Request) (*Response, error)
 }
 
 // NewSenderFunc creates a new sender for the registered scheme.

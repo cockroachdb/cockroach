@@ -47,6 +47,40 @@ const (
 	defaultAllowRebalancing   = false
 )
 
+//go:generate stringer -type Protocol
+
+// Protocol is an enum of network protocols.
+type Protocol int
+
+// Set implements the pflag.Value interface.
+func (p *Protocol) Set(protocol string) error {
+	protocol = strings.ToUpper(protocol)
+
+	for i := RPC; i < endSentinel; i++ {
+		if i.String() == protocol {
+			*p = i
+			return nil
+		}
+	}
+
+	return util.Errorf("unknown protocol %q", protocol)
+}
+
+// Type implements the pflag.Value interface.
+func (*Protocol) Type() string {
+	return "string"
+}
+
+// Protocols we support.
+const (
+	_ Protocol = iota
+	RPC
+	HTTP
+	GRPC
+
+	endSentinel
+)
+
 // Context holds parameters needed to setup a server.
 // Calling "cli".initFlags(ctx *Context) will initialize Context using
 // command flags. Keep in sync with "cli/flags.go".
@@ -56,6 +90,9 @@ type Context struct {
 
 	// Addr is the host:port to bind for HTTP/RPC traffic.
 	Addr string
+
+	// The protocol specified at the command line.
+	Protocol Protocol
 
 	// Stores is specified to enable durable key-value storage.
 	// Memory-backed key value stores may be optionally specified
@@ -129,6 +166,20 @@ type Context struct {
 	// TimeUntilStoreDead is the time after which if there is no new gossiped
 	// information about a store, it is considered dead.
 	TimeUntilStoreDead time.Duration
+}
+
+// RequestScheme returns the preferred request scheme.
+func (ctx *Context) RequestScheme() string {
+	switch ctx.Protocol {
+	case RPC:
+		return ctx.RPCRequestScheme()
+	case HTTP:
+		return ctx.HTTPRequestScheme()
+	case GRPC:
+		return ctx.GRPCRequestScheme()
+	default:
+		panic(fmt.Sprintf("unknown protocol %s", ctx.Protocol))
+	}
 }
 
 // NewContext returns a Context with default values.

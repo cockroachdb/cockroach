@@ -23,9 +23,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
@@ -76,6 +80,8 @@ type Server struct {
 	tsServer      *ts.Server
 	raftTransport multiraft.Transport
 	stopper       *stop.Stopper
+
+	grpcServer *grpc.Server
 }
 
 // NewServer creates a Server from a server.Context.
@@ -137,7 +143,47 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
-	s.sqlServer = sql.MakeHTTPServer(&s.ctx.Context, *s.db, s.gossip)
+	executor := sql.NewExecutor(*s.db, s.gossip)
+	s.sqlServer = sql.MakeHTTPServer(&s.ctx.Context, executor)
+
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	if port != "0" {
+		i, err := strconv.Atoi(port)
+		if err != nil {
+			return nil, err
+		}
+		port = strconv.Itoa(i + 1)
+	}
+
+	lis, err := net.Listen("tcp", net.JoinHostPort(host, port))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	var opts []grpc.ServerOption
+
+	tls, err := rpcContext.GetServerTLSConfig()
+	if err != nil {
+		return nil, err
+	}
+	if tls != nil {
+		opts = append(opts, grpc.Creds(credentials.NewTLS(tls)))
+	}
+
+	s.grpcServer = grpc.NewServer(opts...)
+	driver.RegisterSqlServiceServer(s.grpcServer, sql.MakeGRPCServer(&s.ctx.Context, executor))
+
+	go func() {
+		_ = s.grpcServer.Serve(lis)
+	}()
+	s.stopper.AddCloser(stop.CloserFn(s.grpcServer.Stop))
+	s.stopper.AddCloser(stop.CloserFn(func() {
+		_ = lis.Close()
+	}))
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{

@@ -21,6 +21,11 @@ import math "math"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
+import (
+	context "golang.org/x/net/context"
+	grpc "google.golang.org/grpc"
+)
+
 import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -561,6 +566,67 @@ func (m *Response_Result_Rows_Row) GetValues() []Datum {
 		return m.Values
 	}
 	return nil
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// Client API for SqlService service
+
+type SqlServiceClient interface {
+	Execute(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error)
+}
+
+type sqlServiceClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewSqlServiceClient(cc *grpc.ClientConn) SqlServiceClient {
+	return &sqlServiceClient{cc}
+}
+
+func (c *sqlServiceClient) Execute(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error) {
+	out := new(Response)
+	err := grpc.Invoke(ctx, "/cockroach.driver.SqlService/Execute", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for SqlService service
+
+type SqlServiceServer interface {
+	Execute(context.Context, *Request) (*Response, error)
+}
+
+func RegisterSqlServiceServer(s *grpc.Server, srv SqlServiceServer) {
+	s.RegisterService(&_SqlService_serviceDesc, srv)
+}
+
+func _SqlService_Execute_Handler(srv interface{}, ctx context.Context, codec grpc.Codec, buf []byte) (interface{}, error) {
+	in := new(Request)
+	if err := codec.Unmarshal(buf, in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(SqlServiceServer).Execute(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+var _SqlService_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "cockroach.driver.SqlService",
+	HandlerType: (*SqlServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Execute",
+			Handler:    _SqlService_Execute_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{},
 }
 
 func (m *Datum) Marshal() (data []byte, err error) {
