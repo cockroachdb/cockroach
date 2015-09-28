@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 )
 
 func init() {

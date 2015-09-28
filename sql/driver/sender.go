@@ -19,12 +19,12 @@ package driver
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
@@ -72,11 +72,4 @@ func newSender(u *url.URL, ctx *base.Context) (Sender, error) {
 		return nil, fmt.Errorf("no sender registered for \"%s\"", u.Scheme)
 	}
 	return f(u, ctx, defaultRetryOptions)
-}
-
-func init() {
-	// Register a sender for the empty scheme which return a nil sender.
-	RegisterSender("", func(*url.URL, *base.Context, retry.Options) (Sender, error) {
-		return nil, nil
-	})
 }

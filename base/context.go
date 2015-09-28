@@ -19,13 +19,13 @@ package base
 
 import (
 	"crypto/tls"
+	"log"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Base context defaults.
@@ -113,18 +113,13 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 	}
 
 	if ctx.Certs != "" {
-		if log.V(1) {
-			log.Infof("setting up TLS from certificates directory: %s", ctx.Certs)
-		}
 		cfg, err := security.LoadClientTLSConfig(ctx.Certs, ctx.User)
 		if err != nil {
 			return nil, util.Errorf("error setting up client TLS config: %s", err)
 		}
 		ctx.clientTLSConfig = cfg
 	} else {
-		if log.V(1) {
-			log.Infof("no certificates directory specified: using insecure TLS")
-		}
+		log.Println("no certificates directory specified: using insecure TLS")
 		ctx.clientTLSConfig = security.LoadInsecureClientTLSConfig()
 	}
 
@@ -151,9 +146,6 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 		return nil, util.Errorf("--insecure=false, but --certs is empty. We need a certs directory")
 	}
 
-	if log.V(1) {
-		log.Infof("setting up TLS from certificates directory: %s", ctx.Certs)
-	}
 	cfg, err := security.LoadServerTLSConfig(ctx.Certs, ctx.User)
 	if err != nil {
 		return nil, util.Errorf("error setting up server TLS config: %s", err)
@@ -174,7 +166,7 @@ func (ctx *Context) GetHTTPClient() (*http.Client, error) {
 	}
 
 	if ctx.Insecure {
-		log.Warning("running in insecure mode, this is strongly discouraged. See --insecure and --certs.")
+		log.Println("running in insecure mode, this is strongly discouraged. See --insecure and --certs.")
 	}
 	tlsConfig, err := ctx.GetClientTLSConfig()
 	if err != nil {

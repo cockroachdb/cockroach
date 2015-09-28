@@ -19,12 +19,10 @@ package security
 
 import (
 	"crypto/tls"
-	"fmt"
-	"net/http"
+	"log"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -35,18 +33,11 @@ const (
 	RootUser = "root"
 )
 
-// LogRequestCertificates examines a http request and logs a summary of the TLS config.
-func LogRequestCertificates(r *http.Request) {
-	LogTLSState(fmt.Sprintf("%s %s", r.Method, r.URL), r.TLS)
-}
-
 // LogTLSState logs information about TLS state in the form:
 // "<method>: perr certs: [<Subject.CommonName>...], chain: [[<CommonName>...][..]]"
 func LogTLSState(method string, tlsState *tls.ConnectionState) {
 	if tlsState == nil {
-		if log.V(3) {
-			log.Infof("%s: no TLS", method)
-		}
+		log.Printf("%s: no TLS\n", method)
 		return
 	}
 
@@ -62,9 +53,7 @@ func LogTLSState(method string, tlsState *tls.ConnectionState) {
 		}
 		verifiedChain = append(verifiedChain, strings.Join(subjects, ","))
 	}
-	if log.V(3) {
-		log.Infof("%s: peer certs: %v, chain: %v", method, peerCerts, verifiedChain)
-	}
+	log.Printf("%s: peer certs: %v, chain: %v\n", method, peerCerts, verifiedChain)
 }
 
 // GetCertificateUser extract the username from a client certificate.
