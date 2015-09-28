@@ -47,14 +47,9 @@ want to run them from the local install using one of:
 
 If you're adding an npm dependency, you'll need to run:
 ```
-	node_modules/.bin/npm install --save <myAwesomeDep> && node_modules/.bin/npm shrinkwrap
+	node_modules/.bin/npm install --save <myAwesomeDep> && node_modules/.bin/shonkwrap
 ```
 
-The `--save` modifier and `shrinkwrap` invocation above are necessary to properly
+The `--save` modifier and `shonkwrap` invocation above are necessary to properly
 lock down dependencies for other developers on the project, so make sure you don't
 elide them!
-
-Also note that the `npm` invocation above uses a local `npm` rather than the
-global one. Please be sure to use the local `npm` as the shrinkwrap format
-often changes; these cosmetic differences may hold up your PR, so best to just
-avoid them.
