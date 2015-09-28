@@ -209,10 +209,10 @@ func TestSumRateInterpolation(t *testing.T) {
 
 // assertQuery generates a query result from the local test model and compares
 // it against the query returned from the server.
-func (tm *testModel) assertQuery(name string, agg *proto.TimeSeriesQueryAggregator,
+func (tm *testModel) assertQuery(name string, agg *TimeSeriesQueryAggregator,
 	r Resolution, start, end int64, expectedDatapointCount int, expectedSourceCount int) {
 	// Query the actual server.
-	q := proto.TimeSeriesQueryRequest_Query{
+	q := TimeSeriesQueryRequest_Query{
 		Name:       name,
 		Aggregator: agg,
 	}
@@ -228,7 +228,7 @@ func (tm *testModel) assertQuery(name string, agg *proto.TimeSeriesQueryAggregat
 	}
 
 	// Construct an expected result for comparison.
-	var expectedDatapoints []*proto.TimeSeriesDatapoint
+	var expectedDatapoints []*TimeSeriesDatapoint
 	expectedSources := make([]string, 0, 0)
 	dataSpans := make(map[string]*dataSpan)
 
@@ -272,12 +272,12 @@ func (tm *testModel) assertQuery(name string, agg *proto.TimeSeriesQueryAggregat
 	for iters.isValid() {
 		var value float64
 		switch q.GetAggregator() {
-		case proto.TimeSeriesQueryAggregator_AVG:
+		case TimeSeriesQueryAggregator_AVG:
 			value = iters.avg()
-		case proto.TimeSeriesQueryAggregator_AVG_RATE:
+		case TimeSeriesQueryAggregator_AVG_RATE:
 			value = iters.dAvg()
 		}
-		expectedDatapoints = append(expectedDatapoints, &proto.TimeSeriesDatapoint{
+		expectedDatapoints = append(expectedDatapoints, &TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
 			Value:          value,
 		})
@@ -302,10 +302,10 @@ func TestQuery(t *testing.T) {
 	tm.Start()
 	defer tm.Stop()
 
-	tm.storeTimeSeriesData(resolution1ns, []proto.TimeSeriesData{
+	tm.storeTimeSeriesData(resolution1ns, []TimeSeriesData{
 		{
 			Name: "test.metric",
-			Datapoints: []*proto.TimeSeriesDatapoint{
+			Datapoints: []*TimeSeriesDatapoint{
 				datapoint(1, 100),
 				datapoint(5, 200),
 				datapoint(15, 300),
@@ -321,11 +321,11 @@ func TestQuery(t *testing.T) {
 	tm.assertQuery("test.metric", nil, resolution1ns, 0, 60, 7, 1)
 
 	// Verify across multiple sources
-	tm.storeTimeSeriesData(resolution1ns, []proto.TimeSeriesData{
+	tm.storeTimeSeriesData(resolution1ns, []TimeSeriesData{
 		{
 			Name:   "test.multimetric",
 			Source: "source1",
-			Datapoints: []*proto.TimeSeriesDatapoint{
+			Datapoints: []*TimeSeriesDatapoint{
 				datapoint(1, 100),
 				datapoint(15, 300),
 				datapoint(17, 500),
@@ -335,7 +335,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.multimetric",
 			Source: "source2",
-			Datapoints: []*proto.TimeSeriesDatapoint{
+			Datapoints: []*TimeSeriesDatapoint{
 				datapoint(5, 100),
 				datapoint(16, 300),
 				datapoint(22, 500),
@@ -347,9 +347,9 @@ func TestQuery(t *testing.T) {
 	tm.assertKeyCount(11)
 	tm.assertModelCorrect()
 	tm.assertQuery("test.multimetric", nil, resolution1ns, 0, 90, 8, 2)
-	tm.assertQuery("test.multimetric", proto.TimeSeriesQueryAggregator_AVG.Enum(),
+	tm.assertQuery("test.multimetric", TimeSeriesQueryAggregator_AVG.Enum(),
 		resolution1ns, 0, 90, 8, 2)
-	tm.assertQuery("test.multimetric", proto.TimeSeriesQueryAggregator_AVG_RATE.Enum(),
+	tm.assertQuery("test.multimetric", TimeSeriesQueryAggregator_AVG_RATE.Enum(),
 		resolution1ns, 0, 90, 8, 2)
 	tm.assertQuery("nodata", nil, resolution1ns, 0, 90, 0, 0)
 }

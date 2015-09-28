@@ -26,12 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-// byTimeAndName is a slice of proto.TimeSeriesData.
-type byTimeAndName []proto.TimeSeriesData
+// byTimeAndName is a slice of ts.TimeSeriesData.
+type byTimeAndName []ts.TimeSeriesData
 
 // implement sort.Interface for byTimeAndName
 func (a byTimeAndName) Len() int      { return len(a) }
@@ -202,10 +203,10 @@ func TestNodeStatusRecorder(t *testing.T) {
 		Method: proto.Scan,
 	})
 
-	generateNodeData := func(nodeId int, name string, time, val int64) proto.TimeSeriesData {
-		return proto.TimeSeriesData{
+	generateNodeData := func(nodeId int, name string, time, val int64) ts.TimeSeriesData {
+		return ts.TimeSeriesData{
 			Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, proto.StoreID(nodeId)),
-			Datapoints: []*proto.TimeSeriesDatapoint{
+			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: time,
 					Value:          float64(val),
@@ -214,10 +215,10 @@ func TestNodeStatusRecorder(t *testing.T) {
 		}
 	}
 
-	generateStoreData := func(storeId int, name string, time, val int64) proto.TimeSeriesData {
-		return proto.TimeSeriesData{
+	generateStoreData := func(storeId int, name string, time, val int64) ts.TimeSeriesData {
+		return ts.TimeSeriesData{
 			Name: fmt.Sprintf(storeTimeSeriesNameFmt, name, proto.StoreID(storeId)),
-			Datapoints: []*proto.TimeSeriesDatapoint{
+			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: time,
 					Value:          float64(val),
@@ -229,7 +230,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 	// Generate the expected return value of recorder.GetTimeSeriesData(). This
 	// data was manually generated, but is based on a simple multiple of the
 	// "stats" collection above.
-	expected := []proto.TimeSeriesData{
+	expected := []ts.TimeSeriesData{
 		// Store 1 should have accumulated 3x stats from two ranges.
 		generateStoreData(1, "livebytes", 100, 3),
 		generateStoreData(1, "keybytes", 100, 6),

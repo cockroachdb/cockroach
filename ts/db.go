@@ -55,7 +55,7 @@ func (db *DB) PollSource(source DataSource, frequency time.Duration, r Resolutio
 
 // A DataSource can be queryied for a slice of time series data.
 type DataSource interface {
-	GetTimeSeriesData() []proto.TimeSeriesData
+	GetTimeSeriesData() []TimeSeriesData
 }
 
 // poller maintains information for a polling process started by PollSource().
@@ -101,7 +101,7 @@ func (p *poller) poll() {
 
 // StoreData writes the supplied time series data to the cockroach server.
 // Stored data will be sampled at the supplied resolution.
-func (db *DB) StoreData(r Resolution, data []proto.TimeSeriesData) error {
+func (db *DB) StoreData(r Resolution, data []TimeSeriesData) error {
 	var kvs []proto.KeyValue
 
 	// Process data collection: data is converted to internal format, and a key

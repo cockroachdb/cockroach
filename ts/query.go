@@ -395,8 +395,8 @@ func (is unionIterator) dAvg() float64 {
 // returned datapoint will represent the sum of datapoints from all sources at
 // the same time. The returned string slices contains a list of all sources for
 // the metric which were aggregated to produce the result.
-func (db *DB) Query(query proto.TimeSeriesQueryRequest_Query, r Resolution,
-	startNanos, endNanos int64) ([]*proto.TimeSeriesDatapoint, []string, error) {
+func (db *DB) Query(query TimeSeriesQueryRequest_Query, r Resolution,
+	startNanos, endNanos int64) ([]*TimeSeriesDatapoint, []string, error) {
 	// Normalize startNanos and endNanos the nearest SampleDuration boundary.
 	startNanos -= startNanos % r.SampleDuration()
 
@@ -432,7 +432,7 @@ func (db *DB) Query(query proto.TimeSeriesQueryRequest_Query, r Resolution,
 		}
 	}
 
-	var responseData []*proto.TimeSeriesDatapoint
+	var responseData []*TimeSeriesDatapoint
 	sources := make([]string, 0, len(sourceSpans))
 
 	// Create an interpolatingIterator for each dataSpan.
@@ -446,15 +446,15 @@ func (db *DB) Query(query proto.TimeSeriesQueryRequest_Query, r Resolution,
 	// the response for each value.
 	var valueFn func() float64
 	switch query.GetAggregator() {
-	case proto.TimeSeriesQueryAggregator_AVG:
+	case TimeSeriesQueryAggregator_AVG:
 		valueFn = iters.avg
-	case proto.TimeSeriesQueryAggregator_AVG_RATE:
+	case TimeSeriesQueryAggregator_AVG_RATE:
 		valueFn = iters.dAvg
 	}
 
 	iters.init()
 	for iters.isValid() && iters.timestamp() <= endNanos {
-		responseData = append(responseData, &proto.TimeSeriesDatapoint{
+		responseData = append(responseData, &TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
 			Value:          valueFn(),
 		})

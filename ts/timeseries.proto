@@ -16,8 +16,8 @@
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 syntax = "proto2";
-package cockroach.proto;
-option go_package = "proto";
+package cockroach.ts;
+option go_package = "ts";
 
 import "gogoproto/gogo.proto";
 
