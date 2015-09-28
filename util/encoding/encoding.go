@@ -52,16 +52,6 @@ func DecodeUint32(b []byte) ([]byte, uint32, error) {
 	return b[4:], v, nil
 }
 
-// MustDecodeUint32Decreasing is a wrapper around DecodeUint32Decreasing which
-// panics if an error occurs.
-func MustDecodeUint32Decreasing(b []byte) ([]byte, uint32) {
-	b, u, err := DecodeUint32Decreasing(b)
-	if err != nil {
-		panic(err)
-	}
-	return b, u
-}
-
 // DecodeUint32Decreasing decodes a uint32 value which was encoded
 // using EncodeUint32Decreasing.
 func DecodeUint32Decreasing(b []byte) ([]byte, uint32, error) {
@@ -96,16 +86,6 @@ func DecodeUint64(b []byte) ([]byte, uint64, error) {
 		(uint64(b[4]) << 24) | (uint64(b[5]) << 16) |
 		(uint64(b[6]) << 8) | uint64(b[7])
 	return b[8:], v, nil
-}
-
-// MustDecodeUint64Decreasing is a wrapper around DecodeUint64Decreasing which
-// panics if an error occurs.
-func MustDecodeUint64Decreasing(b []byte) ([]byte, uint64) {
-	b, u, err := DecodeUint64Decreasing(b)
-	if err != nil {
-		panic(err)
-	}
-	return b, u
 }
 
 // DecodeUint64Decreasing decodes a uint64 value which was encoded
@@ -158,16 +138,6 @@ func EncodeVarint(b []byte, v int64) []byte {
 // reverse order, from largest to smallest.
 func EncodeVarintDecreasing(b []byte, v int64) []byte {
 	return EncodeVarint(b, ^v)
-}
-
-// MustDecodeVarint is a wrapper around DecodeVarint which panics if an error
-// occurs.
-func MustDecodeVarint(b []byte) ([]byte, int64) {
-	b, i, err := DecodeVarint(b)
-	if err != nil {
-		panic(err)
-	}
-	return b, i
 }
 
 // DecodeVarint decodes a varint encoded int64 from the input
@@ -278,16 +248,6 @@ func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
 		return append(b, intMin, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
-}
-
-// MustDecodeUvarint is a wrapper around DecodeUvarint which panics if an error
-// occurs.
-func MustDecodeUvarint(b []byte) ([]byte, uint64) {
-	b, u, err := DecodeUvarint(b)
-	if err != nil {
-		panic(err)
-	}
-	return b, u
 }
 
 // DecodeUvarint decodes a varint encoded uint64 from the input
@@ -424,16 +384,6 @@ func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte, error) {
 
 		b = b[i+2:]
 	}
-}
-
-// MustDecodeBytes is a wrapper around DecodeBytes which panics if an error
-// occurs.
-func MustDecodeBytes(b []byte, r []byte) ([]byte, []byte) {
-	b, r, err := DecodeBytes(b, r)
-	if err != nil {
-		panic(err)
-	}
-	return b, r
 }
 
 // DecodeBytes decodes a []byte value from the input buffer which was

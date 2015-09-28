@@ -591,7 +591,10 @@ func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey,
 			return nil, nil, err
 		}
 		if valueKey != nil {
-			_, ts, _ := MVCCDecodeKey(valueKey)
+			_, ts, _, err := MVCCDecodeKey(valueKey)
+			if err != nil {
+				return nil, nil, err
+			}
 			if timestamp.Less(ts) {
 				// Third case: Our read timestamp is sufficiently behind the newest
 				// value, but there is another previous write with the same issues
@@ -622,7 +625,10 @@ func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey,
 		return nil, ignoredIntents, nil
 	}
 
-	_, ts, isValue := MVCCDecodeKey(valueKey)
+	_, ts, isValue, err := MVCCDecodeKey(valueKey)
+	if err != nil {
+		return nil, nil, err
+	}
 	if !isValue {
 		return nil, nil, util.Errorf("expected scan to versioned value reading key %q; got %q", key, valueKey)
 	}
@@ -972,7 +978,10 @@ func getScanMetaKey(iter Iterator, encEndKey proto.EncodedKey) (proto.Key, proto
 	if bytes.Compare(metaKey, encEndKey) >= 0 {
 		return nil, nil, iter.Error()
 	}
-	key, _, isValue := MVCCDecodeKey(metaKey)
+	key, _, isValue, err := MVCCDecodeKey(metaKey)
+	if err != nil {
+		return nil, nil, err
+	}
 	if isValue {
 		return nil, nil, util.Errorf("expected an MVCC metadata key: %q", metaKey)
 	}
@@ -988,7 +997,10 @@ func getReverseScanMetaKey(iter Iterator, encEndKey proto.EncodedKey) (proto.Key
 
 	// The row with oldest version will be got by seeking reversely. We use the
 	// key of this row to get the MVCC metadata key.
-	key, _, isValue := MVCCDecodeKey(metaKey)
+	key, _, isValue, err := MVCCDecodeKey(metaKey)
+	if err != nil {
+		return nil, nil, err
+	}
 	// If this isn't the meta key yet, scan again to get the meta key.
 	// TODO(tschottdorf): can we save any work here or leverage
 	// getScanMetaKey() above after doing the Seek() below?
@@ -999,7 +1011,10 @@ func getReverseScanMetaKey(iter Iterator, encEndKey proto.EncodedKey) (proto.Key
 		}
 
 		metaKey = iter.Key()
-		_, _, isValue = MVCCDecodeKey(metaKey)
+		_, _, isValue, err = MVCCDecodeKey(metaKey)
+		if err != nil {
+			return nil, nil, err
+		}
 		if isValue {
 			return nil, nil, util.Errorf("expected an MVCC metadata key: %q", metaKey)
 		}
@@ -1323,7 +1338,10 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 		// Clear stat counters attributable to the intent we're aborting.
 		updateStatsOnAbort(ms, key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, origAgeSeconds, 0)
 	} else {
-		_, ts, isValue := MVCCDecodeKey(kvs[0].Key)
+		_, ts, isValue, err := MVCCDecodeKey(kvs[0].Key)
+		if err != nil {
+			return err
+		}
 		if !isValue {
 			return util.Errorf("expected an MVCC value key: %s", kvs[0].Key)
 		}
@@ -1378,7 +1396,10 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey proto
 			break
 		}
 
-		currentKey, _, isValue := MVCCDecodeKey(kvs[0].Key)
+		currentKey, _, isValue, err := MVCCDecodeKey(kvs[0].Key)
+		if err != nil {
+			return 0, err
+		}
 		if isValue {
 			return 0, util.Errorf("expected an MVCC metadata key: %s", kvs[0].Key)
 		}
@@ -1437,7 +1458,10 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []proto.GCRequest_GCK
 		// Note that we start the for loop by iterating once to move past
 		// the metadata key.
 		for iter.Next(); iter.Valid(); iter.Next() {
-			_, ts, isValue := MVCCDecodeKey(iter.Key())
+			_, ts, isValue, err := MVCCDecodeKey(iter.Key())
+			if err != nil {
+				return err
+			}
 			if !isValue {
 				break
 			}
@@ -1524,7 +1548,10 @@ func MVCCFindSplitKey(engine Engine, rangeID proto.RangeID, key, endKey proto.Ke
 		done := !bestSplitKey.Equal(encStartKey) && diff > bestSplitDiff
 
 		// Add this key/value to the size scanned so far.
-		_, _, isValue := MVCCDecodeKey(kv.Key)
+		_, _, isValue, err := MVCCDecodeKey(kv.Key)
+		if err != nil {
+			return false, err
+		}
 		if isValue {
 			sizeSoFar += mvccVersionTimestampSize + int64(len(kv.Value))
 		} else {
@@ -1542,7 +1569,10 @@ func MVCCFindSplitKey(engine Engine, rangeID proto.RangeID, key, endKey proto.Ke
 
 	// The key is an MVCC key, so to avoid corrupting MVCC we get the
 	// associated mvcc metadata key, which is fine to split in front of.
-	humanKey, _, _ := MVCCDecodeKey(bestSplitKey)
+	humanKey, _, _, err := MVCCDecodeKey(bestSplitKey)
+	if err != nil {
+		return nil, err
+	}
 	return humanKey, nil
 }
 
@@ -1560,7 +1590,10 @@ func MVCCComputeStats(iter Iterator, nowNanos int64) (MVCCStats, error) {
 	meta := &MVCCMetadata{}
 
 	for ; iter.Valid(); iter.Next() {
-		key, ts, isValue := MVCCDecodeKey(iter.Key())
+		key, ts, isValue, err := MVCCDecodeKey(iter.Key())
+		if err != nil {
+			return ms, err
+		}
 		_, sys := updateStatsForKey(&ms, key)
 		if !isValue {
 			totalBytes := int64(len(iter.Value())) + int64(len(iter.Key()))
@@ -1662,18 +1695,28 @@ func mvccEncodeTimestamp(key proto.EncodedKey, timestamp proto.Timestamp) proto.
 // exactly 12 trailing bytes and they're decoded into a timestamp.
 // The decoded key, timestamp and true are returned to indicate the
 // key is for an MVCC versioned value.
-func MVCCDecodeKey(encodedKey proto.EncodedKey) (proto.Key, proto.Timestamp, bool) {
-	tsBytes, key := encoding.MustDecodeBytes(encodedKey, nil)
+func MVCCDecodeKey(encodedKey proto.EncodedKey) (proto.Key, proto.Timestamp, bool, error) {
+	tsBytes, key, err := encoding.DecodeBytes(encodedKey, nil)
+	if err != nil {
+		return nil, proto.Timestamp{}, false, err
+	}
 	if len(tsBytes) == 0 {
-		return key, proto.Timestamp{}, false
+		return key, proto.Timestamp{}, false, nil
 	} else if len(tsBytes) != 12 {
-		panic(fmt.Sprintf("there should be 12 bytes for encoded timestamp: %q", tsBytes))
+		return nil, proto.Timestamp{}, false,
+			util.Errorf("there should be 12 bytes for encoded timestamp: %q", tsBytes)
 	}
 	var walltime uint64
 	var logical uint32
-	tsBytes, walltime = encoding.MustDecodeUint64Decreasing(tsBytes)
-	tsBytes, logical = encoding.MustDecodeUint32Decreasing(tsBytes)
-	return key, proto.Timestamp{WallTime: int64(walltime), Logical: int32(logical)}, true
+	tsBytes, walltime, err = encoding.DecodeUint64Decreasing(tsBytes)
+	if err != nil {
+		return nil, proto.Timestamp{}, false, err
+	}
+	tsBytes, logical, err = encoding.DecodeUint32Decreasing(tsBytes)
+	if err != nil {
+		return nil, proto.Timestamp{}, false, err
+	}
+	return key, proto.Timestamp{WallTime: int64(walltime), Logical: int32(logical)}, true, nil
 }
 
 // willOverflow returns true iff adding both inputs would under- or overflow

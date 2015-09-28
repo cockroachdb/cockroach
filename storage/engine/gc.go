@@ -59,7 +59,11 @@ func (gc *GarbageCollector) Filter(keys []proto.EncodedKey, values [][]byte) pro
 	delTS := proto.ZeroTimestamp
 	survivors := false
 	for i, key := range keys {
-		_, ts, isValue := MVCCDecodeKey(key)
+		_, ts, isValue, err := MVCCDecodeKey(key)
+		if err != nil {
+			log.Errorf("unable to decode MVCC key: %q: %v", key, err)
+			return proto.ZeroTimestamp
+		}
 		if !isValue {
 			log.Errorf("unexpected MVCC metadata encountered: %q", key)
 			return proto.ZeroTimestamp
@@ -88,7 +92,13 @@ func (gc *GarbageCollector) Filter(keys []proto.EncodedKey, values [][]byte) pro
 	// If there are no non-deleted survivors, return timestamp of first key
 	// to delete all entries.
 	if !survivors {
-		_, ts, _ := MVCCDecodeKey(keys[0])
+		_, ts, _, err := MVCCDecodeKey(keys[0])
+		if err != nil {
+			// TODO(tschottdorf): Perhaps we should be propagating an error
+			// (e.g. ReplicaCorruptionError) up to the caller.
+			log.Errorf("unable to decode MVCC key: %q: %v", keys[0], err)
+			return proto.ZeroTimestamp
+		}
 		return ts
 	}
 	return delTS

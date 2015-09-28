@@ -72,7 +72,11 @@ func TestDataKeys(t *testing.T) {
 		tc.timestamp = (tc.timestamp / tc.resolution.KeyDuration()) * tc.resolution.KeyDuration()
 
 		d := tc
-		d.name, d.source, d.resolution, d.timestamp = DecodeDataKey(encoded)
+		var err error
+		d.name, d.source, d.resolution, d.timestamp, err = DecodeDataKey(encoded)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !reflect.DeepEqual(d, tc) {
 			t.Errorf("case %d, decoded values %v did not match expected %v", i, d, tc)
 		}

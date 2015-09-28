@@ -419,7 +419,10 @@ func (db *DB) Query(query TimeSeriesQueryRequest_Query, r Resolution,
 			return nil, nil, err
 		}
 
-		_, source, _, _ := DecodeDataKey(row.Key)
+		_, source, _, _, err := DecodeDataKey(row.Key)
+		if err != nil {
+			return nil, nil, err
+		}
 		if _, ok := sourceSpans[source]; !ok {
 			sourceSpans[source] = &dataSpan{
 				startNanos:  startNanos,
