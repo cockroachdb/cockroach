@@ -322,7 +322,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 	// TxnID (if applicable). Begin a Trace which follows this request.
 	trace := tc.tracer.NewTrace(&ba)
 	defer trace.Finalize()
-	defer trace.Epoch(fmt.Sprintf("sending %s", proto.Batch))()
+	defer trace.Epoch("sending batch")()
 	ctx = tracer.ToCtx(ctx, trace)
 
 	// TODO(tschottdorf): No looping through the batch will be necessary once

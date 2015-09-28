@@ -1062,7 +1062,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 	if rErr == nil && ba.IsWrite() {
 		// Publish update to event feed.
 		// TODO(spencer): we should be sending feed updates for each part
-		// of the batch.
+		// of the batch. In particular, stats should be reported per-command.
 		r.rm.EventFeed().updateRange(r, proto.Batch, &ms)
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()

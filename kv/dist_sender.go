@@ -368,8 +368,9 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replic
 		return &proto.BatchResponse{}
 	}
 
-	replies, err := ds.rpcSend(rpcOpts, "Node."+proto.Batch.String(),
-		addrs, getArgs, getReply, ds.gossip.RPCContext)
+	const method = "Node.Batch"
+	replies, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, getReply,
+		ds.gossip.RPCContext)
 	if err != nil {
 		return nil, err
 	}

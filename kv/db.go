@@ -18,8 +18,6 @@
 package kv
 
 import (
-	"fmt"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -58,7 +56,8 @@ func NewDBServer(ctx *base.Context, sender client.Sender) *DBServer {
 
 // RegisterRPC registers the RPC endpoints.
 func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
-	return rpcServer.Register(fmt.Sprintf("Server.%s", proto.Batch), s.executeCmd, &proto.BatchRequest{})
+	const method = "Server.Batch"
+	return rpcServer.Register(method, s.executeCmd, &proto.BatchRequest{})
 }
 
 // executeCmd interprets the given message as a *proto.BatchRequest and sends it

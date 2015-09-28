@@ -223,7 +223,8 @@ func (n *Node) initNodeID(id proto.NodeID) {
 func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	attrs proto.Attributes, stopper *stop.Stopper) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
-	if err := rpcServer.Register("Node."+proto.Batch.String(), n.executeCmd, &proto.BatchRequest{}); err != nil {
+	const method = "Node.Batch"
+	if err := rpcServer.Register(method, n.executeCmd, &proto.BatchRequest{}); err != nil {
 		log.Fatalf("unable to register node service with RPC server: %s", err)
 	}
 

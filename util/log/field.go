@@ -26,7 +26,6 @@ const (
 	NodeID   Field = iota // the ID of the node
 	StoreID               // the ID of the store
 	RangeID               // the ID of the range
-	Method                // the method being executed
 	Key                   // a proto.Key related to an event.
 	maxField              // internal field bounding the range of allocated fields
 )

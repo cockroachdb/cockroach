@@ -128,7 +128,6 @@ func (ls *LocalSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.
 	}
 
 	ctx = log.Add(ctx,
-		log.Method, proto.Batch, // TODO(tschottdorf): method is always `Batch`.
 		log.Key, ba.Key,
 		log.RangeID, ba.RangeID)
 

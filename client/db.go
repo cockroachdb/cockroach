@@ -478,7 +478,7 @@ func (db *DB) send(reqs ...proto.Request) (*proto.BatchResponse, *proto.Error) {
 	br, pErr := db.sender.Send(context.TODO(), ba)
 	if pErr != nil {
 		if log.V(1) {
-			log.Infof("failed %s: %s", proto.Batch, pErr)
+			log.Infof("failed batch: %s", pErr)
 		}
 		return nil, pErr
 	}

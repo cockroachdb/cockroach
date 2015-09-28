@@ -633,7 +633,7 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	// Define our rpcSend stub which returns success on the second address.
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-		if method == "Node."+proto.Batch.String() {
+		if method == "Node.Batch" {
 			// reply from first address failed
 			_ = getReply()
 			// reply from second address succeed
@@ -723,7 +723,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		{Key: proto.Key("c"), Value: proto.Value{Bytes: []byte("2")}},
 	}
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-		if method != "Node."+proto.Batch.String() {
+		if method != "Node.Batch" {
 			t.Fatalf("unexpected method:%s", method)
 		}
 		header := getArgs(testAddress).(*proto.BatchRequest).RequestHeader
