@@ -21,8 +21,8 @@ import (
 	"strconv"
 	"unsafe"
 
-	// Link against the snappy library. This is explicit because this Go
-	// library does not export any Go symbols.
+	// Link against the snappy library. This is explicit because we are
+	// not using any Go symbols from this library.
 	_ "github.com/cockroachdb/c-snappy"
 	"github.com/gogo/protobuf/proto"
 )
