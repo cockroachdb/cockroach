@@ -483,7 +483,7 @@ func (r *Replica) ReplicaDescriptor(replicaID proto.ReplicaID) (proto.ReplicaDes
 		return r.pendingReplica.value, nil
 	}
 	return proto.ReplicaDescriptor{}, util.Errorf("replica %d not found in range %d",
-		replicaID, r.Desc().RangeID)
+		replicaID, desc.RangeID)
 }
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
@@ -957,7 +957,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba *proto.BatchRequest
 		return errChan, pendingCmd
 	}
 	raftCmd := proto.RaftCommand{
-		RangeID:       r.Desc().RangeID,
+		RangeID:       desc.RangeID,
 		OriginReplica: *replica,
 		Cmd:           *ba,
 	}

@@ -33,7 +33,7 @@ import (
 )
 
 // The Transport interface is supplied by the application to manage communication with
-// other nodes. It is responsible for mapping from IDs to some communication channel
+// other nodes. It is responsible for mapping from IDs to some communication channel.
 type Transport interface {
 	// Listen informs the Transport of a local store's ID and callback interface.
 	// The Transport should associate the given id with the server object so other Transport's

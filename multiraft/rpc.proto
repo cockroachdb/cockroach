@@ -55,6 +55,6 @@ message ConfChangeContext {
   // proto.EndTransactionRequest).
   optional bytes payload = 2;
 
-  // Replica contians full details about the replica being added or removed.
+  // Replica contains full details about the replica being added or removed.
   optional proto.ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
 }

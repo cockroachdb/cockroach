@@ -88,7 +88,7 @@ type ConfChangeContext struct {
 	// Payload is the application-level command (i.e. an encoded
 	// proto.EndTransactionRequest).
 	Payload []byte `protobuf:"bytes,2,opt,name=payload" json:"payload,omitempty"`
-	// Replica contians full details about the replica being added or removed.
+	// Replica contains full details about the replica being added or removed.
 	Replica cockroach_proto.ReplicaDescriptor `protobuf:"bytes,3,opt,name=replica" json:"replica"`
 }
 

@@ -1111,7 +1111,7 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 		}
 		fromReplica, err = s.ReplicaDescriptor(groupID, proto.ReplicaID(msg.From))
 		if err != nil {
-			log.Warningf("failed to lookup sending replica %d in group %d: %s", msg.From, groupID, err)
+			log.Warningf("failed to lookup sender replica %d in group %d: %s", msg.From, groupID, err)
 			return
 		}
 	}
