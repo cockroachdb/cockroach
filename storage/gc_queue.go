@@ -205,7 +205,11 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
 
 	// Iterate through the keys and values of this replica's range.
 	for ; iter.Valid(); iter.Next() {
-		baseKey, ts, isValue := engine.MVCCDecodeKey(iter.Key())
+		baseKey, ts, isValue, err := engine.MVCCDecodeKey(iter.Key())
+		if err != nil {
+			log.Errorf("unable to decode MVCC key: %q: %v", iter.Key(), err)
+			continue
+		}
 		if !isValue {
 			// Moving to the next key (& values).
 			processKeysAndValues()

@@ -19,10 +19,10 @@ package ts
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -78,31 +78,33 @@ func MakeDataKey(name string, source string, r Resolution, timestamp int64) prot
 }
 
 // DecodeDataKey decodes a time series key into its components.
-func DecodeDataKey(key proto.Key) (string, string, Resolution, int64) {
-	var (
-		name          []byte
-		source        []byte
-		resolutionInt int64
-		timeslot      int64
-		remainder     = key
-	)
-
+func DecodeDataKey(key proto.Key) (string, string, Resolution, int64, error) {
 	// Detect and remove prefix.
+	remainder := key
 	if !bytes.HasPrefix(remainder, keyDataPrefix) {
-		panic(fmt.Sprintf("malformed time series data key %v: improper prefix", key))
+		return "", "", 0, 0, util.Errorf("malformed time series data key %v: improper prefix", key)
 	}
 	remainder = remainder[len(keyDataPrefix):]
 
 	// Decode series name.
-	remainder, name = encoding.MustDecodeBytes(remainder, nil)
+	remainder, name, err := encoding.DecodeBytes(remainder, nil)
+	if err != nil {
+		return "", "", 0, 0, err
+	}
 	// Decode resolution.
-	remainder, resolutionInt = encoding.MustDecodeVarint(remainder)
+	remainder, resolutionInt, err := encoding.DecodeVarint(remainder)
+	if err != nil {
+		return "", "", 0, 0, err
+	}
 	resolution := Resolution(resolutionInt)
 	// Decode timestamp.
-	remainder, timeslot = encoding.MustDecodeVarint(remainder)
+	remainder, timeslot, err := encoding.DecodeVarint(remainder)
+	if err != nil {
+		return "", "", 0, 0, err
+	}
 	timestamp := timeslot * resolution.KeyDuration()
 	// The remaining bytes are the source.
-	source = remainder
+	source := remainder
 
-	return string(name), string(source), resolution, timestamp
+	return string(name), string(source), resolution, timestamp, nil
 }

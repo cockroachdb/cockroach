@@ -98,13 +98,8 @@ func ObjectIDForKey(key proto.Key) (uint32, bool) {
 	}
 
 	// Consume first encoded int.
-	defer func() {
-		// Nothing to do, default return values mean "could not decode", which is
-		// definitely the case if DecodeUvarint panics.
-		_ = recover()
-	}()
-	_, id64 := encoding.MustDecodeUvarint(remaining)
-	return uint32(id64), true
+	_, id64, err := encoding.DecodeUvarint(remaining)
+	return uint32(id64), err == nil
 }
 
 // GetValue searches the kv list for 'key' and returns its

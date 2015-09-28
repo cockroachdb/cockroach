@@ -489,7 +489,10 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	if _, err := engine.MVCCIterate(s.engine, start, end, now, false /* !consistent */, nil, /* txn */
 		false /* !reverse */, func(kv proto.KeyValue) (bool, error) {
 			// Only consider range metadata entries; ignore others.
-			_, suffix, _ := keys.DecodeRangeKey(kv.Key)
+			_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
+			if err != nil {
+				return false, err
+			}
 			if !suffix.Equal(keys.LocalRangeDescriptorSuffix) {
 				return false, nil
 			}

@@ -2411,7 +2411,10 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, kv := range kvsn {
-		key, ts, _ := MVCCDecodeKey(kv.Key)
+		key, ts, _, err := MVCCDecodeKey(kv.Key)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if log.V(1) {
 			log.Infof("%d: %q, ts=%s", i, key, ts)
 		}
@@ -2444,7 +2447,10 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		t.Fatalf("number of kvs %d != expected %d", len(kvs), len(expEncKeys))
 	}
 	for i, kv := range kvs {
-		key, ts, _ := MVCCDecodeKey(kv.Key)
+		key, ts, _, err := MVCCDecodeKey(kv.Key)
+		if err != nil {
+			t.Fatal(err)
+		}
 		log.Infof("%d: %q, ts=%s", i, key, ts)
 		if !kv.Key.Equal(expEncKeys[i]) {
 			t.Errorf("%d: expected key %q; got %q", i, expEncKeys[i], kv.Key)

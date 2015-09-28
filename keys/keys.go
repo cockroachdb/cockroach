@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -88,17 +89,6 @@ func RaftHardStateKey(rangeID proto.RangeID) proto.Key {
 	return MakeRangeIDKey(rangeID, LocalRaftHardStateSuffix, proto.Key{})
 }
 
-// DecodeRaftStateKey extracts the Range ID from a RaftStateKey.
-func DecodeRaftStateKey(key proto.Key) proto.RangeID {
-	if !bytes.HasPrefix(key, LocalRangeIDPrefix) {
-		panic(fmt.Sprintf("key %q does not have %q prefix", key, LocalRangeIDPrefix))
-	}
-	// Cut the prefix and the Range ID.
-	b := key[len(LocalRangeIDPrefix):]
-	_, rangeID := encoding.MustDecodeUvarint(b)
-	return proto.RangeID(rangeID)
-}
-
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
 func RaftTruncatedStateKey(rangeID proto.RangeID) proto.Key {
 	return MakeRangeIDKey(rangeID, LocalRaftTruncatedStateSuffix, proto.Key{})
@@ -151,17 +141,20 @@ func MakeRangeKey(key, suffix, detail proto.Key) proto.Key {
 
 // DecodeRangeKey decodes the range key into range start key,
 // suffix and optional detail (may be nil).
-func DecodeRangeKey(key proto.Key) (startKey, suffix, detail proto.Key) {
+func DecodeRangeKey(key proto.Key) (startKey, suffix, detail proto.Key, err error) {
 	if !bytes.HasPrefix(key, LocalRangePrefix) {
-		panic(fmt.Sprintf("key %q does not have %q prefix",
-			key, LocalRangePrefix))
+		return nil, nil, nil, util.Errorf("key %q does not have %q prefix",
+			key, LocalRangePrefix)
 	}
 	// Cut the prefix and the Range ID.
 	b := key[len(LocalRangePrefix):]
-	b, startKey = encoding.MustDecodeBytes(b, nil)
+	b, startKey, err = encoding.DecodeBytes(b, nil)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	if len(b) < LocalSuffixLength {
-		panic(fmt.Sprintf("key %q does not have suffix of length %d",
-			key, LocalSuffixLength))
+		return nil, nil, nil, util.Errorf("key %q does not have suffix of length %d",
+			key, LocalSuffixLength)
 	}
 	// Cut the response cache suffix.
 	suffix = b[:LocalSuffixLength]
@@ -214,6 +207,8 @@ func TransactionKey(key proto.Key, id []byte) proto.Key {
 // key) are addressable (e.g. range metadata and txn records). Range
 // local keys incorporating the Range ID are not (e.g. response cache
 // entries, and range stats).
+//
+// TODO(pmattis): Should KeyAddress return an error when the key is malformed?
 func KeyAddress(k proto.Key) proto.Key {
 	if k == nil {
 		return nil
@@ -224,7 +219,10 @@ func KeyAddress(k proto.Key) proto.Key {
 	}
 	if bytes.HasPrefix(k, LocalRangePrefix) {
 		k = k[len(LocalRangePrefix):]
-		_, k = encoding.MustDecodeBytes(k, nil)
+		_, k, err := encoding.DecodeBytes(k, nil)
+		if err != nil {
+			panic(err)
+		}
 		return k
 	}
 	log.Fatalf("local key %q malformed; should contain prefix %q",

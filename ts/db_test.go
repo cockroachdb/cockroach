@@ -107,7 +107,10 @@ func (tm *testModel) assertModelCorrect() {
 		var buf bytes.Buffer
 		buf.WriteString("Found unexpected differences in model data and actual data:\n")
 		for k, vActual := range actualData {
-			n, s, r, ts := DecodeDataKey([]byte(k))
+			n, s, r, ts, err := DecodeDataKey([]byte(k))
+			if err != nil {
+				tm.t.Fatal(err)
+			}
 			if vModel, ok := tm.modelData[k]; !ok {
 				fmt.Fprintf(&buf, "\tKey %s/%s@%d, r:%d from actual data was not found in model", n, s, ts, r)
 			} else {
@@ -129,7 +132,10 @@ func (tm *testModel) assertModelCorrect() {
 
 		// Detect keys in model which were not present in the actual data.
 		for k := range tm.modelData {
-			n, s, r, ts := DecodeDataKey([]byte(k))
+			n, s, r, ts, err := DecodeDataKey([]byte(k))
+			if err != nil {
+				tm.t.Fatal(err)
+			}
 			if _, ok := actualData[k]; !ok {
 				fmt.Fprintf(&buf, "Key %s/%s@%d, r:%d from model was not found in actual data", n, s, ts, r)
 			}

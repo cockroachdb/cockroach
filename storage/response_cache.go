@@ -202,7 +202,10 @@ func (rc *ResponseCache) shouldCacheResponse(replyWithErr proto.ResponseWithErro
 
 func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.ClientCmdID, error) {
 	ret := proto.ClientCmdID{}
-	key, _, isValue := engine.MVCCDecodeKey(encKey)
+	key, _, isValue, err := engine.MVCCDecodeKey(encKey)
+	if err != nil {
+		return ret, err
+	}
 	if isValue {
 		return ret, util.Errorf("key %s is not a raw MVCC value", encKey)
 	}
@@ -211,7 +214,7 @@ func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.
 	}
 	// Cut the prefix and the Range ID.
 	b := key[len(keys.LocalRangeIDPrefix):]
-	b, _, err := encoding.DecodeUvarint(b)
+	b, _, err = encoding.DecodeUvarint(b)
 	if err != nil {
 		return ret, err
 	}

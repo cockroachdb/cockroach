@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -246,7 +247,10 @@ func TestGCQueueProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, kv := range kvs {
-		if key, ts, isValue := engine.MVCCDecodeKey(kv.Key); isValue {
+		if key, ts, isValue, err := engine.MVCCDecodeKey(kv.Key); isValue {
+			if err != nil {
+				t.Fatal(err)
+			}
 			if log.V(1) {
 				log.Infof("%d: %q, ts=%s", i, key, ts)
 			}
@@ -260,7 +264,10 @@ func TestGCQueueProcess(t *testing.T) {
 		t.Fatalf("expected length %d; got %d", len(expKVs), len(kvs))
 	}
 	for i, kv := range kvs {
-		key, ts, isValue := engine.MVCCDecodeKey(kv.Key)
+		key, ts, isValue, err := engine.MVCCDecodeKey(kv.Key)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !key.Equal(expKVs[i].key) {
 			t.Errorf("%d: expected key %q; got %q", i, expKVs[i].key, key)
 		}
@@ -349,12 +356,14 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	// Iterate through all values to ensure intents have been fully resolved.
 	meta := &engine.MVCCMetadata{}
 	err := tc.store.Engine().Iterate(engine.MVCCEncodeKey(proto.KeyMin), engine.MVCCEncodeKey(proto.KeyMax), func(kv proto.RawKeyValue) (bool, error) {
-		if key, _, isValue := engine.MVCCDecodeKey(kv.Key); !isValue {
+		if key, _, isValue, err := engine.MVCCDecodeKey(kv.Key); err != nil {
+			return false, err
+		} else if !isValue {
 			if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
-				t.Fatalf("unable to unmarshal mvcc metadata for key %s", key)
+				return false, err
 			}
 			if meta.Txn != nil {
-				t.Fatalf("non-nil Txn after GC for key %s", key)
+				return false, util.Errorf("non-nil Txn after GC for key %s", key)
 			}
 		}
 		return false, nil

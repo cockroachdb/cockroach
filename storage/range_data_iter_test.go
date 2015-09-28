@@ -177,8 +177,14 @@ func disabledTestRangeDataIterator(t *testing.T) {
 			t.Fatal("there are more keys in the iteration than expected")
 		}
 		if key := iter.Key(); !key.Equal(curKeys[i]) {
-			k1, ts1, _ := engine.MVCCDecodeKey(key)
-			k2, ts2, _ := engine.MVCCDecodeKey(curKeys[i])
+			k1, ts1, _, err := engine.MVCCDecodeKey(key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			k2, ts2, _, err := engine.MVCCDecodeKey(curKeys[i])
+			if err != nil {
+				t.Fatal(err)
+			}
 			t.Errorf("%d: expected %q(%d); got %q(%d)", i, k2, ts2, k1, ts1)
 		}
 		i++
@@ -209,7 +215,10 @@ func disabledTestRangeDataIterator(t *testing.T) {
 		defer iter.Close()
 		i = 0
 		for ; iter.Valid(); iter.Next() {
-			k1, ts1, _ := engine.MVCCDecodeKey(iter.Key())
+			k1, ts1, _, err := engine.MVCCDecodeKey(iter.Key())
+			if err != nil {
+				t.Fatal(err)
+			}
 			if bytes.HasPrefix(k1, keys.StatusPrefix) {
 				// Some data is written into the system prefix by Store.BootstrapRange,
 				// but it is not in our expected key list so skip it.
@@ -217,7 +226,10 @@ func disabledTestRangeDataIterator(t *testing.T) {
 				continue
 			}
 			if key := iter.Key(); !key.Equal(test.keys[i]) {
-				k2, ts2, _ := engine.MVCCDecodeKey(test.keys[i])
+				k2, ts2, _, err := engine.MVCCDecodeKey(test.keys[i])
+				if err != nil {
+					t.Fatal(err)
+				}
 				t.Errorf("%d: key mismatch %q(%d) != %q(%d)", i, k1, ts1, k2, ts2)
 			}
 			i++
