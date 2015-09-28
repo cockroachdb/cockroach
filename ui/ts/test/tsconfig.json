@@ -8,7 +8,7 @@
     "noEmitOnError": true,
     "removeComments": true,
     "noLib": false,
-    "out": "./js/test.js",
+    "out": "./build/test.js",
     "sourceMap": false
   },
   "files": [

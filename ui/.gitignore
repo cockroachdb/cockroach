@@ -1,0 +1,14 @@
+# NPM node modules
+node_modules
+npm.installed
+
+# Bower components
+bower_components
+bower.installed
+
+# Typescript definitions
+typings
+tsd.installed
+
+# Generated intermediates
+build/

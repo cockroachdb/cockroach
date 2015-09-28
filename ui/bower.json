@@ -1,0 +1,13 @@
+{
+  "name": "cockroach-ui",
+  "dependencies": {
+    "d3": "~3.5.6",
+    "lodash": "~3.10.1",
+    "mithril": "~0.2.0",
+    "nvd3": "~1.8.1"
+  },
+  "devDependencies": {
+    "mocha": "~2.3.3",
+    "chai": "~3.3.0"
+  }
+}

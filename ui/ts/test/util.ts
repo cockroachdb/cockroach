@@ -1,6 +1,6 @@
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/mocha/mocha.d.ts" />
-/// <reference path="../typings/chai/chai.d.ts" />
+/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../typings/mocha/mocha.d.ts" />
+/// <reference path="../../typings/chai/chai.d.ts" />
 /// <reference path="../util/property.ts" />
 /// <reference path="../util/querycache.ts" />
 

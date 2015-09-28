@@ -18,6 +18,8 @@ go-bindata in debug mode.  This will instruct go-bindata to proxy your local
 files (rather than using embedded versions) so you'll be able to edit them live
 without recompiling or restarting the server.
 
+For this change to be picked up, you'll need to run `make build` in the project root.
+
 Note that only those files that were present the last time you ran `make debug`
 will be proxied; if you add a new file, you must run recompile and restart the
 server after running `make debug`.
@@ -27,10 +29,32 @@ Before committing, be sure to run `make` to generate a non-debug version of
 will result in wasted time waiting for the build.
 
 ## Dependencies
-Our admin UI is written in Typescript, so compiling it depends on having the
-typescript compiler locally. We also require a typescript linter (tslint).
+Our admin UI is compiled using a collection of tools that depends on
+[nodejs](https://nodejs.org/), so you'll want to have that installed.
 
-1. Install [nodejs](https://nodejs.org/)
-2. Install [typescript](http://www.typescriptlang.org/) and
-   [tslint](https://github.com/palantir/tslint). This can be done via the
-   command line using npm: `npm install -g typescript tslint`
+We use npm to manage various dependencies; be sure that your node installation
+includes a recent version of npm. If you observe problems with npm, try updating
+it using `npm install -g npm`.
+
+We use bower to manage frontend dependencies and tsd to manage typescript
+definition files.
+Our Makefile automatically installs these tools locally, so for the most part,
+you can be blissfully ignorant of their use. However, if you wish to add
+bower/tsd dependencies (and do not have your own opinions on binstubs), you'll
+want to run them from the local install using one of:
+- `node_modules/.bin/bower install --save <myAwesomeDep>`
+- `node_modules/.bin/tsd install --save <myAwesomeDep>`
+
+If you're adding an npm dependency, you'll need to run:
+```
+	node_modules/.bin/npm install --save <myAwesomeDep> && node_modules/.bin/npm shrinkwrap
+```
+
+The `--save` modifier and `shrinkwrap` invocation above are necessary to properly
+lock down dependencies for other developers on the project, so make sure you don't
+elide them!
+
+Also note that the `npm` invocation above uses a local `npm` rather than the
+global one. Please be sure to use the local `npm` as the shrinkwrap format
+often changes; these cosmetic differences may hold up your PR, so best to just
+avoid them.

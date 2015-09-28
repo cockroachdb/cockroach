@@ -15,13 +15,14 @@
 #
 # Author: Tamir Duberstein (tamird@gmail.com)
 
-REPO_ROOT    := $(realpath ..)
-ORG_ROOT     := $(REPO_ROOT)/..
-GITHUB_ROOT  := $(ORG_ROOT)/..
-NODE_MODULES := node_modules
-TS_ROOT      := ts
-STYL_ROOT    := styl
-TEST_ROOT    := ts/test
+REPO_ROOT        := $(realpath ..)
+ORG_ROOT         := $(REPO_ROOT)/..
+GITHUB_ROOT      := $(ORG_ROOT)/..
+BOWER_COMPONENTS := bower_components
+NODE_MODULES     := node_modules
+TS_ROOT          := ts
+STYL_ROOT        := styl
+TEST_ROOT        := ts/test
 
 # Ensure we only have one entry in GOPATH
 GOPATH := $(GITHUB_ROOT)/../..
@@ -32,13 +33,13 @@ GOPATH_BIN := $(GOPATH)/bin
 
 GO_BINDATA := $(GOPATH_BIN)/go-bindata
 
-TYPESCRIPT_TARGET      := js/app.js
-TEST_TARGET            := js/test.js
-CSS_TARGET             := css/app.css
-STYL_OPTIONS           :=
-GOBINDATA_SOURCES      := $(TYPESCRIPT_TARGET) index.html $(shell find css js/libs -type f)
-GOBINDATA_TARGET       := ./embedded.go
-GOBINDATA_DEBUG_TARGET := ./embedded_debug.go
+TYPESCRIPT_TARGET       := build/app.js
+TEST_TARGET             := build/test.js
+CSS_TARGET              := build/app.css
+STYL_OPTIONS            :=
+GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
+GOBINDATA_TARGET        := ./embedded.go
+GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
 
 .PHONY:
 all: STYL_OPTIONS += --compress
@@ -49,24 +50,35 @@ all: $(GOBINDATA_TARGET) $(TEST_TARGET)
 debug: $(GOBINDATA_DEBUG_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
+bower.installed: bower.json npm.installed
+	$(NODE_MODULES)/.bin/bower install --config.interactive=false --allow-root
+	touch $@
+
 npm.installed: npm-shrinkwrap.json
 	npm install
 	touch $@
 
-$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) npm.installed
-	$(NODE_MODULES)/.bin/tsc -p $(TS_ROOT)
-	$(NODE_MODULES)/.bin/tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts' -not -path '*typings*')
+tsd.installed: tsd.json npm.installed
+	$(NODE_MODULES)/.bin/tsd install
+	touch $@
 
-$(TEST_TARGET): $(shell find $(TS_ROOT)) npm.installed
+.PHONY:
+deps: npm.installed bower.installed tsd.installed
+
+$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) deps
+	$(NODE_MODULES)/.bin/tsc -p $(TS_ROOT)
+	$(NODE_MODULES)/.bin/tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts' -not -path '*external*')
+
+$(TEST_TARGET): $(shell find $(TS_ROOT)) deps
 	$(NODE_MODULES)/.bin/tsc -p $(TEST_ROOT)
 
-$(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed
-	$(NODE_MODULES)/.bin/stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out css
+$(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
+	$(NODE_MODULES)/.bin/stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out build/
 
-$(GOBINDATA_TARGET): $(GOBINDATA_SOURCES)
-	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $^
+$(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed
+	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $(GOBINDATA_DEPS) index.html $(shell find $(BOWER_COMPONENTS) -name *.min.* | sort)
 	gofmt -s -w $@
 	goimports -w $@
 
-$(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_SOURCES)
-	$(GO_BINDATA) -pkg ui -o $@ -debug $^
+$(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEPS) bower.installed
+	$(GO_BINDATA) -pkg ui -o $@ -debug $(GOBINDATA_DEPS) index.html $(shell find $(BOWER_COMPONENTS) -name *.min.* | sort)
