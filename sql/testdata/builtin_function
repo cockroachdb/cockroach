@@ -223,6 +223,16 @@ SELECT initcap('THOMAS')
 Thomas
 
 query T
+SELECT left('💩abcde'::bytes, 2)
+----
+[240 159]
+
+query T
+SELECT right('abcde💩'::bytes, 2)
+----
+[146 169]
+
+query T
 SELECT left('💩abcde', 2)
 ----
 💩a

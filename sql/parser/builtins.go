@@ -111,11 +111,11 @@ var builtins = map[string][]builtin{
 					if d == DNull {
 						continue
 					}
-					ds, err := datumToRawString(d)
+					dStr, err := datumToString(d)
 					if err != nil {
 						return DNull, err
 					}
-					buffer.WriteString(ds)
+					buffer.WriteString(dStr)
 				}
 				return DString(buffer.String()), nil
 			},
@@ -136,7 +136,7 @@ var builtins = map[string][]builtin{
 					if d == DNull {
 						continue
 					}
-					ds, err := datumToRawString(d)
+					ds, err := datumToString(d)
 					if err != nil {
 						return DNull, err
 					}
@@ -296,6 +296,23 @@ var builtins = map[string][]builtin{
 
 	"left": {
 		builtin{
+			types:      typeList{bytesType, intType},
+			returnType: DummyBytes,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				bytes := []byte(args[0].(DBytes))
+				n := int(args[1].(DInt))
+
+				if n < -len(bytes) {
+					n = 0
+				} else if n < 0 {
+					n = len(bytes) + n
+				} else if n > len(bytes) {
+					n = len(bytes)
+				}
+				return DBytes(bytes[:n]), nil
+			},
+		},
+		builtin{
 			types:      typeList{stringType, intType},
 			returnType: DummyString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
@@ -315,6 +332,23 @@ var builtins = map[string][]builtin{
 	},
 
 	"right": {
+		builtin{
+			types:      typeList{bytesType, intType},
+			returnType: DummyBytes,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				bytes := []byte(args[0].(DBytes))
+				n := int(args[1].(DInt))
+
+				if n < -len(bytes) {
+					n = 0
+				} else if n < 0 {
+					n = len(bytes) + n
+				} else if n > len(bytes) {
+					n = len(bytes)
+				}
+				return DBytes(bytes[len(bytes)-n:]), nil
+			},
+		},
 		builtin{
 			types:      typeList{stringType, intType},
 			returnType: DummyString,
@@ -887,7 +921,7 @@ func bytesBuiltin1(f func(string) (Datum, error), returnType Datum) builtin {
 	}
 }
 
-func datumToRawString(datum Datum) (string, error) {
+func datumToString(datum Datum) (string, error) {
 	if dString, ok := datum.(DString); ok {
 		return string(dString), nil
 	}
