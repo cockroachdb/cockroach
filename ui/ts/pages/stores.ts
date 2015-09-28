@@ -1,5 +1,5 @@
 // source: pages/stores.ts
-/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />

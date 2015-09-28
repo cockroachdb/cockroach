@@ -1,5 +1,5 @@
 // source: pages/nodes.ts
-/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../../typings/lodash/lodash.d.ts" />
 /// <reference path="../util/property.ts" />
 
