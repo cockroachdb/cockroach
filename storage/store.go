@@ -1558,7 +1558,7 @@ func (s *Store) ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) 
 			return rep.ReplicaID, nil
 		}
 	}
-	return 0, util.Errorf("store %s not found as replica of range %s", storeID, groupID)
+	return 0, util.Errorf("store %s not found as replica of range %d", storeID, groupID)
 }
 
 // ReplicasFromSnapshot implements the multiraft.Storage interface.

@@ -120,11 +120,11 @@ type multiraftServer MultiRaft
 
 // NewMultiRaft creates a MultiRaft object.
 func NewMultiRaft(nodeID proto.NodeID, storeID proto.StoreID, config *Config, stopper *stop.Stopper) (*MultiRaft, error) {
-	if nodeID == 0 {
-		return nil, util.Errorf("invalid NodeID")
+	if nodeID <= 0 {
+		return nil, util.Errorf("invalid NodeID: %s", nodeID)
 	}
-	if storeID == 0 {
-		return nil, util.Errorf("invalid StoreID")
+	if storeID <= 0 {
+		return nil, util.Errorf("invalid StoreID: %s", storeID)
 	}
 	if err := config.validate(); err != nil {
 		return nil, err
@@ -755,6 +755,11 @@ func (s *state) removeNode(nodeID proto.NodeID, g *group) error {
 	return nil
 }
 
+// createGroup is called in two situations: by the application at
+// startup (in which case the replicaID argument is zero and the
+// replicaID will be loaded from storage), and in response to incoming
+// messages (in which case the replicaID comes from the incoming
+// message, since nothing is on disk yet).
 func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) error {
 	if _, ok := s.groups[groupID]; ok {
 		return nil
@@ -779,7 +784,7 @@ func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) er
 			if replicaID == 0 {
 				replicaID = repDesc.ReplicaID
 			} else if replicaID != repDesc.ReplicaID {
-				return util.Errorf("inconsistent replica ID: passed %s, but found %s by scanning ConfState for store %s",
+				return util.Errorf("inconsistent replica ID: passed %d, but found %s by scanning ConfState for store %s",
 					replicaID, repDesc.ReplicaID, s.storeID)
 			}
 			replicaID = repDesc.ReplicaID
