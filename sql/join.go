@@ -38,7 +38,7 @@ type indexJoinNode struct {
 	err              error
 }
 
-func makeIndexJoin(indexScan *scanNode) (*indexJoinNode, error) {
+func makeIndexJoin(indexScan *scanNode, exactPrefix int) (*indexJoinNode, error) {
 	// Copy the index scan node into a new table scan node and reset the fields
 	// that were set up for the index scan.
 	table := &scanNode{}
@@ -47,7 +47,7 @@ func makeIndexJoin(indexScan *scanNode) (*indexJoinNode, error) {
 	table.spans = nil
 	table.reverse = false
 	table.isSecondaryIndex = false
-	table.initOrdering()
+	table.initOrdering(0)
 
 	// We want to the index scan to keep the same render target indexes for
 	// columns which are part of the primary key or part of the index. This
@@ -88,7 +88,7 @@ func makeIndexJoin(indexScan *scanNode) (*indexJoinNode, error) {
 		}
 	}
 
-	indexScan.initOrdering()
+	indexScan.initOrdering(exactPrefix)
 
 	primaryKeyPrefix := proto.Key(MakeIndexKeyPrefix(table.desc.ID, table.index.ID))
 
@@ -104,7 +104,7 @@ func (n *indexJoinNode) Columns() []string {
 	return n.table.Columns()
 }
 
-func (n *indexJoinNode) Ordering() []int {
+func (n *indexJoinNode) Ordering() ([]int, int) {
 	return n.index.Ordering()
 }
 

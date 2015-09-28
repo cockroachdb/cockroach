@@ -234,3 +234,13 @@ query I
 SELECT a FROM abc ORDER BY a DESC OFFSET 1
 ----
 1
+
+query I
+EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
+----
+0 scan abc@bc /2-/3
+
+query I
+EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
+----
+0 revscan abc@bc /2-/3

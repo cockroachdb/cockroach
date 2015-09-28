@@ -77,8 +77,8 @@ func (n *valuesNode) Columns() []string {
 	return n.columns
 }
 
-func (n *valuesNode) Ordering() []int {
-	return nil
+func (n *valuesNode) Ordering() ([]int, int) {
+	return nil, 0
 }
 
 func (n *valuesNode) Values() parser.DTuple {

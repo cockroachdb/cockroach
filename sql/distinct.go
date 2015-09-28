@@ -33,11 +33,16 @@ func (*planner) distinct(n *parser.Select, p planNode) planNode {
 		planNode:   p,
 		suffixSeen: make(map[string]struct{}),
 	}
-	if len(p.Ordering()) != 0 {
+	ordering, prefix := p.Ordering()
+	if len(ordering) != 0 {
 		d.columnsInOrder = make([]bool, len(p.Columns()))
 	}
-	for _, p := range p.Ordering() {
+	for _, p := range ordering {
 		if p == 0 {
+			if prefix > 0 {
+				prefix--
+				continue
+			}
 			break
 		}
 		if p < 0 {

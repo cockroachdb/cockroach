@@ -180,7 +180,7 @@ EXPLAIN SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3)
 1 scan  xyz@zyx /3/2-/3/3
 
 query ITT
-EXPLAIN SELECT MAX(x) FROM xyz WHERE (y, z) = (2, 3)
+EXPLAIN SELECT MAX(x) FROM xyz WHERE (z, y) = (3, 2)
 ----
 0 group   MAX(x)
 1 revscan xyz@zyx /3/2-/3/3

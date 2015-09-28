@@ -68,7 +68,7 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	if group != nil {
 		ordering = group.desiredOrdering
 	} else if sort != nil {
-		ordering = sort.Ordering()
+		ordering, _ = sort.Ordering()
 	}
 	plan, err := p.selectIndex(scan, ordering)
 	if err != nil {
@@ -94,7 +94,7 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 	if s.desc == nil || (s.filter == nil && ordering == nil) {
 		// No table or no where-clause and no ordering.
-		s.initOrdering()
+		s.initOrdering(0)
 		return s, nil
 	}
 
@@ -194,10 +194,10 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 	}
 
 	if c.covering {
-		s.initOrdering()
+		s.initOrdering(c.exactPrefix)
 		return s, nil
 	}
-	return makeIndexJoin(s)
+	return makeIndexJoin(s, c.exactPrefix)
 }
 
 type indexConstraint struct {
@@ -243,6 +243,7 @@ type indexInfo struct {
 	cost        float64
 	covering    bool // indicates whether the index covers the required qvalues
 	reverse     bool
+	exactPrefix int
 }
 
 func (v *indexInfo) init(s *scanNode) {
@@ -285,50 +286,17 @@ func (v *indexInfo) analyzeRanges(exprs []parser.Exprs) {
 // if it matches the ordering requested by the query. Non-matching orderings
 // increase the cost of using the index.
 func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
+	// Compute the prefix of the index for which we have exact constraints. This
+	// prefix is inconsequential for ordering because the values are identical.
+	v.exactPrefix = exactPrefix(v.constraints)
+
 	// Compute the ordering provided by the index.
 	indexOrdering := scan.computeOrdering(v.index.fullColumnIDs())
 
-	// Compute the prefix of the index for which we have exact constraints. This
-	// prefix is inconsequential for ordering because the values are identical.
-	prefix := exactPrefix(v.constraints)
-
 	// Compute how much of the index ordering matches the requested ordering for
 	// both forward and reverse scans.
-	fwdMatch, fwdPrefix, fwdIndexOrdering := 0, prefix, indexOrdering
-	for fwdMatch < len(ordering) && fwdMatch < len(fwdIndexOrdering) {
-		if ordering[fwdMatch] == fwdIndexOrdering[fwdMatch] {
-			// The index ordering matched the desired ordering.
-			fwdPrefix = 0
-			fwdMatch++
-			continue
-		}
-		// The index ordering did not match the desired ordering. Check if we're
-		// still considering a prefix of the index for which there was an exact
-		// match (and thus ordering is inconsequential).
-		if fwdPrefix == 0 {
-			break
-		}
-		fwdPrefix--
-		fwdIndexOrdering = fwdIndexOrdering[1:]
-	}
-
-	revMatch, revPrefix, revIndexOrdering := 0, prefix, indexOrdering
-	for revMatch < len(ordering) && revMatch < len(revIndexOrdering) {
-		if ordering[revMatch] == -revIndexOrdering[revMatch] {
-			// The index ordering matched the desired ordering.
-			revPrefix = 0
-			revMatch++
-			continue
-		}
-		// The index ordering did not match the desired ordering. Check if we're
-		// still considering a prefix of the index for which there was an exact
-		// match (and thus ordering is inconsequential).
-		if revPrefix == 0 {
-			break
-		}
-		revPrefix--
-		revIndexOrdering = revIndexOrdering[1:]
-	}
+	fwdMatch := computeOrderingMatch(ordering, indexOrdering, v.exactPrefix, +1)
+	revMatch := computeOrderingMatch(ordering, indexOrdering, v.exactPrefix, -1)
 
 	// Weight the cost by how much of the ordering matched.
 	//
