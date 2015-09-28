@@ -31,7 +31,7 @@ cachedir="${gopath0}/pkg/cache"
 # The tag for the cockroachdb/builder image. If the image is changed
 # (for example, adding "npm"), a new image should be pushed using
 # "build/builder.sh push" and the new tag value placed here.
-tag="20150920-200733"
+tag="20150928-162648"
 
 mkdir -p "${cachedir}"
 du -sh "${cachedir}"
