@@ -22,6 +22,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -193,7 +194,7 @@ func TestGCQueueProcess(t *testing.T) {
 				dArgs.Txn.OrigTimestamp = datum.ts
 				dArgs.Txn.Timestamp = datum.ts
 			}
-			if _, err := sendArg(tc.rng, tc.rng.context(), &dArgs); err != nil {
+			if _, err := client.SendWrapped(tc.rng, tc.rng.context(), &dArgs); err != nil {
 				t.Fatalf("%d: could not delete data: %s", i, err)
 			}
 		} else {
@@ -204,7 +205,7 @@ func TestGCQueueProcess(t *testing.T) {
 				pArgs.Txn.OrigTimestamp = datum.ts
 				pArgs.Txn.Timestamp = datum.ts
 			}
-			if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
+			if _, err := client.SendWrapped(tc.rng, tc.rng.context(), &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
 		}
@@ -336,7 +337,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%05d", i, j)), []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
 			pArgs.Timestamp = makeTS(1, 0)
 			pArgs.Txn = txns[i]
-			if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
+			if _, err := client.SendWrapped(tc.rng, tc.rng.context(), &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
 		}

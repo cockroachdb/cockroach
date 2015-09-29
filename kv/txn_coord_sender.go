@@ -292,7 +292,7 @@ func (tc *TxnCoordSender) startStats() {
 // It is checked that the individual call does not have a UserPriority
 // or Txn set that differs from the batch's.
 // TODO(tschottdorf): will go with #2143.
-func updateForBatch(args roachpb.Request, bHeader roachpb.RequestHeader) error {
+func updateForBatch(args roachpb.Request, bHeader roachpb.BatchRequest_Header) error {
 	// Disallow transaction, user and priority on individual calls, unless
 	// equal.
 	aHeader := args.Header()
@@ -329,7 +329,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	// we've eliminated all the redundancies.
 	for _, arg := range ba.Requests {
 		trace.Event(fmt.Sprintf("%T", arg.GetValue()))
-		if err := updateForBatch(arg.GetInner(), ba.RequestHeader); err != nil {
+		if err := updateForBatch(arg.GetInner(), ba.BatchRequest_Header); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}

@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -432,11 +431,11 @@ func TestStoreSend(t *testing.T) {
 	gArgs := getArgs([]byte("a"), 1, store.StoreID())
 
 	// Try a successful get request.
-	if _, err := batchutil.SendWrapped(store, &gArgs); err != nil {
+	if _, err := client.SendWrapped(store, nil, &gArgs); err != nil {
 		t.Fatal(err)
 	}
 	pArgs := putArgs([]byte("a"), []byte("aaa"), 1, store.StoreID())
-	if _, err := batchutil.SendWrapped(store, &pArgs); err != nil {
+	if _, err := client.SendWrapped(store, nil, &pArgs); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -445,13 +444,10 @@ func TestStoreExecuteNoop(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	ba := roachpb.BatchRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:     nil, // intentional
-			RangeID: 1,
-			Replica: roachpb.ReplicaDescriptor{StoreID: store.StoreID()},
-		},
-	}
+	ba := roachpb.BatchRequest{}
+	ba.Key = nil // intentional
+	ba.RangeID = 1
+	ba.Replica = roachpb.ReplicaDescriptor{StoreID: store.StoreID()}
 	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
 	ba.Add(&roachpb.NoopRequest{})
 
@@ -475,40 +471,40 @@ func TestStoreVerifyKeys(t *testing.T) {
 
 	// Start with a too-long key on a get.
 	gArgs := getArgs(tooLongKey, 1, store.StoreID())
-	if _, err := batchutil.SendWrapped(store, &gArgs); !testutils.IsError(err, "exceeded") {
+	if _, err := client.SendWrapped(store, nil, &gArgs); !testutils.IsError(err, "exceeded") {
 		t.Fatalf("unexpected error for key too long: %v", err)
 	}
 	// Try a start key == KeyMax.
 	gArgs.Key = roachpb.KeyMax
-	if _, err := batchutil.SendWrapped(store, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
+	if _, err := client.SendWrapped(store, nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
 		t.Fatalf("expected error for start key == KeyMax: %v", err)
 	}
 	// Try a get with an end key specified (get requires only a start key and should fail).
 	gArgs.EndKey = roachpb.KeyMax
-	if _, err := batchutil.SendWrapped(store, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
+	if _, err := client.SendWrapped(store, nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
 		t.Fatalf("unexpected error for end key specified on a non-range-based operation: %v", err)
 	}
 	// Try a scan with too-long EndKey.
 	sArgs := scanArgs(roachpb.KeyMin, tooLongKey, 1, store.StoreID())
-	if _, err := batchutil.SendWrapped(store, &sArgs); !testutils.IsError(err, "length exceeded") {
+	if _, err := client.SendWrapped(store, nil, &sArgs); !testutils.IsError(err, "length exceeded") {
 		t.Fatalf("unexpected error for end key too long: %v", err)
 	}
 	// Try a scan with end key < start key.
 	sArgs.Key = []byte("b")
 	sArgs.EndKey = []byte("a")
-	if _, err := batchutil.SendWrapped(store, &sArgs); !testutils.IsError(err, "must be greater than") {
+	if _, err := client.SendWrapped(store, nil, &sArgs); !testutils.IsError(err, "must be greater than") {
 		t.Fatalf("unexpected error for end key < start: %v", err)
 	}
 	// Try a scan with start key == end key.
 	sArgs.Key = []byte("a")
 	sArgs.EndKey = sArgs.Key
-	if _, err := batchutil.SendWrapped(store, &sArgs); !testutils.IsError(err, "must be greater than") {
+	if _, err := client.SendWrapped(store, nil, &sArgs); !testutils.IsError(err, "must be greater than") {
 		t.Fatalf("unexpected error for start == end key: %v", err)
 	}
 	// Try a scan with range-local start key, but "regular" end key.
 	sArgs.Key = keys.MakeRangeKey([]byte("test"), []byte("sffx"), nil)
 	sArgs.EndKey = []byte("z")
-	if _, err := batchutil.SendWrapped(store, &sArgs); !testutils.IsError(err, "range-local") {
+	if _, err := client.SendWrapped(store, nil, &sArgs); !testutils.IsError(err, "range-local") {
 		t.Fatalf("unexpected error for local start, non-local end key: %v", err)
 	}
 
@@ -516,7 +512,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	// length, but is accepted because of the meta prefix.
 	meta2KeyMax := keys.MakeKey(keys.Meta2Prefix, roachpb.KeyMax)
 	pArgs := putArgs(meta2KeyMax, []byte("value"), 1, store.StoreID())
-	if _, err := batchutil.SendWrapped(store, &pArgs); err != nil {
+	if _, err := client.SendWrapped(store, nil, &pArgs); err != nil {
 		t.Fatalf("unexpected error on put to meta2 value: %s", err)
 	}
 	// Try to put a range descriptor record for a start key which is
@@ -524,7 +520,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	key := append([]byte{}, roachpb.KeyMax...)
 	key[len(key)-1] = 0x01
 	pArgs = putArgs(keys.RangeDescriptorKey(key), []byte("value"), 1, store.StoreID())
-	if _, err := batchutil.SendWrapped(store, &pArgs); err != nil {
+	if _, err := client.SendWrapped(store, nil, &pArgs); err != nil {
 		t.Fatalf("unexpected error on put to range descriptor for KeyMax value: %s", err)
 	}
 	// Try a put to txn record for a meta2 key (note that this doesn't
@@ -532,7 +528,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	// but are instead manipulated only through txn methods).
 	pArgs = putArgs(keys.TransactionKey(meta2KeyMax, []byte(uuid.NewUUID4())),
 		[]byte("value"), 1, store.StoreID())
-	if _, err := batchutil.SendWrapped(store, &pArgs); err != nil {
+	if _, err := client.SendWrapped(store, nil, &pArgs); err != nil {
 		t.Fatalf("unexpected error on put to txn meta2 value: %s", err)
 	}
 }
@@ -545,7 +541,7 @@ func TestStoreSendUpdateTime(t *testing.T) {
 	args := getArgs([]byte("a"), 1, store.StoreID())
 	args.Timestamp = store.ctx.Clock.Now()
 	args.Timestamp.WallTime += (100 * time.Millisecond).Nanoseconds()
-	_, err := batchutil.SendWrapped(store, &args)
+	_, err := client.SendWrapped(store, nil, &args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +561,7 @@ func TestStoreSendWithZeroTime(t *testing.T) {
 
 	// Set clock to time 1.
 	mc.Set(1)
-	resp, err := batchutil.SendWrapped(store, &args)
+	resp, err := client.SendWrapped(store, nil, &args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -595,7 +591,7 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	// Set args timestamp to exceed max offset.
 	args.Timestamp = store.ctx.Clock.Now()
 	args.Timestamp.WallTime += maxOffset.Nanoseconds() + 1
-	if _, err := batchutil.SendWrapped(store, &args); err == nil {
+	if _, err := client.SendWrapped(store, nil, &args); err == nil {
 		t.Error("expected max offset clock error")
 	}
 }
@@ -607,7 +603,7 @@ func TestStoreSendBadRange(t *testing.T) {
 	defer stopper.Stop()
 	args := getArgs([]byte("0"), 2, store.StoreID()) // no range ID 2
 
-	if _, err := batchutil.SendWrapped(store, &args); err == nil {
+	if _, err := client.SendWrapped(store, nil, &args); err == nil {
 		t.Error("expected invalid range")
 	}
 }
@@ -648,14 +644,14 @@ func TestStoreSendOutOfRange(t *testing.T) {
 	// Range 1 is from KeyMin to "b", so reading "b" from range 1 should
 	// fail because it's just after the range boundary.
 	args := getArgs([]byte("b"), 1, store.StoreID())
-	if _, err := batchutil.SendWrapped(store, &args); err == nil {
+	if _, err := client.SendWrapped(store, nil, &args); err == nil {
 		t.Error("expected key to be out of range")
 	}
 
 	// Range 2 is from "b" to KeyMax, so reading "a" from range 2 should
 	// fail because it's before the start of the range.
 	args = getArgs([]byte("a"), rng2.Desc().RangeID, store.StoreID())
-	if _, err := batchutil.SendWrapped(store, &args); err == nil {
+	if _, err := client.SendWrapped(store, nil, &args); err == nil {
 		t.Error("expected key to be out of range")
 	}
 }
@@ -791,14 +787,14 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 		pArgs := putArgs(key, []byte("value"), 1, store.StoreID())
 		pArgs.Timestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pushee
-		if _, err := batchutil.SendWrapped(store, &pArgs); err != nil {
+		if _, err := client.SendWrapped(store, nil, &pArgs); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now, try a put using the pusher's txn.
 		pArgs.Timestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pusher
-		_, err := batchutil.SendWrapped(store, &pArgs)
+		_, err := client.SendWrapped(store, nil, &pArgs)
 		if resolvable {
 			if err != nil {
 				t.Errorf("expected intent resolved; got unexpected error: %s", err)
@@ -819,7 +815,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 				t.Errorf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
 			}
 			// Trying again should fail again.
-			if _, err := batchutil.SendWrapped(store, &pArgs); err == nil {
+			if _, err := client.SendWrapped(store, nil, &pArgs); err == nil {
 				t.Errorf("expected another error on latent write intent but succeeded")
 			}
 		}
@@ -843,7 +839,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	args := incrementArgs(key, 1, 1, store.StoreID())
 	args.Timestamp = store.ctx.Clock.Now()
 	args.Txn = pushee
-	if _, err := batchutil.SendWrapped(store, &args); err != nil {
+	if _, err := client.SendWrapped(store, nil, &args); err != nil {
 		t.Fatal(err)
 	}
 
@@ -851,7 +847,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	args.Timestamp = store.ctx.Clock.Now()
 	args.Txn = pusher
 	args.Increment = 2
-	if resp, err := batchutil.SendWrapped(store, &args); err != nil {
+	if resp, err := client.SendWrapped(store, nil, &args); err != nil {
 		t.Errorf("expected increment to succeed: %s", err)
 	} else if reply := resp.(*roachpb.IncrementResponse); reply.NewValue != 2 {
 		t.Errorf("expected rollback of earlier increment to yield increment value of 2; got %d", reply.NewValue)
@@ -895,7 +891,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		// First, write original value.
 		args := putArgs(key, []byte("value1"), 1, store.StoreID())
 		args.Timestamp = store.ctx.Clock.Now()
-		if _, err := batchutil.SendWrapped(store, &args); err != nil {
+		if _, err := client.SendWrapped(store, nil, &args); err != nil {
 			t.Fatal(err)
 		}
 
@@ -903,7 +899,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		args.Timestamp = store.ctx.Clock.Now()
 		args.Txn = pushee
 		args.Value.Bytes = []byte("value2")
-		if _, err := batchutil.SendWrapped(store, &args); err != nil {
+		if _, err := client.SendWrapped(store, nil, &args); err != nil {
 			t.Fatal(err)
 		}
 
@@ -911,7 +907,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		gArgs := getArgs(key, 1, store.StoreID())
 		gArgs.Timestamp = store.ctx.Clock.Now()
 		gArgs.Txn = pusher
-		firstReply, err := batchutil.SendWrapped(store, &gArgs)
+		firstReply, err := client.SendWrapped(store, nil, &gArgs)
 		if test.resolvable {
 			if err != nil {
 				t.Errorf("%d: expected read to succeed: %s", i, err)
@@ -925,7 +921,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			// verify commit fails with TransactionRetryError.
 			etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
 			etArgs.Timestamp = pushee.Timestamp
-			reply, cErr := batchutil.SendWrapped(store, &etArgs)
+			reply, cErr := client.SendWrapped(store, nil, &etArgs)
 
 			expTimestamp := gArgs.Timestamp
 			expTimestamp.Logical++
@@ -981,7 +977,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// First, write original value.
 	args := putArgs(key, []byte("value1"), 1, store.StoreID())
 	args.Timestamp = store.ctx.Clock.Now()
-	if _, err := batchutil.SendWrapped(store, &args); err != nil {
+	if _, err := client.SendWrapped(store, nil, &args); err != nil {
 		t.Fatal(err)
 	}
 
@@ -989,7 +985,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	args.Timestamp = store.ctx.Clock.Now()
 	args.Txn = pushee
 	args.Value.Bytes = []byte("value2")
-	if _, err := batchutil.SendWrapped(store, &args); err != nil {
+	if _, err := client.SendWrapped(store, nil, &args); err != nil {
 		t.Fatal(err)
 	}
 
@@ -997,7 +993,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	gArgs := getArgs(key, 1, store.StoreID())
 	gArgs.Timestamp = store.ctx.Clock.Now()
 	gArgs.Txn = pusher
-	if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
+	if reply, err := client.SendWrapped(store, nil, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
 	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
 		t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.Bytes)
@@ -1008,7 +1004,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// commit timestamp is equal to gArgs.Timestamp + 1.
 	etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
 	etArgs.Timestamp = pushee.Timestamp
-	reply, err := batchutil.SendWrapped(store, &etArgs)
+	reply, err := client.SendWrapped(store, nil, &etArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1036,7 +1032,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	args := putArgs(key, []byte("value1"), 1, store.StoreID())
 	args.Timestamp = pushee.Timestamp
 	args.Txn = pushee
-	if _, err := batchutil.SendWrapped(store, &args); err != nil {
+	if _, err := client.SendWrapped(store, nil, &args); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1044,7 +1040,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	gArgs := getArgs(key, 1, store.StoreID())
 	gArgs.Timestamp = store.ctx.Clock.Now()
 	gArgs.UserPriority = proto.Int32(math.MaxInt32)
-	if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
+	if reply, err := client.SendWrapped(store, nil, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
 	} else if gReply := reply.(*roachpb.GetResponse); gReply.Value != nil {
 		t.Errorf("expected value to be nil, got %+v", gReply.Value)
@@ -1055,7 +1051,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	args.Value.Bytes = []byte("value2")
 	args.Txn = nil
 	args.UserPriority = proto.Int32(math.MaxInt32)
-	if _, err := batchutil.SendWrapped(store, &args); err != nil {
+	if _, err := client.SendWrapped(store, nil, &args); err != nil {
 		t.Errorf("expected success aborting pushee's txn; got %s", err)
 	}
 
@@ -1086,7 +1082,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// been aborted.
 	etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
 	etArgs.Timestamp = pushee.Timestamp
-	_, err := batchutil.SendWrapped(store, &etArgs)
+	_, err := client.SendWrapped(store, nil, &etArgs)
 	if err == nil {
 		t.Errorf("unexpected success committing transaction")
 	}
@@ -1122,7 +1118,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 
 		// First, write keyA.
 		args := putArgs(keyA, []byte("value1"), 1, store.StoreID())
-		if _, err := batchutil.SendWrapped(store, &args); err != nil {
+		if _, err := client.SendWrapped(store, nil, &args); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1140,14 +1136,14 @@ func TestStoreReadInconsistent(t *testing.T) {
 			args.Key = txn.Key
 			args.Timestamp = txn.Timestamp
 			args.Txn = txn
-			if _, err := batchutil.SendWrapped(store, &args); err != nil {
+			if _, err := client.SendWrapped(store, nil, &args); err != nil {
 				t.Fatal(err)
 			}
 		}
 		// End txn B, but without resolving the intent.
 		etArgs := endTxnArgs(txnB, true, 1, store.StoreID())
 		etArgs.Timestamp = txnB.Timestamp
-		if _, err := batchutil.SendWrapped(store, &etArgs); err != nil {
+		if _, err := client.SendWrapped(store, nil, &etArgs); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1157,14 +1153,14 @@ func TestStoreReadInconsistent(t *testing.T) {
 
 		gArgs.Timestamp = store.ctx.Clock.Now()
 		gArgs.ReadConsistency = roachpb.INCONSISTENT
-		if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
+		if reply, err := client.SendWrapped(store, nil, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
 		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
 			t.Errorf("expected value %q, got %+v", []byte("value1"), gReply.Value)
 		}
 		gArgs.Key = keyB
 
-		if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
+		if reply, err := client.SendWrapped(store, nil, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
 		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value != nil {
 			// The new value of B will not be read at first.
@@ -1173,7 +1169,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// However, it will be read eventually, as B's intent can be
 		// resolved asynchronously as txn B is committed.
 		util.SucceedsWithin(t, 500*time.Millisecond, func() error {
-			if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
+			if reply, err := client.SendWrapped(store, nil, &gArgs); err != nil {
 				return util.Errorf("expected read to succeed: %s", err)
 			} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value2")) {
 				return util.Errorf("expected value %q, got %+v", []byte("value2"), gReply.Value)
@@ -1184,7 +1180,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// Scan keys and verify results.
 		sArgs := scanArgs(keyA, keyB.Next(), 1, store.StoreID())
 		sArgs.ReadConsistency = roachpb.INCONSISTENT
-		reply, err := batchutil.SendWrapped(store, &sArgs)
+		reply, err := client.SendWrapped(store, nil, &sArgs)
 		if err != nil {
 			t.Errorf("expected scan to succeed: %s", err)
 		}
@@ -1257,7 +1253,7 @@ func TestStoreScanIntents(t *testing.T) {
 			}
 			args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)), 1, store.StoreID())
 			args.Txn = txn
-			if _, err := batchutil.SendWrapped(store, &args); err != nil {
+			if _, err := client.SendWrapped(store, nil, &args); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1272,7 +1268,7 @@ func TestStoreScanIntents(t *testing.T) {
 		}
 		done := make(chan struct{})
 		go func() {
-			if reply, err := batchutil.SendWrapped(store, &sArgs); err != nil {
+			if reply, err := client.SendWrapped(store, nil, &sArgs); err != nil {
 				t.Fatal(err)
 			} else {
 				sReply = reply.(*roachpb.ScanResponse)
@@ -1302,7 +1298,7 @@ func TestStoreScanIntents(t *testing.T) {
 				for _, key := range keys {
 					etArgs.Intents = append(etArgs.Intents, roachpb.Intent{Key: key})
 				}
-				if _, err := batchutil.SendWrapped(store, &etArgs); err != nil {
+				if _, err := client.SendWrapped(store, nil, &etArgs); err != nil {
 					t.Fatal(err)
 				}
 				<-done
@@ -1341,7 +1337,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 		keys = append(keys, key)
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)), 1, store.StoreID())
 		args.Txn = txn
-		if _, err := batchutil.SendWrapped(store, &args); err != nil {
+		if _, err := client.SendWrapped(store, nil, &args); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1351,7 +1347,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	// attempts to resolve the intents would fail.
 	etArgs := endTxnArgs(txn, true, 1, store.StoreID())
 	etArgs.Timestamp = txn.Timestamp
-	if _, err := batchutil.SendWrapped(store, &etArgs); err != nil {
+	if _, err := client.SendWrapped(store, nil, &etArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1361,7 +1357,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	sArgs := scanArgs(keys[0], keys[9].Next(), 1, store.StoreID())
 	sArgs.ReadConsistency = roachpb.INCONSISTENT
 	util.SucceedsWithin(t, time.Second, func() error {
-		if reply, err := batchutil.SendWrapped(store, &sArgs); err != nil {
+		if reply, err := client.SendWrapped(store, nil, &sArgs); err != nil {
 			return err
 		} else if sReply := reply.(*roachpb.ScanResponse); len(sReply.Rows) != 10 {
 			return util.Errorf("could not read rows as expected")
@@ -1415,7 +1411,7 @@ func TestStoreBadRequests(t *testing.T) {
 	testCases := append([]roachpb.Request{}, &args0, &args1, &args2, &args3, &args4,
 		&tArgs0, &tArgs2, &tArgs3, &tArgs4)
 	for i, test := range testCases {
-		if _, err := batchutil.SendWrapped(store, test); err == nil {
+		if _, err := client.SendWrapped(store, nil, test); err == nil {
 			t.Errorf("%d unexpected success of request %s", i, test)
 		}
 	}

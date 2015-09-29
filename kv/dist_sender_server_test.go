@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -249,7 +248,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	// Scan.
 	sa := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), 0).(*roachpb.ScanRequest)
 	sa.ReadConsistency = roachpb.INCONSISTENT
-	reply, err := batchutil.SendWrapped(ds, sa)
+	reply, err := client.SendWrapped(ds, nil, sa)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +264,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	// ReverseScan.
 	rsa := roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), 0).(*roachpb.ReverseScanRequest)
 	rsa.ReadConsistency = roachpb.INCONSISTENT
-	reply, err = batchutil.SendWrapped(ds, rsa)
+	reply, err = client.SendWrapped(ds, nil, rsa)
 	if err != nil {
 		t.Fatal(err)
 	}

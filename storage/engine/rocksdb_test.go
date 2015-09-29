@@ -41,11 +41,8 @@ const testCacheSize = 1 << 30 // GB.
 // encodePutResponse creates a put response using the specified
 // timestamp and encodes it using gogoprotobuf.
 func encodePutResponse(timestamp roachpb.Timestamp, t *testing.T) []byte {
-	batch := &roachpb.BatchResponse{
-		ResponseHeader: roachpb.ResponseHeader{
-			Timestamp: timestamp,
-		},
-	}
+	batch := &roachpb.BatchResponse{}
+	batch.Timestamp = timestamp
 	batch.Add(&roachpb.PutResponse{
 		ResponseHeader: roachpb.ResponseHeader{
 			Timestamp: timestamp,

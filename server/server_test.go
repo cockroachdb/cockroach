@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -311,13 +310,13 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: writes[0]},
 	}
 	get.EndKey = writes[len(writes)-1]
-	if _, err := batchutil.SendWrapped(tds, get); err == nil {
+	if _, err := client.SendWrapped(tds, nil, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
 	var delTS roachpb.Timestamp
 	for i, k := range writes {
 		put := roachpb.NewPut(k, roachpb.Value{Bytes: k})
-		reply, err := batchutil.SendWrapped(tds, put)
+		reply, err := client.SendWrapped(tds, nil, put)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -326,7 +325,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		// so make sure we see their values in our Scan.
 		delTS = reply.(*roachpb.PutResponse).Timestamp
 		scan.Timestamp = delTS
-		reply, err = batchutil.SendWrapped(tds, scan)
+		reply, err = client.SendWrapped(tds, nil, scan)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -348,7 +347,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			Timestamp: delTS,
 		},
 	}
-	reply, err := batchutil.SendWrapped(tds, del)
+	reply, err := client.SendWrapped(tds, nil, del)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +363,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*roachpb.ScanRequest)
 	scan.Timestamp = dr.Timestamp
 	scan.Txn = &roachpb.Transaction{Name: "MyTxn"}
-	reply, err = batchutil.SendWrapped(tds, scan)
+	reply, err = client.SendWrapped(tds, nil, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -407,7 +406,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		for _, k := range tc.keys {
 			put := roachpb.NewPut(k, roachpb.Value{Bytes: k})
 			var err error
-			reply, err = batchutil.SendWrapped(tds, put)
+			reply, err = client.SendWrapped(tds, nil, put)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -420,7 +419,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 				scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
 					int64(maxResults))
 				scan.Header().Timestamp = reply.Header().Timestamp
-				reply, err := batchutil.SendWrapped(tds, scan)
+				reply, err := client.SendWrapped(tds, nil, scan)
 				if err != nil {
 					t.Fatal(err)
 				}

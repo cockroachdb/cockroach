@@ -117,8 +117,6 @@ message RequestHeader {
 
 // ResponseHeader is returned with every storage node response.
 message ResponseHeader {
-  // Error is non-nil if an error occurred.
-  optional Error error = 1;
   // Timestamp specifies time at which read or write actually was
   // performed. In the case of both reads and writes, if the timestamp
   // supplied to the request was 0, the wall time of the node
@@ -626,7 +624,52 @@ message ResponseUnion {
 // the User and UserPriority fields.
 message BatchRequest {
   option (gogoproto.goproto_stringer) = false;
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  message Header {
+    // Timestamp specifies time at which read or writes should be
+    // performed. If the timestamp is set to zero value, its value
+    // is initialized to the wall time of the receiving node.
+    optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+    // CmdID is optionally specified for request idempotence
+    // (i.e. replay protection).
+    optional ClientCmdID cmd_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
+    // The key for request. If the request operates on a range, this
+    // represents the starting key for the range.
+    optional bytes key = 3 [(gogoproto.casttype) = "Key"];
+    // The end key is empty if the request spans only a single key. Otherwise,
+    // it must order strictly after Key. In such a case, the header indicates
+    // that the operation takes place on the key range from Key to EndKey,
+    // including Key and excluding EndKey.
+    optional bytes end_key = 4 [(gogoproto.casttype) = "Key"];
+    // Replica specifies the destination for the request. This is a specific
+    // instance of the available replicas belonging to RangeID.
+    optional ReplicaDescriptor replica = 5 [(gogoproto.nullable) = false];
+    // RangeID specifies the ID of the Raft consensus group which the key
+    // range belongs to. This is used by the receiving node to route the
+    // request to the correct range.
+    optional int64 range_id = 6 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+    // UserPriority specifies priority multiple for non-transactional
+    // commands. This value should be a positive integer [1, 2^31-1).
+    // It's properly viewed as a multiple for how likely this
+    // transaction will be to prevail if a write conflict occurs.
+    // Commands with UserPriority=100 will be 100x less likely to be
+    // aborted as conflicting transactions or non-transactional commands
+    // with UserPriority=1. This value is ignored if Txn is
+    // specified. If neither this value nor Txn is specified, the value
+    // defaults to 1.
+    optional int32 user_priority = 7 [default = 1];
+    // Txn is set non-nil if a transaction is underway. To start a txn,
+    // the first request should set this field to non-nil with name and
+    // isolation level set as desired. The response will contain the
+    // fully-initialized transaction with txn ID, priority, initial
+    // timestamp, and maximum timestamp.
+    optional Transaction txn = 8;
+    // ReadConsistency specifies the consistency for read
+    // operations. The default is CONSISTENT. This value is ignored for
+    // write operations.
+    optional ReadConsistencyType read_consistency = 9 [(gogoproto.nullable) = false];
+  }
+  optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
 }
 
@@ -635,6 +678,22 @@ message BatchRequest {
 // error in the response header is set to the first error from the
 // slice of responses, if applicable.
 message BatchResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  message Header {
+    // Error is non-nil if an error occurred.
+    optional Error error = 1;
+    // Timestamp specifies time at which read or write actually was
+    // performed. In the case of both reads and writes, if the timestamp
+    // supplied to the request was 0, the wall time of the node
+    // servicing the request will be set here. Additionally, in the case
+    // of writes, this value may be increased from the timestamp passed
+    // with the RequestHeader if the key being written was either read
+    // or written more recently.
+    optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+    // Transaction is non-nil if the request specified a non-nil
+    // transaction. The transaction timestamp and/or priority may have
+    // been updated, depending on the outcome of the request.
+    optional Transaction txn = 3;
+  }
+  optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }

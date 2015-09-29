@@ -181,7 +181,9 @@ func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	for _, rpl := range rplChunks[1:] {
 		reply.Responses = append(reply.Responses, rpl.Responses...)
 	}
-	reply.ResponseHeader = rplChunks[len(rplChunks)-1].ResponseHeader
+	lastHeader := rplChunks[len(rplChunks)-1].BatchResponse_Header
+	reply.Error = lastHeader.Error
+	reply.Timestamp = lastHeader.Timestamp
 	reply.Txn = ba.Txn
 	return reply, nil
 }

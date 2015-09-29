@@ -215,6 +215,8 @@ type Replica struct {
 	truncatedState unsafe.Pointer // *roachpb.RaftTruancatedState
 }
 
+var _ client.Sender = &Replica{}
+
 // NewReplica initializes the replica using the given metadata.
 func NewReplica(desc *roachpb.RangeDescriptor, rm RangeManager) (*Replica, error) {
 	r := &Replica{
@@ -565,48 +567,24 @@ func setBatchTimestamps(ba roachpb.BatchRequest) {
 	}
 }
 
-// sendArg is an internal convenience function which transparently wraps and
-// unwraps in a BatchRequest.
-// TODO(tschottdorf): should use batchutil.SendWrapped when AddCmd turns into
-// client.Sender#Send.
-func sendArg(r *Replica, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
-	ba := roachpb.BatchRequest{
-		RequestHeader: *args.Header(),
-	}
-	ba.Add(args)
-	// Unwrap reply via deferred function.
-	argsCpy := args
-	reply, pErr := r.AddCmd(ctx, ba)
-	err := pErr.GoError()
-	if err == nil {
-		br, ok := reply.(*roachpb.BatchResponse)
-		if !ok {
-			panic(fmt.Sprintf("expected a BatchResponse, got a %T", reply))
-		}
-		if len(br.Responses) != 1 {
-			panic(fmt.Sprintf("expected a BatchResponse with a single wrapped response, got one with %d", len(br.Responses)))
-		}
-		reply = br.Responses[0].GetInner()
-	} else {
-		reply = argsCpy.CreateReply()
-	}
-	return reply, err
-}
-
-// AddCmd adds a command for execution on this range. The command's
+// Send adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
 // either along the read-only execution path or the read-write Raft
 // command queue.
 // TODO(tschottdorf): use BatchRequest w/o pointer receiver.
-func (r *Replica) AddCmd(ctx context.Context, ba roachpb.BatchRequest) (roachpb.Response, *roachpb.Error) {
-	var reply roachpb.Response
+func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	var br *roachpb.BatchResponse
 	var err error
 	// Fiddle with the timestamps to make sure that writes can overlap
 	// within this batch.
 	// TODO(tschottdorf): provisional feature to get back to passing tests.
 	// Have to discuss how we go about it.
 	setBatchTimestamps(ba)
+
+	if err := r.checkBatchRequest(ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	// TODO(tschottdorf) Some (internal) requests go here directly, so they
 	// won't be traced.
@@ -618,17 +596,18 @@ func (r *Replica) AddCmd(ctx context.Context, ba roachpb.BatchRequest) (roachpb.
 		var iReply roachpb.Response
 		iReply, err = r.addAdminCmd(ctx, args)
 		if err == nil {
-			br := &roachpb.BatchResponse{}
+			br = &roachpb.BatchResponse{}
 			br.Add(iReply)
-			*br.Header() = *iReply.Header()
-			reply = br
+			h := iReply.Header()
+			br.Timestamp = h.Timestamp
+			br.Txn = h.Txn
 		}
 	} else if ba.IsReadOnly() {
 		defer trace.Epoch("read-only path")()
-		reply, err = r.addReadOnlyCmd(ctx, &ba)
+		br, err = r.addReadOnlyCmd(ctx, &ba)
 	} else if ba.IsWrite() {
 		defer trace.Epoch("read-write path")()
-		reply, err = r.addWriteCmd(ctx, &ba, nil)
+		br, err = r.addWriteCmd(ctx, &ba, nil)
 	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
@@ -642,9 +621,14 @@ func (r *Replica) AddCmd(ctx context.Context, ba roachpb.BatchRequest) (roachpb.
 		// clients will retry.
 		err = roachpb.NewRangeNotFoundError(r.Desc().RangeID)
 	}
-	return reply, roachpb.NewError(err)
+	// TODO(tschottdorf): assert nil reply on error.
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	return br, nil
 }
 
+// TODO(tschottdorf): almost obsolete.
 func (r *Replica) checkCmdHeader(header *roachpb.RequestHeader) error {
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		return roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
@@ -657,7 +641,8 @@ func (r *Replica) checkCmdHeader(header *roachpb.RequestHeader) error {
 // all be set to identical values between the batch request header and
 // all constituent batch requests. Also, either all requests must be
 // read-only, or none.
-func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest) error {
+// TODO(tschottdorf): should check that request is contained in range.
+func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 	for i := range ba.Requests {
 		args := ba.Requests[i].GetInner()
 		header := args.Header()
@@ -792,15 +777,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, args roachpb.Request) (roachp
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
 func (r *Replica) addReadOnlyCmd(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-	header := ba.Header()
-
-	if err := r.checkCmdHeader(header); err != nil {
-		return nil, err
-	}
-	if err := r.checkBatchRequest(ba); err != nil {
-		return nil, err
-	}
-
+	header := ba.BatchRequest_Header
 	trace := tracer.FromCtx(ctx)
 
 	// Add the read to the command queue to gate subsequent
@@ -854,13 +831,6 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg 
 	// This happens more eagerly below, but it's important to guarantee that
 	// early returns do not skip this.
 	defer signal()
-
-	if err := r.checkCmdHeader(ba.Header()); err != nil {
-		return nil, err
-	}
-	if err := r.checkBatchRequest(ba); err != nil {
-		return nil, err
-	}
 
 	trace := tracer.FromCtx(ctx)
 
@@ -1211,7 +1181,8 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		// headers.
 		{
 			origHeader := *proto.Clone(header).(*roachpb.RequestHeader)
-			*header = *proto.Clone(&ba.RequestHeader).(*roachpb.RequestHeader)
+			// TODO(tschottdorf): specify which fields to set here.
+			*header = ba.ToHeader()
 			// Only Key and EndKey are allowed to diverge from the iterated
 			// Batch header.
 			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
@@ -1528,7 +1499,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 	if len(baLocal.Requests) > 0 {
 		action := func() {
 			// Trace this under the ID of the intent owner.
-			ctx := tracer.ToCtx(ctx, r.rm.Tracer().NewTrace(baLocal.Header()))
+			ctx := tracer.ToCtx(ctx, r.rm.Tracer().NewTrace(baLocal))
 			if _, err := r.addWriteCmd(ctx, baLocal, &wg); err != nil {
 				if log.V(1) {
 					log.Warningc(ctx, "batch resolve failed: %s", err)

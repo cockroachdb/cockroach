@@ -1154,7 +1154,6 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	ctx = s.Context(ctx)
 	trace := tracer.FromCtx(ctx)
 	// If the request has a zero timestamp, initialize to this node's clock.
-	header := ba.Header()
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()
@@ -1162,6 +1161,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			return nil, roachpb.NewError(err)
 		}
 	}
+	header := &ba.BatchRequest_Header // want to update the original
 	if !header.Timestamp.Equal(roachpb.ZeroTimestamp) {
 		if s.Clock().MaxOffset() > 0 {
 			// Once a command is submitted to raft, all replicas' logical
@@ -1200,15 +1200,15 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			return nil, roachpb.NewError(err)
 		}
 
-		var reply roachpb.Response
+		var br *roachpb.BatchResponse
 		{
 			var pErr *roachpb.Error
-			reply, pErr = rng.AddCmd(ctx, ba)
+			br, pErr = rng.Send(ctx, ba)
 			err = pErr.GoError()
 		}
 
 		if err == nil {
-			return reply.(*roachpb.BatchResponse), nil
+			return br, nil
 		}
 
 		// Maybe resolve a potential write intent error. We do this here

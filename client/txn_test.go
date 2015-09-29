@@ -61,7 +61,7 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 		if pre != nil {
 			br, pErr = pre(ba)
 		} else {
-			br = ba.CreateReply().(*roachpb.BatchResponse)
+			br = ba.CreateReply()
 		}
 		if pErr != nil {
 			return nil, pErr
@@ -192,7 +192,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 	var calls []roachpb.Method
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
-		return ba.CreateReply().(*roachpb.BatchResponse), nil
+		return ba.CreateReply(), nil
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		_, err := txn.Get("a")
@@ -215,7 +215,7 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 		var calls []roachpb.Method
 		db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			calls = append(calls, ba.Methods()...)
-			return ba.CreateReply().(*roachpb.BatchResponse), nil
+			return ba.CreateReply(), nil
 		}, nil))
 		if err := db.Txn(func(txn *Txn) error {
 			b := &Batch{}
@@ -246,7 +246,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 		if et, ok := ba.GetArg(roachpb.EndTransaction); ok && !et.(*roachpb.EndTransactionRequest).Commit {
 			t.Errorf("expected commit to be true")
 		}
-		return ba.CreateReply().(*roachpb.BatchResponse), nil
+		return ba.CreateReply(), nil
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		return txn.Put("a", "b")
@@ -267,7 +267,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 	count := 0
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		count++
-		return ba.CreateReply().(*roachpb.BatchResponse), nil
+		return ba.CreateReply(), nil
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		b := &Batch{}
@@ -289,7 +289,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			t.Errorf("did not expect EndTransaction")
 		}
-		return ba.CreateReply().(*roachpb.BatchResponse), nil
+		return ba.CreateReply(), nil
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
 		return errors.New("foo")
@@ -310,7 +310,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		var calls []roachpb.Method
 		db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			calls = append(calls, ba.Methods()...)
-			return ba.CreateReply().(*roachpb.BatchResponse), nil
+			return ba.CreateReply(), nil
 		}, nil))
 		ok := false
 		if err := db.Txn(func(txn *Txn) error {
@@ -344,7 +344,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 		if et, ok := ba.GetArg(roachpb.EndTransaction); ok && et.(*roachpb.EndTransactionRequest).Commit {
 			t.Errorf("expected commit to be false")
 		}
-		return ba.CreateReply().(*roachpb.BatchResponse), nil
+		return ba.CreateReply(), nil
 	}, nil))
 
 	if err := db.Txn(func(txn *Txn) error {
@@ -388,7 +388,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 					return nil, roachpb.NewError(test.err)
 				}
 			}
-			return ba.CreateReply().(*roachpb.BatchResponse), nil
+			return ba.CreateReply(), nil
 		}, nil))
 		db.txnRetryOptions.InitialBackoff = 1 * time.Millisecond
 		err := db.Txn(func(txn *Txn) error {
@@ -442,7 +442,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				}
 				abort = true
 			}
-			return ba.CreateReply().(*roachpb.BatchResponse), nil
+			return ba.CreateReply(), nil
 		}, nil))
 
 		txn := NewTxn(*db)

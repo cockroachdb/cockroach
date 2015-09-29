@@ -27,13 +27,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
@@ -266,12 +266,12 @@ func TestSendRPCOrder(t *testing.T) {
 	var verifyCall func(rpc.Options, []net.Addr) error
 
 	var testFn rpcSendFn = func(opts rpc.Options, method string,
-		addrs []net.Addr, _ func(addr net.Addr) proto.Message,
+		addrs []net.Addr, getArgs func(addr net.Addr) proto.Message,
 		getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		if err := verifyCall(opts, addrs); err != nil {
 			return nil, err
 		}
-		return []proto.Message{getReply()}, nil
+		return []proto.Message{getArgs(addrs[0]).(*roachpb.BatchRequest).CreateReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -334,7 +334,7 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		if _, err := batchutil.SendWrapped(ds, args); err != nil {
+		if _, err := client.SendWrapped(ds, nil, args); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
 	}
@@ -372,12 +372,12 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		if first {
 			reply := getReply()
-			reply.(roachpb.Response).Header().SetGoError(
+			reply.(*roachpb.BatchResponse).SetGoError(
 				&roachpb.NotLeaderError{Leader: &leader, Replica: &roachpb.ReplicaDescriptor{}})
 			first = false
 			return []proto.Message{reply}, nil
 		}
-		return []proto.Message{getReply()}, nil
+		return []proto.Message{getArgs(nil).(*roachpb.BatchRequest).CreateReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -388,7 +388,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.Value{Bytes: []byte("value")})
-	if _, err := batchutil.SendWrapped(ds, put); err != nil {
+	if _, err := client.SendWrapped(ds, nil, put); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
 	if first {
@@ -407,8 +407,8 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
-		return []proto.Message{getReply()}, nil
+	var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, getArgs func(addr net.Addr) proto.Message, _ func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+		return []proto.Message{getArgs(nil).(*roachpb.BatchRequest).CreateReply()}, nil
 	}
 
 	errors := []error{
@@ -432,11 +432,11 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.Value{Bytes: []byte("value")})
 	// Fatal error on descriptor lookup, propagated to reply.
-	if _, err := batchutil.SendWrapped(ds, put); err.Error() != "fatal boom" {
+	if _, err := client.SendWrapped(ds, nil, put); err.Error() != "fatal boom" {
 		t.Errorf("unexpected error: %s", err)
 	}
 	// Retryable error on descriptor lookup, second attempt successful.
-	if _, err := batchutil.SendWrapped(ds, put); err != nil {
+	if _, err := client.SendWrapped(ds, nil, put); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
 	if len(errors) != 0 {
@@ -465,9 +465,9 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 		first := true
 
-		var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+		var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 			if !first {
-				return []proto.Message{getReply()}, nil
+				return []proto.Message{getArgs(nil).(*roachpb.BatchRequest).CreateReply()}, nil
 			}
 			first = false
 			if tc.rpcError {
@@ -480,7 +480,7 @@ func TestEvictCacheOnError(t *testing.T) {
 				err = errors.New("boom")
 			}
 			reply := getReply()
-			reply.(roachpb.Response).Header().SetGoError(err)
+			reply.(*roachpb.BatchResponse).SetGoError(err)
 			return []proto.Message{reply}, nil
 		}
 
@@ -495,7 +495,7 @@ func TestEvictCacheOnError(t *testing.T) {
 
 		put := roachpb.NewPut(roachpb.Key("a"), roachpb.Value{Bytes: []byte("value")}).(*roachpb.PutRequest)
 
-		if _, err := batchutil.SendWrapped(ds, put); err != nil && !testutils.IsError(err, "boom") {
+		if _, err := client.SendWrapped(ds, nil, put); err != nil && !testutils.IsError(err, "boom") {
 			t.Errorf("put encountered unexpected error: %s", err)
 		}
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &roachpb.ReplicaDescriptor{}) && !tc.shouldClearLeader {
@@ -551,7 +551,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: ba.Key,
 				RequestEndKey: ba.EndKey}
 		}
-		return []proto.Message{ba.CreateReply().(*roachpb.BatchResponse)}, nil
+		return []proto.Message{ba.CreateReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -559,7 +559,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 0)
-	if _, err := batchutil.SendWrapped(ds, scan); err != nil {
+	if _, err := client.SendWrapped(ds, nil, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
 }
@@ -653,7 +653,7 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 1)
-	sr, err := batchutil.SendWrapped(ds, scan)
+	sr, err := client.SendWrapped(ds, nil, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -726,7 +726,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		if method != "Node.Batch" {
 			t.Fatalf("unexpected method:%s", method)
 		}
-		header := getArgs(testAddress).(*roachpb.BatchRequest).RequestHeader
+		header := getArgs(testAddress).(*roachpb.BatchRequest).BatchRequest_Header
 		batchReply := getReply().(*roachpb.BatchResponse)
 		reply := &roachpb.ScanResponse{}
 		batchReply.Add(reply)
@@ -754,7 +754,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 10).(*roachpb.ScanRequest)
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	scan.Txn = &roachpb.Transaction{}
-	reply, err := batchutil.SendWrapped(ds, scan)
+	reply, err := client.SendWrapped(ds, nil, scan)
 	if err != nil {
 		t.Fatalf("scan encountered error: %s", err)
 	}
@@ -771,8 +771,8 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
-		return []proto.Message{getReply()}, nil
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, _ func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+		return []proto.Message{getArgs(nil).(*roachpb.BatchRequest).CreateReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -788,7 +788,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	rScan := &roachpb.ReverseScanRequest{
 		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	}
-	if _, err := batchutil.SendWrapped(ds, rScan); err != nil {
+	if _, err := client.SendWrapped(ds, nil, rScan); err != nil {
 		t.Fatal(err)
 	}
 }
