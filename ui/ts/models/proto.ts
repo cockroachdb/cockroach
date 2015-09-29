@@ -16,7 +16,7 @@ module Models {
    */
   export module Proto {
     /*****************************
-     * /proto/data.proto
+     * roachpb/data.proto
      ****************************/
 
     /**
@@ -82,7 +82,7 @@ module Models {
     }
 
     /*****************************
-     * /proto/metadata.proto
+     * roachpb/metadata.proto
      ****************************/
 
     /**
@@ -124,7 +124,7 @@ module Models {
     }
 
     /*****************************
-     * /proto/status.proto
+     * server/status/status.proto
      ****************************/
 
     /**
@@ -141,6 +141,10 @@ module Models {
       replicated_range_count: number;
       available_range_count: number;
     }
+
+    /*****************************
+     * storage/status.proto
+     ****************************/
 
     /**
      * StoreStatus describes the high-level current status of a Store.
@@ -183,7 +187,7 @@ module Models {
     }
 
     /*****************************
-     * /proto/timeseries.proto
+     * ts/timeseries.proto
      ****************************/
 
     /**
@@ -250,7 +254,7 @@ module Models {
     }
 
     /*****************************
-     * /proto/log.proto
+     * util/log/log.proto
      ****************************/
 
     /**
