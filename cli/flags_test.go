@@ -55,6 +55,7 @@ func TestNoLinkForbidden(t *testing.T) {
 	for _, forbidden := range []string{
 		"testing", // defines flags
 		"github.com/cockroachdb/cockroach/security/securitytest", // contains certificates
+		"github.com/cockroachdb/cockroach/testutils",
 	} {
 		if _, ok := imports[forbidden]; ok {
 			t.Errorf("The cockroach binary includes %s, which is forbidden", forbidden)
