@@ -468,30 +468,18 @@ func (db *DB) send(reqs ...proto.Request) (*proto.BatchResponse, *proto.Error) {
 		return &proto.BatchResponse{}, nil
 	}
 
-	if len(reqs) == 1 {
-		// We only send BatchRequest. Everything else needs to go into one.
-		if ba, ok := reqs[0].(*proto.BatchRequest); ok {
-			if ba.UserPriority == nil && db.userPriority != 0 {
-				ba.UserPriority = gogoproto.Int32(db.userPriority)
-			}
-			resetClientCmdID(ba)
-			br, pErr := db.sender.Send(context.TODO(), *ba)
-			if pErr != nil {
-				if log.V(1) {
-					log.Infof("failed %s: %s", ba.Method(), pErr)
-				}
-				return nil, pErr
-			}
-			return br, nil
-		}
-	}
-
 	ba := proto.BatchRequest{}
 	ba.Add(reqs...)
 
-	br, pErr := db.send(&ba)
-
+	if ba.UserPriority == nil && db.userPriority != 0 {
+		ba.UserPriority = gogoproto.Int32(db.userPriority)
+	}
+	resetClientCmdID(&ba)
+	br, pErr := db.sender.Send(context.TODO(), ba)
 	if pErr != nil {
+		if log.V(1) {
+			log.Infof("failed batch: %s", pErr)
+		}
 		return nil, pErr
 	}
 	return br, nil
@@ -521,8 +509,8 @@ func runOneRow(r Runner, b *Batch) (KeyValue, error) {
 // resetClientCmdID sets the client command ID if the call is for a
 // read-write method. The client command ID provides idempotency
 // protection in conjunction with the server.
-func resetClientCmdID(args proto.Request) {
-	args.Header().CmdID = proto.ClientCmdID{
+func resetClientCmdID(ba *proto.BatchRequest) {
+	ba.CmdID = proto.ClientCmdID{
 		WallTime: time.Now().UnixNano(),
 		Random:   rand.Int63(),
 	}

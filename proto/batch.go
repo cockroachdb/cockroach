@@ -25,67 +25,28 @@ import (
 
 // IsAdmin returns true iff the BatchRequest contains an admin request.
 func (ba *BatchRequest) IsAdmin() bool {
-	for _, arg := range ba.Requests {
-		if IsAdmin(arg.GetInner()) {
-			return true
-		}
-	}
-	return false
-}
-
-// IsRead returns true if all requests within are flagged as reading data.
-func (ba *BatchRequest) IsRead() bool {
-	for i := range ba.Requests {
-		if !IsRead(ba.Requests[i].GetInner()) {
-			return false
-		}
-	}
-	return true
+	return ba.flags()&isAdmin != 0
 }
 
 // IsWrite returns true iff the BatchRequest contains a write.
 func (ba *BatchRequest) IsWrite() bool {
-	for _, arg := range ba.Requests {
-		if IsWrite(arg.GetInner()) {
-			return true
-		}
-	}
-	return false
+	return (ba.flags() & isWrite) != 0
 }
 
 // IsReadOnly returns true if all requests within are read-only.
-// TODO(tschottdorf): unify with proto.IsReadOnly
 func (ba *BatchRequest) IsReadOnly() bool {
-	for i := range ba.Requests {
-		if !IsReadOnly(ba.Requests[i].GetInner()) {
-			return false
-		}
-	}
-	return true
+	flags := ba.flags()
+	return (flags&isRead) != 0 && (flags&isWrite) == 0
 }
 
 // IsReverse returns true iff the BatchRequest contains a reverse request.
 func (ba *BatchRequest) IsReverse() bool {
-	if len(ba.Requests) == 0 {
-		panic("empty batch")
-	}
-	reverse := IsReverse(ba.Requests[0].GetInner())
-	for _, arg := range ba.Requests[1:] {
-		if req := arg.GetInner(); IsReverse(req) != reverse {
-			panic(fmt.Sprintf("argument mixes reverse and non-reverse: %T", req))
-		}
-	}
-	return reverse
+	return (ba.flags() & isReverse) != 0
 }
 
 // IsTransactionWrite returns true iff the BatchRequest contains a txn write.
 func (ba *BatchRequest) IsTransactionWrite() bool {
-	for _, arg := range ba.Requests {
-		if IsTransactionWrite(arg.GetInner()) {
-			return true
-		}
-	}
-	return false
+	return (ba.flags() & isTxnWrite) != 0
 }
 
 // IsRange returns true iff the BatchRequest contains a range request.
@@ -217,9 +178,6 @@ func (ba *BatchRequest) Methods() []Method {
 	return res
 }
 
-// Method implements the Request interface.
-func (*BatchRequest) Method() Method { return Batch }
-
 // CreateReply implements the Request interface. It's slightly different from
 // the other implementations: It creates replies for each of the contained
 // requests, wrapped in a BatchResponse.
@@ -287,7 +245,7 @@ func (ba BatchRequest) String() string {
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
 		h := req.Header()
-		str = append(str, fmt.Sprintf("%T [%s,%s)", req, h.Key, h.EndKey))
+		str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Key, h.EndKey))
 	}
 	return strings.Join(str, ", ")
 }

@@ -27,8 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -36,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -78,7 +77,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 	get := func(store *storage.Store, rangeID proto.RangeID, key proto.Key) int64 {
 		args := getArgs(key, rangeID, store.StoreID())
-		resp, err := store.ExecuteCmd(context.Background(), &args)
+		resp, err := batchutil.SendWrapped(store, &args)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,8 +101,8 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 		increment := func(rangeID proto.RangeID, key proto.Key, value int64) (*proto.IncrementResponse, error) {
 			args := incrementArgs(key, value, rangeID, store.StoreID())
-			resp, pErr := store.ExecuteCmd(context.Background(), &args)
-			return resp.(*proto.IncrementResponse), pErr.GoError()
+			resp, err := batchutil.SendWrapped(store, &args)
+			return resp.(*proto.IncrementResponse), err
 		}
 
 		if _, err := increment(rangeID, key1, 2); err != nil {
@@ -113,7 +112,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 			t.Fatal(err)
 		}
 		splitArgs := adminSplitArgs(proto.KeyMin, splitKey, rangeID, store.StoreID())
-		if _, err := store.ExecuteCmd(context.Background(), &splitArgs); err != nil {
+		if _, err := batchutil.SendWrapped(store, &splitArgs); err != nil {
 			t.Fatal(err)
 		}
 		rangeID2 = store.LookupReplica(key2, nil).Desc().RangeID
@@ -137,11 +136,11 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
 	// ensure that is has been started.
 	incArgs := incrementArgs(key1, 0, rangeID, store.StoreID())
-	if _, err := store.ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(store, &incArgs); err != nil {
 		t.Fatal(err)
 	}
 	incArgs = incrementArgs(key2, 0, rangeID2, store.StoreID())
-	if _, err := store.ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(store, &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -175,14 +174,14 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 		// Write a bytes value so the increment will fail.
 		putArgs := putArgs(proto.Key("a"), []byte("asdf"), 1, store.StoreID())
-		if _, err := store.ExecuteCmd(context.Background(), &putArgs); err != nil {
+		if _, err := batchutil.SendWrapped(store, &putArgs); err != nil {
 			t.Fatal(err)
 		}
 
 		// Try and fail to increment the key. It is important for this test that the
 		// failure be the last thing in the raft log when the store is stopped.
 		incArgs := incrementArgs(proto.Key("a"), 42, 1, store.StoreID())
-		if _, err := store.ExecuteCmd(context.Background(), &incArgs); err == nil {
+		if _, err := batchutil.SendWrapped(store, &incArgs); err == nil {
 			t.Fatal("did not get expected error")
 		}
 	}()
@@ -196,7 +195,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	// Issue a no-op write to lazily initialize raft on the range.
 	incArgs := incrementArgs(proto.Key("b"), 0, 1, store.StoreID())
-	if _, err := store.ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(store, &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -215,7 +214,7 @@ func TestReplicateRange(t *testing.T) {
 
 	// Issue a command on the first node before replicating.
 	incArgs := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
-	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -258,7 +257,7 @@ func TestReplicateRange(t *testing.T) {
 	util.SucceedsWithin(t, 1*time.Second, func() error {
 		getArgs := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
 		getArgs.ReadConsistency = proto.INCONSISTENT
-		if reply, err := mtc.stores[1].ExecuteCmd(context.Background(), &getArgs); err != nil {
+		if reply, err := batchutil.SendWrapped(mtc.stores[1], &getArgs); err != nil {
 			return util.Errorf("failed to read data")
 		} else if v := mustGetInt(reply.(*proto.GetResponse).Value); v != 5 {
 			return util.Errorf("failed to read correct data: %d", v)
@@ -282,7 +281,7 @@ func TestRestoreReplicas(t *testing.T) {
 	// Perform an increment before replication to ensure that commands are not
 	// repeated on restarts.
 	incArgs := incrementArgs([]byte("a"), 23, 1, mtc.stores[0].StoreID())
-	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -309,27 +308,27 @@ func TestRestoreReplicas(t *testing.T) {
 	// Send a command on each store. The original store (the leader still)
 	// will succeed.
 	incArgs = incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
-	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 		t.Fatal(err)
 	}
 	// The follower will return a not leader error, indicating the command
 	// should be forwarded to the leader.
 	incArgs = incrementArgs([]byte("a"), 11, 1, mtc.stores[1].StoreID())
 	{
-		_, pErr := mtc.stores[1].ExecuteCmd(context.Background(), &incArgs)
-		if _, ok := pErr.GoError().(*proto.NotLeaderError); !ok {
-			t.Fatalf("expected not leader error; got %s", pErr)
+		_, err := batchutil.SendWrapped(mtc.stores[1], &incArgs)
+		if _, ok := err.(*proto.NotLeaderError); !ok {
+			t.Fatalf("expected not leader error; got %s", err)
 		}
 	}
 	incArgs.Replica.StoreID = mtc.stores[0].StoreID()
-	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
 		getArgs.ReadConsistency = proto.INCONSISTENT
-		reply, err := mtc.stores[1].ExecuteCmd(context.Background(), &getArgs)
+		reply, err := batchutil.SendWrapped(mtc.stores[1], &getArgs)
 		if err != nil {
 			return false
 		}
@@ -447,7 +446,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	// Issue a command on the first node before replicating.
 	incArgs := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
-	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -460,13 +459,13 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Truncate the log at index+1 (log entries < N are removed, so this includes
 	// the increment).
 	truncArgs := truncateLogArgs(index+1, 1, mtc.stores[0].StoreID())
-	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &truncArgs); err != nil {
+	if _, err := batchutil.SendWrapped(mtc.stores[0], &truncArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Issue a second command post-truncation.
 	incArgs = incrementArgs([]byte("a"), 11, 1, mtc.stores[0].StoreID())
-	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 		t.Fatal(err)
 	}
 	mvcc := rng.GetMVCCStats()
@@ -484,7 +483,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
 		getArgs.ReadConsistency = proto.INCONSISTENT
-		reply, err := mtc.stores[1].ExecuteCmd(context.Background(), &getArgs)
+		reply, err := batchutil.SendWrapped(mtc.stores[1], &getArgs)
 		if err != nil {
 			return false
 		}
@@ -508,14 +507,14 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Send a third command to verify that the log states are synced up so the
 	// new node can accept new commands.
 	incArgs = incrementArgs([]byte("a"), 23, 1, mtc.stores[0].StoreID())
-	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
 		getArgs.ReadConsistency = proto.INCONSISTENT
-		reply, err := mtc.stores[1].ExecuteCmd(context.Background(), &getArgs)
+		reply, err := batchutil.SendWrapped(mtc.stores[1], &getArgs)
 		if err != nil {
 			return false
 		}
@@ -791,7 +790,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	mtc.replicateRange(rangeID, 0, 1, 2)
 
 	incArgs := incrementArgs([]byte("a"), 5, rangeID, mtc.stores[0].StoreID())
-	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -817,7 +816,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	// Stop one of the replicas and issue a new increment.
 	mtc.stopStore(1)
 	incArgs = incrementArgs([]byte("a"), 11, rangeID, mtc.stores[0].StoreID())
-	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -843,7 +842,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		mtc.replicateRange(rangeID, 0, 3, 1)
 
 		incArgs := incrementArgs([]byte("a"), 5, rangeID, mtc.stores[0].StoreID())
-		if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+		if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 			t.Fatal(err)
 		}
 
@@ -880,7 +879,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 
 		// Ensure that the rest of the group can make progress.
 		incArgs = incrementArgs([]byte("a"), 11, rangeID, mtc.stores[0].StoreID())
-		if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+		if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 			t.Fatal(err)
 		}
 		verify([]int64{16, 5, 16, 16})
@@ -891,7 +890,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		// Node 1 never sees the increment that was added while it was
 		// down. Perform another increment on the live nodes to verify.
 		incArgs = incrementArgs([]byte("a"), 23, rangeID, mtc.stores[0].StoreID())
-		if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
+		if _, err := batchutil.SendWrapped(mtc.stores[0], &incArgs); err != nil {
 			t.Fatal(err)
 		}
 		verify([]int64{39, 5, 39, 39})
@@ -956,7 +955,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	store0 := mtc.stores[0]
 	// Make the split
 	splitArgs := adminSplitArgs(proto.KeyMin, splitKey, rangeID, store0.StoreID())
-	if _, err := store0.ExecuteCmd(context.Background(), &splitArgs); err != nil {
+	if _, err := batchutil.SendWrapped(store0, &splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -966,7 +965,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	}
 	// Issue an increment for later check.
 	incArgs := incrementArgs(key, 11, rangeID2, store0.StoreID())
-	if _, err := store0.ExecuteCmd(context.Background(), &incArgs); err != nil {
+	if _, err := batchutil.SendWrapped(store0, &incArgs); err != nil {
 		t.Fatal(err)
 	}
 	// Now add the second replica.
@@ -980,7 +979,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 		getArgs := getArgs(key, rangeID2, mtc.stores[1].StoreID())
 		// Reading on non-leader replica should use inconsistent read
 		getArgs.ReadConsistency = proto.INCONSISTENT
-		reply, err := mtc.stores[1].ExecuteCmd(context.Background(), &getArgs)
+		reply, err := batchutil.SendWrapped(mtc.stores[1], &getArgs)
 		if err != nil {
 			return false
 		}
@@ -1071,7 +1070,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 
 	// Make the split.
 	splitArgs := adminSplitArgs(proto.KeyMin, []byte("b"), proto.RangeID(1), mtc.stores[0].StoreID())
-	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &splitArgs); err != nil {
+	if _, err := batchutil.SendWrapped(mtc.stores[0], &splitArgs); err != nil {
 		t.Fatal(err)
 	}
 

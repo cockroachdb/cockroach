@@ -42,7 +42,7 @@ func init() {
 	RegisterSender("rpcs", f)
 }
 
-var method = fmt.Sprintf("Server.%s", proto.Batch)
+const method = "Server.Batch"
 
 // rpcSender is an implementation of Sender which exposes the
 // Key-Value database provided by a Cockroach cluster by connecting

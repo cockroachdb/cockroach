@@ -18,8 +18,6 @@
 package kv
 
 import (
-	"fmt"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -40,7 +38,6 @@ var allExternalMethods = [...]proto.Request{
 	proto.Scan:           &proto.ScanRequest{},
 	proto.ReverseScan:    &proto.ReverseScanRequest{},
 	proto.EndTransaction: &proto.EndTransactionRequest{},
-	proto.Batch:          &proto.BatchRequest{},
 	proto.AdminSplit:     &proto.AdminSplitRequest{},
 	proto.AdminMerge:     &proto.AdminMergeRequest{},
 }
@@ -59,18 +56,8 @@ func NewDBServer(ctx *base.Context, sender client.Sender) *DBServer {
 
 // RegisterRPC registers the RPC endpoints.
 func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
-	for i, reqType := range allExternalMethods {
-		if reqType == nil {
-			continue
-		}
-
-		method := proto.Method(i)
-
-		if err := rpcServer.Register(fmt.Sprintf("Server.%s", method), s.executeCmd, reqType); err != nil {
-			return err
-		}
-	}
-	return nil
+	const method = "Server.Batch"
+	return rpcServer.Register(method, s.executeCmd, &proto.BatchRequest{})
 }
 
 // executeCmd interprets the given message as a *proto.BatchRequest and sends it

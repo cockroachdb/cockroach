@@ -54,6 +54,7 @@ type IndexedError interface {
 	SetErrorIndex(int32)
 }
 
+var _ IndexedError = &WriteIntentError{}
 var _ IndexedError = &ConditionFailedError{}
 var _ IndexedError = &internalError{}
 
@@ -290,6 +291,9 @@ func (*TransactionAbortedError) Transaction() *Transaction {
 // Txn is the transaction which will be retried. Both arguments are copied.
 // Transactions.
 func NewTransactionPushError(txn, pusheeTxn *Transaction) *TransactionPushError {
+	if len(txn.GetID()) == 0 {
+		txn = nil
+	}
 	return &TransactionPushError{Txn: txn.Clone(), PusheeTxn: *pusheeTxn.Clone()}
 }
 
@@ -338,7 +342,7 @@ func (e *TransactionRetryError) Transaction() *Transaction {
 
 // NewTransactionStatusError initializes a new TransactionStatusError from
 // the given Transaction (which is copied) and a message.
-func NewTransactionStatusError(txn *Transaction, msg string) *TransactionStatusError {
+func NewTransactionStatusError(txn Transaction, msg string) *TransactionStatusError {
 	return &TransactionStatusError{Txn: *txn.Clone(), Msg: msg}
 }
 
@@ -354,6 +358,19 @@ func (e *WriteIntentError) Error() string {
 		keys = append(keys, intent.Key)
 	}
 	return fmt.Sprintf("conflicting intents on %v: resolved? %t", keys, e.Resolved)
+}
+
+// ErrorIndex implements IndexedError.
+func (e *WriteIntentError) ErrorIndex() (int32, bool) {
+	if e.Index != nil {
+		return e.Index.Index, true
+	}
+	return 0, false
+}
+
+// SetErrorIndex implements IndexedError.
+func (e *WriteIntentError) SetErrorIndex(index int32) {
+	e.Index = &ErrPosition{Index: index}
 }
 
 // Error formats error.

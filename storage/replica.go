@@ -89,7 +89,10 @@ var TestingCommandFilter func(proto.Request) error
 // upon EndTransaction if they only have local intents (which can be
 // resolved synchronously with EndTransaction). Certain tests become
 // simpler with this being turned off.
-var txnAutoGC = true
+// TODO(tschottdorf): Push after removal can happen if txn is not
+// single-roundtrip, and pusher will recreate a PENDING entry, getting
+// stuck. Since txn gc story is not done yet (#2062), disabled for now.
+var txnAutoGC = false
 
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
@@ -546,9 +549,9 @@ func (r *Replica) SetLastVerificationTimestamp(timestamp proto.Timestamp) error 
 // This has the effect of allowing self-overlapping commands within the batch,
 // which would otherwise result in an endless loop of WriteTooOldErrors.
 // TODO(tschottdorf): discuss self-overlap.
-func setBatchTimestamps(ba *proto.BatchRequest) {
+func setBatchTimestamps(ba proto.BatchRequest) {
 	if ba.Txn != nil || ba.Timestamp.Equal(proto.ZeroTimestamp) ||
-		!proto.IsWrite(ba) {
+		!ba.IsWrite() {
 		return
 	}
 	for i, union := range ba.Requests {
@@ -563,44 +566,43 @@ func setBatchTimestamps(ba *proto.BatchRequest) {
 	}
 }
 
+// sendArg is an internal convenience function which transparently wraps and
+// unwraps in a BatchRequest.
+// TODO(tschottdorf): should use batchutil.SendWrapped when AddCmd turns into
+// client.Sender#Send.
+func sendArg(r *Replica, ctx context.Context, args proto.Request) (proto.Response, error) {
+	ba := proto.BatchRequest{
+		RequestHeader: *args.Header(),
+	}
+	ba.Add(args)
+	// Unwrap reply via deferred function.
+	argsCpy := args
+	reply, pErr := r.AddCmd(ctx, ba)
+	err := pErr.GoError()
+	if err == nil {
+		br, ok := reply.(*proto.BatchResponse)
+		if !ok {
+			panic(fmt.Sprintf("expected a BatchResponse, got a %T", reply))
+		}
+		if len(br.Responses) != 1 {
+			panic(fmt.Sprintf("expected a BatchResponse with a single wrapped response, got one with %d", len(br.Responses)))
+		}
+		reply = br.Responses[0].GetInner()
+	} else {
+		reply = argsCpy.CreateReply()
+	}
+	return reply, err
+}
+
 // AddCmd adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
 // either along the read-only execution path or the read-write Raft
 // command queue.
-// TODO(tschottdorf): once this receives a BatchRequest, make sure
-// we don't unecessarily use *BatchRequest in the request path.
-func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.Response, err error) {
-	// Wrap non-batch requests in a batch if possible.
-	ba, ok := args.(*proto.BatchRequest)
-	// TODO(tschottdorf): everything should go into a Batch. Keeping some commands
-	// individual creates a lot of trouble on the coordinator side for nothing.
-	// Instead, just enforce that some commands must be alone in their batch.
-	// Then they can just be unwrapped hereabouts (admin commands).
-	if !ok {
-		ba = &proto.BatchRequest{
-			RequestHeader: *args.Header(),
-		}
-		ba.Add(args)
-		// Unwrap reply via deferred function.
-		argsCpy := args
-		defer func() {
-			if err == nil {
-				br, ok := reply.(*proto.BatchResponse)
-				if !ok {
-					panic(fmt.Sprintf("expected a BatchResponse, got a %T", reply))
-				}
-				if len(br.Responses) != 1 {
-					panic(fmt.Sprintf("expected a BatchResponse with a single wrapped response, got one with %d", len(br.Responses)))
-				}
-				reply = br.Responses[0].GetInner()
-			} else {
-				reply = argsCpy.CreateReply()
-			}
-		}()
-	}
-	args = nil // TODO(tschottdorf): make sure we don't use this by accident
-
+// TODO(tschottdorf): use BatchRequest w/o pointer receiver.
+func (r *Replica) AddCmd(ctx context.Context, ba proto.BatchRequest) (proto.Response, *proto.Error) {
+	var reply proto.Response
+	var err error
 	// Fiddle with the timestamps to make sure that writes can overlap
 	// within this batch.
 	// TODO(tschottdorf): provisional feature to get back to passing tests.
@@ -611,7 +613,7 @@ func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.R
 	// won't be traced.
 	trace := tracer.FromCtx(ctx)
 	// Differentiate between admin, read-only and write.
-	if proto.IsAdmin(ba) {
+	if ba.IsAdmin() {
 		defer trace.Epoch("admin path")()
 		args := ba.Requests[0].GetInner()
 		var iReply proto.Response
@@ -622,21 +624,26 @@ func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (reply proto.R
 			*br.Header() = *iReply.Header()
 			reply = br
 		}
-	} else if proto.IsReadOnly(ba) {
+	} else if ba.IsReadOnly() {
 		defer trace.Epoch("read-only path")()
-		reply, err = r.addReadOnlyCmd(ctx, ba)
-	} else if proto.IsWrite(ba) {
+		reply, err = r.addReadOnlyCmd(ctx, &ba)
+	} else if ba.IsWrite() {
 		defer trace.Epoch("read-write path")()
-		reply, err = r.addWriteCmd(ctx, ba, nil)
-	} else if ba != nil && len(ba.Requests) == 0 {
+		reply, err = r.addWriteCmd(ctx, &ba, nil)
+	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
 		// from the header it won't be clear how to route those requests).
 		panic("empty batch")
 	} else {
-		panic(fmt.Sprintf("don't know how to handle command %T: %+v", args, args))
+		panic(fmt.Sprintf("don't know how to handle command %s", ba))
 	}
-	return
+	if err == multiraft.ErrGroupDeleted {
+		// This error needs to be converted appropriately so that
+		// clients will retry.
+		err = proto.NewRangeNotFoundError(r.Desc().RangeID)
+	}
+	return reply, proto.NewError(err)
 }
 
 func (r *Replica) checkCmdHeader(header *proto.RequestHeader) error {
@@ -701,7 +708,7 @@ func (r *Replica) beginCmds(ba *proto.BatchRequest) ([]interface{}, error) {
 		r.Lock()
 		var wg sync.WaitGroup
 		var spans []keys.Span
-		readOnly := proto.IsReadOnly(ba)
+		readOnly := ba.IsReadOnly()
 		for _, union := range ba.Requests {
 			h := union.GetInner().Header()
 			spans = append(spans, keys.Span{Start: h.Key, End: h.EndKey})
@@ -1055,11 +1062,11 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 
 	// On successful write commands, flush to event feed, and handle other
 	// write-related triggers including splitting and config gossip updates.
-	if rErr == nil && proto.IsWrite(ba) {
+	if rErr == nil && ba.IsWrite() {
 		// Publish update to event feed.
 		// TODO(spencer): we should be sending feed updates for each part
-		// of the batch.
-		r.rm.EventFeed().updateRange(r, ba.Method(), &ms)
+		// of the batch. In particular, stats should be reported per-command.
+		r.rm.EventFeed().updateRange(r, proto.Batch, &ms)
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
 	}
@@ -1082,7 +1089,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	btch := r.rm.Engine().NewBatch()
 
 	// Check the response cache for this batch to ensure idempotency.
-	if proto.IsWrite(ba) {
+	if ba.IsWrite() {
 		if replyWithErr, readErr := r.respCache.GetResponse(btch, ba.CmdID); readErr != nil {
 			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
 		} else if replyWithErr.Reply != nil {
@@ -1147,7 +1154,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// a write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence, even if leadership changes.
-	if proto.IsWrite(ba) {
+	if ba.IsWrite() {
 		if err == nil {
 			// If command was successful, flush the MVCC stats to the batch.
 			if err := r.stats.MergeMVCCStats(btch, ms, ba.Timestamp.WallTime); err != nil {
@@ -1481,7 +1488,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 	tracer.ToCtx(ctx, nil) // we're doing async stuff below; those need new traces
 	trace.Event("resolving intents [async]")
 
-	ba := &proto.BatchRequest{}
+	var reqsRemote []proto.Request
 	baLocal := &proto.BatchRequest{}
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
@@ -1513,7 +1520,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		if local {
 			baLocal.Add(resolveArgs)
 		} else {
-			ba.Add(resolveArgs)
+			reqsRemote = append(reqsRemote, resolveArgs)
 		}
 	}
 
@@ -1556,11 +1563,9 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 	}
 
 	// Resolve all of the intents which aren't local to the Range.
-	if len(ba.Requests) > 0 {
-		// TODO(tschottdorf): should be able use the Batch normally and do
-		// without InternalAddRequest.
+	if len(reqsRemote) > 0 {
 		b := &client.Batch{}
-		b.InternalAddRequest(ba)
+		b.InternalAddRequest(reqsRemote...)
 		action := func() {
 			// TODO(tschottdorf): no tracing here yet.
 			if err := r.rm.DB().Run(b); err != nil {

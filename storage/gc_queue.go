@@ -270,7 +270,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
 	// Send GC request through range.
 	gcMeta.OldestIntentNanos = gogoproto.Int64(oldestIntentNanos)
 	gcArgs.GCMeta = *gcMeta
-	if _, err := repl.AddCmd(repl.context(), gcArgs); err != nil {
+	if _, err := sendArg(repl, repl.context(), gcArgs); err != nil {
 		return err
 	}
 
@@ -300,23 +300,18 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 	}
 
 	// Attempt to push the transaction which created the intent.
-	ba := &proto.BatchRequest{}
-	ba.Timestamp = now
-	ba.UserPriority = gogoproto.Int32(proto.MaxPriority)
 	pushArgs := &proto.PushTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Timestamp:    now,
-			Key:          txn.Key,
-			UserPriority: gogoproto.Int32(proto.MaxPriority),
+			Timestamp: now,
+			Key:       txn.Key,
 		},
 		Now:       now,
-		PusherTxn: nil,
+		PusherTxn: proto.Transaction{Priority: proto.MaxPriority},
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}
-	ba.Add(pushArgs)
 	b := &client.Batch{}
-	b.InternalAddRequest(ba)
+	b.InternalAddRequest(pushArgs)
 	br, err := repl.rm.DB().RunWithResponse(b)
 	if err != nil {
 		log.Warningf("push of txn %s failed: %s", txn, err)

@@ -726,7 +726,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		if method != "Node.Batch" {
 			t.Fatalf("unexpected method:%s", method)
 		}
-		header := getArgs(testAddress).(proto.Request).Header()
+		header := getArgs(testAddress).(*proto.BatchRequest).RequestHeader
 		batchReply := getReply().(*proto.BatchResponse)
 		reply := &proto.ScanResponse{}
 		batchReply.Add(reply)

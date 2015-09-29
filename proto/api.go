@@ -67,34 +67,10 @@ const (
 	isAlone                // requests which must be alone in a batch
 )
 
-// IsAdmin returns true if the request is an admin request.
-func IsAdmin(args Request) bool {
-	return (args.flags() & isAdmin) != 0
-}
-
-// IsRead returns true if the request is a read request.
-func IsRead(args Request) bool {
-	return (args.flags() & isRead) != 0
-}
-
-// IsWrite returns true if the request is a write request.
-func IsWrite(args Request) bool {
-	return (args.flags() & isWrite) != 0
-}
-
 // IsReadOnly returns true iff the request is read-only.
 func IsReadOnly(args Request) bool {
-	return IsRead(args) && !IsWrite(args)
-}
-
-// IsWriteOnly returns true if the request only requires write permissions.
-func IsWriteOnly(args Request) bool {
-	return !IsRead(args) && IsWrite(args)
-}
-
-// IsReverse returns true if the request is reverse.
-func IsReverse(args Request) bool {
-	return (args.flags() & isReverse) != 0
+	flags := args.flags()
+	return (flags&isRead) != 0 && (flags&isWrite) == 0
 }
 
 // IsTransactionWrite returns true if the request produces write

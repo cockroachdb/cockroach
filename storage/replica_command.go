@@ -289,7 +289,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 	// Timestamp and Epoch have not suffered regression.
 	if ok {
 		if reply.Txn.Status == proto.COMMITTED {
-			return reply, nil, proto.NewTransactionStatusError(reply.Txn, "already committed")
+			return reply, nil, proto.NewTransactionStatusError(*reply.Txn, "already committed")
 		} else if reply.Txn.Status == proto.ABORTED {
 			// If the transaction was previously aborted by a concurrent
 			// writer's push, any intents written are still open. It's only now
@@ -302,14 +302,14 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 			// importantly, intents) dangling; we can't currently write on
 			// error. Would panic, but that makes TestEndTransactionWithErrors
 			// awkward.
-			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch))
+			return reply, nil, proto.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch))
 		} else if args.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(args.Txn.OrigTimestamp) {
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
 			// than the original transaction timestamp.
 
 			// TODO(tschottdorf): see above comment on epoch regression.
-			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("timestamp regression: %s", args.Txn.OrigTimestamp))
+			return reply, nil, proto.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("timestamp regression: %s", args.Txn.OrigTimestamp))
 		}
 
 		// Take max of requested epoch and existing epoch. The requester
@@ -396,7 +396,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 		var err error
 		if txnAutoGC && len(externalIntents) == 0 {
 			if log.V(1) {
-				log.Infof("auto-gc'ed %s", args.Txn.Short())
+				log.Infof("auto-gc'ed %s (%d intents)", args.Txn.Short(), len(args.Intents))
 			}
 			err = engine.MVCCDelete(batch, ms, key, proto.ZeroTimestamp, nil /* txn */)
 		} else {
@@ -770,16 +770,18 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, args proto.GCReq
 // reader trying to push a conflicting txn's commit timestamp
 // forward), who attempts to resolve a conflict with a "pushee"
 // (args.PushTxn -- the pushee txn whose intent(s) caused the
-// conflict).
+// conflict). A pusher is either transactional, in which case
+// PushTxn is completely initialized, or not, in which case the
+// PushTxn has only the priority set.
 //
 // Txn already committed/aborted: If pushee txn is committed or
 // aborted return success.
 //
 // Txn Timeout: If pushee txn entry isn't present or its LastHeartbeat
-// timestamp isn't set, use PushTxn.Timestamp as LastHeartbeat. If
-// current time - LastHeartbeat > 2 * DefaultHeartbeatInterval, then
-// the pushee txn should be either pushed forward, aborted, or
-// confirmed not pending, depending on value of Request.PushType.
+// timestamp isn't set, use its as LastHeartbeat. If current time -
+// LastHeartbeat > 2 * DefaultHeartbeatInterval, then the pushee txn
+// should be either pushed forward, aborted, or confirmed not pending,
+// depending on value of Request.PushType.
 //
 // Old Txn Epoch: If persisted pushee txn entry has a newer Epoch than
 // PushTxn.Epoch, return success, as older epoch may be removed.
@@ -789,9 +791,7 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, args proto.GCReq
 // args.PushType. If args.PushType is ABORT_TXN, set txn.Status to
 // ABORTED, and priority to one less than the pusher's priority and
 // return success. If args.PushType is PUSH_TIMESTAMP, set
-// txn.Timestamp to pusher's Timestamp + 1 (note that we use the
-// pusher's Args.Timestamp, not Txn.Timestamp because the args
-// timestamp can advance during the txn).
+// txn.Timestamp to just after PushTo.
 //
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionPushError. Transaction will be retried
@@ -858,7 +858,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
-	if args.PushType == proto.PUSH_TIMESTAMP && args.Timestamp.Less(reply.PusheeTxn.Timestamp) {
+	if args.PushType == proto.PUSH_TIMESTAMP && args.PushTo.Less(reply.PusheeTxn.Timestamp) {
 		// Trivial noop.
 		return reply, nil
 	}
@@ -866,18 +866,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	// pusherWins bool is true in the event the pusher prevails.
 	var pusherWins bool
 
-	// If there's no incoming transaction, the pusher is non-transactional.
-	// We make a random priority, biased by specified
-	// args.Header().UserPriority in this case.
-	var priority int32
-	if args.PusherTxn != nil {
-		priority = args.PusherTxn.Priority
-	} else {
-		// Make sure we have a deterministic random number when generating
-		// a priority for this txn-less request, so all replicas see same priority.
-		randGen := rand.New(rand.NewSource(int64(reply.PusheeTxn.Priority) ^ args.Timestamp.WallTime))
-		priority = proto.MakePriority(randGen, args.GetUserPriority())
-	}
+	priority := args.PusherTxn.Priority
 
 	// Check for txn timeout.
 	if reply.PusheeTxn.LastHeartbeat == nil {
@@ -888,7 +877,6 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	}
 	// Compute heartbeat expiration (all replicas must see the same result).
 	expiry := args.Now
-	expiry.Forward(args.Timestamp) // if Timestamp is ahead, use that
 	expiry.WallTime -= 2 * DefaultHeartbeatInterval.Nanoseconds()
 
 	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
@@ -905,7 +893,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 		// If just attempting to cleanup old or already-committed txns, don't push.
 		pusherWins = false
 	} else if reply.PusheeTxn.Priority < priority ||
-		(reply.PusheeTxn.Priority == priority && args.PusherTxn != nil &&
+		(reply.PusheeTxn.Priority == priority && len(args.PusherTxn.ID) != 0 &&
 			args.PusherTxn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
 		// Pusher wins based on priority; if priorities are equal, order
 		// by lower txn timestamp.
@@ -916,7 +904,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	}
 
 	if !pusherWins {
-		err := proto.NewTransactionPushError(args.PusherTxn, reply.PusheeTxn)
+		err := proto.NewTransactionPushError(&args.PusherTxn, reply.PusheeTxn)
 		if log.V(1) {
 			log.Info(err)
 		}
@@ -931,7 +919,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 		reply.PusheeTxn.Status = proto.ABORTED
 	} else if args.PushType == proto.PUSH_TIMESTAMP {
 		// Otherwise, update timestamp to be one greater than the request's timestamp.
-		reply.PusheeTxn.Timestamp = args.Timestamp
+		reply.PusheeTxn.Timestamp = args.PushTo
 		reply.PusheeTxn.Timestamp.Logical++
 	}
 

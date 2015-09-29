@@ -416,7 +416,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 			Key: txn.Key,
 		},
 		Now:       s.Clock.Now(),
-		PusherTxn: txn2,
+		PusherTxn: *txn2,
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}

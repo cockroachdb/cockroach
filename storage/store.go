@@ -277,6 +277,7 @@ type Store struct {
 	uninitReplicas    map[proto.RangeID]*Replica // Map of uninitialized replicas by Range ID
 }
 
+var _ client.Sender = &Store{}
 var _ multiraft.Storage = &Store{}
 
 // A StoreContext encompasses the auxiliary objects and configuration
@@ -742,6 +743,7 @@ func (s *Store) GetReplica(rangeID proto.RangeID) (*Replica, error) {
 	if rng, ok := s.replicas[rangeID]; ok {
 		return rng, nil
 	}
+	log.Warningf("AOU")
 	return nil, proto.NewRangeNotFoundError(rangeID)
 }
 
@@ -1145,26 +1147,19 @@ func (s *Store) ReplicaCount() int {
 	return len(s.replicas)
 }
 
-// ExecuteCmd fetches a range based on the header's replica, assembles
+// Send fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Response, *proto.Error) {
+func (s *Store) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
 	ctx = s.Context(ctx)
 	trace := tracer.FromCtx(ctx)
 	// If the request has a zero timestamp, initialize to this node's clock.
-	header := args.Header()
-	// TODO(tschottdorf): remove this first branch when we only have batches here.
-	if args.Method() != proto.Batch {
-		if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {
+	header := ba.Header()
+	for _, union := range ba.Requests {
+		arg := union.GetInner()
+		header := arg.Header()
+		if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(arg)); err != nil {
 			return nil, proto.NewError(err)
-		}
-	} else {
-		for _, union := range args.(*proto.BatchRequest).Requests {
-			arg := union.GetInner()
-			header := arg.Header()
-			if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(arg)); err != nil {
-				return nil, proto.NewError(err)
-			}
 		}
 	}
 	if !header.Timestamp.Equal(proto.ZeroTimestamp) {
@@ -1185,7 +1180,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		s.ctx.Clock.Update(header.Timestamp)
 	}
 
-	defer trace.Epoch("executing " + args.Method().String())()
+	defer trace.Epoch(fmt.Sprintf("executing %d requests", len(ba.Requests)))()
 	// Backoff and retry loop for handling errors. Backoff times are measured
 	// in the Trace.
 	next := func(r *retry.Retry) bool {
@@ -1206,29 +1201,39 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		}
 
 		var reply proto.Response
-		var index *int32
-		reply, err = rng.AddCmd(ctx, args)
+		{
+			var pErr *proto.Error
+			reply, pErr = rng.AddCmd(ctx, ba)
+			err = pErr.GoError()
+		}
+
 		if err == nil {
-			return reply, nil
-		} else if err == multiraft.ErrGroupDeleted {
-			// This error needs to be converted appropriately so that
-			// clients will retry.
-			err = proto.NewRangeNotFoundError(rng.Desc().RangeID)
+			return reply.(*proto.BatchResponse), nil
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
 		// because this is the code path with the requesting client
 		// waiting. We don't want every replica to attempt to resolve the
-		// intent independently, so we can't do it in Replica.executeCmd.
+		// intent independently, so we can't do it there.
 		if wiErr, ok := err.(*proto.WriteIntentError); ok {
 			var pushType proto.PushTxnType
-			if proto.IsWrite(args) {
+			if ba.IsWrite() {
 				pushType = proto.ABORT_TXN
 			} else {
 				pushType = proto.PUSH_TIMESTAMP
 			}
 
-			err = s.resolveWriteIntentError(ctx, wiErr, rng, args, pushType)
+			index, ok := wiErr.ErrorIndex()
+			if ok {
+				err = s.resolveWriteIntentError(ctx, wiErr, rng, ba.Requests[index].GetInner(), pushType)
+				// Make sure that if an index is carried in the error, it
+				// remains the one corresponding to the batch here.
+				if iErr, ok := err.(proto.IndexedError); ok {
+					if _, ok := iErr.ErrorIndex(); ok {
+						iErr.SetErrorIndex(index)
+					}
+				}
+			}
 		}
 
 		switch t := err.(type) {
@@ -1257,7 +1262,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 
 			// Otherwise, update timestamp on read/write and backoff / retry.
 			for _, intent := range t.Intents {
-				if proto.IsWrite(args) && header.Timestamp.Less(intent.Txn.Timestamp) {
+				if ba.IsWrite() && header.Timestamp.Less(intent.Txn.Timestamp) {
 					header.Timestamp = intent.Txn.Timestamp.Next()
 				}
 			}
@@ -1266,11 +1271,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 			}
 			continue
 		}
-		pErr := proto.NewError(err)
-		if index != nil {
-			pErr.Index = &proto.ErrPosition{Index: *index}
-		}
-		return nil, pErr
+		return nil, proto.NewError(err)
 	}
 
 	// By default, retries are indefinite. However, some unittests set a
@@ -1324,19 +1325,26 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	now := s.Clock().Now()
 	header := args.Header()
-	ba := &proto.BatchRequest{
-		RequestHeader: proto.RequestHeader{
-			Timestamp:    header.Timestamp,
-			UserPriority: header.UserPriority,
-		},
+
+	// TODO(tschottdorf): need deduplication here (many pushes for the same
+	// txn are awkward but even worse, could ratchet up the priority).
+	pusherTxn := header.Txn
+	// If there's no pusher, we communicate a priority by sending an empty
+	// txn with only the priority set.
+	if pusherTxn == nil {
+		pusherTxn = &proto.Transaction{
+			Priority: proto.MakePriority(args.Header().GetUserPriority()),
+		}
 	}
+	var pushReqs []proto.Request
 	for _, intent := range pushIntents {
-		pushArgs := &proto.PushTxnRequest{
+		pushReqs = append(pushReqs, &proto.PushTxnRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: intent.Txn.Key,
 			},
-			PusherTxn: header.Txn,
+			PusherTxn: *pusherTxn,
 			PusheeTxn: intent.Txn,
+			PushTo:    header.Timestamp,
 			// The timestamp is used by PushTxn for figuring out whether the
 			// transaction is abandoned. If we used the argument's timestamp
 			// here, we would run into busy loops because that timestamp
@@ -1344,33 +1352,27 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			// that a transaction has timed out. See #877.
 			Now:      now,
 			PushType: pushType,
-		}
-		ba.Add(pushArgs)
+		})
 	}
 	b := &client.Batch{}
-	if len(ba.Requests) > 0 {
-		b.InternalAddRequest(ba)
-	}
-
+	b.InternalAddRequest(pushReqs...)
 	br, pushErr := s.db.RunWithResponse(b)
 	if pushErr != nil {
-		if pushErr != nil {
-			if log.V(1) {
-				log.Infoc(ctx, "on %s: %s", args.Method(), pushErr)
-			}
-
-			// For write/write conflicts within a transaction, propagate the
-			// push failure, not the original write intent error. The push
-			// failure will instruct the client to restart the transaction
-			// with a backoff.
-			if header.Txn != nil && proto.IsWrite(args) {
-				return pushErr
-			}
-			// For read/write conflicts, return the write intent error which
-			// engages backoff/retry (with !Resolved). We don't need to
-			// restart the txn, only resend the read with a backoff.
-			return wiErr
+		if log.V(1) {
+			log.Infoc(ctx, "on %s: %s", args.Method(), pushErr)
 		}
+
+		// For write/write conflicts within a transaction, propagate the
+		// push failure, not the original write intent error. The push
+		// failure will instruct the client to restart the transaction
+		// with a backoff.
+		if header.Txn != nil && !proto.IsReadOnly(args) {
+			return pushErr
+		}
+		// For read/write conflicts, return the write intent error which
+		// engages backoff/retry (with !Resolved). We don't need to
+		// restart the txn, only resend the read with a backoff.
+		return wiErr
 	}
 	wiErr.Resolved = true // success!
 

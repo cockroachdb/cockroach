@@ -223,33 +223,9 @@ func (n *Node) initNodeID(id proto.NodeID) {
 func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	attrs proto.Attributes, stopper *stop.Stopper) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
-	requests := []proto.Request{
-		&proto.BatchRequest{},
-		&proto.GetRequest{},
-		&proto.PutRequest{},
-		&proto.ConditionalPutRequest{},
-		&proto.IncrementRequest{},
-		&proto.DeleteRequest{},
-		&proto.DeleteRangeRequest{},
-		&proto.ScanRequest{},
-		&proto.ReverseScanRequest{},
-		&proto.EndTransactionRequest{},
-		&proto.AdminSplitRequest{},
-		&proto.AdminMergeRequest{},
-		&proto.HeartbeatTxnRequest{},
-		&proto.GCRequest{},
-		&proto.PushTxnRequest{},
-		&proto.RangeLookupRequest{},
-		&proto.ResolveIntentRequest{},
-		&proto.ResolveIntentRangeRequest{},
-		&proto.MergeRequest{},
-		&proto.TruncateLogRequest{},
-		&proto.LeaderLeaseRequest{},
-	}
-	for _, r := range requests {
-		if err := rpcServer.Register("Node."+r.Method().String(), n.executeCmd, r); err != nil {
-			log.Fatalf("unable to register node service with RPC server: %s", err)
-		}
+	const method = "Node.Batch"
+	if err := rpcServer.Register(method, n.executeCmd, &proto.BatchRequest{}); err != nil {
+		log.Fatalf("unable to register node service with RPC server: %s", err)
 	}
 
 	// Start status monitor.

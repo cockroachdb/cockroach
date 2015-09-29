@@ -230,9 +230,10 @@ void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TransactionStatusError, _internal_metadata_),
       -1);
   WriteIntentError_descriptor_ = file->message_type(9);
-  static const int WriteIntentError_offsets_[2] = {
+  static const int WriteIntentError_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(WriteIntentError, intents_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(WriteIntentError, resolved_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(WriteIntentError, index_),
   };
   WriteIntentError_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -516,54 +517,55 @@ void protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto() {
     "yError\022/\n\003txn\030\001 \001(\0132\034.cockroach.proto.Tr"
     "ansactionB\004\310\336\037\000\"\\\n\026TransactionStatusErro"
     "r\022/\n\003txn\030\001 \001(\0132\034.cockroach.proto.Transac"
-    "tionB\004\310\336\037\000\022\021\n\003msg\030\002 \001(\tB\004\310\336\037\000\"Z\n\020WriteIn"
-    "tentError\022.\n\007intents\030\001 \003(\0132\027.cockroach.p"
-    "roto.IntentB\004\310\336\037\000\022\026\n\010resolved\030\002 \001(\010B\004\310\336\037"
-    "\000\"\205\001\n\020WriteTooOldError\0223\n\ttimestamp\030\001 \001("
-    "\0132\032.cockroach.proto.TimestampB\004\310\336\037\000\022<\n\022e"
-    "xisting_timestamp\030\002 \001(\0132\032.cockroach.prot"
-    "o.TimestampB\004\310\336\037\000\"\024\n\022OpRequiresTxnError\""
-    "q\n\024ConditionFailedError\022,\n\014actual_value\030"
-    "\001 \001(\0132\026.cockroach.proto.Value\022+\n\005index\030\002"
-    " \001(\0132\034.cockroach.proto.ErrPosition\"u\n\022Le"
-    "aseRejectedError\022/\n\tRequested\030\001 \001(\0132\026.co"
-    "ckroach.proto.LeaseB\004\310\336\037\000\022.\n\010Existing\030\002 "
-    "\001(\0132\026.cockroach.proto.LeaseB\004\310\336\037\000\";\n\tSen"
-    "dError\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretryab"
-    "le\030\002 \001(\010B\004\310\336\037\000\"\323\007\n\013ErrorDetail\0223\n\nnot_le"
-    "ader\030\001 \001(\0132\037.cockroach.proto.NotLeaderEr"
-    "ror\022<\n\017range_not_found\030\002 \001(\0132#.cockroach"
-    ".proto.RangeNotFoundError\022B\n\022range_key_m"
-    "ismatch\030\003 \001(\0132&.cockroach.proto.RangeKey"
-    "MismatchError\022]\n read_within_uncertainty"
-    "_interval\030\004 \001(\01323.cockroach.proto.ReadWi"
-    "thinUncertaintyIntervalError\022E\n\023transact"
-    "ion_aborted\030\005 \001(\0132(.cockroach.proto.Tran"
-    "sactionAbortedError\022\?\n\020transaction_push\030"
-    "\006 \001(\0132%.cockroach.proto.TransactionPushE"
-    "rror\022A\n\021transaction_retry\030\007 \001(\0132&.cockro"
-    "ach.proto.TransactionRetryError\022C\n\022trans"
-    "action_status\030\010 \001(\0132\'.cockroach.proto.Tr"
-    "ansactionStatusError\0227\n\014write_intent\030\t \001"
-    "(\0132!.cockroach.proto.WriteIntentError\0228\n"
-    "\rwrite_too_old\030\n \001(\0132!.cockroach.proto.W"
-    "riteTooOldError\022<\n\017op_requires_txn\030\013 \001(\013"
-    "2#.cockroach.proto.OpRequiresTxnError\022\?\n"
-    "\020condition_failed\030\014 \001(\0132%.cockroach.prot"
-    "o.ConditionFailedError\022;\n\016lease_rejected"
-    "\030\r \001(\0132#.cockroach.proto.LeaseRejectedEr"
-    "ror\022\?\n\020node_unavailable\030\016 \001(\0132%.cockroac"
-    "h.proto.NodeUnavailableError\022(\n\004send\030\017 \001"
-    "(\0132\032.cockroach.proto.SendError:\004\310\240\037\001\"\"\n\013"
-    "ErrPosition\022\023\n\005index\030\001 \001(\005B\004\310\336\037\000\"\332\001\n\005Err"
-    "or\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002"
-    " \001(\010B\004\310\336\037\000\022F\n\023transaction_restart\030\003 \001(\0162"
-    "#.cockroach.proto.TransactionRestartB\004\310\336"
-    "\037\000\022,\n\006detail\030\004 \001(\0132\034.cockroach.proto.Err"
-    "orDetail\022+\n\005index\030\005 \001(\0132\034.cockroach.prot"
-    "o.ErrPosition*;\n\022TransactionRestart\022\t\n\005A"
-    "BORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\033Z\005pr"
-    "oto\330\341\036\000\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 3023);
+    "tionB\004\310\336\037\000\022\021\n\003msg\030\002 \001(\tB\004\310\336\037\000\"\207\001\n\020WriteI"
+    "ntentError\022.\n\007intents\030\001 \003(\0132\027.cockroach."
+    "proto.IntentB\004\310\336\037\000\022\026\n\010resolved\030\002 \001(\010B\004\310\336"
+    "\037\000\022+\n\005index\030\003 \001(\0132\034.cockroach.proto.ErrP"
+    "osition\"\205\001\n\020WriteTooOldError\0223\n\ttimestam"
+    "p\030\001 \001(\0132\032.cockroach.proto.TimestampB\004\310\336\037"
+    "\000\022<\n\022existing_timestamp\030\002 \001(\0132\032.cockroac"
+    "h.proto.TimestampB\004\310\336\037\000\"\024\n\022OpRequiresTxn"
+    "Error\"q\n\024ConditionFailedError\022,\n\014actual_"
+    "value\030\001 \001(\0132\026.cockroach.proto.Value\022+\n\005i"
+    "ndex\030\002 \001(\0132\034.cockroach.proto.ErrPosition"
+    "\"u\n\022LeaseRejectedError\022/\n\tRequested\030\001 \001("
+    "\0132\026.cockroach.proto.LeaseB\004\310\336\037\000\022.\n\010Exist"
+    "ing\030\002 \001(\0132\026.cockroach.proto.LeaseB\004\310\336\037\000\""
+    ";\n\tSendError\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tr"
+    "etryable\030\002 \001(\010B\004\310\336\037\000\"\323\007\n\013ErrorDetail\0223\n\n"
+    "not_leader\030\001 \001(\0132\037.cockroach.proto.NotLe"
+    "aderError\022<\n\017range_not_found\030\002 \001(\0132#.coc"
+    "kroach.proto.RangeNotFoundError\022B\n\022range"
+    "_key_mismatch\030\003 \001(\0132&.cockroach.proto.Ra"
+    "ngeKeyMismatchError\022]\n read_within_uncer"
+    "tainty_interval\030\004 \001(\01323.cockroach.proto."
+    "ReadWithinUncertaintyIntervalError\022E\n\023tr"
+    "ansaction_aborted\030\005 \001(\0132(.cockroach.prot"
+    "o.TransactionAbortedError\022\?\n\020transaction"
+    "_push\030\006 \001(\0132%.cockroach.proto.Transactio"
+    "nPushError\022A\n\021transaction_retry\030\007 \001(\0132&."
+    "cockroach.proto.TransactionRetryError\022C\n"
+    "\022transaction_status\030\010 \001(\0132\'.cockroach.pr"
+    "oto.TransactionStatusError\0227\n\014write_inte"
+    "nt\030\t \001(\0132!.cockroach.proto.WriteIntentEr"
+    "ror\0228\n\rwrite_too_old\030\n \001(\0132!.cockroach.p"
+    "roto.WriteTooOldError\022<\n\017op_requires_txn"
+    "\030\013 \001(\0132#.cockroach.proto.OpRequiresTxnEr"
+    "ror\022\?\n\020condition_failed\030\014 \001(\0132%.cockroac"
+    "h.proto.ConditionFailedError\022;\n\016lease_re"
+    "jected\030\r \001(\0132#.cockroach.proto.LeaseReje"
+    "ctedError\022\?\n\020node_unavailable\030\016 \001(\0132%.co"
+    "ckroach.proto.NodeUnavailableError\022(\n\004se"
+    "nd\030\017 \001(\0132\032.cockroach.proto.SendError:\004\310\240"
+    "\037\001\"\"\n\013ErrPosition\022\023\n\005index\030\001 \001(\005B\004\310\336\037\000\"\332"
+    "\001\n\005Error\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretry"
+    "able\030\002 \001(\010B\004\310\336\037\000\022F\n\023transaction_restart\030"
+    "\003 \001(\0162#.cockroach.proto.TransactionResta"
+    "rtB\004\310\336\037\000\022,\n\006detail\030\004 \001(\0132\034.cockroach.pro"
+    "to.ErrorDetail\022+\n\005index\030\005 \001(\0132\034.cockroac"
+    "h.proto.ErrPosition*;\n\022TransactionRestar"
+    "t\022\t\n\005ABORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002"
+    "B\033Z\005proto\330\341\036\000\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 3069);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -3870,6 +3872,7 @@ void TransactionStatusError::clear_msg() {
 #ifndef _MSC_VER
 const int WriteIntentError::kIntentsFieldNumber;
 const int WriteIntentError::kResolvedFieldNumber;
+const int WriteIntentError::kIndexFieldNumber;
 #endif  // !_MSC_VER
 
 WriteIntentError::WriteIntentError()
@@ -3879,6 +3882,7 @@ WriteIntentError::WriteIntentError()
 }
 
 void WriteIntentError::InitAsDefaultInstance() {
+  index_ = const_cast< ::cockroach::proto::ErrPosition*>(&::cockroach::proto::ErrPosition::default_instance());
 }
 
 WriteIntentError::WriteIntentError(const WriteIntentError& from)
@@ -3892,6 +3896,7 @@ WriteIntentError::WriteIntentError(const WriteIntentError& from)
 void WriteIntentError::SharedCtor() {
   _cached_size_ = 0;
   resolved_ = false;
+  index_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -3902,6 +3907,7 @@ WriteIntentError::~WriteIntentError() {
 
 void WriteIntentError::SharedDtor() {
   if (this != default_instance_) {
+    delete index_;
   }
 }
 
@@ -3931,7 +3937,12 @@ WriteIntentError* WriteIntentError::New(::google::protobuf::Arena* arena) const 
 }
 
 void WriteIntentError::Clear() {
-  resolved_ = false;
+  if (_has_bits_[0 / 32] & 6u) {
+    resolved_ = false;
+    if (has_index()) {
+      if (index_ != NULL) index_->::cockroach::proto::ErrPosition::Clear();
+    }
+  }
   intents_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -3976,6 +3987,19 @@ bool WriteIntentError::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(26)) goto parse_index;
+        break;
+      }
+
+      // optional .cockroach.proto.ErrPosition index = 3;
+      case 3: {
+        if (tag == 26) {
+         parse_index:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_index()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -4016,6 +4040,12 @@ void WriteIntentError::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->resolved(), output);
   }
 
+  // optional .cockroach.proto.ErrPosition index = 3;
+  if (has_index()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      3, *this->index_, output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -4038,6 +4068,13 @@ void WriteIntentError::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(2, this->resolved(), target);
   }
 
+  // optional .cockroach.proto.ErrPosition index = 3;
+  if (has_index()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        3, *this->index_, target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -4049,11 +4086,20 @@ void WriteIntentError::SerializeWithCachedSizes(
 int WriteIntentError::ByteSize() const {
   int total_size = 0;
 
-  // optional bool resolved = 2;
-  if (has_resolved()) {
-    total_size += 1 + 1;
-  }
+  if (_has_bits_[1 / 32] & 6) {
+    // optional bool resolved = 2;
+    if (has_resolved()) {
+      total_size += 1 + 1;
+    }
 
+    // optional .cockroach.proto.ErrPosition index = 3;
+    if (has_index()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->index_);
+    }
+
+  }
   // repeated .cockroach.proto.Intent intents = 1;
   total_size += 1 * this->intents_size();
   for (int i = 0; i < this->intents_size(); i++) {
@@ -4092,6 +4138,9 @@ void WriteIntentError::MergeFrom(const WriteIntentError& from) {
     if (from.has_resolved()) {
       set_resolved(from.resolved());
     }
+    if (from.has_index()) {
+      mutable_index()->::cockroach::proto::ErrPosition::MergeFrom(from.index());
+    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -4122,6 +4171,7 @@ void WriteIntentError::Swap(WriteIntentError* other) {
 void WriteIntentError::InternalSwap(WriteIntentError* other) {
   intents_.UnsafeArenaSwap(&other->intents_);
   std::swap(resolved_, other->resolved_);
+  std::swap(index_, other->index_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -4190,6 +4240,49 @@ void WriteIntentError::clear_resolved() {
   set_has_resolved();
   resolved_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.WriteIntentError.resolved)
+}
+
+// optional .cockroach.proto.ErrPosition index = 3;
+bool WriteIntentError::has_index() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+void WriteIntentError::set_has_index() {
+  _has_bits_[0] |= 0x00000004u;
+}
+void WriteIntentError::clear_has_index() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+void WriteIntentError::clear_index() {
+  if (index_ != NULL) index_->::cockroach::proto::ErrPosition::Clear();
+  clear_has_index();
+}
+ const ::cockroach::proto::ErrPosition& WriteIntentError::index() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.WriteIntentError.index)
+  return index_ != NULL ? *index_ : *default_instance_->index_;
+}
+ ::cockroach::proto::ErrPosition* WriteIntentError::mutable_index() {
+  set_has_index();
+  if (index_ == NULL) {
+    index_ = new ::cockroach::proto::ErrPosition;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.WriteIntentError.index)
+  return index_;
+}
+ ::cockroach::proto::ErrPosition* WriteIntentError::release_index() {
+  clear_has_index();
+  ::cockroach::proto::ErrPosition* temp = index_;
+  index_ = NULL;
+  return temp;
+}
+ void WriteIntentError::set_allocated_index(::cockroach::proto::ErrPosition* index) {
+  delete index_;
+  index_ = index;
+  if (index) {
+    set_has_index();
+  } else {
+    clear_has_index();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.WriteIntentError.index)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

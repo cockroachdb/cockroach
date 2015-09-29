@@ -172,7 +172,6 @@ func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
 			case *proto.MergeRequest:
 			case *proto.TruncateLogRequest:
 			case *proto.LeaderLeaseRequest:
-			case *proto.BatchRequest:
 				// Nothing to do for these methods as they do not generate any
 				// rows.
 
@@ -194,20 +193,22 @@ func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
 	return nil
 }
 
-// InternalAddRequest adds the specified call to the batch. It is intended for
-// internal use only.
-func (b *Batch) InternalAddRequest(args proto.Request) {
-	numRows := 0
-	switch args.(type) {
-	case *proto.GetRequest,
-		*proto.PutRequest,
-		*proto.ConditionalPutRequest,
-		*proto.IncrementRequest,
-		*proto.DeleteRequest:
-		numRows = 1
+// InternalAddRequest adds the specified requests to the batch. It is intended
+// for internal use only.
+func (b *Batch) InternalAddRequest(reqs ...proto.Request) {
+	for _, args := range reqs {
+		numRows := 0
+		switch args.(type) {
+		case *proto.GetRequest,
+			*proto.PutRequest,
+			*proto.ConditionalPutRequest,
+			*proto.IncrementRequest,
+			*proto.DeleteRequest:
+			numRows = 1
+		}
+		b.reqs = append(b.reqs, args)
+		b.initResult(1 /* calls */, numRows, nil)
 	}
-	b.reqs = append(b.reqs, args)
-	b.initResult(1 /* calls */, numRows, nil)
 }
 
 // Get retrieves the value for a key. A new result will be appended to the

@@ -3562,19 +3562,28 @@ class PushTxnRequest : public ::google::protobuf::Message {
   ::cockroach::proto::Transaction* release_pushee_txn();
   void set_allocated_pushee_txn(::cockroach::proto::Transaction* pushee_txn);
 
-  // optional .cockroach.proto.Timestamp now = 4;
+  // optional .cockroach.proto.Timestamp push_to = 4;
+  bool has_push_to() const;
+  void clear_push_to();
+  static const int kPushToFieldNumber = 4;
+  const ::cockroach::proto::Timestamp& push_to() const;
+  ::cockroach::proto::Timestamp* mutable_push_to();
+  ::cockroach::proto::Timestamp* release_push_to();
+  void set_allocated_push_to(::cockroach::proto::Timestamp* push_to);
+
+  // optional .cockroach.proto.Timestamp now = 5;
   bool has_now() const;
   void clear_now();
-  static const int kNowFieldNumber = 4;
+  static const int kNowFieldNumber = 5;
   const ::cockroach::proto::Timestamp& now() const;
   ::cockroach::proto::Timestamp* mutable_now();
   ::cockroach::proto::Timestamp* release_now();
   void set_allocated_now(::cockroach::proto::Timestamp* now);
 
-  // optional .cockroach.proto.PushTxnType push_type = 5;
+  // optional .cockroach.proto.PushTxnType push_type = 6;
   bool has_push_type() const;
   void clear_push_type();
-  static const int kPushTypeFieldNumber = 5;
+  static const int kPushTypeFieldNumber = 6;
   ::cockroach::proto::PushTxnType push_type() const;
   void set_push_type(::cockroach::proto::PushTxnType value);
 
@@ -3586,6 +3595,8 @@ class PushTxnRequest : public ::google::protobuf::Message {
   inline void clear_has_pusher_txn();
   inline void set_has_pushee_txn();
   inline void clear_has_pushee_txn();
+  inline void set_has_push_to();
+  inline void clear_has_push_to();
   inline void set_has_now();
   inline void clear_has_now();
   inline void set_has_push_type();
@@ -3597,6 +3608,7 @@ class PushTxnRequest : public ::google::protobuf::Message {
   ::cockroach::proto::RequestHeader* header_;
   ::cockroach::proto::Transaction* pusher_txn_;
   ::cockroach::proto::Transaction* pushee_txn_;
+  ::cockroach::proto::Timestamp* push_to_;
   ::cockroach::proto::Timestamp* now_;
   int push_type_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
@@ -8601,15 +8613,58 @@ inline void PushTxnRequest::set_allocated_pushee_txn(::cockroach::proto::Transac
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PushTxnRequest.pushee_txn)
 }
 
-// optional .cockroach.proto.Timestamp now = 4;
-inline bool PushTxnRequest::has_now() const {
+// optional .cockroach.proto.Timestamp push_to = 4;
+inline bool PushTxnRequest::has_push_to() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
-inline void PushTxnRequest::set_has_now() {
+inline void PushTxnRequest::set_has_push_to() {
   _has_bits_[0] |= 0x00000008u;
 }
-inline void PushTxnRequest::clear_has_now() {
+inline void PushTxnRequest::clear_has_push_to() {
   _has_bits_[0] &= ~0x00000008u;
+}
+inline void PushTxnRequest::clear_push_to() {
+  if (push_to_ != NULL) push_to_->::cockroach::proto::Timestamp::Clear();
+  clear_has_push_to();
+}
+inline const ::cockroach::proto::Timestamp& PushTxnRequest::push_to() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.PushTxnRequest.push_to)
+  return push_to_ != NULL ? *push_to_ : *default_instance_->push_to_;
+}
+inline ::cockroach::proto::Timestamp* PushTxnRequest::mutable_push_to() {
+  set_has_push_to();
+  if (push_to_ == NULL) {
+    push_to_ = new ::cockroach::proto::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.PushTxnRequest.push_to)
+  return push_to_;
+}
+inline ::cockroach::proto::Timestamp* PushTxnRequest::release_push_to() {
+  clear_has_push_to();
+  ::cockroach::proto::Timestamp* temp = push_to_;
+  push_to_ = NULL;
+  return temp;
+}
+inline void PushTxnRequest::set_allocated_push_to(::cockroach::proto::Timestamp* push_to) {
+  delete push_to_;
+  push_to_ = push_to;
+  if (push_to) {
+    set_has_push_to();
+  } else {
+    clear_has_push_to();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PushTxnRequest.push_to)
+}
+
+// optional .cockroach.proto.Timestamp now = 5;
+inline bool PushTxnRequest::has_now() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void PushTxnRequest::set_has_now() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void PushTxnRequest::clear_has_now() {
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void PushTxnRequest::clear_now() {
   if (now_ != NULL) now_->::cockroach::proto::Timestamp::Clear();
@@ -8644,15 +8699,15 @@ inline void PushTxnRequest::set_allocated_now(::cockroach::proto::Timestamp* now
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PushTxnRequest.now)
 }
 
-// optional .cockroach.proto.PushTxnType push_type = 5;
+// optional .cockroach.proto.PushTxnType push_type = 6;
 inline bool PushTxnRequest::has_push_type() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void PushTxnRequest::set_has_push_type() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void PushTxnRequest::clear_has_push_type() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void PushTxnRequest::clear_push_type() {
   push_type_ = 0;
