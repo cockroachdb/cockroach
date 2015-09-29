@@ -27,4 +27,4 @@ fi
 $(dirname $0)/builder.sh $0 docker
 
 # Build the image.
-docker build -t cockroachdb/cockroach "$(dirname $0)/deploy"
+docker build --tag=cockroachdb/cockroach "$(dirname $0)/deploy"
