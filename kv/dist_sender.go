@@ -223,11 +223,10 @@ func (ds *DistSender) rangeLookup(key roachpb.Key, options lookupOptions,
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	reply, err := ds.sendRPC(nil /* Trace */, desc.RangeID, replicas, rpc.OrderRandom, ba)
+	br, err := ds.sendRPC(nil /* Trace */, desc.RangeID, replicas, rpc.OrderRandom, ba)
 	if err != nil {
 		return nil, err
 	}
-	br := reply.(*roachpb.BatchResponse)
 	if err := br.GoError(); err != nil {
 		return nil, err
 	}
@@ -308,7 +307,7 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
 func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
-	ba roachpb.BatchRequest) (roachpb.Response, error) {
+	ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 	if len(replicas) == 0 {
 		return nil, util.Errorf("replicas set is empty")
 	}
@@ -373,7 +372,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 	if err != nil {
 		return nil, err
 	}
-	return replies[0].(roachpb.Response), nil
+	return replies[0].(*roachpb.BatchResponse), nil
 }
 
 // getDescriptors looks up the range descriptor to use for a query over the
@@ -440,12 +439,11 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba roachpb.BatchRequest, 
 		}
 	}
 
-	resp, err := ds.sendRPC(trace, desc.RangeID, replicas, order, ba)
+	br, err := ds.sendRPC(trace, desc.RangeID, replicas, order, ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 	// Untangle the error from the received response.
-	br := resp.(*roachpb.BatchResponse)
 	pErr := br.Error
 	br.Error = nil // scrub the response error
 	return br, pErr

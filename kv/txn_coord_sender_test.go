@@ -535,8 +535,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		teardownHeartbeats(ts)
 		stopper.Stop()
 
-		if reflect.TypeOf(test.err) != reflect.TypeOf(reply.GoError()) {
-			t.Fatalf("%d: expected %T; got %T: %v", i, test.err, reply.GoError(), reply.GoError())
+		if err := reply.Error.GoError(); reflect.TypeOf(test.err) != reflect.TypeOf(err) {
+			t.Fatalf("%d: expected %T; got %T: %v", i, test.err, err, err)
 		}
 		if reply.Txn.Epoch != test.expEpoch {
 			t.Errorf("%d: expected epoch = %d; got %d",
@@ -694,7 +694,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	clock.SetMaxOffset(20)
 
 	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		return ba.CreateReply().(*roachpb.BatchResponse), nil
+		return ba.CreateReply(), nil
 	}), clock, false, nil, stopper)
 
 	// Stop the stopper manually, prior to trying the transaction. This has the

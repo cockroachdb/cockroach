@@ -195,22 +195,6 @@ func (rh *ResponseHeader) Verify(req Request) error {
 	return nil
 }
 
-// GoError returns the non-nil error from the roachpb.Error union.
-func (rh *ResponseHeader) GoError() error {
-	return rh.Error.GoError()
-}
-
-// SetGoError converts the specified type into either one of the proto-
-// defined error types or into an Error for all other Go errors.
-func (rh *ResponseHeader) SetGoError(err error) {
-	if err == nil {
-		rh.Error = nil
-		return
-	}
-	rh.Error = &Error{}
-	rh.Error.SetGoError(err)
-}
-
 // Verify verifies the integrity of the get response value.
 func (gr *GetResponse) Verify(req Request) error {
 	if gr.Value != nil {

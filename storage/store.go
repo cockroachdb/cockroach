@@ -1200,15 +1200,15 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			return nil, roachpb.NewError(err)
 		}
 
-		var reply roachpb.Response
+		var br *roachpb.BatchResponse
 		{
 			var pErr *roachpb.Error
-			reply, pErr = rng.Send(ctx, ba)
+			br, pErr = rng.Send(ctx, ba)
 			err = pErr.GoError()
 		}
 
 		if err == nil {
-			return reply.(*roachpb.BatchResponse), nil
+			return br, nil
 		}
 
 		// Maybe resolve a potential write intent error. We do this here

@@ -1750,8 +1750,8 @@ func (m *BatchRequest_Header) GetReadConsistency() ReadConsistencyType {
 // error in the response header is set to the first error from the
 // slice of responses, if applicable.
 type BatchResponse struct {
-	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Responses      []ResponseUnion `protobuf:"bytes,2,rep,name=responses" json:"responses"`
+	BatchResponse_Header `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Responses            []ResponseUnion `protobuf:"bytes,2,rep,name=responses" json:"responses"`
 }
 
 func (m *BatchResponse) Reset()         { *m = BatchResponse{} }
@@ -1761,6 +1761,48 @@ func (*BatchResponse) ProtoMessage()    {}
 func (m *BatchResponse) GetResponses() []ResponseUnion {
 	if m != nil {
 		return m.Responses
+	}
+	return nil
+}
+
+type BatchResponse_Header struct {
+	// Error is non-nil if an error occurred.
+	Error *Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	// Timestamp specifies time at which read or write actually was
+	// performed. In the case of both reads and writes, if the timestamp
+	// supplied to the request was 0, the wall time of the node
+	// servicing the request will be set here. Additionally, in the case
+	// of writes, this value may be increased from the timestamp passed
+	// with the RequestHeader if the key being written was either read
+	// or written more recently.
+	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	// Transaction is non-nil if the request specified a non-nil
+	// transaction. The transaction timestamp and/or priority may have
+	// been updated, depending on the outcome of the request.
+	Txn *Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
+}
+
+func (m *BatchResponse_Header) Reset()         { *m = BatchResponse_Header{} }
+func (m *BatchResponse_Header) String() string { return proto.CompactTextString(m) }
+func (*BatchResponse_Header) ProtoMessage()    {}
+
+func (m *BatchResponse_Header) GetError() *Error {
+	if m != nil {
+		return m.Error
+	}
+	return nil
+}
+
+func (m *BatchResponse_Header) GetTimestamp() Timestamp {
+	if m != nil {
+		return m.Timestamp
+	}
+	return Timestamp{}
+}
+
+func (m *BatchResponse_Header) GetTxn() *Transaction {
+	if m != nil {
+		return m.Txn
 	}
 	return nil
 }
@@ -3904,8 +3946,8 @@ func (m *BatchResponse) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n113, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.BatchResponse_Header.Size()))
+	n113, err := m.BatchResponse_Header.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -3921,6 +3963,52 @@ func (m *BatchResponse) MarshalTo(data []byte) (int, error) {
 			}
 			i += n
 		}
+	}
+	return i, nil
+}
+
+func (m *BatchResponse_Header) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *BatchResponse_Header) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Error != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Error.Size()))
+		n114, err := m.Error.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n114
+	}
+	data[i] = 0x12
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
+	n115, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n115
+	if m.Txn != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
+		n116, err := m.Txn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n116
 	}
 	return i, nil
 }
@@ -4670,13 +4758,29 @@ func (m *BatchRequest_Header) Size() (n int) {
 func (m *BatchResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.BatchResponse_Header.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if len(m.Responses) > 0 {
 		for _, e := range m.Responses {
 			l = e.Size()
 			n += 1 + l + sovApi(uint64(l))
 		}
+	}
+	return n
+}
+
+func (m *BatchResponse_Header) Size() (n int) {
+	var l int
+	_ = l
+	if m.Error != nil {
+		l = m.Error.Size()
+		n += 1 + l + sovApi(uint64(l))
+	}
+	l = m.Timestamp.Size()
+	n += 1 + l + sovApi(uint64(l))
+	if m.Txn != nil {
+		l = m.Txn.Size()
+		n += 1 + l + sovApi(uint64(l))
 	}
 	return n
 }
@@ -11754,7 +11858,7 @@ func (m *BatchResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field BatchResponse_Header", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -11778,7 +11882,7 @@ func (m *BatchResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.BatchResponse_Header.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -11810,6 +11914,152 @@ func (m *BatchResponse) Unmarshal(data []byte) error {
 			}
 			m.Responses = append(m.Responses, ResponseUnion{})
 			if err := m.Responses[len(m.Responses)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipApi(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthApi
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BatchResponse_Header) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowApi
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Header: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Header: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Error == nil {
+				m.Error = &Error{}
+			}
+			if err := m.Error.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Txn == nil {
+				m.Txn = &Transaction{}
+			}
+			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

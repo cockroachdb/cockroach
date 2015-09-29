@@ -68,11 +68,16 @@ func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
 }
 
 // First returns the first response of the given type, if possible.
-func (ba *BatchResponse) First() Response {
-	if len(ba.Responses) > 0 {
-		return ba.Responses[0].GetInner()
+func (br *BatchResponse) First() Response {
+	if len(br.Responses) > 0 {
+		return br.Responses[0].GetInner()
 	}
 	return nil
+}
+
+// Header returns a pointer to the header.
+func (br *BatchResponse) Header() *BatchResponse_Header {
+	return &br.BatchResponse_Header
 }
 
 // GetIntents returns a slice of key pairs corresponding to transactional writes
@@ -94,11 +99,11 @@ func (ba *BatchRequest) GetIntents() []Intent {
 }
 
 // ResetAll resets all the contained requests to their original state.
-func (ba *BatchResponse) ResetAll() {
-	if ba == nil {
+func (br *BatchResponse) ResetAll() {
+	if br == nil {
 		return
 	}
-	for _, rsp := range ba.Responses {
+	for _, rsp := range br.Responses {
 		// TODO(tschottdorf) `rsp.Reset()` isn't enough because rsp
 		// isn't a pointer.
 		rsp.GetInner().Reset()
@@ -109,16 +114,12 @@ func (ba *BatchResponse) ResetAll() {
 // given request into the corresponding slot of the base response. The number
 // of slots must be equal and the respective slots must be combinable.
 // TODO(tschottdorf): write tests.
-func (ba *BatchResponse) Combine(c Response) error {
-	otherBatch, ok := c.(*BatchResponse)
-	if !ok {
-		return combineError(ba, c)
-	}
-	if len(otherBatch.Responses) != len(ba.Responses) {
+func (br *BatchResponse) Combine(otherBatch *BatchResponse) error {
+	if len(otherBatch.Responses) != len(br.Responses) {
 		return errors.New("unable to combine batch responses of different length")
 	}
-	for i, l := 0, len(ba.Responses); i < l; i++ {
-		valLeft := ba.Responses[i].GetInner()
+	for i, l := 0, len(br.Responses); i < l; i++ {
+		valLeft := br.Responses[i].GetInner()
 		valRight := otherBatch.Responses[i].GetInner()
 		args, lOK := valLeft.(Combinable)
 		reply, rOK := valRight.(Combinable)
@@ -132,7 +133,7 @@ func (ba *BatchResponse) Combine(c Response) error {
 		// the result. Note that the result can still be a NoopResponse, to be
 		// filled in by a future Combine().
 		if _, ok := valLeft.(*NoopResponse); ok {
-			ba.Responses[i] = otherBatch.Responses[i]
+			br.Responses[i] = otherBatch.Responses[i]
 		}
 	}
 	return nil
@@ -161,13 +162,13 @@ func (ba *BatchRequest) Add(requests ...Request) {
 }
 
 // Add adds a response to the batch response.
-func (ba *BatchResponse) Add(reply Response) {
+func (br *BatchResponse) Add(reply Response) {
 	union := ResponseUnion{}
 	if !union.SetValue(reply) {
 		// TODO(tschottdorf) evaluate whether this should return an error.
 		panic(fmt.Sprintf("unable to add %T to batch response", reply))
 	}
-	ba.Responses = append(ba.Responses, union)
+	br.Responses = append(br.Responses, union)
 }
 
 // Methods returns a slice of the contained methods.
@@ -182,7 +183,7 @@ func (ba *BatchRequest) Methods() []Method {
 // CreateReply implements the Request interface. It's slightly different from
 // the other implementations: It creates replies for each of the contained
 // requests, wrapped in a BatchResponse.
-func (ba *BatchRequest) CreateReply() Response {
+func (ba *BatchRequest) CreateReply() *BatchResponse {
 	br := &BatchResponse{}
 	for _, union := range ba.Requests {
 		br.Add(union.GetInner().CreateReply())
@@ -308,4 +309,20 @@ func (ba *BatchRequest) ToHeader() RequestHeader {
 	h.Txn = ba.Txn
 	h.ReadConsistency = ba.ReadConsistency
 	return h
+}
+
+// GoError returns the non-nil error from the proto.Error union.
+func (br *BatchResponse) GoError() error {
+	return br.Error.GoError()
+}
+
+// SetGoError converts the specified type into either one of the proto-
+// defined error types or into an Error for all other Go errors.
+func (br *BatchResponse) SetGoError(err error) {
+	if err == nil {
+		br.Error = nil
+		return
+	}
+	br.Error = &Error{}
+	br.Error.SetGoError(err)
 }

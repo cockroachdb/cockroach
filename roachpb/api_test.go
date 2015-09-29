@@ -44,25 +44,25 @@ func (t *testError) CanRetry() bool            { return true }
 func (t *testError) ErrorIndex() (int32, bool) { return 99, true }
 func (t *testError) SetErrorIndex(_ int32)     { panic("unsupported") }
 
-// TestResponseHeaderSetGoError verifies that a test error that
+// TestSetGoError verifies that a test error that
 // implements retryable or indexed is converted properly into a generic error.
-func TestResponseHeaderSetGoError(t *testing.T) {
-	rh := ResponseHeader{}
-	rh.SetGoError(&testError{})
-	err := rh.GoError()
+func TestSetGoErrorGeneric(t *testing.T) {
+	br := &BatchResponse{}
+	br.SetGoError(&testError{})
+	err := br.GoError()
 	if err.Error() != "test" {
 		t.Fatalf("unexpected error: %s", err)
 	}
-	if !rh.Error.Retryable {
+	if !br.Error.Retryable {
 		t.Error("expected generic error to be retryable")
 	}
-	if rErr, ok := rh.Error.GoError().(retry.Retryable); !ok || !rErr.CanRetry() {
+	if rErr, ok := br.Error.GoError().(retry.Retryable); !ok || !rErr.CanRetry() {
 		t.Error("generated GoError is not retryable")
 	}
-	if rh.Error.GetIndex().GetIndex() != 99 {
+	if br.Error.GetIndex().GetIndex() != 99 {
 		t.Errorf("expected generic error to have index set")
 	}
-	if iErr, ok := rh.Error.GoError().(IndexedError); !ok ||
+	if iErr, ok := br.Error.GoError().(IndexedError); !ok ||
 		func() int32 { i, _ := iErr.ErrorIndex(); return i }() != 99 {
 		t.Errorf("generated GoError lost the index")
 	}
@@ -70,10 +70,10 @@ func TestResponseHeaderSetGoError(t *testing.T) {
 
 // TestResponseHeaderNilError verifies that a nil error can be set
 // and retrieved from a response header.
-func TestResponseHeaderNilError(t *testing.T) {
-	rh := ResponseHeader{}
-	rh.SetGoError(nil)
-	if err := rh.GoError(); err != nil {
+func TestSetGoErrorNil(t *testing.T) {
+	br := &BatchResponse{}
+	br.SetGoError(nil)
+	if err := br.GoError(); err != nil {
 		t.Errorf("expected nil error; got %s", err)
 	}
 }
@@ -163,10 +163,10 @@ func TestCombinable(t *testing.T) {
 }
 
 func TestSetGoErrorCopy(t *testing.T) {
-	rh := ResponseHeader{}
+	br := &BatchResponse{}
 	oErr := &Error{Message: "test123"}
-	rh.Error = oErr
-	rh.SetGoError(&testError{})
+	br.Error = oErr
+	br.SetGoError(&testError{})
 	if oErr.Message != "test123" {
 		t.Fatalf("SetGoError did not create a new error")
 	}

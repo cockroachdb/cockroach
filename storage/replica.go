@@ -598,7 +598,10 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		if err == nil {
 			br = &roachpb.BatchResponse{}
 			br.Add(iReply)
-			*br.Header() = *iReply.Header()
+			h := iReply.Header()
+			br.Timestamp = h.Timestamp
+			br.Error = h.Error
+			br.Txn = h.Txn
 		}
 	} else if ba.IsReadOnly() {
 		defer trace.Epoch("read-only path")()

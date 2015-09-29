@@ -92,7 +92,7 @@ func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID roachpb.ClientCmdID)
 	if ok {
 		header := br.Header()
 		defer func() { header.Error = nil }()
-		return roachpb.ResponseWithError{Reply: br, Err: header.GoError()}, nil
+		return roachpb.ResponseWithError{Reply: br, Err: header.Error.GoError()}, nil
 	}
 	return roachpb.ResponseWithError{}, nil
 }
@@ -172,10 +172,9 @@ func (rc *ResponseCache) PutResponse(e engine.Engine, cmdID roachpb.ClientCmdID,
 	// Write the response value to the engine.
 	if rc.shouldCacheResponse(replyWithErr) {
 		// Write the error into the reply before caching.
-		header := replyWithErr.Reply.Header()
-		header.SetGoError(replyWithErr.Err)
+		replyWithErr.Reply.SetGoError(replyWithErr.Err)
 		// Be sure to clear it when you're done!
-		defer func() { header.Error = nil }()
+		defer func() { replyWithErr.Reply.BatchResponse_Header.Error = nil }()
 
 		key := keys.ResponseCacheKey(rc.rangeID, &cmdID)
 		return engine.MVCCPutProto(e, nil, key, roachpb.ZeroTimestamp, nil, replyWithErr.Reply)

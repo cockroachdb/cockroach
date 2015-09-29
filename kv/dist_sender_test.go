@@ -372,7 +372,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		if first {
 			reply := getReply()
-			reply.(roachpb.Response).Header().SetGoError(
+			reply.(*roachpb.BatchResponse).SetGoError(
 				&roachpb.NotLeaderError{Leader: &leader, Replica: &roachpb.ReplicaDescriptor{}})
 			first = false
 			return []proto.Message{reply}, nil
@@ -480,7 +480,7 @@ func TestEvictCacheOnError(t *testing.T) {
 				err = errors.New("boom")
 			}
 			reply := getReply()
-			reply.(roachpb.Response).Header().SetGoError(err)
+			reply.(*roachpb.BatchResponse).SetGoError(err)
 			return []proto.Message{reply}, nil
 		}
 
@@ -551,7 +551,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: ba.Key,
 				RequestEndKey: ba.EndKey}
 		}
-		return []proto.Message{ba.CreateReply().(*roachpb.BatchResponse)}, nil
+		return []proto.Message{ba.CreateReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
