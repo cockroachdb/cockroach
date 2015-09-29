@@ -582,6 +582,10 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	// Have to discuss how we go about it.
 	setBatchTimestamps(ba)
 
+	if err := r.checkBatchRequest(ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
 	// TODO(tschottdorf) Some (internal) requests go here directly, so they
 	// won't be traced.
 	trace := tracer.FromCtx(ctx)
@@ -622,6 +626,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	return br, nil
 }
 
+// TODO(tschottdorf): almost obsolete.
 func (r *Replica) checkCmdHeader(header *roachpb.RequestHeader) error {
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		return roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
@@ -634,7 +639,8 @@ func (r *Replica) checkCmdHeader(header *roachpb.RequestHeader) error {
 // all be set to identical values between the batch request header and
 // all constituent batch requests. Also, either all requests must be
 // read-only, or none.
-func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest) error {
+// TODO(tschottdorf): should check that request is contained in range.
+func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 	for i := range ba.Requests {
 		args := ba.Requests[i].GetInner()
 		header := args.Header()
@@ -769,15 +775,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, args roachpb.Request) (roachp
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
 func (r *Replica) addReadOnlyCmd(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-	header := ba.Header()
-
-	if err := r.checkCmdHeader(header); err != nil {
-		return nil, err
-	}
-	if err := r.checkBatchRequest(ba); err != nil {
-		return nil, err
-	}
-
+	header := ba.BatchRequest_Header
 	trace := tracer.FromCtx(ctx)
 
 	// Add the read to the command queue to gate subsequent
@@ -831,13 +829,6 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg 
 	// This happens more eagerly below, but it's important to guarantee that
 	// early returns do not skip this.
 	defer signal()
-
-	if err := r.checkCmdHeader(ba.Header()); err != nil {
-		return nil, err
-	}
-	if err := r.checkBatchRequest(ba); err != nil {
-		return nil, err
-	}
 
 	trace := tracer.FromCtx(ctx)
 
@@ -1188,7 +1179,8 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		// headers.
 		{
 			origHeader := *proto.Clone(header).(*roachpb.RequestHeader)
-			*header = *proto.Clone(&ba.RequestHeader).(*roachpb.RequestHeader)
+			// TODO(tschottdorf): specify which fields to set here.
+			*header = ba.ToHeader()
 			// Only Key and EndKey are allowed to diverge from the iterated
 			// Batch header.
 			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
@@ -1505,7 +1497,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 	if len(baLocal.Requests) > 0 {
 		action := func() {
 			// Trace this under the ID of the intent owner.
-			ctx := tracer.ToCtx(ctx, r.rm.Tracer().NewTrace(baLocal.Header()))
+			ctx := tracer.ToCtx(ctx, r.rm.Tracer().NewTrace(baLocal))
 			if _, err := r.addWriteCmd(ctx, baLocal, &wg); err != nil {
 				if log.V(1) {
 					log.Warningc(ctx, "batch resolve failed: %s", err)

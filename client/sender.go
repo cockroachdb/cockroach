@@ -97,7 +97,17 @@ func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roac
 	}
 	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
 		ba := &roachpb.BatchRequest{}
-		ba.RequestHeader = *(proto.Clone(args.Header()).(*roachpb.RequestHeader))
+		{
+			h := *(proto.Clone(args.Header()).(*roachpb.RequestHeader))
+			ba.Key, ba.EndKey = h.Key, h.EndKey
+			ba.CmdID = h.CmdID
+			ba.Timestamp = h.Timestamp
+			ba.Replica = h.Replica
+			ba.RangeID = h.RangeID
+			ba.UserPriority = h.UserPriority
+			ba.Txn = h.Txn
+			ba.ReadConsistency = h.ReadConsistency
+		}
 		ba.Add(args)
 		return ba, func(br *roachpb.BatchResponse) roachpb.Response {
 			var unwrappedReply roachpb.Response

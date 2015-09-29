@@ -444,13 +444,10 @@ func TestStoreExecuteNoop(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	ba := roachpb.BatchRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:     nil, // intentional
-			RangeID: 1,
-			Replica: roachpb.ReplicaDescriptor{StoreID: store.StoreID()},
-		},
-	}
+	ba := roachpb.BatchRequest{}
+	ba.Key = nil // intentional
+	ba.RangeID = 1
+	ba.Replica = roachpb.ReplicaDescriptor{StoreID: store.StoreID()}
 	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
 	ba.Add(&roachpb.NoopRequest{})
 

@@ -1617,8 +1617,8 @@ func (m *ResponseUnion) GetNoop() *NoopResponse {
 // calls must not have transactions specified. The same applies to
 // the User and UserPriority fields.
 type BatchRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Requests      []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
+	BatchRequest_Header `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Requests            []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
 }
 
 func (m *BatchRequest) Reset()      { *m = BatchRequest{} }
@@ -1629,6 +1629,120 @@ func (m *BatchRequest) GetRequests() []RequestUnion {
 		return m.Requests
 	}
 	return nil
+}
+
+type BatchRequest_Header struct {
+	// Timestamp specifies time at which read or writes should be
+	// performed. If the timestamp is set to zero value, its value
+	// is initialized to the wall time of the receiving node.
+	Timestamp Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
+	// CmdID is optionally specified for request idempotence
+	// (i.e. replay protection).
+	CmdID ClientCmdID `protobuf:"bytes,2,opt,name=cmd_id" json:"cmd_id"`
+	// The key for request. If the request operates on a range, this
+	// represents the starting key for the range.
+	Key Key `protobuf:"bytes,3,opt,name=key,casttype=Key" json:"key,omitempty"`
+	// The end key is empty if the request spans only a single key. Otherwise,
+	// it must order strictly after Key. In such a case, the header indicates
+	// that the operation takes place on the key range from Key to EndKey,
+	// including Key and excluding EndKey.
+	EndKey Key `protobuf:"bytes,4,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
+	// Replica specifies the destination for the request. This is a specific
+	// instance of the available replicas belonging to RangeID.
+	Replica ReplicaDescriptor `protobuf:"bytes,5,opt,name=replica" json:"replica"`
+	// RangeID specifies the ID of the Raft consensus group which the key
+	// range belongs to. This is used by the receiving node to route the
+	// request to the correct range.
+	RangeID RangeID `protobuf:"varint,6,opt,name=range_id,casttype=RangeID" json:"range_id"`
+	// UserPriority specifies priority multiple for non-transactional
+	// commands. This value should be a positive integer [1, 2^31-1).
+	// It's properly viewed as a multiple for how likely this
+	// transaction will be to prevail if a write conflict occurs.
+	// Commands with UserPriority=100 will be 100x less likely to be
+	// aborted as conflicting transactions or non-transactional commands
+	// with UserPriority=1. This value is ignored if Txn is
+	// specified. If neither this value nor Txn is specified, the value
+	// defaults to 1.
+	UserPriority *int32 `protobuf:"varint,7,opt,name=user_priority,def=1" json:"user_priority,omitempty"`
+	// Txn is set non-nil if a transaction is underway. To start a txn,
+	// the first request should set this field to non-nil with name and
+	// isolation level set as desired. The response will contain the
+	// fully-initialized transaction with txn ID, priority, initial
+	// timestamp, and maximum timestamp.
+	Txn *Transaction `protobuf:"bytes,8,opt,name=txn" json:"txn,omitempty"`
+	// ReadConsistency specifies the consistency for read
+	// operations. The default is CONSISTENT. This value is ignored for
+	// write operations.
+	ReadConsistency ReadConsistencyType `protobuf:"varint,9,opt,name=read_consistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
+}
+
+func (m *BatchRequest_Header) Reset()         { *m = BatchRequest_Header{} }
+func (m *BatchRequest_Header) String() string { return proto.CompactTextString(m) }
+func (*BatchRequest_Header) ProtoMessage()    {}
+
+const Default_BatchRequest_Header_UserPriority int32 = 1
+
+func (m *BatchRequest_Header) GetTimestamp() Timestamp {
+	if m != nil {
+		return m.Timestamp
+	}
+	return Timestamp{}
+}
+
+func (m *BatchRequest_Header) GetCmdID() ClientCmdID {
+	if m != nil {
+		return m.CmdID
+	}
+	return ClientCmdID{}
+}
+
+func (m *BatchRequest_Header) GetKey() Key {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
+
+func (m *BatchRequest_Header) GetEndKey() Key {
+	if m != nil {
+		return m.EndKey
+	}
+	return nil
+}
+
+func (m *BatchRequest_Header) GetReplica() ReplicaDescriptor {
+	if m != nil {
+		return m.Replica
+	}
+	return ReplicaDescriptor{}
+}
+
+func (m *BatchRequest_Header) GetRangeID() RangeID {
+	if m != nil {
+		return m.RangeID
+	}
+	return 0
+}
+
+func (m *BatchRequest_Header) GetUserPriority() int32 {
+	if m != nil && m.UserPriority != nil {
+		return *m.UserPriority
+	}
+	return Default_BatchRequest_Header_UserPriority
+}
+
+func (m *BatchRequest_Header) GetTxn() *Transaction {
+	if m != nil {
+		return m.Txn
+	}
+	return nil
+}
+
+func (m *BatchRequest_Header) GetReadConsistency() ReadConsistencyType {
+	if m != nil {
+		return m.ReadConsistency
+	}
+	return CONSISTENT
 }
 
 // A BatchResponse contains one or more responses, one per request
@@ -3677,8 +3791,8 @@ func (m *BatchRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n108, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.BatchRequest_Header.Size()))
+	n108, err := m.BatchRequest_Header.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -3695,6 +3809,81 @@ func (m *BatchRequest) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
+	return i, nil
+}
+
+func (m *BatchRequest_Header) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *BatchRequest_Header) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
+	n109, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n109
+	data[i] = 0x12
+	i++
+	i = encodeVarintApi(data, i, uint64(m.CmdID.Size()))
+	n110, err := m.CmdID.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n110
+	if m.Key != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintApi(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	if m.EndKey != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintApi(data, i, uint64(len(m.EndKey)))
+		i += copy(data[i:], m.EndKey)
+	}
+	data[i] = 0x2a
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
+	n111, err := m.Replica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n111
+	data[i] = 0x30
+	i++
+	i = encodeVarintApi(data, i, uint64(m.RangeID))
+	if m.UserPriority != nil {
+		data[i] = 0x38
+		i++
+		i = encodeVarintApi(data, i, uint64(*m.UserPriority))
+	}
+	if m.Txn != nil {
+		data[i] = 0x42
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
+		n112, err := m.Txn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n112
+	}
+	data[i] = 0x48
+	i++
+	i = encodeVarintApi(data, i, uint64(m.ReadConsistency))
 	return i, nil
 }
 
@@ -3716,11 +3905,11 @@ func (m *BatchResponse) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n109, err := m.ResponseHeader.MarshalTo(data[i:])
+	n113, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n109
+	i += n113
 	if len(m.Responses) > 0 {
 		for _, msg := range m.Responses {
 			data[i] = 0x12
@@ -4438,7 +4627,7 @@ func (m *ResponseUnion) Size() (n int) {
 func (m *BatchRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.BatchRequest_Header.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if len(m.Requests) > 0 {
 		for _, e := range m.Requests {
@@ -4446,6 +4635,35 @@ func (m *BatchRequest) Size() (n int) {
 			n += 1 + l + sovApi(uint64(l))
 		}
 	}
+	return n
+}
+
+func (m *BatchRequest_Header) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Timestamp.Size()
+	n += 1 + l + sovApi(uint64(l))
+	l = m.CmdID.Size()
+	n += 1 + l + sovApi(uint64(l))
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovApi(uint64(l))
+	}
+	if m.EndKey != nil {
+		l = len(m.EndKey)
+		n += 1 + l + sovApi(uint64(l))
+	}
+	l = m.Replica.Size()
+	n += 1 + l + sovApi(uint64(l))
+	n += 1 + sovApi(uint64(m.RangeID))
+	if m.UserPriority != nil {
+		n += 1 + sovApi(uint64(*m.UserPriority))
+	}
+	if m.Txn != nil {
+		l = m.Txn.Size()
+		n += 1 + l + sovApi(uint64(l))
+	}
+	n += 1 + sovApi(uint64(m.ReadConsistency))
 	return n
 }
 
@@ -11138,7 +11356,7 @@ func (m *BatchRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field BatchRequest_Header", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -11162,7 +11380,7 @@ func (m *BatchRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.BatchRequest_Header.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -11197,6 +11415,293 @@ func (m *BatchRequest) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipApi(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthApi
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BatchRequest_Header) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowApi
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Header: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Header: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CmdID", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CmdID.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndKey", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.EndKey = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Replica", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Replica.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
+			}
+			m.RangeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.RangeID |= (RangeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UserPriority", wireType)
+			}
+			var v int32
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.UserPriority = &v
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Txn == nil {
+				m.Txn = &Transaction{}
+			}
+			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReadConsistency", wireType)
+			}
+			m.ReadConsistency = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.ReadConsistency |= (ReadConsistencyType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])

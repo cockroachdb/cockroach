@@ -20,6 +20,7 @@ package roachpb
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
 )
 
@@ -248,4 +249,63 @@ func (ba BatchRequest) String() string {
 		str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Key, h.EndKey))
 	}
 	return strings.Join(str, ", ")
+}
+
+// GetOrCreateCmdID returns the request header's command ID if available.
+// Otherwise, creates a new ClientCmdID, initialized with current time
+// and random salt.
+func (ba BatchRequest) GetOrCreateCmdID(walltime int64) (cmdID ClientCmdID) {
+	if !ba.CmdID.IsEmpty() {
+		cmdID = ba.CmdID
+	} else {
+		cmdID = ClientCmdID{
+			WallTime: walltime,
+			Random:   rand.Int63(),
+		}
+	}
+	return
+}
+
+// TraceID implements tracer.Traceable by returning the first nontrivial
+// TraceID of the Transaction and CmdID.
+func (ba BatchRequest) TraceID() string {
+	if r := ba.Txn.TraceID(); r != "" {
+		return r
+	}
+	return ba.CmdID.TraceID()
+}
+
+// TraceName implements tracer.Traceable and behaves like TraceID, but using
+// the TraceName of the object delegated to.
+func (ba BatchRequest) TraceName() string {
+	if r := ba.Txn.TraceID(); r != "" {
+		return ba.Txn.TraceName()
+	}
+	return ba.CmdID.TraceName()
+}
+
+// TODO(marc): we should assert
+// var _ security.RequestWithUser = &BatchRequest{}
+// here, but we need to break cycles first.
+
+// GetUser implements security.RequestWithUser.
+// KV messages are always sent by the node user.
+func (*BatchRequest) GetUser() string {
+	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
+	return "node"
+}
+
+// ToHeader creates a RequestHeader from the batch's header.
+// TODO(tschottdorf): provisional code.
+func (ba *BatchRequest) ToHeader() RequestHeader {
+	var h RequestHeader
+	h.Key, h.EndKey = ba.Key, ba.EndKey
+	h.CmdID = ba.CmdID
+	h.Timestamp = ba.Timestamp
+	h.Replica = ba.Replica
+	h.RangeID = ba.RangeID
+	h.UserPriority = ba.UserPriority
+	h.Txn = ba.Txn
+	h.ReadConsistency = ba.ReadConsistency
+	return h
 }

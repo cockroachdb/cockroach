@@ -87,7 +87,7 @@ func TestAuthenticationHook(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Proto that does not implement GetUser.
 	badRequest := &roachpb.GetResponse{}
-	getRequest := &roachpb.GetRequest{}
+	goodRequest := &roachpb.BatchRequest{}
 
 	testCases := []struct {
 		insecure           bool
@@ -102,15 +102,15 @@ func TestAuthenticationHook(t *testing.T) {
 		// Insecure mode, bad request.
 		{true, nil, badRequest, true, false, false},
 		// Insecure mode, good request.
-		{true, nil, getRequest, true, true, true},
+		{true, nil, goodRequest, true, true, true},
 		// Secure mode, no TLS state.
 		{false, nil, nil, false, false, false},
 		// Secure mode, bad user.
-		{false, makeFakeTLSState([]string{"foo"}, []int{1}), getRequest, true, false, false},
+		{false, makeFakeTLSState([]string{"foo"}, []int{1}), goodRequest, true, false, false},
 		// Secure mode, node user.
-		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), getRequest, true, true, true},
+		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), goodRequest, true, true, true},
 		// Secure mode, root user.
-		{false, makeFakeTLSState([]string{security.RootUser}, []int{1}), getRequest, true, false, false},
+		{false, makeFakeTLSState([]string{security.RootUser}, []int{1}), goodRequest, true, false, false},
 	}
 
 	for tcNum, tc := range testCases {

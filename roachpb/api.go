@@ -19,7 +19,6 @@ package roachpb
 
 import (
 	"fmt"
-	"math/rand"
 	"strconv"
 
 	"github.com/gogo/protobuf/proto"
@@ -112,50 +111,6 @@ type Response interface {
 // into a single one.
 type Combinable interface {
 	Combine(Response) error
-}
-
-// TODO(marc): we should assert
-// var _ security.RequestWithUser = &RequestHeader{}
-// here, but we need to break cycles first.
-
-// GetUser implements security.RequestWithUser.
-// KV messages are always sent by the node user.
-func (*RequestHeader) GetUser() string {
-	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
-	return "node"
-}
-
-// GetOrCreateCmdID returns the request header's command ID if available.
-// Otherwise, creates a new ClientCmdID, initialized with current time
-// and random salt.
-func (rh *RequestHeader) GetOrCreateCmdID(walltime int64) (cmdID ClientCmdID) {
-	if !rh.CmdID.IsEmpty() {
-		cmdID = rh.CmdID
-	} else {
-		cmdID = ClientCmdID{
-			WallTime: walltime,
-			Random:   rand.Int63(),
-		}
-	}
-	return
-}
-
-// TraceID implements tracer.Traceable by returning the first nontrivial
-// TraceID of the Transaction and CmdID.
-func (rh *RequestHeader) TraceID() string {
-	if r := rh.Txn.TraceID(); r != "" {
-		return r
-	}
-	return rh.CmdID.TraceID()
-}
-
-// TraceName implements tracer.Traceable and behaves like TraceID, but using
-// the TraceName of the object delegated to.
-func (rh *RequestHeader) TraceName() string {
-	if r := rh.Txn.TraceID(); r != "" {
-		return rh.Txn.TraceName()
-	}
-	return rh.CmdID.TraceName()
 }
 
 func combineError(a, b interface{}) error {
