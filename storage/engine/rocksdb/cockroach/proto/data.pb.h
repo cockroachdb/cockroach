@@ -982,25 +982,25 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
   ::cockroach::proto::ReplicaChangeType change_type() const;
   void set_change_type(::cockroach::proto::ReplicaChangeType value);
 
-  // optional .cockroach.proto.Replica replica = 4;
+  // optional .cockroach.proto.ReplicaDescriptor replica = 4;
   bool has_replica() const;
   void clear_replica();
   static const int kReplicaFieldNumber = 4;
-  const ::cockroach::proto::Replica& replica() const;
-  ::cockroach::proto::Replica* mutable_replica();
-  ::cockroach::proto::Replica* release_replica();
-  void set_allocated_replica(::cockroach::proto::Replica* replica);
+  const ::cockroach::proto::ReplicaDescriptor& replica() const;
+  ::cockroach::proto::ReplicaDescriptor* mutable_replica();
+  ::cockroach::proto::ReplicaDescriptor* release_replica();
+  void set_allocated_replica(::cockroach::proto::ReplicaDescriptor* replica);
 
-  // repeated .cockroach.proto.Replica updated_replicas = 5;
+  // repeated .cockroach.proto.ReplicaDescriptor updated_replicas = 5;
   int updated_replicas_size() const;
   void clear_updated_replicas();
   static const int kUpdatedReplicasFieldNumber = 5;
-  const ::cockroach::proto::Replica& updated_replicas(int index) const;
-  ::cockroach::proto::Replica* mutable_updated_replicas(int index);
-  ::cockroach::proto::Replica* add_updated_replicas();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >&
+  const ::cockroach::proto::ReplicaDescriptor& updated_replicas(int index) const;
+  ::cockroach::proto::ReplicaDescriptor* mutable_updated_replicas(int index);
+  ::cockroach::proto::ReplicaDescriptor* add_updated_replicas();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor >&
       updated_replicas() const;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >*
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor >*
       mutable_updated_replicas();
 
   // optional int32 next_replica_id = 6;
@@ -1028,10 +1028,10 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::google::protobuf::int32 node_id_;
   ::google::protobuf::int32 store_id_;
-  ::cockroach::proto::Replica* replica_;
+  ::cockroach::proto::ReplicaDescriptor* replica_;
   int change_type_;
   ::google::protobuf::int32 next_replica_id_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica > updated_replicas_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor > updated_replicas_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
@@ -1666,12 +1666,14 @@ class Lease : public ::google::protobuf::Message {
   ::cockroach::proto::Timestamp* release_expiration();
   void set_allocated_expiration(::cockroach::proto::Timestamp* expiration);
 
-  // optional uint64 raft_node_id = 3;
-  bool has_raft_node_id() const;
-  void clear_raft_node_id();
-  static const int kRaftNodeIdFieldNumber = 3;
-  ::google::protobuf::uint64 raft_node_id() const;
-  void set_raft_node_id(::google::protobuf::uint64 value);
+  // optional .cockroach.proto.ReplicaDescriptor replica = 3;
+  bool has_replica() const;
+  void clear_replica();
+  static const int kReplicaFieldNumber = 3;
+  const ::cockroach::proto::ReplicaDescriptor& replica() const;
+  ::cockroach::proto::ReplicaDescriptor* mutable_replica();
+  ::cockroach::proto::ReplicaDescriptor* release_replica();
+  void set_allocated_replica(::cockroach::proto::ReplicaDescriptor* replica);
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.Lease)
  private:
@@ -1679,15 +1681,15 @@ class Lease : public ::google::protobuf::Message {
   inline void clear_has_start();
   inline void set_has_expiration();
   inline void clear_has_expiration();
-  inline void set_has_raft_node_id();
-  inline void clear_has_raft_node_id();
+  inline void set_has_replica();
+  inline void clear_has_replica();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::proto::Timestamp* start_;
   ::cockroach::proto::Timestamp* expiration_;
-  ::google::protobuf::uint64 raft_node_id_;
+  ::cockroach::proto::ReplicaDescriptor* replica_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
@@ -2673,7 +2675,7 @@ inline void ChangeReplicasTrigger::set_change_type(::cockroach::proto::ReplicaCh
   // @@protoc_insertion_point(field_set:cockroach.proto.ChangeReplicasTrigger.change_type)
 }
 
-// optional .cockroach.proto.Replica replica = 4;
+// optional .cockroach.proto.ReplicaDescriptor replica = 4;
 inline bool ChangeReplicasTrigger::has_replica() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -2684,28 +2686,28 @@ inline void ChangeReplicasTrigger::clear_has_replica() {
   _has_bits_[0] &= ~0x00000008u;
 }
 inline void ChangeReplicasTrigger::clear_replica() {
-  if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+  if (replica_ != NULL) replica_->::cockroach::proto::ReplicaDescriptor::Clear();
   clear_has_replica();
 }
-inline const ::cockroach::proto::Replica& ChangeReplicasTrigger::replica() const {
+inline const ::cockroach::proto::ReplicaDescriptor& ChangeReplicasTrigger::replica() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ChangeReplicasTrigger.replica)
   return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
-inline ::cockroach::proto::Replica* ChangeReplicasTrigger::mutable_replica() {
+inline ::cockroach::proto::ReplicaDescriptor* ChangeReplicasTrigger::mutable_replica() {
   set_has_replica();
   if (replica_ == NULL) {
-    replica_ = new ::cockroach::proto::Replica;
+    replica_ = new ::cockroach::proto::ReplicaDescriptor;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ChangeReplicasTrigger.replica)
   return replica_;
 }
-inline ::cockroach::proto::Replica* ChangeReplicasTrigger::release_replica() {
+inline ::cockroach::proto::ReplicaDescriptor* ChangeReplicasTrigger::release_replica() {
   clear_has_replica();
-  ::cockroach::proto::Replica* temp = replica_;
+  ::cockroach::proto::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
   return temp;
 }
-inline void ChangeReplicasTrigger::set_allocated_replica(::cockroach::proto::Replica* replica) {
+inline void ChangeReplicasTrigger::set_allocated_replica(::cockroach::proto::ReplicaDescriptor* replica) {
   delete replica_;
   replica_ = replica;
   if (replica) {
@@ -2716,31 +2718,31 @@ inline void ChangeReplicasTrigger::set_allocated_replica(::cockroach::proto::Rep
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ChangeReplicasTrigger.replica)
 }
 
-// repeated .cockroach.proto.Replica updated_replicas = 5;
+// repeated .cockroach.proto.ReplicaDescriptor updated_replicas = 5;
 inline int ChangeReplicasTrigger::updated_replicas_size() const {
   return updated_replicas_.size();
 }
 inline void ChangeReplicasTrigger::clear_updated_replicas() {
   updated_replicas_.Clear();
 }
-inline const ::cockroach::proto::Replica& ChangeReplicasTrigger::updated_replicas(int index) const {
+inline const ::cockroach::proto::ReplicaDescriptor& ChangeReplicasTrigger::updated_replicas(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_.Get(index);
 }
-inline ::cockroach::proto::Replica* ChangeReplicasTrigger::mutable_updated_replicas(int index) {
+inline ::cockroach::proto::ReplicaDescriptor* ChangeReplicasTrigger::mutable_updated_replicas(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_.Mutable(index);
 }
-inline ::cockroach::proto::Replica* ChangeReplicasTrigger::add_updated_replicas() {
+inline ::cockroach::proto::ReplicaDescriptor* ChangeReplicasTrigger::add_updated_replicas() {
   // @@protoc_insertion_point(field_add:cockroach.proto.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >&
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor >&
 ChangeReplicasTrigger::updated_replicas() const {
   // @@protoc_insertion_point(field_list:cockroach.proto.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_;
 }
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >*
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor >*
 ChangeReplicasTrigger::mutable_updated_replicas() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.proto.ChangeReplicasTrigger.updated_replicas)
   return &updated_replicas_;
@@ -3598,28 +3600,47 @@ inline void Lease::set_allocated_expiration(::cockroach::proto::Timestamp* expir
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Lease.expiration)
 }
 
-// optional uint64 raft_node_id = 3;
-inline bool Lease::has_raft_node_id() const {
+// optional .cockroach.proto.ReplicaDescriptor replica = 3;
+inline bool Lease::has_replica() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void Lease::set_has_raft_node_id() {
+inline void Lease::set_has_replica() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void Lease::clear_has_raft_node_id() {
+inline void Lease::clear_has_replica() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline void Lease::clear_raft_node_id() {
-  raft_node_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_raft_node_id();
+inline void Lease::clear_replica() {
+  if (replica_ != NULL) replica_->::cockroach::proto::ReplicaDescriptor::Clear();
+  clear_has_replica();
 }
-inline ::google::protobuf::uint64 Lease::raft_node_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.raft_node_id)
-  return raft_node_id_;
+inline const ::cockroach::proto::ReplicaDescriptor& Lease::replica() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.replica)
+  return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
-inline void Lease::set_raft_node_id(::google::protobuf::uint64 value) {
-  set_has_raft_node_id();
-  raft_node_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.Lease.raft_node_id)
+inline ::cockroach::proto::ReplicaDescriptor* Lease::mutable_replica() {
+  set_has_replica();
+  if (replica_ == NULL) {
+    replica_ = new ::cockroach::proto::ReplicaDescriptor;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Lease.replica)
+  return replica_;
+}
+inline ::cockroach::proto::ReplicaDescriptor* Lease::release_replica() {
+  clear_has_replica();
+  ::cockroach::proto::ReplicaDescriptor* temp = replica_;
+  replica_ = NULL;
+  return temp;
+}
+inline void Lease::set_allocated_replica(::cockroach::proto::ReplicaDescriptor* replica) {
+  delete replica_;
+  replica_ = replica;
+  if (replica) {
+    set_has_replica();
+  } else {
+    clear_has_replica();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Lease.replica)
 }
 
 // -------------------------------------------------------------------

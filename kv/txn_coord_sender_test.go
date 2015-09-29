@@ -515,7 +515,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			Txn: &proto.Transaction{
 				Name: "test txn",
 			},
-			Replica: proto.Replica{
+			Replica: proto.ReplicaDescriptor{
 				NodeID: 12345,
 			},
 		},

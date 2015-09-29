@@ -40,7 +40,7 @@ func adminMergeArgs(key []byte, rangeID proto.RangeID, storeID proto.StoreID) pr
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 	}
 }

@@ -34,10 +34,10 @@ func (m *Attributes) GetAttrs() []string {
 	return nil
 }
 
-// Replica describes a replica location by node ID (corresponds to a
-// host:port via lookup on gossip network) and store ID (identifies the
-// device).
-type Replica struct {
+// ReplicaDescriptor describes a replica location by node ID
+// (corresponds to a host:port via lookup on gossip network) and store
+// ID (identifies the device).
+type ReplicaDescriptor struct {
 	NodeID  NodeID  `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
 	StoreID StoreID `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
 	// ReplicaID uniquely identifies a replica instance. If a range is removed from
@@ -46,25 +46,25 @@ type Replica struct {
 	ReplicaID ReplicaID `protobuf:"varint,3,opt,name=replica_id,casttype=ReplicaID" json:"replica_id"`
 }
 
-func (m *Replica) Reset()         { *m = Replica{} }
-func (m *Replica) String() string { return proto1.CompactTextString(m) }
-func (*Replica) ProtoMessage()    {}
+func (m *ReplicaDescriptor) Reset()         { *m = ReplicaDescriptor{} }
+func (m *ReplicaDescriptor) String() string { return proto1.CompactTextString(m) }
+func (*ReplicaDescriptor) ProtoMessage()    {}
 
-func (m *Replica) GetNodeID() NodeID {
+func (m *ReplicaDescriptor) GetNodeID() NodeID {
 	if m != nil {
 		return m.NodeID
 	}
 	return 0
 }
 
-func (m *Replica) GetStoreID() StoreID {
+func (m *ReplicaDescriptor) GetStoreID() StoreID {
 	if m != nil {
 		return m.StoreID
 	}
 	return 0
 }
 
-func (m *Replica) GetReplicaID() ReplicaID {
+func (m *ReplicaDescriptor) GetReplicaID() ReplicaID {
 	if m != nil {
 		return m.ReplicaID
 	}
@@ -85,7 +85,7 @@ type RangeDescriptor struct {
 	// Replicas is the set of nodes/stores on which replicas of this
 	// range are stored, the ordering being arbitrary and subject to
 	// permutation.
-	Replicas []Replica `protobuf:"bytes,4,rep,name=replicas" json:"replicas"`
+	Replicas []ReplicaDescriptor `protobuf:"bytes,4,rep,name=replicas" json:"replicas"`
 	// NextReplicaID is a counter used to generate replica IDs.
 	NextReplicaID ReplicaID `protobuf:"varint,5,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
 }
@@ -115,7 +115,7 @@ func (m *RangeDescriptor) GetEndKey() Key {
 	return nil
 }
 
-func (m *RangeDescriptor) GetReplicas() []Replica {
+func (m *RangeDescriptor) GetReplicas() []ReplicaDescriptor {
 	if m != nil {
 		return m.Replicas
 	}
@@ -333,7 +333,7 @@ func (m *Attributes) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Replica) Marshal() (data []byte, err error) {
+func (m *ReplicaDescriptor) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
 	n, err := m.MarshalTo(data)
@@ -343,7 +343,7 @@ func (m *Replica) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Replica) MarshalTo(data []byte) (int, error) {
+func (m *ReplicaDescriptor) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -630,7 +630,7 @@ func (m *Attributes) Size() (n int) {
 	return n
 }
 
-func (m *Replica) Size() (n int) {
+func (m *ReplicaDescriptor) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovMetadata(uint64(m.NodeID))
@@ -819,7 +819,7 @@ func (m *Attributes) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Replica) Unmarshal(data []byte) error {
+func (m *ReplicaDescriptor) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -842,10 +842,10 @@ func (m *Replica) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Replica: wiretype end group for non-group")
+			return fmt.Errorf("proto: ReplicaDescriptor: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Replica: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: ReplicaDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1056,7 +1056,7 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Replicas = append(m.Replicas, Replica{})
+			m.Replicas = append(m.Replicas, ReplicaDescriptor{})
 			if err := m.Replicas[len(m.Replicas)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}

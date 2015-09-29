@@ -56,10 +56,11 @@ func testRangeDescriptor() *proto.RangeDescriptor {
 		RangeID:  1,
 		StartKey: proto.KeyMin,
 		EndKey:   proto.KeyMax,
-		Replicas: []proto.Replica{
+		Replicas: []proto.ReplicaDescriptor{
 			{
-				NodeID:  1,
-				StoreID: 1,
+				ReplicaID: 1,
+				NodeID:    1,
+				StoreID:   1,
 			},
 		},
 	}
@@ -213,13 +214,13 @@ func newTransaction(name string, baseKey proto.Key, userPriority int32,
 		isolation, clock.Now(), clock.MaxOffset().Nanoseconds())
 }
 
-// CreateReplicaSets creates new proto.Replica protos based on an array of
+// CreateReplicaSets creates new proto.ReplicaDescriptor protos based on an array of
 // StoreIDs to aid in testing. Note that this does not actually produce any
 // replicas, it just creates the proto.
-func createReplicaSets(replicaNumbers []proto.StoreID) []proto.Replica {
-	result := []proto.Replica{}
+func createReplicaSets(replicaNumbers []proto.StoreID) []proto.ReplicaDescriptor {
+	result := []proto.ReplicaDescriptor{}
 	for _, replicaNumber := range replicaNumbers {
-		result = append(result, proto.Replica{
+		result = append(result, proto.ReplicaDescriptor{
 			StoreID: replicaNumber,
 		})
 	}
@@ -290,7 +291,7 @@ func TestRangeReadConsistency(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.Replica{
+	secondReplica := proto.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -330,7 +331,11 @@ func TestRangeReadConsistency(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      start,
 		Expiration: start.Add(10, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2), // a different node
+		Replica: proto.ReplicaDescriptor{ // a different node
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	})
 	gArgs.ReadConsistency = proto.CONSISTENT
 	gArgs.Txn = nil
@@ -359,7 +364,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.Replica{
+	secondReplica := proto.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -381,7 +386,11 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      start,
 		Expiration: start.Add(10, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2), // a different node
+		Replica: proto.ReplicaDescriptor{ // a different node
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	})
 
 	// Submit a proposal to Raft.
@@ -416,7 +425,7 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 // range replica and whether it's expired for the given timestamp.
 func hasLease(rng *Replica, timestamp proto.Timestamp) (bool, bool) {
 	l := rng.getLease()
-	return l.OwnedBy(rng.rm.RaftNodeID()), !l.Covers(timestamp)
+	return l.OwnedBy(rng.rm.StoreID()), !l.Covers(timestamp)
 }
 
 func TestRangeLeaderLease(t *testing.T) {
@@ -429,7 +438,7 @@ func TestRangeLeaderLease(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.Replica{
+	secondReplica := proto.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -446,7 +455,11 @@ func TestRangeLeaderLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now.Add(10, 0),
 		Expiration: now.Add(20, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2),
+		Replica: proto.ReplicaDescriptor{
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	})
 	if held, expired := hasLease(tc.rng, tc.clock.Now().Add(15, 0)); held || expired {
 		t.Errorf("expected another replica to have leader lease")
@@ -474,7 +487,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.Replica{
+	secondReplica := proto.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -488,13 +501,17 @@ func TestRangeNotLeaderError(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2),
+		Replica: proto.ReplicaDescriptor{
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	})
 
 	header := proto.RequestHeader{
 		Key:       proto.Key("a"),
 		RangeID:   tc.rng.Desc().RangeID,
-		Replica:   proto.Replica{StoreID: tc.store.StoreID()},
+		Replica:   proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 		Timestamp: now,
 	}
 	testCases := []proto.Request{
@@ -536,7 +553,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.Replica{
+	secondReplica := proto.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -579,7 +596,11 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2),
+		Replica: proto.ReplicaDescriptor{
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	})
 
 	// Expire that lease.
@@ -590,7 +611,11 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now.Add(11, 0),
 		Expiration: now.Add(20, 0),
-		RaftNodeID: tc.store.RaftNodeID(),
+		Replica: proto.ReplicaDescriptor{
+			ReplicaID: 1,
+			NodeID:    1,
+			StoreID:   1,
+		},
 	})
 	if !verifySystem() {
 		t.Errorf("expected gossip of new config")
@@ -611,7 +636,7 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.Replica{
+	secondReplica := proto.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -627,28 +652,32 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	baseLowWater := baseRTS.WallTime
 
 	testCases := []struct {
-		nodeID      proto.RaftNodeID
+		storeID     proto.StoreID
 		start       proto.Timestamp
 		expiration  proto.Timestamp
 		expLowWater int64
 	}{
 		// Grant the lease fresh.
-		{tc.store.RaftNodeID(), now, now.Add(10, 0), baseLowWater},
+		{tc.store.StoreID(), now, now.Add(10, 0), baseLowWater},
 		// Renew the lease.
-		{tc.store.RaftNodeID(), now.Add(15, 0), now.Add(30, 0), baseLowWater},
+		{tc.store.StoreID(), now.Add(15, 0), now.Add(30, 0), baseLowWater},
 		// Renew the lease but shorten expiration.
-		{tc.store.RaftNodeID(), now.Add(16, 0), now.Add(25, 0), baseLowWater},
+		{tc.store.StoreID(), now.Add(16, 0), now.Add(25, 0), baseLowWater},
 		// Lease is held by another.
-		{proto.MakeRaftNodeID(2, 2), now.Add(29, 0), now.Add(50, 0), baseLowWater},
+		{tc.store.StoreID() + 1, now.Add(29, 0), now.Add(50, 0), baseLowWater},
 		// Lease is regranted to this replica.
-		{tc.store.RaftNodeID(), now.Add(60, 0), now.Add(70, 0), now.Add(50, 0).WallTime + int64(maxClockOffset) + baseLowWater},
+		{tc.store.StoreID(), now.Add(60, 0), now.Add(70, 0), now.Add(50, 0).WallTime + int64(maxClockOffset) + baseLowWater},
 	}
 
 	for i, test := range testCases {
 		setLeaderLease(t, tc.rng, &proto.Lease{
 			Start:      test.start,
 			Expiration: test.expiration,
-			RaftNodeID: test.nodeID,
+			Replica: proto.ReplicaDescriptor{
+				ReplicaID: proto.ReplicaID(test.storeID),
+				NodeID:    proto.NodeID(test.storeID),
+				StoreID:   test.storeID,
+			},
 		})
 		// Verify expected low water mark.
 		rTS, wTS := tc.rng.tsCache.GetMax(proto.Key("a"), nil, nil)
@@ -673,7 +702,11 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	lease := &proto.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		RaftNodeID: proto.MakeRaftNodeID(2, 2),
+		Replica: proto.ReplicaDescriptor{
+			ReplicaID: 2,
+			NodeID:    2,
+			StoreID:   2,
+		},
 	}
 	args := &proto.BatchRequest{}
 	args.Add(&proto.LeaderLeaseRequest{Lease: *lease})
@@ -827,7 +860,7 @@ func getArgs(key []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.Get
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 	}
 }
@@ -840,7 +873,7 @@ func putArgs(key, value []byte, rangeID proto.RangeID, storeID proto.StoreID) pr
 			Key:       key,
 			Timestamp: proto.MinTimestamp,
 			RangeID:   rangeID,
-			Replica:   proto.Replica{StoreID: storeID},
+			Replica:   proto.ReplicaDescriptor{StoreID: storeID},
 		},
 		Value: proto.Value{
 			Bytes: value,
@@ -854,7 +887,7 @@ func deleteArgs(key proto.Key, rangeID proto.RangeID, storeID proto.StoreID) pro
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 	}
 }
@@ -878,7 +911,7 @@ func incrementArgs(key []byte, inc int64, rangeID proto.RangeID, storeID proto.S
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 		Increment: inc,
 	}
@@ -890,7 +923,7 @@ func scanArgs(start, end []byte, rangeID proto.RangeID, storeID proto.StoreID) p
 			Key:     start,
 			EndKey:  end,
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 	}
 }
@@ -902,7 +935,7 @@ func endTxnArgs(txn *proto.Transaction, commit bool, rangeID proto.RangeID, stor
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.Key, // not allowed when going through TxnCoordSender, but we're not
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 			Txn:     txn,
 		},
 		Commit: commit,
@@ -917,7 +950,7 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, 
 			Key:       pushee.Key,
 			Timestamp: pusher.Timestamp,
 			RangeID:   rangeID,
-			Replica:   proto.Replica{StoreID: storeID},
+			Replica:   proto.ReplicaDescriptor{StoreID: storeID},
 		},
 		Now:       pusher.Timestamp,
 		PusherTxn: pusher,
@@ -932,7 +965,7 @@ func heartbeatArgs(txn *proto.Transaction, rangeID proto.RangeID, storeID proto.
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.Key,
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 			Txn:     txn,
 		},
 	}
@@ -946,7 +979,7 @@ func internalMergeArgs(key []byte, value proto.Value, rangeID proto.RangeID, sto
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 		Value: value,
 	}
@@ -956,7 +989,7 @@ func truncateLogArgs(index uint64, rangeID proto.RangeID, storeID proto.StoreID)
 	return proto.TruncateLogRequest{
 		RequestHeader: proto.RequestHeader{
 			RangeID: rangeID,
-			Replica: proto.Replica{StoreID: storeID},
+			Replica: proto.ReplicaDescriptor{StoreID: storeID},
 		},
 		Index: index,
 	}
@@ -2257,7 +2290,7 @@ func TestRangeResolveIntentRange(t *testing.T) {
 			Key:     proto.Key("a"),
 			EndKey:  proto.Key("c"),
 			RangeID: tc.rng.Desc().RangeID,
-			Replica: proto.Replica{StoreID: tc.store.StoreID()},
+			Replica: proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 		},
 		IntentTxn: *txn,
 	}
@@ -2284,7 +2317,7 @@ func verifyRangeStats(eng engine.Engine, rangeID proto.RangeID, expMS engine.MVC
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(expMS, ms) {
-		t.Errorf("expected stats %+v; got %+v", expMS, ms)
+		t.Errorf("expected stats \n  %+v;\ngot \n  %+v", expMS, ms)
 	}
 }
 
@@ -2308,7 +2341,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS := engine.MVCCStats{LiveBytes: 42, KeyBytes: 16, ValBytes: 26, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 61, SysCount: 1}
+	expMS := engine.MVCCStats{LiveBytes: 42, KeyBytes: 16, ValBytes: 26, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Put a 2nd value transactionally.
@@ -2319,7 +2352,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 136, KeyBytes: 32, ValBytes: 104, IntentBytes: 26, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 61, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 136, KeyBytes: 32, ValBytes: 104, IntentBytes: 26, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -2327,7 +2360,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		RequestHeader: proto.RequestHeader{
 			Key:     pArgs.Key,
 			RangeID: tc.rng.Desc().RangeID,
-			Replica: proto.Replica{StoreID: tc.store.StoreID()},
+			Replica: proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 		},
 		IntentTxn: *pArgs.Txn,
 	}
@@ -2336,7 +2369,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 84, KeyBytes: 32, ValBytes: 52, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 61, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 84, KeyBytes: 32, ValBytes: 52, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Delete the 1st value.
@@ -2346,7 +2379,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &dArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 42, KeyBytes: 44, ValBytes: 54, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 61, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 42, KeyBytes: 44, ValBytes: 54, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 }
 
@@ -2508,7 +2541,7 @@ func TestConditionFailedError(t *testing.T) {
 			Key:       key,
 			Timestamp: proto.MinTimestamp,
 			RangeID:   1,
-			Replica:   proto.Replica{StoreID: tc.store.StoreID()},
+			Replica:   proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 		},
 		Value: proto.Value{
 			Bytes: value,
@@ -2535,10 +2568,10 @@ func TestReplicaSetsEqual(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testData := []struct {
 		expected bool
-		a        []proto.Replica
-		b        []proto.Replica
+		a        []proto.ReplicaDescriptor
+		b        []proto.ReplicaDescriptor
 	}{
-		{true, []proto.Replica{}, []proto.Replica{}},
+		{true, []proto.ReplicaDescriptor{}, []proto.ReplicaDescriptor{}},
 		{true, createReplicaSets([]proto.StoreID{1}), createReplicaSets([]proto.StoreID{1})},
 		{true, createReplicaSets([]proto.StoreID{1, 2}), createReplicaSets([]proto.StoreID{1, 2})},
 		{true, createReplicaSets([]proto.StoreID{1, 2}), createReplicaSets([]proto.StoreID{2, 1})},
@@ -2626,7 +2659,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	if err := tc.rng.ChangeReplicas(proto.ADD_REPLICA, proto.Replica{
+	if err := tc.rng.ChangeReplicas(proto.ADD_REPLICA, proto.ReplicaDescriptor{
 		NodeID:  tc.store.Ident.NodeID,
 		StoreID: 9999,
 	}, tc.rng.Desc()); err == nil || !strings.Contains(err.Error(),
@@ -2665,7 +2698,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 		RequestHeader: proto.RequestHeader{
 			Key:             keys.RangeMetaKey(key),
 			RangeID:         tc.rng.Desc().RangeID,
-			Replica:         proto.Replica{StoreID: tc.store.StoreID()},
+			Replica:         proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 			ReadConsistency: proto.INCONSISTENT,
 		},
 		MaxRanges: 1,
@@ -2815,7 +2848,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 			Key:     keys.RangeMetaKey(proto.Key("a")),
 			EndKey:  keys.RangeMetaKey(proto.Key("z")),
 			RangeID: tc.rng.Desc().RangeID,
-			Replica: proto.Replica{StoreID: tc.store.StoreID()},
+			Replica: proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 		},
 		IntentTxn: *txn,
 	}
@@ -2828,7 +2861,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	rlArgs := &proto.RangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			RangeID:         tc.rng.Desc().RangeID,
-			Replica:         proto.Replica{StoreID: tc.store.StoreID()},
+			Replica:         proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 			ReadConsistency: proto.INCONSISTENT,
 		},
 		MaxRanges: 1,

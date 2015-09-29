@@ -118,7 +118,7 @@ func (ls *LocalSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
 	if ba.RangeID == 0 || ba.Replica.StoreID == 0 {
-		var repl *proto.Replica
+		var repl *proto.ReplicaDescriptor
 		var rangeID proto.RangeID
 		rangeID, repl, err = ls.lookupReplica(ba.Key, ba.EndKey)
 		if err == nil {
@@ -167,7 +167,7 @@ func (ls *LocalSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.
 // Returns RangeID and replica on success; RangeKeyMismatch error
 // if not found.
 // This is only for testing usage; performance doesn't matter.
-func (ls *LocalSender) lookupReplica(start, end proto.Key) (rangeID proto.RangeID, replica *proto.Replica, err error) {
+func (ls *LocalSender) lookupReplica(start, end proto.Key) (rangeID proto.RangeID, replica *proto.ReplicaDescriptor, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	var rng *storage.Replica

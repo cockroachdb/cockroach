@@ -225,7 +225,7 @@ func TestReplicateRange(t *testing.T) {
 	}
 
 	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
+		proto.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		}, rng.Desc()); err != nil {
@@ -287,7 +287,7 @@ func TestRestoreReplicas(t *testing.T) {
 	}
 
 	if err := firstRng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
+		proto.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		}, firstRng.Desc()); err != nil {
@@ -385,7 +385,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	}
 
 	err = rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
+		proto.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		}, rng.Desc())
@@ -408,7 +408,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	mtc.manualClock.Increment(10 * storage.DefaultHeartbeatInterval.Nanoseconds())
 
 	err = rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
+		proto.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		}, rng.Desc())
@@ -473,7 +473,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	// Now add the second replica.
 	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
+		proto.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		}, rng.Desc()); err != nil {
@@ -633,7 +633,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	// storeIDset is used to compare the replica sets from different views (i.e.
 	// local range descriptors)
 	type storeIDset map[proto.StoreID]struct{}
-	makeStoreIDset := func(replicas []proto.Replica) storeIDset {
+	makeStoreIDset := func(replicas []proto.ReplicaDescriptor) storeIDset {
 		idSet := make(storeIDset)
 		for _, r := range replicas {
 			idSet[r.StoreID] = struct{}{}
@@ -735,7 +735,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 
 	addReplica := func(storeNum int, desc *proto.RangeDescriptor) error {
 		return repl.ChangeReplicas(proto.ADD_REPLICA,
-			proto.Replica{
+			proto.ReplicaDescriptor{
 				NodeID:  mtc.stores[storeNum].Ident.NodeID,
 				StoreID: mtc.stores[storeNum].Ident.StoreID,
 			},
@@ -848,7 +848,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		}
 
 		verify := func(expected []int64) {
-			util.SucceedsWithin(t, time.Second, func() error {
+			util.SucceedsWithin(t, 3*time.Second, func() error {
 				values := []int64{}
 				for _, eng := range mtc.engines {
 					val, _, err := engine.MVCCGet(eng, proto.Key("a"), mtc.clock.Now(), true, nil)
@@ -1092,11 +1092,23 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		return util.Errorf("range still exists")
 	})
 
+	replica1 := proto.ReplicaDescriptor{
+		ReplicaID: proto.ReplicaID(mtc.stores[1].StoreID()),
+		NodeID:    proto.NodeID(mtc.stores[1].StoreID()),
+		StoreID:   mtc.stores[1].StoreID(),
+	}
+	replica2 := proto.ReplicaDescriptor{
+		ReplicaID: proto.ReplicaID(mtc.stores[2].StoreID()),
+		NodeID:    proto.NodeID(mtc.stores[2].StoreID()),
+		StoreID:   mtc.stores[2].StoreID(),
+	}
 	if err := mtc.transport.Send(&multiraft.RaftMessageRequest{
-		GroupID: proto.RangeID(0),
+		GroupID:     0,
+		ToReplica:   replica1,
+		FromReplica: replica2,
 		Message: raftpb.Message{
-			From: uint64(mtc.stores[2].RaftNodeID()),
-			To:   uint64(mtc.stores[1].RaftNodeID()),
+			From: uint64(replica2.ReplicaID),
+			To:   uint64(replica1.ReplicaID),
 			Type: raftpb.MsgHeartbeat,
 		}}); err != nil {
 		t.Fatal(err)
@@ -1113,6 +1125,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // number of repetitions adds an unacceptable amount of test runtime).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(bdarnell): #768")
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 

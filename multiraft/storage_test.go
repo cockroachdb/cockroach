@@ -40,6 +40,18 @@ func (b *BlockableStorage) GroupStorage(g proto.RangeID) WriteableGroupStorage {
 	return &blockableGroupStorage{b, b.storage.GroupStorage(g)}
 }
 
+func (b *BlockableStorage) ReplicaDescriptor(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
+	return b.storage.ReplicaDescriptor(groupID, replicaID)
+}
+
+func (b *BlockableStorage) ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) (proto.ReplicaID, error) {
+	return b.storage.ReplicaIDForStore(groupID, storeID)
+}
+
+func (b *BlockableStorage) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]proto.ReplicaDescriptor, error) {
+	return b.storage.ReplicasFromSnapshot(snap)
+}
+
 type blockableGroupStorage struct {
 	b *BlockableStorage
 	s WriteableGroupStorage

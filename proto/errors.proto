@@ -33,8 +33,8 @@ option (gogoproto.goproto_unrecognized_all) = false;
 // A NotLeaderError indicates that the current range is not the
 // leader. If the leader is known, its Replica is set in the error.
 message NotLeaderError {
-  optional Replica replica = 1;
-  optional Replica leader = 2;
+  optional ReplicaDescriptor replica = 1;
+  optional ReplicaDescriptor leader = 2;
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
 }

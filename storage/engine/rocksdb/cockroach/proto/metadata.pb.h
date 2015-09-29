@@ -40,7 +40,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fmetadata_2eproto();
 void protobuf_ShutdownFile_cockroach_2fproto_2fmetadata_2eproto();
 
 class Attributes;
-class Replica;
+class ReplicaDescriptor;
 class RangeDescriptor;
 class RangeTree;
 class RangeTreeNode;
@@ -146,14 +146,14 @@ class Attributes : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
-class Replica : public ::google::protobuf::Message {
+class ReplicaDescriptor : public ::google::protobuf::Message {
  public:
-  Replica();
-  virtual ~Replica();
+  ReplicaDescriptor();
+  virtual ~ReplicaDescriptor();
 
-  Replica(const Replica& from);
+  ReplicaDescriptor(const ReplicaDescriptor& from);
 
-  inline Replica& operator=(const Replica& from) {
+  inline ReplicaDescriptor& operator=(const ReplicaDescriptor& from) {
     CopyFrom(from);
     return *this;
   }
@@ -167,19 +167,19 @@ class Replica : public ::google::protobuf::Message {
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const Replica& default_instance();
+  static const ReplicaDescriptor& default_instance();
 
-  void Swap(Replica* other);
+  void Swap(ReplicaDescriptor* other);
 
   // implements Message ----------------------------------------------
 
-  inline Replica* New() const { return New(NULL); }
+  inline ReplicaDescriptor* New() const { return New(NULL); }
 
-  Replica* New(::google::protobuf::Arena* arena) const;
+  ReplicaDescriptor* New(::google::protobuf::Arena* arena) const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const Replica& from);
-  void MergeFrom(const Replica& from);
+  void CopyFrom(const ReplicaDescriptor& from);
+  void MergeFrom(const ReplicaDescriptor& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -194,7 +194,7 @@ class Replica : public ::google::protobuf::Message {
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(Replica* other);
+  void InternalSwap(ReplicaDescriptor* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return _internal_metadata_.arena();
@@ -231,7 +231,7 @@ class Replica : public ::google::protobuf::Message {
   ::google::protobuf::int32 replica_id() const;
   void set_replica_id(::google::protobuf::int32 value);
 
-  // @@protoc_insertion_point(class_scope:cockroach.proto.Replica)
+  // @@protoc_insertion_point(class_scope:cockroach.proto.ReplicaDescriptor)
  private:
   inline void set_has_node_id();
   inline void clear_has_node_id();
@@ -251,7 +251,7 @@ class Replica : public ::google::protobuf::Message {
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fmetadata_2eproto();
 
   void InitAsDefaultInstance();
-  static Replica* default_instance_;
+  static ReplicaDescriptor* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -350,16 +350,16 @@ class RangeDescriptor : public ::google::protobuf::Message {
   ::std::string* release_end_key();
   void set_allocated_end_key(::std::string* end_key);
 
-  // repeated .cockroach.proto.Replica replicas = 4;
+  // repeated .cockroach.proto.ReplicaDescriptor replicas = 4;
   int replicas_size() const;
   void clear_replicas();
   static const int kReplicasFieldNumber = 4;
-  const ::cockroach::proto::Replica& replicas(int index) const;
-  ::cockroach::proto::Replica* mutable_replicas(int index);
-  ::cockroach::proto::Replica* add_replicas();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >&
+  const ::cockroach::proto::ReplicaDescriptor& replicas(int index) const;
+  ::cockroach::proto::ReplicaDescriptor* mutable_replicas(int index);
+  ::cockroach::proto::ReplicaDescriptor* add_replicas();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor >&
       replicas() const;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >*
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor >*
       mutable_replicas();
 
   // optional int32 next_replica_id = 5;
@@ -386,7 +386,7 @@ class RangeDescriptor : public ::google::protobuf::Message {
   ::google::protobuf::int64 range_id_;
   ::google::protobuf::internal::ArenaStringPtr start_key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica > replicas_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor > replicas_;
   ::google::protobuf::int32 next_replica_id_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fmetadata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fmetadata_2eproto();
@@ -1049,78 +1049,78 @@ Attributes::mutable_attrs() {
 
 // -------------------------------------------------------------------
 
-// Replica
+// ReplicaDescriptor
 
 // optional int32 node_id = 1;
-inline bool Replica::has_node_id() const {
+inline bool ReplicaDescriptor::has_node_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void Replica::set_has_node_id() {
+inline void ReplicaDescriptor::set_has_node_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void Replica::clear_has_node_id() {
+inline void ReplicaDescriptor::clear_has_node_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void Replica::clear_node_id() {
+inline void ReplicaDescriptor::clear_node_id() {
   node_id_ = 0;
   clear_has_node_id();
 }
-inline ::google::protobuf::int32 Replica::node_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Replica.node_id)
+inline ::google::protobuf::int32 ReplicaDescriptor::node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ReplicaDescriptor.node_id)
   return node_id_;
 }
-inline void Replica::set_node_id(::google::protobuf::int32 value) {
+inline void ReplicaDescriptor::set_node_id(::google::protobuf::int32 value) {
   set_has_node_id();
   node_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.Replica.node_id)
+  // @@protoc_insertion_point(field_set:cockroach.proto.ReplicaDescriptor.node_id)
 }
 
 // optional int32 store_id = 2;
-inline bool Replica::has_store_id() const {
+inline bool ReplicaDescriptor::has_store_id() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void Replica::set_has_store_id() {
+inline void ReplicaDescriptor::set_has_store_id() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void Replica::clear_has_store_id() {
+inline void ReplicaDescriptor::clear_has_store_id() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void Replica::clear_store_id() {
+inline void ReplicaDescriptor::clear_store_id() {
   store_id_ = 0;
   clear_has_store_id();
 }
-inline ::google::protobuf::int32 Replica::store_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Replica.store_id)
+inline ::google::protobuf::int32 ReplicaDescriptor::store_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ReplicaDescriptor.store_id)
   return store_id_;
 }
-inline void Replica::set_store_id(::google::protobuf::int32 value) {
+inline void ReplicaDescriptor::set_store_id(::google::protobuf::int32 value) {
   set_has_store_id();
   store_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.Replica.store_id)
+  // @@protoc_insertion_point(field_set:cockroach.proto.ReplicaDescriptor.store_id)
 }
 
 // optional int32 replica_id = 3;
-inline bool Replica::has_replica_id() const {
+inline bool ReplicaDescriptor::has_replica_id() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void Replica::set_has_replica_id() {
+inline void ReplicaDescriptor::set_has_replica_id() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void Replica::clear_has_replica_id() {
+inline void ReplicaDescriptor::clear_has_replica_id() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline void Replica::clear_replica_id() {
+inline void ReplicaDescriptor::clear_replica_id() {
   replica_id_ = 0;
   clear_has_replica_id();
 }
-inline ::google::protobuf::int32 Replica::replica_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Replica.replica_id)
+inline ::google::protobuf::int32 ReplicaDescriptor::replica_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ReplicaDescriptor.replica_id)
   return replica_id_;
 }
-inline void Replica::set_replica_id(::google::protobuf::int32 value) {
+inline void ReplicaDescriptor::set_replica_id(::google::protobuf::int32 value) {
   set_has_replica_id();
   replica_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.Replica.replica_id)
+  // @@protoc_insertion_point(field_set:cockroach.proto.ReplicaDescriptor.replica_id)
 }
 
 // -------------------------------------------------------------------
@@ -1257,31 +1257,31 @@ inline void RangeDescriptor::set_allocated_end_key(::std::string* end_key) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RangeDescriptor.end_key)
 }
 
-// repeated .cockroach.proto.Replica replicas = 4;
+// repeated .cockroach.proto.ReplicaDescriptor replicas = 4;
 inline int RangeDescriptor::replicas_size() const {
   return replicas_.size();
 }
 inline void RangeDescriptor::clear_replicas() {
   replicas_.Clear();
 }
-inline const ::cockroach::proto::Replica& RangeDescriptor::replicas(int index) const {
+inline const ::cockroach::proto::ReplicaDescriptor& RangeDescriptor::replicas(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.proto.RangeDescriptor.replicas)
   return replicas_.Get(index);
 }
-inline ::cockroach::proto::Replica* RangeDescriptor::mutable_replicas(int index) {
+inline ::cockroach::proto::ReplicaDescriptor* RangeDescriptor::mutable_replicas(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.proto.RangeDescriptor.replicas)
   return replicas_.Mutable(index);
 }
-inline ::cockroach::proto::Replica* RangeDescriptor::add_replicas() {
+inline ::cockroach::proto::ReplicaDescriptor* RangeDescriptor::add_replicas() {
   // @@protoc_insertion_point(field_add:cockroach.proto.RangeDescriptor.replicas)
   return replicas_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >&
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor >&
 RangeDescriptor::replicas() const {
   // @@protoc_insertion_point(field_list:cockroach.proto.RangeDescriptor.replicas)
   return replicas_;
 }
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica >*
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ReplicaDescriptor >*
 RangeDescriptor::mutable_replicas() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.proto.RangeDescriptor.replicas)
   return &replicas_;

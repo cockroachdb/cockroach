@@ -146,23 +146,23 @@ class NotLeaderError : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.proto.Replica replica = 1;
+  // optional .cockroach.proto.ReplicaDescriptor replica = 1;
   bool has_replica() const;
   void clear_replica();
   static const int kReplicaFieldNumber = 1;
-  const ::cockroach::proto::Replica& replica() const;
-  ::cockroach::proto::Replica* mutable_replica();
-  ::cockroach::proto::Replica* release_replica();
-  void set_allocated_replica(::cockroach::proto::Replica* replica);
+  const ::cockroach::proto::ReplicaDescriptor& replica() const;
+  ::cockroach::proto::ReplicaDescriptor* mutable_replica();
+  ::cockroach::proto::ReplicaDescriptor* release_replica();
+  void set_allocated_replica(::cockroach::proto::ReplicaDescriptor* replica);
 
-  // optional .cockroach.proto.Replica leader = 2;
+  // optional .cockroach.proto.ReplicaDescriptor leader = 2;
   bool has_leader() const;
   void clear_leader();
   static const int kLeaderFieldNumber = 2;
-  const ::cockroach::proto::Replica& leader() const;
-  ::cockroach::proto::Replica* mutable_leader();
-  ::cockroach::proto::Replica* release_leader();
-  void set_allocated_leader(::cockroach::proto::Replica* leader);
+  const ::cockroach::proto::ReplicaDescriptor& leader() const;
+  ::cockroach::proto::ReplicaDescriptor* mutable_leader();
+  ::cockroach::proto::ReplicaDescriptor* release_leader();
+  void set_allocated_leader(::cockroach::proto::ReplicaDescriptor* leader);
 
   // optional int64 range_id = 3;
   bool has_range_id() const;
@@ -183,8 +183,8 @@ class NotLeaderError : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::cockroach::proto::Replica* replica_;
-  ::cockroach::proto::Replica* leader_;
+  ::cockroach::proto::ReplicaDescriptor* replica_;
+  ::cockroach::proto::ReplicaDescriptor* leader_;
   ::google::protobuf::int64 range_id_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
@@ -2086,7 +2086,7 @@ class Error : public ::google::protobuf::Message {
 #if !PROTOBUF_INLINE_NOT_IN_HEADERS
 // NotLeaderError
 
-// optional .cockroach.proto.Replica replica = 1;
+// optional .cockroach.proto.ReplicaDescriptor replica = 1;
 inline bool NotLeaderError::has_replica() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -2097,28 +2097,28 @@ inline void NotLeaderError::clear_has_replica() {
   _has_bits_[0] &= ~0x00000001u;
 }
 inline void NotLeaderError::clear_replica() {
-  if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+  if (replica_ != NULL) replica_->::cockroach::proto::ReplicaDescriptor::Clear();
   clear_has_replica();
 }
-inline const ::cockroach::proto::Replica& NotLeaderError::replica() const {
+inline const ::cockroach::proto::ReplicaDescriptor& NotLeaderError::replica() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.NotLeaderError.replica)
   return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
-inline ::cockroach::proto::Replica* NotLeaderError::mutable_replica() {
+inline ::cockroach::proto::ReplicaDescriptor* NotLeaderError::mutable_replica() {
   set_has_replica();
   if (replica_ == NULL) {
-    replica_ = new ::cockroach::proto::Replica;
+    replica_ = new ::cockroach::proto::ReplicaDescriptor;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.NotLeaderError.replica)
   return replica_;
 }
-inline ::cockroach::proto::Replica* NotLeaderError::release_replica() {
+inline ::cockroach::proto::ReplicaDescriptor* NotLeaderError::release_replica() {
   clear_has_replica();
-  ::cockroach::proto::Replica* temp = replica_;
+  ::cockroach::proto::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
   return temp;
 }
-inline void NotLeaderError::set_allocated_replica(::cockroach::proto::Replica* replica) {
+inline void NotLeaderError::set_allocated_replica(::cockroach::proto::ReplicaDescriptor* replica) {
   delete replica_;
   replica_ = replica;
   if (replica) {
@@ -2129,7 +2129,7 @@ inline void NotLeaderError::set_allocated_replica(::cockroach::proto::Replica* r
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NotLeaderError.replica)
 }
 
-// optional .cockroach.proto.Replica leader = 2;
+// optional .cockroach.proto.ReplicaDescriptor leader = 2;
 inline bool NotLeaderError::has_leader() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -2140,28 +2140,28 @@ inline void NotLeaderError::clear_has_leader() {
   _has_bits_[0] &= ~0x00000002u;
 }
 inline void NotLeaderError::clear_leader() {
-  if (leader_ != NULL) leader_->::cockroach::proto::Replica::Clear();
+  if (leader_ != NULL) leader_->::cockroach::proto::ReplicaDescriptor::Clear();
   clear_has_leader();
 }
-inline const ::cockroach::proto::Replica& NotLeaderError::leader() const {
+inline const ::cockroach::proto::ReplicaDescriptor& NotLeaderError::leader() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.NotLeaderError.leader)
   return leader_ != NULL ? *leader_ : *default_instance_->leader_;
 }
-inline ::cockroach::proto::Replica* NotLeaderError::mutable_leader() {
+inline ::cockroach::proto::ReplicaDescriptor* NotLeaderError::mutable_leader() {
   set_has_leader();
   if (leader_ == NULL) {
-    leader_ = new ::cockroach::proto::Replica;
+    leader_ = new ::cockroach::proto::ReplicaDescriptor;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.NotLeaderError.leader)
   return leader_;
 }
-inline ::cockroach::proto::Replica* NotLeaderError::release_leader() {
+inline ::cockroach::proto::ReplicaDescriptor* NotLeaderError::release_leader() {
   clear_has_leader();
-  ::cockroach::proto::Replica* temp = leader_;
+  ::cockroach::proto::ReplicaDescriptor* temp = leader_;
   leader_ = NULL;
   return temp;
 }
-inline void NotLeaderError::set_allocated_leader(::cockroach::proto::Replica* leader) {
+inline void NotLeaderError::set_allocated_leader(::cockroach::proto::ReplicaDescriptor* leader) {
   delete leader_;
   leader_ = leader;
   if (leader) {

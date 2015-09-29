@@ -64,7 +64,7 @@ func TestAttributesSortedString(t *testing.T) {
 
 func TestRangeDescriptorFindReplica(t *testing.T) {
 	desc := RangeDescriptor{
-		Replicas: []Replica{
+		Replicas: []ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 2, StoreID: 2},
 			{NodeID: 3, StoreID: 3},

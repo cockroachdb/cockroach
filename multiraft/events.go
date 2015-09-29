@@ -26,9 +26,9 @@ import (
 // An EventLeaderElection is broadcast when a group starts or completes
 // an election. NodeID is zero when an election is in progress.
 type EventLeaderElection struct {
-	GroupID proto.RangeID
-	NodeID  proto.RaftNodeID
-	Term    uint64
+	GroupID   proto.RangeID
+	ReplicaID proto.ReplicaID
+	Term      uint64
 }
 
 // An EventCommandCommitted is broadcast whenever a command has been committed.
@@ -52,7 +52,7 @@ type EventMembershipChangeCommitted struct {
 	GroupID    proto.RangeID
 	CommandID  string
 	Index      uint64
-	NodeID     proto.RaftNodeID
+	Replica    proto.ReplicaDescriptor
 	ChangeType raftpb.ConfChangeType
 	Payload    []byte
 

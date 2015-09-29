@@ -50,8 +50,8 @@ type rpcTransport struct {
 	rpcServer  *rpc.Server
 	rpcContext *rpc.Context
 	mu         sync.Mutex
-	servers    map[proto.RaftNodeID]multiraft.ServerInterface
-	queues     map[proto.RaftNodeID]chan *multiraft.RaftMessageRequest
+	servers    map[proto.StoreID]multiraft.ServerInterface
+	queues     map[proto.StoreID]chan *multiraft.RaftMessageRequest
 }
 
 // newRPCTransport creates a new rpcTransport with specified gossip and rpc server.
@@ -61,8 +61,8 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 		gossip:     gossip,
 		rpcServer:  rpcServer,
 		rpcContext: rpcContext,
-		servers:    make(map[proto.RaftNodeID]multiraft.ServerInterface),
-		queues:     make(map[proto.RaftNodeID]chan *multiraft.RaftMessageRequest),
+		servers:    make(map[proto.StoreID]multiraft.ServerInterface),
+		queues:     make(map[proto.StoreID]chan *multiraft.RaftMessageRequest),
 	}
 
 	if t.rpcServer != nil {
@@ -80,7 +80,7 @@ func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogopro
 	req := args.(*multiraft.RaftMessageRequest)
 
 	t.mu.Lock()
-	server, ok := t.servers[proto.RaftNodeID(req.Message.To)]
+	server, ok := t.servers[proto.StoreID(req.Message.To)]
 	t.mu.Unlock()
 
 	if !ok {
@@ -101,7 +101,7 @@ func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogopro
 
 // Listen implements the multiraft.Transport interface by registering a ServerInterface
 // to receive proxied messages.
-func (t *rpcTransport) Listen(id proto.RaftNodeID, server multiraft.ServerInterface) error {
+func (t *rpcTransport) Listen(id proto.StoreID, server multiraft.ServerInterface) error {
 	t.mu.Lock()
 	t.servers[id] = server
 	t.mu.Unlock()
@@ -109,7 +109,7 @@ func (t *rpcTransport) Listen(id proto.RaftNodeID, server multiraft.ServerInterf
 }
 
 // Stop implements the multiraft.Transport interface by unregistering the server id.
-func (t *rpcTransport) Stop(id proto.RaftNodeID) {
+func (t *rpcTransport) Stop(id proto.StoreID) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.servers, id)
@@ -122,9 +122,9 @@ func (t *rpcTransport) Stop(id proto.RaftNodeID) {
 // TODO(tschottdorf) should let MultiRaft know if the node is down;
 // need a feedback mechanism for that. Potentially easiest is to arrange for
 // the next call to Send() to fail appropriately.
-func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
+func (t *rpcTransport) processQueue(nodeID proto.NodeID, storeID proto.StoreID) {
 	t.mu.Lock()
-	ch, ok := t.queues[raftNodeID]
+	ch, ok := t.queues[storeID]
 	t.mu.Unlock()
 	if !ok {
 		return
@@ -132,11 +132,10 @@ func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 	// Clean-up when the loop below shuts down.
 	defer func() {
 		t.mu.Lock()
-		delete(t.queues, raftNodeID)
+		delete(t.queues, storeID)
 		t.mu.Unlock()
 	}()
 
-	nodeID, _ := proto.DecodeRaftNodeID(raftNodeID)
 	addr, err := t.gossip.GetNodeIDAddress(nodeID)
 	if err != nil {
 		log.Errorf("could not get address for node %d: %s", nodeID, err)
@@ -182,22 +181,18 @@ func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 			return
 		}
 
-		client.Go(raftMessageName, &multiraft.RaftMessageRequest{
-			GroupID: req.GroupID,
-			Message: req.Message,
-		}, protoResp, done)
+		client.Go(raftMessageName, req, protoResp, done)
 	}
 }
 
 // Send a message to the recipient specified in the request.
 func (t *rpcTransport) Send(req *multiraft.RaftMessageRequest) error {
-	raftNodeID := proto.RaftNodeID(req.Message.To)
 	t.mu.Lock()
-	ch, ok := t.queues[raftNodeID]
+	ch, ok := t.queues[req.ToReplica.StoreID]
 	if !ok {
 		ch = make(chan *multiraft.RaftMessageRequest, raftSendBufferSize)
-		t.queues[raftNodeID] = ch
-		go t.processQueue(raftNodeID)
+		t.queues[req.ToReplica.StoreID] = ch
+		go t.processQueue(req.ToReplica.NodeID, req.ToReplica.StoreID)
 	}
 	t.mu.Unlock()
 

@@ -54,7 +54,7 @@ enum ValueType {
   FLOAT = 2;
   BYTES = 3;
   TIME = 4;
-  
+
   // TIMESERIES is applied to values which contain InternalTimeSeriesData.
   TIMESERIES = 100;
 }
@@ -135,9 +135,9 @@ message ChangeReplicasTrigger {
       (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
   optional ReplicaChangeType change_type = 3 [(gogoproto.nullable) = false];
   // The replica being modified.
-  optional Replica replica = 4 [(gogoproto.nullable) = false];
+  optional ReplicaDescriptor replica = 4 [(gogoproto.nullable) = false];
   // The new replica list with this change applied.
-  repeated Replica updated_replicas = 5 [(gogoproto.nullable) = false];
+  repeated ReplicaDescriptor updated_replicas = 5 [(gogoproto.nullable) = false];
   optional int32 next_replica_id = 6 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
 }
@@ -268,9 +268,8 @@ message Lease {
   optional Timestamp start = 1 [(gogoproto.nullable) = false];
   // The expiration is a timestamp at which the lease will expire.
   optional Timestamp expiration = 2 [(gogoproto.nullable) = false];
-  // The Raft NodeID on which the would-be lease holder lives.
-  optional uint64 raft_node_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RaftNodeID", (gogoproto.casttype) = "RaftNodeID"];
+  // The address of the would-be lease holder.
+  optional ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
 }
 
 // Intent is used to communicate the location of an intent.

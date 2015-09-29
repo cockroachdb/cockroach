@@ -1011,7 +1011,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 	defer r.Unlock()
 
 	prevLease := r.getLease()
-	isExtension := prevLease.RaftNodeID == args.Lease.RaftNodeID
+	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
 	effectiveStart := args.Lease.Start
 	// We return this error in "normal" lease-overlap related failures.
 	rErr := &proto.LeaseRejectedError{
@@ -1027,8 +1027,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 
 	// Verify that requestion replica is part of the current replica set.
 	desc := r.Desc()
-	_, requestingStore := proto.DecodeRaftNodeID(args.Lease.RaftNodeID)
-	if idx, _ := desc.FindReplica(requestingStore); idx == -1 {
+	if idx, _ := desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
 		return reply, rErr
 	}
 
@@ -1045,7 +1044,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 	// If no old lease exists or this is our lease, we don't need to add an
 	// extra tick. This allows multiple requests from the same replica to
 	// merge without ticking away from the minimal common start timestamp.
-	if prevLease.RaftNodeID == 0 || isExtension {
+	if prevLease.Replica.StoreID == 0 || isExtension {
 		// TODO(tschottdorf) Think about whether it'd be better to go all the
 		// way back to prevLease.Start(), so that whenever the last lease is
 		// the own one, the original start is preserved.
@@ -1079,7 +1078,8 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 	// clock offset to account for any difference in clocks
 	// between the expiration (set by a remote node) and this
 	// node.
-	if r.getLease().RaftNodeID == r.rm.RaftNodeID() && prevLease.RaftNodeID != r.getLease().RaftNodeID {
+	if r.getLease().Replica.StoreID == r.rm.StoreID() &&
+		prevLease.Replica.StoreID != r.getLease().Replica.StoreID {
 		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
 		log.Infof("range %d: new leader lease %s", rangeID, args.Lease)
 	}
@@ -1439,6 +1439,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) e
 }
 
 func (r *Replica) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
+	defer r.clearPendingChangeReplicas()
 	cpy := *r.Desc()
 	cpy.Replicas = change.UpdatedReplicas
 	cpy.NextReplicaID = change.NextReplicaID
@@ -1462,10 +1463,15 @@ func (r *Replica) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) err
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
-func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.Replica, desc *proto.RangeDescriptor) error {
+func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.ReplicaDescriptor, desc *proto.RangeDescriptor) error {
+	r.Lock()
+	for r.pendingReplica.value.ReplicaID != 0 {
+		r.pendingReplica.Wait()
+	}
+
 	// Validate the request and prepare the new descriptor.
 	updatedDesc := *desc
-	updatedDesc.Replicas = append([]proto.Replica{}, desc.Replicas...)
+	updatedDesc.Replicas = append([]proto.ReplicaDescriptor{}, desc.Replicas...)
 	found := -1       // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
 	for i, existingRep := range desc.Replicas {
@@ -1486,6 +1492,10 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 		replica.ReplicaID = updatedDesc.NextReplicaID
 		updatedDesc.NextReplicaID++
 		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
+
+		// We need to be able to look up replica information before the change
+		// is official.
+		r.pendingReplica.value = replica
 	} else if changeType == proto.REMOVE_REPLICA {
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
@@ -1496,6 +1506,8 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 		updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
 	}
+
+	r.Unlock()
 
 	err := r.rm.DB().Txn(func(txn *client.Txn) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
@@ -1530,14 +1542,22 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 		return txn.Run(b)
 	})
 	if err != nil {
+		r.clearPendingChangeReplicas()
 		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, err)
 	}
 	return nil
 }
 
+func (r *Replica) clearPendingChangeReplicas() {
+	r.Lock()
+	r.pendingReplica.value = proto.ReplicaDescriptor{}
+	r.pendingReplica.Broadcast()
+	r.Unlock()
+}
+
 // replicaSetsEqual is used in AdminMerge to ensure that the ranges are
 // all collocate on the same set of replicas.
-func replicaSetsEqual(a, b []proto.Replica) bool {
+func replicaSetsEqual(a, b []proto.ReplicaDescriptor) bool {
 	if len(a) != len(b) {
 		return false
 	}

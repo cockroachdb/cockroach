@@ -468,7 +468,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	start := keys.RangeDescriptorKey(proto.KeyMin)
 	end := keys.RangeDescriptorKey(proto.KeyMax)
 
-	if s.multiraft, err = multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
+	if s.multiraft, err = multiraft.NewMultiRaft(s.Ident.NodeID, s.Ident.StoreID, &multiraft.Config{
 		Transport:              s.ctx.Transport,
 		Storage:                s,
 		StateMachine:           s,
@@ -787,7 +787,7 @@ func (s *Store) BootstrapRange(initialValues []proto.KeyValue) error {
 		StartKey:      proto.KeyMin,
 		EndKey:        proto.KeyMax,
 		NextReplicaID: 2,
-		Replicas: []proto.Replica{
+		Replicas: []proto.ReplicaDescriptor{
 			{
 				NodeID:    1,
 				StoreID:   1,
@@ -857,11 +857,6 @@ func (s *Store) ClusterID() string { return s.Ident.ClusterID }
 // StoreID accessor.
 func (s *Store) StoreID() proto.StoreID { return s.Ident.StoreID }
 
-// RaftNodeID accessor.
-func (s *Store) RaftNodeID() proto.RaftNodeID {
-	return proto.MakeRaftNodeID(s.Ident.NodeID, s.Ident.StoreID)
-}
-
 // Clock accessor.
 func (s *Store) Clock() *hlc.Clock { return s.ctx.Clock }
 
@@ -895,7 +890,7 @@ func (s *Store) Tracer() *tracer.Tracer { return s.ctx.Tracer }
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied proto.Replicas slice. It allocates new
 // replica IDs to fill out the supplied replicas.
-func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error) {
+func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.ReplicaDescriptor) (*proto.RangeDescriptor, error) {
 	id, err := s.rangeIDAlloc.Allocate()
 	if err != nil {
 		return nil, err
@@ -904,7 +899,7 @@ func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replic
 		RangeID:       proto.RangeID(id),
 		StartKey:      start,
 		EndKey:        end,
-		Replicas:      append([]proto.Replica(nil), replicas...),
+		Replicas:      append([]proto.ReplicaDescriptor(nil), replicas...),
 		NextReplicaID: proto.ReplicaID(len(replicas) + 1),
 	}
 	for i := range desc.Replicas {
@@ -1434,7 +1429,7 @@ func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd proto.RaftCommand) <-
 			crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
 			return s.multiraft.ChangeGroupMembership(cmd.RangeID, string(idKey),
 				changeTypeInternalToRaft[crt.ChangeType],
-				proto.MakeRaftNodeID(crt.NodeID, crt.StoreID),
+				crt.Replica,
 				data)
 		}
 	}
@@ -1541,6 +1536,39 @@ func (s *Store) GroupStorage(groupID proto.RangeID) multiraft.WriteableGroupStor
 		s.uninitReplicas[r.Desc().RangeID] = r
 	}
 	return r
+}
+
+// ReplicaDescriptor implements the multiraft.Storage interface.
+func (s *Store) ReplicaDescriptor(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
+	rep, err := s.GetReplica(groupID)
+	if err != nil {
+		return proto.ReplicaDescriptor{}, err
+	}
+	return rep.ReplicaDescriptor(replicaID)
+}
+
+// ReplicaIDForStore implements the multiraft.Storage interface.
+func (s *Store) ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) (proto.ReplicaID, error) {
+	r, err := s.GetReplica(groupID)
+	if err != nil {
+		return 0, err
+	}
+	for _, rep := range r.Desc().Replicas {
+		if rep.StoreID == storeID {
+			return rep.ReplicaID, nil
+		}
+	}
+	return 0, util.Errorf("store %s not found as replica of range %d", storeID, groupID)
+}
+
+// ReplicasFromSnapshot implements the multiraft.Storage interface.
+func (s *Store) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]proto.ReplicaDescriptor, error) {
+	// TODO(bdarnell): can we avoid parsing this twice?
+	var parsedSnap proto.RaftSnapshotData
+	if err := parsedSnap.Unmarshal(snap.Data); err != nil {
+		return nil, err
+	}
+	return parsedSnap.RangeDescriptor.Replicas, nil
 }
 
 // AppliedIndex implements the multiraft.StateMachine interface.

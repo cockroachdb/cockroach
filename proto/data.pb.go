@@ -411,10 +411,10 @@ type ChangeReplicasTrigger struct {
 	StoreID    StoreID           `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
 	ChangeType ReplicaChangeType `protobuf:"varint,3,opt,name=change_type,enum=cockroach.proto.ReplicaChangeType" json:"change_type"`
 	// The replica being modified.
-	Replica Replica `protobuf:"bytes,4,opt,name=replica" json:"replica"`
+	Replica ReplicaDescriptor `protobuf:"bytes,4,opt,name=replica" json:"replica"`
 	// The new replica list with this change applied.
-	UpdatedReplicas []Replica `protobuf:"bytes,5,rep,name=updated_replicas" json:"updated_replicas"`
-	NextReplicaID   ReplicaID `protobuf:"varint,6,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
+	UpdatedReplicas []ReplicaDescriptor `protobuf:"bytes,5,rep,name=updated_replicas" json:"updated_replicas"`
+	NextReplicaID   ReplicaID           `protobuf:"varint,6,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
 }
 
 func (m *ChangeReplicasTrigger) Reset()         { *m = ChangeReplicasTrigger{} }
@@ -442,14 +442,14 @@ func (m *ChangeReplicasTrigger) GetChangeType() ReplicaChangeType {
 	return ADD_REPLICA
 }
 
-func (m *ChangeReplicasTrigger) GetReplica() Replica {
+func (m *ChangeReplicasTrigger) GetReplica() ReplicaDescriptor {
 	if m != nil {
 		return m.Replica
 	}
-	return Replica{}
+	return ReplicaDescriptor{}
 }
 
-func (m *ChangeReplicasTrigger) GetUpdatedReplicas() []Replica {
+func (m *ChangeReplicasTrigger) GetUpdatedReplicas() []ReplicaDescriptor {
 	if m != nil {
 		return m.UpdatedReplicas
 	}
@@ -704,8 +704,8 @@ type Lease struct {
 	Start Timestamp `protobuf:"bytes,1,opt,name=start" json:"start"`
 	// The expiration is a timestamp at which the lease will expire.
 	Expiration Timestamp `protobuf:"bytes,2,opt,name=expiration" json:"expiration"`
-	// The Raft NodeID on which the would-be lease holder lives.
-	RaftNodeID RaftNodeID `protobuf:"varint,3,opt,name=raft_node_id,casttype=RaftNodeID" json:"raft_node_id"`
+	// The address of the would-be lease holder.
+	Replica ReplicaDescriptor `protobuf:"bytes,3,opt,name=replica" json:"replica"`
 }
 
 func (m *Lease) Reset()      { *m = Lease{} }
@@ -725,11 +725,11 @@ func (m *Lease) GetExpiration() Timestamp {
 	return Timestamp{}
 }
 
-func (m *Lease) GetRaftNodeID() RaftNodeID {
+func (m *Lease) GetReplica() ReplicaDescriptor {
 	if m != nil {
-		return m.RaftNodeID
+		return m.Replica
 	}
-	return 0
+	return ReplicaDescriptor{}
 }
 
 // Intent is used to communicate the location of an intent.
@@ -1314,9 +1314,14 @@ func (m *Lease) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n19
-	data[i] = 0x18
+	data[i] = 0x1a
 	i++
-	i = encodeVarintData(data, i, uint64(m.RaftNodeID))
+	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
+	n20, err := m.Replica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n20
 	return i, nil
 }
 
@@ -1350,11 +1355,11 @@ func (m *Intent) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x1a
 	i++
 	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-	n20, err := m.Txn.MarshalTo(data[i:])
+	n21, err := m.Txn.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n20
+	i += n21
 	return i, nil
 }
 
@@ -1592,7 +1597,8 @@ func (m *Lease) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	l = m.Expiration.Size()
 	n += 1 + l + sovData(uint64(l))
-	n += 1 + sovData(uint64(m.RaftNodeID))
+	l = m.Replica.Size()
+	n += 1 + l + sovData(uint64(l))
 	return n
 }
 
@@ -2549,7 +2555,7 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.UpdatedReplicas = append(m.UpdatedReplicas, Replica{})
+			m.UpdatedReplicas = append(m.UpdatedReplicas, ReplicaDescriptor{})
 			if err := m.UpdatedReplicas[len(m.UpdatedReplicas)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -3432,10 +3438,10 @@ func (m *Lease) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RaftNodeID", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Replica", wireType)
 			}
-			m.RaftNodeID = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowData
@@ -3445,11 +3451,22 @@ func (m *Lease) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.RaftNodeID |= (RaftNodeID(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthData
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Replica.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])

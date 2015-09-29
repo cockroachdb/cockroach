@@ -27,7 +27,7 @@ import (
 // replicaInfo extends the Replica structure with the associated node
 // descriptor.
 type replicaInfo struct {
-	proto.Replica
+	proto.ReplicaDescriptor
 	NodeDesc *proto.NodeDescriptor
 }
 
@@ -55,8 +55,8 @@ func newReplicaSlice(gossip *gossip.Gossip, desc *proto.RangeDescriptor) replica
 			continue
 		}
 		replicas = append(replicas, replicaInfo{
-			Replica:  r,
-			NodeDesc: nd,
+			ReplicaDescriptor: r,
+			NodeDesc:          nd,
 		})
 	}
 	return replicas

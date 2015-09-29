@@ -43,7 +43,7 @@ var testRangeDescriptor = proto.RangeDescriptor{
 	RangeID:  1,
 	StartKey: proto.Key("a"),
 	EndKey:   proto.Key("z"),
-	Replicas: []proto.Replica{
+	Replicas: []proto.ReplicaDescriptor{
 		{
 			NodeID:  1,
 			StoreID: 1,
@@ -86,16 +86,16 @@ func TestMoveLocalReplicaToFront(t *testing.T) {
 			// No attribute prefix
 			slice: replicaSlice{
 				replicaInfo{
-					Replica:  proto.Replica{NodeID: 2, StoreID: 2},
-					NodeDesc: &proto.NodeDescriptor{NodeID: 2},
+					ReplicaDescriptor: proto.ReplicaDescriptor{NodeID: 2, StoreID: 2},
+					NodeDesc:          &proto.NodeDescriptor{NodeID: 2},
 				},
 				replicaInfo{
-					Replica:  proto.Replica{NodeID: 3, StoreID: 3},
-					NodeDesc: &proto.NodeDescriptor{NodeID: 3},
+					ReplicaDescriptor: proto.ReplicaDescriptor{NodeID: 3, StoreID: 3},
+					NodeDesc:          &proto.NodeDescriptor{NodeID: 3},
 				},
 				replicaInfo{
-					Replica:  proto.Replica{NodeID: 1, StoreID: 1},
-					NodeDesc: &proto.NodeDescriptor{NodeID: 1},
+					ReplicaDescriptor: proto.ReplicaDescriptor{NodeID: 1, StoreID: 1},
+					NodeDesc:          &proto.NodeDescriptor{NodeID: 1},
 				},
 			},
 			localNodeDesc: proto.NodeDescriptor{NodeID: 1},
@@ -104,16 +104,16 @@ func TestMoveLocalReplicaToFront(t *testing.T) {
 			// Sort replicas by attribute
 			slice: replicaSlice{
 				replicaInfo{
-					Replica:  proto.Replica{NodeID: 2, StoreID: 2},
-					NodeDesc: &proto.NodeDescriptor{NodeID: 2, Attrs: proto.Attributes{Attrs: []string{"ad"}}},
+					ReplicaDescriptor: proto.ReplicaDescriptor{NodeID: 2, StoreID: 2},
+					NodeDesc:          &proto.NodeDescriptor{NodeID: 2, Attrs: proto.Attributes{Attrs: []string{"ad"}}},
 				},
 				replicaInfo{
-					Replica:  proto.Replica{NodeID: 3, StoreID: 3},
-					NodeDesc: &proto.NodeDescriptor{NodeID: 3, Attrs: proto.Attributes{Attrs: []string{"ab", "c"}}},
+					ReplicaDescriptor: proto.ReplicaDescriptor{NodeID: 3, StoreID: 3},
+					NodeDesc:          &proto.NodeDescriptor{NodeID: 3, Attrs: proto.Attributes{Attrs: []string{"ab", "c"}}},
 				},
 				replicaInfo{
-					Replica:  proto.Replica{NodeID: 1, StoreID: 1},
-					NodeDesc: &proto.NodeDescriptor{NodeID: 1, Attrs: proto.Attributes{Attrs: []string{"ab"}}},
+					ReplicaDescriptor: proto.ReplicaDescriptor{NodeID: 1, StoreID: 1},
+					NodeDesc:          &proto.NodeDescriptor{NodeID: 1, Attrs: proto.Attributes{Attrs: []string{"ab"}}},
 				},
 			},
 			localNodeDesc: proto.NodeDescriptor{NodeID: 1, Attrs: proto.Attributes{Attrs: []string{"ab"}}},
@@ -299,7 +299,7 @@ func TestSendRPCOrder(t *testing.T) {
 			if err := g.AddInfoProto(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
 				t.Fatal(err)
 			}
-			descriptor.Replicas = append(descriptor.Replicas, proto.Replica{
+			descriptor.Replicas = append(descriptor.Replicas, proto.ReplicaDescriptor{
 				NodeID:  proto.NodeID(i),
 				StoreID: proto.StoreID(i),
 			})
@@ -318,7 +318,7 @@ func TestSendRPCOrder(t *testing.T) {
 			}
 		}
 
-		ds.leaderCache.Update(proto.RangeID(rangeID), proto.Replica{})
+		ds.leaderCache.Update(proto.RangeID(rangeID), proto.ReplicaDescriptor{})
 		if tc.leader > 0 {
 			ds.leaderCache.Update(proto.RangeID(rangeID), descriptor.Replicas[tc.leader-1])
 		}
@@ -363,7 +363,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	g, s := makeTestGossip(t)
 	defer s()
-	leader := proto.Replica{
+	leader := proto.ReplicaDescriptor{
 		NodeID:  99,
 		StoreID: 999,
 	}
@@ -373,7 +373,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 		if first {
 			reply := getReply()
 			reply.(proto.Response).Header().SetGoError(
-				&proto.NotLeaderError{Leader: &leader, Replica: &proto.Replica{}})
+				&proto.NotLeaderError{Leader: &leader, Replica: &proto.ReplicaDescriptor{}})
 			first = false
 			return []gogoproto.Message{reply}, nil
 		}
@@ -459,7 +459,7 @@ func TestEvictCacheOnError(t *testing.T) {
 	for i, tc := range testCases {
 		g, s := makeTestGossip(t)
 		defer s()
-		leader := proto.Replica{
+		leader := proto.ReplicaDescriptor{
 			NodeID:  99,
 			StoreID: 999,
 		}
@@ -498,7 +498,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		if _, err := batchutil.SendWrapped(ds, put); err != nil && !testutils.IsError(err, "boom") {
 			t.Errorf("put encountered unexpected error: %s", err)
 		}
-		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &proto.Replica{}) && !tc.shouldClearLeader {
+		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &proto.ReplicaDescriptor{}) && !tc.shouldClearLeader {
 			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %v", i, tc.shouldClearLeader, cur)
 		}
 		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(put.Key, false /* !inclusive */)
@@ -626,7 +626,7 @@ func TestSendRPCRetry(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		descriptor.Replicas = append(descriptor.Replicas, proto.Replica{
+		descriptor.Replicas = append(descriptor.Replicas, proto.ReplicaDescriptor{
 			NodeID:  proto.NodeID(i),
 			StoreID: proto.StoreID(i),
 		})
@@ -697,7 +697,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		RangeID:  1,
 		StartKey: proto.Key("a"),
 		EndKey:   proto.Key("b"),
-		Replicas: []proto.Replica{
+		Replicas: []proto.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -710,7 +710,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		RangeID:  1,
 		StartKey: proto.Key("a"),
 		EndKey:   proto.KeyMax,
-		Replicas: []proto.Replica{
+		Replicas: []proto.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,

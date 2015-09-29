@@ -47,20 +47,20 @@ func newLeaderCache(size int) *leaderCache {
 
 // Lookup consults the cache for the replica cached as the leader of
 // the given Raft consensus group.
-func (lc *leaderCache) Lookup(group proto.RangeID) proto.Replica {
+func (lc *leaderCache) Lookup(group proto.RangeID) proto.ReplicaDescriptor {
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
 	v, ok := lc.cache.Get(group)
 	if !ok || v == nil {
-		return proto.Replica{}
+		return proto.ReplicaDescriptor{}
 	}
-	return *(v.(*proto.Replica))
+	return *(v.(*proto.ReplicaDescriptor))
 }
 
 // Update invalidates the cached leader for the given Raft group.
 // If a replica is passed in, it is inserted into the cache.
 // A StoreID of 0 (empty replica) means evict.
-func (lc *leaderCache) Update(group proto.RangeID, r proto.Replica) {
+func (lc *leaderCache) Update(group proto.RangeID, r proto.ReplicaDescriptor) {
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
 	lc.cache.Del(group)

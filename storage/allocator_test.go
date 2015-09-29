@@ -199,7 +199,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
+	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, _, _, a := createTestAllocator()
 	defer stopper.Stop()
-	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
+	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.ReplicaDescriptor{}, false, nil)
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
 	}
@@ -226,14 +226,14 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
+	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []proto.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
 	if result1.StoreID != 1 && result1.StoreID != 2 {
 		t.Errorf("Expected store 1 or 2; got %+v", result1)
 	}
-	exReplicas := []proto.Replica{
+	exReplicas := []proto.ReplicaDescriptor{
 		{
 			NodeID:  result1.Node.NodeID,
 			StoreID: result1.StoreID,
@@ -249,7 +249,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	if result1.Node.NodeID == result2.Node.NodeID {
 		t.Errorf("Expected node ids to be different %+v vs %+v", result1, result2)
 	}
-	result3, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []proto.Replica{}, false, nil)
+	result3, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []proto.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -263,11 +263,11 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
-	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []proto.Replica{}, false, nil)
+	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []proto.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	result2, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.Replica{}, false, nil)
+	result2, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		t.Errorf("Expected nodes 1 & 2: %+v vs %+v", result1.Node, result2.Node)
 	}
 	// Verify that no result is forthcoming if we already have a replica.
-	_, err = a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.Replica{
+	_, err = a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.ReplicaDescriptor{
 		{
 			NodeID:  result2.Node.NodeID,
 			StoreID: result2.StoreID,
@@ -291,7 +291,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	result, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], []proto.Replica{
+	result, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], []proto.ReplicaDescriptor{
 		{
 			NodeID:  2,
 			StoreID: 2,
@@ -341,9 +341,9 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 		{[]string{"b", "hdd", "gpu"}, []int{}, true, 2, false},
 	}
 	for i, test := range testCases {
-		var existing []proto.Replica
+		var existing []proto.ReplicaDescriptor
 		for _, id := range test.existing {
-			existing = append(existing, proto.Replica{NodeID: proto.NodeID(id), StoreID: proto.StoreID(id)})
+			existing = append(existing, proto.ReplicaDescriptor{NodeID: proto.NodeID(id), StoreID: proto.StoreID(id)})
 		}
 		result, err := a.AllocateTarget(proto.Attributes{Attrs: test.required}, existing, test.relaxConstraints, nil)
 		if haveErr := (err != nil); haveErr != test.expErr {
@@ -389,7 +389,7 @@ func TestAllocatorRandomAllocation(t *testing.T) {
 	// store 1 or store 2 will be chosen, as the least loaded of the
 	// three random choices is returned.
 	for i := 0; i < 10; i++ {
-		result, err := a.AllocateTarget(proto.Attributes{}, []proto.Replica{}, false, nil)
+		result, err := a.AllocateTarget(proto.Attributes{}, []proto.ReplicaDescriptor{}, false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -432,7 +432,7 @@ func TestAllocatorRebalance(t *testing.T) {
 
 	// Every rebalance target must be either stores 1 or 2.
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(proto.Attributes{}, []proto.Replica{})
+		result := a.RebalanceTarget(proto.Attributes{}, []proto.ReplicaDescriptor{})
 		if result == nil {
 			t.Fatal("nil result")
 		}
@@ -484,7 +484,7 @@ func TestAllocatorRebalanceByCapacity(t *testing.T) {
 
 	// Every rebalance target must be store 4 (if not nil).
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(proto.Attributes{}, []proto.Replica{})
+		result := a.RebalanceTarget(proto.Attributes{}, []proto.ReplicaDescriptor{})
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
@@ -535,7 +535,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(proto.Attributes{}, []proto.Replica{})
+		result := a.RebalanceTarget(proto.Attributes{}, []proto.ReplicaDescriptor{})
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
@@ -559,7 +559,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	defer stopper.Stop()
 
 	// List of replicas that will be passed to RemoveTarget
-	replicas := []proto.Replica{
+	replicas := []proto.ReplicaDescriptor{
 		{
 			StoreID:   1,
 			NodeID:    1,
@@ -684,7 +684,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: 64000,
 			},
 			desc: proto.RangeDescriptor{
-				Replicas: []proto.Replica{
+				Replicas: []proto.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -722,7 +722,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: 64000,
 			},
 			desc: proto.RangeDescriptor{
-				Replicas: []proto.Replica{
+				Replicas: []proto.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -760,7 +760,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: 64000,
 			},
 			desc: proto.RangeDescriptor{
-				Replicas: []proto.Replica{
+				Replicas: []proto.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -808,7 +808,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: 64000,
 			},
 			desc: proto.RangeDescriptor{
-				Replicas: []proto.Replica{
+				Replicas: []proto.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -847,7 +847,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: 64000,
 			},
 			desc: proto.RangeDescriptor{
-				Replicas: []proto.Replica{
+				Replicas: []proto.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -890,7 +890,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: 64000,
 			},
 			desc: proto.RangeDescriptor{
-				Replicas: []proto.Replica{
+				Replicas: []proto.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -933,7 +933,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: 64000,
 			},
 			desc: proto.RangeDescriptor{
-				Replicas: []proto.Replica{
+				Replicas: []proto.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -981,7 +981,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: 64000,
 			},
 			desc: proto.RangeDescriptor{
-				Replicas: []proto.Replica{
+				Replicas: []proto.ReplicaDescriptor{
 					{
 						StoreID:   10,
 						NodeID:    10,
@@ -1019,7 +1019,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: 64000,
 			},
 			desc: proto.RangeDescriptor{
-				Replicas: []proto.Replica{
+				Replicas: []proto.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -1119,7 +1119,7 @@ func Example_rebalancing() {
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
 			if alloc.ShouldRebalance(ts.StoreID) {
-				target := alloc.RebalanceTarget(proto.Attributes{}, []proto.Replica{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}})
+				target := alloc.RebalanceTarget(proto.Attributes{}, []proto.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}})
 				if target != nil {
 					testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 				}

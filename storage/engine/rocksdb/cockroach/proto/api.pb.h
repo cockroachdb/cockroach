@@ -340,14 +340,14 @@ class RequestHeader : public ::google::protobuf::Message {
   ::std::string* release_end_key();
   void set_allocated_end_key(::std::string* end_key);
 
-  // optional .cockroach.proto.Replica replica = 5;
+  // optional .cockroach.proto.ReplicaDescriptor replica = 5;
   bool has_replica() const;
   void clear_replica();
   static const int kReplicaFieldNumber = 5;
-  const ::cockroach::proto::Replica& replica() const;
-  ::cockroach::proto::Replica* mutable_replica();
-  ::cockroach::proto::Replica* release_replica();
-  void set_allocated_replica(::cockroach::proto::Replica* replica);
+  const ::cockroach::proto::ReplicaDescriptor& replica() const;
+  ::cockroach::proto::ReplicaDescriptor* mutable_replica();
+  ::cockroach::proto::ReplicaDescriptor* release_replica();
+  void set_allocated_replica(::cockroach::proto::ReplicaDescriptor* replica);
 
   // optional int64 range_id = 6;
   bool has_range_id() const;
@@ -407,7 +407,7 @@ class RequestHeader : public ::google::protobuf::Message {
   ::cockroach::proto::ClientCmdID* cmd_id_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
-  ::cockroach::proto::Replica* replica_;
+  ::cockroach::proto::ReplicaDescriptor* replica_;
   ::google::protobuf::int64 range_id_;
   ::cockroach::proto::Transaction* txn_;
   ::google::protobuf::int32 user_priority_;
@@ -5981,7 +5981,7 @@ inline void RequestHeader::set_allocated_end_key(::std::string* end_key) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.end_key)
 }
 
-// optional .cockroach.proto.Replica replica = 5;
+// optional .cockroach.proto.ReplicaDescriptor replica = 5;
 inline bool RequestHeader::has_replica() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
@@ -5992,28 +5992,28 @@ inline void RequestHeader::clear_has_replica() {
   _has_bits_[0] &= ~0x00000010u;
 }
 inline void RequestHeader::clear_replica() {
-  if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+  if (replica_ != NULL) replica_->::cockroach::proto::ReplicaDescriptor::Clear();
   clear_has_replica();
 }
-inline const ::cockroach::proto::Replica& RequestHeader::replica() const {
+inline const ::cockroach::proto::ReplicaDescriptor& RequestHeader::replica() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.replica)
   return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
-inline ::cockroach::proto::Replica* RequestHeader::mutable_replica() {
+inline ::cockroach::proto::ReplicaDescriptor* RequestHeader::mutable_replica() {
   set_has_replica();
   if (replica_ == NULL) {
-    replica_ = new ::cockroach::proto::Replica;
+    replica_ = new ::cockroach::proto::ReplicaDescriptor;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestHeader.replica)
   return replica_;
 }
-inline ::cockroach::proto::Replica* RequestHeader::release_replica() {
+inline ::cockroach::proto::ReplicaDescriptor* RequestHeader::release_replica() {
   clear_has_replica();
-  ::cockroach::proto::Replica* temp = replica_;
+  ::cockroach::proto::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
   return temp;
 }
-inline void RequestHeader::set_allocated_replica(::cockroach::proto::Replica* replica) {
+inline void RequestHeader::set_allocated_replica(::cockroach::proto::ReplicaDescriptor* replica) {
   delete replica_;
   replica_ = replica;
   if (replica) {

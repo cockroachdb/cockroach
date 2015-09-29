@@ -101,7 +101,7 @@
 		RaftTruncatedState
 		RaftSnapshotData
 		Attributes
-		Replica
+		ReplicaDescriptor
 		RangeDescriptor
 		RangeTree
 		RangeTreeNode
@@ -270,7 +270,7 @@ type RequestHeader struct {
 	EndKey Key `protobuf:"bytes,4,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
 	// Replica specifies the destination for the request. This is a specific
 	// instance of the available replicas belonging to RangeID.
-	Replica Replica `protobuf:"bytes,5,opt,name=replica" json:"replica"`
+	Replica ReplicaDescriptor `protobuf:"bytes,5,opt,name=replica" json:"replica"`
 	// RangeID specifies the ID of the Raft consensus group which the key
 	// range belongs to. This is used by the receiving node to route the
 	// request to the correct range.
@@ -331,11 +331,11 @@ func (m *RequestHeader) GetEndKey() Key {
 	return nil
 }
 
-func (m *RequestHeader) GetReplica() Replica {
+func (m *RequestHeader) GetReplica() ReplicaDescriptor {
 	if m != nil {
 		return m.Replica
 	}
-	return Replica{}
+	return ReplicaDescriptor{}
 }
 
 func (m *RequestHeader) GetRangeID() RangeID {

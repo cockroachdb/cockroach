@@ -324,7 +324,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 		},
 	}
 
-	replicas := []proto.Replica{
+	replicas := []proto.ReplicaDescriptor{
 		{
 			NodeID:    1,
 			StoreID:   1,

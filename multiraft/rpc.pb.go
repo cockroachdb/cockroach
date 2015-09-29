@@ -11,12 +11,14 @@
 	It has these top-level messages:
 		RaftMessageRequest
 		RaftMessageResponse
+		ConfChangeContext
 */
 package multiraft
 
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import cockroach_proto "github.com/cockroachdb/cockroach/proto"
 import raftpb "github.com/coreos/etcd/raft/raftpb"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
@@ -33,8 +35,10 @@ var _ = math.Inf
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec.
 type RaftMessageRequest struct {
-	GroupID github_com_cockroachdb_cockroach_proto.RangeID `protobuf:"varint,1,opt,name=group_id,casttype=github.com/cockroachdb/cockroach/proto.RangeID" json:"group_id"`
-	Message raftpb.Message                                 `protobuf:"bytes,2,opt,name=message" json:"message"`
+	GroupID     github_com_cockroachdb_cockroach_proto.RangeID `protobuf:"varint,1,opt,name=group_id,casttype=github.com/cockroachdb/cockroach/proto.RangeID" json:"group_id"`
+	FromReplica cockroach_proto.ReplicaDescriptor              `protobuf:"bytes,2,opt,name=from_replica" json:"from_replica"`
+	ToReplica   cockroach_proto.ReplicaDescriptor              `protobuf:"bytes,3,opt,name=to_replica" json:"to_replica"`
+	Message     raftpb.Message                                 `protobuf:"bytes,4,opt,name=message" json:"message"`
 }
 
 func (m *RaftMessageRequest) Reset()         { *m = RaftMessageRequest{} }
@@ -46,6 +50,20 @@ func (m *RaftMessageRequest) GetGroupID() github_com_cockroachdb_cockroach_proto
 		return m.GroupID
 	}
 	return 0
+}
+
+func (m *RaftMessageRequest) GetFromReplica() cockroach_proto.ReplicaDescriptor {
+	if m != nil {
+		return m.FromReplica
+	}
+	return cockroach_proto.ReplicaDescriptor{}
+}
+
+func (m *RaftMessageRequest) GetToReplica() cockroach_proto.ReplicaDescriptor {
+	if m != nil {
+		return m.ToReplica
+	}
+	return cockroach_proto.ReplicaDescriptor{}
 }
 
 func (m *RaftMessageRequest) GetMessage() raftpb.Message {
@@ -63,6 +81,41 @@ type RaftMessageResponse struct {
 func (m *RaftMessageResponse) Reset()         { *m = RaftMessageResponse{} }
 func (m *RaftMessageResponse) String() string { return proto.CompactTextString(m) }
 func (*RaftMessageResponse) ProtoMessage()    {}
+
+// ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
+type ConfChangeContext struct {
+	CommandID string `protobuf:"bytes,1,opt,name=command_id" json:"command_id"`
+	// Payload is the application-level command (i.e. an encoded
+	// proto.EndTransactionRequest).
+	Payload []byte `protobuf:"bytes,2,opt,name=payload" json:"payload,omitempty"`
+	// Replica contains full details about the replica being added or removed.
+	Replica cockroach_proto.ReplicaDescriptor `protobuf:"bytes,3,opt,name=replica" json:"replica"`
+}
+
+func (m *ConfChangeContext) Reset()         { *m = ConfChangeContext{} }
+func (m *ConfChangeContext) String() string { return proto.CompactTextString(m) }
+func (*ConfChangeContext) ProtoMessage()    {}
+
+func (m *ConfChangeContext) GetCommandID() string {
+	if m != nil {
+		return m.CommandID
+	}
+	return ""
+}
+
+func (m *ConfChangeContext) GetPayload() []byte {
+	if m != nil {
+		return m.Payload
+	}
+	return nil
+}
+
+func (m *ConfChangeContext) GetReplica() cockroach_proto.ReplicaDescriptor {
+	if m != nil {
+		return m.Replica
+	}
+	return cockroach_proto.ReplicaDescriptor{}
+}
 
 func (m *RaftMessageRequest) Marshal() (data []byte, err error) {
 	size := m.Size()
@@ -84,12 +137,28 @@ func (m *RaftMessageRequest) MarshalTo(data []byte) (int, error) {
 	i = encodeVarintRpc(data, i, uint64(m.GroupID))
 	data[i] = 0x12
 	i++
-	i = encodeVarintRpc(data, i, uint64(m.Message.Size()))
-	n1, err := m.Message.MarshalTo(data[i:])
+	i = encodeVarintRpc(data, i, uint64(m.FromReplica.Size()))
+	n1, err := m.FromReplica.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n1
+	data[i] = 0x1a
+	i++
+	i = encodeVarintRpc(data, i, uint64(m.ToReplica.Size()))
+	n2, err := m.ToReplica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	data[i] = 0x22
+	i++
+	i = encodeVarintRpc(data, i, uint64(m.Message.Size()))
+	n3, err := m.Message.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
 	return i, nil
 }
 
@@ -108,6 +177,42 @@ func (m *RaftMessageResponse) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	return i, nil
+}
+
+func (m *ConfChangeContext) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ConfChangeContext) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintRpc(data, i, uint64(len(m.CommandID)))
+	i += copy(data[i:], m.CommandID)
+	if m.Payload != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintRpc(data, i, uint64(len(m.Payload)))
+		i += copy(data[i:], m.Payload)
+	}
+	data[i] = 0x1a
+	i++
+	i = encodeVarintRpc(data, i, uint64(m.Replica.Size()))
+	n4, err := m.Replica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
 	return i, nil
 }
 
@@ -142,6 +247,10 @@ func (m *RaftMessageRequest) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovRpc(uint64(m.GroupID))
+	l = m.FromReplica.Size()
+	n += 1 + l + sovRpc(uint64(l))
+	l = m.ToReplica.Size()
+	n += 1 + l + sovRpc(uint64(l))
 	l = m.Message.Size()
 	n += 1 + l + sovRpc(uint64(l))
 	return n
@@ -150,6 +259,20 @@ func (m *RaftMessageRequest) Size() (n int) {
 func (m *RaftMessageResponse) Size() (n int) {
 	var l int
 	_ = l
+	return n
+}
+
+func (m *ConfChangeContext) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.CommandID)
+	n += 1 + l + sovRpc(uint64(l))
+	if m.Payload != nil {
+		l = len(m.Payload)
+		n += 1 + l + sovRpc(uint64(l))
+	}
+	l = m.Replica.Size()
+	n += 1 + l + sovRpc(uint64(l))
 	return n
 }
 
@@ -215,6 +338,66 @@ func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 				}
 			}
 		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FromReplica", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.FromReplica.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ToReplica", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ToReplica.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Message", wireType)
 			}
@@ -294,6 +477,143 @@ func (m *RaftMessageResponse) Unmarshal(data []byte) error {
 			return fmt.Errorf("proto: RaftMessageResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRpc(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRpc
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ConfChangeContext) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRpc
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ConfChangeContext: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ConfChangeContext: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommandID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CommandID = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Payload", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Payload = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Replica", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Replica.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRpc(data[iNdEx:])

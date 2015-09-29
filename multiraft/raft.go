@@ -49,7 +49,7 @@ func (r *raftLogger) prependContext(format string, v []interface{}) string {
 	var s string
 	if r.group != 0 {
 		v2 := append([]interface{}{r.group}, v...)
-		s = fmt.Sprintf("group %d "+format, v2...)
+		s = fmt.Sprintf("[group %d] "+format, v2...)
 	} else {
 		s = fmt.Sprintf(format, v...)
 	}

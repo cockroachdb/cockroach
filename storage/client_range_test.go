@@ -292,7 +292,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	requestHeader := proto.RequestHeader{
 		Key:          proto.Key(key),
 		RangeID:      1,
-		Replica:      proto.Replica{StoreID: store.StoreID()},
+		Replica:      proto.ReplicaDescriptor{StoreID: store.StoreID()},
 		UserPriority: &priority,
 		Timestamp:    clock.Now(),
 	}
@@ -348,7 +348,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			Key:     proto.KeyMin,
 			EndKey:  keys.RangeMetaKey(proto.KeyMax),
 			RangeID: 1,
-			Replica: proto.Replica{StoreID: store.StoreID()},
+			Replica: proto.ReplicaDescriptor{StoreID: store.StoreID()},
 		},
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
@@ -361,7 +361,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			RequestHeader: proto.RequestHeader{
 				Key:             key,
 				RangeID:         1,
-				Replica:         proto.Replica{StoreID: store.StoreID()},
+				Replica:         proto.ReplicaDescriptor{StoreID: store.StoreID()},
 				ReadConsistency: proto.INCONSISTENT,
 			},
 			MaxRanges: maxResults,

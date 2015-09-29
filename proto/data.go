@@ -640,10 +640,9 @@ func (s Int32Slice) Less(i, j int) bool { return s[i] < s[j] }
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
-	nodeID, storeID := DecodeRaftNodeID(RaftNodeID(l.RaftNodeID))
 	t := time.Unix(l.Start.WallTime/1E9, 0)
 	tStr := t.Format("15:04:05.000")
-	return fmt.Sprintf("replica %d:%d %s +%.3fs", nodeID, storeID, tStr, float64(l.Expiration.WallTime-l.Start.WallTime)/1E9)
+	return fmt.Sprintf("replica %s %s +%.3fs", l.Replica, tStr, float64(l.Expiration.WallTime-l.Start.WallTime)/1E9)
 }
 
 // Covers returns true if the given timestamp is strictly less than the
@@ -653,7 +652,7 @@ func (l Lease) Covers(timestamp Timestamp) bool {
 	return timestamp.Less(l.Expiration)
 }
 
-// OwnedBy returns whether the lease owner is equal to the given RaftNodeID.
-func (l Lease) OwnedBy(id RaftNodeID) bool {
-	return l.RaftNodeID == id
+// OwnedBy returns whether the given store is the lease owner.
+func (l Lease) OwnedBy(storeID StoreID) bool {
+	return l.Replica.StoreID == storeID
 }

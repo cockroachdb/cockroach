@@ -30,18 +30,18 @@ func TestLeaderCache(t *testing.T) {
 	if r := lc.Lookup(12); r.StoreID != 0 {
 		t.Fatalf("lookup of missing key returned replica: %v", r)
 	}
-	replica := proto.Replica{StoreID: 1}
+	replica := proto.ReplicaDescriptor{StoreID: 1}
 	lc.Update(5, replica)
 	if r := lc.Lookup(5); r.StoreID != 1 {
 		t.Errorf("expected %v, got %v", replica, r)
 	}
-	newReplica := proto.Replica{StoreID: 7}
+	newReplica := proto.ReplicaDescriptor{StoreID: 7}
 	lc.Update(5, newReplica)
 	r := lc.Lookup(5)
 	if r.StoreID != 7 {
 		t.Errorf("expected %v, got %v", newReplica, r)
 	}
-	lc.Update(5, proto.Replica{})
+	lc.Update(5, proto.ReplicaDescriptor{})
 	r = lc.Lookup(5)
 	if r.StoreID != 0 {
 		t.Fatalf("evicted leader returned: %v", r)

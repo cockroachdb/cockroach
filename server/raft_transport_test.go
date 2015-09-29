@@ -72,7 +72,7 @@ func TestSendAndReceive(t *testing.T) {
 	servers := []*rpc.Server{}
 	// All the rest have length numStores (note that several stores share a transport).
 	nextNodeID := proto.NodeID(1)
-	nodeIDs := []proto.RaftNodeID{}
+	nodeIDs := []proto.NodeID{}
 	transports := []multiraft.Transport{}
 	channels := []channelServer{}
 	for serverIndex := 0; serverIndex < numServers; serverIndex++ {
@@ -89,17 +89,16 @@ func TestSendAndReceive(t *testing.T) {
 		defer transport.Close()
 
 		for store := 0; store < storesPerServer; store++ {
-			protoNodeID := nextNodeID
-			nodeID := proto.MakeRaftNodeID(protoNodeID, 1)
+			nodeID := nextNodeID
 			nextNodeID++
 
 			channel := newChannelServer(10, 0)
-			if err := transport.Listen(nodeID, channel); err != nil {
+			if err := transport.Listen(proto.StoreID(nodeID), channel); err != nil {
 				t.Fatal(err)
 			}
 
 			addr := server.Addr()
-			if err := g.AddInfoProto(gossip.MakeNodeIDKey(protoNodeID),
+			if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
 				&proto.NodeDescriptor{
 					Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 				},
@@ -124,6 +123,16 @@ func TestSendAndReceive(t *testing.T) {
 					From: uint64(nodeIDs[from]),
 					To:   uint64(nodeIDs[to]),
 					Type: raftpb.MsgHeartbeat,
+				},
+				FromReplica: proto.ReplicaDescriptor{
+					NodeID:    nodeIDs[from],
+					StoreID:   proto.StoreID(nodeIDs[from]),
+					ReplicaID: proto.ReplicaID(nodeIDs[from]),
+				},
+				ToReplica: proto.ReplicaDescriptor{
+					NodeID:    nodeIDs[to],
+					StoreID:   proto.StoreID(nodeIDs[to]),
+					ReplicaID: proto.ReplicaID(nodeIDs[to]),
 				},
 			}
 
@@ -174,19 +183,18 @@ func TestInOrderDelivery(t *testing.T) {
 	defer server.Close()
 
 	const numMessages = 100
-	protoNodeID := proto.NodeID(1)
-	raftNodeID := proto.MakeRaftNodeID(protoNodeID, 1)
+	nodeID := proto.NodeID(1)
 	serverTransport, err := newRPCTransport(g, server, nodeRPCContext)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer serverTransport.Close()
 	serverChannel := newChannelServer(numMessages, 10*time.Millisecond)
-	if err := serverTransport.Listen(raftNodeID, serverChannel); err != nil {
+	if err := serverTransport.Listen(proto.StoreID(nodeID), serverChannel); err != nil {
 		t.Fatal(err)
 	}
 	addr := server.Addr()
-	if err := g.AddInfoProto(gossip.MakeNodeIDKey(protoNodeID),
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
 		&proto.NodeDescriptor{
 			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		},
@@ -194,7 +202,7 @@ func TestInOrderDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clientNodeID := proto.MakeRaftNodeID(2, 2)
+	clientNodeID := proto.NodeID(2)
 	clientTransport, err := newRPCTransport(g, nil, nodeRPCContext)
 	if err != nil {
 		t.Fatal(err)
@@ -205,9 +213,19 @@ func TestInOrderDelivery(t *testing.T) {
 		req := &multiraft.RaftMessageRequest{
 			GroupID: 1,
 			Message: raftpb.Message{
-				To:     uint64(raftNodeID),
+				To:     uint64(nodeID),
 				From:   uint64(clientNodeID),
 				Commit: uint64(i),
+			},
+			ToReplica: proto.ReplicaDescriptor{
+				NodeID:    nodeID,
+				StoreID:   proto.StoreID(nodeID),
+				ReplicaID: proto.ReplicaID(nodeID),
+			},
+			FromReplica: proto.ReplicaDescriptor{
+				NodeID:    clientNodeID,
+				StoreID:   proto.StoreID(clientNodeID),
+				ReplicaID: proto.ReplicaID(clientNodeID),
 			},
 		}
 		if err := clientTransport.Send(req); err != nil {
