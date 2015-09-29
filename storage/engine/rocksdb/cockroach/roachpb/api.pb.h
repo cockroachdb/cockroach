@@ -487,15 +487,6 @@ class ResponseHeader : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.Error error = 1;
-  bool has_error() const;
-  void clear_error();
-  static const int kErrorFieldNumber = 1;
-  const ::cockroach::roachpb::Error& error() const;
-  ::cockroach::roachpb::Error* mutable_error();
-  ::cockroach::roachpb::Error* release_error();
-  void set_allocated_error(::cockroach::roachpb::Error* error);
-
   // optional .cockroach.roachpb.Timestamp timestamp = 2;
   bool has_timestamp() const;
   void clear_timestamp();
@@ -516,8 +507,6 @@ class ResponseHeader : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ResponseHeader)
  private:
-  inline void set_has_error();
-  inline void clear_has_error();
   inline void set_has_timestamp();
   inline void clear_has_timestamp();
   inline void set_has_txn();
@@ -526,7 +515,6 @@ class ResponseHeader : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::cockroach::roachpb::Error* error_;
   ::cockroach::roachpb::Timestamp* timestamp_;
   ::cockroach::roachpb::Transaction* txn_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -6464,58 +6452,15 @@ inline void RequestHeader::set_read_consistency(::cockroach::roachpb::ReadConsis
 
 // ResponseHeader
 
-// optional .cockroach.roachpb.Error error = 1;
-inline bool ResponseHeader::has_error() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void ResponseHeader::set_has_error() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void ResponseHeader::clear_has_error() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void ResponseHeader::clear_error() {
-  if (error_ != NULL) error_->::cockroach::roachpb::Error::Clear();
-  clear_has_error();
-}
-inline const ::cockroach::roachpb::Error& ResponseHeader::error() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseHeader.error)
-  return error_ != NULL ? *error_ : *default_instance_->error_;
-}
-inline ::cockroach::roachpb::Error* ResponseHeader::mutable_error() {
-  set_has_error();
-  if (error_ == NULL) {
-    error_ = new ::cockroach::roachpb::Error;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseHeader.error)
-  return error_;
-}
-inline ::cockroach::roachpb::Error* ResponseHeader::release_error() {
-  clear_has_error();
-  ::cockroach::roachpb::Error* temp = error_;
-  error_ = NULL;
-  return temp;
-}
-inline void ResponseHeader::set_allocated_error(::cockroach::roachpb::Error* error) {
-  delete error_;
-  error_ = error;
-  if (error) {
-    set_has_error();
-  } else {
-    clear_has_error();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResponseHeader.error)
-}
-
 // optional .cockroach.roachpb.Timestamp timestamp = 2;
 inline bool ResponseHeader::has_timestamp() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return (_has_bits_[0] & 0x00000001u) != 0;
 }
 inline void ResponseHeader::set_has_timestamp() {
-  _has_bits_[0] |= 0x00000002u;
+  _has_bits_[0] |= 0x00000001u;
 }
 inline void ResponseHeader::clear_has_timestamp() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000001u;
 }
 inline void ResponseHeader::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
@@ -6552,13 +6497,13 @@ inline void ResponseHeader::set_allocated_timestamp(::cockroach::roachpb::Timest
 
 // optional .cockroach.roachpb.Transaction txn = 3;
 inline bool ResponseHeader::has_txn() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 inline void ResponseHeader::set_has_txn() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000002u;
 }
 inline void ResponseHeader::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void ResponseHeader::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();

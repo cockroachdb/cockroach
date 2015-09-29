@@ -110,12 +110,7 @@ func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roac
 		}
 		ba.Add(args)
 		return ba, func(br *roachpb.BatchResponse) roachpb.Response {
-			var unwrappedReply roachpb.Response
-			if len(br.Responses) == 0 {
-				unwrappedReply = args.CreateReply()
-			} else {
-				unwrappedReply = br.Responses[0].GetInner()
-			}
+			unwrappedReply := br.Responses[0].GetInner()
 			// The ReplyTxn is propagated from one response to the next request,
 			// and we adopt the mechanism that whenever the Txn changes, it needs
 			// to be set in the reply, for example to ratchet up the transaction
@@ -125,9 +120,6 @@ func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roac
 			// from TxnCoordSender - it will only need to act on retries/aborts
 			// in the future.
 			unwrappedReply.Header().Txn = br.Txn
-			if unwrappedReply.Header().Error == nil {
-				unwrappedReply.Header().Error = br.Error
-			}
 			return unwrappedReply
 		}
 	}(args)

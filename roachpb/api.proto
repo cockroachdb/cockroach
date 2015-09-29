@@ -117,8 +117,6 @@ message RequestHeader {
 
 // ResponseHeader is returned with every storage node response.
 message ResponseHeader {
-  // Error is non-nil if an error occurred.
-  optional Error error = 1;
   // Timestamp specifies time at which read or write actually was
   // performed. In the case of both reads and writes, if the timestamp
   // supplied to the request was 0, the wall time of the node

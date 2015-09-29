@@ -600,7 +600,6 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 			br.Add(iReply)
 			h := iReply.Header()
 			br.Timestamp = h.Timestamp
-			br.Error = h.Error
 			br.Txn = h.Txn
 		}
 	} else if ba.IsReadOnly() {

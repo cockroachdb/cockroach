@@ -266,12 +266,12 @@ func TestSendRPCOrder(t *testing.T) {
 	var verifyCall func(rpc.Options, []net.Addr) error
 
 	var testFn rpcSendFn = func(opts rpc.Options, method string,
-		addrs []net.Addr, _ func(addr net.Addr) proto.Message,
+		addrs []net.Addr, getArgs func(addr net.Addr) proto.Message,
 		getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		if err := verifyCall(opts, addrs); err != nil {
 			return nil, err
 		}
-		return []proto.Message{getReply()}, nil
+		return []proto.Message{getArgs(addrs[0]).(*roachpb.BatchRequest).CreateReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -377,7 +377,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 			first = false
 			return []proto.Message{reply}, nil
 		}
-		return []proto.Message{getReply()}, nil
+		return []proto.Message{getArgs(nil).(*roachpb.BatchRequest).CreateReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -407,8 +407,8 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
-		return []proto.Message{getReply()}, nil
+	var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, getArgs func(addr net.Addr) proto.Message, _ func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+		return []proto.Message{getArgs(nil).(*roachpb.BatchRequest).CreateReply()}, nil
 	}
 
 	errors := []error{
@@ -465,9 +465,9 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 		first := true
 
-		var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+		var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 			if !first {
-				return []proto.Message{getReply()}, nil
+				return []proto.Message{getArgs(nil).(*roachpb.BatchRequest).CreateReply()}, nil
 			}
 			first = false
 			if tc.rpcError {
@@ -771,8 +771,8 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
-		return []proto.Message{getReply()}, nil
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, _ func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+		return []proto.Message{getArgs(nil).(*roachpb.BatchRequest).CreateReply()}, nil
 	}
 
 	ctx := &DistSenderContext{

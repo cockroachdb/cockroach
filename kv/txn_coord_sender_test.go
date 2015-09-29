@@ -527,15 +527,18 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			return nil, roachpb.NewError(test.err)
 		}), clock, false, nil, stopper)
 		var reply *roachpb.PutResponse
-		if r, err := client.SendWrapped(ts, nil, proto.Clone(testPutReq).(roachpb.Request)); err != nil {
-			t.Fatal(err)
-		} else {
+		var err error
+		{
+			var r roachpb.Response
+			if r, err = client.SendWrapped(ts, nil, proto.Clone(testPutReq).(roachpb.Request)); err != nil {
+				t.Fatal(err)
+			}
 			reply = r.(*roachpb.PutResponse)
 		}
 		teardownHeartbeats(ts)
 		stopper.Stop()
 
-		if err := reply.Error.GoError(); reflect.TypeOf(test.err) != reflect.TypeOf(err) {
+		if reflect.TypeOf(test.err) != reflect.TypeOf(err) {
 			t.Fatalf("%d: expected %T; got %T: %v", i, test.err, err, err)
 		}
 		if reply.Txn.Epoch != test.expEpoch {
