@@ -126,7 +126,7 @@ func (ser *storeEventReader) eventFeedString() string {
 
 	for _, storeID := range storeIDs {
 		if feed, ok := ser.perStoreFeeds[proto.StoreID(storeID)]; ok {
-			fmt.Fprintf(w, "proto.StoreID(%d): {\n", storeID)
+			fmt.Fprintf(w, "%T(%d): {\n", storeID, storeID)
 			for _, evt := range feed {
 				fmt.Fprintf(w, "\t\"%s\",\n", evt)
 			}
@@ -153,7 +153,7 @@ func (ser *storeEventReader) updateCountString() string {
 
 	for _, storeID := range storeIDs {
 		if countset, ok := ser.perStoreUpdateCount[proto.StoreID(storeID)]; ok {
-			fmt.Fprintf(w, "proto.StoreID(%d): {\n", storeID)
+			fmt.Fprintf(w, "%T(%d): {\n", storeID, storeID)
 
 			var methodIDs sort.IntSlice
 			for methodID := range countset {

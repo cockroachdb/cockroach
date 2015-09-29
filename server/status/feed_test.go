@@ -178,7 +178,7 @@ func (ner *nodeEventReader) readEvents(feed *util.Feed) {
 func (ner *nodeEventReader) eventFeedString() string {
 	var response string
 	for id, feed := range ner.perNodeFeeds {
-		response += fmt.Sprintf("proto.NodeID(%d): []string{\n", int64(id))
+		response += fmt.Sprintf("%T(%s): []string{\n", id, id)
 		for _, evt := range feed {
 			response += fmt.Sprintf("\t\t\"%s\",\n", evt)
 		}
