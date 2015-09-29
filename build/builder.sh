@@ -41,19 +41,20 @@ if [ -t 0 ]; then
   tty="--tty"
 fi
 
+buildcache_dir="buildcache"
+uicache_dir="uicache"
+
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
 # computer.
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.
 docker run -i ${tty-} ${rm} \
-  --volume="${gopath0}/src:/go/src" \
+  --volume="${gopath0}:/go" \
+  --volume="${HOME}/${buildcache_dir}:/${buildcache_dir}" \
+  --volume="${HOME}/${uicache_dir}:/${uicache_dir}" \
   --volume="${PWD}:/go/src/github.com/cockroachdb/cockroach" \
-  --volume="${gopath0}/pkg:/go/pkg" \
-  --volume="${gopath0}/pkg/linux_amd64_netgo:/usr/src/go/pkg/linux_amd64_netgo" \
-  --volume="${gopath0}/pkg/linux_amd64_race:/usr/src/go/pkg/linux_amd64_race" \
-  --volume="${gopath0}/bin/linux_amd64:/go/bin" \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
-  --env="CACHE=/go/pkg/cache" \
+  --env="CACHE=/${buildcache_dir}" \
   --env="PAGER=cat" \
   "${image}" "$@"

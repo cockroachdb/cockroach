@@ -10,6 +10,9 @@ checkout:
 dependencies:
   override:
     - build/circle-deps.sh
+  cache_directories:
+    - ~/buildcache
+    - ~/uicache
 
 test:
   override:

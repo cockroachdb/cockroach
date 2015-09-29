@@ -11,12 +11,14 @@ set -eux
 if [ "${1-}" = "docker" ]; then
   cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
 
-  # `"$GOPATH"/pkg/cache` is `cachedir` on the host computer.
+  # `/uicache` is `~/uicache` on the host computer, which is cached by
+  # circle-ci.
+
   # Create the cache directories to avoid errors on `ln` below.
-  mkdir -p "$GOPATH"/pkg/cache/{bower_components,node_modules,typings}
+  mkdir -p /uicache/{bower_components,node_modules,typings}
 
   # Symlink the cache into the source tree.
-  ln -s "$GOPATH"/pkg/cache/{bower_components,node_modules,typings} ui/
+  ln -s /uicache/{bower_components,node_modules,typings} ui/
   time make -C ui {bower,npm,tsd}.installed
 
   # Restore previously cached build artifacts.
@@ -33,23 +35,23 @@ if [ "${1-}" = "docker" ]; then
   exit 0
 fi
 
-gopath0="${GOPATH%%:*}"
-cachedir="${gopath0}/pkg/cache"
+# `~/buildcache` is cached by circle-ci.
+buildcache_dir=~/buildcache
 
 # The tag for the cockroachdb/builder image. If the image is changed
 # (for example, adding "npm"), a new image should be pushed using
 # "build/builder.sh push" and the new tag value placed here.
 tag="20150929-133252"
 
-mkdir -p "${cachedir}"
-du -sh "${cachedir}"
-ls -lh "${cachedir}"
+mkdir -p "${buildcache_dir}"
+du -sh "${buildcache_dir}"
+ls -lh "${buildcache_dir}"
 
 if ! docker images | grep -q "${tag}"; then
   # If there's a base image cached, load it. A click on CircleCI's "Clear
   # Cache" will make sure we start with a clean slate.
-  rm -f "$(ls ${cachedir}/builder*.tar 2>/dev/null | grep -v ${tag})"
-  builder="${cachedir}/builder.${tag}.tar"
+  rm -f "$(ls ${buildcache_dir}/builder*.tar 2>/dev/null | grep -v ${tag})"
+  builder="${buildcache_dir}/builder.${tag}.tar"
   if [[ ! -e "${builder}" ]]; then
     time docker pull "cockroachdb/builder:${tag}"
     docker tag -f "cockroachdb/builder:${tag}" "cockroachdb/builder:latest"
@@ -71,6 +73,6 @@ $(dirname $0)/builder.sh $0 docker
 # Clear the cache of any files that haven't been modified in more than
 # 12 hours. Note that the "build-cache restore" call above will
 # "touch" any cache files that are used by the current run.
-find "${cachedir}" -type f -mmin +720 -ls -delete
-du -sh "${cachedir}"
-ls -lh "${cachedir}"
+find "${buildcache_dir}" -type f -mmin +720 -ls -delete
+du -sh "${buildcache_dir}"
+ls -lh "${buildcache_dir}"
