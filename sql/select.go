@@ -20,6 +20,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -64,13 +65,7 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		return nil, err
 	}
 
-	var ordering []int
-	if group != nil {
-		ordering = group.desiredOrdering
-	} else if sort != nil {
-		ordering, _ = sort.Ordering()
-	}
-	plan, err := p.selectIndex(scan, ordering)
+	plan, err := p.selectIndex(scan, group, sort)
 	if err != nil {
 		return nil, err
 	}
@@ -85,13 +80,20 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 // selectIndex analyzes the scanNode to determine if there is an index
 // available that can fulfill the query with a more restrictive scan.
 //
-// The current occurs in two passes. The first pass performs a limited form of
-// value range propagation for the qvalues (i.e. the columns). The second pass
-// takes the value range information and determines which indexes can fulfill
-// the query (we currently only support covering indexes) and selects the
-// "best" index from that set. The cost model based on keys per row, key size
-// and number of index elements used.
-func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
+// Analysis currently consists of a simplification of the filter expression,
+// replacing expressions which are not usable by indexes by "true". The
+// simplified expression is then considered for each index and a set of range
+// constraints is created for the index. The candidate indexes are ranked using
+// these constraints and the best index is selected. The contraints are then
+// transformed into a set of spans to scan within the index.
+func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (planNode, error) {
+	var ordering []int
+	if group != nil {
+		ordering = group.desiredOrdering
+	} else if sort != nil {
+		ordering, _ = sort.Ordering()
+	}
+
 	if s.desc == nil || (s.filter == nil && ordering == nil) {
 		// No table or no where-clause and no ordering.
 		s.initOrdering(0)
@@ -124,11 +126,16 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 	}
 
 	if s.filter != nil {
+		if group != nil {
+			// Allow the group-by to add an implicit "IS NOT NULL" filter.
+			s.filter = group.isNotNullFilter(s.filter)
+		}
+
 		// Analyze the filter expression, simplifying it and splitting it up into
 		// possibly overlapping ranges.
-		exprs := analyzeExpr(s.filter)
+		exprs, equivalent := analyzeExpr(s.filter)
 		if log.V(2) {
-			log.Infof("analyzeExpr: %s -> %s", s.filter, exprs)
+			log.Infof("analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
 		}
 
 		// Check to see if the filter simplified to a constant.
@@ -139,6 +146,12 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 				s.index = nil
 				return s, nil
 			}
+		}
+
+		// If the simplified expression is equivalent and there is a single
+		// disjunction, use it for the filter instead of the original expression.
+		if equivalent && len(exprs) == 1 {
+			s.filter = joinAndExprs(exprs[0])
 		}
 
 		// TODO(pmattis): If "len(exprs) > 1" then we have multiple disjunctive
@@ -160,7 +173,7 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 		// to scan. An examples of this is "a IN (1, 2, 3)".
 
 		for _, c := range candidates {
-			c.analyzeRanges(exprs)
+			c.analyzeExprs(exprs)
 		}
 	}
 
@@ -170,7 +183,7 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 		}
 	}
 
-	sort.Sort(indexInfoByCost(candidates))
+	indexInfoByCost(candidates).Sort()
 
 	if log.V(2) {
 		for i, c := range candidates {
@@ -191,19 +204,40 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 		s.index = nil
 		return s, nil
 	}
+	s.filter = applyConstraints(s.filter, c.constraints)
 	s.reverse = c.reverse
 
-	if log.V(3) {
-		for i, span := range s.spans {
-			log.Infof("%s/%d: %s", c.index.Name, i, prettySpan(span, 0))
+	var plan planNode
+	if c.covering {
+		s.initOrdering(c.exactPrefix)
+		plan = s
+	} else {
+		var err error
+		plan, err = makeIndexJoin(s, c.exactPrefix)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	if c.covering {
-		s.initOrdering(c.exactPrefix)
-		return s, nil
+	if group != nil && len(group.desiredOrdering) == 1 && len(s.spans) == 1 && s.filter == nil {
+		// If grouping has a desired order and there is a single span for which the
+		// filter is true, check to see if the ordering matches the desired
+		// ordering. If it does we can limit the scan to a single key.
+		existingOrdering, prefix := plan.Ordering()
+		match := computeOrderingMatch(group.desiredOrdering, existingOrdering, prefix, +1)
+		if match == 1 {
+			s.spans[0].count = 1
+		}
 	}
-	return makeIndexJoin(s, c.exactPrefix)
+
+	if log.V(3) {
+		log.Infof("%s: filter=%v", c.index.Name, s.filter)
+		for i, span := range s.spans {
+			log.Infof("%s/%d: %s", c.index.Name, i, prettySpan(span, 2))
+		}
+	}
+
+	return plan, nil
 }
 
 type indexConstraint struct {
@@ -219,6 +253,20 @@ type indexConstraint struct {
 	tupleMap []int
 }
 
+func (c indexConstraint) String() string {
+	var buf bytes.Buffer
+	if c.start != nil {
+		fmt.Fprintf(&buf, "%s", c.start)
+	}
+	if c.end != nil && c.end != c.start {
+		if c.start != nil {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "%s", c.end)
+	}
+	return buf.String()
+}
+
 type indexConstraints []indexConstraint
 
 func (c indexConstraints) String() string {
@@ -228,15 +276,7 @@ func (c indexConstraints) String() string {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		if c[i].start != nil {
-			fmt.Fprintf(&buf, "%s", c[i].start)
-		}
-		if c[i].end != nil && c[i].end != c[i].start {
-			if c[i].start != nil {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, "%s", c[i].end)
-		}
+		buf.WriteString(c[i].String())
 	}
 	buf.WriteString("]")
 	return buf.String()
@@ -247,7 +287,7 @@ type indexInfo struct {
 	index       *IndexDescriptor
 	constraints indexConstraints
 	cost        float64
-	covering    bool // indicates whether the index covers the required qvalues
+	covering    bool // Does the index cover the required qvalues?
 	reverse     bool
 	exactPrefix int
 }
@@ -271,9 +311,9 @@ func (v *indexInfo) init(s *scanNode) {
 	}
 }
 
-// analyzeRanges examines the range map to determine the cost of using the
+// analyzeExprs examines the range map to determine the cost of using the
 // index.
-func (v *indexInfo) analyzeRanges(exprs []parser.Exprs) {
+func (v *indexInfo) analyzeExprs(exprs []parser.Exprs) {
 	v.makeConstraints(exprs)
 
 	// Count the number of elements used to limit the start and end keys. We then
@@ -330,7 +370,7 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 // on the columns (a, b, c). For the expressions "a > 1 AND b > 2" we would
 // have the constraints:
 //
-//   {a: {start: > 1}
+//   {a: {start: > 1}}
 //
 // Why is there no constraint on "b"? Because the start constraint was > and
 // such a constraint does not allow us to consider further columns in the
@@ -521,6 +561,10 @@ func (v indexInfoByCost) Less(i, j int) bool {
 
 func (v indexInfoByCost) Swap(i, j int) {
 	v[i], v[j] = v[j], v[i]
+}
+
+func (v indexInfoByCost) Sort() {
+	sort.Sort(v)
 }
 
 // makeSpans constructs the spans for an index given a set of constraints.
@@ -724,4 +768,147 @@ func exactPrefix(constraints []indexConstraint) int {
 		}
 	}
 	return prefix
+}
+
+// applyConstraints applies the constraints on values specified by constraints
+// to an expression, simplifying the expression where possible. For example, if
+// the expression is "a = 1" and the constraint is "a = 1", the expression can
+// be simplified to "true". If the expression is "a = 1 AND b > 2" and the
+// constraint is "a = 1", the expression is simplified to "b > 2".
+//
+// Note that applyConstraints currently only handles simple cases.
+func applyConstraints(expr parser.Expr, constraints indexConstraints) parser.Expr {
+	v := &applyConstraintsVisitor{}
+	for _, c := range constraints {
+		v.constraint = c
+		expr = parser.WalkExpr(v, expr)
+	}
+	if expr == parser.DBool(true) {
+		return nil
+	}
+	return expr
+}
+
+type applyConstraintsVisitor struct {
+	constraint indexConstraint
+}
+
+func (v *applyConstraintsVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
+	if pre {
+		switch t := expr.(type) {
+		case *parser.AndExpr, *parser.NotExpr:
+			return v, expr
+
+		case *parser.ComparisonExpr:
+			c := v.constraint.start
+			if c == nil {
+				return v, expr
+			}
+			if !varEqual(t.Left, c.Left) {
+				return v, expr
+			}
+			if !isDatum(t.Right) || !isDatum(c.Right) {
+				return v, expr
+			}
+			datum := t.Right.(parser.Datum)
+			cdatum := c.Right.(parser.Datum)
+
+			switch t.Operator {
+			case parser.EQ:
+				if v.constraint.start != v.constraint.end {
+					return v, expr
+				}
+
+				switch c.Operator {
+				case parser.EQ:
+					// Expr: "a = <val>", constraint: "a = <val>".
+					if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
+						return v, expr
+					}
+					cmp := datum.Compare(cdatum)
+					if cmp == 0 {
+						return nil, parser.DBool(true)
+					}
+				case parser.In:
+					// Expr: "a = <val>", constraint: "a IN (<vals>)".
+					ctuple := cdatum.(parser.DTuple)
+					if reflect.TypeOf(datum) != reflect.TypeOf(ctuple[0]) {
+						return v, expr
+					}
+					i := sort.Search(len(ctuple), func(i int) bool {
+						return ctuple[i].(parser.Datum).Compare(datum) >= 0
+					})
+					if i < len(ctuple) && ctuple[i].Compare(datum) == 0 {
+						return nil, parser.DBool(true)
+					}
+				}
+
+			case parser.In:
+				if v.constraint.start != v.constraint.end {
+					return v, expr
+				}
+
+				switch c.Operator {
+				case parser.In:
+					// Expr: "a IN (<vals>)", constraint: "a IN (<vals>)".
+					if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
+						return v, expr
+					}
+					diff := diffSorted(datum.(parser.DTuple), cdatum.(parser.DTuple))
+					if len(diff) == 0 {
+						return nil, parser.DBool(true)
+					}
+					t.Right = diff
+				}
+
+			case parser.IsNot:
+				switch c.Operator {
+				case parser.IsNot:
+					if datum == parser.DNull && cdatum == parser.DNull {
+						// Expr: "a IS NOT NULL", constraint: "a IS NOT NULL"
+						return nil, parser.DBool(true)
+					}
+				}
+			}
+
+		default:
+			return nil, expr
+		}
+
+		return v, expr
+	}
+
+	switch t := expr.(type) {
+	case *parser.AndExpr:
+		if t.Left == parser.DBool(true) && t.Right == parser.DBool(true) {
+			return nil, parser.DBool(true)
+		} else if t.Left == parser.DBool(true) {
+			return nil, t.Right
+		} else if t.Right == parser.DBool(true) {
+			return nil, t.Left
+		}
+	}
+
+	return v, expr
+}
+
+func diffSorted(a, b parser.DTuple) parser.DTuple {
+	n := len(a)
+	if n > len(b) {
+		n = len(b)
+	}
+	var r parser.DTuple
+	for len(a) > 0 && len(b) > 0 {
+		switch a[0].Compare(b[0]) {
+		case -1:
+			r = append(r, a[0])
+			a = a[1:]
+		case 0:
+			a = a[1:]
+			b = b[1:]
+		case 1:
+			b = b[1:]
+		}
+	}
+	return r
 }

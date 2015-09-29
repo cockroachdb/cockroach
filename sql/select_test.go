@@ -18,8 +18,10 @@
 package sql
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -36,17 +38,20 @@ func makeTestIndex(t *testing.T, columns []string) (*TableDescriptor, *IndexDesc
 }
 
 func makeConstraints(t *testing.T, sql string, desc *TableDescriptor,
-	index *IndexDescriptor) indexConstraints {
+	index *IndexDescriptor) (indexConstraints, parser.Expr) {
 	expr, _ := parseAndNormalizeExpr(t, sql)
-	exprs := analyzeExpr(expr)
+	exprs, equiv := analyzeExpr(expr)
 
 	c := &indexInfo{
 		desc:     desc,
 		index:    index,
 		covering: true,
 	}
-	c.analyzeRanges(exprs)
-	return c.constraints
+	c.analyzeExprs(exprs)
+	if equiv && len(exprs) == 1 {
+		expr = joinAndExprs(exprs[0])
+	}
+	return c.constraints, expr
 }
 
 func TestMakeConstraints(t *testing.T) {
@@ -127,13 +132,14 @@ func TestMakeConstraints(t *testing.T) {
 
 		{`(a, b) IN ((1, 2))`, []string{"a", "b"}, `[(a, b) IN ((1, 2))]`},
 		{`(b, a) IN ((1, 2))`, []string{"a", "b"}, `[(b, a) IN ((1, 2))]`},
+		{`(b, a) IN ((1, 2))`, []string{"a"}, `[(b, a) IN ((1, 2))]`},
 
 		{`a IS NULL`, []string{"a"}, `[a IS NULL]`},
 		{`a IS NOT NULL`, []string{"a"}, `[a IS NOT NULL]`},
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndex(t, d.columns)
-		constraints := makeConstraints(t, d.expr, desc, index)
+		constraints, _ := makeConstraints(t, d.expr, desc, index)
 		if s := constraints.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
@@ -231,7 +237,7 @@ func TestMakeSpans(t *testing.T) {
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndex(t, d.columns)
-		constraints := makeConstraints(t, d.expr, desc, index)
+		constraints, _ := makeConstraints(t, d.expr, desc, index)
 		spans := makeSpans(constraints, desc.ID, index.ID)
 		if s := prettySpans(spans, 2); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -259,10 +265,43 @@ func TestExactPrefix(t *testing.T) {
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndex(t, d.columns)
-		constraints := makeConstraints(t, d.expr, desc, index)
+		constraints, _ := makeConstraints(t, d.expr, desc, index)
 		prefix := exactPrefix(constraints)
 		if d.expected != prefix {
 			t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
+		}
+	}
+}
+
+func TestApplyConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	testData := []struct {
+		expr     string
+		columns  []string
+		expected string
+	}{
+		{`a = 1`, []string{"a"}, `<nil>`},
+		{`a = 1 AND b = 1`, []string{"a", "b"}, `<nil>`},
+		{`a = 1 AND b = 1`, []string{"a"}, `b = 1`},
+		{`a = 1 AND b = 1`, []string{"b"}, `a = 1`},
+		{`a = 1 AND b > 1`, []string{"a", "b"}, `b > 1`},
+		{`a > 1 AND b = 1`, []string{"a", "b"}, `a > 1 AND b = 1`},
+		{`a IN (1)`, []string{"a"}, `<nil>`},
+		{`a IN (1) OR a IN (2)`, []string{"a"}, `<nil>`},
+		{`a = 1 OR a = 2`, []string{"a"}, `<nil>`},
+		{`a = 1 OR b = 2`, []string{"a"}, `a = 1 OR b = 2`},
+		{`NOT (a != 1)`, []string{"a"}, `<nil>`},
+		{`a != 1`, []string{"a"}, `a != 1`},
+		{`a IS NOT NULL`, []string{"a"}, `<nil>`},
+		{`a = 1 AND b IS NOT NULL`, []string{"a", "b"}, `<nil>`},
+	}
+	for _, d := range testData {
+		desc, index := makeTestIndex(t, d.columns)
+		constraints, expr := makeConstraints(t, d.expr, desc, index)
+		expr2 := applyConstraints(expr, constraints)
+		if s := fmt.Sprint(expr2); d.expected != s {
+			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 	}
 }

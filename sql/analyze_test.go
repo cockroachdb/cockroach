@@ -154,96 +154,100 @@ func TestSimplifyExpr(t *testing.T) {
 	testData := []struct {
 		expr     string
 		expected string
+		isEquiv  bool
 	}{
-		{`true`, `true`},
-		{`false`, `false`},
+		{`true`, `true`, true},
+		{`false`, `false`, true},
 
-		{`f`, `f`},
-		{`f AND g`, `f AND g`},
-		{`f OR g`, `f OR g`},
-		{`(f AND g) AND (c AND d)`, `f AND g AND c AND d`},
-		{`(f OR g) OR (c OR d)`, `f OR g OR c OR d`},
-		{`i < lower('FOO')`, `i < 'foo'`},
-		{`a < 1 AND a < 2 AND a < 3 AND a < 4 AND a < 5`, `a < 1`},
-		{`a < 1 OR a < 2 OR a < 3 OR a < 4 OR a < 5`, `a < 5`},
-		{`(a < 1 OR a > 1) AND a >= 1`, `a > 1`},
-		{`a < 1 AND (a > 2 AND a < 1)`, `false`},
-		{`a < 1 OR (a > 1 OR a < 2)`, `a < 1 OR a IS NOT NULL`},
-		{`a < 1 AND length(i) > 0`, `a < 1`},
-		{`a < 1 OR length(i) > 0`, `true`},
+		{`f`, `f`, true},
+		{`f AND g`, `f AND g`, true},
+		{`f OR g`, `f OR g`, true},
+		{`(f AND g) AND (c AND d)`, `f AND g AND c AND d`, true},
+		{`(f OR g) OR (c OR d)`, `f OR g OR c OR d`, true},
+		{`i < lower('FOO')`, `i < 'foo'`, true},
+		{`a < 1 AND a < 2 AND a < 3 AND a < 4 AND a < 5`, `a < 1`, true},
+		{`a < 1 OR a < 2 OR a < 3 OR a < 4 OR a < 5`, `a < 5`, true},
+		{`(a < 1 OR a > 1) AND a >= 1`, `a > 1`, true},
+		{`a < 1 AND (a > 2 AND a < 1)`, `false`, true},
+		{`a < 1 OR (a > 1 OR a < 2)`, `a < 1 OR a IS NOT NULL`, true},
+		{`a < 1 AND length(i) > 0`, `a < 1`, false},
+		{`a < 1 OR length(i) > 0`, `true`, false},
 
-		{`a = NULL`, `false`},
-		{`a != NULL`, `false`},
-		{`a > NULL`, `false`},
-		{`a >= NULL`, `false`},
-		{`a < NULL`, `false`},
-		{`a <= NULL`, `false`},
-		{`a IN (NULL)`, `false`},
+		{`a = NULL`, `false`, true},
+		{`a != NULL`, `false`, true},
+		{`a > NULL`, `false`, true},
+		{`a >= NULL`, `false`, true},
+		{`a < NULL`, `false`, true},
+		{`a <= NULL`, `false`, true},
+		{`a IN (NULL)`, `false`, true},
 
-		{`f < false`, `false`},
-		{`f < true`, `f < true`},
-		{`f > false`, `f > false`},
-		{`f > true`, `false`},
-		{`a < -9223372036854775808`, `false`},
-		{`a < 9223372036854775807`, `a < 9223372036854775807`},
-		{`a > -9223372036854775808`, `a > -9223372036854775808`},
-		{`a > 9223372036854775807`, `false`},
-		{`h < -1.7976931348623157e+308`, `false`},
-		{`h < 1.7976931348623157e+308`, `h < 1.7976931348623157e+308`},
-		{`h > -1.7976931348623157e+308`, `h > -1.7976931348623157e+308`},
-		{`h > 1.7976931348623157e+308`, `false`},
-		{`i < ''`, `false`},
-		{`i > ''`, `i > ''`},
+		{`f < false`, `false`, true},
+		{`f < true`, `f < true`, true},
+		{`f > false`, `f > false`, true},
+		{`f > true`, `false`, true},
+		{`a < -9223372036854775808`, `false`, true},
+		{`a < 9223372036854775807`, `a < 9223372036854775807`, true},
+		{`a > -9223372036854775808`, `a > -9223372036854775808`, true},
+		{`a > 9223372036854775807`, `false`, true},
+		{`h < -1.7976931348623157e+308`, `false`, true},
+		{`h < 1.7976931348623157e+308`, `h < 1.7976931348623157e+308`, true},
+		{`h > -1.7976931348623157e+308`, `h > -1.7976931348623157e+308`, true},
+		{`h > 1.7976931348623157e+308`, `false`, true},
+		{`i < ''`, `false`, true},
+		{`i > ''`, `i > ''`, true},
 
-		{`a IN (1, 1)`, `a IN (1)`},
-		{`a IN (2, 3, 1)`, `a IN (1, 2, 3)`},
-		{`a IN (1, NULL, 2, NULL)`, `a IN (1, 2)`},
-		{`a IN (1, NULL) OR a IN (2, NULL)`, `a IN (1, 2)`},
+		{`a IN (1, 1)`, `a IN (1)`, true},
+		{`a IN (2, 3, 1)`, `a IN (1, 2, 3)`, true},
+		{`a IN (1, NULL, 2, NULL)`, `a IN (1, 2)`, true},
+		{`a IN (1, NULL) OR a IN (2, NULL)`, `a IN (1, 2)`, true},
 
-		{`(a, b) IN ((1, 2))`, `(a, b) IN ((1, 2))`},
-		{`(a, b) IN ((1, 2), (1, 2))`, `(a, b) IN ((1, 2))`},
-		{`(a, b) IN ((1, 2)) OR (a, b) IN ((3, 4))`, `(a, b) IN ((1, 2), (3, 4))`},
-		{`(a, b) = (1, 2)`, `(a, b) IN ((1, 2))`},
-		{`(a, b) = (1, 2) OR (a, b) = (3, 4)`, `(a, b) IN ((1, 2), (3, 4))`},
-		{`(a, b) IN ((2, 1), (1, 2), (1, 2), (2, 1))`, `(a, b) IN ((1, 2), (2, 1))`},
+		{`(a, b) IN ((1, 2))`, `(a, b) IN ((1, 2))`, true},
+		{`(a, b) IN ((1, 2), (1, 2))`, `(a, b) IN ((1, 2))`, true},
+		{`(a, b) IN ((1, 2)) OR (a, b) IN ((3, 4))`, `(a, b) IN ((1, 2), (3, 4))`, true},
+		{`(a, b) = (1, 2)`, `(a, b) IN ((1, 2))`, true},
+		{`(a, b) = (1, 2) OR (a, b) = (3, 4)`, `(a, b) IN ((1, 2), (3, 4))`, true},
+		{`(a, b) IN ((2, 1), (1, 2), (1, 2), (2, 1))`, `(a, b) IN ((1, 2), (2, 1))`, true},
 
-		{`i LIKE '%foo'`, `true`},
-		{`i LIKE 'foo'`, `i = 'foo'`},
-		{`i LIKE 'foo%'`, `i >= 'foo' AND i < 'fop'`},
-		{`i LIKE 'foo_'`, `i >= 'foo' AND i < 'fop'`},
-		{`i LIKE 'bar_foo%'`, `i >= 'bar' AND i < 'bas'`},
-		{`i SIMILAR TO '%'`, `true`},
-		{`i SIMILAR TO 'foo'`, `i = 'foo'`},
-		{`i SIMILAR TO 'foo%'`, `i >= 'foo' AND i < 'fop'`},
-		{`i SIMILAR TO '(foo|foobar)%'`, `i >= 'foo' AND i < 'fop'`},
+		{`i LIKE '%foo'`, `true`, false},
+		{`i LIKE 'foo'`, `i = 'foo'`, false},
+		{`i LIKE 'foo%'`, `i >= 'foo' AND i < 'fop'`, false},
+		{`i LIKE 'foo_'`, `i >= 'foo' AND i < 'fop'`, false},
+		{`i LIKE 'bar_foo%'`, `i >= 'bar' AND i < 'bas'`, false},
+		{`i SIMILAR TO '%'`, `true`, false},
+		{`i SIMILAR TO 'foo'`, `i = 'foo'`, false},
+		{`i SIMILAR TO 'foo%'`, `i >= 'foo' AND i < 'fop'`, false},
+		{`i SIMILAR TO '(foo|foobar)%'`, `i >= 'foo' AND i < 'fop'`, false},
 
-		{`c IS NULL`, `c IS NULL`},
-		{`c IS NOT NULL`, `c IS NOT NULL`},
-		{`c IS TRUE`, `true`},
-		{`c IS NOT TRUE`, `true`},
-		{`c IS FALSE`, `true`},
-		{`c IS NOT FALSE`, `true`},
-		{`c IS UNKNOWN`, `c IS NULL`},
-		{`c IS NOT UNKNOWN`, `c IS NOT NULL`},
-		{`a IS DISTINCT FROM NULL`, `a IS NOT NULL`},
-		{`a IS NOT DISTINCT FROM NULL`, `a IS NULL`},
-		{`c IS NOT NULL AND c IS NULL`, `false`},
+		{`c IS NULL`, `c IS NULL`, true},
+		{`c IS NOT NULL`, `c IS NOT NULL`, true},
+		{`c IS TRUE`, `true`, false},
+		{`c IS NOT TRUE`, `true`, false},
+		{`c IS FALSE`, `true`, false},
+		{`c IS NOT FALSE`, `true`, false},
+		{`c IS UNKNOWN`, `c IS NULL`, true},
+		{`c IS NOT UNKNOWN`, `c IS NOT NULL`, true},
+		{`a IS DISTINCT FROM NULL`, `a IS NOT NULL`, true},
+		{`a IS NOT DISTINCT FROM NULL`, `a IS NULL`, true},
+		{`c IS NOT NULL AND c IS NULL`, `false`, true},
 
 		// From a logic-test expression that we previously failed to simplify.
-		{`((a <= 0 AND h > 1.0) OR (a >= 6 AND a <= 3)) AND a >= 5`, `false`},
+		{`((a <= 0 AND h > 1.0) OR (a >= 6 AND a <= 3)) AND a >= 5`, `false`, true},
 
 		// From logic-test expessions that generated nil branches for AND/OR
 		// expressions.
 		{`((a < 0) AND (a < 0 AND b > 0)) OR (a > 1 AND a < 0)`,
-			`a < 0 AND b > 0`},
+			`a < 0 AND b > 0`, true},
 		{`((a < 0) OR (a < 0 OR b > 0)) AND (a > 0 OR a < 1)`,
-			`a < 0 OR b > 0 AND a IS NOT NULL`},
+			`a < 0 OR b > 0 AND a IS NOT NULL`, true},
 	}
 	for _, d := range testData {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
-		expr = simplifyExpr(expr)
+		expr, equiv := simplifyExpr(expr)
 		if s := expr.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+		if d.isEquiv != equiv {
+			t.Fatalf("%s: expected %v, but found %v", d.expr, d.isEquiv, equiv)
 		}
 	}
 }
@@ -254,28 +258,32 @@ func TestSimplifyNotExpr(t *testing.T) {
 	testData := []struct {
 		expr       string
 		expected   string
+		isEquiv    bool
 		checkEquiv bool
 	}{
-		{`NOT a = 1`, `a != 1`, true},
-		{`NOT a != 1`, `a = 1`, true},
-		{`NOT a > 1`, `a <= 1`, true},
-		{`NOT a >= 1`, `a < 1`, true},
-		{`NOT a < 1`, `a >= 1`, true},
-		{`NOT a <= 1`, `a > 1`, true},
-		{`NOT a IN (1, 2)`, `a NOT IN (1, 2)`, true},
-		{`NOT a NOT IN (1, 2)`, `a IN (1, 2)`, true},
-		{`NOT i LIKE 'foo'`, `true`, false},
-		{`NOT i NOT LIKE 'foo'`, `i = 'foo'`, false},
-		{`NOT i SIMILAR TO 'foo'`, `true`, false},
-		{`NOT i NOT SIMILAR TO 'foo'`, `i = 'foo'`, false},
-		{`NOT (a != 1 AND b != 1)`, `a = 1 OR b = 1`, false},
-		{`NOT (a != 1 OR a < 1)`, `a = 1`, false},
+		{`NOT a = 1`, `a != 1`, true, true},
+		{`NOT a != 1`, `a = 1`, true, true},
+		{`NOT a > 1`, `a <= 1`, true, true},
+		{`NOT a >= 1`, `a < 1`, true, true},
+		{`NOT a < 1`, `a >= 1`, true, true},
+		{`NOT a <= 1`, `a > 1`, true, true},
+		{`NOT a IN (1, 2)`, `a NOT IN (1, 2)`, true, true},
+		{`NOT a NOT IN (1, 2)`, `a IN (1, 2)`, true, true},
+		{`NOT i LIKE 'foo'`, `true`, false, false},
+		{`NOT i NOT LIKE 'foo'`, `i = 'foo'`, false, false},
+		{`NOT i SIMILAR TO 'foo'`, `true`, false, false},
+		{`NOT i NOT SIMILAR TO 'foo'`, `i = 'foo'`, false, false},
+		{`NOT (a != 1 AND b != 1)`, `a = 1 OR b = 1`, true, false},
+		{`NOT (a != 1 OR a < 1)`, `a = 1`, true, false},
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2 := simplifyExpr(expr1)
+		expr2, equiv := simplifyExpr(expr1)
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+		if d.isEquiv != equiv {
+			t.Errorf("%s: expected %v, but found %v", d.expr, d.isEquiv, equiv)
 		}
 		if d.checkEquiv {
 			if err := checkEquivExpr(expr1, expr2, qvals); err != nil {
@@ -303,9 +311,12 @@ func TestSimplifyAndExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr1, _ := parseAndNormalizeExpr(t, d.expr)
-		expr2 := simplifyExpr(expr1)
+		expr2, equiv := simplifyExpr(expr1)
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+		if !equiv {
+			t.Errorf("%s: expected equivalent, but found %v", d.expr, equiv)
 		}
 	}
 }
@@ -492,16 +503,20 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2 := simplifyExpr(expr1)
+		expr2, equiv := simplifyExpr(expr1)
 		if s := expr2.String(); d.expected != s {
-			t.Fatalf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
-
-		if d.checkEquiv {
-			if err := checkEquivExpr(expr1, expr2, qvals); err != nil {
-				t.Error(err)
-				continue
-			}
+		if d.checkEquiv != equiv {
+			t.Errorf("%s: expected %v, but found %v", d.expr, d.checkEquiv, equiv)
+		}
+		err := checkEquivExpr(expr1, expr2, qvals)
+		if d.checkEquiv && err != nil {
+			t.Error(err)
+			continue
+		} else if !d.checkEquiv && err == nil {
+			t.Errorf("%s: expected not equivalent, but found equivalent", d.expr)
+			continue
 		}
 
 		if _, ok := expr2.(*parser.AndExpr); !ok {
@@ -509,9 +524,12 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 			// commutative.
 			andExpr := expr1.(*parser.AndExpr)
 			andExpr.Left, andExpr.Right = andExpr.Right, andExpr.Left
-			expr3 := simplifyExpr(andExpr)
+			expr3, equiv := simplifyExpr(andExpr)
 			if s := expr3.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", expr1, d.expected, s)
+			}
+			if d.checkEquiv != equiv {
+				t.Errorf("%s: expected %v, but found %v", d.expr, d.checkEquiv, equiv)
 			}
 		}
 	}
@@ -531,7 +549,7 @@ func TestSimplifyOrExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr1, _ := parseAndNormalizeExpr(t, d.expr)
-		expr2 := simplifyExpr(expr1)
+		expr2, _ := simplifyExpr(expr1)
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
@@ -683,9 +701,12 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2 := simplifyExpr(expr1)
+		expr2, equiv := simplifyExpr(expr1)
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+		if !equiv {
+			t.Errorf("%s: expected equivalent, but found %v", d.expr, equiv)
 		}
 
 		if err := checkEquivExpr(expr1, expr2, qvals); err != nil {
@@ -698,9 +719,12 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 			// commutative.
 			orExpr := expr1.(*parser.OrExpr)
 			orExpr.Left, orExpr.Right = orExpr.Right, orExpr.Left
-			expr3 := simplifyExpr(orExpr)
+			expr3, equiv := simplifyExpr(orExpr)
 			if s := expr3.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", expr1, d.expected, s)
+			}
+			if !equiv {
+				t.Errorf("%s: expected equivalent, but found %v", d.expr, equiv)
 			}
 		}
 	}

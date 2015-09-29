@@ -63,6 +63,7 @@ type colKindMap map[ColumnID]ColumnType_Kind
 type span struct {
 	start roachpb.Key
 	end   roachpb.Key
+	count int64
 }
 
 // prettyKey pretty-prints the specified key, skipping over the first skip
@@ -120,7 +121,12 @@ func prettyKey(key roachpb.Key, skip int) string {
 }
 
 func prettySpan(span span, skip int) string {
-	return fmt.Sprintf("%s-%s", prettyKey(span.start, skip), prettyKey(span.end, skip))
+	var buf bytes.Buffer
+	if span.count != 0 {
+		fmt.Fprintf(&buf, "%d:", span.count)
+	}
+	fmt.Fprintf(&buf, "%s-%s", prettyKey(span.start, skip), prettyKey(span.end, skip))
+	return buf.String()
 }
 
 func prettySpans(spans []span, skip int) string {
@@ -324,11 +330,11 @@ func (n *scanNode) initScan() bool {
 	b := &client.Batch{}
 	if n.reverse {
 		for i := len(n.spans) - 1; i >= 0; i-- {
-			b.ReverseScan(n.spans[i].start, n.spans[i].end, 0)
+			b.ReverseScan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
 		}
 	} else {
 		for i := 0; i < len(n.spans); i++ {
-			b.Scan(n.spans[i].start, n.spans[i].end, 0)
+			b.Scan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
 		}
 	}
 	if n.err = n.txn.Run(b); n.err != nil {
