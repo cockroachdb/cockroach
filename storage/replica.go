@@ -567,12 +567,6 @@ func setBatchTimestamps(ba roachpb.BatchRequest) {
 	}
 }
 
-// sendArg is an internal convenience function which transparently wraps and
-// unwraps in a BatchRequest.
-func sendArg(r *Replica, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
-	return client.SendWrapped(r, nil, args)
-}
-
 // Send adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
