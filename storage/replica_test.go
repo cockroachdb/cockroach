@@ -1707,10 +1707,15 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 		txn := newTransaction("test", key, 1, test.isolation, tc.clock)
 		// End the transaction with args timestamp moved forward in time.
 		args := endTxnArgs(txn, test.commit, 1, tc.store.StoreID())
+		// TODO(tschottdorf): this test is pretty dirty. It should really
+		// write a txn entry and then try to commit that; the way it works
+		// now is by supplying its txn (which has its own timestamp) at
+		// another timestamp. This constrains changes we want to make on
+		// how timestamps work.
 		tc.manualClock.Set(1)
-		args.Timestamp = tc.clock.Now()
+		ts := tc.clock.Now()
 
-		resp, err := client.SendWrapped(tc.rng, tc.rng.context(), &args)
+		resp, err := client.SendWrappedAt(tc.rng, tc.rng.context(), ts, &args)
 
 		if test.expErr {
 			if err == nil {
@@ -2102,9 +2107,8 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		// First, establish "start" of existing pushee's txn via heartbeat.
 		if !test.heartbeat.Equal(roachpb.ZeroTimestamp) {
 			hBA := heartbeatArgs(pushee, 1, tc.store.StoreID())
-			hBA.Timestamp = test.heartbeat
 
-			if _, err := client.SendWrapped(tc.rng, tc.rng.context(), &hBA); err != nil {
+			if _, err := client.SendWrappedAt(tc.rng, tc.rng.context(), test.heartbeat, &hBA); err != nil {
 				t.Fatal(err)
 			}
 		}

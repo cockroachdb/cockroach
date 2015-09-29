@@ -1173,8 +1173,18 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 			// as a write command (is it really?). Interim solution.
 			if delta > 0 && args.Method() != roachpb.PushTxn {
 				header.Timestamp = ba.Timestamp.Add(0, int32(index))
-			} else {
+			} else if !isTxn {
 				header.Timestamp = origHeader.Timestamp
+			} else {
+				// TODO(tschottdorf): should really replace here and assert that
+				// header.Timestamp is empty, but, alas, not the case at the
+				// very least in some tests but also in practice (we bump the
+				// timestamp based on tsCache etc). A future refactor perhaps,
+				// or we decide this is how we want it.
+				// if ba.Txn.Timestamp.Less(origHeader.Timestamp) {
+				// 	panic(fmt.Sprintf("%s\n%d: txn < orig: %s < %s", ba, index, ba.Txn.Timestamp, origHeader.Timestamp))
+				// }
+				header.Timestamp.Forward(ba.Txn.Timestamp)
 			}
 
 			header.Txn = ba.Txn // use latest Txn

@@ -903,10 +903,10 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		}
 
 		// Now, try to read value using the pusher's txn.
+		ts := store.ctx.Clock.Now()
 		gArgs := getArgs(key, 1, store.StoreID())
-		gArgs.Timestamp = store.ctx.Clock.Now()
 		gArgs.Txn = pusher
-		firstReply, err := client.SendWrapped(store, nil, &gArgs)
+		firstReply, err := client.SendWrappedAt(store, nil, ts, &gArgs)
 		if test.resolvable {
 			if err != nil {
 				t.Errorf("%d: expected read to succeed: %s", i, err)
@@ -919,8 +919,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			// commit timestamp is equal to gArgs.Timestamp + 1. Otherwise,
 			// verify commit fails with TransactionRetryError.
 			etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
-			etArgs.Timestamp = pushee.Timestamp
-			reply, cErr := client.SendWrapped(store, nil, &etArgs)
+			ts := pushee.Timestamp
+			reply, cErr := client.SendWrappedAt(store, nil, ts, &etArgs)
 
 			expTimestamp := gArgs.Timestamp
 			expTimestamp.Logical++
@@ -975,24 +975,24 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 
 	// First, write original value.
 	args := putArgs(key, []byte("value1"), 1, store.StoreID())
-	args.Timestamp = store.ctx.Clock.Now()
-	if _, err := client.SendWrapped(store, nil, &args); err != nil {
+	ts := store.ctx.Clock.Now()
+	if _, err := client.SendWrappedAt(store, nil, ts, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Lay down intent using the pushee's txn.
-	args.Timestamp = store.ctx.Clock.Now()
+	ts = store.ctx.Clock.Now()
 	args.Txn = pushee
 	args.Value.Bytes = []byte("value2")
-	if _, err := client.SendWrapped(store, nil, &args); err != nil {
+	if _, err := client.SendWrappedAt(store, nil, ts, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, try to read value using the pusher's txn.
 	gArgs := getArgs(key, 1, store.StoreID())
-	gArgs.Timestamp = store.ctx.Clock.Now()
+	gTS := store.ctx.Clock.Now()
 	gArgs.Txn = pusher
-	if reply, err := client.SendWrapped(store, nil, &gArgs); err != nil {
+	if reply, err := client.SendWrappedAt(store, nil, gTS, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
 	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
 		t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.Bytes)
@@ -1002,13 +1002,13 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// SNAPSHOT isolation, the end should work, but verify the txn
 	// commit timestamp is equal to gArgs.Timestamp + 1.
 	etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
-	etArgs.Timestamp = pushee.Timestamp
-	reply, err := client.SendWrapped(store, nil, &etArgs)
+	ts = pushee.Timestamp
+	reply, err := client.SendWrappedAt(store, nil, ts, &etArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	etReply := reply.(*roachpb.EndTransactionResponse)
-	expTimestamp := gArgs.Timestamp
+	expTimestamp := gTS
 	expTimestamp.Logical++
 	if etReply.Txn.Status != roachpb.COMMITTED || !etReply.Txn.Timestamp.Equal(expTimestamp) {
 		t.Errorf("txn commit didn't yield expected status (COMMITTED) or timestamp %s: %s",
