@@ -12,3 +12,4 @@ tsd.installed
 
 # Generated intermediates
 build/
+/index.html
