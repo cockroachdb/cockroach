@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -45,7 +45,7 @@ func TestNormalizeName(t *testing.T) {
 func TestKeyAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key proto.Key
+		key roachpb.Key
 	}{
 		{MakeNameMetadataKey(0, "BAR")},
 		{MakeNameMetadataKey(1, "BAR")},
@@ -54,7 +54,7 @@ func TestKeyAddress(t *testing.T) {
 		{MakeDescMetadataKey(123)},
 		{MakeDescMetadataKey(124)},
 	}
-	var lastKey proto.Key
+	var lastKey roachpb.Key
 	for i, test := range testCases {
 		result := keys.KeyAddress(test.key)
 		if result.Compare(lastKey) <= 0 {

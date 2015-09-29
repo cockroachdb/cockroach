@@ -23,7 +23,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -39,7 +39,7 @@ var (
 	// DefaultZoneConfig is the default zone configuration
 	// used when no custom config has been specified.
 	DefaultZoneConfig = &ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
+		ReplicaAttrs: []roachpb.Attributes{
 			{},
 			{},
 			{},
@@ -83,8 +83,8 @@ func (z *ZoneConfig) Validate() error {
 
 // ObjectIDForKey returns the object ID (table or database) for 'key',
 // or (_, false) if not within the structured key space.
-func ObjectIDForKey(key proto.Key) (uint32, bool) {
-	if key.Equal(proto.KeyMax) {
+func ObjectIDForKey(key roachpb.Key) (uint32, bool) {
+	if key.Equal(roachpb.KeyMax) {
 		return 0, false
 	}
 	if key.Equal(keys.TableDataPrefix) {
@@ -104,7 +104,7 @@ func ObjectIDForKey(key proto.Key) (uint32, bool) {
 
 // GetValue searches the kv list for 'key' and returns its
 // raw byte value if found. ok is true only if the key is found.
-func (s *SystemConfig) GetValue(key proto.Key) ([]byte, bool) {
+func (s *SystemConfig) GetValue(key roachpb.Key) ([]byte, bool) {
 	kv, found := s.Get(key)
 	if !found {
 		return nil, false
@@ -114,10 +114,10 @@ func (s *SystemConfig) GetValue(key proto.Key) ([]byte, bool) {
 }
 
 // Get searches the kv list for 'key' and returns the key/value if found.
-func (s *SystemConfig) Get(key proto.Key) (proto.KeyValue, bool) {
+func (s *SystemConfig) Get(key roachpb.Key) (roachpb.KeyValue, bool) {
 	index, found := s.GetIndex(key)
 	if !found {
-		return proto.KeyValue{}, false
+		return roachpb.KeyValue{}, false
 	}
 	// TODO(marc): I'm pretty sure a Value returned by MVCCScan can
 	// never be nil. Should check.
@@ -125,7 +125,7 @@ func (s *SystemConfig) Get(key proto.Key) (proto.KeyValue, bool) {
 }
 
 // GetIndex searches the kv list for 'key' and returns its index if found.
-func (s *SystemConfig) GetIndex(key proto.Key) (int, bool) {
+func (s *SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 	if s == nil {
 		return 0, false
 	}
@@ -157,7 +157,7 @@ func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
 	// Search for the first key after the descriptor table.
 	// We can't use GetValue as we don't mind if there is nothing after
 	// the descriptor table.
-	key := proto.Key(keys.MakeTablePrefix(keys.DescriptorTableID + 1))
+	key := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID + 1))
 	index := sort.Search(len(s.Values), func(i int) bool {
 		return !s.Values[i].Key.Less(key)
 	})
@@ -193,7 +193,7 @@ func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
 
 // GetZoneConfigForKey looks up the zone config for the range containing 'key'.
 // It is the caller's responsibility to ensure that the range does not need to be split.
-func (s *SystemConfig) GetZoneConfigForKey(key proto.Key) (*ZoneConfig, error) {
+func (s *SystemConfig) GetZoneConfigForKey(key roachpb.Key) (*ZoneConfig, error) {
 	if objectID, ok := ObjectIDForKey(key); ok {
 		return s.GetZoneConfigForID(objectID)
 	}
@@ -220,12 +220,12 @@ func (s *SystemConfig) GetZoneConfigForID(id uint32) (*ZoneConfig, error) {
 // ComputeSplitKeys takes a start and end key and returns an array of keys
 // at which to split the span [start, end).
 // The only required splits are at each user table prefix.
-func (s *SystemConfig) ComputeSplitKeys(startKey, endKey proto.Key) []proto.Key {
+func (s *SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.Key) []roachpb.Key {
 	if TestingDisableTableSplits {
 		return nil
 	}
 
-	tableStart := proto.Key(keys.UserTableDataMin)
+	tableStart := roachpb.Key(keys.UserTableDataMin)
 	if !tableStart.Less(endKey) {
 		// This range is before the user tables span: no required splits.
 		return nil
@@ -254,8 +254,8 @@ func (s *SystemConfig) ComputeSplitKeys(startKey, endKey proto.Key) []proto.Key 
 	}
 
 	// Build key prefixes for sequential table IDs until we reach endKey.
-	var splitKeys proto.KeySlice
-	var key proto.Key
+	var splitKeys roachpb.KeySlice
+	var key roachpb.Key
 	// endID could be smaller than startID if we don't have user tables.
 	for id := startID; id <= endID; id++ {
 		key = keys.MakeTablePrefix(id)
@@ -275,6 +275,6 @@ func (s *SystemConfig) ComputeSplitKeys(startKey, endKey proto.Key) []proto.Key 
 
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
 // to zone configs.
-func (s *SystemConfig) NeedsSplit(startKey, endKey proto.Key) bool {
+func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.Key) bool {
 	return len(s.ComputeSplitKeys(startKey, endKey)) > 0
 }

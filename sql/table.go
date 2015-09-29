@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -35,7 +35,7 @@ type tableKey struct {
 	name     string
 }
 
-func (tk tableKey) Key() proto.Key {
+func (tk tableKey) Key() roachpb.Key {
 	return MakeNameMetadataKey(tk.parentID, tk.name)
 }
 
@@ -475,7 +475,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, er
 // unmarshalColumnValue decodes the value from a key-value pair using the type
 // expected by the column. An error is returned if the value's type does not
 // match the column's type.
-func unmarshalColumnValue(kind ColumnType_Kind, value *proto.Value) (parser.Datum, error) {
+func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Datum, error) {
 	if value == nil {
 		return parser.DNull, nil
 	}

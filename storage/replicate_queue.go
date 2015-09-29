@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -67,7 +67,7 @@ func (rq *replicateQueue) acceptsUnsplitRanges() bool {
 	return false
 }
 
-func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica,
+func (rq replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := repl.Desc()
@@ -92,7 +92,7 @@ func (rq replicateQueue) shouldQueue(now proto.Timestamp, repl *Replica,
 	return shouldRebalance, 0
 }
 
-func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *config.SystemConfig) error {
+func (rq replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg *config.SystemConfig) error {
 	desc := repl.Desc()
 	// Find the zone config for this range.
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
@@ -116,11 +116,11 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *con
 		if err != nil {
 			return err
 		}
-		newReplica := proto.ReplicaDescriptor{
+		newReplica := roachpb.ReplicaDescriptor{
 			NodeID:  newStore.Node.NodeID,
 			StoreID: newStore.StoreID,
 		}
-		if err = repl.ChangeReplicas(proto.ADD_REPLICA, newReplica, desc); err != nil {
+		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, newReplica, desc); err != nil {
 			return err
 		}
 	case AllocatorRemove:
@@ -128,7 +128,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *con
 		if err != nil {
 			return err
 		}
-		if err = repl.ChangeReplicas(proto.REMOVE_REPLICA, removeReplica, desc); err != nil {
+		if err = repl.ChangeReplicas(roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
 			return err
 		}
 		// Do not requeue if we removed ourselves.
@@ -142,7 +142,7 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *con
 			}
 			break
 		}
-		if err = repl.ChangeReplicas(proto.REMOVE_REPLICA, deadReplicas[0], desc); err != nil {
+		if err = repl.ChangeReplicas(roachpb.REMOVE_REPLICA, deadReplicas[0], desc); err != nil {
 			return err
 		}
 	case AllocatorNoop:
@@ -154,11 +154,11 @@ func (rq replicateQueue) process(now proto.Timestamp, repl *Replica, sysCfg *con
 			// without re-queueing this replica.
 			return nil
 		}
-		rebalanceReplica := proto.ReplicaDescriptor{
+		rebalanceReplica := roachpb.ReplicaDescriptor{
 			NodeID:  rebalanceStore.Node.NodeID,
 			StoreID: rebalanceStore.StoreID,
 		}
-		if err = repl.ChangeReplicas(proto.ADD_REPLICA, rebalanceReplica, desc); err != nil {
+		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err
 		}
 	}

@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/driver"
@@ -59,24 +59,24 @@ func TestInitEngine(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	testCases := []struct {
-		key       string           // data directory
-		expAttrs  proto.Attributes // attributes for engine
-		wantError bool             // do we expect an error from this key?
-		isMem     bool             // is the engine in-memory?
+		key       string             // data directory
+		expAttrs  roachpb.Attributes // attributes for engine
+		wantError bool               // do we expect an error from this key?
+		isMem     bool               // is the engine in-memory?
 	}{
-		{"mem=1000", proto.Attributes{Attrs: []string{"mem"}}, false, true},
-		{"ssd=1000", proto.Attributes{Attrs: []string{"ssd"}}, false, true},
-		{fmt.Sprintf("ssd=%s", tmp[0]), proto.Attributes{Attrs: []string{"ssd"}}, false, false},
-		{fmt.Sprintf("hdd=%s", tmp[1]), proto.Attributes{Attrs: []string{"hdd"}}, false, false},
-		{fmt.Sprintf("mem=%s", tmp[2]), proto.Attributes{Attrs: []string{"mem"}}, false, false},
-		{fmt.Sprintf("abc=%s", tmp[3]), proto.Attributes{Attrs: []string{"abc"}}, false, false},
-		{fmt.Sprintf("hdd:7200rpm=%s", tmp[4]), proto.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false, false},
-		{"", proto.Attributes{}, true, false},
-		{"  ", proto.Attributes{}, true, false},
-		{"arbitrarystring", proto.Attributes{}, true, false},
-		{"mem=", proto.Attributes{}, true, false},
-		{"ssd=", proto.Attributes{}, true, false},
-		{"hdd=", proto.Attributes{}, true, false},
+		{"mem=1000", roachpb.Attributes{Attrs: []string{"mem"}}, false, true},
+		{"ssd=1000", roachpb.Attributes{Attrs: []string{"ssd"}}, false, true},
+		{fmt.Sprintf("ssd=%s", tmp[0]), roachpb.Attributes{Attrs: []string{"ssd"}}, false, false},
+		{fmt.Sprintf("hdd=%s", tmp[1]), roachpb.Attributes{Attrs: []string{"hdd"}}, false, false},
+		{fmt.Sprintf("mem=%s", tmp[2]), roachpb.Attributes{Attrs: []string{"mem"}}, false, false},
+		{fmt.Sprintf("abc=%s", tmp[3]), roachpb.Attributes{Attrs: []string{"abc"}}, false, false},
+		{fmt.Sprintf("hdd:7200rpm=%s", tmp[4]), roachpb.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false, false},
+		{"", roachpb.Attributes{}, true, false},
+		{"  ", roachpb.Attributes{}, true, false},
+		{"arbitrarystring", roachpb.Attributes{}, true, false},
+		{"mem=", roachpb.Attributes{}, true, false},
+		{"ssd=", roachpb.Attributes{}, true, false},
+		{"hdd=", roachpb.Attributes{}, true, false},
 	}
 	for _, spec := range testCases {
 		ctx := NewContext()
@@ -114,13 +114,13 @@ func TestInitEngines(t *testing.T) {
 	ctx.Stores = fmt.Sprintf("mem=1000,mem:ddr3=1000,ssd=%s,hdd:7200rpm=%s", tmp[0], tmp[1])
 	ctx.GossipBootstrap = SelfGossipAddr
 	expEngines := []struct {
-		attrs proto.Attributes
+		attrs roachpb.Attributes
 		isMem bool
 	}{
-		{proto.Attributes{Attrs: []string{"mem"}}, true},
-		{proto.Attributes{Attrs: []string{"mem", "ddr3"}}, true},
-		{proto.Attributes{Attrs: []string{"ssd"}}, false},
-		{proto.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false},
+		{roachpb.Attributes{Attrs: []string{"mem"}}, true},
+		{roachpb.Attributes{Attrs: []string{"mem", "ddr3"}}, true},
+		{roachpb.Attributes{Attrs: []string{"ssd"}}, false},
+		{roachpb.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false},
 	}
 
 	stopper := stop.NewStopper()
@@ -306,31 +306,31 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	if err := s.node.ctx.DB.AdminSplit("m"); err != nil {
 		t.Fatal(err)
 	}
-	writes := []proto.Key{proto.Key("a"), proto.Key("z")}
-	get := &proto.GetRequest{
-		RequestHeader: proto.RequestHeader{Key: writes[0]},
+	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
+	get := &roachpb.GetRequest{
+		RequestHeader: roachpb.RequestHeader{Key: writes[0]},
 	}
 	get.EndKey = writes[len(writes)-1]
 	if _, err := batchutil.SendWrapped(tds, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
-	var delTS proto.Timestamp
+	var delTS roachpb.Timestamp
 	for i, k := range writes {
-		put := proto.NewPut(k, proto.Value{Bytes: k})
+		put := roachpb.NewPut(k, roachpb.Value{Bytes: k})
 		reply, err := batchutil.SendWrapped(tds, put)
 		if err != nil {
 			t.Fatal(err)
 		}
-		scan := proto.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*proto.ScanRequest)
+		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*roachpb.ScanRequest)
 		// The Put ts may have been pushed by tsCache,
 		// so make sure we see their values in our Scan.
-		delTS = reply.(*proto.PutResponse).Timestamp
+		delTS = reply.(*roachpb.PutResponse).Timestamp
 		scan.Timestamp = delTS
 		reply, err = batchutil.SendWrapped(tds, scan)
 		if err != nil {
 			t.Fatal(err)
 		}
-		sr := reply.(*proto.ScanResponse)
+		sr := reply.(*roachpb.ScanResponse)
 		if sr.Txn != nil {
 			// This was the other way around at some point in the past.
 			// Same below for Delete, etc.
@@ -341,10 +341,10 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		}
 	}
 
-	del := &proto.DeleteRangeRequest{
-		RequestHeader: proto.RequestHeader{
+	del := &roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:       writes[0],
-			EndKey:    proto.Key(writes[len(writes)-1]).Next(),
+			EndKey:    roachpb.Key(writes[len(writes)-1]).Next(),
 			Timestamp: delTS,
 		},
 	}
@@ -352,7 +352,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dr := reply.(*proto.DeleteRangeResponse)
+	dr := reply.(*roachpb.DeleteRangeResponse)
 	if dr.Txn != nil {
 		t.Errorf("expected no transaction in response header")
 	}
@@ -361,14 +361,14 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			len(writes), n)
 	}
 
-	scan := proto.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*proto.ScanRequest)
+	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*roachpb.ScanRequest)
 	scan.Timestamp = dr.Timestamp
-	scan.Txn = &proto.Transaction{Name: "MyTxn"}
+	scan.Txn = &roachpb.Transaction{Name: "MyTxn"}
 	reply, err = batchutil.SendWrapped(tds, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sr := reply.(*proto.ScanResponse)
+	sr := reply.(*roachpb.ScanResponse)
 	if txn := sr.Txn; txn == nil || txn.Name != "MyTxn" {
 		t.Errorf("wanted Txn to persist, but it changed to %v", txn)
 	}
@@ -382,14 +382,14 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		splitKeys []proto.Key
-		keys      []proto.Key
+		splitKeys []roachpb.Key
+		keys      []roachpb.Key
 	}{
-		{[]proto.Key{proto.Key("m")},
-			[]proto.Key{proto.Key("a"), proto.Key("z")}},
-		{[]proto.Key{proto.Key("h"), proto.Key("q")},
-			[]proto.Key{proto.Key("b"), proto.Key("f"), proto.Key("k"),
-				proto.Key("r"), proto.Key("w"), proto.Key("y")}},
+		{[]roachpb.Key{roachpb.Key("m")},
+			[]roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}},
+		{[]roachpb.Key{roachpb.Key("h"), roachpb.Key("q")},
+			[]roachpb.Key{roachpb.Key("b"), roachpb.Key("f"), roachpb.Key("k"),
+				roachpb.Key("r"), roachpb.Key("w"), roachpb.Key("y")}},
 	}
 
 	for i, tc := range testCases {
@@ -403,9 +403,9 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			}
 		}
 
-		var reply proto.Response
+		var reply roachpb.Response
 		for _, k := range tc.keys {
-			put := proto.NewPut(k, proto.Value{Bytes: k})
+			put := roachpb.NewPut(k, roachpb.Value{Bytes: k})
 			var err error
 			reply, err = batchutil.SendWrapped(tds, put)
 			if err != nil {
@@ -417,14 +417,14 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		for start := 0; start < len(tc.keys); start++ {
 			// Try every possible maxResults, from 1 to beyond the size of key array.
 			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
-				scan := proto.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
+				scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
 					int64(maxResults))
 				scan.Header().Timestamp = reply.Header().Timestamp
 				reply, err := batchutil.SendWrapped(tds, scan)
 				if err != nil {
 					t.Fatal(err)
 				}
-				rows := reply.(*proto.ScanResponse).Rows
+				rows := reply.(*roachpb.ScanResponse).Rows
 				if start+maxResults <= len(tc.keys) && len(rows) != maxResults {
 					t.Errorf("%d: start=%s: expected %d rows, but got %d", i, tc.keys[start], maxResults, len(rows))
 				} else if start+maxResults == len(tc.keys)+1 && len(rows) != maxResults-1 {
@@ -552,7 +552,7 @@ func TestSystemDBGossip(t *testing.T) {
 	}
 
 	// Now check the gossip callback.
-	var val *proto.Value
+	var val *roachpb.Value
 	systemConfig := &config.SystemConfig{}
 	if err := gogoproto.Unmarshal(b, systemConfig); err != nil {
 		t.Fatal(err)

@@ -20,7 +20,7 @@ package storage
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -46,12 +46,12 @@ const (
 // the current system time plus the maximum clock offset.
 type TimestampCache struct {
 	cache            *cache.IntervalCache
-	lowWater, latest proto.Timestamp
+	lowWater, latest roachpb.Timestamp
 }
 
 // A cacheEntry combines the timestamp with an optional txn ID.
 type cacheEntry struct {
-	timestamp proto.Timestamp
+	timestamp roachpb.Timestamp
 	txnID     []byte // Nil for no transaction
 	readOnly  bool   // Command is read-only
 }
@@ -78,7 +78,7 @@ func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 
 // SetLowWater sets the cache's low water mark, which is the minimum
 // value the cache will return from calls to GetMax().
-func (tc *TimestampCache) SetLowWater(lowWater proto.Timestamp) {
+func (tc *TimestampCache) SetLowWater(lowWater roachpb.Timestamp) {
 	if tc.lowWater.Less(lowWater) {
 		tc.lowWater = lowWater
 	}
@@ -88,7 +88,7 @@ func (tc *TimestampCache) SetLowWater(lowWater proto.Timestamp) {
 // keys from start to end. If end is nil, the range covers the start
 // key only. txnID is nil for no transaction. readOnly specifies
 // whether the command adding this timestamp was read-only or not.
-func (tc *TimestampCache) Add(start, end proto.Key, timestamp proto.Timestamp, txnID []byte, readOnly bool) {
+func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestamp, txnID []byte, readOnly bool) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
 		end = start.Next()
@@ -130,7 +130,7 @@ func (tc *TimestampCache) Add(start, end proto.Key, timestamp proto.Timestamp, t
 // the same transaction) would get that as the max timestamp and be
 // forced to increment it. This allows timestamps from the same txn
 // to be ignored.
-func (tc *TimestampCache) GetMax(start, end proto.Key, txnID []byte) (proto.Timestamp, proto.Timestamp) {
+func (tc *TimestampCache) GetMax(start, end roachpb.Key, txnID []byte) (roachpb.Timestamp, roachpb.Timestamp) {
 	if len(end) == 0 {
 		end = start.Next()
 	}
@@ -138,7 +138,7 @@ func (tc *TimestampCache) GetMax(start, end proto.Key, txnID []byte) (proto.Time
 	maxW := tc.lowWater
 	for _, o := range tc.cache.GetOverlaps(start, end) {
 		ce := o.Value.(cacheEntry)
-		if ce.txnID == nil || txnID == nil || !proto.TxnIDEqual(txnID, ce.txnID) {
+		if ce.txnID == nil || txnID == nil || !roachpb.TxnIDEqual(txnID, ce.txnID) {
 			if ce.readOnly && maxR.Less(ce.timestamp) {
 				maxR = ce.timestamp
 			} else if !ce.readOnly && maxW.Less(ce.timestamp) {

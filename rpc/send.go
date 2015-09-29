@@ -25,7 +25,7 @@ import (
 	"net/rpc"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -86,8 +86,8 @@ func (r rpcError) CanRetry() bool { return true }
 var sendOneFn = sendOne
 
 // NewSendError creates a SendError.
-func NewSendError(msg string, canRetry bool) *proto.SendError {
-	return &proto.SendError{Message: msg, Retryable: canRetry}
+func NewSendError(msg string, canRetry bool) *roachpb.SendError {
+	return &roachpb.SendError{Message: msg, Retryable: canRetry}
 }
 
 // Send sends one or more method RPCs to clients specified by the
@@ -175,8 +175,8 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 		case call := <-done:
 			if call.Error == nil {
 				// Verify response data integrity if this is a proto response.
-				if req, reqOk := call.Args.(proto.Request); reqOk {
-					if resp, respOk := call.Reply.(proto.Response); respOk {
+				if req, reqOk := call.Args.(roachpb.Request); reqOk {
+					if resp, respOk := call.Reply.(roachpb.Response); respOk {
 						if err := resp.Verify(req); err != nil {
 							call.Error = err
 						}

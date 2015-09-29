@@ -25,7 +25,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 )
 
 type testArg struct {
@@ -39,16 +39,16 @@ func (t testArg) String() string {
 
 func testContext() context.Context {
 	ctx := context.Background()
-	return Add(ctx, NodeID, proto.NodeID(1), StoreID, proto.StoreID(2), RangeID, proto.RangeID(3), Key, proto.Key("key"))
+	return Add(ctx, NodeID, roachpb.NodeID(1), StoreID, roachpb.StoreID(2), RangeID, roachpb.RangeID(3), Key, roachpb.Key("key"))
 }
 
 func TestSetLogEntry(t *testing.T) {
 	ctx := testContext()
 
-	nodeID := ctx.Value(NodeID).(proto.NodeID)
-	storeID := ctx.Value(StoreID).(proto.StoreID)
-	rangeID := ctx.Value(RangeID).(proto.RangeID)
-	key := ctx.Value(Key).(proto.Key)
+	nodeID := ctx.Value(NodeID).(roachpb.NodeID)
+	storeID := ctx.Value(StoreID).(roachpb.StoreID)
+	rangeID := ctx.Value(RangeID).(roachpb.RangeID)
+	key := ctx.Value(Key).(roachpb.Key)
 
 	testCases := []struct {
 		ctx      context.Context
@@ -79,7 +79,7 @@ func TestSetLogEntry(t *testing.T) {
 			},
 		}},
 		// Try a proto.Key argument.
-		{nil, "Key arg %s", []interface{}{proto.Key("\x00\xff")}, LogEntry{
+		{nil, "Key arg %s", []interface{}{roachpb.Key("\x00\xff")}, LogEntry{
 			Format: "Key arg %s",
 			Args: []LogEntry_Arg{
 				{Str: "\"\\x00\\xff\""},

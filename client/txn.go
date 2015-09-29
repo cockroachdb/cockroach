@@ -24,7 +24,7 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -44,12 +44,12 @@ var DefaultTxnRetryOptions = retry.Options{
 // method out of the Txn method set.
 type txnSender Txn
 
-func (ts *txnSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Send call through wrapped sender.
 	ba.Txn = &ts.Proto
 	br, pErr := ts.wrapped.Send(ctx, ba)
 	if br != nil && br.Error != nil {
-		panic(proto.ErrorUnexpectedlySet(ts.wrapped, br))
+		panic(roachpb.ErrorUnexpectedlySet(ts.wrapped, br))
 	}
 
 	// TODO(tschottdorf): see about using only the top-level *proto.Error
@@ -63,15 +63,15 @@ func (ts *txnSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.Ba
 	if err == nil {
 		ts.Proto.Update(br.Txn)
 		return br, nil
-	} else if abrtErr, ok := err.(*proto.TransactionAbortedError); ok {
+	} else if abrtErr, ok := err.(*roachpb.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
-		ts.Proto = proto.Transaction{
+		ts.Proto = roachpb.Transaction{
 			Name:      ts.Proto.Name,
 			Isolation: ts.Proto.Isolation,
 			// Acts as a minimum priority on restart.
 			Priority: abrtErr.Transaction().GetPriority(),
 		}
-	} else if txnErr, ok := err.(proto.TransactionRestartError); ok {
+	} else if txnErr, ok := err.(roachpb.TransactionRestartError); ok {
 		ts.Proto.Update(txnErr.Transaction())
 	}
 	return nil, pErr
@@ -82,7 +82,7 @@ func (ts *txnSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.Ba
 type Txn struct {
 	db      DB
 	wrapped Sender
-	Proto   proto.Transaction
+	Proto   roachpb.Transaction
 	// systemDBTrigger is set to true when modifying keys from the
 	// SystemDB span. This sets the SystemDBTrigger on EndTransactionRequest.
 	systemDBTrigger bool
@@ -118,7 +118,7 @@ func (txn *Txn) DebugName() string {
 // SetIsolation sets the transaction's isolation type. Transactions default to
 // serializable isolation. The isolation must be set before any operations are
 // performed on the transaction.
-func (txn *Txn) SetIsolation(isolation proto.IsolationType) error {
+func (txn *Txn) SetIsolation(isolation roachpb.IsolationType) error {
 	if txn.Proto.Isolation != isolation {
 		if txn.Proto.IsInitialized() {
 			return fmt.Errorf("cannot change the isolation level of a running transaction")
@@ -286,7 +286,7 @@ func (txn *Txn) Run(b *Batch) error {
 }
 
 // RunWithResponse is a version of Run that returns the BatchResponse.
-func (txn *Txn) RunWithResponse(b *Batch) (*proto.BatchResponse, error) {
+func (txn *Txn) RunWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
 	if err := b.prepare(); err != nil {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ func (txn *Txn) CommitInBatch(b *Batch) error {
 
 // CommitInBatchWithResponse is a version of CommitInBatch that returns the
 // BatchResponse.
-func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*proto.BatchResponse, error) {
+func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
 	b.reqs = append(b.reqs, endTxnReq(true /* commit */, txn.systemDBTrigger))
 	b.initResult(1, 0, nil)
 	return txn.RunWithResponse(b)
@@ -347,16 +347,16 @@ func (txn *Txn) sendEndTxnReq(commit bool) error {
 	return pErr.GoError()
 }
 
-func endTxnReq(commit bool, hasTrigger bool) proto.Request {
-	var trigger *proto.InternalCommitTrigger
+func endTxnReq(commit bool, hasTrigger bool) roachpb.Request {
+	var trigger *roachpb.InternalCommitTrigger
 	if hasTrigger {
-		trigger = &proto.InternalCommitTrigger{
-			ModifiedSpanTrigger: &proto.ModifiedSpanTrigger{
+		trigger = &roachpb.InternalCommitTrigger{
+			ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
 				SystemDBSpan: true,
 			},
 		}
 	}
-	return &proto.EndTransactionRequest{
+	return &roachpb.EndTransactionRequest{
 		Commit:                commit,
 		InternalCommitTrigger: trigger,
 	}
@@ -368,19 +368,19 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 	var err error
 	for r := retry.Start(txn.db.txnRetryOptions); r.Next(); {
 		err = retryable(txn)
-		if err == nil && txn.Proto.Status == proto.PENDING {
+		if err == nil && txn.Proto.Status == roachpb.PENDING {
 			// retryable succeeded, but didn't commit.
 			err = txn.commit()
 		}
-		if restartErr, ok := err.(proto.TransactionRestartError); ok {
+		if restartErr, ok := err.(roachpb.TransactionRestartError); ok {
 			if log.V(2) {
 				log.Warning(err)
 			}
 			switch restartErr.CanRestartTransaction() {
-			case proto.TransactionRestart_IMMEDIATE:
+			case roachpb.TransactionRestart_IMMEDIATE:
 				r.Reset()
 				continue
-			case proto.TransactionRestart_BACKOFF:
+			case roachpb.TransactionRestart_BACKOFF:
 				continue
 			}
 			// By default, fall through and break.
@@ -397,15 +397,15 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous).
-func (txn *Txn) send(reqs ...proto.Request) (*proto.BatchResponse, *proto.Error) {
+func (txn *Txn) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error) {
 
-	if txn.Proto.Status != proto.PENDING {
-		return nil, proto.NewError(util.Errorf("attempting to use %s transaction", txn.Proto.Status))
+	if txn.Proto.Status != roachpb.PENDING {
+		return nil, roachpb.NewError(util.Errorf("attempting to use %s transaction", txn.Proto.Status))
 	}
 
 	lastIndex := len(reqs) - 1
 	if lastIndex < 0 {
-		return &proto.BatchResponse{}, nil
+		return &roachpb.BatchResponse{}, nil
 	}
 
 	lastReq := reqs[lastIndex]
@@ -413,19 +413,19 @@ func (txn *Txn) send(reqs ...proto.Request) (*proto.BatchResponse, *proto.Error)
 	// txn.Proto.Writing, which is set by the coordinator when the first
 	// intent has been created, and which lives for the life of the
 	// transaction.
-	haveTxnWrite := proto.IsTransactionWrite(lastReq)
+	haveTxnWrite := roachpb.IsTransactionWrite(lastReq)
 
 	for _, args := range reqs[:lastIndex] {
-		if _, ok := args.(*proto.EndTransactionRequest); ok {
-			return nil, proto.NewError(util.Errorf("%s sent as non-terminal call", args.Method()))
+		if _, ok := args.(*roachpb.EndTransactionRequest); ok {
+			return nil, roachpb.NewError(util.Errorf("%s sent as non-terminal call", args.Method()))
 		}
 
 		if !haveTxnWrite {
-			haveTxnWrite = proto.IsTransactionWrite(args)
+			haveTxnWrite = roachpb.IsTransactionWrite(args)
 		}
 	}
 
-	endTxnRequest, haveEndTxn := lastReq.(*proto.EndTransactionRequest)
+	endTxnRequest, haveEndTxn := lastReq.(*roachpb.EndTransactionRequest)
 	needEndTxn := txn.Proto.Writing || haveTxnWrite
 	elideEndTxn := haveEndTxn && !needEndTxn
 
@@ -440,9 +440,9 @@ func (txn *Txn) send(reqs ...proto.Request) (*proto.BatchResponse, *proto.Error)
 		// still inspect the transaction struct, so we manually update it
 		// here to emulate a true transaction.
 		if endTxnRequest.Commit {
-			txn.Proto.Status = proto.COMMITTED
+			txn.Proto.Status = roachpb.COMMITTED
 		} else {
-			txn.Proto.Status = proto.ABORTED
+			txn.Proto.Status = roachpb.ABORTED
 		}
 	}
 	return br, pErr

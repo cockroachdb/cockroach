@@ -26,7 +26,7 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -43,7 +43,7 @@ const (
 )
 
 type storeDetail struct {
-	desc            proto.StoreDescriptor
+	desc            roachpb.StoreDescriptor
 	dead            bool
 	gossiped        bool // Was this store updated via gossip?
 	timesDied       int
@@ -62,7 +62,7 @@ func (sd *storeDetail) markDead(foundDeadOn time.Time) {
 
 // markAlive sets the storeDetail to alive(active) and saves the updated time
 // and descriptor.
-func (sd *storeDetail) markAlive(foundAliveOn time.Time, storeDesc proto.StoreDescriptor, gossiped bool) {
+func (sd *storeDetail) markAlive(foundAliveOn time.Time, storeDesc roachpb.StoreDescriptor, gossiped bool) {
 	sd.desc = storeDesc
 	sd.dead = false
 	sd.gossiped = gossiped
@@ -143,7 +143,7 @@ type StorePool struct {
 	// Each storeDetail is contained in both a map and a priorityQueue; pointers
 	// are used so that data can be kept in sync.
 	mu     sync.RWMutex // Protects stores and queue.
-	stores map[proto.StoreID]*storeDetail
+	stores map[roachpb.StoreID]*storeDetail
 	queue  storePoolPQ
 }
 
@@ -152,7 +152,7 @@ type StorePool struct {
 func NewStorePool(g *gossip.Gossip, timeUntilStoreDead time.Duration, stopper *stop.Stopper) *StorePool {
 	sp := &StorePool{
 		timeUntilStoreDead: timeUntilStoreDead,
-		stores:             make(map[proto.StoreID]*storeDetail),
+		stores:             make(map[roachpb.StoreID]*storeDetail),
 	}
 	heap.Init(&sp.queue)
 
@@ -166,7 +166,7 @@ func NewStorePool(g *gossip.Gossip, timeUntilStoreDead time.Duration, stopper *s
 
 // storeGossipUpdate The gossip callback used to keep the StorePool up to date.
 func (sp *StorePool) storeGossipUpdate(_ string, content []byte) {
-	var storeDesc proto.StoreDescriptor
+	var storeDesc roachpb.StoreDescriptor
 	if err := gogoproto.Unmarshal(content, &storeDesc); err != nil {
 		log.Error(err)
 		return
@@ -223,7 +223,7 @@ func (sp *StorePool) start(stopper *stop.Stopper) {
 }
 
 // GetStoreDescriptor returns the store detail for the given storeID.
-func (sp *StorePool) getStoreDetail(storeID proto.StoreID) storeDetail {
+func (sp *StorePool) getStoreDetail(storeID roachpb.StoreID) storeDetail {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
@@ -234,7 +234,7 @@ func (sp *StorePool) getStoreDetail(storeID proto.StoreID) storeDetail {
 		// considered dead.
 		detail = &storeDetail{index: -1}
 		sp.stores[storeID] = detail
-		detail.markAlive(time.Now(), proto.StoreDescriptor{StoreID: storeID}, false)
+		detail.markAlive(time.Now(), roachpb.StoreDescriptor{StoreID: storeID}, false)
 		sp.queue.enqueue(detail)
 	}
 
@@ -243,7 +243,7 @@ func (sp *StorePool) getStoreDetail(storeID proto.StoreID) storeDetail {
 
 // GetStoreDescriptor returns the latest store descriptor for the given
 // storeID.
-func (sp *StorePool) getStoreDescriptor(storeID proto.StoreID) *proto.StoreDescriptor {
+func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) *roachpb.StoreDescriptor {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
@@ -263,8 +263,8 @@ func (sp *StorePool) getStoreDescriptor(storeID proto.StoreID) *proto.StoreDescr
 
 // findDeadReplicas returns any replicas from the supplied slice that are
 // located on dead stores.
-func (sp *StorePool) deadReplicas(repls []proto.ReplicaDescriptor) []proto.ReplicaDescriptor {
-	var deadReplicas []proto.ReplicaDescriptor
+func (sp *StorePool) deadReplicas(repls []roachpb.ReplicaDescriptor) []roachpb.ReplicaDescriptor {
+	var deadReplicas []roachpb.ReplicaDescriptor
 	for _, repl := range repls {
 		if sp.getStoreDetail(repl.StoreID).dead {
 			deadReplicas = append(deadReplicas, repl)
@@ -288,13 +288,13 @@ func (s *stat) update(x float64) {
 // StoreList holds a list of store descriptors and associated count and used
 // stats for those stores.
 type StoreList struct {
-	stores      []*proto.StoreDescriptor
+	stores      []*roachpb.StoreDescriptor
 	count, used stat
 }
 
 // add includes the store descriptor to the list of stores and updates
 // maintained statistics.
-func (sl *StoreList) add(s *proto.StoreDescriptor) {
+func (sl *StoreList) add(s *roachpb.StoreDescriptor) {
 	sl.stores = append(sl.stores, s)
 	sl.count.update(float64(s.Capacity.RangeCount))
 	sl.used.update(s.Capacity.FractionUsed())
@@ -305,11 +305,11 @@ func (sl *StoreList) add(s *proto.StoreDescriptor) {
 // TODO(embark, spencer): consider using a reverse index map from
 // Attr->stores, for efficiency. Ensure that entries in this map still
 // have an opportunity to be garbage collected.
-func (sp *StorePool) getStoreList(required proto.Attributes, deterministic bool) *StoreList {
+func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic bool) *StoreList {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
-	var storeIDs proto.StoreIDSlice
+	var storeIDs roachpb.StoreIDSlice
 	for storeID := range sp.stores {
 		storeIDs = append(storeIDs, storeID)
 	}
@@ -320,7 +320,7 @@ func (sp *StorePool) getStoreList(required proto.Attributes, deterministic bool)
 	}
 	sl := new(StoreList)
 	for _, storeID := range storeIDs {
-		detail := sp.stores[proto.StoreID(storeID)]
+		detail := sp.stores[roachpb.StoreID(storeID)]
 		if !detail.dead && required.IsSubset(*detail.desc.CombinedAttrs()) {
 			desc := detail.desc
 			sl.add(&desc)

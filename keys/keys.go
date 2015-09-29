@@ -22,7 +22,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -30,43 +30,43 @@ import (
 
 // MakeKey makes a new key which is the concatenation of the
 // given inputs, in order.
-func MakeKey(keys ...proto.Key) proto.Key {
-	return proto.MakeKey(keys...)
+func MakeKey(keys ...roachpb.Key) roachpb.Key {
+	return roachpb.MakeKey(keys...)
 }
 
 // MakeStoreKey creates a store-local key based on the metadata key
 // suffix, and optional detail.
-func MakeStoreKey(suffix, detail proto.Key) proto.Key {
+func MakeStoreKey(suffix, detail roachpb.Key) roachpb.Key {
 	return MakeKey(LocalStorePrefix, suffix, detail)
 }
 
 // StoreIdentKey returns a store-local key for the store metadata.
-func StoreIdentKey() proto.Key {
-	return MakeStoreKey(LocalStoreIdentSuffix, proto.Key{})
+func StoreIdentKey() roachpb.Key {
+	return MakeStoreKey(LocalStoreIdentSuffix, roachpb.Key{})
 }
 
 // StoreStatusKey returns the key for accessing the store status for the
 // specified store ID.
-func StoreStatusKey(storeID int32) proto.Key {
+func StoreStatusKey(storeID int32) roachpb.Key {
 	return MakeKey(StatusStorePrefix, encoding.EncodeUvarint(nil, uint64(storeID)))
 }
 
 // NodeStatusKey returns the key for accessing the node status for the
 // specified node ID.
-func NodeStatusKey(nodeID int32) proto.Key {
+func NodeStatusKey(nodeID int32) roachpb.Key {
 	return MakeKey(StatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID)))
 }
 
 // MakeRangeIDPrefix creates a range-local key prefix from
 // rangeID.
-func MakeRangeIDPrefix(rangeID proto.RangeID) proto.Key {
+func MakeRangeIDPrefix(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeKey(LocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(rangeID)))
 }
 
 // MakeRangeIDKey creates a range-local key based on the range's
 // Range ID, metadata key suffix, and optional detail (e.g. the
 // encoded command ID for a response cache entry, etc.).
-func MakeRangeIDKey(rangeID proto.RangeID, suffix, detail proto.Key) proto.Key {
+func MakeRangeIDKey(rangeID roachpb.RangeID, suffix, detail roachpb.Key) roachpb.Key {
 	if len(suffix) != LocalSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, LocalSuffixLength))
 	}
@@ -74,52 +74,52 @@ func MakeRangeIDKey(rangeID proto.RangeID, suffix, detail proto.Key) proto.Key {
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
-func RaftLogKey(rangeID proto.RangeID, logIndex uint64) proto.Key {
+func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
 	return MakeRangeIDKey(rangeID, LocalRaftLogSuffix,
 		encoding.EncodeUint64(nil, logIndex))
 }
 
 // RaftLogPrefix returns the system-local prefix shared by all entries in a Raft log.
-func RaftLogPrefix(rangeID proto.RangeID) proto.Key {
-	return MakeRangeIDKey(rangeID, LocalRaftLogSuffix, proto.Key{})
+func RaftLogPrefix(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDKey(rangeID, LocalRaftLogSuffix, roachpb.Key{})
 }
 
 // RaftHardStateKey returns a system-local key for a Raft HardState.
-func RaftHardStateKey(rangeID proto.RangeID) proto.Key {
-	return MakeRangeIDKey(rangeID, LocalRaftHardStateSuffix, proto.Key{})
+func RaftHardStateKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDKey(rangeID, LocalRaftHardStateSuffix, roachpb.Key{})
 }
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
-func RaftTruncatedStateKey(rangeID proto.RangeID) proto.Key {
-	return MakeRangeIDKey(rangeID, LocalRaftTruncatedStateSuffix, proto.Key{})
+func RaftTruncatedStateKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDKey(rangeID, LocalRaftTruncatedStateSuffix, roachpb.Key{})
 }
 
 // RaftAppliedIndexKey returns a system-local key for a raft applied index.
-func RaftAppliedIndexKey(rangeID proto.RangeID) proto.Key {
-	return MakeRangeIDKey(rangeID, LocalRaftAppliedIndexSuffix, proto.Key{})
+func RaftAppliedIndexKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDKey(rangeID, LocalRaftAppliedIndexSuffix, roachpb.Key{})
 }
 
 // RaftLeaderLeaseKey returns a system-local key for a raft leader lease.
-func RaftLeaderLeaseKey(rangeID proto.RangeID) proto.Key {
-	return MakeRangeIDKey(rangeID, LocalRaftLeaderLeaseSuffix, proto.Key{})
+func RaftLeaderLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDKey(rangeID, LocalRaftLeaderLeaseSuffix, roachpb.Key{})
 }
 
 // RaftLastIndexKey returns a system-local key for a raft last index.
-func RaftLastIndexKey(rangeID proto.RangeID) proto.Key {
-	return MakeRangeIDKey(rangeID, LocalRaftLastIndexSuffix, proto.Key{})
+func RaftLastIndexKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDKey(rangeID, LocalRaftLastIndexSuffix, roachpb.Key{})
 }
 
 // RangeStatsKey returns the key for accessing the MVCCStats struct
 // for the specified Range ID.
-func RangeStatsKey(rangeID proto.RangeID) proto.Key {
+func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDKey(rangeID, LocalRangeStatsSuffix, nil)
 }
 
 // ResponseCacheKey returns a range-local key by Range ID for a
 // response cache entry, with detail specified by encoding the
 // supplied client command ID.
-func ResponseCacheKey(rangeID proto.RangeID, cmdID *proto.ClientCmdID) proto.Key {
-	detail := proto.Key{}
+func ResponseCacheKey(rangeID roachpb.RangeID, cmdID *roachpb.ClientCmdID) roachpb.Key {
+	detail := roachpb.Key{}
 	if cmdID != nil {
 		// Wall time helps sort for locality.
 		detail = encoding.EncodeUvarint(nil, uint64(cmdID.WallTime))
@@ -131,7 +131,7 @@ func ResponseCacheKey(rangeID proto.RangeID, cmdID *proto.ClientCmdID) proto.Key
 // MakeRangeKey creates a range-local key based on the range
 // start key, metadata key suffix, and optional detail (e.g. the
 // transaction ID for a txn record, etc.).
-func MakeRangeKey(key, suffix, detail proto.Key) proto.Key {
+func MakeRangeKey(key, suffix, detail roachpb.Key) roachpb.Key {
 	if len(suffix) != LocalSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, LocalSuffixLength))
 	}
@@ -141,7 +141,7 @@ func MakeRangeKey(key, suffix, detail proto.Key) proto.Key {
 
 // DecodeRangeKey decodes the range key into range start key,
 // suffix and optional detail (may be nil).
-func DecodeRangeKey(key proto.Key) (startKey, suffix, detail proto.Key, err error) {
+func DecodeRangeKey(key roachpb.Key) (startKey, suffix, detail roachpb.Key, err error) {
 	if !bytes.HasPrefix(key, LocalRangePrefix) {
 		return nil, nil, nil, util.Errorf("key %q does not have %q prefix",
 			key, LocalRangePrefix)
@@ -164,33 +164,33 @@ func DecodeRangeKey(key proto.Key) (startKey, suffix, detail proto.Key, err erro
 
 // RangeGCMetadataKey returns a range-local key for range garbage
 // collection metadata.
-func RangeGCMetadataKey(rangeID proto.RangeID) proto.Key {
-	return MakeRangeIDKey(rangeID, LocalRangeGCMetadataSuffix, proto.Key{})
+func RangeGCMetadataKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDKey(rangeID, LocalRangeGCMetadataSuffix, roachpb.Key{})
 }
 
 // RangeLastVerificationTimestampKey returns a range-local key for
 // the range's last verification timestamp.
-func RangeLastVerificationTimestampKey(rangeID proto.RangeID) proto.Key {
-	return MakeRangeIDKey(rangeID, LocalRangeLastVerificationTimestampSuffix, proto.Key{})
+func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDKey(rangeID, LocalRangeLastVerificationTimestampSuffix, roachpb.Key{})
 }
 
 // RangeTreeNodeKey returns a range-local key for the the range's
 // node in the range tree.
-func RangeTreeNodeKey(key proto.Key) proto.Key {
-	return MakeRangeKey(key, LocalRangeTreeNodeSuffix, proto.Key{})
+func RangeTreeNodeKey(key roachpb.Key) roachpb.Key {
+	return MakeRangeKey(key, LocalRangeTreeNodeSuffix, roachpb.Key{})
 }
 
 // RangeDescriptorKey returns a range-local key for the descriptor
 // for the range with specified key.
-func RangeDescriptorKey(key proto.Key) proto.Key {
-	return MakeRangeKey(key, LocalRangeDescriptorSuffix, proto.Key{})
+func RangeDescriptorKey(key roachpb.Key) roachpb.Key {
+	return MakeRangeKey(key, LocalRangeDescriptorSuffix, roachpb.Key{})
 }
 
 // TransactionKey returns a transaction key based on the provided
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.
-func TransactionKey(key proto.Key, id []byte) proto.Key {
-	return MakeRangeKey(key, LocalTransactionSuffix, proto.Key(id))
+func TransactionKey(key roachpb.Key, id []byte) roachpb.Key {
+	return MakeRangeKey(key, LocalTransactionSuffix, roachpb.Key(id))
 }
 
 // KeyAddress returns the address for the key, used to lookup the
@@ -209,7 +209,7 @@ func TransactionKey(key proto.Key, id []byte) proto.Key {
 // entries, and range stats).
 //
 // TODO(pmattis): Should KeyAddress return an error when the key is malformed?
-func KeyAddress(k proto.Key) proto.Key {
+func KeyAddress(k roachpb.Key) roachpb.Key {
 	if k == nil {
 		return nil
 	}
@@ -234,9 +234,9 @@ func KeyAddress(k proto.Key) proto.Key {
 // for the given key. For ordinary keys this returns a level 2
 // metadata key - for level 2 keys, it returns a level 1 key. For
 // level 1 keys and local keys, KeyMin is returned.
-func RangeMetaKey(key proto.Key) proto.Key {
+func RangeMetaKey(key roachpb.Key) roachpb.Key {
 	if len(key) == 0 {
-		return proto.KeyMin
+		return roachpb.KeyMin
 	}
 	addr := KeyAddress(key)
 	if !bytes.HasPrefix(addr, MetaPrefix) {
@@ -246,15 +246,15 @@ func RangeMetaKey(key proto.Key) proto.Key {
 		return MakeKey(Meta1Prefix, addr[len(Meta2Prefix):])
 	}
 
-	return proto.KeyMin
+	return roachpb.KeyMin
 }
 
 // validateRangeMetaKey validates that the given key is a valid Range Metadata
 // key. This checks only the constraints common to forward and backwards scans:
 // correct prefix and not exceeding KeyMax.
-func validateRangeMetaKey(key proto.Key) error {
+func validateRangeMetaKey(key roachpb.Key) error {
 	// KeyMin is a valid key.
-	if key.Equal(proto.KeyMin) {
+	if key.Equal(roachpb.KeyMin) {
 		return nil
 	}
 	// Key must be at least as long as Meta1Prefix.
@@ -262,12 +262,12 @@ func validateRangeMetaKey(key proto.Key) error {
 		return NewInvalidRangeMetaKeyError("too short", key)
 	}
 
-	prefix, body := proto.Key(key[:len(Meta1Prefix)]), proto.Key(key[len(Meta1Prefix):])
+	prefix, body := roachpb.Key(key[:len(Meta1Prefix)]), roachpb.Key(key[len(Meta1Prefix):])
 	if !prefix.Equal(Meta2Prefix) && !prefix.Equal(Meta1Prefix) {
 		return NewInvalidRangeMetaKeyError("not a meta key", key)
 	}
 
-	if proto.KeyMax.Less(body) {
+	if roachpb.KeyMax.Less(body) {
 		return NewInvalidRangeMetaKeyError("body of meta key range lookup is > KeyMax", key)
 	}
 	return nil
@@ -276,7 +276,7 @@ func validateRangeMetaKey(key proto.Key) error {
 // MetaScanBounds returns the range [start,end) within which the desired meta
 // record can be found by means of an engine scan. The given key must be a
 // valid RangeMetaKey as defined by validateRangeMetaKey.
-func MetaScanBounds(key proto.Key) (proto.Key, proto.Key, error) {
+func MetaScanBounds(key roachpb.Key) (roachpb.Key, roachpb.Key, error) {
 	if err := validateRangeMetaKey(key); err != nil {
 		return nil, nil, err
 	}
@@ -285,7 +285,7 @@ func MetaScanBounds(key proto.Key) (proto.Key, proto.Key, error) {
 		return nil, nil, NewInvalidRangeMetaKeyError("Meta2KeyMax can't be used as the key of scan", key)
 	}
 
-	if key.Equal(proto.KeyMin) {
+	if key.Equal(roachpb.KeyMin) {
 		// Special case KeyMin: find the first entry in meta1.
 		return Meta1Prefix, Meta1Prefix.PrefixEnd(), nil
 	}
@@ -295,18 +295,18 @@ func MetaScanBounds(key proto.Key) (proto.Key, proto.Key, error) {
 		return key, Meta1Prefix.PrefixEnd(), nil
 	}
 	// Otherwise find the first entry greater than the given key in the same meta prefix.
-	return key.Next(), proto.Key(key[:len(Meta1Prefix)]).PrefixEnd(), nil
+	return key.Next(), roachpb.Key(key[:len(Meta1Prefix)]).PrefixEnd(), nil
 }
 
 // MetaReverseScanBounds returns the range [start,end) within which the desired
 // meta record can be found by means of a reverse engine scan. The given key
 // must be a valid RangeMetaKey as defined by validateRangeMetaKey.
-func MetaReverseScanBounds(key proto.Key) (proto.Key, proto.Key, error) {
+func MetaReverseScanBounds(key roachpb.Key) (roachpb.Key, roachpb.Key, error) {
 	if err := validateRangeMetaKey(key); err != nil {
 		return nil, nil, err
 	}
 
-	if key.Equal(proto.KeyMin) || key.Equal(Meta1Prefix) {
+	if key.Equal(roachpb.KeyMin) || key.Equal(Meta1Prefix) {
 		return nil, nil, NewInvalidRangeMetaKeyError("KeyMin and Meta1Prefix can't be used as the key of reverse scan", key)
 	}
 	if key.Equal(Meta2Prefix) {
@@ -340,12 +340,12 @@ func MakeTablePrefix(tableID uint32) []byte {
 // through the cracks.
 // TODO(tschottdorf): ideally method on *BatchRequest. See #2198.
 // TODO(tschottdorf): return a keys.Span?
-func Range(ba proto.BatchRequest) (proto.Key, proto.Key) {
-	from := proto.KeyMax
-	to := proto.KeyMin
+func Range(ba roachpb.BatchRequest) (roachpb.Key, roachpb.Key) {
+	from := roachpb.KeyMax
+	to := roachpb.KeyMin
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
-		if req.Method() == proto.Noop {
+		if req.Method() == roachpb.Noop {
 			continue
 		}
 		h := req.Header()

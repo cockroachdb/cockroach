@@ -20,7 +20,7 @@ package cockroach.sql;
 option go_package = "sql";
 
 import "gogoproto/gogo.proto";
-import "cockroach/proto/data.proto";
+import "cockroach/roachpb/data.proto";
 import "cockroach/sql/driver/wire.proto";
 
 option (gogoproto.sizer_all) = true;
@@ -32,9 +32,9 @@ message Session {
   optional string database = 1 [(gogoproto.nullable) = false];
   optional int32 syntax = 2 [(gogoproto.nullable) = false];
   message Transaction {
-    optional proto.Transaction txn = 1 [(gogoproto.nullable) = false];
+    optional roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];
     // Timestamp to be used by SQL in the above transaction. Note: this is not the
-    // transaction timestamp in proto.Transaction above.
+    // transaction timestamp in roachpb.Transaction above.
     optional driver.Datum.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
   // Open transaction.

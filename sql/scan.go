@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
@@ -61,13 +61,13 @@ type qvalMap map[ColumnID]*qvalue
 type colKindMap map[ColumnID]ColumnType_Kind
 
 type span struct {
-	start proto.Key
-	end   proto.Key
+	start roachpb.Key
+	end   roachpb.Key
 }
 
 // prettyKey pretty-prints the specified key, skipping over the first skip
 // fields.
-func prettyKey(key proto.Key, skip int) string {
+func prettyKey(key roachpb.Key, skip int) string {
 	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
 		return fmt.Sprintf("index key missing table data prefix: %q vs %q",
 			key, keys.TableDataPrefix)
@@ -312,7 +312,7 @@ func (n *scanNode) initScan() bool {
 	if len(n.spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix.
-		start := proto.Key(MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
+		start := roachpb.Key(MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
 		n.spans = append(n.spans, span{
 			start: start,
 			end:   start.PrefixEnd(),

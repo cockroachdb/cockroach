@@ -21,20 +21,20 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 var (
-	aKey  = proto.Key("a")
-	bKey  = proto.Key("b")
-	aKeys = []proto.EncodedKey{
+	aKey  = roachpb.Key("a")
+	bKey  = roachpb.Key("b")
+	aKeys = []roachpb.EncodedKey{
 		MVCCEncodeVersionKey(aKey, makeTS(2E9, 0)),
 		MVCCEncodeVersionKey(aKey, makeTS(1E9, 1)),
 		MVCCEncodeVersionKey(aKey, makeTS(1E9, 0)),
 	}
-	bKeys = []proto.EncodedKey{
+	bKeys = []roachpb.EncodedKey{
 		MVCCEncodeVersionKey(bKey, makeTS(2E9, 0)),
 		MVCCEncodeVersionKey(bKey, makeTS(1E9, 0)),
 	}
@@ -58,22 +58,22 @@ func TestGarbageCollectorFilter(t *testing.T) {
 	d := serializedMVCCValue(true, t)
 	testData := []struct {
 		gc       *GarbageCollector
-		time     proto.Timestamp
-		keys     []proto.EncodedKey
+		time     roachpb.Timestamp
+		keys     []roachpb.EncodedKey
 		values   [][]byte
-		expDelTS proto.Timestamp
+		expDelTS roachpb.Timestamp
 	}{
-		{gcA, makeTS(0, 0), aKeys, [][]byte{n, n, n}, proto.ZeroTimestamp},
+		{gcA, makeTS(0, 0), aKeys, [][]byte{n, n, n}, roachpb.ZeroTimestamp},
 		{gcA, makeTS(0, 0), aKeys, [][]byte{d, d, d}, makeTS(2E9, 0)},
-		{gcB, makeTS(0, 0), bKeys, [][]byte{n, n}, proto.ZeroTimestamp},
+		{gcB, makeTS(0, 0), bKeys, [][]byte{n, n}, roachpb.ZeroTimestamp},
 		{gcB, makeTS(0, 0), bKeys, [][]byte{d, d}, makeTS(2E9, 0)},
-		{gcA, makeTS(1E9, 0), aKeys, [][]byte{n, n, n}, proto.ZeroTimestamp},
-		{gcB, makeTS(1E9, 0), bKeys, [][]byte{n, n}, proto.ZeroTimestamp},
-		{gcA, makeTS(2E9, 0), aKeys, [][]byte{n, n, n}, proto.ZeroTimestamp},
-		{gcB, makeTS(2E9, 0), bKeys, [][]byte{n, n}, proto.ZeroTimestamp},
+		{gcA, makeTS(1E9, 0), aKeys, [][]byte{n, n, n}, roachpb.ZeroTimestamp},
+		{gcB, makeTS(1E9, 0), bKeys, [][]byte{n, n}, roachpb.ZeroTimestamp},
+		{gcA, makeTS(2E9, 0), aKeys, [][]byte{n, n, n}, roachpb.ZeroTimestamp},
+		{gcB, makeTS(2E9, 0), bKeys, [][]byte{n, n}, roachpb.ZeroTimestamp},
 		{gcA, makeTS(3E9, 0), aKeys, [][]byte{n, n, n}, makeTS(1E9, 1)},
 		{gcA, makeTS(3E9, 0), aKeys, [][]byte{d, n, n}, makeTS(2E9, 0)},
-		{gcB, makeTS(3E9, 0), bKeys, [][]byte{n, n}, proto.ZeroTimestamp},
+		{gcB, makeTS(3E9, 0), bKeys, [][]byte{n, n}, roachpb.ZeroTimestamp},
 		{gcA, makeTS(4E9, 0), aKeys, [][]byte{n, n, n}, makeTS(1E9, 1)},
 		{gcB, makeTS(4E9, 0), bKeys, [][]byte{n, n}, makeTS(1E9, 0)},
 		{gcB, makeTS(4E9, 0), bKeys, [][]byte{d, n}, makeTS(2E9, 0)},

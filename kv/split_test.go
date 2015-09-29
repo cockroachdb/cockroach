@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -98,8 +98,8 @@ func TestRangeSplitMeta(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	splitKeys := []proto.Key{proto.Key("G"), keys.RangeMetaKey(proto.Key("F")),
-		keys.RangeMetaKey(proto.Key("K")), keys.RangeMetaKey(proto.Key("H"))}
+	splitKeys := []roachpb.Key{roachpb.Key("G"), keys.RangeMetaKey(roachpb.Key("F")),
+		keys.RangeMetaKey(roachpb.Key("K")), keys.RangeMetaKey(roachpb.Key("H"))}
 
 	// Execute the consecutive splits.
 	for _, splitKey := range splitKeys {
@@ -111,7 +111,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	}
 
 	if err := util.IsTrueWithin(func() bool {
-		if _, _, err := engine.MVCCScan(s.Eng, keys.LocalMax, proto.KeyMax, 0, proto.MaxTimestamp, true, nil); err != nil {
+		if _, _, err := engine.MVCCScan(s.Eng, keys.LocalMax, roachpb.KeyMax, 0, roachpb.MaxTimestamp, true, nil); err != nil {
 			log.Infof("mvcc scan should be clean: %s", err)
 			return false
 		}
@@ -134,7 +134,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	txnChannel := make(chan struct{}, 1000)
 
 	// Set five split keys, about evenly spaced along the range of random keys.
-	splitKeys := []proto.Key{proto.Key("G"), proto.Key("R"), proto.Key("a"), proto.Key("l"), proto.Key("s")}
+	splitKeys := []roachpb.Key{roachpb.Key("G"), roachpb.Key("R"), roachpb.Key("a"), roachpb.Key("l"), roachpb.Key("s")}
 
 	// Start up the concurrent goroutines which run transactions.
 	const concurrency = 10
@@ -210,7 +210,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// for timing of finishing the test writer and a possibly-ongoing
 	// asynchronous split.
 	if err := util.IsTrueWithin(func() bool {
-		if _, _, err := engine.MVCCScan(s.Eng, keys.LocalMax, proto.KeyMax, 0, proto.MaxTimestamp, true, nil); err != nil {
+		if _, _, err := engine.MVCCScan(s.Eng, keys.LocalMax, roachpb.KeyMax, 0, roachpb.MaxTimestamp, true, nil); err != nil {
 			log.Infof("mvcc scan should be clean: %s", err)
 			return false
 		}
@@ -227,7 +227,7 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	splitKey := proto.Key("aa")
+	splitKey := roachpb.Key("aa")
 	log.Infof("starting split at key %q...", splitKey)
 	if err := s.DB.AdminSplit(splitKey); err != nil {
 		t.Fatal(err)

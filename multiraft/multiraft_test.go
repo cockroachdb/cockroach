@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -51,7 +51,7 @@ type testCluster struct {
 	transport Transport
 	// groups maps group IDs to a list of members; members are
 	// specified in terms of node index, not node ID.
-	groups map[proto.RangeID][]int
+	groups map[roachpb.RangeID][]int
 }
 
 func newTestCluster(transport Transport, size int, stopper *stop.Stopper, t *testing.T) *testCluster {
@@ -62,7 +62,7 @@ func newTestCluster(transport Transport, size int, stopper *stop.Stopper, t *tes
 	cluster := &testCluster{
 		t:         t,
 		transport: transport,
-		groups:    map[proto.RangeID][]int{},
+		groups:    map[roachpb.RangeID][]int{},
 	}
 
 	for i := 0; i < size; i++ {
@@ -76,7 +76,7 @@ func newTestCluster(transport Transport, size int, stopper *stop.Stopper, t *tes
 			HeartbeatIntervalTicks: 1,
 			TickInterval:           time.Hour, // not in use
 		}
-		mr, err := NewMultiRaft(proto.NodeID(i+1), proto.StoreID(i+1), config, stopper)
+		mr, err := NewMultiRaft(roachpb.NodeID(i+1), roachpb.StoreID(i+1), config, stopper)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -101,7 +101,7 @@ func (c *testCluster) start() {
 
 // createGroup replicates a group consisting of numReplicas members,
 // the first being the node at index firstNode.
-func (c *testCluster) createGroup(groupID proto.RangeID, firstNode, numReplicas int) {
+func (c *testCluster) createGroup(groupID roachpb.RangeID, firstNode, numReplicas int) {
 	var replicaIDs []uint64
 	for i := 0; i < numReplicas; i++ {
 		nodeIndex := firstNode + i
@@ -140,7 +140,7 @@ func (c *testCluster) createGroup(groupID proto.RangeID, firstNode, numReplicas 
 // triggerElection starts an election in the specified group. In most situations
 // the given node will win the election. Unlike elect(), triggerElection() does not
 // wait for the election to resolve.
-func (c *testCluster) triggerElection(nodeIndex int, groupID proto.RangeID) {
+func (c *testCluster) triggerElection(nodeIndex int, groupID roachpb.RangeID) {
 	if err := c.nodes[nodeIndex].multiNode.Campaign(context.Background(), uint64(groupID)); err != nil {
 		c.t.Fatal(err)
 	}
@@ -164,12 +164,12 @@ func (c *testCluster) waitForElection(i int) *EventLeaderElection {
 // elect is a simplified wrapper around triggerElection and waitForElection which
 // waits for the election to complete on all members of a group.
 // TODO(bdarnell): make this work when membership has been changed after creation.
-func (c *testCluster) elect(leaderIndex int, groupID proto.RangeID) {
+func (c *testCluster) elect(leaderIndex int, groupID roachpb.RangeID) {
 	c.triggerElection(leaderIndex, groupID)
 	for _, i := range c.groups[groupID] {
 		el := c.waitForElection(i)
 		// With the in-memory storage used in these tests, replica and node IDs are interchangeable.
-		if el.ReplicaID != proto.ReplicaID(c.nodes[leaderIndex].nodeID) {
+		if el.ReplicaID != roachpb.ReplicaID(c.nodes[leaderIndex].nodeID) {
 			c.t.Fatalf("wrong leader elected; wanted node %d but got event %v", leaderIndex, el)
 		}
 		if el.GroupID != groupID {
@@ -186,7 +186,7 @@ func TestInitialLeaderElection(t *testing.T) {
 		log.Infof("testing leader election for node %v", leaderIndex)
 		stopper := stop.NewStopper()
 		cluster := newTestCluster(nil, 3, stopper, t)
-		groupID := proto.RangeID(1)
+		groupID := roachpb.RangeID(1)
 		cluster.createGroup(groupID, 0, 3)
 
 		cluster.elect(leaderIndex, groupID)
@@ -213,7 +213,7 @@ func TestLeaderElectionEvent(t *testing.T) {
 	stopper := stop.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
-	groupID := proto.RangeID(1)
+	groupID := roachpb.RangeID(1)
 	cluster.createGroup(groupID, 0, 3)
 
 	// Process a Ready with a new leader but no new commits.
@@ -272,7 +272,7 @@ func TestCommand(t *testing.T) {
 	stopper := stop.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
-	groupID := proto.RangeID(1)
+	groupID := roachpb.RangeID(1)
 	cluster.createGroup(groupID, 0, 3)
 	cluster.triggerElection(0, groupID)
 
@@ -294,7 +294,7 @@ func TestSlowStorage(t *testing.T) {
 	stopper := stop.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
-	groupID := proto.RangeID(1)
+	groupID := roachpb.RangeID(1)
 	cluster.createGroup(groupID, 0, 3)
 	cluster.triggerElection(0, groupID)
 
@@ -353,7 +353,7 @@ func TestMembershipChange(t *testing.T) {
 	defer stopper.Stop()
 
 	// Create a group with a single member, cluster.nodes[0].
-	groupID := proto.RangeID(1)
+	groupID := roachpb.RangeID(1)
 	cluster.createGroup(groupID, 0, 1)
 	// An automatic election is triggered since this is a single-node Raft group,
 	// so we don't need to call triggerElection.
@@ -375,10 +375,10 @@ func TestMembershipChange(t *testing.T) {
 	for i := 1; i < 4; i++ {
 		ch := cluster.nodes[0].ChangeGroupMembership(groupID, makeCommandID(),
 			raftpb.ConfChangeAddNode,
-			proto.ReplicaDescriptor{
+			roachpb.ReplicaDescriptor{
 				NodeID:    cluster.nodes[i].nodeID,
-				StoreID:   proto.StoreID(cluster.nodes[i].nodeID),
-				ReplicaID: proto.ReplicaID(cluster.nodes[i].nodeID),
+				StoreID:   roachpb.StoreID(cluster.nodes[i].nodeID),
+				ReplicaID: roachpb.ReplicaID(cluster.nodes[i].nodeID),
 			}, nil)
 		<-ch
 	}
@@ -453,7 +453,7 @@ func TestRemoveLeader(t *testing.T) {
 	})
 
 	// Create a group with three members.
-	groupID := proto.RangeID(1)
+	groupID := roachpb.RangeID(1)
 	cluster.createGroup(groupID, 0, groupSize)
 
 	// Move the group one node at a time from the first three nodes to
@@ -463,10 +463,10 @@ func TestRemoveLeader(t *testing.T) {
 		log.Infof("adding node %d", i+groupSize)
 		ch := cluster.nodes[i].ChangeGroupMembership(groupID, makeCommandID(),
 			raftpb.ConfChangeAddNode,
-			proto.ReplicaDescriptor{
+			roachpb.ReplicaDescriptor{
 				NodeID:    cluster.nodes[i+groupSize].nodeID,
-				StoreID:   proto.StoreID(cluster.nodes[i+groupSize].nodeID),
-				ReplicaID: proto.ReplicaID(cluster.nodes[i+groupSize].nodeID),
+				StoreID:   roachpb.StoreID(cluster.nodes[i+groupSize].nodeID),
+				ReplicaID: roachpb.ReplicaID(cluster.nodes[i+groupSize].nodeID),
 			}, nil)
 		if err := <-ch; err != nil {
 			t.Fatal(err)
@@ -475,10 +475,10 @@ func TestRemoveLeader(t *testing.T) {
 		log.Infof("removing node %d", i)
 		ch = cluster.nodes[i].ChangeGroupMembership(groupID, makeCommandID(),
 			raftpb.ConfChangeRemoveNode,
-			proto.ReplicaDescriptor{
+			roachpb.ReplicaDescriptor{
 				NodeID:    cluster.nodes[i].nodeID,
-				StoreID:   proto.StoreID(cluster.nodes[i].nodeID),
-				ReplicaID: proto.ReplicaID(cluster.nodes[i].nodeID),
+				StoreID:   roachpb.StoreID(cluster.nodes[i].nodeID),
+				ReplicaID: roachpb.ReplicaID(cluster.nodes[i].nodeID),
 			}, nil)
 		if err := <-ch; err != nil {
 			t.Fatal(err)
@@ -497,7 +497,7 @@ func TestRapidMembershipChange(t *testing.T) {
 	numCommit := int32(200)
 
 	cluster := newTestCluster(nil, 1, stopper, t)
-	groupID := proto.RangeID(1)
+	groupID := roachpb.RangeID(1)
 
 	cluster.createGroup(groupID, 0, 1 /* replicas */)
 	startSeq := int32(0) // updated atomically from now on

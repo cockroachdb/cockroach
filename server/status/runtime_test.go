@@ -20,7 +20,7 @@ package status
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -28,7 +28,7 @@ import (
 func TestRuntimeStatRecorder(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(100)
-	recorder := NewRuntimeStatRecorder(proto.NodeID(1), hlc.NewClock(manual.UnixNano))
+	recorder := NewRuntimeStatRecorder(roachpb.NodeID(1), hlc.NewClock(manual.UnixNano))
 
 	data := recorder.GetTimeSeriesData()
 	if a, e := len(data), 10; a != e {

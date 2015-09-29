@@ -29,7 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -40,13 +40,13 @@ import (
 // appropriate storage API command. It returns the response, an error,
 // and a slice of intents that were skipped during execution.
 // If an error is returned, any returned intents should still be resolved.
-func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto.Request) (proto.Response, []proto.Intent, error) {
+func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args roachpb.Request) (roachpb.Response, []roachpb.Intent, error) {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
 	header := args.Header()
 
-	if _, ok := args.(*proto.NoopRequest); ok {
-		return &proto.NoopResponse{}, nil, nil
+	if _, ok := args.(*roachpb.NoopRequest); ok {
+		return &roachpb.NoopResponse{}, nil, nil
 	}
 
 	if err := r.checkCmdHeader(header); err != nil {
@@ -60,80 +60,80 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args pro
 		}
 	}
 
-	var reply proto.Response
-	var intents []proto.Intent
+	var reply roachpb.Response
+	var intents []roachpb.Intent
 	var err error
 	switch tArgs := args.(type) {
-	case *proto.GetRequest:
-		var resp proto.GetResponse
+	case *roachpb.GetRequest:
+		var resp roachpb.GetResponse
 		resp, intents, err = r.Get(batch, *tArgs)
 		reply = &resp
-	case *proto.PutRequest:
-		var resp proto.PutResponse
+	case *roachpb.PutRequest:
+		var resp roachpb.PutResponse
 		resp, err = r.Put(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.ConditionalPutRequest:
-		var resp proto.ConditionalPutResponse
+	case *roachpb.ConditionalPutRequest:
+		var resp roachpb.ConditionalPutResponse
 		resp, err = r.ConditionalPut(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.IncrementRequest:
-		var resp proto.IncrementResponse
+	case *roachpb.IncrementRequest:
+		var resp roachpb.IncrementResponse
 		resp, err = r.Increment(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.DeleteRequest:
-		var resp proto.DeleteResponse
+	case *roachpb.DeleteRequest:
+		var resp roachpb.DeleteResponse
 		resp, err = r.Delete(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.DeleteRangeRequest:
-		var resp proto.DeleteRangeResponse
+	case *roachpb.DeleteRangeRequest:
+		var resp roachpb.DeleteRangeResponse
 		resp, err = r.DeleteRange(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.ScanRequest:
-		var resp proto.ScanResponse
+	case *roachpb.ScanRequest:
+		var resp roachpb.ScanResponse
 		resp, intents, err = r.Scan(batch, *tArgs)
 		reply = &resp
-	case *proto.ReverseScanRequest:
-		var resp proto.ReverseScanResponse
+	case *roachpb.ReverseScanRequest:
+		var resp roachpb.ReverseScanResponse
 		resp, intents, err = r.ReverseScan(batch, *tArgs)
 		reply = &resp
-	case *proto.EndTransactionRequest:
-		var resp proto.EndTransactionResponse
+	case *roachpb.EndTransactionRequest:
+		var resp roachpb.EndTransactionResponse
 		resp, intents, err = r.EndTransaction(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.RangeLookupRequest:
-		var resp proto.RangeLookupResponse
+	case *roachpb.RangeLookupRequest:
+		var resp roachpb.RangeLookupResponse
 		resp, intents, err = r.RangeLookup(batch, *tArgs)
 		reply = &resp
-	case *proto.HeartbeatTxnRequest:
-		var resp proto.HeartbeatTxnResponse
+	case *roachpb.HeartbeatTxnRequest:
+		var resp roachpb.HeartbeatTxnResponse
 		resp, err = r.HeartbeatTxn(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.GCRequest:
-		var resp proto.GCResponse
+	case *roachpb.GCRequest:
+		var resp roachpb.GCResponse
 		resp, err = r.GC(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.PushTxnRequest:
-		var resp proto.PushTxnResponse
+	case *roachpb.PushTxnRequest:
+		var resp roachpb.PushTxnResponse
 		resp, err = r.PushTxn(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.ResolveIntentRequest:
-		var resp proto.ResolveIntentResponse
+	case *roachpb.ResolveIntentRequest:
+		var resp roachpb.ResolveIntentResponse
 		resp, err = r.ResolveIntent(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.ResolveIntentRangeRequest:
-		var resp proto.ResolveIntentRangeResponse
+	case *roachpb.ResolveIntentRangeRequest:
+		var resp roachpb.ResolveIntentRangeResponse
 		resp, err = r.ResolveIntentRange(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.MergeRequest:
-		var resp proto.MergeResponse
+	case *roachpb.MergeRequest:
+		var resp roachpb.MergeResponse
 		resp, err = r.Merge(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.TruncateLogRequest:
-		var resp proto.TruncateLogResponse
+	case *roachpb.TruncateLogRequest:
+		var resp roachpb.TruncateLogResponse
 		resp, err = r.TruncateLog(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.LeaderLeaseRequest:
-		var resp proto.LeaderLeaseResponse
+	case *roachpb.LeaderLeaseRequest:
+		var resp roachpb.LeaderLeaseResponse
 		resp, err = r.LeaderLease(batch, ms, *tArgs)
 		reply = &resp
 	default:
@@ -162,7 +162,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args pro
 	// the node to be classified as without further uncertain reads for the
 	// remainder of the transaction.
 	// See the comment on proto.Transaction.CertainNodes.
-	if tErr, ok := err.(*proto.ReadWithinUncertaintyIntervalError); ok {
+	if tErr, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); ok {
 		// Note that we can use this node's clock (which may be different from
 		// other replicas') because this error attaches the existing timestamp
 		// to the node itself when retrying.
@@ -173,17 +173,17 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args pro
 }
 
 // Get returns the value for a specified key.
-func (r *Replica) Get(batch engine.Engine, args proto.GetRequest) (proto.GetResponse, []proto.Intent, error) {
-	var reply proto.GetResponse
+func (r *Replica) Get(batch engine.Engine, args roachpb.GetRequest) (roachpb.GetResponse, []roachpb.Intent, error) {
+	var reply roachpb.GetResponse
 
-	val, intents, err := engine.MVCCGet(batch, args.Key, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
+	val, intents, err := engine.MVCCGet(batch, args.Key, args.Timestamp, args.ReadConsistency == roachpb.CONSISTENT, args.Txn)
 	reply.Value = val
 	return reply, intents, err
 }
 
 // Put sets the value for a specified key.
-func (r *Replica) Put(batch engine.Engine, ms *engine.MVCCStats, args proto.PutRequest) (proto.PutResponse, error) {
-	var reply proto.PutResponse
+func (r *Replica) Put(batch engine.Engine, ms *engine.MVCCStats, args roachpb.PutRequest) (roachpb.PutResponse, error) {
+	var reply roachpb.PutResponse
 
 	return reply, engine.MVCCPut(batch, ms, args.Key, args.Timestamp, args.Value, args.Txn)
 }
@@ -191,8 +191,8 @@ func (r *Replica) Put(batch engine.Engine, ms *engine.MVCCStats, args proto.PutR
 // ConditionalPut sets the value for a specified key only if
 // the expected value matches. If not, the return value contains
 // the actual value.
-func (r *Replica) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, args proto.ConditionalPutRequest) (proto.ConditionalPutResponse, error) {
-	var reply proto.ConditionalPutResponse
+func (r *Replica) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, args roachpb.ConditionalPutRequest) (roachpb.ConditionalPutResponse, error) {
+	var reply roachpb.ConditionalPutResponse
 
 	return reply, engine.MVCCConditionalPut(batch, ms, args.Key, args.Timestamp, args.Value, args.ExpValue, args.Txn)
 }
@@ -200,8 +200,8 @@ func (r *Replica) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, args
 // Increment increments the value (interpreted as varint64 encoded) and
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
-func (r *Replica) Increment(batch engine.Engine, ms *engine.MVCCStats, args proto.IncrementRequest) (proto.IncrementResponse, error) {
-	var reply proto.IncrementResponse
+func (r *Replica) Increment(batch engine.Engine, ms *engine.MVCCStats, args roachpb.IncrementRequest) (roachpb.IncrementResponse, error) {
+	var reply roachpb.IncrementResponse
 
 	newVal, err := engine.MVCCIncrement(batch, ms, args.Key, args.Timestamp, args.Txn, args.Increment)
 	reply.NewValue = newVal
@@ -209,16 +209,16 @@ func (r *Replica) Increment(batch engine.Engine, ms *engine.MVCCStats, args prot
 }
 
 // Delete deletes the key and value specified by key.
-func (r *Replica) Delete(batch engine.Engine, ms *engine.MVCCStats, args proto.DeleteRequest) (proto.DeleteResponse, error) {
-	var reply proto.DeleteResponse
+func (r *Replica) Delete(batch engine.Engine, ms *engine.MVCCStats, args roachpb.DeleteRequest) (roachpb.DeleteResponse, error) {
+	var reply roachpb.DeleteResponse
 
 	return reply, engine.MVCCDelete(batch, ms, args.Key, args.Timestamp, args.Txn)
 }
 
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
-func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, args proto.DeleteRangeRequest) (proto.DeleteRangeResponse, error) {
-	var reply proto.DeleteRangeResponse
+func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, args roachpb.DeleteRangeRequest) (roachpb.DeleteRangeResponse, error) {
+	var reply roachpb.DeleteRangeResponse
 
 	numDel, err := engine.MVCCDeleteRange(batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, args.Timestamp, args.Txn)
 	reply.NumDeleted = numDel
@@ -227,21 +227,21 @@ func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, args pr
 
 // Scan scans the key range specified by start key through end key in ascending
 // order up to some maximum number of results.
-func (r *Replica) Scan(batch engine.Engine, args proto.ScanRequest) (proto.ScanResponse, []proto.Intent, error) {
-	var reply proto.ScanResponse
+func (r *Replica) Scan(batch engine.Engine, args roachpb.ScanRequest) (roachpb.ScanResponse, []roachpb.Intent, error) {
+	var reply roachpb.ScanResponse
 
-	rows, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
+	rows, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.ReadConsistency == roachpb.CONSISTENT, args.Txn)
 	reply.Rows = rows
 	return reply, intents, err
 }
 
 // ReverseScan scans the key range specified by start key through end key in
 // descending order up to some maximum number of results.
-func (r *Replica) ReverseScan(batch engine.Engine, args proto.ReverseScanRequest) (proto.ReverseScanResponse, []proto.Intent, error) {
-	var reply proto.ReverseScanResponse
+func (r *Replica) ReverseScan(batch engine.Engine, args roachpb.ReverseScanRequest) (roachpb.ReverseScanResponse, []roachpb.Intent, error) {
+	var reply roachpb.ReverseScanResponse
 
 	rows, intents, err := engine.MVCCReverseScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp,
-		args.ReadConsistency == proto.CONSISTENT, args.Txn)
+		args.ReadConsistency == roachpb.CONSISTENT, args.Txn)
 	reply.Rows = rows
 	return reply, intents, err
 }
@@ -250,8 +250,8 @@ func (r *Replica) ReverseScan(batch engine.Engine, args proto.ReverseScanRequest
 // transaction according to the args.Commit parameter.
 // TODO(tschottdorf): return nil reply on any error. The error itself
 // must be the authoritative source of information.
-func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args proto.EndTransactionRequest) (proto.EndTransactionResponse, []proto.Intent, error) {
-	var reply proto.EndTransactionResponse
+func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args roachpb.EndTransactionRequest) (roachpb.EndTransactionResponse, []roachpb.Intent, error) {
+	var reply roachpb.EndTransactionResponse
 
 	if args.Txn == nil {
 		return reply, nil, util.Errorf("no transaction specified to EndTransaction")
@@ -263,8 +263,8 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	// Fetch existing transaction if possible.
-	reply.Txn = &proto.Transaction{}
-	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, reply.Txn)
+	reply.Txn = &roachpb.Transaction{}
+	ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, reply.Txn)
 	if err != nil {
 		return reply, nil, err
 	}
@@ -288,28 +288,28 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 	// commit it or abort it (according to args.Commit), and also that the
 	// Timestamp and Epoch have not suffered regression.
 	if ok {
-		if reply.Txn.Status == proto.COMMITTED {
-			return reply, nil, proto.NewTransactionStatusError(*reply.Txn, "already committed")
-		} else if reply.Txn.Status == proto.ABORTED {
+		if reply.Txn.Status == roachpb.COMMITTED {
+			return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, "already committed")
+		} else if reply.Txn.Status == roachpb.ABORTED {
 			// If the transaction was previously aborted by a concurrent
 			// writer's push, any intents written are still open. It's only now
 			// that we know them, so we return them all for asynchronous
 			// resolution (we're currently not able to write on error, but
 			// see #1989).
-			return reply, args.Intents, proto.NewTransactionAbortedError(reply.Txn)
+			return reply, args.Intents, roachpb.NewTransactionAbortedError(reply.Txn)
 		} else if args.Txn.Epoch < reply.Txn.Epoch {
 			// TODO(tschottdorf): this leaves the Txn record (and more
 			// importantly, intents) dangling; we can't currently write on
 			// error. Would panic, but that makes TestEndTransactionWithErrors
 			// awkward.
-			return reply, nil, proto.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch))
+			return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch))
 		} else if args.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(args.Txn.OrigTimestamp) {
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
 			// than the original transaction timestamp.
 
 			// TODO(tschottdorf): see above comment on epoch regression.
-			return reply, nil, proto.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("timestamp regression: %s", args.Txn.OrigTimestamp))
+			return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("timestamp regression: %s", args.Txn.OrigTimestamp))
 		}
 
 		// Take max of requested epoch and existing epoch. The requester
@@ -334,12 +334,12 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 		// If the isolation level is SERIALIZABLE, return a transaction
 		// retry error if the commit timestamp isn't equal to the txn
 		// timestamp.
-		if args.Txn.Isolation == proto.SERIALIZABLE && !reply.Txn.Timestamp.Equal(args.Txn.OrigTimestamp) {
-			return reply, nil, proto.NewTransactionRetryError(reply.Txn)
+		if args.Txn.Isolation == roachpb.SERIALIZABLE && !reply.Txn.Timestamp.Equal(args.Txn.OrigTimestamp) {
+			return reply, nil, roachpb.NewTransactionRetryError(reply.Txn)
 		}
-		reply.Txn.Status = proto.COMMITTED
+		reply.Txn.Status = roachpb.COMMITTED
 	} else {
-		reply.Txn.Status = proto.ABORTED
+		reply.Txn.Status = roachpb.ABORTED
 	}
 
 	// Resolve any explicit intents. All that are local to this range get
@@ -353,7 +353,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 		desc = wideDesc
 	}
 
-	var externalIntents []proto.Intent
+	var externalIntents []roachpb.Intent
 	for _, intent := range args.Intents {
 		// Update the intent; we set the txn before (for handling
 		// TransactionAbortedError) but have changed the status in the
@@ -398,9 +398,9 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 			if log.V(1) {
 				log.Infof("auto-gc'ed %s (%d intents)", args.Txn.Short(), len(args.Intents))
 			}
-			err = engine.MVCCDelete(batch, ms, key, proto.ZeroTimestamp, nil /* txn */)
+			err = engine.MVCCDelete(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
 		} else {
-			err = engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil /* txn */, reply.Txn)
+			err = engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */, reply.Txn)
 		}
 		if err != nil {
 			return reply, nil, err
@@ -411,7 +411,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 	// triggers will set an error and prevent the batch from committing.
 	if ct := args.InternalCommitTrigger; ct != nil {
 		// Run appropriate trigger.
-		if reply.Txn.Status == proto.COMMITTED {
+		if reply.Txn.Status == roachpb.COMMITTED {
 			if ct.SplitTrigger != nil {
 				*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
 				if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
@@ -447,7 +447,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 // belonging to or outside of the descriptor's key range, and passing an intent
 // which begins range-local but ends non-local results in a panic.
 // TODO(tschottdorf) move to proto, make more gen-purpose.
-func intersectIntent(intent proto.Intent, desc proto.RangeDescriptor) (middle *proto.Intent, outside []proto.Intent) {
+func intersectIntent(intent roachpb.Intent, desc roachpb.RangeDescriptor) (middle *roachpb.Intent, outside []roachpb.Intent) {
 	start, end := desc.StartKey, desc.EndKey
 	if !intent.Key.Less(intent.EndKey) {
 		return
@@ -523,14 +523,14 @@ func intersectIntent(intent proto.Intent, desc proto.RangeDescriptor) (middle *p
 // are likely to be desired by their current workload. The Reverse flag
 // specifies whether descriptors are prefetched in descending or ascending
 // order.
-func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest) (proto.RangeLookupResponse, []proto.Intent, error) {
-	var reply proto.RangeLookupResponse
+func (r *Replica) RangeLookup(batch engine.Engine, args roachpb.RangeLookupRequest) (roachpb.RangeLookupResponse, []roachpb.Intent, error) {
+	var reply roachpb.RangeLookupResponse
 
 	rangeCount := int64(args.MaxRanges)
 	if rangeCount < 1 {
 		return reply, nil, util.Errorf("Range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
-	consistent := args.ReadConsistency != proto.INCONSISTENT
+	consistent := args.ReadConsistency != roachpb.INCONSISTENT
 	if consistent && args.ConsiderIntents {
 		return reply, nil, util.Errorf("can not read consistently and special-case intents")
 	}
@@ -540,15 +540,15 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		rangeCount = 1
 	}
 
-	var checkAndUnmarshal func(b []byte) (*proto.RangeDescriptor, error)
+	var checkAndUnmarshal func(b []byte) (*roachpb.RangeDescriptor, error)
 
-	var kvs []proto.KeyValue // kv descriptor pairs in scan order
-	var intents []proto.Intent
+	var kvs []roachpb.KeyValue // kv descriptor pairs in scan order
+	var intents []roachpb.Intent
 	if !args.Reverse {
 		// If scanning forward, there's no special "checking": Just decode the
 		// descriptor and return it.
-		checkAndUnmarshal = func(b []byte) (*proto.RangeDescriptor, error) {
-			var rd proto.RangeDescriptor
+		checkAndUnmarshal = func(b []byte) (*roachpb.RangeDescriptor, error) {
+			var rd roachpb.RangeDescriptor
 			if err := gogoproto.Unmarshal(b, &rd); err != nil {
 				return nil, err
 			}
@@ -592,8 +592,8 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		// In this case, checkAndUnmarshal is more complicated: It needs
 		// to weed out descriptors from the forward scan above, which could
 		// return a result or an intent we're not supposed to return.
-		checkAndUnmarshal = func(b []byte) (*proto.RangeDescriptor, error) {
-			var r proto.RangeDescriptor
+		checkAndUnmarshal = func(b []byte) (*roachpb.RangeDescriptor, error) {
+			var r roachpb.RangeDescriptor
 			if err := gogoproto.Unmarshal(b, &r); err != nil {
 				return nil, err
 			}
@@ -639,7 +639,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 		intents = append(intents, revIntents...)
 	}
 
-	var rds []proto.RangeDescriptor // corresponding unmarshaled descriptors
+	var rds []roachpb.RangeDescriptor // corresponding unmarshaled descriptors
 	if args.ConsiderIntents && len(intents) > 0 && rand.Intn(2) == 0 {
 		// NOTE (subtle): dangling intents on meta records are peculiar: It's not
 		// clear whether the intent or the previous value point to the correct
@@ -668,8 +668,8 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 			// If this is a descriptor we're allowed to return,
 			// do just that and call it a day.
 			if rd != nil {
-				kvs = []proto.KeyValue{{Key: key, Value: *val}}
-				rds = []proto.RangeDescriptor{*rd}
+				kvs = []roachpb.KeyValue{{Key: key, Value: *val}}
+				rds = []roachpb.RangeDescriptor{*rd}
 				break
 			}
 		}
@@ -704,8 +704,8 @@ func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest
 // HeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
-func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.HeartbeatTxnRequest) (proto.HeartbeatTxnResponse, error) {
-	var reply proto.HeartbeatTxnResponse
+func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, args roachpb.HeartbeatTxnRequest) (roachpb.HeartbeatTxnResponse, error) {
+	var reply roachpb.HeartbeatTxnResponse
 
 	if args.Txn == nil {
 		return reply, util.Errorf("no transaction specified to HeartbeatTxn")
@@ -716,8 +716,8 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, args p
 
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
-	var txn proto.Transaction
-	if ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, &txn); err != nil {
+	var txn roachpb.Transaction
+	if ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, &txn); err != nil {
 		return reply, err
 	} else if !ok {
 		// If no existing transaction record was found, initialize to a
@@ -726,14 +726,14 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, args p
 		txn = *args.Txn
 	}
 
-	if txn.Status == proto.PENDING {
+	if txn.Status == roachpb.PENDING {
 		if txn.LastHeartbeat == nil {
-			txn.LastHeartbeat = &proto.Timestamp{}
+			txn.LastHeartbeat = &roachpb.Timestamp{}
 		}
 		if txn.LastHeartbeat.Less(args.Header().Timestamp) {
 			*txn.LastHeartbeat = args.Header().Timestamp
 		}
-		if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &txn); err != nil {
+		if err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &txn); err != nil {
 			return reply, err
 		}
 	}
@@ -746,8 +746,8 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, args p
 // specified in the arguments. MVCCGarbageCollect is invoked on each
 // listed key along with the expiration timestamp. The GC metadata
 // specified in the args is persisted after GC.
-func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, args proto.GCRequest) (proto.GCResponse, error) {
-	var reply proto.GCResponse
+func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, args roachpb.GCRequest) (roachpb.GCResponse, error) {
+	var reply roachpb.GCResponse
 
 	// Garbage collect the specified keys by expiration timestamps.
 	if err := engine.MVCCGarbageCollect(batch, ms, args.Keys, args.Timestamp); err != nil {
@@ -756,7 +756,7 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, args proto.GCReq
 
 	// Store the GC metadata for this range.
 	key := keys.RangeGCMetadataKey(r.Desc().RangeID)
-	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &args.GCMeta); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &args.GCMeta); err != nil {
 		return reply, err
 	}
 	return reply, nil
@@ -796,8 +796,8 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, args proto.GCReq
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionPushError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
-func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.PushTxnRequest) (proto.PushTxnResponse, error) {
-	var reply proto.PushTxnResponse
+func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args roachpb.PushTxnRequest) (roachpb.PushTxnResponse, error) {
+	var reply roachpb.PushTxnResponse
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
 		return reply, util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
@@ -805,8 +805,8 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
 	// Fetch existing transaction if possible.
-	existTxn := &proto.Transaction{}
-	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp,
+	existTxn := &roachpb.Transaction{}
+	ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, existTxn)
 	if err != nil {
 		return reply, err
@@ -842,8 +842,8 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 		}
 	} else {
 		// Some sanity checks for case where we don't find a transaction record.
-		if args.PusheeTxn.Status != proto.PENDING {
-			return reply, proto.NewTransactionStatusError(args.PusherTxn,
+		if args.PusheeTxn.Status != roachpb.PENDING {
+			return reply, roachpb.NewTransactionStatusError(args.PusherTxn,
 				fmt.Sprintf("no txn persisted, yet intent has status %s", args.PusheeTxn.Status))
 		}
 		// The transaction doesn't exist yet on disk; use the supplied version.
@@ -851,14 +851,14 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	}
 
 	// If already committed or aborted, return success.
-	if reply.PusheeTxn.Status != proto.PENDING {
+	if reply.PusheeTxn.Status != roachpb.PENDING {
 		// Trivial noop.
 		return reply, nil
 	}
 
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
-	if args.PushType == proto.PUSH_TIMESTAMP && args.PushTo.Less(reply.PusheeTxn.Timestamp) {
+	if args.PushType == roachpb.PUSH_TIMESTAMP && args.PushTo.Less(reply.PusheeTxn.Timestamp) {
 		// Trivial noop.
 		return reply, nil
 	}
@@ -872,7 +872,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	if reply.PusheeTxn.LastHeartbeat == nil {
 		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
 	}
-	if args.Now.Equal(proto.ZeroTimestamp) {
+	if args.Now.Equal(roachpb.ZeroTimestamp) {
 		return reply, util.Errorf("the field Now must be provided")
 	}
 	// Compute heartbeat expiration (all replicas must see the same result).
@@ -884,12 +884,12 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 			log.Infof("pushing expired txn %s", reply.PusheeTxn)
 		}
 		pusherWins = true
-	} else if reply.PusheeTxn.Isolation == proto.SNAPSHOT && args.PushType == proto.PUSH_TIMESTAMP {
+	} else if reply.PusheeTxn.Isolation == roachpb.SNAPSHOT && args.PushType == roachpb.PUSH_TIMESTAMP {
 		if log.V(1) {
 			log.Infof("pushing timestamp for snapshot isolation txn")
 		}
 		pusherWins = true
-	} else if args.PushType == proto.CLEANUP_TXN {
+	} else if args.PushType == roachpb.CLEANUP_TXN {
 		// If just attempting to cleanup old or already-committed txns, don't push.
 		pusherWins = false
 	} else if reply.PusheeTxn.Priority < priority ||
@@ -904,7 +904,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	}
 
 	if !pusherWins {
-		err := proto.NewTransactionPushError(&args.PusherTxn, reply.PusheeTxn)
+		err := roachpb.NewTransactionPushError(&args.PusherTxn, reply.PusheeTxn)
 		if log.V(1) {
 			log.Info(err)
 		}
@@ -915,9 +915,9 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 	reply.PusheeTxn.UpgradePriority(priority - 1)
 
 	// If aborting transaction, set new status and return success.
-	if args.PushType == proto.ABORT_TXN {
-		reply.PusheeTxn.Status = proto.ABORTED
-	} else if args.PushType == proto.PUSH_TIMESTAMP {
+	if args.PushType == roachpb.ABORT_TXN {
+		reply.PusheeTxn.Status = roachpb.ABORTED
+	} else if args.PushType == roachpb.PUSH_TIMESTAMP {
 		// Otherwise, update timestamp to be one greater than the request's timestamp.
 		reply.PusheeTxn.Timestamp = args.PushTo
 		reply.PusheeTxn.Timestamp.Logical++
@@ -925,7 +925,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 
 	// Persist the pushed transaction using zero timestamp for inline value.
 	reply.PusheeTxn.Writing = true // required; see comment on the proto
-	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, reply.PusheeTxn); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, reply.PusheeTxn); err != nil {
 		return reply, err
 	}
 	return reply, nil
@@ -933,8 +933,8 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.
 
 // ResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
-func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, args proto.ResolveIntentRequest) (proto.ResolveIntentResponse, error) {
-	var reply proto.ResolveIntentResponse
+func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, args roachpb.ResolveIntentRequest) (roachpb.ResolveIntentResponse, error) {
+	var reply roachpb.ResolveIntentResponse
 
 	err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, args.Timestamp, &args.IntentTxn)
 	return reply, err
@@ -943,8 +943,8 @@ func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, args 
 // ResolveIntentRange resolves write intents in the specified
 // key range according to the status of the transaction which created it.
 func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
-	args proto.ResolveIntentRangeRequest) (proto.ResolveIntentRangeResponse, error) {
-	var reply proto.ResolveIntentRangeResponse
+	args roachpb.ResolveIntentRangeRequest) (roachpb.ResolveIntentRangeResponse, error) {
+	var reply roachpb.ResolveIntentRangeResponse
 
 	_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, args.Timestamp, &args.IntentTxn)
 	return reply, err
@@ -955,15 +955,15 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 // Cockroach for the efficient accumulation of certain values. Due to the
 // difficulty of making these operations transactional, merges are not currently
 // exposed directly to clients. Merged values are explicitly not MVCC data.
-func (r *Replica) Merge(batch engine.Engine, ms *engine.MVCCStats, args proto.MergeRequest) (proto.MergeResponse, error) {
-	var reply proto.MergeResponse
+func (r *Replica) Merge(batch engine.Engine, ms *engine.MVCCStats, args roachpb.MergeRequest) (roachpb.MergeResponse, error) {
+	var reply roachpb.MergeResponse
 
 	return reply, engine.MVCCMerge(batch, ms, args.Key, args.Value)
 }
 
 // TruncateLog discards a prefix of the raft log.
-func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, args proto.TruncateLogRequest) (proto.TruncateLogResponse, error) {
-	var reply proto.TruncateLogResponse
+func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, args roachpb.TruncateLogRequest) (roachpb.TruncateLogResponse, error) {
+	var reply roachpb.TruncateLogResponse
 
 	// args.Index is the first index to keep.
 	term, err := r.Term(args.Index - 1)
@@ -973,16 +973,16 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, args pr
 	rangeID := r.Desc().RangeID
 	start := keys.RaftLogKey(rangeID, 0)
 	end := keys.RaftLogKey(rangeID, args.Index)
-	if err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end), func(kv proto.RawKeyValue) (bool, error) {
+	if err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end), func(kv roachpb.RawKeyValue) (bool, error) {
 		return false, batch.Clear(kv.Key)
 	}); err != nil {
 		return reply, err
 	}
-	ts := proto.RaftTruncatedState{
+	ts := roachpb.RaftTruncatedState{
 		Index: args.Index - 1,
 		Term:  term,
 	}
-	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(rangeID), proto.ZeroTimestamp, nil, &ts)
+	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(rangeID), roachpb.ZeroTimestamp, nil, &ts)
 }
 
 // LeaderLease sets the leader lease for this range. The command fails
@@ -992,8 +992,8 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, args pr
 // holder, the expiration will be extended or shortened as indicated. For a new
 // lease, all duties required of the range leader are commenced, including
 // clearing the command queue and timestamp cache.
-func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args proto.LeaderLeaseRequest) (proto.LeaderLeaseResponse, error) {
-	var reply proto.LeaderLeaseResponse
+func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args roachpb.LeaderLeaseRequest) (roachpb.LeaderLeaseResponse, error) {
+	var reply roachpb.LeaderLeaseResponse
 
 	r.Lock()
 	defer r.Unlock()
@@ -1002,7 +1002,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
 	effectiveStart := args.Lease.Start
 	// We return this error in "normal" lease-overlap related failures.
-	rErr := &proto.LeaseRejectedError{
+	rErr := &roachpb.LeaseRejectedError{
 		Existing:  *prevLease,
 		Requested: args.Lease,
 	}
@@ -1056,7 +1056,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 	rangeID := desc.RangeID
 
 	// Store the lease to disk & in-memory.
-	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(rangeID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(&args.Lease))
@@ -1093,13 +1093,13 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args pr
 // affirmative the descriptor is passed to AdminSplit, which performs a
 // Conditional Put on the RangeDescriptor to ensure that no other operation has
 // modified the range in the time the decision was being made.
-func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDescriptor) (proto.AdminSplitResponse, error) {
-	var reply proto.AdminSplitResponse
+func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.RangeDescriptor) (roachpb.AdminSplitResponse, error) {
+	var reply roachpb.AdminSplitResponse
 
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
 	// other commands.
-	splitKey := proto.Key(args.SplitKey)
+	splitKey := roachpb.Key(args.SplitKey)
 	if len(splitKey) == 0 {
 		snap := r.rm.NewSnapshot()
 		defer snap.Close()
@@ -1117,7 +1117,7 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 	}
 	// Verify some properties of split key.
 	if !r.ContainsKey(splitKey) {
-		return reply, proto.NewRangeKeyMismatchError(splitKey, splitKey, desc)
+		return reply, roachpb.NewRangeKeyMismatchError(splitKey, splitKey, desc)
 	}
 	if !engine.IsValidSplitKey(splitKey) {
 		return reply, util.Errorf("cannot split range at key %s", splitKey)
@@ -1163,10 +1163,10 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
-		b.InternalAddRequest(&proto.EndTransactionRequest{
+		b.InternalAddRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
-			InternalCommitTrigger: &proto.InternalCommitTrigger{
-				SplitTrigger: &proto.SplitTrigger{
+			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				SplitTrigger: &roachpb.SplitTrigger{
 					UpdatedDesc: updatedDesc,
 					NewDesc:     *newDesc,
 				},
@@ -1184,7 +1184,7 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest, desc *proto.RangeDesc
 // transaction. It copies the response cache for the new range and
 // recomputes stats for both the existing, updated range and the new
 // range.
-func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) error {
+func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger) error {
 	desc := r.Desc()
 	if !bytes.Equal(desc.StartKey, split.UpdatedDesc.StartKey) ||
 		!bytes.Equal(desc.EndKey, split.NewDesc.EndKey) {
@@ -1198,7 +1198,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) e
 	if err != nil {
 		return util.Errorf("unable to fetch GC metadata: %s", err)
 	}
-	if err := engine.MVCCPutProto(batch, nil, keys.RangeGCMetadataKey(split.NewDesc.RangeID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
+	if err := engine.MVCCPutProto(batch, nil, keys.RangeGCMetadataKey(split.NewDesc.RangeID), roachpb.ZeroTimestamp, nil, gcMeta); err != nil {
 		return util.Errorf("unable to copy GC metadata: %s", err)
 	}
 
@@ -1207,7 +1207,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) e
 	if err != nil {
 		return util.Errorf("unable to fetch last verification timestamp: %s", err)
 	}
-	if err := engine.MVCCPutProto(batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), proto.ZeroTimestamp, nil, &verifyTS); err != nil {
+	if err := engine.MVCCPutProto(batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), roachpb.ZeroTimestamp, nil, &verifyTS); err != nil {
 		return util.Errorf("unable to copy last verification timestamp: %s", err)
 	}
 
@@ -1273,10 +1273,10 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) e
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
-func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.RangeDescriptor) (proto.AdminMergeResponse, error) {
-	var reply proto.AdminMergeResponse
+func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roachpb.RangeDescriptor) (roachpb.AdminMergeResponse, error) {
+	var reply roachpb.AdminMergeResponse
 
-	if origLeftDesc.EndKey.Equal(proto.KeyMax) {
+	if origLeftDesc.EndKey.Equal(roachpb.KeyMax) {
 		// Merging the final range doesn't make sense.
 		return reply, util.Errorf("cannot merge final range")
 	}
@@ -1316,7 +1316,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.R
 
 		// Do a consistent read of the second range descriptor.
 		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
-		var rightDesc proto.RangeDescriptor
+		var rightDesc roachpb.RangeDescriptor
 		if err := txn.GetProto(rightDescKey, &rightDesc); err != nil {
 			return err
 		}
@@ -1351,10 +1351,10 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.R
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
-		b.InternalAddRequest(&proto.EndTransactionRequest{
+		b.InternalAddRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
-			InternalCommitTrigger: &proto.InternalCommitTrigger{
-				MergeTrigger: &proto.MergeTrigger{
+			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				MergeTrigger: &roachpb.MergeTrigger{
 					UpdatedDesc:     updatedLeftDesc,
 					SubsumedRangeID: rightDesc.RangeID,
 				},
@@ -1370,7 +1370,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest, origLeftDesc *proto.R
 
 // mergeTrigger is called on a successful commit of an AdminMerge
 // transaction. It recomputes stats for the receiving range.
-func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) error {
+func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger) error {
 	desc := r.Desc()
 	if !bytes.Equal(desc.StartKey, merge.UpdatedDesc.StartKey) {
 		return util.Errorf("range and updated range start keys do not match: %s != %s",
@@ -1393,7 +1393,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) e
 
 	// Remove the subsumed range's metadata.
 	localRangeKeyPrefix := keys.MakeRangeIDPrefix(merge.SubsumedRangeID)
-	if _, err := engine.MVCCDeleteRange(batch, nil, localRangeKeyPrefix, localRangeKeyPrefix.PrefixEnd(), 0, proto.ZeroTimestamp, nil); err != nil {
+	if _, err := engine.MVCCDeleteRange(batch, nil, localRangeKeyPrefix, localRangeKeyPrefix.PrefixEnd(), 0, roachpb.ZeroTimestamp, nil); err != nil {
 		return util.Errorf("cannot remove range metadata %s", err)
 	}
 
@@ -1426,7 +1426,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) e
 	return nil
 }
 
-func (r *Replica) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
+func (r *Replica) changeReplicasTrigger(change *roachpb.ChangeReplicasTrigger) error {
 	defer r.clearPendingChangeReplicas()
 	cpy := *r.Desc()
 	cpy.Replicas = change.UpdatedReplicas
@@ -1435,7 +1435,7 @@ func (r *Replica) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) err
 		return err
 	}
 	// If we're removing the current replica, add it to the range GC queue.
-	if change.ChangeType == proto.REMOVE_REPLICA && r.rm.StoreID() == change.Replica.StoreID {
+	if change.ChangeType == roachpb.REMOVE_REPLICA && r.rm.StoreID() == change.Replica.StoreID {
 		if err := r.rm.rangeGCQueue().Add(r, 1.0); err != nil {
 			// Log the error; this shouldn't prevent the commit; the range
 			// will be GC'd eventually.
@@ -1451,7 +1451,7 @@ func (r *Replica) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) err
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
-func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.ReplicaDescriptor, desc *proto.RangeDescriptor) error {
+func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc *roachpb.RangeDescriptor) error {
 	r.Lock()
 	for r.pendingReplica.value.ReplicaID != 0 {
 		r.pendingReplica.Wait()
@@ -1459,7 +1459,7 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 
 	// Validate the request and prepare the new descriptor.
 	updatedDesc := *desc
-	updatedDesc.Replicas = append([]proto.ReplicaDescriptor{}, desc.Replicas...)
+	updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor{}, desc.Replicas...)
 	found := -1       // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
 	for i, existingRep := range desc.Replicas {
@@ -1470,7 +1470,7 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 			break
 		}
 	}
-	if changeType == proto.ADD_REPLICA {
+	if changeType == roachpb.ADD_REPLICA {
 		// If the replica exists on the remote node, no matter in which store,
 		// abort the replica add.
 		if nodeUsed {
@@ -1484,7 +1484,7 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 		// We need to be able to look up replica information before the change
 		// is official.
 		r.pendingReplica.value = replica
-	} else if changeType == proto.REMOVE_REPLICA {
+	} else if changeType == roachpb.REMOVE_REPLICA {
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
 		if found == -1 {
@@ -1514,10 +1514,10 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
-		b.InternalAddRequest(&proto.EndTransactionRequest{
+		b.InternalAddRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
-			InternalCommitTrigger: &proto.InternalCommitTrigger{
-				ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
+			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
 					NodeID:          replica.NodeID,
 					StoreID:         replica.StoreID,
 					ChangeType:      changeType,
@@ -1538,19 +1538,19 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 
 func (r *Replica) clearPendingChangeReplicas() {
 	r.Lock()
-	r.pendingReplica.value = proto.ReplicaDescriptor{}
+	r.pendingReplica.value = roachpb.ReplicaDescriptor{}
 	r.pendingReplica.Broadcast()
 	r.Unlock()
 }
 
 // replicaSetsEqual is used in AdminMerge to ensure that the ranges are
 // all collocate on the same set of replicas.
-func replicaSetsEqual(a, b []proto.ReplicaDescriptor) bool {
+func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 	if len(a) != len(b) {
 		return false
 	}
 
-	set := make(map[proto.StoreID]int)
+	set := make(map[roachpb.StoreID]int)
 	for _, replica := range a {
 		set[replica.StoreID]++
 	}
@@ -1582,7 +1582,7 @@ func replicaSetsEqual(a, b []proto.ReplicaDescriptor) bool {
 // TODO(bdarnell): store the entire RangeDescriptor in the CommitTrigger
 // and load it automatically instead of reconstructing individual
 // changes.
-func updateRangeDescriptor(b *client.Batch, descKey proto.Key, oldDesc, newDesc *proto.RangeDescriptor) error {
+func updateRangeDescriptor(b *client.Batch, descKey roachpb.Key, oldDesc, newDesc *roachpb.RangeDescriptor) error {
 	if err := newDesc.Validate(); err != nil {
 		return err
 	}

@@ -19,7 +19,7 @@ import math "math"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
-import github_com_cockroachdb_cockroach_proto "github.com/cockroachdb/cockroach/proto"
+import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
 import io "io"
 
@@ -44,11 +44,11 @@ type LogEntry struct {
 	Format string         `protobuf:"bytes,6,opt,name=format" json:"format"`
 	Args   []LogEntry_Arg `protobuf:"bytes,7,rep,name=args" json:"args"`
 	// Optional parameters which may be set with log entry.
-	NodeID  *github_com_cockroachdb_cockroach_proto.NodeID  `protobuf:"varint,8,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id,omitempty"`
-	StoreID *github_com_cockroachdb_cockroach_proto.StoreID `protobuf:"varint,9,opt,name=store_id,casttype=github.com/cockroachdb/cockroach/proto.StoreID" json:"store_id,omitempty"`
-	RangeID *github_com_cockroachdb_cockroach_proto.RangeID `protobuf:"varint,10,opt,name=range_id,casttype=github.com/cockroachdb/cockroach/proto.RangeID" json:"range_id,omitempty"`
-	Method  *github_com_cockroachdb_cockroach_proto.Method  `protobuf:"varint,11,opt,name=method,casttype=github.com/cockroachdb/cockroach/proto.Method" json:"method,omitempty"`
-	Key     github_com_cockroachdb_cockroach_proto.Key      `protobuf:"bytes,12,opt,name=key,casttype=github.com/cockroachdb/cockroach/proto.Key" json:"key,omitempty"`
+	NodeID  *github_com_cockroachdb_cockroach_roachpb.NodeID  `protobuf:"varint,8,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/roachpb.NodeID" json:"node_id,omitempty"`
+	StoreID *github_com_cockroachdb_cockroach_roachpb.StoreID `protobuf:"varint,9,opt,name=store_id,casttype=github.com/cockroachdb/cockroach/roachpb.StoreID" json:"store_id,omitempty"`
+	RangeID *github_com_cockroachdb_cockroach_roachpb.RangeID `protobuf:"varint,10,opt,name=range_id,casttype=github.com/cockroachdb/cockroach/roachpb.RangeID" json:"range_id,omitempty"`
+	Method  *github_com_cockroachdb_cockroach_roachpb.Method  `protobuf:"varint,11,opt,name=method,casttype=github.com/cockroachdb/cockroach/roachpb.Method" json:"method,omitempty"`
+	Key     github_com_cockroachdb_cockroach_roachpb.Key      `protobuf:"bytes,12,opt,name=key,casttype=github.com/cockroachdb/cockroach/roachpb.Key" json:"key,omitempty"`
 	// Stack traces if requested.
 	Stacks []byte `protobuf:"bytes,13,opt,name=stacks" json:"stacks,omitempty"`
 }
@@ -106,35 +106,35 @@ func (m *LogEntry) GetArgs() []LogEntry_Arg {
 	return nil
 }
 
-func (m *LogEntry) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
+func (m *LogEntry) GetNodeID() github_com_cockroachdb_cockroach_roachpb.NodeID {
 	if m != nil && m.NodeID != nil {
 		return *m.NodeID
 	}
 	return 0
 }
 
-func (m *LogEntry) GetStoreID() github_com_cockroachdb_cockroach_proto.StoreID {
+func (m *LogEntry) GetStoreID() github_com_cockroachdb_cockroach_roachpb.StoreID {
 	if m != nil && m.StoreID != nil {
 		return *m.StoreID
 	}
 	return 0
 }
 
-func (m *LogEntry) GetRangeID() github_com_cockroachdb_cockroach_proto.RangeID {
+func (m *LogEntry) GetRangeID() github_com_cockroachdb_cockroach_roachpb.RangeID {
 	if m != nil && m.RangeID != nil {
 		return *m.RangeID
 	}
 	return 0
 }
 
-func (m *LogEntry) GetMethod() github_com_cockroachdb_cockroach_proto.Method {
+func (m *LogEntry) GetMethod() github_com_cockroachdb_cockroach_roachpb.Method {
 	if m != nil && m.Method != nil {
 		return *m.Method
 	}
 	return 0
 }
 
-func (m *LogEntry) GetKey() github_com_cockroachdb_cockroach_proto.Key {
+func (m *LogEntry) GetKey() github_com_cockroachdb_cockroach_roachpb.Key {
 	if m != nil {
 		return m.Key
 	}
@@ -587,7 +587,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NodeID", wireType)
 			}
-			var v github_com_cockroachdb_cockroach_proto.NodeID
+			var v github_com_cockroachdb_cockroach_roachpb.NodeID
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowLog
@@ -597,7 +597,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				v |= (github_com_cockroachdb_cockroach_proto.NodeID(b) & 0x7F) << shift
+				v |= (github_com_cockroachdb_cockroach_roachpb.NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -607,7 +607,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field StoreID", wireType)
 			}
-			var v github_com_cockroachdb_cockroach_proto.StoreID
+			var v github_com_cockroachdb_cockroach_roachpb.StoreID
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowLog
@@ -617,7 +617,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				v |= (github_com_cockroachdb_cockroach_proto.StoreID(b) & 0x7F) << shift
+				v |= (github_com_cockroachdb_cockroach_roachpb.StoreID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -627,7 +627,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
 			}
-			var v github_com_cockroachdb_cockroach_proto.RangeID
+			var v github_com_cockroachdb_cockroach_roachpb.RangeID
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowLog
@@ -637,7 +637,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				v |= (github_com_cockroachdb_cockroach_proto.RangeID(b) & 0x7F) << shift
+				v |= (github_com_cockroachdb_cockroach_roachpb.RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -647,7 +647,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Method", wireType)
 			}
-			var v github_com_cockroachdb_cockroach_proto.Method
+			var v github_com_cockroachdb_cockroach_roachpb.Method
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowLog
@@ -657,7 +657,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				v |= (github_com_cockroachdb_cockroach_proto.Method(b) & 0x7F) << shift
+				v |= (github_com_cockroachdb_cockroach_roachpb.Method(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

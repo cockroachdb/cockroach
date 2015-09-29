@@ -33,7 +33,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
@@ -525,8 +525,8 @@ func TestStoreStatusResponse(t *testing.T) {
 			t.Fatal(err)
 		}
 		// The capacities fluctuate a lot, so drop them for the deep equal.
-		desc.Capacity = proto.StoreCapacity{}
-		storeStatus.Desc.Capacity = proto.StoreCapacity{}
+		desc.Capacity = roachpb.StoreCapacity{}
+		storeStatus.Desc.Capacity = roachpb.StoreCapacity{}
 		if !reflect.DeepEqual(*desc, storeStatus.Desc) {
 			t.Errorf("store status descriptors are not equal\nexpected:%+v\nactual:%+v\n", *desc, storeStatus.Desc)
 		}
@@ -537,7 +537,7 @@ func TestStoreStatusResponse(t *testing.T) {
 		if err := json.Unmarshal(requestBody, &fetchedStoreStatus); err != nil {
 			t.Fatal(err)
 		}
-		fetchedStoreStatus.Desc.Capacity = proto.StoreCapacity{}
+		fetchedStoreStatus.Desc.Capacity = roachpb.StoreCapacity{}
 		if !reflect.DeepEqual(*desc, fetchedStoreStatus.Desc) {
 			t.Errorf("store status descriptors are not equal\nexpected:%+v\nactual:%+v\n", *desc, fetchedStoreStatus.Desc)
 		}
@@ -558,7 +558,7 @@ func TestMetricsRecording(t *testing.T) {
 
 	checkTimeSeriesKey := func(now int64, keyName string) error {
 		key := ts.MakeDataKey(keyName, "", ts.Resolution10s, now)
-		data := proto.InternalTimeSeriesData{}
+		data := roachpb.InternalTimeSeriesData{}
 		return tsrv.db.GetProto(key, &data)
 	}
 

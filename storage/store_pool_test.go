@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
@@ -36,15 +36,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-var uniqueStore = []*proto.StoreDescriptor{
+var uniqueStore = []*roachpb.StoreDescriptor{
 	{
 		StoreID: 2,
-		Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
-		Node: proto.NodeDescriptor{
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
+		Node: roachpb.NodeDescriptor{
 			NodeID: 2,
-			Attrs:  proto.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
-		Capacity: proto.StoreCapacity{
+		Capacity: roachpb.StoreCapacity{
 			Capacity:  100,
 			Available: 200,
 		},
@@ -88,7 +88,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 }
 
 // waitUntilDead will block until the specified store is marked as dead.
-func waitUntilDead(t *testing.T, sp *StorePool, storeID proto.StoreID) {
+func waitUntilDead(t *testing.T, sp *StorePool, storeID roachpb.StoreID) {
 	util.SucceedsWithin(t, 10*TestTimeUntilStoreDead, func() error {
 		sp.mu.RLock()
 		defer sp.mu.RUnlock()
@@ -193,7 +193,7 @@ func TestStorePoolDies(t *testing.T) {
 // verifyStoreList ensures that the returned list of stores is correct.
 func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int) error {
 	var actual []int
-	sl := sp.getStoreList(proto.Attributes{Attrs: requiredAttrs}, false)
+	sl := sp.getStoreList(roachpb.Attributes{Attrs: requiredAttrs}, false)
 	for _, store := range sl.stores {
 		actual = append(actual, int(store.StoreID))
 	}
@@ -214,37 +214,37 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
-	if sl := sp.getStoreList(proto.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
+	if sl := sp.getStoreList(roachpb.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
 		t.Errorf("expected no stores, instead %+v", sl.stores)
 	}
 
-	matchingStore := proto.StoreDescriptor{
+	matchingStore := roachpb.StoreDescriptor{
 		StoreID: 1,
-		Node:    proto.NodeDescriptor{NodeID: 1},
-		Attrs:   proto.Attributes{Attrs: required},
+		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{Attrs: required},
 	}
-	supersetStore := proto.StoreDescriptor{
+	supersetStore := roachpb.StoreDescriptor{
 		StoreID: 2,
-		Node:    proto.NodeDescriptor{NodeID: 1},
-		Attrs:   proto.Attributes{Attrs: append(required, "db")},
+		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{Attrs: append(required, "db")},
 	}
-	unmatchingStore := proto.StoreDescriptor{
+	unmatchingStore := roachpb.StoreDescriptor{
 		StoreID: 3,
-		Node:    proto.NodeDescriptor{NodeID: 1},
-		Attrs:   proto.Attributes{Attrs: []string{"ssd", "otherdc"}},
+		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd", "otherdc"}},
 	}
-	emptyStore := proto.StoreDescriptor{
+	emptyStore := roachpb.StoreDescriptor{
 		StoreID: 4,
-		Node:    proto.NodeDescriptor{NodeID: 1},
-		Attrs:   proto.Attributes{},
+		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{},
 	}
-	deadStore := proto.StoreDescriptor{
+	deadStore := roachpb.StoreDescriptor{
 		StoreID: 5,
-		Node:    proto.NodeDescriptor{NodeID: 1},
-		Attrs:   proto.Attributes{Attrs: required},
+		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{Attrs: required},
 	}
 
-	sg.GossipStores([]*proto.StoreDescriptor{
+	sg.GossipStores([]*roachpb.StoreDescriptor{
 		&matchingStore,
 		&supersetStore,
 		&unmatchingStore,
@@ -264,7 +264,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	waitUntilDead(t, sp, 5)
 
 	// Resurrect all stores except for 5.
-	sg.GossipStores([]*proto.StoreDescriptor{
+	sg.GossipStores([]*roachpb.StoreDescriptor{
 		&matchingStore,
 		&supersetStore,
 		&unmatchingStore,
@@ -286,11 +286,11 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
-	if detail := sp.getStoreDetail(proto.StoreID(1)); detail.dead {
+	if detail := sp.getStoreDetail(roachpb.StoreID(1)); detail.dead {
 		t.Errorf("Present storeDetail came back as dead, expected it to be alive. %+v", detail)
 	}
 
-	if detail := sp.getStoreDetail(proto.StoreID(2)); detail.dead {
+	if detail := sp.getStoreDetail(roachpb.StoreID(2)); detail.dead {
 		t.Errorf("Absent storeDetail came back as dead, expected it to be alive. %+v", detail)
 	}
 }
@@ -301,30 +301,30 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
 
-	stores := []*proto.StoreDescriptor{
+	stores := []*roachpb.StoreDescriptor{
 		{
 			StoreID: 1,
-			Node:    proto.NodeDescriptor{NodeID: 1},
+			Node:    roachpb.NodeDescriptor{NodeID: 1},
 		},
 		{
 			StoreID: 2,
-			Node:    proto.NodeDescriptor{NodeID: 2},
+			Node:    roachpb.NodeDescriptor{NodeID: 2},
 		},
 		{
 			StoreID: 3,
-			Node:    proto.NodeDescriptor{NodeID: 3},
+			Node:    roachpb.NodeDescriptor{NodeID: 3},
 		},
 		{
 			StoreID: 4,
-			Node:    proto.NodeDescriptor{NodeID: 4},
+			Node:    roachpb.NodeDescriptor{NodeID: 4},
 		},
 		{
 			StoreID: 5,
-			Node:    proto.NodeDescriptor{NodeID: 5},
+			Node:    roachpb.NodeDescriptor{NodeID: 5},
 		},
 	}
 
-	replicas := []proto.ReplicaDescriptor{
+	replicas := []roachpb.ReplicaDescriptor{
 		{
 			NodeID:    1,
 			StoreID:   1,

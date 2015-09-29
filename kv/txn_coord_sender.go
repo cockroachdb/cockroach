@@ -28,7 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
@@ -62,7 +62,7 @@ const statusLogInterval = 5 * time.Second
 // periodically on their own.
 type txnMetadata struct {
 	// txn is a copy of the transaction record, updated with each request.
-	txn proto.Transaction
+	txn roachpb.Transaction
 
 	// keys stores key ranges affected by this transaction through this
 	// coordinator. By keeping this record, the coordinator will be able
@@ -92,7 +92,7 @@ type txnMetadata struct {
 // addKeyRange adds the specified key range to the interval cache,
 // taking care not to add this range if existing entries already
 // completely cover the range.
-func (tm *txnMetadata) addKeyRange(start, end proto.Key) {
+func (tm *txnMetadata) addKeyRange(start, end roachpb.Key) {
 	// This gives us a memory-efficient end key if end is empty.
 	// The most common case for keys in the intents interval map
 	// is for single keys. However, the interval cache requires
@@ -137,13 +137,13 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 
 // intents collects the intents to be resolved for the transaction. It does
 // not create copies, so the caller must not alter the returned data.
-func (tm *txnMetadata) intents() []proto.Intent {
-	intents := make([]proto.Intent, 0, tm.keys.Len())
-	for _, o := range tm.keys.GetOverlaps(proto.KeyMin, proto.KeyMax) {
-		intent := proto.Intent{
-			Key: o.Key.Start().(proto.Key),
+func (tm *txnMetadata) intents() []roachpb.Intent {
+	intents := make([]roachpb.Intent, 0, tm.keys.Len())
+	for _, o := range tm.keys.GetOverlaps(roachpb.KeyMin, roachpb.KeyMax) {
+		intent := roachpb.Intent{
+			Key: o.Key.Start().(roachpb.Key),
 		}
-		if endKey := o.Key.End().(proto.Key); !intent.Key.IsPrev(endKey) {
+		if endKey := o.Key.End().(roachpb.Key); !intent.Key.IsPrev(endKey) {
 			intent.EndKey = endKey
 		}
 		intents = append(intents, intent)
@@ -292,11 +292,11 @@ func (tc *TxnCoordSender) startStats() {
 // It is checked that the individual call does not have a UserPriority
 // or Txn set that differs from the batch's.
 // TODO(tschottdorf): will go with #2143.
-func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
+func updateForBatch(args roachpb.Request, bHeader roachpb.RequestHeader) error {
 	// Disallow transaction, user and priority on individual calls, unless
 	// equal.
 	aHeader := args.Header()
-	if aPrio := aHeader.GetUserPriority(); aPrio != proto.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
+	if aPrio := aHeader.GetUserPriority(); aPrio != roachpb.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
 		return util.Errorf("conflicting user priority on call in batch")
 	}
 	aHeader.UserPriority = bHeader.UserPriority
@@ -313,7 +313,7 @@ func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 // transaction's interval tree of key ranges for eventual cleanup via resolved
 // write intents; they're tagged to an outgoing EndTransaction request, with
 // the receiving replica in charge of resolving them.
-func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	tc.maybeBeginTxn(&ba)
 	ba.CmdID = ba.GetOrCreateCmdID(tc.clock.PhysicalNow())
 	var startNS int64
@@ -330,7 +330,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 	for _, arg := range ba.Requests {
 		trace.Event(fmt.Sprintf("%T", arg.GetValue()))
 		if err := updateForBatch(arg.GetInner(), ba.RequestHeader); err != nil {
-			return nil, proto.NewError(err)
+			return nil, roachpb.NewError(err)
 		}
 	}
 
@@ -346,7 +346,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 			_, ok := tc.txns[id]
 			tc.Unlock()
 			if !ok {
-				return nil, proto.NewError(util.Errorf("transaction must not write on multiple coordinators"))
+				return nil, roachpb.NewError(util.Errorf("transaction must not write on multiple coordinators"))
 			}
 		}
 
@@ -359,8 +359,8 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 			ba.Timestamp = ba.Txn.Timestamp
 		}
 
-		if rArgs, ok := ba.GetArg(proto.EndTransaction); ok {
-			et := rArgs.(*proto.EndTransactionRequest)
+		if rArgs, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			et := rArgs.(*roachpb.EndTransactionRequest)
 			// Remember when EndTransaction started in case we want to
 			// be linearizable.
 			startNS = tc.clock.PhysicalNow()
@@ -368,10 +368,10 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 				// TODO(tschottdorf): it may be useful to allow this later.
 				// That would be part of a possible plan to allow txns which
 				// write on multiple coordinators.
-				return nil, proto.NewError(util.Errorf("client must not pass intents to EndTransaction"))
+				return nil, roachpb.NewError(util.Errorf("client must not pass intents to EndTransaction"))
 			}
 			if len(et.Key) != 0 {
-				return nil, proto.NewError(util.Errorf("EndTransaction must not have a Key set"))
+				return nil, roachpb.NewError(util.Errorf("EndTransaction must not have a Key set"))
 			}
 			et.Key = ba.Txn.Key
 
@@ -400,13 +400,13 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 				// TODO(bdarnell): if we had a GetTransactionStatus API then
 				// we could lookup the transaction and return either nil or
 				// TransactionAbortedError instead of this ambivalent error.
-				return nil, proto.NewError(util.Errorf("transaction is already committed or aborted"))
+				return nil, roachpb.NewError(util.Errorf("transaction is already committed or aborted"))
 			}
 			if len(et.Intents) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state in
 				// the client.
-				return nil, proto.NewError(util.Errorf("cannot commit a read-only transaction"))
+				return nil, roachpb.NewError(util.Errorf("cannot commit a read-only transaction"))
 			}
 			// TODO(tschottdorf): V(1)
 			for _, intent := range et.Intents {
@@ -417,12 +417,12 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 
 	// Send the command through wrapped sender, taking appropriate measures
 	// on error.
-	var br *proto.BatchResponse
+	var br *roachpb.BatchResponse
 	{
-		var pErr *proto.Error
+		var pErr *roachpb.Error
 		br, pErr = tc.wrapped.Send(ctx, ba)
 
-		if _, ok := pErr.GoError().(*proto.OpRequiresTxnError); ok {
+		if _, ok := pErr.GoError().(*roachpb.OpRequiresTxnError); ok {
 			br, pErr = tc.resendWithTxn(ba)
 		}
 
@@ -435,7 +435,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 		return br, nil
 	}
 
-	if _, ok := ba.GetArg(proto.EndTransaction); !ok {
+	if _, ok := ba.GetArg(roachpb.EndTransaction); !ok {
 		return br, nil
 	}
 	// If the --linearizable flag is set, we want to make sure that
@@ -459,7 +459,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 			time.Sleep(sleepNS)
 		}()
 	}
-	if br.Txn.Status != proto.PENDING {
+	if br.Txn.Status != roachpb.PENDING {
 		tc.cleanupTxn(trace, *br.Txn)
 	}
 	return br, nil
@@ -469,7 +469,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 // in the request but has a nil ID. The new transaction is initialized
 // using the name and isolation in the otherwise uninitialized txn.
 // The Priority, if non-zero is used as a minimum.
-func (tc *TxnCoordSender) maybeBeginTxn(ba *proto.BatchRequest) {
+func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) {
 	if ba.Txn == nil {
 		return
 	}
@@ -479,7 +479,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *proto.BatchRequest) {
 	if len(ba.Txn.ID) == 0 {
 		// TODO(tschottdorf): should really choose the first txn write here.
 		firstKey := ba.Requests[0].GetInner().Header().Key
-		newTxn := proto.NewTransaction(ba.Txn.Name, keys.KeyAddress(firstKey), ba.GetUserPriority(),
+		newTxn := roachpb.NewTransaction(ba.Txn.Name, keys.KeyAddress(firstKey), ba.GetUserPriority(),
 			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
 		// Use existing priority as a minimum. This is used on transaction
 		// aborts to ratchet priority when creating successor transaction.
@@ -493,7 +493,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *proto.BatchRequest) {
 // cleanupTxn is called when a transaction ends. The transaction record is
 // updated and the heartbeat goroutine signaled to clean up the transaction
 // gracefully.
-func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction) {
+func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn roachpb.Transaction) {
 	trace.Event("coordinator stops")
 	tc.Lock()
 	defer tc.Unlock()
@@ -520,11 +520,11 @@ func (tc *TxnCoordSender) unregisterTxnLocked(id string) {
 	tc.txnStats.durations = append(tc.txnStats.durations, float64(tc.clock.PhysicalNow()-txnMeta.firstUpdateNanos))
 	tc.txnStats.restarts = append(tc.txnStats.restarts, float64(txnMeta.txn.Epoch))
 	switch txnMeta.txn.Status {
-	case proto.ABORTED:
+	case roachpb.ABORTED:
 		tc.txnStats.aborted++
-	case proto.PENDING:
+	case roachpb.PENDING:
 		tc.txnStats.abandoned++
-	case proto.COMMITTED:
+	case roachpb.COMMITTED:
 		tc.txnStats.committed++
 	}
 	txnMeta.keys.Clear()
@@ -606,9 +606,9 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 		return false
 	}
 
-	hb := &proto.HeartbeatTxnRequest{}
+	hb := &roachpb.HeartbeatTxnRequest{}
 	hb.Key = txn.Key
-	ba := proto.BatchRequest{}
+	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
 	ba.Key = txn.Key
 	ba.Txn = &txn
@@ -639,9 +639,9 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 // error cases, applying those updates to the corresponding txnMeta
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
-func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest, br *proto.BatchResponse, pErr *proto.Error) *proto.Error {
+func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
 	trace := tracer.FromCtx(ctx)
-	newTxn := &proto.Transaction{}
+	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.GetTxn())
 	err := pErr.GoError()
 	switch t := err.(type) {
@@ -652,14 +652,14 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 		// Looks like this isn't necessary any more, nor did it prevent a bug
 		// referenced in a TODO there.
 		newTxn.Timestamp.Forward(br.Timestamp)
-	case *proto.TransactionStatusError:
+	case *roachpb.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
 		// timestamp regressions; consider txn dead.
 		defer tc.cleanupTxn(trace, t.Txn)
-	case *proto.OpRequiresTxnError:
+	case *roachpb.OpRequiresTxnError:
 		// TODO(tschottdorf): range-spanning autowrap currently broken.
 		panic("TODO(tschottdorf): disabled")
-	case *proto.ReadWithinUncertaintyIntervalError:
+	case *roachpb.ReadWithinUncertaintyIntervalError:
 		// Mark the host as certain. See the protobuf comment for
 		// Transaction.CertainNodes for details.
 		if t.NodeID == 0 {
@@ -674,7 +674,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 		newTxn.Timestamp.Forward(candidateTS)
 		newTxn.Restart(ba.GetUserPriority(), newTxn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
-	case *proto.TransactionAbortedError:
+	case *roachpb.TransactionAbortedError:
 		// Increase timestamp if applicable.
 		newTxn.Timestamp.Forward(t.Txn.Timestamp)
 		newTxn.Priority = t.Txn.Priority
@@ -682,18 +682,18 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 		// Clean up the freshly aborted transaction in defer(), avoiding a
 		// race with the state update below.
 		defer tc.cleanupTxn(trace, t.Txn)
-	case *proto.TransactionPushError:
+	case *roachpb.TransactionPushError:
 		// Increase timestamp if applicable, ensuring that we're
 		// just ahead of the pushee.
 		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp.Add(0, 1))
 		newTxn.Restart(ba.GetUserPriority(), t.PusheeTxn.Priority-1, newTxn.Timestamp)
 		t.Txn = newTxn
-	case *proto.TransactionRetryError:
+	case *roachpb.TransactionRetryError:
 		// Increase timestamp if applicable.
 		newTxn.Timestamp.Forward(t.Txn.Timestamp)
 		newTxn.Restart(ba.GetUserPriority(), t.Txn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
-	case proto.TransactionRestartError:
+	case roachpb.TransactionRestartError:
 		// Assertion: The above cases should exhaust all ErrorDetails which
 		// carry a Transaction.
 		if pErr.Detail != nil {
@@ -701,7 +701,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 		}
 	}
 
-	return func() *proto.Error {
+	return func() *roachpb.Error {
 		if len(newTxn.ID) <= 0 {
 			return pErr
 		}
@@ -729,7 +729,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 				// If the transaction is already over, there's no point in
 				// launching a one-off coordinator which will shut down right
 				// away.
-				if _, isEnding := ba.GetArg(proto.EndTransaction); !isEnding {
+				if _, isEnding := ba.GetArg(roachpb.EndTransaction); !isEnding {
 					trace.Event("coordinator spawns")
 					if !tc.stopper.RunAsyncTask(func() {
 						tc.heartbeatLoop(id)
@@ -739,7 +739,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 						// they're likely not going to have all intents committed.
 						// In principle, we can relax this as needed though.
 						tc.unregisterTxnLocked(id)
-						return proto.NewError(&proto.NodeUnavailableError{})
+						return roachpb.NewError(&roachpb.NodeUnavailableError{})
 					}
 				}
 			}
@@ -759,7 +759,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 			// For successful transactional requests, always send the updated txn
 			// record back.
 			if br.Txn == nil {
-				br.Txn = &proto.Transaction{}
+				br.Txn = &roachpb.Transaction{}
 			}
 			*br.Txn = *newTxn
 		}
@@ -771,13 +771,13 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba proto.BatchRequest
 // give this error back to the client, our options are limited. We'll have to
 // run the whole thing for them, or any restart will still end up at the client
 // which will not be prepared to be handed a Txn.
-func (tc *TxnCoordSender) resendWithTxn(ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Run a one-off transaction with that single command.
 	if log.V(1) {
 		log.Infof("%s: auto-wrapping in txn and re-executing: ", ba)
 	}
 	tmpDB := client.NewDBWithPriority(tc, ba.GetUserPriority())
-	var br *proto.BatchResponse
+	var br *roachpb.BatchResponse
 	err := tmpDB.Txn(func(txn *client.Txn) error {
 		txn.SetDebugName("auto-wrap", 0)
 		b := &client.Batch{}
@@ -790,7 +790,7 @@ func (tc *TxnCoordSender) resendWithTxn(ba proto.BatchRequest) (*proto.BatchResp
 		return err
 	})
 	if err != nil {
-		return nil, proto.NewError(err)
+		return nil, roachpb.NewError(err)
 	}
 	br.Txn = nil // hide the evidence
 	return br, nil

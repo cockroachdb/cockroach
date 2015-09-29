@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -53,10 +53,10 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
-	key := keys.MakeKey(keys.Meta1Prefix, proto.KeyMax)
+	key := keys.MakeKey(keys.Meta1Prefix, roachpb.KeyMax)
 	now := s.Clock().Now()
-	txn := proto.NewTransaction("txn", proto.Key("foobar"), 0, proto.SERIALIZABLE, now, 0)
-	if err := engine.MVCCPutProto(s.Ctx.Engines[0], nil, key, now, txn, &proto.RangeDescriptor{}); err != nil {
+	txn := roachpb.NewTransaction("txn", roachpb.Key("foobar"), 0, roachpb.SERIALIZABLE, now, 0)
+	if err := engine.MVCCPutProto(s.Ctx.Engines[0], nil, key, now, txn, &roachpb.RangeDescriptor{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -247,13 +247,13 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, s.Gossip())
 
 	// Scan.
-	sa := proto.NewScan(proto.Key("a"), proto.Key("c"), 0).(*proto.ScanRequest)
-	sa.ReadConsistency = proto.INCONSISTENT
+	sa := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), 0).(*roachpb.ScanRequest)
+	sa.ReadConsistency = roachpb.INCONSISTENT
 	reply, err := batchutil.SendWrapped(ds, sa)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sr := reply.(*proto.ScanResponse)
+	sr := reply.(*roachpb.ScanResponse)
 
 	if l := len(sr.Rows); l != 1 {
 		t.Fatalf("expected 1 row; got %d", l)
@@ -263,13 +263,13 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	}
 
 	// ReverseScan.
-	rsa := proto.NewReverseScan(proto.Key("a"), proto.Key("c"), 0).(*proto.ReverseScanRequest)
-	rsa.ReadConsistency = proto.INCONSISTENT
+	rsa := roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), 0).(*roachpb.ReverseScanRequest)
+	rsa.ReadConsistency = roachpb.INCONSISTENT
 	reply, err = batchutil.SendWrapped(ds, rsa)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rsr := reply.(*proto.ReverseScanResponse)
+	rsr := reply.(*roachpb.ReverseScanResponse)
 	if l := len(rsr.Rows); l != 1 {
 		t.Fatalf("expected 1 row; got %d", l)
 	}
@@ -321,7 +321,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 	// Case 3: Test proto.KeyMax
 	// This span covers the system DB keys.
 	wanted := 1 + len(sql.GetInitialSystemValues())
-	if rows, err := db.ReverseScan("g", proto.KeyMax, 0); err != nil {
+	if rows, err := db.ReverseScan("g", roachpb.KeyMax, 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != wanted {
 		t.Errorf("expected %d rows; got %d", wanted, l)

@@ -27,14 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func countRangeReplicas(db *client.DB) (int, error) {
-	desc := &proto.RangeDescriptor{}
-	if err := db.GetProto(keys.RangeDescriptorKey(proto.KeyMin), desc); err != nil {
+	desc := &roachpb.RangeDescriptor{}
+	if err := db.GetProto(keys.RangeDescriptorKey(roachpb.KeyMin), desc); err != nil {
 		return 0, err
 	}
 	return len(desc.Replicas), nil

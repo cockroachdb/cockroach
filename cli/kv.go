@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/stop"
 
@@ -83,7 +83,7 @@ func runGet(cmd *cobra.Command, args []string) {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	key := proto.Key(unquoteArg(args[0], false))
+	key := roachpb.Key(unquoteArg(args[0], false))
 	r, err := kvDB.Get(key)
 	if err != nil {
 		fmt.Fprintf(osStderr, "get failed: %s\n", err)
@@ -201,7 +201,7 @@ func runInc(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	key := proto.Key(unquoteArg(args[0], true /* disallow system keys */))
+	key := roachpb.Key(unquoteArg(args[0], true /* disallow system keys */))
 	if r, err := kvDB.Inc(key, int64(amount)); err != nil {
 		fmt.Fprintf(osStderr, "increment failed: %s\n", err)
 		osExit(1)
@@ -335,15 +335,15 @@ func runReverseScan(cmd *cobra.Command, args []string) {
 	showResult(rows)
 }
 
-func initScanArgs(args []string) (startKey, endKey proto.Key) {
+func initScanArgs(args []string) (startKey, endKey roachpb.Key) {
 	if len(args) >= 1 {
-		startKey = proto.Key(unquoteArg(args[0], false))
+		startKey = roachpb.Key(unquoteArg(args[0], false))
 	} else {
 		// Start with the first key after the system key range.
 		startKey = keys.UserDataSpan.Start
 	}
 	if len(args) >= 2 {
-		endKey = proto.Key(unquoteArg(args[1], false))
+		endKey = roachpb.Key(unquoteArg(args[1], false))
 	} else {
 		// Exclude table data keys by default. The user can explicitly request them
 		// by passing \xff\xff for the end key.
@@ -360,7 +360,7 @@ func showResult(rows []client.KeyValue) {
 			continue
 		}
 
-		key := proto.Key(row.Key)
+		key := roachpb.Key(row.Key)
 		fmt.Printf("%s\t%s\n", key, row.PrettyValue())
 	}
 	fmt.Printf("%d result(s)\n", len(rows))

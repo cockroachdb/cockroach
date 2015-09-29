@@ -22,7 +22,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 
 	"github.com/spf13/cobra"
 )
@@ -42,9 +42,9 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
-	var startKey proto.Key
+	var startKey roachpb.Key
 	if len(args) >= 1 {
-		startKey = keys.RangeMetaKey(proto.Key(args[0]))
+		startKey = keys.RangeMetaKey(roachpb.Key(args[0]))
 	} else {
 		startKey = keys.Meta2Prefix
 	}
@@ -59,7 +59,7 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 	}
 
 	for _, row := range rows {
-		desc := &proto.RangeDescriptor{}
+		desc := &roachpb.RangeDescriptor{}
 		if err := row.ValueProto(desc); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: unable to unmarshal range descriptor\n", row.Key)
 			continue
@@ -89,7 +89,7 @@ func runSplitRange(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	key := proto.Key(args[0])
+	key := roachpb.Key(args[0])
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 	if err := kvDB.AdminSplit(key); err != nil {

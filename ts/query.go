@@ -21,7 +21,7 @@ import (
 	"container/heap"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -30,7 +30,7 @@ import (
 // adjustment which adjusts each Sample offset to be relative to the start time
 // of the dataSpan, rather than the start time of the InternalTimeSeriesData.
 type calibratedData struct {
-	*proto.InternalTimeSeriesData
+	*roachpb.InternalTimeSeriesData
 	offsetAdjustment int32
 }
 
@@ -59,7 +59,7 @@ func (ds *dataSpan) timestampForOffset(offset int32) int64 {
 
 // addData adds an InternalTimeSeriesData object into this dataSpan, normalizing
 // it to a calibratedData object in the process.
-func (ds *dataSpan) addData(data *proto.InternalTimeSeriesData) error {
+func (ds *dataSpan) addData(data *roachpb.InternalTimeSeriesData) error {
 	if data.SampleDurationNanos != ds.sampleNanos {
 		return util.Errorf("data added to dataSpan with mismatched sample duration period")
 	}
@@ -109,7 +109,7 @@ type dataSpanIterator struct {
 
 // sample returns the InternalTimeSeriesSample value currently pointed to by
 // this iterator.
-func (dsi *dataSpanIterator) sample() *proto.InternalTimeSeriesSample {
+func (dsi *dataSpanIterator) sample() *roachpb.InternalTimeSeriesSample {
 	if !dsi.valid {
 		return nil
 	}
@@ -414,7 +414,7 @@ func (db *DB) Query(query TimeSeriesQueryRequest_Query, r Resolution,
 	// query. Each dataspan will contain all data queried from the same source.
 	sourceSpans := make(map[string]*dataSpan)
 	for _, row := range rows {
-		data := &proto.InternalTimeSeriesData{}
+		data := &roachpb.InternalTimeSeriesData{}
 		if err := row.ValueProto(data); err != nil {
 			return nil, nil, err
 		}

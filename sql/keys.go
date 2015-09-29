@@ -24,7 +24,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -69,7 +69,7 @@ func equalName(a, b string) bool {
 // MakeNameMetadataKey returns the key for the name. Pass name == "" in order
 // to generate the prefix key to use to scan over all of the names for the
 // specified parentID.
-func MakeNameMetadataKey(parentID ID, name string) proto.Key {
+func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
 	name = normalizeName(name)
 	k := keys.MakeTablePrefix(uint32(NamespaceTable.ID))
 	k = encoding.EncodeUvarint(k, uint64(NamespaceTable.PrimaryIndex.ID))
@@ -82,7 +82,7 @@ func MakeNameMetadataKey(parentID ID, name string) proto.Key {
 }
 
 // MakeDescMetadataKey returns the key for the descriptor.
-func MakeDescMetadataKey(descID ID) proto.Key {
+func MakeDescMetadataKey(descID ID) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
 	k = encoding.EncodeUvarint(k, uint64(DescriptorTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarint(k, uint64(descID))
@@ -91,7 +91,7 @@ func MakeDescMetadataKey(descID ID) proto.Key {
 }
 
 // MakeZoneKey returns the key for 'id's entry in the system.zones table.
-func MakeZoneKey(id ID) proto.Key {
+func MakeZoneKey(id ID) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(ZonesTable.ID))
 	k = encoding.EncodeUvarint(k, uint64(ZonesTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarint(k, uint64(id))
@@ -100,7 +100,7 @@ func MakeZoneKey(id ID) proto.Key {
 }
 
 // MakeColumnKey returns the key for the column in the given row.
-func MakeColumnKey(colID ColumnID, primaryKey []byte) proto.Key {
+func MakeColumnKey(colID ColumnID, primaryKey []byte) roachpb.Key {
 	var key []byte
 	key = append(key, primaryKey...)
 	return encoding.EncodeUvarint(key, uint64(colID))

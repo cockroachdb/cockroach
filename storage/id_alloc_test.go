@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -151,7 +151,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	}
 
 	// Make Allocator invalid.
-	idAlloc.idKey.Store(proto.KeyMin)
+	idAlloc.idKey.Store(roachpb.KeyMin)
 
 	// Should be able to get the allocated IDs, and there will be one
 	// background allocateBlock to get ID continuously.

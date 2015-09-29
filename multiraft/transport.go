@@ -23,7 +23,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	crpc "github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/rpc/codec"
 	"github.com/cockroachdb/cockroach/util"
@@ -38,10 +38,10 @@ type Transport interface {
 	// Listen informs the Transport of a local store's ID and callback interface.
 	// The Transport should associate the given id with the server object so other Transport's
 	// Connect methods can find it.
-	Listen(id proto.StoreID, server ServerInterface) error
+	Listen(id roachpb.StoreID, server ServerInterface) error
 
 	// Stop undoes a previous Listen.
-	Stop(id proto.StoreID)
+	Stop(id roachpb.StoreID)
 
 	// Send a message to the node specified in the request's To field.
 	Send(req *RaftMessageRequest) error
@@ -61,8 +61,8 @@ var (
 
 type localRPCTransport struct {
 	mu      sync.Mutex
-	servers map[proto.StoreID]*crpc.Server
-	clients map[proto.StoreID]*netrpc.Client
+	servers map[roachpb.StoreID]*crpc.Server
+	clients map[roachpb.StoreID]*netrpc.Client
 	conns   map[net.Conn]struct{}
 	closed  chan struct{}
 	stopper *stop.Stopper
@@ -75,15 +75,15 @@ type localRPCTransport struct {
 // Because this is just for local testing, it doesn't use TLS.
 func NewLocalRPCTransport(stopper *stop.Stopper) Transport {
 	return &localRPCTransport{
-		servers: make(map[proto.StoreID]*crpc.Server),
-		clients: make(map[proto.StoreID]*netrpc.Client),
+		servers: make(map[roachpb.StoreID]*crpc.Server),
+		clients: make(map[roachpb.StoreID]*netrpc.Client),
 		conns:   make(map[net.Conn]struct{}),
 		closed:  make(chan struct{}),
 		stopper: stopper,
 	}
 }
 
-func (lt *localRPCTransport) Listen(id proto.StoreID, server ServerInterface) error {
+func (lt *localRPCTransport) Listen(id roachpb.StoreID, server ServerInterface) error {
 	addr := util.CreateTestAddr("tcp")
 	rpcServer := crpc.NewServer(addr, &crpc.Context{
 		Context: base.Context{
@@ -112,7 +112,7 @@ func (lt *localRPCTransport) Listen(id proto.StoreID, server ServerInterface) er
 	return rpcServer.Start()
 }
 
-func (lt *localRPCTransport) Stop(id proto.StoreID) {
+func (lt *localRPCTransport) Stop(id roachpb.StoreID) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	lt.servers[id].Close()
@@ -123,7 +123,7 @@ func (lt *localRPCTransport) Stop(id proto.StoreID) {
 	}
 }
 
-func (lt *localRPCTransport) getClient(id proto.StoreID) (*netrpc.Client, error) {
+func (lt *localRPCTransport) getClient(id roachpb.StoreID) (*netrpc.Client, error) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 

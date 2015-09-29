@@ -34,7 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -69,10 +69,10 @@ func (ss *notifyingSender) wait() {
 	ss.waiter = nil
 }
 
-func (ss *notifyingSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (ss *notifyingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	br, pErr := ss.wrapped.Send(ctx, ba)
 	if br != nil && br.Error != nil {
-		panic(proto.ErrorUnexpectedlySet(ss.wrapped, br))
+		panic(roachpb.ErrorUnexpectedlySet(ss.wrapped, br))
 	}
 	if ss.waiter != nil {
 		ss.waiter.Done()
@@ -124,27 +124,27 @@ func TestClientRetryNonTxn(t *testing.T) {
 	})
 
 	testCases := []struct {
-		args        proto.Request
-		isolation   proto.IsolationType
+		args        roachpb.Request
+		isolation   roachpb.IsolationType
 		canPush     bool
 		expAttempts int
 	}{
 		// Write/write conflicts.
-		{&proto.PutRequest{}, proto.SNAPSHOT, true, 2},
-		{&proto.PutRequest{}, proto.SERIALIZABLE, true, 2},
-		{&proto.PutRequest{}, proto.SNAPSHOT, false, 1},
-		{&proto.PutRequest{}, proto.SERIALIZABLE, false, 1},
+		{&roachpb.PutRequest{}, roachpb.SNAPSHOT, true, 2},
+		{&roachpb.PutRequest{}, roachpb.SERIALIZABLE, true, 2},
+		{&roachpb.PutRequest{}, roachpb.SNAPSHOT, false, 1},
+		{&roachpb.PutRequest{}, roachpb.SERIALIZABLE, false, 1},
 		// Read/write conflicts.
-		{&proto.GetRequest{}, proto.SNAPSHOT, true, 1},
-		{&proto.GetRequest{}, proto.SERIALIZABLE, true, 2},
-		{&proto.GetRequest{}, proto.SNAPSHOT, false, 1},
-		{&proto.GetRequest{}, proto.SERIALIZABLE, false, 1},
+		{&roachpb.GetRequest{}, roachpb.SNAPSHOT, true, 1},
+		{&roachpb.GetRequest{}, roachpb.SERIALIZABLE, true, 2},
+		{&roachpb.GetRequest{}, roachpb.SNAPSHOT, false, 1},
+		{&roachpb.GetRequest{}, roachpb.SERIALIZABLE, false, 1},
 	}
 	// Lay down a write intent using a txn and attempt to write to same
 	// key. Try this twice--once with priorities which will allow the
 	// intent to be pushed and once with priorities which will not.
 	for i, test := range testCases {
-		key := proto.Key(fmt.Sprintf("key-%d", i))
+		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 		var txnPri int32 = 1
 		var clientPri int32 = 1
 		if test.canPush {
@@ -159,8 +159,8 @@ func TestClientRetryNonTxn(t *testing.T) {
 		doneCall := make(chan struct{})
 		count := 0 // keeps track of retries
 		err := db.Txn(func(txn *client.Txn) error {
-			if test.isolation == proto.SNAPSHOT {
-				if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+			if test.isolation == roachpb.SNAPSHOT {
+				if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 					return err
 				}
 			}
@@ -184,12 +184,12 @@ func TestClientRetryNonTxn(t *testing.T) {
 				go func() {
 					var err error
 					for i := 0; ; i++ {
-						if _, ok := test.args.(*proto.GetRequest); ok {
+						if _, ok := test.args.(*roachpb.GetRequest); ok {
 							_, err = db.Get(key)
 						} else {
 							err = db.Put(key, "value")
 						}
-						if _, ok := err.(*proto.WriteIntentError); !ok {
+						if _, ok := err.(*roachpb.WriteIntentError); !ok {
 							break
 						}
 					}
@@ -215,7 +215,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 			t.Fatalf("%d: expected success getting %q: %s", i, key, err)
 		}
 
-		if _, isGet := test.args.(*proto.GetRequest); isGet || test.canPush {
+		if _, isGet := test.args.(*roachpb.GetRequest); isGet || test.canPush {
 			if !bytes.Equal(gr.ValueBytes(), []byte("txn-value")) {
 				t.Errorf("%d: expected \"txn-value\"; got %q", i, gr.ValueBytes())
 			}
@@ -253,7 +253,7 @@ func TestClientRunTransaction(t *testing.T) {
 
 		// Use snapshot isolation so non-transactional read can always push.
 		err := db.Txn(func(txn *client.Txn) error {
-			if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 				return err
 			}
 
@@ -308,7 +308,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	zoneConfig := &config.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
+		ReplicaAttrs: []roachpb.Attributes{
 			{Attrs: []string{"dc1", "mem"}},
 			{Attrs: []string{"dc2", "mem"}},
 		},
@@ -316,7 +316,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 		RangeMaxBytes: 1 << 18, // 256k
 	}
 
-	key := proto.Key(testUser + "/zone-config")
+	key := roachpb.Key(testUser + "/zone-config")
 	if err := db.Put(key, zoneConfig); err != nil {
 		t.Fatalf("unable to put proto: %s", err)
 	}
@@ -398,11 +398,11 @@ func TestClientBatch(t *testing.T) {
 
 	skipBecauseOf1891 := true // TODO(tschottdorf): remove when unnecessary
 
-	keys := []proto.Key{}
+	keys := []roachpb.Key{}
 	{
 		b := &client.Batch{}
 		for i := 0; i < 10; i++ {
-			key := proto.Key(fmt.Sprintf("%s/key %02d", testUser, i))
+			key := roachpb.Key(fmt.Sprintf("%s/key %02d", testUser, i))
 			keys = append(keys, key)
 			b.Inc(key, int64(i))
 		}
@@ -434,13 +434,13 @@ func TestClientBatch(t *testing.T) {
 				len(scan1), len(scan2))
 		}
 		for i := 0; i < 5; i++ {
-			if key := proto.Key(scan1[i].Key); !key.Equal(keys[i]) {
+			if key := roachpb.Key(scan1[i].Key); !key.Equal(keys[i]) {
 				t.Errorf("expected scan1 key %d to be %q; got %q", i, keys[i], key)
 			}
 			if val := scan1[i].ValueInt(); val != int64(i) {
 				t.Errorf("expected scan1 result %d to be %d; got %d", i, i, val)
 			}
-			if key := proto.Key(scan2[i].Key); !key.Equal(keys[i+5]) {
+			if key := roachpb.Key(scan2[i].Key); !key.Equal(keys[i+5]) {
 				t.Errorf("expected scan2 key %d to be %q; got %q", i, keys[i+5], key)
 			}
 			if val := scan2[i].ValueInt(); val != int64(i+5) {
@@ -468,13 +468,13 @@ func TestClientBatch(t *testing.T) {
 				len(revScan1), len(revScan2))
 		}
 		for i := 0; i < expectedCount; i++ {
-			if key := proto.Key(revScan1[i].Key); !key.Equal(keys[rev1TopIndex-i]) {
+			if key := roachpb.Key(revScan1[i].Key); !key.Equal(keys[rev1TopIndex-i]) {
 				t.Errorf("expected revScan1 key %d to be %q; got %q", i, keys[rev1TopIndex-i], key)
 			}
 			if val := revScan1[i].ValueInt(); val != int64(rev1TopIndex-i) {
 				t.Errorf("expected revScan1 result %d to be %d; got %d", i, rev1TopIndex-i, val)
 			}
-			if key := proto.Key(revScan2[i].Key); !key.Equal(keys[rev2TopIndex-i]) {
+			if key := roachpb.Key(revScan2[i].Key); !key.Equal(keys[rev2TopIndex-i]) {
 				t.Errorf("expected revScan2 key %d to be %q; got %q", i, keys[rev2TopIndex-i], key)
 			}
 			if val := revScan2[i].ValueInt(); val != int64(rev2TopIndex-i) {
@@ -485,7 +485,7 @@ func TestClientBatch(t *testing.T) {
 
 	// Induce a non-transactional failure.
 	{
-		key := proto.Key("conditionalPut")
+		key := roachpb.Key("conditionalPut")
 		if err := db.Put(key, "hello"); err != nil {
 			t.Fatal(err)
 		}
@@ -510,7 +510,7 @@ func TestClientBatch(t *testing.T) {
 
 	// Induce a transactional failure.
 	{
-		key := proto.Key("conditionalPut")
+		key := roachpb.Key("conditionalPut")
 		if err := db.Put(key, "hello"); err != nil {
 			t.Fatal(err)
 		}
@@ -689,7 +689,7 @@ func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 	if !useSSL {
 		s.Ctx.Insecure = true
 	}
-	s.Ctx.Engines = []engine.Engine{engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, s.Stopper())}
+	s.Ctx.Engines = []engine.Engine{engine.NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, s.Stopper())}
 	if err := s.Start(); err != nil {
 		b.Fatal(err)
 	}
@@ -705,19 +705,19 @@ func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 	}
 
 	rng, _ := randutil.NewPseudoRand()
-	keys := make([]proto.Key, numKeys)
+	keys := make([]roachpb.Key, numKeys)
 	nvs := make([]int, numKeys)
 	for t := 1; t <= numVersions; t++ {
 		batch := &client.Batch{}
 		for i := 0; i < numKeys; i++ {
 			if t == 1 {
-				keys[i] = proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
+				keys[i] = roachpb.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
 				nvs[i] = int(rand.Int31n(int32(numVersions)) + 1)
 			}
 			// Only write values if this iteration is less than the random
 			// number of versions chosen for this key.
 			if t <= nvs[i] {
-				batch.Put(proto.Key(keys[i]), randutil.RandBytes(rng, valueSize))
+				batch.Put(roachpb.Key(keys[i]), randutil.RandBytes(rng, valueSize))
 			}
 			if (i+1)%1000 == 0 {
 				if err := db.Run(batch); err != nil {
@@ -759,8 +759,8 @@ func runClientScan(useSSL bool, numRows, numVersions int, b *testing.B) {
 		for pb.Next() {
 			// Choose a random key to start scan.
 			keyIdx := rand.Int31n(int32(numKeys - numRows))
-			startKey := proto.Key(encoding.EncodeUvarint(startKeyBuf, uint64(keyIdx)))
-			endKey := proto.Key(encoding.EncodeUvarint(endKeyBuf, uint64(keyIdx)+uint64(numRows)))
+			startKey := roachpb.Key(encoding.EncodeUvarint(startKeyBuf, uint64(keyIdx)))
+			endKey := roachpb.Key(encoding.EncodeUvarint(endKeyBuf, uint64(keyIdx)+uint64(numRows)))
 			rows, err := db.Scan(startKey, endKey, int64(numRows))
 			if err != nil {
 				b.Fatalf("failed scan: %s", err)

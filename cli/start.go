@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -152,7 +152,7 @@ func runStart(_ *cobra.Command, _ []string) {
 	if context.EphemeralSingleNode {
 		// TODO(marc): set this in the zones table when we have an entry
 		// for the default cluster-wide zone config.
-		config.DefaultZoneConfig.ReplicaAttrs = []proto.Attributes{{}}
+		config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
 	}
 
 	signalCh := make(chan os.Signal, 1)

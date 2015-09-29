@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -147,7 +147,7 @@ func (s *statusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // extractNodeID examines the node_id URL parameter and returns the nodeID and a
 // boolean showing if it is this node. If node_id is "local" or not present, it
 // returns the local nodeID.
-func (s *statusServer) extractNodeID(ps httprouter.Params) (proto.NodeID, bool, error) {
+func (s *statusServer) extractNodeID(ps httprouter.Params) (roachpb.NodeID, bool, error) {
 	nodeIDParam := ps.ByName("node_id")
 
 	// No parameter provided or set to local.
@@ -159,12 +159,12 @@ func (s *statusServer) extractNodeID(ps httprouter.Params) (proto.NodeID, bool, 
 	if err != nil {
 		return 0, false, fmt.Errorf("node id could not be parsed: %s", err)
 	}
-	nodeID := proto.NodeID(id)
+	nodeID := roachpb.NodeID(id)
 	return nodeID, nodeID == s.gossip.GetNodeID(), nil
 }
 
 // proxyRequest performs a GET request to another node's status server.
-func (s *statusServer) proxyRequest(nodeID proto.NodeID, w http.ResponseWriter, r *http.Request) {
+func (s *statusServer) proxyRequest(nodeID roachpb.NodeID, w http.ResponseWriter, r *http.Request) {
 	addr, err := s.gossip.GetNodeIDAddress(nodeID)
 	if err != nil {
 		http.Error(w,
@@ -236,7 +236,7 @@ func (s *statusServer) handleGossip(w http.ResponseWriter, r *http.Request, ps h
 // handleDetailsLocal handles local requests for node details.
 func (s *statusServer) handleDetailsLocal(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	local := struct {
-		NodeID    proto.NodeID        `json:"nodeID"`
+		NodeID    roachpb.NodeID      `json:"nodeID"`
 		Address   util.UnresolvedAddr `json:"address"`
 		BuildInfo util.BuildInfo      `json:"buildInfo"`
 	}{

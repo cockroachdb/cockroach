@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -40,18 +40,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
-func adminSplitArgs(key, splitKey []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.AdminSplitRequest {
-	return proto.AdminSplitRequest{
-		RequestHeader: proto.RequestHeader{
+func adminSplitArgs(key, splitKey []byte, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.AdminSplitRequest {
+	return roachpb.AdminSplitRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 		SplitKey: splitKey,
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, rangeID proto.RangeID, expMS engine.MVCCStats) error {
+func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.MVCCStats) error {
 	var ms engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(eng, rangeID, &ms); err != nil {
 		return err
@@ -71,14 +71,14 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	for _, key := range []proto.Key{
+	for _, key := range []roachpb.Key{
 		keys.Meta1Prefix,
 		keys.MakeKey(keys.Meta1Prefix, []byte("a")),
-		keys.MakeKey(keys.Meta1Prefix, proto.KeyMax),
+		keys.MakeKey(keys.Meta1Prefix, roachpb.KeyMax),
 		keys.Meta2KeyMax,
 		keys.MakeTablePrefix(10 /* system descriptor ID */),
 	} {
-		args := adminSplitArgs(proto.KeyMin, key, 1, store.StoreID())
+		args := adminSplitArgs(roachpb.KeyMin, key, 1, store.StoreID())
 		_, err := batchutil.SendWrapped(store, &args)
 		if err == nil {
 			t.Fatalf("%q: split succeeded unexpectedly", key)
@@ -120,7 +120,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	args := adminSplitArgs(proto.KeyMin, []byte("a"), 1, store.StoreID())
+	args := adminSplitArgs(roachpb.KeyMin, []byte("a"), 1, store.StoreID())
 	if _, err := batchutil.SendWrapped(store, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 		t.Fatalf("split succeeded unexpectedly")
 	}
 	// Now try to split at start of new range.
-	args = adminSplitArgs(proto.KeyMin, []byte("a"), 2, store.StoreID())
+	args = adminSplitArgs(roachpb.KeyMin, []byte("a"), 2, store.StoreID())
 	if _, err := batchutil.SendWrapped(store, &args); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
 	}
@@ -143,14 +143,14 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	splitKey := proto.Key("a")
+	splitKey := roachpb.Key("a")
 	concurrentCount := int32(10)
 	wg := sync.WaitGroup{}
 	wg.Add(int(concurrentCount))
 	failureCount := int32(0)
 	for i := int32(0); i < concurrentCount; i++ {
 		go func() {
-			args := adminSplitArgs(proto.KeyMin, splitKey, 1, store.StoreID())
+			args := adminSplitArgs(roachpb.KeyMin, splitKey, 1, store.StoreID())
 			_, err := batchutil.SendWrapped(store, &args)
 			if err != nil {
 				atomic.AddInt32(&failureCount, 1)
@@ -167,12 +167,12 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	if a, e := store.ReplicaCount(), 2; a != e {
 		t.Fatalf("expected %d stores after concurrent splits; actual count=%d", e, a)
 	}
-	rng := store.LookupReplica(proto.KeyMin, nil)
+	rng := store.LookupReplica(roachpb.KeyMin, nil)
 	newRng := store.LookupReplica(splitKey, nil)
 	if !bytes.Equal(newRng.Desc().StartKey, splitKey) || !bytes.Equal(splitKey, rng.Desc().EndKey) {
 		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRng.Desc().StartKey, splitKey, rng.Desc().EndKey)
 	}
-	if !bytes.Equal(newRng.Desc().EndKey, proto.KeyMax) || !bytes.Equal(rng.Desc().StartKey, proto.KeyMin) {
+	if !bytes.Equal(newRng.Desc().EndKey, roachpb.KeyMax) || !bytes.Equal(rng.Desc().StartKey, roachpb.KeyMin) {
 		t.Errorf("new ranges do not cover KeyMin-KeyMax, but only %q-%q", rng.Desc().StartKey, newRng.Desc().EndKey)
 	}
 }
@@ -184,9 +184,9 @@ func TestStoreRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
-	rangeID := proto.RangeID(1)
-	splitKey := proto.Key("m")
-	content := proto.Key("asdvb")
+	rangeID := roachpb.RangeID(1)
+	splitKey := roachpb.Key("m")
+	content := roachpb.Key("asdvb")
 
 	// First, write some values left and right of the proposed split key.
 	pArgs := putArgs([]byte("c"), content, rangeID, store.StoreID())
@@ -202,12 +202,12 @@ func TestStoreRangeSplit(t *testing.T) {
 	// address them to the original range, then later to the one that contains
 	// the key.
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100, rangeID, store.StoreID())
-	lIncArgs.CmdID = proto.ClientCmdID{WallTime: 123, Random: 423}
+	lIncArgs.CmdID = roachpb.ClientCmdID{WallTime: 123, Random: 423}
 	if _, err := batchutil.SendWrapped(store, &lIncArgs); err != nil {
 		t.Fatal(err)
 	}
 	rIncArgs := incrementArgs([]byte("wobble"), 10, rangeID, store.StoreID())
-	rIncArgs.CmdID = proto.ClientCmdID{WallTime: 12, Random: 42}
+	rIncArgs.CmdID = roachpb.ClientCmdID{WallTime: 12, Random: 42}
 	if _, err := batchutil.SendWrapped(store, &rIncArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -220,24 +220,24 @@ func TestStoreRangeSplit(t *testing.T) {
 	keyBytes, valBytes := ms.KeyBytes, ms.ValBytes
 
 	// Split the range.
-	args := adminSplitArgs(proto.KeyMin, splitKey, 1, store.StoreID())
+	args := adminSplitArgs(roachpb.KeyMin, splitKey, 1, store.StoreID())
 	if _, err := batchutil.SendWrapped(store, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify no intents remains on range descriptor keys.
-	for _, key := range []proto.Key{keys.RangeDescriptorKey(proto.KeyMin), keys.RangeDescriptorKey(splitKey)} {
+	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.KeyMin), keys.RangeDescriptorKey(splitKey)} {
 		if _, _, err := engine.MVCCGet(store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	rng := store.LookupReplica(proto.KeyMin, nil)
+	rng := store.LookupReplica(roachpb.KeyMin, nil)
 	newRng := store.LookupReplica([]byte("m"), nil)
 	if !bytes.Equal(newRng.Desc().StartKey, splitKey) || !bytes.Equal(splitKey, rng.Desc().EndKey) {
 		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRng.Desc().StartKey, splitKey, rng.Desc().EndKey)
 	}
-	if !bytes.Equal(newRng.Desc().EndKey, proto.KeyMax) || !bytes.Equal(rng.Desc().StartKey, proto.KeyMin) {
+	if !bytes.Equal(newRng.Desc().EndKey, roachpb.KeyMax) || !bytes.Equal(rng.Desc().StartKey, roachpb.KeyMin) {
 		t.Errorf("new ranges do not cover KeyMin-KeyMax, but only %q-%q", rng.Desc().StartKey, newRng.Desc().EndKey)
 	}
 
@@ -245,13 +245,13 @@ func TestStoreRangeSplit(t *testing.T) {
 	gArgs := getArgs([]byte("c"), rangeID, store.StoreID())
 	if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 	gArgs = getArgs([]byte("x"), newRng.Desc().RangeID, store.StoreID())
 	if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 
@@ -259,7 +259,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	// remains in the old range.
 	if reply, err := batchutil.SendWrapped(store, &lIncArgs); err != nil {
 		t.Fatal(err)
-	} else if lIncReply := reply.(*proto.IncrementResponse); lIncReply.NewValue != 100 {
+	} else if lIncReply := reply.(*roachpb.IncrementResponse); lIncReply.NewValue != 100 {
 		t.Errorf("response cache broken in old range, expected %d but got %d", lIncArgs.Increment, lIncReply.NewValue)
 	}
 
@@ -268,7 +268,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	rIncArgs.RequestHeader.RangeID = newRng.Desc().RangeID
 	if reply, err := batchutil.SendWrapped(store, &rIncArgs); err != nil {
 		t.Fatal(err)
-	} else if rIncReply := reply.(*proto.IncrementResponse); rIncReply.NewValue != 10 {
+	} else if rIncReply := reply.(*roachpb.IncrementResponse); rIncReply.NewValue != 10 {
 		t.Errorf("response cache not copied correctly to new range, expected %d but got %d", rIncArgs.Increment, rIncReply.NewValue)
 	}
 
@@ -310,7 +310,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	// Split the range after the last table data key.
 	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
-	args := adminSplitArgs(proto.KeyMin, keyPrefix, 1, store.StoreID())
+	args := adminSplitArgs(roachpb.KeyMin, keyPrefix, 1, store.StoreID())
 	if _, err := batchutil.SendWrapped(store, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -376,7 +376,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 // fillRange writes keys with the given prefix and associated values
 // until bytes bytes have been written.
-func fillRange(store *storage.Store, rangeID proto.RangeID, prefix proto.Key, bytes int64, t *testing.T) {
+func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key, bytes int64, t *testing.T) {
 	src := rand.New(rand.NewSource(0))
 	for {
 		var ms engine.MVCCStats
@@ -418,7 +418,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	}
 
 	// Wait for the range to be split along table boundaries.
-	originalRange := store.LookupReplica(proto.KeyMin, nil)
+	originalRange := store.LookupReplica(roachpb.KeyMin, nil)
 	var rng *storage.Replica
 	if err := util.IsTrueWithin(func() bool {
 		rng = store.LookupReplica(keys.MakeTablePrefix(1000), nil)
@@ -433,7 +433,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	}
 
 	// Make sure the second range goes to the end.
-	if !proto.KeyMax.Equal(rng.Desc().EndKey) {
+	if !roachpb.KeyMax.Equal(rng.Desc().EndKey) {
 		t.Fatalf("second range has split: %+v", rng.Desc())
 	}
 
@@ -450,7 +450,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	}
 
 	// Make sure the new range goes to the end.
-	if !proto.KeyMax.Equal(newRng.Desc().EndKey) {
+	if !roachpb.KeyMax.Equal(newRng.Desc().EndKey) {
 		t.Fatalf("second range has split: %+v", rng.Desc())
 	}
 }
@@ -464,7 +464,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
 
-	origRng := store.LookupReplica(proto.KeyMin, nil)
+	origRng := store.LookupReplica(roachpb.KeyMin, nil)
 
 	// Set max bytes.
 	maxBytes := int64(1 << 16)
@@ -525,19 +525,19 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expKeys := []proto.Key{}
+	expKeys := []roachpb.Key{}
 	for i := 1; i <= 5; i++ {
 		expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix,
 			keys.MakeTablePrefix(uint32(keys.MaxReservedDescID+i))))
 	}
-	expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix, proto.KeyMax))
+	expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix, roachpb.KeyMax))
 
 	if err := util.IsTrueWithin(func() bool {
 		rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
-		var keys []proto.Key
+		var keys []roachpb.Key
 		for _, r := range rows {
 			keys = append(keys, r.Key)
 		}
@@ -562,19 +562,19 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expKeys = []proto.Key{}
+	expKeys = []roachpb.Key{}
 	for i := 1; i <= 10; i++ {
 		expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix,
 			keys.MakeTablePrefix(uint32(keys.MaxReservedDescID+i))))
 	}
-	expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix, proto.KeyMax))
+	expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix, roachpb.KeyMax))
 
 	if err := util.IsTrueWithin(func() bool {
 		rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
-		var keys []proto.Key
+		var keys []roachpb.Key
 		for _, r := range rows {
 			keys = append(keys, r.Key)
 		}

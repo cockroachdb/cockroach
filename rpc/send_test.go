@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -40,7 +40,7 @@ func TestInvalidAddrLength(t *testing.T) {
 	ret, err := Send(Options{N: 1}, "", nil, nil, nil, nil)
 
 	// the expected return is nil and SendError
-	if _, ok := err.(*proto.SendError); !ok || ret != nil {
+	if _, ok := err.(*roachpb.SendError); !ok || ret != nil {
 		t.Fatalf("Shorter addrs should return nil and SendError.")
 	}
 }
@@ -141,7 +141,7 @@ func TestRetryableError(t *testing.T) {
 }
 
 type BrokenResponse struct {
-	*proto.ResponseHeader
+	*roachpb.ResponseHeader
 }
 
 func (*BrokenResponse) Verify() error {
@@ -166,12 +166,12 @@ func TestUnretryableError(t *testing.T) {
 		Timeout:         5 * time.Second,
 	}
 	getArgs := func(addr net.Addr) gogoproto.Message {
-		return &proto.RequestHeader{}
+		return &roachpb.RequestHeader{}
 	}
 	// Make getRetry return a BrokenResponse so that the proto
 	// integrity check fails.
 	getReply := func() gogoproto.Message {
-		return &BrokenResponse{&proto.ResponseHeader{}}
+		return &BrokenResponse{&roachpb.ResponseHeader{}}
 	}
 	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{s.Addr()}, getArgs, getReply, nodeContext)
 	if err == nil {

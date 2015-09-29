@@ -21,7 +21,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
@@ -58,18 +58,18 @@ import (
 // 		slot := (timestamp / keyDuration) // integer division
 var (
 	// keyDataPrefix is the key prefix for time series data keys.
-	keyDataPrefix = proto.MakeKey(keys.SystemPrefix, proto.Key("tsd"))
+	keyDataPrefix = roachpb.MakeKey(keys.SystemPrefix, roachpb.Key("tsd"))
 )
 
 // MakeDataKey creates a time series data key for the given series name, source,
 // Resolution and timestamp. The timestamp is expressed in nanoseconds since the
 // epoch; it will be truncated to an exact multiple of the supplied
 // Resolution's KeyDuration.
-func MakeDataKey(name string, source string, r Resolution, timestamp int64) proto.Key {
+func MakeDataKey(name string, source string, r Resolution, timestamp int64) roachpb.Key {
 	// Normalize timestamp into a timeslot before recording.
 	timeslot := timestamp / r.KeyDuration()
 
-	k := append(proto.Key(nil), keyDataPrefix...)
+	k := append(roachpb.Key(nil), keyDataPrefix...)
 	k = encoding.EncodeBytes(k, []byte(name))
 	k = encoding.EncodeVarint(k, int64(r))
 	k = encoding.EncodeVarint(k, timeslot)
@@ -78,7 +78,7 @@ func MakeDataKey(name string, source string, r Resolution, timestamp int64) prot
 }
 
 // DecodeDataKey decodes a time series key into its components.
-func DecodeDataKey(key proto.Key) (string, string, Resolution, int64, error) {
+func DecodeDataKey(key roachpb.Key) (string, string, Resolution, int64, error) {
 	// Detect and remove prefix.
 	remainder := key
 	if !bytes.HasPrefix(remainder, keyDataPrefix) {

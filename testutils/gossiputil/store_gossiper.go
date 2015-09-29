@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 )
 
 // StoreGossiper allows tests to push storeDescriptors into gossip and
@@ -55,7 +55,7 @@ func NewStoreGossiper(g *gossip.Gossip) *StoreGossiper {
 
 // GossipStores queues up a list of stores to gossip and blocks until each one
 // is gossiped before returning.
-func (sg *StoreGossiper) GossipStores(stores []*proto.StoreDescriptor, t *testing.T) {
+func (sg *StoreGossiper) GossipStores(stores []*roachpb.StoreDescriptor, t *testing.T) {
 	sg.mu.Lock()
 	sg.storeKeyMap = make(map[string]struct{})
 	sg.wg.Add(len(stores))
@@ -76,7 +76,7 @@ func (sg *StoreGossiper) GossipStores(stores []*proto.StoreDescriptor, t *testin
 
 // GossipWithFunction is similar to GossipStores but instead of gossiping the
 // store descriptors directly, call the passed in function to do so.
-func (sg *StoreGossiper) GossipWithFunction(stores []proto.StoreID, gossiper func()) {
+func (sg *StoreGossiper) GossipWithFunction(stores []roachpb.StoreID, gossiper func()) {
 	sg.mu.Lock()
 	sg.storeKeyMap = make(map[string]struct{})
 	sg.wg.Add(len(stores))

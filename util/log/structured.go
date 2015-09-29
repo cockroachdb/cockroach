@@ -26,7 +26,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/caller"
 )
 
@@ -46,7 +46,7 @@ func getJSON(arg interface{}) []byte {
 	// Not much point in storying strings and byte slices twice, as
 	// they're nearly always exactly specified in the format string.
 	switch arg.(type) {
-	case string, []byte, proto.Key, proto.EncodedKey:
+	case string, []byte, roachpb.Key, roachpb.EncodedKey:
 		return nil
 	}
 
@@ -63,15 +63,15 @@ func setLogEntry(ctx context.Context, format string, args []interface{}, entry *
 		for i := Field(0); i < maxField; i++ {
 			if v := ctx.Value(i); v != nil {
 				switch vTyp := v.(type) {
-				case proto.NodeID:
+				case roachpb.NodeID:
 					entry.NodeID = &vTyp
-				case proto.StoreID:
+				case roachpb.StoreID:
 					entry.StoreID = &vTyp
-				case proto.RangeID:
+				case roachpb.RangeID:
 					entry.RangeID = &vTyp
-				case proto.Method:
+				case roachpb.Method:
 					entry.Method = &vTyp
-				case proto.Key:
+				case roachpb.Key:
 					entry.Key = vTyp
 				}
 			}

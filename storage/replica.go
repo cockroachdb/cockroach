@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -83,7 +83,7 @@ const (
 // be run once for each replica and must produce consistent results
 // each time. Should only be used in tests in the storage and
 // storage_test packages.
-var TestingCommandFilter func(proto.Request) error
+var TestingCommandFilter func(roachpb.Request) error
 
 // This flag controls whether Transaction entries are automatically gc'ed
 // upon EndTransaction if they only have local intents (which can be
@@ -111,26 +111,26 @@ const (
 // index equal to the value of the final Method. Unused indexes
 // default to false.
 var tsCacheMethods = [...]bool{
-	proto.Get:                true,
-	proto.Put:                true,
-	proto.ConditionalPut:     true,
-	proto.Increment:          true,
-	proto.Scan:               true,
-	proto.ReverseScan:        true,
-	proto.Delete:             true,
-	proto.DeleteRange:        true,
-	proto.ResolveIntent:      true,
-	proto.ResolveIntentRange: true,
+	roachpb.Get:                true,
+	roachpb.Put:                true,
+	roachpb.ConditionalPut:     true,
+	roachpb.Increment:          true,
+	roachpb.Scan:               true,
+	roachpb.ReverseScan:        true,
+	roachpb.Delete:             true,
+	roachpb.DeleteRange:        true,
+	roachpb.ResolveIntent:      true,
+	roachpb.ResolveIntentRange: true,
 }
 
 // usesTimestampCache returns true if the request affects or is
 // affected by the timestamp cache.
-func usesTimestampCache(r proto.Request) bool {
+func usesTimestampCache(r roachpb.Request) bool {
 	m := r.Method()
-	if m < 0 || m >= proto.Method(len(tsCacheMethods)) {
+	if m < 0 || m >= roachpb.Method(len(tsCacheMethods)) {
 		return false
 	}
-	if proto.IsReadOnly(r) && r.Header().ReadConsistency == proto.INCONSISTENT {
+	if roachpb.IsReadOnly(r) && r.Header().ReadConsistency == roachpb.INCONSISTENT {
 		return false
 	}
 	return tsCacheMethods[m]
@@ -141,7 +141,7 @@ func usesTimestampCache(r proto.Request) bool {
 // via the done channel.
 type pendingCmd struct {
 	ctx  context.Context
-	done chan proto.ResponseWithError // Used to signal waiting RPC handler
+	done chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
 
 // A RangeManager is an interface satisfied by Store through which ranges
@@ -151,7 +151,7 @@ type pendingCmd struct {
 type RangeManager interface {
 	// Accessors for shared state.
 	ClusterID() string
-	StoreID() proto.StoreID
+	StoreID() roachpb.StoreID
 	Clock() *hlc.Clock
 	Engine() engine.Engine
 	DB() *client.DB
@@ -162,14 +162,14 @@ type RangeManager interface {
 	Stopper() *stop.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
-	resolveWriteIntentError(context.Context, *proto.WriteIntentError, *Replica, proto.Request, proto.PushTxnType) error
+	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.PushTxnType) error
 
 	// Range and replica manipulation methods.
-	LookupReplica(start, end proto.Key) *Replica
-	MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRangeID proto.RangeID) error
-	NewRangeDescriptor(start, end proto.Key, replicas []proto.ReplicaDescriptor) (*proto.RangeDescriptor, error)
+	LookupReplica(start, end roachpb.Key) *Replica
+	MergeRange(subsumingRng *Replica, updatedEndKey roachpb.Key, subsumedRangeID roachpb.RangeID) error
+	NewRangeDescriptor(start, end roachpb.Key, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
-	ProposeRaftCommand(cmdIDKey, proto.RaftCommand) <-chan error
+	ProposeRaftCommand(cmdIDKey, roachpb.RaftCommand) <-chan error
 	RemoveReplica(rng *Replica) error
 	Tracer() *tracer.Tracer
 	SplitRange(origRng, newRng *Replica) error
@@ -211,13 +211,13 @@ type Replica struct {
 	// pendingReplica.value changes to zero.
 	pendingReplica struct {
 		*sync.Cond
-		value proto.ReplicaDescriptor
+		value roachpb.ReplicaDescriptor
 	}
 	truncatedState unsafe.Pointer // *proto.RaftTruancatedState
 }
 
 // NewReplica initializes the replica using the given metadata.
-func NewReplica(desc *proto.RangeDescriptor, rm RangeManager) (*Replica, error) {
+func NewReplica(desc *roachpb.RangeDescriptor, rm RangeManager) (*Replica, error) {
 	r := &Replica{
 		rm:          rm,
 		cmdQ:        NewCommandQueue(),
@@ -296,26 +296,26 @@ func (r *Replica) SetMaxBytes(maxBytes int64) {
 
 // IsFirstRange returns true if this is the first range.
 func (r *Replica) IsFirstRange() bool {
-	return bytes.Equal(r.Desc().StartKey, proto.KeyMin)
+	return bytes.Equal(r.Desc().StartKey, roachpb.KeyMin)
 }
 
-func loadLeaderLease(eng engine.Engine, rangeID proto.RangeID) (*proto.Lease, error) {
-	lease := &proto.Lease{}
-	if _, err := engine.MVCCGetProto(eng, keys.RaftLeaderLeaseKey(rangeID), proto.ZeroTimestamp, true, nil, lease); err != nil {
+func loadLeaderLease(eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
+	lease := &roachpb.Lease{}
+	if _, err := engine.MVCCGetProto(eng, keys.RaftLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
 	}
 	return lease, nil
 }
 
 // getLease returns the current leader lease.
-func (r *Replica) getLease() *proto.Lease {
-	return (*proto.Lease)(atomic.LoadPointer(&r.lease))
+func (r *Replica) getLease() *roachpb.Lease {
+	return (*roachpb.Lease)(atomic.LoadPointer(&r.lease))
 }
 
 // newNotLeaderError returns a NotLeaderError initialized with the
 // replica for the holder (if any) of the given lease.
-func (r *Replica) newNotLeaderError(l *proto.Lease, originStoreID proto.StoreID) error {
-	err := &proto.NotLeaderError{}
+func (r *Replica) newNotLeaderError(l *roachpb.Lease, originStoreID roachpb.StoreID) error {
+	err := &roachpb.NotLeaderError{}
 	if l != nil && l.Replica.ReplicaID != 0 {
 		desc := r.Desc()
 
@@ -329,7 +329,7 @@ func (r *Replica) newNotLeaderError(l *proto.Lease, originStoreID proto.StoreID)
 // requestLeaderLease sends a request to obtain or extend a leader lease for
 // this replica. Unless an error is returned, the obtained lease will be valid
 // for a time interval containing the requested timestamp.
-func (r *Replica) requestLeaderLease(timestamp proto.Timestamp) error {
+func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	// TODO(Tobias): get duration from configuration, either as a config flag
 	// or, later, dynamically adjusted.
 	duration := int64(DefaultLeaderLeaseDuration)
@@ -340,23 +340,23 @@ func (r *Replica) requestLeaderLease(timestamp proto.Timestamp) error {
 	if replica == nil {
 		return util.Errorf("can't find store %s in descriptor %+v", r.rm.StoreID(), desc)
 	}
-	args := &proto.LeaderLeaseRequest{
-		RequestHeader: proto.RequestHeader{
+	args := &roachpb.LeaderLeaseRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:       desc.StartKey,
 			Timestamp: timestamp,
-			CmdID: proto.ClientCmdID{
+			CmdID: roachpb.ClientCmdID{
 				WallTime: r.rm.Clock().Now().WallTime,
 				Random:   rand.Int63(),
 			},
 			RangeID: desc.RangeID,
 		},
-		Lease: proto.Lease{
+		Lease: roachpb.Lease{
 			Start:      timestamp,
 			Expiration: expiration,
 			Replica:    *replica,
 		},
 	}
-	ba := &proto.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Add(args)
 	// Send lease request directly to raft in order to skip unnecessary
 	// checks from normal request machinery, (e.g. the command queue).
@@ -386,7 +386,7 @@ func (r *Replica) requestLeaderLease(timestamp proto.Timestamp) error {
 //  will fail as well. If it succeeds, as is likely, then the write
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
-func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp proto.Timestamp) error {
+func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp roachpb.Timestamp) error {
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 
@@ -406,7 +406,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	// we can redirect if they cover our timestamp. Note that it can't be us,
 	// since we're holding a lock here, and even if it were it would be a rare
 	// extra round-trip.
-	if _, ok := err.(*proto.LeaseRejectedError); ok {
+	if _, ok := err.(*roachpb.LeaseRejectedError); ok {
 		if lease := r.getLease(); lease.Covers(timestamp) {
 			return r.newNotLeaderError(lease, r.rm.StoreID())
 		}
@@ -431,14 +431,14 @@ func (r *Replica) isInitialized() bool {
 }
 
 // Desc atomically returns the range's descriptor.
-func (r *Replica) Desc() *proto.RangeDescriptor {
-	return (*proto.RangeDescriptor)(atomic.LoadPointer(&r.desc))
+func (r *Replica) Desc() *roachpb.RangeDescriptor {
+	return (*roachpb.RangeDescriptor)(atomic.LoadPointer(&r.desc))
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
 // processRangeDescriptorUpdate() to make the range manager handle the
 // descriptor update.
-func (r *Replica) setDesc(desc *proto.RangeDescriptor) error {
+func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
 	r.setDescWithoutProcessUpdate(desc)
 	if r.rm == nil {
 		// r.rm is null in some tests.
@@ -449,30 +449,30 @@ func (r *Replica) setDesc(desc *proto.RangeDescriptor) error {
 
 // setDescWithoutProcessUpdate updates the range descriptor without calling
 // processRangeDescriptorUpdate.
-func (r *Replica) setDescWithoutProcessUpdate(desc *proto.RangeDescriptor) {
+func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
 }
 
 // getCachedTruncatedState atomically returns the range's cached truncated
 // state.
-func (r *Replica) getCachedTruncatedState() *proto.RaftTruncatedState {
-	return (*proto.RaftTruncatedState)(atomic.LoadPointer(&r.truncatedState))
+func (r *Replica) getCachedTruncatedState() *roachpb.RaftTruncatedState {
+	return (*roachpb.RaftTruncatedState)(atomic.LoadPointer(&r.truncatedState))
 }
 
 // setCachedTruncatedState atomically sets the range's truncated state.
-func (r *Replica) setCachedTruncatedState(state *proto.RaftTruncatedState) {
+func (r *Replica) setCachedTruncatedState(state *roachpb.RaftTruncatedState) {
 	atomic.StorePointer(&r.truncatedState, unsafe.Pointer(state))
 }
 
 // GetReplica returns the replica for this range from the range descriptor.
 // Returns nil if the replica is not found.
-func (r *Replica) GetReplica() *proto.ReplicaDescriptor {
+func (r *Replica) GetReplica() *roachpb.ReplicaDescriptor {
 	_, replica := r.Desc().FindReplica(r.rm.StoreID())
 	return replica
 }
 
 // ReplicaDescriptor returns information about the given member of this replica's range.
-func (r *Replica) ReplicaDescriptor(replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
+func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
 	r.RLock()
 	defer r.RUnlock()
 
@@ -485,7 +485,7 @@ func (r *Replica) ReplicaDescriptor(replicaID proto.ReplicaID) (proto.ReplicaDes
 	if r.pendingReplica.value.ReplicaID == replicaID {
 		return r.pendingReplica.value, nil
 	}
-	return proto.ReplicaDescriptor{}, util.Errorf("replica %d not found in range %d",
+	return roachpb.ReplicaDescriptor{}, util.Errorf("replica %d not found in range %d",
 		replicaID, desc.RangeID)
 }
 
@@ -495,29 +495,29 @@ func (r *Replica) GetMVCCStats() engine.MVCCStats {
 }
 
 // ContainsKey returns whether this range contains the specified key.
-func (r *Replica) ContainsKey(key proto.Key) bool {
+func (r *Replica) ContainsKey(key roachpb.Key) bool {
 	return containsKey(*r.Desc(), key)
 }
 
-func containsKey(desc proto.RangeDescriptor, key proto.Key) bool {
+func containsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
 	return desc.ContainsKey(keys.KeyAddress(key))
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
-func (r *Replica) ContainsKeyRange(start, end proto.Key) bool {
+func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
 	return containsKeyRange(*r.Desc(), start, end)
 }
 
-func containsKeyRange(desc proto.RangeDescriptor, start, end proto.Key) bool {
+func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool {
 	return desc.ContainsKeyRange(keys.KeyAddress(start), keys.KeyAddress(end))
 }
 
 // GetGCMetadata reads the latest GC metadata for this range.
-func (r *Replica) GetGCMetadata() (*proto.GCMetadata, error) {
+func (r *Replica) GetGCMetadata() (*roachpb.GCMetadata, error) {
 	key := keys.RangeGCMetadataKey(r.Desc().RangeID)
-	gcMeta := &proto.GCMetadata{}
-	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, true, nil, gcMeta)
+	gcMeta := &roachpb.GCMetadata{}
+	_, err := engine.MVCCGetProto(r.rm.Engine(), key, roachpb.ZeroTimestamp, true, nil, gcMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -526,21 +526,21 @@ func (r *Replica) GetGCMetadata() (*proto.GCMetadata, error) {
 
 // GetLastVerificationTimestamp reads the timestamp at which the range's
 // data was last verified.
-func (r *Replica) GetLastVerificationTimestamp() (proto.Timestamp, error) {
+func (r *Replica) GetLastVerificationTimestamp() (roachpb.Timestamp, error) {
 	key := keys.RangeLastVerificationTimestampKey(r.Desc().RangeID)
-	timestamp := proto.Timestamp{}
-	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, true, nil, &timestamp)
+	timestamp := roachpb.Timestamp{}
+	_, err := engine.MVCCGetProto(r.rm.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
-		return proto.ZeroTimestamp, err
+		return roachpb.ZeroTimestamp, err
 	}
 	return timestamp, nil
 }
 
 // SetLastVerificationTimestamp writes the timestamp at which the range's
 // data was last verified.
-func (r *Replica) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
+func (r *Replica) SetLastVerificationTimestamp(timestamp roachpb.Timestamp) error {
 	key := keys.RangeLastVerificationTimestampKey(r.Desc().RangeID)
-	return engine.MVCCPutProto(r.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &timestamp)
+	return engine.MVCCPutProto(r.rm.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
 // setBatchTimestamps ensures that timestamps on individual requests are
@@ -549,8 +549,8 @@ func (r *Replica) SetLastVerificationTimestamp(timestamp proto.Timestamp) error 
 // This has the effect of allowing self-overlapping commands within the batch,
 // which would otherwise result in an endless loop of WriteTooOldErrors.
 // TODO(tschottdorf): discuss self-overlap.
-func setBatchTimestamps(ba proto.BatchRequest) {
-	if ba.Txn != nil || ba.Timestamp.Equal(proto.ZeroTimestamp) ||
+func setBatchTimestamps(ba roachpb.BatchRequest) {
+	if ba.Txn != nil || ba.Timestamp.Equal(roachpb.ZeroTimestamp) ||
 		!ba.IsWrite() {
 		return
 	}
@@ -560,7 +560,7 @@ func setBatchTimestamps(ba proto.BatchRequest) {
 		// the same Txn for different intents will push the pushee in
 		// iteration, bumping up its priority. Unfortunately PushTxn is flagged
 		// as a write command (is it really?). Interim solution.
-		if args := union.GetInner(); args.Method() != proto.PushTxn {
+		if args := union.GetInner(); args.Method() != roachpb.PushTxn {
 			args.Header().Timestamp.Forward(ba.Timestamp.Add(0, int32(i)))
 		}
 	}
@@ -570,8 +570,8 @@ func setBatchTimestamps(ba proto.BatchRequest) {
 // unwraps in a BatchRequest.
 // TODO(tschottdorf): should use batchutil.SendWrapped when AddCmd turns into
 // client.Sender#Send.
-func sendArg(r *Replica, ctx context.Context, args proto.Request) (proto.Response, error) {
-	ba := proto.BatchRequest{
+func sendArg(r *Replica, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
+	ba := roachpb.BatchRequest{
 		RequestHeader: *args.Header(),
 	}
 	ba.Add(args)
@@ -580,7 +580,7 @@ func sendArg(r *Replica, ctx context.Context, args proto.Request) (proto.Respons
 	reply, pErr := r.AddCmd(ctx, ba)
 	err := pErr.GoError()
 	if err == nil {
-		br, ok := reply.(*proto.BatchResponse)
+		br, ok := reply.(*roachpb.BatchResponse)
 		if !ok {
 			panic(fmt.Sprintf("expected a BatchResponse, got a %T", reply))
 		}
@@ -600,8 +600,8 @@ func sendArg(r *Replica, ctx context.Context, args proto.Request) (proto.Respons
 // either along the read-only execution path or the read-write Raft
 // command queue.
 // TODO(tschottdorf): use BatchRequest w/o pointer receiver.
-func (r *Replica) AddCmd(ctx context.Context, ba proto.BatchRequest) (proto.Response, *proto.Error) {
-	var reply proto.Response
+func (r *Replica) AddCmd(ctx context.Context, ba roachpb.BatchRequest) (roachpb.Response, *roachpb.Error) {
+	var reply roachpb.Response
 	var err error
 	// Fiddle with the timestamps to make sure that writes can overlap
 	// within this batch.
@@ -616,10 +616,10 @@ func (r *Replica) AddCmd(ctx context.Context, ba proto.BatchRequest) (proto.Resp
 	if ba.IsAdmin() {
 		defer trace.Epoch("admin path")()
 		args := ba.Requests[0].GetInner()
-		var iReply proto.Response
+		var iReply roachpb.Response
 		iReply, err = r.addAdminCmd(ctx, args)
 		if err == nil {
-			br := &proto.BatchResponse{}
+			br := &roachpb.BatchResponse{}
 			br.Add(iReply)
 			*br.Header() = *iReply.Header()
 			reply = br
@@ -641,14 +641,14 @@ func (r *Replica) AddCmd(ctx context.Context, ba proto.BatchRequest) (proto.Resp
 	if err == multiraft.ErrGroupDeleted {
 		// This error needs to be converted appropriately so that
 		// clients will retry.
-		err = proto.NewRangeNotFoundError(r.Desc().RangeID)
+		err = roachpb.NewRangeNotFoundError(r.Desc().RangeID)
 	}
-	return reply, proto.NewError(err)
+	return reply, roachpb.NewError(err)
 }
 
-func (r *Replica) checkCmdHeader(header *proto.RequestHeader) error {
+func (r *Replica) checkCmdHeader(header *roachpb.RequestHeader) error {
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
-		return proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
+		return roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
 	}
 	return nil
 }
@@ -658,11 +658,11 @@ func (r *Replica) checkCmdHeader(header *proto.RequestHeader) error {
 // all be set to identical values between the batch request header and
 // all constituent batch requests. Also, either all requests must be
 // read-only, or none.
-func (r *Replica) checkBatchRequest(ba *proto.BatchRequest) error {
+func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest) error {
 	for i := range ba.Requests {
 		args := ba.Requests[i].GetInner()
 		header := args.Header()
-		if args.Method() == proto.EndTransaction && len(ba.Requests) != 1 {
+		if args.Method() == roachpb.EndTransaction && len(ba.Requests) != 1 {
 			return util.Errorf("cannot mix EndTransaction with other operations in a batch")
 		}
 		// TODO(tschottdorf): disabled since execution forces at least the batch
@@ -680,15 +680,15 @@ func (r *Replica) checkBatchRequest(ba *proto.BatchRequest) error {
 		if header.ReadConsistency != ba.ReadConsistency {
 			return util.Errorf("requests and batch must have same read consistency")
 		}
-		if proto.IsReadOnly(args) {
-			if header.ReadConsistency == proto.INCONSISTENT && header.Txn != nil {
+		if roachpb.IsReadOnly(args) {
+			if header.ReadConsistency == roachpb.INCONSISTENT && header.Txn != nil {
 				// Disallow any inconsistent reads within txns.
 				return util.Errorf("cannot allow inconsistent reads within a transaction")
 			}
-			if header.ReadConsistency == proto.CONSENSUS {
+			if header.ReadConsistency == roachpb.CONSENSUS {
 				return util.Errorf("consensus reads not implemented")
 			}
-		} else if header.ReadConsistency == proto.INCONSISTENT {
+		} else if header.ReadConsistency == roachpb.INCONSISTENT {
 			return util.Errorf("inconsistent mode is only available to reads")
 		}
 	}
@@ -701,10 +701,10 @@ func (r *Replica) checkBatchRequest(ba *proto.BatchRequest) error {
 // key ranges. This method will block if there are any overlapping commands
 // already in the queue. Returns the command queue insertion keys, to be
 // supplied to a subsequent invocation of endCmds().
-func (r *Replica) beginCmds(ba *proto.BatchRequest) ([]interface{}, error) {
+func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
 	var cmdKeys []interface{}
 	// Don't use the command queue for inconsistent reads.
-	if ba.ReadConsistency != proto.INCONSISTENT {
+	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		r.Lock()
 		var wg sync.WaitGroup
 		var spans []keys.Span
@@ -723,7 +723,7 @@ func (r *Replica) beginCmds(ba *proto.BatchRequest) ([]interface{}, error) {
 	// preceding command(s) for key range are complete so that the node
 	// clock has been updated to the high water mark of any commands
 	// which might overlap this one in effect.
-	if ba.Timestamp.Equal(proto.ZeroTimestamp) {
+	if ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
 		if ba.Txn != nil {
 			// TODO(tschottdorf): see if this is already done somewhere else.
 			ba.Timestamp = ba.Txn.Timestamp
@@ -735,7 +735,7 @@ func (r *Replica) beginCmds(ba *proto.BatchRequest) ([]interface{}, error) {
 	for _, union := range ba.Requests {
 		args := union.GetInner()
 		header := args.Header()
-		if header.Timestamp.Equal(proto.ZeroTimestamp) {
+		if header.Timestamp.Equal(roachpb.ZeroTimestamp) {
 			header.Timestamp = ba.Timestamp
 		}
 	}
@@ -745,7 +745,7 @@ func (r *Replica) beginCmds(ba *proto.BatchRequest) ([]interface{}, error) {
 
 // endCmds removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
-func (r *Replica) endCmds(cmdKeys []interface{}, ba *proto.BatchRequest, err error) {
+func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, err error) {
 	r.Lock()
 	// Only update the timestamp cache if the command succeeded.
 	if err == nil {
@@ -753,7 +753,7 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *proto.BatchRequest, err err
 			args := union.GetInner()
 			if usesTimestampCache(args) {
 				header := args.Header()
-				r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.GetID(), proto.IsReadOnly(args))
+				r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.GetID(), roachpb.IsReadOnly(args))
 			}
 		}
 	}
@@ -765,7 +765,7 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *proto.BatchRequest, err err
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the leader replica.
-func (r *Replica) addAdminCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
+func (r *Replica) addAdminCmd(ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
 	header := args.Header()
 
 	if err := r.checkCmdHeader(header); err != nil {
@@ -778,10 +778,10 @@ func (r *Replica) addAdminCmd(ctx context.Context, args proto.Request) (proto.Re
 	}
 
 	switch tArgs := args.(type) {
-	case *proto.AdminSplitRequest:
+	case *roachpb.AdminSplitRequest:
 		resp, err := r.AdminSplit(*tArgs, r.Desc())
 		return &resp, err
-	case *proto.AdminMergeRequest:
+	case *roachpb.AdminMergeRequest:
 		resp, err := r.AdminMerge(*tArgs, r.Desc())
 		return &resp, err
 	default:
@@ -792,7 +792,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, args proto.Request) (proto.Re
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Replica) addReadOnlyCmd(ctx context.Context, ba *proto.BatchRequest) (*proto.BatchResponse, error) {
+func (r *Replica) addReadOnlyCmd(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 	header := ba.Header()
 
 	if err := r.checkCmdHeader(header); err != nil {
@@ -844,7 +844,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba *proto.BatchRequest) (*
 // error returned. If a WaitGroup is supplied, it is signaled when the command
 // enters Raft or the function returns with a preprocessing error, whichever
 // happens earlier.
-func (r *Replica) addWriteCmd(ctx context.Context, ba *proto.BatchRequest, wg *sync.WaitGroup) (*proto.BatchResponse, error) {
+func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg *sync.WaitGroup) (*roachpb.BatchResponse, error) {
 	signal := func() {
 		if wg != nil {
 			wg.Done()
@@ -936,7 +936,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *proto.BatchRequest, wg *s
 	signal()
 
 	// First wait for raft to commit or abort the command.
-	var br *proto.BatchResponse
+	var br *roachpb.BatchResponse
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		respWithErr := <-pendingCmd.done
@@ -951,10 +951,10 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *proto.BatchRequest, wg *s
 // initializes a client command ID if one hasn't been. It then
 // proposes the command to Raft and returns the error channel and
 // pending command struct for receiving.
-func (r *Replica) proposeRaftCommand(ctx context.Context, ba *proto.BatchRequest) (<-chan error, *pendingCmd) {
+func (r *Replica) proposeRaftCommand(ctx context.Context, ba *roachpb.BatchRequest) (<-chan error, *pendingCmd) {
 	pendingCmd := &pendingCmd{
 		ctx:  ctx,
-		done: make(chan proto.ResponseWithError, 1),
+		done: make(chan roachpb.ResponseWithError, 1),
 	}
 	desc := r.Desc()
 	_, replica := desc.FindReplica(r.rm.StoreID())
@@ -963,7 +963,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba *proto.BatchRequest
 		errChan <- util.Errorf("could not find own replica in descriptor")
 		return errChan, pendingCmd
 	}
-	raftCmd := proto.RaftCommand{
+	raftCmd := roachpb.RaftCommand{
 		RangeID:       desc.RangeID,
 		OriginReplica: *replica,
 		Cmd:           *ba,
@@ -982,7 +982,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba *proto.BatchRequest
 // struct to get args and reply and then applying the command to the
 // state machine via applyRaftCommand(). The error result is sent on
 // the command's done channel, if available.
-func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.RaftCommand) error {
+func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roachpb.RaftCommand) error {
 	if index == 0 {
 		log.Fatalc(r.context(), "processRaftCommand requires a non-zero index")
 	}
@@ -1014,7 +1014,7 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto
 	}
 
 	if cmd != nil {
-		cmd.done <- proto.ResponseWithError{Reply: br, Err: err}
+		cmd.done <- roachpb.ResponseWithError{Reply: br, Err: err}
 	} else if err != nil && log.V(1) {
 		log.Errorc(r.context(), "error executing raft command: %s", err)
 	}
@@ -1026,8 +1026,8 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto
 // underlying state machine (i.e. the engine).
 // When certain critical operations fail, a replicaCorruptionError may be
 // returned and must be handled by the caller.
-func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originReplica proto.ReplicaDescriptor,
-	ba *proto.BatchRequest) (*proto.BatchResponse, error) {
+func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originReplica roachpb.ReplicaDescriptor,
+	ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 	if index <= 0 {
 		log.Fatalc(ctx, "raft command index is <= 0")
 	}
@@ -1055,7 +1055,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 		atomic.StoreUint64(&r.appliedIndex, index)
 		// Invalidate the cache and let raftTruncatedState() read the value the next
 		// time it's required.
-		if _, ok := ba.GetArg(proto.TruncateLog); ok {
+		if _, ok := ba.GetArg(roachpb.TruncateLog); ok {
 			r.setCachedTruncatedState(nil)
 		}
 	}
@@ -1066,7 +1066,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 		// Publish update to event feed.
 		// TODO(spencer): we should be sending feed updates for each part
 		// of the batch. In particular, stats should be reported per-command.
-		r.rm.EventFeed().updateRange(r, proto.Batch, &ms)
+		r.rm.EventFeed().updateRange(r, roachpb.Batch, &ms)
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
 	}
@@ -1083,8 +1083,8 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 // applyRaftCommandInBatch executes the command in a batch engine and
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
-func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, originReplica proto.ReplicaDescriptor,
-	ba *proto.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *proto.BatchResponse, []intentsWithArg, error) {
+func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, originReplica roachpb.ReplicaDescriptor,
+	ba *roachpb.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *roachpb.BatchResponse, []intentsWithArg, error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.rm.Engine().NewBatch()
 
@@ -1125,7 +1125,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 
 		// TODO(tschottdorf): shouldn't be in the loop. Currently is because
 		// we haven't cleaned up the timestamp handling fully.
-		if lease := r.getLease(); args.Method() != proto.LeaderLease &&
+		if lease := r.getLease(); args.Method() != roachpb.LeaderLease &&
 			(!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(args.Header().Timestamp)) {
 			// Verify the leader lease is held, unless this command is trying to
 			// obtain it. Any other Raft command has had the leader lease held
@@ -1164,14 +1164,14 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		} else {
 			// TODO(tschottdorf): make `nil` acceptable. Corresponds to
 			// proto.Response{With->Or}Error.
-			br = &proto.BatchResponse{}
+			br = &roachpb.BatchResponse{}
 			// Otherwise, reset the batch to clear out partial execution and
 			// prepare for the failed response cache entry.
 			btch.Close()
 			btch = r.rm.Engine().NewBatch()
 		}
 		if err := r.respCache.PutResponse(btch, ba.CmdID,
-			proto.ResponseWithError{Reply: br, Err: err}); err != nil {
+			roachpb.ResponseWithError{Reply: br, Err: err}); err != nil {
 			// TODO(tschottdorf): ReplicaCorruptionError.
 			log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", err)
 		}
@@ -1181,12 +1181,12 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 }
 
 type intentsWithArg struct {
-	args    proto.Request
-	intents []proto.Intent
+	args    roachpb.Request
+	intents []roachpb.Intent
 }
 
-func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *proto.BatchRequest) (*proto.BatchResponse, []intentsWithArg, error) {
-	br := &proto.BatchResponse{}
+func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, []intentsWithArg, error) {
+	br := &roachpb.BatchResponse{}
 	br.Timestamp = ba.Timestamp
 	var intents []intentsWithArg
 	// If transactional, we use ba.Txn for each individual command and
@@ -1211,8 +1211,8 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *pr
 		// individual requests contain nothing but the key (range) in their
 		// headers.
 		{
-			origHeader := *gogoproto.Clone(header).(*proto.RequestHeader)
-			*header = *gogoproto.Clone(&ba.RequestHeader).(*proto.RequestHeader)
+			origHeader := *gogoproto.Clone(header).(*roachpb.RequestHeader)
+			*header = *gogoproto.Clone(&ba.RequestHeader).(*roachpb.RequestHeader)
 			// Only Key and EndKey are allowed to diverge from the iterated
 			// Batch header.
 			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
@@ -1229,7 +1229,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *pr
 		}
 
 		if err != nil {
-			if iErr, ok := err.(proto.IndexedError); ok {
+			if iErr, ok := err.(roachpb.IndexedError); ok {
 				iErr.SetErrorIndex(int32(index))
 			}
 			return nil, intents, err
@@ -1276,7 +1276,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, error) {
 			switch e := err.(type) {
 			// NotLeaderError means there is an active lease, leaseRejectedError
 			// means we tried to get one but someone beat us to it.
-			case *proto.NotLeaderError, *proto.LeaseRejectedError:
+			case *roachpb.NotLeaderError, *roachpb.LeaseRejectedError:
 				err = nil
 			default:
 				// Any other error is worth being logged visibly.
@@ -1389,12 +1389,12 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// TODO(tschottdorf): avoid data race related to batch unrolling in ExecuteCmd;
 		// can probably go again when that provisional code there is gone. Should
 		// still be careful though, a retry could happen and race with args.
-		args := gogoproto.Clone(item.args).(proto.Request)
+		args := gogoproto.Clone(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
-			err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
+			err := r.rm.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
 				Intents: item.intents,
-			}, r, args, proto.CLEANUP_TXN)
-			if wiErr, ok := err.(*proto.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
+			}, r, args, roachpb.CLEANUP_TXN)
+			if wiErr, ok := err.(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 			}
 		})
@@ -1483,31 +1483,31 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 // TODO(tschottdorf): once Txn records have a list of possibly open intents,
 // resolveIntents should send an RPC to update the transaction(s) as well (for
 // those intents with non-pending Txns).
-func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
+func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) {
 	trace := tracer.FromCtx(ctx)
 	tracer.ToCtx(ctx, nil) // we're doing async stuff below; those need new traces
 	trace.Event("resolving intents [async]")
 
-	var reqsRemote []proto.Request
-	baLocal := &proto.BatchRequest{}
+	var reqsRemote []roachpb.Request
+	baLocal := &roachpb.BatchRequest{}
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
-		var resolveArgs proto.Request
+		var resolveArgs roachpb.Request
 		var local bool // whether this intent lives on this Range
 		{
-			header := proto.RequestHeader{
+			header := roachpb.RequestHeader{
 				Key:    intent.Key,
 				EndKey: intent.EndKey,
 			}
 
 			if len(intent.EndKey) == 0 {
-				resolveArgs = &proto.ResolveIntentRequest{
+				resolveArgs = &roachpb.ResolveIntentRequest{
 					RequestHeader: header,
 					IntentTxn:     intent.Txn,
 				}
 				local = r.ContainsKey(intent.Key)
 			} else {
-				resolveArgs = &proto.ResolveIntentRangeRequest{
+				resolveArgs = &roachpb.ResolveIntentRangeRequest{
 					RequestHeader: header,
 					IntentTxn:     intent.Txn,
 				}
@@ -1543,8 +1543,8 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 				// errors.
 				if err != multiraft.ErrGroupDeleted {
 					switch err.(type) {
-					case *proto.RangeKeyMismatchError:
-					case *proto.NotLeaderError:
+					case *roachpb.RangeKeyMismatchError:
+					case *roachpb.NotLeaderError:
 					default:
 						// TODO(tschottdorf): Does this need to be a panic?
 						panic(fmt.Sprintf("intent resolution failed with unexpected error: %s", err))
@@ -1586,10 +1586,10 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 
 // loadSystemDBSpan scans the entire SystemDB span and returns the full list of
 // key/value pairs along with the sha1 checksum of the contents (key and value).
-func loadSystemDBSpan(eng engine.Engine) ([]proto.KeyValue, []byte, error) {
+func loadSystemDBSpan(eng engine.Engine) ([]roachpb.KeyValue, []byte, error) {
 	// TODO(tschottdorf): Currently this does not handle intents well.
 	kvs, _, err := engine.MVCCScan(eng, keys.SystemDBSpan.Start, keys.SystemDBSpan.End,
-		0, proto.MaxTimestamp, true /* consistent */, nil)
+		0, roachpb.MaxTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return nil, nil, err
 	}

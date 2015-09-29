@@ -65,7 +65,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
@@ -163,7 +163,7 @@ func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []reso
 }
 
 // GetNodeID returns the instance's saved NodeID.
-func (g *Gossip) GetNodeID() proto.NodeID {
+func (g *Gossip) GetNodeID() roachpb.NodeID {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.is.NodeID
@@ -171,7 +171,7 @@ func (g *Gossip) GetNodeID() proto.NodeID {
 
 // SetNodeDescriptor adds the node descriptor to the gossip network
 // and sets the infostore's node ID.
-func (g *Gossip) SetNodeDescriptor(desc *proto.NodeDescriptor) error {
+func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	log.Infof("gossiping node descriptor %+v", desc)
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, ttlNodeIDGossip); err != nil {
 		return util.Errorf("couldn't gossip descriptor for node %d: %v", desc.NodeID, err)
@@ -193,15 +193,15 @@ func (g *Gossip) SetResolvers(resolvers []resolver.Resolver) {
 }
 
 // GetNodeIDAddress looks up the address of the node by ID.
-func (g *Gossip) GetNodeIDAddress(nodeID proto.NodeID) (net.Addr, error) {
+func (g *Gossip) GetNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.getNodeIDAddressLocked(nodeID)
 }
 
 // GetNodeDescriptor looks up the descriptor of the node by ID.
-func (g *Gossip) GetNodeDescriptor(nodeID proto.NodeID) (*proto.NodeDescriptor, error) {
-	nodeDescriptor := &proto.NodeDescriptor{}
+func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	nodeDescriptor := &roachpb.NodeDescriptor{}
 	if err := g.GetInfoProto(MakeNodeIDKey(nodeID), nodeDescriptor); err != nil {
 		return nil, util.Errorf("unable to lookup descriptor for node %d: %s", nodeID, err)
 	}
@@ -212,7 +212,7 @@ func (g *Gossip) GetNodeDescriptor(nodeID proto.NodeID) (*proto.NodeDescriptor, 
 // getNodeDescriptorLocked looks up the descriptor of the node by ID. The mutex
 // is assumed held by the caller. This method is called externally via
 // GetNodeDescriptor and internally by getNodeIDAddressLocked.
-func (g *Gossip) getNodeDescriptorLocked(nodeID proto.NodeID) (*proto.NodeDescriptor, error) {
+func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	nodeIDKey := MakeNodeIDKey(nodeID)
 
 	// We can't use GetInfoProto here because that method grabs the lock.
@@ -220,7 +220,7 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID proto.NodeID) (*proto.NodeDescri
 		if err := i.Value.Verify([]byte(nodeIDKey)); err != nil {
 			return nil, err
 		}
-		nodeDescriptor := &proto.NodeDescriptor{}
+		nodeDescriptor := &roachpb.NodeDescriptor{}
 
 		if err := gogoproto.Unmarshal(i.Value.Bytes, nodeDescriptor); err != nil {
 			return nil, err
@@ -236,7 +236,7 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID proto.NodeID) (*proto.NodeDescri
 // assumed held by the caller. This method is called externally via
 // GetNodeIDAddress or internally when looking up a "distant" node address to
 // connect directly to.
-func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
+func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (net.Addr, error) {
 	nd, err := g.getNodeDescriptorLocked(nodeID)
 	if err != nil {
 		return nil, err
@@ -377,7 +377,7 @@ func (g *Gossip) MaxHops() uint32 {
 
 // Incoming returns a slice of incoming gossip client connection
 // node IDs.
-func (g *Gossip) Incoming() []proto.NodeID {
+func (g *Gossip) Incoming() []roachpb.NodeID {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.incoming.asSlice()
@@ -388,7 +388,7 @@ func (g *Gossip) Incoming() []proto.NodeID {
 // actually be legitimately connected. They may be in the process
 // of trying, or may already have failed, but haven't yet been
 // processed by the gossip instance.
-func (g *Gossip) Outgoing() []proto.NodeID {
+func (g *Gossip) Outgoing() []roachpb.NodeID {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.outgoing.asSlice()
@@ -432,7 +432,7 @@ func (g *Gossip) maxToleratedHops() uint32 {
 
 // hasIncoming returns whether the server has an incoming gossip
 // client matching the provided node ID.
-func (g *Gossip) hasIncoming(nodeID proto.NodeID) bool {
+func (g *Gossip) hasIncoming(nodeID roachpb.NodeID) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.incoming.hasNode(nodeID)
@@ -442,9 +442,9 @@ func (g *Gossip) hasIncoming(nodeID proto.NodeID) bool {
 // are already connected to this node, either via outgoing or incoming
 // client connections.
 func (g *Gossip) filterExtant(nodes nodeSet) nodeSet {
-	return nodes.filter(func(a proto.NodeID) bool {
+	return nodes.filter(func(a roachpb.NodeID) bool {
 		return !g.outgoing.hasNode(a)
-	}).filter(func(a proto.NodeID) bool {
+	}).filter(func(a roachpb.NodeID) bool {
 		return !g.incoming.hasNode(a)
 	})
 }
@@ -674,7 +674,7 @@ func (g *Gossip) startClient(addr net.Addr, context *rpc.Context, stopper *stop.
 }
 
 // closeClient finds and removes a client from the clients slice.
-func (g *Gossip) closeClient(nodeID proto.NodeID) {
+func (g *Gossip) closeClient(nodeID roachpb.NodeID) {
 	c := g.findClient(func(c *client) bool { return c.peerID == nodeID })
 	if c != nil {
 		c.close()

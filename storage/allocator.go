@@ -24,7 +24,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -117,8 +117,8 @@ func MakeAllocator(storePool *StorePool, options RebalancingOptions) Allocator {
 
 // getUsedNodes returns a set of node IDs which are already being used
 // to store replicas.
-func getUsedNodes(existing []proto.ReplicaDescriptor) map[proto.NodeID]struct{} {
-	usedNodes := map[proto.NodeID]struct{}{}
+func getUsedNodes(existing []roachpb.ReplicaDescriptor) map[roachpb.NodeID]struct{} {
+	usedNodes := map[roachpb.NodeID]struct{}{}
 	for _, replica := range existing {
 		usedNodes[replica.NodeID] = struct{}{}
 	}
@@ -129,7 +129,7 @@ func getUsedNodes(existing []proto.ReplicaDescriptor) map[proto.NodeID]struct{} 
 // range, as governed by the supplied zone configuration. It returns the
 // required action that should be taken and a replica on which the action should
 // be performed.
-func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *proto.RangeDescriptor) (
+func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDescriptor) (
 	AllocatorAction, float64) {
 	deadReplicas := a.storePool.deadReplicas(desc.Replicas)
 	if len(deadReplicas) > 0 {
@@ -169,16 +169,16 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *proto.RangeDescr
 // filter the results. The function will be passed the storeDesc and the used
 // and new counts. It returns a bool indicating inclusion or exclusion from the
 // set of stores being considered.
-func (a *Allocator) AllocateTarget(required proto.Attributes, existing []proto.ReplicaDescriptor, relaxConstraints bool,
-	filter func(storeDesc *proto.StoreDescriptor, count, used *stat) bool) (*proto.StoreDescriptor, error) {
+func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roachpb.ReplicaDescriptor, relaxConstraints bool,
+	filter func(storeDesc *roachpb.StoreDescriptor, count, used *stat) bool) (*roachpb.StoreDescriptor, error) {
 	// Because more redundancy is better than less, if relaxConstraints, the
 	// matching here is lenient, and tries to find a target by relaxing an
 	// attribute constraint, from last attribute to first.
 	for attrs := append([]string(nil), required.Attrs...); ; attrs = attrs[:len(attrs)-1] {
-		stores, sl := a.selectRandom(3, proto.Attributes{Attrs: attrs}, existing)
+		stores, sl := a.selectRandom(3, roachpb.Attributes{Attrs: attrs}, existing)
 
 		// Choose the store with the least fraction of bytes used.
-		var leastStore *proto.StoreDescriptor
+		var leastStore *roachpb.StoreDescriptor
 		for _, s := range stores {
 			// Filter store descriptor.
 			if filter != nil && !filter(s, &sl.count, &sl.used) {
@@ -218,15 +218,15 @@ func (a *Allocator) AllocateTarget(required proto.Attributes, existing []proto.R
 // the zone config associated with the provided replicas. This will allow it to
 // make correct decisions in the case of ranges with heterogeneous replica
 // requirements (i.e. multiple data centers).
-func (a Allocator) RemoveTarget(existing []proto.ReplicaDescriptor) (proto.ReplicaDescriptor, error) {
+func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor) (roachpb.ReplicaDescriptor, error) {
 	if len(existing) == 0 {
-		return proto.ReplicaDescriptor{}, util.Errorf("must supply at least one replica to allocator.RemoveTarget()")
+		return roachpb.ReplicaDescriptor{}, util.Errorf("must supply at least one replica to allocator.RemoveTarget()")
 	}
 
 	// Retrieve store descriptors for the provided replicas from the StorePool.
 	type replStore struct {
-		repl  proto.ReplicaDescriptor
-		store *proto.StoreDescriptor
+		repl  roachpb.ReplicaDescriptor
+		store *roachpb.StoreDescriptor
 	}
 	replStores := make([]replStore, len(existing))
 	usedStat := stat{}
@@ -275,8 +275,8 @@ func (a Allocator) RemoveTarget(existing []proto.ReplicaDescriptor) (proto.Repli
 // is perfectly fine, as other stores in the cluster will also be
 // doing their probabilistic best to rebalance. This helps prevent
 // a stampeding herd targeting an abnormally under-utilized store.
-func (a Allocator) RebalanceTarget(required proto.Attributes, existing []proto.ReplicaDescriptor) *proto.StoreDescriptor {
-	filter := func(s *proto.StoreDescriptor, count, used *stat) bool {
+func (a Allocator) RebalanceTarget(required roachpb.Attributes, existing []roachpb.ReplicaDescriptor) *roachpb.StoreDescriptor {
+	filter := func(s *roachpb.StoreDescriptor, count, used *stat) bool {
 		// In clusters with very low disk usage, a store is eligible to be a
 		// rebalancing target if the number of ranges on that store is below
 		// average. This is primarily useful for distributing load evenly in a
@@ -312,7 +312,7 @@ func (a Allocator) RebalanceTarget(required proto.Attributes, existing []proto.R
 
 // ShouldRebalance returns whether the specified store should attempt to
 // rebalance a replica to another store.
-func (a Allocator) ShouldRebalance(storeID proto.StoreID) bool {
+func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 	if !a.options.AllowRebalance {
 		return false
 	}
@@ -364,8 +364,8 @@ func (a Allocator) ShouldRebalance(storeID proto.StoreID) bool {
 // replicas. If the supplied filter is nil, it is ignored. Returns the
 // list of matching descriptors, and the store list matching the
 // required attributes.
-func (a Allocator) selectRandom(count int, required proto.Attributes, existing []proto.ReplicaDescriptor) ([]*proto.StoreDescriptor, *StoreList) {
-	var descs []*proto.StoreDescriptor
+func (a Allocator) selectRandom(count int, required roachpb.Attributes, existing []roachpb.ReplicaDescriptor) ([]*roachpb.StoreDescriptor, *StoreList) {
+	var descs []*roachpb.StoreDescriptor
 	sl := a.storePool.getStoreList(required, a.options.Deterministic)
 	used := getUsedNodes(existing)
 

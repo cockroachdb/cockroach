@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -162,7 +162,7 @@ func (ts *TestServer) Start() error {
 		ts.StoresPerNode = 1
 	}
 	for i := len(ts.Ctx.Engines); i < ts.StoresPerNode; i++ {
-		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(proto.Attributes{}, 100<<20, ts.Server.stopper))
+		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(roachpb.Attributes{}, 100<<20, ts.Server.stopper))
 	}
 
 	if !ts.SkipBootstrap {
@@ -179,7 +179,7 @@ func (ts *TestServer) Start() error {
 
 	// TODO(marc): set this in the zones table when we have an entry
 	// for the default cluster-wide zone config.
-	config.DefaultZoneConfig.ReplicaAttrs = []proto.Attributes{{}}
+	config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
 	return nil
 }
 

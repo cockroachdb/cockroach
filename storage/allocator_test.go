@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -37,13 +37,13 @@ import (
 )
 
 var simpleZoneConfig = config.ZoneConfig{
-	ReplicaAttrs: []proto.Attributes{
+	ReplicaAttrs: []roachpb.Attributes{
 		{Attrs: []string{"a", "ssd"}},
 	},
 }
 
 var multiDisksConfig = config.ZoneConfig{
-	ReplicaAttrs: []proto.Attributes{
+	ReplicaAttrs: []roachpb.Attributes{
 		{Attrs: []string{"a", "ssd"}},
 		{Attrs: []string{"a", "hdd"}},
 		{Attrs: []string{"a", "mem"}},
@@ -51,111 +51,111 @@ var multiDisksConfig = config.ZoneConfig{
 }
 
 var multiDCConfig = config.ZoneConfig{
-	ReplicaAttrs: []proto.Attributes{
+	ReplicaAttrs: []roachpb.Attributes{
 		{Attrs: []string{"a", "ssd"}},
 		{Attrs: []string{"b", "ssd"}},
 	},
 }
 
-var singleStore = []*proto.StoreDescriptor{
+var singleStore = []*roachpb.StoreDescriptor{
 	{
 		StoreID: 1,
-		Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
-		Node: proto.NodeDescriptor{
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
+		Node: roachpb.NodeDescriptor{
 			NodeID: 1,
-			Attrs:  proto.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
-		Capacity: proto.StoreCapacity{
+		Capacity: roachpb.StoreCapacity{
 			Capacity:  100,
 			Available: 200,
 		},
 	},
 }
 
-var sameDCStores = []*proto.StoreDescriptor{
+var sameDCStores = []*roachpb.StoreDescriptor{
 	{
 		StoreID: 1,
-		Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
-		Node: proto.NodeDescriptor{
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
+		Node: roachpb.NodeDescriptor{
 			NodeID: 1,
-			Attrs:  proto.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
-		Capacity: proto.StoreCapacity{
+		Capacity: roachpb.StoreCapacity{
 			Capacity:  100,
 			Available: 200,
 		},
 	},
 	{
 		StoreID: 2,
-		Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
-		Node: proto.NodeDescriptor{
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
+		Node: roachpb.NodeDescriptor{
 			NodeID: 2,
-			Attrs:  proto.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
-		Capacity: proto.StoreCapacity{
+		Capacity: roachpb.StoreCapacity{
 			Capacity:  100,
 			Available: 200,
 		},
 	},
 	{
 		StoreID: 3,
-		Attrs:   proto.Attributes{Attrs: []string{"hdd"}},
-		Node: proto.NodeDescriptor{
+		Attrs:   roachpb.Attributes{Attrs: []string{"hdd"}},
+		Node: roachpb.NodeDescriptor{
 			NodeID: 2,
-			Attrs:  proto.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
-		Capacity: proto.StoreCapacity{
+		Capacity: roachpb.StoreCapacity{
 			Capacity:  100,
 			Available: 200,
 		},
 	},
 	{
 		StoreID: 4,
-		Attrs:   proto.Attributes{Attrs: []string{"hdd"}},
-		Node: proto.NodeDescriptor{
+		Attrs:   roachpb.Attributes{Attrs: []string{"hdd"}},
+		Node: roachpb.NodeDescriptor{
 			NodeID: 3,
-			Attrs:  proto.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
-		Capacity: proto.StoreCapacity{
+		Capacity: roachpb.StoreCapacity{
 			Capacity:  100,
 			Available: 200,
 		},
 	},
 	{
 		StoreID: 5,
-		Attrs:   proto.Attributes{Attrs: []string{"mem"}},
-		Node: proto.NodeDescriptor{
+		Attrs:   roachpb.Attributes{Attrs: []string{"mem"}},
+		Node: roachpb.NodeDescriptor{
 			NodeID: 4,
-			Attrs:  proto.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
-		Capacity: proto.StoreCapacity{
+		Capacity: roachpb.StoreCapacity{
 			Capacity:  100,
 			Available: 200,
 		},
 	},
 }
 
-var multiDCStores = []*proto.StoreDescriptor{
+var multiDCStores = []*roachpb.StoreDescriptor{
 	{
 		StoreID: 1,
-		Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
-		Node: proto.NodeDescriptor{
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
+		Node: roachpb.NodeDescriptor{
 			NodeID: 1,
-			Attrs:  proto.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
-		Capacity: proto.StoreCapacity{
+		Capacity: roachpb.StoreCapacity{
 			Capacity:  100,
 			Available: 200,
 		},
 	},
 	{
 		StoreID: 2,
-		Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
-		Node: proto.NodeDescriptor{
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
+		Node: roachpb.NodeDescriptor{
 			NodeID: 2,
-			Attrs:  proto.Attributes{Attrs: []string{"b"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"b"}},
 		},
-		Capacity: proto.StoreCapacity{
+		Capacity: roachpb.StoreCapacity{
 			Capacity:  100,
 			Available: 200,
 		},
@@ -175,21 +175,21 @@ func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator
 
 // mockStorePool sets up a collection of a alive and dead stores in the
 // store pool for testing purposes.
-func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []proto.StoreID) {
+func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.StoreID) {
 	storePool.mu.Lock()
 	defer storePool.mu.Unlock()
 
-	storePool.stores = make(map[proto.StoreID]*storeDetail)
+	storePool.stores = make(map[roachpb.StoreID]*storeDetail)
 	for _, storeID := range aliveStoreIDs {
 		storePool.stores[storeID] = &storeDetail{
 			dead: false,
-			desc: proto.StoreDescriptor{StoreID: storeID},
+			desc: roachpb.StoreDescriptor{StoreID: storeID},
 		}
 	}
 	for _, storeID := range deadStoreIDs {
 		storePool.stores[storeID] = &storeDetail{
 			dead: true,
-			desc: proto.StoreDescriptor{StoreID: storeID},
+			desc: roachpb.StoreDescriptor{StoreID: storeID},
 		}
 	}
 }
@@ -199,7 +199,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.ReplicaDescriptor{}, false, nil)
+	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, _, _, a := createTestAllocator()
 	defer stopper.Stop()
-	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.ReplicaDescriptor{}, false, nil)
+	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
 	}
@@ -226,14 +226,14 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []proto.ReplicaDescriptor{}, false, nil)
+	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
 	if result1.StoreID != 1 && result1.StoreID != 2 {
 		t.Errorf("Expected store 1 or 2; got %+v", result1)
 	}
-	exReplicas := []proto.ReplicaDescriptor{
+	exReplicas := []roachpb.ReplicaDescriptor{
 		{
 			NodeID:  result1.Node.NodeID,
 			StoreID: result1.StoreID,
@@ -249,7 +249,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	if result1.Node.NodeID == result2.Node.NodeID {
 		t.Errorf("Expected node ids to be different %+v vs %+v", result1, result2)
 	}
-	result3, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []proto.ReplicaDescriptor{}, false, nil)
+	result3, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []roachpb.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -263,11 +263,11 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
-	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []proto.ReplicaDescriptor{}, false, nil)
+	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	result2, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.ReplicaDescriptor{}, false, nil)
+	result2, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		t.Errorf("Expected nodes 1 & 2: %+v vs %+v", result1.Node, result2.Node)
 	}
 	// Verify that no result is forthcoming if we already have a replica.
-	_, err = a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.ReplicaDescriptor{
+	_, err = a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{
 		{
 			NodeID:  result2.Node.NodeID,
 			StoreID: result2.StoreID,
@@ -291,7 +291,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	result, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], []proto.ReplicaDescriptor{
+	result, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{
 		{
 			NodeID:  2,
 			StoreID: 2,
@@ -341,14 +341,14 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 		{[]string{"b", "hdd", "gpu"}, []int{}, true, 2, false},
 	}
 	for i, test := range testCases {
-		var existing []proto.ReplicaDescriptor
+		var existing []roachpb.ReplicaDescriptor
 		for _, id := range test.existing {
-			existing = append(existing, proto.ReplicaDescriptor{NodeID: proto.NodeID(id), StoreID: proto.StoreID(id)})
+			existing = append(existing, roachpb.ReplicaDescriptor{NodeID: roachpb.NodeID(id), StoreID: roachpb.StoreID(id)})
 		}
-		result, err := a.AllocateTarget(proto.Attributes{Attrs: test.required}, existing, test.relaxConstraints, nil)
+		result, err := a.AllocateTarget(roachpb.Attributes{Attrs: test.required}, existing, test.relaxConstraints, nil)
 		if haveErr := (err != nil); haveErr != test.expErr {
 			t.Errorf("%d: expected error %t; got %t: %s", i, test.expErr, haveErr, err)
-		} else if err == nil && proto.StoreID(test.expID) != result.StoreID {
+		} else if err == nil && roachpb.StoreID(test.expID) != result.StoreID {
 			t.Errorf("%d: expected result to have store %d; got %+v", i, test.expID, result)
 		}
 	}
@@ -361,26 +361,26 @@ func TestAllocatorRandomAllocation(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 
-	stores := []*proto.StoreDescriptor{
+	stores := []*roachpb.StoreDescriptor{
 		{
 			StoreID:  1,
-			Node:     proto.NodeDescriptor{NodeID: 1},
-			Capacity: proto.StoreCapacity{Capacity: 200, Available: 200},
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200},
 		},
 		{
 			StoreID:  2,
-			Node:     proto.NodeDescriptor{NodeID: 2},
-			Capacity: proto.StoreCapacity{Capacity: 200, Available: 150},
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 150},
 		},
 		{
 			StoreID:  3,
-			Node:     proto.NodeDescriptor{NodeID: 3},
-			Capacity: proto.StoreCapacity{Capacity: 200, Available: 50},
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 50},
 		},
 		{
 			StoreID:  4,
-			Node:     proto.NodeDescriptor{NodeID: 4},
-			Capacity: proto.StoreCapacity{Capacity: 200, Available: 0},
+			Node:     roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 0},
 		},
 	}
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
@@ -389,7 +389,7 @@ func TestAllocatorRandomAllocation(t *testing.T) {
 	// store 1 or store 2 will be chosen, as the least loaded of the
 	// three random choices is returned.
 	for i := 0; i < 10; i++ {
-		result, err := a.AllocateTarget(proto.Attributes{}, []proto.ReplicaDescriptor{}, false, nil)
+		result, err := a.AllocateTarget(roachpb.Attributes{}, []roachpb.ReplicaDescriptor{}, false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -406,33 +406,33 @@ func TestAllocatorRebalance(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 
-	stores := []*proto.StoreDescriptor{
+	stores := []*roachpb.StoreDescriptor{
 		{
 			StoreID:  1,
-			Node:     proto.NodeDescriptor{NodeID: 1},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100},
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100},
 		},
 		{
 			StoreID:  2,
-			Node:     proto.NodeDescriptor{NodeID: 2},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 50},
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 50},
 		},
 		{
 			StoreID:  3,
-			Node:     proto.NodeDescriptor{NodeID: 3},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100 - int64(100*maxFractionUsedThreshold)},
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100 - int64(100*maxFractionUsedThreshold)},
 		},
 		{
 			StoreID:  4,
-			Node:     proto.NodeDescriptor{NodeID: 4},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: (100 - int64(100*maxFractionUsedThreshold)) / 2},
+			Node:     roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: (100 - int64(100*maxFractionUsedThreshold)) / 2},
 		},
 	}
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
 	// Every rebalance target must be either stores 1 or 2.
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(proto.Attributes{}, []proto.ReplicaDescriptor{})
+		result := a.RebalanceTarget(roachpb.Attributes{}, []roachpb.ReplicaDescriptor{})
 		if result == nil {
 			t.Fatal("nil result")
 		}
@@ -458,33 +458,33 @@ func TestAllocatorRebalanceByCapacity(t *testing.T) {
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 
-	stores := []*proto.StoreDescriptor{
+	stores := []*roachpb.StoreDescriptor{
 		{
 			StoreID:  1,
-			Node:     proto.NodeDescriptor{NodeID: 1},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 50},
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 50},
 		},
 		{
 			StoreID:  2,
-			Node:     proto.NodeDescriptor{NodeID: 2},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 50},
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 50},
 		},
 		{
 			StoreID:  3,
-			Node:     proto.NodeDescriptor{NodeID: 3},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 50},
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 50},
 		},
 		{
 			StoreID:  4,
-			Node:     proto.NodeDescriptor{NodeID: 4},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 80},
+			Node:     roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 80},
 		},
 	}
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
 	// Every rebalance target must be store 4 (if not nil).
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(proto.Attributes{}, []proto.ReplicaDescriptor{})
+		result := a.RebalanceTarget(roachpb.Attributes{}, []roachpb.ReplicaDescriptor{})
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
@@ -509,33 +509,33 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	defer stopper.Stop()
 
 	// Setup the stores so that only one is below the standard deviation threshold.
-	stores := []*proto.StoreDescriptor{
+	stores := []*roachpb.StoreDescriptor{
 		{
 			StoreID:  1,
-			Node:     proto.NodeDescriptor{NodeID: 1},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
 		},
 		{
 			StoreID:  2,
-			Node:     proto.NodeDescriptor{NodeID: 2},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 99, RangeCount: 10},
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 99, RangeCount: 10},
 		},
 		{
 			StoreID:  3,
-			Node:     proto.NodeDescriptor{NodeID: 3},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 98, RangeCount: 10},
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 98, RangeCount: 10},
 		},
 		{
 			StoreID:  4,
-			Node:     proto.NodeDescriptor{NodeID: 4},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 97, RangeCount: 5},
+			Node:     roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 97, RangeCount: 5},
 		},
 	}
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(proto.Attributes{}, []proto.ReplicaDescriptor{})
+		result := a.RebalanceTarget(roachpb.Attributes{}, []roachpb.ReplicaDescriptor{})
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
@@ -559,7 +559,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	defer stopper.Stop()
 
 	// List of replicas that will be passed to RemoveTarget
-	replicas := []proto.ReplicaDescriptor{
+	replicas := []roachpb.ReplicaDescriptor{
 		{
 			StoreID:   1,
 			NodeID:    1,
@@ -583,26 +583,26 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	}
 
 	// Setup the stores so that store 3 is the worst candidate.
-	stores := []*proto.StoreDescriptor{
+	stores := []*roachpb.StoreDescriptor{
 		{
 			StoreID:  1,
-			Node:     proto.NodeDescriptor{NodeID: 1},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
 		},
 		{
 			StoreID:  2,
-			Node:     proto.NodeDescriptor{NodeID: 2},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 80, RangeCount: 10},
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 80, RangeCount: 10},
 		},
 		{
 			StoreID:  3,
-			Node:     proto.NodeDescriptor{NodeID: 3},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 60, RangeCount: 10},
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 60, RangeCount: 10},
 		},
 		{
 			StoreID:  4,
-			Node:     proto.NodeDescriptor{NodeID: 4},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 5},
+			Node:     roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 5},
 		},
 	}
 	sg := gossiputil.NewStoreGossiper(g)
@@ -618,26 +618,26 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 
 	// Setup the stores again so that store 2 is the worst, but with very low
 	// used capacity to force the range count criteria to be used.
-	stores = []*proto.StoreDescriptor{
+	stores = []*roachpb.StoreDescriptor{
 		{
 			StoreID:  1,
-			Node:     proto.NodeDescriptor{NodeID: 1},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
 		},
 		{
 			StoreID:  2,
-			Node:     proto.NodeDescriptor{NodeID: 2},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 18},
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 18},
 		},
 		{
 			StoreID:  3,
-			Node:     proto.NodeDescriptor{NodeID: 3},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
 		},
 		{
 			StoreID:  4,
-			Node:     proto.NodeDescriptor{NodeID: 4},
-			Capacity: proto.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 5},
+			Node:     roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 5},
 		},
 	}
 	sg.GossipStores(stores, t)
@@ -657,19 +657,19 @@ func TestAllocatorComputeAction(t *testing.T) {
 	defer stopper.Stop()
 
 	// Set up seven stores. Stores six and seven are marked as dead.
-	mockStorePool(sp, []proto.StoreID{1, 2, 3, 4, 5}, []proto.StoreID{6, 7})
+	mockStorePool(sp, []roachpb.StoreID{1, 2, 3, 4, 5}, []roachpb.StoreID{6, 7})
 
 	// Each test case should describe a repair situation which has a lower
 	// priority than the previous test case.
 	testCases := []struct {
 		zone           config.ZoneConfig
-		desc           proto.RangeDescriptor
+		desc           roachpb.RangeDescriptor
 		expectedAction AllocatorAction
 	}{
 		// Needs Three replicas, two are on dead stores.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []proto.Attributes{
+				ReplicaAttrs: []roachpb.Attributes{
 					{
 						Attrs: []string{"us-east"},
 					},
@@ -683,8 +683,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
-			desc: proto.RangeDescriptor{
-				Replicas: []proto.ReplicaDescriptor{
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -707,7 +707,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Needs Three replicas, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []proto.Attributes{
+				ReplicaAttrs: []roachpb.Attributes{
 					{
 						Attrs: []string{"us-east"},
 					},
@@ -721,8 +721,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
-			desc: proto.RangeDescriptor{
-				Replicas: []proto.ReplicaDescriptor{
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -745,7 +745,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Needs five replicas, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []proto.Attributes{
+				ReplicaAttrs: []roachpb.Attributes{
 					{
 						Attrs: []string{"us-east"},
 					},
@@ -759,8 +759,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
-			desc: proto.RangeDescriptor{
-				Replicas: []proto.ReplicaDescriptor{
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -793,7 +793,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Needs Three replicas, have two
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []proto.Attributes{
+				ReplicaAttrs: []roachpb.Attributes{
 					{
 						Attrs: []string{"us-east"},
 					},
@@ -807,8 +807,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
-			desc: proto.RangeDescriptor{
-				Replicas: []proto.ReplicaDescriptor{
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -826,7 +826,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Needs Five replicas, have four.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []proto.Attributes{
+				ReplicaAttrs: []roachpb.Attributes{
 					{
 						Attrs: []string{"us-east"},
 					},
@@ -846,8 +846,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
-			desc: proto.RangeDescriptor{
-				Replicas: []proto.ReplicaDescriptor{
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -875,7 +875,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have four.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []proto.Attributes{
+				ReplicaAttrs: []roachpb.Attributes{
 					{
 						Attrs: []string{"us-east"},
 					},
@@ -889,8 +889,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
-			desc: proto.RangeDescriptor{
-				Replicas: []proto.ReplicaDescriptor{
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -918,7 +918,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have five.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []proto.Attributes{
+				ReplicaAttrs: []roachpb.Attributes{
 					{
 						Attrs: []string{"us-east"},
 					},
@@ -932,8 +932,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
-			desc: proto.RangeDescriptor{
-				Replicas: []proto.ReplicaDescriptor{
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -966,7 +966,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Three replicas have three, none of the replicas in the store pool.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []proto.Attributes{
+				ReplicaAttrs: []roachpb.Attributes{
 					{
 						Attrs: []string{"us-east"},
 					},
@@ -980,8 +980,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
-			desc: proto.RangeDescriptor{
-				Replicas: []proto.ReplicaDescriptor{
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   10,
 						NodeID:    10,
@@ -1004,7 +1004,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Three replicas have three.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []proto.Attributes{
+				ReplicaAttrs: []roachpb.Attributes{
 					{
 						Attrs: []string{"us-east"},
 					},
@@ -1018,8 +1018,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
-			desc: proto.RangeDescriptor{
-				Replicas: []proto.ReplicaDescriptor{
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -1056,7 +1056,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 }
 
 type testStore struct {
-	proto.StoreDescriptor
+	roachpb.StoreDescriptor
 }
 
 func (ts *testStore) add(bytes int64) {
@@ -1093,9 +1093,9 @@ func Example_rebalancing() {
 	// Initialize testStores.
 	var testStores [nodes]testStore
 	for i := 0; i < len(testStores); i++ {
-		testStores[i].StoreID = proto.StoreID(i)
-		testStores[i].Node = proto.NodeDescriptor{NodeID: proto.NodeID(i)}
-		testStores[i].Capacity = proto.StoreCapacity{Capacity: 1 << 30, Available: 1 << 30}
+		testStores[i].StoreID = roachpb.StoreID(i)
+		testStores[i].Node = roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)}
+		testStores[i].Capacity = roachpb.StoreCapacity{Capacity: 1 << 30, Available: 1 << 30}
 	}
 	// Initialize the cluster with a single range.
 	testStores[0].add(alloc.randGen.Int63n(1 << 20))
@@ -1108,7 +1108,7 @@ func Example_rebalancing() {
 			if testStores[j].Capacity.RangeCount > 0 {
 				testStores[j].add(alloc.randGen.Int63n(1 << 20))
 			}
-			key := gossip.MakeStoreKey(proto.StoreID(j))
+			key := gossip.MakeStoreKey(roachpb.StoreID(j))
 			if err := g.AddInfoProto(key, &testStores[j].StoreDescriptor, 0); err != nil {
 				panic(err)
 			}
@@ -1119,7 +1119,7 @@ func Example_rebalancing() {
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
 			if alloc.ShouldRebalance(ts.StoreID) {
-				target := alloc.RebalanceTarget(proto.Attributes{}, []proto.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}})
+				target := alloc.RebalanceTarget(roachpb.Attributes{}, []roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}})
 				if target != nil {
 					testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 				}

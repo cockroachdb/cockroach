@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/multiraft/storagetest"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -50,12 +50,12 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-func testRangeDescriptor() *proto.RangeDescriptor {
-	return &proto.RangeDescriptor{
+func testRangeDescriptor() *roachpb.RangeDescriptor {
+	return &roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: proto.KeyMin,
-		EndKey:   proto.KeyMax,
-		Replicas: []proto.ReplicaDescriptor{
+		StartKey: roachpb.KeyMin,
+		EndKey:   roachpb.KeyMax,
+		Replicas: []roachpb.ReplicaDescriptor{
 			{
 				ReplicaID: 1,
 				NodeID:    1,
@@ -88,7 +88,7 @@ type testContext struct {
 	transport     multiraft.Transport
 	store         *Store
 	rng           *Replica
-	rangeID       proto.RangeID
+	rangeID       roachpb.RangeID
 	gossip        *gossip.Gossip
 	engine        engine.Engine
 	manualClock   *hlc.ManualClock
@@ -117,7 +117,7 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.clock = hlc.NewClock(tc.manualClock.UnixNano)
 	}
 	if tc.engine == nil {
-		tc.engine = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, tc.stopper)
+		tc.engine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, tc.stopper)
 	}
 	if tc.transport == nil {
 		tc.transport = multiraft.NewLocalRPCTransport(tc.stopper)
@@ -135,8 +135,8 @@ func (tc *testContext) Start(t testing.TB) {
 		// store will be passed to the sender after it is created and bootstrapped.
 		sender := &testSender{}
 		ctx.DB = client.NewDB(sender)
-		tc.store = NewStore(ctx, tc.engine, &proto.NodeDescriptor{NodeID: 1})
-		if err := tc.store.Bootstrap(proto.StoreIdent{
+		tc.store = NewStore(ctx, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
+		if err := tc.store.Bootstrap(roachpb.StoreIdent{
 			ClusterID: "test",
 			NodeID:    1,
 			StoreID:   1,
@@ -207,25 +207,25 @@ func (tc *testContext) initConfigs(realRange bool) error {
 	return nil
 }
 
-func newTransaction(name string, baseKey proto.Key, userPriority int32,
-	isolation proto.IsolationType, clock *hlc.Clock) *proto.Transaction {
+func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
+	isolation roachpb.IsolationType, clock *hlc.Clock) *roachpb.Transaction {
 	var offset int64
-	var now proto.Timestamp
+	var now roachpb.Timestamp
 	if clock != nil {
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	return proto.NewTransaction(name, keys.KeyAddress(baseKey), userPriority,
+	return roachpb.NewTransaction(name, keys.KeyAddress(baseKey), userPriority,
 		isolation, now, offset)
 }
 
 // CreateReplicaSets creates new proto.ReplicaDescriptor protos based on an array of
 // StoreIDs to aid in testing. Note that this does not actually produce any
 // replicas, it just creates the proto.
-func createReplicaSets(replicaNumbers []proto.StoreID) []proto.ReplicaDescriptor {
-	result := []proto.ReplicaDescriptor{}
+func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescriptor {
+	result := []roachpb.ReplicaDescriptor{}
 	for _, replicaNumber := range replicaNumbers {
-		result = append(result, proto.ReplicaDescriptor{
+		result = append(result, roachpb.ReplicaDescriptor{
 			StoreID: replicaNumber,
 		})
 	}
@@ -236,32 +236,32 @@ func createReplicaSets(replicaNumbers []proto.StoreID) []proto.ReplicaDescriptor
 // order to properly resolve addresses for local keys.
 func TestRangeContains(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	desc := &proto.RangeDescriptor{
+	desc := &roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: proto.Key("a"),
-		EndKey:   proto.Key("b"),
+		StartKey: roachpb.Key("a"),
+		EndKey:   roachpb.Key("b"),
 	}
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, stopper)
+	e := engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, stopper)
 	clock := hlc.NewClock(hlc.UnixNano)
 	ctx := TestStoreContext
 	ctx.Clock = clock
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	defer ctx.Transport.Close()
-	store := NewStore(ctx, e, &proto.NodeDescriptor{NodeID: 1})
+	store := NewStore(ctx, e, &roachpb.NodeDescriptor{NodeID: 1})
 	r, err := NewReplica(desc, store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !r.ContainsKey(proto.Key("aa")) {
+	if !r.ContainsKey(roachpb.Key("aa")) {
 		t.Errorf("expected range to contain key \"aa\"")
 	}
 	if !r.ContainsKey(keys.RangeDescriptorKey([]byte("aa"))) {
 		t.Errorf("expected range to contain range descriptor key for \"aa\"")
 	}
-	if !r.ContainsKeyRange(proto.Key("aa"), proto.Key("b")) {
+	if !r.ContainsKeyRange(roachpb.Key("aa"), roachpb.Key("b")) {
 		t.Errorf("expected range to contain key range \"aa\"-\"b\"")
 	}
 	if !r.ContainsKeyRange(keys.RangeDescriptorKey([]byte("aa")),
@@ -270,9 +270,9 @@ func TestRangeContains(t *testing.T) {
 	}
 }
 
-func setLeaderLease(t *testing.T, r *Replica, l *proto.Lease) {
-	args := &proto.BatchRequest{}
-	args.Add(&proto.LeaderLeaseRequest{Lease: *l})
+func setLeaderLease(t *testing.T, r *Replica, l *roachpb.Lease) {
+	args := &roachpb.BatchRequest{}
+	args.Add(&roachpb.LeaderLeaseRequest{Lease: *l})
 	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args)
 	var err error
 	if err = <-errChan; err == nil {
@@ -296,7 +296,7 @@ func TestRangeReadConsistency(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.ReplicaDescriptor{
+	secondReplica := roachpb.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -305,7 +305,7 @@ func TestRangeReadConsistency(t *testing.T) {
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
 	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
-	gArgs := getArgs(proto.Key("a"), 1, tc.store.StoreID())
+	gArgs := getArgs(roachpb.Key("a"), 1, tc.store.StoreID())
 	gArgs.Timestamp = tc.clock.Now()
 
 	// Try consistent read and verify success.
@@ -315,15 +315,15 @@ func TestRangeReadConsistency(t *testing.T) {
 	}
 
 	// Try a consensus read and verify error.
-	gArgs.ReadConsistency = proto.CONSENSUS
+	gArgs.ReadConsistency = roachpb.CONSENSUS
 
 	if _, err := sendArg(tc.rng, tc.rng.context(), &gArgs); err == nil {
 		t.Errorf("expected error on consensus read")
 	}
 
 	// Try an inconsistent read within a transaction.
-	gArgs.ReadConsistency = proto.INCONSISTENT
-	gArgs.Txn = newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
+	gArgs.ReadConsistency = roachpb.INCONSISTENT
+	gArgs.Txn = newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
 
 	if _, err := sendArg(tc.rng, tc.rng.context(), &gArgs); err == nil {
 		t.Errorf("expected error on inconsistent read within a txn")
@@ -333,24 +333,24 @@ func TestRangeReadConsistency(t *testing.T) {
 	// and INCONSISTENT reads work as expected.
 	start := tc.rng.getLease().Expiration.Add(1, 0)
 	tc.manualClock.Set(start.WallTime)
-	setLeaderLease(t, tc.rng, &proto.Lease{
+	setLeaderLease(t, tc.rng, &roachpb.Lease{
 		Start:      start,
 		Expiration: start.Add(10, 0),
-		Replica: proto.ReplicaDescriptor{ // a different node
+		Replica: roachpb.ReplicaDescriptor{ // a different node
 			ReplicaID: 2,
 			NodeID:    2,
 			StoreID:   2,
 		},
 	})
-	gArgs.ReadConsistency = proto.CONSISTENT
+	gArgs.ReadConsistency = roachpb.CONSISTENT
 	gArgs.Txn = nil
 
 	_, err := sendArg(tc.rng, tc.rng.context(), &gArgs)
-	if _, ok := err.(*proto.NotLeaderError); !ok {
+	if _, ok := err.(*roachpb.NotLeaderError); !ok {
 		t.Errorf("expected not leader error; got %s", err)
 	}
 
-	gArgs.ReadConsistency = proto.INCONSISTENT
+	gArgs.ReadConsistency = roachpb.INCONSISTENT
 
 	if _, err := sendArg(tc.rng, tc.rng.context(), &gArgs); err != nil {
 		t.Errorf("expected success reading with inconsistent: %s", err)
@@ -369,7 +369,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.ReplicaDescriptor{
+	secondReplica := roachpb.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -378,9 +378,9 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
 	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
-	ba := proto.BatchRequest{}
+	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
-	pArgs := putArgs(proto.Key("a"), []byte("asd"),
+	pArgs := putArgs(roachpb.Key("a"), []byte("asd"),
 		tc.rng.Desc().RangeID, tc.store.StoreID())
 	pArgs.Timestamp = ba.Timestamp
 	ba.Add(&pArgs)
@@ -388,10 +388,10 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	// Lose the lease.
 	start := tc.rng.getLease().Expiration.Add(1, 0)
 	tc.manualClock.Set(start.WallTime)
-	setLeaderLease(t, tc.rng, &proto.Lease{
+	setLeaderLease(t, tc.rng, &roachpb.Lease{
 		Start:      start,
 		Expiration: start.Add(10, 0),
-		Replica: proto.ReplicaDescriptor{ // a different node
+		Replica: roachpb.ReplicaDescriptor{ // a different node
 			ReplicaID: 2,
 			NodeID:    2,
 			StoreID:   2,
@@ -405,7 +405,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	}
 	if err := (<-pendingCmd.done).Err; err == nil {
 		t.Fatalf("expected an error")
-	} else if _, ok := err.(*proto.NotLeaderError); !ok {
+	} else if _, ok := err.(*roachpb.NotLeaderError); !ok {
 		t.Fatalf("expected not leader error in return, got %s", err)
 	}
 }
@@ -416,19 +416,19 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	splitTestRange(tc.store, proto.Key("a"), proto.Key("a"), t)
-	gArgs := getArgs(proto.Key("b"), 1, tc.store.StoreID())
+	splitTestRange(tc.store, roachpb.Key("a"), roachpb.Key("a"), t)
+	gArgs := getArgs(roachpb.Key("b"), 1, tc.store.StoreID())
 
 	_, err := sendArg(tc.rng, tc.rng.context(), &gArgs)
 
-	if _, ok := err.(*proto.RangeKeyMismatchError); !ok {
+	if _, ok := err.(*roachpb.RangeKeyMismatchError); !ok {
 		t.Errorf("expected range key mismatch error: %s", err)
 	}
 }
 
 // hasLease returns whether the most recent leader lease was held by the given
 // range replica and whether it's expired for the given timestamp.
-func hasLease(rng *Replica, timestamp proto.Timestamp) (bool, bool) {
+func hasLease(rng *Replica, timestamp roachpb.Timestamp) (bool, bool) {
 	l := rng.getLease()
 	return l.OwnedBy(rng.rm.StoreID()), !l.Covers(timestamp)
 }
@@ -443,7 +443,7 @@ func TestRangeLeaderLease(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.ReplicaDescriptor{
+	secondReplica := roachpb.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -457,10 +457,10 @@ func TestRangeLeaderLease(t *testing.T) {
 	}
 	tc.manualClock.Set(int64(DefaultLeaderLeaseDuration + 1))
 	now := tc.clock.Now()
-	setLeaderLease(t, tc.rng, &proto.Lease{
+	setLeaderLease(t, tc.rng, &roachpb.Lease{
 		Start:      now.Add(10, 0),
 		Expiration: now.Add(20, 0),
-		Replica: proto.ReplicaDescriptor{
+		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 2,
 			NodeID:    2,
 			StoreID:   2,
@@ -471,7 +471,7 @@ func TestRangeLeaderLease(t *testing.T) {
 	}
 
 	err := tc.rng.redirectOnOrAcquireLeaderLease(nil, tc.clock.Now())
-	if lErr, ok := err.(*proto.NotLeaderError); !ok || lErr == nil {
+	if lErr, ok := err.(*roachpb.NotLeaderError); !ok || lErr == nil {
 		t.Fatalf("wanted NotLeaderError, got %s", err)
 	}
 
@@ -492,7 +492,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.ReplicaDescriptor{
+	secondReplica := roachpb.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -503,36 +503,36 @@ func TestRangeNotLeaderError(t *testing.T) {
 
 	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
 	now := tc.clock.Now()
-	setLeaderLease(t, tc.rng, &proto.Lease{
+	setLeaderLease(t, tc.rng, &roachpb.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		Replica: proto.ReplicaDescriptor{
+		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 2,
 			NodeID:    2,
 			StoreID:   2,
 		},
 	})
 
-	header := proto.RequestHeader{
-		Key:       proto.Key("a"),
+	header := roachpb.RequestHeader{
+		Key:       roachpb.Key("a"),
 		RangeID:   tc.rng.Desc().RangeID,
-		Replica:   proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+		Replica:   roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 		Timestamp: now,
 	}
-	testCases := []proto.Request{
+	testCases := []roachpb.Request{
 		// Admin split covers admin commands.
-		&proto.AdminSplitRequest{
+		&roachpb.AdminSplitRequest{
 			RequestHeader: header,
-			SplitKey:      proto.Key("a"),
+			SplitKey:      roachpb.Key("a"),
 		},
 		// Get covers read-only commands.
-		&proto.GetRequest{
+		&roachpb.GetRequest{
 			RequestHeader: header,
 		},
 		// Put covers read-write commands.
-		&proto.PutRequest{
+		&roachpb.PutRequest{
 			RequestHeader: header,
-			Value: proto.Value{
+			Value: roachpb.Value{
 				Bytes: []byte("value"),
 			},
 		},
@@ -541,7 +541,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 	for i, test := range testCases {
 		_, err := sendArg(tc.rng, tc.rng.context(), test)
 
-		if _, ok := err.(*proto.NotLeaderError); !ok {
+		if _, ok := err.(*roachpb.NotLeaderError); !ok {
 			t.Errorf("%d: expected not leader error: %s", i, err)
 		}
 	}
@@ -558,7 +558,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.ReplicaDescriptor{
+	secondReplica := roachpb.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -569,9 +569,9 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
-	var val proto.Value
+	var val roachpb.Value
 	val.SetInt(42)
-	if err := engine.MVCCPut(tc.engine, nil, key, proto.MinTimestamp, val, nil); err != nil {
+	if err := engine.MVCCPut(tc.engine, nil, key, roachpb.MinTimestamp, val, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -598,10 +598,10 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	now := tc.clock.Now()
 
 	// Give lease to someone else.
-	setLeaderLease(t, tc.rng, &proto.Lease{
+	setLeaderLease(t, tc.rng, &roachpb.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		Replica: proto.ReplicaDescriptor{
+		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 2,
 			NodeID:    2,
 			StoreID:   2,
@@ -613,10 +613,10 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	now = tc.clock.Now()
 
 	// Give lease to this range.
-	setLeaderLease(t, tc.rng, &proto.Lease{
+	setLeaderLease(t, tc.rng, &roachpb.Lease{
 		Start:      now.Add(11, 0),
 		Expiration: now.Add(20, 0),
-		Replica: proto.ReplicaDescriptor{
+		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 1,
 			NodeID:    1,
 			StoreID:   1,
@@ -641,7 +641,7 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
-	secondReplica := proto.ReplicaDescriptor{
+	secondReplica := roachpb.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: 2,
@@ -651,15 +651,15 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
 	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
-	now := proto.Timestamp{WallTime: tc.manualClock.UnixNano()}
+	now := roachpb.Timestamp{WallTime: tc.manualClock.UnixNano()}
 
-	baseRTS, _ := tc.rng.tsCache.GetMax(proto.Key("a"), nil /* end */, nil /* txn */)
+	baseRTS, _ := tc.rng.tsCache.GetMax(roachpb.Key("a"), nil /* end */, nil /* txn */)
 	baseLowWater := baseRTS.WallTime
 
 	testCases := []struct {
-		storeID     proto.StoreID
-		start       proto.Timestamp
-		expiration  proto.Timestamp
+		storeID     roachpb.StoreID
+		start       roachpb.Timestamp
+		expiration  roachpb.Timestamp
 		expLowWater int64
 	}{
 		// Grant the lease fresh.
@@ -675,17 +675,17 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		setLeaderLease(t, tc.rng, &proto.Lease{
+		setLeaderLease(t, tc.rng, &roachpb.Lease{
 			Start:      test.start,
 			Expiration: test.expiration,
-			Replica: proto.ReplicaDescriptor{
-				ReplicaID: proto.ReplicaID(test.storeID),
-				NodeID:    proto.NodeID(test.storeID),
+			Replica: roachpb.ReplicaDescriptor{
+				ReplicaID: roachpb.ReplicaID(test.storeID),
+				NodeID:    roachpb.NodeID(test.storeID),
 				StoreID:   test.storeID,
 			},
 		})
 		// Verify expected low water mark.
-		rTS, wTS := tc.rng.tsCache.GetMax(proto.Key("a"), nil, nil)
+		rTS, wTS := tc.rng.tsCache.GetMax(roachpb.Key("a"), nil, nil)
 		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
 			t.Errorf("%d: expected low water %d; got %d, %d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
 		}
@@ -704,17 +704,17 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 
 	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
 	now := tc.clock.Now()
-	lease := &proto.Lease{
+	lease := &roachpb.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		Replica: proto.ReplicaDescriptor{
+		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 2,
 			NodeID:    2,
 			StoreID:   2,
 		},
 	}
-	args := &proto.BatchRequest{}
-	args.Add(&proto.LeaderLeaseRequest{Lease: *lease})
+	args := &roachpb.BatchRequest{}
+	args.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
 	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), args)
 	var err error
 	if err = <-errChan; err == nil {
@@ -739,7 +739,7 @@ func TestRangeGossipFirstRange(t *testing.T) {
 			t.Errorf("missing first range gossip of key %s", key)
 		}
 		if key == gossip.KeyFirstRangeDescriptor {
-			var rangeDesc proto.RangeDescriptor
+			var rangeDesc roachpb.RangeDescriptor
 			if err := gogoproto.Unmarshal(bytes, &rangeDesc); err != nil {
 				t.Fatal(err)
 			}
@@ -775,18 +775,18 @@ func TestRangeNoGossipConfig(t *testing.T) {
 
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
-	rangeID := proto.RangeID(1)
+	rangeID := roachpb.RangeID(1)
 
-	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
 	req1 := putArgs(key, []byte("foo"), rangeID, tc.store.StoreID())
 	req1.Txn = txn
 
 	req2 := endTxnArgs(txn, true /* commit */, rangeID, tc.store.StoreID())
-	req2.Intents = []proto.Intent{{Key: key}}
+	req2.Intents = []roachpb.Intent{{Key: key}}
 
 	req3 := getArgs(key, rangeID, tc.store.StoreID())
 
-	for i, req := range []proto.Request{&req1, &req2, &req3} {
+	for i, req := range []roachpb.Request{&req1, &req2, &req3} {
 		if _, err := sendArg(tc.rng, tc.rng.context(), req); err != nil {
 			t.Fatal(err)
 		}
@@ -812,9 +812,9 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
-	rangeID := proto.RangeID(1)
+	rangeID := roachpb.RangeID(1)
 
-	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
 	req1 := putArgs(key, nil, rangeID, tc.store.StoreID())
 	req1.Txn = txn
 	req1.Timestamp = txn.Timestamp
@@ -823,7 +823,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	}
 	req2 := endTxnArgs(txn, true /* commit */, rangeID, tc.store.StoreID())
 	req2.Timestamp = txn.Timestamp
-	req2.Intents = []proto.Intent{{Key: key}}
+	req2.Intents = []roachpb.Intent{{Key: key}}
 	if _, err := batchutil.SendWrapped(tc.store, &req2); err != nil {
 		t.Fatal(err)
 	}
@@ -857,39 +857,39 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.GetRequest {
-	return proto.GetRequest{
-		RequestHeader: proto.RequestHeader{
+func getArgs(key []byte, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.GetRequest {
+	return roachpb.GetRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 	}
 }
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.PutRequest {
-	return proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
+func putArgs(key, value []byte, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.PutRequest {
+	return roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:       key,
-			Timestamp: proto.MinTimestamp,
+			Timestamp: roachpb.MinTimestamp,
 			RangeID:   rangeID,
-			Replica:   proto.ReplicaDescriptor{StoreID: storeID},
+			Replica:   roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
-		Value: proto.Value{
+		Value: roachpb.Value{
 			Bytes: value,
 		},
 	}
 }
 
 // deleteArgs returns a DeleteRequest and DeleteResponse pair.
-func deleteArgs(key proto.Key, rangeID proto.RangeID, storeID proto.StoreID) proto.DeleteRequest {
-	return proto.DeleteRequest{
-		RequestHeader: proto.RequestHeader{
+func deleteArgs(key roachpb.Key, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.DeleteRequest {
+	return roachpb.DeleteRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 	}
 }
@@ -897,7 +897,7 @@ func deleteArgs(key proto.Key, rangeID proto.RangeID, storeID proto.StoreID) pro
 // readOrWriteArgs returns either get or put arguments depending on
 // value of "read". Get for true; Put for false. Returns method
 // selected and args & reply.
-func readOrWriteArgs(key proto.Key, read bool, rangeID proto.RangeID, storeID proto.StoreID) proto.Request {
+func readOrWriteArgs(key roachpb.Key, read bool, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.Request {
 	if read {
 		gArgs := getArgs(key, rangeID, storeID)
 		return &gArgs
@@ -908,36 +908,36 @@ func readOrWriteArgs(key proto.Key, read bool, rangeID proto.RangeID, storeID pr
 
 // incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key []byte, inc int64, rangeID proto.RangeID, storeID proto.StoreID) proto.IncrementRequest {
-	return proto.IncrementRequest{
-		RequestHeader: proto.RequestHeader{
+func incrementArgs(key []byte, inc int64, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.IncrementRequest {
+	return roachpb.IncrementRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 		Increment: inc,
 	}
 }
 
-func scanArgs(start, end []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.ScanRequest {
-	return proto.ScanRequest{
-		RequestHeader: proto.RequestHeader{
+func scanArgs(start, end []byte, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.ScanRequest {
+	return roachpb.ScanRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     start,
 			EndKey:  end,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 	}
 }
 
 // endTxnArgs returns request/response pair for EndTransaction RPC
 // addressed to the default replica for the specified key.
-func endTxnArgs(txn *proto.Transaction, commit bool, rangeID proto.RangeID, storeID proto.StoreID) proto.EndTransactionRequest {
-	return proto.EndTransactionRequest{
-		RequestHeader: proto.RequestHeader{
+func endTxnArgs(txn *roachpb.Transaction, commit bool, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.EndTransactionRequest {
+	return roachpb.EndTransactionRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     txn.Key, // not allowed when going through TxnCoordSender, but we're not
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 			Txn:     txn,
 		},
 		Commit: commit,
@@ -946,12 +946,12 @@ func endTxnArgs(txn *proto.Transaction, commit bool, rangeID proto.RangeID, stor
 
 // pushTxnArgs returns a request/response pair for PushTxn RPC
 // addressed to the default replica for the specified key.
-func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, rangeID proto.RangeID, storeID proto.StoreID) proto.PushTxnRequest {
-	return proto.PushTxnRequest{
-		RequestHeader: proto.RequestHeader{
+func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.PushTxnRequest {
+	return roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     pushee.Key,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 		Now:       pusher.Timestamp,
 		PushTo:    pusher.Timestamp,
@@ -962,12 +962,12 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, 
 }
 
 // heartbeatArgs returns request/response pair for HeartbeatTxn RPC.
-func heartbeatArgs(txn *proto.Transaction, rangeID proto.RangeID, storeID proto.StoreID) proto.HeartbeatTxnRequest {
-	return proto.HeartbeatTxnRequest{
-		RequestHeader: proto.RequestHeader{
+func heartbeatArgs(txn *roachpb.Transaction, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.HeartbeatTxnRequest {
+	return roachpb.HeartbeatTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     txn.Key,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 			Txn:     txn,
 		},
 	}
@@ -976,22 +976,22 @@ func heartbeatArgs(txn *proto.Transaction, rangeID proto.RangeID, storeID proto.
 // internalMergeArgs returns a MergeRequest and MergeResponse
 // pair addressed to the default replica for the specified key. The request will
 // contain the given proto.Value.
-func internalMergeArgs(key []byte, value proto.Value, rangeID proto.RangeID, storeID proto.StoreID) proto.MergeRequest {
-	return proto.MergeRequest{
-		RequestHeader: proto.RequestHeader{
+func internalMergeArgs(key []byte, value roachpb.Value, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.MergeRequest {
+	return roachpb.MergeRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 		Value: value,
 	}
 }
 
-func truncateLogArgs(index uint64, rangeID proto.RangeID, storeID proto.StoreID) proto.TruncateLogRequest {
-	return proto.TruncateLogRequest{
-		RequestHeader: proto.RequestHeader{
+func truncateLogArgs(index uint64, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.TruncateLogRequest {
+	return roachpb.TruncateLogRequest{
+		RequestHeader: roachpb.RequestHeader{
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 		Index: index,
 	}
@@ -1000,7 +1000,7 @@ func truncateLogArgs(index uint64, rangeID proto.RangeID, storeID proto.StoreID)
 // getSerializedMVCCValue produces a byte slice of the serialized
 // mvcc value. If value is nil, MVCCValue.Deleted is set to true;
 // otherwise MVCCValue.Value is set to value.
-func getSerializedMVCCValue(value *proto.Value) []byte {
+func getSerializedMVCCValue(value *roachpb.Value) []byte {
 	mvccVal := &engine.MVCCValue{}
 	if value != nil {
 		mvccVal.Value = value
@@ -1022,7 +1022,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 	gArgs := getArgs([]byte("a"), 1, 0)
 	pArgs := putArgs([]byte("b"), []byte("1"), 1, 0)
 
-	testCases := []proto.Request{&gArgs, &pArgs}
+	testCases := []roachpb.Request{&gArgs, &pArgs}
 
 	for i, test := range testCases {
 		tc := testContext{}
@@ -1084,17 +1084,17 @@ func TestRangeUpdateTSCache(t *testing.T) {
 		t.Error(err)
 	}
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
-	rTS, wTS := tc.rng.tsCache.GetMax(proto.Key("a"), nil, nil)
+	rTS, wTS := tc.rng.tsCache.GetMax(roachpb.Key("a"), nil, nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != 0 {
 		t.Errorf("expected rTS=1s and wTS=0s, but got %s, %s", rTS, wTS)
 	}
 	// Verify the timestamp cache has rTS=0s and wTS=2s for "b".
-	rTS, wTS = tc.rng.tsCache.GetMax(proto.Key("b"), nil, nil)
+	rTS, wTS = tc.rng.tsCache.GetMax(roachpb.Key("b"), nil, nil)
 	if rTS.WallTime != 0 || wTS.WallTime != t1.Nanoseconds() {
 		t.Errorf("expected rTS=0s and wTS=2s, but got %s, %s", rTS, wTS)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, wTS = tc.rng.tsCache.GetMax(proto.Key("c"), nil, nil)
+	rTS, wTS = tc.rng.tsCache.GetMax(roachpb.Key("c"), nil, nil)
 	if rTS.WallTime != 0 || wTS.WallTime != 0 {
 		t.Errorf("expected rTS=0s and wTS=0s, but got %s %s", rTS, wTS)
 	}
@@ -1115,7 +1115,7 @@ func TestRangeCommandQueue(t *testing.T) {
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
 	defer close(blockingDone) // make sure teardown can happen
-	TestingCommandFilter = func(args proto.Request) error {
+	TestingCommandFilter = func(args roachpb.Request) error {
 		if args.Header().GetUserPriority() == 42 {
 			blockingStart <- struct{}{}
 			<-blockingDone
@@ -1139,8 +1139,8 @@ func TestRangeCommandQueue(t *testing.T) {
 	tooLong := 5 * time.Second
 
 	for i, test := range testCases {
-		key1 := proto.Key(fmt.Sprintf("key1-%d", i))
-		key2 := proto.Key(fmt.Sprintf("key2-%d", i))
+		key1 := roachpb.Key(fmt.Sprintf("key1-%d", i))
+		key2 := roachpb.Key(fmt.Sprintf("key2-%d", i))
 		// Asynchronously put a value to the rng with blocking enabled.
 		cmd1Done := make(chan struct{})
 		tc.stopper.RunAsyncTask(func() {
@@ -1227,10 +1227,10 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	key := proto.Key("key1")
+	key := roachpb.Key("key1")
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
-	TestingCommandFilter = func(args proto.Request) error {
+	TestingCommandFilter = func(args roachpb.Request) error {
 		if args.Header().CmdID.Random == 1 {
 			blockingStart <- struct{}{}
 			<-blockingDone
@@ -1256,7 +1256,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	cmd2Done := make(chan struct{})
 	go func() {
 		args := getArgs(key, tc.rng.Desc().RangeID, tc.store.StoreID())
-		args.ReadConsistency = proto.INCONSISTENT
+		args.ReadConsistency = roachpb.INCONSISTENT
 
 		_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
@@ -1308,7 +1308,7 @@ func TestRangeUseTSCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pReply := reply.(*proto.PutResponse)
+	pReply := reply.(*roachpb.PutResponse)
 	if pReply.Timestamp.WallTime != tc.clock.Timestamp().WallTime {
 		t.Errorf("expected write timestamp to upgrade to 1s; got %s", pReply.Timestamp)
 	}
@@ -1326,7 +1326,7 @@ func TestRangeNoTSCacheInconsistent(t *testing.T) {
 	tc.manualClock.Set(t0.Nanoseconds())
 	args := getArgs([]byte("a"), 1, tc.store.StoreID())
 	args.Timestamp = tc.clock.Now()
-	args.ReadConsistency = proto.INCONSISTENT
+	args.ReadConsistency = roachpb.INCONSISTENT
 
 	_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
@@ -1339,7 +1339,7 @@ func TestRangeNoTSCacheInconsistent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pReply := reply.(*proto.PutResponse)
+	pReply := reply.(*roachpb.PutResponse)
 	if pReply.Timestamp.WallTime == tc.clock.Timestamp().WallTime {
 		t.Errorf("expected write timestamp not to upgrade to 1s; got %s", pReply.Timestamp)
 	}
@@ -1356,18 +1356,18 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 
 	// Test for both read & write attempts.
 	for i, read := range []bool{true, false} {
-		key := proto.Key(fmt.Sprintf("key-%d", i))
+		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 
 		// Start by laying down an intent to trip up future read or write to same key.
 		pArgs := putArgs(key, []byte("value"), 1, tc.store.StoreID())
-		pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+		pArgs.Txn = newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 		pArgs.Timestamp = pArgs.Txn.Timestamp
 
 		reply, err := sendArg(tc.rng, tc.rng.context(), &pArgs)
 		if err != nil {
 			t.Fatalf("test %d: %s", i, err)
 		}
-		pReply := reply.(*proto.PutResponse)
+		pReply := reply.(*roachpb.PutResponse)
 
 		// Now attempt read or write.
 		args := readOrWriteArgs(key, read, tc.rng.Desc().RangeID, tc.store.StoreID())
@@ -1398,8 +1398,8 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	defer tc.Stop()
 
 	// Test for both read & write attempts.
-	key := proto.Key("a")
-	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+	key := roachpb.Key("a")
+	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 
 	// Start with a read to warm the timestamp cache.
 	gArgs := getArgs(key, 1, tc.store.StoreID())
@@ -1419,17 +1419,17 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pReply := reply.(*proto.PutResponse)
+	pReply := reply.(*roachpb.PutResponse)
 	if !pReply.Timestamp.Equal(pArgs.Timestamp) {
 		t.Errorf("expected timestamp to remain %s; got %s", pArgs.Timestamp, pReply.Timestamp)
 	}
 
 	// Resolve the intent.
-	rArgs := &proto.ResolveIntentRequest{
+	rArgs := &roachpb.ResolveIntentRequest{
 		RequestHeader: *pArgs.Header(),
 		IntentTxn:     *pArgs.Txn,
 	}
-	rArgs.IntentTxn.Status = proto.COMMITTED
+	rArgs.IntentTxn.Status = roachpb.COMMITTED
 	if _, err := sendArg(tc.rng, tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -1442,7 +1442,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	if reply, err = sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
-	pReply = reply.(*proto.PutResponse)
+	pReply = reply.(*roachpb.PutResponse)
 	if !pReply.Timestamp.Equal(expTS) {
 		t.Errorf("expected timestamp to increment to %s; got %s", expTS, pReply.Timestamp)
 	}
@@ -1466,12 +1466,12 @@ func TestRangeIdempotence(t *testing.T) {
 		args := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 		args.Header().Timestamp = tc.clock.Now()
 		if idx%2 == 0 {
-			args.CmdID = proto.ClientCmdID{WallTime: 1, Random: 1}
+			args.CmdID = roachpb.ClientCmdID{WallTime: 1, Random: 1}
 		} else {
-			args.CmdID = proto.ClientCmdID{WallTime: 1, Random: int64(idx + 100)}
+			args.CmdID = roachpb.ClientCmdID{WallTime: 1, Random: int64(idx + 100)}
 		}
 		resp, err := sendArg(tc.rng, tc.rng.context(), &args)
-		reply := resp.(*proto.IncrementResponse)
+		reply := resp.(*roachpb.IncrementResponse)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1514,7 +1514,7 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 	defer tc.Stop()
 
 	args := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
-	args.CmdID = proto.ClientCmdID{WallTime: 1, Random: 1}
+	args.CmdID = roachpb.ClientCmdID{WallTime: 1, Random: 1}
 
 	if _, pErr := sendArg(tc.rng, tc.rng.context(), &args); pErr != nil {
 		t.Fatal(pErr)
@@ -1522,7 +1522,7 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 
 	// Overwrite repsonse cache entry with garbage for the last op.
 	key := keys.ResponseCacheKey(tc.rng.Desc().RangeID, &args.CmdID)
-	err := engine.MVCCPut(tc.engine, nil, key, proto.ZeroTimestamp, proto.Value{Bytes: []byte("\xff")}, nil)
+	err := engine.MVCCPut(tc.engine, nil, key, roachpb.ZeroTimestamp, roachpb.Value{Bytes: []byte("\xff")}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1541,14 +1541,14 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	cmdID := proto.ClientCmdID{WallTime: 1, Random: 1}
+	cmdID := roachpb.ClientCmdID{WallTime: 1, Random: 1}
 	// Write an error into the response cache.
-	incReply := proto.IncrementResponse{}
-	br := proto.BatchResponse{}
+	incReply := roachpb.IncrementResponse{}
+	br := roachpb.BatchResponse{}
 	br.Add(&incReply)
 	pastError := errors.New("boom")
 	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID,
-		proto.ResponseWithError{Reply: &br, Err: pastError})
+		roachpb.ResponseWithError{Reply: &br, Err: pastError})
 
 	args := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 	args.CmdID = cmdID
@@ -1568,8 +1568,8 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	key := proto.Key("foo")
-	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+	key := roachpb.Key("foo")
+	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 	pArgs := putArgs(key, []byte("only here to make this a rw transaction"), tc.rng.Desc().RangeID, tc.store.StoreID())
 	pArgs.Txn = txn
 	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
@@ -1581,9 +1581,9 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	// Make an EndTransaction request which would fail if not
 	// stripped. In this case, we set the start key to "bar" for a
 	// split of the default range; start key must be "" in this case.
-	args.InternalCommitTrigger = &proto.InternalCommitTrigger{
-		SplitTrigger: &proto.SplitTrigger{
-			UpdatedDesc: proto.RangeDescriptor{StartKey: proto.Key("bar")},
+	args.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
+		SplitTrigger: &roachpb.SplitTrigger{
+			UpdatedDesc: roachpb.RangeDescriptor{StartKey: roachpb.Key("bar")},
 		},
 	}
 
@@ -1606,7 +1606,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 
 	key := []byte("a")
 	for _, commit := range []bool{true, false} {
-		txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 		args := endTxnArgs(txn, commit, 1, tc.store.StoreID())
 		args.Timestamp = txn.Timestamp
 
@@ -1614,10 +1614,10 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		reply := resp.(*proto.EndTransactionResponse)
-		expStatus := proto.COMMITTED
+		reply := resp.(*roachpb.EndTransactionResponse)
+		expStatus := roachpb.COMMITTED
 		if !commit {
-			expStatus = proto.ABORTED
+			expStatus = roachpb.ABORTED
 		}
 		if reply.Txn.Status != expStatus {
 			t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
@@ -1631,7 +1631,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		hBR := resp.(*proto.HeartbeatTxnResponse)
+		hBR := resp.(*roachpb.HeartbeatTxnResponse)
 		if hBR.Txn.Status != expStatus || hBR.Txn.LastHeartbeat != nil {
 			t.Errorf("unexpected heartbeat reply contents: %+v", hBR)
 		}
@@ -1648,7 +1648,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 
 	key := []byte("a")
 	for _, commit := range []bool{true, false} {
-		txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 
 		// Start out with a heartbeat to the transaction.
 		hBA := heartbeatArgs(txn, 1, tc.store.StoreID())
@@ -1658,8 +1658,8 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		hBR := resp.(*proto.HeartbeatTxnResponse)
-		if hBR.Txn.Status != proto.PENDING || hBR.Txn.LastHeartbeat == nil {
+		hBR := resp.(*roachpb.HeartbeatTxnResponse)
+		if hBR.Txn.Status != roachpb.PENDING || hBR.Txn.LastHeartbeat == nil {
 			t.Errorf("unexpected heartbeat reply contents: %+v", hBR)
 		}
 
@@ -1670,10 +1670,10 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		reply := resp.(*proto.EndTransactionResponse)
-		expStatus := proto.COMMITTED
+		reply := resp.(*roachpb.EndTransactionResponse)
+		expStatus := roachpb.COMMITTED
 		if !commit {
-			expStatus = proto.ABORTED
+			expStatus = roachpb.ABORTED
 		}
 		if reply.Txn.Status != expStatus {
 			t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
@@ -1697,13 +1697,13 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 
 	testCases := []struct {
 		commit    bool
-		isolation proto.IsolationType
+		isolation roachpb.IsolationType
 		expErr    bool
 	}{
-		{true, proto.SERIALIZABLE, true},
-		{true, proto.SNAPSHOT, false},
-		{false, proto.SERIALIZABLE, false},
-		{false, proto.SNAPSHOT, false},
+		{true, roachpb.SERIALIZABLE, true},
+		{true, roachpb.SNAPSHOT, false},
+		{false, roachpb.SERIALIZABLE, false},
+		{false, roachpb.SNAPSHOT, false},
 	}
 	key := []byte("a")
 	for _, test := range testCases {
@@ -1719,18 +1719,18 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 			if err == nil {
 				t.Errorf("expected error")
 			}
-			if _, ok := err.(*proto.TransactionRetryError); !ok {
+			if _, ok := err.(*roachpb.TransactionRetryError); !ok {
 				t.Errorf("expected retry error; got %s", err)
 			}
 		} else {
 			if err != nil {
 				t.Errorf("unexpected error: %s", err)
 			}
-			expStatus := proto.COMMITTED
+			expStatus := roachpb.COMMITTED
 			if !test.commit {
-				expStatus = proto.ABORTED
+				expStatus = roachpb.ABORTED
 			}
-			reply := resp.(*proto.EndTransactionResponse)
+			reply := resp.(*roachpb.EndTransactionResponse)
 			if reply.Txn.Status != expStatus {
 				t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
 			}
@@ -1747,7 +1747,7 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	defer tc.Stop()
 
 	key := []byte("a")
-	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 
 	// Start out with a heartbeat to the transaction.
 	hBA := heartbeatArgs(txn, 1, tc.store.StoreID())
@@ -1768,8 +1768,8 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	reply := resp.(*proto.EndTransactionResponse)
-	if reply.Txn.Status != proto.COMMITTED {
+	reply := resp.(*roachpb.EndTransactionResponse)
+	if reply.Txn.Status != roachpb.COMMITTED {
 		t.Errorf("expected transaction status to be COMMITTED; got %s", reply.Txn.Status)
 	}
 	if reply.Txn.Epoch != txn.Epoch {
@@ -1791,30 +1791,30 @@ func TestEndTransactionWithErrors(t *testing.T) {
 
 	regressTS := tc.clock.Now()
 	tc.manualClock.Set(1)
-	txn := newTransaction("test", proto.Key(""), 1, proto.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", roachpb.Key(""), 1, roachpb.SERIALIZABLE, tc.clock)
 
 	testCases := []struct {
-		key          proto.Key
-		existStatus  proto.TransactionStatus
+		key          roachpb.Key
+		existStatus  roachpb.TransactionStatus
 		existEpoch   int32
-		existTS      proto.Timestamp
+		existTS      roachpb.Timestamp
 		expErrRegexp string
 	}{
-		{proto.Key("a"), proto.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" id=.*: already committed"},
-		{proto.Key("b"), proto.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted \"test\" id=.*"},
-		{proto.Key("c"), proto.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" id=.*: epoch regression: 0"},
-		{proto.Key("d"), proto.PENDING, txn.Epoch, regressTS, "txn \"test\" id=.*: timestamp regression: 0.000000001,0"},
+		{roachpb.Key("a"), roachpb.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" id=.*: already committed"},
+		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted \"test\" id=.*"},
+		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" id=.*: epoch regression: 0"},
+		{roachpb.Key("d"), roachpb.PENDING, txn.Epoch, regressTS, "txn \"test\" id=.*: timestamp regression: 0.000000001,0"},
 	}
 	for _, test := range testCases {
 		// Establish existing txn state by writing directly to range engine.
-		var existTxn proto.Transaction
+		var existTxn roachpb.Transaction
 		gogoproto.Merge(&existTxn, txn)
 		existTxn.Key = test.key
 		existTxn.Status = test.existStatus
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
 		txnKey := keys.TransactionKey(test.key, txn.ID)
-		if err := engine.MVCCPutProto(tc.rng.rm.Engine(), nil, txnKey, proto.ZeroTimestamp,
+		if err := engine.MVCCPutProto(tc.rng.rm.Engine(), nil, txnKey, roachpb.ZeroTimestamp,
 			nil, &existTxn); err != nil {
 			t.Fatal(err)
 		}
@@ -1840,33 +1840,33 @@ func TestEndTransactionGC(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	splitKey := proto.Key("c")
+	splitKey := roachpb.Key("c")
 	splitTestRange(tc.store, splitKey, splitKey, t)
 	for i, test := range []struct {
-		intents []proto.Intent
+		intents []roachpb.Intent
 		expGC   bool
 	}{
 		// Range inside.
-		{[]proto.Intent{{Key: proto.Key("a"), EndKey: proto.Key("b")}}, true},
+		{[]roachpb.Intent{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}}, true},
 		// Two intents inside.
-		{[]proto.Intent{{Key: proto.Key("a")}, {Key: proto.Key("b")}}, true},
+		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: roachpb.Key("b")}}, true},
 		// Intent range spilling over right endpoint.
-		{[]proto.Intent{{Key: proto.Key("a"), EndKey: splitKey.Next()}}, false},
+		{[]roachpb.Intent{{Key: roachpb.Key("a"), EndKey: splitKey.Next()}}, false},
 		// Intent range completely outside.
-		{[]proto.Intent{{Key: splitKey, EndKey: proto.Key("q")}}, false},
+		{[]roachpb.Intent{{Key: splitKey, EndKey: roachpb.Key("q")}}, false},
 		// Intent inside and outside.
-		{[]proto.Intent{{Key: proto.Key("a")}, {Key: splitKey}}, false},
+		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: splitKey}}, false},
 	} {
-		txn := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
+		txn := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
 		args := endTxnArgs(txn, true, 1, tc.store.StoreID())
 		args.Timestamp = txn.Timestamp
 		args.Intents = test.intents
 		if _, err := sendArg(tc.rng, tc.rng.context(), &args); err != nil {
 			t.Fatal(err)
 		}
-		var readTxn proto.Transaction
+		var readTxn roachpb.Transaction
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
-		ok, err := engine.MVCCGetProto(tc.rng.rm.Engine(), txnKey, proto.ZeroTimestamp,
+		ok, err := engine.MVCCGetProto(tc.rng.rm.Engine(), txnKey, roachpb.ZeroTimestamp,
 			true /* consistent */, nil /* txn */, &readTxn)
 		if err != nil {
 			t.Fatal(err)
@@ -1882,10 +1882,10 @@ func TestEndTransactionGC(t *testing.T) {
 func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
-	key := proto.Key("a")
+	key := roachpb.Key("a")
 	splitKey := key.Next()
-	TestingCommandFilter = func(args proto.Request) error {
-		if args.Method() == proto.ResolveIntentRange && args.Header().Key.Equal(splitKey) {
+	TestingCommandFilter = func(args roachpb.Request) error {
+		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey) {
 			return util.Errorf("boom")
 		}
 		return nil
@@ -1897,7 +1897,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	// The keys of the two intents are next to each other.
 	newRng := splitTestRange(tc.store, splitKey, splitKey, t)
 
-	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 	pArgs := putArgs(key, []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
 	pArgs.Txn = txn
 	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
@@ -1913,7 +1913,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	// End the transaction and resolve the intents.
 	args := endTxnArgs(txn, true /* commit */, 1, tc.store.StoreID())
 	args.Timestamp = txn.Timestamp
-	args.Intents = []proto.Intent{{Key: key, EndKey: splitKey.Next()}}
+	args.Intents = []roachpb.Intent{{Key: key, EndKey: splitKey.Next()}}
 	if _, err := sendArg(tc.rng, tc.rng.context(), &args); err != nil {
 		t.Fatal(err)
 	}
@@ -1921,7 +1921,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	// Check if the intent in the other range has not yet been resolved.
 	gArgs := getArgs(splitKey, newRng.Desc().RangeID, tc.store.StoreID())
 	_, err := sendArg(newRng, newRng.context(), &gArgs)
-	if _, ok := err.(*proto.WriteIntentError); !ok {
+	if _, ok := err.(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected write intent error, but got %s", err)
 	}
 }
@@ -1933,10 +1933,10 @@ func TestPushTxnBadKey(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	pusher := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
-	pushee := newTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, tc.clock)
+	pusher := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
+	pushee := newTransaction("test", roachpb.Key("b"), 1, roachpb.SERIALIZABLE, tc.clock)
 
-	args := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
+	args := pushTxnArgs(pusher, pushee, roachpb.ABORT_TXN, 1, tc.store.StoreID())
 	args.Key = pusher.Key
 
 	if _, err := sendArg(tc.rng, tc.rng.context(), &args); !testutils.IsError(err, ".*should match pushee.*") {
@@ -1958,15 +1958,15 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	for i, status := range []proto.TransactionStatus{proto.COMMITTED, proto.ABORTED} {
-		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
-		pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+	for i, status := range []roachpb.TransactionStatus{roachpb.COMMITTED, roachpb.ABORTED} {
+		key := roachpb.Key(fmt.Sprintf("key-%d", i))
+		pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 		pusher.Priority = 1
 		pushee.Priority = 2 // pusher will lose, meaning we shouldn't push unless pushee is already ended.
 
 		// End the pushee's transaction.
-		etArgs := endTxnArgs(pushee, status == proto.COMMITTED, 1, tc.store.StoreID())
+		etArgs := endTxnArgs(pushee, status == roachpb.COMMITTED, 1, tc.store.StoreID())
 		etArgs.Timestamp = pushee.Timestamp
 
 		if _, err := sendArg(tc.rng, tc.rng.context(), &etArgs); err != nil {
@@ -1974,13 +1974,13 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 		}
 
 		// Now try to push what's already committed or aborted.
-		args := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
+		args := pushTxnArgs(pusher, pushee, roachpb.ABORT_TXN, 1, tc.store.StoreID())
 
 		resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 		if err != nil {
 			t.Fatal(err)
 		}
-		reply := resp.(*proto.PushTxnResponse)
+		reply := resp.(*roachpb.PushTxnResponse)
 		if reply.PusheeTxn.Status != status {
 			t.Errorf("expected push txn to return with status == %s; got %+v", status, reply.PusheeTxn)
 		}
@@ -1997,11 +1997,11 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	ts1 := proto.Timestamp{WallTime: 1}
-	ts2 := proto.Timestamp{WallTime: 2}
+	ts1 := roachpb.Timestamp{WallTime: 1}
+	ts2 := roachpb.Timestamp{WallTime: 2}
 	testCases := []struct {
 		startEpoch, epoch, expEpoch int32
-		startTS, ts, expTS          proto.Timestamp
+		startTS, ts, expTS          roachpb.Timestamp
 	}{
 		// Move epoch forward.
 		{0, 1, 1, ts1, ts1, ts1},
@@ -2018,9 +2018,9 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
-		pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+		key := roachpb.Key(fmt.Sprintf("key-%d", i))
+		pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 		pushee.Priority = 1
 		pusher.Priority = 2 // Pusher will win.
 
@@ -2037,17 +2037,17 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		// Now, attempt to push the transaction using updated values for epoch & timestamp.
 		pushee.Epoch = test.epoch
 		pushee.Timestamp = test.ts
-		args := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
+		args := pushTxnArgs(pusher, pushee, roachpb.ABORT_TXN, 1, tc.store.StoreID())
 
 		resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 		if err != nil {
 			t.Fatal(err)
 		}
-		reply := resp.(*proto.PushTxnResponse)
-		expTxn := gogoproto.Clone(pushee).(*proto.Transaction)
+		reply := resp.(*roachpb.PushTxnResponse)
+		expTxn := gogoproto.Clone(pushee).(*roachpb.Transaction)
 		expTxn.Epoch = test.expEpoch
 		expTxn.Timestamp = test.expTS
-		expTxn.Status = proto.ABORTED
+		expTxn.Status = roachpb.ABORTED
 		expTxn.LastHeartbeat = &test.startTS
 		expTxn.Writing = true // always set for physical txn table entries
 
@@ -2066,44 +2066,44 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	ts := proto.Timestamp{WallTime: 1}
+	ts := roachpb.Timestamp{WallTime: 1}
 	ns := DefaultHeartbeatInterval.Nanoseconds()
 	testCases := []struct {
-		heartbeat   proto.Timestamp // zero value indicates no heartbeat
-		currentTime int64           // nanoseconds
-		pushType    proto.PushTxnType
+		heartbeat   roachpb.Timestamp // zero value indicates no heartbeat
+		currentTime int64             // nanoseconds
+		pushType    roachpb.PushTxnType
 		expSuccess  bool
 	}{
-		{proto.ZeroTimestamp, 1, proto.PUSH_TIMESTAMP, false}, // using 0 as time is awkward
-		{proto.ZeroTimestamp, 1, proto.ABORT_TXN, false},
-		{proto.ZeroTimestamp, 1, proto.CLEANUP_TXN, false},
-		{proto.ZeroTimestamp, ns, proto.PUSH_TIMESTAMP, false},
-		{proto.ZeroTimestamp, ns, proto.ABORT_TXN, false},
-		{proto.ZeroTimestamp, ns, proto.CLEANUP_TXN, false},
-		{proto.ZeroTimestamp, ns*2 - 1, proto.PUSH_TIMESTAMP, false},
-		{proto.ZeroTimestamp, ns*2 - 1, proto.ABORT_TXN, false},
-		{proto.ZeroTimestamp, ns*2 - 1, proto.CLEANUP_TXN, false},
-		{proto.ZeroTimestamp, ns * 2, proto.PUSH_TIMESTAMP, false},
-		{proto.ZeroTimestamp, ns * 2, proto.ABORT_TXN, false},
-		{proto.ZeroTimestamp, ns * 2, proto.CLEANUP_TXN, false},
-		{ts, ns*2 + 1, proto.PUSH_TIMESTAMP, false},
-		{ts, ns*2 + 1, proto.ABORT_TXN, false},
-		{ts, ns*2 + 1, proto.CLEANUP_TXN, false},
-		{ts, ns*2 + 2, proto.PUSH_TIMESTAMP, true},
-		{ts, ns*2 + 2, proto.ABORT_TXN, true},
-		{ts, ns*2 + 2, proto.CLEANUP_TXN, true},
+		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TIMESTAMP, false}, // using 0 as time is awkward
+		{roachpb.ZeroTimestamp, 1, roachpb.ABORT_TXN, false},
+		{roachpb.ZeroTimestamp, 1, roachpb.CLEANUP_TXN, false},
+		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_TIMESTAMP, false},
+		{roachpb.ZeroTimestamp, ns, roachpb.ABORT_TXN, false},
+		{roachpb.ZeroTimestamp, ns, roachpb.CLEANUP_TXN, false},
+		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TIMESTAMP, false},
+		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.ABORT_TXN, false},
+		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.CLEANUP_TXN, false},
+		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_TIMESTAMP, false},
+		{roachpb.ZeroTimestamp, ns * 2, roachpb.ABORT_TXN, false},
+		{roachpb.ZeroTimestamp, ns * 2, roachpb.CLEANUP_TXN, false},
+		{ts, ns*2 + 1, roachpb.PUSH_TIMESTAMP, false},
+		{ts, ns*2 + 1, roachpb.ABORT_TXN, false},
+		{ts, ns*2 + 1, roachpb.CLEANUP_TXN, false},
+		{ts, ns*2 + 2, roachpb.PUSH_TIMESTAMP, true},
+		{ts, ns*2 + 2, roachpb.ABORT_TXN, true},
+		{ts, ns*2 + 2, roachpb.CLEANUP_TXN, true},
 	}
 
 	for i, test := range testCases {
 		tc.manualClock.Set(0)
-		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, 1, proto.SERIALIZABLE, nil /* clock */)
-		pusher := newTransaction("pusher", key, 1, proto.SERIALIZABLE, nil /* clock */)
+		key := roachpb.Key(fmt.Sprintf("key-%d", i))
+		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, 1, roachpb.SERIALIZABLE, nil /* clock */)
+		pusher := newTransaction("pusher", key, 1, roachpb.SERIALIZABLE, nil /* clock */)
 		pushee.Priority = 2
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
 		// First, establish "start" of existing pushee's txn via heartbeat.
-		if !test.heartbeat.Equal(proto.ZeroTimestamp) {
+		if !test.heartbeat.Equal(roachpb.ZeroTimestamp) {
 			hBA := heartbeatArgs(pushee, 1, tc.store.StoreID())
 			hBA.Timestamp = test.heartbeat
 
@@ -2114,7 +2114,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// Now, attempt to push the transaction with Now set to our current time.
 		args := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
-		args.Now = proto.Timestamp{WallTime: test.currentTime}
+		args.Now = roachpb.Timestamp{WallTime: test.currentTime}
 
 		_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
@@ -2122,7 +2122,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
 		}
 		if err != nil {
-			if _, ok := err.(*proto.TransactionPushError); !ok {
+			if _, ok := err.(*roachpb.TransactionPushError); !ok {
 				t.Errorf("expected txn push error: %s", err)
 			}
 		}
@@ -2139,40 +2139,40 @@ func TestPushTxnPriorities(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	ts1 := proto.Timestamp{WallTime: 1}
-	ts2 := proto.Timestamp{WallTime: 2}
+	ts1 := roachpb.Timestamp{WallTime: 1}
+	ts2 := roachpb.Timestamp{WallTime: 2}
 	testCases := []struct {
 		pusherPriority, pusheePriority int32
-		pusherTS, pusheeTS             proto.Timestamp
-		pushType                       proto.PushTxnType
+		pusherTS, pusheeTS             roachpb.Timestamp
+		pushType                       roachpb.PushTxnType
 		expSuccess                     bool
 	}{
 		// Pusher has higher priority succeeds.
-		{2, 1, ts1, ts1, proto.ABORT_TXN, true},
+		{2, 1, ts1, ts1, roachpb.ABORT_TXN, true},
 		// Pusher has lower priority fails.
-		{1, 2, ts1, ts1, proto.ABORT_TXN, false},
-		{1, 2, ts1, ts1, proto.PUSH_TIMESTAMP, false},
+		{1, 2, ts1, ts1, roachpb.ABORT_TXN, false},
+		{1, 2, ts1, ts1, roachpb.PUSH_TIMESTAMP, false},
 		// Pusher has lower priority fails, even with older txn timestamp.
-		{1, 2, ts1, ts2, proto.ABORT_TXN, false},
+		{1, 2, ts1, ts2, roachpb.ABORT_TXN, false},
 		// Pusher has lower priority, but older txn timestamp allows success if !abort.
-		{1, 2, ts1, ts2, proto.PUSH_TIMESTAMP, true},
+		{1, 2, ts1, ts2, roachpb.PUSH_TIMESTAMP, true},
 		// With same priorities, older txn timestamp succeeds.
-		{1, 1, ts1, ts2, proto.ABORT_TXN, true},
+		{1, 1, ts1, ts2, roachpb.ABORT_TXN, true},
 		// With same priorities, same txn timestamp fails.
-		{1, 1, ts1, ts1, proto.ABORT_TXN, false},
-		{1, 1, ts1, ts1, proto.PUSH_TIMESTAMP, false},
+		{1, 1, ts1, ts1, roachpb.ABORT_TXN, false},
+		{1, 1, ts1, ts1, roachpb.PUSH_TIMESTAMP, false},
 		// With same priorities, newer txn timestamp fails.
-		{1, 1, ts2, ts1, proto.ABORT_TXN, false},
-		{1, 1, ts2, ts1, proto.PUSH_TIMESTAMP, false},
+		{1, 1, ts2, ts1, roachpb.ABORT_TXN, false},
+		{1, 1, ts2, ts1, roachpb.PUSH_TIMESTAMP, false},
 		// When confirming, priority never wins.
-		{2, 1, ts1, ts1, proto.CLEANUP_TXN, false},
-		{1, 2, ts1, ts1, proto.CLEANUP_TXN, false},
+		{2, 1, ts1, ts1, roachpb.CLEANUP_TXN, false},
+		{1, 2, ts1, ts1, roachpb.CLEANUP_TXN, false},
 	}
 
 	for i, test := range testCases {
-		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
-		pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+		key := roachpb.Key(fmt.Sprintf("key-%d", i))
+		pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 		pusher.Priority = test.pusherPriority
 		pushee.Priority = test.pusheePriority
 		pusher.Timestamp = test.pusherTS
@@ -2187,7 +2187,7 @@ func TestPushTxnPriorities(t *testing.T) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
 		}
 		if err != nil {
-			if _, ok := err.(*proto.TransactionPushError); !ok {
+			if _, ok := err.(*roachpb.TransactionPushError); !ok {
 				t.Errorf("expected txn push error: %s", err)
 			}
 		}
@@ -2204,15 +2204,15 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	pusher := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
-	pushee := newTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, tc.clock)
+	pusher := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
+	pushee := newTransaction("test", roachpb.Key("b"), 1, roachpb.SERIALIZABLE, tc.clock)
 	pusher.Priority = 2
 	pushee.Priority = 1 // pusher will win
-	pusher.Timestamp = proto.Timestamp{WallTime: 50, Logical: 25}
-	pushee.Timestamp = proto.Timestamp{WallTime: 5, Logical: 1}
+	pusher.Timestamp = roachpb.Timestamp{WallTime: 50, Logical: 25}
+	pushee.Timestamp = roachpb.Timestamp{WallTime: 5, Logical: 1}
 
 	// Now, push the transaction with args.Abort=false.
-	args := pushTxnArgs(pusher, pushee, proto.PUSH_TIMESTAMP, 1, tc.store.StoreID())
+	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_TIMESTAMP, 1, tc.store.StoreID())
 
 	resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 	if err != nil {
@@ -2220,11 +2220,11 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 	}
 	expTS := pusher.Timestamp
 	expTS.Logical++
-	reply := resp.(*proto.PushTxnResponse)
+	reply := resp.(*roachpb.PushTxnResponse)
 	if !reply.PusheeTxn.Timestamp.Equal(expTS) {
 		t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PusheeTxn.Timestamp)
 	}
-	if reply.PusheeTxn.Status != proto.PENDING {
+	if reply.PusheeTxn.Status != roachpb.PENDING {
 		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
 	}
 }
@@ -2239,25 +2239,25 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	pusher := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
-	pushee := newTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, tc.clock)
+	pusher := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
+	pushee := newTransaction("test", roachpb.Key("b"), 1, roachpb.SERIALIZABLE, tc.clock)
 	pusher.Priority = 1
 	pushee.Priority = 2 // pusher will lose
-	pusher.Timestamp = proto.Timestamp{WallTime: 50, Logical: 0}
-	pushee.Timestamp = proto.Timestamp{WallTime: 50, Logical: 1}
+	pusher.Timestamp = roachpb.Timestamp{WallTime: 50, Logical: 0}
+	pushee.Timestamp = roachpb.Timestamp{WallTime: 50, Logical: 1}
 
 	// Now, push the transaction with args.Abort=false.
-	args := pushTxnArgs(pusher, pushee, proto.PUSH_TIMESTAMP, 1, tc.store.StoreID())
+	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_TIMESTAMP, 1, tc.store.StoreID())
 
 	resp, err := sendArg(tc.rng, tc.rng.context(), &args)
 	if err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}
-	reply := resp.(*proto.PushTxnResponse)
+	reply := resp.(*roachpb.PushTxnResponse)
 	if !reply.PusheeTxn.Timestamp.Equal(pushee.Timestamp) {
 		t.Errorf("expected timestamp to be equal to original %+v; got %+v", pushee.Timestamp, reply.PusheeTxn.Timestamp)
 	}
-	if reply.PusheeTxn.Status != proto.PENDING {
+	if reply.PusheeTxn.Status != roachpb.PENDING {
 		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
 	}
 }
@@ -2270,8 +2270,8 @@ func TestRangeResolveIntentRange(t *testing.T) {
 	defer tc.Stop()
 
 	// Put two values transactionally.
-	txn := &proto.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
-	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
+	txn := &roachpb.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
+	for _, key := range []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")} {
 		pArgs := putArgs(key, []byte("value1"), 1, tc.store.StoreID())
 		pArgs.Txn = txn
 		if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
@@ -2280,33 +2280,33 @@ func TestRangeResolveIntentRange(t *testing.T) {
 	}
 
 	// Resolve the intents.
-	rArgs := &proto.ResolveIntentRangeRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:     proto.Key("a"),
-			EndKey:  proto.Key("c"),
+	rArgs := &roachpb.ResolveIntentRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:     roachpb.Key("a"),
+			EndKey:  roachpb.Key("c"),
 			RangeID: tc.rng.Desc().RangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+			Replica: roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 		},
 		IntentTxn: *txn,
 	}
-	rArgs.IntentTxn.Status = proto.COMMITTED
+	rArgs.IntentTxn.Status = roachpb.COMMITTED
 	if _, err := sendArg(tc.rng, tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Do a consistent scan to verify intents have been cleared.
-	sArgs := scanArgs(proto.Key("a"), proto.Key("c"), 1, tc.store.StoreID())
+	sArgs := scanArgs(roachpb.Key("a"), roachpb.Key("c"), 1, tc.store.StoreID())
 	reply, err := batchutil.SendWrapped(tc.store, &sArgs)
 	if err != nil {
 		t.Fatalf("unexpected error on scan: %s", err)
 	}
-	sReply := reply.(*proto.ScanResponse)
+	sReply := reply.(*roachpb.ScanResponse)
 	if len(sReply.Rows) != 2 {
 		t.Errorf("expected 2 rows; got %v", sReply.Rows)
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, rangeID proto.RangeID, expMS engine.MVCCStats, t *testing.T) {
+func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.MVCCStats, t *testing.T) {
 	var ms engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(eng, rangeID, &ms); err != nil {
 		t.Fatal(err)
@@ -2342,7 +2342,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	// Put a 2nd value transactionally.
 	pArgs = putArgs([]byte("b"), []byte("value2"), 1, tc.store.StoreID())
 	pArgs.Timestamp = tc.clock.Now()
-	pArgs.Txn = &proto.Transaction{ID: uuid.NewUUID4(), Timestamp: pArgs.Timestamp}
+	pArgs.Txn = &roachpb.Transaction{ID: uuid.NewUUID4(), Timestamp: pArgs.Timestamp}
 
 	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
@@ -2351,15 +2351,15 @@ func TestRangeStatsComputation(t *testing.T) {
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Resolve the 2nd value.
-	rArgs := &proto.ResolveIntentRequest{
-		RequestHeader: proto.RequestHeader{
+	rArgs := &roachpb.ResolveIntentRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     pArgs.Key,
 			RangeID: tc.rng.Desc().RangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+			Replica: roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 		},
 		IntentTxn: *pArgs.Txn,
 	}
-	rArgs.IntentTxn.Status = proto.COMMITTED
+	rArgs.IntentTxn.Status = roachpb.COMMITTED
 
 	if _, err := sendArg(tc.rng, tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
@@ -2393,7 +2393,7 @@ func TestMerge(t *testing.T) {
 	stringExpected := "abcd"
 
 	for _, str := range stringArgs {
-		mergeArgs := internalMergeArgs(key, proto.Value{Bytes: []byte(str)}, 1, tc.store.StoreID())
+		mergeArgs := internalMergeArgs(key, roachpb.Value{Bytes: []byte(str)}, 1, tc.store.StoreID())
 
 		if _, err := sendArg(tc.rng, tc.rng.context(), &mergeArgs); err != nil {
 			t.Fatalf("unexpected error from Merge: %s", err.Error())
@@ -2406,7 +2406,7 @@ func TestMerge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error from Get: %s", err)
 	}
-	resp := reply.(*proto.GetResponse)
+	resp := reply.(*roachpb.GetResponse)
 	if resp.Value == nil {
 		t.Fatal("GetResponse had nil value")
 	}
@@ -2493,7 +2493,7 @@ func TestRaftStorage(t *testing.T) {
 	defer stopper.Stop()
 	storagetest.RunTests(t,
 		func(t *testing.T) storagetest.WriteableStorage {
-			eng = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, stopper)
+			eng = engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, stopper)
 			// Fake store to house the engine.
 			store := &Store{
 				ctx: StoreContext{
@@ -2501,10 +2501,10 @@ func TestRaftStorage(t *testing.T) {
 				},
 				engine: eng,
 			}
-			rng, err := NewReplica(&proto.RangeDescriptor{
+			rng, err := NewReplica(&roachpb.RangeDescriptor{
 				RangeID:  1,
-				StartKey: proto.KeyMin,
-				EndKey:   proto.KeyMax,
+				StartKey: roachpb.KeyMin,
+				EndKey:   roachpb.KeyMax,
 			}, store)
 			if err != nil {
 				t.Fatal(err)
@@ -2531,24 +2531,24 @@ func TestConditionFailedError(t *testing.T) {
 	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	args := proto.ConditionalPutRequest{
-		RequestHeader: proto.RequestHeader{
+	args := roachpb.ConditionalPutRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:       key,
-			Timestamp: proto.MinTimestamp,
+			Timestamp: roachpb.MinTimestamp,
 			RangeID:   1,
-			Replica:   proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+			Replica:   roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 		},
-		Value: proto.Value{
+		Value: roachpb.Value{
 			Bytes: value,
 		},
-		ExpValue: &proto.Value{
+		ExpValue: &roachpb.Value{
 			Bytes: []byte("moo"),
 		},
 	}
 
 	_, err := sendArg(tc.rng, tc.rng.context(), &args)
 
-	if cErr, ok := err.(*proto.ConditionFailedError); err == nil || !ok {
+	if cErr, ok := err.(*roachpb.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
 			err, err)
 	} else if v := cErr.ActualValue; v == nil || !bytes.Equal(v.Bytes, value) {
@@ -2563,21 +2563,21 @@ func TestReplicaSetsEqual(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testData := []struct {
 		expected bool
-		a        []proto.ReplicaDescriptor
-		b        []proto.ReplicaDescriptor
+		a        []roachpb.ReplicaDescriptor
+		b        []roachpb.ReplicaDescriptor
 	}{
-		{true, []proto.ReplicaDescriptor{}, []proto.ReplicaDescriptor{}},
-		{true, createReplicaSets([]proto.StoreID{1}), createReplicaSets([]proto.StoreID{1})},
-		{true, createReplicaSets([]proto.StoreID{1, 2}), createReplicaSets([]proto.StoreID{1, 2})},
-		{true, createReplicaSets([]proto.StoreID{1, 2}), createReplicaSets([]proto.StoreID{2, 1})},
-		{false, createReplicaSets([]proto.StoreID{1}), createReplicaSets([]proto.StoreID{2})},
-		{false, createReplicaSets([]proto.StoreID{1, 2}), createReplicaSets([]proto.StoreID{2})},
-		{false, createReplicaSets([]proto.StoreID{1, 2}), createReplicaSets([]proto.StoreID{1})},
-		{false, createReplicaSets([]proto.StoreID{}), createReplicaSets([]proto.StoreID{1})},
-		{true, createReplicaSets([]proto.StoreID{1, 2, 3}), createReplicaSets([]proto.StoreID{2, 3, 1})},
-		{true, createReplicaSets([]proto.StoreID{1, 1}), createReplicaSets([]proto.StoreID{1, 1})},
-		{false, createReplicaSets([]proto.StoreID{1, 1}), createReplicaSets([]proto.StoreID{1, 1, 1})},
-		{true, createReplicaSets([]proto.StoreID{1, 2, 3, 1, 2, 3}), createReplicaSets([]proto.StoreID{1, 1, 2, 2, 3, 3})},
+		{true, []roachpb.ReplicaDescriptor{}, []roachpb.ReplicaDescriptor{}},
+		{true, createReplicaSets([]roachpb.StoreID{1}), createReplicaSets([]roachpb.StoreID{1})},
+		{true, createReplicaSets([]roachpb.StoreID{1, 2}), createReplicaSets([]roachpb.StoreID{1, 2})},
+		{true, createReplicaSets([]roachpb.StoreID{1, 2}), createReplicaSets([]roachpb.StoreID{2, 1})},
+		{false, createReplicaSets([]roachpb.StoreID{1}), createReplicaSets([]roachpb.StoreID{2})},
+		{false, createReplicaSets([]roachpb.StoreID{1, 2}), createReplicaSets([]roachpb.StoreID{2})},
+		{false, createReplicaSets([]roachpb.StoreID{1, 2}), createReplicaSets([]roachpb.StoreID{1})},
+		{false, createReplicaSets([]roachpb.StoreID{}), createReplicaSets([]roachpb.StoreID{1})},
+		{true, createReplicaSets([]roachpb.StoreID{1, 2, 3}), createReplicaSets([]roachpb.StoreID{2, 3, 1})},
+		{true, createReplicaSets([]roachpb.StoreID{1, 1}), createReplicaSets([]roachpb.StoreID{1, 1})},
+		{false, createReplicaSets([]roachpb.StoreID{1, 1}), createReplicaSets([]roachpb.StoreID{1, 1, 1})},
+		{true, createReplicaSets([]roachpb.StoreID{1, 2, 3, 1, 2, 3}), createReplicaSets([]roachpb.StoreID{1, 1, 2, 2, 3, 3})},
 	}
 	for _, test := range testData {
 		if replicaSetsEqual(test.a, test.b) != test.expected {
@@ -2601,7 +2601,7 @@ func TestAppliedIndex(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		reply := resp.(*proto.IncrementResponse)
+		reply := resp.(*roachpb.IncrementResponse)
 		sum += i
 
 		if reply.NewValue != sum {
@@ -2624,7 +2624,7 @@ func TestReplicaCorruption(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	args := putArgs(proto.Key("test"), []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
+	args := putArgs(roachpb.Key("test"), []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
 	_, err := sendArg(tc.rng, tc.rng.context(), &args)
 	if err != nil {
 		t.Fatal(err)
@@ -2654,7 +2654,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	if err := tc.rng.ChangeReplicas(proto.ADD_REPLICA, proto.ReplicaDescriptor{
+	if err := tc.rng.ChangeReplicas(roachpb.ADD_REPLICA, roachpb.ReplicaDescriptor{
 		NodeID:  tc.store.Ident.NodeID,
 		StoreID: 9999,
 	}, tc.rng.Desc()); err == nil || !strings.Contains(err.Error(),
@@ -2686,27 +2686,27 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	key := proto.Key("a")
+	key := roachpb.Key("a")
 
 	// Get original meta2 descriptor.
-	rlArgs := &proto.RangeLookupRequest{
-		RequestHeader: proto.RequestHeader{
+	rlArgs := &roachpb.RangeLookupRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:             keys.RangeMetaKey(key),
 			RangeID:         tc.rng.Desc().RangeID,
-			Replica:         proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
-			ReadConsistency: proto.INCONSISTENT,
+			Replica:         roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+			ReadConsistency: roachpb.INCONSISTENT,
 		},
 		MaxRanges: 1,
 		Reverse:   isReverse,
 	}
 
-	var rlReply *proto.RangeLookupResponse
+	var rlReply *roachpb.RangeLookupResponse
 
 	reply, err := sendArg(tc.rng, tc.rng.context(), rlArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rlReply = reply.(*proto.RangeLookupResponse)
+	rlReply = reply.(*roachpb.RangeLookupResponse)
 
 	origDesc := rlReply.Ranges[0]
 	newDesc := origDesc
@@ -2718,7 +2718,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 		t.Fatal(err)
 	}
 	pArgs := putArgs(keys.RangeMetaKey(key), data, 1, tc.store.StoreID())
-	pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+	pArgs.Txn = newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 	pArgs.Timestamp = pArgs.Txn.Timestamp
 
 	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
@@ -2727,22 +2727,22 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	// Now lookup the range; should get the value. Since the lookup is
 	// inconsistent, there's no WriteIntentErorr.
-	rlArgs.Key = keys.RangeMetaKey(proto.Key("A"))
-	rlArgs.Timestamp = proto.ZeroTimestamp
+	rlArgs.Key = keys.RangeMetaKey(roachpb.Key("A"))
+	rlArgs.Timestamp = roachpb.ZeroTimestamp
 
 	reply, err = sendArg(tc.rng, tc.rng.context(), rlArgs)
 	if err != nil {
 		t.Errorf("unexpected lookup error: %s", err)
 	}
-	rlReply = reply.(*proto.RangeLookupResponse)
+	rlReply = reply.(*roachpb.RangeLookupResponse)
 	if !reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
 		t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])
 	}
 
 	// Switch to consistent lookups, which should run into the intent.
-	rlArgs.ReadConsistency = proto.CONSISTENT
+	rlArgs.ReadConsistency = roachpb.CONSISTENT
 	_, err = sendArg(tc.rng, tc.rng.context(), rlArgs)
-	if _, ok := err.(*proto.WriteIntentError); !ok {
+	if _, ok := err.(*roachpb.WriteIntentError); !ok {
 		t.Fatalf("expected WriteIntentError, not %s", err)
 	}
 
@@ -2754,20 +2754,20 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 		t.Fatalf("wanted specific error, not %s", err)
 	}
 	// After changing back to inconsistent lookups, should be good to go.
-	rlArgs.ReadConsistency = proto.INCONSISTENT
+	rlArgs.ReadConsistency = roachpb.INCONSISTENT
 
 	var origSeen, newSeen bool
 	const count = 100
 
 	for i := 0; i < count && !(origSeen && newSeen); i++ {
-		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.RangeLookupRequest)
-		clonedRLArgs.Timestamp = proto.ZeroTimestamp
+		clonedRLArgs := gogoproto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs.Timestamp = roachpb.ZeroTimestamp
 
 		reply, err = sendArg(tc.rng, tc.rng.context(), clonedRLArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
-		rlReply = reply.(*proto.RangeLookupResponse)
+		rlReply = reply.(*roachpb.RangeLookupResponse)
 		seen := rlReply.Ranges[0]
 		if reflect.DeepEqual(seen, origDesc) {
 			origSeen = true
@@ -2792,18 +2792,18 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	defer tc.Stop()
 
 	// Test ranges: ["a","c"), ["c","f"), ["f","h") and ["h","y").
-	testRanges := []proto.RangeDescriptor{
-		{RangeID: 2, StartKey: proto.Key("a"), EndKey: proto.Key("c")},
-		{RangeID: 3, StartKey: proto.Key("c"), EndKey: proto.Key("f")},
-		{RangeID: 4, StartKey: proto.Key("f"), EndKey: proto.Key("h")},
-		{RangeID: 5, StartKey: proto.Key("h"), EndKey: proto.Key("y")},
+	testRanges := []roachpb.RangeDescriptor{
+		{RangeID: 2, StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+		{RangeID: 3, StartKey: roachpb.Key("c"), EndKey: roachpb.Key("f")},
+		{RangeID: 4, StartKey: roachpb.Key("f"), EndKey: roachpb.Key("h")},
+		{RangeID: 5, StartKey: roachpb.Key("h"), EndKey: roachpb.Key("y")},
 	}
 	// The range ["f","h") has dangling intent in meta2.
 	withIntentRangeIndex := 2
 
 	testCases := []struct {
 		key      string
-		expected proto.RangeDescriptor
+		expected roachpb.RangeDescriptor
 	}{
 		// For testRanges[0|1|3] there is no intent. A key in the middle
 		// and the end key should both give us the range itself.
@@ -2819,7 +2819,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 		{key: "h", expected: testRanges[1]},
 	}
 
-	txn := &proto.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
+	txn := &roachpb.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
 	for i, r := range testRanges {
 		if i != withIntentRangeIndex {
 			// Write the new descriptor as an intent.
@@ -2838,42 +2838,42 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	}
 
 	// Resolve the intents.
-	rArgs := &proto.ResolveIntentRangeRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:     keys.RangeMetaKey(proto.Key("a")),
-			EndKey:  keys.RangeMetaKey(proto.Key("z")),
+	rArgs := &roachpb.ResolveIntentRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:     keys.RangeMetaKey(roachpb.Key("a")),
+			EndKey:  keys.RangeMetaKey(roachpb.Key("z")),
 			RangeID: tc.rng.Desc().RangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+			Replica: roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 		},
 		IntentTxn: *txn,
 	}
-	rArgs.IntentTxn.Status = proto.COMMITTED
+	rArgs.IntentTxn.Status = roachpb.COMMITTED
 	if _, err := sendArg(tc.rng, tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Get original meta2 descriptor.
-	rlArgs := &proto.RangeLookupRequest{
-		RequestHeader: proto.RequestHeader{
+	rlArgs := &roachpb.RangeLookupRequest{
+		RequestHeader: roachpb.RequestHeader{
 			RangeID:         tc.rng.Desc().RangeID,
-			Replica:         proto.ReplicaDescriptor{StoreID: tc.store.StoreID()},
-			ReadConsistency: proto.INCONSISTENT,
+			Replica:         roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+			ReadConsistency: roachpb.INCONSISTENT,
 		},
 		MaxRanges: 1,
 		Reverse:   true,
 	}
-	var rlReply *proto.RangeLookupResponse
+	var rlReply *roachpb.RangeLookupResponse
 
 	// Test ReverseScan without intents.
 	for _, c := range testCases {
-		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.RangeLookupRequest)
-		clonedRLArgs.Timestamp = proto.ZeroTimestamp
-		clonedRLArgs.Key = keys.RangeMetaKey(proto.Key(c.key))
+		clonedRLArgs := gogoproto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs.Timestamp = roachpb.ZeroTimestamp
+		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.Key(c.key))
 		reply, err := sendArg(tc.rng, tc.rng.context(), clonedRLArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
-		rlReply = reply.(*proto.RangeLookupResponse)
+		rlReply = reply.(*roachpb.RangeLookupResponse)
 		seen := rlReply.Ranges[0]
 		if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
 			t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
@@ -2887,7 +2887,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	pArgs := putArgs(keys.RangeMetaKey(intentRange.EndKey), data, 1, tc.store.StoreID())
-	pArgs.Txn = &proto.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
+	pArgs.Txn = &roachpb.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
 	pArgs.Timestamp = pArgs.Txn.Timestamp
 	if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
@@ -2895,14 +2895,14 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Test ReverseScan with intents.
 	for _, c := range testCases {
-		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.RangeLookupRequest)
-		clonedRLArgs.Timestamp = proto.ZeroTimestamp
-		clonedRLArgs.Key = keys.RangeMetaKey(proto.Key(c.key))
+		clonedRLArgs := gogoproto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs.Timestamp = roachpb.ZeroTimestamp
+		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.Key(c.key))
 		reply, err := sendArg(tc.rng, tc.rng.context(), clonedRLArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
-		rlReply = reply.(*proto.RangeLookupResponse)
+		rlReply = reply.(*roachpb.RangeLookupResponse)
 		seen := rlReply.Ranges[0]
 		if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
 			t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
@@ -2916,18 +2916,18 @@ func TestRangeLookup(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	expected := []proto.RangeDescriptor{*tc.rng.Desc()}
+	expected := []roachpb.RangeDescriptor{*tc.rng.Desc()}
 	testCases := []struct {
-		key      proto.Key
+		key      roachpb.Key
 		reverse  bool
-		expected []proto.RangeDescriptor
+		expected []roachpb.RangeDescriptor
 	}{
 
 		// Test with the first range (StartKey==KeyMin). Normally we look
 		// up this range in gossip instead of executing the RPC, but
 		// RangeLookup is still used when up-to-date information is
 		// required.
-		{key: proto.KeyMin, reverse: false, expected: expected},
+		{key: roachpb.KeyMin, reverse: false, expected: expected},
 		// Test with the last key in a meta prefix. This is an edge case in the
 		// implementation.
 		{key: keys.Meta1KeyMax, reverse: false, expected: expected},
@@ -2937,8 +2937,8 @@ func TestRangeLookup(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		resp, err := batchutil.SendWrapped(tc.store, &proto.RangeLookupRequest{
-			RequestHeader: proto.RequestHeader{
+		resp, err := batchutil.SendWrapped(tc.store, &roachpb.RangeLookupRequest{
+			RequestHeader: roachpb.RequestHeader{
 				RangeID: 1,
 				Key:     c.key,
 			},
@@ -2950,7 +2950,7 @@ func TestRangeLookup(t *testing.T) {
 				t.Fatal(err)
 			}
 		} else {
-			reply := resp.(*proto.RangeLookupResponse)
+			reply := resp.(*roachpb.RangeLookupResponse)
 			if !reflect.DeepEqual(reply.Ranges, c.expected) {
 				t.Fatalf("expected %+v, got %+v", c.expected, reply.Ranges)
 			}
@@ -3022,11 +3022,11 @@ func BenchmarkWriteCmdWithEventsAndConsumer(b *testing.B) {
 
 type mockRangeManager struct {
 	*Store
-	mockProposeRaftCommand func(cmdIDKey, proto.RaftCommand) <-chan error
+	mockProposeRaftCommand func(cmdIDKey, roachpb.RaftCommand) <-chan error
 }
 
 // ProposeRaftCommand mocks out the corresponding method on the Store.
-func (mrm *mockRangeManager) ProposeRaftCommand(idKey cmdIDKey, cmd proto.RaftCommand) <-chan error {
+func (mrm *mockRangeManager) ProposeRaftCommand(idKey cmdIDKey, cmd roachpb.RaftCommand) <-chan error {
 	if mrm.mockProposeRaftCommand == nil {
 		return mrm.Store.ProposeRaftCommand(idKey, cmd)
 	}
@@ -3044,7 +3044,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer tc.Stop()
 
 	// Mock the RangeManager, simulate proposeRaftCommand return an ErrGroupDeleted error.
-	proposeRaftCommandFn := func(cmdIDKey, proto.RaftCommand) <-chan error {
+	proposeRaftCommandFn := func(cmdIDKey, roachpb.RaftCommand) <-chan error {
 		ch := make(chan error, 1)
 		ch <- multiraft.ErrGroupDeleted
 		return ch
@@ -3061,37 +3061,37 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	gArgs := getArgs(proto.Key("a"), 1, tc.store.StoreID())
+	gArgs := getArgs(roachpb.Key("a"), 1, tc.store.StoreID())
 	// Force the read command request a new lease.
 	clock := tc.clock
 	gArgs.Header().Timestamp = clock.Update(clock.Now().Add(int64(DefaultLeaderLeaseDuration), 0))
 	_, err = batchutil.SendWrapped(tc.store, &gArgs)
-	if _, ok := err.(*proto.RangeNotFoundError); !ok {
+	if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
 		t.Fatalf("expected a RangeNotFoundError, get %s", err)
 	}
 }
 
 func TestIntentIntersect(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	iPt := proto.Intent{
-		Key:    proto.Key("asd"),
+	iPt := roachpb.Intent{
+		Key:    roachpb.Key("asd"),
 		EndKey: nil,
 	}
-	iRn := proto.Intent{
-		Key:    proto.Key("c"),
-		EndKey: proto.Key("x"),
+	iRn := roachpb.Intent{
+		Key:    roachpb.Key("c"),
+		EndKey: roachpb.Key("x"),
 	}
 
-	suffix := proto.Key("abcd")
-	iLc := proto.Intent{
-		Key:    keys.MakeRangeKey(proto.Key("c"), suffix, nil),
-		EndKey: keys.MakeRangeKey(proto.Key("x"), suffix, nil),
+	suffix := roachpb.Key("abcd")
+	iLc := roachpb.Intent{
+		Key:    keys.MakeRangeKey(roachpb.Key("c"), suffix, nil),
+		EndKey: keys.MakeRangeKey(roachpb.Key("x"), suffix, nil),
 	}
 	kl1 := string(iLc.Key)
 	kl2 := string(iLc.EndKey)
 
 	for i, tc := range []struct {
-		intent   proto.Intent
+		intent   roachpb.Intent
 		from, to string
 		exp      []string
 	}{
@@ -3118,9 +3118,9 @@ func TestIntentIntersect(t *testing.T) {
 		{intent: iLc, from: "a", to: "z", exp: []string{kl1, kl2}},
 	} {
 		var all []string
-		in, out := intersectIntent(tc.intent, proto.RangeDescriptor{
-			StartKey: proto.Key(tc.from),
-			EndKey:   proto.Key(tc.to),
+		in, out := intersectIntent(tc.intent, roachpb.RangeDescriptor{
+			StartKey: roachpb.Key(tc.from),
+			EndKey:   roachpb.Key(tc.to),
 		})
 		if in != nil {
 			all = append(all, string(in.Key), string(in.EndKey))
@@ -3145,28 +3145,28 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	ba := proto.BatchRequest{}
+	ba := roachpb.BatchRequest{}
 	ba.RangeID = tc.rng.Desc().RangeID
 	ba.Replica.StoreID = tc.store.StoreID()
-	ba.Add(&proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
-		Value:         proto.Value{Bytes: []byte("not nil")},
+	ba.Add(&roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
+		Value:         roachpb.Value{Bytes: []byte("not nil")},
 	})
 	// This one fails with a ConditionalPutError, which implements
 	// proto.IndexedError.
-	ba.Add(&proto.ConditionalPutRequest{
-		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
-		Value:         proto.Value{Bytes: []byte("irrelevant")},
+	ba.Add(&roachpb.ConditionalPutRequest{
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
+		Value:         roachpb.Value{Bytes: []byte("irrelevant")},
 		ExpValue:      nil, // not true after above Put
 	})
 	// This one is never executed.
-	ba.Add(&proto.GetRequest{
-		RequestHeader: proto.RequestHeader{Key: proto.Key("k")},
+	ba.Add(&roachpb.GetRequest{
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
 	})
 
 	if _, pErr := tc.rng.AddCmd(tc.rng.context(), ba); pErr == nil {
 		t.Fatal("expected an error")
-	} else if iErr, ok := pErr.GoError().(proto.IndexedError); !ok {
+	} else if iErr, ok := pErr.GoError().(roachpb.IndexedError); !ok {
 		t.Fatalf("expected indexed error, got %s", pErr)
 	} else if index, ok := iErr.ErrorIndex(); !ok || index != 1 || !testutils.IsError(pErr.GoError(), "unexpected value") {
 		t.Fatalf("invalid index or error type: %s", iErr)

@@ -22,7 +22,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -71,7 +71,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	b.Del(databaseKey{string(n.Name)}.Key())
 
 	if err := p.txn.Run(&b); err != nil {
-		if _, ok := err.(*proto.ConditionFailedError); ok {
+		if _, ok := err.(*roachpb.ConditionFailedError); ok {
 			return nil, fmt.Errorf("the new database name %q already exists", string(n.NewName))
 		}
 		return nil, err
@@ -158,7 +158,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	b.Del(tbKey)
 
 	if err := p.txn.Run(&b); err != nil {
-		if _, ok := err.(*proto.ConditionFailedError); ok {
+		if _, ok := err.(*roachpb.ConditionFailedError); ok {
 			return nil, fmt.Errorf("table name %q already exists", n.NewName.Table())
 		}
 		return nil, err

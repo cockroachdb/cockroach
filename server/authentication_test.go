@@ -25,7 +25,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -80,8 +80,8 @@ func TestSSLEnforcement(t *testing.T) {
 	insecureContext := testutils.NewTestBaseContext(TestUser)
 	insecureContext.Insecure = true
 
-	kvGet := &proto.GetRequest{}
-	kvGet.Key = proto.Key("/")
+	kvGet := &roachpb.GetRequest{}
+	kvGet.Key = roachpb.Key("/")
 
 	testCases := []struct {
 		method, key string

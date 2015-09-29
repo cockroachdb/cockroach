@@ -20,7 +20,7 @@ package client
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -45,7 +45,7 @@ type Batch struct {
 	//   // string(b.Results[0].Rows[0].Key) == "a"
 	//   // string(b.Results[1].Rows[0].Key) == "b"
 	Results    []Result
-	reqs       []proto.Request
+	reqs       []roachpb.Request
 	resultsBuf [8]Result
 	rowsBuf    [8]KeyValue
 	rowsIdx    int
@@ -77,7 +77,7 @@ func (b *Batch) initResult(calls, numRows int, err error) {
 	b.Results = append(b.Results, r)
 }
 
-func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
+func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) error {
 	offset := 0
 	for i := range b.Results {
 		result := &b.Results[i]
@@ -85,13 +85,13 @@ func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
 		for k := 0; k < result.calls; k++ {
 			args := b.reqs[offset+k]
 
-			var reply proto.Response
+			var reply roachpb.Response
 			if result.Err == nil {
 				result.Err = pErr.GoError()
 				if result.Err == nil {
 					if offset+k < len(br.Responses) {
-						reply = br.Responses[offset+k].GetValue().(proto.Response)
-					} else if args.Method() != proto.EndTransaction {
+						reply = br.Responses[offset+k].GetValue().(roachpb.Response)
+					} else if args.Method() != roachpb.EndTransaction {
 						// TODO(tschottdorf): EndTransaction is excepted here
 						// because it may be elided (r/o txns). Might prefer to
 						// simulate an EndTransaction response instead; this
@@ -102,40 +102,40 @@ func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
 			}
 
 			switch req := args.(type) {
-			case *proto.GetRequest:
+			case *roachpb.GetRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
-					row.Value = reply.(*proto.GetResponse).Value
+					row.Value = reply.(*roachpb.GetResponse).Value
 				}
-			case *proto.PutRequest:
+			case *roachpb.PutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
 					row.Value = &req.Value
-					row.setTimestamp(reply.(*proto.PutResponse).Timestamp)
+					row.setTimestamp(reply.(*roachpb.PutResponse).Timestamp)
 				}
-			case *proto.ConditionalPutRequest:
+			case *roachpb.ConditionalPutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
 					row.Value = &req.Value
-					row.setTimestamp(reply.(*proto.ConditionalPutResponse).Timestamp)
+					row.setTimestamp(reply.(*roachpb.ConditionalPutResponse).Timestamp)
 				}
-			case *proto.IncrementRequest:
+			case *roachpb.IncrementRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
-					t := reply.(*proto.IncrementResponse)
-					row.Value = &proto.Value{
+					t := reply.(*roachpb.IncrementResponse)
+					row.Value = &roachpb.Value{
 						Bytes: encoding.EncodeUint64(nil, uint64(t.NewValue)),
-						Tag:   proto.ValueType_INT,
+						Tag:   roachpb.ValueType_INT,
 					}
 					row.setTimestamp(t.Timestamp)
 				}
-			case *proto.ScanRequest:
+			case *roachpb.ScanRequest:
 				if result.Err == nil {
-					t := reply.(*proto.ScanResponse)
+					t := reply.(*roachpb.ScanResponse)
 					result.Rows = make([]KeyValue, len(t.Rows))
 					for j := range t.Rows {
 						src := &t.Rows[j]
@@ -144,9 +144,9 @@ func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
 						dst.Value = &src.Value
 					}
 				}
-			case *proto.ReverseScanRequest:
+			case *roachpb.ReverseScanRequest:
 				if result.Err == nil {
-					t := reply.(*proto.ReverseScanResponse)
+					t := reply.(*roachpb.ReverseScanResponse)
 					result.Rows = make([]KeyValue, len(t.Rows))
 					for j := range t.Rows {
 						src := &t.Rows[j]
@@ -155,23 +155,23 @@ func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
 						dst.Value = &src.Value
 					}
 				}
-			case *proto.DeleteRequest:
+			case *roachpb.DeleteRequest:
 				row := &result.Rows[k]
-				row.Key = []byte(args.(*proto.DeleteRequest).Key)
+				row.Key = []byte(args.(*roachpb.DeleteRequest).Key)
 
-			case *proto.DeleteRangeRequest:
-			case *proto.EndTransactionRequest:
-			case *proto.AdminMergeRequest:
-			case *proto.AdminSplitRequest:
-			case *proto.HeartbeatTxnRequest:
-			case *proto.GCRequest:
-			case *proto.PushTxnRequest:
-			case *proto.RangeLookupRequest:
-			case *proto.ResolveIntentRequest:
-			case *proto.ResolveIntentRangeRequest:
-			case *proto.MergeRequest:
-			case *proto.TruncateLogRequest:
-			case *proto.LeaderLeaseRequest:
+			case *roachpb.DeleteRangeRequest:
+			case *roachpb.EndTransactionRequest:
+			case *roachpb.AdminMergeRequest:
+			case *roachpb.AdminSplitRequest:
+			case *roachpb.HeartbeatTxnRequest:
+			case *roachpb.GCRequest:
+			case *roachpb.PushTxnRequest:
+			case *roachpb.RangeLookupRequest:
+			case *roachpb.ResolveIntentRequest:
+			case *roachpb.ResolveIntentRangeRequest:
+			case *roachpb.MergeRequest:
+			case *roachpb.TruncateLogRequest:
+			case *roachpb.LeaderLeaseRequest:
 				// Nothing to do for these methods as they do not generate any
 				// rows.
 
@@ -195,15 +195,15 @@ func (b *Batch) fillResults(br *proto.BatchResponse, pErr *proto.Error) error {
 
 // InternalAddRequest adds the specified requests to the batch. It is intended
 // for internal use only.
-func (b *Batch) InternalAddRequest(reqs ...proto.Request) {
+func (b *Batch) InternalAddRequest(reqs ...roachpb.Request) {
 	for _, args := range reqs {
 		numRows := 0
 		switch args.(type) {
-		case *proto.GetRequest,
-			*proto.PutRequest,
-			*proto.ConditionalPutRequest,
-			*proto.IncrementRequest,
-			*proto.DeleteRequest:
+		case *roachpb.GetRequest,
+			*roachpb.PutRequest,
+			*roachpb.ConditionalPutRequest,
+			*roachpb.IncrementRequest,
+			*roachpb.DeleteRequest:
 			numRows = 1
 		}
 		b.reqs = append(b.reqs, args)
@@ -224,7 +224,7 @@ func (b *Batch) Get(key interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.reqs = append(b.reqs, proto.NewGet(k))
+	b.reqs = append(b.reqs, roachpb.NewGet(k))
 	b.initResult(1, 1, nil)
 }
 
@@ -246,7 +246,7 @@ func (b *Batch) Put(key, value interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.reqs = append(b.reqs, proto.NewPut(k, v))
+	b.reqs = append(b.reqs, roachpb.NewPut(k, v))
 	b.initResult(1, 1, nil)
 }
 
@@ -275,7 +275,7 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.reqs = append(b.reqs, proto.NewConditionalPut(k, v, ev))
+	b.reqs = append(b.reqs, roachpb.NewConditionalPut(k, v, ev))
 	b.initResult(1, 1, nil)
 }
 
@@ -293,7 +293,7 @@ func (b *Batch) Inc(key interface{}, value int64) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.reqs = append(b.reqs, proto.NewIncrement(k, value))
+	b.reqs = append(b.reqs, roachpb.NewIncrement(k, value))
 	b.initResult(1, 1, nil)
 }
 
@@ -309,9 +309,9 @@ func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
 		return
 	}
 	if !isReverse {
-		b.reqs = append(b.reqs, proto.NewScan(proto.Key(begin), proto.Key(end), maxRows))
+		b.reqs = append(b.reqs, roachpb.NewScan(roachpb.Key(begin), roachpb.Key(end), maxRows))
 	} else {
-		b.reqs = append(b.reqs, proto.NewReverseScan(proto.Key(begin), proto.Key(end), maxRows))
+		b.reqs = append(b.reqs, roachpb.NewReverseScan(roachpb.Key(begin), roachpb.Key(end), maxRows))
 	}
 	b.initResult(1, 0, nil)
 }
@@ -345,14 +345,14 @@ func (b *Batch) ReverseScan(s, e interface{}, maxRows int64) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Del(keys ...interface{}) {
-	var reqs []proto.Request
+	var reqs []roachpb.Request
 	for _, key := range keys {
 		k, err := marshalKey(key)
 		if err != nil {
 			b.initResult(0, len(keys), err)
 			return
 		}
-		reqs = append(reqs, proto.NewDelete(k))
+		reqs = append(reqs, roachpb.NewDelete(k))
 	}
 	b.reqs = append(b.reqs, reqs...)
 	b.initResult(len(reqs), len(reqs), nil)
@@ -375,7 +375,7 @@ func (b *Batch) DelRange(s, e interface{}) {
 		b.initResult(0, 0, err)
 		return
 	}
-	b.reqs = append(b.reqs, proto.NewDeleteRange(proto.Key(begin), proto.Key(end)))
+	b.reqs = append(b.reqs, roachpb.NewDeleteRange(roachpb.Key(begin), roachpb.Key(end)))
 	b.initResult(1, 0, nil)
 }
 
@@ -387,8 +387,8 @@ func (b *Batch) adminMerge(key interface{}) {
 		b.initResult(0, 0, err)
 		return
 	}
-	req := &proto.AdminMergeRequest{
-		RequestHeader: proto.RequestHeader{
+	req := &roachpb.AdminMergeRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key: k,
 		},
 	}
@@ -404,8 +404,8 @@ func (b *Batch) adminSplit(splitKey interface{}) {
 		b.initResult(0, 0, err)
 		return
 	}
-	req := &proto.AdminSplitRequest{
-		RequestHeader: proto.RequestHeader{
+	req := &roachpb.AdminSplitRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key: k,
 		},
 	}

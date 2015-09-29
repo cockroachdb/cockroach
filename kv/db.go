@@ -22,24 +22,24 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-var allExternalMethods = [...]proto.Request{
-	proto.Get:            &proto.GetRequest{},
-	proto.Put:            &proto.PutRequest{},
-	proto.ConditionalPut: &proto.ConditionalPutRequest{},
-	proto.Increment:      &proto.IncrementRequest{},
-	proto.Delete:         &proto.DeleteRequest{},
-	proto.DeleteRange:    &proto.DeleteRangeRequest{},
-	proto.Scan:           &proto.ScanRequest{},
-	proto.ReverseScan:    &proto.ReverseScanRequest{},
-	proto.EndTransaction: &proto.EndTransactionRequest{},
-	proto.AdminSplit:     &proto.AdminSplitRequest{},
-	proto.AdminMerge:     &proto.AdminMergeRequest{},
+var allExternalMethods = [...]roachpb.Request{
+	roachpb.Get:            &roachpb.GetRequest{},
+	roachpb.Put:            &roachpb.PutRequest{},
+	roachpb.ConditionalPut: &roachpb.ConditionalPutRequest{},
+	roachpb.Increment:      &roachpb.IncrementRequest{},
+	roachpb.Delete:         &roachpb.DeleteRequest{},
+	roachpb.DeleteRange:    &roachpb.DeleteRangeRequest{},
+	roachpb.Scan:           &roachpb.ScanRequest{},
+	roachpb.ReverseScan:    &roachpb.ReverseScanRequest{},
+	roachpb.EndTransaction: &roachpb.EndTransactionRequest{},
+	roachpb.AdminSplit:     &roachpb.AdminSplitRequest{},
+	roachpb.AdminMerge:     &roachpb.AdminMergeRequest{},
 }
 
 // A DBServer provides an HTTP server endpoint serving the key-value API.
@@ -57,22 +57,22 @@ func NewDBServer(ctx *base.Context, sender client.Sender) *DBServer {
 // RegisterRPC registers the RPC endpoints.
 func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
 	const method = "Server.Batch"
-	return rpcServer.Register(method, s.executeCmd, &proto.BatchRequest{})
+	return rpcServer.Register(method, s.executeCmd, &roachpb.BatchRequest{})
 }
 
 // executeCmd interprets the given message as a *proto.BatchRequest and sends it
 // via the local sender.
 func (s *DBServer) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
-	ba := argsI.(*proto.BatchRequest)
+	ba := argsI.(*roachpb.BatchRequest)
 	if err := verifyRequest(ba); err != nil {
 		return nil, err
 	}
 	br, pErr := s.sender.Send(context.TODO(), *ba)
 	if pErr != nil {
-		br = &proto.BatchResponse{}
+		br = &roachpb.BatchResponse{}
 	}
 	if br.Error != nil {
-		panic(proto.ErrorUnexpectedlySet(s.sender, br))
+		panic(roachpb.ErrorUnexpectedlySet(s.sender, br))
 	}
 	br.Error = pErr
 	return br, nil
@@ -80,11 +80,11 @@ func (s *DBServer) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error
 
 // verifyRequest checks for illegal inputs in request proto and
 // returns an error indicating which, if any, were found.
-func verifyRequest(ba *proto.BatchRequest) error {
+func verifyRequest(ba *roachpb.BatchRequest) error {
 	for _, reqUnion := range ba.Requests {
 		req := reqUnion.GetInner()
 
-		if et, ok := req.(*proto.EndTransactionRequest); ok {
+		if et, ok := req.(*roachpb.EndTransactionRequest); ok {
 			if err := verifyEndTransaction(et); err != nil {
 				return err
 			}
@@ -99,7 +99,7 @@ func verifyRequest(ba *proto.BatchRequest) error {
 	return nil
 }
 
-func verifyEndTransaction(req *proto.EndTransactionRequest) error {
+func verifyEndTransaction(req *roachpb.EndTransactionRequest) error {
 	if req.InternalCommitTrigger != nil {
 		return util.Errorf("EndTransaction request from external KV API contains commit trigger: %+v", req.InternalCommitTrigger)
 	}

@@ -24,14 +24,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 var testConfig = config.ZoneConfig{
-	ReplicaAttrs: []proto.Attributes{
+	ReplicaAttrs: []roachpb.Attributes{
 		{Attrs: []string{"a", "ssd"}},
 		{Attrs: []string{"a", "hdd"}},
 		{Attrs: []string{"b", "ssd"}},

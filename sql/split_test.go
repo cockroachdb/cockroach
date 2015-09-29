@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -39,12 +39,12 @@ func getFastScanContext() *server.Context {
 }
 
 // getRangeKeys returns the end keys of all ranges.
-func getRangeKeys(db *client.DB) ([]proto.Key, error) {
+func getRangeKeys(db *client.DB) ([]roachpb.Key, error) {
 	rows, err := db.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
 		return nil, err
 	}
-	ret := make([]proto.Key, len(rows), len(rows))
+	ret := make([]roachpb.Key, len(rows), len(rows))
 	for i := 0; i < len(rows); i++ {
 		ret[i] = bytes.TrimPrefix(rows[i].Key, keys.Meta2Prefix)
 	}
@@ -59,7 +59,7 @@ func getNumRanges(db *client.DB) (int, error) {
 	return len(rows), nil
 }
 
-func rangesMatchSplits(ranges []proto.Key, splits []proto.Key) bool {
+func rangesMatchSplits(ranges []roachpb.Key, splits []roachpb.Key) bool {
 	if len(ranges) != len(splits) {
 		return false
 	}
@@ -104,7 +104,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 
 	// Verify the actual splits.
 	objectID := uint32(keys.MaxReservedDescID + 1)
-	splits := proto.KeySlice{keys.MakeTablePrefix(objectID), proto.KeyMax}
+	splits := roachpb.KeySlice{keys.MakeTablePrefix(objectID), roachpb.KeyMax}
 	ranges, err := getRangeKeys(kvDB)
 	if err != nil {
 		t.Fatal(err)
@@ -130,7 +130,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	}
 
 	// Verify the actual splits.
-	splits = proto.KeySlice{keys.MakeTablePrefix(objectID), keys.MakeTablePrefix(objectID + 1), proto.KeyMax}
+	splits = roachpb.KeySlice{keys.MakeTablePrefix(objectID), keys.MakeTablePrefix(objectID + 1), roachpb.KeyMax}
 	ranges, err = getRangeKeys(kvDB)
 	if err != nil {
 		t.Fatal(err)

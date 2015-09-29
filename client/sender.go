@@ -26,7 +26,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -44,15 +44,15 @@ var defaultRetryOptions = retry.Options{
 // Sender is the interface used to call into a Cockroach instance.
 // If the returned *proto.Error is not nil, no response should be returned.
 type Sender interface {
-	Send(context.Context, proto.BatchRequest) (*proto.BatchResponse, *proto.Error)
+	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
 // SenderFunc is an adapter to allow the use of ordinary functions
 // as Senders.
-type SenderFunc func(context.Context, proto.BatchRequest) (*proto.BatchResponse, *proto.Error)
+type SenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
 // Send calls f(ctx, c).
-func (f SenderFunc) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (f SenderFunc) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	return f(ctx, ba)
 }
 

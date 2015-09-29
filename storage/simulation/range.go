@@ -23,7 +23,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 )
 
@@ -40,19 +40,19 @@ type replica struct {
 // Range is a simulated cockroach range.
 type Range struct {
 	zone      config.ZoneConfig
-	desc      proto.RangeDescriptor
-	replicas  map[proto.StoreID]replica
+	desc      roachpb.RangeDescriptor
+	replicas  map[roachpb.StoreID]replica
 	allocator storage.Allocator
 }
 
 // newRange returns a new range with the given rangeID.
-func newRange(rangeID proto.RangeID, allocator storage.Allocator) *Range {
+func newRange(rangeID roachpb.RangeID, allocator storage.Allocator) *Range {
 	return &Range{
-		desc: proto.RangeDescriptor{
+		desc: roachpb.RangeDescriptor{
 			RangeID: rangeID,
 		},
 		zone:      *config.DefaultZoneConfig,
-		replicas:  make(map[proto.StoreID]replica),
+		replicas:  make(map[roachpb.StoreID]replica),
 		allocator: allocator,
 	}
 }
@@ -61,7 +61,7 @@ func newRange(rangeID proto.RangeID, allocator storage.Allocator) *Range {
 // both the range descriptor and the store map.
 func (r *Range) addReplica(s *Store) {
 	storeID, nodeID := s.getIDs()
-	r.desc.Replicas = append(r.desc.Replicas, proto.ReplicaDescriptor{
+	r.desc.Replicas = append(r.desc.Replicas, roachpb.ReplicaDescriptor{
 		NodeID:  nodeID,
 		StoreID: storeID,
 	})
@@ -71,8 +71,8 @@ func (r *Range) addReplica(s *Store) {
 }
 
 // getStoreIDs returns the list of all stores where this range has replicas.
-func (r *Range) getStoreIDs() []proto.StoreID {
-	var storeIDs []proto.StoreID
+func (r *Range) getStoreIDs() []roachpb.StoreID {
+	var storeIDs []roachpb.StoreID
 	for storeID := range r.replicas {
 		storeIDs = append(storeIDs, storeID)
 	}
@@ -80,8 +80,8 @@ func (r *Range) getStoreIDs() []proto.StoreID {
 }
 
 // getStores returns a shallow copy of the internal stores map.
-func (r *Range) getStores() map[proto.StoreID]*Store {
-	stores := make(map[proto.StoreID]*Store)
+func (r *Range) getStores() map[roachpb.StoreID]*Store {
+	stores := make(map[roachpb.StoreID]*Store)
 	for storeID, replica := range r.replicas {
 		stores[storeID] = replica.store
 	}
@@ -93,7 +93,7 @@ func (r *Range) getStores() map[proto.StoreID]*Store {
 // replicas in the range.
 func (r *Range) splitRange(originalRange *Range) {
 	stores := originalRange.getStores()
-	r.desc.Replicas = append([]proto.ReplicaDescriptor(nil), originalRange.desc.Replicas...)
+	r.desc.Replicas = append([]roachpb.ReplicaDescriptor(nil), originalRange.desc.Replicas...)
 	for storeID, store := range stores {
 		r.replicas[storeID] = replica{
 			store: store,
@@ -103,7 +103,7 @@ func (r *Range) splitRange(originalRange *Range) {
 
 // getAllocateTarget calls allocateTarget for the range and returns the top
 // target store.
-func (r *Range) getAllocateTarget() (proto.StoreID, error) {
+func (r *Range) getAllocateTarget() (roachpb.StoreID, error) {
 	newStore, err := r.allocator.AllocateTarget(r.zone.ReplicaAttrs[0], r.desc.Replicas, true, nil)
 	if err != nil {
 		return 0, err
@@ -113,7 +113,7 @@ func (r *Range) getAllocateTarget() (proto.StoreID, error) {
 
 // String returns a human readable string with details about the range.
 func (r *Range) String() string {
-	var storeIDs proto.StoreIDSlice
+	var storeIDs roachpb.StoreIDSlice
 	for storeID := range r.replicas {
 		storeIDs = append(storeIDs, storeID)
 	}

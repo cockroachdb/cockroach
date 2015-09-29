@@ -20,7 +20,7 @@ package gossip
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -30,7 +30,7 @@ func TestNodeSetMaxSize(t *testing.T) {
 	if !nodes.hasSpace() {
 		t.Error("set should have space")
 	}
-	nodes.addNode(proto.NodeID(1))
+	nodes.addNode(roachpb.NodeID(1))
 	if nodes.hasSpace() {
 		t.Error("set should have no space")
 	}
@@ -39,7 +39,7 @@ func TestNodeSetMaxSize(t *testing.T) {
 func TestNodeSetHasNode(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	nodes := makeNodeSet(2)
-	node := proto.NodeID(1)
+	node := roachpb.NodeID(1)
 	if nodes.hasNode(node) {
 		t.Error("node wasn't added and should not be valid")
 	}
@@ -53,8 +53,8 @@ func TestNodeSetHasNode(t *testing.T) {
 func TestNodeSetAddAndRemoveNode(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	nodes := makeNodeSet(2)
-	node0 := proto.NodeID(1)
-	node1 := proto.NodeID(2)
+	node0 := roachpb.NodeID(1)
+	node1 := roachpb.NodeID(2)
 	nodes.addNode(node0)
 	nodes.addNode(node1)
 	if !nodes.hasNode(node0) || !nodes.hasNode(node1) {
@@ -73,15 +73,15 @@ func TestNodeSetAddAndRemoveNode(t *testing.T) {
 func TestNodeSetFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	nodes1 := makeNodeSet(2)
-	node0 := proto.NodeID(1)
-	node1 := proto.NodeID(2)
+	node0 := roachpb.NodeID(1)
+	node1 := roachpb.NodeID(2)
 	nodes1.addNode(node0)
 	nodes1.addNode(node1)
 
 	nodes2 := makeNodeSet(1)
 	nodes2.addNode(node1)
 
-	filtered := nodes1.filter(func(a proto.NodeID) bool {
+	filtered := nodes1.filter(func(a roachpb.NodeID) bool {
 		return !nodes2.hasNode(a)
 	})
 	if filtered.len() != 1 || filtered.hasNode(node1) || !filtered.hasNode(node0) {
@@ -92,8 +92,8 @@ func TestNodeSetFilter(t *testing.T) {
 func TestNodeSetAsSlice(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	nodes := makeNodeSet(2)
-	node0 := proto.NodeID(1)
-	node1 := proto.NodeID(2)
+	node0 := roachpb.NodeID(1)
+	node1 := roachpb.NodeID(2)
 	nodes.addNode(node0)
 	nodes.addNode(node1)
 

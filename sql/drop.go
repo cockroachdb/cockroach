@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
@@ -123,7 +123,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, idx.ID)
 
 		// Delete the index.
-		indexStartKey := proto.Key(indexPrefix)
+		indexStartKey := roachpb.Key(indexPrefix)
 		indexEndKey := indexStartKey.PrefixEnd()
 		if log.V(2) {
 			log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))

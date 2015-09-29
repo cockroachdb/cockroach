@@ -19,8 +19,8 @@ syntax = "proto2";
 package cockroach.config;
 option go_package = "config";
 
-import "cockroach/proto/metadata.proto";
-import "cockroach/proto/data.proto";
+import "cockroach/roachpb/metadata.proto";
+import "cockroach/roachpb/data.proto";
 import "gogoproto/gogo.proto";
 
 option (gogoproto.sizer_all) = true;
@@ -46,7 +46,7 @@ message ZoneConfig {
   // ReplicaAttrs is a slice of Attributes, each describing required attributes
   // for each replica in the zone. The order in which the attributes are stored
   // in ReplicaAttrs is arbitrary and may change.
-  repeated proto.Attributes replica_attrs = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"replicas,omitempty\""];
+  repeated roachpb.Attributes replica_attrs = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"replicas,omitempty\""];
   optional int64 range_min_bytes = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_min_bytes,omitempty\""];
   optional int64 range_max_bytes = 3 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_max_bytes,omitempty\""];
   // If GC policy is not set, uses the next highest, non-null policy
@@ -55,5 +55,5 @@ message ZoneConfig {
 }
 
 message SystemConfig {
-  repeated proto.KeyValue values = 1 [(gogoproto.nullable) = false];
+  repeated roachpb.KeyValue values = 1 [(gogoproto.nullable) = false];
 }

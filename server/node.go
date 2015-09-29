@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
@@ -62,34 +62,34 @@ const (
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
-	ClusterID  string               // UUID for Cockroach cluster
-	Descriptor proto.NodeDescriptor // Node ID, network/physical topology
-	ctx        storage.StoreContext // Context to use and pass to stores
-	lSender    *kv.LocalSender      // Local KV sender for access to node-local stores
-	feed       status.NodeEventFeed // Feed publisher for local events
+	ClusterID  string                 // UUID for Cockroach cluster
+	Descriptor roachpb.NodeDescriptor // Node ID, network/physical topology
+	ctx        storage.StoreContext   // Context to use and pass to stores
+	lSender    *kv.LocalSender        // Local KV sender for access to node-local stores
+	feed       status.NodeEventFeed   // Feed publisher for local events
 	status     *status.NodeStatusMonitor
 	startedAt  int64
 }
 
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
-func allocateNodeID(db *client.DB) (proto.NodeID, error) {
+func allocateNodeID(db *client.DB) (roachpb.NodeID, error) {
 	r, err := db.Inc(keys.NodeIDGenerator, 1)
 	if err != nil {
 		return 0, util.Errorf("unable to allocate node ID: %s", err)
 	}
-	return proto.NodeID(r.ValueInt()), nil
+	return roachpb.NodeID(r.ValueInt()), nil
 }
 
 // allocateStoreIDs increments the store id generator key for the
 // specified node to allocate "inc" new, unique store ids. The
 // first ID in a contiguous range is returned on success.
-func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.StoreID, error) {
+func allocateStoreIDs(nodeID roachpb.NodeID, inc int64, db *client.DB) (roachpb.StoreID, error) {
 	r, err := db.Inc(keys.StoreIDGenerator, inc)
 	if err != nil {
 		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 	}
-	return proto.StoreID(r.ValueInt() - inc + 1), nil
+	return roachpb.StoreID(r.ValueInt() - inc + 1), nil
 }
 
 // BootstrapCluster bootstraps a multiple stores using the provided engines and
@@ -108,15 +108,15 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	for i, eng := range engines {
-		sIdent := proto.StoreIdent{
+		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
 			NodeID:    1,
-			StoreID:   proto.StoreID(i + 1),
+			StoreID:   roachpb.StoreID(i + 1),
 		}
 
 		// The bootstrapping store will not connect to other nodes so its
 		// StoreConfig doesn't really matter.
-		s := storage.NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})
+		s := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 		// Verify the store isn't already part of a cluster.
 		if len(s.Ident.ClusterID) > 0 {
@@ -175,7 +175,7 @@ func (n *Node) context() context.Context {
 
 // initDescriptor initializes the node descriptor with the server
 // address and the node attributes.
-func (n *Node) initDescriptor(addr net.Addr, attrs proto.Attributes) {
+func (n *Node) initDescriptor(addr net.Addr, attrs roachpb.Attributes) {
 	n.Descriptor.Address = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	n.Descriptor.Attrs = attrs
 }
@@ -187,7 +187,7 @@ func (n *Node) initDescriptor(addr net.Addr, attrs proto.Attributes) {
 //
 // Upon setting a new NodeID, the descriptor is gossiped and the NodeID is
 // stored into the gossip instance.
-func (n *Node) initNodeID(id proto.NodeID) {
+func (n *Node) initNodeID(id roachpb.NodeID) {
 	if id < 0 {
 		log.Fatalf("NodeID must not be negative")
 	}
@@ -221,10 +221,10 @@ func (n *Node) initNodeID(id proto.NodeID) {
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
 func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
-	attrs proto.Attributes, stopper *stop.Stopper) error {
+	attrs roachpb.Attributes, stopper *stop.Stopper) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	const method = "Node.Batch"
-	if err := rpcServer.Register(method, n.executeCmd, &proto.BatchRequest{}); err != nil {
+	if err := rpcServer.Register(method, n.executeCmd, &roachpb.BatchRequest{}); err != nil {
 		log.Fatalf("unable to register node service with RPC server: %s", err)
 	}
 
@@ -344,7 +344,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *stop.Stopper) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	sIdent := proto.StoreIdent{
+	sIdent := roachpb.StoreIdent{
 		ClusterID: n.ClusterID,
 		NodeID:    n.Descriptor.NodeID,
 		StoreID:   firstID,
@@ -450,7 +450,7 @@ func (n *Node) publishStoreStatuses() error {
 // executeCmd interprets the given message as a *proto.BatchRequest and sends it
 // via the local sender.
 func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
-	ba := argsI.(*proto.BatchRequest)
+	ba := argsI.(*roachpb.BatchRequest)
 	// TODO(tschottdorf) get a hold of the client's ID, add it to the
 	// context before dispatching, and create an ID for tracing the request.
 	ba.CmdID = ba.GetOrCreateCmdID(n.ctx.Clock.PhysicalNow())
@@ -461,11 +461,11 @@ func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
 
 	br, pErr := n.lSender.Send(ctx, *ba)
 	if pErr != nil {
-		br = &proto.BatchResponse{}
+		br = &roachpb.BatchResponse{}
 		trace.Event(fmt.Sprintf("error: %T", pErr.GoError()))
 	}
 	if br.Error != nil {
-		panic(proto.ErrorUnexpectedlySet(n.lSender, br))
+		panic(roachpb.ErrorUnexpectedlySet(n.lSender, br))
 	}
 	n.feed.CallComplete(*ba, pErr)
 	br.Error = pErr

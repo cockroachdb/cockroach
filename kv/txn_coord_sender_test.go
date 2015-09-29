@@ -28,7 +28,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
@@ -64,8 +64,8 @@ func createTestDB(t testing.TB) *LocalTestCluster {
 }
 
 // makeTS creates a new timestamp.
-func makeTS(walltime int64, logical int32) proto.Timestamp {
-	return proto.Timestamp{
+func makeTS(walltime int64, logical int32) roachpb.Timestamp {
+	return roachpb.Timestamp{
 		WallTime: walltime,
 		Logical:  logical,
 	}
@@ -73,30 +73,30 @@ func makeTS(walltime int64, logical int32) proto.Timestamp {
 
 // newTxn begins a transaction. For testing purposes, this comes with a ID
 // pre-initialized, but with the Writing flag set to false.
-func newTxn(clock *hlc.Clock, baseKey proto.Key) *proto.Transaction {
+func newTxn(clock *hlc.Clock, baseKey roachpb.Key) *roachpb.Transaction {
 	f, l, fun := caller.Lookup(1)
 	name := fmt.Sprintf("%s:%d %s", f, l, fun)
-	txn := proto.NewTransaction("test", baseKey, 1, proto.SERIALIZABLE, clock.Now(), clock.MaxOffset().Nanoseconds())
+	txn := roachpb.NewTransaction("test", baseKey, 1, roachpb.SERIALIZABLE, clock.Now(), clock.MaxOffset().Nanoseconds())
 	txn.Name = name
 	return txn
 }
 
 // createPutRequest returns a ready-made request using the
 // specified key, value & txn ID.
-func createPutRequest(key proto.Key, value []byte, txn *proto.Transaction) *proto.PutRequest {
-	return &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
+func createPutRequest(key roachpb.Key, value []byte, txn *roachpb.Transaction) *roachpb.PutRequest {
+	return &roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:       key,
 			Timestamp: txn.Timestamp,
 			Txn:       txn,
 		},
-		Value: proto.Value{Bytes: value},
+		Value: roachpb.Value{Bytes: value},
 	}
 }
 
-func createDeleteRangeRequest(key, endKey proto.Key, txn *proto.Transaction) *proto.DeleteRangeRequest {
-	return &proto.DeleteRangeRequest{
-		RequestHeader: proto.RequestHeader{
+func createDeleteRangeRequest(key, endKey roachpb.Key, txn *roachpb.Transaction) *roachpb.DeleteRangeRequest {
+	return &roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:       key,
 			EndKey:    endKey,
 			Timestamp: txn.Timestamp,
@@ -114,8 +114,8 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	txn := newTxn(s.Clock, proto.Key("a"))
-	put := createPutRequest(proto.Key("a"), []byte("value"), txn)
+	txn := newTxn(s.Clock, roachpb.Key("a"))
+	put := createPutRequest(roachpb.Key("a"), []byte("value"), txn)
 
 	// Put request will create a new transaction.
 	reply, err := batchutil.SendWrapped(s.Sender, put)
@@ -157,21 +157,21 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	key := proto.Key("key")
-	reply, err := batchutil.SendWrapped(s.Sender, &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
+	key := roachpb.Key("key")
+	reply, err := batchutil.SendWrapped(s.Sender, &roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:          key,
 			UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
-			Txn: &proto.Transaction{
+			Txn: &roachpb.Transaction{
 				Name:      "test txn",
-				Isolation: proto.SNAPSHOT,
+				Isolation: roachpb.SNAPSHOT,
 			},
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	pr := reply.(*proto.PutResponse)
+	pr := reply.(*roachpb.PutResponse)
 	if pr.Txn.Name != "test txn" {
 		t.Errorf("expected txn name to be %q; got %q", "test txn", pr.Txn.Name)
 	}
@@ -181,7 +181,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	if !bytes.Equal(pr.Txn.Key, key) {
 		t.Errorf("expected txn Key to match %q != %q", key, pr.Txn.Key)
 	}
-	if pr.Txn.Isolation != proto.SNAPSHOT {
+	if pr.Txn.Isolation != roachpb.SNAPSHOT {
 		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", pr.Txn.Isolation)
 	}
 }
@@ -194,13 +194,13 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	reply, err := batchutil.SendWrapped(s.Sender, &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:          proto.Key("key"),
+	reply, err := batchutil.SendWrapped(s.Sender, &roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:          roachpb.Key("key"),
 			UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
-			Txn: &proto.Transaction{
+			Txn: &roachpb.Transaction{
 				Name:      "test txn",
-				Isolation: proto.SNAPSHOT,
+				Isolation: roachpb.SNAPSHOT,
 				Priority:  11,
 			},
 		},
@@ -208,7 +208,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prio := reply.(*proto.PutResponse).Txn.Priority; prio != 11 {
+	if prio := reply.(*roachpb.PutResponse).Txn.Priority; prio != 11 {
 		t.Errorf("expected txn priority 11; got %d", prio)
 	}
 }
@@ -219,20 +219,20 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ranges := []struct {
-		start, end proto.Key
+		start, end roachpb.Key
 	}{
-		{proto.Key("a"), proto.Key(nil)},
-		{proto.Key("a"), proto.Key(nil)},
-		{proto.Key("aa"), proto.Key(nil)},
-		{proto.Key("b"), proto.Key(nil)},
-		{proto.Key("aa"), proto.Key("c")},
-		{proto.Key("b"), proto.Key("c")},
+		{roachpb.Key("a"), roachpb.Key(nil)},
+		{roachpb.Key("a"), roachpb.Key(nil)},
+		{roachpb.Key("aa"), roachpb.Key(nil)},
+		{roachpb.Key("b"), roachpb.Key(nil)},
+		{roachpb.Key("aa"), roachpb.Key("c")},
+		{roachpb.Key("b"), roachpb.Key("c")},
 	}
 
 	s := createTestDB(t)
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
-	txn := newTxn(s.Clock, proto.Key("a"))
+	txn := newTxn(s.Clock, roachpb.Key("a"))
 
 	for _, rng := range ranges {
 		if rng.end != nil {
@@ -268,13 +268,13 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	txn1 := newTxn(s.Clock, proto.Key("a"))
-	txn2 := newTxn(s.Clock, proto.Key("b"))
-	put1 := createPutRequest(proto.Key("a"), []byte("value"), txn1)
+	txn1 := newTxn(s.Clock, roachpb.Key("a"))
+	txn2 := newTxn(s.Clock, roachpb.Key("b"))
+	put1 := createPutRequest(roachpb.Key("a"), []byte("value"), txn1)
 	if _, err := batchutil.SendWrapped(s.Sender, put1); err != nil {
 		t.Fatal(err)
 	}
-	put2 := createPutRequest(proto.Key("b"), []byte("value"), txn2)
+	put2 := createPutRequest(roachpb.Key("b"), []byte("value"), txn2)
 	if _, err := batchutil.SendWrapped(s.Sender, put2); err != nil {
 		t.Fatal(err)
 	}
@@ -295,8 +295,8 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	// Set heartbeat interval to 1ms for testing.
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
-	initialTxn := newTxn(s.Clock, proto.Key("a"))
-	put := createPutRequest(proto.Key("a"), []byte("value"), initialTxn)
+	initialTxn := newTxn(s.Clock, roachpb.Key("a"))
+	put := createPutRequest(roachpb.Key("a"), []byte("value"), initialTxn)
 	if reply, err := batchutil.SendWrapped(s.Sender, put); err != nil {
 		t.Fatal(err)
 	} else {
@@ -304,7 +304,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	}
 
 	// Verify 3 heartbeats.
-	var heartbeatTS proto.Timestamp
+	var heartbeatTS roachpb.Timestamp
 	for i := 0; i < 3; i++ {
 		if err := util.IsTrueWithin(func() bool {
 			ok, txn, err := getTxn(s.Sender, initialTxn)
@@ -328,9 +328,9 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(coord *TxnCoordSender, txn *proto.Transaction) (bool, *proto.Transaction, error) {
-	hb := &proto.HeartbeatTxnRequest{
-		RequestHeader: proto.RequestHeader{
+func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Transaction, error) {
+	hb := &roachpb.HeartbeatTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 			Txn: txn,
 		},
@@ -339,10 +339,10 @@ func getTxn(coord *TxnCoordSender, txn *proto.Transaction) (bool, *proto.Transac
 	if err != nil {
 		return false, nil, err
 	}
-	return true, reply.(*proto.HeartbeatTxnResponse).Txn, nil
+	return true, reply.(*roachpb.HeartbeatTxnResponse).Txn, nil
 }
 
-func verifyCleanup(key proto.Key, coord *TxnCoordSender, eng engine.Engine, t *testing.T) {
+func verifyCleanup(key roachpb.Key, coord *TxnCoordSender, eng engine.Engine, t *testing.T) {
 	util.SucceedsWithin(t, 500*time.Millisecond, func() error {
 		coord.Lock()
 		l := len(coord.txns)
@@ -370,16 +370,16 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	txn := newTxn(s.Clock, proto.Key("a"))
-	key := proto.Key("a")
+	txn := newTxn(s.Clock, roachpb.Key("a"))
+	key := roachpb.Key("a")
 	put := createPutRequest(key, []byte("value"), txn)
 	reply, err := batchutil.SendWrapped(s.Sender, put)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pReply := reply.(*proto.PutResponse)
-	if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
-		RequestHeader: proto.RequestHeader{
+	pReply := reply.(*roachpb.PutResponse)
+	if _, err := batchutil.SendWrapped(s.Sender, &roachpb.EndTransactionRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Timestamp: txn.Timestamp,
 			Txn:       pReply.Header().Txn,
 		},
@@ -398,7 +398,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	defer s.Stop()
 
 	// Create a transaction with intent at "a".
-	key := proto.Key("a")
+	key := roachpb.Key("a")
 	txn := newTxn(s.Clock, key)
 	txn.Priority = 1
 	put := createPutRequest(key, []byte("value"), txn)
@@ -411,14 +411,14 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// Push the transaction to abort it.
 	txn2 := newTxn(s.Clock, key)
 	txn2.Priority = 2
-	pushArgs := &proto.PushTxnRequest{
-		RequestHeader: proto.RequestHeader{
+	pushArgs := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Now:       s.Clock.Now(),
 		PusherTxn: *txn2,
 		PusheeTxn: *txn,
-		PushType:  proto.ABORT_TXN,
+		PushType:  roachpb.ABORT_TXN,
 	}
 	if _, err := batchutil.SendWrapped(s.Sender, pushArgs); err != nil {
 		t.Fatal(err)
@@ -426,8 +426,8 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 
 	// Now end the transaction and verify we've cleanup up, even though
 	// end transaction failed.
-	etArgs := &proto.EndTransactionRequest{
-		RequestHeader: proto.RequestHeader{
+	etArgs := &roachpb.EndTransactionRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Timestamp: txn.Timestamp,
 			Txn:       txn,
 		},
@@ -435,7 +435,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	}
 	_, err := batchutil.SendWrapped(s.Sender, etArgs)
 	switch err.(type) {
-	case *proto.TransactionAbortedError:
+	case *roachpb.TransactionAbortedError:
 		// Expected
 	default:
 		t.Fatalf("expected transaction aborted error; got %s", err)
@@ -453,8 +453,8 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	// Set heartbeat interval to 1ms for testing.
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
-	txn := newTxn(s.Clock, proto.Key("a"))
-	put := createPutRequest(proto.Key("a"), []byte("value"), txn)
+	txn := newTxn(s.Clock, roachpb.Key("a"))
+	put := createPutRequest(roachpb.Key("a"), []byte("value"), txn)
 	if _, err := batchutil.SendWrapped(s.Sender, put); err != nil {
 		t.Fatal(err)
 	}
@@ -489,33 +489,33 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		err       error
 		expEpoch  int32
 		expPri    int32
-		expTS     proto.Timestamp
-		expOrigTS proto.Timestamp
+		expTS     roachpb.Timestamp
+		expOrigTS roachpb.Timestamp
 		nodeSeen  bool
 	}{
 		{nil, 0, 1, makeTS(0, 1), makeTS(0, 1), false},
-		{&proto.ReadWithinUncertaintyIntervalError{
+		{&roachpb.ReadWithinUncertaintyIntervalError{
 			ExistingTimestamp: makeTS(10, 10)}, 1, 1, makeTS(10, 11),
 			makeTS(10, 11), true},
-		{&proto.TransactionAbortedError{Txn: proto.Transaction{
+		{&roachpb.TransactionAbortedError{Txn: roachpb.Transaction{
 			Timestamp: makeTS(20, 10), Priority: 10}}, 0, 10, makeTS(20, 10),
 			makeTS(0, 1), false},
-		{&proto.TransactionPushError{PusheeTxn: proto.Transaction{
+		{&roachpb.TransactionPushError{PusheeTxn: roachpb.Transaction{
 			Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 9,
 			makeTS(10, 11), makeTS(10, 11), false},
-		{&proto.TransactionRetryError{Txn: proto.Transaction{
+		{&roachpb.TransactionRetryError{Txn: roachpb.Transaction{
 			Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 10,
 			makeTS(10, 10), makeTS(10, 10), false},
 	}
 
-	var testPutReq = &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:          proto.Key("test-key"),
+	var testPutReq = &roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:          roachpb.Key("test-key"),
 			UserPriority: gogoproto.Int32(-1),
-			Txn: &proto.Transaction{
+			Txn: &roachpb.Transaction{
 				Name: "test txn",
 			},
-			Replica: proto.ReplicaDescriptor{
+			Replica: roachpb.ReplicaDescriptor{
 				NodeID: 12345,
 			},
 		},
@@ -523,14 +523,14 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
-		ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
-			return nil, proto.NewError(test.err)
+		ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			return nil, roachpb.NewError(test.err)
 		}), clock, false, nil, stopper)
-		var reply *proto.PutResponse
-		if r, err := batchutil.SendWrapped(ts, gogoproto.Clone(testPutReq).(proto.Request)); err != nil {
+		var reply *roachpb.PutResponse
+		if r, err := batchutil.SendWrapped(ts, gogoproto.Clone(testPutReq).(roachpb.Request)); err != nil {
 			t.Fatal(err)
 		} else {
-			reply = r.(*proto.PutResponse)
+			reply = r.(*roachpb.PutResponse)
 		}
 		teardownHeartbeats(ts)
 		stopper.Stop()
@@ -576,8 +576,8 @@ func TestTxnDrainingNode(t *testing.T) {
 		t.Fatal("stopper draining prematurely")
 	}
 
-	txn := newTxn(s.Clock, proto.Key("a"))
-	key := proto.Key("a")
+	txn := newTxn(s.Clock, roachpb.Key("a"))
+	key := roachpb.Key("a")
 	beginTxn := func() {
 		put := createPutRequest(key, []byte("value"), txn)
 		if reply, err := batchutil.SendWrapped(s.Sender, put); err != nil {
@@ -587,8 +587,8 @@ func TestTxnDrainingNode(t *testing.T) {
 		}
 	}
 	endTxn := func() {
-		if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{
+		if _, err := batchutil.SendWrapped(s.Sender, &roachpb.EndTransactionRequest{
+			RequestHeader: roachpb.RequestHeader{
 				Timestamp: txn.Timestamp,
 				Txn:       txn,
 			},
@@ -612,16 +612,16 @@ func TestTxnDrainingNode(t *testing.T) {
 	verifyCleanup(key, s.Sender, s.Eng, t) // make sure intent gets resolved
 
 	// Attempt to start another transaction, but it should be too late.
-	key = proto.Key("key")
-	_, err := batchutil.SendWrapped(s.Sender, &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
+	key = roachpb.Key("key")
+	_, err := batchutil.SendWrapped(s.Sender, &roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
-			Txn: &proto.Transaction{
+			Txn: &roachpb.Transaction{
 				Name: "test txn",
 			},
 		},
 	})
-	if _, ok := err.(*proto.NodeUnavailableError); !ok {
+	if _, ok := err.(*roachpb.NodeUnavailableError); !ok {
 		teardownHeartbeats(s.Sender)
 		t.Fatal(err)
 	}
@@ -637,17 +637,17 @@ func TestTxnMultipleCoord(t *testing.T) {
 	defer s.Stop()
 
 	for i, tc := range []struct {
-		args    proto.Request
+		args    roachpb.Request
 		writing bool
 		ok      bool
 	}{
-		{proto.NewGet(proto.Key("a")), true, true},
-		{proto.NewGet(proto.Key("a")), false, true},
-		{proto.NewPut(proto.Key("a"), proto.Value{}), false, true},
-		{proto.NewPut(proto.Key("a"), proto.Value{}), true, false},
+		{roachpb.NewGet(roachpb.Key("a")), true, true},
+		{roachpb.NewGet(roachpb.Key("a")), false, true},
+		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), false, true},
+		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), true, false},
 	} {
 		{
-			txn := newTxn(s.Clock, proto.Key("a"))
+			txn := newTxn(s.Clock, roachpb.Key("a"))
 			txn.Writing = tc.writing
 			tc.args.Header().Txn = txn
 		}
@@ -663,7 +663,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 		txn := reply.Header().Txn
 		// The transaction should come back rw if it started rw or if we just
 		// wrote.
-		isWrite := proto.IsTransactionWrite(tc.args)
+		isWrite := roachpb.IsTransactionWrite(tc.args)
 		if (tc.writing || isWrite) != txn.Writing {
 			t.Errorf("%d: unexpected writing state: %s", i, txn)
 		}
@@ -671,8 +671,8 @@ func TestTxnMultipleCoord(t *testing.T) {
 			continue
 		}
 		// Abort for clean shutdown.
-		if _, err := batchutil.SendWrapped(s.Sender, &proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{
+		if _, err := batchutil.SendWrapped(s.Sender, &roachpb.EndTransactionRequest{
+			RequestHeader: roachpb.RequestHeader{
 				Timestamp: txn.Timestamp,
 				Txn:       txn,
 			},
@@ -693,8 +693,8 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(20)
 
-	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
-		return ba.CreateReply().(*proto.BatchResponse), nil
+	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		return ba.CreateReply().(*roachpb.BatchResponse), nil
 	}), clock, false, nil, stopper)
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
@@ -702,12 +702,12 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	// a heartbeat goroutine.
 	stopper.Stop()
 
-	var ba proto.BatchRequest
-	put := &proto.PutRequest{}
-	put.Key = proto.Key("test")
+	var ba roachpb.BatchRequest
+	put := &roachpb.PutRequest{}
+	put.Key = roachpb.Key("test")
 	ba.Add(put)
-	ba.Add(&proto.EndTransactionRequest{})
-	ba.Txn = &proto.Transaction{Name: "test"}
+	ba.Add(&roachpb.EndTransactionRequest{})
+	ba.Txn = &roachpb.Transaction{Name: "test"}
 	_, pErr := ts.Send(context.Background(), ba)
 	if pErr != nil {
 		t.Fatal(pErr)

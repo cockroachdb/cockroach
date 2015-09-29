@@ -18,7 +18,7 @@ package engine
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_proto1 "github.com/cockroachdb/cockroach/proto"
+import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
@@ -36,7 +36,7 @@ type MVCCValue struct {
 	// be nil.
 	Deleted bool `protobuf:"varint,1,opt,name=deleted" json:"deleted"`
 	// The value. Nil if deleted is true; not nil otherwise.
-	Value *cockroach_proto1.Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+	Value *cockroach_roachpb1.Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 }
 
 func (m *MVCCValue) Reset()         { *m = MVCCValue{} }
@@ -50,7 +50,7 @@ func (m *MVCCValue) GetDeleted() bool {
 	return false
 }
 
-func (m *MVCCValue) GetValue() *cockroach_proto1.Value {
+func (m *MVCCValue) GetValue() *cockroach_roachpb1.Value {
 	if m != nil {
 		return m.Value
 	}
@@ -59,9 +59,9 @@ func (m *MVCCValue) GetValue() *cockroach_proto1.Value {
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 type MVCCMetadata struct {
-	Txn *cockroach_proto1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
+	Txn *cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
 	// The timestamp of the most recent versioned value.
-	Timestamp cockroach_proto1.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	Timestamp cockroach_roachpb1.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 	// Is the most recent value a deletion tombstone?
 	Deleted bool `protobuf:"varint,3,opt,name=deleted" json:"deleted"`
 	// The size in bytes of the most recent encoded key.
@@ -73,25 +73,25 @@ type MVCCMetadata struct {
 	// and subsequent version rows. If timestamp == (0, 0), then there
 	// is only a single MVCC metadata row with value inlined, and with
 	// empty timestamp, key_bytes, and val_bytes.
-	Value *cockroach_proto1.Value `protobuf:"bytes,6,opt,name=value" json:"value,omitempty"`
+	Value *cockroach_roachpb1.Value `protobuf:"bytes,6,opt,name=value" json:"value,omitempty"`
 }
 
 func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
 func (m *MVCCMetadata) String() string { return proto.CompactTextString(m) }
 func (*MVCCMetadata) ProtoMessage()    {}
 
-func (m *MVCCMetadata) GetTxn() *cockroach_proto1.Transaction {
+func (m *MVCCMetadata) GetTxn() *cockroach_roachpb1.Transaction {
 	if m != nil {
 		return m.Txn
 	}
 	return nil
 }
 
-func (m *MVCCMetadata) GetTimestamp() cockroach_proto1.Timestamp {
+func (m *MVCCMetadata) GetTimestamp() cockroach_roachpb1.Timestamp {
 	if m != nil {
 		return m.Timestamp
 	}
-	return cockroach_proto1.Timestamp{}
+	return cockroach_roachpb1.Timestamp{}
 }
 
 func (m *MVCCMetadata) GetDeleted() bool {
@@ -115,7 +115,7 @@ func (m *MVCCMetadata) GetValBytes() int64 {
 	return 0
 }
 
-func (m *MVCCMetadata) GetValue() *cockroach_proto1.Value {
+func (m *MVCCMetadata) GetValue() *cockroach_roachpb1.Value {
 	if m != nil {
 		return m.Value
 	}
@@ -563,7 +563,7 @@ func (m *MVCCValue) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Value == nil {
-				m.Value = &cockroach_proto1.Value{}
+				m.Value = &cockroach_roachpb1.Value{}
 			}
 			if err := m.Value.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
@@ -646,7 +646,7 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Txn == nil {
-				m.Txn = &cockroach_proto1.Transaction{}
+				m.Txn = &cockroach_roachpb1.Transaction{}
 			}
 			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
@@ -767,7 +767,7 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Value == nil {
-				m.Value = &cockroach_proto1.Value{}
+				m.Value = &cockroach_roachpb1.Value{}
 			}
 			if err := m.Value.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err

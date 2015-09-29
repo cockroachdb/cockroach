@@ -30,7 +30,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -41,41 +41,41 @@ import (
 
 // Constants for system-reserved keys in the KV map.
 var (
-	testKey1     = proto.Key("/db1")
-	testKey2     = proto.Key("/db2")
-	testKey3     = proto.Key("/db3")
-	testKey4     = proto.Key("/db4")
-	txn1         = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn1"), Epoch: 1}
-	txn1Commit   = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn1"), Epoch: 1, Status: proto.COMMITTED}
-	txn1Abort    = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn1"), Epoch: 1, Status: proto.ABORTED}
-	txn1e2       = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn1"), Epoch: 2}
-	txn1e2Commit = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn1"), Epoch: 2, Status: proto.COMMITTED}
-	txn2         = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn2")}
-	txn2Commit   = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn2"), Status: proto.COMMITTED}
-	value1       = proto.Value{Bytes: []byte("testValue1")}
-	value2       = proto.Value{Bytes: []byte("testValue2")}
-	value3       = proto.Value{Bytes: []byte("testValue3")}
-	value4       = proto.Value{Bytes: []byte("testValue4")}
-	valueEmpty   = proto.Value{}
+	testKey1     = roachpb.Key("/db1")
+	testKey2     = roachpb.Key("/db2")
+	testKey3     = roachpb.Key("/db3")
+	testKey4     = roachpb.Key("/db4")
+	txn1         = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 1}
+	txn1Commit   = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 1, Status: roachpb.COMMITTED}
+	txn1Abort    = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 1, Status: roachpb.ABORTED}
+	txn1e2       = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 2}
+	txn1e2Commit = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 2, Status: roachpb.COMMITTED}
+	txn2         = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn2")}
+	txn2Commit   = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn2"), Status: roachpb.COMMITTED}
+	value1       = roachpb.Value{Bytes: []byte("testValue1")}
+	value2       = roachpb.Value{Bytes: []byte("testValue2")}
+	value3       = roachpb.Value{Bytes: []byte("testValue3")}
+	value4       = roachpb.Value{Bytes: []byte("testValue4")}
+	valueEmpty   = roachpb.Value{}
 )
 
 // createTestEngine returns a new in-memory engine with 1MB of storage
 // capacity.
 func createTestEngine(stopper *stop.Stopper) Engine {
-	return NewInMem(proto.Attributes{}, 1<<20, stopper)
+	return NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 }
 
 // makeTxn creates a new transaction using the specified base
 // txn and timestamp.
-func makeTxn(baseTxn *proto.Transaction, ts proto.Timestamp) *proto.Transaction {
-	txn := gogoproto.Clone(baseTxn).(*proto.Transaction)
+func makeTxn(baseTxn *roachpb.Transaction, ts roachpb.Timestamp) *roachpb.Transaction {
+	txn := gogoproto.Clone(baseTxn).(*roachpb.Transaction)
 	txn.Timestamp = ts
 	return txn
 }
 
 // makeTS creates a new hybrid logical timestamp.
-func makeTS(nanos int64, logical int32) proto.Timestamp {
-	return proto.Timestamp{
+func makeTS(nanos int64, logical int32) roachpb.Timestamp {
+	return roachpb.Timestamp{
 		WallTime: nanos,
 		Logical:  logical,
 	}
@@ -95,8 +95,8 @@ func makeTS(nanos int64, logical int32) proto.Timestamp {
 // a\x00<t=0>
 func TestMVCCKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	aKey := proto.Key("a")
-	a0Key := proto.Key("a\x00")
+	aKey := roachpb.Key("a")
+	a0Key := roachpb.Key("a\x00")
 	keys := []string{
 		string(MVCCEncodeKey(aKey)),
 		string(MVCCEncodeVersionKey(aKey, makeTS(math.MaxInt64, 0))),
@@ -121,19 +121,19 @@ func TestMVCCEmptyKey(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	if _, _, err := MVCCGet(engine, proto.Key{}, makeTS(0, 1), true, nil); err == nil {
+	if _, _, err := MVCCGet(engine, roachpb.Key{}, makeTS(0, 1), true, nil); err == nil {
 		t.Error("expected empty key error")
 	}
-	if err := MVCCPut(engine, nil, proto.Key{}, makeTS(0, 1), value1, nil); err == nil {
+	if err := MVCCPut(engine, nil, roachpb.Key{}, makeTS(0, 1), value1, nil); err == nil {
 		t.Error("expected empty key error")
 	}
-	if _, _, err := MVCCScan(engine, proto.Key{}, testKey1, 0, makeTS(0, 1), true, nil); err != nil {
+	if _, _, err := MVCCScan(engine, roachpb.Key{}, testKey1, 0, makeTS(0, 1), true, nil); err != nil {
 		t.Errorf("empty key allowed for start key in scan; got %s", err)
 	}
-	if _, _, err := MVCCScan(engine, testKey1, proto.Key{}, 0, makeTS(0, 1), true, nil); err == nil {
+	if _, _, err := MVCCScan(engine, testKey1, roachpb.Key{}, 0, makeTS(0, 1), true, nil); err == nil {
 		t.Error("expected empty key error")
 	}
-	if err := MVCCResolveWriteIntent(engine, nil, proto.Key{}, makeTS(0, 1), txn1); err == nil {
+	if err := MVCCResolveWriteIntent(engine, nil, roachpb.Key{}, makeTS(0, 1), txn1); err == nil {
 		t.Error("expected empty key error")
 	}
 }
@@ -164,7 +164,7 @@ func TestMVCCPutWithTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, ts := range []proto.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(1, 0)} {
+	for _, ts := range []roachpb.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(1, 0)} {
 		value, _, err := MVCCGet(engine, testKey1, ts, true, txn1)
 		if err != nil {
 			t.Fatal(err)
@@ -187,7 +187,7 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, ts := range []proto.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(1, 0)} {
+	for _, ts := range []roachpb.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(1, 0)} {
 		value, _, err := MVCCGet(engine, testKey1, ts, true, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -291,7 +291,7 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 	}
 
 	// Override the non-integer value.
-	val := proto.Value{}
+	val := roachpb.Value{}
 	val.SetInt(1)
 	err = MVCCPut(engine, nil, testKey1, makeTS(3, 0), val, nil)
 	if err != nil {
@@ -451,7 +451,7 @@ func TestMVCCGetUncertainty(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	txn := &proto.Transaction{ID: []byte("txn"), Timestamp: makeTS(5, 0), MaxTimestamp: makeTS(10, 0)}
+	txn := &roachpb.Transaction{ID: []byte("txn"), Timestamp: makeTS(5, 0), MaxTimestamp: makeTS(10, 0)}
 	// Put a value from the past.
 	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
 		t.Fatal(err)
@@ -477,7 +477,7 @@ func TestMVCCGetUncertainty(t *testing.T) {
 	// Read with transaction, should get error back.
 	if _, _, err := MVCCGet(engine, testKey2, makeTS(7, 0), true, txn); err == nil {
 		t.Fatal("wanted an error")
-	} else if e, ok := err.(*proto.ReadWithinUncertaintyIntervalError); !ok {
+	} else if e, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
 		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", e)
 	}
 	if _, _, err := MVCCScan(engine, testKey2, testKey2.PrefixEnd(), 10, makeTS(7, 0), true, txn); err == nil {
@@ -556,7 +556,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	engine := NewInMem(proto.Attributes{}, 1<<20, stopper)
+	engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	if err := MVCCDelete(engine, nil, testKey1, makeTS(1, 0), nil); err != nil {
 		t.Fatal(err)
@@ -632,17 +632,17 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	ts := []proto.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(0, 3), makeTS(0, 4), makeTS(0, 5), makeTS(0, 6)}
-	fixtureKVs := []proto.KeyValue{
-		{Key: testKey1, Value: proto.Value{Bytes: []byte("testValue1 pre"), Timestamp: &ts[0]}},
-		{Key: testKey4, Value: proto.Value{Bytes: []byte("testValue4 pre"), Timestamp: &ts[1]}},
-		{Key: testKey1, Value: proto.Value{Bytes: []byte("testValue1"), Timestamp: &ts[2]}},
-		{Key: testKey2, Value: proto.Value{Bytes: []byte("testValue2"), Timestamp: &ts[3]}},
-		{Key: testKey3, Value: proto.Value{Bytes: []byte("testValue3"), Timestamp: &ts[4]}},
-		{Key: testKey4, Value: proto.Value{Bytes: []byte("testValue4"), Timestamp: &ts[5]}},
+	ts := []roachpb.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(0, 3), makeTS(0, 4), makeTS(0, 5), makeTS(0, 6)}
+	fixtureKVs := []roachpb.KeyValue{
+		{Key: testKey1, Value: roachpb.Value{Bytes: []byte("testValue1 pre"), Timestamp: &ts[0]}},
+		{Key: testKey4, Value: roachpb.Value{Bytes: []byte("testValue4 pre"), Timestamp: &ts[1]}},
+		{Key: testKey1, Value: roachpb.Value{Bytes: []byte("testValue1"), Timestamp: &ts[2]}},
+		{Key: testKey2, Value: roachpb.Value{Bytes: []byte("testValue2"), Timestamp: &ts[3]}},
+		{Key: testKey3, Value: roachpb.Value{Bytes: []byte("testValue3"), Timestamp: &ts[4]}},
+		{Key: testKey4, Value: roachpb.Value{Bytes: []byte("testValue4"), Timestamp: &ts[5]}},
 	}
 	for i, kv := range fixtureKVs {
-		var txn *proto.Transaction
+		var txn *roachpb.Transaction
 		if i == 2 {
 			txn = txn1
 		} else if i == 5 {
@@ -656,14 +656,14 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 
 	scanCases := []struct {
 		consistent bool
-		txn        *proto.Transaction
-		expIntents []proto.Intent
-		expValues  []proto.KeyValue
+		txn        *roachpb.Transaction
+		expIntents []roachpb.Intent
+		expValues  []roachpb.KeyValue
 	}{
 		{
 			consistent: true,
 			txn:        nil,
-			expIntents: []proto.Intent{
+			expIntents: []roachpb.Intent{
 				{Key: testKey1, Txn: *txn1},
 				{Key: testKey4, Txn: *txn2},
 			},
@@ -673,7 +673,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		{
 			consistent: true,
 			txn:        txn1,
-			expIntents: []proto.Intent{
+			expIntents: []roachpb.Intent{
 				{Key: testKey4, Txn: *txn2},
 			},
 			expValues: nil, // []proto.KeyValue{fixtureKVs[2], fixtureKVs[3], fixtureKVs[4]},
@@ -681,7 +681,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		{
 			consistent: true,
 			txn:        txn2,
-			expIntents: []proto.Intent{
+			expIntents: []roachpb.Intent{
 				{Key: testKey1, Txn: *txn1},
 			},
 			expValues: nil, // []proto.KeyValue{fixtureKVs[3], fixtureKVs[4], fixtureKVs[5]},
@@ -689,11 +689,11 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		{
 			consistent: false,
 			txn:        nil,
-			expIntents: []proto.Intent{
+			expIntents: []roachpb.Intent{
 				{Key: testKey1, Txn: *txn1},
 				{Key: testKey4, Txn: *txn2},
 			},
-			expValues: []proto.KeyValue{fixtureKVs[0], fixtureKVs[3], fixtureKVs[4], fixtureKVs[1]},
+			expValues: []roachpb.KeyValue{fixtureKVs[0], fixtureKVs[3], fixtureKVs[4], fixtureKVs[1]},
 		},
 	}
 
@@ -703,7 +703,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			cStr = "consistent"
 		}
 		kvs, intents, err := MVCCScan(engine, testKey1, testKey4.Next(), 0, makeTS(1, 0), scan.consistent, scan.txn)
-		wiErr, _ := err.(*proto.WriteIntentError)
+		wiErr, _ := err.(*roachpb.WriteIntentError)
 		if (err == nil) != (wiErr == nil) {
 			t.Errorf("%s(%d): unexpected error: %s", cStr, i, err)
 		}
@@ -758,7 +758,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	}
 
 	// Inconsistent get will fetch value1 for any timestamp.
-	for _, ts := range []proto.Timestamp{makeTS(1, 0), makeTS(2, 0)} {
+	for _, ts := range []roachpb.Timestamp{makeTS(1, 0), makeTS(2, 0)} {
 		val, intents, err := MVCCGet(engine, testKey1, ts, false, nil)
 		if ts.Less(makeTS(2, 0)) {
 			if err != nil {
@@ -796,34 +796,34 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	value1, err := gogoproto.Marshal(&proto.RawKeyValue{Value: []byte("value1")})
+	value1, err := gogoproto.Marshal(&roachpb.RawKeyValue{Value: []byte("value1")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	value2, err := gogoproto.Marshal(&proto.RawKeyValue{Value: []byte("value2")})
+	value2, err := gogoproto.Marshal(&roachpb.RawKeyValue{Value: []byte("value2")})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Put two values to key 1, the latest with a txn.
-	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), proto.Value{Bytes: value1}, nil); err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), roachpb.Value{Bytes: value1}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(engine, nil, testKey1, makeTS(2, 0), proto.Value{Bytes: value2}, txn1); err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(2, 0), roachpb.Value{Bytes: value2}, txn1); err != nil {
 		t.Fatal(err)
 	}
 
 	// A get with consistent=false should fail in a txn.
-	val := &proto.RawKeyValue{}
+	val := &roachpb.RawKeyValue{}
 	_, err = MVCCGetProto(engine, testKey1, makeTS(1, 0), false, txn1, val)
 	if err == nil {
 		t.Error("expected an error getting with consistent=false in txn")
-	} else if _, ok := err.(*proto.WriteIntentError); ok {
+	} else if _, ok := err.(*roachpb.WriteIntentError); ok {
 		t.Error("expected non-WriteIntentError with inconsistent read in txn")
 	}
 
 	// Inconsistent get will fetch value1 for any timestamp.
-	for _, ts := range []proto.Timestamp{makeTS(1, 0), makeTS(2, 0)} {
+	for _, ts := range []roachpb.Timestamp{makeTS(1, 0), makeTS(2, 0)} {
 		val.Reset()
 		found, err := MVCCGetProto(engine, testKey1, ts, false, nil, val)
 		if ts.Less(makeTS(2, 0)) {
@@ -842,7 +842,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	}
 
 	// Write a single intent for key 2 and verify get returns empty.
-	if err := MVCCPut(engine, nil, testKey2, makeTS(2, 0), proto.Value{Bytes: value1}, txn2); err != nil {
+	if err := MVCCPut(engine, nil, testKey2, makeTS(2, 0), roachpb.Value{Bytes: value1}, txn2); err != nil {
 		t.Fatal(err)
 	}
 	found, err := MVCCGetProto(engine, testKey2, makeTS(2, 0), false, nil, val)
@@ -859,7 +859,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	if err := MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(engine, nil, testKey3, makeTS(2, 0), proto.Value{Bytes: value2}, txn1); err != nil {
+	if err := MVCCPut(engine, nil, testKey3, makeTS(2, 0), roachpb.Value{Bytes: value2}, txn1); err != nil {
 		t.Fatal(err)
 	}
 	val.Reset()
@@ -913,7 +913,7 @@ func TestMVCCScan(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	kvs, _, err = MVCCScan(engine, testKey4, proto.KeyMax, 0, makeTS(1, 0), true, nil)
+	kvs, _, err = MVCCScan(engine, testKey4, roachpb.KeyMax, 0, makeTS(1, 0), true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -924,7 +924,7 @@ func TestMVCCScan(t *testing.T) {
 	}
 
 	_, _, err = MVCCGet(engine, testKey1, makeTS(1, 0), true, txn2)
-	kvs, _, err = MVCCScan(engine, proto.KeyMin, testKey2, 0, makeTS(1, 0), true, nil)
+	kvs, _, err = MVCCScan(engine, roachpb.KeyMin, testKey2, 0, makeTS(1, 0), true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -974,19 +974,19 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 	// b<T=5>
 	// In this case, if we scan from "a"-"b", we wish to skip
 	// a<T=2> and a<T=1> and find "aa'.
-	err := MVCCPut(engine, nil, proto.Key("/a"), makeTS(1, 0), value1, nil)
-	err = MVCCPut(engine, nil, proto.Key("/a"), makeTS(2, 0), value2, nil)
-	err = MVCCPut(engine, nil, proto.Key("/aa"), makeTS(2, 0), value2, nil)
-	err = MVCCPut(engine, nil, proto.Key("/aa"), makeTS(3, 0), value3, nil)
-	err = MVCCPut(engine, nil, proto.Key("/b"), makeTS(1, 0), value3, nil)
+	err := MVCCPut(engine, nil, roachpb.Key("/a"), makeTS(1, 0), value1, nil)
+	err = MVCCPut(engine, nil, roachpb.Key("/a"), makeTS(2, 0), value2, nil)
+	err = MVCCPut(engine, nil, roachpb.Key("/aa"), makeTS(2, 0), value2, nil)
+	err = MVCCPut(engine, nil, roachpb.Key("/aa"), makeTS(3, 0), value3, nil)
+	err = MVCCPut(engine, nil, roachpb.Key("/b"), makeTS(1, 0), value3, nil)
 
-	kvs, _, err := MVCCScan(engine, proto.Key("/a"), proto.Key("/b"), 0, makeTS(2, 0), true, nil)
+	kvs, _, err := MVCCScan(engine, roachpb.Key("/a"), roachpb.Key("/b"), 0, makeTS(2, 0), true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(kvs) != 2 ||
-		!bytes.Equal(kvs[0].Key, proto.Key("/a")) ||
-		!bytes.Equal(kvs[1].Key, proto.Key("/aa")) ||
+		!bytes.Equal(kvs[0].Key, roachpb.Key("/a")) ||
+		!bytes.Equal(kvs[1].Key, roachpb.Key("/aa")) ||
 		!bytes.Equal(kvs[0].Value.Bytes, value2.Bytes) ||
 		!bytes.Equal(kvs[1].Value.Bytes, value2.Bytes) {
 		t.Fatal("the value should not be empty")
@@ -1031,7 +1031,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 	engine := createTestEngine(stopper)
 
 	// A scan with consistent=false should fail in a txn.
-	if _, _, err := MVCCScan(engine, proto.KeyMin, proto.KeyMax, 0, makeTS(1, 0), false, txn1); err == nil {
+	if _, _, err := MVCCScan(engine, roachpb.KeyMin, roachpb.KeyMax, 0, makeTS(1, 0), false, txn1); err == nil {
 		t.Error("expected an error scanning with consistent=false in txn")
 	}
 
@@ -1060,7 +1060,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expIntents := []proto.Intent{
+	expIntents := []roachpb.Intent{
 		{Key: testKey1, Txn: *txn1},
 		{Key: testKey3, Txn: *txn2},
 	}
@@ -1069,10 +1069,10 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expKVs := []proto.KeyValue{
-		{Key: testKey1, Value: proto.Value{Bytes: value1.Bytes, Timestamp: &ts1}},
-		{Key: testKey2, Value: proto.Value{Bytes: value2.Bytes, Timestamp: &ts4}},
-		{Key: testKey4, Value: proto.Value{Bytes: value4.Bytes, Timestamp: &ts6}},
+	expKVs := []roachpb.KeyValue{
+		{Key: testKey1, Value: roachpb.Value{Bytes: value1.Bytes, Timestamp: &ts1}},
+		{Key: testKey2, Value: roachpb.Value{Bytes: value2.Bytes, Timestamp: &ts4}},
+		{Key: testKey4, Value: roachpb.Value{Bytes: value4.Bytes, Timestamp: &ts6}},
 	}
 	if !reflect.DeepEqual(kvs, expKVs) {
 		t.Errorf("expected key values equal %v != %v", kvs, expKVs)
@@ -1084,9 +1084,9 @@ func TestMVCCScanInconsistent(t *testing.T) {
 	if !reflect.DeepEqual(intents, expIntents) {
 		t.Fatal(err)
 	}
-	expKVs = []proto.KeyValue{
-		{Key: testKey1, Value: proto.Value{Bytes: value1.Bytes, Timestamp: &ts1}},
-		{Key: testKey2, Value: proto.Value{Bytes: value1.Bytes, Timestamp: &ts3}},
+	expKVs = []roachpb.KeyValue{
+		{Key: testKey1, Value: roachpb.Value{Bytes: value1.Bytes, Timestamp: &ts1}},
+		{Key: testKey2, Value: roachpb.Value{Bytes: value1.Bytes, Timestamp: &ts3}},
 	}
 	if !reflect.DeepEqual(kvs, expKVs) {
 		t.Errorf("expected key values equal %v != %v", kvs, expKVs)
@@ -1111,7 +1111,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if num != 2 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _, _ := MVCCScan(engine, proto.KeyMin, proto.KeyMax, 0, makeTS(2, 0), true, nil)
+	kvs, _, _ := MVCCScan(engine, roachpb.KeyMin, roachpb.KeyMax, 0, makeTS(2, 0), true, nil)
 	if len(kvs) != 2 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
@@ -1120,28 +1120,28 @@ func TestMVCCDeleteRange(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	num, err = MVCCDeleteRange(engine, nil, testKey4, proto.KeyMax, 0, makeTS(2, 0), nil)
+	num, err = MVCCDeleteRange(engine, nil, testKey4, roachpb.KeyMax, 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if num != 1 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _, _ = MVCCScan(engine, proto.KeyMin, proto.KeyMax, 0, makeTS(2, 0), true, nil)
+	kvs, _, _ = MVCCScan(engine, roachpb.KeyMin, roachpb.KeyMax, 0, makeTS(2, 0), true, nil)
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[0].Value.Bytes, value1.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 
-	num, err = MVCCDeleteRange(engine, nil, proto.KeyMin, testKey2, 0, makeTS(2, 0), nil)
+	num, err = MVCCDeleteRange(engine, nil, roachpb.KeyMin, testKey2, 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if num != 1 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _, _ = MVCCScan(engine, proto.KeyMin, proto.KeyMax, 0, makeTS(2, 0), true, nil)
+	kvs, _, _ = MVCCScan(engine, roachpb.KeyMin, roachpb.KeyMax, 0, makeTS(2, 0), true, nil)
 	if len(kvs) != 0 {
 		t.Fatal("the value should be empty")
 	}
@@ -1201,7 +1201,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	switch e := err.(type) {
 	default:
 		t.Fatalf("unexpected error %T", e)
-	case *proto.ConditionFailedError:
+	case *roachpb.ConditionFailedError:
 		if e.ActualValue != nil {
 			t.Fatalf("expected missing actual value: %v", e.ActualValue)
 		}
@@ -1215,7 +1215,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	switch e := err.(type) {
 	default:
 		t.Fatalf("unexpected error %T", e)
-	case *proto.ConditionFailedError:
+	case *roachpb.ConditionFailedError:
 		if e.ActualValue != nil {
 			t.Fatalf("expected missing actual value: %v", e.ActualValue)
 		}
@@ -1235,7 +1235,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	switch e := err.(type) {
 	default:
 		t.Fatalf("unexpected error %T", e)
-	case *proto.ConditionFailedError:
+	case *roachpb.ConditionFailedError:
 		if !bytes.Equal(e.ActualValue.Bytes, value1.Bytes) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
 				e.ActualValue.Bytes, value1.Bytes)
@@ -1250,7 +1250,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	switch e := err.(type) {
 	default:
 		t.Fatalf("unexpected error %T", e)
-	case *proto.ConditionFailedError:
+	case *roachpb.ConditionFailedError:
 		if !bytes.Equal(e.ActualValue.Bytes, value1.Bytes) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
 				e.ActualValue.Bytes, value1.Bytes)
@@ -1366,7 +1366,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected success on conditional put")
 	}
-	if _, ok := err.(*proto.WriteTooOldError); !ok {
+	if _, ok := err.(*roachpb.WriteTooOldError); !ok {
 		t.Errorf("unexpected error on conditional put: %s", err)
 	}
 
@@ -1374,7 +1374,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected success on conditional put")
 	}
-	if _, ok := err.(*proto.ConditionFailedError); !ok {
+	if _, ok := err.(*roachpb.ConditionFailedError); !ok {
 		t.Errorf("unexpected error on conditional put: %s", err)
 	}
 }
@@ -1518,8 +1518,8 @@ func TestMVCCReadWithDiffEpochs(t *testing.T) {
 	}
 	// Try reading using different txns & epochs.
 	testCases := []struct {
-		txn      *proto.Transaction
-		expValue *proto.Value
+		txn      *roachpb.Transaction
+		expValue *roachpb.Value
 		expErr   bool
 	}{
 		// No transaction; should see error.
@@ -1536,7 +1536,7 @@ func TestMVCCReadWithDiffEpochs(t *testing.T) {
 		if test.expErr {
 			if err == nil {
 				t.Errorf("test %d: unexpected success", i)
-			} else if _, ok := err.(*proto.WriteIntentError); !ok {
+			} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
 				t.Errorf("test %d: expected write intent error; got %v", i, err)
 			}
 		} else if err != nil || value == nil || !bytes.Equal(test.expValue.Bytes, value.Bytes) {
@@ -1775,44 +1775,44 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 func TestValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key   proto.Key
+		key   roachpb.Key
 		valid bool
 	}{
-		{proto.Key("\x00"), false},
-		{proto.Key("\x00\x00"), false},
-		{proto.Key("\x00\x00meta1"), false},
-		{proto.Key("\x00\x00meta1\x00"), false},
-		{proto.Key("\x00\x00meta1\xff"), false},
-		{proto.Key("\x00\x00meta2"), true},
-		{proto.Key("\x00\x00meta2\x00"), true},
-		{proto.Key("\x00\x00meta2\xff"), true},
-		{proto.Key("\x00\x00meta2\xff\xff"), false},
-		{proto.Key("\x00\x00meta3"), true},
-		{proto.Key("\x00\x01"), true},
+		{roachpb.Key("\x00"), false},
+		{roachpb.Key("\x00\x00"), false},
+		{roachpb.Key("\x00\x00meta1"), false},
+		{roachpb.Key("\x00\x00meta1\x00"), false},
+		{roachpb.Key("\x00\x00meta1\xff"), false},
+		{roachpb.Key("\x00\x00meta2"), true},
+		{roachpb.Key("\x00\x00meta2\x00"), true},
+		{roachpb.Key("\x00\x00meta2\xff"), true},
+		{roachpb.Key("\x00\x00meta2\xff\xff"), false},
+		{roachpb.Key("\x00\x00meta3"), true},
+		{roachpb.Key("\x00\x01"), true},
 		// Deprecated accounting config key. Valid split.
-		{proto.Key("\x00accs\xff"), true},
-		{proto.Key("\x00acct"), true},
-		{proto.Key("\x00acct\x00"), true},
-		{proto.Key("\x00acct\xff"), true},
-		{proto.Key("\x00accu"), true},
-		{proto.Key("\x00perl"), true},
-		{proto.Key("\x00perm"), true},
+		{roachpb.Key("\x00accs\xff"), true},
+		{roachpb.Key("\x00acct"), true},
+		{roachpb.Key("\x00acct\x00"), true},
+		{roachpb.Key("\x00acct\xff"), true},
+		{roachpb.Key("\x00accu"), true},
+		{roachpb.Key("\x00perl"), true},
+		{roachpb.Key("\x00perm"), true},
 		// Deprecated permission config key. Valid split.
-		{proto.Key("\x00perm\x00"), true},
-		{proto.Key("\x00perm\xff"), true},
-		{proto.Key("\x00pern"), true},
-		{proto.Key("\x00zond"), true},
-		{proto.Key("\x00zone"), true},
+		{roachpb.Key("\x00perm\x00"), true},
+		{roachpb.Key("\x00perm\xff"), true},
+		{roachpb.Key("\x00pern"), true},
+		{roachpb.Key("\x00zond"), true},
+		{roachpb.Key("\x00zone"), true},
 		// Deprecated zone config key. Valid split.
-		{proto.Key("\x00zone\x00"), true},
-		{proto.Key("\x00zone\xff"), true},
-		{proto.Key("\x00zonf"), true},
-		{proto.Key("\x01"), true},
-		{proto.Key("a"), true},
-		{proto.Key("\xff"), true},
-		{proto.Key("\xff\x00"), false},
-		{proto.Key(keys.MakeTablePrefix(keys.MaxReservedDescID)), false},
-		{proto.Key(keys.MakeTablePrefix(keys.MaxReservedDescID + 1)), true},
+		{roachpb.Key("\x00zone\x00"), true},
+		{roachpb.Key("\x00zone\xff"), true},
+		{roachpb.Key("\x00zonf"), true},
+		{roachpb.Key("\x01"), true},
+		{roachpb.Key("a"), true},
+		{roachpb.Key("\xff"), true},
+		{roachpb.Key("\xff\x00"), false},
+		{roachpb.Key(keys.MakeTablePrefix(keys.MaxReservedDescID)), false},
+		{roachpb.Key(keys.MakeTablePrefix(keys.MaxReservedDescID + 1)), true},
 	}
 
 	for i, test := range testCases {
@@ -1824,10 +1824,10 @@ func TestValidSplitKeys(t *testing.T) {
 
 func TestFindSplitKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rangeID := proto.RangeID(1)
+	rangeID := roachpb.RangeID(1)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	engine := NewInMem(proto.Attributes{}, 1<<20, stopper)
+	engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	ms := &MVCCStats{}
 	// Generate a series of KeyValues, each containing targetLength
@@ -1839,7 +1839,7 @@ func TestFindSplitKey(t *testing.T) {
 	for i := 0; i < splitReservoirSize; i++ {
 		k := fmt.Sprintf("%09d", i)
 		v := strings.Repeat("X", 10-len(k))
-		val := proto.Value{Bytes: []byte(v)}
+		val := roachpb.Value{Bytes: []byte(v)}
 		// Write the key and value through MVCC
 		if err := MVCCPut(engine, ms, []byte(k), makeTS(0, 1), val, nil); err != nil {
 			t.Fatal(err)
@@ -1851,7 +1851,7 @@ func TestFindSplitKey(t *testing.T) {
 	}
 	snap := engine.NewSnapshot()
 	defer snap.Close()
-	humanSplitKey, err := MVCCFindSplitKey(snap, rangeID, proto.KeyMin, proto.KeyMax)
+	humanSplitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.KeyMin, roachpb.KeyMax)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1865,75 +1865,75 @@ func TestFindSplitKey(t *testing.T) {
 // they avoid splits through invalid key ranges.
 func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rangeID := proto.RangeID(1)
+	rangeID := roachpb.RangeID(1)
 	testCases := []struct {
-		keys     []proto.Key
-		expSplit proto.Key
+		keys     []roachpb.Key
+		expSplit roachpb.Key
 		expError bool
 	}{
 		// All meta1 cannot be split.
 		{
-			keys: []proto.Key{
-				proto.Key("\x00\x00meta1"),
-				proto.Key("\x00\x00meta1\x00"),
-				proto.Key("\x00\x00meta1\xff"),
+			keys: []roachpb.Key{
+				roachpb.Key("\x00\x00meta1"),
+				roachpb.Key("\x00\x00meta1\x00"),
+				roachpb.Key("\x00\x00meta1\xff"),
 			},
 			expSplit: nil,
 			expError: true,
 		},
 		// All system span cannot be split.
 		{
-			keys: []proto.Key{
-				proto.Key(keys.MakeTablePrefix(1)),
-				proto.Key(keys.MakeTablePrefix(keys.MaxReservedDescID)),
+			keys: []roachpb.Key{
+				roachpb.Key(keys.MakeTablePrefix(1)),
+				roachpb.Key(keys.MakeTablePrefix(keys.MaxReservedDescID)),
 			},
 			expSplit: nil,
 			expError: true,
 		},
 		// Between meta1 and meta2, splits at meta2.
 		{
-			keys: []proto.Key{
-				proto.Key("\x00\x00meta1"),
-				proto.Key("\x00\x00meta1\x00"),
-				proto.Key("\x00\x00meta1\xff"),
-				proto.Key("\x00\x00meta2"),
-				proto.Key("\x00\x00meta2\x00"),
-				proto.Key("\x00\x00meta2\xff"),
+			keys: []roachpb.Key{
+				roachpb.Key("\x00\x00meta1"),
+				roachpb.Key("\x00\x00meta1\x00"),
+				roachpb.Key("\x00\x00meta1\xff"),
+				roachpb.Key("\x00\x00meta2"),
+				roachpb.Key("\x00\x00meta2\x00"),
+				roachpb.Key("\x00\x00meta2\xff"),
 			},
-			expSplit: proto.Key("\x00\x00meta2"),
+			expSplit: roachpb.Key("\x00\x00meta2"),
 			expError: false,
 		},
 		// Even lopsided, always split at meta2.
 		{
-			keys: []proto.Key{
-				proto.Key("\x00\x00meta1"),
-				proto.Key("\x00\x00meta1\x00"),
-				proto.Key("\x00\x00meta1\xff"),
-				proto.Key("\x00\x00meta2"),
+			keys: []roachpb.Key{
+				roachpb.Key("\x00\x00meta1"),
+				roachpb.Key("\x00\x00meta1\x00"),
+				roachpb.Key("\x00\x00meta1\xff"),
+				roachpb.Key("\x00\x00meta2"),
 			},
-			expSplit: proto.Key("\x00\x00meta2"),
+			expSplit: roachpb.Key("\x00\x00meta2"),
 			expError: false,
 		},
 		// Lopsided, truncate non-zone prefix.
 		{
-			keys: []proto.Key{
-				proto.Key("\x00zond"),
-				proto.Key("\x00zone"),
-				proto.Key("\x00zone\x00"),
-				proto.Key("\x00zone\xff"),
+			keys: []roachpb.Key{
+				roachpb.Key("\x00zond"),
+				roachpb.Key("\x00zone"),
+				roachpb.Key("\x00zone\x00"),
+				roachpb.Key("\x00zone\xff"),
 			},
-			expSplit: proto.Key("\x00zone\x00"),
+			expSplit: roachpb.Key("\x00zone\x00"),
 			expError: false,
 		},
 		// Lopsided, truncate non-zone suffix.
 		{
-			keys: []proto.Key{
-				proto.Key("\x00zone"),
-				proto.Key("\x00zone\x00"),
-				proto.Key("\x00zone\xff"),
-				proto.Key("\x00zonf"),
+			keys: []roachpb.Key{
+				roachpb.Key("\x00zone"),
+				roachpb.Key("\x00zone\x00"),
+				roachpb.Key("\x00zone\xff"),
+				roachpb.Key("\x00zonf"),
 			},
-			expSplit: proto.Key("\x00zone\xff"),
+			expSplit: roachpb.Key("\x00zone\xff"),
 			expError: false,
 		},
 	}
@@ -1941,10 +1941,10 @@ func TestFindValidSplitKeys(t *testing.T) {
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
-		engine := NewInMem(proto.Attributes{}, 1<<20, stopper)
+		engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 		ms := &MVCCStats{}
-		val := proto.Value{Bytes: []byte(strings.Repeat("X", 10))}
+		val := roachpb.Value{Bytes: []byte(strings.Repeat("X", 10))}
 		for _, k := range test.keys {
 			if err := MVCCPut(engine, ms, []byte(k), makeTS(0, 1), val, nil); err != nil {
 				t.Fatal(err)
@@ -1979,7 +1979,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 // the left and right halves are equally balanced.
 func TestFindBalancedSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rangeID := proto.RangeID(1)
+	rangeID := roachpb.RangeID(1)
 	testCases := []struct {
 		keySizes []int
 		valSizes []int
@@ -2026,16 +2026,16 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
-		engine := NewInMem(proto.Attributes{}, 1<<20, stopper)
+		engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 		ms := &MVCCStats{}
-		var expKey proto.Key
+		var expKey roachpb.Key
 		for j, keySize := range test.keySizes {
-			key := proto.Key(fmt.Sprintf("%d%s", j, strings.Repeat("X", keySize)))
+			key := roachpb.Key(fmt.Sprintf("%d%s", j, strings.Repeat("X", keySize)))
 			if test.expSplit == j {
 				expKey = key
 			}
-			val := proto.Value{Bytes: []byte(strings.Repeat("X", test.valSizes[j]))}
+			val := roachpb.Value{Bytes: []byte(strings.Repeat("X", test.valSizes[j]))}
 			if err := MVCCPut(engine, ms, key, makeTS(0, 1), val, nil); err != nil {
 				t.Fatal(err)
 			}
@@ -2046,7 +2046,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		}
 		snap := engine.NewSnapshot()
 		defer snap.Close()
-		splitKey, err := MVCCFindSplitKey(snap, rangeID, proto.Key("\x01"), proto.KeyMax)
+		splitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.Key("\x01"), roachpb.KeyMax)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 			continue
@@ -2119,14 +2119,14 @@ func TestMVCCStatsBasic(t *testing.T) {
 
 	// Verify size of mvccVersionTimestampSize.
 	ts := makeTS(1*1E9, 0)
-	key := proto.Key("a")
+	key := roachpb.Key("a")
 	keySize := int64(len(MVCCEncodeVersionKey(key, ts)) - len(MVCCEncodeKey(key)))
 	if keySize != mvccVersionTimestampSize {
 		t.Errorf("expected version timestamp size %d; got %d", mvccVersionTimestampSize, keySize)
 	}
 
 	// Put a value.
-	value := proto.Value{Bytes: []byte("value")}
+	value := roachpb.Value{Bytes: []byte("value")}
 	if err := MVCCPut(engine, ms, key, ts, value, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -2146,7 +2146,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	verifyStats("after put", ms, &expMS, t)
 
 	// Delete the value using a transaction.
-	txn := &proto.Transaction{ID: []byte("txn1"), Timestamp: makeTS(1*1E9, 0)}
+	txn := &roachpb.Transaction{ID: []byte("txn1"), Timestamp: makeTS(1*1E9, 0)}
 	ts2 := makeTS(2*1E9, 0)
 	if err := MVCCDelete(engine, ms, key, ts2, txn); err != nil {
 		t.Fatal(err)
@@ -2167,7 +2167,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	verifyStats("after delete", ms, &expMS2, t)
 
 	// Resolve the deletion by aborting it.
-	txn.Status = proto.ABORTED
+	txn.Status = roachpb.ABORTED
 	if err := MVCCResolveWriteIntent(engine, ms, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -2175,7 +2175,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	verifyStats("after abort", ms, &expMS, t)
 
 	// Re-delete, but this time, we're going to commit it.
-	txn.Status = proto.PENDING
+	txn.Status = roachpb.PENDING
 	ts3 := makeTS(3*1E9, 0)
 	if err := MVCCDelete(engine, ms, key, ts3, txn); err != nil {
 		t.Fatal(err)
@@ -2187,8 +2187,8 @@ func TestMVCCStatsBasic(t *testing.T) {
 	// Put another intent, which should age deleted intent.
 	ts4 := makeTS(4*1E9, 0)
 	txn.Timestamp = ts4
-	key2 := proto.Key("b")
-	value2 := proto.Value{Bytes: []byte("value")}
+	key2 := roachpb.Key("b")
+	value2 := roachpb.Value{Bytes: []byte("value")}
 	if err := MVCCPut(engine, ms, key2, ts4, value2, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -2210,7 +2210,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	verifyStats("after 2nd put", ms, &expMS3, t)
 
 	// Now commit both values.
-	txn.Status = proto.COMMITTED
+	txn.Status = roachpb.COMMITTED
 	if err := MVCCResolveWriteIntent(engine, ms, key, ts4, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -2245,8 +2245,8 @@ func TestMVCCStatsBasic(t *testing.T) {
 
 	// Write a transaction record which is a system-local key.
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	txnVal := proto.Value{Bytes: []byte("txn-data")}
-	if err := MVCCPut(engine, ms, txnKey, proto.ZeroTimestamp, txnVal, nil); err != nil {
+	txnVal := roachpb.Value{Bytes: []byte("txn-data")}
+	if err := MVCCPut(engine, ms, txnKey, roachpb.ZeroTimestamp, txnVal, nil); err != nil {
 		t.Fatal(err)
 	}
 	txnKeySize := int64(len(MVCCEncodeKey(txnKey)))
@@ -2283,9 +2283,9 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 
 		key := []byte(fmt.Sprintf("%s-%d", randutil.RandBytes(rng, int(rng.Int31n(32))), i))
 		keys[i] = key
-		var txn *proto.Transaction
+		var txn *roachpb.Transaction
 		if rng.Int31n(2) == 0 { // create a txn with 50% prob
-			txn = &proto.Transaction{ID: []byte(fmt.Sprintf("txn-%d", i)), Timestamp: makeTS(int64(i+1)*1E9, 0)}
+			txn = &roachpb.Transaction{ID: []byte(fmt.Sprintf("txn-%d", i)), Timestamp: makeTS(int64(i+1)*1E9, 0)}
 		}
 		// With 25% probability, put a new value; otherwise, delete an earlier
 		// key. Because an earlier step in this process may have itself been
@@ -2299,8 +2299,8 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			}
 			if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), txn); err != nil {
 				// Abort any write intent on an earlier, unresolved txn.
-				if wiErr, ok := err.(*proto.WriteIntentError); ok {
-					wiErr.Intents[0].Txn.Status = proto.ABORTED
+				if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
+					wiErr.Intents[0].Txn.Status = roachpb.ABORTED
 					if log.V(1) {
 						log.Infof("*** ABORT index %d", idx)
 					}
@@ -2319,7 +2319,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 				}
 			}
 		} else {
-			rngVal := proto.Value{Bytes: randutil.RandBytes(rng, int(rng.Int31n(128)))}
+			rngVal := roachpb.Value{Bytes: randutil.RandBytes(rng, int(rng.Int31n(128)))}
 			if log.V(1) {
 				log.Infof("*** PUT index %d; TXN=%t", i, txn != nil)
 			}
@@ -2328,12 +2328,12 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			}
 		}
 		if !isDelete && txn != nil && rng.Int31n(2) == 0 { // resolve txn with 50% prob
-			txn.Status = proto.COMMITTED
+			txn.Status = roachpb.COMMITTED
 			if rng.Int31n(10) == 0 { // abort txn with 10% prob
-				txn.Status = proto.ABORTED
+				txn.Status = roachpb.ABORTED
 			}
 			if log.V(1) {
-				log.Infof("*** RESOLVE index %d; COMMIT=%t", i, txn.Status == proto.COMMITTED)
+				log.Infof("*** RESOLVE index %d; COMMIT=%t", i, txn.Status == roachpb.COMMITTED)
 			}
 			if err := MVCCResolveWriteIntent(engine, ms, key, makeTS(int64(i+1)*1E9, 0), txn); err != nil {
 				t.Fatal(err)
@@ -2344,7 +2344,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		if i%10 == 0 {
 			// Compute the stats manually.
 			iter := engine.NewIterator()
-			iter.Seek(proto.KeyMin)
+			iter.Seek(roachpb.KeyMin)
 			expMS, err := MVCCComputeStats(iter, int64(i+1)*1E9)
 			iter.Close()
 			if err != nil {
@@ -2370,19 +2370,19 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	ts1 := makeTS(1E9, 0)
 	ts2 := makeTS(2E9, 0)
 	ts3 := makeTS(3E9, 0)
-	val1 := proto.Value{Bytes: bytes, Timestamp: &ts1}
-	val2 := proto.Value{Bytes: bytes, Timestamp: &ts2}
-	val3 := proto.Value{Bytes: bytes, Timestamp: &ts3}
+	val1 := roachpb.Value{Bytes: bytes, Timestamp: &ts1}
+	val2 := roachpb.Value{Bytes: bytes, Timestamp: &ts2}
+	val3 := roachpb.Value{Bytes: bytes, Timestamp: &ts3}
 
 	testData := []struct {
-		key       proto.Key
-		vals      []proto.Value
+		key       roachpb.Key
+		vals      []roachpb.Value
 		isDeleted bool // is the most recent value a deletion tombstone?
 	}{
-		{proto.Key("a"), []proto.Value{val1, val2}, false},
-		{proto.Key("a-del"), []proto.Value{val1, val2}, true},
-		{proto.Key("b"), []proto.Value{val1, val2, val3}, false},
-		{proto.Key("b-del"), []proto.Value{val1, val2, val3}, true},
+		{roachpb.Key("a"), []roachpb.Value{val1, val2}, false},
+		{roachpb.Key("a-del"), []roachpb.Value{val1, val2}, true},
+		{roachpb.Key("b"), []roachpb.Value{val1, val2, val3}, false},
+		{roachpb.Key("b-del"), []roachpb.Value{val1, val2, val3}, true},
 	}
 
 	for i := 0; i < 3; i++ {
@@ -2406,7 +2406,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 		}
 	}
-	kvsn, err := Scan(engine, MVCCEncodeKey(proto.KeyMin), MVCCEncodeKey(proto.KeyMax), 0)
+	kvsn, err := Scan(engine, MVCCEncodeKey(roachpb.KeyMin), MVCCEncodeKey(roachpb.KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2420,26 +2420,26 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		}
 	}
 
-	keys := []proto.GCRequest_GCKey{
-		{Key: proto.Key("a"), Timestamp: ts1},
-		{Key: proto.Key("a-del"), Timestamp: ts2},
-		{Key: proto.Key("b"), Timestamp: ts1},
-		{Key: proto.Key("b-del"), Timestamp: ts2},
+	keys := []roachpb.GCRequest_GCKey{
+		{Key: roachpb.Key("a"), Timestamp: ts1},
+		{Key: roachpb.Key("a-del"), Timestamp: ts2},
+		{Key: roachpb.Key("b"), Timestamp: ts1},
+		{Key: roachpb.Key("b-del"), Timestamp: ts2},
 	}
 	if err := MVCCGarbageCollect(engine, ms, keys, ts3); err != nil {
 		t.Fatal(err)
 	}
 
-	expEncKeys := []proto.EncodedKey{
-		MVCCEncodeKey(proto.Key("a")),
-		MVCCEncodeVersionKey(proto.Key("a"), ts2),
-		MVCCEncodeKey(proto.Key("b")),
-		MVCCEncodeVersionKey(proto.Key("b"), ts3),
-		MVCCEncodeVersionKey(proto.Key("b"), ts2),
-		MVCCEncodeKey(proto.Key("b-del")),
-		MVCCEncodeVersionKey(proto.Key("b-del"), ts3),
+	expEncKeys := []roachpb.EncodedKey{
+		MVCCEncodeKey(roachpb.Key("a")),
+		MVCCEncodeVersionKey(roachpb.Key("a"), ts2),
+		MVCCEncodeKey(roachpb.Key("b")),
+		MVCCEncodeVersionKey(roachpb.Key("b"), ts3),
+		MVCCEncodeVersionKey(roachpb.Key("b"), ts2),
+		MVCCEncodeKey(roachpb.Key("b-del")),
+		MVCCEncodeVersionKey(roachpb.Key("b-del"), ts3),
 	}
-	kvs, err := Scan(engine, MVCCEncodeKey(proto.KeyMin), MVCCEncodeKey(proto.KeyMax), 0)
+	kvs, err := Scan(engine, MVCCEncodeKey(roachpb.KeyMin), MVCCEncodeKey(roachpb.KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2459,7 +2459,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 
 	// Verify aggregated stats match computed stats after GC.
 	iter := engine.NewIterator()
-	iter.Seek(proto.KeyMin)
+	iter.Seek(roachpb.KeyMin)
 	expMS, err := MVCCComputeStats(iter, ts3.WallTime)
 	iter.Close()
 	if err != nil {
@@ -2479,17 +2479,17 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 	bytes := []byte("value")
 	ts1 := makeTS(1E9, 0)
 	ts2 := makeTS(2E9, 0)
-	val1 := proto.Value{Bytes: bytes, Timestamp: &ts1}
-	val2 := proto.Value{Bytes: bytes, Timestamp: &ts2}
-	key := proto.Key("a")
-	vals := []proto.Value{val1, val2}
+	val1 := roachpb.Value{Bytes: bytes, Timestamp: &ts1}
+	val2 := roachpb.Value{Bytes: bytes, Timestamp: &ts2}
+	key := roachpb.Key("a")
+	vals := []roachpb.Value{val1, val2}
 	for _, val := range vals {
 		if err := MVCCPut(engine, nil, key, *val.Timestamp, val, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
-	keys := []proto.GCRequest_GCKey{
-		{Key: proto.Key("a"), Timestamp: ts2},
+	keys := []roachpb.GCRequest_GCKey{
+		{Key: roachpb.Key("a"), Timestamp: ts2},
 	}
 	if err := MVCCGarbageCollect(engine, nil, keys, ts2); err == nil {
 		t.Fatal("expected error garbage collecting a non-deleted live value")
@@ -2506,17 +2506,17 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	bytes := []byte("value")
 	ts1 := makeTS(1E9, 0)
 	ts2 := makeTS(2E9, 0)
-	val1 := proto.Value{Bytes: bytes, Timestamp: &ts1}
-	key := proto.Key("a")
+	val1 := roachpb.Value{Bytes: bytes, Timestamp: &ts1}
+	key := roachpb.Key("a")
 	if err := MVCCPut(engine, nil, key, ts1, val1, nil); err != nil {
 		t.Fatal(err)
 	}
-	txn := &proto.Transaction{ID: []byte("txn"), Timestamp: ts2}
+	txn := &roachpb.Transaction{ID: []byte("txn"), Timestamp: ts2}
 	if err := MVCCDelete(engine, nil, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
-	keys := []proto.GCRequest_GCKey{
-		{Key: proto.Key("a"), Timestamp: ts2},
+	keys := []roachpb.GCRequest_GCKey{
+		{Key: roachpb.Key("a"), Timestamp: ts2},
 	}
 	if err := MVCCGarbageCollect(engine, nil, keys, ts2); err == nil {
 		t.Fatal("expected error garbage collecting an intent")
@@ -2581,7 +2581,7 @@ func TestWillOverflow(t *testing.T) {
 func BenchmarkMVCCStats(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
+	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
 
 	ms := MVCCStats{
 		LiveBytes:       1,

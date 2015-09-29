@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -48,11 +48,11 @@ func TestLocalSenderRemoveStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ls := NewLocalSender()
 
-	storeID := proto.StoreID(89)
+	storeID := roachpb.StoreID(89)
 
-	ls.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: storeID}})
+	ls.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: storeID}})
 
-	ls.RemoveStore(&storage.Store{Ident: proto.StoreIdent{StoreID: storeID}})
+	ls.RemoveStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: storeID}})
 
 	if ls.HasStore(storeID) {
 		t.Errorf("expted local sender to remove storeID=%d", storeID)
@@ -68,7 +68,7 @@ func TestLocalSenderGetStoreCount(t *testing.T) {
 
 	expectedCount := 10
 	for i := 0; i < expectedCount; i++ {
-		ls.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: proto.StoreID(i)}})
+		ls.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
 	}
 	if count := ls.GetStoreCount(); count != expectedCount {
 		t.Errorf("expected store count to be %d but was %d", expectedCount, count)
@@ -80,7 +80,7 @@ func TestLocalSenderVisitStores(t *testing.T) {
 	ls := NewLocalSender()
 	numStores := 10
 	for i := 0; i < numStores; i++ {
-		ls.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: proto.StoreID(i)}})
+		ls.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
 	}
 
 	visit := make([]bool, numStores)
@@ -105,7 +105,7 @@ func TestLocalSenderGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ls := NewLocalSender()
 	store := storage.Store{}
-	replica := proto.ReplicaDescriptor{StoreID: store.Ident.StoreID}
+	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
 	s, err := ls.GetStore(replica.StoreID)
 	if s != nil || err == nil {
 		t.Errorf("expected no stores in new local sender")
@@ -135,26 +135,26 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	// Create two new stores with ranges we care about.
 	var e [2]engine.Engine
 	var s [2]*storage.Store
-	var d [2]*proto.RangeDescriptor
+	var d [2]*roachpb.RangeDescriptor
 	ranges := []struct {
-		storeID    proto.StoreID
-		start, end proto.Key
+		storeID    roachpb.StoreID
+		start, end roachpb.Key
 	}{
-		{2, proto.Key(proto.KeyMin), proto.Key("c")},
-		{3, proto.Key("x"), proto.Key("z")},
+		{2, roachpb.Key(roachpb.KeyMin), roachpb.Key("c")},
+		{3, roachpb.Key("x"), roachpb.Key("z")},
 	}
 	for i, rng := range ranges {
-		e[i] = engine.NewInMem(proto.Attributes{}, 1<<20, stopper)
+		e[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 		ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 		defer ctx.Transport.Close()
-		s[i] = storage.NewStore(ctx, e[i], &proto.NodeDescriptor{NodeID: 1})
+		s[i] = storage.NewStore(ctx, e[i], &roachpb.NodeDescriptor{NodeID: 1})
 		s[i].Ident.StoreID = rng.storeID
 
-		d[i] = &proto.RangeDescriptor{
-			RangeID:  proto.RangeID(i),
+		d[i] = &roachpb.RangeDescriptor{
+			RangeID:  roachpb.RangeID(i),
 			StartKey: rng.start,
 			EndKey:   rng.end,
-			Replicas: []proto.ReplicaDescriptor{{StoreID: rng.storeID}},
+			Replicas: []roachpb.ReplicaDescriptor{{StoreID: rng.storeID}},
 		}
 		newRng, err := storage.NewReplica(d[i], s[i])
 		if err != nil {
@@ -166,19 +166,19 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		ls.AddStore(s[i])
 	}
 
-	if _, r, err := ls.lookupReplica(proto.Key("a"), proto.Key("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(roachpb.Key("a"), roachpb.Key("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(proto.Key("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(roachpb.Key("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(proto.Key("b"), proto.Key("d")); r != nil || err == nil {
+	if _, r, err := ls.lookupReplica(roachpb.Key("b"), roachpb.Key("d")); r != nil || err == nil {
 		t.Errorf("expected store 0 and error got %d", r.StoreID)
 	}
-	if _, r, err := ls.lookupReplica(proto.Key("x"), proto.Key("z")); r.StoreID != s[1].Ident.StoreID {
+	if _, r, err := ls.lookupReplica(roachpb.Key("x"), roachpb.Key("z")); r.StoreID != s[1].Ident.StoreID {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(proto.Key("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(roachpb.Key("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
 

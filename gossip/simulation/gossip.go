@@ -78,7 +78,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -100,18 +100,18 @@ var (
 
 // edge is a helper struct which describes an edge in the dot output graph.
 type edge struct {
-	dest    proto.NodeID // Node ID of destination
-	added   bool         // True if edge was recently added
-	deleted bool         // True if edge was recently deleted
+	dest    roachpb.NodeID // Node ID of destination
+	added   bool           // True if edge was recently added
+	deleted bool           // True if edge was recently deleted
 }
 
 // edgeMap is a map from node address to a list of edges. A helper
 // method is provided to simplify adding edges.
-type edgeMap map[proto.NodeID][]edge
+type edgeMap map[roachpb.NodeID][]edge
 
 // addEdge creates a list of edges if one doesn't yet exist for the
 // specified node ID.
-func (em edgeMap) addEdge(nodeID proto.NodeID, e edge) {
+func (em edgeMap) addEdge(nodeID roachpb.NodeID, e edge) {
 	if _, ok := em[nodeID]; !ok {
 		em[nodeID] = make([]edge, 0, 1)
 	}
@@ -188,7 +188,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 		if err != nil {
 			log.Fatal(err)
 		}
-		outgoingMap.addEdge(proto.NodeID(nodeID), e)
+		outgoingMap.addEdge(roachpb.NodeID(nodeID), e)
 		delete(edgeSet, key)
 	}
 

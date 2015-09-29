@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -32,8 +32,8 @@ import (
 )
 
 // makeTS creates a new hybrid logical timestamp.
-func makeTS(nanos int64, logical int32) proto.Timestamp {
-	return proto.Timestamp{
+func makeTS(nanos int64, logical int32) roachpb.Timestamp {
+	return roachpb.Timestamp{
 		WallTime: nanos,
 		Logical:  logical,
 	}
@@ -51,7 +51,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 
 	// Put an empty GC metadata; all that's read from it is last scan nanos.
 	key := keys.RangeGCMetadataKey(tc.rng.Desc().RangeID)
-	if err := engine.MVCCPutProto(tc.rng.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &proto.GCMetadata{}); err != nil {
+	if err := engine.MVCCPutProto(tc.rng.rm.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &roachpb.GCMetadata{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -65,7 +65,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		gcBytesAge  int64
 		intentCount int64
 		intentAge   int64
-		now         proto.Timestamp
+		now         roachpb.Timestamp
 		shouldQ     bool
 		priority    float64
 	}{
@@ -137,19 +137,19 @@ func TestGCQueueProcess(t *testing.T) {
 	ts3 := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)     // 2h old
 	ts4 := makeTS(now-(intentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
 	ts5 := makeTS(now-1E9, 0)                                  // 1s old
-	key1 := proto.Key("a")
-	key2 := proto.Key("b")
-	key3 := proto.Key("c")
-	key4 := proto.Key("d")
-	key5 := proto.Key("e")
-	key6 := proto.Key("f")
-	key7 := proto.Key("g")
-	key8 := proto.Key("h")
-	key9 := proto.Key("i")
+	key1 := roachpb.Key("a")
+	key2 := roachpb.Key("b")
+	key3 := roachpb.Key("c")
+	key4 := roachpb.Key("d")
+	key5 := roachpb.Key("e")
+	key6 := roachpb.Key("f")
+	key7 := roachpb.Key("g")
+	key8 := roachpb.Key("h")
+	key9 := roachpb.Key("i")
 
 	data := []struct {
-		key proto.Key
-		ts  proto.Timestamp
+		key roachpb.Key
+		ts  roachpb.Timestamp
 		del bool
 		txn bool
 	}{
@@ -189,7 +189,7 @@ func TestGCQueueProcess(t *testing.T) {
 			dArgs := deleteArgs(datum.key, tc.rng.Desc().RangeID, tc.store.StoreID())
 			dArgs.Timestamp = datum.ts
 			if datum.txn {
-				dArgs.Txn = newTransaction("test", datum.key, 1, proto.SERIALIZABLE, tc.clock)
+				dArgs.Txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
 				dArgs.Txn.OrigTimestamp = datum.ts
 				dArgs.Txn.Timestamp = datum.ts
 			}
@@ -200,7 +200,7 @@ func TestGCQueueProcess(t *testing.T) {
 			pArgs := putArgs(datum.key, []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
 			pArgs.Timestamp = datum.ts
 			if datum.txn {
-				pArgs.Txn = newTransaction("test", datum.key, 1, proto.SERIALIZABLE, tc.clock)
+				pArgs.Txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
 				pArgs.Txn.OrigTimestamp = datum.ts
 				pArgs.Txn.Timestamp = datum.ts
 			}
@@ -222,23 +222,23 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 
 	expKVs := []struct {
-		key proto.Key
-		ts  proto.Timestamp
+		key roachpb.Key
+		ts  roachpb.Timestamp
 	}{
-		{key1, proto.ZeroTimestamp},
+		{key1, roachpb.ZeroTimestamp},
 		{key1, ts5},
-		{key3, proto.ZeroTimestamp},
+		{key3, roachpb.ZeroTimestamp},
 		{key3, ts5},
 		{key3, ts2},
-		{key4, proto.ZeroTimestamp},
+		{key4, roachpb.ZeroTimestamp},
 		{key4, ts2},
-		{key6, proto.ZeroTimestamp},
+		{key6, roachpb.ZeroTimestamp},
 		{key6, ts5},
 		{key6, ts1},
-		{key7, proto.ZeroTimestamp},
+		{key7, roachpb.ZeroTimestamp},
 		{key7, ts4},
 		{key7, ts2},
-		{key8, proto.ZeroTimestamp},
+		{key8, roachpb.ZeroTimestamp},
 		{key8, ts2},
 	}
 	// Read data directly from engine to avoid intent errors from MVCC.
@@ -318,9 +318,9 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	const now int64 = 48 * 60 * 60 * 1E9 // 2d past the epoch
 	tc.manualClock.Set(now)
 
-	txns := []*proto.Transaction{
-		newTransaction("txn1", proto.Key("0-00000"), 1, proto.SERIALIZABLE, tc.clock),
-		newTransaction("txn2", proto.Key("1-00000"), 1, proto.SERIALIZABLE, tc.clock),
+	txns := []*roachpb.Transaction{
+		newTransaction("txn1", roachpb.Key("0-00000"), 1, roachpb.SERIALIZABLE, tc.clock),
+		newTransaction("txn2", roachpb.Key("1-00000"), 1, roachpb.SERIALIZABLE, tc.clock),
 	}
 	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
 	txns[0].OrigTimestamp = intentResolveTS
@@ -333,7 +333,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		// 5 puts per transaction.
 		// TODO(spencerkimball): benchmark with ~50k.
 		for j := 0; j < 5; j++ {
-			pArgs := putArgs(proto.Key(fmt.Sprintf("%d-%05d", i, j)), []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
+			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%05d", i, j)), []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
 			pArgs.Timestamp = makeTS(1, 0)
 			pArgs.Txn = txns[i]
 			if _, err := sendArg(tc.rng, tc.rng.context(), &pArgs); err != nil {
@@ -355,7 +355,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 	// Iterate through all values to ensure intents have been fully resolved.
 	meta := &engine.MVCCMetadata{}
-	err := tc.store.Engine().Iterate(engine.MVCCEncodeKey(proto.KeyMin), engine.MVCCEncodeKey(proto.KeyMax), func(kv proto.RawKeyValue) (bool, error) {
+	err := tc.store.Engine().Iterate(engine.MVCCEncodeKey(roachpb.KeyMin), engine.MVCCEncodeKey(roachpb.KeyMax), func(kv roachpb.RawKeyValue) (bool, error) {
 		if key, _, isValue, err := engine.MVCCDecodeKey(kv.Key); err != nil {
 			return false, err
 		} else if !isValue {

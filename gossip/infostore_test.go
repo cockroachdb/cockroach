@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -215,10 +215,10 @@ func TestInfoStoreDelta(t *testing.T) {
 // Hops > maxHops.
 func TestInfoStoreDistant(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	nodes := []proto.NodeID{
-		proto.NodeID(1),
-		proto.NodeID(2),
-		proto.NodeID(3),
+	nodes := []roachpb.NodeID{
+		roachpb.NodeID(1),
+		roachpb.NodeID(2),
+		roachpb.NodeID(3),
 	}
 	is := newInfoStore(1, emptyAddr)
 	// Add info from each address, with hop count equal to index+1.
@@ -243,9 +243,9 @@ func TestInfoStoreDistant(t *testing.T) {
 // can be determined.
 func TestLeastUseful(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	nodes := []proto.NodeID{
-		proto.NodeID(1),
-		proto.NodeID(2),
+	nodes := []roachpb.NodeID{
+		roachpb.NodeID(1),
+		roachpb.NodeID(2),
 	}
 	is := newInfoStore(1, emptyAddr)
 

@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"golang.org/x/net/context"
 )
@@ -41,19 +41,19 @@ import (
 // TODO(tschottdorf): Consider returning a new BatchRequest, which has more
 // overhead in the common case of a batch which never needs truncation but is
 // less magical.
-func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to proto.Key) (func(), int, error) {
+func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to roachpb.Key) (func(), int, error) {
 	if !desc.ContainsKey(from) {
 		from = desc.StartKey
 	}
 	if !desc.ContainsKeyRange(desc.StartKey, to) || to == nil {
 		to = desc.EndKey
 	}
-	truncateOne := func(args proto.Request) (bool, []func(), error) {
-		if _, ok := args.(*proto.NoopRequest); ok {
+	truncateOne := func(args roachpb.Request) (bool, []func(), error) {
+		if _, ok := args.(*roachpb.NoopRequest); ok {
 			return true, nil, nil
 		}
 		header := args.Header()
-		if !proto.IsRange(args) {
+		if !roachpb.IsRange(args) {
 			if len(header.EndKey) > 0 {
 				return false, nil, util.Errorf("%T is not a range command, but EndKey is set", args)
 			}
@@ -92,8 +92,8 @@ func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to prot
 		omit, undo, err := truncateOne(arg.GetInner())
 		if omit {
 			numNoop++
-			nReq := &proto.RequestUnion{}
-			if !nReq.SetValue(&proto.NoopRequest{}) {
+			nReq := &roachpb.RequestUnion{}
+			if !nReq.SetValue(&roachpb.NoopRequest{}) {
 				panic("RequestUnion excludes NoopRequest")
 			}
 			oReq := br.Requests[pos]
@@ -112,10 +112,10 @@ func truncate(br *proto.BatchRequest, desc *proto.RangeDescriptor, from, to prot
 }
 
 // SenderFn is a function that implements a Sender.
-type senderFn func(context.Context, proto.BatchRequest) (*proto.BatchResponse, *proto.Error)
+type senderFn func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
 // Send implements batch.Sender.
-func (f senderFn) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (f senderFn) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	return f(ctx, ba)
 }
 
@@ -138,23 +138,23 @@ func newChunkingSender(f senderFn) client.Sender {
 // that you're multi-range. In those cases, the wrapped sender should return an
 // error so that we split and retry once the chunk which contains
 // EndTransaction (i.e. the last one).
-func (cs *chunkingSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(ba.Requests) < 1 {
 		panic("empty batch")
 	}
 
 	// Deterministically create ClientCmdIDs for all parts of the batch if
 	// a CmdID is already set (otherwise, leave them empty).
-	var nextID func() proto.ClientCmdID
-	empty := proto.ClientCmdID{}
+	var nextID func() roachpb.ClientCmdID
+	empty := roachpb.ClientCmdID{}
 	if empty == ba.CmdID {
-		nextID = func() proto.ClientCmdID {
+		nextID = func() roachpb.ClientCmdID {
 			return empty
 		}
 	} else {
 		rng := rand.New(rand.NewSource(ba.CmdID.Random))
 		id := ba.CmdID
-		nextID = func() proto.ClientCmdID {
+		nextID = func() roachpb.ClientCmdID {
 			curID := id             // copy
 			id.Random = rng.Int63() // adjust for next call
 			return curID
@@ -162,7 +162,7 @@ func (cs *chunkingSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 	}
 
 	parts := ba.Split()
-	var rplChunks []*proto.BatchResponse
+	var rplChunks []*roachpb.BatchResponse
 	for _, part := range parts {
 		ba.Requests = part
 		ba.CmdID = nextID()
@@ -190,8 +190,8 @@ func (cs *chunkingSender) Send(ctx context.Context, ba proto.BatchRequest) (*pro
 // affect keys larger than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func prev(ba proto.BatchRequest, k proto.Key) proto.Key {
-	candidate := proto.KeyMin
+func prev(ba roachpb.BatchRequest, k roachpb.Key) roachpb.Key {
+	candidate := roachpb.KeyMin
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
 		addr := keys.KeyAddress(h.Key)
@@ -221,8 +221,8 @@ func prev(ba proto.BatchRequest, k proto.Key) proto.Key {
 // affect keys less than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func next(ba proto.BatchRequest, k proto.Key) proto.Key {
-	candidate := proto.KeyMax
+func next(ba roachpb.BatchRequest, k roachpb.Key) roachpb.Key {
+	candidate := roachpb.KeyMax
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
 		addr := keys.KeyAddress(h.Key)

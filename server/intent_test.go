@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -74,14 +74,14 @@ func TestIntentResolution(t *testing.T) {
 		var result []string
 		var mu sync.Mutex
 		closer := make(chan struct{}, 2)
-		storage.TestingCommandFilter = func(args proto.Request) error {
+		storage.TestingCommandFilter = func(args roachpb.Request) error {
 			mu.Lock()
 			defer mu.Unlock()
 			header := args.Header()
 			switch args.(type) {
-			case *proto.ResolveIntentRequest:
+			case *roachpb.ResolveIntentRequest:
 				result = append(result, string(header.Key))
-			case *proto.ResolveIntentRangeRequest:
+			case *roachpb.ResolveIntentRangeRequest:
 				result = append(result, fmt.Sprintf("%s-%s", header.Key, header.EndKey))
 			}
 			if len(result) == len(tc.exp) {

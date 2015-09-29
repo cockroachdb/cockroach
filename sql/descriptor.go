@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
@@ -43,7 +43,7 @@ var _ descriptorProto = &TableDescriptor{}
 // DatabaseKey and TableKey. It is used to easily get the
 // descriptor key and plain name.
 type descriptorKey interface {
-	Key() proto.Key
+	Key() roachpb.Key
 	Name() string
 }
 

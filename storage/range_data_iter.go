@@ -19,7 +19,7 @@ package storage
 
 import (
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -27,7 +27,7 @@ import (
 
 // keyRange is a helper struct for the rangeDataIterator.
 type keyRange struct {
-	start, end proto.EncodedKey
+	start, end roachpb.EncodedKey
 }
 
 // rangeDataIterator provides a complete iteration over all key / value
@@ -43,12 +43,12 @@ type rangeDataIterator struct {
 	iter     engine.Iterator
 }
 
-func newRangeDataIterator(d *proto.RangeDescriptor, e engine.Engine) *rangeDataIterator {
+func newRangeDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *rangeDataIterator {
 	// The first range in the keyspace starts at KeyMin, which includes the node-local
 	// space. We need the original StartKey to find the range metadata, but the
 	// actual data starts at LocalMax.
 	dataStartKey := d.StartKey
-	if d.StartKey.Equal(proto.KeyMin) {
+	if d.StartKey.Equal(roachpb.KeyMin) {
 		dataStartKey = keys.LocalMax
 	}
 	ri := &rangeDataIterator{
@@ -98,7 +98,7 @@ func (ri *rangeDataIterator) Next() {
 }
 
 // Key returns the current Key for the iteration if valid.
-func (ri *rangeDataIterator) Key() proto.EncodedKey {
+func (ri *rangeDataIterator) Key() roachpb.EncodedKey {
 	return ri.iter.Key()
 }
 

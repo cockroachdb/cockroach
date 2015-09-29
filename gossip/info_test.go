@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -31,9 +31,9 @@ func newInfo(val float64) info {
 
 	return info{
 		Info: Info{
-			Value: proto.Value{
+			Value: roachpb.Value{
 				Bytes: encoding.EncodeFloat(nil, val),
-				Timestamp: &proto.Timestamp{
+				Timestamp: &roachpb.Timestamp{
 					WallTime: now.UnixNano(),
 				},
 			},
@@ -58,9 +58,9 @@ func TestIsFresh(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	const seq = 10
 
-	node1 := proto.NodeID(1)
-	node2 := proto.NodeID(2)
-	node3 := proto.NodeID(3)
+	node1 := roachpb.NodeID(1)
+	node2 := roachpb.NodeID(2)
+	node3 := roachpb.NodeID(3)
 	i := newInfo(float64(1))
 	i.NodeID = node1
 	i.peerID = node2

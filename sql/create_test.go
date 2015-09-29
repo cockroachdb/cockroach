@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -67,7 +67,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
-	start := proto.Key(keys.MakeTablePrefix(uint32(sql.NamespaceTable.ID)))
+	start := roachpb.Key(keys.MakeTablePrefix(uint32(sql.NamespaceTable.ID)))
 	if kvs, err := kvDB.Scan(start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {

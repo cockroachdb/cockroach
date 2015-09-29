@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 )
 
 var (
@@ -268,7 +268,7 @@ func (d DString) Compare(other Datum) int {
 
 // Next implements the Datum interface.
 func (d DString) Next() Datum {
-	return DString(proto.Key(d).Next())
+	return DString(roachpb.Key(d).Next())
 }
 
 // IsMax implements the Datum interface.
@@ -315,7 +315,7 @@ func (d DBytes) Compare(other Datum) int {
 
 // Next implements the Datum interface.
 func (d DBytes) Next() Datum {
-	return DBytes(proto.Key(d).Next())
+	return DBytes(roachpb.Key(d).Next())
 }
 
 // IsMax implements the Datum interface.

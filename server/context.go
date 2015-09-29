@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -107,7 +107,7 @@ type Context struct {
 	Engines []engine.Engine
 
 	// NodeAttributes is the parsed representation of Attrs.
-	NodeAttributes proto.Attributes
+	NodeAttributes roachpb.Attributes
 
 	// GossipBootstrapResolvers is a list of gossip resolvers used
 	// to find bootstrap nodes for connecting to the gossip network.
@@ -247,12 +247,12 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error)
 // parseAttributes parses a colon-separated list of strings,
 // filtering empty strings (i.e. "::" will yield no attributes.
 // Returns the list of strings as Attributes.
-func parseAttributes(attrsStr string) proto.Attributes {
+func parseAttributes(attrsStr string) roachpb.Attributes {
 	var filtered []string
 	for _, attr := range strings.Split(attrsStr, ":") {
 		if len(attr) != 0 {
 			filtered = append(filtered, attr)
 		}
 	}
-	return proto.Attributes{Attrs: filtered}
+	return roachpb.Attributes{Attrs: filtered}
 }

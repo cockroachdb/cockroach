@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -33,8 +33,8 @@ import (
 )
 
 type metaRecord struct {
-	key  proto.Key
-	desc *proto.RangeDescriptor
+	key  roachpb.Key
+	desc *roachpb.RangeDescriptor
 }
 type metaSlice []metaRecord
 
@@ -43,11 +43,11 @@ func (ms metaSlice) Len() int           { return len(ms) }
 func (ms metaSlice) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
 func (ms metaSlice) Less(i, j int) bool { return ms[i].key.Less(ms[j].key) }
 
-func meta1Key(key proto.Key) proto.Key {
+func meta1Key(key roachpb.Key) roachpb.Key {
 	return keys.MakeKey(keys.Meta1Prefix, key)
 }
 
-func meta2Key(key proto.Key) proto.Key {
+func meta2Key(key roachpb.Key) roachpb.Key {
 	return keys.MakeKey(keys.Meta2Prefix, key)
 }
 
@@ -63,58 +63,58 @@ func TestUpdateRangeAddressing(t *testing.T) {
 	// expect to be removed.
 	testCases := []struct {
 		split                   bool
-		leftStart, leftEnd      proto.Key
-		rightStart, rightEnd    proto.Key
-		leftExpNew, rightExpNew []proto.Key
+		leftStart, leftEnd      roachpb.Key
+		rightStart, rightEnd    roachpb.Key
+		leftExpNew, rightExpNew []roachpb.Key
 	}{
 		// Start out with whole range.
-		{false, proto.KeyMin, proto.KeyMax, proto.KeyMin, proto.KeyMax,
-			[]proto.Key{}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.KeyMax)}},
+		{false, roachpb.KeyMin, roachpb.KeyMax, roachpb.KeyMin, roachpb.KeyMax,
+			[]roachpb.Key{}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.KeyMax)}},
 		// Split KeyMin-KeyMax at key "a".
-		{true, proto.KeyMin, proto.Key("a"), proto.Key("a"), proto.KeyMax,
-			[]proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.Key("a"))}, []proto.Key{meta2Key(proto.KeyMax)}},
+		{true, roachpb.KeyMin, roachpb.Key("a"), roachpb.Key("a"), roachpb.KeyMax,
+			[]roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}, []roachpb.Key{meta2Key(roachpb.KeyMax)}},
 		// Split "a"-KeyMax at key "z".
-		{true, proto.Key("a"), proto.Key("z"), proto.Key("z"), proto.KeyMax,
-			[]proto.Key{meta2Key(proto.Key("z"))}, []proto.Key{meta2Key(proto.KeyMax)}},
+		{true, roachpb.Key("a"), roachpb.Key("z"), roachpb.Key("z"), roachpb.KeyMax,
+			[]roachpb.Key{meta2Key(roachpb.Key("z"))}, []roachpb.Key{meta2Key(roachpb.KeyMax)}},
 		// Split "a"-"z" at key "m".
-		{true, proto.Key("a"), proto.Key("m"), proto.Key("m"), proto.Key("z"),
-			[]proto.Key{meta2Key(proto.Key("m"))}, []proto.Key{meta2Key(proto.Key("z"))}},
+		{true, roachpb.Key("a"), roachpb.Key("m"), roachpb.Key("m"), roachpb.Key("z"),
+			[]roachpb.Key{meta2Key(roachpb.Key("m"))}, []roachpb.Key{meta2Key(roachpb.Key("z"))}},
 		// Split KeyMin-"a" at meta2(m).
-		{true, proto.KeyMin, keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("m")), proto.Key("a"),
-			[]proto.Key{meta1Key(proto.Key("m"))}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.Key("a"))}},
+		{true, roachpb.KeyMin, keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("m")), roachpb.Key("a"),
+			[]roachpb.Key{meta1Key(roachpb.Key("m"))}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
 		// Split meta2(m)-"a" at meta2(z).
-		{true, keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("z")), keys.RangeMetaKey(proto.Key("z")), proto.Key("a"),
-			[]proto.Key{meta1Key(proto.Key("z"))}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.Key("a"))}},
+		{true, keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("z")), keys.RangeMetaKey(roachpb.Key("z")), roachpb.Key("a"),
+			[]roachpb.Key{meta1Key(roachpb.Key("z"))}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
 		// Split meta2(m)-meta2(z) at meta2(r).
-		{true, keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("r")), keys.RangeMetaKey(proto.Key("r")), keys.RangeMetaKey(proto.Key("z")),
-			[]proto.Key{meta1Key(proto.Key("r"))}, []proto.Key{meta1Key(proto.Key("z"))}},
+		{true, keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("r")), keys.RangeMetaKey(roachpb.Key("r")), keys.RangeMetaKey(roachpb.Key("z")),
+			[]roachpb.Key{meta1Key(roachpb.Key("r"))}, []roachpb.Key{meta1Key(roachpb.Key("z"))}},
 
 		// Now, merge all of our splits backwards...
 
 		// Merge meta2(m)-meta2(z).
-		{false, keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("r")), keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("z")),
-			[]proto.Key{meta1Key(proto.Key("r"))}, []proto.Key{meta1Key(proto.Key("z"))}},
+		{false, keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("r")), keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("z")),
+			[]roachpb.Key{meta1Key(roachpb.Key("r"))}, []roachpb.Key{meta1Key(roachpb.Key("z"))}},
 		// Merge meta2(m)-"a".
-		{false, keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("z")), keys.RangeMetaKey(proto.Key("m")), proto.Key("a"),
-			[]proto.Key{meta1Key(proto.Key("z"))}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.Key("a"))}},
+		{false, keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("z")), keys.RangeMetaKey(roachpb.Key("m")), roachpb.Key("a"),
+			[]roachpb.Key{meta1Key(roachpb.Key("z"))}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
 		// Merge KeyMin-"a".
-		{false, proto.KeyMin, keys.RangeMetaKey(proto.Key("m")), proto.KeyMin, proto.Key("a"),
-			[]proto.Key{meta1Key(proto.Key("m"))}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.Key("a"))}},
+		{false, roachpb.KeyMin, keys.RangeMetaKey(roachpb.Key("m")), roachpb.KeyMin, roachpb.Key("a"),
+			[]roachpb.Key{meta1Key(roachpb.Key("m"))}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
 		// Merge "a"-"z".
-		{false, proto.Key("a"), proto.Key("m"), proto.Key("a"), proto.Key("z"),
-			[]proto.Key{meta2Key(proto.Key("m"))}, []proto.Key{meta2Key(proto.Key("z"))}},
+		{false, roachpb.Key("a"), roachpb.Key("m"), roachpb.Key("a"), roachpb.Key("z"),
+			[]roachpb.Key{meta2Key(roachpb.Key("m"))}, []roachpb.Key{meta2Key(roachpb.Key("z"))}},
 		// Merge "a"-KeyMax.
-		{false, proto.Key("a"), proto.Key("z"), proto.Key("a"), proto.KeyMax,
-			[]proto.Key{meta2Key(proto.Key("z"))}, []proto.Key{meta2Key(proto.KeyMax)}},
+		{false, roachpb.Key("a"), roachpb.Key("z"), roachpb.Key("a"), roachpb.KeyMax,
+			[]roachpb.Key{meta2Key(roachpb.Key("z"))}, []roachpb.Key{meta2Key(roachpb.KeyMax)}},
 		// Merge KeyMin-KeyMax.
-		{false, proto.KeyMin, proto.Key("a"), proto.KeyMin, proto.KeyMax,
-			[]proto.Key{meta2Key(proto.Key("a"))}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.KeyMax)}},
+		{false, roachpb.KeyMin, roachpb.Key("a"), roachpb.KeyMin, roachpb.KeyMax,
+			[]roachpb.Key{meta2Key(roachpb.Key("a"))}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.KeyMax)}},
 	}
 	expMetas := metaSlice{}
 
 	for i, test := range testCases {
-		left := &proto.RangeDescriptor{RangeID: proto.RangeID(i * 2), StartKey: test.leftStart, EndKey: test.leftEnd}
-		right := &proto.RangeDescriptor{RangeID: proto.RangeID(i*2 + 1), StartKey: test.rightStart, EndKey: test.rightEnd}
+		left := &roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i * 2), StartKey: test.leftStart, EndKey: test.leftEnd}
+		right := &roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i*2 + 1), StartKey: test.rightStart, EndKey: test.rightEnd}
 		b := &client.Batch{}
 		if test.split {
 			if err := splitRangeAddressing(b, left, right); err != nil {
@@ -129,13 +129,13 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.
-		kvs, _, err := engine.MVCCScan(store.Engine(), keys.MetaPrefix, keys.MetaMax, 0, proto.MaxTimestamp, true, nil)
+		kvs, _, err := engine.MVCCScan(store.Engine(), keys.MetaPrefix, keys.MetaMax, 0, roachpb.MaxTimestamp, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		metas := metaSlice{}
 		for _, kv := range kvs {
-			scannedDesc := &proto.RangeDescriptor{}
+			scannedDesc := &roachpb.RangeDescriptor{}
 			if err := gogoproto.Unmarshal(kv.Value.Bytes, scannedDesc); err != nil {
 				t.Fatal(err)
 			}
@@ -144,7 +144,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 
 		// Continue to build up the expected metas slice, replacing any earlier
 		// version of same key.
-		addOrRemoveNew := func(keys []proto.Key, desc *proto.RangeDescriptor, add bool) {
+		addOrRemoveNew := func(keys []roachpb.Key, desc *roachpb.RangeDescriptor, add bool) {
 			for _, n := range keys {
 				found := -1
 				for i := range expMetas {
@@ -203,8 +203,8 @@ func TestUpdateRangeAddressing(t *testing.T) {
 // of meta1 records.
 func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	left := &proto.RangeDescriptor{StartKey: proto.KeyMin, EndKey: meta1Key(proto.Key("a"))}
-	right := &proto.RangeDescriptor{StartKey: meta1Key(proto.Key("a")), EndKey: proto.KeyMax}
+	left := &roachpb.RangeDescriptor{StartKey: roachpb.KeyMin, EndKey: meta1Key(roachpb.Key("a"))}
+	right := &roachpb.RangeDescriptor{StartKey: meta1Key(roachpb.Key("a")), EndKey: roachpb.KeyMax}
 	if err := splitRangeAddressing(&client.Batch{}, left, right); err == nil {
 		t.Error("expected failure trying to update addressing records for meta1 split")
 	}

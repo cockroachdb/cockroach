@@ -22,16 +22,16 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 var (
-	testSeries1 = []*proto.InternalTimeSeriesData{
+	testSeries1 = []*roachpb.InternalTimeSeriesData{
 		{
 			StartTimestampNanos: 0,
 			SampleDurationNanos: 10,
-			Samples: []*proto.InternalTimeSeriesSample{
+			Samples: []*roachpb.InternalTimeSeriesSample{
 				{
 					Offset: 0,
 					Count:  1,
@@ -52,7 +52,7 @@ var (
 		{
 			StartTimestampNanos: 80,
 			SampleDurationNanos: 10,
-			Samples: []*proto.InternalTimeSeriesSample{
+			Samples: []*roachpb.InternalTimeSeriesSample{
 				{
 					Offset: 1,
 					Count:  3,
@@ -66,11 +66,11 @@ var (
 			},
 		},
 	}
-	testSeries2 = []*proto.InternalTimeSeriesData{
+	testSeries2 = []*roachpb.InternalTimeSeriesData{
 		{
 			StartTimestampNanos: 30,
 			SampleDurationNanos: 10,
-			Samples: []*proto.InternalTimeSeriesSample{
+			Samples: []*roachpb.InternalTimeSeriesSample{
 				{
 					Offset: 0,
 					Count:  1,
@@ -244,7 +244,7 @@ func (tm *testModel) assertQuery(name string, agg *TimeSeriesQueryAggregator,
 			}
 
 			// Add data from the key to the correct dataSpan.
-			data, err := proto.InternalTimeSeriesDataFromValue(value)
+			data, err := roachpb.InternalTimeSeriesDataFromValue(value)
 			if err != nil {
 				tm.t.Fatal(err)
 			}

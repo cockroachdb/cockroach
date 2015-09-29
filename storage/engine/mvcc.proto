@@ -19,7 +19,7 @@ syntax = "proto2";
 package cockroach.storage.engine;
 option go_package = "engine";
 
-import "cockroach/proto/data.proto";
+import "cockroach/roachpb/data.proto";
 import "gogoproto/gogo.proto";
 
 option (gogoproto.sizer_all) = true;
@@ -34,14 +34,14 @@ message MVCCValue {
   // be nil.
   optional bool deleted = 1 [(gogoproto.nullable) = false];
   // The value. Nil if deleted is true; not nil otherwise.
-  optional proto.Value value = 2;
+  optional roachpb.Value value = 2;
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 message MVCCMetadata {
-  optional proto.Transaction txn = 1;
+  optional roachpb.Transaction txn = 1;
   // The timestamp of the most recent versioned value.
-  optional proto.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  optional roachpb.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   // Is the most recent value a deletion tombstone?
   optional bool deleted = 3 [(gogoproto.nullable) = false];
   // The size in bytes of the most recent encoded key.
@@ -53,7 +53,7 @@ message MVCCMetadata {
   // and subsequent version rows. If timestamp == (0, 0), then there
   // is only a single MVCC metadata row with value inlined, and with
   // empty timestamp, key_bytes, and val_bytes.
-  optional proto.Value value = 6;
+  optional roachpb.Value value = 6;
 }
 
 // MVCCStats tracks byte and instance counts for:

@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -96,7 +96,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tablePrefix = append(tablePrefix, keys.TableDataPrefix...)
 	tablePrefix = encoding.EncodeUvarint(tablePrefix, uint64(tbDesc.ID))
 
-	tableStartKey := proto.Key(tablePrefix)
+	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)
@@ -188,7 +188,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	indexPrefix := sql.MakeIndexKeyPrefix(desc.ID, idx.ID)
 
-	indexStartKey := proto.Key(indexPrefix)
+	indexStartKey := roachpb.Key(indexPrefix)
 	indexEndKey := indexStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
 		t.Fatal(err)
@@ -264,7 +264,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tablePrefix = append(tablePrefix, keys.TableDataPrefix...)
 	tablePrefix = encoding.EncodeUvarint(tablePrefix, uint64(desc.ID))
 
-	tableStartKey := proto.Key(tablePrefix)
+	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)

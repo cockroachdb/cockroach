@@ -24,7 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -33,8 +33,8 @@ import (
 
 // A LocalSender provides methods to access a collection of local stores.
 type LocalSender struct {
-	mu       sync.RWMutex                     // Protects storeMap and addrs
-	storeMap map[proto.StoreID]*storage.Store // Map from StoreID to Store
+	mu       sync.RWMutex                       // Protects storeMap and addrs
+	storeMap map[roachpb.StoreID]*storage.Store // Map from StoreID to Store
 }
 
 var _ client.Sender = &LocalSender{}
@@ -44,7 +44,7 @@ var _ rangeDescriptorDB = &LocalSender{}
 // a collection of stores.
 func NewLocalSender() *LocalSender {
 	return &LocalSender{
-		storeMap: map[proto.StoreID]*storage.Store{},
+		storeMap: map[roachpb.StoreID]*storage.Store{},
 	}
 }
 
@@ -56,7 +56,7 @@ func (ls *LocalSender) GetStoreCount() int {
 }
 
 // HasStore returns true if the specified store is owned by this LocalSender.
-func (ls *LocalSender) HasStore(storeID proto.StoreID) bool {
+func (ls *LocalSender) HasStore(storeID roachpb.StoreID) bool {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	_, ok := ls.storeMap[storeID]
@@ -65,7 +65,7 @@ func (ls *LocalSender) HasStore(storeID proto.StoreID) bool {
 
 // GetStore looks up the store by store ID. Returns an error
 // if not found.
-func (ls *LocalSender) GetStore(storeID proto.StoreID) (*storage.Store, error) {
+func (ls *LocalSender) GetStore(storeID roachpb.StoreID) (*storage.Store, error) {
 	ls.mu.RLock()
 	store, ok := ls.storeMap[storeID]
 	ls.mu.RUnlock()
@@ -110,7 +110,7 @@ func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
 // store map if specified by the request; otherwise, the command is being
 // executed locally, and the replica is determined via lookup through each
 // store's LookupRange method. The latter path is taken only by unit tests.
-func (ls *LocalSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (ls *LocalSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	trace := tracer.FromCtx(ctx)
 	var store *storage.Store
 	var err error
@@ -118,8 +118,8 @@ func (ls *LocalSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
 	if ba.RangeID == 0 || ba.Replica.StoreID == 0 {
-		var repl *proto.ReplicaDescriptor
-		var rangeID proto.RangeID
+		var repl *roachpb.ReplicaDescriptor
+		var rangeID roachpb.RangeID
 		rangeID, repl, err = ls.lookupReplica(ba.Key, ba.EndKey)
 		if err == nil {
 			ba.RangeID = rangeID
@@ -135,9 +135,9 @@ func (ls *LocalSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.
 		store, err = ls.GetStore(ba.Replica.StoreID)
 	}
 
-	var br *proto.BatchResponse
+	var br *roachpb.BatchResponse
 	if err != nil {
-		return nil, proto.NewError(err)
+		return nil, roachpb.NewError(err)
 	}
 	// For calls that read data within a txn, we can avoid uncertainty
 	// related retries in certain situations. If the node is in
@@ -151,7 +151,7 @@ func (ls *LocalSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.
 	}
 	br, pErr := store.Send(ctx, ba)
 	if br != nil && br.Error != nil {
-		panic(proto.ErrorUnexpectedlySet(store, br))
+		panic(roachpb.ErrorUnexpectedlySet(store, br))
 	}
 	return br, pErr
 }
@@ -161,7 +161,7 @@ func (ls *LocalSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.
 // Returns RangeID and replica on success; RangeKeyMismatch error
 // if not found.
 // This is only for testing usage; performance doesn't matter.
-func (ls *LocalSender) lookupReplica(start, end proto.Key) (rangeID proto.RangeID, replica *proto.ReplicaDescriptor, err error) {
+func (ls *LocalSender) lookupReplica(start, end roachpb.Key) (rangeID roachpb.RangeID, replica *roachpb.ReplicaDescriptor, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	var rng *storage.Replica
@@ -183,15 +183,15 @@ func (ls *LocalSender) lookupReplica(start, end proto.Key) (rangeID proto.RangeI
 			"range %+v exists on additional store: %+v", rng, store)
 	}
 	if replica == nil {
-		err = proto.NewRangeKeyMismatchError(start, end, nil)
+		err = roachpb.NewRangeKeyMismatchError(start, end, nil)
 	}
 	return rangeID, replica, err
 }
 
 // firstRange implements the rangeDescriptorDB interface. It returns the
 // range descriptor which contains KeyMin.
-func (ls *LocalSender) firstRange() (*proto.RangeDescriptor, error) {
-	_, replica, err := ls.lookupReplica(proto.KeyMin, nil)
+func (ls *LocalSender) firstRange() (*roachpb.RangeDescriptor, error) {
+	_, replica, err := ls.lookupReplica(roachpb.KeyMin, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func (ls *LocalSender) firstRange() (*proto.RangeDescriptor, error) {
 		return nil, err
 	}
 
-	rpl := store.LookupReplica(proto.KeyMin, nil)
+	rpl := store.LookupReplica(roachpb.KeyMin, nil)
 	if rpl == nil {
 		panic("firstRange found no first range")
 	}
@@ -209,13 +209,13 @@ func (ls *LocalSender) firstRange() (*proto.RangeDescriptor, error) {
 
 // rangeLookup implements the rangeDescriptorDB interface. It looks up
 // the descriptors for the given (meta) key.
-func (ls *LocalSender) rangeLookup(key proto.Key, options lookupOptions, _ *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
-	ba := proto.BatchRequest{}
-	ba.ReadConsistency = proto.INCONSISTENT
-	ba.Add(&proto.RangeLookupRequest{
-		RequestHeader: proto.RequestHeader{
+func (ls *LocalSender) rangeLookup(key roachpb.Key, options lookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
+	ba := roachpb.BatchRequest{}
+	ba.ReadConsistency = roachpb.INCONSISTENT
+	ba.Add(&roachpb.RangeLookupRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:             key,
-			ReadConsistency: proto.INCONSISTENT,
+			ReadConsistency: roachpb.INCONSISTENT,
 		},
 		MaxRanges:       1,
 		ConsiderIntents: options.considerIntents,
@@ -225,5 +225,5 @@ func (ls *LocalSender) rangeLookup(key proto.Key, options lookupOptions, _ *prot
 	if pErr != nil {
 		return nil, pErr.GoError()
 	}
-	return br.Responses[0].GetInner().(*proto.RangeLookupResponse).Ranges, nil
+	return br.Responses[0].GetInner().(*roachpb.RangeLookupResponse).Ranges, nil
 }

@@ -21,7 +21,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -34,8 +34,8 @@ import (
 // components.
 type StoreStatusMonitor struct {
 	rangeDataAccumulator
-	ID        proto.StoreID
-	desc      *proto.StoreDescriptor
+	ID        roachpb.StoreID
+	desc      *roachpb.StoreDescriptor
 	startedAt int64
 
 	// replication counts.
@@ -52,8 +52,8 @@ type StoreStatusMonitor struct {
 // for passing event feed data to these subset structures for accumulation.
 type NodeStatusMonitor struct {
 	sync.RWMutex
-	stores     map[proto.StoreID]*StoreStatusMonitor
-	desc       proto.NodeDescriptor
+	stores     map[roachpb.StoreID]*StoreStatusMonitor
+	desc       roachpb.NodeDescriptor
 	startedAt  int64
 	callCount  int64
 	callErrors int64
@@ -62,13 +62,13 @@ type NodeStatusMonitor struct {
 // NewNodeStatusMonitor initializes a new NodeStatusMonitor instance.
 func NewNodeStatusMonitor() *NodeStatusMonitor {
 	return &NodeStatusMonitor{
-		stores: make(map[proto.StoreID]*StoreStatusMonitor),
+		stores: make(map[roachpb.StoreID]*StoreStatusMonitor),
 	}
 }
 
 // GetStoreMonitor is a helper method which retrieves the StoreStatusMonitor for the
 // given StoreID, creating it if it does not already exist.
-func (nsm *NodeStatusMonitor) GetStoreMonitor(id proto.StoreID) *StoreStatusMonitor {
+func (nsm *NodeStatusMonitor) GetStoreMonitor(id roachpb.StoreID) *StoreStatusMonitor {
 	nsm.RLock()
 	s, ok := nsm.stores[id]
 	nsm.RUnlock()
@@ -242,7 +242,7 @@ type rangeDataAccumulator struct {
 	// a scan. The seenScan collection is used to properly handle
 	// UpdateRangeEvents in this case.
 	isScanning bool
-	seenScan   map[proto.RangeID]struct{}
+	seenScan   map[roachpb.RangeID]struct{}
 }
 
 func (rda *rangeDataAccumulator) registerRange(event *storage.RegisterRangeEvent) {
@@ -298,7 +298,7 @@ func (rda *rangeDataAccumulator) beginScanRanges(event *storage.BeginScanRangesE
 	rda.isScanning = true
 	rda.stats = engine.MVCCStats{}
 	rda.rangeCount = 0
-	rda.seenScan = make(map[proto.RangeID]struct{})
+	rda.seenScan = make(map[roachpb.RangeID]struct{})
 }
 
 func (rda *rangeDataAccumulator) endScanRanges(event *storage.EndScanRangesEvent) {

@@ -18,12 +18,12 @@
 package gossip
 
 import (
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 )
 
 type info struct {
 	Info
-	peerID proto.NodeID
+	peerID roachpb.NodeID
 	seq    int64
 }
 
@@ -35,7 +35,7 @@ func (i *info) expired(now int64) bool {
 // isFresh returns true if the info has a sequence number newer
 // than seq and wasn't either passed directly or originated from
 // the same node.
-func (i *info) isFresh(nodeID proto.NodeID, seq int64) bool {
+func (i *info) isFresh(nodeID roachpb.NodeID, seq int64) bool {
 	if i.seq <= seq {
 		return false
 	}

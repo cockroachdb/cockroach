@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -48,7 +48,7 @@ type callback struct {
 // infoStores are not thread safe.
 type infoStore struct {
 	Infos     infoMap             `json:"infos,omitempty"` // Map from key to info
-	NodeID    proto.NodeID        `json:"-"`               // Owning node's ID
+	NodeID    roachpb.NodeID      `json:"-"`               // Owning node's ID
 	NodeAddr  util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
 	MaxSeq    int64               `json:"-"`               // Maximum sequence number inserted
 	seqGen    int64               // Sequence generator incremented each time info is added
@@ -100,7 +100,7 @@ var (
 )
 
 // newInfoStore allocates and returns a new infoStore.
-func newInfoStore(nodeID proto.NodeID, nodeAddr util.UnresolvedAddr) infoStore {
+func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr) infoStore {
 	return infoStore{
 		Infos:    make(infoMap),
 		NodeID:   nodeID,
@@ -120,9 +120,9 @@ func (is *infoStore) newInfo(val []byte, ttl time.Duration) *info {
 
 	return &info{
 		Info: Info{
-			Value: proto.Value{
+			Value: roachpb.Value{
 				Bytes: val,
-				Timestamp: &proto.Timestamp{
+				Timestamp: &roachpb.Timestamp{
 					WallTime: now,
 				},
 			},
@@ -255,7 +255,7 @@ func (is *infoStore) visitInfos(visitInfo func(string, *info) error) error {
 // store's sequence generator. All hop distances on infos are
 // incremented to indicate they've arrived from an external source.
 // Returns the count of "fresh" infos in the provided delta.
-func (is *infoStore) combine(infos map[string]*Info, nodeID proto.NodeID) int {
+func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) int {
 	var freshCount int
 	for key, infoProto := range infos {
 		i := &info{
@@ -280,7 +280,7 @@ func (is *infoStore) combine(infos map[string]*Info, nodeID proto.NodeID) int {
 // from node requesting delta are ignored.
 //
 // Returns nil if there are no deltas.
-func (is *infoStore) delta(nodeID proto.NodeID, seq int64) map[string]*Info {
+func (is *infoStore) delta(nodeID roachpb.NodeID, seq int64) map[string]*Info {
 	infos := make(map[string]*Info)
 
 	if seq < is.MaxSeq {
@@ -315,8 +315,8 @@ func (is *infoStore) distant(maxHops uint32) nodeSet {
 
 // leastUseful determines which node ID from amongst the set is
 // currently contributing the least. Returns 0 if nodes is empty.
-func (is *infoStore) leastUseful(nodes nodeSet) proto.NodeID {
-	contrib := make(map[proto.NodeID]int, nodes.len())
+func (is *infoStore) leastUseful(nodes nodeSet) roachpb.NodeID {
+	contrib := make(map[roachpb.NodeID]int, nodes.len())
 	for node := range nodes.nodes {
 		contrib[node] = 0
 	}
@@ -328,7 +328,7 @@ func (is *infoStore) leastUseful(nodes nodeSet) proto.NodeID {
 	}
 
 	least := math.MaxInt32
-	var leastNode proto.NodeID
+	var leastNode roachpb.NodeID
 	for id, count := range contrib {
 		if nodes.hasNode(id) {
 			if count < least {

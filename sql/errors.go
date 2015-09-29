@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
@@ -44,7 +44,7 @@ func (e errUniquenessConstraintViolation) Error() string {
 }
 
 func convertBatchError(tableDesc *TableDescriptor, b client.Batch, err error) error {
-	iErr, ok := err.(proto.IndexedError)
+	iErr, ok := err.(roachpb.IndexedError)
 	if !ok {
 		return err
 	}
@@ -56,7 +56,7 @@ func convertBatchError(tableDesc *TableDescriptor, b client.Batch, err error) er
 		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
 	}
 	result := b.Results[index]
-	if _, ok := err.(*proto.ConditionFailedError); ok {
+	if _, ok := err.(*roachpb.ConditionFailedError); ok {
 		for _, row := range result.Rows {
 			indexID, key, err := decodeIndexKeyPrefix(tableDesc, row.Key)
 			if err != nil {

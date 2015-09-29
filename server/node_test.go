@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
@@ -84,13 +84,13 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, *Node, *stop.Stopper) {
 	rpcServer, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(rpcServer, engines, proto.Attributes{}, stopper); err != nil {
+	if err := node.start(rpcServer, engines, roachpb.Attributes{}, stopper); err != nil {
 		t.Fatal(err)
 	}
 	return rpcServer, node, stopper
 }
 
-func formatKeys(keys []proto.Key) string {
+func formatKeys(keys []roachpb.Key) string {
 	var buf bytes.Buffer
 	for i, key := range keys {
 		fmt.Fprintf(&buf, "%d: %s\n", i, key)
@@ -103,7 +103,7 @@ func formatKeys(keys []proto.Key) string {
 func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
-	e := engine.NewInMem(proto.Attributes{}, 1<<20, stopper)
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 	localDB, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
 	if err != nil {
 		t.Fatal(err)
@@ -111,20 +111,20 @@ func TestBootstrapCluster(t *testing.T) {
 	defer stopper.Stop()
 
 	// Scan the complete contents of the local database.
-	rows, err := localDB.Scan(keys.LocalPrefix.PrefixEnd(), proto.KeyMax, 0)
+	rows, err := localDB.Scan(keys.LocalPrefix.PrefixEnd(), roachpb.KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var foundKeys proto.KeySlice
+	var foundKeys roachpb.KeySlice
 	for _, kv := range rows {
 		foundKeys = append(foundKeys, kv.Key)
 	}
-	var expectedKeys = proto.KeySlice{
-		proto.MakeKey(proto.Key("\x00\x00meta1"), proto.KeyMax),
-		proto.MakeKey(proto.Key("\x00\x00meta2"), proto.KeyMax),
-		proto.Key("\x00node-idgen"),
-		proto.Key("\x00range-tree-root"),
-		proto.Key("\x00store-idgen"),
+	var expectedKeys = roachpb.KeySlice{
+		roachpb.MakeKey(roachpb.Key("\x00\x00meta1"), roachpb.KeyMax),
+		roachpb.MakeKey(roachpb.Key("\x00\x00meta2"), roachpb.KeyMax),
+		roachpb.Key("\x00node-idgen"),
+		roachpb.Key("\x00range-tree-root"),
+		roachpb.Key("\x00store-idgen"),
 	}
 	// Add the initial keys for sql.
 	for _, kv := range sql.GetInitialSystemValues() {
@@ -147,7 +147,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
-	e := engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 	eagerStopper := stop.NewStopper()
 	if _, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper); err != nil {
 		t.Fatal(err)
@@ -157,8 +157,8 @@ func TestBootstrapNewStore(t *testing.T) {
 	// Start a new node with two new stores which will require bootstrapping.
 	engines := []engine.Engine{
 		e,
-		engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper),
-		engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper),
+		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
+		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
 	}
 	_, node, stopper := createAndStartTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
 	defer stopper.Stop()
@@ -188,7 +188,7 @@ func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
-	e := engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 	stopper := stop.NewStopper()
 	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
 	if err != nil {
@@ -205,7 +205,7 @@ func TestNodeJoin(t *testing.T) {
 	defer stopper1.Stop()
 
 	// Create a new node.
-	engines2 := []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)}
+	engines2 := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
 	server2, node2, stopper2 := createAndStartTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
 	defer stopper2.Stop()
 
@@ -218,14 +218,14 @@ func TestNodeJoin(t *testing.T) {
 	node1Key := gossip.MakeNodeIDKey(node1.Descriptor.NodeID)
 	node2Key := gossip.MakeNodeIDKey(node2.Descriptor.NodeID)
 	if err := util.IsTrueWithin(func() bool {
-		nodeDesc1 := &proto.NodeDescriptor{}
+		nodeDesc1 := &roachpb.NodeDescriptor{}
 		if err := node1.ctx.Gossip.GetInfoProto(node2Key, nodeDesc1); err != nil {
 			return false
 		}
 		if addr2 := nodeDesc1.Address.AddressField; addr2 != server2.Addr().String() {
 			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2, server2.Addr().String())
 		}
-		nodeDesc2 := &proto.NodeDescriptor{}
+		nodeDesc2 := &roachpb.NodeDescriptor{}
 		if err := node2.ctx.Gossip.GetInfoProto(node1Key, nodeDesc2); err != nil {
 			return false
 		}
@@ -243,7 +243,7 @@ func TestNodeJoin(t *testing.T) {
 func TestCorruptedClusterID(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engineStopper := stop.NewStopper()
-	e := engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 	defer engineStopper.Stop()
 	eagerStopper := stop.NewStopper()
 	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper)
@@ -253,18 +253,18 @@ func TestCorruptedClusterID(t *testing.T) {
 	eagerStopper.Stop()
 
 	// Set the cluster ID to an empty string.
-	sIdent := proto.StoreIdent{
+	sIdent := roachpb.StoreIdent{
 		ClusterID: "",
 		NodeID:    1,
 		StoreID:   1,
 	}
-	if err = engine.MVCCPutProto(e, nil, keys.StoreIdentKey(), proto.ZeroTimestamp, nil, &sIdent); err != nil {
+	if err = engine.MVCCPutProto(e, nil, keys.StoreIdentKey(), roachpb.ZeroTimestamp, nil, &sIdent); err != nil {
 		t.Fatal(err)
 	}
 
 	engines := []engine.Engine{e}
 	server, _, node, stopper := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
-	if err := node.start(server, engines, proto.Attributes{}, stopper); err == nil {
+	if err := node.start(server, engines, roachpb.Attributes{}, stopper); err == nil {
 		t.Errorf("unexpected success")
 	}
 	stopper.Stop()
@@ -411,7 +411,7 @@ func TestStatusSummaries(t *testing.T) {
 	defer ts.Stop()
 
 	// Retrieve the first store from the Node.
-	s, err := ts.node.lSender.GetStore(proto.StoreID(1))
+	s, err := ts.node.lSender.GetStore(roachpb.StoreID(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -433,7 +433,7 @@ func TestStatusSummaries(t *testing.T) {
 
 	expectedNodeStatus := &status.NodeStatus{
 		RangeCount:           1,
-		StoreIDs:             []proto.StoreID{1, 2, 3},
+		StoreIDs:             []roachpb.StoreID{1, 2, 3},
 		StartedAt:            0,
 		UpdatedAt:            0,
 		Desc:                 ts.node.Descriptor,
@@ -502,7 +502,7 @@ func TestStatusSummaries(t *testing.T) {
 
 	expectedNodeStatus = &status.NodeStatus{
 		RangeCount:           1,
-		StoreIDs:             []proto.StoreID{1, 2, 3},
+		StoreIDs:             []roachpb.StoreID{1, 2, 3},
 		StartedAt:            oldNodeStats.StartedAt,
 		UpdatedAt:            oldNodeStats.UpdatedAt,
 		Desc:                 ts.node.Descriptor,
@@ -555,7 +555,7 @@ func TestStatusSummaries(t *testing.T) {
 
 	expectedNodeStatus = &status.NodeStatus{
 		RangeCount:           2,
-		StoreIDs:             []proto.StoreID{1, 2, 3},
+		StoreIDs:             []roachpb.StoreID{1, 2, 3},
 		StartedAt:            oldNodeStats.StartedAt,
 		UpdatedAt:            oldNodeStats.UpdatedAt,
 		Desc:                 ts.node.Descriptor,

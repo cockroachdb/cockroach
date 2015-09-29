@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -49,7 +49,7 @@ func TestToInternal(t *testing.T) {
 		sampleDuration int64
 		expectsError   bool
 		input          *TimeSeriesData
-		expected       []*proto.InternalTimeSeriesData
+		expected       []*roachpb.InternalTimeSeriesData
 	}{
 		{
 			time.Minute.Nanoseconds(),
@@ -77,11 +77,11 @@ func TestToInternal(t *testing.T) {
 				tsdp((time.Hour*15)+(time.Minute*22)+1, 5.0),
 				tsdp((time.Hour*52)+(time.Minute*15), 0.0),
 			),
-			[]*proto.InternalTimeSeriesData{
+			[]*roachpb.InternalTimeSeriesData{
 				{
 					StartTimestampNanos: 0,
 					SampleDurationNanos: int64(time.Minute * 20),
-					Samples: []*proto.InternalTimeSeriesSample{
+					Samples: []*roachpb.InternalTimeSeriesSample{
 						{
 							Offset: 15,
 							Count:  1,
@@ -102,7 +102,7 @@ func TestToInternal(t *testing.T) {
 				{
 					StartTimestampNanos: int64(time.Hour * 24),
 					SampleDurationNanos: int64(time.Minute * 20),
-					Samples: []*proto.InternalTimeSeriesSample{
+					Samples: []*roachpb.InternalTimeSeriesSample{
 						{
 							Offset: 1,
 							Count:  1,
@@ -113,7 +113,7 @@ func TestToInternal(t *testing.T) {
 				{
 					StartTimestampNanos: int64(time.Hour * 48),
 					SampleDurationNanos: int64(time.Minute * 20),
-					Samples: []*proto.InternalTimeSeriesSample{
+					Samples: []*roachpb.InternalTimeSeriesSample{
 						{
 							Offset: 0,
 							Count:  1,

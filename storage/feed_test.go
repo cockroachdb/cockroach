@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -33,15 +33,15 @@ func TestStoreEventFeed(t *testing.T) {
 
 	// Construct a set of fake ranges to synthesize events correctly. They do
 	// not need to be added to a Store.
-	desc1 := &proto.RangeDescriptor{
+	desc1 := &roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: proto.Key("a"),
-		EndKey:   proto.Key("b"),
+		StartKey: roachpb.Key("a"),
+		EndKey:   roachpb.Key("b"),
 	}
-	desc2 := &proto.RangeDescriptor{
+	desc2 := &roachpb.RangeDescriptor{
 		RangeID:  2,
-		StartKey: proto.Key("b"),
-		EndKey:   proto.Key("c"),
+		StartKey: roachpb.Key("b"),
+		EndKey:   roachpb.Key("c"),
 	}
 	rng1 := &Replica{
 		stats: &rangeStats{
@@ -71,12 +71,12 @@ func TestStoreEventFeed(t *testing.T) {
 	if err := rng2.setDesc(desc2); err != nil {
 		t.Fatal(err)
 	}
-	storeDesc := &proto.StoreDescriptor{
-		StoreID: proto.StoreID(1),
-		Node: proto.NodeDescriptor{
-			NodeID: proto.NodeID(1),
+	storeDesc := &roachpb.StoreDescriptor{
+		StoreID: roachpb.StoreID(1),
+		Node: roachpb.NodeDescriptor{
+			NodeID: roachpb.NodeID(1),
 		},
-		Capacity: proto.StoreCapacity{
+		Capacity: roachpb.StoreCapacity{
 			Capacity:   100,
 			Available:  100,
 			RangeCount: 1,
@@ -102,11 +102,11 @@ func TestStoreEventFeed(t *testing.T) {
 				feed.registerRange(rng1, false /* scan */)
 			},
 			&RegisterRangeEvent{
-				StoreID: proto.StoreID(1),
-				Desc: &proto.RangeDescriptor{
+				StoreID: roachpb.StoreID(1),
+				Desc: &roachpb.RangeDescriptor{
 					RangeID:  1,
-					StartKey: proto.Key("a"),
-					EndKey:   proto.Key("b"),
+					StartKey: roachpb.Key("a"),
+					EndKey:   roachpb.Key("b"),
 				},
 				Stats: engine.MVCCStats{
 					LiveBytes:       400,
@@ -119,14 +119,14 @@ func TestStoreEventFeed(t *testing.T) {
 		{
 			"UpdateRange",
 			func(feed StoreEventFeed) {
-				feed.updateRange(rng1, proto.Put, diffStats)
+				feed.updateRange(rng1, roachpb.Put, diffStats)
 			},
 			&UpdateRangeEvent{
-				StoreID: proto.StoreID(1),
-				Desc: &proto.RangeDescriptor{
+				StoreID: roachpb.StoreID(1),
+				Desc: &roachpb.RangeDescriptor{
 					RangeID:  1,
-					StartKey: proto.Key("a"),
-					EndKey:   proto.Key("b"),
+					StartKey: roachpb.Key("a"),
+					EndKey:   roachpb.Key("b"),
 				},
 				Stats: engine.MVCCStats{
 					LiveBytes:       400,
@@ -134,7 +134,7 @@ func TestStoreEventFeed(t *testing.T) {
 					ValBytes:        360,
 					LastUpdateNanos: 10 * 1E9,
 				},
-				Method: proto.Put,
+				Method: roachpb.Put,
 				Delta: engine.MVCCStats{
 					IntentBytes: 30,
 					IntentAge:   20,
@@ -147,11 +147,11 @@ func TestStoreEventFeed(t *testing.T) {
 				feed.removeRange(rng2)
 			},
 			&RemoveRangeEvent{
-				StoreID: proto.StoreID(1),
-				Desc: &proto.RangeDescriptor{
+				StoreID: roachpb.StoreID(1),
+				Desc: &roachpb.RangeDescriptor{
 					RangeID:  2,
-					StartKey: proto.Key("b"),
-					EndKey:   proto.Key("c"),
+					StartKey: roachpb.Key("b"),
+					EndKey:   roachpb.Key("c"),
 				},
 				Stats: engine.MVCCStats{
 					LiveBytes:       200,
@@ -167,12 +167,12 @@ func TestStoreEventFeed(t *testing.T) {
 				feed.splitRange(rng1, rng2)
 			},
 			&SplitRangeEvent{
-				StoreID: proto.StoreID(1),
+				StoreID: roachpb.StoreID(1),
 				Original: UpdateRangeEvent{
-					Desc: &proto.RangeDescriptor{
+					Desc: &roachpb.RangeDescriptor{
 						RangeID:  1,
-						StartKey: proto.Key("a"),
-						EndKey:   proto.Key("b"),
+						StartKey: roachpb.Key("a"),
+						EndKey:   roachpb.Key("b"),
 					},
 					Stats: engine.MVCCStats{
 						LiveBytes:       400,
@@ -188,10 +188,10 @@ func TestStoreEventFeed(t *testing.T) {
 					},
 				},
 				New: RegisterRangeEvent{
-					Desc: &proto.RangeDescriptor{
+					Desc: &roachpb.RangeDescriptor{
 						RangeID:  2,
-						StartKey: proto.Key("b"),
-						EndKey:   proto.Key("c"),
+						StartKey: roachpb.Key("b"),
+						EndKey:   roachpb.Key("c"),
 					},
 					Stats: engine.MVCCStats{
 						LiveBytes:       200,
@@ -208,12 +208,12 @@ func TestStoreEventFeed(t *testing.T) {
 				feed.mergeRange(rng1, rng2)
 			},
 			&MergeRangeEvent{
-				StoreID: proto.StoreID(1),
+				StoreID: roachpb.StoreID(1),
 				Merged: UpdateRangeEvent{
-					Desc: &proto.RangeDescriptor{
+					Desc: &roachpb.RangeDescriptor{
 						RangeID:  1,
-						StartKey: proto.Key("a"),
-						EndKey:   proto.Key("b"),
+						StartKey: roachpb.Key("a"),
+						EndKey:   roachpb.Key("b"),
 					},
 					Stats: engine.MVCCStats{
 						LiveBytes:       400,
@@ -229,10 +229,10 @@ func TestStoreEventFeed(t *testing.T) {
 					},
 				},
 				Removed: RemoveRangeEvent{
-					Desc: &proto.RangeDescriptor{
+					Desc: &roachpb.RangeDescriptor{
 						RangeID:  2,
-						StartKey: proto.Key("b"),
-						EndKey:   proto.Key("c"),
+						StartKey: roachpb.Key("b"),
+						EndKey:   roachpb.Key("c"),
 					},
 					Stats: engine.MVCCStats{
 						LiveBytes:       200,
@@ -258,7 +258,7 @@ func TestStoreEventFeed(t *testing.T) {
 				feed.replicationStatus(3, 2, 1)
 			},
 			&ReplicationStatusEvent{
-				StoreID:              proto.StoreID(1),
+				StoreID:              roachpb.StoreID(1),
 				LeaderRangeCount:     3,
 				ReplicatedRangeCount: 2,
 				AvailableRangeCount:  1,
@@ -270,7 +270,7 @@ func TestStoreEventFeed(t *testing.T) {
 				feed.startStore(100)
 			},
 			&StartStoreEvent{
-				StoreID:   proto.StoreID(1),
+				StoreID:   roachpb.StoreID(1),
 				StartedAt: 100,
 			},
 		},
@@ -280,7 +280,7 @@ func TestStoreEventFeed(t *testing.T) {
 				feed.beginScanRanges()
 			},
 			&BeginScanRangesEvent{
-				StoreID: proto.StoreID(1),
+				StoreID: roachpb.StoreID(1),
 			},
 		},
 		{
@@ -289,7 +289,7 @@ func TestStoreEventFeed(t *testing.T) {
 				feed.endScanRanges()
 			},
 			&EndScanRangesEvent{
-				StoreID: proto.StoreID(1),
+				StoreID: roachpb.StoreID(1),
 			},
 		},
 	}
@@ -310,7 +310,7 @@ func TestStoreEventFeed(t *testing.T) {
 		events = append(events, event)
 	})
 
-	storefeed := NewStoreEventFeed(proto.StoreID(1), feed)
+	storefeed := NewStoreEventFeed(roachpb.StoreID(1), feed)
 	for _, tc := range testCases {
 		tc.publishTo(storefeed)
 	}

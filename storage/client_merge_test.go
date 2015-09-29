@@ -25,7 +25,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -34,18 +34,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func adminMergeArgs(key []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.AdminMergeRequest {
-	return proto.AdminMergeRequest{
-		RequestHeader: proto.RequestHeader{
+func adminMergeArgs(key []byte, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.AdminMergeRequest {
+	return roachpb.AdminMergeRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 	}
 }
 
-func createSplitRanges(store *storage.Store) (*proto.RangeDescriptor, *proto.RangeDescriptor, error) {
-	args := adminSplitArgs(proto.KeyMin, []byte("b"), 1, store.StoreID())
+func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb.RangeDescriptor, error) {
+	args := adminSplitArgs(roachpb.KeyMin, []byte("b"), 1, store.StoreID())
 	if _, err := batchutil.SendWrapped(store, &args); err != nil {
 		return nil, nil, err
 	}
@@ -72,7 +72,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	}
 
 	// Merge the b range back into the a range.
-	args := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
+	args := adminMergeArgs(roachpb.KeyMin, 1, store.StoreID())
 	_, err := batchutil.SendWrapped(store, &args)
 	if err != nil {
 		t.Fatal(err)
@@ -94,12 +94,12 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	scan := func(f func(proto.KeyValue) (bool, error)) {
-		if _, err := engine.MVCCIterate(store.Engine(), proto.KeyMin, proto.KeyMax, proto.ZeroTimestamp, true, nil, false, f); err != nil {
+	scan := func(f func(roachpb.KeyValue) (bool, error)) {
+		if _, err := engine.MVCCIterate(store.Engine(), roachpb.KeyMin, roachpb.KeyMax, roachpb.ZeroTimestamp, true, nil, false, f); err != nil {
 			t.Fatal(err)
 		}
 	}
-	content := proto.Key("testing!")
+	content := roachpb.Key("testing!")
 
 	// Write some values left of the proposed split key.
 	pArgs := putArgs([]byte("aaa"), content, 1, store.StoreID())
@@ -109,7 +109,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 
 	// Collect all the keys.
 	preKeys := make(map[string]struct{})
-	scan(func(kv proto.KeyValue) (bool, error) {
+	scan(func(kv roachpb.KeyValue) (bool, error) {
 		preKeys[string(kv.Key)] = struct{}{}
 		return false, nil
 	})
@@ -127,14 +127,14 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 
 	// Merge the b range back into the a range.
-	args := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
+	args := adminMergeArgs(roachpb.KeyMin, 1, store.StoreID())
 	if _, err := batchutil.SendWrapped(store, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Collect all the keys again.
 	postKeys := make(map[string]struct{})
-	scan(func(kv proto.KeyValue) (bool, error) {
+	scan(func(kv roachpb.KeyValue) (bool, error) {
 		postKeys[string(kv.Key)] = struct{}{}
 		return false, nil
 	})
@@ -166,7 +166,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 // each containing data.
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	content := proto.Key("testing!")
+	content := roachpb.Key("testing!")
 
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -190,24 +190,24 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	gArgs := getArgs([]byte("aaa"), aDesc.RangeID, store.StoreID())
 	if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 	gArgs = getArgs([]byte("ccc"), bDesc.RangeID, store.StoreID())
 	if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 
 	// Merge the b range back into the a range.
-	args := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
+	args := adminMergeArgs(roachpb.KeyMin, 1, store.StoreID())
 	if _, err := batchutil.SendWrapped(store, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify no intents remains on range descriptor keys.
-	for _, key := range []proto.Key{keys.RangeDescriptorKey(aDesc.StartKey), keys.RangeDescriptorKey(bDesc.StartKey)} {
+	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(aDesc.StartKey), keys.RangeDescriptorKey(bDesc.StartKey)} {
 		if _, _, err := engine.MVCCGet(store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -220,24 +220,24 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	if !reflect.DeepEqual(rangeA, rangeB) {
 		t.Fatalf("ranges were not merged %+v=%+v", rangeA.Desc(), rangeB.Desc())
 	}
-	if !bytes.Equal(rangeA.Desc().StartKey, proto.KeyMin) {
-		t.Fatalf("The start key is not equal to KeyMin %q=%q", rangeA.Desc().StartKey, proto.KeyMin)
+	if !bytes.Equal(rangeA.Desc().StartKey, roachpb.KeyMin) {
+		t.Fatalf("The start key is not equal to KeyMin %q=%q", rangeA.Desc().StartKey, roachpb.KeyMin)
 	}
-	if !bytes.Equal(rangeA.Desc().EndKey, proto.KeyMax) {
-		t.Fatalf("The end key is not equal to KeyMax %q=%q", rangeA.Desc().EndKey, proto.KeyMax)
+	if !bytes.Equal(rangeA.Desc().EndKey, roachpb.KeyMax) {
+		t.Fatalf("The end key is not equal to KeyMax %q=%q", rangeA.Desc().EndKey, roachpb.KeyMax)
 	}
 
 	// Try to get values from after the merge.
 	gArgs = getArgs([]byte("aaa"), rangeA.Desc().RangeID, store.StoreID())
 	if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 	gArgs = getArgs([]byte("ccc"), rangeB.Desc().RangeID, store.StoreID())
 	if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 
@@ -255,13 +255,13 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	gArgs = getArgs([]byte("aaaa"), rangeA.Desc().RangeID, store.StoreID())
 	if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 	gArgs = getArgs([]byte("cccc"), rangeA.Desc().RangeID, store.StoreID())
 	if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 }
@@ -274,7 +274,7 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer stopper.Stop()
 
 	// Merge last range.
-	args := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
+	args := adminMergeArgs(roachpb.KeyMin, 1, store.StoreID())
 	if _, err := batchutil.SendWrapped(store, &args); !testutils.IsError(err, "cannot merge final range") {
 		t.Fatalf("expected 'cannot merge final range' error; got %s", err)
 	}
@@ -290,11 +290,11 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	store := mtc.stores[0]
 
 	// Split into 3 ranges
-	argsSplit := adminSplitArgs(proto.KeyMin, []byte("d"), 1, store.StoreID())
+	argsSplit := adminSplitArgs(roachpb.KeyMin, []byte("d"), 1, store.StoreID())
 	if _, err := batchutil.SendWrapped(store, &argsSplit); err != nil {
 		t.Fatalf("Can't split range %s", err)
 	}
-	argsSplit = adminSplitArgs(proto.KeyMin, []byte("b"), 1, store.StoreID())
+	argsSplit = adminSplitArgs(roachpb.KeyMin, []byte("b"), 1, store.StoreID())
 	if _, err := batchutil.SendWrapped(store, &argsSplit); err != nil {
 		t.Fatalf("Can't split range %s", err)
 	}

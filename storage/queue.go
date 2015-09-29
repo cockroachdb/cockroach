@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -94,11 +94,11 @@ type queueImpl interface {
 
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
-	shouldQueue(proto.Timestamp, *Replica, *config.SystemConfig) (shouldQueue bool, priority float64)
+	shouldQueue(roachpb.Timestamp, *Replica, *config.SystemConfig) (shouldQueue bool, priority float64)
 
 	// process accepts current time, a replica, and the system config
 	// and executes queue-specific work on it.
-	process(proto.Timestamp, *Replica, *config.SystemConfig) error
+	process(roachpb.Timestamp, *Replica, *config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue.
@@ -114,11 +114,11 @@ type baseQueue struct {
 	name       string
 	impl       queueImpl
 	gossip     *gossip.Gossip
-	maxSize    int                            // Maximum number of replicas to queue
-	incoming   chan struct{}                  // Channel signaled when a new replica is added to the queue.
-	sync.Mutex                                // Mutex protects priorityQ and replicas
-	priorityQ  priorityQueue                  // The priority queue
-	replicas   map[proto.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)
+	maxSize    int                              // Maximum number of replicas to queue
+	incoming   chan struct{}                    // Channel signaled when a new replica is added to the queue.
+	sync.Mutex                                  // Mutex protects priorityQ and replicas
+	priorityQ  priorityQueue                    // The priority queue
+	replicas   map[roachpb.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)
 	// Some tests in this package disable queues.
 	disabled int32 // updated atomically
 }
@@ -136,7 +136,7 @@ func newBaseQueue(name string, impl queueImpl, gossip *gossip.Gossip, maxSize in
 		gossip:   gossip,
 		maxSize:  maxSize,
 		incoming: make(chan struct{}, 1),
-		replicas: map[proto.RangeID]*replicaItem{},
+		replicas: map[roachpb.RangeID]*replicaItem{},
 	}
 }
 
@@ -178,7 +178,7 @@ func (bq *baseQueue) Add(repl *Replica, priority float64) error {
 // returned by bq.shouldQueue. If the queue is too full, the replica may
 // not be added, as the replica with the lowest priority will be
 // dropped.
-func (bq *baseQueue) MaybeAdd(repl *Replica, now proto.Timestamp) {
+func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 	// Load the system config.
 	cfg := bq.gossip.GetSystemConfig()
 	if cfg == nil {
@@ -301,7 +301,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 			// Exit on stopper.
 			case <-stopper.ShouldStop():
 				bq.Lock()
-				bq.replicas = map[proto.RangeID]*replicaItem{}
+				bq.replicas = map[roachpb.RangeID]*replicaItem{}
 				bq.priorityQ = nil
 				bq.Unlock()
 				return
@@ -348,7 +348,7 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 	// and renew or acquire if necessary.
 	if bq.impl.needsLeaderLease() {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		args := &proto.GetRequest{RequestHeader: proto.RequestHeader{Timestamp: now}}
+		args := &roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Timestamp: now}}
 		if err := repl.redirectOnOrAcquireLeaderLease(nil /* Trace */, args.Header().Timestamp); err != nil {
 			if log.V(3) {
 				log.Infof("this replica of %s could not acquire leader lease; skipping...", repl)

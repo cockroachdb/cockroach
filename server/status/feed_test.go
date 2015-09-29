@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/server/status"
@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-func wrap(args proto.Request) proto.BatchRequest {
-	var ba proto.BatchRequest
+func wrap(args roachpb.Request) roachpb.BatchRequest {
+	var ba roachpb.BatchRequest
 	ba.Add(args)
 	return ba
 }
@@ -41,8 +41,8 @@ func wrap(args proto.Request) proto.BatchRequest {
 func TestNodeEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	nodeDesc := proto.NodeDescriptor{
-		NodeID: proto.NodeID(99),
+	nodeDesc := roachpb.NodeDescriptor{
+		NodeID: roachpb.NodeID(99),
 	}
 
 	// A testCase corresponds to a single Store event type. Each case contains a
@@ -64,41 +64,41 @@ func TestNodeEventFeed(t *testing.T) {
 		},
 		{
 			publishTo: func(nef status.NodeEventFeed) {
-				nef.CallComplete(wrap(proto.NewGet(proto.Key("abc"))), nil)
+				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), nil)
 			},
 			expected: &status.CallSuccessEvent{
-				NodeID: proto.NodeID(1),
-				Method: proto.Get,
+				NodeID: roachpb.NodeID(1),
+				Method: roachpb.Get,
 			},
 		},
 		{
 			publishTo: func(nef status.NodeEventFeed) {
-				nef.CallComplete(wrap(proto.NewPut(proto.Key("abc"), proto.Value{Bytes: []byte("def")})), nil)
+				nef.CallComplete(wrap(roachpb.NewPut(roachpb.Key("abc"), roachpb.Value{Bytes: []byte("def")})), nil)
 			},
 			expected: &status.CallSuccessEvent{
-				NodeID: proto.NodeID(1),
-				Method: proto.Put,
+				NodeID: roachpb.NodeID(1),
+				Method: roachpb.Put,
 			},
 		},
 		{
 			publishTo: func(nef status.NodeEventFeed) {
-				nef.CallComplete(wrap(proto.NewGet(proto.Key("abc"))), proto.NewError(util.Errorf("error")))
+				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), roachpb.NewError(util.Errorf("error")))
 			},
 			expected: &status.CallErrorEvent{
-				NodeID: proto.NodeID(1),
-				Method: proto.Batch,
+				NodeID: roachpb.NodeID(1),
+				Method: roachpb.Batch,
 			},
 		},
 		{
 			publishTo: func(nef status.NodeEventFeed) {
-				nef.CallComplete(wrap(proto.NewGet(proto.Key("abc"))), &proto.Error{
-					Index:   &proto.ErrPosition{Index: 0},
+				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), &roachpb.Error{
+					Index:   &roachpb.ErrPosition{Index: 0},
 					Message: "boo",
 				})
 			},
 			expected: &status.CallErrorEvent{
-				NodeID: proto.NodeID(1),
-				Method: proto.Get,
+				NodeID: roachpb.NodeID(1),
+				Method: roachpb.Get,
 			},
 		},
 	}
@@ -119,7 +119,7 @@ func TestNodeEventFeed(t *testing.T) {
 		events = append(events, event)
 	})
 
-	nodefeed := status.NewNodeEventFeed(proto.NodeID(1), feed)
+	nodefeed := status.NewNodeEventFeed(roachpb.NodeID(1), feed)
 	for _, tc := range testCases {
 		tc.publishTo(nodefeed)
 	}
@@ -134,7 +134,7 @@ func TestNodeEventFeed(t *testing.T) {
 // nodeEventReader reads the node-related events off of a feed subscription,
 // ignoring other events.
 type nodeEventReader struct {
-	perNodeFeeds map[proto.NodeID][]string
+	perNodeFeeds map[roachpb.NodeID][]string
 }
 
 // recordEvent records an events received from the node itself. Each event is
@@ -142,15 +142,15 @@ type nodeEventReader struct {
 // comparison, but should be easier to correct if future changes slightly modify
 // these values. Events which do not pertain to a Node are ignored.
 func (ner *nodeEventReader) recordEvent(event interface{}) {
-	var nid proto.NodeID
+	var nid roachpb.NodeID
 	eventStr := ""
 	switch event := event.(type) {
 	case *status.CallSuccessEvent:
-		if event.Method == proto.ResolveIntent {
+		if event.Method == roachpb.ResolveIntent {
 			// Ignore this best-effort method.
 			break
 		}
-		if event.Method == proto.RangeLookup {
+		if event.Method == roachpb.RangeLookup {
 			// Due to a race with the server's status recording system, we
 			// can't reliably depend on RangeLookup to occur during the
 			// test. Ignore this method.
@@ -168,7 +168,7 @@ func (ner *nodeEventReader) recordEvent(event interface{}) {
 }
 
 func (ner *nodeEventReader) readEvents(feed *util.Feed) {
-	ner.perNodeFeeds = make(map[proto.NodeID][]string)
+	ner.perNodeFeeds = make(map[roachpb.NodeID][]string)
 	feed.Subscribe(ner.recordEvent)
 }
 
@@ -233,8 +233,8 @@ func TestServerNodeEventFeed(t *testing.T) {
 	feed.Flush()
 	s.Stop()
 
-	expectedNodeEvents := map[proto.NodeID][]string{
-		proto.NodeID(1): {
+	expectedNodeEvents := map[roachpb.NodeID][]string{
+		roachpb.NodeID(1): {
 			"Put",
 			"Put",
 			"EndTransaction",
@@ -289,21 +289,21 @@ func TestNodeEventFeedTransactionRestart(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	feed := util.NewFeed(stopper)
-	nodeID := proto.NodeID(1)
+	nodeID := roachpb.NodeID(1)
 	nodefeed := status.NewNodeEventFeed(nodeID, feed)
 	ner := nodeEventReader{}
 	ner.readEvents(feed)
 
-	get := wrap(&proto.GetRequest{})
-	nodefeed.CallComplete(get, &proto.Error{
-		TransactionRestart: proto.TransactionRestart_BACKOFF})
-	nodefeed.CallComplete(get, &proto.Error{
-		TransactionRestart: proto.TransactionRestart_IMMEDIATE})
-	nodefeed.CallComplete(wrap(&proto.PutRequest{}), &proto.Error{
-		TransactionRestart: proto.TransactionRestart_ABORT})
-	nodefeed.CallComplete(wrap(&proto.PutRequest{}), &proto.Error{
-		Index:              &proto.ErrPosition{Index: 0},
-		TransactionRestart: proto.TransactionRestart_ABORT,
+	get := wrap(&roachpb.GetRequest{})
+	nodefeed.CallComplete(get, &roachpb.Error{
+		TransactionRestart: roachpb.TransactionRestart_BACKOFF})
+	nodefeed.CallComplete(get, &roachpb.Error{
+		TransactionRestart: roachpb.TransactionRestart_IMMEDIATE})
+	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), &roachpb.Error{
+		TransactionRestart: roachpb.TransactionRestart_ABORT})
+	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), &roachpb.Error{
+		Index:              &roachpb.ErrPosition{Index: 0},
+		TransactionRestart: roachpb.TransactionRestart_ABORT,
 	})
 
 	feed.Flush()

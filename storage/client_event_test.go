@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -41,8 +41,8 @@ type storeEventReader struct {
 	// If true, Update events will be recorded in full detail. If false, only a
 	// count of update events will be recorded.
 	recordUpdateDetail  bool
-	perStoreFeeds       map[proto.StoreID][]string
-	perStoreUpdateCount map[proto.StoreID]map[proto.Method]int
+	perStoreFeeds       map[roachpb.StoreID][]string
+	perStoreUpdateCount map[roachpb.StoreID]map[roachpb.Method]int
 }
 
 // recordEvent records the events received for all stores. Each event is
@@ -50,7 +50,7 @@ type storeEventReader struct {
 // comparison, but should be easier to correct if future changes slightly modify
 // these values.
 func (ser *storeEventReader) recordEvent(event interface{}) {
-	var sid proto.StoreID
+	var sid roachpb.StoreID
 	eventStr := ""
 	switch event := event.(type) {
 	case *storage.StartStoreEvent:
@@ -61,8 +61,8 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 		eventStr = fmt.Sprintf("RegisterRange scan=%t, rid=%d, live=%d",
 			event.Scan, event.Desc.RangeID, event.Stats.LiveBytes)
 	case *storage.UpdateRangeEvent:
-		if event.Method == proto.ResolveIntent ||
-			event.Method == proto.ResolveIntentRange {
+		if event.Method == roachpb.ResolveIntent ||
+			event.Method == roachpb.ResolveIntentRange {
 			// Some commands are best effort calls that make this test
 			// flaky. Ignore them.
 			break
@@ -74,7 +74,7 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 		} else {
 			m := ser.perStoreUpdateCount[event.StoreID]
 			if m == nil {
-				m = make(map[proto.Method]int)
+				m = make(map[roachpb.Method]int)
 				ser.perStoreUpdateCount[event.StoreID] = m
 			}
 			m[event.Method]++
@@ -106,8 +106,8 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 }
 
 func (ser *storeEventReader) readEvents(feed *util.Feed) {
-	ser.perStoreFeeds = make(map[proto.StoreID][]string)
-	ser.perStoreUpdateCount = make(map[proto.StoreID]map[proto.Method]int)
+	ser.perStoreFeeds = make(map[roachpb.StoreID][]string)
+	ser.perStoreUpdateCount = make(map[roachpb.StoreID]map[roachpb.Method]int)
 	feed.Subscribe(ser.recordEvent)
 }
 
@@ -125,7 +125,7 @@ func (ser *storeEventReader) eventFeedString() string {
 	sort.Sort(storeIDs)
 
 	for _, storeID := range storeIDs {
-		if feed, ok := ser.perStoreFeeds[proto.StoreID(storeID)]; ok {
+		if feed, ok := ser.perStoreFeeds[roachpb.StoreID(storeID)]; ok {
 			fmt.Fprintf(w, "%T(%d): {\n", storeID, storeID)
 			for _, evt := range feed {
 				fmt.Fprintf(w, "\t\"%s\",\n", evt)
@@ -152,7 +152,7 @@ func (ser *storeEventReader) updateCountString() string {
 	sort.Sort(storeIDs)
 
 	for _, storeID := range storeIDs {
-		if countset, ok := ser.perStoreUpdateCount[proto.StoreID(storeID)]; ok {
+		if countset, ok := ser.perStoreUpdateCount[roachpb.StoreID(storeID)]; ok {
 			fmt.Fprintf(w, "%T(%d): {\n", storeID, storeID)
 
 			var methodIDs sort.IntSlice
@@ -162,7 +162,7 @@ func (ser *storeEventReader) updateCountString() string {
 			sort.Sort(methodIDs)
 
 			for _, methodID := range methodIDs {
-				method := proto.Method(methodID)
+				method := roachpb.Method(methodID)
 				if count, okCount := countset[method]; okCount {
 					fmt.Fprintf(w, "\tproto.%s:\t%d,\n", method, count)
 				} else {
@@ -177,7 +177,7 @@ func (ser *storeEventReader) updateCountString() string {
 	return buffer.String()
 }
 
-func checkMatch(patternMap, lineMap map[proto.StoreID][]string) bool {
+func checkMatch(patternMap, lineMap map[roachpb.StoreID][]string) bool {
 	if len(patternMap) != len(lineMap) {
 		return false
 	}
@@ -224,7 +224,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	defer mtc.Stop()
 
 	// Replicate the default range.
-	rangeID := proto.RangeID(1)
+	rangeID := roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 0, 1, 2)
 
 	// Add some data in a transaction
@@ -260,7 +260,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
 		for _, eng := range mtc.engines {
-			val, _, err := engine.MVCCGet(eng, proto.Key("aa"), mtc.clock.Now(), true, nil)
+			val, _, err := engine.MVCCGet(eng, roachpb.Key("aa"), mtc.clock.Now(), true, nil)
 			if err != nil {
 				return err
 			}
@@ -276,8 +276,8 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	stopper.Stop()
 
 	// Compare events to expected values.
-	expected := map[proto.StoreID][]string{
-		proto.StoreID(1): {
+	expected := map[roachpb.StoreID][]string{
+		roachpb.StoreID(1): {
 			"StartStore",
 			"BeginScanRanges",
 			"RegisterRange scan=true, rid=1, live=.*",
@@ -286,7 +286,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
 			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
-		proto.StoreID(2): {
+		roachpb.StoreID(2): {
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",
@@ -295,7 +295,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
 			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
-		proto.StoreID(3): {
+		roachpb.StoreID(3): {
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",
@@ -310,30 +310,30 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	}
 
 	// Expected count of update events on a per-method basis.
-	expectedUpdateCount := map[proto.StoreID]map[proto.Method]int{
-		proto.StoreID(1): {
-			proto.Put:            18,
-			proto.ConditionalPut: 7,
-			proto.Increment:      2,
-			proto.Delete:         2,
-			proto.EndTransaction: 6,
-			proto.LeaderLease:    3,
+	expectedUpdateCount := map[roachpb.StoreID]map[roachpb.Method]int{
+		roachpb.StoreID(1): {
+			roachpb.Put:            18,
+			roachpb.ConditionalPut: 7,
+			roachpb.Increment:      2,
+			roachpb.Delete:         2,
+			roachpb.EndTransaction: 6,
+			roachpb.LeaderLease:    3,
 		},
-		proto.StoreID(2): {
-			proto.Put:            16,
-			proto.ConditionalPut: 6,
-			proto.Increment:      2,
-			proto.Delete:         2,
-			proto.EndTransaction: 5,
-			proto.LeaderLease:    2,
+		roachpb.StoreID(2): {
+			roachpb.Put:            16,
+			roachpb.ConditionalPut: 6,
+			roachpb.Increment:      2,
+			roachpb.Delete:         2,
+			roachpb.EndTransaction: 5,
+			roachpb.LeaderLease:    2,
 		},
-		proto.StoreID(3): {
-			proto.Put:            14,
-			proto.ConditionalPut: 5,
-			proto.Increment:      2,
-			proto.Delete:         2,
-			proto.EndTransaction: 4,
-			proto.LeaderLease:    2,
+		roachpb.StoreID(3): {
+			roachpb.Put:            14,
+			roachpb.ConditionalPut: 5,
+			roachpb.Increment:      2,
+			roachpb.Delete:         2,
+			roachpb.EndTransaction: 4,
+			roachpb.LeaderLease:    2,
 		},
 	}
 	if a, e := ser.perStoreUpdateCount, expectedUpdateCount; !reflect.DeepEqual(a, e) {

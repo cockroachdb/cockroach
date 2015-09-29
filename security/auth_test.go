@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"testing"
 
-	cockroach_proto "github.com/cockroachdb/cockroach/proto"
+	cockroach_proto "github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"

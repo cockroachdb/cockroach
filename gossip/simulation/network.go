@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -90,8 +90,8 @@ func NewNetwork(nodeCount int, networkType string,
 
 		gossipNode := gossip.New(rpcContext, gossipInterval, resolvers)
 		addr := leftNode.Server.Addr()
-		if err := gossipNode.SetNodeDescriptor(&proto.NodeDescriptor{
-			NodeID:  proto.NodeID(i + 1),
+		if err := gossipNode.SetNodeDescriptor(&roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(i + 1),
 			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		}); err != nil {
 			log.Fatal(err)
@@ -124,7 +124,7 @@ func (n *Network) GetNodeFromAddr(addr string) (*Node, bool) {
 
 // GetNodeFromID returns the simulation node associated with
 // provided node ID, or nil if there is no such node.
-func (n *Network) GetNodeFromID(nodeID proto.NodeID) (*Node, bool) {
+func (n *Network) GetNodeFromID(nodeID roachpb.NodeID) (*Node, bool) {
 	for _, node := range n.Nodes {
 		if node.Gossip.GetNodeID() == nodeID {
 			return node, true

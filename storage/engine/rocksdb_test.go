@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -40,14 +40,14 @@ const testCacheSize = 1 << 30 // GB.
 
 // encodePutResponse creates a put response using the specified
 // timestamp and encodes it using gogoprotobuf.
-func encodePutResponse(timestamp proto.Timestamp, t *testing.T) []byte {
-	batch := &proto.BatchResponse{
-		ResponseHeader: proto.ResponseHeader{
+func encodePutResponse(timestamp roachpb.Timestamp, t *testing.T) []byte {
+	batch := &roachpb.BatchResponse{
+		ResponseHeader: roachpb.ResponseHeader{
 			Timestamp: timestamp,
 		},
 	}
-	batch.Add(&proto.PutResponse{
-		ResponseHeader: proto.ResponseHeader{
+	batch.Add(&roachpb.PutResponse{
+		ResponseHeader: roachpb.ResponseHeader{
 			Timestamp: timestamp,
 		},
 	})
@@ -60,8 +60,8 @@ func encodePutResponse(timestamp proto.Timestamp, t *testing.T) []byte {
 
 // encodeTransaction creates a transaction using the specified
 // timestamp and encodes it using gogoprotobuf.
-func encodeTransaction(timestamp proto.Timestamp, t *testing.T) []byte {
-	txn := &proto.Transaction{
+func encodeTransaction(timestamp roachpb.Timestamp, t *testing.T) []byte {
+	txn := &roachpb.Transaction{
 		Timestamp: timestamp,
 	}
 	data, err := gogoproto.Marshal(txn)
@@ -78,52 +78,52 @@ func TestRocksDBCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := newMemRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
+	rocksdb := newMemRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
 	err := rocksdb.Open()
 	if err != nil {
 		t.Fatalf("could not create new in-memory rocksdb db instance: %v", err)
 	}
 	rocksdb.SetGCTimeouts(1, 2)
 
-	cmdID := &proto.ClientCmdID{WallTime: 1, Random: 1}
+	cmdID := &roachpb.ClientCmdID{WallTime: 1, Random: 1}
 
 	// Write two transaction values and two response cache values such
 	// that exactly one of each should be GC'd based on our GC timeouts.
-	kvs := []proto.KeyValue{
+	kvs := []roachpb.KeyValue{
 		{
 			Key:   keys.ResponseCacheKey(1, cmdID),
-			Value: proto.Value{Bytes: encodePutResponse(makeTS(2, 0), t)},
+			Value: roachpb.Value{Bytes: encodePutResponse(makeTS(2, 0), t)},
 		},
 		{
 			Key:   keys.ResponseCacheKey(2, cmdID),
-			Value: proto.Value{Bytes: encodePutResponse(makeTS(3, 0), t)},
+			Value: roachpb.Value{Bytes: encodePutResponse(makeTS(3, 0), t)},
 		},
 		{
-			Key:   keys.TransactionKey(proto.Key("a"), proto.Key(uuid.NewUUID4())),
-			Value: proto.Value{Bytes: encodeTransaction(makeTS(1, 0), t)},
+			Key:   keys.TransactionKey(roachpb.Key("a"), roachpb.Key(uuid.NewUUID4())),
+			Value: roachpb.Value{Bytes: encodeTransaction(makeTS(1, 0), t)},
 		},
 		{
-			Key:   keys.TransactionKey(proto.Key("b"), proto.Key(uuid.NewUUID4())),
-			Value: proto.Value{Bytes: encodeTransaction(makeTS(2, 0), t)},
+			Key:   keys.TransactionKey(roachpb.Key("b"), roachpb.Key(uuid.NewUUID4())),
+			Value: roachpb.Value{Bytes: encodeTransaction(makeTS(2, 0), t)},
 		},
 	}
 	for _, kv := range kvs {
-		if err := MVCCPut(rocksdb, nil, kv.Key, proto.ZeroTimestamp, kv.Value, nil); err != nil {
+		if err := MVCCPut(rocksdb, nil, kv.Key, roachpb.ZeroTimestamp, kv.Value, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Compact range and scan remaining values to compare.
 	rocksdb.CompactRange(nil, nil)
-	actualKVs, _, err := MVCCScan(rocksdb, proto.KeyMin, proto.KeyMax, 0, proto.ZeroTimestamp, true, nil)
+	actualKVs, _, err := MVCCScan(rocksdb, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.ZeroTimestamp, true, nil)
 	if err != nil {
 		t.Fatalf("could not run scan: %v", err)
 	}
-	var keys []proto.Key
+	var keys []roachpb.Key
 	for _, kv := range actualKVs {
 		keys = append(keys, kv.Key)
 	}
-	expKeys := []proto.Key{
+	expKeys := []roachpb.Key{
 		kvs[1].Key,
 		kvs[3].Key,
 	}
@@ -158,7 +158,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) (*RocksDB, *stop.
 	log.Infof("creating mvcc data: %s", loc)
 	const cacheSize = 8 << 30 // 8 GB
 	stopper := stop.NewStopper()
-	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, stopper)
+	rocksdb := NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, stopper)
 	if err := rocksdb.Open(); err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
@@ -168,7 +168,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) (*RocksDB, *stop.
 	}
 
 	rng, _ := randutil.NewPseudoRand()
-	keys := make([]proto.Key, numKeys)
+	keys := make([]roachpb.Key, numKeys)
 	nvs := make([]int, numKeys)
 	for t := 1; t <= numVersions; t++ {
 		walltime := int64(5 * t)
@@ -176,13 +176,13 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) (*RocksDB, *stop.
 		batch := rocksdb.NewBatch()
 		for i := 0; i < numKeys; i++ {
 			if t == 1 {
-				keys[i] = proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
+				keys[i] = roachpb.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
 				nvs[i] = int(rand.Int31n(int32(numVersions)) + 1)
 			}
 			// Only write values if this iteration is less than the random
 			// number of versions chosen for this key.
 			if t <= nvs[i] {
-				value := proto.Value{Bytes: randutil.RandBytes(rng, 1024)}
+				value := roachpb.Value{Bytes: randutil.RandBytes(rng, 1024)}
 				value.InitChecksum(keys[i])
 				if err := MVCCPut(batch, nil, keys[i], ts, value, nil); err != nil {
 					b.Fatal(err)
@@ -234,10 +234,10 @@ func runMVCCScan(numRows, numVersions int, b *testing.B) {
 		for pb.Next() {
 			// Choose a random key to start scan.
 			keyIdx := rand.Int31n(int32(numKeys - numRows))
-			startKey := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
+			startKey := roachpb.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
-			kvs, _, err := MVCCScan(rocksdb, startKey, proto.KeyMax, int64(numRows), ts, true, nil)
+			kvs, _, err := MVCCScan(rocksdb, startKey, roachpb.KeyMax, int64(numRows), ts, true, nil)
 			if err != nil {
 				b.Fatalf("failed scan: %s", err)
 			}
@@ -323,7 +323,7 @@ func runMVCCGet(numVersions int, b *testing.B) {
 		for pb.Next() {
 			// Choose a random key to retrieve.
 			keyIdx := rand.Int31n(int32(numKeys))
-			key := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
+			key := roachpb.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
 			if v, _, err := MVCCGet(rocksdb, key, ts, true, nil); err != nil {
@@ -351,18 +351,18 @@ func BenchmarkMVCCGet100Versions(b *testing.B) {
 
 func runMVCCPut(valueSize int, b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
-	value := proto.Value{Bytes: randutil.RandBytes(rng, valueSize)}
+	value := roachpb.Value{Bytes: randutil.RandBytes(rng, valueSize)}
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
+	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
 
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		key := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(i)))
+		key := roachpb.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(i)))
 		ts := makeTS(time.Now().UnixNano(), 0)
 		if err := MVCCPut(rocksdb, nil, key, ts, value, nil); err != nil {
 			b.Fatalf("failed put: %s", err)
@@ -390,12 +390,12 @@ func BenchmarkMVCCPut10000(b *testing.B) {
 
 func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
-	value := proto.Value{Bytes: randutil.RandBytes(rng, valueSize)}
+	value := roachpb.Value{Bytes: randutil.RandBytes(rng, valueSize)}
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
+	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
 
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
@@ -409,7 +409,7 @@ func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 		batch := rocksdb.NewBatch()
 
 		for j := i; j < end; j++ {
-			key := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(j)))
+			key := roachpb.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(j)))
 			ts := makeTS(time.Now().UnixNano(), 0)
 			if err := MVCCPut(batch, nil, key, ts, value, nil); err != nil {
 				b.Fatalf("failed put: %s", err)
@@ -443,15 +443,15 @@ func BenchmarkMVCCBatch100000Put10(b *testing.B) {
 }
 
 // runMVCCMerge merges value into numKeys separate keys.
-func runMVCCMerge(value *proto.Value, numKeys int, b *testing.B) {
+func runMVCCMerge(value *roachpb.Value, numKeys int, b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
+	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
 
 	// Precompute keys so we don't waste time formatting them at each iteration.
-	keys := make([]proto.Key, numKeys)
+	keys := make([]roachpb.Key, numKeys)
 	for i := 0; i < numKeys; i++ {
-		keys[i] = proto.Key(fmt.Sprintf("key-%d", i))
+		keys[i] = roachpb.Key(fmt.Sprintf("key-%d", i))
 	}
 
 	b.ResetTimer()
@@ -468,7 +468,7 @@ func runMVCCMerge(value *proto.Value, numKeys int, b *testing.B) {
 
 	// Read values out to force merge.
 	for _, key := range keys {
-		val, _, err := MVCCGet(rocksdb, key, proto.ZeroTimestamp, true, nil)
+		val, _, err := MVCCGet(rocksdb, key, roachpb.ZeroTimestamp, true, nil)
 		if err != nil {
 			b.Fatal(err)
 		} else if val == nil {
@@ -484,10 +484,10 @@ func runMVCCMerge(value *proto.Value, numKeys int, b *testing.B) {
 
 // BenchmarkMVCCMergeTimeSeries computes performance of merging time series data.
 func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
-	ts := &proto.InternalTimeSeriesData{
+	ts := &roachpb.InternalTimeSeriesData{
 		StartTimestampNanos: 0,
 		SampleDurationNanos: 1000,
-		Samples: []*proto.InternalTimeSeriesSample{
+		Samples: []*roachpb.InternalTimeSeriesSample{
 			{Offset: 0, Count: 1, Sum: 5.0},
 		},
 	}

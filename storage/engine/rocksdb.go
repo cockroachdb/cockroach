@@ -29,7 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/storage/engine/rocksdb"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -51,15 +51,15 @@ func init() {
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
 	rdb         *C.DBEngine
-	attrs       proto.Attributes // Attributes for this engine
-	dir         string           // The data directory
-	cacheSize   int64            // Memory to use to cache values.
+	attrs       roachpb.Attributes // Attributes for this engine
+	dir         string             // The data directory
+	cacheSize   int64              // Memory to use to cache values.
 	stopper     *stop.Stopper
 	deallocated chan struct{} // Closed when the underlying handle is deallocated.
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
-func NewRocksDB(attrs proto.Attributes, dir string, cacheSize int64, stopper *stop.Stopper) *RocksDB {
+func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize int64, stopper *stop.Stopper) *RocksDB {
 	if dir == "" {
 		panic(util.Errorf("dir must be non-empty"))
 	}
@@ -72,7 +72,7 @@ func NewRocksDB(attrs proto.Attributes, dir string, cacheSize int64, stopper *st
 	}
 }
 
-func newMemRocksDB(attrs proto.Attributes, cacheSize int64, stopper *stop.Stopper) *RocksDB {
+func newMemRocksDB(attrs roachpb.Attributes, cacheSize int64, stopper *stop.Stopper) *RocksDB {
 	return &RocksDB{
 		attrs: attrs,
 		// dir: empty dir == "mem" RocksDB instance.
@@ -144,7 +144,7 @@ func (r *RocksDB) Close() {
 // may include a specification of disk type (e.g. hdd, ssd, fio, etc.)
 // and potentially other labels to identify important attributes of
 // the engine.
-func (r *RocksDB) Attrs() proto.Attributes {
+func (r *RocksDB) Attrs() roachpb.Attributes {
 	return r.attrs
 }
 
@@ -156,7 +156,7 @@ func emptyKeyError() error {
 //
 // The key and value byte slices may be reused safely. put takes a copy of
 // them before returning.
-func (r *RocksDB) Put(key proto.EncodedKey, value []byte) error {
+func (r *RocksDB) Put(key roachpb.EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -175,7 +175,7 @@ func (r *RocksDB) Put(key proto.EncodedKey, value []byte) error {
 //
 // The key and value byte slices may be reused safely. merge takes a copy
 // of them before returning.
-func (r *RocksDB) Merge(key proto.EncodedKey, value []byte) error {
+func (r *RocksDB) Merge(key roachpb.EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -187,12 +187,12 @@ func (r *RocksDB) Merge(key proto.EncodedKey, value []byte) error {
 }
 
 // Get returns the value for the given key.
-func (r *RocksDB) Get(key proto.EncodedKey) ([]byte, error) {
+func (r *RocksDB) Get(key roachpb.EncodedKey) ([]byte, error) {
 	return r.getInternal(key, nil)
 }
 
 // getInternal returns the value for the given key.
-func (r *RocksDB) getInternal(key proto.EncodedKey, snapshotHandle *C.DBSnapshot) ([]byte, error) {
+func (r *RocksDB) getInternal(key roachpb.EncodedKey, snapshotHandle *C.DBSnapshot) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -205,12 +205,12 @@ func (r *RocksDB) getInternal(key proto.EncodedKey, snapshotHandle *C.DBSnapshot
 }
 
 // GetProto fetches the value at the specified key and unmarshals it.
-func (r *RocksDB) GetProto(key proto.EncodedKey, msg gogoproto.Message) (
+func (r *RocksDB) GetProto(key roachpb.EncodedKey, msg gogoproto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
 	return r.getProtoInternal(key, msg, nil)
 }
 
-func (r *RocksDB) getProtoInternal(key proto.EncodedKey, msg gogoproto.Message,
+func (r *RocksDB) getProtoInternal(key roachpb.EncodedKey, msg gogoproto.Message,
 	snapshotHandle *C.DBSnapshot) (ok bool, keyBytes, valBytes int64, err error) {
 	if len(key) == 0 {
 		err = emptyKeyError()
@@ -228,7 +228,7 @@ func (r *RocksDB) getProtoInternal(key proto.EncodedKey, msg gogoproto.Message,
 	if msg != nil {
 		// Make a byte slice that is backed by result.data. This slice
 		// cannot live past the lifetime of this method, but we're only
-		// using it to unmarshal the proto.
+		// using it to unmarshal the roachpb.
 		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
 		err = gogoproto.Unmarshal(data, msg)
 	}
@@ -239,7 +239,7 @@ func (r *RocksDB) getProtoInternal(key proto.EncodedKey, msg gogoproto.Message,
 }
 
 // Clear removes the item from the db with the given key.
-func (r *RocksDB) Clear(key proto.EncodedKey) error {
+func (r *RocksDB) Clear(key roachpb.EncodedKey) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -248,11 +248,11 @@ func (r *RocksDB) Clear(key proto.EncodedKey) error {
 
 // Iterate iterates from start to end keys, invoking f on each
 // key/value pair. See engine.Iterate for details.
-func (r *RocksDB) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error {
+func (r *RocksDB) Iterate(start, end roachpb.EncodedKey, f func(roachpb.RawKeyValue) (bool, error)) error {
 	return r.iterateInternal(start, end, f, nil)
 }
 
-func (r *RocksDB) iterateInternal(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error),
+func (r *RocksDB) iterateInternal(start, end roachpb.EncodedKey, f func(roachpb.RawKeyValue) (bool, error),
 	snapshotHandle *C.DBSnapshot) error {
 	if bytes.Compare(start, end) >= 0 {
 		return nil
@@ -266,7 +266,7 @@ func (r *RocksDB) iterateInternal(start, end proto.EncodedKey, f func(proto.RawK
 		if !it.Key().Less(end) {
 			break
 		}
-		if done, err := f(proto.RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
+		if done, err := f(roachpb.RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
 			return err
 		}
 	}
@@ -275,9 +275,9 @@ func (r *RocksDB) iterateInternal(start, end proto.EncodedKey, f func(proto.RawK
 }
 
 // Capacity queries the underlying file system for disk capacity information.
-func (r *RocksDB) Capacity() (proto.StoreCapacity, error) {
+func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	var fs syscall.Statfs_t
-	var capacity proto.StoreCapacity
+	var capacity roachpb.StoreCapacity
 	dir := r.dir
 	if dir == "" {
 		dir = "/tmp"
@@ -300,7 +300,7 @@ func (r *RocksDB) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
 // Similarly, specifying nil for the end key will compact through the
 // last key. Note that the use of the word "Range" here does not refer
 // to Cockroach ranges, just to a generalized key range.
-func (r *RocksDB) CompactRange(start, end proto.EncodedKey) {
+func (r *RocksDB) CompactRange(start, end roachpb.EncodedKey) {
 	var (
 		s, e       C.DBSlice
 		sPtr, ePtr *C.DBSlice
@@ -326,7 +326,7 @@ func (r *RocksDB) Destroy() error {
 
 // ApproximateSize returns the approximate number of bytes on disk that RocksDB
 // is using to store data for the given range of keys.
-func (r *RocksDB) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
+func (r *RocksDB) ApproximateSize(start, end roachpb.EncodedKey) (uint64, error) {
 	return uint64(C.DBApproximateSize(r.rdb, goToCSlice(start), goToCSlice(end))), nil
 }
 
@@ -398,8 +398,8 @@ func statusToError(s C.DBStatus) error {
 }
 
 // goMerge takes existing and update byte slices that are expected to
-// be marshalled proto.Values and merges the two values returning a
-// marshalled proto.Value or an error.
+// be marshalled roachpb.Values and merges the two values returning a
+// marshalled roachpb.Value or an error.
 func goMerge(existing, update []byte) ([]byte, error) {
 	var result C.DBString
 	status := C.DBMergeOne(goToCSlice(existing), goToCSlice(update), &result)
@@ -458,22 +458,22 @@ func (r *rocksDBSnapshot) Close() {
 }
 
 // Attrs returns the engine/store attributes.
-func (r *rocksDBSnapshot) Attrs() proto.Attributes {
+func (r *rocksDBSnapshot) Attrs() roachpb.Attributes {
 	return r.parent.Attrs()
 }
 
 // Put is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) Put(key proto.EncodedKey, value []byte) error {
+func (r *rocksDBSnapshot) Put(key roachpb.EncodedKey, value []byte) error {
 	return util.Errorf("cannot Put to a snapshot")
 }
 
 // Get returns the value for the given key, nil otherwise using
 // the snapshot handle.
-func (r *rocksDBSnapshot) Get(key proto.EncodedKey) ([]byte, error) {
+func (r *rocksDBSnapshot) Get(key roachpb.EncodedKey) ([]byte, error) {
 	return r.parent.getInternal(key, r.handle)
 }
 
-func (r *rocksDBSnapshot) GetProto(key proto.EncodedKey, msg gogoproto.Message) (
+func (r *rocksDBSnapshot) GetProto(key roachpb.EncodedKey, msg gogoproto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
 	return r.parent.getProtoInternal(key, msg, r.handle)
 }
@@ -481,22 +481,22 @@ func (r *rocksDBSnapshot) GetProto(key proto.EncodedKey, msg gogoproto.Message) 
 // Iterate iterates over the keys between start inclusive and end
 // exclusive, invoking f() on each key/value pair using the snapshot
 // handle.
-func (r *rocksDBSnapshot) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error {
+func (r *rocksDBSnapshot) Iterate(start, end roachpb.EncodedKey, f func(roachpb.RawKeyValue) (bool, error)) error {
 	return r.parent.iterateInternal(start, end, f, r.handle)
 }
 
 // Clear is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) Clear(key proto.EncodedKey) error {
+func (r *rocksDBSnapshot) Clear(key roachpb.EncodedKey) error {
 	return util.Errorf("cannot Clear from a snapshot")
 }
 
 // Merge is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) Merge(key proto.EncodedKey, value []byte) error {
+func (r *rocksDBSnapshot) Merge(key roachpb.EncodedKey, value []byte) error {
 	return util.Errorf("cannot Merge to a snapshot")
 }
 
 // Capacity returns capacity details for the engine's available storage.
-func (r *rocksDBSnapshot) Capacity() (proto.StoreCapacity, error) {
+func (r *rocksDBSnapshot) Capacity() (roachpb.StoreCapacity, error) {
 	return r.parent.Capacity()
 }
 
@@ -506,7 +506,7 @@ func (r *rocksDBSnapshot) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
 
 // ApproximateSize returns the approximate number of bytes the engine is
 // using to store data for the given range of keys.
-func (r *rocksDBSnapshot) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
+func (r *rocksDBSnapshot) ApproximateSize(start, end roachpb.EncodedKey) (uint64, error) {
 	return r.parent.ApproximateSize(start, end)
 }
 
@@ -565,11 +565,11 @@ func (r *rocksDBBatch) Close() {
 }
 
 // Attrs returns the engine/store attributes.
-func (r *rocksDBBatch) Attrs() proto.Attributes {
+func (r *rocksDBBatch) Attrs() roachpb.Attributes {
 	return r.parent.Attrs()
 }
 
-func (r *rocksDBBatch) Put(key proto.EncodedKey, value []byte) error {
+func (r *rocksDBBatch) Put(key roachpb.EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -577,7 +577,7 @@ func (r *rocksDBBatch) Put(key proto.EncodedKey, value []byte) error {
 	return nil
 }
 
-func (r *rocksDBBatch) Merge(key proto.EncodedKey, value []byte) error {
+func (r *rocksDBBatch) Merge(key roachpb.EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -585,7 +585,7 @@ func (r *rocksDBBatch) Merge(key proto.EncodedKey, value []byte) error {
 	return nil
 }
 
-func (r *rocksDBBatch) Get(key proto.EncodedKey) ([]byte, error) {
+func (r *rocksDBBatch) Get(key roachpb.EncodedKey) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -597,7 +597,7 @@ func (r *rocksDBBatch) Get(key proto.EncodedKey) ([]byte, error) {
 	return cStringToGoBytes(result), nil
 }
 
-func (r *rocksDBBatch) GetProto(key proto.EncodedKey, msg gogoproto.Message) (
+func (r *rocksDBBatch) GetProto(key roachpb.EncodedKey, msg gogoproto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
 	if len(key) == 0 {
 		err = emptyKeyError()
@@ -614,7 +614,7 @@ func (r *rocksDBBatch) GetProto(key proto.EncodedKey, msg gogoproto.Message) (
 	if msg != nil {
 		// Make a byte slice that is backed by result.data. This slice
 		// cannot live past the lifetime of this method, but we're only
-		// using it to unmarshal the proto.
+		// using it to unmarshal the roachpb.
 		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
 		err = gogoproto.Unmarshal(data, msg)
 	}
@@ -624,7 +624,7 @@ func (r *rocksDBBatch) GetProto(key proto.EncodedKey, msg gogoproto.Message) (
 	return
 }
 
-func (r *rocksDBBatch) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error {
+func (r *rocksDBBatch) Iterate(start, end roachpb.EncodedKey, f func(roachpb.RawKeyValue) (bool, error)) error {
 	if bytes.Compare(start, end) >= 0 {
 		return nil
 	}
@@ -639,7 +639,7 @@ func (r *rocksDBBatch) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyV
 		if !it.Key().Less(end) {
 			break
 		}
-		if done, err := f(proto.RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
+		if done, err := f(roachpb.RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
 			return err
 		}
 	}
@@ -647,7 +647,7 @@ func (r *rocksDBBatch) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyV
 	return it.Error()
 }
 
-func (r *rocksDBBatch) Clear(key proto.EncodedKey) error {
+func (r *rocksDBBatch) Clear(key roachpb.EncodedKey) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -655,7 +655,7 @@ func (r *rocksDBBatch) Clear(key proto.EncodedKey) error {
 	return nil
 }
 
-func (r *rocksDBBatch) Capacity() (proto.StoreCapacity, error) {
+func (r *rocksDBBatch) Capacity() (roachpb.StoreCapacity, error) {
 	return r.parent.Capacity()
 }
 
@@ -663,7 +663,7 @@ func (r *rocksDBBatch) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
 	// no-op
 }
 
-func (r *rocksDBBatch) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
+func (r *rocksDBBatch) ApproximateSize(start, end roachpb.EncodedKey) (uint64, error) {
 	return r.parent.ApproximateSize(start, end)
 }
 
@@ -763,7 +763,7 @@ func (r *rocksDBIterator) SeekReverse(key []byte) {
 		}
 		// Make sure the current key is <= the provided key.
 		curKey := r.Key()
-		if proto.EncodedKey(key).Less(curKey) {
+		if roachpb.EncodedKey(key).Less(curKey) {
 			r.Prev()
 		}
 	}
@@ -773,7 +773,7 @@ func (r *rocksDBIterator) Prev() {
 	C.DBIterPrev(r.iter)
 }
 
-func (r *rocksDBIterator) Key() proto.EncodedKey {
+func (r *rocksDBIterator) Key() roachpb.EncodedKey {
 	// The data returned by rocksdb_iter_{key,value} is not meant to be
 	// freed by the client. It is a direct reference to the data managed
 	// by the iterator, so it is copied instead of freed.
@@ -793,7 +793,7 @@ func (r *rocksDBIterator) ValueProto(msg gogoproto.Message) error {
 	}
 	// Make a byte slice that is backed by result.data. This slice
 	// cannot live past the lifetime of this method, but we're only
-	// using it to unmarshal the proto.
+	// using it to unmarshal the roachpb.
 	data := cSliceToUnsafeGoBytes(result)
 	return gogoproto.Unmarshal(data, msg)
 }

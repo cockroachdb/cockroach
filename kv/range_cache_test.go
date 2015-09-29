@@ -24,7 +24,7 @@ import (
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -36,7 +36,7 @@ type testDescriptorDB struct {
 }
 
 type testDescriptorNode struct {
-	*proto.RangeDescriptor
+	*roachpb.RangeDescriptor
 }
 
 func (a testDescriptorNode) Compare(b llrb.Comparable) int {
@@ -45,12 +45,12 @@ func (a testDescriptorNode) Compare(b llrb.Comparable) int {
 	return bytes.Compare(aKey, bKey)
 }
 
-func (db *testDescriptorDB) getDescriptor(key proto.Key) []proto.RangeDescriptor {
+func (db *testDescriptorDB) getDescriptor(key roachpb.Key) []roachpb.RangeDescriptor {
 	log.Infof("getDescriptor: %s", key)
-	response := make([]proto.RangeDescriptor, 0, 3)
+	response := make([]roachpb.RangeDescriptor, 0, 3)
 	for i := 0; i < 3; i++ {
 		v := db.data.Ceil(testDescriptorNode{
-			&proto.RangeDescriptor{
+			&roachpb.RangeDescriptor{
 				EndKey: key.Next(),
 			},
 		})
@@ -59,19 +59,19 @@ func (db *testDescriptorDB) getDescriptor(key proto.Key) []proto.RangeDescriptor
 		}
 		response = append(response, *(v.(testDescriptorNode).RangeDescriptor))
 		// Break to keep from skidding off the end of the available ranges.
-		if response[i].EndKey.Equal(proto.KeyMax) {
+		if response[i].EndKey.Equal(roachpb.KeyMax) {
 			break
 		}
-		key = proto.Key(response[i].EndKey)
+		key = roachpb.Key(response[i].EndKey)
 	}
 	return response
 }
 
-func (db *testDescriptorDB) firstRange() (*proto.RangeDescriptor, error) {
+func (db *testDescriptorDB) firstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, nil
 }
 
-func (db *testDescriptorDB) rangeLookup(key proto.Key, _ lookupOptions, _ *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
+func (db *testDescriptorDB) rangeLookup(key roachpb.Key, _ lookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
 	db.lookupCount++
 	if bytes.HasPrefix(key, keys.Meta2Prefix) {
 		return db.getDescriptor(key[len(keys.Meta2Prefix):]), nil
@@ -79,8 +79,8 @@ func (db *testDescriptorDB) rangeLookup(key proto.Key, _ lookupOptions, _ *proto
 	return db.getDescriptor(key), nil
 }
 
-func (db *testDescriptorDB) splitRange(t *testing.T, key proto.Key) {
-	v := db.data.Ceil(testDescriptorNode{&proto.RangeDescriptor{EndKey: key}})
+func (db *testDescriptorDB) splitRange(t *testing.T, key roachpb.Key) {
+	v := db.data.Ceil(testDescriptorNode{&roachpb.RangeDescriptor{EndKey: key}})
 	if v == nil {
 		t.Fatalf("Error splitting range at key %s, range to split not found", string(key))
 	}
@@ -89,13 +89,13 @@ func (db *testDescriptorDB) splitRange(t *testing.T, key proto.Key) {
 		t.Fatalf("Attempt to split existing range at Endkey: %s", string(key))
 	}
 	db.data.Insert(testDescriptorNode{
-		&proto.RangeDescriptor{
+		&roachpb.RangeDescriptor{
 			StartKey: val.StartKey,
 			EndKey:   key,
 		},
 	})
 	db.data.Insert(testDescriptorNode{
-		&proto.RangeDescriptor{
+		&roachpb.RangeDescriptor{
 			StartKey: key,
 			EndKey:   val.EndKey,
 		},
@@ -105,15 +105,15 @@ func (db *testDescriptorDB) splitRange(t *testing.T, key proto.Key) {
 func newTestDescriptorDB() *testDescriptorDB {
 	db := &testDescriptorDB{}
 	db.data.Insert(testDescriptorNode{
-		&proto.RangeDescriptor{
-			StartKey: keys.MakeKey(keys.Meta2Prefix, proto.KeyMin),
-			EndKey:   keys.MakeKey(keys.Meta2Prefix, proto.KeyMax),
+		&roachpb.RangeDescriptor{
+			StartKey: keys.MakeKey(keys.Meta2Prefix, roachpb.KeyMin),
+			EndKey:   keys.MakeKey(keys.Meta2Prefix, roachpb.KeyMax),
 		},
 	})
 	db.data.Insert(testDescriptorNode{
-		&proto.RangeDescriptor{
-			StartKey: proto.KeyMin,
-			EndKey:   proto.KeyMax,
+		&roachpb.RangeDescriptor{
+			StartKey: roachpb.KeyMin,
+			EndKey:   roachpb.KeyMax,
 		},
 	})
 	return db
@@ -126,12 +126,12 @@ func (db *testDescriptorDB) assertLookupCount(t *testing.T, expected int, key st
 	db.lookupCount = 0
 }
 
-func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *proto.RangeDescriptor {
-	r, err := rc.LookupRangeDescriptor(proto.Key(key), lookupOptions{})
+func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *roachpb.RangeDescriptor {
+	r, err := rc.LookupRangeDescriptor(roachpb.Key(key), lookupOptions{})
 	if err != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err.Error())
 	}
-	if !r.ContainsKey(keys.KeyAddress(proto.Key(key))) {
+	if !r.ContainsKey(keys.KeyAddress(roachpb.Key(key))) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
 	log.Infof("doLookup: %s %+v", key, r)
@@ -140,8 +140,8 @@ func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *proto.RangeDe
 
 func TestRangeCacheAssumptions(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	expKeyMin := keys.RangeMetaKey(keys.RangeMetaKey(keys.RangeMetaKey(proto.Key("test"))))
-	if !bytes.Equal(expKeyMin, proto.KeyMin) {
+	expKeyMin := keys.RangeMetaKey(keys.RangeMetaKey(keys.RangeMetaKey(roachpb.Key("test"))))
+	if !bytes.Equal(expKeyMin, roachpb.KeyMin) {
 		t.Fatalf("RangeCache relies on RangeMetaKey returning KeyMin after two levels, but got %s", expKeyMin)
 	}
 }
@@ -154,9 +154,9 @@ func TestRangeCache(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	db := newTestDescriptorDB()
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
-		db.splitRange(t, proto.Key(string(char)))
+		db.splitRange(t, roachpb.Key(string(char)))
 		if i > 0 && i%6 == 0 {
-			db.splitRange(t, keys.RangeMetaKey(proto.Key(string(char))))
+			db.splitRange(t, keys.RangeMetaKey(roachpb.Key(string(char))))
 		}
 	}
 
@@ -194,7 +194,7 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCount(t, 0, "xx")
 
 	// Evict clears one level 1 and one level 2 cache
-	db.cache.EvictCachedRangeDescriptor(proto.Key("da"), nil, false)
+	db.cache.EvictCachedRangeDescriptor(roachpb.Key("da"), nil, false)
 	doLookup(t, db.cache, "fa")
 	db.assertLookupCount(t, 0, "fa")
 	doLookup(t, db.cache, "da")
@@ -207,12 +207,12 @@ func TestRangeCache(t *testing.T) {
 
 	// Attempt to compare-and-evict with a descriptor that is not equal to the
 	// cached one; it should not alter the cache.
-	db.cache.EvictCachedRangeDescriptor(proto.Key("cz"), &proto.RangeDescriptor{}, false)
+	db.cache.EvictCachedRangeDescriptor(roachpb.Key("cz"), &roachpb.RangeDescriptor{}, false)
 	doLookup(t, db.cache, "cz")
 	db.assertLookupCount(t, 0, "cz")
 	// Now evict with the actual descriptor. The cache should clear the
 	// descriptor and the cached meta key.
-	db.cache.EvictCachedRangeDescriptor(proto.Key("cz"), doLookup(t, db.cache, "cz"), false)
+	db.cache.EvictCachedRangeDescriptor(roachpb.Key("cz"), doLookup(t, db.cache, "cz"), false)
 	doLookup(t, db.cache, "cz")
 	db.assertLookupCount(t, 2, "cz")
 
@@ -223,38 +223,38 @@ func TestRangeCache(t *testing.T) {
 func TestRangeCacheClearOverlapping(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	defDesc := &proto.RangeDescriptor{
-		StartKey: proto.KeyMin,
-		EndKey:   proto.KeyMax,
+	defDesc := &roachpb.RangeDescriptor{
+		StartKey: roachpb.KeyMin,
+		EndKey:   roachpb.KeyMax,
 	}
 
 	cache := newRangeDescriptorCache(nil, 2<<10)
-	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), defDesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.KeyMax)), defDesc)
 
 	// Now, add a new, overlapping set of descriptors.
-	minToBDesc := &proto.RangeDescriptor{
-		StartKey: proto.KeyMin,
-		EndKey:   proto.Key("b"),
+	minToBDesc := &roachpb.RangeDescriptor{
+		StartKey: roachpb.KeyMin,
+		EndKey:   roachpb.Key("b"),
 	}
-	bToMaxDesc := &proto.RangeDescriptor{
-		StartKey: proto.Key("b"),
-		EndKey:   proto.KeyMax,
+	bToMaxDesc := &roachpb.RangeDescriptor{
+		StartKey: roachpb.Key("b"),
+		EndKey:   roachpb.KeyMax,
 	}
-	cache.clearOverlappingCachedRangeDescriptors(proto.Key("b"), keys.RangeMetaKey(proto.Key("b")), minToBDesc)
-	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.Key("b"))), minToBDesc)
-	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b"), false); desc != nil {
+	cache.clearOverlappingCachedRangeDescriptors(roachpb.Key("b"), keys.RangeMetaKey(roachpb.Key("b")), minToBDesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.Key("b"))), minToBDesc)
+	if _, desc := cache.getCachedRangeDescriptor(roachpb.Key("b"), false); desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
-	cache.clearOverlappingCachedRangeDescriptors(proto.KeyMax, keys.RangeMetaKey(proto.KeyMax), bToMaxDesc)
-	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), bToMaxDesc)
-	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b"), false); desc != bToMaxDesc {
+	cache.clearOverlappingCachedRangeDescriptors(roachpb.KeyMax, keys.RangeMetaKey(roachpb.KeyMax), bToMaxDesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.KeyMax)), bToMaxDesc)
+	if _, desc := cache.getCachedRangeDescriptor(roachpb.Key("b"), false); desc != bToMaxDesc {
 		t.Errorf("expected descriptor %s; got %s", bToMaxDesc, desc)
 	}
 
 	// Add default descriptor back which should remove two split descriptors.
-	cache.clearOverlappingCachedRangeDescriptors(proto.KeyMax, keys.RangeMetaKey(proto.KeyMax), defDesc)
-	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), defDesc)
-	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
+	cache.clearOverlappingCachedRangeDescriptors(roachpb.KeyMax, keys.RangeMetaKey(roachpb.KeyMax), defDesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.KeyMax)), defDesc)
+	for _, key := range []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")} {
 		if _, desc := cache.getCachedRangeDescriptor(key, false); desc != defDesc {
 			t.Errorf("expected descriptor %s for key %s; got %s", defDesc, key, desc)
 		}
@@ -273,13 +273,13 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	firstDesc := &proto.RangeDescriptor{
-		StartKey: proto.KeyMin,
-		EndKey:   proto.Key("zzz"),
+	firstDesc := &roachpb.RangeDescriptor{
+		StartKey: roachpb.KeyMin,
+		EndKey:   roachpb.Key("zzz"),
 	}
-	restDesc := &proto.RangeDescriptor{
+	restDesc := &roachpb.RangeDescriptor{
 		StartKey: firstDesc.StartKey,
-		EndKey:   proto.KeyMax,
+		EndKey:   roachpb.KeyMax,
 	}
 
 	cache := newRangeDescriptorCache(nil, 2<<10)
@@ -289,9 +289,9 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 		restDesc)
 
 	// Add new range, corresponding to splitting the first range at a meta key.
-	metaSplitDesc := &proto.RangeDescriptor{
-		StartKey: proto.KeyMin,
-		EndKey:   proto.Key(keys.RangeMetaKey(proto.Key("foo"))),
+	metaSplitDesc := &roachpb.RangeDescriptor{
+		StartKey: roachpb.KeyMin,
+		EndKey:   roachpb.Key(keys.RangeMetaKey(roachpb.Key("foo"))),
 	}
 	func() {
 		defer func() {
@@ -308,10 +308,10 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 func TestGetCachedRangeDescriptorInclusive(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	testData := []*proto.RangeDescriptor{
-		{StartKey: proto.Key("a"), EndKey: proto.Key("c")},
-		{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
-		{StartKey: proto.Key("g"), EndKey: proto.Key("z")},
+	testData := []*roachpb.RangeDescriptor{
+		{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+		{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("e")},
+		{StartKey: roachpb.Key("g"), EndKey: roachpb.Key("z")},
 	}
 
 	cache := newRangeDescriptorCache(nil, 2<<10)
@@ -320,37 +320,37 @@ func TestGetCachedRangeDescriptorInclusive(t *testing.T) {
 	}
 
 	testCases := []struct {
-		queryKey proto.Key
+		queryKey roachpb.Key
 		cacheKey rangeCacheKey
-		rng      *proto.RangeDescriptor
+		rng      *roachpb.RangeDescriptor
 	}{
 		{
 			// Check range start key.
-			queryKey: proto.Key("a"),
+			queryKey: roachpb.Key("a"),
 			cacheKey: nil,
 			rng:      nil,
 		},
 		{
 			// Check range end key.
-			queryKey: proto.Key("c"),
-			cacheKey: rangeCacheKey(keys.RangeMetaKey(proto.Key("c"))),
-			rng:      &proto.RangeDescriptor{StartKey: proto.Key("a"), EndKey: proto.Key("c")},
+			queryKey: roachpb.Key("c"),
+			cacheKey: rangeCacheKey(keys.RangeMetaKey(roachpb.Key("c"))),
+			rng:      &roachpb.RangeDescriptor{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 		},
 		{
 			// Check range middle key.
-			queryKey: proto.Key("d"),
-			cacheKey: rangeCacheKey(keys.RangeMetaKey(proto.Key("e"))),
-			rng:      &proto.RangeDescriptor{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
+			queryKey: roachpb.Key("d"),
+			cacheKey: rangeCacheKey(keys.RangeMetaKey(roachpb.Key("e"))),
+			rng:      &roachpb.RangeDescriptor{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("e")},
 		},
 		{
 			// Check miss range key.
-			queryKey: proto.Key("f"),
+			queryKey: roachpb.Key("f"),
 			cacheKey: nil,
 			rng:      nil,
 		},
 		{
 			// Check range start key with previous range miss.
-			queryKey: proto.Key("g"),
+			queryKey: roachpb.Key("g"),
 			cacheKey: nil,
 			rng:      nil,
 		},

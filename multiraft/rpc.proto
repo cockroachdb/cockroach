@@ -19,7 +19,7 @@ syntax = "proto2";
 package cockroach.multiraft;
 option go_package = "multiraft";
 
-import "cockroach/proto/metadata.proto";
+import "cockroach/roachpb/metadata.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
@@ -33,10 +33,10 @@ option (gogoproto.goproto_unrecognized_all) = false;
 message RaftMessageRequest {
   optional uint64 group_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "GroupID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.RangeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
 
-  optional proto.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
-  optional proto.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
+  optional roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
+  optional roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
 
   optional raftpb.Message message = 4 [(gogoproto.nullable) = false];
 }
@@ -52,9 +52,9 @@ message ConfChangeContext {
       (gogoproto.customname) = "CommandID"];
 
   // Payload is the application-level command (i.e. an encoded
-  // proto.EndTransactionRequest).
+  // roachpb.EndTransactionRequest).
   optional bytes payload = 2;
 
   // Replica contains full details about the replica being added or removed.
-  optional proto.ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
+  optional roachpb.ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
 }

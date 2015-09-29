@@ -20,15 +20,15 @@ package kv
 
 import (
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // replicaInfo extends the Replica structure with the associated node
 // descriptor.
 type replicaInfo struct {
-	proto.ReplicaDescriptor
-	NodeDesc *proto.NodeDescriptor
+	roachpb.ReplicaDescriptor
+	NodeDesc *roachpb.NodeDescriptor
 }
 
 func (i *replicaInfo) attrs() []string {
@@ -41,7 +41,7 @@ type replicaSlice []replicaInfo
 // newReplicaSlice creates a replicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossipped are omitted from the result.
-func newReplicaSlice(gossip *gossip.Gossip, desc *proto.RangeDescriptor) replicaSlice {
+func newReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) replicaSlice {
 	if gossip == nil {
 		return nil
 	}
@@ -69,7 +69,7 @@ func (rs replicaSlice) Swap(i, j int) {
 
 // FindReplica returns the index of the replica which matches the specified store
 // ID. If no replica matches, -1 is returned.
-func (rs replicaSlice) FindReplica(storeID proto.StoreID) int {
+func (rs replicaSlice) FindReplica(storeID roachpb.StoreID) int {
 	for i := range rs {
 		if rs[i].StoreID == storeID {
 			return i
@@ -80,7 +80,7 @@ func (rs replicaSlice) FindReplica(storeID proto.StoreID) int {
 
 // FindReplicaByNodeID returns the index of the replica which matches the specified node
 // ID. If no replica matches, -1 is returned.
-func (rs replicaSlice) FindReplicaByNodeID(nodeID proto.NodeID) int {
+func (rs replicaSlice) FindReplicaByNodeID(nodeID roachpb.NodeID) int {
 	for i := range rs {
 		if rs[i].NodeID == nodeID {
 			return i

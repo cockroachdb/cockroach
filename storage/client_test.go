@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
@@ -57,7 +57,7 @@ import (
 func createTestStore(t *testing.T) (*storage.Store, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	store := createTestStoreWithEngine(t,
-		engine.NewInMem(proto.Attributes{}, 10<<20, stopper),
+		engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper),
 		hlc.NewClock(hlc.NewManualClock(0).UnixNano),
 		true, nil, stopper)
 	return store, stopper
@@ -72,16 +72,16 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 		ctx := storage.TestStoreContext
 		sCtx = &ctx
 	}
-	nodeDesc := &proto.NodeDescriptor{NodeID: 1}
+	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	sCtx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	localSender := kv.NewLocalSender()
 	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) gogoproto.Message, _ func() gogoproto.Message,
 		_ *rpc.Context) ([]gogoproto.Message, error) {
-		ba := getArgs(nil /* net.Addr */).(*proto.BatchRequest)
+		ba := getArgs(nil /* net.Addr */).(*roachpb.BatchRequest)
 		br, pErr := localSender.Send(context.Background(), *ba)
 		if br == nil {
-			br = &proto.BatchResponse{}
+			br = &roachpb.BatchResponse{}
 		}
 		br.Error = pErr
 		return []gogoproto.Message{br}, nil
@@ -103,7 +103,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(*sCtx, eng, nodeDesc)
 	if bootstrap {
-		if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
+		if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -140,7 +140,7 @@ type multiTestContext struct {
 	engines []engine.Engine
 	senders []*kv.LocalSender
 	stores  []*storage.Store
-	idents  []proto.StoreIdent
+	idents  []roachpb.StoreIdent
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
 	// for 'transport', and the 'stoppers' slice corresponds to the
@@ -228,15 +228,15 @@ func (m *multiTestContext) Stop() {
 func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 	getArgs func(addr net.Addr) gogoproto.Message,
 	getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-	fail := func(pErr *proto.Error) ([]gogoproto.Message, error) {
-		br := &proto.BatchResponse{}
+	fail := func(pErr *roachpb.Error) ([]gogoproto.Message, error) {
+		br := &roachpb.BatchResponse{}
 		br.Error = pErr
 		return []gogoproto.Message{br}, nil
 	}
-	var br *proto.BatchResponse
-	var pErr *proto.Error
+	var br *roachpb.BatchResponse
+	var pErr *roachpb.Error
 	for _, addr := range addrs {
-		ba := *getArgs(nil /* net.Addr */).(*proto.BatchRequest)
+		ba := *getArgs(nil /* net.Addr */).(*roachpb.BatchRequest)
 		// Node ID is encoded in the address.
 		nodeID, stErr := strconv.Atoi(addr.String())
 		if stErr != nil {
@@ -247,8 +247,8 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 			return []gogoproto.Message{br}, nil
 		}
 		switch tErr := pErr.GoError().(type) {
-		case *proto.RangeKeyMismatchError:
-		case *proto.NotLeaderError:
+		case *roachpb.RangeKeyMismatchError:
+		case *roachpb.NotLeaderError:
 			if tErr.Leader == nil {
 				// localSender has the range, is *not* the Leader, but the
 				// Leader is not known; this can happen if the leader is removed
@@ -305,19 +305,19 @@ func (m *multiTestContext) addStore() {
 	} else {
 		engineStopper := stop.NewStopper()
 		m.engineStoppers = append(m.engineStoppers, engineStopper)
-		eng = engine.NewInMem(proto.Attributes{}, 1<<20, engineStopper)
+		eng = engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 		m.engines = append(m.engines, eng)
 		needBootstrap = true
 	}
 
 	stopper := stop.NewStopper()
 	ctx := m.makeContext(idx)
-	nodeID := proto.NodeID(idx + 1)
-	store := storage.NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: nodeID})
+	nodeID := roachpb.NodeID(idx + 1)
+	store := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap {
-		err := store.Bootstrap(proto.StoreIdent{
-			NodeID:  proto.NodeID(idx + 1),
-			StoreID: proto.StoreID(idx + 1),
+		err := store.Bootstrap(roachpb.StoreIdent{
+			NodeID:  roachpb.NodeID(idx + 1),
+			StoreID: roachpb.StoreID(idx + 1),
 		}, stopper)
 		if err != nil {
 			m.t.Fatal(err)
@@ -350,8 +350,8 @@ func (m *multiTestContext) addStore() {
 
 // gossipNodeDesc adds the node descriptor to the gossip network.
 // Mostly makes sure that we don't see a warning per request.
-func gossipNodeDesc(g *gossip.Gossip, nodeID proto.NodeID) error {
-	nodeDesc := &proto.NodeDescriptor{
+func gossipNodeDesc(g *gossip.Gossip, nodeID roachpb.NodeID) error {
+	nodeDesc := &roachpb.NodeDescriptor{
 		NodeID: nodeID,
 		// Encode the node ID in the address so that rpcSend
 		// can figure out where requests must be sent.
@@ -377,7 +377,7 @@ func (m *multiTestContext) restartStore(i int) {
 	m.stoppers[i] = stop.NewStopper()
 
 	ctx := m.makeContext(i)
-	m.stores[i] = storage.NewStore(ctx, m.engines[i], &proto.NodeDescriptor{NodeID: proto.NodeID(i + 1)})
+	m.stores[i] = storage.NewStore(ctx, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
 	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
 		m.t.Fatal(err)
 	}
@@ -397,15 +397,15 @@ func (m *multiTestContext) restart() {
 }
 
 // replicateRange replicates the given range onto the given stores.
-func (m *multiTestContext) replicateRange(rangeID proto.RangeID, sourceStoreIndex int, dests ...int) {
+func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, sourceStoreIndex int, dests ...int) {
 	rng, err := m.stores[sourceStoreIndex].GetReplica(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
 	}
 
 	for _, dest := range dests {
-		err = rng.ChangeReplicas(proto.ADD_REPLICA,
-			proto.ReplicaDescriptor{
+		err = rng.ChangeReplicas(roachpb.ADD_REPLICA,
+			roachpb.ReplicaDescriptor{
 				NodeID:  m.stores[dest].Ident.NodeID,
 				StoreID: m.stores[dest].Ident.StoreID,
 			}, rng.Desc())
@@ -429,14 +429,14 @@ func (m *multiTestContext) replicateRange(rangeID proto.RangeID, sourceStoreInde
 
 // unreplicateRange removes a replica of the range in the source store
 // from the dest store.
-func (m *multiTestContext) unreplicateRange(rangeID proto.RangeID, source, dest int) {
+func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, source, dest int) {
 	rng, err := m.stores[source].GetReplica(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
 	}
 
-	err = rng.ChangeReplicas(proto.REMOVE_REPLICA,
-		proto.ReplicaDescriptor{
+	err = rng.ChangeReplicas(roachpb.REMOVE_REPLICA,
+		roachpb.ReplicaDescriptor{
 			NodeID:  m.idents[dest].NodeID,
 			StoreID: m.idents[dest].StoreID,
 		}, rng.Desc())
@@ -458,26 +458,26 @@ func (m *multiTestContext) expireLeaderLeases() {
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.GetRequest {
-	return proto.GetRequest{
-		RequestHeader: proto.RequestHeader{
+func getArgs(key []byte, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.GetRequest {
+	return roachpb.GetRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 	}
 }
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.PutRequest {
-	return proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
+func putArgs(key, value []byte, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.PutRequest {
+	return roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
-		Value: proto.Value{
+		Value: roachpb.Value{
 			Bytes: value,
 		},
 	}
@@ -485,22 +485,22 @@ func putArgs(key, value []byte, rangeID proto.RangeID, storeID proto.StoreID) pr
 
 // incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key []byte, inc int64, rangeID proto.RangeID, storeID proto.StoreID) proto.IncrementRequest {
-	return proto.IncrementRequest{
-		RequestHeader: proto.RequestHeader{
+func incrementArgs(key []byte, inc int64, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.IncrementRequest {
+	return roachpb.IncrementRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key:     key,
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 		Increment: inc,
 	}
 }
 
-func truncateLogArgs(index uint64, rangeID proto.RangeID, storeID proto.StoreID) proto.TruncateLogRequest {
-	return proto.TruncateLogRequest{
-		RequestHeader: proto.RequestHeader{
+func truncateLogArgs(index uint64, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.TruncateLogRequest {
+	return roachpb.TruncateLogRequest{
+		RequestHeader: roachpb.RequestHeader{
 			RangeID: rangeID,
-			Replica: proto.ReplicaDescriptor{StoreID: storeID},
+			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
 		},
 		Index: index,
 	}

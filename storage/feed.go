@@ -18,7 +18,7 @@
 package storage
 
 import (
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -29,8 +29,8 @@ import (
 // the store (for example through replication), with Scan set to false. This
 // event includes the Range's RangeDescriptor and current MVCCStats.
 type RegisterRangeEvent struct {
-	StoreID proto.StoreID
-	Desc    *proto.RangeDescriptor
+	StoreID roachpb.StoreID
+	Desc    *roachpb.RangeDescriptor
 	Stats   engine.MVCCStats
 	Scan    bool
 }
@@ -40,10 +40,10 @@ type RegisterRangeEvent struct {
 // MVCCStats containing the delta from the Range's previous stats. If the
 // update did not modify any statistics, this delta may be nil.
 type UpdateRangeEvent struct {
-	StoreID proto.StoreID
-	Desc    *proto.RangeDescriptor
+	StoreID roachpb.StoreID
+	Desc    *roachpb.RangeDescriptor
 	Stats   engine.MVCCStats
-	Method  proto.Method
+	Method  roachpb.Method
 	Delta   engine.MVCCStats
 }
 
@@ -51,8 +51,8 @@ type UpdateRangeEvent struct {
 // structure includes the Range's RangeDescriptor and the Range's previous
 // MVCCStats before it was removed.
 type RemoveRangeEvent struct {
-	StoreID proto.StoreID
-	Desc    *proto.RangeDescriptor
+	StoreID roachpb.StoreID
+	Desc    *roachpb.RangeDescriptor
 	Stats   engine.MVCCStats
 }
 
@@ -61,7 +61,7 @@ type RemoveRangeEvent struct {
 // originally existed, and a RegisterRangeEvent for the range created via
 // the split.
 type SplitRangeEvent struct {
-	StoreID  proto.StoreID
+	StoreID  roachpb.StoreID
 	Original UpdateRangeEvent
 	New      RegisterRangeEvent
 }
@@ -70,14 +70,14 @@ type SplitRangeEvent struct {
 // contains two component events: an UpdateRangeEvent for the range which
 // subsumed the other, and a RemoveRangeEvent for the range that was subsumed.
 type MergeRangeEvent struct {
-	StoreID proto.StoreID
+	StoreID roachpb.StoreID
 	Merged  UpdateRangeEvent
 	Removed RemoveRangeEvent
 }
 
 // StartStoreEvent occurs whenever a store is initially started.
 type StartStoreEvent struct {
-	StoreID   proto.StoreID
+	StoreID   roachpb.StoreID
 	StartedAt int64
 }
 
@@ -87,7 +87,7 @@ type StartStoreEvent struct {
 // from other events, this event should be periodically broadcast by the store
 // independently of other operations.
 type StoreStatusEvent struct {
-	Desc *proto.StoreDescriptor
+	Desc *roachpb.StoreDescriptor
 }
 
 // ReplicationStatusEvent contains statistics on the replication status of the
@@ -97,7 +97,7 @@ type StoreStatusEvent struct {
 // event should be periodically broadcast by the store independently of other
 // operations.
 type ReplicationStatusEvent struct {
-	StoreID proto.StoreID
+	StoreID roachpb.StoreID
 
 	// Per-range availability information, which is currently computed by
 	// periodically polling the ranges of each store.
@@ -114,27 +114,27 @@ type ReplicationStatusEvent struct {
 // consumers may be tracking statistics via the Deltas in UpdateRangeEvent;
 // this event informs subscribers to clear currently cached values.
 type BeginScanRangesEvent struct {
-	StoreID proto.StoreID
+	StoreID roachpb.StoreID
 }
 
 // EndScanRangesEvent occurs when the store has finished scanning all ranges.
 // Every BeginScanRangeEvent will eventually be followed by an
 // EndScanRangeEvent.
 type EndScanRangesEvent struct {
-	StoreID proto.StoreID
+	StoreID roachpb.StoreID
 }
 
 // StoreEventFeed is a helper structure which publishes store-specific events to
 // a util.Feed. The target feed may be shared by multiple StoreEventFeeds. If
 // the target feed is nil, event methods become no-ops.
 type StoreEventFeed struct {
-	id proto.StoreID
+	id roachpb.StoreID
 	f  *util.Feed
 }
 
 // NewStoreEventFeed creates a new StoreEventFeed which publishes events for a
 // specific store to the supplied feed.
-func NewStoreEventFeed(id proto.StoreID, feed *util.Feed) StoreEventFeed {
+func NewStoreEventFeed(id roachpb.StoreID, feed *util.Feed) StoreEventFeed {
 	return StoreEventFeed{
 		id: id,
 		f:  feed,
@@ -149,7 +149,7 @@ func (sef StoreEventFeed) registerRange(rng *Replica, scan bool) {
 
 // updateRange publishes an UpdateRangeEvent to this feed which describes a change
 // to the supplied Range.
-func (sef StoreEventFeed) updateRange(rng *Replica, method proto.Method, delta *engine.MVCCStats) {
+func (sef StoreEventFeed) updateRange(rng *Replica, method roachpb.Method, delta *engine.MVCCStats) {
 	sef.f.Publish(makeUpdateRangeEvent(sef.id, rng, method, delta))
 }
 
@@ -180,7 +180,7 @@ func (sef StoreEventFeed) startStore(startedAt int64) {
 }
 
 // storeStatus publishes a StoreStatusEvent to this feed.
-func (sef StoreEventFeed) storeStatus(desc *proto.StoreDescriptor) {
+func (sef StoreEventFeed) storeStatus(desc *roachpb.StoreDescriptor) {
 	sef.f.Publish(&StoreStatusEvent{
 		Desc: desc,
 	})
@@ -247,7 +247,7 @@ func ProcessStoreEvent(l StoreEventListener, event interface{}) {
 	}
 }
 
-func makeRegisterRangeEvent(id proto.StoreID, rng *Replica, scan bool) *RegisterRangeEvent {
+func makeRegisterRangeEvent(id roachpb.StoreID, rng *Replica, scan bool) *RegisterRangeEvent {
 	return &RegisterRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
@@ -256,7 +256,7 @@ func makeRegisterRangeEvent(id proto.StoreID, rng *Replica, scan bool) *Register
 	}
 }
 
-func makeUpdateRangeEvent(id proto.StoreID, rng *Replica, method proto.Method, delta *engine.MVCCStats) *UpdateRangeEvent {
+func makeUpdateRangeEvent(id roachpb.StoreID, rng *Replica, method roachpb.Method, delta *engine.MVCCStats) *UpdateRangeEvent {
 	return &UpdateRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
@@ -266,7 +266,7 @@ func makeUpdateRangeEvent(id proto.StoreID, rng *Replica, method proto.Method, d
 	}
 }
 
-func makeRemoveRangeEvent(id proto.StoreID, rng *Replica) *RemoveRangeEvent {
+func makeRemoveRangeEvent(id roachpb.StoreID, rng *Replica) *RemoveRangeEvent {
 	return &RemoveRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
@@ -274,7 +274,7 @@ func makeRemoveRangeEvent(id proto.StoreID, rng *Replica) *RemoveRangeEvent {
 	}
 }
 
-func makeSplitRangeEvent(id proto.StoreID, rngOrig, rngNew *Replica) *SplitRangeEvent {
+func makeSplitRangeEvent(id roachpb.StoreID, rngOrig, rngNew *Replica) *SplitRangeEvent {
 	sre := &SplitRangeEvent{
 		StoreID: id,
 		Original: UpdateRangeEvent{
@@ -292,7 +292,7 @@ func makeSplitRangeEvent(id proto.StoreID, rngOrig, rngNew *Replica) *SplitRange
 	return sre
 }
 
-func makeMergeRangeEvent(id proto.StoreID, rngMerged, rngRemoved *Replica) *MergeRangeEvent {
+func makeMergeRangeEvent(id roachpb.StoreID, rngMerged, rngRemoved *Replica) *MergeRangeEvent {
 	mre := &MergeRangeEvent{
 		StoreID: id,
 		Merged: UpdateRangeEvent{

@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -32,7 +32,7 @@ import (
 )
 
 type clientInfo struct {
-	id   proto.NodeID
+	id   roachpb.NodeID
 	addr *util.UnresolvedAddr
 }
 

@@ -28,14 +28,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 type details struct {
-	NodeID proto.NodeID `json:"nodeID"`
+	NodeID roachpb.NodeID `json:"nodeID"`
 }
 
 var retryOptions = retry.Options{
