@@ -5,6 +5,7 @@
   "dependencies": {
     "bower": ">=1.5.3",
     "npm": "^3.3.4",
+    "shonkwrap": "^1.1.2",
     "stylus": ">=0.51.1",
     "tsd": "^0.6.4",
     "tslint": ">=2.3.1-beta",
