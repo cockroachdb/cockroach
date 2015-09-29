@@ -38,7 +38,8 @@ TEST_TARGET             := build/test.js
 CSS_TARGET              := build/app.css
 STYL_OPTIONS            :=
 REMOTE_DEPS             := npm.installed bower.installed tsd.installed
-GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET) index.html
+INDEX                   := index.html
+GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
 GOBINDATA_SOURCES       := $(BOWER_COMPONENTS)/d3/d3.min.js \
                            $(BOWER_COMPONENTS)/lodash/lodash.min.js \
                            $(BOWER_COMPONENTS)/mithril/mithril.js \
@@ -60,7 +61,7 @@ all: $(GOBINDATA_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
 
 .PHONY:
-debug: $(GOBINDATA_DEBUG_TARGET)
+debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
 bower.installed: bower.json npm.installed
@@ -85,10 +86,12 @@ $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
 	$(NODE_MODULES)/.bin/stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out build/
 
-$(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed
-	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $(GOBINDATA_DEPS) $(GOBINDATA_SOURCES)
+$(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
+	cp release/$(INDEX) $(INDEX)
+	$(GO_BINDATA) -nometadata -pkg ui -o $@ $(GOBINDATA_DEPS) $(INDEX) $(GOBINDATA_SOURCES)
 	gofmt -s -w $@
 	goimports -w $@
 
-$(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEPS) bower.installed
-	$(GO_BINDATA) -pkg ui -o $@ -debug $(GOBINDATA_DEPS) $(GOBINDATA_DEBUG_SOURCES)
+$(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEPS) bower.installed debug/$(INDEX)
+	cp debug/$(INDEX) $(INDEX)
+	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_DEPS) $(INDEX) $(GOBINDATA_DEBUG_SOURCES)
