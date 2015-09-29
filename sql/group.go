@@ -110,7 +110,7 @@ func (n *groupNode) Columns() []string {
 	return n.columns
 }
 
-func (n *groupNode) Ordering() []int {
+func (n *groupNode) Ordering() ([]int, int) {
 	return n.plan.Ordering()
 }
 

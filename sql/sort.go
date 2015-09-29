@@ -137,11 +137,11 @@ func (n *sortNode) Columns() []string {
 	return n.columns
 }
 
-func (n *sortNode) Ordering() []int {
+func (n *sortNode) Ordering() ([]int, int) {
 	if n == nil {
-		return nil
+		return nil, 0
 	}
-	return n.ordering
+	return n.ordering, 0
 }
 
 func (n *sortNode) Values() parser.DTuple {
@@ -192,16 +192,15 @@ func (n *sortNode) wrap(plan planNode) planNode {
 	if n != nil {
 		// Check to see if the requested ordering is compatible with the existing
 		// ordering.
-		existingOrdering := plan.Ordering()
-		for i := range n.ordering {
-			if i >= len(existingOrdering) || n.ordering[i] != existingOrdering[i] {
-				if log.V(2) {
-					log.Infof("Sort: %d != %d", existingOrdering, n.ordering)
-				}
-				n.plan = plan
-				n.needSort = true
-				return n
-			}
+		existingOrdering, prefix := plan.Ordering()
+		if log.V(2) {
+			log.Infof("Sort: existing=%d (%d) desired=%d", existingOrdering, prefix, n.ordering)
+		}
+		match := computeOrderingMatch(n.ordering, existingOrdering, prefix, +1)
+		if match < len(n.ordering) {
+			n.plan = plan
+			n.needSort = true
+			return n
 		}
 
 		if len(n.columns) < len(plan.Columns()) {
@@ -235,4 +234,25 @@ func (n *sortNode) initValues() bool {
 	sort.Sort(v)
 	n.plan = v
 	return true
+}
+
+func computeOrderingMatch(desired, existing []int, prefix, reverse int) int {
+	match := 0
+	for match < len(desired) && match < len(existing) {
+		if desired[match] == reverse*existing[match] {
+			// The existing ordering matched the desired ordering.
+			prefix = 0
+			match++
+			continue
+		}
+		// The existing ordering did not match the desired ordering. Check if we're
+		// still considering a prefix of the existing ordering for which there was
+		// an exact match (and thus ordering is inconsequential).
+		if prefix == 0 {
+			break
+		}
+		prefix--
+		existing = existing[1:]
+	}
+	return match
 }

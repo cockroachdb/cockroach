@@ -148,6 +148,7 @@ type scanNode struct {
 	columns          []string
 	columnIDs        []ColumnID
 	ordering         []int
+	exactPrefix      int
 	err              error
 	indexKey         []byte            // the index key of the current row
 	kvs              []client.KeyValue // the raw key/value pairs
@@ -171,8 +172,8 @@ func (n *scanNode) Columns() []string {
 	return n.columns
 }
 
-func (n *scanNode) Ordering() []int {
-	return n.ordering
+func (n *scanNode) Ordering() ([]int, int) {
+	return n.ordering, n.exactPrefix
 }
 
 func (n *scanNode) Values() parser.DTuple {
@@ -406,10 +407,11 @@ func (n *scanNode) initTargets(targets parser.SelectExprs) error {
 
 // initOrdering initializes the ordering info using the selected index. This
 // must be called after index selection is performed.
-func (n *scanNode) initOrdering() {
+func (n *scanNode) initOrdering(exactPrefix int) {
 	if n.index == nil {
 		return
 	}
+	n.exactPrefix = exactPrefix
 	n.columnIDs = n.index.fullColumnIDs()
 	n.ordering = n.computeOrdering(n.columnIDs)
 	if n.reverse {
