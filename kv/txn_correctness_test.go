@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -266,22 +266,22 @@ func parseHistories(histories []string, t *testing.T) [][]*cmd {
 
 // Easily accessible slices of transaction isolation variations.
 var (
-	bothIsolations   = []proto.IsolationType{proto.SERIALIZABLE, proto.SNAPSHOT}
-	onlySerializable = []proto.IsolationType{proto.SERIALIZABLE}
-	onlySnapshot     = []proto.IsolationType{proto.SNAPSHOT}
+	bothIsolations   = []roachpb.IsolationType{roachpb.SERIALIZABLE, roachpb.SNAPSHOT}
+	onlySerializable = []roachpb.IsolationType{roachpb.SERIALIZABLE}
+	onlySnapshot     = []roachpb.IsolationType{roachpb.SNAPSHOT}
 )
 
 // enumerateIsolations returns a slice enumerating all combinations of
 // isolation types across the transactions. The inner slice describes
 // the isolation type for each transaction. The outer slice contains
 // each possible combination of such transaction isolations.
-func enumerateIsolations(numTxns int, isolations []proto.IsolationType) [][]proto.IsolationType {
+func enumerateIsolations(numTxns int, isolations []roachpb.IsolationType) [][]roachpb.IsolationType {
 	// Use a count from 0 to pow(# isolations, numTxns) and examine
 	// n-ary digits to get all possible combinations of txn isolations.
 	n := len(isolations)
-	result := [][]proto.IsolationType{}
+	result := [][]roachpb.IsolationType{}
 	for i := 0; i < int(math.Pow(float64(n), float64(numTxns))); i++ {
-		desc := make([]proto.IsolationType, numTxns)
+		desc := make([]roachpb.IsolationType, numTxns)
 		val := i
 		for j := 0; j < numTxns; j++ {
 			desc[j] = isolations[val%n]
@@ -294,9 +294,9 @@ func enumerateIsolations(numTxns int, isolations []proto.IsolationType) [][]prot
 
 func TestEnumerateIsolations(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	SSI := proto.SERIALIZABLE
-	SI := proto.SNAPSHOT
-	expIsolations := [][]proto.IsolationType{
+	SSI := roachpb.SERIALIZABLE
+	SI := roachpb.SNAPSHOT
+	expIsolations := [][]roachpb.IsolationType{
 		{SSI, SSI, SSI},
 		{SI, SSI, SSI},
 		{SSI, SI, SSI},
@@ -310,7 +310,7 @@ func TestEnumerateIsolations(t *testing.T) {
 		t.Errorf("expected enumeration to match %s; got %s", expIsolations, enumerateIsolations(3, bothIsolations))
 	}
 
-	expDegenerate := [][]proto.IsolationType{
+	expDegenerate := [][]roachpb.IsolationType{
 		{SSI, SSI, SSI},
 	}
 	if !reflect.DeepEqual(enumerateIsolations(3, onlySerializable), expDegenerate) {
@@ -464,7 +464,7 @@ func areHistoriesSymmetric(txns []string) bool {
 	return true
 }
 
-func (hv *historyVerifier) run(isolations []proto.IsolationType, db *client.DB, t *testing.T) {
+func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB, t *testing.T) {
 	log.Infof("verifying all possible histories for the %q anomaly", hv.name)
 	priorities := make([]int32, len(hv.txns))
 	for i := 0; i < len(hv.txns); i++ {
@@ -495,7 +495,7 @@ func (hv *historyVerifier) run(isolations []proto.IsolationType, db *client.DB, 
 }
 
 func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
-	isolations []proto.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
+	isolations []roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	plannedStr := historyString(cmds)
 	if log.V(1) {
 		log.Infof("attempting iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
@@ -560,13 +560,13 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 }
 
 func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
-	isolation proto.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
+	isolation roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	var retry int
 	txnName := fmt.Sprintf("txn%d", txnIdx)
 	err := db.Txn(func(txn *client.Txn) error {
 		txn.SetDebugName(txnName, 0)
-		if isolation == proto.SNAPSHOT {
-			if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+		if isolation == roachpb.SNAPSHOT {
+			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 				return err
 			}
 		}
@@ -614,7 +614,7 @@ func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cm
 
 // checkConcurrency creates a history verifier, starts a new database
 // and runs the verifier.
-func checkConcurrency(name string, isolations []proto.IsolationType, txns []string,
+func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []string,
 	verify *verifier, expSuccess bool, t *testing.T) {
 	verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
 	s := createTestDB(t)

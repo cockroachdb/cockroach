@@ -1,1 +1,1 @@
-./cockroach/proto/internal.pb.cc
+./cockroach/roachpb/internal.pb.cc

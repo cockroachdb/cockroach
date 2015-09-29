@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils/batchutil"
@@ -71,7 +71,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	util.SucceedsWithin(t, 50*time.Millisecond, func() error {
 		values := []int64{}
 		for _, eng := range mtc.engines {
-			val, _, err := engine.MVCCGet(eng, proto.Key("a"), clocks[0].Now(), true, nil)
+			val, _, err := engine.MVCCGet(eng, roachpb.Key("a"), clocks[0].Now(), true, nil)
 			if err != nil {
 				return err
 			}
@@ -148,7 +148,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	if now := clock.Now(); now.WallTime != int64(190*time.Millisecond) {
 		t.Errorf("expected clock to advance to 190ms; got %s", now)
 	}
-	val, _, err := engine.MVCCGet(mtc.engines[0], proto.Key("a"), clock.Now(), true, nil)
+	val, _, err := engine.MVCCGet(mtc.engines[0], roachpb.Key("a"), clock.Now(), true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,9 +188,9 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	key := "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
-	storage.TestingCommandFilter = func(args proto.Request) error {
-		if _, ok := args.(*proto.GetRequest); ok &&
-			args.Header().Key.Equal(proto.Key(key)) &&
+	storage.TestingCommandFilter = func(args roachpb.Request) error {
+		if _, ok := args.(*roachpb.GetRequest); ok &&
+			args.Header().Key.Equal(roachpb.Key(key)) &&
 			args.Header().Txn == nil {
 			// The Reader executes two get operations, each of which triggers two get requests
 			// (the first request fails and triggers txn push, and then the second request
@@ -211,7 +211,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	store := createTestStoreWithEngine(t,
-		engine.NewInMem(proto.Attributes{}, 10<<20, stopper),
+		engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper),
 		clock,
 		true,
 		nil,
@@ -288,14 +288,14 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	priority := int32(math.MaxInt32)
-	requestHeader := proto.RequestHeader{
-		Key:          proto.Key(key),
+	requestHeader := roachpb.RequestHeader{
+		Key:          roachpb.Key(key),
 		RangeID:      1,
-		Replica:      proto.ReplicaDescriptor{StoreID: store.StoreID()},
+		Replica:      roachpb.ReplicaDescriptor{StoreID: store.StoreID()},
 		UserPriority: &priority,
 		Timestamp:    clock.Now(),
 	}
-	if _, err := batchutil.SendWrapped(store, &proto.GetRequest{RequestHeader: requestHeader}); err != nil {
+	if _, err := batchutil.SendWrapped(store, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
 
@@ -310,7 +310,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	requestHeader.Timestamp = clock.Now()
-	if _, err := batchutil.SendWrapped(store, &proto.GetRequest{RequestHeader: requestHeader}); err == nil {
+	if _, err := batchutil.SendWrapped(store, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
 	}
 
@@ -327,11 +327,11 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 	// Init test ranges:
 	// ["","a"), ["a","c"), ["c","e"), ["e","g") and ["g","\xff\xff").
-	splits := []proto.AdminSplitRequest{
-		adminSplitArgs(proto.Key("g"), proto.Key("g"), 1, store.StoreID()),
-		adminSplitArgs(proto.Key("e"), proto.Key("e"), 1, store.StoreID()),
-		adminSplitArgs(proto.Key("c"), proto.Key("c"), 1, store.StoreID()),
-		adminSplitArgs(proto.Key("a"), proto.Key("a"), 1, store.StoreID()),
+	splits := []roachpb.AdminSplitRequest{
+		adminSplitArgs(roachpb.Key("g"), roachpb.Key("g"), 1, store.StoreID()),
+		adminSplitArgs(roachpb.Key("e"), roachpb.Key("e"), 1, store.StoreID()),
+		adminSplitArgs(roachpb.Key("c"), roachpb.Key("c"), 1, store.StoreID()),
+		adminSplitArgs(roachpb.Key("a"), roachpb.Key("a"), 1, store.StoreID()),
 	}
 
 	for _, split := range splits {
@@ -342,12 +342,12 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	// Resolve the intents.
-	scanArgs := proto.ScanRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:     proto.KeyMin,
-			EndKey:  keys.RangeMetaKey(proto.KeyMax),
+	scanArgs := roachpb.ScanRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:     roachpb.KeyMin,
+			EndKey:  keys.RangeMetaKey(roachpb.KeyMax),
 			RangeID: 1,
-			Replica: proto.ReplicaDescriptor{StoreID: store.StoreID()},
+			Replica: roachpb.ReplicaDescriptor{StoreID: store.StoreID()},
 		},
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
@@ -355,13 +355,13 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		return err
 	})
 
-	revScanArgs := func(key []byte, maxResults int32) *proto.RangeLookupRequest {
-		return &proto.RangeLookupRequest{
-			RequestHeader: proto.RequestHeader{
+	revScanArgs := func(key []byte, maxResults int32) *roachpb.RangeLookupRequest {
+		return &roachpb.RangeLookupRequest{
+			RequestHeader: roachpb.RequestHeader{
 				Key:             key,
 				RangeID:         1,
-				Replica:         proto.ReplicaDescriptor{StoreID: store.StoreID()},
-				ReadConsistency: proto.INCONSISTENT,
+				Replica:         roachpb.ReplicaDescriptor{StoreID: store.StoreID()},
+				ReadConsistency: roachpb.INCONSISTENT,
 			},
 			MaxRanges: maxResults,
 			Reverse:   true,
@@ -371,51 +371,51 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 	// Test cases.
 	testCases := []struct {
-		request  *proto.RangeLookupRequest
-		expected []proto.RangeDescriptor
+		request  *roachpb.RangeLookupRequest
+		expected []roachpb.RangeDescriptor
 	}{
 		// Test key in the middle of the range.
 		{
-			request: revScanArgs(keys.RangeMetaKey(proto.Key("f")), 2),
+			request: revScanArgs(keys.RangeMetaKey(roachpb.Key("f")), 2),
 			// ["e","g") and ["c","e").
-			expected: []proto.RangeDescriptor{
-				{StartKey: proto.Key("e"), EndKey: proto.Key("g")},
-				{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
+			expected: []roachpb.RangeDescriptor{
+				{StartKey: roachpb.Key("e"), EndKey: roachpb.Key("g")},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("e")},
 			},
 		},
 		// Test key in the end key of the range.
 		{
-			request: revScanArgs(keys.RangeMetaKey(proto.Key("g")), 3),
+			request: revScanArgs(keys.RangeMetaKey(roachpb.Key("g")), 3),
 			// ["e","g"), ["c","e") and ["a","c").
-			expected: []proto.RangeDescriptor{
-				{StartKey: proto.Key("e"), EndKey: proto.Key("g")},
-				{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
-				{StartKey: proto.Key("a"), EndKey: proto.Key("c")},
+			expected: []roachpb.RangeDescriptor{
+				{StartKey: roachpb.Key("e"), EndKey: roachpb.Key("g")},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("e")},
+				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 			},
 		},
 		{
-			request: revScanArgs(keys.RangeMetaKey(proto.Key("e")), 2),
+			request: revScanArgs(keys.RangeMetaKey(roachpb.Key("e")), 2),
 			// ["c","e") and ["a","c").
-			expected: []proto.RangeDescriptor{
-				{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
-				{StartKey: proto.Key("a"), EndKey: proto.Key("c")},
+			expected: []roachpb.RangeDescriptor{
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("e")},
+				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 			},
 		},
 		// Test Meta2KeyMax.
 		{
 			request: revScanArgs(keys.Meta2KeyMax, 2),
 			// ["e","g") and ["g","\xff\xff")
-			expected: []proto.RangeDescriptor{
-				{StartKey: proto.Key("g"), EndKey: proto.Key("\xff\xff")},
-				{StartKey: proto.Key("e"), EndKey: proto.Key("g")},
+			expected: []roachpb.RangeDescriptor{
+				{StartKey: roachpb.Key("g"), EndKey: roachpb.Key("\xff\xff")},
+				{StartKey: roachpb.Key("e"), EndKey: roachpb.Key("g")},
 			},
 		},
 		// Test Meta1KeyMax.
 		{
 			request: revScanArgs(keys.Meta1KeyMax, 1),
 			// ["","a")
-			expected: []proto.RangeDescriptor{
-				{StartKey: proto.KeyMin, EndKey: proto.Key("a")},
+			expected: []roachpb.RangeDescriptor{
+				{StartKey: roachpb.KeyMin, EndKey: roachpb.Key("a")},
 			},
 		},
 	}
@@ -426,7 +426,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			t.Fatalf("RangeLookup error: %s", err)
 		}
 
-		rlReply := resp.(*proto.RangeLookupResponse)
+		rlReply := resp.(*roachpb.RangeLookupResponse)
 		// Checks the results count.
 		if int32(len(rlReply.Ranges)) != test.request.MaxRanges {
 			t.Fatalf("returned results count, expected %d,but got %d", test.request.MaxRanges, len(rlReply.Ranges))

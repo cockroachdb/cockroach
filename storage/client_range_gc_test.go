@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -36,7 +36,7 @@ func TestRangeGCQueueDropReplica(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	rangeID := proto.RangeID(1)
+	rangeID := roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 0, 1, 2)
 	mtc.unreplicateRange(rangeID, 0, 1)
 
@@ -64,7 +64,7 @@ func TestRangeGCQueueDropReplicaGCOnScan(t *testing.T) {
 	// Disable the range gc queue to prevent direct removal of range.
 	mtc.stores[1].DisableRangeGCQueue(true)
 
-	rangeID := proto.RangeID(1)
+	rangeID := roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 0, 1, 2)
 	mtc.unreplicateRange(rangeID, 0, 1)
 

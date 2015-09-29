@@ -6,7 +6,7 @@
 
 # Summary
 
-Assuming [#1998](https://github.com/cockroachdb/cockroach/pull/1998) in place, replace `proto.Request` by `proto.BatchRequest` throughout most of the main execution path starting in `Store.ExecuteCmd()`.
+Assuming [#1998](https://github.com/cockroachdb/cockroach/pull/1998) in place, replace `roachpb.Request` by `roachpb.BatchRequest` throughout most of the main execution path starting in `Store.ExecuteCmd()`.
 
 # Motivation
 
@@ -61,7 +61,7 @@ reads consistent for free when they're part of a mutating batch anyways, and
 ### Timestamp Cache and Command Queue
 
 `(*Replica).{begin,end}Cmd` are changed to operate on `Batch` (instead of
-`proto.RequestHeader`), obviating the `readOnly` flag (which is determined
+`roachpb.RequestHeader`), obviating the `readOnly` flag (which is determined
 from the request type). The entries are added to the command queue in bulk
 so that overlaps are resolved gracefully: reading `[a,c)` and then writing
 `b` should add `[a,b)` and `[b\x00,c)` for reading, and `b` for writing.
@@ -82,13 +82,13 @@ no noteworthy changes.
 
 ## (\*Replica).processRaftCommand
 
-`proto.ResponseWithError` changes to `proto.ResponsesWithError` which also
+`roachpb.ResponseWithError` changes to `roachpb.ResponsesWithError` which also
 contains the index of the first error, if any (or, alternatively, by
 convention the error occured at index `len(rwe.Responses)`).
 
 ## (\*Replica).applyRaftCommand
 
-Returns `[]proto.Response`, one for each successfully executed request (in
+Returns `[]roachpb.Response`, one for each successfully executed request (in
 `Batch` order).
 
 ## (\*Replica).applyRaftCommandInBatch

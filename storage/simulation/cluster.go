@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
@@ -46,12 +46,12 @@ type Cluster struct {
 	storePool       *storage.StorePool
 	allocator       storage.Allocator
 	storeGossiper   *gossiputil.StoreGossiper
-	nodes           map[proto.NodeID]*Node
-	stores          map[proto.StoreID]*Store
-	storeIDs        proto.StoreIDSlice // sorted
-	ranges          map[proto.RangeID]*Range
-	rangeIDs        proto.RangeIDSlice // sorted
-	rangeIDsByStore map[proto.StoreID]proto.RangeIDSlice
+	nodes           map[roachpb.NodeID]*Node
+	stores          map[roachpb.StoreID]*Store
+	storeIDs        roachpb.StoreIDSlice // sorted
+	ranges          map[roachpb.RangeID]*Range
+	rangeIDs        roachpb.RangeIDSlice // sorted
+	rangeIDsByStore map[roachpb.StoreID]roachpb.RangeIDSlice
 	rand            *rand.Rand
 	seed            int64
 	epoch           int
@@ -75,10 +75,10 @@ func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWrit
 		storePool:       storePool,
 		allocator:       storage.MakeAllocator(storePool, storage.RebalancingOptions{}),
 		storeGossiper:   gossiputil.NewStoreGossiper(g),
-		nodes:           make(map[proto.NodeID]*Node),
-		stores:          make(map[proto.StoreID]*Store),
-		ranges:          make(map[proto.RangeID]*Range),
-		rangeIDsByStore: make(map[proto.StoreID]proto.RangeIDSlice),
+		nodes:           make(map[roachpb.NodeID]*Node),
+		stores:          make(map[roachpb.StoreID]*Store),
+		ranges:          make(map[roachpb.RangeID]*Range),
+		rangeIDsByStore: make(map[roachpb.StoreID]roachpb.RangeIDSlice),
 		rand:            rand,
 		seed:            seed,
 		epochWriter:     tabwriter.NewWriter(epochWriter, 8, 1, 2, ' ', 0),
@@ -105,13 +105,13 @@ func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWrit
 
 // addNewNodeWithStore adds new node with a single store.
 func (c *Cluster) addNewNodeWithStore() {
-	nodeID := proto.NodeID(len(c.nodes))
+	nodeID := roachpb.NodeID(len(c.nodes))
 	c.nodes[nodeID] = newNode(nodeID, c.gossip)
 	c.addStore(nodeID, false)
 }
 
 // addStore adds a new store to the node with the provided nodeID.
-func (c *Cluster) addStore(nodeID proto.NodeID, output bool) *Store {
+func (c *Cluster) addStore(nodeID roachpb.NodeID, output bool) *Store {
 	n := c.nodes[nodeID]
 	s := n.addNewStore()
 	storeID, _ := s.getIDs()
@@ -131,7 +131,7 @@ func (c *Cluster) addStore(nodeID proto.NodeID, output bool) *Store {
 // addRange adds a new range to the cluster but does not attach it to any
 // store.
 func (c *Cluster) addRange() *Range {
-	rangeID := proto.RangeID(len(c.ranges))
+	rangeID := roachpb.RangeID(len(c.ranges))
 	newRng := newRange(rangeID, c.allocator)
 	c.ranges[rangeID] = newRng
 
@@ -145,20 +145,20 @@ func (c *Cluster) addRange() *Range {
 
 // splitRangeRandom splits a random range from within the cluster.
 func (c *Cluster) splitRangeRandom() {
-	rangeID := proto.RangeID(c.rand.Int63n(int64(len(c.ranges))))
+	rangeID := roachpb.RangeID(c.rand.Int63n(int64(len(c.ranges))))
 	c.splitRange(rangeID)
 }
 
 // splitRangeLast splits the last added range in the cluster.
 func (c *Cluster) splitRangeLast() {
-	rangeID := proto.RangeID(len(c.ranges) - 1)
+	rangeID := roachpb.RangeID(len(c.ranges) - 1)
 	c.splitRange(rangeID)
 }
 
 // splitRange "splits" a range. This split creates a new range with new
 // replicas on the same stores as the passed in range. The new range has the
 // same zone config as the original range.
-func (c *Cluster) splitRange(rangeID proto.RangeID) {
+func (c *Cluster) splitRange(rangeID roachpb.RangeID) {
 	newRange := c.addRange()
 	originalRange := c.ranges[rangeID]
 	newRange.splitRange(originalRange)
@@ -231,12 +231,12 @@ func (c *Cluster) performActions() {
 	// our case, the first store numerically will always be the one that
 	// succeeds. In a real cluster, the transaction with the higher
 	// transactional priority will succeed and the others will abort.
-	usedRanges := make(map[proto.RangeID]proto.StoreID)
+	usedRanges := make(map[roachpb.RangeID]roachpb.StoreID)
 	// Each store can perform a single action per epoch.
 	for _, storeID := range c.storeIDs {
 		// Find the range with the highest priority action for the replica on
 		// the store.
-		var topRangeID proto.RangeID
+		var topRangeID roachpb.RangeID
 		var topReplica replica
 		for _, rangeID := range c.rangeIDsByStore[storeID] {
 			replica := c.ranges[rangeID].replicas[storeID]
@@ -299,7 +299,7 @@ func (c *Cluster) performActions() {
 // store. This map is used for determining which operation to run for each store
 // and outputs.  It should only be run once at the end of each epoch.
 func (c *Cluster) calculateRangeIDsByStore() {
-	c.rangeIDsByStore = make(map[proto.StoreID]proto.RangeIDSlice)
+	c.rangeIDsByStore = make(map[roachpb.StoreID]roachpb.RangeIDSlice)
 	for rangeID, r := range c.ranges {
 		for _, storeID := range r.getStoreIDs() {
 			c.rangeIDsByStore[storeID] = append(c.rangeIDsByStore[storeID], rangeID)
@@ -315,7 +315,7 @@ func (c *Cluster) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "Cluster Info:\nSeed - %d\tEpoch - %d\n", c.seed, c.epoch)
 
-	var nodeIDs proto.NodeIDSlice
+	var nodeIDs roachpb.NodeIDSlice
 	for nodeID := range c.nodes {
 		nodeIDs = append(nodeIDs, nodeID)
 	}
@@ -335,7 +335,7 @@ func (c *Cluster) String() string {
 		buf.WriteString("\n")
 	}
 
-	var rangeIDs proto.RangeIDSlice
+	var rangeIDs roachpb.RangeIDSlice
 	for rangeID := range c.ranges {
 		rangeIDs = append(rangeIDs, rangeID)
 	}
@@ -366,7 +366,7 @@ func (c *Cluster) OutputEpoch() {
 	fmt.Fprintf(c.epochWriter, "%d:\t", c.epoch)
 
 	for _, storeID := range c.storeIDs {
-		store := c.stores[proto.StoreID(storeID)]
+		store := c.stores[roachpb.StoreID(storeID)]
 		capacity := store.getCapacity(len(c.rangeIDsByStore[storeID]))
 		fmt.Fprintf(c.epochWriter, "%d/%.0f%%\t", len(c.rangeIDsByStore[storeID]), float64(capacity.Available)/float64(capacity.Capacity)*100)
 	}

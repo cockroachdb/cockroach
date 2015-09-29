@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 )
 
 const (
@@ -34,15 +34,15 @@ const (
 // Store is a simulated cockroach store. To access the replicas in a store, use
 // the ranges directly instead.
 type Store struct {
-	desc   proto.StoreDescriptor
+	desc   roachpb.StoreDescriptor
 	gossip *gossip.Gossip
 }
 
 // newStore returns a new store with using the passed in ID and node
 // descriptor.
-func newStore(storeID proto.StoreID, nodeDesc proto.NodeDescriptor, gossip *gossip.Gossip) *Store {
+func newStore(storeID roachpb.StoreID, nodeDesc roachpb.NodeDescriptor, gossip *gossip.Gossip) *Store {
 	return &Store{
-		desc: proto.StoreDescriptor{
+		desc: roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    nodeDesc,
 		},
@@ -51,13 +51,13 @@ func newStore(storeID proto.StoreID, nodeDesc proto.NodeDescriptor, gossip *goss
 }
 
 // getIDs returns the store's ID and its node's IDs.
-func (s *Store) getIDs() (proto.StoreID, proto.NodeID) {
+func (s *Store) getIDs() (roachpb.StoreID, roachpb.NodeID) {
 	return s.desc.StoreID, s.desc.Node.NodeID
 }
 
 // getDesc returns the store descriptor. The rangeCount is required to
 // determine the current capacity.
-func (s *Store) getDesc(rangeCount int) proto.StoreDescriptor {
+func (s *Store) getDesc(rangeCount int) roachpb.StoreDescriptor {
 	desc := s.desc
 	desc.Capacity = s.getCapacity(rangeCount)
 	return desc
@@ -66,8 +66,8 @@ func (s *Store) getDesc(rangeCount int) proto.StoreDescriptor {
 // getCapacity returns the store capacity based on the numbers of ranges
 // located in the store.
 // TODO(bram): Change this to take the actual ranges for real counts.
-func (s *Store) getCapacity(rangeCount int) proto.StoreCapacity {
-	return proto.StoreCapacity{
+func (s *Store) getCapacity(rangeCount int) roachpb.StoreCapacity {
+	return roachpb.StoreCapacity{
 		Capacity:   capacityPerStore,
 		Available:  capacityPerStore - int64(rangeCount)*bytesPerRange,
 		RangeCount: int32(rangeCount),

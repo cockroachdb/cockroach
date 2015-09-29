@@ -21,7 +21,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 )
 
 // separator is used to separate the non-prefix components of a
@@ -40,7 +40,7 @@ const (
 	KeyClusterID = "cluster-id"
 
 	// KeyStorePrefix is the key prefix for gossiping stores in the network.
-	// The suffix is a store ID and the value is proto.StoreDescriptor.
+	// The suffix is a store ID and the value is roachpb.StoreDescriptor.
 	KeyStorePrefix = "store"
 
 	// KeyNodeIDPrefix is the key prefix for gossiping node id
@@ -83,11 +83,11 @@ func MakePrefixPattern(prefix string) string {
 }
 
 // MakeNodeIDKey returns the gossip key for node ID info.
-func MakeNodeIDKey(nodeID proto.NodeID) string {
+func MakeNodeIDKey(nodeID roachpb.NodeID) string {
 	return MakeKey(KeyNodeIDPrefix, nodeID.String())
 }
 
 // MakeStoreKey returns the gossip key for the given store.
-func MakeStoreKey(storeID proto.StoreID) string {
+func MakeStoreKey(storeID roachpb.StoreID) string {
 	return MakeKey(KeyStorePrefix, storeID.String())
 }

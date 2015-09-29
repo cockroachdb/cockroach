@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -69,8 +69,8 @@ func TestReplicaSetSortByCommonAttributePrefix(t *testing.T) {
 		rs := replicaSlice{}
 		for _, c := range replicaAttrs {
 			rs = append(rs, replicaInfo{
-				NodeDesc: &proto.NodeDescriptor{
-					Attrs: proto.Attributes{Attrs: c},
+				NodeDesc: &roachpb.NodeDescriptor{
+					Attrs: roachpb.Attributes{Attrs: c},
 				},
 			})
 		}
@@ -81,7 +81,7 @@ func TestReplicaSetSortByCommonAttributePrefix(t *testing.T) {
 	}
 }
 
-func getStores(rs replicaSlice) (r []proto.StoreID) {
+func getStores(rs replicaSlice) (r []roachpb.StoreID) {
 	for i := range rs {
 		r = append(r, rs[i].StoreID)
 	}
@@ -92,20 +92,20 @@ func TestReplicaSetMoveToFront(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rs := replicaSlice(nil)
 	for i := 0; i < 5; i++ {
-		rs = append(rs, replicaInfo{ReplicaDescriptor: proto.ReplicaDescriptor{StoreID: proto.StoreID(i + 1)}})
+		rs = append(rs, replicaInfo{ReplicaDescriptor: roachpb.ReplicaDescriptor{StoreID: roachpb.StoreID(i + 1)}})
 	}
 	rs.MoveToFront(0)
-	exp := []proto.StoreID{1, 2, 3, 4, 5}
+	exp := []roachpb.StoreID{1, 2, 3, 4, 5}
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}
 	rs.MoveToFront(2)
-	exp = []proto.StoreID{3, 1, 2, 4, 5}
+	exp = []roachpb.StoreID{3, 1, 2, 4, 5}
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}
 	rs.MoveToFront(4)
-	exp = []proto.StoreID{5, 3, 1, 2, 4}
+	exp = []roachpb.StoreID{5, 3, 1, 2, 4}
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}

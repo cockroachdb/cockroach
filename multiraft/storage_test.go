@@ -6,7 +6,7 @@ package multiraft
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -36,19 +36,19 @@ func (b *BlockableStorage) Unblock() {
 	b.mu.Unlock()
 }
 
-func (b *BlockableStorage) GroupStorage(g proto.RangeID) WriteableGroupStorage {
+func (b *BlockableStorage) GroupStorage(g roachpb.RangeID) WriteableGroupStorage {
 	return &blockableGroupStorage{b, b.storage.GroupStorage(g)}
 }
 
-func (b *BlockableStorage) ReplicaDescriptor(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
+func (b *BlockableStorage) ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
 	return b.storage.ReplicaDescriptor(groupID, replicaID)
 }
 
-func (b *BlockableStorage) ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) (proto.ReplicaID, error) {
+func (b *BlockableStorage) ReplicaIDForStore(groupID roachpb.RangeID, storeID roachpb.StoreID) (roachpb.ReplicaID, error) {
 	return b.storage.ReplicaIDForStore(groupID, storeID)
 }
 
-func (b *BlockableStorage) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]proto.ReplicaDescriptor, error) {
+func (b *BlockableStorage) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb.ReplicaDescriptor, error) {
 	return b.storage.ReplicasFromSnapshot(snap)
 }
 

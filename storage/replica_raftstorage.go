@@ -23,14 +23,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var _ multiraft.WriteableGroupStorage = &Replica{}
@@ -40,7 +40,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
 	desc := r.Desc()
 	found, err := engine.MVCCGetProto(r.rm.Engine(), keys.RaftHardStateKey(desc.RangeID),
-		proto.ZeroTimestamp, true, nil, &hs)
+		roachpb.ZeroTimestamp, true, nil, &hs)
 	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
@@ -81,8 +81,8 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	var ents []raftpb.Entry
 	size := uint64(0)
 	var ent raftpb.Entry
-	scanFunc := func(kv proto.KeyValue) (bool, error) {
-		err := gogoproto.Unmarshal(kv.Value.GetBytes(), &ent)
+	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+		err := proto.Unmarshal(kv.Value.GetBytes(), &ent)
 		if err != nil {
 			return false, err
 		}
@@ -96,7 +96,7 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	_, err := engine.MVCCIterate(r.rm.Engine(),
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
-		proto.ZeroTimestamp,
+		roachpb.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, false /* !reverse */, scanFunc)
 
 	if err != nil {
@@ -141,13 +141,13 @@ func (r *Replica) LastIndex() (uint64, error) {
 // raftTruncatedState returns metadata about the log that preceded the first
 // current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
-func (r *Replica) raftTruncatedState() (proto.RaftTruncatedState, error) {
+func (r *Replica) raftTruncatedState() (roachpb.RaftTruncatedState, error) {
 	if ts := r.getCachedTruncatedState(); ts != nil {
 		return *ts, nil
 	}
-	ts := proto.RaftTruncatedState{}
+	ts := roachpb.RaftTruncatedState{}
 	ok, err := engine.MVCCGetProto(r.rm.Engine(), keys.RaftTruncatedStateKey(r.Desc().RangeID),
-		proto.ZeroTimestamp, true, nil, &ts)
+		roachpb.ZeroTimestamp, true, nil, &ts)
 	if err != nil {
 		return ts, err
 	}
@@ -188,7 +188,7 @@ func (r *Replica) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 		appliedIndex = 0
 	}
 	v, _, err := engine.MVCCGet(eng, keys.RaftAppliedIndexKey(r.Desc().RangeID),
-		proto.ZeroTimestamp, true, nil)
+		roachpb.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -203,11 +203,11 @@ func (r *Replica) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 }
 
 // setAppliedIndex persists a new applied index.
-func setAppliedIndex(eng engine.Engine, rangeID proto.RangeID, appliedIndex uint64) error {
+func setAppliedIndex(eng engine.Engine, rangeID roachpb.RangeID, appliedIndex uint64) error {
 	return engine.MVCCPut(eng, nil, /* stats */
 		keys.RaftAppliedIndexKey(rangeID),
-		proto.ZeroTimestamp,
-		proto.Value{Bytes: encoding.EncodeUint64(nil, appliedIndex)},
+		roachpb.ZeroTimestamp,
+		roachpb.Value{Bytes: encoding.EncodeUint64(nil, appliedIndex)},
 		nil /* txn */)
 }
 
@@ -216,7 +216,7 @@ func (r *Replica) loadLastIndex() (uint64, error) {
 	lastIndex := uint64(0)
 	v, _, err := engine.MVCCGet(r.rm.Engine(),
 		keys.RaftLastIndexKey(r.Desc().RangeID),
-		proto.ZeroTimestamp, true /* consistent */, nil)
+		roachpb.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -240,9 +240,9 @@ func (r *Replica) loadLastIndex() (uint64, error) {
 }
 
 // setLastIndex persists a new last index.
-func setLastIndex(eng engine.Engine, rangeID proto.RangeID, lastIndex uint64) error {
+func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) error {
 	return engine.MVCCPut(eng, nil, keys.RaftLastIndexKey(rangeID),
-		proto.ZeroTimestamp, proto.Value{
+		roachpb.ZeroTimestamp, roachpb.Value{
 			Bytes: encoding.EncodeUint64(nil, lastIndex),
 		}, nil)
 }
@@ -252,7 +252,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
 	snap := r.rm.NewSnapshot()
 	defer snap.Close()
-	var snapData proto.RaftSnapshotData
+	var snapData roachpb.RaftSnapshotData
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
@@ -262,7 +262,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	}
 
 	curDesc := r.Desc()
-	var desc proto.RangeDescriptor
+	var desc roachpb.RangeDescriptor
 	// We ignore intents on the range descriptor (consistent=false) because we
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
@@ -282,10 +282,10 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// the response cache.
 	for iter := newRangeDataIterator(curDesc, snap); iter.Valid(); iter.Next() {
 		snapData.KV = append(snapData.KV,
-			&proto.RaftSnapshotData_KeyValue{Key: iter.Key(), Value: iter.Value()})
+			&roachpb.RaftSnapshotData_KeyValue{Key: iter.Key(), Value: iter.Value()})
 	}
 
-	data, err := gogoproto.Marshal(&snapData)
+	data, err := proto.Marshal(&snapData)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -323,7 +323,7 @@ func (r *Replica) Append(entries []raftpb.Entry) error {
 
 	for _, ent := range entries {
 		err := engine.MVCCPutProto(batch, nil, keys.RaftLogKey(rangeID, ent.Index),
-			proto.ZeroTimestamp, nil, &ent)
+			roachpb.ZeroTimestamp, nil, &ent)
 		if err != nil {
 			return err
 		}
@@ -333,7 +333,7 @@ func (r *Replica) Append(entries []raftpb.Entry) error {
 	// Delete any previously appended log entries which never committed.
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
 		err := engine.MVCCDelete(batch, nil,
-			keys.RaftLogKey(rangeID, i), proto.ZeroTimestamp, nil)
+			keys.RaftLogKey(rangeID, i), roachpb.ZeroTimestamp, nil)
 		if err != nil {
 			return err
 		}
@@ -384,8 +384,8 @@ func (r *Replica) updateRangeInfo() error {
 
 // ApplySnapshot implements the multiraft.WriteableGroupStorage interface.
 func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
-	snapData := proto.RaftSnapshotData{}
-	err := gogoproto.Unmarshal(snap.Data, &snapData)
+	snapData := roachpb.RaftSnapshotData{}
+	err := proto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
 		return err
 	}
@@ -395,7 +395,7 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 	// First, save the HardState.  The HardState must not be changed
 	// because it may record a previous vote cast by this node.
 	hardStateKey := keys.RaftHardStateKey(rangeID)
-	hardState, _, err := engine.MVCCGet(r.rm.Engine(), hardStateKey, proto.ZeroTimestamp, true /* consistent */, nil)
+	hardState, _, err := engine.MVCCGet(r.rm.Engine(), hardStateKey, roachpb.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return err
 	}
@@ -422,12 +422,12 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 
 	// Restore the saved HardState.
 	if hardState == nil {
-		err := engine.MVCCDelete(batch, nil, hardStateKey, proto.ZeroTimestamp, nil)
+		err := engine.MVCCDelete(batch, nil, hardStateKey, roachpb.ZeroTimestamp, nil)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := engine.MVCCPut(batch, nil, hardStateKey, proto.ZeroTimestamp, *hardState, nil)
+		err := engine.MVCCPut(batch, nil, hardStateKey, roachpb.ZeroTimestamp, *hardState, nil)
 		if err != nil {
 			return err
 		}
@@ -488,5 +488,5 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 // SetHardState implements the multiraft.WriteableGroupStorage interface.
 func (r *Replica) SetHardState(st raftpb.HardState) error {
 	return engine.MVCCPutProto(r.rm.Engine(), nil, keys.RaftHardStateKey(r.Desc().RangeID),
-		proto.ZeroTimestamp, nil, &st)
+		roachpb.ZeroTimestamp, nil, &st)
 }

@@ -23,12 +23,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func prevKey(k proto.Key) proto.Key {
+func prevKey(k roachpb.Key) roachpb.Key {
 	length := len(k)
 
 	// When the byte array is empty.
@@ -46,22 +46,22 @@ func prevKey(k proto.Key) proto.Key {
 	return bytes.Join([][]byte{
 		k[0 : length-1],
 		{k[length-1] - 1},
-		bytes.Repeat([]byte{0xff}, proto.KeyMaxLength-length),
+		bytes.Repeat([]byte{0xff}, roachpb.KeyMaxLength-length),
 	}, nil)
 }
 
 // createRangeData creates sample range data in all possible areas of
 // the key space. Returns a slice of the encoded keys of all created
 // data.
-func createRangeData(r *Replica, t *testing.T) []proto.EncodedKey {
-	ts0 := proto.ZeroTimestamp
-	ts := proto.Timestamp{WallTime: 1}
+func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
+	ts0 := roachpb.ZeroTimestamp
+	ts := roachpb.Timestamp{WallTime: 1}
 	keyTSs := []struct {
-		key proto.Key
-		ts  proto.Timestamp
+		key roachpb.Key
+		ts  roachpb.Timestamp
 	}{
-		{keys.ResponseCacheKey(r.Desc().RangeID, &proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
-		{keys.ResponseCacheKey(r.Desc().RangeID, &proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
+		{keys.ResponseCacheKey(r.Desc().RangeID, &roachpb.ClientCmdID{WallTime: 1, Random: 1}), ts0},
+		{keys.ResponseCacheKey(r.Desc().RangeID, &roachpb.ClientCmdID{WallTime: 2, Random: 2}), ts0},
 		{keys.RaftHardStateKey(r.Desc().RangeID), ts0},
 		{keys.RaftLogKey(r.Desc().RangeID, 2), ts0},
 		{keys.RaftLogKey(r.Desc().RangeID, 1), ts0},
@@ -82,9 +82,9 @@ func createRangeData(r *Replica, t *testing.T) []proto.EncodedKey {
 		{prevKey(r.Desc().EndKey), ts},
 	}
 
-	keys := []proto.EncodedKey{}
+	keys := []roachpb.EncodedKey{}
 	for _, keyTS := range keyTSs {
-		if err := engine.MVCCPut(r.rm.Engine(), nil, keyTS.key, keyTS.ts, proto.Value{Bytes: []byte("value")}, nil); err != nil {
+		if err := engine.MVCCPut(r.rm.Engine(), nil, keyTS.key, keyTS.ts, roachpb.Value{Bytes: []byte("value")}, nil); err != nil {
 			t.Fatal(err)
 		}
 		keys = append(keys, engine.MVCCEncodeKey(keyTS.key))
@@ -109,7 +109,7 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 	// records and config entries during the iteration. This is a rather
 	// nasty little hack, but since it's test code, meh.
 	newDesc := *tc.rng.Desc()
-	newDesc.StartKey = proto.Key("a")
+	newDesc.StartKey = roachpb.Key("a")
 	if err := tc.rng.setDesc(&newDesc); err != nil {
 		t.Fatal(err)
 	}
@@ -145,18 +145,18 @@ func disabledTestRangeDataIterator(t *testing.T) {
 
 	// See notes in EmptyRange test method for adjustment to descriptor.
 	newDesc := *tc.rng.Desc()
-	newDesc.StartKey = proto.Key("b")
-	newDesc.EndKey = proto.Key("c")
+	newDesc.StartKey = roachpb.Key("b")
+	newDesc.EndKey = roachpb.Key("c")
 	if err := tc.rng.setDesc(&newDesc); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create two more ranges, one before the test range and one after.
-	preRng := createRange(tc.store, 2, proto.KeyMin, proto.Key("b"))
+	preRng := createRange(tc.store, 2, roachpb.KeyMin, roachpb.Key("b"))
 	if err := tc.store.AddReplicaTest(preRng); err != nil {
 		t.Fatal(err)
 	}
-	postRng := createRange(tc.store, 3, proto.Key("c"), proto.KeyMax)
+	postRng := createRange(tc.store, 3, roachpb.Key("c"), roachpb.KeyMax)
 	if err := tc.store.AddReplicaTest(postRng); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 	// Verify the keys in pre & post ranges.
 	for _, test := range []struct {
 		r    *Replica
-		keys []proto.EncodedKey
+		keys []roachpb.EncodedKey
 	}{
 		{preRng, preKeys},
 		{postRng, postKeys},

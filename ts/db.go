@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -102,7 +102,7 @@ func (p *poller) poll() {
 // StoreData writes the supplied time series data to the cockroach server.
 // Stored data will be sampled at the supplied resolution.
 func (db *DB) StoreData(r Resolution, data []TimeSeriesData) error {
-	var kvs []proto.KeyValue
+	var kvs []roachpb.KeyValue
 
 	// Process data collection: data is converted to internal format, and a key
 	// is generated for each internal message.
@@ -116,7 +116,7 @@ func (db *DB) StoreData(r Resolution, data []TimeSeriesData) error {
 			if err != nil {
 				return err
 			}
-			kvs = append(kvs, proto.KeyValue{
+			kvs = append(kvs, roachpb.KeyValue{
 				Key:   MakeDataKey(d.Name, d.Source, r, idata.StartTimestampNanos),
 				Value: *value,
 			})
@@ -133,8 +133,8 @@ func (db *DB) StoreData(r Resolution, data []TimeSeriesData) error {
 		// Note, this looks like a batch, but isn't a batch because we only add a
 		// single request to it.
 		b := &client.Batch{}
-		b.InternalAddRequest(&proto.MergeRequest{
-			RequestHeader: proto.RequestHeader{
+		b.InternalAddRequest(&roachpb.MergeRequest{
+			RequestHeader: roachpb.RequestHeader{
 				Key: kv.Key,
 			},
 			Value: kv.Value,

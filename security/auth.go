@@ -71,7 +71,7 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	return tlsState.PeerCertificates[0].Subject.CommonName, nil
 }
 
-// RequestWithUser must be implemented by `proto.Request`s which are
+// RequestWithUser must be implemented by `roachpb.Request`s which are
 // arguments to methods that are not permitted to skip user checks.
 type RequestWithUser interface {
 	GetUser() string

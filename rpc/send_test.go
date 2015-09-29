@@ -24,12 +24,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 func TestInvalidAddrLength(t *testing.T) {
@@ -40,7 +40,7 @@ func TestInvalidAddrLength(t *testing.T) {
 	ret, err := Send(Options{N: 1}, "", nil, nil, nil, nil)
 
 	// the expected return is nil and SendError
-	if _, ok := err.(*proto.SendError); !ok || ret != nil {
+	if _, ok := err.(*roachpb.SendError); !ok || ret != nil {
 		t.Fatalf("Shorter addrs should return nil and SendError.")
 	}
 }
@@ -141,7 +141,7 @@ func TestRetryableError(t *testing.T) {
 }
 
 type BrokenResponse struct {
-	*proto.ResponseHeader
+	*roachpb.ResponseHeader
 }
 
 func (*BrokenResponse) Verify() error {
@@ -165,13 +165,13 @@ func TestUnretryableError(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         5 * time.Second,
 	}
-	getArgs := func(addr net.Addr) gogoproto.Message {
-		return &proto.RequestHeader{}
+	getArgs := func(addr net.Addr) proto.Message {
+		return &roachpb.RequestHeader{}
 	}
 	// Make getRetry return a BrokenResponse so that the proto
 	// integrity check fails.
-	getReply := func() gogoproto.Message {
-		return &BrokenResponse{&proto.ResponseHeader{}}
+	getReply := func() proto.Message {
+		return &BrokenResponse{&roachpb.ResponseHeader{}}
 	}
 	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{s.Addr()}, getArgs, getReply, nodeContext)
 	if err == nil {
@@ -188,7 +188,7 @@ func TestUnretryableError(t *testing.T) {
 
 type Heartbeat struct{}
 
-func (h *Heartbeat) Ping(args gogoproto.Message) (gogoproto.Message, error) {
+func (h *Heartbeat) Ping(args proto.Message) (proto.Message, error) {
 	time.Sleep(50 * time.Millisecond)
 	return &PingResponse{}, nil
 }
@@ -325,15 +325,15 @@ func TestComplexScenarios(t *testing.T) {
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         1 * time.Second,
 		}
-		getArgs := func(addr net.Addr) gogoproto.Message {
+		getArgs := func(addr net.Addr) proto.Message {
 			return &PingRequest{}
 		}
-		getReply := func() gogoproto.Message {
+		getReply := func() proto.Message {
 			return &PingResponse{}
 		}
 
 		// Mock sendOne.
-		sendOneFn = func(client *Client, timeout time.Duration, method string, args, reply gogoproto.Message, done chan *rpc.Call) {
+		sendOneFn = func(client *Client, timeout time.Duration, method string, args, reply proto.Message, done chan *rpc.Call) {
 			addr := client.addr
 			addrID := -1
 			for serverAddrID, serverAddr := range serverAddrs {
@@ -383,18 +383,18 @@ func createAndStartNewServer(t *testing.T, ctx *Context) *Server {
 }
 
 // sendPing sends Ping requests to specified addresses using Send.
-func sendPing(opts Options, addrs []net.Addr, rpcContext *Context) ([]gogoproto.Message, error) {
+func sendPing(opts Options, addrs []net.Addr, rpcContext *Context) ([]proto.Message, error) {
 	return sendRPC(opts, addrs, rpcContext, "Heartbeat.Ping",
 		&PingRequest{}, &PingResponse{})
 }
 
 func sendRPC(opts Options, addrs []net.Addr, rpcContext *Context, name string,
-	args, reply gogoproto.Message) ([]gogoproto.Message, error) {
-	getArgs := func(addr net.Addr) gogoproto.Message {
+	args, reply proto.Message) ([]proto.Message, error) {
+	getArgs := func(addr net.Addr) proto.Message {
 		return args
 	}
-	getReply := func() gogoproto.Message {
-		return gogoproto.Clone(reply)
+	getReply := func() proto.Message {
+		return proto.Clone(reply)
 	}
 	return Send(opts, name, addrs, getArgs, getReply, rpcContext)
 }

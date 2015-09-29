@@ -25,20 +25,20 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
-func doHTTPReq(t *testing.T, client *http.Client, method, url string, body gogoproto.Message) (*http.Response, error) {
+func doHTTPReq(t *testing.T, client *http.Client, method, url string, body proto.Message) (*http.Response, error) {
 	var b io.Reader
 	if body != nil {
-		buf, err := gogoproto.Marshal(body)
+		buf, err := proto.Marshal(body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -55,7 +55,7 @@ func doHTTPReq(t *testing.T, client *http.Client, method, url string, body gogop
 	return client.Do(req)
 }
 
-func sqlForUser(context *base.Context) gogoproto.Message {
+func sqlForUser(context *base.Context) proto.Message {
 	ret := &driver.Request{}
 	ret.User = context.User
 	return ret
@@ -80,12 +80,12 @@ func TestSSLEnforcement(t *testing.T) {
 	insecureContext := testutils.NewTestBaseContext(TestUser)
 	insecureContext.Insecure = true
 
-	kvGet := &proto.GetRequest{}
-	kvGet.Key = proto.Key("/")
+	kvGet := &roachpb.GetRequest{}
+	kvGet.Key = roachpb.Key("/")
 
 	testCases := []struct {
 		method, key string
-		body        gogoproto.Message
+		body        proto.Message
 		ctx         *base.Context
 		success     bool // request sent successfully (may be non-200)
 		code        int  // http response code

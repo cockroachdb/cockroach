@@ -379,7 +379,7 @@ transaction is
 
 **Transaction Table**
 
-Please see [proto/data.proto](https://github.com/cockroachdb/cockroach/blob/master/proto/data.proto) for the up-to-date structures, the best entry point being `message Transaction`.
+Please see [roachpb/data.proto](https://github.com/cockroachdb/cockroach/blob/master/roachpb/data.proto) for the up-to-date structures, the best entry point being `message Transaction`.
 
 **Pros**
 
@@ -1270,8 +1270,8 @@ they’re compared with the next most general if applicable, and so on.
 
 # Key-Value API
 
-see the protobufs in [proto/](https://github.com/cockroachdb/cockroach/blob/master/proto),
-in particular [proto/api.proto](https://github.com/cockroachdb/cockroach/blob/master/proto/api.proto) and the comments within.
+see the protobufs in [roachpb/](https://github.com/cockroachdb/cockroach/blob/master/roachpb),
+in particular [roachpb/api.proto](https://github.com/cockroachdb/cockroach/blob/master/roachpb/api.proto) and the comments within.
 
 # Structured Data API
 

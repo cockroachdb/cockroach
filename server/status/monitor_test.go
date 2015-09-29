@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -31,15 +31,15 @@ import (
 
 func TestNodeStatusMonitor(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	desc1 := &proto.RangeDescriptor{
+	desc1 := &roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: proto.Key("a"),
-		EndKey:   proto.Key("b"),
+		StartKey: roachpb.Key("a"),
+		EndKey:   roachpb.Key("b"),
 	}
-	desc2 := &proto.RangeDescriptor{
+	desc2 := &roachpb.RangeDescriptor{
 		RangeID:  2,
-		StartKey: proto.Key("b"),
-		EndKey:   proto.Key("c"),
+		StartKey: roachpb.Key("b"),
+		EndKey:   roachpb.Key("c"),
 	}
 	stats := engine.MVCCStats{
 		LiveBytes:       1,
@@ -61,7 +61,7 @@ func TestNodeStatusMonitor(t *testing.T) {
 	monitor.StartMonitorFeed(feed)
 
 	for i := 0; i < 3; i++ {
-		id := proto.StoreID(i + 1)
+		id := roachpb.StoreID(i + 1)
 		eventList := []interface{}{
 			&storage.StartStoreEvent{
 				StoreID: id,
@@ -142,16 +142,16 @@ func TestNodeStatusMonitor(t *testing.T) {
 				Delta:   stats,
 			},
 			&CallSuccessEvent{
-				NodeID: proto.NodeID(1),
-				Method: proto.Get,
+				NodeID: roachpb.NodeID(1),
+				Method: roachpb.Get,
 			},
 			&CallSuccessEvent{
-				NodeID: proto.NodeID(1),
-				Method: proto.Put,
+				NodeID: roachpb.NodeID(1),
+				Method: roachpb.Put,
 			},
 			&CallErrorEvent{
-				NodeID: proto.NodeID(1),
-				Method: proto.Scan,
+				NodeID: roachpb.NodeID(1),
+				Method: roachpb.Scan,
 			},
 		}
 		for _, event := range eventList {

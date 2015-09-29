@@ -19,7 +19,7 @@ syntax = "proto2";
 package cockroach.server.status;
 option go_package = "status";
 
-import "cockroach/proto/metadata.proto";
+import "cockroach/roachpb/metadata.proto";
 import "cockroach/storage/engine/mvcc.proto";
 import "gogoproto/gogo.proto";
 
@@ -31,8 +31,8 @@ option (gogoproto.goproto_unrecognized_all) = false;
 // NodeStatus contains the stats needed to calculate the current status of a
 // node.
 message NodeStatus {
-  optional proto.NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
-  repeated int32 store_ids = 2 [(gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.StoreID"];
+  optional roachpb.NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  repeated int32 store_ids = 2 [(gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.StoreID"];
   optional int32 range_count = 3 [(gogoproto.nullable) = false];
   optional int64 started_at = 4 [(gogoproto.nullable) = false];
   optional int64 updated_at = 5 [(gogoproto.nullable) = false];

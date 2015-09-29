@@ -21,7 +21,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -36,12 +36,12 @@ const (
 
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
-	peerID      proto.NodeID  // Peer node ID; 0 until first gossip response
-	addr        net.Addr      // Peer node network address
-	rpcClient   *rpc.Client   // RPC client
-	forwardAddr net.Addr      // Set if disconnected with an alternate addr
-	lastFresh   int64         // Last wall time client received fresh info
-	closer      chan struct{} // Client shutdown channel
+	peerID      roachpb.NodeID // Peer node ID; 0 until first gossip response
+	addr        net.Addr       // Peer node network address
+	rpcClient   *rpc.Client    // RPC client
+	forwardAddr net.Addr       // Set if disconnected with an alternate addr
+	lastFresh   int64          // Last wall time client received fresh info
+	closer      chan struct{}  // Client shutdown channel
 }
 
 // newClient creates and returns a client struct.

@@ -27,9 +27,9 @@
 #include "rocksdb/options.h"
 #include "rocksdb/table.h"
 #include "rocksdb/utilities/write_batch_with_index.h"
-#include "cockroach/proto/api.pb.h"
-#include "cockroach/proto/data.pb.h"
-#include "cockroach/proto/internal.pb.h"
+#include "cockroach/roachpb/api.pb.h"
+#include "cockroach/roachpb/data.pb.h"
+#include "cockroach/roachpb/internal.pb.h"
 #include "cockroach/storage/engine/mvcc.pb.h"
 #include "db.h"
 #include "encoding.h"
@@ -229,7 +229,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
     // Response cache rows are GC'd if their timestamp is older than the
     // response cache GC timeout.
     if (is_rcache) {
-      cockroach::proto::BatchResponse b_reply;
+      cockroach::roachpb::BatchResponse b_reply;
       if (!b_reply.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
         // *error_msg = (char*)"failed to parse response cache entry";
         return false;
@@ -242,7 +242,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
       // the system-wide minimum write intent timestamp. This
       // system-wide minimum write intent is periodically computed via
       // map-reduce over all ranges and gossiped.
-      cockroach::proto::Transaction txn;
+      cockroach::roachpb::Transaction txn;
       if (!txn.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
         // *error_msg = (char*)"failed to parse transaction entry";
         return false;
@@ -305,25 +305,25 @@ bool WillOverflow(int64_t a, int64_t b) {
 }
 
 // Method used to sort InternalTimeSeriesSamples.
-bool TimeSeriesSampleOrdering(const cockroach::proto::InternalTimeSeriesSample* a,
-        const cockroach::proto::InternalTimeSeriesSample* b) {
+bool TimeSeriesSampleOrdering(const cockroach::roachpb::InternalTimeSeriesSample* a,
+        const cockroach::roachpb::InternalTimeSeriesSample* b) {
     return a->offset() < b->offset();
 }
 
 // IsTimeSeriesData returns true if the given protobuffer Value contains a
 // TimeSeriesData message.
-bool IsTimeSeriesData(const cockroach::proto::Value *val) {
+bool IsTimeSeriesData(const cockroach::roachpb::Value *val) {
     return val->has_tag()
-        && val->tag() == cockroach::proto::TIMESERIES;
+        && val->tag() == cockroach::roachpb::TIMESERIES;
 }
 
-double GetMax(const cockroach::proto::InternalTimeSeriesSample *sample) {
+double GetMax(const cockroach::roachpb::InternalTimeSeriesSample *sample) {
     if (sample->has_max()) return sample->max();
     if (sample->has_sum()) return sample->sum();
     return std::numeric_limits<double>::min();
 }
 
-double GetMin(const cockroach::proto::InternalTimeSeriesSample *sample) {
+double GetMin(const cockroach::roachpb::InternalTimeSeriesSample *sample) {
     if (sample->has_min()) return sample->min();
     if (sample->has_sum()) return sample->sum();
     return std::numeric_limits<double>::max();
@@ -332,8 +332,8 @@ double GetMin(const cockroach::proto::InternalTimeSeriesSample *sample) {
 // AccumulateTimeSeriesSamples accumulates the individual values of two
 // InternalTimeSeriesSamples which have a matching timestamp. The dest parameter
 // is modified to contain the accumulated values.
-void AccumulateTimeSeriesSamples(cockroach::proto::InternalTimeSeriesSample* dest,
-        const cockroach::proto::InternalTimeSeriesSample &src) {
+void AccumulateTimeSeriesSamples(cockroach::roachpb::InternalTimeSeriesSample* dest,
+        const cockroach::roachpb::InternalTimeSeriesSample &src) {
     // Accumulate integer values
     int total_count = dest->count() + src.count();
     if (total_count > 1) {
@@ -351,11 +351,11 @@ void AccumulateTimeSeriesSamples(cockroach::proto::InternalTimeSeriesSample* des
 // InternalTimeSeriesData messages. The messages cannot be merged if they have
 // different start timestamps or sample durations. Returns true if the merge is
 // successful.
-bool MergeTimeSeriesValues(cockroach::proto::Value *left, const cockroach::proto::Value &right,
+bool MergeTimeSeriesValues(cockroach::roachpb::Value *left, const cockroach::roachpb::Value &right,
         bool full_merge, rocksdb::Logger* logger) {
     // Attempt to parse TimeSeriesData from both Values.
-    cockroach::proto::InternalTimeSeriesData left_ts;
-    cockroach::proto::InternalTimeSeriesData right_ts;
+    cockroach::roachpb::InternalTimeSeriesData left_ts;
+    cockroach::roachpb::InternalTimeSeriesData right_ts;
     if (!left_ts.ParseFromString(left->bytes())) {
         rocksdb::Warn(logger,
                 "left InternalTimeSeriesData could not be parsed from bytes.");
@@ -392,7 +392,7 @@ bool MergeTimeSeriesValues(cockroach::proto::Value *left, const cockroach::proto
 
     // Initialize new_ts and its primitive data fields. Values from the left and
     // right collections will be merged into the new collection.
-    cockroach::proto::InternalTimeSeriesData new_ts;
+    cockroach::roachpb::InternalTimeSeriesData new_ts;
     new_ts.set_start_timestamp_nanos(left_ts.start_timestamp_nanos());
     new_ts.set_sample_duration_nanos(left_ts.sample_duration_nanos());
 
@@ -425,7 +425,7 @@ bool MergeTimeSeriesValues(cockroach::proto::Value *left, const cockroach::proto
         // offset.  Accumulate data from all samples at the front of either left
         // or right which match the selected timestamp. This behavior is needed
         // because each side may individually have duplicated offsets.
-        cockroach::proto::InternalTimeSeriesSample* ns = new_ts.add_samples();
+        cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
         ns->set_offset(next_offset);
         while (left_front != left_end && left_front->offset() == ns->offset()) {
             AccumulateTimeSeriesSamples(ns, *left_front);
@@ -448,9 +448,9 @@ bool MergeTimeSeriesValues(cockroach::proto::Value *left, const cockroach::proto
 // the single-value equivalent of MergeTimeSeriesValues, and is used in the case
 // where the first value is merged into the key. Returns true if the merge is
 // successful.
-bool ConsolidateTimeSeriesValue(cockroach::proto::Value *val, rocksdb::Logger* logger) {
+bool ConsolidateTimeSeriesValue(cockroach::roachpb::Value *val, rocksdb::Logger* logger) {
     // Attempt to parse TimeSeriesData from both Values.
-    cockroach::proto::InternalTimeSeriesData val_ts;
+    cockroach::roachpb::InternalTimeSeriesData val_ts;
     if (!val_ts.ParseFromString(val->bytes())) {
         rocksdb::Warn(logger,
                 "InternalTimeSeriesData could not be parsed from bytes.");
@@ -458,7 +458,7 @@ bool ConsolidateTimeSeriesValue(cockroach::proto::Value *val, rocksdb::Logger* l
     }
 
     // Initialize new_ts and its primitive data fields.
-    cockroach::proto::InternalTimeSeriesData new_ts;
+    cockroach::roachpb::InternalTimeSeriesData new_ts;
     new_ts.set_start_timestamp_nanos(val_ts.start_timestamp_nanos());
     new_ts.set_sample_duration_nanos(val_ts.sample_duration_nanos());
 
@@ -477,7 +477,7 @@ bool ConsolidateTimeSeriesValue(cockroach::proto::Value *val, rocksdb::Logger* l
         // offset.  Accumulate data from all samples at the front of the sample
         // collection which match the selected timestamp. This behavior is
         // needed because even a single value may have duplicated offsets.
-        cockroach::proto::InternalTimeSeriesSample* ns = new_ts.add_samples();
+        cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
         ns->set_offset(front->offset());
         while (front != end && front->offset() == ns->offset()) {
             AccumulateTimeSeriesSamples(ns, *front);
@@ -490,7 +490,7 @@ bool ConsolidateTimeSeriesValue(cockroach::proto::Value *val, rocksdb::Logger* l
     return true;
 }
 
-bool MergeValues(cockroach::proto::Value *left, const cockroach::proto::Value &right,
+bool MergeValues(cockroach::roachpb::Value *left, const cockroach::roachpb::Value &right,
         bool full_merge, rocksdb::Logger* logger) {
     if (left->has_bytes()) {
         if (!right.has_bytes()) {

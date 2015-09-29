@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -47,29 +47,29 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	}
 
 	testCases := []struct {
-		start, end proto.Key
+		start, end roachpb.Key
 		bytes      int64
 		shouldQ    bool
 		priority   float64
 	}{
 		// No intersection, no bytes.
-		{proto.KeyMin, proto.Key("/"), 0, false, 0},
+		{roachpb.KeyMin, roachpb.Key("/"), 0, false, 0},
 		// Intersection in zone, no bytes.
-		{keys.MakeTablePrefix(2001), proto.KeyMax, 0, true, 1},
+		{keys.MakeTablePrefix(2001), roachpb.KeyMax, 0, true, 1},
 		// Already split at largest ID.
-		{keys.MakeTablePrefix(2002), proto.KeyMax, 0, false, 0},
+		{keys.MakeTablePrefix(2002), roachpb.KeyMax, 0, false, 0},
 		// Multiple intersections, no bytes.
-		{proto.KeyMin, proto.KeyMax, 0, true, 1},
+		{roachpb.KeyMin, roachpb.KeyMax, 0, true, 1},
 		// No intersection, max bytes.
-		{proto.KeyMin, proto.Key("/"), 64 << 20, false, 0},
+		{roachpb.KeyMin, roachpb.Key("/"), 64 << 20, false, 0},
 		// No intersection, max bytes+1.
-		{proto.KeyMin, proto.Key("/"), 64<<20 + 1, true, 1},
+		{roachpb.KeyMin, roachpb.Key("/"), 64<<20 + 1, true, 1},
 		// No intersection, max bytes * 2.
-		{proto.KeyMin, proto.Key("/"), 64 << 21, true, 2},
+		{roachpb.KeyMin, roachpb.Key("/"), 64 << 21, true, 2},
 		// Intersection, max bytes +1.
-		{keys.MakeTablePrefix(2000), proto.KeyMax, 32<<20 + 1, true, 2},
+		{keys.MakeTablePrefix(2000), roachpb.KeyMax, 32<<20 + 1, true, 2},
 		// Split needed at table boundary, but no zone config.
-		{keys.MakeTablePrefix(2001), proto.KeyMax, 32<<20 + 1, true, 1},
+		{keys.MakeTablePrefix(2001), roachpb.KeyMax, 32<<20 + 1, true, 1},
 	}
 
 	splitQ := newSplitQueue(nil, tc.gossip)
@@ -89,7 +89,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		if err := tc.rng.setDesc(&copy); err != nil {
 			t.Fatal(err)
 		}
-		shouldQ, priority := splitQ.shouldQueue(proto.ZeroTimestamp, tc.rng, cfg)
+		shouldQ, priority := splitQ.shouldQueue(roachpb.ZeroTimestamp, tc.rng, cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}

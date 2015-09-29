@@ -22,11 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 func TestDropDatabase(t *testing.T) {
@@ -71,7 +71,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	// Add a zone config for both the table and database.
-	buf, err := gogoproto.Marshal(config.DefaultZoneConfig)
+	buf, err := proto.Marshal(config.DefaultZoneConfig)
 	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tablePrefix = append(tablePrefix, keys.TableDataPrefix...)
 	tablePrefix = encoding.EncodeUvarint(tablePrefix, uint64(tbDesc.ID))
 
-	tableStartKey := proto.Key(tablePrefix)
+	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)
@@ -188,7 +188,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	indexPrefix := sql.MakeIndexKeyPrefix(desc.ID, idx.ID)
 
-	indexStartKey := proto.Key(indexPrefix)
+	indexStartKey := roachpb.Key(indexPrefix)
 	indexEndKey := indexStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
 		t.Fatal(err)
@@ -248,7 +248,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	// Add a zone config for the table.
-	buf, err := gogoproto.Marshal(config.DefaultZoneConfig)
+	buf, err := proto.Marshal(config.DefaultZoneConfig)
 	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, desc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tablePrefix = append(tablePrefix, keys.TableDataPrefix...)
 	tablePrefix = encoding.EncodeUvarint(tablePrefix, uint64(desc.ID))
 
-	tableStartKey := proto.Key(tablePrefix)
+	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)

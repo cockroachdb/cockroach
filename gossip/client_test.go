@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -49,7 +49,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 		t.Fatal(err)
 	}
 	local = New(lRPCContext, gossipInterval, TestBootstrap)
-	if err := local.SetNodeDescriptor(&proto.NodeDescriptor{
+	if err := local.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  1,
 		Address: util.MakeUnresolvedAddr(laddr.Network(), laddr.String()),
 	}); err != nil {
@@ -63,7 +63,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 		t.Fatal(err)
 	}
 	remote = New(rRPCContext, gossipInterval, TestBootstrap)
-	if err := local.SetNodeDescriptor(&proto.NodeDescriptor{
+	if err := local.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  2,
 		Address: util.MakeUnresolvedAddr(raddr.Network(), raddr.String()),
 	}); err != nil {

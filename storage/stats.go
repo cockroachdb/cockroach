@@ -20,7 +20,7 @@ package storage
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
@@ -33,7 +33,7 @@ import (
 // processing goroutine and should never be individually updated; use
 // Update() instead. For access from other goroutines, use GetMVCC().
 type rangeStats struct {
-	rangeID          proto.RangeID
+	rangeID          roachpb.RangeID
 	sync.Mutex       // Protects MVCCStats
 	engine.MVCCStats // embedded, cached version of stat values
 }
@@ -43,7 +43,7 @@ type rangeStats struct {
 // nanos and intent count are pulled from the engine and cached in the
 // struct for efficient processing (i.e. each new merge does not
 // require the values to be read from the engine).
-func newRangeStats(rangeID proto.RangeID, e engine.Engine) (*rangeStats, error) {
+func newRangeStats(rangeID roachpb.RangeID, e engine.Engine) (*rangeStats, error) {
 	rs := &rangeStats{rangeID: rangeID}
 	if err := engine.MVCCGetRangeStats(e, rangeID, &rs.MVCCStats); err != nil {
 		return nil, err

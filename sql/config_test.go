@@ -23,9 +23,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestGetZoneConfig exercises config.GetZoneConfig and the sql hook for it.
@@ -87,10 +87,10 @@ func TestGetZoneConfig(t *testing.T) {
 
 	// We have no custom zone configs.
 	testCases := []struct {
-		key     proto.Key
+		key     roachpb.Key
 		zoneCfg config.ZoneConfig
 	}{
-		{proto.KeyMin, *config.DefaultZoneConfig},
+		{roachpb.KeyMin, *config.DefaultZoneConfig},
 		{keys.TableDataPrefix, *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(1), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(keys.MaxReservedDescID), *config.DefaultZoneConfig},
@@ -122,15 +122,15 @@ func TestGetZoneConfig(t *testing.T) {
 	// db1: false
 	//   tb1: true
 	//   tb2: false
-	db1Cfg := config.ZoneConfig{ReplicaAttrs: []proto.Attributes{{[]string{"db1"}}}}
-	tb11Cfg := config.ZoneConfig{ReplicaAttrs: []proto.Attributes{{[]string{"db1.tb1"}}}}
-	tb21Cfg := config.ZoneConfig{ReplicaAttrs: []proto.Attributes{{[]string{"db2.tb1"}}}}
+	db1Cfg := config.ZoneConfig{ReplicaAttrs: []roachpb.Attributes{{[]string{"db1"}}}}
+	tb11Cfg := config.ZoneConfig{ReplicaAttrs: []roachpb.Attributes{{[]string{"db1.tb1"}}}}
+	tb21Cfg := config.ZoneConfig{ReplicaAttrs: []roachpb.Attributes{{[]string{"db2.tb1"}}}}
 	for objID, objZone := range map[uint32]config.ZoneConfig{
 		db1:  db1Cfg,
 		tb11: tb11Cfg,
 		tb21: tb21Cfg,
 	} {
-		buf, err := gogoproto.Marshal(&objZone)
+		buf, err := proto.Marshal(&objZone)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,10 +145,10 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 
 	testCases = []struct {
-		key     proto.Key
+		key     roachpb.Key
 		zoneCfg config.ZoneConfig
 	}{
-		{proto.KeyMin, *config.DefaultZoneConfig},
+		{roachpb.KeyMin, *config.DefaultZoneConfig},
 		{keys.TableDataPrefix, *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(1), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(keys.MaxReservedDescID), *config.DefaultZoneConfig},

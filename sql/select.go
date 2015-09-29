@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -536,10 +536,10 @@ func (v indexInfoByCost) Swap(i, j int) {
 
 // makeSpans constructs the spans for an index given a set of constraints.
 func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span {
-	prefix := proto.Key(MakeIndexKeyPrefix(tableID, indexID))
+	prefix := roachpb.Key(MakeIndexKeyPrefix(tableID, indexID))
 	spans := []span{{
-		start: append(proto.Key(nil), prefix...),
-		end:   append(proto.Key(nil), prefix...),
+		start: append(roachpb.Key(nil), prefix...),
+		end:   append(roachpb.Key(nil), prefix...),
 	}}
 	var buf [100]byte
 
@@ -616,10 +616,10 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 
 				for _, s := range existingSpans {
 					if c.start != nil {
-						s.start = append(append(proto.Key(nil), s.start...), start...)
+						s.start = append(append(roachpb.Key(nil), s.start...), start...)
 					}
 					if c.end != nil {
-						s.end = append(append(proto.Key(nil), s.end...), end...)
+						s.end = append(append(roachpb.Key(nil), s.end...), end...)
 					}
 					spans = append(spans, s)
 				}

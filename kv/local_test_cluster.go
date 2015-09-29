@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -68,30 +68,30 @@ type LocalTestCluster struct {
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t util.Tester) {
 
-	nodeID := proto.NodeID(1)
-	nodeDesc := &proto.NodeDescriptor{NodeID: nodeID}
+	nodeID := roachpb.NodeID(1)
+	nodeDesc := &roachpb.NodeDescriptor{NodeID: nodeID}
 	ltc.tester = t
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), ltc.Clock, ltc.Stopper)
 	ltc.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
-	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20, ltc.Stopper)
+	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
 	ltc.localSender = NewLocalSender()
 	var rpcSend rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr,
-		getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message,
-		_ *rpc.Context) ([]gogoproto.Message, error) {
+		getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
+		_ *rpc.Context) ([]proto.Message, error) {
 		// TODO(tschottdorf): remove getReply().
-		br, pErr := ltc.localSender.Send(context.Background(), *getArgs(nil).(*proto.BatchRequest))
+		br, pErr := ltc.localSender.Send(context.Background(), *getArgs(nil).(*roachpb.BatchRequest))
 		if br == nil {
-			br = &proto.BatchResponse{}
+			br = &roachpb.BatchResponse{}
 		}
 		if br.Error != nil {
-			panic(proto.ErrorUnexpectedlySet(ltc.localSender, br))
+			panic(roachpb.ErrorUnexpectedlySet(ltc.localSender, br))
 		}
 		br.Error = pErr
-		return []gogoproto.Message{br}, nil
+		return []proto.Message{br}, nil
 	}
 	ltc.distSender = NewDistSender(&DistSenderContext{
 		Clock: ltc.Clock,
@@ -115,7 +115,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ctx.Gossip = ltc.Gossip
 	ctx.Transport = transport
 	ltc.Store = storage.NewStore(ctx, ltc.Eng, nodeDesc)
-	if err := ltc.Store.Bootstrap(proto.StoreIdent{NodeID: nodeID, StoreID: 1}, ltc.Stopper); err != nil {
+	if err := ltc.Store.Bootstrap(roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	ltc.localSender.AddStore(ltc.Store)

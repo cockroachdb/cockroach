@@ -55,8 +55,8 @@ awareness of segment IDs is contained in the storage package.
 ## Key encoding
 
 We introduce a new level of key encoding at the storage level.
-For clarity, the existing `proto.EncodedKey` type will be renamed to
-`proto.MVCCKey`, and the three levels of encoding will be as follows:
+For clarity, the existing `roachpb.EncodedKey` type will be renamed to
+`roachpb.MVCCKey`, and the three levels of encoding will be as follows:
 
 * `Key`: a raw key in the monolithic sorted map.
 * `StorageKey`: a `Key` prefixed with a segment ID.
@@ -74,11 +74,11 @@ is:
 
 ```
 +-----------------------------------------------+
-|               proto.MVCCKey                   |
+|               roachpb.MVCCKey                   |
 +-----------------------+
-|   proto.StorageKey    |
+|   roachpb.StorageKey    |
            +------------+
-           | proto.Key  |
+           | roachpb.Key  |
 
 Segment ID | Raw key    | Walltime | Logical TS |
 4 bytes    | (variable) | 8 bytes  | 4 bytes    |

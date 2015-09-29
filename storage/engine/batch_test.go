@@ -22,10 +22,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestBatchBasics verifies that all commands work in a batch, aren't
@@ -34,36 +34,36 @@ func TestBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
 
-	if err := b.Put(proto.EncodedKey("a"), []byte("value")); err != nil {
+	if err := b.Put(roachpb.EncodedKey("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
 	// Write an engine value to be deleted.
-	if err := e.Put(proto.EncodedKey("b"), []byte("value")); err != nil {
+	if err := e.Put(roachpb.EncodedKey("b"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(proto.EncodedKey("b")); err != nil {
+	if err := b.Clear(roachpb.EncodedKey("b")); err != nil {
 		t.Fatal(err)
 	}
 	// Write an engine value to be merged.
-	if err := e.Put(proto.EncodedKey("c"), appender("foo")); err != nil {
+	if err := e.Put(roachpb.EncodedKey("c"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(proto.EncodedKey("c"), appender("bar")); err != nil {
+	if err := b.Merge(roachpb.EncodedKey("c"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Check all keys are in initial state (nothing from batch has gone
 	// through to engine until commit).
-	expValues := []proto.RawKeyValue{
-		{Key: proto.EncodedKey("b"), Value: []byte("value")},
-		{Key: proto.EncodedKey("c"), Value: appender("foo")},
+	expValues := []roachpb.RawKeyValue{
+		{Key: roachpb.EncodedKey("b"), Value: []byte("value")},
+		{Key: roachpb.EncodedKey("c"), Value: appender("foo")},
 	}
-	kvs, err := Scan(e, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 0)
+	kvs, err := Scan(e, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,12 +72,12 @@ func TestBatchBasics(t *testing.T) {
 	}
 
 	// Now, merged values should be:
-	expValues = []proto.RawKeyValue{
-		{Key: proto.EncodedKey("a"), Value: []byte("value")},
-		{Key: proto.EncodedKey("c"), Value: appender("foobar")},
+	expValues = []roachpb.RawKeyValue{
+		{Key: roachpb.EncodedKey("a"), Value: []byte("value")},
+		{Key: roachpb.EncodedKey("c"), Value: appender("foobar")},
 	}
 	// Scan values from batch directly.
-	kvs, err = Scan(b, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 0)
+	kvs, err = Scan(b, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestBatchBasics(t *testing.T) {
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	kvs, err = Scan(e, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 0)
+	kvs, err = Scan(e, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,33 +102,33 @@ func TestBatchGet(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
 
 	// Write initial values, then write to batch.
-	if err := e.Put(proto.EncodedKey("b"), []byte("value")); err != nil {
+	if err := e.Put(roachpb.EncodedKey("b"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Put(proto.EncodedKey("c"), appender("foo")); err != nil {
+	if err := e.Put(roachpb.EncodedKey("c"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
 	// Write batch values.
-	if err := b.Put(proto.EncodedKey("a"), []byte("value")); err != nil {
+	if err := b.Put(roachpb.EncodedKey("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(proto.EncodedKey("b")); err != nil {
+	if err := b.Clear(roachpb.EncodedKey("b")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(proto.EncodedKey("c"), appender("bar")); err != nil {
+	if err := b.Merge(roachpb.EncodedKey("c"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
 
-	expValues := []proto.RawKeyValue{
-		{Key: proto.EncodedKey("a"), Value: []byte("value")},
-		{Key: proto.EncodedKey("b"), Value: nil},
-		{Key: proto.EncodedKey("c"), Value: appender("foobar")},
+	expValues := []roachpb.RawKeyValue{
+		{Key: roachpb.EncodedKey("a"), Value: []byte("value")},
+		{Key: roachpb.EncodedKey("b"), Value: nil},
+		{Key: roachpb.EncodedKey("c"), Value: appender("foobar")},
 	}
 	for i, expKV := range expValues {
 		kv, err := b.Get(expKV.Key)
@@ -143,10 +143,10 @@ func TestBatchGet(t *testing.T) {
 
 func compareMergedValues(t *testing.T, result, expected []byte) bool {
 	var resultV, expectedV MVCCMetadata
-	if err := gogoproto.Unmarshal(result, &resultV); err != nil {
+	if err := proto.Unmarshal(result, &resultV); err != nil {
 		t.Fatal(err)
 	}
-	if err := gogoproto.Unmarshal(expected, &expectedV); err != nil {
+	if err := proto.Unmarshal(expected, &expectedV); err != nil {
 		t.Fatal(err)
 	}
 	return reflect.DeepEqual(resultV, expectedV)
@@ -156,35 +156,35 @@ func TestBatchMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
 
 	// Write batch put, delete & merge.
-	if err := b.Put(proto.EncodedKey("a"), appender("a-value")); err != nil {
+	if err := b.Put(roachpb.EncodedKey("a"), appender("a-value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(proto.EncodedKey("b")); err != nil {
+	if err := b.Clear(roachpb.EncodedKey("b")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(proto.EncodedKey("c"), appender("c-value")); err != nil {
+	if err := b.Merge(roachpb.EncodedKey("c"), appender("c-value")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, merge to all three keys.
-	if err := b.Merge(proto.EncodedKey("a"), appender("append")); err != nil {
+	if err := b.Merge(roachpb.EncodedKey("a"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(proto.EncodedKey("b"), appender("append")); err != nil {
+	if err := b.Merge(roachpb.EncodedKey("b"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(proto.EncodedKey("c"), appender("append")); err != nil {
+	if err := b.Merge(roachpb.EncodedKey("c"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify values.
-	val, err := b.Get(proto.EncodedKey("a"))
+	val, err := b.Get(roachpb.EncodedKey("a"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestBatchMerge(t *testing.T) {
 		t.Error("mismatch of \"a\"")
 	}
 
-	val, err = b.Get(proto.EncodedKey("b"))
+	val, err = b.Get(roachpb.EncodedKey("b"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestBatchMerge(t *testing.T) {
 		t.Error("mismatch of \"b\"")
 	}
 
-	val, err = b.Get(proto.EncodedKey("c"))
+	val, err = b.Get(roachpb.EncodedKey("c"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,17 +213,17 @@ func TestBatchProto(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
 
-	kv := &proto.RawKeyValue{Key: proto.EncodedKey("a"), Value: []byte("value")}
-	if _, _, err := PutProto(b, proto.EncodedKey("proto"), kv); err != nil {
+	kv := &roachpb.RawKeyValue{Key: roachpb.EncodedKey("a"), Value: []byte("value")}
+	if _, _, err := PutProto(b, roachpb.EncodedKey("proto"), kv); err != nil {
 		t.Fatal(err)
 	}
-	getKV := &proto.RawKeyValue{}
-	ok, keySize, valSize, err := b.GetProto(proto.EncodedKey("proto"), getKV)
+	getKV := &roachpb.RawKeyValue{}
+	ok, keySize, valSize, err := b.GetProto(roachpb.EncodedKey("proto"), getKV)
 	if !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
@@ -231,7 +231,7 @@ func TestBatchProto(t *testing.T) {
 		t.Errorf("expected key size 5; got %d", keySize)
 	}
 	var data []byte
-	if data, err = gogoproto.Marshal(kv); err != nil {
+	if data, err = proto.Marshal(kv); err != nil {
 		t.Fatal(err)
 	}
 	if valSize != int64(len(data)) {
@@ -241,14 +241,14 @@ func TestBatchProto(t *testing.T) {
 		t.Errorf("expected %v; got %v", kv, getKV)
 	}
 	// Before commit, proto will not be available via engine.
-	if ok, _, _, err = e.GetProto(proto.EncodedKey("proto"), getKV); ok || err != nil {
+	if ok, _, _, err = e.GetProto(roachpb.EncodedKey("proto"), getKV); ok || err != nil {
 		t.Fatalf("expected GetProto to fail ok=%t: %s", ok, err)
 	}
 	// Commit and verify the proto can be read directly from the engine.
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if ok, _, _, err = e.GetProto(proto.EncodedKey("proto"), getKV); !ok || err != nil {
+	if ok, _, _, err = e.GetProto(roachpb.EncodedKey("proto"), getKV); !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
 	if !reflect.DeepEqual(getKV, kv) {
@@ -260,25 +260,25 @@ func TestBatchScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
 
-	existingVals := []proto.RawKeyValue{
-		{Key: proto.EncodedKey("a"), Value: []byte("1")},
-		{Key: proto.EncodedKey("b"), Value: []byte("2")},
-		{Key: proto.EncodedKey("c"), Value: []byte("3")},
-		{Key: proto.EncodedKey("d"), Value: []byte("4")},
-		{Key: proto.EncodedKey("e"), Value: []byte("5")},
-		{Key: proto.EncodedKey("f"), Value: []byte("6")},
-		{Key: proto.EncodedKey("g"), Value: []byte("7")},
-		{Key: proto.EncodedKey("h"), Value: []byte("8")},
-		{Key: proto.EncodedKey("i"), Value: []byte("9")},
-		{Key: proto.EncodedKey("j"), Value: []byte("10")},
-		{Key: proto.EncodedKey("k"), Value: []byte("11")},
-		{Key: proto.EncodedKey("l"), Value: []byte("12")},
-		{Key: proto.EncodedKey("m"), Value: []byte("13")},
+	existingVals := []roachpb.RawKeyValue{
+		{Key: roachpb.EncodedKey("a"), Value: []byte("1")},
+		{Key: roachpb.EncodedKey("b"), Value: []byte("2")},
+		{Key: roachpb.EncodedKey("c"), Value: []byte("3")},
+		{Key: roachpb.EncodedKey("d"), Value: []byte("4")},
+		{Key: roachpb.EncodedKey("e"), Value: []byte("5")},
+		{Key: roachpb.EncodedKey("f"), Value: []byte("6")},
+		{Key: roachpb.EncodedKey("g"), Value: []byte("7")},
+		{Key: roachpb.EncodedKey("h"), Value: []byte("8")},
+		{Key: roachpb.EncodedKey("i"), Value: []byte("9")},
+		{Key: roachpb.EncodedKey("j"), Value: []byte("10")},
+		{Key: roachpb.EncodedKey("k"), Value: []byte("11")},
+		{Key: roachpb.EncodedKey("l"), Value: []byte("12")},
+		{Key: roachpb.EncodedKey("m"), Value: []byte("13")},
 	}
 	for _, kv := range existingVals {
 		if err := e.Put(kv.Key, kv.Value); err != nil {
@@ -286,17 +286,17 @@ func TestBatchScan(t *testing.T) {
 		}
 	}
 
-	batchVals := []proto.RawKeyValue{
-		{Key: proto.EncodedKey("a"), Value: []byte("b1")},
-		{Key: proto.EncodedKey("bb"), Value: []byte("b2")},
-		{Key: proto.EncodedKey("c"), Value: []byte("b3")},
-		{Key: proto.EncodedKey("dd"), Value: []byte("b4")},
-		{Key: proto.EncodedKey("e"), Value: []byte("b5")},
-		{Key: proto.EncodedKey("ff"), Value: []byte("b6")},
-		{Key: proto.EncodedKey("g"), Value: []byte("b7")},
-		{Key: proto.EncodedKey("hh"), Value: []byte("b8")},
-		{Key: proto.EncodedKey("i"), Value: []byte("b9")},
-		{Key: proto.EncodedKey("jj"), Value: []byte("b10")},
+	batchVals := []roachpb.RawKeyValue{
+		{Key: roachpb.EncodedKey("a"), Value: []byte("b1")},
+		{Key: roachpb.EncodedKey("bb"), Value: []byte("b2")},
+		{Key: roachpb.EncodedKey("c"), Value: []byte("b3")},
+		{Key: roachpb.EncodedKey("dd"), Value: []byte("b4")},
+		{Key: roachpb.EncodedKey("e"), Value: []byte("b5")},
+		{Key: roachpb.EncodedKey("ff"), Value: []byte("b6")},
+		{Key: roachpb.EncodedKey("g"), Value: []byte("b7")},
+		{Key: roachpb.EncodedKey("hh"), Value: []byte("b8")},
+		{Key: roachpb.EncodedKey("i"), Value: []byte("b9")},
+		{Key: roachpb.EncodedKey("jj"), Value: []byte("b10")},
 	}
 	for _, kv := range batchVals {
 		if err := b.Put(kv.Key, kv.Value); err != nil {
@@ -305,25 +305,25 @@ func TestBatchScan(t *testing.T) {
 	}
 
 	scans := []struct {
-		start, end proto.EncodedKey
+		start, end roachpb.EncodedKey
 		max        int64
 	}{
 		// Full monty.
-		{start: proto.EncodedKey("a"), end: proto.EncodedKey("z"), max: 0},
+		{start: roachpb.EncodedKey("a"), end: roachpb.EncodedKey("z"), max: 0},
 		// Select ~half.
-		{start: proto.EncodedKey("a"), end: proto.EncodedKey("z"), max: 9},
+		{start: roachpb.EncodedKey("a"), end: roachpb.EncodedKey("z"), max: 9},
 		// Select one.
-		{start: proto.EncodedKey("a"), end: proto.EncodedKey("z"), max: 1},
+		{start: roachpb.EncodedKey("a"), end: roachpb.EncodedKey("z"), max: 1},
 		// Select half by end key.
-		{start: proto.EncodedKey("a"), end: proto.EncodedKey("f0"), max: 0},
+		{start: roachpb.EncodedKey("a"), end: roachpb.EncodedKey("f0"), max: 0},
 		// Start at half and select rest.
-		{start: proto.EncodedKey("f"), end: proto.EncodedKey("z"), max: 0},
+		{start: roachpb.EncodedKey("f"), end: roachpb.EncodedKey("z"), max: 0},
 		// Start at last and select max=10.
-		{start: proto.EncodedKey("m"), end: proto.EncodedKey("z"), max: 10},
+		{start: roachpb.EncodedKey("m"), end: roachpb.EncodedKey("z"), max: 10},
 	}
 
 	// Scan each case using the batch and store the results.
-	results := map[int][]proto.RawKeyValue{}
+	results := map[int][]roachpb.RawKeyValue{}
 	for i, scan := range scans {
 		kvs, err := Scan(b, scan.start, scan.end, scan.max)
 		if err != nil {
@@ -353,19 +353,19 @@ func TestBatchScanWithDelete(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
 
 	// Write initial value, then delete via batch.
-	if err := e.Put(proto.EncodedKey("a"), []byte("value")); err != nil {
+	if err := e.Put(roachpb.EncodedKey("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(proto.EncodedKey("a")); err != nil {
+	if err := b.Clear(roachpb.EncodedKey("a")); err != nil {
 		t.Fatal(err)
 	}
-	kvs, err := Scan(b, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 0)
+	kvs, err := Scan(b, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,24 +381,24 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
 
 	// Write two values.
-	if err := e.Put(proto.EncodedKey("a"), []byte("value1")); err != nil {
+	if err := e.Put(roachpb.EncodedKey("a"), []byte("value1")); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Put(proto.EncodedKey("b"), []byte("value2")); err != nil {
+	if err := e.Put(roachpb.EncodedKey("b"), []byte("value2")); err != nil {
 		t.Fatal(err)
 	}
 	// Now, delete "a" in batch.
-	if err := b.Clear(proto.EncodedKey("a")); err != nil {
+	if err := b.Clear(roachpb.EncodedKey("a")); err != nil {
 		t.Fatal(err)
 	}
 	// A scan with max=1 should scan "b".
-	kvs, err := Scan(b, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 1)
+	kvs, err := Scan(b, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,16 +415,16 @@ func TestBatchConcurrency(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()
 
 	// Write a merge to the batch.
-	if err := b.Merge(proto.EncodedKey("a"), appender("bar")); err != nil {
+	if err := b.Merge(roachpb.EncodedKey("a"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
-	val, err := b.Get(proto.EncodedKey("a"))
+	val, err := b.Get(roachpb.EncodedKey("a"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,11 +432,11 @@ func TestBatchConcurrency(t *testing.T) {
 		t.Error("mismatch of \"a\"")
 	}
 	// Write an engine value.
-	if err := e.Put(proto.EncodedKey("a"), appender("foo")); err != nil {
+	if err := e.Put(roachpb.EncodedKey("a"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
 	// Now, read again and verify that the merge happens on top of the mod.
-	val, err = b.Get(proto.EncodedKey("a"))
+	val, err = b.Get(roachpb.EncodedKey("a"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -450,7 +450,7 @@ func TestBatchDefer(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	e := NewInMem(proto.Attributes{}, 1<<20, stopper)
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	b := e.NewBatch()
 	defer b.Close()

@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -55,7 +55,7 @@ type idAllocator struct {
 // specified key in allocation blocks of size blockSize, with
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
-func newIDAllocator(idKey proto.Key, db *client.DB, minID uint32, blockSize uint32, stopper *stop.Stopper) (*idAllocator, error) {
+func newIDAllocator(idKey roachpb.Key, db *client.DB, minID uint32, blockSize uint32, stopper *stop.Stopper) (*idAllocator, error) {
 	// minID can't be the zero value because reads from closed channels return
 	// the zero value.
 	if minID == 0 {
@@ -100,7 +100,7 @@ func (ia *idAllocator) start() {
 					res client.KeyValue
 				)
 				for r := retry.Start(idAllocationRetryOpts); r.Next(); {
-					idKey := ia.idKey.Load().(proto.Key)
+					idKey := ia.idKey.Load().(roachpb.Key)
 					if !ia.stopper.RunTask(func() {
 						res, err = ia.db.Inc(idKey, int64(ia.blockSize))
 					}) {

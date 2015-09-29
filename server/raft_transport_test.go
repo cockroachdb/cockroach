@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -71,8 +71,8 @@ func TestSendAndReceive(t *testing.T) {
 	// servers has length numServers.
 	servers := []*rpc.Server{}
 	// All the rest have length numStores (note that several stores share a transport).
-	nextNodeID := proto.NodeID(1)
-	nodeIDs := []proto.NodeID{}
+	nextNodeID := roachpb.NodeID(1)
+	nodeIDs := []roachpb.NodeID{}
 	transports := []multiraft.Transport{}
 	channels := []channelServer{}
 	for serverIndex := 0; serverIndex < numServers; serverIndex++ {
@@ -93,13 +93,13 @@ func TestSendAndReceive(t *testing.T) {
 			nextNodeID++
 
 			channel := newChannelServer(10, 0)
-			if err := transport.Listen(proto.StoreID(nodeID), channel); err != nil {
+			if err := transport.Listen(roachpb.StoreID(nodeID), channel); err != nil {
 				t.Fatal(err)
 			}
 
 			addr := server.Addr()
 			if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
-				&proto.NodeDescriptor{
+				&roachpb.NodeDescriptor{
 					Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 				},
 				time.Hour); err != nil {
@@ -124,15 +124,15 @@ func TestSendAndReceive(t *testing.T) {
 					To:   uint64(nodeIDs[to]),
 					Type: raftpb.MsgHeartbeat,
 				},
-				FromReplica: proto.ReplicaDescriptor{
+				FromReplica: roachpb.ReplicaDescriptor{
 					NodeID:    nodeIDs[from],
-					StoreID:   proto.StoreID(nodeIDs[from]),
-					ReplicaID: proto.ReplicaID(nodeIDs[from]),
+					StoreID:   roachpb.StoreID(nodeIDs[from]),
+					ReplicaID: roachpb.ReplicaID(nodeIDs[from]),
 				},
-				ToReplica: proto.ReplicaDescriptor{
+				ToReplica: roachpb.ReplicaDescriptor{
 					NodeID:    nodeIDs[to],
-					StoreID:   proto.StoreID(nodeIDs[to]),
-					ReplicaID: proto.ReplicaID(nodeIDs[to]),
+					StoreID:   roachpb.StoreID(nodeIDs[to]),
+					ReplicaID: roachpb.ReplicaID(nodeIDs[to]),
 				},
 			}
 
@@ -183,26 +183,26 @@ func TestInOrderDelivery(t *testing.T) {
 	defer server.Close()
 
 	const numMessages = 100
-	nodeID := proto.NodeID(1)
+	nodeID := roachpb.NodeID(1)
 	serverTransport, err := newRPCTransport(g, server, nodeRPCContext)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer serverTransport.Close()
 	serverChannel := newChannelServer(numMessages, 10*time.Millisecond)
-	if err := serverTransport.Listen(proto.StoreID(nodeID), serverChannel); err != nil {
+	if err := serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel); err != nil {
 		t.Fatal(err)
 	}
 	addr := server.Addr()
 	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
-		&proto.NodeDescriptor{
+		&roachpb.NodeDescriptor{
 			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		},
 		time.Hour); err != nil {
 		t.Fatal(err)
 	}
 
-	clientNodeID := proto.NodeID(2)
+	clientNodeID := roachpb.NodeID(2)
 	clientTransport, err := newRPCTransport(g, nil, nodeRPCContext)
 	if err != nil {
 		t.Fatal(err)
@@ -217,15 +217,15 @@ func TestInOrderDelivery(t *testing.T) {
 				From:   uint64(clientNodeID),
 				Commit: uint64(i),
 			},
-			ToReplica: proto.ReplicaDescriptor{
+			ToReplica: roachpb.ReplicaDescriptor{
 				NodeID:    nodeID,
-				StoreID:   proto.StoreID(nodeID),
-				ReplicaID: proto.ReplicaID(nodeID),
+				StoreID:   roachpb.StoreID(nodeID),
+				ReplicaID: roachpb.ReplicaID(nodeID),
 			},
-			FromReplica: proto.ReplicaDescriptor{
+			FromReplica: roachpb.ReplicaDescriptor{
 				NodeID:    clientNodeID,
-				StoreID:   proto.StoreID(clientNodeID),
-				ReplicaID: proto.ReplicaID(clientNodeID),
+				StoreID:   roachpb.StoreID(clientNodeID),
+				ReplicaID: roachpb.ReplicaID(clientNodeID),
 			},
 		}
 		if err := clientTransport.Send(req); err != nil {

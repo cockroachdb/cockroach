@@ -19,8 +19,8 @@ syntax = "proto3";
 package cockroach.gossip;
 option go_package = "gossip";
 
-import "cockroach/proto/data.proto";
-import "cockroach/proto/metadata.proto";
+import "cockroach/roachpb/data.proto";
+import "cockroach/roachpb/metadata.proto";
 import "cockroach/util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 
@@ -33,7 +33,7 @@ option (gogoproto.goproto_unrecognized_all) = false;
 message Request {
   // Requesting node's ID.
   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
   // Address of the requesting client.
   util.UnresolvedAddr addr = 2 [(gogoproto.nullable) = false];
   // Local address of client on requesting node (this is a kludge to
@@ -50,7 +50,7 @@ message Request {
 message Response {
   // Responding Node's ID.
   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
   // Address of the responding client.
   util.UnresolvedAddr addr = 2 [(gogoproto.nullable) = false];
   // Non-nil means client should retry with this address.
@@ -64,12 +64,12 @@ message Response {
 // Info is the basic unit of information traded over the
 // gossip network.
 message Info {
-  proto.Value value = 1 [(gogoproto.nullable) = false];
+  roachpb.Value value = 1 [(gogoproto.nullable) = false];
   // Wall time when info is to be discarded (Unix-nanos)
   int64 ttl_stamp = 2 [(gogoproto.customname) = "TTLStamp"];
   // Number of hops from originator
   uint32 hops = 3;
   // Originating node's ID
   int32 node_id = 4 [(gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
 }

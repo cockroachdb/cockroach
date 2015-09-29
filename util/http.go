@@ -25,7 +25,8 @@ import (
 	"regexp"
 	"strings"
 
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
+
 	yaml "gopkg.in/yaml.v1"
 )
 
@@ -132,11 +133,11 @@ func UnmarshalRequest(r *http.Request, body []byte, value interface{}, allowed [
 		}
 	case ProtoContentType, AltProtoContentType:
 		if isAllowed(ProtoEncoding, allowed) {
-			msg, ok := value.(gogoproto.Message)
+			msg, ok := value.(proto.Message)
 			if !ok {
 				return Errorf("unable to convert %+v to protobuf", value)
 			}
-			return gogoproto.Unmarshal(body, msg)
+			return proto.Unmarshal(body, msg)
 		}
 	case YAMLContentType, AltYAMLContentType:
 		if isAllowed(YAMLEncoding, allowed) {
@@ -207,7 +208,7 @@ func MarshalResponse(r *http.Request, value interface{}, allowed []EncodingType)
 
 	// Reset protoIdx if value cannot be converted to a protocol message
 	if protoIdx < math.MaxInt32 {
-		if _, ok := value.(gogoproto.Message); !ok {
+		if _, ok := value.(proto.Message); !ok {
 			protoIdx = int32(math.MaxInt32)
 		}
 	}
@@ -215,7 +216,7 @@ func MarshalResponse(r *http.Request, value interface{}, allowed []EncodingType)
 	if protoIdx < jsonIdx && protoIdx < yamlIdx {
 		// Protobuf-encode the config.
 		contentType = ProtoContentType
-		if body, err = gogoproto.Marshal(value.(gogoproto.Message)); err != nil {
+		if body, err = proto.Marshal(value.(proto.Message)); err != nil {
 			err = Errorf("unable to marshal %+v to protobuf: %s", value, err)
 		}
 	} else if yamlIdx < jsonIdx && yamlIdx < protoIdx {

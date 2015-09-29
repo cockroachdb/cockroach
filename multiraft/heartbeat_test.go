@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -239,10 +239,10 @@ func TestHeartbeatResponseFanout(t *testing.T) {
 	defer stopper.Stop()
 
 	cluster := newTestCluster(nil, 3, stopper, t)
-	groupID1 := proto.RangeID(1)
+	groupID1 := roachpb.RangeID(1)
 	cluster.createGroup(groupID1, 0, 3 /* replicas */)
 
-	groupID2 := proto.RangeID(2)
+	groupID2 := roachpb.RangeID(2)
 	cluster.createGroup(groupID2, 0, 3 /* replicas */)
 
 	leaderIndex := 0

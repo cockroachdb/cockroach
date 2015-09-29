@@ -20,18 +20,18 @@ package keys
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 )
 
 // InvalidRangeMetaKeyError indicates that a Range Metadata key is somehow
 // invalid.
 type InvalidRangeMetaKeyError struct {
 	Msg string
-	Key proto.Key
+	Key roachpb.Key
 }
 
 // NewInvalidRangeMetaKeyError returns a new InvalidRangeMetaKeyError
-func NewInvalidRangeMetaKeyError(msg string, k proto.Key) *InvalidRangeMetaKeyError {
+func NewInvalidRangeMetaKeyError(msg string, k roachpb.Key) *InvalidRangeMetaKeyError {
 	return &InvalidRangeMetaKeyError{Msg: msg, Key: k}
 }
 

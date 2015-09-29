@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -40,7 +40,7 @@ type replicaQueue interface {
 	// MaybeAdd adds the replica to the queue if the replica meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
-	MaybeAdd(*Replica, proto.Timestamp)
+	MaybeAdd(*Replica, roachpb.Timestamp)
 	// MaybeRemove removes the replica from the queue if it is present.
 	MaybeRemove(*Replica)
 }

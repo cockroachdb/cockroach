@@ -22,23 +22,23 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 )
 
 // Node is a simulated cockroach node.
 type Node struct {
-	desc   proto.NodeDescriptor
-	stores map[proto.StoreID]*Store
+	desc   roachpb.NodeDescriptor
+	stores map[roachpb.StoreID]*Store
 	gossip *gossip.Gossip
 }
 
 // newNode creates a new node with no stores.
-func newNode(nodeID proto.NodeID, gossip *gossip.Gossip) *Node {
+func newNode(nodeID roachpb.NodeID, gossip *gossip.Gossip) *Node {
 	node := &Node{
-		desc: proto.NodeDescriptor{
+		desc: roachpb.NodeDescriptor{
 			NodeID: nodeID,
 		},
-		stores: make(map[proto.StoreID]*Store),
+		stores: make(map[roachpb.StoreID]*Store),
 		gossip: gossip,
 	}
 	return node
@@ -46,8 +46,8 @@ func newNode(nodeID proto.NodeID, gossip *gossip.Gossip) *Node {
 
 // getStoreIDs returns the list of storeIDs from the stores contained on the
 // node.
-func (n *Node) getStoreIDs() []proto.StoreID {
-	var storeIDs []proto.StoreID
+func (n *Node) getStoreIDs() []roachpb.StoreID {
+	var storeIDs []roachpb.StoreID
 	for storeID := range n.stores {
 		storeIDs = append(storeIDs, storeID)
 	}
@@ -56,8 +56,8 @@ func (n *Node) getStoreIDs() []proto.StoreID {
 
 // getNextStoreID gets the store ID that should be used when adding a new store
 // to the node.
-func (n *Node) getNextStoreID() proto.StoreID {
-	return proto.StoreID((int(n.desc.NodeID) * 1000) + len(n.stores))
+func (n *Node) getNextStoreID() roachpb.StoreID {
+	return roachpb.StoreID((int(n.desc.NodeID) * 1000) + len(n.stores))
 }
 
 // addNewStore creates a new store and adds it to the node.

@@ -25,7 +25,7 @@ import (
 
 	"github.com/google/btree"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -45,10 +45,10 @@ type testRangeSet struct {
 func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 	rs := &testRangeSet{rangesByKey: btree.New(64 /* degree */)}
 	for i := 0; i < count; i++ {
-		desc := &proto.RangeDescriptor{
-			RangeID:  proto.RangeID(i),
-			StartKey: proto.Key(fmt.Sprintf("%03d", i)),
-			EndKey:   proto.Key(fmt.Sprintf("%03d", i+1)),
+		desc := &roachpb.RangeDescriptor{
+			RangeID:  roachpb.RangeID(i),
+			StartKey: roachpb.Key(fmt.Sprintf("%03d", i)),
+			EndKey:   roachpb.Key(fmt.Sprintf("%03d", i+1)),
 		}
 		// Initialize the range stat so the scanner can use it.
 		rng := &Replica{
@@ -96,7 +96,7 @@ func (rs *testRangeSet) EstimatedCount() int {
 
 // removeRange removes the i-th range from the range set.
 func (rs *testRangeSet) remove(index int, t *testing.T) *Replica {
-	endKey := proto.Key(fmt.Sprintf("%03d", index+1))
+	endKey := roachpb.Key(fmt.Sprintf("%03d", index+1))
 	rs.Lock()
 	defer rs.Unlock()
 	rng := rs.rangesByKey.Delete((rangeBTreeKey)(endKey))
@@ -144,7 +144,7 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	})
 }
 
-func (tq *testQueue) MaybeAdd(rng *Replica, now proto.Timestamp) {
+func (tq *testQueue) MaybeAdd(rng *Replica, now roachpb.Timestamp) {
 	tq.Lock()
 	defer tq.Unlock()
 	if index := tq.indexOf(rng); index == -1 {

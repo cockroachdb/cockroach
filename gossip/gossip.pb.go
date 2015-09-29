@@ -18,14 +18,14 @@ package gossip
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_proto1 "github.com/cockroachdb/cockroach/proto"
+import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
 
-// discarding unused import cockroach_proto "github.com/cockroachdb/cockroach/proto"
+// discarding unused import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 import cockroach_util "github.com/cockroachdb/cockroach/util"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
-import github_com_cockroachdb_cockroach_proto "github.com/cockroachdb/cockroach/proto"
+import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
 import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 import errors "errors"
@@ -40,7 +40,7 @@ var _ = math.Inf
 // Request is the request struct passed with the Gossip RPC.
 type Request struct {
 	// Requesting node's ID.
-	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,1,opt,name=node_id,proto3,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id,omitempty"`
+	NodeID github_com_cockroachdb_cockroach_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,proto3,casttype=github.com/cockroachdb/cockroach/roachpb.NodeID" json:"node_id,omitempty"`
 	// Address of the requesting client.
 	Addr cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=addr" json:"addr"`
 	// Local address of client on requesting node (this is a kludge to
@@ -81,7 +81,7 @@ func (m *Request) GetDelta() map[string]*Info {
 // Delta will be nil in the event that Alternate is set.
 type Response struct {
 	// Responding Node's ID.
-	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,1,opt,name=node_id,proto3,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id,omitempty"`
+	NodeID github_com_cockroachdb_cockroach_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,proto3,casttype=github.com/cockroachdb/cockroach/roachpb.NodeID" json:"node_id,omitempty"`
 	// Address of the responding client.
 	Addr cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=addr" json:"addr"`
 	// Non-nil means client should retry with this address.
@@ -120,24 +120,24 @@ func (m *Response) GetDelta() map[string]*Info {
 // Info is the basic unit of information traded over the
 // gossip network.
 type Info struct {
-	Value cockroach_proto1.Value `protobuf:"bytes,1,opt,name=value" json:"value"`
+	Value cockroach_roachpb1.Value `protobuf:"bytes,1,opt,name=value" json:"value"`
 	// Wall time when info is to be discarded (Unix-nanos)
 	TTLStamp int64 `protobuf:"varint,2,opt,name=ttl_stamp,proto3" json:"ttl_stamp,omitempty"`
 	// Number of hops from originator
 	Hops uint32 `protobuf:"varint,3,opt,name=hops,proto3" json:"hops,omitempty"`
 	// Originating node's ID
-	NodeID github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,4,opt,name=node_id,proto3,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id,omitempty"`
+	NodeID github_com_cockroachdb_cockroach_roachpb.NodeID `protobuf:"varint,4,opt,name=node_id,proto3,casttype=github.com/cockroachdb/cockroach/roachpb.NodeID" json:"node_id,omitempty"`
 }
 
 func (m *Info) Reset()         { *m = Info{} }
 func (m *Info) String() string { return proto.CompactTextString(m) }
 func (*Info) ProtoMessage()    {}
 
-func (m *Info) GetValue() cockroach_proto1.Value {
+func (m *Info) GetValue() cockroach_roachpb1.Value {
 	if m != nil {
 		return m.Value
 	}
-	return cockroach_proto1.Value{}
+	return cockroach_roachpb1.Value{}
 }
 
 func (m *Request) Marshal() (data []byte, err error) {
@@ -489,7 +489,7 @@ func (m *Request) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.NodeID |= (github_com_cockroachdb_cockroach_proto.NodeID(b) & 0x7F) << shift
+				m.NodeID |= (github_com_cockroachdb_cockroach_roachpb.NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -753,7 +753,7 @@ func (m *Response) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.NodeID |= (github_com_cockroachdb_cockroach_proto.NodeID(b) & 0x7F) << shift
+				m.NodeID |= (github_com_cockroachdb_cockroach_roachpb.NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1088,7 +1088,7 @@ func (m *Info) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.NodeID |= (github_com_cockroachdb_cockroach_proto.NodeID(b) & 0x7F) << shift
+				m.NodeID |= (github_com_cockroachdb_cockroach_roachpb.NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

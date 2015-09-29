@@ -19,7 +19,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -93,7 +93,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		}
 
 		// Delete the row.
-		rowStartKey := proto.Key(primaryIndexKey)
+		rowStartKey := roachpb.Key(primaryIndexKey)
 		rowEndKey := rowStartKey.PrefixEnd()
 		if log.V(2) {
 			log.Infof("DelRange %s - %s", prettyKey(rowStartKey, 0), prettyKey(rowEndKey, 0))

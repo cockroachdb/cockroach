@@ -20,7 +20,7 @@ package multiraft
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
@@ -41,10 +41,10 @@ var _ WriteableGroupStorage = (*raft.MemoryStorage)(nil)
 // The Storage interface is supplied by the application to manage persistent storage
 // of raft data.
 type Storage interface {
-	GroupStorage(groupID proto.RangeID) WriteableGroupStorage
-	ReplicaDescriptor(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error)
-	ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) (proto.ReplicaID, error)
-	ReplicasFromSnapshot(snap raftpb.Snapshot) ([]proto.ReplicaDescriptor, error)
+	GroupStorage(groupID roachpb.RangeID) WriteableGroupStorage
+	ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error)
+	ReplicaIDForStore(groupID roachpb.RangeID, storeID roachpb.StoreID) (roachpb.ReplicaID, error)
+	ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb.ReplicaDescriptor, error)
 }
 
 // The StateMachine interface is supplied by the application to manage a persistent
@@ -53,12 +53,12 @@ type Storage interface {
 type StateMachine interface {
 	// AppliedIndex returns the last index which has been applied to the given group's
 	// state machine.
-	AppliedIndex(groupID proto.RangeID) (uint64, error)
+	AppliedIndex(groupID roachpb.RangeID) (uint64, error)
 }
 
 // MemoryStorage is an in-memory implementation of Storage for testing.
 type MemoryStorage struct {
-	groups map[proto.RangeID]WriteableGroupStorage
+	groups map[roachpb.RangeID]WriteableGroupStorage
 	mu     sync.Mutex
 }
 
@@ -68,12 +68,12 @@ var _ Storage = (*MemoryStorage)(nil)
 // NewMemoryStorage creates a MemoryStorage.
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
-		groups: make(map[proto.RangeID]WriteableGroupStorage),
+		groups: make(map[roachpb.RangeID]WriteableGroupStorage),
 	}
 }
 
 // GroupStorage implements the Storage interface.
-func (m *MemoryStorage) GroupStorage(groupID proto.RangeID) WriteableGroupStorage {
+func (m *MemoryStorage) GroupStorage(groupID roachpb.RangeID) WriteableGroupStorage {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	g, ok := m.groups[groupID]
@@ -86,21 +86,21 @@ func (m *MemoryStorage) GroupStorage(groupID proto.RangeID) WriteableGroupStorag
 
 // ReplicaDescriptor implements the Storage interface by returning a
 // dummy descriptor.
-func (m *MemoryStorage) ReplicaDescriptor(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
-	return proto.ReplicaDescriptor{
+func (m *MemoryStorage) ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
+	return roachpb.ReplicaDescriptor{
 		ReplicaID: replicaID,
-		NodeID:    proto.NodeID(replicaID),
-		StoreID:   proto.StoreID(replicaID),
+		NodeID:    roachpb.NodeID(replicaID),
+		StoreID:   roachpb.StoreID(replicaID),
 	}, nil
 }
 
 // ReplicaIDForStore implements the Storage interface.
-func (m *MemoryStorage) ReplicaIDForStore(groupID proto.RangeID, storeID proto.StoreID) (proto.ReplicaID, error) {
-	return proto.ReplicaID(storeID), nil
+func (m *MemoryStorage) ReplicaIDForStore(groupID roachpb.RangeID, storeID roachpb.StoreID) (roachpb.ReplicaID, error) {
+	return roachpb.ReplicaID(storeID), nil
 }
 
 // ReplicasFromSnapshot implements the Storage interface.
-func (m *MemoryStorage) ReplicasFromSnapshot(_ raftpb.Snapshot) ([]proto.ReplicaDescriptor, error) {
+func (m *MemoryStorage) ReplicasFromSnapshot(_ raftpb.Snapshot) ([]roachpb.ReplicaDescriptor, error) {
 	return nil, nil
 }
 
@@ -113,12 +113,12 @@ type groupWriteRequest struct {
 
 // writeRequest is a collection of groupWriteRequests.
 type writeRequest struct {
-	groups map[proto.RangeID]*groupWriteRequest
+	groups map[roachpb.RangeID]*groupWriteRequest
 }
 
 // newWriteRequest creates a writeRequest.
 func newWriteRequest() *writeRequest {
-	return &writeRequest{make(map[proto.RangeID]*groupWriteRequest)}
+	return &writeRequest{make(map[roachpb.RangeID]*groupWriteRequest)}
 }
 
 // groupWriteResponse represents the final state of a persistent group.
@@ -134,7 +134,7 @@ type groupWriteResponse struct {
 
 // writeResponse is a collection of groupWriteResponses.
 type writeResponse struct {
-	groups map[proto.RangeID]*groupWriteResponse
+	groups map[roachpb.RangeID]*groupWriteResponse
 }
 
 // writeTask manages a goroutine that interacts with the storage system.
@@ -175,7 +175,7 @@ func (w *writeTask) start(stopper *stop.Stopper) {
 			if log.V(6) {
 				log.Infof("writeTask got request %#v", *request)
 			}
-			response := &writeResponse{make(map[proto.RangeID]*groupWriteResponse)}
+			response := &writeResponse{make(map[roachpb.RangeID]*groupWriteResponse)}
 
 			for groupID, groupReq := range request.groups {
 				group := w.storage.GroupStorage(groupID)

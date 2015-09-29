@@ -16,12 +16,12 @@ package storage
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_proto "github.com/cockroachdb/cockroach/proto"
+import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 import cockroach_storage_engine "github.com/cockroachdb/cockroach/storage/engine"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
-import github_com_cockroachdb_cockroach_proto "github.com/cockroachdb/cockroach/proto"
+import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
 import io "io"
 
@@ -33,29 +33,29 @@ var _ = math.Inf
 // StoreStatus contains the stats needed to calculate the current status of a
 // store.
 type StoreStatus struct {
-	Desc                 cockroach_proto.StoreDescriptor               `protobuf:"bytes,1,opt,name=desc" json:"desc"`
-	NodeID               github_com_cockroachdb_cockroach_proto.NodeID `protobuf:"varint,2,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id"`
-	RangeCount           int32                                         `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
-	StartedAt            int64                                         `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
-	UpdatedAt            int64                                         `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`
-	Stats                cockroach_storage_engine.MVCCStats            `protobuf:"bytes,6,opt,name=stats" json:"stats"`
-	LeaderRangeCount     int32                                         `protobuf:"varint,7,opt,name=leader_range_count" json:"leader_range_count"`
-	ReplicatedRangeCount int32                                         `protobuf:"varint,8,opt,name=replicated_range_count" json:"replicated_range_count"`
-	AvailableRangeCount  int32                                         `protobuf:"varint,9,opt,name=available_range_count" json:"available_range_count"`
+	Desc                 cockroach_roachpb.StoreDescriptor               `protobuf:"bytes,1,opt,name=desc" json:"desc"`
+	NodeID               github_com_cockroachdb_cockroach_roachpb.NodeID `protobuf:"varint,2,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/roachpb.NodeID" json:"node_id"`
+	RangeCount           int32                                           `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
+	StartedAt            int64                                           `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
+	UpdatedAt            int64                                           `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`
+	Stats                cockroach_storage_engine.MVCCStats              `protobuf:"bytes,6,opt,name=stats" json:"stats"`
+	LeaderRangeCount     int32                                           `protobuf:"varint,7,opt,name=leader_range_count" json:"leader_range_count"`
+	ReplicatedRangeCount int32                                           `protobuf:"varint,8,opt,name=replicated_range_count" json:"replicated_range_count"`
+	AvailableRangeCount  int32                                           `protobuf:"varint,9,opt,name=available_range_count" json:"available_range_count"`
 }
 
 func (m *StoreStatus) Reset()         { *m = StoreStatus{} }
 func (m *StoreStatus) String() string { return proto.CompactTextString(m) }
 func (*StoreStatus) ProtoMessage()    {}
 
-func (m *StoreStatus) GetDesc() cockroach_proto.StoreDescriptor {
+func (m *StoreStatus) GetDesc() cockroach_roachpb.StoreDescriptor {
 	if m != nil {
 		return m.Desc
 	}
-	return cockroach_proto.StoreDescriptor{}
+	return cockroach_roachpb.StoreDescriptor{}
 }
 
-func (m *StoreStatus) GetNodeID() github_com_cockroachdb_cockroach_proto.NodeID {
+func (m *StoreStatus) GetNodeID() github_com_cockroachdb_cockroach_roachpb.NodeID {
 	if m != nil {
 		return m.NodeID
 	}
@@ -296,7 +296,7 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.NodeID |= (github_com_cockroachdb_cockroach_proto.NodeID(b) & 0x7F) << shift
+				m.NodeID |= (github_com_cockroachdb_cockroach_roachpb.NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

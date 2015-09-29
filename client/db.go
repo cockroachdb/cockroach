@@ -28,19 +28,19 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // KeyValue represents a single key/value pair and corresponding
-// timestamp. This is similar to proto.KeyValue except that the value may be
+// timestamp. This is similar to roachpb.KeyValue except that the value may be
 // nil.
 type KeyValue struct {
 	Key   []byte
-	Value *proto.Value
+	Value *roachpb.Value
 }
 
 func (kv *KeyValue) String() string {
@@ -58,25 +58,25 @@ func (kv *KeyValue) PrettyValue() string {
 		return "nil"
 	}
 	switch kv.Value.Tag {
-	case proto.ValueType_INT:
+	case roachpb.ValueType_INT:
 		v, err := kv.Value.GetInt()
 		if err != nil {
 			return fmt.Sprintf("%v", err)
 		}
 		return fmt.Sprintf("%d", v)
-	case proto.ValueType_FLOAT:
+	case roachpb.ValueType_FLOAT:
 		v, err := kv.Value.GetFloat()
 		if err != nil {
 			return fmt.Sprintf("%v", err)
 		}
 		return fmt.Sprintf("%v", v)
-	case proto.ValueType_BYTES:
+	case roachpb.ValueType_BYTES:
 		v, err := kv.Value.GetBytesChecked()
 		if err != nil {
 			return fmt.Sprintf("%v", err)
 		}
 		return fmt.Sprintf("%q", v)
-	case proto.ValueType_TIME:
+	case roachpb.ValueType_TIME:
 		v, err := kv.Value.GetTime()
 		if err != nil {
 			return fmt.Sprintf("%v", err)
@@ -86,7 +86,7 @@ func (kv *KeyValue) PrettyValue() string {
 	return fmt.Sprintf("%q", kv.Value.Bytes)
 }
 
-func (kv *KeyValue) setTimestamp(t proto.Timestamp) {
+func (kv *KeyValue) setTimestamp(t roachpb.Timestamp) {
 	if kv.Value != nil {
 		kv.Value.Timestamp = &t
 	}
@@ -123,12 +123,12 @@ func (kv *KeyValue) ValueInt() int64 {
 }
 
 // ValueProto parses the byte slice value as a proto message.
-func (kv *KeyValue) ValueProto(msg gogoproto.Message) error {
+func (kv *KeyValue) ValueProto(msg proto.Message) error {
 	if kv.Value == nil || kv.Value.Bytes == nil {
 		msg.Reset()
 		return nil
 	}
-	return gogoproto.Unmarshal(kv.Value.Bytes, msg)
+	return proto.Unmarshal(kv.Value.Bytes, msg)
 }
 
 // Result holds the result for a single DB or Txn operation (e.g. Get, Put,
@@ -283,7 +283,7 @@ func (db *DB) Get(key interface{}) (KeyValue, error) {
 // message.
 //
 // key can be either a byte slice or a string.
-func (db *DB) GetProto(key interface{}, msg gogoproto.Message) error {
+func (db *DB) GetProto(key interface{}, msg proto.Message) error {
 	r, err := db.Get(key)
 	if err != nil {
 		return err
@@ -405,7 +405,7 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
-func sendAndFill(send func(...proto.Request) (*proto.BatchResponse, *proto.Error), b *Batch) (*proto.BatchResponse, error) {
+func sendAndFill(send func(...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error), b *Batch) (*roachpb.BatchResponse, error) {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call
 	// fails. But send() also returns its own errors, so there's some dancing
@@ -441,7 +441,7 @@ func (db *DB) Run(b *Batch) error {
 }
 
 // RunWithResponse is a version of Run that returns the BatchResponse.
-func (db *DB) RunWithResponse(b *Batch) (*proto.BatchResponse, error) {
+func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
 	if err := b.prepare(); err != nil {
 		return nil, err
 	}
@@ -463,16 +463,16 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 
 // send runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (db *DB) send(reqs ...proto.Request) (*proto.BatchResponse, *proto.Error) {
+func (db *DB) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(reqs) == 0 {
-		return &proto.BatchResponse{}, nil
+		return &roachpb.BatchResponse{}, nil
 	}
 
-	ba := proto.BatchRequest{}
+	ba := roachpb.BatchRequest{}
 	ba.Add(reqs...)
 
 	if ba.UserPriority == nil && db.userPriority != 0 {
-		ba.UserPriority = gogoproto.Int32(db.userPriority)
+		ba.UserPriority = proto.Int32(db.userPriority)
 	}
 	resetClientCmdID(&ba)
 	br, pErr := db.sender.Send(context.TODO(), ba)
@@ -509,8 +509,8 @@ func runOneRow(r Runner, b *Batch) (KeyValue, error) {
 // resetClientCmdID sets the client command ID if the call is for a
 // read-write method. The client command ID provides idempotency
 // protection in conjunction with the server.
-func resetClientCmdID(ba *proto.BatchRequest) {
-	ba.CmdID = proto.ClientCmdID{
+func resetClientCmdID(ba *roachpb.BatchRequest) {
+	ba.CmdID = roachpb.ClientCmdID{
 		WallTime: time.Now().UnixNano(),
 		Random:   rand.Int63(),
 	}

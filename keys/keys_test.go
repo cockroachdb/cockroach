@@ -21,7 +21,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -32,23 +32,23 @@ import (
 func TestKeySorting(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Reminder: Increasing the last byte by one < adding a null byte.
-	if !(proto.Key("").Less(proto.Key("\x00")) && proto.Key("\x00").Less(proto.Key("\x01")) &&
-		proto.Key("\x01").Less(proto.Key("\x01\x00"))) {
+	if !(roachpb.Key("").Less(roachpb.Key("\x00")) && roachpb.Key("\x00").Less(roachpb.Key("\x01")) &&
+		roachpb.Key("\x01").Less(roachpb.Key("\x01\x00"))) {
 		t.Fatalf("something is seriously wrong with this machine")
 	}
 	if !LocalPrefix.Less(MetaPrefix) {
 		t.Fatalf("local key spilling into replicable ranges")
 	}
-	if !bytes.Equal(proto.Key(""), proto.Key(nil)) || !bytes.Equal(proto.Key(""), proto.Key(nil)) {
+	if !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) || !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) {
 		t.Fatalf("equality between keys failed")
 	}
 }
 
 func TestMakeKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	if !bytes.Equal(MakeKey(proto.Key("A"), proto.Key("B")), proto.Key("AB")) ||
-		!bytes.Equal(MakeKey(proto.Key("A")), proto.Key("A")) ||
-		!bytes.Equal(MakeKey(proto.Key("A"), proto.Key("B"), proto.Key("C")), proto.Key("ABC")) {
+	if !bytes.Equal(MakeKey(roachpb.Key("A"), roachpb.Key("B")), roachpb.Key("AB")) ||
+		!bytes.Equal(MakeKey(roachpb.Key("A")), roachpb.Key("A")) ||
+		!bytes.Equal(MakeKey(roachpb.Key("A"), roachpb.Key("B"), roachpb.Key("C")), roachpb.Key("ABC")) {
 		t.Fatalf("MakeKey is broken")
 	}
 }
@@ -56,13 +56,13 @@ func TestMakeKey(t *testing.T) {
 func TestKeyAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key, expAddress proto.Key
+		key, expAddress roachpb.Key
 	}{
-		{proto.Key{}, proto.KeyMin},
-		{proto.Key("123"), proto.Key("123")},
-		{RangeDescriptorKey(proto.Key("foo")), proto.Key("foo")},
-		{TransactionKey(proto.Key("baz"), proto.Key(uuid.NewUUID4())), proto.Key("baz")},
-		{TransactionKey(proto.KeyMax, proto.Key(uuid.NewUUID4())), proto.KeyMax},
+		{roachpb.Key{}, roachpb.KeyMin},
+		{roachpb.Key("123"), roachpb.Key("123")},
+		{RangeDescriptorKey(roachpb.Key("foo")), roachpb.Key("foo")},
+		{TransactionKey(roachpb.Key("baz"), roachpb.Key(uuid.NewUUID4())), roachpb.Key("baz")},
+		{TransactionKey(roachpb.KeyMax, roachpb.Key(uuid.NewUUID4())), roachpb.KeyMax},
 		{nil, nil},
 	}
 	for i, test := range testCases {
@@ -76,35 +76,35 @@ func TestKeyAddress(t *testing.T) {
 func TestRangeMetaKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key, expKey proto.Key
+		key, expKey roachpb.Key
 	}{
 		{
-			key:    proto.Key{},
-			expKey: proto.KeyMin,
+			key:    roachpb.Key{},
+			expKey: roachpb.KeyMin,
 		},
 		{
-			key:    proto.Key("\x00\x00meta2\x00zonefoo"),
-			expKey: proto.Key("\x00\x00meta1\x00zonefoo"),
+			key:    roachpb.Key("\x00\x00meta2\x00zonefoo"),
+			expKey: roachpb.Key("\x00\x00meta1\x00zonefoo"),
 		},
 		{
-			key:    proto.Key("\x00\x00meta1\x00zonefoo"),
-			expKey: proto.KeyMin,
+			key:    roachpb.Key("\x00\x00meta1\x00zonefoo"),
+			expKey: roachpb.KeyMin,
 		},
 		{
-			key:    proto.Key("foo"),
-			expKey: proto.Key("\x00\x00meta2foo"),
+			key:    roachpb.Key("foo"),
+			expKey: roachpb.Key("\x00\x00meta2foo"),
 		},
 		{
-			key:    proto.Key("foo"),
-			expKey: proto.Key("\x00\x00meta2foo"),
+			key:    roachpb.Key("foo"),
+			expKey: roachpb.Key("\x00\x00meta2foo"),
 		},
 		{
-			key:    proto.Key("\x00\x00meta2foo"),
-			expKey: proto.Key("\x00\x00meta1foo"),
+			key:    roachpb.Key("\x00\x00meta2foo"),
+			expKey: roachpb.Key("\x00\x00meta1foo"),
 		},
 		{
-			key:    proto.Key("\x00\x00meta1foo"),
-			expKey: proto.KeyMin,
+			key:    roachpb.Key("\x00\x00meta1foo"),
+			expKey: roachpb.KeyMin,
 		},
 	}
 	for i, test := range testCases {
@@ -127,30 +127,30 @@ func TestMetaScanBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
-		key, expStart, expEnd proto.Key
+		key, expStart, expEnd roachpb.Key
 		expError              string
 	}{
 		{
-			key:      proto.Key{},
+			key:      roachpb.Key{},
 			expStart: Meta1Prefix,
 			expEnd:   Meta1Prefix.PrefixEnd(),
 			expError: "",
 		},
 		{
-			key:      proto.MakeKey(Meta2Prefix, proto.Key("foo")),
-			expStart: proto.MakeKey(Meta2Prefix, proto.Key("foo\x00")),
+			key:      roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")),
+			expStart: roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo\x00")),
 			expEnd:   Meta2Prefix.PrefixEnd(),
 			expError: "",
 		},
 		{
-			key:      proto.MakeKey(Meta1Prefix, proto.Key("foo")),
-			expStart: proto.MakeKey(Meta1Prefix, proto.Key("foo\x00")),
+			key:      roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")),
+			expStart: roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo\x00")),
 			expEnd:   Meta1Prefix.PrefixEnd(),
 			expError: "",
 		},
 		{
-			key:      proto.MakeKey(Meta1Prefix, proto.KeyMax),
-			expStart: proto.MakeKey(Meta1Prefix, proto.KeyMax),
+			key:      roachpb.MakeKey(Meta1Prefix, roachpb.KeyMax),
+			expStart: roachpb.MakeKey(Meta1Prefix, roachpb.KeyMax),
 			expEnd:   Meta1Prefix.PrefixEnd(),
 			expError: "",
 		},
@@ -192,11 +192,11 @@ func TestMetaReverseScanBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
-		key, expStart, expEnd proto.Key
+		key, expStart, expEnd roachpb.Key
 		expError              string
 	}{
 		{
-			key:      proto.Key{},
+			key:      roachpb.Key{},
 			expStart: nil,
 			expEnd:   nil,
 			expError: "KeyMin and Meta1Prefix can't be used as the key of reverse scan",
@@ -220,15 +220,15 @@ func TestMetaReverseScanBounds(t *testing.T) {
 			expError: "body of meta key range lookup is",
 		},
 		{
-			key:      proto.MakeKey(Meta2Prefix, proto.Key("foo")),
+			key:      roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")),
 			expStart: Meta2Prefix,
-			expEnd:   proto.MakeKey(Meta2Prefix, proto.Key("foo\x00")),
+			expEnd:   roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo\x00")),
 			expError: "",
 		},
 		{
-			key:      proto.MakeKey(Meta1Prefix, proto.Key("foo")),
+			key:      roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")),
 			expStart: Meta1Prefix,
-			expEnd:   proto.MakeKey(Meta1Prefix, proto.Key("foo\x00")),
+			expEnd:   roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo\x00")),
 			expError: "",
 		},
 		{
@@ -262,16 +262,16 @@ func TestMetaReverseScanBounds(t *testing.T) {
 func TestValidateRangeMetaKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key    proto.Key
+		key    roachpb.Key
 		expErr bool
 	}{
-		{proto.KeyMin, false},
-		{proto.Key("\x00"), true},
+		{roachpb.KeyMin, false},
+		{roachpb.Key("\x00"), true},
 		{Meta1Prefix[:len(Meta1Prefix)-1], true},
 		{Meta1Prefix, false},
-		{proto.MakeKey(Meta1Prefix, proto.KeyMax), false},
-		{proto.MakeKey(Meta2Prefix, proto.KeyMax), false},
-		{proto.MakeKey(Meta2Prefix, proto.KeyMax.Next()), true},
+		{roachpb.MakeKey(Meta1Prefix, roachpb.KeyMax), false},
+		{roachpb.MakeKey(Meta2Prefix, roachpb.KeyMax), false},
+		{roachpb.MakeKey(Meta2Prefix, roachpb.KeyMax.Next()), true},
 	}
 	for i, test := range testCases {
 		err := validateRangeMetaKey(test.key)

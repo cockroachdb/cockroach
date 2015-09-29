@@ -25,7 +25,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 )
 
 type testArg struct {
@@ -39,16 +39,16 @@ func (t testArg) String() string {
 
 func testContext() context.Context {
 	ctx := context.Background()
-	return Add(ctx, NodeID, proto.NodeID(1), StoreID, proto.StoreID(2), RangeID, proto.RangeID(3), Key, proto.Key("key"))
+	return Add(ctx, NodeID, roachpb.NodeID(1), StoreID, roachpb.StoreID(2), RangeID, roachpb.RangeID(3), Key, roachpb.Key("key"))
 }
 
 func TestSetLogEntry(t *testing.T) {
 	ctx := testContext()
 
-	nodeID := ctx.Value(NodeID).(proto.NodeID)
-	storeID := ctx.Value(StoreID).(proto.StoreID)
-	rangeID := ctx.Value(RangeID).(proto.RangeID)
-	key := ctx.Value(Key).(proto.Key)
+	nodeID := ctx.Value(NodeID).(roachpb.NodeID)
+	storeID := ctx.Value(StoreID).(roachpb.StoreID)
+	rangeID := ctx.Value(RangeID).(roachpb.RangeID)
+	key := ctx.Value(Key).(roachpb.Key)
 
 	testCases := []struct {
 		ctx      context.Context
@@ -68,51 +68,55 @@ func TestSetLogEntry(t *testing.T) {
 			NodeID: &nodeID, StoreID: &storeID, RangeID: &rangeID, Key: key,
 			Format: "1 arg %s",
 			Args: []LogEntry_Arg{
-				{Type: "string", Str: "foo"},
+				{Str: "foo"},
 			},
 		}},
 		// Try a float64 argument with width and precision specified.
 		{nil, "float arg %10.4f", []interface{}{math.Pi}, LogEntry{
 			Format: "float arg %s",
 			Args: []LogEntry_Arg{
-				{Type: "float64", Str: "    3.1416", Json: []byte("3.141592653589793")},
+				{Str: "    3.1416", Json: []byte("3.141592653589793")},
 			},
 		}},
-		// Try a proto.Key argument.
-		{nil, "Key arg %s", []interface{}{proto.Key("\x00\xff")}, LogEntry{
+		// Try a roachpb.Key argument.
+		{nil, "Key arg %s", []interface{}{roachpb.Key("\x00\xff")}, LogEntry{
 			Format: "Key arg %s",
 			Args: []LogEntry_Arg{
-				{Type: "proto.Key", Str: "\"\\x00\\xff\""},
+				{Str: "\"\\x00\\xff\""},
 			},
 		}},
 		// Verify multiple args and set the formatting very particularly for int type.
 		{nil, "2 args %s %010d", []interface{}{"foo", 1}, LogEntry{
 			Format: "2 args %s %s",
 			Args: []LogEntry_Arg{
-				{Type: "string", Str: "foo"},
-				{Type: "int", Str: "0000000001", Json: []byte("1")},
+				{Str: "foo"},
+				{Str: "0000000001", Json: []byte("1")},
 			},
 		}},
 		// Set argument to a non-simple type with custom stringer which will yield a JSON value in the Arg.
 		{nil, "JSON arg %s", []interface{}{testArg{"foo", 10}}, LogEntry{
 			Format: "JSON arg %s",
 			Args: []LogEntry_Arg{
-				{Type: "log.testArg", Str: "10-->foo", Json: []byte("{\"StrVal\":\"foo\",\"IntVal\":10}")},
+				{Str: "10-->foo", Json: []byte("{\"StrVal\":\"foo\",\"IntVal\":10}")},
 			},
 		}},
 		// Error format test.
 		{nil, "Error format s%", []interface{}{"foo"}, LogEntry{
 			Format: "Error format s",
 			Args: []LogEntry_Arg{
-				{Type: "string", Str: "foo"},
+				{Str: "foo"},
 			},
 		}},
 	}
 	for i, test := range testCases {
+		for i, arg := range test.args {
+			test.expEntry.Args[i].Type = fmt.Sprintf("%T", arg)
+		}
+
 		entry := &LogEntry{}
 		setLogEntry(test.ctx, test.format, test.args, entry)
 		if !reflect.DeepEqual(entry, &test.expEntry) {
-			t.Errorf("%d: expected %+v; got %+v", i, &test.expEntry, entry)
+			t.Errorf("%d: expected:\n%+v\ngot:\n%+v", i, &test.expEntry, entry)
 		}
 	}
 }

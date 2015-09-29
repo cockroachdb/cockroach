@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -33,14 +33,14 @@ func TestBatchPrevNext(t *testing.T) {
 		var r []keys.Span
 		for i, str := range strs {
 			if i%2 == 0 {
-				r = append(r, keys.Span{Start: proto.Key(str)})
+				r = append(r, keys.Span{Start: roachpb.Key(str)})
 			} else {
-				r[len(r)-1].End = proto.Key(str)
+				r[len(r)-1].End = roachpb.Key(str)
 			}
 		}
 		return r
 	}
-	max, min := string(proto.KeyMax), string(proto.KeyMin)
+	max, min := string(roachpb.KeyMax), string(roachpb.KeyMin)
 	abc := span("a", "", "b", "", "c", "")
 	testCases := []struct {
 		spans             []keys.Span
@@ -57,16 +57,16 @@ func TestBatchPrevNext(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		var ba proto.BatchRequest
+		var ba roachpb.BatchRequest
 		for _, span := range test.spans {
-			args := &proto.ScanRequest{}
+			args := &roachpb.ScanRequest{}
 			args.Key, args.EndKey = span.Start, span.End
 			ba.Add(args)
 		}
-		if next := next(ba, proto.Key(test.key)); !bytes.Equal(next, proto.Key(test.expFW)) {
+		if next := next(ba, roachpb.Key(test.key)); !bytes.Equal(next, roachpb.Key(test.expFW)) {
 			t.Errorf("%d: next: expected %q, got %q", i, test.expFW, next)
 		}
-		if prev := prev(ba, proto.Key(test.key)); !bytes.Equal(prev, proto.Key(test.expBW)) {
+		if prev := prev(ba, roachpb.Key(test.key)); !bytes.Equal(prev, roachpb.Key(test.expBW)) {
 			t.Errorf("%d: prev: expected %q, got %q", i, test.expBW, prev)
 		}
 	}

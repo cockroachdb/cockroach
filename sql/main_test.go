@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
@@ -45,8 +45,8 @@ func TestMain(m *testing.M) {
 
 // checkEndTransactionTrigger verifies that an EndTransactionRequest
 // that includes intents for the SystemDB keys sets the proper trigger.
-func checkEndTransactionTrigger(req proto.Request) error {
-	args, ok := req.(*proto.EndTransactionRequest)
+func checkEndTransactionTrigger(req roachpb.Request) error {
+	args, ok := req.(*roachpb.EndTransactionRequest)
 	if !ok {
 		return nil
 	}

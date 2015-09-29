@@ -20,7 +20,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -45,7 +45,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 		tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 
 		// Delete rows and indexes starting with the table's prefix.
-		tableStartKey := proto.Key(tablePrefix)
+		tableStartKey := roachpb.Key(tablePrefix)
 		tableEndKey := tableStartKey.PrefixEnd()
 		if log.V(2) {
 			log.Infof("DelRange %s - %s", prettyKey(tableStartKey, 0), prettyKey(tableEndKey, 0))

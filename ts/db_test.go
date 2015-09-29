@@ -26,11 +26,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/kv"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // testModel is a model-based testing structure used to verify that time
@@ -49,7 +49,7 @@ import (
 // data matches.
 type testModel struct {
 	t           testing.TB
-	modelData   map[string]*proto.Value
+	modelData   map[string]*roachpb.Value
 	seenSources map[string]bool
 	*kv.LocalTestCluster
 	DB *DB
@@ -60,7 +60,7 @@ type testModel struct {
 func newTestModel(t *testing.T) *testModel {
 	return &testModel{
 		t:                t,
-		modelData:        make(map[string]*proto.Value),
+		modelData:        make(map[string]*roachpb.Value),
 		seenSources:      make(map[string]bool),
 		LocalTestCluster: &kv.LocalTestCluster{},
 	}
@@ -74,8 +74,8 @@ func (tm *testModel) Start() {
 }
 
 // getActualData returns the actual value of all time series keys in the
-// underlying engine. Data is returned as a map of strings to proto.Values.
-func (tm *testModel) getActualData() map[string]*proto.Value {
+// underlying engine. Data is returned as a map of strings to roachpb.Values.
+func (tm *testModel) getActualData() map[string]*roachpb.Value {
 	// Scan over all TS Keys stored in the engine
 	startKey := keyDataPrefix
 	endKey := keyDataPrefix.PrefixEnd()
@@ -84,7 +84,7 @@ func (tm *testModel) getActualData() map[string]*proto.Value {
 		tm.t.Fatalf("error scanning TS data from engine: %s", err.Error())
 	}
 
-	kvMap := make(map[string]*proto.Value)
+	kvMap := make(map[string]*roachpb.Value)
 	for _, kv := range keyValues {
 		val := kv.Value
 		kvMap[string(kv.Key)] = &val
@@ -114,14 +114,14 @@ func (tm *testModel) assertModelCorrect() {
 			if vModel, ok := tm.modelData[k]; !ok {
 				fmt.Fprintf(&buf, "\tKey %s/%s@%d, r:%d from actual data was not found in model", n, s, ts, r)
 			} else {
-				if !gogoproto.Equal(vActual, vModel) {
+				if !proto.Equal(vActual, vModel) {
 					fmt.Fprintf(&buf, "\tKey %s/%s@%d, r:%d differs between model and actual:", n, s, ts, r)
-					if its, err := proto.InternalTimeSeriesDataFromValue(vActual); err != nil {
+					if its, err := roachpb.InternalTimeSeriesDataFromValue(vActual); err != nil {
 						fmt.Fprintf(&buf, "\tActual value is not a valid time series: %v", vActual)
 					} else {
 						fmt.Fprintf(&buf, "\tActual value: %v", its)
 					}
-					if its, err := proto.InternalTimeSeriesDataFromValue(vModel); err != nil {
+					if its, err := roachpb.InternalTimeSeriesDataFromValue(vModel); err != nil {
 						fmt.Fprintf(&buf, "\tModel value is not a valid time series: %v", vModel)
 					} else {
 						fmt.Fprintf(&buf, "\tModel value: %v", its)
@@ -169,9 +169,9 @@ func (tm *testModel) storeInModel(r Resolution, data TimeSeriesData) {
 		keyStr := string(key)
 
 		existing, ok := tm.modelData[keyStr]
-		var newTs *proto.InternalTimeSeriesData
+		var newTs *roachpb.InternalTimeSeriesData
 		if ok {
-			existingTs, err := proto.InternalTimeSeriesDataFromValue(existing)
+			existingTs, err := roachpb.InternalTimeSeriesDataFromValue(existing)
 			if err != nil {
 				tm.t.Fatalf("test could not extract time series from existing model value: %s", err.Error())
 			}

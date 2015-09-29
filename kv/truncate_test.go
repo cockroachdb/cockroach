@@ -6,16 +6,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 func TestTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	loc := func(s string) string {
-		return string(keys.RangeDescriptorKey(proto.Key(s)))
+		return string(keys.RangeDescriptorKey(roachpb.Key(s)))
 	}
 	testCases := []struct {
 		keys     [][2]string
@@ -72,40 +71,40 @@ func TestTruncate(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		ba := &proto.BatchRequest{}
+		ba := &roachpb.BatchRequest{}
 		for _, ks := range test.keys {
 			if len(ks[1]) > 0 {
-				ba.Add(&proto.ScanRequest{
-					RequestHeader: proto.RequestHeader{Key: proto.Key(ks[0]), EndKey: proto.Key(ks[1])},
+				ba.Add(&roachpb.ScanRequest{
+					RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1])},
 				})
 			} else {
-				ba.Add(&proto.GetRequest{
-					RequestHeader: proto.RequestHeader{Key: proto.Key(ks[0])},
+				ba.Add(&roachpb.GetRequest{
+					RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(ks[0])},
 				})
 			}
 		}
-		original := gogoproto.Clone(ba).(*proto.BatchRequest)
+		original := proto.Clone(ba).(*roachpb.BatchRequest)
 
-		desc := &proto.RangeDescriptor{
-			StartKey: proto.Key(test.desc[0]), EndKey: proto.Key(test.desc[1]),
+		desc := &roachpb.RangeDescriptor{
+			StartKey: roachpb.Key(test.desc[0]), EndKey: roachpb.Key(test.desc[1]),
 		}
 		if len(desc.StartKey) == 0 {
-			desc.StartKey = proto.Key(test.from)
+			desc.StartKey = roachpb.Key(test.from)
 		}
 		if len(desc.EndKey) == 0 {
-			desc.EndKey = proto.Key(test.to)
+			desc.EndKey = roachpb.Key(test.to)
 		}
-		undo, num, err := truncate(ba, desc, proto.Key(test.from), proto.Key(test.to))
+		undo, num, err := truncate(ba, desc, roachpb.Key(test.from), roachpb.Key(test.to))
 		if err != nil {
 			t.Errorf("%d: %s", i, err)
 		}
 		var reqs int
 		for j, arg := range ba.Requests {
 			req := arg.GetInner()
-			if h := req.Header(); !bytes.Equal(h.Key, proto.Key(test.expKeys[j][0])) || !bytes.Equal(h.EndKey, proto.Key(test.expKeys[j][1])) {
+			if h := req.Header(); !bytes.Equal(h.Key, roachpb.Key(test.expKeys[j][0])) || !bytes.Equal(h.EndKey, roachpb.Key(test.expKeys[j][1])) {
 				t.Errorf("%d.%d: range mismatch: actual [%q,%q), wanted [%q,%q)", i, j,
 					h.Key, h.EndKey, test.expKeys[j][0], test.expKeys[j][1])
-			} else if _, ok := req.(*proto.NoopRequest); ok != (len(h.Key) == 0) {
+			} else if _, ok := req.(*roachpb.NoopRequest); ok != (len(h.Key) == 0) {
 				t.Errorf("%d.%d: expected NoopRequest, got %T", i, j, req)
 			} else if len(h.Key) != 0 {
 				reqs++

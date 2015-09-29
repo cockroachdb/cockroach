@@ -18,12 +18,12 @@ package multiraft
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_proto "github.com/cockroachdb/cockroach/proto"
+import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 import raftpb "github.com/coreos/etcd/raft/raftpb"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
-import github_com_cockroachdb_cockroach_proto "github.com/cockroachdb/cockroach/proto"
+import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
 import io "io"
 
@@ -35,35 +35,35 @@ var _ = math.Inf
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec.
 type RaftMessageRequest struct {
-	GroupID     github_com_cockroachdb_cockroach_proto.RangeID `protobuf:"varint,1,opt,name=group_id,casttype=github.com/cockroachdb/cockroach/proto.RangeID" json:"group_id"`
-	FromReplica cockroach_proto.ReplicaDescriptor              `protobuf:"bytes,2,opt,name=from_replica" json:"from_replica"`
-	ToReplica   cockroach_proto.ReplicaDescriptor              `protobuf:"bytes,3,opt,name=to_replica" json:"to_replica"`
-	Message     raftpb.Message                                 `protobuf:"bytes,4,opt,name=message" json:"message"`
+	GroupID     github_com_cockroachdb_cockroach_roachpb.RangeID `protobuf:"varint,1,opt,name=group_id,casttype=github.com/cockroachdb/cockroach/roachpb.RangeID" json:"group_id"`
+	FromReplica cockroach_roachpb.ReplicaDescriptor              `protobuf:"bytes,2,opt,name=from_replica" json:"from_replica"`
+	ToReplica   cockroach_roachpb.ReplicaDescriptor              `protobuf:"bytes,3,opt,name=to_replica" json:"to_replica"`
+	Message     raftpb.Message                                   `protobuf:"bytes,4,opt,name=message" json:"message"`
 }
 
 func (m *RaftMessageRequest) Reset()         { *m = RaftMessageRequest{} }
 func (m *RaftMessageRequest) String() string { return proto.CompactTextString(m) }
 func (*RaftMessageRequest) ProtoMessage()    {}
 
-func (m *RaftMessageRequest) GetGroupID() github_com_cockroachdb_cockroach_proto.RangeID {
+func (m *RaftMessageRequest) GetGroupID() github_com_cockroachdb_cockroach_roachpb.RangeID {
 	if m != nil {
 		return m.GroupID
 	}
 	return 0
 }
 
-func (m *RaftMessageRequest) GetFromReplica() cockroach_proto.ReplicaDescriptor {
+func (m *RaftMessageRequest) GetFromReplica() cockroach_roachpb.ReplicaDescriptor {
 	if m != nil {
 		return m.FromReplica
 	}
-	return cockroach_proto.ReplicaDescriptor{}
+	return cockroach_roachpb.ReplicaDescriptor{}
 }
 
-func (m *RaftMessageRequest) GetToReplica() cockroach_proto.ReplicaDescriptor {
+func (m *RaftMessageRequest) GetToReplica() cockroach_roachpb.ReplicaDescriptor {
 	if m != nil {
 		return m.ToReplica
 	}
-	return cockroach_proto.ReplicaDescriptor{}
+	return cockroach_roachpb.ReplicaDescriptor{}
 }
 
 func (m *RaftMessageRequest) GetMessage() raftpb.Message {
@@ -86,10 +86,10 @@ func (*RaftMessageResponse) ProtoMessage()    {}
 type ConfChangeContext struct {
 	CommandID string `protobuf:"bytes,1,opt,name=command_id" json:"command_id"`
 	// Payload is the application-level command (i.e. an encoded
-	// proto.EndTransactionRequest).
+	// roachpb.EndTransactionRequest).
 	Payload []byte `protobuf:"bytes,2,opt,name=payload" json:"payload,omitempty"`
 	// Replica contains full details about the replica being added or removed.
-	Replica cockroach_proto.ReplicaDescriptor `protobuf:"bytes,3,opt,name=replica" json:"replica"`
+	Replica cockroach_roachpb.ReplicaDescriptor `protobuf:"bytes,3,opt,name=replica" json:"replica"`
 }
 
 func (m *ConfChangeContext) Reset()         { *m = ConfChangeContext{} }
@@ -110,11 +110,11 @@ func (m *ConfChangeContext) GetPayload() []byte {
 	return nil
 }
 
-func (m *ConfChangeContext) GetReplica() cockroach_proto.ReplicaDescriptor {
+func (m *ConfChangeContext) GetReplica() cockroach_roachpb.ReplicaDescriptor {
 	if m != nil {
 		return m.Replica
 	}
-	return cockroach_proto.ReplicaDescriptor{}
+	return cockroach_roachpb.ReplicaDescriptor{}
 }
 
 func (m *RaftMessageRequest) Marshal() (data []byte, err error) {
@@ -332,7 +332,7 @@ func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.GroupID |= (github_com_cockroachdb_cockroach_proto.RangeID(b) & 0x7F) << shift
+				m.GroupID |= (github_com_cockroachdb_cockroach_roachpb.RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

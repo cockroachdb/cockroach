@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	noGroup = proto.RangeID(0)
+	noGroup = roachpb.RangeID(0)
 
 	reqBufferSize = 100
 
@@ -104,8 +104,8 @@ type MultiRaft struct {
 	stopper         *stop.Stopper
 	multiNode       raft.MultiNode
 	Events          chan []interface{}
-	nodeID          proto.NodeID
-	storeID         proto.StoreID
+	nodeID          roachpb.NodeID
+	storeID         roachpb.StoreID
 	reqChan         chan *RaftMessageRequest
 	createGroupChan chan *createGroupOp
 	removeGroupChan chan *removeGroupOp
@@ -119,7 +119,7 @@ type MultiRaft struct {
 type multiraftServer MultiRaft
 
 // NewMultiRaft creates a MultiRaft object.
-func NewMultiRaft(nodeID proto.NodeID, storeID proto.StoreID, config *Config, stopper *stop.Stopper) (*MultiRaft, error) {
+func NewMultiRaft(nodeID roachpb.NodeID, storeID roachpb.StoreID, config *Config, stopper *stop.Stopper) (*MultiRaft, error) {
 	if nodeID <= 0 {
 		return nil, util.Errorf("invalid NodeID: %s", nodeID)
 	}
@@ -199,7 +199,7 @@ func (s *state) sendEvent(event interface{}) {
 func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 	// A heartbeat message is expanded into a heartbeat for each group
 	// that the remote node is a part of.
-	fromID := proto.NodeID(req.Message.From)
+	fromID := roachpb.NodeID(req.Message.From)
 	groupCount := 0
 	followerCount := 0
 	if originNode, ok := s.nodes[fromID]; ok {
@@ -270,7 +270,7 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 // fanoutHeartbeatResponse sends the given heartbeat response to all groups
 // which overlap with the sender's groups and consider themselves leader.
 func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
-	fromID := proto.NodeID(req.Message.From)
+	fromID := roachpb.NodeID(req.Message.From)
 	originNode, ok := s.nodes[fromID]
 	if !ok {
 		log.Warningf("node %v: not fanning out heartbeat response from unknown node %v",
@@ -329,7 +329,7 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 
 // CreateGroup creates a new consensus group and joins it. The initial membership of this
 // group is determined by the InitialState method of the group's Storage object.
-func (m *MultiRaft) CreateGroup(groupID proto.RangeID) error {
+func (m *MultiRaft) CreateGroup(groupID roachpb.RangeID) error {
 	op := &createGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
@@ -341,7 +341,7 @@ func (m *MultiRaft) CreateGroup(groupID proto.RangeID) error {
 // RemoveGroup destroys the consensus group with the given ID.
 // No events for this group will be emitted after this method returns
 // (but some events may still be in the channel buffer).
-func (m *MultiRaft) RemoveGroup(groupID proto.RangeID) error {
+func (m *MultiRaft) RemoveGroup(groupID roachpb.RangeID) error {
 	op := &removeGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
@@ -354,7 +354,7 @@ func (m *MultiRaft) RemoveGroup(groupID proto.RangeID) error {
 // when the command has been successfully sent, not when it has been committed.
 // An error or nil will be written to the returned channel when the command has
 // been committed or aborted.
-func (m *MultiRaft) SubmitCommand(groupID proto.RangeID, commandID string, command []byte) <-chan error {
+func (m *MultiRaft) SubmitCommand(groupID roachpb.RangeID, commandID string, command []byte) <-chan error {
 	if log.V(6) {
 		log.Infof("node %v submitting command to group %v", m.nodeID, groupID)
 	}
@@ -375,8 +375,8 @@ func (m *MultiRaft) SubmitCommand(groupID proto.RangeID, commandID string, comma
 
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 // Payload is an opaque blob that will be returned in EventMembershipChangeCommitted.
-func (m *MultiRaft) ChangeGroupMembership(groupID proto.RangeID, commandID string,
-	changeType raftpb.ConfChangeType, replica proto.ReplicaDescriptor, payload []byte) <-chan error {
+func (m *MultiRaft) ChangeGroupMembership(groupID roachpb.RangeID, commandID string,
+	changeType raftpb.ConfChangeType, replica roachpb.ReplicaDescriptor, payload []byte) <-chan error {
 	if log.V(6) {
 		log.Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
 	}
@@ -413,12 +413,12 @@ func (m *MultiRaft) ChangeGroupMembership(groupID proto.RangeID, commandID strin
 }
 
 // Status returns the current status of the given group.
-func (m *MultiRaft) Status(groupID proto.RangeID) *raft.Status {
+func (m *MultiRaft) Status(groupID roachpb.RangeID) *raft.Status {
 	return m.multiNode.Status(uint64(groupID))
 }
 
 type proposal struct {
-	groupID   proto.RangeID
+	groupID   roachpb.RangeID
 	commandID string
 	fn        func()
 	ch        chan<- error
@@ -426,14 +426,14 @@ type proposal struct {
 
 // group represents the state of a consensus group.
 type group struct {
-	id proto.RangeID
+	id roachpb.RangeID
 
 	// committedTerm is the term of the most recently committed entry.
 	committedTerm uint64
 
 	// leader is the last known leader for this group, or all zeros
 	// if an election is in progress.
-	leader proto.ReplicaDescriptor
+	leader roachpb.ReplicaDescriptor
 
 	// pending contains all commands that have been proposed but not yet
 	// committed in the current term. When a proposal is committed, nil
@@ -446,7 +446,7 @@ type group struct {
 	// an earlier incarnation to be fed into a later one.
 	writing bool
 	// nodeIDs track the remote nodes associated with this group.
-	nodeIDs []proto.NodeID
+	nodeIDs []roachpb.NodeID
 	// waitForCallback is true while a configuration change callback
 	// is waiting to be called. It's a bool other than a counter
 	// as only one configuration change should be pending in range leader.
@@ -454,29 +454,29 @@ type group struct {
 }
 
 type createGroupOp struct {
-	groupID proto.RangeID
+	groupID roachpb.RangeID
 	ch      chan error
 }
 
 type removeGroupOp struct {
-	groupID proto.RangeID
+	groupID roachpb.RangeID
 	ch      chan error
 }
 
 // node represents a connection to a remote node.
 type node struct {
-	nodeID   proto.NodeID
-	groupIDs map[proto.RangeID]struct{}
+	nodeID   roachpb.NodeID
+	groupIDs map[roachpb.RangeID]struct{}
 }
 
-func (n *node) registerGroup(groupID proto.RangeID) {
+func (n *node) registerGroup(groupID roachpb.RangeID) {
 	if groupID == noGroup {
 		panic("must not call registerGroup with noGroup")
 	}
 	n.groupIDs[groupID] = struct{}{}
 }
 
-func (n *node) unregisterGroup(groupID proto.RangeID) {
+func (n *node) unregisterGroup(groupID roachpb.RangeID) {
 	delete(n.groupIDs, groupID)
 }
 
@@ -485,8 +485,8 @@ func (n *node) unregisterGroup(groupID proto.RangeID) {
 // synchronization.
 type state struct {
 	*MultiRaft
-	groups           map[proto.RangeID]*group
-	nodes            map[proto.NodeID]*node
+	groups           map[roachpb.RangeID]*group
+	nodes            map[roachpb.NodeID]*node
 	writeTask        *writeTask
 	replicaDescCache *cache.UnorderedCache
 	// Buffer the events and send them in batch to avoid the deadlock
@@ -497,8 +497,8 @@ type state struct {
 func newState(m *MultiRaft) *state {
 	return &state{
 		MultiRaft: m,
-		groups:    make(map[proto.RangeID]*group),
-		nodes:     make(map[proto.NodeID]*node),
+		groups:    make(map[roachpb.RangeID]*group),
+		nodes:     make(map[roachpb.NodeID]*node),
 		writeTask: newWriteTask(m.Storage),
 		replicaDescCache: cache.NewUnorderedCache(cache.Config{
 			Policy: cache.CacheLRU,
@@ -711,12 +711,12 @@ func (s *state) stop() {
 
 // addNode creates a node and registers the given group (if not nil)
 // for that node.
-func (s *state) addNode(nodeID proto.NodeID, g *group) error {
+func (s *state) addNode(nodeID roachpb.NodeID, g *group) error {
 	newNode, ok := s.nodes[nodeID]
 	if !ok {
 		s.nodes[nodeID] = &node{
 			nodeID:   nodeID,
-			groupIDs: make(map[proto.RangeID]struct{}),
+			groupIDs: make(map[roachpb.RangeID]struct{}),
 		}
 		newNode = s.nodes[nodeID]
 	}
@@ -729,7 +729,7 @@ func (s *state) addNode(nodeID proto.NodeID, g *group) error {
 }
 
 // removeNode removes a node from a group.
-func (s *state) removeNode(nodeID proto.NodeID, g *group) error {
+func (s *state) removeNode(nodeID roachpb.NodeID, g *group) error {
 	node, ok := s.nodes[nodeID]
 	if !ok {
 		return util.Errorf("cannot remove unknown node %s", nodeID)
@@ -760,7 +760,7 @@ func (s *state) removeNode(nodeID proto.NodeID, g *group) error {
 // replicaID will be loaded from storage), and in response to incoming
 // messages (in which case the replicaID comes from the incoming
 // message, since nothing is on disk yet).
-func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) error {
+func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) error {
 	if _, ok := s.groups[groupID]; ok {
 		return nil
 	}
@@ -776,7 +776,7 @@ func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) er
 
 	// Find our store ID in the replicas list.
 	for _, r := range cs.Nodes {
-		repDesc, err := s.ReplicaDescriptor(groupID, proto.ReplicaID(r))
+		repDesc, err := s.ReplicaDescriptor(groupID, roachpb.ReplicaID(r))
 		if err != nil {
 			return err
 		}
@@ -795,7 +795,7 @@ func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) er
 		return util.Errorf("couldn't find replica ID for this store (%s) in range %d",
 			s.storeID, groupID)
 	}
-	s.CacheReplicaDescriptor(groupID, proto.ReplicaDescriptor{
+	s.CacheReplicaDescriptor(groupID, roachpb.ReplicaDescriptor{
 		ReplicaID: replicaID,
 		NodeID:    s.nodeID,
 		StoreID:   s.storeID,
@@ -830,7 +830,7 @@ func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) er
 	s.groups[groupID] = g
 
 	for _, id := range cs.Nodes {
-		replicaID := proto.ReplicaID(id)
+		replicaID := roachpb.ReplicaID(id)
 		replica, err := s.ReplicaDescriptor(groupID, replicaID)
 		if err != nil {
 			return err
@@ -858,7 +858,7 @@ func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) er
 	// out and then voting again. This is expected to be an extremely
 	// rare event.
 	if len(cs.Nodes) == 1 {
-		replica, err := s.ReplicaDescriptor(groupID, proto.ReplicaID(cs.Nodes[0]))
+		replica, err := s.ReplicaDescriptor(groupID, roachpb.ReplicaID(cs.Nodes[0]))
 		if err != nil {
 			return err
 		}
@@ -872,7 +872,7 @@ func (s *state) createGroup(groupID proto.RangeID, replicaID proto.ReplicaID) er
 	return nil
 }
 
-func (s *state) removeGroup(groupID proto.RangeID, readyGroups map[uint64]raft.Ready) error {
+func (s *state) removeGroup(groupID roachpb.RangeID, readyGroups map[uint64]raft.Ready) error {
 	// Group creation is lazy and idempotent; so is removal.
 	g, ok := s.groups[groupID]
 	if !ok {
@@ -970,7 +970,7 @@ func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 	}
 	writeRequest := newWriteRequest()
 	for groupID, ready := range readyGroups {
-		raftGroupID := proto.RangeID(groupID)
+		raftGroupID := roachpb.RangeID(groupID)
 		g, ok := s.groups[raftGroupID]
 		if !ok {
 			if log.V(6) {
@@ -997,7 +997,7 @@ func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 
 // processCommittedEntry tells the application that a command was committed.
 // Returns the commandID, or an empty string if the given entry was not a command.
-func (s *state) processCommittedEntry(groupID proto.RangeID, g *group, entry raftpb.Entry) string {
+func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry raftpb.Entry) string {
 	var commandID string
 	switch entry.Type {
 	case raftpb.EntryNormal:
@@ -1028,7 +1028,7 @@ func (s *state) processCommittedEntry(groupID proto.RangeID, g *group, entry raf
 			payload = ctx.Payload
 			s.CacheReplicaDescriptor(groupID, ctx.Replica)
 		}
-		replica, err := s.ReplicaDescriptor(groupID, proto.ReplicaID(cc.NodeID))
+		replica, err := s.ReplicaDescriptor(groupID, roachpb.ReplicaID(cc.NodeID))
 		if err != nil {
 			// TODO(bdarnell): stash Replica information somewhere so we can have it here
 			// with no chance of failure.
@@ -1092,8 +1092,8 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 			raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
 	}
 	groupID := noGroup
-	var toReplica proto.ReplicaDescriptor
-	var fromReplica proto.ReplicaDescriptor
+	var toReplica roachpb.ReplicaDescriptor
+	var fromReplica roachpb.ReplicaDescriptor
 	if g == nil {
 		// No group (a coalesced heartbeat): To/From fields are NodeIDs.
 		// TODO(bdarnell): test transports route by store ID, not node ID.
@@ -1101,20 +1101,20 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 		// it would be better to fix the transports.
 		// I think we need to fix this before we can support a range
 		// with two replicas on different stores of the same node.
-		toReplica.NodeID = proto.NodeID(msg.To)
-		toReplica.StoreID = proto.StoreID(msg.To)
-		fromReplica.NodeID = proto.NodeID(msg.From)
-		fromReplica.StoreID = proto.StoreID(msg.From)
+		toReplica.NodeID = roachpb.NodeID(msg.To)
+		toReplica.StoreID = roachpb.StoreID(msg.To)
+		fromReplica.NodeID = roachpb.NodeID(msg.From)
+		fromReplica.StoreID = roachpb.StoreID(msg.From)
 	} else {
 		// Regular message: To/From fields are replica IDs.
 		groupID = g.id
 		var err error
-		toReplica, err = s.ReplicaDescriptor(groupID, proto.ReplicaID(msg.To))
+		toReplica, err = s.ReplicaDescriptor(groupID, roachpb.ReplicaID(msg.To))
 		if err != nil {
 			log.Warningf("failed to lookup recipient replica %d in group %d: %s", msg.To, groupID, err)
 			return
 		}
-		fromReplica, err = s.ReplicaDescriptor(groupID, proto.ReplicaID(msg.From))
+		fromReplica, err = s.ReplicaDescriptor(groupID, roachpb.ReplicaID(msg.From))
 		if err != nil {
 			log.Warningf("failed to lookup sender replica %d in group %d: %s", msg.From, groupID, err)
 			return
@@ -1155,18 +1155,18 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 // maybeSendLeaderEvent processes a raft.Ready to send events in response to leadership
 // changes (this includes both sending an event to the app and retrying any pending
 // proposals).
-func (s *state) maybeSendLeaderEvent(groupID proto.RangeID, g *group, ready *raft.Ready) {
+func (s *state) maybeSendLeaderEvent(groupID roachpb.RangeID, g *group, ready *raft.Ready) {
 	term := g.committedTerm
 	if ready.SoftState != nil {
 		// Always save the leader whenever it changes.
-		if proto.ReplicaID(ready.SoftState.Lead) != g.leader.ReplicaID {
+		if roachpb.ReplicaID(ready.SoftState.Lead) != g.leader.ReplicaID {
 			if ready.SoftState.Lead == 0 {
-				g.leader = proto.ReplicaDescriptor{}
+				g.leader = roachpb.ReplicaDescriptor{}
 			} else {
-				if repl, err := s.ReplicaDescriptor(g.id, proto.ReplicaID(ready.SoftState.Lead)); err != nil {
+				if repl, err := s.ReplicaDescriptor(g.id, roachpb.ReplicaID(ready.SoftState.Lead)); err != nil {
 					log.Warningf("node %s: failed to look up address of replica %d in group %d: %s",
 						s.nodeID, ready.SoftState.Lead, g.id, err)
-					g.leader = proto.ReplicaDescriptor{}
+					g.leader = roachpb.ReplicaDescriptor{}
 				} else {
 					g.leader = repl
 				}
@@ -1201,7 +1201,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 	// Everything has been written to disk; now we can apply updates to the state machine
 	// and send outgoing messages.
 	for groupID, ready := range readyGroups {
-		raftGroupID := proto.RangeID(groupID)
+		raftGroupID := roachpb.RangeID(groupID)
 		g, ok := s.groups[raftGroupID]
 		if !ok {
 			if log.V(4) {
@@ -1268,13 +1268,13 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 }
 
 type replicaDescCacheKey struct {
-	groupID   proto.RangeID
-	replicaID proto.ReplicaID
+	groupID   roachpb.RangeID
+	replicaID roachpb.ReplicaID
 }
 
-func (s *state) ReplicaDescriptor(groupID proto.RangeID, replicaID proto.ReplicaID) (proto.ReplicaDescriptor, error) {
+func (s *state) ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
 	if rep, ok := s.replicaDescCache.Get(replicaDescCacheKey{groupID, replicaID}); ok {
-		return rep.(proto.ReplicaDescriptor), nil
+		return rep.(roachpb.ReplicaDescriptor), nil
 	}
 	rep, err := s.Storage.ReplicaDescriptor(groupID, replicaID)
 	if err == nil {
@@ -1283,6 +1283,6 @@ func (s *state) ReplicaDescriptor(groupID proto.RangeID, replicaID proto.Replica
 	return rep, err
 }
 
-func (s *state) CacheReplicaDescriptor(groupID proto.RangeID, replica proto.ReplicaDescriptor) {
+func (s *state) CacheReplicaDescriptor(groupID roachpb.RangeID, replica roachpb.ReplicaDescriptor) {
 	s.replicaDescCache.Add(replicaDescCacheKey{groupID, replica.ReplicaID}, replica)
 }

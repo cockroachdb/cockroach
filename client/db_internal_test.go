@@ -20,7 +20,7 @@ package client
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -30,12 +30,12 @@ import (
 func TestClientCommandID(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	count := 0
-	db := NewDB(newTestSender(func(ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		count++
 		if ba.CmdID.WallTime == 0 {
-			return nil, proto.NewError(util.Errorf("expected client command ID to be initialized"))
+			return nil, roachpb.NewError(util.Errorf("expected client command ID to be initialized"))
 		}
-		return ba.CreateReply().(*proto.BatchResponse), nil
+		return ba.CreateReply().(*roachpb.BatchResponse), nil
 	}, nil))
 	if err := db.Put("a", "b"); err != nil {
 		t.Error(err)

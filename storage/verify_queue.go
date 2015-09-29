@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -65,7 +65,7 @@ func (vq *verifyQueue) acceptsUnsplitRanges() bool {
 // verification scanning, and if so, at what priority. Returns true
 // for shouldQ in the event that it's been longer since the last scan
 // than the verification interval.
-func (vq *verifyQueue) shouldQueue(now proto.Timestamp, rng *Replica,
+func (vq *verifyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 	_ *config.SystemConfig) (shouldQ bool, priority float64) {
 
 	// Get last verification timestamp.
@@ -85,7 +85,7 @@ func (vq *verifyQueue) shouldQueue(now proto.Timestamp, rng *Replica,
 // process iterates through all keys and values in a range. The very
 // act of scanning keys verifies on-disk checksums, as each block
 // checksum is checked on load.
-func (vq *verifyQueue) process(now proto.Timestamp, rng *Replica,
+func (vq *verifyQueue) process(now roachpb.Timestamp, rng *Replica,
 	_ *config.SystemConfig) error {
 
 	snap := rng.rm.Engine().NewSnapshot()

@@ -19,25 +19,25 @@ package engine
 
 import (
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // GarbageCollector GCs MVCC key/values using a zone-specific GC
 // policy allows either the union or intersection of maximum # of
 // versions and maximum age.
 type GarbageCollector struct {
-	expiration proto.Timestamp
+	expiration roachpb.Timestamp
 	policy     config.GCPolicy
 }
 
 // NewGarbageCollector allocates and returns a new GC, with expiration
 // computed based on current time and policy.TTLSeconds.
-func NewGarbageCollector(now proto.Timestamp, policy config.GCPolicy) *GarbageCollector {
+func NewGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) *GarbageCollector {
 	ttlNanos := int64(policy.TTLSeconds) * 1E9
 	return &GarbageCollector{
-		expiration: proto.Timestamp{WallTime: now.WallTime - ttlNanos},
+		expiration: roachpb.Timestamp{WallTime: now.WallTime - ttlNanos},
 		policy:     policy,
 	}
 }
@@ -46,32 +46,32 @@ func NewGarbageCollector(now proto.Timestamp, policy config.GCPolicy) *GarbageCo
 // garbage collection policy for batches of values for the same key.
 // Returns the timestamp including, and after which, all values should
 // be garbage collected. If no values should be GC'd, returns
-// proto.ZeroTimestamp.
-func (gc *GarbageCollector) Filter(keys []proto.EncodedKey, values [][]byte) proto.Timestamp {
+// roachpb.ZeroTimestamp.
+func (gc *GarbageCollector) Filter(keys []roachpb.EncodedKey, values [][]byte) roachpb.Timestamp {
 	if gc.policy.TTLSeconds <= 0 {
-		return proto.ZeroTimestamp
+		return roachpb.ZeroTimestamp
 	}
 	if len(keys) == 0 {
-		return proto.ZeroTimestamp
+		return roachpb.ZeroTimestamp
 	}
 
 	// Loop over values. All should be MVCC versions.
-	delTS := proto.ZeroTimestamp
+	delTS := roachpb.ZeroTimestamp
 	survivors := false
 	for i, key := range keys {
 		_, ts, isValue, err := MVCCDecodeKey(key)
 		if err != nil {
 			log.Errorf("unable to decode MVCC key: %q: %v", key, err)
-			return proto.ZeroTimestamp
+			return roachpb.ZeroTimestamp
 		}
 		if !isValue {
 			log.Errorf("unexpected MVCC metadata encountered: %q", key)
-			return proto.ZeroTimestamp
+			return roachpb.ZeroTimestamp
 		}
 		mvccVal := MVCCValue{}
-		if err := gogoproto.Unmarshal(values[i], &mvccVal); err != nil {
+		if err := proto.Unmarshal(values[i], &mvccVal); err != nil {
 			log.Errorf("unable to unmarshal MVCC value %q: %v", key, err)
-			return proto.ZeroTimestamp
+			return roachpb.ZeroTimestamp
 		}
 		if i == 0 {
 			// If the first value isn't a deletion tombstone, don't consider
@@ -97,7 +97,7 @@ func (gc *GarbageCollector) Filter(keys []proto.EncodedKey, values [][]byte) pro
 			// TODO(tschottdorf): Perhaps we should be propagating an error
 			// (e.g. ReplicaCorruptionError) up to the caller.
 			log.Errorf("unable to decode MVCC key: %q: %v", keys[0], err)
-			return proto.ZeroTimestamp
+			return roachpb.ZeroTimestamp
 		}
 		return ts
 	}

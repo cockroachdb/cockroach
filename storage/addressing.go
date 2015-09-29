@@ -22,24 +22,24 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 )
 
-type metaAction func(*client.Batch, proto.Key, *proto.RangeDescriptor)
+type metaAction func(*client.Batch, roachpb.Key, *roachpb.RangeDescriptor)
 
-func putMeta(b *client.Batch, key proto.Key, desc *proto.RangeDescriptor) {
+func putMeta(b *client.Batch, key roachpb.Key, desc *roachpb.RangeDescriptor) {
 	b.Put(key, desc)
 }
 
-func delMeta(b *client.Batch, key proto.Key, desc *proto.RangeDescriptor) {
+func delMeta(b *client.Batch, key roachpb.Key, desc *roachpb.RangeDescriptor) {
 	b.Del(key)
 }
 
 // splitRangeAddressing creates (or overwrites if necessary) the meta1
 // and meta2 range addressing records for the left and right ranges
 // caused by a split.
-func splitRangeAddressing(b *client.Batch, left, right *proto.RangeDescriptor) error {
+func splitRangeAddressing(b *client.Batch, left, right *roachpb.RangeDescriptor) error {
 	if err := rangeAddressing(b, left, putMeta); err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func splitRangeAddressing(b *client.Batch, left, right *proto.RangeDescriptor) e
 // addressing records caused by merging and updates the records for
 // the new merged range. Left is the range descriptor for the "left"
 // range before merging and merged describes the left to right merge.
-func mergeRangeAddressing(b *client.Batch, left, merged *proto.RangeDescriptor) error {
+func mergeRangeAddressing(b *client.Batch, left, merged *roachpb.RangeDescriptor) error {
 	if err := rangeAddressing(b, left, delMeta); err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func mergeRangeAddressing(b *client.Batch, left, merged *proto.RangeDescriptor) 
 
 // updateRangeAddressing overwrites the meta1 and meta2 range addressing
 // records for the descriptor.
-func updateRangeAddressing(b *client.Batch, desc *proto.RangeDescriptor) error {
+func updateRangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor) error {
 	return rangeAddressing(b, desc, putMeta)
 }
 
@@ -77,7 +77,7 @@ func updateRangeAddressing(b *client.Batch, desc *proto.RangeDescriptor) error {
 //     - meta2(desc.EndKey)
 //     3a. If desc.StartKey is KeyMin or meta2:
 //         - meta1(KeyMax)
-func rangeAddressing(b *client.Batch, desc *proto.RangeDescriptor, action metaAction) error {
+func rangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor, action metaAction) error {
 	// 1. handle illegal case of start or end key being meta1.
 	if bytes.HasPrefix(desc.EndKey, keys.Meta1Prefix) ||
 		bytes.HasPrefix(desc.StartKey, keys.Meta1Prefix) {
@@ -94,9 +94,9 @@ func rangeAddressing(b *client.Batch, desc *proto.RangeDescriptor, action metaAc
 		action(b, keys.MakeKey(keys.Meta2Prefix, desc.EndKey), desc)
 		// 3a. the range starts with KeyMin or a meta2 addressing record,
 		// update the meta1 entry for KeyMax.
-		if bytes.Equal(desc.StartKey, proto.KeyMin) ||
+		if bytes.Equal(desc.StartKey, roachpb.KeyMin) ||
 			bytes.HasPrefix(desc.StartKey, keys.Meta2Prefix) {
-			action(b, keys.MakeKey(keys.Meta1Prefix, proto.KeyMax), desc)
+			action(b, keys.MakeKey(keys.Meta1Prefix, roachpb.KeyMax), desc)
 		}
 	}
 	return nil

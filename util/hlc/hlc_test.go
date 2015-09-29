@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -45,7 +45,7 @@ func ExampleNewClock() {
 	// Update the state of the hybrid clock.
 	s := c.Now()
 	time.Sleep(50 * time.Nanosecond)
-	t := proto.Timestamp{WallTime: UnixNano()}
+	t := roachpb.Timestamp{WallTime: UnixNano()}
 	// The sanity checks below will usually never be triggered.
 
 	if s.Less(t) || !t.Less(s) {
@@ -112,26 +112,26 @@ func TestClock(t *testing.T) {
 		wallClock int64
 		event     Event
 		// If this is a receive event, this holds the "input" timestamp.
-		input *proto.Timestamp
+		input *roachpb.Timestamp
 		// The expected timestamp generated from the input.
-		expected proto.Timestamp
+		expected roachpb.Timestamp
 	}{
 		// A few valid steps to warm up.
-		{5, SEND, nil, proto.Timestamp{WallTime: 5, Logical: 0}},
-		{6, SEND, nil, proto.Timestamp{WallTime: 6, Logical: 0}},
-		{10, RECV, &proto.Timestamp{WallTime: 10, Logical: 5}, proto.Timestamp{WallTime: 10, Logical: 6}},
+		{5, SEND, nil, roachpb.Timestamp{WallTime: 5, Logical: 0}},
+		{6, SEND, nil, roachpb.Timestamp{WallTime: 6, Logical: 0}},
+		{10, RECV, &roachpb.Timestamp{WallTime: 10, Logical: 5}, roachpb.Timestamp{WallTime: 10, Logical: 6}},
 		// Our clock mysteriously jumps back.
-		{7, SEND, nil, proto.Timestamp{WallTime: 10, Logical: 7}},
+		{7, SEND, nil, roachpb.Timestamp{WallTime: 10, Logical: 7}},
 		// Wall clocks coincide, but the local logical clock wins.
-		{8, RECV, &proto.Timestamp{WallTime: 10, Logical: 4}, proto.Timestamp{WallTime: 10, Logical: 8}},
+		{8, RECV, &roachpb.Timestamp{WallTime: 10, Logical: 4}, roachpb.Timestamp{WallTime: 10, Logical: 8}},
 		// Wall clocks coincide, but the remote logical clock wins.
-		{10, RECV, &proto.Timestamp{WallTime: 10, Logical: 99}, proto.Timestamp{WallTime: 10, Logical: 100}},
+		{10, RECV, &roachpb.Timestamp{WallTime: 10, Logical: 99}, roachpb.Timestamp{WallTime: 10, Logical: 100}},
 		// The physical clock has caught up and takes over.
-		{11, RECV, &proto.Timestamp{WallTime: 10, Logical: 31}, proto.Timestamp{WallTime: 11, Logical: 0}},
-		{11, SEND, nil, proto.Timestamp{WallTime: 11, Logical: 1}},
+		{11, RECV, &roachpb.Timestamp{WallTime: 10, Logical: 31}, roachpb.Timestamp{WallTime: 11, Logical: 0}},
+		{11, SEND, nil, roachpb.Timestamp{WallTime: 11, Logical: 1}},
 	}
 
-	var current proto.Timestamp
+	var current roachpb.Timestamp
 	for i, step := range expectedHistory {
 		m.Set(step.wallClock)
 		switch step.event {

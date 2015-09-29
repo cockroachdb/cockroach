@@ -23,18 +23,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func plainKV(k, v string) proto.KeyValue {
+func plainKV(k, v string) roachpb.KeyValue {
 	return kv([]byte(k), []byte(v))
 }
 
-func sqlKV(tableID uint32, indexID, descriptorID uint64) proto.KeyValue {
+func sqlKV(tableID uint32, indexID, descriptorID uint64) roachpb.KeyValue {
 	k := keys.MakeTablePrefix(tableID)
 	k = encoding.EncodeUvarint(k, indexID)
 	k = encoding.EncodeUvarint(k, descriptorID)
@@ -42,14 +42,14 @@ func sqlKV(tableID uint32, indexID, descriptorID uint64) proto.KeyValue {
 	return kv(k, nil)
 }
 
-func descriptor(descriptorID uint32) proto.KeyValue {
+func descriptor(descriptorID uint32) roachpb.KeyValue {
 	return sqlKV(uint32(keys.DescriptorTableID), 1, uint64(descriptorID))
 }
 
-func kv(k, v []byte) proto.KeyValue {
-	return proto.KeyValue{
+func kv(k, v []byte) roachpb.KeyValue {
+	return roachpb.KeyValue{
 		Key:   k,
-		Value: proto.Value{Bytes: v},
+		Value: roachpb.Value{Bytes: v},
 	}
 }
 
@@ -57,23 +57,23 @@ func TestObjectIDForKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
-		key     proto.Key
+		key     roachpb.Key
 		success bool
 		id      uint32
 	}{
 		// Before the structured span.
-		{proto.Key(""), false, 0},
+		{roachpb.Key(""), false, 0},
 		{keys.SystemMax, false, 0},
 
 		// Boundaries of structured span.
 		{keys.TableDataPrefix, false, 0},
-		{proto.KeyMax, false, 0},
+		{roachpb.KeyMax, false, 0},
 
 		// In system span, but no Uvarint ID.
-		{keys.MakeKey(keys.TableDataPrefix, proto.Key("foo")), false, 0},
+		{keys.MakeKey(keys.TableDataPrefix, roachpb.Key("foo")), false, 0},
 
 		// Valid, even if there are things after the ID.
-		{keys.MakeKey(keys.MakeTablePrefix(42), proto.Key("foo")), true, 42},
+		{keys.MakeKey(keys.MakeTablePrefix(42), roachpb.Key("foo")), true, 42},
 		{keys.MakeTablePrefix(0), true, 0},
 		{keys.MakeTablePrefix(999), true, 999},
 	}
@@ -93,15 +93,15 @@ func TestObjectIDForKey(t *testing.T) {
 func TestGet(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	emptyKeys := []proto.KeyValue{}
-	someKeys := []proto.KeyValue{
+	emptyKeys := []roachpb.KeyValue{}
+	someKeys := []roachpb.KeyValue{
 		plainKV("a", "vala"),
 		plainKV("c", "valc"),
 		plainKV("d", "vald"),
 	}
 
 	testCases := []struct {
-		values []proto.KeyValue
+		values []roachpb.KeyValue
 		key    string
 		found  bool
 		value  string
@@ -139,7 +139,7 @@ func TestGet(t *testing.T) {
 func TestGetLargestID(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		values  []proto.KeyValue
+		values  []roachpb.KeyValue
 		largest uint32
 		errStr  string
 	}{
@@ -147,20 +147,20 @@ func TestGetLargestID(t *testing.T) {
 		{nil, 0, "empty system values"},
 
 		// Some data, but not from the system span.
-		{[]proto.KeyValue{plainKV("a", "b")}, 0, "descriptor table not found"},
+		{[]roachpb.KeyValue{plainKV("a", "b")}, 0, "descriptor table not found"},
 
 		// Some real data, but no descriptors.
-		{[]proto.KeyValue{
+		{[]roachpb.KeyValue{
 			sqlKV(keys.NamespaceTableID, 1, 1),
 			sqlKV(keys.NamespaceTableID, 1, 2),
 			sqlKV(keys.UsersTableID, 1, 3),
 		}, 0, "descriptor table not found"},
 
 		// Single correct descriptor entry.
-		{[]proto.KeyValue{sqlKV(keys.DescriptorTableID, 1, 1)}, 1, ""},
+		{[]roachpb.KeyValue{sqlKV(keys.DescriptorTableID, 1, 1)}, 1, ""},
 
 		// Surrounded by other data.
-		{[]proto.KeyValue{
+		{[]roachpb.KeyValue{
 			sqlKV(keys.NamespaceTableID, 1, 20),
 			sqlKV(keys.NamespaceTableID, 1, 30),
 			sqlKV(keys.DescriptorTableID, 1, 8),
@@ -168,7 +168,7 @@ func TestGetLargestID(t *testing.T) {
 		}, 8, ""},
 
 		// Descriptors with holes. Index ID does not matter.
-		{[]proto.KeyValue{
+		{[]roachpb.KeyValue{
 			sqlKV(keys.DescriptorTableID, 1, 1),
 			sqlKV(keys.DescriptorTableID, 2, 5),
 			sqlKV(keys.DescriptorTableID, 3, 8),
@@ -212,39 +212,39 @@ func TestComputeSplits(t *testing.T) {
 	allSplits := []uint32{start, start + 1, start + 2, start + 3, start + 4, start + 5}
 
 	testCases := []struct {
-		values     []proto.KeyValue
-		start, end proto.Key
+		values     []roachpb.KeyValue
+		start, end roachpb.Key
 		// Use ints in the testcase definitions, more readable.
 		splits []uint32
 	}{
 		// No data.
-		{nil, proto.KeyMin, proto.KeyMax, nil},
-		{nil, keys.MakeTablePrefix(start), proto.KeyMax, nil},
+		{nil, roachpb.KeyMin, roachpb.KeyMax, nil},
+		{nil, keys.MakeTablePrefix(start), roachpb.KeyMax, nil},
 		{nil, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
-		{nil, proto.KeyMin, keys.MakeTablePrefix(start + 10), nil},
+		{nil, roachpb.KeyMin, keys.MakeTablePrefix(start + 10), nil},
 
 		// No user data.
-		{baseSql, proto.KeyMin, proto.KeyMax, nil},
-		{baseSql, keys.MakeTablePrefix(start), proto.KeyMax, nil},
+		{baseSql, roachpb.KeyMin, roachpb.KeyMax, nil},
+		{baseSql, keys.MakeTablePrefix(start), roachpb.KeyMax, nil},
 		{baseSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
-		{baseSql, proto.KeyMin, keys.MakeTablePrefix(start + 10), nil},
+		{baseSql, roachpb.KeyMin, keys.MakeTablePrefix(start + 10), nil},
 
 		// User descriptors.
-		{userSql, proto.KeyMin, proto.KeyMax, allSplits},
-		{userSql, keys.MakeTablePrefix(start), proto.KeyMax, allSplits[1:]},
+		{userSql, roachpb.KeyMin, roachpb.KeyMax, allSplits},
+		{userSql, keys.MakeTablePrefix(start), roachpb.KeyMax, allSplits[1:]},
 		{userSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), allSplits[1:]},
-		{userSql, proto.KeyMin, keys.MakeTablePrefix(start + 10), allSplits},
+		{userSql, roachpb.KeyMin, keys.MakeTablePrefix(start + 10), allSplits},
 		{userSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allSplits[5:]},
 		{userSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), nil},
 		{userSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), nil},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), proto.Key("foo")),
+		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.Key("foo")),
 			keys.MakeTablePrefix(start + 10), allSplits[1:]},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), proto.Key("foo")),
+		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.Key("foo")),
 			keys.MakeTablePrefix(start + 5), allSplits[1:5]},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), proto.Key("foo")),
-			keys.MakeKey(keys.MakeTablePrefix(start+5), proto.Key("bar")), allSplits[1:]},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), proto.Key("foo")),
-			keys.MakeKey(keys.MakeTablePrefix(start), proto.Key("morefoo")), nil},
+		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.Key("foo")),
+			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.Key("bar")), allSplits[1:]},
+		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.Key("foo")),
+			keys.MakeKey(keys.MakeTablePrefix(start), roachpb.Key("morefoo")), nil},
 	}
 
 	cfg := config.SystemConfig{}
@@ -256,7 +256,7 @@ func TestComputeSplits(t *testing.T) {
 		}
 
 		// Convert ints to actual keys.
-		expected := []proto.Key{}
+		expected := []roachpb.Key{}
 		if tc.splits != nil {
 			for _, s := range tc.splits {
 				expected = append(expected, keys.MakeTablePrefix(s))

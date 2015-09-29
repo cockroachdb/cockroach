@@ -18,15 +18,15 @@
 package engine
 
 import (
-	"github.com/cockroachdb/cockroach/proto"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/gogo/protobuf/proto"
 )
 
 // MergeInternalTimeSeriesData exports the engine's C++ merge logic for
 // InternalTimeSeriesData to higher level packages. This is intended primarily
 // for consumption by high level testing of time series functionality.
-func MergeInternalTimeSeriesData(sources ...*proto.InternalTimeSeriesData) (
-	*proto.InternalTimeSeriesData, error) {
+func MergeInternalTimeSeriesData(sources ...*roachpb.InternalTimeSeriesData) (
+	*roachpb.InternalTimeSeriesData, error) {
 	// Wrap each proto in an inlined MVCC value, and marshal each wrapped value
 	// to bytes. This is the format required by the engine.
 	srcBytes := make([][]byte, 0, len(sources))
@@ -35,7 +35,7 @@ func MergeInternalTimeSeriesData(sources ...*proto.InternalTimeSeriesData) (
 		if err != nil {
 			return nil, err
 		}
-		bytes, err := gogoproto.Marshal(&MVCCMetadata{
+		bytes, err := proto.Marshal(&MVCCMetadata{
 			Value: val,
 		})
 		if err != nil {
@@ -58,10 +58,10 @@ func MergeInternalTimeSeriesData(sources ...*proto.InternalTimeSeriesData) (
 
 	// Unmarshal merged bytes and extract the time series value within.
 	var mvccValue MVCCMetadata
-	if err := gogoproto.Unmarshal(mergedBytes, &mvccValue); err != nil {
+	if err := proto.Unmarshal(mergedBytes, &mvccValue); err != nil {
 		return nil, err
 	}
-	mergedTS, err := proto.InternalTimeSeriesDataFromValue(mvccValue.Value)
+	mergedTS, err := roachpb.InternalTimeSeriesDataFromValue(mvccValue.Value)
 	if err != nil {
 		return nil, err
 	}

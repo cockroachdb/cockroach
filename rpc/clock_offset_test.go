@@ -23,10 +23,9 @@ import (
 	"testing"
 	"time"
 
-	gogoproto "github.com/gogo/protobuf/proto"
-
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestUpdateOffset tests the three cases that UpdateOffset should or should
@@ -38,7 +37,7 @@ func TestUpdateOffset(t *testing.T) {
 	// Case 1: There is no prior offset for the address.
 	offset1 := RemoteOffset{}
 	monitor.UpdateOffset("addr", offset1)
-	if o := monitor.offsets["addr"]; !gogoproto.Equal(&o, &offset1) {
+	if o := monitor.offsets["addr"]; !proto.Equal(&o, &offset1) {
 		t.Errorf("expected offset %v, instead %v", offset1, o)
 	}
 
@@ -50,7 +49,7 @@ func TestUpdateOffset(t *testing.T) {
 		MeasuredAt:  6,
 	}
 	monitor.UpdateOffset("addr", offset2)
-	if o := monitor.offsets["addr"]; !gogoproto.Equal(&o, &offset2) {
+	if o := monitor.offsets["addr"]; !proto.Equal(&o, &offset2) {
 		t.Errorf("expected offset %v, instead %v", offset2, o)
 	}
 
@@ -61,13 +60,13 @@ func TestUpdateOffset(t *testing.T) {
 		MeasuredAt:  8,
 	}
 	monitor.UpdateOffset("addr", offset3)
-	if o := monitor.offsets["addr"]; !gogoproto.Equal(&o, &offset3) {
+	if o := monitor.offsets["addr"]; !proto.Equal(&o, &offset3) {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
 
 	// Larger error and offset3.MeasuredAt > lastMonitoredAt, so no update.
 	monitor.UpdateOffset("addr", offset2)
-	if o := monitor.offsets["addr"]; !gogoproto.Equal(&o, &offset3) {
+	if o := monitor.offsets["addr"]; !proto.Equal(&o, &offset3) {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
 }

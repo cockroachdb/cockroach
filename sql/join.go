@@ -18,7 +18,7 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -33,7 +33,7 @@ const joinBatchSize = 100
 type indexJoinNode struct {
 	index            *scanNode
 	table            *scanNode
-	primaryKeyPrefix proto.Key
+	primaryKeyPrefix roachpb.Key
 	colIDtoRowIndex  map[ColumnID]int
 	err              error
 }
@@ -90,7 +90,7 @@ func makeIndexJoin(indexScan *scanNode) (*indexJoinNode, error) {
 
 	indexScan.initOrdering()
 
-	primaryKeyPrefix := proto.Key(MakeIndexKeyPrefix(table.desc.ID, table.index.ID))
+	primaryKeyPrefix := roachpb.Key(MakeIndexKeyPrefix(table.desc.ID, table.index.ID))
 
 	return &indexJoinNode{
 		index:            indexScan,
@@ -149,7 +149,7 @@ func (n *indexJoinNode) Next() bool {
 		if n.err != nil {
 			return false
 		}
-		key := proto.Key(primaryIndexKey)
+		key := roachpb.Key(primaryIndexKey)
 		n.table.spans = append(n.table.spans, span{
 			start: key,
 			end:   key.PrefixEnd(),

@@ -20,7 +20,7 @@ package kv
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
 )
 
@@ -47,20 +47,20 @@ func newLeaderCache(size int) *leaderCache {
 
 // Lookup consults the cache for the replica cached as the leader of
 // the given Raft consensus group.
-func (lc *leaderCache) Lookup(group proto.RangeID) proto.ReplicaDescriptor {
+func (lc *leaderCache) Lookup(group roachpb.RangeID) roachpb.ReplicaDescriptor {
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
 	v, ok := lc.cache.Get(group)
 	if !ok || v == nil {
-		return proto.ReplicaDescriptor{}
+		return roachpb.ReplicaDescriptor{}
 	}
-	return *(v.(*proto.ReplicaDescriptor))
+	return *(v.(*roachpb.ReplicaDescriptor))
 }
 
 // Update invalidates the cached leader for the given Raft group.
 // If a replica is passed in, it is inserted into the cache.
 // A StoreID of 0 (empty replica) means evict.
-func (lc *leaderCache) Update(group proto.RangeID, r proto.ReplicaDescriptor) {
+func (lc *leaderCache) Update(group roachpb.RangeID, r roachpb.ReplicaDescriptor) {
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
 	lc.cache.Del(group)

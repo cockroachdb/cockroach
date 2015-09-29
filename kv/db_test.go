@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -52,7 +52,7 @@ func TestKVDBCoverage(t *testing.T) {
 	defer s.Stop()
 
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
-	key := proto.Key("a")
+	key := roachpb.Key("a")
 	value1 := []byte("value1")
 	value2 := []byte("value2")
 	value3 := []byte("value3")
@@ -99,10 +99,10 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 
 	// Put values in anticipation of scan & delete range.
-	keyValues := []proto.KeyValue{
-		{Key: proto.Key("a"), Value: proto.Value{Bytes: value1}},
-		{Key: proto.Key("b"), Value: proto.Value{Bytes: value2}},
-		{Key: proto.Key("c"), Value: proto.Value{Bytes: value3}},
+	keyValues := []roachpb.KeyValue{
+		{Key: roachpb.Key("a"), Value: roachpb.Value{Bytes: value1}},
+		{Key: roachpb.Key("b"), Value: roachpb.Value{Bytes: value2}},
+		{Key: roachpb.Key("c"), Value: roachpb.Value{Bytes: value3}},
 	}
 	for _, kv := range keyValues {
 		if err := db.Put(kv.Key, kv.Value.Bytes); err != nil {
@@ -147,26 +147,26 @@ func TestKVDBInternalMethods(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	testCases := []proto.Request{
-		&proto.HeartbeatTxnRequest{},
-		&proto.GCRequest{},
-		&proto.PushTxnRequest{},
-		&proto.RangeLookupRequest{},
-		&proto.ResolveIntentRequest{},
-		&proto.ResolveIntentRangeRequest{},
-		&proto.MergeRequest{},
-		&proto.TruncateLogRequest{},
-		&proto.LeaderLeaseRequest{},
+	testCases := []roachpb.Request{
+		&roachpb.HeartbeatTxnRequest{},
+		&roachpb.GCRequest{},
+		&roachpb.PushTxnRequest{},
+		&roachpb.RangeLookupRequest{},
+		&roachpb.ResolveIntentRequest{},
+		&roachpb.ResolveIntentRangeRequest{},
+		&roachpb.MergeRequest{},
+		&roachpb.TruncateLogRequest{},
+		&roachpb.LeaderLeaseRequest{},
 
-		&proto.EndTransactionRequest{
-			InternalCommitTrigger: &proto.InternalCommitTrigger{},
+		&roachpb.EndTransactionRequest{
+			InternalCommitTrigger: &roachpb.InternalCommitTrigger{},
 		},
 	}
 	// Verify internal methods experience bad request errors.
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 	for i, args := range testCases {
-		args.Header().Key = proto.Key("a")
-		if proto.IsRange(args) {
+		args.Header().Key = roachpb.Key("a")
+		if roachpb.IsRange(args) {
 			args.Header().EndKey = args.Header().Key.Next()
 		}
 		b := &client.Batch{}
@@ -189,11 +189,11 @@ func TestKVDBTransaction(t *testing.T) {
 
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
-	key := proto.Key("db-txn-test")
+	key := roachpb.Key("db-txn-test")
 	value := []byte("value")
 	err := db.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
-		if err := txn.SetIsolation(proto.SNAPSHOT); err != nil {
+		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 			return err
 		}
 
@@ -234,8 +234,8 @@ func TestAuthentication(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	arg := &proto.PutRequest{}
-	arg.Header().Key = proto.Key("a")
+	arg := &roachpb.PutRequest{}
+	arg.Header().Key = roachpb.Key("a")
 	b := &client.Batch{}
 	b.InternalAddRequest(arg)
 

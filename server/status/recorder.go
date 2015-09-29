@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -154,7 +154,7 @@ func (nsr *NodeStatusRecorder) GetStatusSummaries() (*NodeStatus, []storage.Stor
 		Desc:      nsr.desc,
 		UpdatedAt: now,
 		StartedAt: nsr.startedAt,
-		StoreIDs:  make([]proto.StoreID, 0, nsr.lastSummaryCount),
+		StoreIDs:  make([]roachpb.StoreID, 0, nsr.lastSummaryCount),
 	}
 
 	storeStats := make([]storage.StoreStatus, 0, nsr.lastSummaryCount)

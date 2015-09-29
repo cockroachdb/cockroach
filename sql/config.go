@@ -20,7 +20,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/util"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 func init() {
@@ -34,7 +34,7 @@ func GetZoneConfig(cfg *config.SystemConfig, id uint32) (*config.ZoneConfig, err
 	// Look in the zones table.
 	if val, ok := cfg.GetValue(MakeZoneKey(ID(id))); ok {
 		zone := &config.ZoneConfig{}
-		if err := gogoproto.Unmarshal(val, zone); err != nil {
+		if err := proto.Unmarshal(val, zone); err != nil {
 			return nil, err
 		}
 		// We're done.
@@ -56,13 +56,13 @@ func GetZoneConfig(cfg *config.SystemConfig, id uint32) (*config.ZoneConfig, err
 	// - separate descriptor tables for databases and tables
 	// - prebuild list of databases and tables in the system config
 	var dbDesc DatabaseDescriptor
-	if err := gogoproto.Unmarshal(rawDesc, &dbDesc); err == nil {
+	if err := proto.Unmarshal(rawDesc, &dbDesc); err == nil {
 		// parses as a database: return default config.
 		return config.DefaultZoneConfig, nil
 	}
 
 	var tableDesc TableDescriptor
-	if err := gogoproto.Unmarshal(rawDesc, &tableDesc); err != nil {
+	if err := proto.Unmarshal(rawDesc, &tableDesc); err != nil {
 		// does not parse as a table either: this means an entry in the
 		// descriptor table we're not familiar with.
 		return nil, util.Errorf("descriptor for object ID %d is not a table or database", id)

@@ -24,7 +24,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
@@ -1273,7 +1273,7 @@ func makePrefixRange(prefix parser.DString, datum parser.Expr, complete bool) pa
 		Right: &parser.ComparisonExpr{
 			Operator: parser.LT,
 			Left:     datum,
-			Right:    parser.DString(proto.Key(prefix).PrefixEnd()),
+			Right:    parser.DString(roachpb.Key(prefix).PrefixEnd()),
 		},
 	}
 }

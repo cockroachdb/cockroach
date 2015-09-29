@@ -16,12 +16,12 @@ package status
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_proto "github.com/cockroachdb/cockroach/proto"
+import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 import cockroach_storage_engine "github.com/cockroachdb/cockroach/storage/engine"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
-import github_com_cockroachdb_cockroach_proto "github.com/cockroachdb/cockroach/proto"
+import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
 import io "io"
 
@@ -33,29 +33,29 @@ var _ = math.Inf
 // NodeStatus contains the stats needed to calculate the current status of a
 // node.
 type NodeStatus struct {
-	Desc                 cockroach_proto.NodeDescriptor                   `protobuf:"bytes,1,opt,name=desc" json:"desc"`
-	StoreIDs             []github_com_cockroachdb_cockroach_proto.StoreID `protobuf:"varint,2,rep,name=store_ids,casttype=github.com/cockroachdb/cockroach/proto.StoreID" json:"store_ids,omitempty"`
-	RangeCount           int32                                            `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
-	StartedAt            int64                                            `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
-	UpdatedAt            int64                                            `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`
-	Stats                cockroach_storage_engine.MVCCStats               `protobuf:"bytes,6,opt,name=stats" json:"stats"`
-	LeaderRangeCount     int32                                            `protobuf:"varint,7,opt,name=leader_range_count" json:"leader_range_count"`
-	ReplicatedRangeCount int32                                            `protobuf:"varint,8,opt,name=replicated_range_count" json:"replicated_range_count"`
-	AvailableRangeCount  int32                                            `protobuf:"varint,9,opt,name=available_range_count" json:"available_range_count"`
+	Desc                 cockroach_roachpb.NodeDescriptor                   `protobuf:"bytes,1,opt,name=desc" json:"desc"`
+	StoreIDs             []github_com_cockroachdb_cockroach_roachpb.StoreID `protobuf:"varint,2,rep,name=store_ids,casttype=github.com/cockroachdb/cockroach/roachpb.StoreID" json:"store_ids,omitempty"`
+	RangeCount           int32                                              `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
+	StartedAt            int64                                              `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
+	UpdatedAt            int64                                              `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`
+	Stats                cockroach_storage_engine.MVCCStats                 `protobuf:"bytes,6,opt,name=stats" json:"stats"`
+	LeaderRangeCount     int32                                              `protobuf:"varint,7,opt,name=leader_range_count" json:"leader_range_count"`
+	ReplicatedRangeCount int32                                              `protobuf:"varint,8,opt,name=replicated_range_count" json:"replicated_range_count"`
+	AvailableRangeCount  int32                                              `protobuf:"varint,9,opt,name=available_range_count" json:"available_range_count"`
 }
 
 func (m *NodeStatus) Reset()         { *m = NodeStatus{} }
 func (m *NodeStatus) String() string { return proto.CompactTextString(m) }
 func (*NodeStatus) ProtoMessage()    {}
 
-func (m *NodeStatus) GetDesc() cockroach_proto.NodeDescriptor {
+func (m *NodeStatus) GetDesc() cockroach_roachpb.NodeDescriptor {
 	if m != nil {
 		return m.Desc
 	}
-	return cockroach_proto.NodeDescriptor{}
+	return cockroach_roachpb.NodeDescriptor{}
 }
 
-func (m *NodeStatus) GetStoreIDs() []github_com_cockroachdb_cockroach_proto.StoreID {
+func (m *NodeStatus) GetStoreIDs() []github_com_cockroachdb_cockroach_roachpb.StoreID {
 	if m != nil {
 		return m.StoreIDs
 	}
@@ -294,7 +294,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field StoreIDs", wireType)
 			}
-			var v github_com_cockroachdb_cockroach_proto.StoreID
+			var v github_com_cockroachdb_cockroach_roachpb.StoreID
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowStatus
@@ -304,7 +304,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				v |= (github_com_cockroachdb_cockroach_proto.StoreID(b) & 0x7F) << shift
+				v |= (github_com_cockroachdb_cockroach_roachpb.StoreID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

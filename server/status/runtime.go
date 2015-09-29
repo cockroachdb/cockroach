@@ -23,7 +23,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -33,7 +33,7 @@ import (
 // as time series data. "Runtime statistics" include OS-level statistics (such as
 // memory and CPU usage) and Go runtime statistics (e.g. count of Goroutines).
 type RuntimeStatRecorder struct {
-	nodeID        proto.NodeID
+	nodeID        roachpb.NodeID
 	clock         *hlc.Clock
 	lastDataCount int
 
@@ -49,7 +49,7 @@ type RuntimeStatRecorder struct {
 
 // NewRuntimeStatRecorder instantiates a runtime status recorder for the
 // supplied node ID.
-func NewRuntimeStatRecorder(nodeID proto.NodeID, clock *hlc.Clock) *RuntimeStatRecorder {
+func NewRuntimeStatRecorder(nodeID roachpb.NodeID, clock *hlc.Clock) *RuntimeStatRecorder {
 	return &RuntimeStatRecorder{
 		nodeID: nodeID,
 		clock:  clock,

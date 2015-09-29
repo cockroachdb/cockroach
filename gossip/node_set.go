@@ -17,18 +17,18 @@
 
 package gossip
 
-import "github.com/cockroachdb/cockroach/proto"
+import "github.com/cockroachdb/cockroach/roachpb"
 
 // A nodeSet keeps a set of nodes and provides simple node-matched
 // management functions. nodeSet is not thread safe.
 type nodeSet struct {
-	nodes   map[proto.NodeID]struct{} // Set of proto.NodeID
-	maxSize int                       // Maximum size of set
+	nodes   map[roachpb.NodeID]struct{} // Set of roachpb.NodeID
+	maxSize int                         // Maximum size of set
 }
 
 func makeNodeSet(maxSize int) nodeSet {
 	return nodeSet{
-		nodes:   make(map[proto.NodeID]struct{}),
+		nodes:   make(map[roachpb.NodeID]struct{}),
 		maxSize: maxSize,
 	}
 }
@@ -45,8 +45,8 @@ func (as nodeSet) len() int {
 }
 
 // asSlice returns the nodes as a slice.
-func (as nodeSet) asSlice() []proto.NodeID {
-	slice := make([]proto.NodeID, 0, len(as.nodes))
+func (as nodeSet) asSlice() []roachpb.NodeID {
+	slice := make([]roachpb.NodeID, 0, len(as.nodes))
 	for node := range as.nodes {
 		slice = append(slice, node)
 	}
@@ -55,7 +55,7 @@ func (as nodeSet) asSlice() []proto.NodeID {
 
 // selectRandom returns a random node from the set. Returns 0 if
 // there are no nodes to select.
-func (as nodeSet) selectRandom() proto.NodeID {
+func (as nodeSet) selectRandom() roachpb.NodeID {
 	for node := range as.nodes {
 		return node
 	}
@@ -65,7 +65,7 @@ func (as nodeSet) selectRandom() proto.NodeID {
 // filter returns an nodeSet of nodes which return true when
 // passed to the supplied filter function filterFn. filterFn should
 // return true to keep an node and false to remove an node.
-func (as nodeSet) filter(filterFn func(node proto.NodeID) bool) nodeSet {
+func (as nodeSet) filter(filterFn func(node roachpb.NodeID) bool) nodeSet {
 	avail := makeNodeSet(as.maxSize)
 	for node := range as.nodes {
 		if filterFn(node) {
@@ -77,17 +77,17 @@ func (as nodeSet) filter(filterFn func(node proto.NodeID) bool) nodeSet {
 
 // hasNode verifies that the supplied node matches a node
 // in the slice.
-func (as nodeSet) hasNode(node proto.NodeID) bool {
+func (as nodeSet) hasNode(node roachpb.NodeID) bool {
 	_, ok := as.nodes[node]
 	return ok
 }
 
 // addNode adds the node to the nodes set.
-func (as *nodeSet) addNode(node proto.NodeID) {
+func (as *nodeSet) addNode(node roachpb.NodeID) {
 	as.nodes[node] = struct{}{}
 }
 
 // removeNode removes the node from the nodes set.
-func (as *nodeSet) removeNode(node proto.NodeID) {
+func (as *nodeSet) removeNode(node roachpb.NodeID) {
 	delete(as.nodes, node)
 }

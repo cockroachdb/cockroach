@@ -23,7 +23,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
@@ -46,8 +46,8 @@ func (a byTimeAndName) Less(i, j int) bool {
 
 var _ sort.Interface = byTimeAndName{}
 
-// byStoreID is a slice of proto.StoreID.
-type byStoreID []proto.StoreID
+// byStoreID is a slice of roachpb.StoreID.
+type byStoreID []roachpb.StoreID
 
 // implement sort.Interface for byStoreID
 func (a byStoreID) Len() int      { return len(a) }
@@ -74,32 +74,32 @@ var _ sort.Interface = byStoreDescID{}
 // recorder matches the data added to the monitor.
 func TestNodeStatusRecorder(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	nodeDesc := proto.NodeDescriptor{
-		NodeID: proto.NodeID(1),
+	nodeDesc := roachpb.NodeDescriptor{
+		NodeID: roachpb.NodeID(1),
 	}
-	storeDesc1 := proto.StoreDescriptor{
-		StoreID: proto.StoreID(1),
-		Capacity: proto.StoreCapacity{
+	storeDesc1 := roachpb.StoreDescriptor{
+		StoreID: roachpb.StoreID(1),
+		Capacity: roachpb.StoreCapacity{
 			Capacity:  100,
 			Available: 50,
 		},
 	}
-	storeDesc2 := proto.StoreDescriptor{
-		StoreID: proto.StoreID(2),
-		Capacity: proto.StoreCapacity{
+	storeDesc2 := roachpb.StoreDescriptor{
+		StoreID: roachpb.StoreID(2),
+		Capacity: roachpb.StoreCapacity{
 			Capacity:  200,
 			Available: 75,
 		},
 	}
-	desc1 := &proto.RangeDescriptor{
+	desc1 := &roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: proto.Key("a"),
-		EndKey:   proto.Key("b"),
+		StartKey: roachpb.Key("a"),
+		EndKey:   roachpb.Key("b"),
 	}
-	desc2 := &proto.RangeDescriptor{
+	desc2 := &roachpb.RangeDescriptor{
 		RangeID:  2,
-		StartKey: proto.Key("b"),
-		EndKey:   proto.Key("c"),
+		StartKey: roachpb.Key("b"),
+		EndKey:   roachpb.Key("c"),
 	}
 	stats := engine.MVCCStats{
 		LiveBytes:       1,
@@ -126,11 +126,11 @@ func TestNodeStatusRecorder(t *testing.T) {
 		StartedAt: 50,
 	})
 	monitor.OnStartStore(&storage.StartStoreEvent{
-		StoreID:   proto.StoreID(1),
+		StoreID:   roachpb.StoreID(1),
 		StartedAt: 60,
 	})
 	monitor.OnStartStore(&storage.StartStoreEvent{
-		StoreID:   proto.StoreID(2),
+		StoreID:   roachpb.StoreID(2),
 		StartedAt: 70,
 	})
 	monitor.OnStoreStatus(&storage.StoreStatusEvent{
@@ -142,70 +142,70 @@ func TestNodeStatusRecorder(t *testing.T) {
 
 	// Add some data to the monitor by simulating incoming events.
 	monitor.OnBeginScanRanges(&storage.BeginScanRangesEvent{
-		StoreID: proto.StoreID(1),
+		StoreID: roachpb.StoreID(1),
 	})
 	monitor.OnBeginScanRanges(&storage.BeginScanRangesEvent{
-		StoreID: proto.StoreID(2),
+		StoreID: roachpb.StoreID(2),
 	})
 	monitor.OnRegisterRange(&storage.RegisterRangeEvent{
-		StoreID: proto.StoreID(1),
+		StoreID: roachpb.StoreID(1),
 		Desc:    desc1,
 		Stats:   stats,
 		Scan:    true,
 	})
 	monitor.OnRegisterRange(&storage.RegisterRangeEvent{
-		StoreID: proto.StoreID(1),
+		StoreID: roachpb.StoreID(1),
 		Desc:    desc2,
 		Stats:   stats,
 		Scan:    true,
 	})
 	monitor.OnRegisterRange(&storage.RegisterRangeEvent{
-		StoreID: proto.StoreID(2),
+		StoreID: roachpb.StoreID(2),
 		Desc:    desc1,
 		Stats:   stats,
 		Scan:    true,
 	})
 	monitor.OnEndScanRanges(&storage.EndScanRangesEvent{
-		StoreID: proto.StoreID(1),
+		StoreID: roachpb.StoreID(1),
 	})
 	monitor.OnEndScanRanges(&storage.EndScanRangesEvent{
-		StoreID: proto.StoreID(2),
+		StoreID: roachpb.StoreID(2),
 	})
 	monitor.OnUpdateRange(&storage.UpdateRangeEvent{
-		StoreID: proto.StoreID(1),
+		StoreID: roachpb.StoreID(1),
 		Desc:    desc1,
 		Delta:   stats,
 	})
 	// Periodically published events.
 	monitor.OnReplicationStatus(&storage.ReplicationStatusEvent{
-		StoreID:              proto.StoreID(1),
+		StoreID:              roachpb.StoreID(1),
 		LeaderRangeCount:     1,
 		AvailableRangeCount:  2,
 		ReplicatedRangeCount: 0,
 	})
 	monitor.OnReplicationStatus(&storage.ReplicationStatusEvent{
-		StoreID:              proto.StoreID(2),
+		StoreID:              roachpb.StoreID(2),
 		LeaderRangeCount:     1,
 		AvailableRangeCount:  2,
 		ReplicatedRangeCount: 0,
 	})
 	// Node Events.
 	monitor.OnCallSuccess(&CallSuccessEvent{
-		NodeID: proto.NodeID(1),
-		Method: proto.Get,
+		NodeID: roachpb.NodeID(1),
+		Method: roachpb.Get,
 	})
 	monitor.OnCallSuccess(&CallSuccessEvent{
-		NodeID: proto.NodeID(1),
-		Method: proto.Put,
+		NodeID: roachpb.NodeID(1),
+		Method: roachpb.Put,
 	})
 	monitor.OnCallError(&CallErrorEvent{
-		NodeID: proto.NodeID(1),
-		Method: proto.Scan,
+		NodeID: roachpb.NodeID(1),
+		Method: roachpb.Scan,
 	})
 
 	generateNodeData := func(nodeId int, name string, time, val int64) ts.TimeSeriesData {
 		return ts.TimeSeriesData{
-			Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, proto.StoreID(nodeId)),
+			Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, roachpb.StoreID(nodeId)),
 			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: time,
@@ -217,7 +217,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 
 	generateStoreData := func(storeId int, name string, time, val int64) ts.TimeSeriesData {
 		return ts.TimeSeriesData{
-			Name: fmt.Sprintf(storeTimeSeriesNameFmt, name, proto.StoreID(storeId)),
+			Name: fmt.Sprintf(storeTimeSeriesNameFmt, name, roachpb.StoreID(storeId)),
 			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: time,
@@ -285,9 +285,9 @@ func TestNodeStatusRecorder(t *testing.T) {
 		Desc:      nodeDesc,
 		StartedAt: 50,
 		UpdatedAt: 100,
-		StoreIDs: []proto.StoreID{
-			proto.StoreID(1),
-			proto.StoreID(2),
+		StoreIDs: []roachpb.StoreID{
+			roachpb.StoreID(1),
+			roachpb.StoreID(2),
 		},
 		RangeCount:           3,
 		LeaderRangeCount:     2,
@@ -297,7 +297,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 	expectedStoreSummaries := []storage.StoreStatus{
 		{
 			Desc:                 storeDesc1,
-			NodeID:               proto.NodeID(1),
+			NodeID:               roachpb.NodeID(1),
 			UpdatedAt:            100,
 			StartedAt:            60,
 			RangeCount:           2,
@@ -307,7 +307,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 		},
 		{
 			Desc:                 storeDesc2,
-			NodeID:               proto.NodeID(1),
+			NodeID:               roachpb.NodeID(1),
 			StartedAt:            70,
 			UpdatedAt:            100,
 			RangeCount:           1,

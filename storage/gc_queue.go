@@ -26,10 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -84,7 +84,7 @@ func (gcq *gcQueue) acceptsUnsplitRanges() bool {
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
-func (gcq *gcQueue) shouldQueue(now proto.Timestamp, repl *Replica,
+func (gcq *gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := repl.Desc()
@@ -117,7 +117,7 @@ func (gcq *gcQueue) shouldQueue(now proto.Timestamp, repl *Replica,
 // collector for each key and associated set of values. GC'd keys are batched
 // into GC calls. Extant intents are resolved if intents are older than
 // intentAgeThreshold.
-func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
+func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	sysCfg *config.SystemConfig) error {
 
 	snap := repl.rm.Engine().NewSnapshot()
@@ -133,28 +133,28 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
 	}
 	policy := zone.GC
 
-	gcMeta := proto.NewGCMetadata(now.WallTime)
+	gcMeta := roachpb.NewGCMetadata(now.WallTime)
 	gc := engine.NewGarbageCollector(now, *policy)
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now
 	intentExp.WallTime -= intentAgeThreshold.Nanoseconds()
 
-	gcArgs := &proto.GCRequest{
-		RequestHeader: proto.RequestHeader{
+	gcArgs := &roachpb.GCRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Timestamp: now,
 			RangeID:   desc.RangeID,
 		},
 	}
 	var mu sync.Mutex
 	var oldestIntentNanos int64 = math.MaxInt64
-	var expBaseKey proto.Key
-	var keys []proto.EncodedKey
+	var expBaseKey roachpb.Key
+	var keys []roachpb.EncodedKey
 	var vals [][]byte
 
 	// Maps from txn ID to txn and intent key slice.
-	txnMap := map[string]*proto.Transaction{}
-	intentMap := map[string][]proto.Intent{}
+	txnMap := map[string]*roachpb.Transaction{}
+	intentMap := map[string][]roachpb.Intent{}
 
 	// updateOldestIntent atomically updates the oldest intent.
 	updateOldestIntent := func(intentNanos int64) {
@@ -173,7 +173,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
 		// If there's more than a single value for the key, possibly send for GC.
 		if len(keys) > 1 {
 			meta := &engine.MVCCMetadata{}
-			if err := gogoproto.Unmarshal(vals[0], meta); err != nil {
+			if err := proto.Unmarshal(vals[0], meta); err != nil {
 				log.Errorf("unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
 			} else {
 				// In the event that there's an active intent, send for
@@ -185,7 +185,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
 					if meta.Timestamp.Less(intentExp) {
 						id := string(meta.Txn.ID)
 						txnMap[id] = meta.Txn
-						intentMap[id] = append(intentMap[id], proto.Intent{Key: expBaseKey})
+						intentMap[id] = append(intentMap[id], roachpb.Intent{Key: expBaseKey})
 					} else {
 						updateOldestIntent(meta.Txn.OrigTimestamp.WallTime)
 					}
@@ -193,11 +193,11 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
 					startIdx = 2
 				}
 				// See if any values may be GC'd.
-				if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); !gcTS.Equal(proto.ZeroTimestamp) {
+				if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); !gcTS.Equal(roachpb.ZeroTimestamp) {
 					// TODO(spencer): need to split the requests up into
 					// multiple requests in the event that more than X keys
 					// are added to the request.
-					gcArgs.Keys = append(gcArgs.Keys, proto.GCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
+					gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
 				}
 			}
 		}
@@ -214,7 +214,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
 			// Moving to the next key (& values).
 			processKeysAndValues()
 			expBaseKey = baseKey
-			keys = []proto.EncodedKey{iter.Key()}
+			keys = []roachpb.EncodedKey{iter.Key()}
 			vals = [][]byte{iter.Value()}
 		} else {
 			if !baseKey.Equal(expBaseKey) {
@@ -240,9 +240,9 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
 	wg.Wait()
 
 	// Resolve all intents.
-	var intents []proto.Intent
+	var intents []roachpb.Intent
 	for id, txn := range txnMap {
-		if txn.Status != proto.PENDING {
+		if txn.Status != roachpb.PENDING {
 			for _, intent := range intentMap[id] {
 				intent.Txn = *txn
 				intents = append(intents, intent)
@@ -268,7 +268,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, repl *Replica,
 	}
 
 	// Send GC request through range.
-	gcMeta.OldestIntentNanos = gogoproto.Int64(oldestIntentNanos)
+	gcMeta.OldestIntentNanos = proto.Int64(oldestIntentNanos)
 	gcArgs.GCMeta = *gcMeta
 	if _, err := sendArg(repl, repl.context(), gcArgs); err != nil {
 		return err
@@ -293,22 +293,22 @@ func (gcq *gcQueue) timer() time.Duration {
 // cannot be aborted, the oldestIntentNanos value is atomically
 // updated to the min of oldestIntentNanos and the intent's
 // timestamp. The wait group is signaled on completion.
-func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Transaction, updateOldestIntent func(int64), wg *sync.WaitGroup) {
+func (gcq *gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction, updateOldestIntent func(int64), wg *sync.WaitGroup) {
 	defer wg.Done() // signal wait group always on completion
 	if log.V(1) {
 		log.Infof("pushing txn %s ts=%s", txn, txn.OrigTimestamp)
 	}
 
 	// Attempt to push the transaction which created the intent.
-	pushArgs := &proto.PushTxnRequest{
-		RequestHeader: proto.RequestHeader{
+	pushArgs := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Timestamp: now,
 			Key:       txn.Key,
 		},
 		Now:       now,
-		PusherTxn: proto.Transaction{Priority: proto.MaxPriority},
+		PusherTxn: roachpb.Transaction{Priority: roachpb.MaxPriority},
 		PusheeTxn: *txn,
-		PushType:  proto.ABORT_TXN,
+		PushType:  roachpb.ABORT_TXN,
 	}
 	b := &client.Batch{}
 	b.InternalAddRequest(pushArgs)
@@ -319,5 +319,5 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now proto.Timestamp, txn *proto.Trans
 		return
 	}
 	// Update the supplied txn on successful push.
-	*txn = *br.Responses[0].GetInner().(*proto.PushTxnResponse).PusheeTxn
+	*txn = *br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 }

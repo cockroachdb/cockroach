@@ -20,14 +20,14 @@ package multiraft
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 type localInterceptableTransport struct {
 	mu        sync.Mutex
-	listeners map[proto.StoreID]ServerInterface
+	listeners map[roachpb.StoreID]ServerInterface
 	messages  chan *RaftMessageRequest
 	Events    chan *interceptMessage
 	stopper   *stop.Stopper
@@ -39,7 +39,7 @@ type localInterceptableTransport struct {
 // which they are queued, intercepted and blocked until acknowledged.
 func NewLocalInterceptableTransport(stopper *stop.Stopper) Transport {
 	lt := &localInterceptableTransport{
-		listeners: make(map[proto.StoreID]ServerInterface),
+		listeners: make(map[roachpb.StoreID]ServerInterface),
 		messages:  make(chan *RaftMessageRequest, 100),
 		Events:    make(chan *interceptMessage),
 		stopper:   stopper,
@@ -90,14 +90,14 @@ func (lt *localInterceptableTransport) handleMessage(msg *RaftMessageRequest) {
 	}
 }
 
-func (lt *localInterceptableTransport) Listen(id proto.StoreID, server ServerInterface) error {
+func (lt *localInterceptableTransport) Listen(id roachpb.StoreID, server ServerInterface) error {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	lt.listeners[id] = server
 	return nil
 }
 
-func (lt *localInterceptableTransport) Stop(id proto.StoreID) {
+func (lt *localInterceptableTransport) Stop(id roachpb.StoreID) {
 	lt.mu.Lock()
 	delete(lt.listeners, id)
 	lt.mu.Unlock()

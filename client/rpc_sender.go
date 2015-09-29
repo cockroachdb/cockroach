@@ -25,7 +25,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -82,9 +82,9 @@ func newRPCSender(server string, context *base.Context, retryOpts retry.Options,
 // ID to avoid reporting failure when in fact the command may have gone through
 // and been executed successfully. We retry here to eventually get through with
 // the same client command ID and be given the cached response.
-func (s *rpcSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.BatchResponse, *proto.Error) {
+func (s *rpcSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	var err error
-	var br proto.BatchResponse
+	var br roachpb.BatchResponse
 	for r := retry.Start(s.retryOpts); r.Next(); {
 		select {
 		case <-s.client.Healthy():
@@ -111,7 +111,7 @@ func (s *rpcSender) Send(ctx context.Context, ba proto.BatchRequest) (*proto.Bat
 		break
 	}
 	if err != nil {
-		return nil, proto.NewError(err)
+		return nil, roachpb.NewError(err)
 	}
 	pErr := br.Error
 	br.Error = nil

@@ -24,11 +24,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 
 	gorpc "net/rpc"
 )
@@ -50,8 +50,8 @@ type rpcTransport struct {
 	rpcServer  *rpc.Server
 	rpcContext *rpc.Context
 	mu         sync.Mutex
-	servers    map[proto.StoreID]multiraft.ServerInterface
-	queues     map[proto.StoreID]chan *multiraft.RaftMessageRequest
+	servers    map[roachpb.StoreID]multiraft.ServerInterface
+	queues     map[roachpb.StoreID]chan *multiraft.RaftMessageRequest
 }
 
 // newRPCTransport creates a new rpcTransport with specified gossip and rpc server.
@@ -61,8 +61,8 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 		gossip:     gossip,
 		rpcServer:  rpcServer,
 		rpcContext: rpcContext,
-		servers:    make(map[proto.StoreID]multiraft.ServerInterface),
-		queues:     make(map[proto.StoreID]chan *multiraft.RaftMessageRequest),
+		servers:    make(map[roachpb.StoreID]multiraft.ServerInterface),
+		queues:     make(map[roachpb.StoreID]chan *multiraft.RaftMessageRequest),
 	}
 
 	if t.rpcServer != nil {
@@ -76,11 +76,11 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 }
 
 // RaftMessage proxies the incoming request to the listening server interface.
-func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogoproto.Message, error)) {
+func (t *rpcTransport) RaftMessage(args proto.Message, callback func(proto.Message, error)) {
 	req := args.(*multiraft.RaftMessageRequest)
 
 	t.mu.Lock()
-	server, ok := t.servers[proto.StoreID(req.Message.To)]
+	server, ok := t.servers[roachpb.StoreID(req.Message.To)]
 	t.mu.Unlock()
 
 	if !ok {
@@ -101,7 +101,7 @@ func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogopro
 
 // Listen implements the multiraft.Transport interface by registering a ServerInterface
 // to receive proxied messages.
-func (t *rpcTransport) Listen(id proto.StoreID, server multiraft.ServerInterface) error {
+func (t *rpcTransport) Listen(id roachpb.StoreID, server multiraft.ServerInterface) error {
 	t.mu.Lock()
 	t.servers[id] = server
 	t.mu.Unlock()
@@ -109,7 +109,7 @@ func (t *rpcTransport) Listen(id proto.StoreID, server multiraft.ServerInterface
 }
 
 // Stop implements the multiraft.Transport interface by unregistering the server id.
-func (t *rpcTransport) Stop(id proto.StoreID) {
+func (t *rpcTransport) Stop(id roachpb.StoreID) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.servers, id)
@@ -122,7 +122,7 @@ func (t *rpcTransport) Stop(id proto.StoreID) {
 // TODO(tschottdorf) should let MultiRaft know if the node is down;
 // need a feedback mechanism for that. Potentially easiest is to arrange for
 // the next call to Send() to fail appropriately.
-func (t *rpcTransport) processQueue(nodeID proto.NodeID, storeID proto.StoreID) {
+func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.StoreID) {
 	t.mu.Lock()
 	ch, ok := t.queues[storeID]
 	t.mu.Unlock()

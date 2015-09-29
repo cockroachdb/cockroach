@@ -20,14 +20,14 @@ package status
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
 // StartNodeEvent is published when a node is started.
 type StartNodeEvent struct {
-	Desc      proto.NodeDescriptor
+	Desc      roachpb.NodeDescriptor
 	StartedAt int64
 }
 
@@ -38,8 +38,8 @@ func (e StartNodeEvent) String() string {
 
 // CallSuccessEvent is published when a call to a node completes without error.
 type CallSuccessEvent struct {
-	NodeID proto.NodeID
-	Method proto.Method
+	NodeID roachpb.NodeID
+	Method roachpb.Method
 }
 
 // String implements fmt.Stringer.
@@ -49,8 +49,8 @@ func (e CallSuccessEvent) String() string {
 
 // CallErrorEvent is published when a call to a node returns an error.
 type CallErrorEvent struct {
-	NodeID proto.NodeID
-	Method proto.Method
+	NodeID roachpb.NodeID
+	Method roachpb.Method
 }
 
 // String implements fmt.Stringer.
@@ -61,13 +61,13 @@ func (e CallErrorEvent) String() string {
 // NodeEventFeed is a helper structure which publishes node-specific events to a
 // util.Feed. If the target feed is nil, event methods become no-ops.
 type NodeEventFeed struct {
-	id proto.NodeID
+	id roachpb.NodeID
 	f  *util.Feed
 }
 
 // NewNodeEventFeed creates a new NodeEventFeed which publishes events for a
 // specific node to the supplied feed.
-func NewNodeEventFeed(id proto.NodeID, feed *util.Feed) NodeEventFeed {
+func NewNodeEventFeed(id roachpb.NodeID, feed *util.Feed) NodeEventFeed {
 	return NodeEventFeed{
 		id: id,
 		f:  feed,
@@ -75,7 +75,7 @@ func NewNodeEventFeed(id proto.NodeID, feed *util.Feed) NodeEventFeed {
 }
 
 // StartNode is called by a node when it has started.
-func (nef NodeEventFeed) StartNode(desc proto.NodeDescriptor, startedAt int64) {
+func (nef NodeEventFeed) StartNode(desc roachpb.NodeDescriptor, startedAt int64) {
 	nef.f.Publish(&StartNodeEvent{
 		Desc:      desc,
 		StartedAt: startedAt,
@@ -87,11 +87,11 @@ func (nef NodeEventFeed) StartNode(desc proto.NodeDescriptor, startedAt int64) {
 // - For a successful request, a corresponding event for each request in the batch,
 // - on error without index information, a failure of the Batch, and
 // - on an indexed error a failure of the individual request.
-func (nef NodeEventFeed) CallComplete(ba proto.BatchRequest, pErr *proto.Error) {
-	if pErr != nil && pErr.TransactionRestart == proto.TransactionRestart_ABORT {
-		var method proto.Method
+func (nef NodeEventFeed) CallComplete(ba roachpb.BatchRequest, pErr *roachpb.Error) {
+	if pErr != nil && pErr.TransactionRestart == roachpb.TransactionRestart_ABORT {
+		var method roachpb.Method
 		if pErr.Index == nil {
-			method = proto.Batch
+			method = roachpb.Batch
 		} else {
 			method = ba.Requests[int(pErr.Index.Index)].GetInner().Method()
 		}

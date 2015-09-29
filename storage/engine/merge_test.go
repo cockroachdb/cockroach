@@ -24,9 +24,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var testtime = int64(-446061360000000000)
@@ -47,8 +47,8 @@ func gibberishString(n int) string {
 	return string(b)
 }
 
-func mustMarshal(m gogoproto.Message) []byte {
-	b, err := gogoproto.Marshal(m)
+func mustMarshal(m proto.Message) []byte {
+	b, err := proto.Marshal(m)
 	if err != nil {
 		panic(err)
 	}
@@ -57,7 +57,7 @@ func mustMarshal(m gogoproto.Message) []byte {
 
 func appender(s string) []byte {
 	v := &MVCCMetadata{
-		Value: &proto.Value{
+		Value: &roachpb.Value{
 			Bytes: []byte(s),
 		},
 	}
@@ -67,19 +67,19 @@ func appender(s string) []byte {
 // timeSeries generates a simple InternalTimeSeriesData object which starts
 // at the given timestamp and has samples of the given duration.
 func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
-	ts := &proto.InternalTimeSeriesData{
+	ts := &roachpb.InternalTimeSeriesData{
 		StartTimestampNanos: start,
 		SampleDurationNanos: duration,
 	}
 	for _, sample := range samples {
-		newSample := &proto.InternalTimeSeriesSample{
+		newSample := &roachpb.InternalTimeSeriesSample{
 			Offset: sample.offset,
 			Count:  sample.count,
 			Sum:    sample.sum,
 		}
 		if sample.count > 1 {
-			newSample.Max = gogoproto.Float64(sample.max)
-			newSample.Min = gogoproto.Float64(sample.min)
+			newSample.Max = proto.Float64(sample.max)
+			newSample.Min = proto.Float64(sample.min)
 		}
 		ts.Samples = append(ts.Samples, newSample)
 	}
@@ -148,7 +148,7 @@ func TestGoMerge(t *testing.T) {
 	}{
 		{appender(""), appender(""), appender("")},
 		{nil, appender(""), appender("")},
-		{nil, nil, mustMarshal(&MVCCMetadata{Value: &proto.Value{}})},
+		{nil, nil, mustMarshal(&MVCCMetadata{Value: &roachpb.Value{}})},
 		{appender("\n "), appender(" \t "), appender("\n  \t ")},
 		{appender("ქართული"), appender("\nKhartuli"), appender("ქართული\nKhartuli")},
 		{appender(gibber1), appender(gibber2), appender(gibber1 + gibber2)},
@@ -161,10 +161,10 @@ func TestGoMerge(t *testing.T) {
 			continue
 		}
 		var resultV, expectedV MVCCMetadata
-		if err := gogoproto.Unmarshal(result, &resultV); err != nil {
+		if err := proto.Unmarshal(result, &resultV); err != nil {
 			t.Fatal(err)
 		}
-		if err := gogoproto.Unmarshal(c.expected, &expectedV); err != nil {
+		if err := proto.Unmarshal(c.expected, &expectedV); err != nil {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(resultV, expectedV) {
@@ -290,15 +290,15 @@ func TestGoMerge(t *testing.T) {
 // unmarshalTimeSeries unmarshals the time series value stored in the given byte
 // array. It is assumed that the time series value was originally marshalled as
 // a MVCCMetadata with an inline value.
-func unmarshalTimeSeries(t testing.TB, b []byte) *proto.InternalTimeSeriesData {
+func unmarshalTimeSeries(t testing.TB, b []byte) *roachpb.InternalTimeSeriesData {
 	if b == nil {
 		return nil
 	}
 	var mvccValue MVCCMetadata
-	if err := gogoproto.Unmarshal(b, &mvccValue); err != nil {
+	if err := proto.Unmarshal(b, &mvccValue); err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}
-	valueTS, err := proto.InternalTimeSeriesDataFromValue(mvccValue.Value)
+	valueTS, err := roachpb.InternalTimeSeriesDataFromValue(mvccValue.Value)
 	if err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}

@@ -38,12 +38,12 @@ the batch is added to `EndTransaction` in this case.
 Schematically, `DistSender.Send()` would turn into something along the lines of
 ```go
 // SendBatch is called by (*TxnCoordSender).Send().
-func (ds *DistSender) SendBatch(b *proto.BatchRequest) (proto.BatchResponse, error) {
+func (ds *DistSender) SendBatch(b *roachpb.BatchRequest) (roachpb.BatchResponse, error) {
   // Retry loop here.
   // ...
   {
     // Chop up the batch. This is already in a retry loop.
-    var chopped []*proto.BatchRequest = ds.Split(b)
+    var chopped []*roachpb.BatchRequest = ds.Split(b)
     // `adapt` **must** be idempotent! It may be executed multiple times on
     // retryable errors, in particular with stale descriptors.
     // EndTransaction needs to go last; but TxnCoordSender has already
@@ -72,7 +72,7 @@ stage with the chunk containing `EndTransaction`.
 
 Since in many tests, `TxnCoordSender` has to talk to a `LocalSender` instead
 of a `DistSender`, we may want to stick to the `client.Sender` interface though
-and keep the signature `Send(proto.Call)`.
+and keep the signature `Send(roachpb.Call)`.
 
 ## Transaction restarts/updates
 

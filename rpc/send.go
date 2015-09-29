@@ -25,13 +25,12 @@ import (
 	"net/rpc"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracer"
-
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // OrderingPolicy is an enum for ordering strategies when there
@@ -86,8 +85,8 @@ func (r rpcError) CanRetry() bool { return true }
 var sendOneFn = sendOne
 
 // NewSendError creates a SendError.
-func NewSendError(msg string, canRetry bool) *proto.SendError {
-	return &proto.SendError{Message: msg, Retryable: canRetry}
+func NewSendError(msg string, canRetry bool) *roachpb.SendError {
+	return &roachpb.SendError{Message: msg, Retryable: canRetry}
 }
 
 // Send sends one or more method RPCs to clients specified by the
@@ -98,8 +97,8 @@ func NewSendError(msg string, canRetry bool) *proto.SendError {
 // opts.N. Otherwise, Send returns an error if and as soon as the
 // number of failed RPCs exceeds the available endpoints less the
 // number of required replies.
-func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message,
-	getReply func() gogoproto.Message, context *Context) ([]gogoproto.Message, error) {
+func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message,
+	getReply func() proto.Message, context *Context) ([]proto.Message, error) {
 	trace := opts.Trace // not thread safe!
 
 	if opts.N <= 0 {
@@ -166,7 +165,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 		sendFn(client)
 	}
 
-	var replies []gogoproto.Message
+	var replies []proto.Message
 	var errors, retryableErrors int
 
 	// Wait for completions.
@@ -175,8 +174,8 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 		case call := <-done:
 			if call.Error == nil {
 				// Verify response data integrity if this is a proto response.
-				if req, reqOk := call.Args.(proto.Request); reqOk {
-					if resp, respOk := call.Reply.(proto.Response); respOk {
+				if req, reqOk := call.Args.(roachpb.Request); reqOk {
+					if resp, respOk := call.Reply.(roachpb.Response); respOk {
 						if err := resp.Verify(req); err != nil {
 							call.Error = err
 						}
@@ -191,7 +190,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 					log.Infof("%s: successful reply: %+v", method, call.Reply)
 				}
 
-				replies = append(replies, call.Reply.(gogoproto.Message))
+				replies = append(replies, call.Reply.(proto.Message))
 				break // end the select
 			}
 
@@ -235,7 +234,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 // sendOne invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
-func sendOne(client *Client, timeout time.Duration, method string, args, reply gogoproto.Message, done chan *rpc.Call) {
+func sendOne(client *Client, timeout time.Duration, method string, args, reply proto.Message, done chan *rpc.Call) {
 	var timeoutChan <-chan time.Time
 	if timeout != 0 {
 		timeoutChan = time.After(timeout)

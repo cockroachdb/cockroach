@@ -23,15 +23,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func getWait(cq *CommandQueue, from, to proto.Key, readOnly bool, wg *sync.WaitGroup) {
+func getWait(cq *CommandQueue, from, to roachpb.Key, readOnly bool, wg *sync.WaitGroup) {
 	cq.GetWait(readOnly, wg, keys.Span{Start: from, End: to})
 }
 
-func add(cq *CommandQueue, from, to proto.Key, readOnly bool) interface{} {
+func add(cq *CommandQueue, from, to roachpb.Key, readOnly bool) interface{} {
 	return cq.Add(readOnly, keys.Span{Start: from, End: to})[0]
 }
 
@@ -65,14 +65,14 @@ func TestCommandQueue(t *testing.T) {
 	wg := sync.WaitGroup{}
 
 	// Try a command with no overlapping already-running commands.
-	getWait(cq, proto.Key("a"), nil, false, &wg)
+	getWait(cq, roachpb.Key("a"), nil, false, &wg)
 	wg.Wait()
-	getWait(cq, proto.Key("a"), proto.Key("b"), false, &wg)
+	getWait(cq, roachpb.Key("a"), roachpb.Key("b"), false, &wg)
 	wg.Wait()
 
 	// Add a command and verify wait group is returned.
-	wk := add(cq, proto.Key("a"), nil, false)
-	getWait(cq, proto.Key("a"), nil, false, &wg)
+	wk := add(cq, roachpb.Key("a"), nil, false)
+	getWait(cq, roachpb.Key("a"), nil, false, &wg)
 	cmdDone := waitForCmd(&wg)
 	if testCmdDone(cmdDone, 1*time.Millisecond) {
 		t.Fatal("command should not finish with command outstanding")
@@ -88,12 +88,12 @@ func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
 	cq := NewCommandQueue()
 	wg := sync.WaitGroup{}
 	// Add a read-only command.
-	wk := add(cq, proto.Key("a"), nil, true)
+	wk := add(cq, roachpb.Key("a"), nil, true)
 	// Verify no wait on another read-only command.
-	getWait(cq, proto.Key("a"), nil, true, &wg)
+	getWait(cq, roachpb.Key("a"), nil, true, &wg)
 	wg.Wait()
 	// Verify wait with a read-write command.
-	getWait(cq, proto.Key("a"), nil, false, &wg)
+	getWait(cq, roachpb.Key("a"), nil, false, &wg)
 	cmdDone := waitForCmd(&wg)
 	if testCmdDone(cmdDone, 1*time.Millisecond) {
 		t.Fatal("command should not finish with command outstanding")
@@ -110,10 +110,10 @@ func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
 	wg := sync.WaitGroup{}
 
 	// Add multiple commands and add a command which overlaps them all.
-	wk1 := add(cq, proto.Key("a"), nil, false)
-	wk2 := add(cq, proto.Key("b"), proto.Key("c"), false)
-	wk3 := add(cq, proto.Key("0"), proto.Key("d"), false)
-	getWait(cq, proto.Key("a"), proto.Key("cc"), false, &wg)
+	wk1 := add(cq, roachpb.Key("a"), nil, false)
+	wk2 := add(cq, roachpb.Key("b"), roachpb.Key("c"), false)
+	wk3 := add(cq, roachpb.Key("0"), roachpb.Key("d"), false)
+	getWait(cq, roachpb.Key("a"), roachpb.Key("cc"), false, &wg)
 	cmdDone := waitForCmd(&wg)
 	cq.Remove([]interface{}{wk1})
 	if testCmdDone(cmdDone, 1*time.Millisecond) {
@@ -137,10 +137,10 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 	wg3 := sync.WaitGroup{}
 
 	// Add a command which will overlap all commands.
-	wk := add(cq, proto.Key("a"), proto.Key("d"), false)
-	getWait(cq, proto.Key("a"), nil, false, &wg1)
-	getWait(cq, proto.Key("b"), nil, false, &wg2)
-	getWait(cq, proto.Key("c"), nil, false, &wg3)
+	wk := add(cq, roachpb.Key("a"), roachpb.Key("d"), false)
+	getWait(cq, roachpb.Key("a"), nil, false, &wg1)
+	getWait(cq, roachpb.Key("b"), nil, false, &wg2)
+	getWait(cq, roachpb.Key("c"), nil, false, &wg3)
 	cmdDone1 := waitForCmd(&wg1)
 	cmdDone2 := waitForCmd(&wg2)
 	cmdDone3 := waitForCmd(&wg3)
@@ -165,10 +165,10 @@ func TestCommandQueueClear(t *testing.T) {
 	wg2 := sync.WaitGroup{}
 
 	// Add multiple commands and commands which access each.
-	add(cq, proto.Key("a"), nil, false)
-	add(cq, proto.Key("b"), nil, false)
-	getWait(cq, proto.Key("a"), nil, false, &wg1)
-	getWait(cq, proto.Key("b"), nil, false, &wg2)
+	add(cq, roachpb.Key("a"), nil, false)
+	add(cq, roachpb.Key("b"), nil, false)
+	getWait(cq, roachpb.Key("a"), nil, false, &wg1)
+	getWait(cq, roachpb.Key("b"), nil, false, &wg2)
 	cmdDone1 := waitForCmd(&wg1)
 	cmdDone2 := waitForCmd(&wg2)
 
@@ -188,10 +188,10 @@ func TestCommandQueueClear(t *testing.T) {
 func TestCommandQueueExclusiveEnd(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	cq := NewCommandQueue()
-	add(cq, proto.Key("a"), proto.Key("b"), false)
+	add(cq, roachpb.Key("a"), roachpb.Key("b"), false)
 
 	wg := sync.WaitGroup{}
-	getWait(cq, proto.Key("b"), nil, false, &wg)
+	getWait(cq, roachpb.Key("b"), nil, false, &wg)
 	// Verify no wait on the second writer command on "b" since
 	// it does not overlap with the first command on ["a", "b").
 	wg.Wait()
@@ -204,8 +204,8 @@ func TestCommandQueueExclusiveEnd(t *testing.T) {
 func TestCommandQueueSelfOverlap(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	cq := NewCommandQueue()
-	a := proto.Key("a")
-	k := add(cq, a, proto.Key("b"), false)
+	a := roachpb.Key("a")
+	k := add(cq, a, roachpb.Key("b"), false)
 	var wg sync.WaitGroup
 	cq.GetWait(false, &wg, []keys.Span{{Start: a}, {Start: a}, {Start: a}}...)
 	cq.Remove([]interface{}{k})

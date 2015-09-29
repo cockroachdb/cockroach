@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -70,7 +70,7 @@ func (q *rangeGCQueue) acceptsUnsplitRanges() bool {
 // if so at what priority. Ranges which have been inactive for longer
 // than rangeGCQueueInactivityThreshold are considered for possible GC
 // at equal priority.
-func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Replica,
+func (q *rangeGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 	_ *config.SystemConfig) (bool, float64) {
 
 	if l := rng.getLease(); l.Expiration.Add(RangeGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now) {
@@ -81,7 +81,7 @@ func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Replica,
 
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
-func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica, _ *config.SystemConfig) error {
+func (q *rangeGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.SystemConfig) error {
 	desc := rng.Desc()
 
 	// Calls to RangeLookup typically use inconsistent reads, but we
@@ -89,8 +89,8 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica, _ *config.Syst
 	// considering one of the metadata ranges: we must not do an
 	// inconsistent lookup in our own copy of the range.
 	b := &client.Batch{}
-	b.InternalAddRequest(&proto.RangeLookupRequest{
-		RequestHeader: proto.RequestHeader{
+	b.InternalAddRequest(&roachpb.RangeLookupRequest{
+		RequestHeader: roachpb.RequestHeader{
 			Key: keys.RangeMetaKey(desc.StartKey),
 		},
 		MaxRanges: 1,
@@ -99,7 +99,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica, _ *config.Syst
 	if err != nil {
 		return err
 	}
-	reply := br.Responses[0].GetInner().(*proto.RangeLookupResponse)
+	reply := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
 
 	if len(reply.Ranges) != 1 {
 		return util.Errorf("expected 1 range descriptor, got %d", len(reply.Ranges))
@@ -148,7 +148,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica, _ *config.Syst
 		// This range is a current member of the raft group. Acquire the lease
 		// to avoid processing this range again before the next inactivity threshold.
 		if err := rng.requestLeaderLease(now); err != nil {
-			if _, ok := err.(*proto.LeaseRejectedError); !ok {
+			if _, ok := err.(*roachpb.LeaseRejectedError); !ok {
 				if log.V(1) {
 					log.Infof("unable to acquire lease from valid range %s: %s", rng, err)
 				}

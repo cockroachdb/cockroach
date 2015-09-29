@@ -22,28 +22,28 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TODO(pmattis): The methods in this file needs tests.
 
-func marshalKey(k interface{}) (proto.Key, error) {
+func marshalKey(k interface{}) (roachpb.Key, error) {
 	switch t := k.(type) {
 	case string:
-		return proto.Key(t), nil
-	case proto.Key:
+		return roachpb.Key(t), nil
+	case roachpb.Key:
 		return t, nil
 	case []byte:
-		return proto.Key(t), nil
+		return roachpb.Key(t), nil
 	}
 	return nil, fmt.Errorf("unable to marshal key: %T", k)
 }
 
-// marshalValue returns a proto.Value initialized from the source
+// marshalValue returns a roachpb.Value initialized from the source
 // interface{}, returning an error if the types are not compatible.
-func marshalValue(v interface{}) (proto.Value, error) {
-	var r proto.Value
+func marshalValue(v interface{}) (roachpb.Value, error) {
+	var r roachpb.Value
 
 	// Handle a few common types via a type switch.
 	switch t := v.(type) {
@@ -66,7 +66,7 @@ func marshalValue(v interface{}) (proto.Value, error) {
 		r.SetBytes(t)
 		return r, nil
 
-	case proto.Key:
+	case roachpb.Key:
 		r.SetBytes([]byte(t))
 		return r, nil
 
@@ -74,7 +74,7 @@ func marshalValue(v interface{}) (proto.Value, error) {
 		r.SetTime(t)
 		return r, nil
 
-	case gogoproto.Message:
+	case proto.Message:
 		err := r.SetProto(t)
 		return r, err
 	}

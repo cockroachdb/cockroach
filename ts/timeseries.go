@@ -20,7 +20,7 @@ package ts
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 )
 
 // ToInternal places the datapoints in a TimeSeriesData message into one or
@@ -53,7 +53,7 @@ import (
 // For more information on how time series data is stored, see
 // InternalTimeSeriesData and its related structures.
 func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
-	[]*proto.InternalTimeSeriesData, error) {
+	[]*roachpb.InternalTimeSeriesData, error) {
 	if keyDuration%sampleDuration != 0 {
 		return nil, fmt.Errorf(
 			"sample duration %d does not evenly divide key duration %d",
@@ -65,8 +65,8 @@ func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
 			sampleDuration, keyDuration)
 	}
 
-	result := []*proto.InternalTimeSeriesData{}
-	resultByKeyTime := map[int64]*proto.InternalTimeSeriesData{}
+	result := []*roachpb.InternalTimeSeriesData{}
+	resultByKeyTime := map[int64]*roachpb.InternalTimeSeriesData{}
 
 	for _, dp := range ts.Datapoints {
 		// Determine which InternalTimeSeriesData this datapoint belongs to,
@@ -74,7 +74,7 @@ func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
 		keyTime := (dp.TimestampNanos / keyDuration) * keyDuration
 		itsd, ok := resultByKeyTime[keyTime]
 		if !ok {
-			itsd = &proto.InternalTimeSeriesData{
+			itsd = &roachpb.InternalTimeSeriesData{
 				StartTimestampNanos: keyTime,
 				SampleDurationNanos: sampleDuration,
 			}
@@ -85,7 +85,7 @@ func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
 		// Create a new sample for this datapoint and place it into the
 		// InternalTimeSeriesData.
 		sampleOffset := int32((dp.TimestampNanos - keyTime) / sampleDuration)
-		sample := &proto.InternalTimeSeriesSample{
+		sample := &roachpb.InternalTimeSeriesSample{
 			Offset: sampleOffset,
 			Count:  1,
 			Sum:    dp.Value,

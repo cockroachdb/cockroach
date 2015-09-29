@@ -19,7 +19,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
@@ -28,7 +28,7 @@ type databaseKey struct {
 	name string
 }
 
-func (dk databaseKey) Key() proto.Key {
+func (dk databaseKey) Key() roachpb.Key {
 	return MakeNameMetadataKey(keys.RootNamespaceID, dk.name)
 }
 

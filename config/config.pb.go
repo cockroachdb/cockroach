@@ -18,8 +18,8 @@ package config
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_proto "github.com/cockroachdb/cockroach/proto"
-import cockroach_proto1 "github.com/cockroachdb/cockroach/proto"
+import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
+import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 
@@ -59,9 +59,9 @@ type ZoneConfig struct {
 	// ReplicaAttrs is a slice of Attributes, each describing required attributes
 	// for each replica in the zone. The order in which the attributes are stored
 	// in ReplicaAttrs is arbitrary and may change.
-	ReplicaAttrs  []cockroach_proto.Attributes `protobuf:"bytes,1,rep,name=replica_attrs" json:"replica_attrs" yaml:"replicas,omitempty"`
-	RangeMinBytes int64                        `protobuf:"varint,2,opt,name=range_min_bytes" json:"range_min_bytes" yaml:"range_min_bytes,omitempty"`
-	RangeMaxBytes int64                        `protobuf:"varint,3,opt,name=range_max_bytes" json:"range_max_bytes" yaml:"range_max_bytes,omitempty"`
+	ReplicaAttrs  []cockroach_roachpb.Attributes `protobuf:"bytes,1,rep,name=replica_attrs" json:"replica_attrs" yaml:"replicas,omitempty"`
+	RangeMinBytes int64                          `protobuf:"varint,2,opt,name=range_min_bytes" json:"range_min_bytes" yaml:"range_min_bytes,omitempty"`
+	RangeMaxBytes int64                          `protobuf:"varint,3,opt,name=range_max_bytes" json:"range_max_bytes" yaml:"range_max_bytes,omitempty"`
 	// If GC policy is not set, uses the next highest, non-null policy
 	// in the zone config hierarchy, up to the default policy if necessary.
 	GC *GCPolicy `protobuf:"bytes,4,opt,name=gc" json:"gc,omitempty" yaml:"gc,omitempty"`
@@ -71,7 +71,7 @@ func (m *ZoneConfig) Reset()         { *m = ZoneConfig{} }
 func (m *ZoneConfig) String() string { return proto.CompactTextString(m) }
 func (*ZoneConfig) ProtoMessage()    {}
 
-func (m *ZoneConfig) GetReplicaAttrs() []cockroach_proto.Attributes {
+func (m *ZoneConfig) GetReplicaAttrs() []cockroach_roachpb.Attributes {
 	if m != nil {
 		return m.ReplicaAttrs
 	}
@@ -100,14 +100,14 @@ func (m *ZoneConfig) GetGC() *GCPolicy {
 }
 
 type SystemConfig struct {
-	Values []cockroach_proto1.KeyValue `protobuf:"bytes,1,rep,name=values" json:"values"`
+	Values []cockroach_roachpb1.KeyValue `protobuf:"bytes,1,rep,name=values" json:"values"`
 }
 
 func (m *SystemConfig) Reset()         { *m = SystemConfig{} }
 func (m *SystemConfig) String() string { return proto.CompactTextString(m) }
 func (*SystemConfig) ProtoMessage()    {}
 
-func (m *SystemConfig) GetValues() []cockroach_proto1.KeyValue {
+func (m *SystemConfig) GetValues() []cockroach_roachpb1.KeyValue {
 	if m != nil {
 		return m.Values
 	}
@@ -412,7 +412,7 @@ func (m *ZoneConfig) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ReplicaAttrs = append(m.ReplicaAttrs, cockroach_proto.Attributes{})
+			m.ReplicaAttrs = append(m.ReplicaAttrs, cockroach_roachpb.Attributes{})
 			if err := m.ReplicaAttrs[len(m.ReplicaAttrs)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -564,7 +564,7 @@ func (m *SystemConfig) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Values = append(m.Values, cockroach_proto1.KeyValue{})
+			m.Values = append(m.Values, cockroach_roachpb1.KeyValue{})
 			if err := m.Values[len(m.Values)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}

@@ -18,7 +18,7 @@
 package engine
 
 import (
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -28,7 +28,7 @@ type InMem struct {
 }
 
 // NewInMem allocates and returns a new, opened InMem engine.
-func NewInMem(attrs proto.Attributes, cacheSize int64, stopper *stop.Stopper) InMem {
+func NewInMem(attrs roachpb.Attributes, cacheSize int64, stopper *stop.Stopper) InMem {
 	db := InMem{
 		RocksDB: newMemRocksDB(attrs, cacheSize, stopper),
 	}

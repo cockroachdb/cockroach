@@ -28,10 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
@@ -57,7 +57,7 @@ func NewExecutor(db client.DB, gossip *gossip.Gossip) *Executor {
 }
 
 // SetNodeID sets the node ID for the SQL server.
-func (e *Executor) SetNodeID(nodeID proto.NodeID) {
+func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
 	e.nodeID = uint32(nodeID)
 }
 
@@ -87,7 +87,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 		systemConfig: e.getSystemConfig(),
 	}
 	// Pick up current session state.
-	if err := gogoproto.Unmarshal(args.Session, &planMaker.session); err != nil {
+	if err := proto.Unmarshal(args.Session, &planMaker.session); err != nil {
 		return args.CreateReply(), http.StatusBadRequest, err
 	}
 	// Resume a pending transaction if present.
@@ -113,7 +113,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 		planMaker.session.Txn = nil
 		planMaker.session.MutatesSystemDB = false
 	}
-	bytes, err := gogoproto.Marshal(&planMaker.session)
+	bytes, err := proto.Marshal(&planMaker.session)
 	if err != nil {
 		return args.CreateReply(), http.StatusInternalServerError, err
 	}
@@ -157,7 +157,7 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if planMaker.txn == nil {
 			return result, errNoTransactionInProgress
-		} else if planMaker.txn.Proto.Status == proto.ABORTED {
+		} else if planMaker.txn.Proto.Status == roachpb.ABORTED {
 			// Reset to allow starting a new transaction.
 			planMaker.resetTxn()
 			return result, nil
@@ -167,7 +167,7 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 			return result, errNoTransactionInProgress
 		}
 	default:
-		if planMaker.txn != nil && planMaker.txn.Proto.Status == proto.ABORTED {
+		if planMaker.txn != nil && planMaker.txn.Proto.Status == roachpb.ABORTED {
 			return result, errTransactionAborted
 		}
 	}

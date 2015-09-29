@@ -24,17 +24,17 @@ import (
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // rangeCacheKey is the key type used to store and sort values in the
 // RangeCache.
-type rangeCacheKey proto.Key
+type rangeCacheKey roachpb.Key
 
 func (a rangeCacheKey) String() string {
-	return proto.Key(a).String()
+	return roachpb.Key(a).String()
 }
 
 // Compare implements the llrb.Comparable interface for rangeCacheKey, so that
@@ -49,10 +49,10 @@ func (a rangeCacheKey) Compare(b llrb.Comparable) int {
 type rangeDescriptorDB interface {
 	// rangeLookup takes a meta key to look up descriptors for,
 	// for example \x00\x00meta1aa or \x00\x00meta2f.
-	rangeLookup(proto.Key, lookupOptions, *proto.RangeDescriptor) ([]proto.RangeDescriptor, error)
+	rangeLookup(roachpb.Key, lookupOptions, *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error)
 	// firstRange returns the descriptor for the first Range. This is the
 	// Range containing all \x00\x00meta1 entries.
-	firstRange() (*proto.RangeDescriptor, error)
+	firstRange() (*roachpb.RangeDescriptor, error)
 }
 
 // rangeDescriptorCache is used to retrieve range descriptors for
@@ -94,7 +94,7 @@ func (rdc *rangeDescriptorCache) String() string {
 func (rdc *rangeDescriptorCache) stringLocked() string {
 	var buf bytes.Buffer
 	rdc.rangeCache.Do(func(k, v interface{}) {
-		fmt.Fprintf(&buf, "key=%s desc=%+v\n", proto.Key(k.(rangeCacheKey)), v)
+		fmt.Fprintf(&buf, "key=%s desc=%+v\n", roachpb.Key(k.(rangeCacheKey)), v)
 	})
 	return buf.String()
 }
@@ -112,8 +112,8 @@ func (rdc *rangeDescriptorCache) stringLocked() string {
 //
 // This method returns the RangeDescriptor for the range containing
 // the key's data, or an error if any occurred.
-func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
-	options lookupOptions) (*proto.RangeDescriptor, error) {
+func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.Key,
+	options lookupOptions) (*roachpb.RangeDescriptor, error) {
 	if _, r := rdc.getCachedRangeDescriptor(key, options.useReverseScan); r != nil {
 		return r, nil
 	}
@@ -123,17 +123,17 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	} else if log.V(1) {
 		log.Infof("lookup range descriptor: key=%s", key)
 	}
-	rs, err := func(key proto.Key, options lookupOptions) ([]proto.RangeDescriptor, error) {
+	rs, err := func(key roachpb.Key, options lookupOptions) ([]roachpb.RangeDescriptor, error) {
 		var (
 			// metadataKey is sent to rangeLookup to find the
 			// RangeDescriptor which contains key.
 			metadataKey = keys.RangeMetaKey(key)
 			// desc is the RangeDescriptor for the range which contains
 			// metadataKey.
-			desc *proto.RangeDescriptor
+			desc *roachpb.RangeDescriptor
 			err  error
 		)
-		if bytes.Equal(metadataKey, proto.KeyMin) {
+		if bytes.Equal(metadataKey, roachpb.KeyMin) {
 			// In this case, the requested key is stored in the cluster's first
 			// range. Return the first range, which is always gossiped and not
 			// queried from the datastore.
@@ -141,7 +141,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 			if err != nil {
 				return nil, err
 			}
-			return []proto.RangeDescriptor{*rd}, nil
+			return []roachpb.RangeDescriptor{*rd}, nil
 		}
 		if bytes.HasPrefix(metadataKey, keys.Meta1Prefix) {
 			// In this case, desc is the cluster's first range.
@@ -198,8 +198,8 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 // seenDesc should always be passed in and is used as the basis of a
 // compare-and-evict (as pointers); if it is nil, eviction is unconditional
 // but a warning will be logged.
-func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key,
-	seenDesc *proto.RangeDescriptor, inclusive bool) {
+func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey roachpb.Key,
+	seenDesc *roachpb.RangeDescriptor, inclusive bool) {
 	if seenDesc == nil {
 		log.Warningf("compare-and-evict for key %s with nil descriptor; clearing unconditionally", descKey)
 	}
@@ -234,7 +234,7 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key,
 		// can also be evicted. This is necessary since the initial range
 		// [KeyMin,KeyMax) may turn into [KeyMin, "something"), after which
 		// larger ranges don't fit into it any more.
-		if bytes.Equal(descKey, proto.KeyMin) {
+		if bytes.Equal(descKey, roachpb.KeyMin) {
 			break
 		}
 	}
@@ -247,8 +247,8 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key,
 // `inclusive` determines the behaviour at the range boundary: If set to true
 // and `key` is the EndKey and StartKey of two adjacent ranges, the first range
 // is returned instead of the second (which technically contains the given key).
-func (rdc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key, inclusive bool) (
-	rangeCacheKey, *proto.RangeDescriptor) {
+func (rdc *rangeDescriptorCache) getCachedRangeDescriptor(key roachpb.Key, inclusive bool) (
+	rangeCacheKey, *roachpb.RangeDescriptor) {
 	rdc.rangeCacheMu.RLock()
 	defer rdc.rangeCacheMu.RUnlock()
 	return rdc.getCachedRangeDescriptorLocked(key, inclusive)
@@ -257,11 +257,11 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key, inclusi
 // getCachedRangeDescriptorLocked is a helper function to retrieve the
 // descriptor of the range which contains the given key, if present in the
 // cache. It is assumed that the caller holds a read lock on rdc.rangeCacheMu.
-func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key, inclusive bool) (
-	rangeCacheKey, *proto.RangeDescriptor) {
+func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.Key, inclusive bool) (
+	rangeCacheKey, *roachpb.RangeDescriptor) {
 	// The cache is indexed using the end-key of the range, but the
 	// end-key is non-inclusive by default.
-	var metaKey proto.Key
+	var metaKey roachpb.Key
 	if !inclusive {
 		metaKey = keys.RangeMetaKey(key.Next())
 	} else {
@@ -273,7 +273,7 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key, i
 		return nil, nil
 	}
 	metaEndKey := k.(rangeCacheKey)
-	rd := v.(*proto.RangeDescriptor)
+	rd := v.(*roachpb.RangeDescriptor)
 
 	// Check that key actually belongs to the range.
 	if !rd.ContainsKey(key) {
@@ -294,7 +294,7 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key, i
 
 // clearOverlappingCachedRangeDescriptors looks up and clears any
 // cache entries which overlap the specified key or descriptor.
-func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, metaKey proto.Key, desc *proto.RangeDescriptor) {
+func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, metaKey roachpb.Key, desc *roachpb.RangeDescriptor) {
 	if desc.StartKey.Equal(desc.EndKey) { // True for some unittests.
 		return
 	}
@@ -303,7 +303,7 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, met
 	// should be cleared out in favor of a KeyMin->"m" descriptor.
 	k, v, ok := rdc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if ok {
-		descriptor := v.(*proto.RangeDescriptor)
+		descriptor := v.(*roachpb.RangeDescriptor)
 		if !key.Less(descriptor.StartKey) && !descriptor.EndKey.Less(key) {
 			if log.V(1) {
 				log.Infof("clearing overlapping descriptor: key=%s desc=%s", k, descriptor)
@@ -317,7 +317,7 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, met
 	// after RangeMetaKey(desc.StartKey) to the range meta key for desc.EndKey.
 	rdc.rangeCache.DoRange(func(k, v interface{}) {
 		if log.V(1) {
-			log.Infof("clearing subsumed descriptor: key=%s desc=%s", k, v.(*proto.RangeDescriptor))
+			log.Infof("clearing subsumed descriptor: key=%s desc=%s", k, v.(*roachpb.RangeDescriptor))
 		}
 		rdc.rangeCache.Del(k.(rangeCacheKey))
 	}, rangeCacheKey(keys.RangeMetaKey(desc.StartKey).Next()),

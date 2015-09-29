@@ -23,11 +23,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var (
@@ -43,7 +43,7 @@ var _ descriptorProto = &TableDescriptor{}
 // DatabaseKey and TableKey. It is used to easily get the
 // descriptor key and plain name.
 type descriptorKey interface {
-	Key() proto.Key
+	Key() roachpb.Key
 	Name() string
 }
 
@@ -51,7 +51,7 @@ type descriptorKey interface {
 // and TableDescriptor.
 // TODO(marc): this is getting rather large.
 type descriptorProto interface {
-	gogoproto.Message
+	proto.Message
 	GetPrivileges() *PrivilegeDescriptor
 	GetID() ID
 	SetID(ID)

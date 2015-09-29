@@ -19,7 +19,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -123,7 +123,7 @@ func createSystemTable(id ID, cmd string) TableDescriptor {
 
 // GetInitialSystemValues returns a list of key/value pairs.
 // They are written at cluster bootstrap time (see storage/node.go:BootstrapCLuster).
-func GetInitialSystemValues() []proto.KeyValue {
+func GetInitialSystemValues() []roachpb.KeyValue {
 	systemData := []struct {
 		parentID ID
 		desc     descriptorProto
@@ -139,13 +139,13 @@ func GetInitialSystemValues() []proto.KeyValue {
 	// - ID generator
 	// - 2 per table/database
 	numEntries := 1 + len(systemData)*2
-	ret := make([]proto.KeyValue, numEntries, numEntries)
+	ret := make([]roachpb.KeyValue, numEntries, numEntries)
 	i := 0
 
 	// Descriptor ID generator.
-	value := proto.Value{}
+	value := roachpb.Value{}
 	value.SetInt(int64(keys.MaxReservedDescID + 1))
-	ret[i] = proto.KeyValue{
+	ret[i] = roachpb.KeyValue{
 		Key:   keys.DescIDGenerator,
 		Value: value,
 	}
@@ -153,19 +153,19 @@ func GetInitialSystemValues() []proto.KeyValue {
 
 	// System database and tables.
 	for _, d := range systemData {
-		value = proto.Value{}
+		value = roachpb.Value{}
 		value.SetInt(int64(d.desc.GetID()))
-		ret[i] = proto.KeyValue{
+		ret[i] = roachpb.KeyValue{
 			Key:   MakeNameMetadataKey(d.parentID, d.desc.GetName()),
 			Value: value,
 		}
 		i++
 
-		value = proto.Value{}
+		value = roachpb.Value{}
 		if err := value.SetProto(d.desc); err != nil {
 			log.Fatalf("could not marshal %v", d.desc)
 		}
-		ret[i] = proto.KeyValue{
+		ret[i] = roachpb.KeyValue{
 			Key:   MakeDescMetadataKey(d.desc.GetID()),
 			Value: value,
 		}
