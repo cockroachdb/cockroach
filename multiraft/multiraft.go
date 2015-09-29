@@ -1045,13 +1045,18 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 			ChangeType: cc.Type,
 			Payload:    payload,
 			Callback: func(err error) {
+				var errStr string
+				if err != nil {
+					errStr = err.Error() // can't leak err into the callback
+				}
 				select {
 				case s.callbackChan <- func() {
-					if err == nil {
+					if errStr == "" {
 						if log.V(3) {
 							log.Infof("node %v applying configuration change %v", s.nodeID, cc)
 						}
 						// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
+						var err error
 						switch cc.Type {
 						case raftpb.ConfChangeAddNode:
 							err = s.addNode(replica.NodeID, g)
@@ -1065,7 +1070,7 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 						}
 						s.multiNode.ApplyConfChange(uint64(groupID), cc)
 					} else {
-						log.Warningf("aborting configuration change: %s", err)
+						log.Warningf("aborting configuration change: %s", errStr)
 						s.multiNode.ApplyConfChange(uint64(groupID),
 							raftpb.ConfChange{})
 					}
