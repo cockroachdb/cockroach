@@ -576,7 +576,7 @@ func TestStoreSendWithZeroTime(t *testing.T) {
 
 // TestStoreSendWithClockOffset verifies that if the request
 // specifies a timestamp further into the future than the node's
-// maximum allowed clock offset, the cmd still succeeds.
+// maximum allowed clock offset, the cmd fails.
 func TestStoreSendWithClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, mc, stopper := createTestStore(t)
@@ -589,9 +589,8 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	maxOffset := 250 * time.Millisecond
 	store.ctx.Clock.SetMaxOffset(maxOffset)
 	// Set args timestamp to exceed max offset.
-	args.Timestamp = store.ctx.Clock.Now()
-	args.Timestamp.WallTime += maxOffset.Nanoseconds() + 1
-	if _, err := client.SendWrapped(store, nil, &args); err == nil {
+	ts := store.ctx.Clock.Now().Add(maxOffset.Nanoseconds()+1, 0)
+	if _, err := client.SendWrappedAt(store, nil, ts, &args); err == nil {
 		t.Error("expected max offset clock error")
 	}
 }

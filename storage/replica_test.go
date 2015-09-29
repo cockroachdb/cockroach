@@ -1033,18 +1033,17 @@ func TestAcquireLeaderLease(t *testing.T) {
 		expStart := tc.rng.getLease().Expiration
 		tc.manualClock.Set(int64(DefaultLeaderLeaseDuration + 1000))
 
-		test.Header().Timestamp = tc.clock.Now()
-
-		if _, err := client.SendWrapped(tc.rng, tc.rng.context(), test); err != nil {
+		ts := tc.clock.Now()
+		if _, err := client.SendWrappedAt(tc.rng, tc.rng.context(), ts, test); err != nil {
 			t.Fatal(err)
 		}
-		if held, expired := hasLease(tc.rng, test.Header().Timestamp); !held || expired {
+		if held, expired := hasLease(tc.rng, ts); !held || expired {
 			t.Fatalf("%d: expected lease acquisition", i)
 		}
 		lease := tc.rng.getLease()
 		// The lease may start earlier than our request timestamp, but the
 		// expiration will still be measured relative to it.
-		expExpiration := test.Header().Timestamp.Add(int64(DefaultLeaderLeaseDuration), 0)
+		expExpiration := ts.Add(int64(DefaultLeaderLeaseDuration), 0)
 		if !lease.Start.Equal(expStart) || !lease.Expiration.Equal(expExpiration) {
 			t.Errorf("%d: unexpected lease timing %s, %s; expected %s, %s", i,
 				lease.Start, lease.Expiration, expStart, expExpiration)
@@ -1324,17 +1323,17 @@ func TestRangeNoTSCacheInconsistent(t *testing.T) {
 	t0 := 1 * time.Second
 	tc.manualClock.Set(t0.Nanoseconds())
 	args := getArgs([]byte("a"), 1, tc.store.StoreID())
-	args.Timestamp = tc.clock.Now()
 	args.ReadConsistency = roachpb.INCONSISTENT
+	ts := tc.clock.Now()
 
-	_, err := client.SendWrapped(tc.rng, tc.rng.context(), &args)
+	_, err := client.SendWrappedAt(tc.rng, tc.rng.context(), ts, &args)
 
 	if err != nil {
 		t.Error(err)
 	}
 	pArgs := putArgs([]byte("a"), []byte("value"), 1, tc.store.StoreID())
 
-	reply, err := client.SendWrapped(tc.rng, tc.rng.context(), &pArgs)
+	reply, err := client.SendWrappedAt(tc.rng, tc.rng.context(), roachpb.ZeroTimestamp.Add(0, 1), &pArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1403,7 +1402,6 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	// Start with a read to warm the timestamp cache.
 	gArgs := getArgs(key, 1, tc.store.StoreID())
 	gArgs.Txn = txn
-	gArgs.Timestamp = txn.Timestamp
 
 	if _, err := client.SendWrapped(tc.rng, tc.rng.context(), &gArgs); err != nil {
 		t.Fatal(err)
@@ -1412,7 +1410,6 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	// Now try a write and verify timestamp isn't incremented.
 	pArgs := putArgs(key, []byte("value"), 1, tc.store.StoreID())
 	pArgs.Txn = txn
-	pArgs.Timestamp = pArgs.Txn.Timestamp
 
 	reply, err := client.SendWrapped(tc.rng, tc.rng.context(), &pArgs)
 	if err != nil {
@@ -1434,11 +1431,12 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	}
 
 	// Finally, try a non-transactional write and verify timestamp is incremented.
+	ts := pArgs.Txn.Timestamp
 	pArgs.Txn = nil
-	expTS := pArgs.Timestamp
+	expTS := ts
 	expTS.Logical++
 
-	if reply, err = client.SendWrapped(tc.rng, tc.rng.context(), &pArgs); err != nil {
+	if reply, err = client.SendWrappedAt(tc.rng, tc.rng.context(), ts, &pArgs); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
 	pReply = reply.(*roachpb.PutResponse)

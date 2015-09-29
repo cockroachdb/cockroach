@@ -568,11 +568,6 @@ func setBatchTimestamps(ba roachpb.BatchRequest) {
 func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
 	var err error
-	// Fiddle with the timestamps to make sure that writes can overlap
-	// within this batch.
-	// TODO(tschottdorf): provisional feature to get back to passing tests.
-	// Have to discuss how we go about it.
-	setBatchTimestamps(ba)
 
 	if err := r.checkBatchRequest(ba); err != nil {
 		return nil, roachpb.NewError(err)
@@ -1154,6 +1149,11 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 	// accumulate updates to it.
 	isTxn := ba.Txn != nil
 
+	// Fiddle with the timestamps to make sure that writes can overlap
+	// within this batch.
+	// TODO(tschottdorf): provisional feature to get back to passing tests.
+	// Have to discuss how we go about it.
+	setBatchTimestamps(*ba)
 	// TODO(tschottdorf): provisionals ahead. This loop needs to execute each
 	// command and propagate txn and timestamp to the next (and, eventually,
 	// to the batch response header). We're currently in an intermediate stage
