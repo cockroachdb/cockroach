@@ -93,7 +93,7 @@ func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stoppe
 // in that case.
 func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
 	if ctx == nil {
-		ctx = context.TODO()
+		ctx = context.Background()
 	}
 	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
 		ba := &roachpb.BatchRequest{}
@@ -123,7 +123,7 @@ func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roac
 			return unwrappedReply
 		}
 	}(args)
-	br, pErr := sender.Send(context.TODO(), *ba)
+	br, pErr := sender.Send(ctx, *ba)
 	if err := pErr.GoError(); err != nil {
 		return nil, err
 	}

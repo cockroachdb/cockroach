@@ -220,7 +220,7 @@ func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
 
 // CreateReplicaSets creates new roachpb.ReplicaDescriptor protos based on an array of
 // StoreIDs to aid in testing. Note that this does not actually produce any
-// replicas, it just creates the roachpb.
+// replicas, it just creates the descriptors.
 func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescriptor {
 	result := []roachpb.ReplicaDescriptor{}
 	for _, replicaNumber := range replicaNumbers {
@@ -585,7 +585,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 		}, 100*time.Millisecond) == nil
 	}
 
-	// If this actually failed, we would have gossiped from MVCCPutroachpb.
+	// If this actually failed, we would have gossiped from MVCCPutProto.
 	// Unlikely, but why not check.
 	if verifySystem() {
 		t.Errorf("not expecting gossip of new config until new lease is acquired")
