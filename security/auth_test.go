@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"testing"
 
-	cockroach_proto "github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
@@ -86,8 +86,8 @@ func TestGetCertificateUser(t *testing.T) {
 func TestAuthenticationHook(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Proto that does not implement GetUser.
-	badRequest := &cockroach_proto.GetResponse{}
-	getRequest := &cockroach_proto.GetRequest{}
+	badRequest := &roachpb.GetResponse{}
+	getRequest := &roachpb.GetRequest{}
 
 	testCases := []struct {
 		insecure           bool
