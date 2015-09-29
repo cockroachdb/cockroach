@@ -27,13 +27,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
@@ -334,7 +334,7 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		if _, err := batchutil.SendWrapped(ds, args); err != nil {
+		if _, err := client.SendWrapped(ds, args); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
 	}
@@ -388,7 +388,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.Value{Bytes: []byte("value")})
-	if _, err := batchutil.SendWrapped(ds, put); err != nil {
+	if _, err := client.SendWrapped(ds, put); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
 	if first {
@@ -432,11 +432,11 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.Value{Bytes: []byte("value")})
 	// Fatal error on descriptor lookup, propagated to reply.
-	if _, err := batchutil.SendWrapped(ds, put); err.Error() != "fatal boom" {
+	if _, err := client.SendWrapped(ds, put); err.Error() != "fatal boom" {
 		t.Errorf("unexpected error: %s", err)
 	}
 	// Retryable error on descriptor lookup, second attempt successful.
-	if _, err := batchutil.SendWrapped(ds, put); err != nil {
+	if _, err := client.SendWrapped(ds, put); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
 	if len(errors) != 0 {
@@ -495,7 +495,7 @@ func TestEvictCacheOnError(t *testing.T) {
 
 		put := roachpb.NewPut(roachpb.Key("a"), roachpb.Value{Bytes: []byte("value")}).(*roachpb.PutRequest)
 
-		if _, err := batchutil.SendWrapped(ds, put); err != nil && !testutils.IsError(err, "boom") {
+		if _, err := client.SendWrapped(ds, put); err != nil && !testutils.IsError(err, "boom") {
 			t.Errorf("put encountered unexpected error: %s", err)
 		}
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &roachpb.ReplicaDescriptor{}) && !tc.shouldClearLeader {
@@ -559,7 +559,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 0)
-	if _, err := batchutil.SendWrapped(ds, scan); err != nil {
+	if _, err := client.SendWrapped(ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
 }
@@ -653,7 +653,7 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 1)
-	sr, err := batchutil.SendWrapped(ds, scan)
+	sr, err := client.SendWrapped(ds, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -754,7 +754,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 10).(*roachpb.ScanRequest)
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	scan.Txn = &roachpb.Transaction{}
-	reply, err := batchutil.SendWrapped(ds, scan)
+	reply, err := client.SendWrapped(ds, scan)
 	if err != nil {
 		t.Fatalf("scan encountered error: %s", err)
 	}
@@ -788,7 +788,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	rScan := &roachpb.ReverseScanRequest{
 		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	}
-	if _, err := batchutil.SendWrapped(ds, rScan); err != nil {
+	if _, err := client.SendWrapped(ds, rScan); err != nil {
 		t.Fatal(err)
 	}
 }

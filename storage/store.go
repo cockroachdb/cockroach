@@ -1203,7 +1203,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		var reply roachpb.Response
 		{
 			var pErr *roachpb.Error
-			reply, pErr = rng.AddCmd(ctx, ba)
+			reply, pErr = rng.Send(ctx, ba)
 			err = pErr.GoError()
 		}
 

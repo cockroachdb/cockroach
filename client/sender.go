@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/gogo/protobuf/proto"
 )
 
 // defaultRetryOptions sets the retry options for handling retryable errors and
@@ -84,4 +85,41 @@ func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stoppe
 		return nil, fmt.Errorf("no sender registered for \"%s\"", u.Scheme)
 	}
 	return f(u, ctx, retryOptions, stopper)
+}
+
+// SendWrapped is a convenience function which wraps the request in a batch,
+// sends it via the provided Sender, and returns the unwrapped response
+// or an error.
+func SendWrapped(sender Sender, args roachpb.Request) (roachpb.Response, error) {
+	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
+		ba := &roachpb.BatchRequest{}
+		ba.RequestHeader = *(proto.Clone(args.Header()).(*roachpb.RequestHeader))
+		ba.Add(args)
+		return ba, func(br *roachpb.BatchResponse) roachpb.Response {
+			var unwrappedReply roachpb.Response
+			if len(br.Responses) == 0 {
+				unwrappedReply = args.CreateReply()
+			} else {
+				unwrappedReply = br.Responses[0].GetInner()
+			}
+			// The ReplyTxn is propagated from one response to the next request,
+			// and we adopt the mechanism that whenever the Txn changes, it needs
+			// to be set in the reply, for example to ratchet up the transaction
+			// timestamp on writes when necessary.
+			// This is internally necessary to sequentially execute the batch,
+			// so it makes some sense to take the burden of updating the Txn
+			// from TxnCoordSender - it will only need to act on retries/aborts
+			// in the future.
+			unwrappedReply.Header().Txn = br.Txn
+			if unwrappedReply.Header().Error == nil {
+				unwrappedReply.Header().Error = br.Error
+			}
+			return unwrappedReply
+		}
+	}(args)
+	br, pErr := sender.Send(context.TODO(), *ba)
+	if err := pErr.GoError(); err != nil {
+		return nil, err
+	}
+	return unwrap(br), nil
 }

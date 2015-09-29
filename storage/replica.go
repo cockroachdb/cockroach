@@ -215,6 +215,8 @@ type Replica struct {
 	truncatedState unsafe.Pointer // *roachpb.RaftTruancatedState
 }
 
+var _ client.Sender = &Replica{}
+
 // NewReplica initializes the replica using the given metadata.
 func NewReplica(desc *roachpb.RangeDescriptor, rm RangeManager) (*Replica, error) {
 	r := &Replica{
@@ -567,40 +569,18 @@ func setBatchTimestamps(ba roachpb.BatchRequest) {
 
 // sendArg is an internal convenience function which transparently wraps and
 // unwraps in a BatchRequest.
-// TODO(tschottdorf): should use batchutil.SendWrapped when AddCmd turns into
-// client.Sender#Send.
 func sendArg(r *Replica, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
-	ba := roachpb.BatchRequest{
-		RequestHeader: *args.Header(),
-	}
-	ba.Add(args)
-	// Unwrap reply via deferred function.
-	argsCpy := args
-	reply, pErr := r.AddCmd(ctx, ba)
-	err := pErr.GoError()
-	if err == nil {
-		br, ok := reply.(*roachpb.BatchResponse)
-		if !ok {
-			panic(fmt.Sprintf("expected a BatchResponse, got a %T", reply))
-		}
-		if len(br.Responses) != 1 {
-			panic(fmt.Sprintf("expected a BatchResponse with a single wrapped response, got one with %d", len(br.Responses)))
-		}
-		reply = br.Responses[0].GetInner()
-	} else {
-		reply = argsCpy.CreateReply()
-	}
-	return reply, err
+	return client.SendWrapped(r, args)
 }
 
-// AddCmd adds a command for execution on this range. The command's
+// Send adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
 // either along the read-only execution path or the read-write Raft
 // command queue.
 // TODO(tschottdorf): use BatchRequest w/o pointer receiver.
-func (r *Replica) AddCmd(ctx context.Context, ba roachpb.BatchRequest) (roachpb.Response, *roachpb.Error) {
-	var reply roachpb.Response
+func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	var br *roachpb.BatchResponse
 	var err error
 	// Fiddle with the timestamps to make sure that writes can overlap
 	// within this batch.
@@ -618,17 +598,16 @@ func (r *Replica) AddCmd(ctx context.Context, ba roachpb.BatchRequest) (roachpb.
 		var iReply roachpb.Response
 		iReply, err = r.addAdminCmd(ctx, args)
 		if err == nil {
-			br := &roachpb.BatchResponse{}
+			br = &roachpb.BatchResponse{}
 			br.Add(iReply)
 			*br.Header() = *iReply.Header()
-			reply = br
 		}
 	} else if ba.IsReadOnly() {
 		defer trace.Epoch("read-only path")()
-		reply, err = r.addReadOnlyCmd(ctx, &ba)
+		br, err = r.addReadOnlyCmd(ctx, &ba)
 	} else if ba.IsWrite() {
 		defer trace.Epoch("read-write path")()
-		reply, err = r.addWriteCmd(ctx, &ba, nil)
+		br, err = r.addWriteCmd(ctx, &ba, nil)
 	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
@@ -642,7 +621,11 @@ func (r *Replica) AddCmd(ctx context.Context, ba roachpb.BatchRequest) (roachpb.
 		// clients will retry.
 		err = roachpb.NewRangeNotFoundError(r.Desc().RangeID)
 	}
-	return reply, roachpb.NewError(err)
+	// TODO(tschottdorf): assert nil reply on error.
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	return br, nil
 }
 
 func (r *Replica) checkCmdHeader(header *roachpb.RequestHeader) error {

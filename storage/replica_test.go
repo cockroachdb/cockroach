@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -221,7 +220,7 @@ func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
 
 // CreateReplicaSets creates new roachpb.ReplicaDescriptor protos based on an array of
 // StoreIDs to aid in testing. Note that this does not actually produce any
-// replicas, it just creates the proto.
+// replicas, it just creates the roachpb.
 func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescriptor {
 	result := []roachpb.ReplicaDescriptor{}
 	for _, replicaNumber := range replicaNumbers {
@@ -586,7 +585,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 		}, 100*time.Millisecond) == nil
 	}
 
-	// If this actually failed, we would have gossiped from MVCCPutProto.
+	// If this actually failed, we would have gossiped from MVCCPutroachpb.
 	// Unlikely, but why not check.
 	if verifySystem() {
 		t.Errorf("not expecting gossip of new config until new lease is acquired")
@@ -818,19 +817,19 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	req1 := putArgs(key, nil, rangeID, tc.store.StoreID())
 	req1.Txn = txn
 	req1.Timestamp = txn.Timestamp
-	if _, err := batchutil.SendWrapped(tc.store, &req1); err != nil {
+	if _, err := client.SendWrapped(tc.store, &req1); err != nil {
 		t.Fatal(err)
 	}
 	req2 := endTxnArgs(txn, true /* commit */, rangeID, tc.store.StoreID())
 	req2.Timestamp = txn.Timestamp
 	req2.Intents = []roachpb.Intent{{Key: key}}
-	if _, err := batchutil.SendWrapped(tc.store, &req2); err != nil {
+	if _, err := client.SendWrapped(tc.store, &req2); err != nil {
 		t.Fatal(err)
 	}
 	// Execute a get to resolve the intent.
 	req3 := getArgs(key, rangeID, tc.store.StoreID())
 	req3.Timestamp = txn.Timestamp
-	if _, err := batchutil.SendWrapped(tc.store, &req3); err != nil {
+	if _, err := client.SendWrapped(tc.store, &req3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2296,7 +2295,7 @@ func TestRangeResolveIntentRange(t *testing.T) {
 
 	// Do a consistent scan to verify intents have been cleared.
 	sArgs := scanArgs(roachpb.Key("a"), roachpb.Key("c"), 1, tc.store.StoreID())
-	reply, err := batchutil.SendWrapped(tc.store, &sArgs)
+	reply, err := client.SendWrapped(tc.store, &sArgs)
 	if err != nil {
 		t.Fatalf("unexpected error on scan: %s", err)
 	}
@@ -2937,7 +2936,7 @@ func TestRangeLookup(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		resp, err := batchutil.SendWrapped(tc.store, &roachpb.RangeLookupRequest{
+		resp, err := client.SendWrapped(tc.store, &roachpb.RangeLookupRequest{
 			RequestHeader: roachpb.RequestHeader{
 				RangeID: 1,
 				Key:     c.key,
@@ -3065,7 +3064,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	// Force the read command request a new lease.
 	clock := tc.clock
 	gArgs.Header().Timestamp = clock.Update(clock.Now().Add(int64(DefaultLeaderLeaseDuration), 0))
-	_, err = batchutil.SendWrapped(tc.store, &gArgs)
+	_, err = client.SendWrapped(tc.store, &gArgs)
 	if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
 		t.Fatalf("expected a RangeNotFoundError, get %s", err)
 	}
@@ -3164,7 +3163,7 @@ func TestBatchErrorWithIndex(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
 	})
 
-	if _, pErr := tc.rng.AddCmd(tc.rng.context(), ba); pErr == nil {
+	if _, pErr := tc.rng.Send(tc.rng.context(), ba); pErr == nil {
 		t.Fatal("expected an error")
 	} else if iErr, ok := pErr.GoError().(roachpb.IndexedError); !ok {
 		t.Fatalf("expected indexed error, got %s", pErr)

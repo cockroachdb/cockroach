@@ -119,7 +119,7 @@ func AfterTest(t testing.TB) {
 		"created by net/rpc.NewClientWithCodec":        "an rpc client",
 		"created by net/rpc.(*Server.ServeCodec)":      "an rpc server connection",
 		"(*Store).Start":                               "a store",
-		"(*Range).AddCmd":                              "a range command",
+		"(*Range).Send":                                "a range command",
 	}
 	var stacks string
 	for i := 0; i < 8; i++ {
