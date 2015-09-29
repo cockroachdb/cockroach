@@ -12,7 +12,6 @@
     "sourceMap": false
   },
   "files": [
-    "./header.ts",
     "./util.ts",
     "./components.ts"
   ]
