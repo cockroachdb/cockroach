@@ -1161,17 +1161,16 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			return nil, roachpb.NewError(err)
 		}
 	}
-	header := &ba.BatchRequest_Header // want to update the original
-	if !header.Timestamp.Equal(roachpb.ZeroTimestamp) {
+	if !ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
 		if s.Clock().MaxOffset() > 0 {
 			// Once a command is submitted to raft, all replicas' logical
 			// clocks will be ratcheted forward to match. If the command
 			// appears to come from a node with a bad clock, reject it now
 			// before we reach that point.
-			offset := time.Duration(header.Timestamp.WallTime - s.Clock().PhysicalNow())
+			offset := time.Duration(ba.Timestamp.WallTime - s.Clock().PhysicalNow())
 			if offset > s.Clock().MaxOffset() {
 				return nil, roachpb.NewError(util.Errorf("Rejecting command with timestamp in the future: %d (%s ahead)",
-					header.Timestamp.WallTime, offset))
+					ba.Timestamp.WallTime, offset))
 			}
 		}
 		// Update our clock with the incoming request timestamp. This
@@ -1179,7 +1178,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		// amongst all nodes with which it has interacted.
 		// TODO(tschottdorf): see executeBatch for an explanation of the weird
 		// logical ticks added here.
-		s.ctx.Clock.Update(header.Timestamp.Add(0, int32(len(ba.Requests))-1))
+		ba.Timestamp.Add(0, int32(len(ba.Requests))-1)
 	} else if ba.Txn == nil {
 		// TODO(tschottdorf): possibly consolidate this with other locations
 		// doing the same (but it's definitely required here).
@@ -1187,6 +1186,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		// logical ticks added here.
 		ba.Timestamp.Forward(s.Clock().Now().Add(0, int32(len(ba.Requests))-1))
 	}
+	s.ctx.Clock.Update(ba.Timestamp)
 
 	defer trace.Epoch(fmt.Sprintf("executing %d requests", len(ba.Requests)))()
 	// Backoff and retry loop for handling errors. Backoff times are measured
@@ -1203,7 +1203,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	// Add the command to the range for execution; exit retry loop on success.
 	for r := retry.Start(s.ctx.RangeRetryOptions); next(&r); {
 		// Get range and add command to the range for execution.
-		rng, err = s.GetReplica(header.RangeID)
+		rng, err = s.GetReplica(ba.RangeID)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -1246,11 +1246,11 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 
 		switch t := err.(type) {
 		case *roachpb.ReadWithinUncertaintyIntervalError:
-			t.NodeID = header.Replica.NodeID
+			t.NodeID = ba.Replica.NodeID
 		case *roachpb.WriteTooOldError:
 			trace.Event(fmt.Sprintf("error: %T", err))
 			// Update request timestamp and retry immediately.
-			header.Timestamp = t.ExistingTimestamp.Next()
+			ba.Timestamp = t.ExistingTimestamp.Next()
 			r.Reset()
 			if log.V(1) {
 				log.Warning(err)
@@ -1270,8 +1270,8 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 
 			// Otherwise, update timestamp on read/write and backoff / retry.
 			for _, intent := range t.Intents {
-				if ba.IsWrite() && header.Timestamp.Less(intent.Txn.Timestamp) {
-					header.Timestamp = intent.Txn.Timestamp.Next()
+				if ba.IsWrite() && ba.Timestamp.Less(intent.Txn.Timestamp) {
+					ba.Timestamp = intent.Txn.Timestamp.Next()
 				}
 			}
 			if log.V(1) {
@@ -1286,8 +1286,8 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	// maximum retry count; return txn retry error for transactional cases
 	// and the original error otherwise.
 	trace.Event("store retry limit exceeded") // good to check for if tests fail
-	if header.Txn != nil {
-		return nil, roachpb.NewError(roachpb.NewTransactionRetryError(header.Txn))
+	if ba.Txn != nil {
+		return nil, roachpb.NewError(roachpb.NewTransactionRetryError(ba.Txn))
 	}
 	return nil, roachpb.NewError(err)
 }
