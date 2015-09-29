@@ -219,7 +219,7 @@ func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
 		isolation, now, offset)
 }
 
-// CreateReplicaSets creates new proto.ReplicaDescriptor protos based on an array of
+// CreateReplicaSets creates new roachpb.ReplicaDescriptor protos based on an array of
 // StoreIDs to aid in testing. Note that this does not actually produce any
 // replicas, it just creates the proto.
 func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescriptor {
@@ -975,7 +975,7 @@ func heartbeatArgs(txn *roachpb.Transaction, rangeID roachpb.RangeID, storeID ro
 
 // internalMergeArgs returns a MergeRequest and MergeResponse
 // pair addressed to the default replica for the specified key. The request will
-// contain the given proto.Value.
+// contain the given roachpb.Value.
 func internalMergeArgs(key []byte, value roachpb.Value, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.MergeRequest {
 	return roachpb.MergeRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -3137,7 +3137,7 @@ func TestIntentIntersect(t *testing.T) {
 }
 
 // TestBatchErrorWithIndex tests that when an individual entry in a batch
-// results in an error which implements proto.IndexedError, the index of this
+// results in an error which implements roachpb.IndexedError, the index of this
 // command is stored into the error.
 func TestBatchErrorWithIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -3153,7 +3153,7 @@ func TestBatchErrorWithIndex(t *testing.T) {
 		Value:         roachpb.Value{Bytes: []byte("not nil")},
 	})
 	// This one fails with a ConditionalPutError, which implements
-	// proto.IndexedError.
+	// roachpb.IndexedError.
 	ba.Add(&roachpb.ConditionalPutRequest{
 		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
 		Value:         roachpb.Value{Bytes: []byte("irrelevant")},

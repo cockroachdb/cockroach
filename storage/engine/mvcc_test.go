@@ -667,7 +667,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 				{Key: testKey1, Txn: *txn1},
 				{Key: testKey4, Txn: *txn2},
 			},
-			// would be []proto.KeyValue{fixtureKVs[3], fixtureKVs[4]} without WriteIntentError
+			// would be []roachpb.KeyValue{fixtureKVs[3], fixtureKVs[4]} without WriteIntentError
 			expValues: nil,
 		},
 		{
@@ -676,7 +676,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			expIntents: []roachpb.Intent{
 				{Key: testKey4, Txn: *txn2},
 			},
-			expValues: nil, // []proto.KeyValue{fixtureKVs[2], fixtureKVs[3], fixtureKVs[4]},
+			expValues: nil, // []roachpb.KeyValue{fixtureKVs[2], fixtureKVs[3], fixtureKVs[4]},
 		},
 		{
 			consistent: true,
@@ -684,7 +684,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			expIntents: []roachpb.Intent{
 				{Key: testKey1, Txn: *txn1},
 			},
-			expValues: nil, // []proto.KeyValue{fixtureKVs[3], fixtureKVs[4], fixtureKVs[5]},
+			expValues: nil, // []roachpb.KeyValue{fixtureKVs[3], fixtureKVs[4], fixtureKVs[5]},
 		},
 		{
 			consistent: false,
@@ -853,7 +853,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 		t.Errorf("expected no result; got %+v", val)
 	}
 
-	// Write a malformed value (not an encoded proto.RawKeyValue) and a
+	// Write a malformed value (not an encoded roachpb.RawKeyValue) and a
 	// write intent to key 3; the parse error is returned instead of the
 	// write intent.
 	if err := MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {

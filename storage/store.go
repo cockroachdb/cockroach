@@ -151,12 +151,12 @@ func (e *rangeAlreadyExists) Error() string {
 	return fmt.Sprintf("range for Range ID %d already exists on store", e.rng.Desc().RangeID)
 }
 
-// rangeKeyItem is a common interface for proto.Key and Range.
+// rangeKeyItem is a common interface for roachpb.Key and Range.
 type rangeKeyItem interface {
 	getKey() roachpb.Key
 }
 
-// rangeBTreeKey is a type alias of proto.Key that implements the
+// rangeBTreeKey is a type alias of roachpb.Key that implements the
 // rangeKeyItem interface and the btree.Item interface.
 type rangeBTreeKey roachpb.Key
 
@@ -890,7 +890,7 @@ func (s *Store) EventFeed() StoreEventFeed { return s.feed }
 func (s *Store) Tracer() *tracer.Tracer { return s.ctx.Tracer }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
-// keys and the supplied proto.Replicas slice. It allocates new
+// keys and the supplied roachpb.Replicas slice. It allocates new
 // replica IDs to fill out the supplied replicas.
 func (s *Store) NewRangeDescriptor(start, end roachpb.Key, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error) {
 	id, err := s.rangeIDAlloc.Allocate()

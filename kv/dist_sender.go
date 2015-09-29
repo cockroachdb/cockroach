@@ -300,7 +300,7 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 	return nil
 }
 
-// sendRPC sends one or more RPCs to replicas from the supplied proto.Replica
+// sendRPC sends one or more RPCs to replicas from the supplied roachpb.Replica
 // slice. First, replicas which have gossiped addresses are corralled (and
 // rearranged depending on proximity and whether the request needs to go to a
 // leader) and then sent via rpc.Send, with requirement that one RPC to a
@@ -655,7 +655,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// This was the second or later call in a cross-Range request.
 			// Combine the new response with the existing one.
 			if err := br.Combine(curReply); err != nil {
-				// TODO(tschottdorf): return nil, proto.NewError(err)
+				// TODO(tschottdorf): return nil, roachpb.NewError(err)
 				panic(err)
 			}
 		}

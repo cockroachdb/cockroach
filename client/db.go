@@ -36,7 +36,7 @@ import (
 )
 
 // KeyValue represents a single key/value pair and corresponding
-// timestamp. This is similar to proto.KeyValue except that the value may be
+// timestamp. This is similar to roachpb.KeyValue except that the value may be
 // nil.
 type KeyValue struct {
 	Key   []byte

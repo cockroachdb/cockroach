@@ -78,7 +78,7 @@ func TestSetLogEntry(t *testing.T) {
 				{Str: "    3.1416", Json: []byte("3.141592653589793")},
 			},
 		}},
-		// Try a proto.Key argument.
+		// Try a roachpb.Key argument.
 		{nil, "Key arg %s", []interface{}{roachpb.Key("\x00\xff")}, LogEntry{
 			Format: "Key arg %s",
 			Args: []LogEntry_Arg{

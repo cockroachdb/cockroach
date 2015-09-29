@@ -46,7 +46,7 @@ func NewGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) *Garbage
 // garbage collection policy for batches of values for the same key.
 // Returns the timestamp including, and after which, all values should
 // be garbage collected. If no values should be GC'd, returns
-// proto.ZeroTimestamp.
+// roachpb.ZeroTimestamp.
 func (gc *GarbageCollector) Filter(keys []roachpb.EncodedKey, values [][]byte) roachpb.Timestamp {
 	if gc.policy.TTLSeconds <= 0 {
 		return roachpb.ZeroTimestamp

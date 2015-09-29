@@ -461,7 +461,7 @@ func TestStoreExecuteNoop(t *testing.T) {
 	}
 	reply := br.Responses[1].GetInner()
 	if _, ok := reply.(*roachpb.NoopResponse); !ok {
-		t.Errorf("expected *proto.NoopResponse, got %T", reply)
+		t.Errorf("expected *roachpb.NoopResponse, got %T", reply)
 	}
 }
 
@@ -719,7 +719,7 @@ func TestStoreRangesByKey(t *testing.T) {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
 	if store.LookupReplica(roachpb.KeyMax, nil) != nil {
-		t.Errorf("expected proto.KeyMax to not have an associated range")
+		t.Errorf("expected roachpb.KeyMax to not have an associated range")
 	}
 }
 

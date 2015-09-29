@@ -447,7 +447,7 @@ func (n *Node) publishStoreStatuses() error {
 	})
 }
 
-// executeCmd interprets the given message as a *proto.BatchRequest and sends it
+// executeCmd interprets the given message as a *roachpb.BatchRequest and sends it
 // via the local sender.
 func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	ba := argsI.(*roachpb.BatchRequest)

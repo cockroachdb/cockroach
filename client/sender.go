@@ -42,7 +42,7 @@ var defaultRetryOptions = retry.Options{
 }
 
 // Sender is the interface used to call into a Cockroach instance.
-// If the returned *proto.Error is not nil, no response should be returned.
+// If the returned *roachpb.Error is not nil, no response should be returned.
 type Sender interface {
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }

@@ -74,7 +74,7 @@ func (tm *testModel) Start() {
 }
 
 // getActualData returns the actual value of all time series keys in the
-// underlying engine. Data is returned as a map of strings to proto.Values.
+// underlying engine. Data is returned as a map of strings to roachpb.Values.
 func (tm *testModel) getActualData() map[string]*roachpb.Value {
 	// Scan over all TS Keys stored in the engine
 	startKey := keyDataPrefix

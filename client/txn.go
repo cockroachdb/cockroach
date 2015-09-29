@@ -52,7 +52,7 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 		panic(roachpb.ErrorUnexpectedlySet(ts.wrapped, br))
 	}
 
-	// TODO(tschottdorf): see about using only the top-level *proto.Error
+	// TODO(tschottdorf): see about using only the top-level *roachpb.Error
 	// information for this restart logic (includes adding the Txn).
 	err := pErr.GoError()
 	// Only successful requests can carry an updated Txn in their response

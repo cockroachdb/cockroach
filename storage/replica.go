@@ -182,7 +182,7 @@ type RangeManager interface {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
-	desc     unsafe.Pointer // Atomic pointer for *proto.RangeDescriptor
+	desc     unsafe.Pointer // Atomic pointer for *roachpb.RangeDescriptor
 	rm       RangeManager   // Makes some store methods available
 	stats    *rangeStats    // Range statistics
 	maxBytes int64          // Max bytes before split.
@@ -212,7 +212,7 @@ type Replica struct {
 		*sync.Cond
 		value roachpb.ReplicaDescriptor
 	}
-	truncatedState unsafe.Pointer // *proto.RaftTruancatedState
+	truncatedState unsafe.Pointer // *roachpb.RaftTruancatedState
 }
 
 // NewReplica initializes the replica using the given metadata.
@@ -1162,7 +1162,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			}
 		} else {
 			// TODO(tschottdorf): make `nil` acceptable. Corresponds to
-			// proto.Response{With->Or}Error.
+			// roachpb.Response{With->Or}Error.
 			br = &roachpb.BatchResponse{}
 			// Otherwise, reset the batch to clear out partial execution and
 			// prepare for the failed response cache entry.

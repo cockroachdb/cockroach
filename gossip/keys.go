@@ -40,7 +40,7 @@ const (
 	KeyClusterID = "cluster-id"
 
 	// KeyStorePrefix is the key prefix for gossiping stores in the network.
-	// The suffix is a store ID and the value is proto.StoreDescriptor.
+	// The suffix is a store ID and the value is roachpb.StoreDescriptor.
 	KeyStorePrefix = "store"
 
 	// KeyNodeIDPrefix is the key prefix for gossiping node id

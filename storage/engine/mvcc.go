@@ -451,7 +451,7 @@ var getBufferPool = sync.Pool{
 //
 // The consistent parameter indicates that intents should cause
 // WriteIntentErrors. If set to false, a possible intent on the key will be
-// ignored for reading the value (but returned via the proto.Intent slice);
+// ignored for reading the value (but returned via the roachpb.Intent slice);
 // the previous value (if any) is read instead.
 func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction) (*roachpb.Value, []roachpb.Intent, error) {
 	if len(key) == 0 {
@@ -500,7 +500,7 @@ type getValueFunc func(engine Engine, start, end roachpb.EncodedKey,
 // intents (regardless of the actual status of their transaction) and read the
 // most recent non-intent value instead. In the event that an inconsistent read
 // does encounter an intent (currently there can only be one), it is returned
-// via the proto.Intent slice, in addition to the result.
+// via the roachpb.Intent slice, in addition to the result.
 func mvccGetInternal(engine Engine, key roachpb.Key, metaKey roachpb.EncodedKey,
 	timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction,
 	getValue getValueFunc, buf *getBuffer) (*roachpb.Value, []roachpb.Intent, error) {
@@ -645,7 +645,7 @@ func mvccGetInternal(engine Engine, key roachpb.Key, metaKey roachpb.EncodedKey,
 		}
 	} else if !value.Deleted {
 		// Sanity check.
-		panic(fmt.Sprintf("encountered MVCC value at key %q with a nil proto.Value but with !Deleted: %+v", key, value))
+		panic(fmt.Sprintf("encountered MVCC value at key %q with a nil roachpb.Value but with !Deleted: %+v", key, value))
 	}
 
 	return value.Value, ignoredIntents, nil
@@ -673,7 +673,7 @@ var putBufferPool = sync.Pool{
 // with different versions according to its timestamp and update the
 // key metadata.
 //
-// If the timestamp is specifed as proto.ZeroTimestamp, the value is
+// If the timestamp is specifed as roachpb.ZeroTimestamp, the value is
 // inlined instead of being written as a timestamp-versioned value. A
 // zero timestamp write to a key precludes a subsequent write using a
 // non-zero timestamp and vice versa. Inlined values require only a
@@ -930,7 +930,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 
 // MVCCMerge implements a merge operation. Merge adds integer values,
 // concatenates undifferentiated byte slice values, and efficiently
-// combines time series observations if the proto.Value tag value
+// combines time series observations if the roachpb.Value tag value
 // indicates the value byte slice is of type _CR_TS (the internal
 // cockroach time series data tag).
 func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, value roachpb.Value) error {

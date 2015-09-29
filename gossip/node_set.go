@@ -22,7 +22,7 @@ import "github.com/cockroachdb/cockroach/roachpb"
 // A nodeSet keeps a set of nodes and provides simple node-matched
 // management functions. nodeSet is not thread safe.
 type nodeSet struct {
-	nodes   map[roachpb.NodeID]struct{} // Set of proto.NodeID
+	nodes   map[roachpb.NodeID]struct{} // Set of roachpb.NodeID
 	maxSize int                         // Maximum size of set
 }
 

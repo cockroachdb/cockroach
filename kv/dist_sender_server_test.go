@@ -157,7 +157,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 		// TODO(tschottdorf): write tests for range-local and range-global stuff;
 		// using KeyMin here currently fails miserably because it plows through
 		// internal data. See #2198.
-		// b.DelRange("aaa", proto.KeyMax)
+		// b.DelRange("aaa", roachpb.KeyMax)
 		return txn.CommitInBatch(b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
@@ -318,7 +318,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 	} else if l := len(rows); l != 2 {
 		t.Errorf("expected 2 rows; got %d", l)
 	}
-	// Case 3: Test proto.KeyMax
+	// Case 3: Test roachpb.KeyMax
 	// This span covers the system DB keys.
 	wanted := 1 + len(sql.GetInitialSystemValues())
 	if rows, err := db.ReverseScan("g", roachpb.KeyMax, 0); err != nil {

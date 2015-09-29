@@ -143,7 +143,7 @@ func (ls *LocalSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roac
 	// related retries in certain situations. If the node is in
 	// "CertainNodes", we need not worry about uncertain reads any
 	// more. Setting MaxTimestamp=Timestamp for the operation
-	// accomplishes that. See proto.Transaction.CertainNodes for details.
+	// accomplishes that. See roachpb.Transaction.CertainNodes for details.
 	if ba.Txn != nil && ba.Txn.CertainNodes.Contains(ba.Replica.NodeID) {
 		// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
 		trace.Event("read has no clock uncertainty")

@@ -33,7 +33,7 @@ type ResponseWithError struct {
 }
 
 // ErrorUnexpectedlySet creates a string to panic with when a response (typically
-// a proto.BatchResponse) unexpectedly has Error set in its response header.
+// a roachpb.BatchResponse) unexpectedly has Error set in its response header.
 func ErrorUnexpectedlySet(culprit, response interface{}) string {
 	return fmt.Sprintf("error is unexpectedly set, culprit is %T:\n%+v", culprit, response)
 }
@@ -133,7 +133,7 @@ func (e *internalError) SetErrorIndex(index int32) {
 	e.Index = &ErrPosition{Index: index}
 }
 
-// GoError returns the non-nil error from the proto.Error union.
+// GoError returns the non-nil error from the roachpb.Error union.
 func (e *Error) GoError() error {
 	if e == nil {
 		return nil
@@ -170,7 +170,7 @@ func (e *Error) GoError() error {
 // SetGoError sets Error using err.
 func (e *Error) SetGoError(err error) {
 	if e.Message != "" {
-		panic("cannot re-use proto.Error")
+		panic("cannot re-use roachpb.Error")
 	}
 	e.Message = err.Error()
 	if r, ok := err.(retry.Retryable); ok {

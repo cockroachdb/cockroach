@@ -304,7 +304,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 //
 // This is a prerequisite for being able to prevent further uncertainty
 // restarts for that node and transaction without sacrificing correctness.
-// See proto.Transaction.CertainNodes for details.
+// See roachpb.Transaction.CertainNodes for details.
 func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)

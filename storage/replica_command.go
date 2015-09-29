@@ -161,7 +161,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args roa
 	// the nodes are causally consistent with the transaction. This allows
 	// the node to be classified as without further uncertain reads for the
 	// remainder of the transaction.
-	// See the comment on proto.Transaction.CertainNodes.
+	// See the comment on roachpb.Transaction.CertainNodes.
 	if tErr, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); ok {
 		// Note that we can use this node's clock (which may be different from
 		// other replicas') because this error attaches the existing timestamp
@@ -574,7 +574,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, args roachpb.RangeLookupReque
 		// Use MVCCScan to get first the first range. There are three cases:
 		// 1. args.Key is not an endpoint of the range and
 		// 2a. The args.Key is the start/end key of the range.
-		// 2b. Even worse, the body of args.Key is proto.KeyMax.
+		// 2b. Even worse, the body of args.Key is roachpb.KeyMax.
 		// In the first case, we need use the MVCCScan() to get the first
 		// range descriptor, because ReverseScan can't do the work. If we
 		// have ranges [a,c) and [c,f) and the reverse scan request's key
@@ -1110,7 +1110,7 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 		splitKey = foundSplitKey
 	}
 	// First verify this condition so that it will not return
-	// proto.NewRangeKeyMismatchError if splitKey equals to desc.EndKey,
+	// roachpb.NewRangeKeyMismatchError if splitKey equals to desc.EndKey,
 	// otherwise it will cause infinite retry loop.
 	if splitKey.Equal(desc.StartKey) || splitKey.Equal(desc.EndKey) {
 		return reply, util.Errorf("range is already split at key %s", splitKey)

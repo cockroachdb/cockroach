@@ -117,7 +117,7 @@ func verifyBinarySearchTree(t *testing.T, nodes map[string]roachpb.RangeTreeNode
 	if !node.Key.Less(keyMax) {
 		t.Errorf("%s: Failed Property BST - The key %s is not less than %s.", testName, node.Key, keyMax)
 	}
-	// We need the extra check since proto.KeyMin is actually a range start key.
+	// We need the extra check since roachpb.KeyMin is actually a range start key.
 	if !keyMin.Less(node.Key) && !node.Key.Equal(roachpb.KeyMin) {
 		t.Errorf("%s: Failed Property BST - The key %s is not greater than %s.", testName, node.Key, keyMin)
 	}

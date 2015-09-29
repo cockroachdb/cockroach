@@ -40,7 +40,7 @@ func marshalKey(k interface{}) (roachpb.Key, error) {
 	return nil, fmt.Errorf("unable to marshal key: %T", k)
 }
 
-// marshalValue returns a proto.Value initialized from the source
+// marshalValue returns a roachpb.Value initialized from the source
 // interface{}, returning an error if the types are not compatible.
 func marshalValue(v interface{}) (roachpb.Value, error) {
 	var r roachpb.Value

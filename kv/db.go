@@ -60,7 +60,7 @@ func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
 	return rpcServer.Register(method, s.executeCmd, &roachpb.BatchRequest{})
 }
 
-// executeCmd interprets the given message as a *proto.BatchRequest and sends it
+// executeCmd interprets the given message as a *roachpb.BatchRequest and sends it
 // via the local sender.
 func (s *DBServer) executeCmd(argsI proto.Message) (proto.Message, error) {
 	ba := argsI.(*roachpb.BatchRequest)

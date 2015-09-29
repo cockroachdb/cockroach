@@ -98,7 +98,7 @@ type Engine interface {
 	// integers, byte slices, and time series observations. Merged integers are
 	// summed, acting as a high-performance accumulator.  Byte slices are simply
 	// concatenated in the order they are merged. Time series observations
-	// (stored as byte slices with a special tag on the proto.Value) are
+	// (stored as byte slices with a special tag on the roachpb.Value) are
 	// combined with specialized logic beyond that of simple byte slices.
 	//
 	// The logic for merges is written in db.cc in order to be compatible with RocksDB.

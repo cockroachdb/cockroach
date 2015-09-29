@@ -46,7 +46,7 @@ func (a byTimeAndName) Less(i, j int) bool {
 
 var _ sort.Interface = byTimeAndName{}
 
-// byStoreID is a slice of proto.StoreID.
+// byStoreID is a slice of roachpb.StoreID.
 type byStoreID []roachpb.StoreID
 
 // implement sort.Interface for byStoreID

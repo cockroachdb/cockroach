@@ -246,7 +246,7 @@ func (s *SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.Key) []roachpb.
 	}
 
 	// Find the largest object ID.
-	// We can't keep splitting until we reach endKey as it could be proto.KeyMax.
+	// We can't keep splitting until we reach endKey as it could be roachpb.KeyMax.
 	endID, err := s.GetLargestObjectID()
 	if err != nil {
 		log.Errorf("unable to determine largest object ID from system config: %s", err)

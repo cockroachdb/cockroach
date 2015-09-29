@@ -240,7 +240,7 @@ func (rh *ResponseHeader) Verify(req Request) error {
 	return nil
 }
 
-// GoError returns the non-nil error from the proto.Error union.
+// GoError returns the non-nil error from the roachpb.Error union.
 func (rh *ResponseHeader) GoError() error {
 	return rh.Error.GoError()
 }

@@ -26,6 +26,6 @@ const (
 	NodeID   Field = iota // the ID of the node
 	StoreID               // the ID of the store
 	RangeID               // the ID of the range
-	Key                   // a proto.Key related to an event.
+	Key                   // a roachpb.Key related to an event.
 	maxField              // internal field bounding the range of allocated fields
 )
