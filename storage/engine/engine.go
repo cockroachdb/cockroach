@@ -23,7 +23,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // Iterator is an interface for iterating over key/value pairs in an
@@ -56,7 +56,7 @@ type Iterator interface {
 	Value() []byte
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
-	ValueProto(msg gogoproto.Message) error
+	ValueProto(msg proto.Message) error
 	// Error returns the error, if any, which the iterator encountered.
 	Error() error
 }
@@ -78,7 +78,7 @@ type Engine interface {
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the
 	// key and the value.
-	GetProto(key roachpb.EncodedKey, msg gogoproto.Message) (ok bool, keyBytes, valBytes int64, err error)
+	GetProto(key roachpb.EncodedKey, msg proto.Message) (ok bool, keyBytes, valBytes int64, err error)
 	// Iterate scans from start to end keys, visiting at most max
 	// key/value pairs. On each key value pair, the function f is
 	// invoked. If f returns an error or if the scan itself encounters
@@ -145,15 +145,15 @@ type Engine interface {
 
 var bufferPool = sync.Pool{
 	New: func() interface{} {
-		return gogoproto.NewBuffer(nil)
+		return proto.NewBuffer(nil)
 	},
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.
-func PutProto(engine Engine, key roachpb.EncodedKey, msg gogoproto.Message) (keyBytes, valBytes int64, err error) {
-	buf := bufferPool.Get().(*gogoproto.Buffer)
+func PutProto(engine Engine, key roachpb.EncodedKey, msg proto.Message) (keyBytes, valBytes int64, err error) {
+	buf := bufferPool.Get().(*proto.Buffer)
 	buf.Reset()
 
 	if err = buf.Marshal(msg); err != nil {

@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestHTTPSession is a helper for tests which want to exercise repeated simple
@@ -94,7 +94,7 @@ func (ths *TestHTTPSession) Post(relative string, body []byte) []byte {
 // PostProto handles the common case where both the data posted and the expected
 // response are encoded protobuffers. This method handles the marshalling of
 // those buffers.
-func (ths *TestHTTPSession) PostProto(relative string, msg gogoproto.Message, out interface{}) {
+func (ths *TestHTTPSession) PostProto(relative string, msg proto.Message, out interface{}) {
 	requestBytes, err := json.Marshal(msg)
 	if err != nil {
 		ths.t.Fatal(err)

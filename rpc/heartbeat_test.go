@@ -20,12 +20,11 @@ package rpc
 import (
 	"testing"
 
-	gogoproto "github.com/gogo/protobuf/proto"
-
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/gogo/protobuf/proto"
 )
 
 func TestRemoteOffsetString(t *testing.T) {
@@ -153,7 +152,7 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	o := nodeContext.RemoteClocks.offsets[remoteAddr]
 	nodeContext.RemoteClocks.mu.Unlock()
 	expServerOffset := RemoteOffset{Offset: -10, Uncertainty: 5, MeasuredAt: 20}
-	if gogoproto.Equal(&o, &expServerOffset) {
+	if proto.Equal(&o, &expServerOffset) {
 		t.Errorf("expected updated offset %v, instead %v", expServerOffset, o)
 	}
 	s.Close()

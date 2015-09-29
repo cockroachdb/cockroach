@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // testModel is a model-based testing structure used to verify that time
@@ -114,7 +114,7 @@ func (tm *testModel) assertModelCorrect() {
 			if vModel, ok := tm.modelData[k]; !ok {
 				fmt.Fprintf(&buf, "\tKey %s/%s@%d, r:%d from actual data was not found in model", n, s, ts, r)
 			} else {
-				if !gogoproto.Equal(vActual, vModel) {
+				if !proto.Equal(vActual, vModel) {
 					fmt.Fprintf(&buf, "\tKey %s/%s@%d, r:%d differs between model and actual:", n, s, ts, r)
 					if its, err := roachpb.InternalTimeSeriesDataFromValue(vActual); err != nil {
 						fmt.Fprintf(&buf, "\tActual value is not a valid time series: %v", vActual)

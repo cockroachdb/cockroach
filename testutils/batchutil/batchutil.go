@@ -20,9 +20,8 @@ package batchutil
 import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
-
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // SendWrapped is a convenience function which wraps the request in a batch,
@@ -40,7 +39,7 @@ func SendWrapped(sender client.Sender, args roachpb.Request) (roachpb.Response, 
 // MaybeWrap wraps the given argument in a batch, unless it is already one.
 func maybeWrap(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
 	ba := &roachpb.BatchRequest{}
-	ba.RequestHeader = *(gogoproto.Clone(args.Header()).(*roachpb.RequestHeader))
+	ba.RequestHeader = *(proto.Clone(args.Header()).(*roachpb.RequestHeader))
 	ba.Add(args)
 	return ba, func(br *roachpb.BatchResponse) roachpb.Response {
 		var unwrappedReply roachpb.Response

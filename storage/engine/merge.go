@@ -19,7 +19,7 @@ package engine
 
 import (
 	"github.com/cockroachdb/cockroach/roachpb"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // MergeInternalTimeSeriesData exports the engine's C++ merge logic for
@@ -35,7 +35,7 @@ func MergeInternalTimeSeriesData(sources ...*roachpb.InternalTimeSeriesData) (
 		if err != nil {
 			return nil, err
 		}
-		bytes, err := gogoproto.Marshal(&MVCCMetadata{
+		bytes, err := proto.Marshal(&MVCCMetadata{
 			Value: val,
 		})
 		if err != nil {
@@ -58,7 +58,7 @@ func MergeInternalTimeSeriesData(sources ...*roachpb.InternalTimeSeriesData) (
 
 	// Unmarshal merged bytes and extract the time series value within.
 	var mvccValue MVCCMetadata
-	if err := gogoproto.Unmarshal(mergedBytes, &mvccValue); err != nil {
+	if err := proto.Unmarshal(mergedBytes, &mvccValue); err != nil {
 		return nil, err
 	}
 	mergedTS, err := roachpb.InternalTimeSeriesDataFromValue(mvccValue.Value)

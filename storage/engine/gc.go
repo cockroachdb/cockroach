@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // GarbageCollector GCs MVCC key/values using a zone-specific GC
@@ -69,7 +69,7 @@ func (gc *GarbageCollector) Filter(keys []roachpb.EncodedKey, values [][]byte) r
 			return roachpb.ZeroTimestamp
 		}
 		mvccVal := MVCCValue{}
-		if err := gogoproto.Unmarshal(values[i], &mvccVal); err != nil {
+		if err := proto.Unmarshal(values[i], &mvccVal); err != nil {
 			log.Errorf("unable to unmarshal MVCC value %q: %v", key, err)
 			return roachpb.ZeroTimestamp
 		}

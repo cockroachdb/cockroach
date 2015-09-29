@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
@@ -205,12 +205,12 @@ func (r *RocksDB) getInternal(key roachpb.EncodedKey, snapshotHandle *C.DBSnapsh
 }
 
 // GetProto fetches the value at the specified key and unmarshals it.
-func (r *RocksDB) GetProto(key roachpb.EncodedKey, msg gogoproto.Message) (
+func (r *RocksDB) GetProto(key roachpb.EncodedKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
 	return r.getProtoInternal(key, msg, nil)
 }
 
-func (r *RocksDB) getProtoInternal(key roachpb.EncodedKey, msg gogoproto.Message,
+func (r *RocksDB) getProtoInternal(key roachpb.EncodedKey, msg proto.Message,
 	snapshotHandle *C.DBSnapshot) (ok bool, keyBytes, valBytes int64, err error) {
 	if len(key) == 0 {
 		err = emptyKeyError()
@@ -230,7 +230,7 @@ func (r *RocksDB) getProtoInternal(key roachpb.EncodedKey, msg gogoproto.Message
 		// cannot live past the lifetime of this method, but we're only
 		// using it to unmarshal the roachpb.
 		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
-		err = gogoproto.Unmarshal(data, msg)
+		err = proto.Unmarshal(data, msg)
 	}
 	C.free(unsafe.Pointer(result.data))
 	keyBytes = int64(len(key))
@@ -473,7 +473,7 @@ func (r *rocksDBSnapshot) Get(key roachpb.EncodedKey) ([]byte, error) {
 	return r.parent.getInternal(key, r.handle)
 }
 
-func (r *rocksDBSnapshot) GetProto(key roachpb.EncodedKey, msg gogoproto.Message) (
+func (r *rocksDBSnapshot) GetProto(key roachpb.EncodedKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
 	return r.parent.getProtoInternal(key, msg, r.handle)
 }
@@ -597,7 +597,7 @@ func (r *rocksDBBatch) Get(key roachpb.EncodedKey) ([]byte, error) {
 	return cStringToGoBytes(result), nil
 }
 
-func (r *rocksDBBatch) GetProto(key roachpb.EncodedKey, msg gogoproto.Message) (
+func (r *rocksDBBatch) GetProto(key roachpb.EncodedKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
 	if len(key) == 0 {
 		err = emptyKeyError()
@@ -616,7 +616,7 @@ func (r *rocksDBBatch) GetProto(key roachpb.EncodedKey, msg gogoproto.Message) (
 		// cannot live past the lifetime of this method, but we're only
 		// using it to unmarshal the roachpb.
 		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
-		err = gogoproto.Unmarshal(data, msg)
+		err = proto.Unmarshal(data, msg)
 	}
 	C.free(unsafe.Pointer(result.data))
 	keyBytes = int64(len(key))
@@ -786,7 +786,7 @@ func (r *rocksDBIterator) Value() []byte {
 	return cSliceToGoBytes(data)
 }
 
-func (r *rocksDBIterator) ValueProto(msg gogoproto.Message) error {
+func (r *rocksDBIterator) ValueProto(msg proto.Message) error {
 	result := C.DBIterValue(r.iter)
 	if result.len <= 0 {
 		return nil
@@ -795,7 +795,7 @@ func (r *rocksDBIterator) ValueProto(msg gogoproto.Message) error {
 	// cannot live past the lifetime of this method, but we're only
 	// using it to unmarshal the roachpb.
 	data := cSliceToUnsafeGoBytes(result)
-	return gogoproto.Unmarshal(data, msg)
+	return proto.Unmarshal(data, msg)
 }
 
 func (r *rocksDBIterator) Error() error {

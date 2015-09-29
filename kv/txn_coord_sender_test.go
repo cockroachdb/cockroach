@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // teardownHeartbeats goes through the coordinator's active transactions and
@@ -161,7 +161,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	reply, err := batchutil.SendWrapped(s.Sender, &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:          key,
-			UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
+			UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
 			Txn: &roachpb.Transaction{
 				Name:      "test txn",
 				Isolation: roachpb.SNAPSHOT,
@@ -197,7 +197,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	reply, err := batchutil.SendWrapped(s.Sender, &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:          roachpb.Key("key"),
-			UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
+			UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
 			Txn: &roachpb.Transaction{
 				Name:      "test txn",
 				Isolation: roachpb.SNAPSHOT,
@@ -511,7 +511,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	var testPutReq = &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:          roachpb.Key("test-key"),
-			UserPriority: gogoproto.Int32(-1),
+			UserPriority: proto.Int32(-1),
 			Txn: &roachpb.Transaction{
 				Name: "test txn",
 			},
@@ -527,7 +527,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			return nil, roachpb.NewError(test.err)
 		}), clock, false, nil, stopper)
 		var reply *roachpb.PutResponse
-		if r, err := batchutil.SendWrapped(ts, gogoproto.Clone(testPutReq).(roachpb.Request)); err != nil {
+		if r, err := batchutil.SendWrapped(ts, proto.Clone(testPutReq).(roachpb.Request)); err != nil {
 			t.Fatal(err)
 		} else {
 			reply = r.(*roachpb.PutResponse)

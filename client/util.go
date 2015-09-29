@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TODO(pmattis): The methods in this file needs tests.
@@ -74,7 +74,7 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 		r.SetTime(t)
 		return r, nil
 
-	case gogoproto.Message:
+	case proto.Message:
 		err := r.SetProto(t)
 		return r, err
 	}

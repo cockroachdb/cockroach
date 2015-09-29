@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var (
@@ -41,7 +41,7 @@ var (
 )
 
 func serializedMVCCValue(deleted bool, t *testing.T) []byte {
-	data, err := gogoproto.Marshal(&MVCCValue{Deleted: deleted})
+	data, err := proto.Marshal(&MVCCValue{Deleted: deleted})
 	if err != nil {
 		t.Fatalf("unexpected marshal error: %v", err)
 	}

@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // KeyValue represents a single key/value pair and corresponding
@@ -123,12 +123,12 @@ func (kv *KeyValue) ValueInt() int64 {
 }
 
 // ValueProto parses the byte slice value as a proto message.
-func (kv *KeyValue) ValueProto(msg gogoproto.Message) error {
+func (kv *KeyValue) ValueProto(msg proto.Message) error {
 	if kv.Value == nil || kv.Value.Bytes == nil {
 		msg.Reset()
 		return nil
 	}
-	return gogoproto.Unmarshal(kv.Value.Bytes, msg)
+	return proto.Unmarshal(kv.Value.Bytes, msg)
 }
 
 // Result holds the result for a single DB or Txn operation (e.g. Get, Put,
@@ -283,7 +283,7 @@ func (db *DB) Get(key interface{}) (KeyValue, error) {
 // message.
 //
 // key can be either a byte slice or a string.
-func (db *DB) GetProto(key interface{}, msg gogoproto.Message) error {
+func (db *DB) GetProto(key interface{}, msg proto.Message) error {
 	r, err := db.Get(key)
 	if err != nil {
 		return err
@@ -472,7 +472,7 @@ func (db *DB) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Er
 	ba.Add(reqs...)
 
 	if ba.UserPriority == nil && db.userPriority != 0 {
-		ba.UserPriority = gogoproto.Int32(db.userPriority)
+		ba.UserPriority = proto.Int32(db.userPriority)
 	}
 	resetClientCmdID(&ba)
 	br, pErr := db.sender.Send(context.TODO(), ba)

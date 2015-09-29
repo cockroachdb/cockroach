@@ -41,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -449,7 +449,7 @@ func (n *Node) publishStoreStatuses() error {
 
 // executeCmd interprets the given message as a *proto.BatchRequest and sends it
 // via the local sender.
-func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
+func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	ba := argsI.(*roachpb.BatchRequest)
 	// TODO(tschottdorf) get a hold of the client's ID, add it to the
 	// context before dispatching, and create an ID for tracing the request.

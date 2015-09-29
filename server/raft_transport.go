@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 
 	gorpc "net/rpc"
 )
@@ -76,7 +76,7 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 }
 
 // RaftMessage proxies the incoming request to the listening server interface.
-func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogoproto.Message, error)) {
+func (t *rpcTransport) RaftMessage(args proto.Message, callback func(proto.Message, error)) {
 	req := args.(*multiraft.RaftMessageRequest)
 
 	t.mu.Lock()

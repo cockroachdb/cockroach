@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var configID = sql.ID(1)
@@ -67,7 +67,7 @@ func waitForConfigChange(t *testing.T, s *server.TestServer) (cfg *config.System
 		if !ok {
 			return false
 		}
-		if err2 := gogoproto.Unmarshal(raw, &foundDesc); err2 != nil {
+		if err2 := proto.Unmarshal(raw, &foundDesc); err2 != nil {
 			t.Fatalf("could not unmarshal raw value: %s", err2)
 			return false
 		}
@@ -194,7 +194,7 @@ func TestDescriptorCache(t *testing.T) {
 		ID:         configID,
 		Privileges: &sql.PrivilegeDescriptor{},
 	}
-	raw, err := gogoproto.Marshal(&configDesc)
+	raw, err := proto.Marshal(&configDesc)
 	if err != nil {
 		t.Fatal(err)
 	}

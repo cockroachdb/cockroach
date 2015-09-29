@@ -47,7 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/coreos/etcd/raft"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 func testRangeDescriptor() *roachpb.RangeDescriptor {
@@ -740,7 +740,7 @@ func TestRangeGossipFirstRange(t *testing.T) {
 		}
 		if key == gossip.KeyFirstRangeDescriptor {
 			var rangeDesc roachpb.RangeDescriptor
-			if err := gogoproto.Unmarshal(bytes, &rangeDesc); err != nil {
+			if err := proto.Unmarshal(bytes, &rangeDesc); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1007,7 +1007,7 @@ func getSerializedMVCCValue(value *roachpb.Value) []byte {
 	} else {
 		mvccVal.Deleted = true
 	}
-	data, err := gogoproto.Marshal(&engine.MVCCValue{Value: value})
+	data, err := proto.Marshal(&engine.MVCCValue{Value: value})
 	if err != nil {
 		panic("unexpected marshal error")
 	}
@@ -1145,7 +1145,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		cmd1Done := make(chan struct{})
 		tc.stopper.RunAsyncTask(func() {
 			args := readOrWriteArgs(key1, test.cmd1Read, tc.rng.Desc().RangeID, tc.store.StoreID())
-			args.Header().UserPriority = gogoproto.Int32(42)
+			args.Header().UserPriority = proto.Int32(42)
 
 			_, err := sendArg(tc.rng, tc.rng.context(), args)
 
@@ -1808,7 +1808,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	for _, test := range testCases {
 		// Establish existing txn state by writing directly to range engine.
 		var existTxn roachpb.Transaction
-		gogoproto.Merge(&existTxn, txn)
+		proto.Merge(&existTxn, txn)
 		existTxn.Key = test.key
 		existTxn.Status = test.existStatus
 		existTxn.Epoch = test.existEpoch
@@ -2044,7 +2044,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 			t.Fatal(err)
 		}
 		reply := resp.(*roachpb.PushTxnResponse)
-		expTxn := gogoproto.Clone(pushee).(*roachpb.Transaction)
+		expTxn := proto.Clone(pushee).(*roachpb.Transaction)
 		expTxn.Epoch = test.expEpoch
 		expTxn.Timestamp = test.expTS
 		expTxn.Status = roachpb.ABORTED
@@ -2713,7 +2713,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	newDesc.EndKey = key
 
 	// Write the new descriptor as an intent.
-	data, err := gogoproto.Marshal(&newDesc)
+	data, err := proto.Marshal(&newDesc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2760,7 +2760,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	const count = 100
 
 	for i := 0; i < count && !(origSeen && newSeen); i++ {
-		clonedRLArgs := gogoproto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
 		clonedRLArgs.Timestamp = roachpb.ZeroTimestamp
 
 		reply, err = sendArg(tc.rng, tc.rng.context(), clonedRLArgs)
@@ -2823,7 +2823,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	for i, r := range testRanges {
 		if i != withIntentRangeIndex {
 			// Write the new descriptor as an intent.
-			data, err := gogoproto.Marshal(&r)
+			data, err := proto.Marshal(&r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2866,7 +2866,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Test ReverseScan without intents.
 	for _, c := range testCases {
-		clonedRLArgs := gogoproto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
 		clonedRLArgs.Timestamp = roachpb.ZeroTimestamp
 		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.Key(c.key))
 		reply, err := sendArg(tc.rng, tc.rng.context(), clonedRLArgs)
@@ -2882,7 +2882,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Write the new descriptor as an intent.
 	intentRange := testRanges[withIntentRangeIndex]
-	data, err := gogoproto.Marshal(&intentRange)
+	data, err := proto.Marshal(&intentRange)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2895,7 +2895,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Test ReverseScan with intents.
 	for _, c := range testCases {
-		clonedRLArgs := gogoproto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
 		clonedRLArgs.Timestamp = roachpb.ZeroTimestamp
 		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.Key(c.key))
 		reply, err := sendArg(tc.rng, tc.rng.context(), clonedRLArgs)

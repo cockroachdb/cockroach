@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 	"golang.org/x/net/context"
 
@@ -43,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -498,7 +498,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				return false, nil
 			}
 			var desc roachpb.RangeDescriptor
-			if err := gogoproto.Unmarshal(kv.Value.Bytes, &desc); err != nil {
+			if err := proto.Unmarshal(kv.Value.Bytes, &desc); err != nil {
 				return false, err
 			}
 			rng, err := NewReplica(&desc, s)
@@ -1412,7 +1412,7 @@ func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd roachpb.RaftCommand) 
 		return ch
 	}
 
-	data, err := gogoproto.Marshal(&cmd)
+	data, err := proto.Marshal(&cmd)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -1459,7 +1459,7 @@ func (s *Store) processRaft() {
 						groupID = e.GroupID
 						commandID = e.CommandID
 						index = e.Index
-						err := gogoproto.Unmarshal(e.Command, &cmd)
+						err := proto.Unmarshal(e.Command, &cmd)
 						if err != nil {
 							log.Fatal(err)
 						}
@@ -1472,7 +1472,7 @@ func (s *Store) processRaft() {
 						commandID = e.CommandID
 						index = e.Index
 						callback = e.Callback
-						err := gogoproto.Unmarshal(e.Payload, &cmd)
+						err := proto.Unmarshal(e.Payload, &cmd)
 						if err != nil {
 							log.Fatal(err)
 						}
@@ -1589,7 +1589,7 @@ func raftEntryFormatter(data []byte) string {
 		return "[empty]"
 	}
 	var cmd roachpb.RaftCommand
-	if err := gogoproto.Unmarshal(data, &cmd); err != nil {
+	if err := proto.Unmarshal(data, &cmd); err != nil {
 		return fmt.Sprintf("[error parsing entry: %s]", err)
 	}
 	s := cmd.String()

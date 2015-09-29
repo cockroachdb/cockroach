@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/batchutil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var testRangeDescriptor = roachpb.RangeDescriptor{
@@ -266,12 +266,12 @@ func TestSendRPCOrder(t *testing.T) {
 	var verifyCall func(rpc.Options, []net.Addr) error
 
 	var testFn rpcSendFn = func(opts rpc.Options, method string,
-		addrs []net.Addr, _ func(addr net.Addr) gogoproto.Message,
-		getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
+		addrs []net.Addr, _ func(addr net.Addr) proto.Message,
+		getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		if err := verifyCall(opts, addrs); err != nil {
 			return nil, err
 		}
-		return []gogoproto.Message{getReply()}, nil
+		return []proto.Message{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -369,15 +369,15 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 	first := true
 
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		if first {
 			reply := getReply()
 			reply.(roachpb.Response).Header().SetGoError(
 				&roachpb.NotLeaderError{Leader: &leader, Replica: &roachpb.ReplicaDescriptor{}})
 			first = false
-			return []gogoproto.Message{reply}, nil
+			return []proto.Message{reply}, nil
 		}
-		return []gogoproto.Message{getReply()}, nil
+		return []proto.Message{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -407,8 +407,8 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-		return []gogoproto.Message{getReply()}, nil
+	var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+		return []proto.Message{getReply()}, nil
 	}
 
 	errors := []error{
@@ -465,9 +465,9 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 		first := true
 
-		var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
+		var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 			if !first {
-				return []gogoproto.Message{getReply()}, nil
+				return []proto.Message{getReply()}, nil
 			}
 			first = false
 			if tc.rpcError {
@@ -481,7 +481,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			}
 			reply := getReply()
 			reply.(roachpb.Response).Header().SetGoError(err)
-			return []gogoproto.Message{reply}, nil
+			return []proto.Message{reply}, nil
 		}
 
 		ctx := &DistSenderContext{
@@ -522,7 +522,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	newRangeDescriptor.StartKey = badStartKey
 	descStale := true
 
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		ba := getArgs(testAddress).(*roachpb.BatchRequest)
 		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
 			if !descStale && bytes.HasPrefix(ba.Key, keys.Meta2Prefix) {
@@ -543,7 +543,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 					descStale = false
 				}
 			}
-			return []gogoproto.Message{br}, nil
+			return []proto.Message{br}, nil
 		}
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
@@ -551,7 +551,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: ba.Key,
 				RequestEndKey: ba.EndKey}
 		}
-		return []gogoproto.Message{ba.CreateReply().(*roachpb.BatchResponse)}, nil
+		return []proto.Message{ba.CreateReply().(*roachpb.BatchResponse)}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -632,7 +632,7 @@ func TestSendRPCRetry(t *testing.T) {
 		})
 	}
 	// Define our rpcSend stub which returns success on the second address.
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		if method == "Node.Batch" {
 			// reply from first address failed
 			_ = getReply()
@@ -641,7 +641,7 @@ func TestSendRPCRetry(t *testing.T) {
 			reply := &roachpb.ScanResponse{}
 			batchReply.Add(reply)
 			reply.Rows = append([]roachpb.KeyValue{}, roachpb.KeyValue{Key: roachpb.Key("b"), Value: roachpb.Value{}})
-			return []gogoproto.Message{batchReply}, nil
+			return []proto.Message{batchReply}, nil
 		}
 		return nil, util.Errorf("unexpected method %v", method)
 	}
@@ -722,7 +722,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		{Key: roachpb.Key("a"), Value: roachpb.Value{Bytes: []byte("1")}},
 		{Key: roachpb.Key("c"), Value: roachpb.Value{Bytes: []byte("2")}},
 	}
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		if method != "Node.Batch" {
 			t.Fatalf("unexpected method:%s", method)
 		}
@@ -737,7 +737,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 			}
 		}
 		reply.Rows = results
-		return []gogoproto.Message{batchReply}, nil
+		return []proto.Message{batchReply}, nil
 	}
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
@@ -771,8 +771,8 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-		return []gogoproto.Message{getReply()}, nil
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+		return []proto.Message{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{

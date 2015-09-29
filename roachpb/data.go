@@ -32,7 +32,7 @@ import (
 	"github.com/biogo/store/interval"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -271,7 +271,7 @@ func (t *Timestamp) GoTime() time.Time {
 // checksum includes it directly.
 func (v *Value) InitChecksum(key []byte) {
 	if v.Checksum == nil {
-		v.Checksum = gogoproto.Uint32(v.computeChecksum(key))
+		v.Checksum = proto.Uint32(v.computeChecksum(key))
 	}
 }
 
@@ -310,8 +310,8 @@ func (v *Value) SetInt(i int64) {
 }
 
 // SetProto encodes the specified proto message into the bytes field of the receiver.
-func (v *Value) SetProto(msg gogoproto.Message) error {
-	data, err := gogoproto.Marshal(msg)
+func (v *Value) SetProto(msg proto.Message) error {
+	data, err := proto.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -443,7 +443,7 @@ func (t *Transaction) Clone() *Transaction {
 	if t == nil {
 		return nil
 	}
-	return gogoproto.Clone(t).(*Transaction)
+	return proto.Clone(t).(*Transaction)
 }
 
 // Equal tests two transactions for equality. They are equal if they are
@@ -543,7 +543,7 @@ func (t *Transaction) Update(o *Transaction) {
 		return
 	}
 	if len(t.ID) == 0 {
-		*t = *gogoproto.Clone(o).(*Transaction)
+		*t = *proto.Clone(o).(*Transaction)
 		return
 	}
 	if o.Status != PENDING {
@@ -607,7 +607,7 @@ func (t *Transaction) Short() string {
 func NewGCMetadata(nowNanos int64) *GCMetadata {
 	return &GCMetadata{
 		LastScanNanos:     nowNanos,
-		OldestIntentNanos: gogoproto.Int64(nowNanos),
+		OldestIntentNanos: proto.Int64(nowNanos),
 	}
 }
 

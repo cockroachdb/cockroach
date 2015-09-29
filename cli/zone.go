@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v1"
 
 	"github.com/spf13/cobra"
@@ -35,7 +35,7 @@ import (
 // its yaml representation.
 func zoneProtoToYAMLString(val string) (string, error) {
 	var zone config.ZoneConfig
-	if err := gogoproto.Unmarshal([]byte(val), &zone); err != nil {
+	if err := proto.Unmarshal([]byte(val), &zone); err != nil {
 		return "", err
 	}
 	ret, err := yaml.Marshal(zone)
@@ -223,7 +223,7 @@ func runSetZone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	buf, err := gogoproto.Marshal(&pbZoneConfig)
+	buf, err := proto.Marshal(&pbZoneConfig)
 	if err != nil {
 		log.Errorf("unable to parse zone config file %q: %s", args[1], err)
 		return

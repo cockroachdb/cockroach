@@ -72,7 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -222,7 +222,7 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDe
 		}
 		nodeDescriptor := &roachpb.NodeDescriptor{}
 
-		if err := gogoproto.Unmarshal(i.Value.Bytes, nodeDescriptor); err != nil {
+		if err := proto.Unmarshal(i.Value.Bytes, nodeDescriptor); err != nil {
 			return nil, err
 		}
 
@@ -258,8 +258,8 @@ func (g *Gossip) AddInfo(key string, val []byte, ttl time.Duration) error {
 
 // AddInfoProto adds or updates an info object. Returns an error if info
 // couldn't be added.
-func (g *Gossip) AddInfoProto(key string, msg gogoproto.Message, ttl time.Duration) error {
-	bytes, err := gogoproto.Marshal(msg)
+func (g *Gossip) AddInfoProto(key string, msg proto.Message, ttl time.Duration) error {
+	bytes, err := proto.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -284,12 +284,12 @@ func (g *Gossip) GetInfo(key string) ([]byte, error) {
 
 // GetInfoProto returns an info value by key or an error if specified
 // key does not exist or has expired.
-func (g *Gossip) GetInfoProto(key string, msg gogoproto.Message) error {
+func (g *Gossip) GetInfoProto(key string, msg proto.Message) error {
 	bytes, err := g.GetInfo(key)
 	if err != nil {
 		return err
 	}
-	return gogoproto.Unmarshal(bytes, msg)
+	return proto.Unmarshal(bytes, msg)
 }
 
 // GetInfosAsJSON returns the contents of the infostore, marshalled to
@@ -354,7 +354,7 @@ func (g *Gossip) updateSystemConfig(key string, content []byte) {
 		return
 	}
 	cfg := &config.SystemConfig{}
-	if err := gogoproto.Unmarshal(content, cfg); err != nil {
+	if err := proto.Unmarshal(content, cfg); err != nil {
 		log.Errorf("could not unmarshal system config on callback: %s", err)
 		return
 	}

@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 func TestDropDatabase(t *testing.T) {
@@ -71,7 +71,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	// Add a zone config for both the table and database.
-	buf, err := gogoproto.Marshal(config.DefaultZoneConfig)
+	buf, err := proto.Marshal(config.DefaultZoneConfig)
 	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	// Add a zone config for the table.
-	buf, err := gogoproto.Marshal(config.DefaultZoneConfig)
+	buf, err := proto.Marshal(config.DefaultZoneConfig)
 	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, desc.ID, buf); err != nil {
 		t.Fatal(err)
 	}

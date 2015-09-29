@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // makeTS creates a new hybrid logical timestamp.
@@ -359,7 +359,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		if key, _, isValue, err := engine.MVCCDecodeKey(kv.Key); err != nil {
 			return false, err
 		} else if !isValue {
-			if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
+			if err := proto.Unmarshal(kv.Value, meta); err != nil {
 				return false, err
 			}
 			if meta.Txn != nil {

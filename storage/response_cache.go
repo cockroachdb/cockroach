@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 type cmdIDKey string
@@ -117,7 +117,7 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRangeID roachpb.RangeID) 
 		encKey := engine.MVCCEncodeKey(key)
 		// Decode the value, update the checksum and re-encode.
 		meta := &engine.MVCCMetadata{}
-		if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
+		if err := proto.Unmarshal(kv.Value, meta); err != nil {
 			return false, util.Errorf("could not decode response cache value %s [% x]: %s",
 				roachpb.Key(kv.Key), kv.Value, err)
 		}
@@ -150,7 +150,7 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID
 		encKey := engine.MVCCEncodeKey(key)
 		// Decode the value, update the checksum and re-encode.
 		meta := &engine.MVCCMetadata{}
-		if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
+		if err := proto.Unmarshal(kv.Value, meta); err != nil {
 			return false, util.Errorf("could not decode response cache value %s [% x]: %s",
 				roachpb.Key(kv.Key), kv.Value, err)
 		}

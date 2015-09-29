@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []roachpb.RawKeyValue) {
@@ -168,7 +168,7 @@ func TestEngineBatch(t *testing.T) {
 				t.Fatal(err)
 			}
 			m := &MVCCMetadata{}
-			if err := gogoproto.Unmarshal(b, m); err != nil {
+			if err := proto.Unmarshal(b, m); err != nil {
 				t.Fatal(err)
 			}
 			if m.Value == nil {
@@ -364,10 +364,10 @@ func TestEngineMerge(t *testing.T) {
 			}
 			result, _ := engine.Get(tc.testKey)
 			var resultV, expectedV MVCCMetadata
-			if err := gogoproto.Unmarshal(result, &resultV); err != nil {
+			if err := proto.Unmarshal(result, &resultV); err != nil {
 				t.Fatal(err)
 			}
-			if err := gogoproto.Unmarshal(tc.expected, &expectedV); err != nil {
+			if err := proto.Unmarshal(tc.expected, &expectedV); err != nil {
 				t.Fatal(err)
 			}
 			if !reflect.DeepEqual(resultV, expectedV) {

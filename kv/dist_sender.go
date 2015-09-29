@@ -36,8 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracer"
-
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // Default constants for timeouts.
@@ -122,8 +121,8 @@ var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(rpc.Options, string, []net.Addr,
-	func(addr net.Addr) gogoproto.Message, func() gogoproto.Message,
-	*rpc.Context) ([]gogoproto.Message, error)
+	func(addr net.Addr) proto.Message, func() proto.Message,
+	*rpc.Context) ([]proto.Message, error)
 
 // DistSenderContext holds auxiliary objects that can be passed to
 // NewDistSender.
@@ -341,7 +340,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 	}
 	// getArgs clones the arguments on demand for all but the first replica.
 	firstArgs := true
-	getArgs := func(addr net.Addr) gogoproto.Message {
+	getArgs := func(addr net.Addr) proto.Message {
 		var a *roachpb.BatchRequest
 		// Use the supplied args proto if this is our first address.
 		if firstArgs {
@@ -349,7 +348,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 			a = &ba
 		} else {
 			// Otherwise, copy the args value and set the replica in the header.
-			a = gogoproto.Clone(&ba).(*roachpb.BatchRequest)
+			a = proto.Clone(&ba).(*roachpb.BatchRequest)
 		}
 		if addr != nil {
 			// TODO(tschottdorf): see len(replicas) above.
@@ -363,8 +362,8 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 	// If the RPC call times out using our original reply object,
 	// we must not use it any more; the rpc call might still return
 	// and just write to it at any time.
-	// args.CreateReply() should be cheaper than gogoproto.Clone which use reflect.
-	getReply := func() gogoproto.Message {
+	// args.CreateReply() should be cheaper than proto.Clone which use reflect.
+	getReply := func() proto.Message {
 		return &roachpb.BatchResponse{}
 	}
 

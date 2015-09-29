@@ -21,14 +21,14 @@ package roachpb
 import (
 	"fmt"
 
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // ToValue generates a Value message which contains an encoded copy of this
 // TimeSeriesData in its "bytes" field. The returned Value will also have its
 // "tag" string set to the TIME_SERIES constant.
 func (ts *InternalTimeSeriesData) ToValue() (*Value, error) {
-	b, err := gogoproto.Marshal(ts)
+	b, err := proto.Marshal(ts)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func InternalTimeSeriesDataFromValue(value *Value) (*InternalTimeSeriesData, err
 		return nil, fmt.Errorf("value is not tagged as containing TimeSeriesData: %v", value)
 	}
 	var ts InternalTimeSeriesData
-	err := gogoproto.Unmarshal(value.Bytes, &ts)
+	err := proto.Unmarshal(value.Bytes, &ts)
 	if err != nil {
 		return nil, fmt.Errorf("TimeSeriesData could not be unmarshalled from value: %v %s", value, err)
 	}

@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -80,8 +80,8 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 
 	ltc.localSender = NewLocalSender()
 	var rpcSend rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr,
-		getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message,
-		_ *rpc.Context) ([]gogoproto.Message, error) {
+		getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
+		_ *rpc.Context) ([]proto.Message, error) {
 		// TODO(tschottdorf): remove getReply().
 		br, pErr := ltc.localSender.Send(context.Background(), *getArgs(nil).(*roachpb.BatchRequest))
 		if br == nil {
@@ -91,7 +91,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 			panic(roachpb.ErrorUnexpectedlySet(ltc.localSender, br))
 		}
 		br.Error = pErr
-		return []gogoproto.Message{br}, nil
+		return []proto.Message{br}, nil
 	}
 	ltc.distSender = NewDistSender(&DistSenderContext{
 		Clock: ltc.Clock,

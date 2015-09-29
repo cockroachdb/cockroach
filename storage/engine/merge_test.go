@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var testtime = int64(-446061360000000000)
@@ -47,8 +47,8 @@ func gibberishString(n int) string {
 	return string(b)
 }
 
-func mustMarshal(m gogoproto.Message) []byte {
-	b, err := gogoproto.Marshal(m)
+func mustMarshal(m proto.Message) []byte {
+	b, err := proto.Marshal(m)
 	if err != nil {
 		panic(err)
 	}
@@ -78,8 +78,8 @@ func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
 			Sum:    sample.sum,
 		}
 		if sample.count > 1 {
-			newSample.Max = gogoproto.Float64(sample.max)
-			newSample.Min = gogoproto.Float64(sample.min)
+			newSample.Max = proto.Float64(sample.max)
+			newSample.Min = proto.Float64(sample.min)
 		}
 		ts.Samples = append(ts.Samples, newSample)
 	}
@@ -161,10 +161,10 @@ func TestGoMerge(t *testing.T) {
 			continue
 		}
 		var resultV, expectedV MVCCMetadata
-		if err := gogoproto.Unmarshal(result, &resultV); err != nil {
+		if err := proto.Unmarshal(result, &resultV); err != nil {
 			t.Fatal(err)
 		}
-		if err := gogoproto.Unmarshal(c.expected, &expectedV); err != nil {
+		if err := proto.Unmarshal(c.expected, &expectedV); err != nil {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(resultV, expectedV) {
@@ -295,7 +295,7 @@ func unmarshalTimeSeries(t testing.TB, b []byte) *roachpb.InternalTimeSeriesData
 		return nil
 	}
 	var mvccValue MVCCMetadata
-	if err := gogoproto.Unmarshal(b, &mvccValue); err != nil {
+	if err := proto.Unmarshal(b, &mvccValue); err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}
 	valueTS, err := roachpb.InternalTimeSeriesDataFromValue(mvccValue.Value)

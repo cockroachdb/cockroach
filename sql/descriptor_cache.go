@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestingDisableDescriptorCache is used by tests and benchmarks to disable
@@ -95,7 +95,7 @@ func (p *planner) getCachedDescriptor(plainKey descriptorKey, descriptor descrip
 			descriptor.TypeName(), plainKey.Name())
 	}
 
-	if err := gogoproto.Unmarshal(kv.Value.Bytes, descriptor); err != nil {
+	if err := proto.Unmarshal(kv.Value.Bytes, descriptor); err != nil {
 		return err
 	}
 

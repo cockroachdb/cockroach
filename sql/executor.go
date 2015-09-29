@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
@@ -87,7 +87,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 		systemConfig: e.getSystemConfig(),
 	}
 	// Pick up current session state.
-	if err := gogoproto.Unmarshal(args.Session, &planMaker.session); err != nil {
+	if err := proto.Unmarshal(args.Session, &planMaker.session); err != nil {
 		return args.CreateReply(), http.StatusBadRequest, err
 	}
 	// Resume a pending transaction if present.
@@ -113,7 +113,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 		planMaker.session.Txn = nil
 		planMaker.session.MutatesSystemDB = false
 	}
-	bytes, err := gogoproto.Marshal(&planMaker.session)
+	bytes, err := proto.Marshal(&planMaker.session)
 	if err != nil {
 		return args.CreateReply(), http.StatusInternalServerError, err
 	}

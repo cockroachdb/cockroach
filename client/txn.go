@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	gogoproto "github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/gogo/protobuf/proto"
 )
 
 // DefaultTxnRetryOptions are the standard retry options used
@@ -169,7 +169,7 @@ func (txn *Txn) Get(key interface{}) (KeyValue, error) {
 // message.
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) GetProto(key interface{}, msg gogoproto.Message) error {
+func (txn *Txn) GetProto(key interface{}, msg proto.Message) error {
 	r, err := txn.Get(key)
 	if err != nil {
 		return err

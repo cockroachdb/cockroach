@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var (
@@ -51,7 +51,7 @@ type descriptorKey interface {
 // and TableDescriptor.
 // TODO(marc): this is getting rather large.
 type descriptorProto interface {
-	gogoproto.Message
+	proto.Message
 	GetPrivileges() *PrivilegeDescriptor
 	GetID() ID
 	SetID(ID)

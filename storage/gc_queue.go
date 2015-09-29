@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -173,7 +173,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 		// If there's more than a single value for the key, possibly send for GC.
 		if len(keys) > 1 {
 			meta := &engine.MVCCMetadata{}
-			if err := gogoproto.Unmarshal(vals[0], meta); err != nil {
+			if err := proto.Unmarshal(vals[0], meta); err != nil {
 				log.Errorf("unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
 			} else {
 				// In the event that there's an active intent, send for
@@ -268,7 +268,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	}
 
 	// Send GC request through range.
-	gcMeta.OldestIntentNanos = gogoproto.Int64(oldestIntentNanos)
+	gcMeta.OldestIntentNanos = proto.Int64(oldestIntentNanos)
 	gcArgs.GCMeta = *gcMeta
 	if _, err := sendArg(repl, repl.context(), gcArgs); err != nil {
 		return err

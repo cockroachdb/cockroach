@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var _ multiraft.WriteableGroupStorage = &Replica{}
@@ -82,7 +82,7 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	size := uint64(0)
 	var ent raftpb.Entry
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
-		err := gogoproto.Unmarshal(kv.Value.GetBytes(), &ent)
+		err := proto.Unmarshal(kv.Value.GetBytes(), &ent)
 		if err != nil {
 			return false, err
 		}
@@ -285,7 +285,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 			&roachpb.RaftSnapshotData_KeyValue{Key: iter.Key(), Value: iter.Value()})
 	}
 
-	data, err := gogoproto.Marshal(&snapData)
+	data, err := proto.Marshal(&snapData)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -385,7 +385,7 @@ func (r *Replica) updateRangeInfo() error {
 // ApplySnapshot implements the multiraft.WriteableGroupStorage interface.
 func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 	snapData := roachpb.RaftSnapshotData{}
-	err := gogoproto.Unmarshal(snap.Data, &snapData)
+	err := proto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
 		return err
 	}

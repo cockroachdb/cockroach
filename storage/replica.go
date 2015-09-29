@@ -44,8 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
-
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -1211,8 +1210,8 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		// individual requests contain nothing but the key (range) in their
 		// headers.
 		{
-			origHeader := *gogoproto.Clone(header).(*roachpb.RequestHeader)
-			*header = *gogoproto.Clone(&ba.RequestHeader).(*roachpb.RequestHeader)
+			origHeader := *proto.Clone(header).(*roachpb.RequestHeader)
+			*header = *proto.Clone(&ba.RequestHeader).(*roachpb.RequestHeader)
 			// Only Key and EndKey are allowed to diverge from the iterated
 			// Batch header.
 			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
@@ -1389,7 +1388,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// TODO(tschottdorf): avoid data race related to batch unrolling in ExecuteCmd;
 		// can probably go again when that provisional code there is gone. Should
 		// still be careful though, a retry could happen and race with args.
-		args := gogoproto.Clone(item.args).(roachpb.Request)
+		args := proto.Clone(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
 			err := r.rm.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
 				Intents: item.intents,

@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var (
@@ -50,7 +50,7 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 	txnID := []byte(uuid.NewUUID4())
 
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		ba.UserPriority = gogoproto.Int32(-1)
+		ba.UserPriority = proto.Int32(-1)
 		if ba.Txn != nil && len(ba.Txn.ID) == 0 {
 			ba.Txn.Key = txnKey
 			ba.Txn.ID = txnID
@@ -69,7 +69,7 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 		var writing bool
 		status := roachpb.PENDING
 		if _, ok := ba.GetArg(roachpb.Put); ok {
-			br.Add(gogoproto.Clone(testPutResp).(roachpb.Response))
+			br.Add(proto.Clone(testPutResp).(roachpb.Response))
 			writing = true
 		}
 		if args, ok := ba.GetArg(roachpb.EndTransaction); ok {
@@ -81,7 +81,7 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 				status = roachpb.ABORTED
 			}
 		}
-		br.Txn = gogoproto.Clone(ba.Txn).(*roachpb.Transaction)
+		br.Txn = proto.Clone(ba.Txn).(*roachpb.Transaction)
 		if br.Txn != nil && pErr == nil {
 			br.Txn.Writing = writing
 			br.Txn.Status = status
@@ -151,7 +151,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		return nil, roachpb.NewError(&roachpb.TransactionAbortedError{
-			Txn: *gogoproto.Clone(ba.Txn).(*roachpb.Transaction),
+			Txn: *proto.Clone(ba.Txn).(*roachpb.Transaction),
 		})
 	}, nil))
 

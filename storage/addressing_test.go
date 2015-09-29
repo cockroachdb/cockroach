@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 type metaRecord struct {
@@ -136,7 +136,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		metas := metaSlice{}
 		for _, kv := range kvs {
 			scannedDesc := &roachpb.RangeDescriptor{}
-			if err := gogoproto.Unmarshal(kv.Value.Bytes, scannedDesc); err != nil {
+			if err := proto.Unmarshal(kv.Value.Bytes, scannedDesc); err != nil {
 				t.Fatal(err)
 			}
 			metas = append(metas, metaRecord{key: kv.Key, desc: scannedDesc})

@@ -48,8 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
-
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // createTestStore creates a test store using an in-memory
@@ -76,15 +75,15 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sCtx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	localSender := kv.NewLocalSender()
 	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
-		getArgs func(addr net.Addr) gogoproto.Message, _ func() gogoproto.Message,
-		_ *rpc.Context) ([]gogoproto.Message, error) {
+		getArgs func(addr net.Addr) proto.Message, _ func() proto.Message,
+		_ *rpc.Context) ([]proto.Message, error) {
 		ba := getArgs(nil /* net.Addr */).(*roachpb.BatchRequest)
 		br, pErr := localSender.Send(context.Background(), *ba)
 		if br == nil {
 			br = &roachpb.BatchResponse{}
 		}
 		br.Error = pErr
-		return []gogoproto.Message{br}, nil
+		return []proto.Message{br}, nil
 	}
 
 	if err := gossipNodeDesc(sCtx.Gossip, nodeDesc.NodeID); err != nil {
@@ -226,12 +225,12 @@ func (m *multiTestContext) Stop() {
 // the request to multiTestContext's localSenders specified in addrs. The request is
 // sent in order until no error is returned.
 func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
-	getArgs func(addr net.Addr) gogoproto.Message,
-	getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
-	fail := func(pErr *roachpb.Error) ([]gogoproto.Message, error) {
+	getArgs func(addr net.Addr) proto.Message,
+	getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+	fail := func(pErr *roachpb.Error) ([]proto.Message, error) {
 		br := &roachpb.BatchResponse{}
 		br.Error = pErr
-		return []gogoproto.Message{br}, nil
+		return []proto.Message{br}, nil
 	}
 	var br *roachpb.BatchResponse
 	var pErr *roachpb.Error
@@ -244,7 +243,7 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 		}
 		br, pErr = m.senders[nodeID-1].Send(context.Background(), ba)
 		if pErr == nil {
-			return []gogoproto.Message{br}, nil
+			return []proto.Message{br}, nil
 		}
 		switch tErr := pErr.GoError().(type) {
 		case *roachpb.RangeKeyMismatchError:

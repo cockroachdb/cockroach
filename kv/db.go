@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var allExternalMethods = [...]roachpb.Request{
@@ -62,7 +62,7 @@ func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
 
 // executeCmd interprets the given message as a *proto.BatchRequest and sends it
 // via the local sender.
-func (s *DBServer) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
+func (s *DBServer) executeCmd(argsI proto.Message) (proto.Message, error) {
 	ba := argsI.(*roachpb.BatchRequest)
 	if err := verifyRequest(ba); err != nil {
 		return nil, err

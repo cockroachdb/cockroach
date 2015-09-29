@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestBatchBasics verifies that all commands work in a batch, aren't
@@ -143,10 +143,10 @@ func TestBatchGet(t *testing.T) {
 
 func compareMergedValues(t *testing.T, result, expected []byte) bool {
 	var resultV, expectedV MVCCMetadata
-	if err := gogoproto.Unmarshal(result, &resultV); err != nil {
+	if err := proto.Unmarshal(result, &resultV); err != nil {
 		t.Fatal(err)
 	}
-	if err := gogoproto.Unmarshal(expected, &expectedV); err != nil {
+	if err := proto.Unmarshal(expected, &expectedV); err != nil {
 		t.Fatal(err)
 	}
 	return reflect.DeepEqual(resultV, expectedV)
@@ -231,7 +231,7 @@ func TestBatchProto(t *testing.T) {
 		t.Errorf("expected key size 5; got %d", keySize)
 	}
 	var data []byte
-	if data, err = gogoproto.Marshal(kv); err != nil {
+	if data, err = proto.Marshal(kv); err != nil {
 		t.Fatal(err)
 	}
 	if valSize != int64(len(data)) {

@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // testUser has valid client certs.
@@ -325,7 +325,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 	if err := db.GetProto(key, readZoneConfig); err != nil {
 		t.Fatalf("unable to get proto: %v", err)
 	}
-	if !gogoproto.Equal(zoneConfig, readZoneConfig) {
+	if !proto.Equal(zoneConfig, readZoneConfig) {
 		t.Errorf("expected %+v, but found %+v", zoneConfig, readZoneConfig)
 	}
 }

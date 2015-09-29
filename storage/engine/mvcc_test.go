@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // Constants for system-reserved keys in the KV map.
@@ -68,7 +68,7 @@ func createTestEngine(stopper *stop.Stopper) Engine {
 // makeTxn creates a new transaction using the specified base
 // txn and timestamp.
 func makeTxn(baseTxn *roachpb.Transaction, ts roachpb.Timestamp) *roachpb.Transaction {
-	txn := gogoproto.Clone(baseTxn).(*roachpb.Transaction)
+	txn := proto.Clone(baseTxn).(*roachpb.Transaction)
 	txn.Timestamp = ts
 	return txn
 }
@@ -796,11 +796,11 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	value1, err := gogoproto.Marshal(&roachpb.RawKeyValue{Value: []byte("value1")})
+	value1, err := proto.Marshal(&roachpb.RawKeyValue{Value: []byte("value1")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	value2, err := gogoproto.Marshal(&roachpb.RawKeyValue{Value: []byte("value2")})
+	value2, err := proto.Marshal(&roachpb.RawKeyValue{Value: []byte("value2")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2058,8 +2058,8 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 }
 
 // encodedSize returns the encoded size of the protobuf message.
-func encodedSize(msg gogoproto.Message, t *testing.T) int64 {
-	data, err := gogoproto.Marshal(msg)
+func encodedSize(msg proto.Message, t *testing.T) int64 {
+	data, err := proto.Marshal(msg)
 	if err != nil {
 		t.Fatal(err)
 	}

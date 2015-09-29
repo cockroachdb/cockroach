@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var emptyAddr = util.MakeUnresolvedAddr("test", "<test-addr>")
@@ -146,7 +146,7 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	}
 
 	i := is.getInfo("a")
-	if i.Hops != info1.Hops || !gogoproto.Equal(i, info1) {
+	if i.Hops != info1.Hops || !proto.Equal(i, info1) {
 		t.Error("failed to properly combine hops and value", i)
 	}
 
@@ -156,7 +156,7 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 		t.Error(err)
 	}
 	i = is.getInfo("a")
-	if i.Hops != info3.Hops || !gogoproto.Equal(i, info3) {
+	if i.Hops != info3.Hops || !proto.Equal(i, info3) {
 		t.Error("failed to properly combine hops and value", i)
 	}
 }

@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // The Transport interface is supplied by the application to manage communication with
@@ -93,7 +93,7 @@ func (lt *localRPCTransport) Listen(id roachpb.StoreID, server ServerInterface) 
 		DisableCache: true,
 	})
 	err := rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
-		func(argsI gogoproto.Message, callback func(gogoproto.Message, error)) {
+		func(argsI proto.Message, callback func(proto.Message, error)) {
 			args := argsI.(*RaftMessageRequest)
 			resp, err := server.RaftMessage(args)
 			callback(resp, err)

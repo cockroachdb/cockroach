@@ -29,11 +29,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/c-snappy"
+	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/retry"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -63,9 +63,9 @@ type postContext struct {
 // failure when in fact the command may go through and execute successfully. We
 // retry here to eventually get through with the same client command ID and be
 // given the cached response.
-func httpPost(c postContext, request, response gogoproto.Message, method fmt.Stringer) error {
+func httpPost(c postContext, request, response proto.Message, method fmt.Stringer) error {
 	// Marshal the args into a request body.
-	body, err := gogoproto.Marshal(request)
+	body, err := proto.Marshal(request)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func httpPost(c postContext, request, response gogoproto.Message, method fmt.Str
 			log.Println(err)
 			continue
 		}
-		if err = gogoproto.Unmarshal(b, response); err != nil {
+		if err = proto.Unmarshal(b, response); err != nil {
 			log.Println(err)
 			continue
 		}

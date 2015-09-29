@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -393,13 +393,13 @@ func MVCCSetRangeStats(engine Engine, rangeID roachpb.RangeID, ms *MVCCStats) er
 // consistent=false, we return the error and the decoded result; for
 // all other errors (or when consistent=true) the decoded value is
 // invalid.
-func MVCCGetProto(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction, msg gogoproto.Message) (bool, error) {
+func MVCCGetProto(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction, msg proto.Message) (bool, error) {
 	// TODO(tschottdorf) Consider returning skipped intents to the caller.
 	value, _, err := MVCCGet(engine, key, timestamp, consistent, txn)
 	found := value != nil && len(value.Bytes) > 0
 	// If we found a result, parse it regardless of the error returned by MVCCGet.
 	if found && msg != nil {
-		unmarshalErr := gogoproto.Unmarshal(value.Bytes, msg)
+		unmarshalErr := proto.Unmarshal(value.Bytes, msg)
 		// If the unmarshal failed, return its result. Otherwise, pass
 		// through the underlying error (which may be a WriteIntentError
 		// to be handled specially alongside the returned value).
@@ -412,7 +412,7 @@ func MVCCGetProto(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, c
 
 // MVCCPutProto sets the given key to the protobuf-serialized byte
 // string of msg and the provided timestamp.
-func MVCCPutProto(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, txn *roachpb.Transaction, msg gogoproto.Message) error {
+func MVCCPutProto(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, txn *roachpb.Transaction, msg proto.Message) error {
 	value := roachpb.Value{}
 	if err := value.SetProto(msg); err != nil {
 		return err
@@ -460,7 +460,7 @@ func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consis
 
 	// Create a function which scans for the first key between start and end keys.
 	getValue := func(engine Engine, start, end roachpb.EncodedKey,
-		msg gogoproto.Message) (roachpb.EncodedKey, error) {
+		msg proto.Message) (roachpb.EncodedKey, error) {
 		iter := engine.NewIterator()
 		defer iter.Close()
 		iter.Seek(start)
@@ -489,7 +489,7 @@ func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consis
 // getValueFunc fetches a version of a key between start and end.
 // Returns the key as an encoded byte slice, and error, if applicable.
 type getValueFunc func(engine Engine, start, end roachpb.EncodedKey,
-	msg gogoproto.Message) (roachpb.EncodedKey, error)
+	msg proto.Message) (roachpb.EncodedKey, error)
 
 // mvccGetInternal parses the MVCCMetadata from the specified raw key
 // value, and reads the versioned value indicated by timestamp, taking
@@ -941,7 +941,7 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, value roachpb.Valu
 
 	// Encode and merge the MVCC metadata with inlined value.
 	meta := &MVCCMetadata{Value: &value}
-	data, err := gogoproto.Marshal(meta)
+	data, err := proto.Marshal(meta)
 	if err != nil {
 		return err
 	}
@@ -1101,7 +1101,7 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 	iter := engine.NewIterator()
 	defer iter.Close()
 	getValue := func(engine Engine, start, end roachpb.EncodedKey,
-		msg gogoproto.Message) (roachpb.EncodedKey, error) {
+		msg proto.Message) (roachpb.EncodedKey, error) {
 		iter.Seek(start)
 		if !iter.Valid() {
 			return nil, iter.Error()
@@ -1437,7 +1437,7 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_G
 		}
 		// First, check whether all values of the key are being deleted.
 		meta := &MVCCMetadata{}
-		if err := gogoproto.Unmarshal(iter.Value(), meta); err != nil {
+		if err := proto.Unmarshal(iter.Value(), meta); err != nil {
 			return util.Errorf("unable to marshal mvcc meta: %s", err)
 		}
 		if !gcKey.Timestamp.Less(meta.Timestamp) {
@@ -1598,7 +1598,7 @@ func MVCCComputeStats(iter Iterator, nowNanos int64) (MVCCStats, error) {
 		if !isValue {
 			totalBytes := int64(len(iter.Value())) + int64(len(iter.Key()))
 			first = true
-			if err := gogoproto.Unmarshal(iter.Value(), meta); err != nil {
+			if err := proto.Unmarshal(iter.Value(), meta); err != nil {
 				return ms, util.Errorf("unable to unmarshal MVCC metadata %b: %s", iter.Value(), err)
 			}
 			if sys {

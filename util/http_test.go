@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var testConfig = config.ZoneConfig{
@@ -85,7 +85,7 @@ var protobufConfig []byte
 
 func init() {
 	var err error
-	if protobufConfig, err = gogoproto.Marshal(&testConfig); err != nil {
+	if protobufConfig, err = proto.Marshal(&testConfig); err != nil {
 		log.Fatalf("unable to marshal test config %+v: %s", testConfig, err)
 	}
 }

@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // executeCmd switches over the method and multiplexes to execute the
@@ -549,7 +549,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, args roachpb.RangeLookupReque
 		// descriptor and return it.
 		checkAndUnmarshal = func(b []byte) (*roachpb.RangeDescriptor, error) {
 			var rd roachpb.RangeDescriptor
-			if err := gogoproto.Unmarshal(b, &rd); err != nil {
+			if err := proto.Unmarshal(b, &rd); err != nil {
 				return nil, err
 			}
 			return &rd, nil
@@ -594,7 +594,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, args roachpb.RangeLookupReque
 		// return a result or an intent we're not supposed to return.
 		checkAndUnmarshal = func(b []byte) (*roachpb.RangeDescriptor, error) {
 			var r roachpb.RangeDescriptor
-			if err := gogoproto.Unmarshal(b, &r); err != nil {
+			if err := proto.Unmarshal(b, &r); err != nil {
 				return nil, err
 			}
 			if !keys.RangeMetaKey(r.StartKey).Less(args.Key) {
@@ -1589,11 +1589,11 @@ func updateRangeDescriptor(b *client.Batch, descKey roachpb.Key, oldDesc, newDes
 	var oldValue []byte
 	if oldDesc != nil {
 		var err error
-		if oldValue, err = gogoproto.Marshal(oldDesc); err != nil {
+		if oldValue, err = proto.Marshal(oldDesc); err != nil {
 			return err
 		}
 	}
-	newValue, err := gogoproto.Marshal(newDesc)
+	newValue, err := proto.Marshal(newDesc)
 	if err != nil {
 		return err
 	}

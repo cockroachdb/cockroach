@@ -23,13 +23,12 @@ import (
 	"sync"
 	"time"
 
-	gogoproto "github.com/gogo/protobuf/proto"
-
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -167,7 +166,7 @@ func NewStorePool(g *gossip.Gossip, timeUntilStoreDead time.Duration, stopper *s
 // storeGossipUpdate The gossip callback used to keep the StorePool up to date.
 func (sp *StorePool) storeGossipUpdate(_ string, content []byte) {
 	var storeDesc roachpb.StoreDescriptor
-	if err := gogoproto.Unmarshal(content, &storeDesc); err != nil {
+	if err := proto.Unmarshal(content, &storeDesc); err != nil {
 		log.Error(err)
 		return
 	}

@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var testContext = NewTestContext()
@@ -470,7 +470,7 @@ func TestSQLServer(t *testing.T) {
 	// Use the sql administrator (root user). Note that the certificates
 	// used here will indicate the node user, but that's OK because node
 	// is allowed to act on behalf of all users.
-	body, err := gogoproto.Marshal(&driver.Request{User: security.RootUser})
+	body, err := proto.Marshal(&driver.Request{User: security.RootUser})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -554,7 +554,7 @@ func TestSystemDBGossip(t *testing.T) {
 	// Now check the gossip callback.
 	var val *roachpb.Value
 	systemConfig := &config.SystemConfig{}
-	if err := gogoproto.Unmarshal(b, systemConfig); err != nil {
+	if err := proto.Unmarshal(b, systemConfig); err != nil {
 		t.Fatal(err)
 	}
 
@@ -569,7 +569,7 @@ func TestSystemDBGossip(t *testing.T) {
 
 	// Make sure the returned value is valAt(2).
 	var got sql.DatabaseDescriptor
-	if err := gogoproto.Unmarshal(val.Bytes, &got); err != nil {
+	if err := proto.Unmarshal(val.Bytes, &got); err != nil {
 		t.Fatal(err)
 	}
 	if got.ID != 2 {

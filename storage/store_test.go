@@ -48,7 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var testIdent = roachpb.StoreIdent{
@@ -1043,7 +1043,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// Now, try to read outside a transaction.
 	gArgs := getArgs(key, 1, store.StoreID())
 	gArgs.Timestamp = store.ctx.Clock.Now()
-	gArgs.UserPriority = gogoproto.Int32(math.MaxInt32)
+	gArgs.UserPriority = proto.Int32(math.MaxInt32)
 	if reply, err := batchutil.SendWrapped(store, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
 	} else if gReply := reply.(*roachpb.GetResponse); gReply.Value != nil {
@@ -1054,7 +1054,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	args.Timestamp = store.ctx.Clock.Now()
 	args.Value.Bytes = []byte("value2")
 	args.Txn = nil
-	args.UserPriority = gogoproto.Int32(math.MaxInt32)
+	args.UserPriority = proto.Int32(math.MaxInt32)
 	if _, err := batchutil.SendWrapped(store, &args); err != nil {
 		t.Errorf("expected success aborting pushee's txn; got %s", err)
 	}

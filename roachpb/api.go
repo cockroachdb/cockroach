@@ -22,7 +22,7 @@ import (
 	"math/rand"
 	"strconv"
 
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // A RangeID is a unique ID associated to a Raft consensus group.
@@ -87,7 +87,7 @@ func IsRange(args Request) bool {
 
 // Request is an interface for RPC requests.
 type Request interface {
-	gogoproto.Message
+	proto.Message
 	// Header returns the request header.
 	Header() *RequestHeader
 	// Method returns the request method.
@@ -99,7 +99,7 @@ type Request interface {
 
 // Response is an interface for RPC responses.
 type Response interface {
-	gogoproto.Message
+	proto.Message
 	// Header returns the response header.
 	Header() *ResponseHeader
 	// Verify verifies response integrity, as applicable.

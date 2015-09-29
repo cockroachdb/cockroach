@@ -21,7 +21,7 @@ import (
 	"bytes"
 	"testing"
 
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 func TestTimeSeriesToValue(t *testing.T) {
@@ -57,7 +57,7 @@ func TestTimeSeriesToValue(t *testing.T) {
 	}
 
 	// Ensure the Value's 'bytes' field contains the marshalled TSD
-	tsEncoded, err := gogoproto.Marshal(tsOriginal)
+	tsEncoded, err := proto.Marshal(tsOriginal)
 	if err != nil {
 		t.Fatalf("error marshaling TimeSeriesData: %s", err.Error())
 	}
@@ -70,7 +70,7 @@ func TestTimeSeriesToValue(t *testing.T) {
 	if err != nil {
 		t.Errorf("error extracting Time Series: %s", err.Error())
 	}
-	if !gogoproto.Equal(tsOriginal, tsNew) {
+	if !proto.Equal(tsOriginal, tsNew) {
 		t.Errorf("extracted time series not equivalent to original; %v != %v", tsNew, tsOriginal)
 	}
 

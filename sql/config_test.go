@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestGetZoneConfig exercises config.GetZoneConfig and the sql hook for it.
@@ -130,7 +130,7 @@ func TestGetZoneConfig(t *testing.T) {
 		tb11: tb11Cfg,
 		tb21: tb21Cfg,
 	} {
-		buf, err := gogoproto.Marshal(&objZone)
+		buf, err := proto.Marshal(&objZone)
 		if err != nil {
 			t.Fatal(err)
 		}

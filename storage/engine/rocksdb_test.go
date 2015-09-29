@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 const testCacheSize = 1 << 30 // GB.
@@ -51,7 +51,7 @@ func encodePutResponse(timestamp roachpb.Timestamp, t *testing.T) []byte {
 			Timestamp: timestamp,
 		},
 	})
-	data, err := gogoproto.Marshal(batch)
+	data, err := proto.Marshal(batch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func encodeTransaction(timestamp roachpb.Timestamp, t *testing.T) []byte {
 	txn := &roachpb.Transaction{
 		Timestamp: timestamp,
 	}
-	data, err := gogoproto.Marshal(txn)
+	data, err := proto.Marshal(txn)
 	if err != nil {
 		t.Fatal(err)
 	}

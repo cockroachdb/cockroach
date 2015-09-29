@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 var _ security.RequestWithUser = &PingRequest{}
@@ -66,7 +66,7 @@ func (hs *HeartbeatService) Register(server *Server) error {
 // server's current clock value, allowing the requester to measure its clock.
 // The requester should also estimate its offset from this server along
 // with the requester's address.
-func (hs *HeartbeatService) Ping(argsI gogoproto.Message) (gogoproto.Message, error) {
+func (hs *HeartbeatService) Ping(argsI proto.Message) (proto.Message, error) {
 	args := argsI.(*PingRequest)
 	reply := &PingResponse{}
 	reply.Pong = args.Ping
@@ -97,7 +97,7 @@ func (mhs *ManualHeartbeatService) Register(server *Server) error {
 }
 
 // Ping waits until the heartbeat service is ready to respond to a Heartbeat.
-func (mhs *ManualHeartbeatService) Ping(args gogoproto.Message) (gogoproto.Message, error) {
+func (mhs *ManualHeartbeatService) Ping(args proto.Message) (proto.Message, error) {
 	select {
 	case <-mhs.ready:
 	case <-mhs.stopper.ShouldStop():

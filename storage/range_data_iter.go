@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // keyRange is a helper struct for the rangeDataIterator.
@@ -109,8 +109,8 @@ func (ri *rangeDataIterator) Value() []byte {
 
 // ValueProto unmarshals the current value into the provided message
 // if valid.
-func (ri *rangeDataIterator) ValueProto(msg gogoproto.Message) error {
-	return gogoproto.Unmarshal(ri.iter.Value(), msg)
+func (ri *rangeDataIterator) ValueProto(msg proto.Message) error {
+	return proto.Unmarshal(ri.iter.Value(), msg)
 }
 
 // Error returns the Error for the iteration if applicable.

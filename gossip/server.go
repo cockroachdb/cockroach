@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 type clientInfo struct {
@@ -64,7 +64,7 @@ func newServer(interval time.Duration) *server {
 // Gossip receives gossiped information from a peer node.
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
-func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
+func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	args := argsI.(*Request)
 	reply := &Response{}
 	s.mu.Lock()

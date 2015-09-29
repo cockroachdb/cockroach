@@ -38,7 +38,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 )
 
 // Severity identifies the sort of log: info, warning etc. It also implements
@@ -385,7 +385,7 @@ func (lr *EntryDecoder) Decode(entry *LogEntry) error {
 	if err != nil {
 		return err
 	}
-	if err := gogoproto.Unmarshal(buf[:n], entry); err != nil {
+	if err := proto.Unmarshal(buf[:n], entry); err != nil {
 		return err
 	}
 	return nil
@@ -810,7 +810,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, alsoToStder
 
 func encodeLogEntry(entry *LogEntry) []byte {
 	// Marshal log entry.
-	entryData, err := gogoproto.Marshal(entry)
+	entryData, err := proto.Marshal(entry)
 	if err != nil {
 		panic(fmt.Sprintf("unable to marshal log entry: %s", err))
 	}
