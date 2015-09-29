@@ -554,7 +554,7 @@ func setBatchTimestamps(ba roachpb.BatchRequest) {
 		// iteration, bumping up its priority. Unfortunately PushTxn is flagged
 		// as a write command (is it really?). Interim solution.
 		if args := union.GetInner(); args.Method() != roachpb.PushTxn {
-			args.Header().Timestamp.Forward(ba.Timestamp.Add(0, int32(i)))
+			args.Header().Timestamp = ba.Timestamp.Add(0, int32(i))
 		}
 	}
 }
