@@ -817,19 +817,19 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	req1 := putArgs(key, nil, rangeID, tc.store.StoreID())
 	req1.Txn = txn
 	req1.Timestamp = txn.Timestamp
-	if _, err := client.SendWrapped(tc.store, &req1); err != nil {
+	if _, err := client.SendWrapped(tc.store, nil, &req1); err != nil {
 		t.Fatal(err)
 	}
 	req2 := endTxnArgs(txn, true /* commit */, rangeID, tc.store.StoreID())
 	req2.Timestamp = txn.Timestamp
 	req2.Intents = []roachpb.Intent{{Key: key}}
-	if _, err := client.SendWrapped(tc.store, &req2); err != nil {
+	if _, err := client.SendWrapped(tc.store, nil, &req2); err != nil {
 		t.Fatal(err)
 	}
 	// Execute a get to resolve the intent.
 	req3 := getArgs(key, rangeID, tc.store.StoreID())
 	req3.Timestamp = txn.Timestamp
-	if _, err := client.SendWrapped(tc.store, &req3); err != nil {
+	if _, err := client.SendWrapped(tc.store, nil, &req3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2295,7 +2295,7 @@ func TestRangeResolveIntentRange(t *testing.T) {
 
 	// Do a consistent scan to verify intents have been cleared.
 	sArgs := scanArgs(roachpb.Key("a"), roachpb.Key("c"), 1, tc.store.StoreID())
-	reply, err := client.SendWrapped(tc.store, &sArgs)
+	reply, err := client.SendWrapped(tc.store, nil, &sArgs)
 	if err != nil {
 		t.Fatalf("unexpected error on scan: %s", err)
 	}
@@ -2936,7 +2936,7 @@ func TestRangeLookup(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		resp, err := client.SendWrapped(tc.store, &roachpb.RangeLookupRequest{
+		resp, err := client.SendWrapped(tc.store, nil, &roachpb.RangeLookupRequest{
 			RequestHeader: roachpb.RequestHeader{
 				RangeID: 1,
 				Key:     c.key,
@@ -3064,7 +3064,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	// Force the read command request a new lease.
 	clock := tc.clock
 	gArgs.Header().Timestamp = clock.Update(clock.Now().Add(int64(DefaultLeaderLeaseDuration), 0))
-	_, err = client.SendWrapped(tc.store, &gArgs)
+	_, err = client.SendWrapped(tc.store, nil, &gArgs)
 	if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
 		t.Fatalf("expected a RangeNotFoundError, get %s", err)
 	}

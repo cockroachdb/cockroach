@@ -62,7 +62,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	manuals[0].Increment(int64(500 * time.Millisecond))
 	incArgs := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
 	incArgs.Timestamp = clocks[0].Now()
-	if _, err := client.SendWrapped(mtc.stores[0], &incArgs); err != nil {
+	if _, err := client.SendWrapped(mtc.stores[0], nil, &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -111,7 +111,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	// First do a write. The first write will advance the clock by MaxOffset
 	// because of the read cache's low water mark.
 	getArgs := putArgs([]byte("b"), []byte("b"), 1, mtc.stores[0].StoreID())
-	if _, err := client.SendWrapped(mtc.stores[0], &getArgs); err != nil {
+	if _, err := client.SendWrapped(mtc.stores[0], nil, &getArgs); err != nil {
 		t.Fatal(err)
 	}
 	if now := clock.Now(); now.WallTime != int64(maxOffset) {
@@ -128,7 +128,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	for i := int64(0); i < 3; i++ {
 		incArgs := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
 		incArgs.Timestamp.WallTime = startTime + ((i+1)*30)*int64(time.Millisecond)
-		if _, err := client.SendWrapped(mtc.stores[0], &incArgs); err != nil {
+		if _, err := client.SendWrapped(mtc.stores[0], nil, &incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -139,7 +139,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
 	incArgs := incrementArgs([]byte("a"), 11, 1, mtc.stores[0].StoreID())
 	incArgs.Timestamp.WallTime = int64((time.Duration(startTime) + maxOffset + 1) * time.Millisecond)
-	if _, err := client.SendWrapped(mtc.stores[0], &incArgs); err == nil {
+	if _, err := client.SendWrapped(mtc.stores[0], nil, &incArgs); err == nil {
 		t.Fatalf("expected clock offset error but got nil")
 	}
 
@@ -294,7 +294,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		UserPriority: &priority,
 		Timestamp:    clock.Now(),
 	}
-	if _, err := client.SendWrapped(store, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
+	if _, err := client.SendWrapped(store, nil, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
 
@@ -309,7 +309,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	requestHeader.Timestamp = clock.Now()
-	if _, err := client.SendWrapped(store, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
+	if _, err := client.SendWrapped(store, nil, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
 	}
 
@@ -334,7 +334,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for _, split := range splits {
-		_, err := client.SendWrapped(store, &split)
+		_, err := client.SendWrapped(store, nil, &split)
 		if err != nil {
 			t.Fatalf("%q: split unexpected error: %s", split.SplitKey, err)
 		}
@@ -350,7 +350,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		},
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
-		_, err := client.SendWrapped(store, &scanArgs)
+		_, err := client.SendWrapped(store, nil, &scanArgs)
 		return err
 	})
 
@@ -420,7 +420,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		resp, err := client.SendWrapped(store, test.request)
+		resp, err := client.SendWrapped(store, nil, test.request)
 		if err != nil {
 			t.Fatalf("RangeLookup error: %s", err)
 		}

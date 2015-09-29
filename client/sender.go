@@ -89,8 +89,12 @@ func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stoppe
 
 // SendWrapped is a convenience function which wraps the request in a batch,
 // sends it via the provided Sender, and returns the unwrapped response
-// or an error.
-func SendWrapped(sender Sender, args roachpb.Request) (roachpb.Response, error) {
+// or an error. It's valid to pass a `nil` context; context.TODO() is used
+// in that case.
+func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
+	if ctx == nil {
+		ctx = context.TODO()
+	}
 	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
 		ba := &roachpb.BatchRequest{}
 		ba.RequestHeader = *(proto.Clone(args.Header()).(*roachpb.RequestHeader))
