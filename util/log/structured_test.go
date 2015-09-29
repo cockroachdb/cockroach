@@ -112,7 +112,7 @@ func TestSetLogEntry(t *testing.T) {
 		entry := &LogEntry{}
 		setLogEntry(test.ctx, test.format, test.args, entry)
 		if !reflect.DeepEqual(entry, &test.expEntry) {
-			t.Errorf("%d: expected %+v; got %+v", i, &test.expEntry, entry)
+			t.Errorf("%d: expected:\n%+v\ngot:\n%+v", i, &test.expEntry, entry)
 		}
 	}
 }
