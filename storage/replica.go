@@ -536,29 +536,6 @@ func (r *Replica) SetLastVerificationTimestamp(timestamp roachpb.Timestamp) erro
 	return engine.MVCCPutProto(r.rm.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
-// setBatchTimestamps ensures that timestamps on individual requests are
-// offset by an incremental amount of logical ticks from the base timestamp
-// of the batch request (if that is non-zero and the batch is not in a Txn).
-// This has the effect of allowing self-overlapping commands within the batch,
-// which would otherwise result in an endless loop of WriteTooOldErrors.
-// TODO(tschottdorf): discuss self-overlap.
-func setBatchTimestamps(ba roachpb.BatchRequest) {
-	if ba.Txn != nil || ba.Timestamp.Equal(roachpb.ZeroTimestamp) ||
-		!ba.IsWrite() {
-		return
-	}
-	for i, union := range ba.Requests {
-		// TODO(tschottdorf): currently treating PushTxn specially. Otherwise
-		// conflict resolution would break because a batch full of pushes of
-		// the same Txn for different intents will push the pushee in
-		// iteration, bumping up its priority. Unfortunately PushTxn is flagged
-		// as a write command (is it really?). Interim solution.
-		if args := union.GetInner(); args.Method() != roachpb.PushTxn {
-			args.Header().Timestamp = ba.Timestamp.Add(0, int32(i))
-		}
-	}
-}
-
 // Send adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
@@ -1149,11 +1126,20 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 	// accumulate updates to it.
 	isTxn := ba.Txn != nil
 
-	// Fiddle with the timestamps to make sure that writes can overlap
-	// within this batch.
+	// Ensure that timestamps on individual requests are offset by an incremental
+	// amount of logical ticks from the base timestamp of the batch request (if
+	// that is non-zero and the batch is not in a Txn). This has the effect of
+	// allowing self-overlapping commands within the batch, which would otherwise
+	// result in an endless loop of WriteTooOldErrors.
+	// TODO(tschottdorf): discuss self-overlap.
 	// TODO(tschottdorf): provisional feature to get back to passing tests.
 	// Have to discuss how we go about it.
-	setBatchTimestamps(*ba)
+	delta := 1
+	if ba.Txn != nil || ba.Timestamp.Equal(roachpb.ZeroTimestamp) ||
+		!ba.IsWrite() {
+		delta = 0
+	}
+
 	// TODO(tschottdorf): provisionals ahead. This loop needs to execute each
 	// command and propagate txn and timestamp to the next (and, eventually,
 	// to the batch response header). We're currently in an intermediate stage
@@ -1176,10 +1162,21 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 			// TODO(tschottdorf): specify which fields to set here.
 			*header = ba.ToHeader()
 			// Only Key and EndKey are allowed to diverge from the iterated
-			// Batch header.
+			// Batch header (Timestamp too, but that's exceptional).
 			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
-			// TODO(tschottdorf): Special exception because of pending self-overlap discussion.
-			header.Timestamp = origHeader.Timestamp
+			// TODO(tschottdorf): Special exception because of pending
+			// self-overlap discussion.
+			// TODO(tschottdorf): currently treating PushTxn specially. Otherwise
+			// conflict resolution would break because a batch full of pushes of
+			// the same Txn for different intents will push the pushee in
+			// iteration, bumping up its priority. Unfortunately PushTxn is flagged
+			// as a write command (is it really?). Interim solution.
+			if delta > 0 && args.Method() != roachpb.PushTxn {
+				header.Timestamp = ba.Timestamp.Add(0, int32(index))
+			} else {
+				header.Timestamp = origHeader.Timestamp
+			}
+
 			header.Txn = ba.Txn // use latest Txn
 		}
 

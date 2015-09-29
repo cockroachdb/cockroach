@@ -1177,11 +1177,15 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		// Update our clock with the incoming request timestamp. This
 		// advances the local node's clock to a high water mark from
 		// amongst all nodes with which it has interacted.
-		s.ctx.Clock.Update(header.Timestamp)
+		// TODO(tschottdorf): see executeBatch for an explanation of the weird
+		// logical ticks added here.
+		s.ctx.Clock.Update(header.Timestamp.Add(0, int32(len(ba.Requests))-1))
 	} else if ba.Txn == nil {
 		// TODO(tschottdorf): possibly consolidate this with other locations
 		// doing the same (but it's definitely required here).
-		ba.Timestamp.Forward(s.Clock().Now())
+		// TODO(tschottdorf): see executeBatch for an explanation of the weird
+		// logical ticks added here.
+		ba.Timestamp.Forward(s.Clock().Now().Add(0, int32(len(ba.Requests))-1))
 	}
 
 	defer trace.Epoch(fmt.Sprintf("executing %d requests", len(ba.Requests)))()
