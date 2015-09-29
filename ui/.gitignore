@@ -11,5 +11,5 @@ typings
 tsd.installed
 
 # Generated intermediates
-build/
+/build
 /index.html
