@@ -258,8 +258,8 @@ func (g *Gossip) AddInfo(key string, val []byte, ttl time.Duration) error {
 
 // AddInfoProto adds or updates an info object. Returns an error if info
 // couldn't be added.
-func (g *Gossip) AddInfoProto(key string, proto gogoproto.Message, ttl time.Duration) error {
-	bytes, err := gogoproto.Marshal(proto)
+func (g *Gossip) AddInfoProto(key string, msg gogoproto.Message, ttl time.Duration) error {
+	bytes, err := gogoproto.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -284,12 +284,12 @@ func (g *Gossip) GetInfo(key string) ([]byte, error) {
 
 // GetInfoProto returns an info value by key or an error if specified
 // key does not exist or has expired.
-func (g *Gossip) GetInfoProto(key string, proto gogoproto.Message) error {
+func (g *Gossip) GetInfoProto(key string, msg gogoproto.Message) error {
 	bytes, err := g.GetInfo(key)
 	if err != nil {
 		return err
 	}
-	return gogoproto.Unmarshal(bytes, proto)
+	return gogoproto.Unmarshal(bytes, msg)
 }
 
 // GetInfosAsJSON returns the contents of the infostore, marshalled to
