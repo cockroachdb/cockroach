@@ -166,7 +166,6 @@ func typeCheckBooleanExprs(exprs ...Expr) (Datum, error) {
 	return DummyBool, nil
 }
 
-// TODO(tamird): reduce duplication with evalComparisonExpr.
 func typeCheckComparisonExpr(expr *ComparisonExpr) (Datum, error) {
 	leftType, err := TypeCheckExpr(expr.Left)
 	if err != nil {
@@ -177,67 +176,43 @@ func typeCheckComparisonExpr(expr *ComparisonExpr) (Datum, error) {
 		return nil, err
 	}
 
-	return typeCheckComparisonOp(expr.Operator, leftType, rightType)
+	d, cmp, err := typeCheckComparisonOp(expr.Operator, leftType, rightType)
+	expr.fn = cmp
+	return d, err
 }
 
-func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, error) {
+func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, cmpOp, error) {
 	if dummyLeft == DNull || dummyRight == DNull {
 		switch op {
 		case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
 			// TODO(pmattis): For IS {UNKNOWN,TRUE,FALSE} we should be requiring that
 			// dummyLeft == DummyBool. We currently can't distinguish NULL from
 			// UNKNOWN. Is it important to do so?
-			return DummyBool, nil
+			return DummyBool, cmpOp{}, nil
 		default:
-			return DNull, nil
+			return DNull, cmpOp{}, nil
 		}
 	}
 
-	switch op {
-	case NE:
-		// NE(left, right) is implemented as !EQ(left, right).
-		op = EQ
-	case GT:
-		// GT(left, right) is implemented as LT(right, left)
-		op = LT
-		dummyLeft, dummyRight = dummyRight, dummyLeft
-	case GE:
-		// GE(left, right) is implemented as LE(right, left)
-		op = LE
-		dummyLeft, dummyRight = dummyRight, dummyLeft
-	case NotIn:
-		// NotIn(left, right) is implemented as !IN(left, right)
-		op = In
-	case NotLike:
-		// NotLike(left, right) is implemented as !Like(left, right)
-		op = Like
-	case NotSimilarTo:
-		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
-		op = SimilarTo
-	case Is, IsNot:
-		op = EQ
-	}
-
+	op, dummyLeft, dummyRight, _ = foldComparisonExpr(op, dummyLeft, dummyRight)
 	lType := reflect.TypeOf(dummyLeft)
 	rType := reflect.TypeOf(dummyRight)
 
-	// TODO(pmattis): Memoize the cmpOps lookup as we've done for unaryOps and
-	// binOps.
-	if _, ok := cmpOps[cmpArgs{op, lType, rType}]; ok {
+	if cmp, ok := cmpOps[cmpArgs{op, lType, rType}]; ok {
 		if op == EQ && lType == tupleType && rType == tupleType {
 			if err := typeCheckTupleEQ(dummyLeft, dummyRight); err != nil {
-				return nil, err
+				return nil, cmpOp{}, err
 			}
 		} else if op == In && rType == tupleType {
 			if err := typeCheckTupleIN(dummyLeft, dummyRight); err != nil {
-				return nil, err
+				return nil, cmpOp{}, err
 			}
 		}
 
-		return cmpOpResultType, nil
+		return cmpOpResultType, cmp, nil
 	}
 
-	return nil, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+	return nil, cmpOp{}, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
 		dummyLeft.Type(), op, dummyRight.Type())
 }
 
@@ -455,7 +430,7 @@ func typeCheckTupleEQ(lDummy, rDummy Datum) error {
 	}
 
 	for i := range lTuple {
-		if _, err := typeCheckComparisonOp(EQ, lTuple[i], rTuple[i]); err != nil {
+		if _, _, err := typeCheckComparisonOp(EQ, lTuple[i], rTuple[i]); err != nil {
 			return err
 		}
 	}
@@ -492,7 +467,7 @@ func typeCheckTupleIN(arg, values Datum) error {
 		}
 	} else {
 		for _, val := range vtuple {
-			if _, err := typeCheckComparisonOp(EQ, arg, val); err != nil {
+			if _, _, err := typeCheckComparisonOp(EQ, arg, val); err != nil {
 				return err
 			}
 		}
