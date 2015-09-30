@@ -415,14 +415,6 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	return err
 }
 
-// WaitForLeaderLease is used from unittests to wait until this range
-// has the leader lease.
-func (r *Replica) WaitForLeaderLease(t util.Tester) {
-	util.SucceedsWithin(t, 1*time.Second, func() error {
-		return r.requestLeaderLease(r.rm.Clock().Now())
-	})
-}
-
 // isInitialized is true if we know the metadata of this range, either
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response

@@ -1178,6 +1178,10 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		// advances the local node's clock to a high water mark from
 		// amongst all nodes with which it has interacted.
 		s.ctx.Clock.Update(header.Timestamp)
+	} else if ba.Txn == nil {
+		// TODO(tschottdorf): possibly consolidate this with other locations
+		// doing the same (but it's definitely required here).
+		ba.Timestamp.Forward(s.Clock().Now())
 	}
 
 	defer trace.Epoch(fmt.Sprintf("executing %d requests", len(ba.Requests)))()
