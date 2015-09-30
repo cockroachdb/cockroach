@@ -162,7 +162,7 @@ type RangeManager interface {
 	Stopper() *stop.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
-	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.PushTxnType) error
+	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.Timestamp, roachpb.PushTxnType) error
 
 	// Range and replica manipulation methods.
 	LookupReplica(start, end roachpb.Key) *Replica
@@ -344,8 +344,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	}
 	args := &roachpb.LeaderLeaseRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:                 desc.StartKey,
-			DeprecatedTimestamp: timestamp,
+			Key: desc.StartKey,
 			CmdID: roachpb.ClientCmdID{
 				WallTime: r.rm.Clock().Now().WallTime,
 				Random:   rand.Int63(),
@@ -681,14 +680,6 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
 		}
 	}
 
-	for _, union := range ba.Requests {
-		args := union.GetInner()
-		header := args.Header()
-		if header.DeprecatedTimestamp.Equal(roachpb.ZeroTimestamp) {
-			header.DeprecatedTimestamp = ba.Timestamp
-		}
-	}
-
 	return cmdKeys, nil
 }
 
@@ -702,7 +693,7 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, err e
 			args := union.GetInner()
 			if usesTimestampCache(args) {
 				header := args.Header()
-				r.tsCache.Add(header.Key, header.EndKey, header.DeprecatedTimestamp, header.Txn.GetID(), roachpb.IsReadOnly(args))
+				r.tsCache.Add(header.Key, header.EndKey, ba.Timestamp, header.Txn.GetID(), roachpb.IsReadOnly(args))
 			}
 		}
 	}
@@ -854,13 +845,6 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg 
 		}
 	}
 
-	// Make sure the batch timestamp is copied consistently to each request.
-	// TODO(tschottdorf): Forward() is provisional, depending on the outcome
-	// of the self-overlap discussion. See setBatchTimestamps.
-	for _, union := range ba.Requests {
-		args := union.GetInner()
-		args.Header().DeprecatedTimestamp.Forward(ba.Timestamp)
-	}
 	r.Unlock()
 
 	defer trace.Epoch("raft")()
@@ -1060,7 +1044,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		// TODO(tschottdorf): shouldn't be in the loop. Currently is because
 		// we haven't cleaned up the timestamp handling fully.
 		if lease := r.getLease(); args.Method() != roachpb.LeaderLease &&
-			(!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(args.Header().DeprecatedTimestamp)) {
+			(!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(ba.Timestamp)) {
 			// Verify the leader lease is held, unless this command is trying to
 			// obtain it. Any other Raft command has had the leader lease held
 			// by the replica at proposal time, but this may no longer be the case.
@@ -1372,9 +1356,10 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// still be careful though, a retry could happen and race with args.
 		args := proto.Clone(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
+			now := r.rm.Clock().Now()
 			err := r.rm.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
 				Intents: item.intents,
-			}, r, args, roachpb.CLEANUP_TXN)
+			}, r, args, now, roachpb.CLEANUP_TXN)
 			if wiErr, ok := err.(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 			}
