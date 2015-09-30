@@ -1152,19 +1152,22 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		// Execute the command.
 		args := union.GetInner()
 
-		header := args.Header()
-
 		// Scrub the headers. Specifically, always use almost everything from
 		// the batch. We're trying to simulate the situation in which the
 		// individual requests contain nothing but the key (range) in their
 		// headers.
-		origHeader := *proto.Clone(header).(*roachpb.RequestHeader)
+		origHeader := *proto.Clone(args.Header()).(*roachpb.RequestHeader)
 		{
+			header := args.Header()
 			// TODO(tschottdorf): specify which fields to set here.
 			*header = ba.ToHeader()
 			// Only Key and EndKey are allowed to diverge from the iterated
 			// Batch header (Timestamp too, but that's exceptional).
 			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
+		}
+		// Set the timestamp for this request.
+		ts := args.Header().Timestamp
+		{
 			// TODO(tschottdorf): Special exception because of pending
 			// self-overlap discussion.
 			// TODO(tschottdorf): currently treating PushTxn specially. Otherwise
@@ -1172,10 +1175,11 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 			// the same Txn for different intents will push the pushee in
 			// iteration, bumping up its priority. Unfortunately PushTxn is flagged
 			// as a write command (is it really?). Interim solution.
+			// Note that being in a txn implies delta=0.
 			if delta > 0 && args.Method() != roachpb.PushTxn {
-				header.Timestamp = ba.Timestamp.Add(0, int32(index))
+				ts = ba.Timestamp.Add(0, int32(index))
 			} else if !isTxn {
-				header.Timestamp = origHeader.Timestamp
+				ts = origHeader.Timestamp
 			} else {
 				// TODO(tschottdorf): should really replace here and assert that
 				// header.Timestamp is empty, but, alas, not the case at the
@@ -1185,23 +1189,23 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 				// if ba.Txn.Timestamp.Less(origHeader.Timestamp) {
 				// 	panic(fmt.Sprintf("%s\n%d: txn < orig: %s < %s", ba, index, ba.Txn.Timestamp, origHeader.Timestamp))
 				// }
-				header.Timestamp.Forward(ba.Txn.Timestamp)
+				ts.Forward(ba.Txn.Timestamp)
 			}
-
-			header.Txn = ba.Txn // use latest Txn
 		}
 
-		ts := header.Timestamp
-		header.Timestamp = roachpb.Timestamp{WallTime: math.MaxInt64} // poison it
+		args.Header().Txn = ba.Txn // use latest Txn
+		// Poison the timestamp which still remains in the header. We must not use it.
+		args.Header().Timestamp = roachpb.Timestamp{WallTime: math.MaxInt64}
+
 		reply, curIntents, err := r.executeCmd(batch, ms, ts, args)
 		{
 			// Undo any changes (in particular the poisoned timestamp).
-			*header = origHeader
-			header = nil
+			*args.Header() = origHeader
 		}
 
 		// Collect intents skipped over the course of execution.
 		if len(curIntents) > 0 {
+			// TODO(tschottdorf): see about refactoring the args away.
 			intents = append(intents, intentsWithArg{args: args, intents: curIntents})
 		}
 
