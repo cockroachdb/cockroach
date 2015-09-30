@@ -1,15 +1,7 @@
 {
-  "version": "1.4.1",
   "compilerOptions": {
     "target": "ES5",
-    "module": "commonjs",
-    "declaration": false,
-    "noImplicitAny": false,
-    "noEmitOnError": true,
-    "removeComments": true,
-    "noLib": false,
-    "out": "./build/test.js",
-    "sourceMap": false
+    "outFile": "../../build/test.js"
   },
   "files": [
     "./util.ts",
