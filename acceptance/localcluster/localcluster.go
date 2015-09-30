@@ -37,6 +37,7 @@ const (
 	builderImage   = "cockroachdb/builder"
 	dockerspyImage = "cockroachdb/docker-spy"
 	domain         = "local"
+	cockroachPort  = 26257
 )
 
 var cockroachImage = flag.String("i", builderImage, "the docker image to run")
@@ -276,7 +277,7 @@ func (l *Cluster) createRoach(i int, cmd ...string) *Container {
 		Hostname:     hostname,
 		Domainname:   domain,
 		Image:        *cockroachImage,
-		ExposedPorts: map[string]struct{}{"8080/tcp": {}},
+		ExposedPorts: map[string]struct{}{fmt.Sprintf("%d/tcp", cockroachPort): {}},
 		Entrypoint:   entrypoint,
 		Cmd:          cmd,
 	})
@@ -303,14 +304,14 @@ func (l *Cluster) createNodeCerts() {
 func (l *Cluster) startNode(i int) *Container {
 	gossipNodes := []string{}
 	for i := range l.Nodes {
-		gossipNodes = append(gossipNodes, node(i)+":8080")
+		gossipNodes = append(gossipNodes, fmt.Sprintf("%s:%d", node(i), cockroachPort))
 	}
 
 	cmd := []string{
 		"start",
 		"--stores=ssd=" + data(i),
 		"--certs=/certs",
-		"--addr=" + node(i) + ":8080",
+		"--addr=" + fmt.Sprintf("%s:%d", node(i), cockroachPort),
 		"--gossip=" + strings.Join(gossipNodes, ","),
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}

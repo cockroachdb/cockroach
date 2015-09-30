@@ -76,7 +76,7 @@ func NewResolver(context *base.Context, spec string) (Resolver, error) {
 			"valid types are %s", typ, spec, validTypes)
 	}
 
-	// For non-unix resolvers, make sure we fill in the host when not specified (eg: ":8080")
+	// For non-unix resolvers, make sure we fill in the host when not specified (eg: ":26257")
 	if typ != "unix" {
 		addr = util.EnsureHost(addr)
 	}
