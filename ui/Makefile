@@ -94,11 +94,15 @@ $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
 	stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out build/
 
 $(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
+	rm -f $(INDEX)
 	cp release/$(INDEX) $(INDEX)
+	chmod a-w $(INDEX)
 	$(GO_BINDATA) -nometadata -pkg ui -o $@ $(GOBINDATA_DEPS) $(INDEX) $(GOBINDATA_SOURCES)
 	gofmt -s -w $@
 	goimports -w $@
 
 $(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEPS) bower.installed debug/$(INDEX)
+	rm -f $(INDEX)
 	cp debug/$(INDEX) $(INDEX)
+	chmod a-w $(INDEX)
 	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_DEPS) $(INDEX) $(GOBINDATA_DEBUG_SOURCES)
