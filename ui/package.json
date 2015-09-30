@@ -4,6 +4,11 @@
   "private": true,
   "dependencies": {
     "bower": ">=1.5.3",
+    "del": "^2.0.2",
+    "gulp": "^3.9.0",
+    "gulp-livereload": "^3.8.0",
+    "gulp-stylus": "^2.0.7",
+    "gulp-typescript": "^2.9.0",
     "npm": "^3.3.4",
     "shonkwrap": "^1.1.2",
     "stylus": ">=0.51.1",

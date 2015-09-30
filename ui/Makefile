@@ -106,3 +106,6 @@ $(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEPS) bower.installed debug/$(INDEX)
 	cp debug/$(INDEX) $(INDEX)
 	chmod a-w $(INDEX)
 	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_DEPS) $(INDEX) $(GOBINDATA_DEBUG_SOURCES)
+
+watch: debug
+	gulp watch
