@@ -556,16 +556,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	// Differentiate between admin, read-only and write.
 	if ba.IsAdmin() {
 		defer trace.Epoch("admin path")()
-		args := ba.Requests[0].GetInner()
-		var iReply roachpb.Response
-		iReply, err = r.addAdminCmd(ctx, args)
-		if err == nil {
-			br = &roachpb.BatchResponse{}
-			br.Add(iReply)
-			h := iReply.Header()
-			br.Timestamp = h.Timestamp
-			br.Txn = h.Txn
-		}
+		br, err = r.addAdminCmd(ctx, ba)
 	} else if ba.IsReadOnly() {
 		defer trace.Epoch("read-only path")()
 		br, err = r.addReadOnlyCmd(ctx, &ba)
@@ -704,29 +695,43 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, err e
 // addAdminCmd executes the command directly. There is no interaction
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
-// Admin commands must run on the leader replica.
-func (r *Replica) addAdminCmd(ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
-	header := args.Header()
+// Admin commands must run on the leader replica. Batch support here is
+// only formal: the first request is executed and responded to, nothing else.
+func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	args := ba.Requests[0].GetInner()
 
-	if err := r.checkCmdHeader(header); err != nil {
+	if err := r.checkCmdHeader(args.Header()); err != nil {
 		return nil, err
 	}
 
 	// Admin commands always require the leader lease.
-	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), header.DeprecatedTimestamp); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), ba.Timestamp); err != nil {
 		return nil, err
 	}
 
+	var resp roachpb.Response
+	var err error
 	switch tArgs := args.(type) {
 	case *roachpb.AdminSplitRequest:
-		resp, err := r.AdminSplit(*tArgs, r.Desc())
-		return &resp, err
+		var reply roachpb.AdminSplitResponse
+		reply, err = r.AdminSplit(*tArgs, r.Desc())
+		resp = &reply
 	case *roachpb.AdminMergeRequest:
-		resp, err := r.AdminMerge(*tArgs, r.Desc())
-		return &resp, err
+		var reply roachpb.AdminMergeResponse
+		reply, err = r.AdminMerge(*tArgs, r.Desc())
+		resp = &reply
 	default:
 		return nil, util.Errorf("unrecognized admin command: %T", args)
 	}
+
+	if err != nil {
+		return nil, err
+	}
+	br := &roachpb.BatchResponse{}
+	br.Add(resp)
+	br.Timestamp = ba.Timestamp
+	br.Txn = resp.Header().Txn
+	return br, nil
 }
 
 // addReadOnlyCmd updates the read timestamp cache and waits for any
