@@ -539,15 +539,15 @@ func TestStoreSendUpdateTime(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	args := getArgs([]byte("a"), 1, store.StoreID())
-	ts := store.ctx.Clock.Now()
-	ts.WallTime += (100 * time.Millisecond).Nanoseconds()
-	_, err := client.SendWrappedAt(store, nil, ts, &args)
+	reqTS := store.ctx.Clock.Now()
+	reqTS.WallTime += (100 * time.Millisecond).Nanoseconds()
+	_, err := client.SendWrappedAt(store, nil, reqTS, &args)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts = store.ctx.Clock.Timestamp()
-	if ts.WallTime != args.DeprecatedTimestamp.WallTime || ts.Logical <= args.DeprecatedTimestamp.Logical {
-		t.Errorf("expected store clock to advance to %s; got %s", args.DeprecatedTimestamp, ts)
+	ts := store.ctx.Clock.Timestamp()
+	if ts.WallTime != reqTS.WallTime || ts.Logical <= reqTS.Logical {
+		t.Errorf("expected store clock to advance to %s; got %s", reqTS, ts)
 	}
 }
 
@@ -784,14 +784,12 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 
 		// First lay down intent using the pushee's txn.
 		pArgs := putArgs(key, []byte("value"), 1, store.StoreID())
-		pArgs.DeprecatedTimestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pushee
 		if _, err := client.SendWrapped(store, nil, &pArgs); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now, try a put using the pusher's txn.
-		pArgs.DeprecatedTimestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pusher
 		_, err := client.SendWrapped(store, nil, &pArgs)
 		if resolvable {
@@ -836,14 +834,12 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 
 	// First lay down intent using the pushee's txn.
 	args := incrementArgs(key, 1, 1, store.StoreID())
-	args.DeprecatedTimestamp = store.ctx.Clock.Now()
 	args.Txn = pushee
 	if _, err := client.SendWrapped(store, nil, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, try a put using the pusher's txn.
-	args.DeprecatedTimestamp = store.ctx.Clock.Now()
 	args.Txn = pusher
 	args.Increment = 2
 	if resp, err := client.SendWrapped(store, nil, &args); err != nil {
@@ -889,13 +885,11 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 		// First, write original value.
 		args := putArgs(key, []byte("value1"), 1, store.StoreID())
-		args.DeprecatedTimestamp = store.ctx.Clock.Now()
 		if _, err := client.SendWrapped(store, nil, &args); err != nil {
 			t.Fatal(err)
 		}
 
 		// Second, lay down intent using the pushee's txn.
-		args.DeprecatedTimestamp = store.ctx.Clock.Now()
 		args.Txn = pushee
 		args.Value.Bytes = []byte("value2")
 		if _, err := client.SendWrapped(store, nil, &args); err != nil {
@@ -916,13 +910,12 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 			// Finally, try to end the pushee's transaction; if we have
 			// SNAPSHOT isolation, the commit should work: verify the txn
-			// commit timestamp is equal to gArgs.Timestamp + 1. Otherwise,
+			// commit timestamp is equal to pusher's Timestamp + 1. Otherwise,
 			// verify commit fails with TransactionRetryError.
 			etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
-			ts := pushee.Timestamp
-			reply, cErr := client.SendWrappedAt(store, nil, ts, &etArgs)
+			reply, cErr := client.SendWrapped(store, nil, &etArgs)
 
-			expTimestamp := gArgs.DeprecatedTimestamp
+			expTimestamp := pusher.Timestamp
 			expTimestamp.Logical++
 			if test.pusheeIso == roachpb.SNAPSHOT {
 				if cErr != nil {
@@ -1036,20 +1029,20 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	// Now, try to read outside a transaction.
 	gArgs := getArgs(key, 1, store.StoreID())
-	ts := store.ctx.Clock.Now()
+	getTS := store.ctx.Clock.Now()
 	gArgs.UserPriority = proto.Int32(math.MaxInt32)
-	if reply, err := client.SendWrappedAt(store, nil, ts, &gArgs); err != nil {
+	if reply, err := client.SendWrappedAt(store, nil, getTS, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
 	} else if gReply := reply.(*roachpb.GetResponse); gReply.Value != nil {
 		t.Errorf("expected value to be nil, got %+v", gReply.Value)
 	}
 
 	// Next, try to write outside of a transaction. We will succeed in pushing txn.
-	gTS := store.ctx.Clock.Now()
+	putTS := store.ctx.Clock.Now()
 	args.Value.Bytes = []byte("value2")
 	args.Txn = nil
 	args.UserPriority = proto.Int32(math.MaxInt32)
-	if _, err := client.SendWrappedAt(store, nil, gTS, &args); err != nil {
+	if _, err := client.SendWrappedAt(store, nil, putTS, &args); err != nil {
 		t.Errorf("expected success aborting pushee's txn; got %s", err)
 	}
 
@@ -1065,7 +1058,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	// Verify that the pushee's timestamp was moved forward on
 	// former read, since we have it available in write intent error.
-	expTS := gArgs.DeprecatedTimestamp
+	expTS := getTS
 	expTS.Logical++
 	if !txn.Timestamp.Equal(expTS) {
 		t.Errorf("expected pushee timestamp pushed to %s; got %s", expTS, txn.Timestamp)
@@ -1131,7 +1124,6 @@ func TestStoreReadInconsistent(t *testing.T) {
 		txnB := newTransaction("testB", keyB, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 			args.Key = txn.Key
-			args.DeprecatedTimestamp = txn.Timestamp
 			args.Txn = txn
 			if _, err := client.SendWrapped(store, nil, &args); err != nil {
 				t.Fatal(err)
@@ -1139,7 +1131,6 @@ func TestStoreReadInconsistent(t *testing.T) {
 		}
 		// End txn B, but without resolving the intent.
 		etArgs := endTxnArgs(txnB, true, 1, store.StoreID())
-		etArgs.DeprecatedTimestamp = txnB.Timestamp
 		if _, err := client.SendWrapped(store, nil, &etArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -1148,7 +1139,6 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// will be able to read with INCONSISTENT.
 		gArgs := getArgs(keyA, 1, store.StoreID())
 
-		gArgs.DeprecatedTimestamp = store.ctx.Clock.Now()
 		gArgs.ReadConsistency = roachpb.INCONSISTENT
 		if reply, err := client.SendWrapped(store, nil, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
@@ -1342,7 +1332,6 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	// of Txn entries in this test, the Txn entry would be removed and later
 	// attempts to resolve the intents would fail.
 	etArgs := endTxnArgs(txn, true, 1, store.StoreID())
-	etArgs.DeprecatedTimestamp = txn.Timestamp
 	if _, err := client.SendWrapped(store, nil, &etArgs); err != nil {
 		t.Fatal(err)
 	}
