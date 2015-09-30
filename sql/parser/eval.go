@@ -319,109 +319,233 @@ type cmpArgs struct {
 	rightType reflect.Type
 }
 
-var cmpOpResultType = reflect.New(reflect.TypeOf(cmpOps).Elem().Out(0)).Elem().Interface().(DBool)
+type cmpOp struct {
+	fn func(Datum, Datum) (DBool, error)
+}
+
+var cmpOpResultType = reflect.New(reflect.TypeOf(cmpOp{}).Field(0).Type.Out(0)).Elem().Interface().(DBool)
 
 // cmpOps contains the comparison operations indexed by operation type and
 // argument types.
-var cmpOps = map[cmpArgs]func(Datum, Datum) (DBool, error){
-	cmpArgs{EQ, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DString) == right.(DString)), nil
+var cmpOps = map[cmpArgs]cmpOp{
+	cmpArgs{EQ, stringType, stringType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DString) == right.(DString)), nil
+		},
 	},
-	cmpArgs{EQ, bytesType, bytesType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DBytes) == right.(DBytes)), nil
+	cmpArgs{EQ, bytesType, bytesType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DBytes) == right.(DBytes)), nil
+		},
 	},
-	cmpArgs{EQ, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DBool) == right.(DBool)), nil
+	cmpArgs{EQ, boolType, boolType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DBool) == right.(DBool)), nil
+		},
 	},
-	cmpArgs{EQ, intType, intType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DInt) == right.(DInt)), nil
+	cmpArgs{EQ, intType, intType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DInt) == right.(DInt)), nil
+		},
 	},
-	cmpArgs{EQ, floatType, floatType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DFloat) == right.(DFloat)), nil
+	cmpArgs{EQ, floatType, floatType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DFloat) == right.(DFloat)), nil
+		},
 	},
-	cmpArgs{EQ, dateType, dateType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DDate).Equal(right.(DDate).Time)), nil
+	cmpArgs{EQ, dateType, dateType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DDate).Equal(right.(DDate).Time)), nil
+		},
 	},
-	cmpArgs{EQ, timestampType, timestampType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DTimestamp).Equal(right.(DTimestamp).Time)), nil
+	cmpArgs{EQ, timestampType, timestampType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DTimestamp).Equal(right.(DTimestamp).Time)), nil
+		},
 	},
-	cmpArgs{EQ, intervalType, intervalType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DInterval) == right.(DInterval)), nil
-	},
-
-	cmpArgs{LT, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DString) < right.(DString)), nil
-	},
-	cmpArgs{LT, bytesType, bytesType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DBytes) < right.(DBytes)), nil
-	},
-	cmpArgs{LT, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(!left.(DBool) && right.(DBool)), nil
-	},
-	cmpArgs{LT, intType, intType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DInt) < right.(DInt)), nil
-	},
-	cmpArgs{LT, floatType, floatType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DFloat) < right.(DFloat)), nil
-	},
-	cmpArgs{LT, dateType, dateType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DDate).Before(right.(DDate).Time)), nil
-	},
-	cmpArgs{LT, timestampType, timestampType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DTimestamp).Before(right.(DTimestamp).Time)), nil
-	},
-	cmpArgs{LT, intervalType, intervalType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DInterval).Duration < right.(DInterval).Duration), nil
+	cmpArgs{EQ, intervalType, intervalType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DInterval) == right.(DInterval)), nil
+		},
 	},
 
-	cmpArgs{LE, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DString) <= right.(DString)), nil
+	cmpArgs{LT, stringType, stringType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DString) < right.(DString)), nil
+		},
 	},
-	cmpArgs{LE, bytesType, bytesType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DBytes) <= right.(DBytes)), nil
+	cmpArgs{LT, bytesType, bytesType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DBytes) < right.(DBytes)), nil
+		},
 	},
-	cmpArgs{LE, boolType, boolType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(!left.(DBool) || right.(DBool)), nil
+	cmpArgs{LT, boolType, boolType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(!left.(DBool) && right.(DBool)), nil
+		},
 	},
-	cmpArgs{LE, intType, intType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DInt) <= right.(DInt)), nil
+	cmpArgs{LT, intType, intType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DInt) < right.(DInt)), nil
+		},
 	},
-	cmpArgs{LE, floatType, floatType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DFloat) <= right.(DFloat)), nil
+	cmpArgs{LT, floatType, floatType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DFloat) < right.(DFloat)), nil
+		},
 	},
-	cmpArgs{LE, dateType, dateType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(right.(DDate).Before(left.(DDate).Time)), nil
+	cmpArgs{LT, dateType, dateType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DDate).Before(right.(DDate).Time)), nil
+		},
 	},
-	cmpArgs{LE, timestampType, timestampType}: func(left Datum, right Datum) (DBool, error) {
-		return !DBool(right.(DTimestamp).Before(left.(DTimestamp).Time)), nil
+	cmpArgs{LT, timestampType, timestampType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DTimestamp).Before(right.(DTimestamp).Time)), nil
+		},
 	},
-	cmpArgs{LE, intervalType, intervalType}: func(left Datum, right Datum) (DBool, error) {
-		return DBool(left.(DInterval).Duration <= right.(DInterval).Duration), nil
+	cmpArgs{LT, intervalType, intervalType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DInterval).Duration < right.(DInterval).Duration), nil
+		},
 	},
 
-	cmpArgs{Like, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
-		pattern := regexp.QuoteMeta(string(right.(DString)))
-		// Replace LIKE specific wildcards with standard wildcards
-		pattern = strings.Replace(pattern, "%", ".*", -1)
-		pattern = strings.Replace(pattern, "_", ".", -1)
-		pattern = anchorPattern(pattern, false)
-
-		// TODO(pmattis): Can we cache this regexp compilation?
-		re := regexp.MustCompile(pattern)
-		return DBool(re.MatchString(string(left.(DString)))), nil
+	cmpArgs{LE, stringType, stringType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DString) <= right.(DString)), nil
+		},
+	},
+	cmpArgs{LE, bytesType, bytesType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DBytes) <= right.(DBytes)), nil
+		},
+	},
+	cmpArgs{LE, boolType, boolType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(!left.(DBool) || right.(DBool)), nil
+		},
+	},
+	cmpArgs{LE, intType, intType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DInt) <= right.(DInt)), nil
+		},
+	},
+	cmpArgs{LE, floatType, floatType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DFloat) <= right.(DFloat)), nil
+		},
+	},
+	cmpArgs{LE, dateType, dateType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(right.(DDate).Before(left.(DDate).Time)), nil
+		},
+	},
+	cmpArgs{LE, timestampType, timestampType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return !DBool(right.(DTimestamp).Before(left.(DTimestamp).Time)), nil
+		},
+	},
+	cmpArgs{LE, intervalType, intervalType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DInterval).Duration <= right.(DInterval).Duration), nil
+		},
 	},
 
-	cmpArgs{SimilarTo, stringType, stringType}: func(left Datum, right Datum) (DBool, error) {
-		pattern := SimilarEscape(string(right.(DString)))
-		pattern = anchorPattern(pattern, false)
+	cmpArgs{Like, stringType, stringType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			pattern := regexp.QuoteMeta(string(right.(DString)))
+			// Replace LIKE specific wildcards with standard wildcards
+			pattern = strings.Replace(pattern, "%", ".*", -1)
+			pattern = strings.Replace(pattern, "_", ".", -1)
+			pattern = anchorPattern(pattern, false)
 
-		// TODO(pmattis): Can we cache this regexp compilation?
-		re, err := regexp.Compile(pattern)
-		if err != nil {
-			return DBool(false), err
+			// TODO(pmattis): Can we cache this regexp compilation?
+			re := regexp.MustCompile(pattern)
+			return DBool(re.MatchString(string(left.(DString)))), nil
+		},
+	},
+
+	cmpArgs{SimilarTo, stringType, stringType}: {
+		fn: func(left Datum, right Datum) (DBool, error) {
+			pattern := SimilarEscape(string(right.(DString)))
+			pattern = anchorPattern(pattern, false)
+
+			// TODO(pmattis): Can we cache this regexp compilation?
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				return DBool(false), err
+			}
+
+			return DBool(re.MatchString(string(left.(DString)))), nil
+		},
+	},
+}
+
+var evalTupleEQ = cmpOp{
+	fn: func(ldatum, rdatum Datum) (DBool, error) {
+		left := ldatum.(DTuple)
+		right := rdatum.(DTuple)
+		if len(left) != len(right) {
+			return DBool(false), nil
+		}
+		for i := range left {
+			d, err := evalComparisonEq(left[i], right[i])
+			if err != nil {
+				return DummyBool, err
+			}
+			if v, err := getBool(d); err != nil {
+				return DummyBool, err
+			} else if !v {
+				return v, nil
+			}
+		}
+		return DBool(true), nil
+	},
+}
+
+var evalTupleIN = cmpOp{
+	fn: func(arg, values Datum) (DBool, error) {
+		if arg == DNull {
+			return DBool(false), nil
 		}
 
-		return DBool(re.MatchString(string(left.(DString)))), nil
+		vtuple := values.(DTuple)
+
+		// TODO(pmattis): If we're evaluating the expression multiple times we should
+		// use a map when possible. This works as long as arg is not a tuple. Note
+		// that the usage of the map is currently disabled via the "&& false" because
+		// building the map is a pessimization if we're only evaluating the
+		// expression once. We need to determine when the expression will be
+		// evaluated multiple times before enabling. Also need to figure out a way to
+		// use the map approach for tuples. One idea is to encode the tuples into
+		// strings and then use a map of strings.
+		if _, ok := arg.(DTuple); !ok && false {
+			m := make(map[Datum]struct{}, len(vtuple))
+			for _, val := range vtuple {
+				if reflect.TypeOf(arg) != reflect.TypeOf(val) {
+					return DummyBool, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+						arg.Type(), EQ, val.Type())
+				}
+				m[val] = struct{}{}
+			}
+			if _, exists := m[arg]; exists {
+				return DBool(true), nil
+			}
+		} else {
+			for _, val := range vtuple {
+				d, err := evalComparisonEq(arg, val)
+				if err != nil {
+					return DummyBool, err
+				}
+				if v, err := getBool(d); err != nil {
+					return DummyBool, err
+				} else if v {
+					return v, nil
+				}
+			}
+		}
+
+		return DBool(false), nil
 	},
 }
 
@@ -725,7 +849,7 @@ func (ctx EvalContext) evalNullIfExpr(expr *NullIfExpr) (Datum, error) {
 	if err != nil {
 		return DNull, err
 	}
-	cond, err := evalComparisonOp(EQ, expr1, expr2)
+	cond, err := evalComparisonEq(expr1, expr2)
 	if err != nil {
 		return DNull, err
 	}
@@ -757,12 +881,9 @@ func (ctx EvalContext) evalComparisonExpr(expr *ComparisonExpr) (Datum, error) {
 	if err != nil {
 		return DNull, err
 	}
-	return evalComparisonOp(expr.Operator, left, right)
-}
 
-func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 	if left == DNull || right == DNull {
-		switch op {
+		switch expr.Operator {
 		case IsDistinctFrom:
 			return !DBool(left == DNull && right == DNull), nil
 		case IsNotDistinctFrom:
@@ -777,68 +898,26 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 		}
 	}
 
-	not := false
-	switch op {
-	case NE:
-		// NE(left, right) is implemented as !EQ(left, right).
-		not = true
-		op = EQ
-	case GT:
-		// GT(left, right) is implemented as LT(right, left)
-		op = LT
-		left, right = right, left
-	case GE:
-		// GE(left, right) is implemented as LE(right, left)
-		op = LE
-		left, right = right, left
-	case NotIn:
-		// NotIn(left, right) is implemented as !IN(left, right)
-		not = true
-		op = In
-	case NotLike:
-		// NotLike(left, right) is implemented as !Like(left, right)
-		not = true
-		op = Like
-	case NotSimilarTo:
-		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
-		not = true
-		op = SimilarTo
-	case IsDistinctFrom:
-		// IsDistinctFrom(left, right) is implemented as !EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS DISTINCT FROM above.
-		not = true
-		op = EQ
-	case IsNotDistinctFrom:
-		// IsNotDistinctFrom(left, right) is implemented as EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS NOT DISTINCT FROM above.
-		op = EQ
-	case Is:
-		// Is(left, right) is implemented as EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS above.
-		op = EQ
-	case IsNot:
-		// IsNot(left, right) is implemented as !EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS NOT above.
-		not = true
-		op = EQ
-	}
-
-	// TODO(pmattis): Memoize the cmpOps lookup as we've done for unaryOps and
-	// binOps.
-	if f, ok := cmpOps[cmpArgs{op, reflect.TypeOf(left), reflect.TypeOf(right)}]; ok {
-		d, err := f(left, right)
-		if err == nil && not {
-			return !d, nil
+	// Make sure the expression's cmpOp function is memoized
+	if expr.fn.fn == nil {
+		if _, err := typeCheckComparisonExpr(expr); err != nil {
+			return DNull, err
 		}
-		return d, err
+
+		// If cmpOp's function is still nil, return unsupported op error
+		if expr.fn.fn == nil {
+			return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+				left.Type(), expr.Operator, right.Type())
+		}
 	}
 
-	return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
-		left.Type(), op, right.Type())
+	_, newLeft, newRight, not := foldComparisonExpr(expr.Operator, left, right)
+
+	d, err := expr.fn.fn(newLeft, newRight)
+	if err == nil && not {
+		return !d, nil
+	}
+	return d, err
 }
 
 func (ctx EvalContext) evalBinaryExpr(expr *BinaryExpr) (Datum, error) {
@@ -936,7 +1015,7 @@ func (ctx EvalContext) evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			if err != nil {
 				return DNull, err
 			}
-			d, err := evalComparisonOp(EQ, val, arg)
+			d, err := evalComparisonEq(val, arg)
 			if err != nil {
 				return DNull, err
 			}
@@ -965,70 +1044,6 @@ func (ctx EvalContext) evalCaseExpr(expr *CaseExpr) (Datum, error) {
 		return ctx.EvalExpr(expr.Else)
 	}
 	return DNull, nil
-}
-
-func evalTupleEQ(ldatum, rdatum Datum) (DBool, error) {
-	left := ldatum.(DTuple)
-	right := rdatum.(DTuple)
-	if len(left) != len(right) {
-		return DBool(false), nil
-	}
-	for i := range left {
-		d, err := evalComparisonOp(EQ, left[i], right[i])
-		if err != nil {
-			return DummyBool, err
-		}
-		if v, err := getBool(d); err != nil {
-			return DummyBool, err
-		} else if !v {
-			return v, nil
-		}
-	}
-	return DBool(true), nil
-}
-
-func evalTupleIN(arg, values Datum) (DBool, error) {
-	if arg == DNull {
-		return DBool(false), nil
-	}
-
-	vtuple := values.(DTuple)
-
-	// TODO(pmattis): If we're evaluating the expression multiple times we should
-	// use a map when possible. This works as long as arg is not a tuple. Note
-	// that the usage of the map is currently disabled via the "&& false" because
-	// building the map is a pessimization if we're only evaluating the
-	// expression once. We need to determine when the expression will be
-	// evaluated multiple times before enabling. Also need to figure out a way to
-	// use the map approach for tuples. One idea is to encode the tuples into
-	// strings and then use a map of strings.
-	if _, ok := arg.(DTuple); !ok && false {
-		m := make(map[Datum]struct{}, len(vtuple))
-		for _, val := range vtuple {
-			if reflect.TypeOf(arg) != reflect.TypeOf(val) {
-				return DummyBool, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
-					arg.Type(), EQ, val.Type())
-			}
-			m[val] = struct{}{}
-		}
-		if _, exists := m[arg]; exists {
-			return DBool(true), nil
-		}
-	} else {
-		for _, val := range vtuple {
-			d, err := evalComparisonOp(EQ, arg, val)
-			if err != nil {
-				return DummyBool, err
-			}
-			if v, err := getBool(d); err != nil {
-				return DummyBool, err
-			} else if v {
-				return v, nil
-			}
-		}
-	}
-
-	return DBool(false), nil
 }
 
 func (ctx EvalContext) evalCastExpr(expr *CastExpr) (Datum, error) {
@@ -1157,6 +1172,66 @@ func (ctx EvalContext) evalCastExpr(expr *CastExpr) (Datum, error) {
 	}
 
 	return DNull, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)
+}
+
+func evalComparisonEq(left, right Datum) (Datum, error) {
+	if left == DNull || right == DNull {
+		return DNull, nil
+	}
+
+	if f, ok := cmpOps[cmpArgs{EQ, reflect.TypeOf(left), reflect.TypeOf(right)}]; ok {
+		return f.fn(left, right)
+	}
+
+	return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+		left.Type(), EQ, right.Type())
+}
+
+// foldComparisonExpr folds a given comparison operation and its datum into an
+// equivalent operation that will hit in the cmpOps map, returning this new
+// operation, along with potentially flipped operands and a "not" flag.
+func foldComparisonExpr(op ComparisonOp, dummyLeft, dummyRight Datum) (ComparisonOp, Datum, Datum, bool) {
+	switch op {
+	case NE:
+		// NE(left, right) is implemented as !EQ(left, right).
+		return EQ, dummyLeft, dummyRight, true
+	case GT:
+		// GT(left, right) is implemented as LT(right, left)
+		return LT, dummyRight, dummyLeft, false
+	case GE:
+		// GE(left, right) is implemented as LE(right, left)
+		return LE, dummyRight, dummyLeft, false
+	case NotIn:
+		// NotIn(left, right) is implemented as !IN(left, right)
+		return In, dummyLeft, dummyRight, true
+	case NotLike:
+		// NotLike(left, right) is implemented as !Like(left, right)
+		return Like, dummyLeft, dummyRight, true
+	case NotSimilarTo:
+		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
+		return SimilarTo, dummyLeft, dummyRight, true
+	case IsDistinctFrom:
+		// IsDistinctFrom(left, right) is implemented as !EQ(left, right)
+		//
+		// Note the special handling of NULLs and IS DISTINCT FROM above.
+		return EQ, dummyLeft, dummyRight, true
+	case IsNotDistinctFrom:
+		// IsNotDistinctFrom(left, right) is implemented as EQ(left, right)
+		//
+		// Note the special handling of NULLs and IS NOT DISTINCT FROM above.
+		return EQ, dummyLeft, dummyRight, false
+	case Is:
+		// Is(left, right) is implemented as EQ(left, right)
+		//
+		// Note the special handling of NULLs and IS above.
+		return EQ, dummyLeft, dummyRight, false
+	case IsNot:
+		// IsNot(left, right) is implemented as !EQ(left, right)
+		//
+		// Note the special handling of NULLs and IS NOT above.
+		return EQ, dummyLeft, dummyRight, true
+	}
+	return op, dummyLeft, dummyRight, false
 }
 
 // time.Time formats.
