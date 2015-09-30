@@ -348,8 +348,8 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 	// and renew or acquire if necessary.
 	if bq.impl.needsLeaderLease() {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		args := &roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Timestamp: now}}
-		if err := repl.redirectOnOrAcquireLeaderLease(nil /* Trace */, args.Header().Timestamp); err != nil {
+		args := &roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{DeprecatedTimestamp: now}}
+		if err := repl.redirectOnOrAcquireLeaderLease(nil /* Trace */, args.Header().DeprecatedTimestamp); err != nil {
 			if log.V(3) {
 				log.Infof("this replica of %s could not acquire leader lease; skipping...", repl)
 			}

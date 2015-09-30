@@ -1352,7 +1352,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 			},
 			PusherTxn: *pusherTxn,
 			PusheeTxn: intent.Txn,
-			PushTo:    header.Timestamp,
+			PushTo:    header.DeprecatedTimestamp,
 			// The timestamp is used by PushTxn for figuring out whether the
 			// transaction is abandoned. If we used the argument's timestamp
 			// here, we would run into busy loops because that timestamp

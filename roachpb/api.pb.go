@@ -253,10 +253,10 @@ func (m *ClientCmdID) GetRandom() int64 {
 
 // RequestHeader is supplied with every storage node request.
 type RequestHeader struct {
-	// Timestamp specifies time at which read or writes should be
+	// DeprecatedTimestamp specifies time at which read or writes should be
 	// performed. If the timestamp is set to zero value, its value
 	// is initialized to the wall time of the receiving node.
-	Timestamp Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
+	DeprecatedTimestamp Timestamp `protobuf:"bytes,1,opt,name=deprecated_timestamp" json:"deprecated_timestamp"`
 	// CmdID is optionally specified for request idempotence
 	// (i.e. replay protection).
 	CmdID ClientCmdID `protobuf:"bytes,2,opt,name=cmd_id" json:"cmd_id"`
@@ -303,9 +303,9 @@ func (*RequestHeader) ProtoMessage()    {}
 
 const Default_RequestHeader_UserPriority int32 = 1
 
-func (m *RequestHeader) GetTimestamp() Timestamp {
+func (m *RequestHeader) GetDeprecatedTimestamp() Timestamp {
 	if m != nil {
-		return m.Timestamp
+		return m.DeprecatedTimestamp
 	}
 	return Timestamp{}
 }
@@ -1843,8 +1843,8 @@ func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
-	n1, err := m.Timestamp.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.DeprecatedTimestamp.Size()))
+	n1, err := m.DeprecatedTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -4032,7 +4032,7 @@ func (m *ClientCmdID) Size() (n int) {
 func (m *RequestHeader) Size() (n int) {
 	var l int
 	_ = l
-	l = m.Timestamp.Size()
+	l = m.DeprecatedTimestamp.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.CmdID.Size()
 	n += 1 + l + sovApi(uint64(l))
@@ -5126,7 +5126,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field DeprecatedTimestamp", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -5150,7 +5150,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.DeprecatedTimestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

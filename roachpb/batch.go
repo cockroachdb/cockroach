@@ -302,7 +302,7 @@ func (ba *BatchRequest) ToHeader() RequestHeader {
 	var h RequestHeader
 	h.Key, h.EndKey = ba.Key, ba.EndKey
 	h.CmdID = ba.CmdID
-	h.Timestamp = ba.Timestamp
+	h.DeprecatedTimestamp = ba.Timestamp
 	h.Replica = ba.Replica
 	h.RangeID = ba.RangeID
 	h.UserPriority = ba.UserPriority

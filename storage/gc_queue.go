@@ -142,8 +142,8 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	gcArgs := &roachpb.GCRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Timestamp: now,
-			RangeID:   desc.RangeID,
+			DeprecatedTimestamp: now,
+			RangeID:             desc.RangeID,
 		},
 	}
 	var mu sync.Mutex
@@ -302,8 +302,8 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.T
 	// Attempt to push the transaction which created the intent.
 	pushArgs := &roachpb.PushTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Timestamp: now,
-			Key:       txn.Key,
+			DeprecatedTimestamp: now,
+			Key:                 txn.Key,
 		},
 		Now:       now,
 		PusherTxn: roachpb.Transaction{Priority: roachpb.MaxPriority},

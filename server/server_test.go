@@ -324,7 +324,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		// The Put ts may have been pushed by tsCache,
 		// so make sure we see their values in our Scan.
 		delTS = reply.(*roachpb.PutResponse).Timestamp
-		scan.Timestamp = delTS
+		scan.DeprecatedTimestamp = delTS
 		reply, err = client.SendWrapped(tds, nil, scan)
 		if err != nil {
 			t.Fatal(err)
@@ -342,9 +342,9 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	del := &roachpb.DeleteRangeRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:       writes[0],
-			EndKey:    roachpb.Key(writes[len(writes)-1]).Next(),
-			Timestamp: delTS,
+			Key:                 writes[0],
+			EndKey:              roachpb.Key(writes[len(writes)-1]).Next(),
+			DeprecatedTimestamp: delTS,
 		},
 	}
 	reply, err := client.SendWrapped(tds, nil, del)
@@ -361,7 +361,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*roachpb.ScanRequest)
-	scan.Timestamp = dr.Timestamp
+	scan.DeprecatedTimestamp = dr.Timestamp
 	scan.Txn = &roachpb.Transaction{Name: "MyTxn"}
 	reply, err = client.SendWrapped(tds, nil, scan)
 	if err != nil {
@@ -418,7 +418,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
 				scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
 					int64(maxResults))
-				scan.Header().Timestamp = reply.Header().Timestamp
+				scan.Header().DeprecatedTimestamp = reply.Header().Timestamp
 				reply, err := client.SendWrapped(tds, nil, scan)
 				if err != nil {
 					t.Fatal(err)

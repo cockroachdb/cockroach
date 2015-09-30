@@ -300,14 +300,14 @@ class RequestHeader : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.Timestamp timestamp = 1;
-  bool has_timestamp() const;
-  void clear_timestamp();
-  static const int kTimestampFieldNumber = 1;
-  const ::cockroach::roachpb::Timestamp& timestamp() const;
-  ::cockroach::roachpb::Timestamp* mutable_timestamp();
-  ::cockroach::roachpb::Timestamp* release_timestamp();
-  void set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp);
+  // optional .cockroach.roachpb.Timestamp deprecated_timestamp = 1;
+  bool has_deprecated_timestamp() const;
+  void clear_deprecated_timestamp();
+  static const int kDeprecatedTimestampFieldNumber = 1;
+  const ::cockroach::roachpb::Timestamp& deprecated_timestamp() const;
+  ::cockroach::roachpb::Timestamp* mutable_deprecated_timestamp();
+  ::cockroach::roachpb::Timestamp* release_deprecated_timestamp();
+  void set_allocated_deprecated_timestamp(::cockroach::roachpb::Timestamp* deprecated_timestamp);
 
   // optional .cockroach.roachpb.ClientCmdID cmd_id = 2;
   bool has_cmd_id() const;
@@ -383,8 +383,8 @@ class RequestHeader : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RequestHeader)
  private:
-  inline void set_has_timestamp();
-  inline void clear_has_timestamp();
+  inline void set_has_deprecated_timestamp();
+  inline void clear_has_deprecated_timestamp();
   inline void set_has_cmd_id();
   inline void clear_has_cmd_id();
   inline void set_has_key();
@@ -405,7 +405,7 @@ class RequestHeader : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::cockroach::roachpb::Timestamp* timestamp_;
+  ::cockroach::roachpb::Timestamp* deprecated_timestamp_;
   ::cockroach::roachpb::ClientCmdID* cmd_id_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
@@ -6097,47 +6097,47 @@ inline void ClientCmdID::set_random(::google::protobuf::int64 value) {
 
 // RequestHeader
 
-// optional .cockroach.roachpb.Timestamp timestamp = 1;
-inline bool RequestHeader::has_timestamp() const {
+// optional .cockroach.roachpb.Timestamp deprecated_timestamp = 1;
+inline bool RequestHeader::has_deprecated_timestamp() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void RequestHeader::set_has_timestamp() {
+inline void RequestHeader::set_has_deprecated_timestamp() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void RequestHeader::clear_has_timestamp() {
+inline void RequestHeader::clear_has_deprecated_timestamp() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void RequestHeader::clear_timestamp() {
-  if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
-  clear_has_timestamp();
+inline void RequestHeader::clear_deprecated_timestamp() {
+  if (deprecated_timestamp_ != NULL) deprecated_timestamp_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_deprecated_timestamp();
 }
-inline const ::cockroach::roachpb::Timestamp& RequestHeader::timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestHeader.timestamp)
-  return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
+inline const ::cockroach::roachpb::Timestamp& RequestHeader::deprecated_timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestHeader.deprecated_timestamp)
+  return deprecated_timestamp_ != NULL ? *deprecated_timestamp_ : *default_instance_->deprecated_timestamp_;
 }
-inline ::cockroach::roachpb::Timestamp* RequestHeader::mutable_timestamp() {
-  set_has_timestamp();
-  if (timestamp_ == NULL) {
-    timestamp_ = new ::cockroach::roachpb::Timestamp;
+inline ::cockroach::roachpb::Timestamp* RequestHeader::mutable_deprecated_timestamp() {
+  set_has_deprecated_timestamp();
+  if (deprecated_timestamp_ == NULL) {
+    deprecated_timestamp_ = new ::cockroach::roachpb::Timestamp;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestHeader.timestamp)
-  return timestamp_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestHeader.deprecated_timestamp)
+  return deprecated_timestamp_;
 }
-inline ::cockroach::roachpb::Timestamp* RequestHeader::release_timestamp() {
-  clear_has_timestamp();
-  ::cockroach::roachpb::Timestamp* temp = timestamp_;
-  timestamp_ = NULL;
+inline ::cockroach::roachpb::Timestamp* RequestHeader::release_deprecated_timestamp() {
+  clear_has_deprecated_timestamp();
+  ::cockroach::roachpb::Timestamp* temp = deprecated_timestamp_;
+  deprecated_timestamp_ = NULL;
   return temp;
 }
-inline void RequestHeader::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
-  delete timestamp_;
-  timestamp_ = timestamp;
-  if (timestamp) {
-    set_has_timestamp();
+inline void RequestHeader::set_allocated_deprecated_timestamp(::cockroach::roachpb::Timestamp* deprecated_timestamp) {
+  delete deprecated_timestamp_;
+  deprecated_timestamp_ = deprecated_timestamp;
+  if (deprecated_timestamp) {
+    set_has_deprecated_timestamp();
   } else {
-    clear_has_timestamp();
+    clear_has_deprecated_timestamp();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestHeader.timestamp)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestHeader.deprecated_timestamp)
 }
 
 // optional .cockroach.roachpb.ClientCmdID cmd_id = 2;

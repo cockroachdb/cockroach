@@ -198,7 +198,7 @@ func TestGCQueueProcess(t *testing.T) {
 			}
 		} else {
 			pArgs := putArgs(datum.key, []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
-			pArgs.Timestamp = datum.ts
+			pArgs.DeprecatedTimestamp = datum.ts
 			if datum.txn {
 				pArgs.Txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
 				pArgs.Txn.OrigTimestamp = datum.ts
@@ -334,7 +334,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		// TODO(spencerkimball): benchmark with ~50k.
 		for j := 0; j < 5; j++ {
 			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%05d", i, j)), []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
-			pArgs.Timestamp = makeTS(1, 0)
+			pArgs.DeprecatedTimestamp = makeTS(1, 0)
 			pArgs.Txn = txns[i]
 			if _, err := client.SendWrapped(tc.rng, tc.rng.context(), &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)

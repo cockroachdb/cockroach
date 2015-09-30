@@ -61,7 +61,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	// MaxOffset but less than the leader lease) and execute a command.
 	manuals[0].Increment(int64(500 * time.Millisecond))
 	incArgs := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
-	incArgs.Timestamp = clocks[0].Now()
+	incArgs.DeprecatedTimestamp = clocks[0].Now()
 	if _, err := client.SendWrapped(mtc.stores[0], nil, &incArgs); err != nil {
 		t.Fatal(err)
 	}

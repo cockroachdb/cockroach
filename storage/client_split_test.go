@@ -328,7 +328,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val, rng.Desc().RangeID, store.StoreID())
-		pArgs.Timestamp = store.Clock().Now()
+		pArgs.DeprecatedTimestamp = store.Clock().Now()
 		if _, err := client.SendWrapped(store, nil, &pArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -389,7 +389,7 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 		key := append(append([]byte(nil), prefix...), randutil.RandBytes(src, 100)...)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val, rangeID, store.StoreID())
-		pArgs.Timestamp = store.Clock().Now()
+		pArgs.DeprecatedTimestamp = store.Clock().Now()
 		if _, err := client.SendWrapped(store, nil, &pArgs); err != nil {
 			t.Fatal(err)
 		}

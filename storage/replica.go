@@ -344,8 +344,8 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	}
 	args := &roachpb.LeaderLeaseRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:       desc.StartKey,
-			Timestamp: timestamp,
+			Key:                 desc.StartKey,
+			DeprecatedTimestamp: timestamp,
 			CmdID: roachpb.ClientCmdID{
 				WallTime: r.rm.Clock().Now().WallTime,
 				Random:   rand.Int63(),
@@ -684,8 +684,8 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
 	for _, union := range ba.Requests {
 		args := union.GetInner()
 		header := args.Header()
-		if header.Timestamp.Equal(roachpb.ZeroTimestamp) {
-			header.Timestamp = ba.Timestamp
+		if header.DeprecatedTimestamp.Equal(roachpb.ZeroTimestamp) {
+			header.DeprecatedTimestamp = ba.Timestamp
 		}
 	}
 
@@ -702,7 +702,7 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, err e
 			args := union.GetInner()
 			if usesTimestampCache(args) {
 				header := args.Header()
-				r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.GetID(), roachpb.IsReadOnly(args))
+				r.tsCache.Add(header.Key, header.EndKey, header.DeprecatedTimestamp, header.Txn.GetID(), roachpb.IsReadOnly(args))
 			}
 		}
 	}
@@ -722,7 +722,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, args roachpb.Request) (roachp
 	}
 
 	// Admin commands always require the leader lease.
-	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), header.Timestamp); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), header.DeprecatedTimestamp); err != nil {
 		return nil, err
 	}
 
@@ -859,7 +859,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg 
 	// of the self-overlap discussion. See setBatchTimestamps.
 	for _, union := range ba.Requests {
 		args := union.GetInner()
-		args.Header().Timestamp.Forward(ba.Timestamp)
+		args.Header().DeprecatedTimestamp.Forward(ba.Timestamp)
 	}
 	r.Unlock()
 
@@ -1060,7 +1060,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		// TODO(tschottdorf): shouldn't be in the loop. Currently is because
 		// we haven't cleaned up the timestamp handling fully.
 		if lease := r.getLease(); args.Method() != roachpb.LeaderLease &&
-			(!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(args.Header().Timestamp)) {
+			(!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(args.Header().DeprecatedTimestamp)) {
 			// Verify the leader lease is held, unless this command is trying to
 			// obtain it. Any other Raft command has had the leader lease held
 			// by the replica at proposal time, but this may no longer be the case.
@@ -1166,7 +1166,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
 		}
 		// Set the timestamp for this request.
-		ts := args.Header().Timestamp
+		ts := args.Header().DeprecatedTimestamp
 		{
 			// TODO(tschottdorf): Special exception because of pending
 			// self-overlap discussion.
@@ -1195,7 +1195,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 
 		args.Header().Txn = ba.Txn // use latest Txn
 		// Poison the timestamp which still remains in the header. We must not use it.
-		args.Header().Timestamp = roachpb.Timestamp{WallTime: math.MaxInt64}
+		args.Header().DeprecatedTimestamp = roachpb.Timestamp{WallTime: math.MaxInt64}
 
 		reply, curIntents, err := r.executeCmd(batch, ms, ts, args)
 		{

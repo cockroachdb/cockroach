@@ -546,8 +546,8 @@ func TestStoreSendUpdateTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts = store.ctx.Clock.Timestamp()
-	if ts.WallTime != args.Timestamp.WallTime || ts.Logical <= args.Timestamp.Logical {
-		t.Errorf("expected store clock to advance to %s; got %s", args.Timestamp, ts)
+	if ts.WallTime != args.DeprecatedTimestamp.WallTime || ts.Logical <= args.DeprecatedTimestamp.Logical {
+		t.Errorf("expected store clock to advance to %s; got %s", args.DeprecatedTimestamp, ts)
 	}
 }
 
@@ -784,14 +784,14 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 
 		// First lay down intent using the pushee's txn.
 		pArgs := putArgs(key, []byte("value"), 1, store.StoreID())
-		pArgs.Timestamp = store.ctx.Clock.Now()
+		pArgs.DeprecatedTimestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pushee
 		if _, err := client.SendWrapped(store, nil, &pArgs); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now, try a put using the pusher's txn.
-		pArgs.Timestamp = store.ctx.Clock.Now()
+		pArgs.DeprecatedTimestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pusher
 		_, err := client.SendWrapped(store, nil, &pArgs)
 		if resolvable {
@@ -836,14 +836,14 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 
 	// First lay down intent using the pushee's txn.
 	args := incrementArgs(key, 1, 1, store.StoreID())
-	args.Timestamp = store.ctx.Clock.Now()
+	args.DeprecatedTimestamp = store.ctx.Clock.Now()
 	args.Txn = pushee
 	if _, err := client.SendWrapped(store, nil, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, try a put using the pusher's txn.
-	args.Timestamp = store.ctx.Clock.Now()
+	args.DeprecatedTimestamp = store.ctx.Clock.Now()
 	args.Txn = pusher
 	args.Increment = 2
 	if resp, err := client.SendWrapped(store, nil, &args); err != nil {
@@ -889,13 +889,13 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 		// First, write original value.
 		args := putArgs(key, []byte("value1"), 1, store.StoreID())
-		args.Timestamp = store.ctx.Clock.Now()
+		args.DeprecatedTimestamp = store.ctx.Clock.Now()
 		if _, err := client.SendWrapped(store, nil, &args); err != nil {
 			t.Fatal(err)
 		}
 
 		// Second, lay down intent using the pushee's txn.
-		args.Timestamp = store.ctx.Clock.Now()
+		args.DeprecatedTimestamp = store.ctx.Clock.Now()
 		args.Txn = pushee
 		args.Value.Bytes = []byte("value2")
 		if _, err := client.SendWrapped(store, nil, &args); err != nil {
@@ -922,7 +922,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			ts := pushee.Timestamp
 			reply, cErr := client.SendWrappedAt(store, nil, ts, &etArgs)
 
-			expTimestamp := gArgs.Timestamp
+			expTimestamp := gArgs.DeprecatedTimestamp
 			expTimestamp.Logical++
 			if test.pusheeIso == roachpb.SNAPSHOT {
 				if cErr != nil {
@@ -1065,7 +1065,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	// Verify that the pushee's timestamp was moved forward on
 	// former read, since we have it available in write intent error.
-	expTS := gArgs.Timestamp
+	expTS := gArgs.DeprecatedTimestamp
 	expTS.Logical++
 	if !txn.Timestamp.Equal(expTS) {
 		t.Errorf("expected pushee timestamp pushed to %s; got %s", expTS, txn.Timestamp)
@@ -1131,7 +1131,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		txnB := newTransaction("testB", keyB, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 			args.Key = txn.Key
-			args.Timestamp = txn.Timestamp
+			args.DeprecatedTimestamp = txn.Timestamp
 			args.Txn = txn
 			if _, err := client.SendWrapped(store, nil, &args); err != nil {
 				t.Fatal(err)
@@ -1139,7 +1139,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		}
 		// End txn B, but without resolving the intent.
 		etArgs := endTxnArgs(txnB, true, 1, store.StoreID())
-		etArgs.Timestamp = txnB.Timestamp
+		etArgs.DeprecatedTimestamp = txnB.Timestamp
 		if _, err := client.SendWrapped(store, nil, &etArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -1148,7 +1148,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// will be able to read with INCONSISTENT.
 		gArgs := getArgs(keyA, 1, store.StoreID())
 
-		gArgs.Timestamp = store.ctx.Clock.Now()
+		gArgs.DeprecatedTimestamp = store.ctx.Clock.Now()
 		gArgs.ReadConsistency = roachpb.INCONSISTENT
 		if reply, err := client.SendWrapped(store, nil, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
@@ -1342,7 +1342,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	// of Txn entries in this test, the Txn entry would be removed and later
 	// attempts to resolve the intents would fail.
 	etArgs := endTxnArgs(txn, true, 1, store.StoreID())
-	etArgs.Timestamp = txn.Timestamp
+	etArgs.DeprecatedTimestamp = txn.Timestamp
 	if _, err := client.SendWrapped(store, nil, &etArgs); err != nil {
 		t.Fatal(err)
 	}
