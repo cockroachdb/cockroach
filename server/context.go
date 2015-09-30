@@ -36,7 +36,7 @@ import (
 
 // Context defaults.
 const (
-	defaultAddr               = ":8080"
+	defaultAddr               = ":26257"
 	defaultMaxOffset          = 250 * time.Millisecond
 	defaultGossipInterval     = 2 * time.Second
 	defaultCacheSize          = 1 << 30 // GB

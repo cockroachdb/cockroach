@@ -44,7 +44,7 @@ Getting a RoachNode up and running is easy. If you have the `cockroach` binary, 
 # or if you built it yourself.
 docker pull cockroachdb/cockroach
 # Open a shell on a Cockroach container.
-docker run -t -i -p 8080:8080 cockroachdb/cockroach shell
+docker run -t -i -p 26257:26257 cockroachdb/cockroach shell
 # root@82cb657cdc42:/cockroach#
 ```
 
@@ -90,19 +90,19 @@ This initializes and starts a single-node cluster in the background.
 Now let's talk to this node. The easiest way to do that is to use the `cockroach` binary - it comes with a built-in sql client:
 
 ```bash
-$ ./cockroach sql --addr $(docker-machine ip default):8080
+$ ./cockroach sql --addr $(docker-machine ip default):26257
 # Welcome to the cockroach SQL interface.
 # All statements must be terminated by a semicolon.
 # To exit: CTRL + D.
-192.168.99.100:8080> show databases;
+192.168.99.100:26257> show databases;
 +----------+
 | Database |
 +----------+
 | "system" |
 +----------+
-192.168.99.100:8080> SET database = system;
+192.168.99.100:26257> SET database = system;
 OK
-192.168.99.100:8080> show tables;
+192.168.99.100:26257> show tables;
 +--------------+
 |    Table     |
 +--------------+
