@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
 
 // defaultRetryOptions sets the retry options for handling retryable errors and
@@ -95,13 +94,13 @@ func SendWrappedAt(sender Sender, ctx context.Context, ts roachpb.Timestamp, arg
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	args.Header().Timestamp = roachpb.ZeroTimestamp // scrub the field
 	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
 		ba := &roachpb.BatchRequest{}
+		ba.Timestamp = ts
 		{
-			h := *(proto.Clone(args.Header()).(*roachpb.RequestHeader))
-			h.Timestamp = roachpb.ZeroTimestamp
+			h := args.Header()
 			ba.Key, ba.EndKey = h.Key, h.EndKey
-			ba.Timestamp = ts
 			ba.CmdID = h.CmdID
 			ba.Replica = h.Replica
 			ba.RangeID = h.RangeID
