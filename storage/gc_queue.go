@@ -140,10 +140,13 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	intentExp := now
 	intentExp.WallTime -= intentAgeThreshold.Nanoseconds()
 
+	// TODO(tschottdorf): execution will use a leader-assigned local
+	// timestamp to compute intent age. While this should be fine, could
+	// consider adding a Now timestamp to GCRequest which would be used
+	// instead.
 	gcArgs := &roachpb.GCRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Timestamp: now,
-			RangeID:   desc.RangeID,
+			RangeID: desc.RangeID,
 		},
 	}
 	var mu sync.Mutex
@@ -302,8 +305,7 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.T
 	// Attempt to push the transaction which created the intent.
 	pushArgs := &roachpb.PushTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Timestamp: now,
-			Key:       txn.Key,
+			Key: txn.Key,
 		},
 		Now:       now,
 		PusherTxn: roachpb.Transaction{Priority: roachpb.MaxPriority},

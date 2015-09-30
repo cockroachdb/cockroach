@@ -161,7 +161,7 @@ type RangeManager interface {
 	Stopper() *stop.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
-	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.PushTxnType) error
+	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.Timestamp, roachpb.PushTxnType) error
 
 	// Range and replica manipulation methods.
 	LookupReplica(start, end roachpb.Key) *Replica
@@ -343,8 +343,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	}
 	args := &roachpb.LeaderLeaseRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:       desc.StartKey,
-			Timestamp: timestamp,
+			Key: desc.StartKey,
 			CmdID: roachpb.ClientCmdID{
 				WallTime: r.rm.Clock().Now().WallTime,
 				Random:   rand.Int63(),
@@ -536,29 +535,6 @@ func (r *Replica) SetLastVerificationTimestamp(timestamp roachpb.Timestamp) erro
 	return engine.MVCCPutProto(r.rm.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
-// setBatchTimestamps ensures that timestamps on individual requests are
-// offset by an incremental amount of logical ticks from the base timestamp
-// of the batch request (if that is non-zero and the batch is not in a Txn).
-// This has the effect of allowing self-overlapping commands within the batch,
-// which would otherwise result in an endless loop of WriteTooOldErrors.
-// TODO(tschottdorf): discuss self-overlap.
-func setBatchTimestamps(ba roachpb.BatchRequest) {
-	if ba.Txn != nil || ba.Timestamp.Equal(roachpb.ZeroTimestamp) ||
-		!ba.IsWrite() {
-		return
-	}
-	for i, union := range ba.Requests {
-		// TODO(tschottdorf): currently treating PushTxn specially. Otherwise
-		// conflict resolution would break because a batch full of pushes of
-		// the same Txn for different intents will push the pushee in
-		// iteration, bumping up its priority. Unfortunately PushTxn is flagged
-		// as a write command (is it really?). Interim solution.
-		if args := union.GetInner(); args.Method() != roachpb.PushTxn {
-			args.Header().Timestamp.Forward(ba.Timestamp.Add(0, int32(i)))
-		}
-	}
-}
-
 // Send adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
@@ -568,11 +544,6 @@ func setBatchTimestamps(ba roachpb.BatchRequest) {
 func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
 	var err error
-	// Fiddle with the timestamps to make sure that writes can overlap
-	// within this batch.
-	// TODO(tschottdorf): provisional feature to get back to passing tests.
-	// Have to discuss how we go about it.
-	setBatchTimestamps(ba)
 
 	if err := r.checkBatchRequest(ba); err != nil {
 		return nil, roachpb.NewError(err)
@@ -584,16 +555,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	// Differentiate between admin, read-only and write.
 	if ba.IsAdmin() {
 		defer trace.Epoch("admin path")()
-		args := ba.Requests[0].GetInner()
-		var iReply roachpb.Response
-		iReply, err = r.addAdminCmd(ctx, args)
-		if err == nil {
-			br = &roachpb.BatchResponse{}
-			br.Add(iReply)
-			h := iReply.Header()
-			br.Timestamp = h.Timestamp
-			br.Txn = h.Txn
-		}
+		br, err = r.addAdminCmd(ctx, ba)
 	} else if ba.IsReadOnly() {
 		defer trace.Epoch("read-only path")()
 		br, err = r.addReadOnlyCmd(ctx, &ba)
@@ -708,14 +670,6 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
 		}
 	}
 
-	for _, union := range ba.Requests {
-		args := union.GetInner()
-		header := args.Header()
-		if header.Timestamp.Equal(roachpb.ZeroTimestamp) {
-			header.Timestamp = ba.Timestamp
-		}
-	}
-
 	return cmdKeys, nil
 }
 
@@ -729,7 +683,7 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, err e
 			args := union.GetInner()
 			if usesTimestampCache(args) {
 				header := args.Header()
-				r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.GetID(), roachpb.IsReadOnly(args))
+				r.tsCache.Add(header.Key, header.EndKey, ba.Timestamp, header.Txn.GetID(), roachpb.IsReadOnly(args))
 			}
 		}
 	}
@@ -740,29 +694,46 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, err e
 // addAdminCmd executes the command directly. There is no interaction
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
-// Admin commands must run on the leader replica.
-func (r *Replica) addAdminCmd(ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
-	header := args.Header()
+// Admin commands must run on the leader replica. Batch support here is
+// limited to single-element batches; everything else catches an error.
+func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	if len(ba.Requests) != 1 {
+		return nil, util.Errorf("only single-element admin batches allowed")
+	}
+	args := ba.Requests[0].GetInner()
 
-	if err := r.checkCmdHeader(header); err != nil {
+	if err := r.checkCmdHeader(args.Header()); err != nil {
 		return nil, err
 	}
 
 	// Admin commands always require the leader lease.
-	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), header.Timestamp); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), ba.Timestamp); err != nil {
 		return nil, err
 	}
 
+	var resp roachpb.Response
+	var err error
 	switch tArgs := args.(type) {
 	case *roachpb.AdminSplitRequest:
-		resp, err := r.AdminSplit(*tArgs, r.Desc())
-		return &resp, err
+		var reply roachpb.AdminSplitResponse
+		reply, err = r.AdminSplit(*tArgs, r.Desc())
+		resp = &reply
 	case *roachpb.AdminMergeRequest:
-		resp, err := r.AdminMerge(*tArgs, r.Desc())
-		return &resp, err
+		var reply roachpb.AdminMergeResponse
+		reply, err = r.AdminMerge(*tArgs, r.Desc())
+		resp = &reply
 	default:
 		return nil, util.Errorf("unrecognized admin command: %T", args)
 	}
+
+	if err != nil {
+		return nil, err
+	}
+	br := &roachpb.BatchResponse{}
+	br.Add(resp)
+	br.Timestamp = ba.Timestamp
+	br.Txn = resp.Header().Txn
+	return br, nil
 }
 
 // addReadOnlyCmd updates the read timestamp cache and waits for any
@@ -881,13 +852,6 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg 
 		}
 	}
 
-	// Make sure the batch timestamp is copied consistently to each request.
-	// TODO(tschottdorf): Forward() is provisional, depending on the outcome
-	// of the self-overlap discussion. See setBatchTimestamps.
-	for _, union := range ba.Requests {
-		args := union.GetInner()
-		args.Header().Timestamp.Forward(ba.Timestamp)
-	}
 	r.Unlock()
 
 	defer trace.Epoch("raft")()
@@ -1087,7 +1051,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		// TODO(tschottdorf): shouldn't be in the loop. Currently is because
 		// we haven't cleaned up the timestamp handling fully.
 		if lease := r.getLease(); args.Method() != roachpb.LeaderLease &&
-			(!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(args.Header().Timestamp)) {
+			(!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(ba.Timestamp)) {
 			// Verify the leader lease is held, unless this command is trying to
 			// obtain it. Any other Raft command has had the leader lease held
 			// by the replica at proposal time, but this may no longer be the case.
@@ -1154,6 +1118,16 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 	// accumulate updates to it.
 	isTxn := ba.Txn != nil
 
+	// Ensure that timestamps on individual requests are offset by an incremental
+	// amount of logical ticks from the base timestamp of the batch request (if
+	// that is non-zero and the batch is not in a Txn). This has the effect of
+	// allowing self-overlapping commands within the batch, which would otherwise
+	// result in an endless loop of WriteTooOldErrors.
+	// TODO(tschottdorf): discuss self-overlap.
+	// TODO(tschottdorf): provisional feature to get back to passing tests.
+	// Have to discuss how we go about it.
+	fiddleWithTimestamps := ba.Txn == nil && ba.IsWrite()
+
 	// TODO(tschottdorf): provisionals ahead. This loop needs to execute each
 	// command and propagate txn and timestamp to the next (and, eventually,
 	// to the batch response header). We're currently in an intermediate stage
@@ -1165,28 +1139,58 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		// Execute the command.
 		args := union.GetInner()
 
-		header := args.Header()
-
 		// Scrub the headers. Specifically, always use almost everything from
 		// the batch. We're trying to simulate the situation in which the
 		// individual requests contain nothing but the key (range) in their
 		// headers.
+		origHeader := *proto.Clone(args.Header()).(*roachpb.RequestHeader)
 		{
-			origHeader := *proto.Clone(header).(*roachpb.RequestHeader)
+			header := args.Header()
 			// TODO(tschottdorf): specify which fields to set here.
 			*header = ba.ToHeader()
 			// Only Key and EndKey are allowed to diverge from the iterated
-			// Batch header.
+			// Batch header (Timestamp too, but that's exceptional).
 			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
-			// TODO(tschottdorf): Special exception because of pending self-overlap discussion.
-			header.Timestamp = origHeader.Timestamp
-			header.Txn = ba.Txn // use latest Txn
+		}
+		// Set the timestamp for this request.
+		ts := ba.Timestamp
+		{
+			// TODO(tschottdorf): Special exception because of pending
+			// self-overlap discussion.
+			// TODO(tschottdorf): currently treating PushTxn specially. Otherwise
+			// conflict resolution would break because a batch full of pushes of
+			// the same Txn for different intents will push the pushee in
+			// iteration, bumping up its priority. Unfortunately PushTxn is flagged
+			// as a write command (is it really?). Interim solution.
+			// Note that being in a txn implies no fiddling.
+			if fiddleWithTimestamps && args.Method() != roachpb.PushTxn {
+				ts = ba.Timestamp.Add(0, int32(index))
+			} else if !isTxn {
+				ts = ba.Timestamp
+			} else {
+				// TODO(tschottdorf): should really replace here and assert that
+				// header.Timestamp is empty, but, alas, not the case at the
+				// very least in some tests but also in practice (we bump the
+				// timestamp based on tsCache etc). A future refactor perhaps,
+				// or we decide this is how we want it.
+				// if ba.Txn.Timestamp.Less(origHeader.Timestamp) {
+				// 	panic(fmt.Sprintf("%s\n%d: txn < orig: %s < %s", ba, index, ba.Txn.Timestamp, origHeader.Timestamp))
+				// }
+				ts.Forward(ba.Txn.Timestamp)
+			}
 		}
 
-		reply, curIntents, err := r.executeCmd(batch, ms, args)
+		args.Header().Txn = ba.Txn // use latest Txn
+
+		reply, curIntents, err := r.executeCmd(batch, ms, ts, args)
+		{
+			// Undo any changes to the header.
+			*args.Header() = origHeader
+		}
 
 		// Collect intents skipped over the course of execution.
 		if len(curIntents) > 0 {
+			// TODO(tschottdorf): see about refactoring the args away.
 			intents = append(intents, intentsWithArg{args: args, intents: curIntents})
 		}
 
@@ -1198,7 +1202,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		}
 
 		// Add the response to the batch, updating the timestamp.
-		br.Timestamp.Forward(header.Timestamp)
+		br.Timestamp.Forward(ts)
 		br.Add(reply)
 		if isTxn {
 			if txn := reply.Header().Txn; txn != nil {
@@ -1353,9 +1357,10 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// still be careful though, a retry could happen and race with args.
 		args := proto.Clone(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
+			now := r.rm.Clock().Now()
 			err := r.rm.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
 				Intents: item.intents,
-			}, r, args, roachpb.CLEANUP_TXN)
+			}, r, args, now, roachpb.CLEANUP_TXN)
 			if wiErr, ok := err.(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 			}

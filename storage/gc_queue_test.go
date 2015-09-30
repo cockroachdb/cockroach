@@ -188,24 +188,22 @@ func TestGCQueueProcess(t *testing.T) {
 	for i, datum := range data {
 		if datum.del {
 			dArgs := deleteArgs(datum.key, tc.rng.Desc().RangeID, tc.store.StoreID())
-			dArgs.Timestamp = datum.ts
 			if datum.txn {
 				dArgs.Txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
 				dArgs.Txn.OrigTimestamp = datum.ts
 				dArgs.Txn.Timestamp = datum.ts
 			}
-			if _, err := client.SendWrapped(tc.rng, tc.rng.context(), &dArgs); err != nil {
+			if _, err := client.SendWrappedAt(tc.rng, tc.rng.context(), datum.ts, &dArgs); err != nil {
 				t.Fatalf("%d: could not delete data: %s", i, err)
 			}
 		} else {
 			pArgs := putArgs(datum.key, []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
-			pArgs.Timestamp = datum.ts
 			if datum.txn {
 				pArgs.Txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
 				pArgs.Txn.OrigTimestamp = datum.ts
 				pArgs.Txn.Timestamp = datum.ts
 			}
-			if _, err := client.SendWrapped(tc.rng, tc.rng.context(), &pArgs); err != nil {
+			if _, err := client.SendWrappedAt(tc.rng, tc.rng.context(), datum.ts, &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
 		}
@@ -335,7 +333,6 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		// TODO(spencerkimball): benchmark with ~50k.
 		for j := 0; j < 5; j++ {
 			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%05d", i, j)), []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
-			pArgs.Timestamp = makeTS(1, 0)
 			pArgs.Txn = txns[i]
 			if _, err := client.SendWrapped(tc.rng, tc.rng.context(), &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)

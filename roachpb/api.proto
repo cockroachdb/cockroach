@@ -70,10 +70,6 @@ enum ReadConsistencyType {
 
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
-  // Timestamp specifies time at which read or writes should be
-  // performed. If the timestamp is set to zero value, its value
-  // is initialized to the wall time of the receiving node.
-  optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   // CmdID is optionally specified for request idempotence
   // (i.e. replay protection).
   optional ClientCmdID cmd_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];

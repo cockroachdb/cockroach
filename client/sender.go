@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
 
 // defaultRetryOptions sets the retry options for handling retryable errors and
@@ -87,21 +86,21 @@ func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stoppe
 	return f(u, ctx, retryOptions, stopper)
 }
 
-// SendWrapped is a convenience function which wraps the request in a batch,
-// sends it via the provided Sender, and returns the unwrapped response
-// or an error. It's valid to pass a `nil` context; context.TODO() is used
-// in that case.
-func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
+// SendWrappedAt is a convenience function which wraps the request in a batch
+// and sends it via the provided Sender at the given timestamp. It returns the
+// unwrapped response or an error. It's valid to pass a `nil` context;
+// context.Background() is used in that case.
+func SendWrappedAt(sender Sender, ctx context.Context, ts roachpb.Timestamp, args roachpb.Request) (roachpb.Response, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
 		ba := &roachpb.BatchRequest{}
+		ba.Timestamp = ts
 		{
-			h := *(proto.Clone(args.Header()).(*roachpb.RequestHeader))
+			h := args.Header()
 			ba.Key, ba.EndKey = h.Key, h.EndKey
 			ba.CmdID = h.CmdID
-			ba.Timestamp = h.Timestamp
 			ba.Replica = h.Replica
 			ba.RangeID = h.RangeID
 			ba.UserPriority = h.UserPriority
@@ -128,4 +127,9 @@ func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roac
 		return nil, err
 	}
 	return unwrap(br), nil
+}
+
+// SendWrapped is identical to SendWrappedAt with a zero timestamp.
+func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
+	return SendWrappedAt(sender, ctx, roachpb.ZeroTimestamp, args)
 }

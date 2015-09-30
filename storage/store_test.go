@@ -539,15 +539,15 @@ func TestStoreSendUpdateTime(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	args := getArgs([]byte("a"), 1, store.StoreID())
-	args.Timestamp = store.ctx.Clock.Now()
-	args.Timestamp.WallTime += (100 * time.Millisecond).Nanoseconds()
-	_, err := client.SendWrapped(store, nil, &args)
+	reqTS := store.ctx.Clock.Now()
+	reqTS.WallTime += (100 * time.Millisecond).Nanoseconds()
+	_, err := client.SendWrappedAt(store, nil, reqTS, &args)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ts := store.ctx.Clock.Timestamp()
-	if ts.WallTime != args.Timestamp.WallTime || ts.Logical <= args.Timestamp.Logical {
-		t.Errorf("expected store clock to advance to %s; got %s", args.Timestamp, ts)
+	if ts.WallTime != reqTS.WallTime || ts.Logical <= reqTS.Logical {
+		t.Errorf("expected store clock to advance to %s; got %s", reqTS, ts)
 	}
 }
 
@@ -576,7 +576,7 @@ func TestStoreSendWithZeroTime(t *testing.T) {
 
 // TestStoreSendWithClockOffset verifies that if the request
 // specifies a timestamp further into the future than the node's
-// maximum allowed clock offset, the cmd still succeeds.
+// maximum allowed clock offset, the cmd fails.
 func TestStoreSendWithClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, mc, stopper := createTestStore(t)
@@ -589,9 +589,8 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	maxOffset := 250 * time.Millisecond
 	store.ctx.Clock.SetMaxOffset(maxOffset)
 	// Set args timestamp to exceed max offset.
-	args.Timestamp = store.ctx.Clock.Now()
-	args.Timestamp.WallTime += maxOffset.Nanoseconds() + 1
-	if _, err := client.SendWrapped(store, nil, &args); err == nil {
+	ts := store.ctx.Clock.Now().Add(maxOffset.Nanoseconds()+1, 0)
+	if _, err := client.SendWrappedAt(store, nil, ts, &args); err == nil {
 		t.Error("expected max offset clock error")
 	}
 }
@@ -785,14 +784,12 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 
 		// First lay down intent using the pushee's txn.
 		pArgs := putArgs(key, []byte("value"), 1, store.StoreID())
-		pArgs.Timestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pushee
 		if _, err := client.SendWrapped(store, nil, &pArgs); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now, try a put using the pusher's txn.
-		pArgs.Timestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pusher
 		_, err := client.SendWrapped(store, nil, &pArgs)
 		if resolvable {
@@ -837,14 +834,12 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 
 	// First lay down intent using the pushee's txn.
 	args := incrementArgs(key, 1, 1, store.StoreID())
-	args.Timestamp = store.ctx.Clock.Now()
 	args.Txn = pushee
 	if _, err := client.SendWrapped(store, nil, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, try a put using the pusher's txn.
-	args.Timestamp = store.ctx.Clock.Now()
 	args.Txn = pusher
 	args.Increment = 2
 	if resp, err := client.SendWrapped(store, nil, &args); err != nil {
@@ -890,13 +885,11 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 		// First, write original value.
 		args := putArgs(key, []byte("value1"), 1, store.StoreID())
-		args.Timestamp = store.ctx.Clock.Now()
 		if _, err := client.SendWrapped(store, nil, &args); err != nil {
 			t.Fatal(err)
 		}
 
 		// Second, lay down intent using the pushee's txn.
-		args.Timestamp = store.ctx.Clock.Now()
 		args.Txn = pushee
 		args.Value.Bytes = []byte("value2")
 		if _, err := client.SendWrapped(store, nil, &args); err != nil {
@@ -904,10 +897,10 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		}
 
 		// Now, try to read value using the pusher's txn.
+		ts := store.ctx.Clock.Now()
 		gArgs := getArgs(key, 1, store.StoreID())
-		gArgs.Timestamp = store.ctx.Clock.Now()
 		gArgs.Txn = pusher
-		firstReply, err := client.SendWrapped(store, nil, &gArgs)
+		firstReply, err := client.SendWrappedAt(store, nil, ts, &gArgs)
 		if test.resolvable {
 			if err != nil {
 				t.Errorf("%d: expected read to succeed: %s", i, err)
@@ -917,13 +910,12 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 			// Finally, try to end the pushee's transaction; if we have
 			// SNAPSHOT isolation, the commit should work: verify the txn
-			// commit timestamp is equal to gArgs.Timestamp + 1. Otherwise,
+			// commit timestamp is equal to pusher's Timestamp + 1. Otherwise,
 			// verify commit fails with TransactionRetryError.
 			etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
-			etArgs.Timestamp = pushee.Timestamp
 			reply, cErr := client.SendWrapped(store, nil, &etArgs)
 
-			expTimestamp := gArgs.Timestamp
+			expTimestamp := pusher.Timestamp
 			expTimestamp.Logical++
 			if test.pusheeIso == roachpb.SNAPSHOT {
 				if cErr != nil {
@@ -976,24 +968,24 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 
 	// First, write original value.
 	args := putArgs(key, []byte("value1"), 1, store.StoreID())
-	args.Timestamp = store.ctx.Clock.Now()
-	if _, err := client.SendWrapped(store, nil, &args); err != nil {
+	ts := store.ctx.Clock.Now()
+	if _, err := client.SendWrappedAt(store, nil, ts, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Lay down intent using the pushee's txn.
-	args.Timestamp = store.ctx.Clock.Now()
+	ts = store.ctx.Clock.Now()
 	args.Txn = pushee
 	args.Value.Bytes = []byte("value2")
-	if _, err := client.SendWrapped(store, nil, &args); err != nil {
+	if _, err := client.SendWrappedAt(store, nil, ts, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, try to read value using the pusher's txn.
 	gArgs := getArgs(key, 1, store.StoreID())
-	gArgs.Timestamp = store.ctx.Clock.Now()
+	gTS := store.ctx.Clock.Now()
 	gArgs.Txn = pusher
-	if reply, err := client.SendWrapped(store, nil, &gArgs); err != nil {
+	if reply, err := client.SendWrappedAt(store, nil, gTS, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
 	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
 		t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.Bytes)
@@ -1003,13 +995,13 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// SNAPSHOT isolation, the end should work, but verify the txn
 	// commit timestamp is equal to gArgs.Timestamp + 1.
 	etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
-	etArgs.Timestamp = pushee.Timestamp
-	reply, err := client.SendWrapped(store, nil, &etArgs)
+	ts = pushee.Timestamp
+	reply, err := client.SendWrappedAt(store, nil, ts, &etArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	etReply := reply.(*roachpb.EndTransactionResponse)
-	expTimestamp := gArgs.Timestamp
+	expTimestamp := gTS
 	expTimestamp.Logical++
 	if etReply.Txn.Status != roachpb.COMMITTED || !etReply.Txn.Timestamp.Equal(expTimestamp) {
 		t.Errorf("txn commit didn't yield expected status (COMMITTED) or timestamp %s: %s",
@@ -1030,7 +1022,6 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	// First, lay down intent from pushee.
 	args := putArgs(key, []byte("value1"), 1, store.StoreID())
-	args.Timestamp = pushee.Timestamp
 	args.Txn = pushee
 	if _, err := client.SendWrapped(store, nil, &args); err != nil {
 		t.Fatal(err)
@@ -1038,20 +1029,20 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	// Now, try to read outside a transaction.
 	gArgs := getArgs(key, 1, store.StoreID())
-	gArgs.Timestamp = store.ctx.Clock.Now()
+	getTS := store.ctx.Clock.Now()
 	gArgs.UserPriority = proto.Int32(math.MaxInt32)
-	if reply, err := client.SendWrapped(store, nil, &gArgs); err != nil {
+	if reply, err := client.SendWrappedAt(store, nil, getTS, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
 	} else if gReply := reply.(*roachpb.GetResponse); gReply.Value != nil {
 		t.Errorf("expected value to be nil, got %+v", gReply.Value)
 	}
 
 	// Next, try to write outside of a transaction. We will succeed in pushing txn.
-	args.Timestamp = store.ctx.Clock.Now()
+	putTS := store.ctx.Clock.Now()
 	args.Value.Bytes = []byte("value2")
 	args.Txn = nil
 	args.UserPriority = proto.Int32(math.MaxInt32)
-	if _, err := client.SendWrapped(store, nil, &args); err != nil {
+	if _, err := client.SendWrappedAt(store, nil, putTS, &args); err != nil {
 		t.Errorf("expected success aborting pushee's txn; got %s", err)
 	}
 
@@ -1067,7 +1058,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	// Verify that the pushee's timestamp was moved forward on
 	// former read, since we have it available in write intent error.
-	expTS := gArgs.Timestamp
+	expTS := getTS
 	expTS.Logical++
 	if !txn.Timestamp.Equal(expTS) {
 		t.Errorf("expected pushee timestamp pushed to %s; got %s", expTS, txn.Timestamp)
@@ -1081,7 +1072,6 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// Finally, try to end the pushee's transaction; it should have
 	// been aborted.
 	etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
-	etArgs.Timestamp = pushee.Timestamp
 	_, err := client.SendWrapped(store, nil, &etArgs)
 	if err == nil {
 		t.Errorf("unexpected success committing transaction")
@@ -1134,7 +1124,6 @@ func TestStoreReadInconsistent(t *testing.T) {
 		txnB := newTransaction("testB", keyB, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 			args.Key = txn.Key
-			args.Timestamp = txn.Timestamp
 			args.Txn = txn
 			if _, err := client.SendWrapped(store, nil, &args); err != nil {
 				t.Fatal(err)
@@ -1142,7 +1131,6 @@ func TestStoreReadInconsistent(t *testing.T) {
 		}
 		// End txn B, but without resolving the intent.
 		etArgs := endTxnArgs(txnB, true, 1, store.StoreID())
-		etArgs.Timestamp = txnB.Timestamp
 		if _, err := client.SendWrapped(store, nil, &etArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -1151,7 +1139,6 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// will be able to read with INCONSISTENT.
 		gArgs := getArgs(keyA, 1, store.StoreID())
 
-		gArgs.Timestamp = store.ctx.Clock.Now()
 		gArgs.ReadConsistency = roachpb.INCONSISTENT
 		if reply, err := client.SendWrapped(store, nil, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
@@ -1262,13 +1249,13 @@ func TestStoreScanIntents(t *testing.T) {
 		// it isn't expected to finish.
 		sArgs := scanArgs(keys[0], keys[9].Next(), 1, store.StoreID())
 		var sReply *roachpb.ScanResponse
-		sArgs.Timestamp = store.Clock().Now()
+		ts := store.Clock().Now()
 		if !test.consistent {
 			sArgs.ReadConsistency = roachpb.INCONSISTENT
 		}
 		done := make(chan struct{})
 		go func() {
-			if reply, err := client.SendWrapped(store, nil, &sArgs); err != nil {
+			if reply, err := client.SendWrappedAt(store, nil, ts, &sArgs); err != nil {
 				t.Fatal(err)
 			} else {
 				sReply = reply.(*roachpb.ScanResponse)
@@ -1294,7 +1281,6 @@ func TestStoreScanIntents(t *testing.T) {
 			} else {
 				// Commit the unpushable txn so the read can finish.
 				etArgs := endTxnArgs(txn, true, 1, store.StoreID())
-				etArgs.Timestamp = txn.Timestamp
 				for _, key := range keys {
 					etArgs.Intents = append(etArgs.Intents, roachpb.Intent{Key: key})
 				}
@@ -1346,7 +1332,6 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	// of Txn entries in this test, the Txn entry would be removed and later
 	// attempts to resolve the intents would fail.
 	etArgs := endTxnArgs(txn, true, 1, store.StoreID())
-	etArgs.Timestamp = txn.Timestamp
 	if _, err := client.SendWrapped(store, nil, &etArgs); err != nil {
 		t.Fatal(err)
 	}

@@ -324,8 +324,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		// The Put ts may have been pushed by tsCache,
 		// so make sure we see their values in our Scan.
 		delTS = reply.(*roachpb.PutResponse).Timestamp
-		scan.Timestamp = delTS
-		reply, err = client.SendWrapped(tds, nil, scan)
+		reply, err = client.SendWrappedAt(tds, nil, delTS, scan)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -342,12 +341,11 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	del := &roachpb.DeleteRangeRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:       writes[0],
-			EndKey:    roachpb.Key(writes[len(writes)-1]).Next(),
-			Timestamp: delTS,
+			Key:    writes[0],
+			EndKey: roachpb.Key(writes[len(writes)-1]).Next(),
 		},
 	}
-	reply, err := client.SendWrapped(tds, nil, del)
+	reply, err := client.SendWrappedAt(tds, nil, delTS, del)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,9 +359,8 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*roachpb.ScanRequest)
-	scan.Timestamp = dr.Timestamp
 	scan.Txn = &roachpb.Transaction{Name: "MyTxn"}
-	reply, err = client.SendWrapped(tds, nil, scan)
+	reply, err = client.SendWrappedAt(tds, nil, dr.Timestamp, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,12 +399,9 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			}
 		}
 
-		var reply roachpb.Response
 		for _, k := range tc.keys {
 			put := roachpb.NewPut(k, roachpb.Value{Bytes: k})
-			var err error
-			reply, err = client.SendWrapped(tds, nil, put)
-			if err != nil {
+			if _, err := client.SendWrapped(tds, nil, put); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -418,7 +412,6 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
 				scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
 					int64(maxResults))
-				scan.Header().Timestamp = reply.Header().Timestamp
 				reply, err := client.SendWrapped(tds, nil, scan)
 				if err != nil {
 					t.Fatal(err)
