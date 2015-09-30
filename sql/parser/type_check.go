@@ -182,8 +182,6 @@ func typeCheckComparisonExpr(expr *ComparisonExpr) (Datum, error) {
 }
 
 func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, cmpOp, error) {
-	op, dummyLeft, dummyRight, _ = foldComparisonExpr(op, dummyLeft, dummyRight)
-
 	if dummyLeft == DNull || dummyRight == DNull {
 		switch op {
 		case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
@@ -196,6 +194,7 @@ func typeCheckComparisonOp(op ComparisonOp, dummyLeft, dummyRight Datum) (Datum,
 		}
 	}
 
+	op, dummyLeft, dummyRight, _ = foldComparisonExpr(op, dummyLeft, dummyRight)
 	lType := reflect.TypeOf(dummyLeft)
 	rType := reflect.TypeOf(dummyRight)
 
