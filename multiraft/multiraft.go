@@ -447,10 +447,11 @@ type group struct {
 	writing bool
 	// nodeIDs track the remote nodes associated with this group.
 	nodeIDs []roachpb.NodeID
-	// waitForCallback is true while a configuration change callback
-	// is waiting to be called. It's a bool other than a counter
-	// as only one configuration change should be pending in range leader.
-	waitForCallback bool
+	// waitForCallback is a counter that is incremented when a
+	// configuration change callback is created and is decremented
+	// when the callback finishes. The positive value indicates
+	// that there is a pending callback.
+	waitForCallback int
 }
 
 type createGroupOp struct {
@@ -924,7 +925,7 @@ func (s *state) propose(p *proposal) {
 		return
 	}
 	// If configration change callback is pending, wait for it.
-	if g.waitForCallback {
+	if g.waitForCallback > 0 {
 		g.pending[p.commandID] = p
 		return
 	}
@@ -1035,7 +1036,7 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 			log.Fatalf("could not look up replica info (node %s, group %d, replica %d): %s",
 				s.nodeID, groupID, cc.NodeID, err)
 		}
-		g.waitForCallback = true
+		g.waitForCallback++
 		s.sendEvent(&EventMembershipChangeCommitted{
 			GroupID:    groupID,
 			CommandID:  commandID,
@@ -1071,9 +1072,11 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 
 					// Re-submit all pending proposals that were held
 					// while the config change was pending
-					g.waitForCallback = false
-					for _, prop := range g.pending {
-						s.propose(prop)
+					g.waitForCallback--
+					if g.waitForCallback <= 0 {
+						for _, prop := range g.pending {
+							s.propose(prop)
+						}
 					}
 				}:
 				case <-s.stopper.ShouldStop():
