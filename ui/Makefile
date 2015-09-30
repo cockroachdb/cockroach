@@ -43,10 +43,11 @@ GO_BINDATA := $(GOPATH_BIN)/go-bindata
 TYPESCRIPT_TARGET       := build/app.js
 TEST_TARGET             := build/test.js
 CSS_TARGET              := build/app.css
-STYL_OPTIONS            :=
+CSS_DEBUG_TARGET        := build/app_debug.css
 REMOTE_DEPS             := npm.installed bower.installed tsd.installed
 INDEX                   := index.html
 GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
+GOBINDATA_DEBUG_DEPS    := $(TYPESCRIPT_TARGET) $(CSS_DEBUG_TARGET)
 GOBINDATA_SOURCES       := $(BOWER_COMPONENTS)/d3/d3.min.js \
                            $(BOWER_COMPONENTS)/lodash/lodash.min.js \
                            $(BOWER_COMPONENTS)/mithril/mithril.js \
@@ -63,7 +64,6 @@ GOBINDATA_TARGET        := ./embedded.go
 GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
 
 .PHONY:
-all: STYL_OPTIONS += --compress
 all: $(GOBINDATA_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
 
@@ -91,7 +91,10 @@ $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	tsc -p $(TEST_ROOT)
 
 $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
-	stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out build/
+	stylus --compress $(STYL_ROOT)/app.styl --out $@
+
+$(CSS_DEBUG_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
+	stylus $(STYL_ROOT)/app.styl --out $@
 
 $(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
 	rm -f $(INDEX)
@@ -101,11 +104,11 @@ $(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
 	gofmt -s -w $@
 	goimports -w $@
 
-$(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEPS) bower.installed debug/$(INDEX)
+$(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEBUG_DEPS) bower.installed debug/$(INDEX)
 	rm -f $(INDEX)
 	cp debug/$(INDEX) $(INDEX)
 	chmod a-w $(INDEX)
-	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_DEPS) $(INDEX) $(GOBINDATA_DEBUG_SOURCES)
+	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_DEBUG_DEPS) $(INDEX) $(GOBINDATA_DEBUG_SOURCES)
 
 watch: debug
 	gulp watch

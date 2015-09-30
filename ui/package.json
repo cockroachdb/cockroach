@@ -7,6 +7,7 @@
     "del": "^2.0.2",
     "gulp": "^3.9.0",
     "gulp-livereload": "^3.8.0",
+    "gulp-rename": "^1.2.2",
     "gulp-stylus": "^2.0.7",
     "gulp-typescript": "^2.9.0",
     "npm": "^3.3.4",

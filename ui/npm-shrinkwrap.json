@@ -345,7 +345,7 @@
       "version": "0.3.3"
     },
     "event-stream": {
-      "version": "3.1.7"
+      "version": "3.3.1"
     },
     "exit": {
       "version": "0.1.2"
@@ -367,6 +367,14 @@
     },
     "find-index": {
       "version": "0.1.1"
+    },
+    "findup-sync": {
+      "version": "0.3.0",
+      "dependencies": {
+        "glob": {
+          "version": "5.0.15"
+        }
+      }
     },
     "first-chunk-stream": {
       "version": "1.0.0"
@@ -422,7 +430,7 @@
       "version": "0.5.1"
     },
     "get-stdin": {
-      "version": "0.1.0"
+      "version": "5.0.0"
     },
     "github": {
       "version": "0.2.4"
@@ -527,6 +535,9 @@
           "version": "0.2.0"
         }
       }
+    },
+    "gulp-rename": {
+      "version": "1.2.2"
     },
     "gulp-stylus": {
       "version": "2.0.7"
@@ -798,15 +809,7 @@
       "version": "0.3.2"
     },
     "liftoff": {
-      "version": "2.2.0",
-      "dependencies": {
-        "findup-sync": {
-          "version": "0.3.0"
-        },
-        "glob": {
-          "version": "5.0.15"
-        }
-      }
+      "version": "2.2.0"
     },
     "livereload-js": {
       "version": "2.2.2"
@@ -1892,13 +1895,10 @@
       "version": "0.1.43"
     },
     "split": {
-      "version": "0.2.10"
+      "version": "0.3.3"
     },
     "sprintf-js": {
       "version": "1.0.3"
-    },
-    "stat-mode": {
-      "version": "0.2.1"
     },
     "statuses": {
       "version": "1.2.1"
@@ -2119,7 +2119,7 @@
       "version": "0.3.2"
     },
     "uri-templates": {
-      "version": "0.1.7"
+      "version": "0.1.8"
     },
     "user-home": {
       "version": "1.1.1"
