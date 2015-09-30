@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
+	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -1157,8 +1158,8 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		// the batch. We're trying to simulate the situation in which the
 		// individual requests contain nothing but the key (range) in their
 		// headers.
+		origHeader := *proto.Clone(header).(*roachpb.RequestHeader)
 		{
-			origHeader := *proto.Clone(header).(*roachpb.RequestHeader)
 			// TODO(tschottdorf): specify which fields to set here.
 			*header = ba.ToHeader()
 			// Only Key and EndKey are allowed to diverge from the iterated
@@ -1191,7 +1192,13 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		}
 
 		ts := header.Timestamp
+		header.Timestamp = roachpb.Timestamp{WallTime: math.MaxInt64} // poison it
 		reply, curIntents, err := r.executeCmd(batch, ms, ts, args)
+		{
+			// Undo any changes (in particular the poisoned timestamp).
+			*header = origHeader
+			header = nil
+		}
 
 		// Collect intents skipped over the course of execution.
 		if len(curIntents) > 0 {
