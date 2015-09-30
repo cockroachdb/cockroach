@@ -86,10 +86,10 @@ func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stoppe
 	return f(u, ctx, retryOptions, stopper)
 }
 
-// SendWrappedAt is a convenience function which wraps the request in a batch,
-// and send it via the provided Sender at the given timestamp. It returns the
+// SendWrappedAt is a convenience function which wraps the request in a batch
+// and sends it via the provided Sender at the given timestamp. It returns the
 // unwrapped response or an error. It's valid to pass a `nil` context;
-// context.TODO() is used in that case.
+// context.Background() is used in that case.
 func SendWrappedAt(sender Sender, ctx context.Context, ts roachpb.Timestamp, args roachpb.Request) (roachpb.Response, error) {
 	if ctx == nil {
 		ctx = context.Background()

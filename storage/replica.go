@@ -695,8 +695,11 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, err e
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the leader replica. Batch support here is
-// only formal: the first request is executed and responded to, nothing else.
+// limited to single-element batches; everything else catches an error.
 func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	if len(ba.Requests) != 1 {
+		return nil, util.Errorf("only single-element admin batches allowed")
+	}
 	args := ba.Requests[0].GetInner()
 
 	if err := r.checkCmdHeader(args.Header()); err != nil {
@@ -1123,11 +1126,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 	// TODO(tschottdorf): discuss self-overlap.
 	// TODO(tschottdorf): provisional feature to get back to passing tests.
 	// Have to discuss how we go about it.
-	delta := 1
-	if ba.Txn != nil || ba.Timestamp.Equal(roachpb.ZeroTimestamp) ||
-		!ba.IsWrite() {
-		delta = 0
-	}
+	fiddleWithTimestamps := ba.Txn == nil && ba.IsWrite()
 
 	// TODO(tschottdorf): provisionals ahead. This loop needs to execute each
 	// command and propagate txn and timestamp to the next (and, eventually,
@@ -1163,8 +1162,8 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 			// the same Txn for different intents will push the pushee in
 			// iteration, bumping up its priority. Unfortunately PushTxn is flagged
 			// as a write command (is it really?). Interim solution.
-			// Note that being in a txn implies delta=0.
-			if delta > 0 && args.Method() != roachpb.PushTxn {
+			// Note that being in a txn implies no fiddling.
+			if fiddleWithTimestamps && args.Method() != roachpb.PushTxn {
 				ts = ba.Timestamp.Add(0, int32(index))
 			} else if !isTxn {
 				ts = ba.Timestamp
