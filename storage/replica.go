@@ -24,7 +24,6 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
-	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -1183,12 +1182,10 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		}
 
 		args.Header().Txn = ba.Txn // use latest Txn
-		// Poison the timestamp which still remains in the header. We must not use it.
-		args.Header().DeprecatedTimestamp = roachpb.Timestamp{WallTime: math.MaxInt64}
 
 		reply, curIntents, err := r.executeCmd(batch, ms, ts, args)
 		{
-			// Undo any changes (in particular the poisoned timestamp).
+			// Undo any changes to the header.
 			*args.Header() = origHeader
 		}
 

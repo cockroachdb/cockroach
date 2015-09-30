@@ -94,7 +94,6 @@ func SendWrappedAt(sender Sender, ctx context.Context, ts roachpb.Timestamp, arg
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	args.Header().DeprecatedTimestamp = roachpb.ZeroTimestamp // scrub the field
 	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
 		ba := &roachpb.BatchRequest{}
 		ba.Timestamp = ts
