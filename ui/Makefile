@@ -15,6 +15,13 @@
 #
 # Author: Tamir Duberstein (tamird@gmail.com)
 
+# NOTE: for some reason bash is necessary for updating the PATH to work
+# See http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile
+SHELL            := /bin/bash
+
+# Update the path to prefer binstubs over globals
+PATH             := node_modules/.bin:$(PATH)
+
 REPO_ROOT        := $(realpath ..)
 ORG_ROOT         := $(REPO_ROOT)/..
 GITHUB_ROOT      := $(ORG_ROOT)/..
@@ -65,7 +72,7 @@ debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
 bower.installed: bower.json npm.installed
-	$(NODE_MODULES)/.bin/bower install --config.interactive=false --allow-root
+	bower install --config.interactive=false --allow-root
 	touch $@
 
 npm.installed: npm-shrinkwrap.json
@@ -73,18 +80,18 @@ npm.installed: npm-shrinkwrap.json
 	touch $@
 
 tsd.installed: tsd.json npm.installed
-	$(NODE_MODULES)/.bin/tsd install
+	tsd install
 	touch $@
 
 $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
-	$(NODE_MODULES)/.bin/tsc -p $(TS_ROOT)
-	$(NODE_MODULES)/.bin/tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts' -not -path '*external*')
+	tsc -p $(TS_ROOT)
+	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts' -not -path '*external*')
 
 $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
-	$(NODE_MODULES)/.bin/tsc -p $(TEST_ROOT)
+	tsc -p $(TEST_ROOT)
 
 $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
-	$(NODE_MODULES)/.bin/stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out build/
+	stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out build/
 
 $(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
 	cp release/$(INDEX) $(INDEX)
