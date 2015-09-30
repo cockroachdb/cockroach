@@ -1179,7 +1179,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 			if delta > 0 && args.Method() != roachpb.PushTxn {
 				ts = ba.Timestamp.Add(0, int32(index))
 			} else if !isTxn {
-				ts = origHeader.Timestamp
+				ts = ba.Timestamp
 			} else {
 				// TODO(tschottdorf): should really replace here and assert that
 				// header.Timestamp is empty, but, alas, not the case at the

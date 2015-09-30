@@ -292,9 +292,9 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		RangeID:      1,
 		Replica:      roachpb.ReplicaDescriptor{StoreID: store.StoreID()},
 		UserPriority: &priority,
-		Timestamp:    clock.Now(),
 	}
-	if _, err := client.SendWrapped(store, nil, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
+	ts := clock.Now()
+	if _, err := client.SendWrappedAt(store, nil, ts, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
 
@@ -308,8 +308,8 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// timestamp cache from being updated).
 	manualClock.Increment(100)
 
-	requestHeader.Timestamp = clock.Now()
-	if _, err := client.SendWrapped(store, nil, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
+	ts = clock.Now()
+	if _, err := client.SendWrappedAt(store, nil, ts, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
 	}
 
