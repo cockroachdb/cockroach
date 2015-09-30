@@ -10,7 +10,7 @@ If any modifications are made to the contents of this directory, run `make`
 in this directory to generate a new `embedded.go`, which should _then be
 committed along with the original files_. The generated file is committed
 because making our web admin resource requires [additional non-go
-dependencies](####dependencies)
+dependencies](#dependencies)
 
 ## Development
 While actively developing the user interface, use `make debug` in order to run
