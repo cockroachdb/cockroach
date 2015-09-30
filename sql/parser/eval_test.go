@@ -18,6 +18,7 @@
 package parser
 
 import (
+	"reflect"
 	"regexp"
 	"testing"
 
@@ -327,6 +328,49 @@ func TestEvalExprError(t *testing.T) {
 		expr := q[0].(*Select).Exprs[0].Expr
 		if _, err := defaultContext.EvalExpr(expr); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
+		}
+	}
+}
+
+func TestEvalComparisonExprCaching(t *testing.T) {
+	regexpType := reflect.TypeOf(&regexp.Regexp{})
+	testExprs := []struct {
+		op          ComparisonOp
+		left, right string
+		cacheType   reflect.Type
+	}{
+		// Comparisons.
+		{EQ, `0`, `1`, nil},
+		{LT, `0`, `1`, nil},
+		// LIKE and NOT LIKE
+		{Like, `TEST`, `T%T`, regexpType},
+		{NotLike, `TEST`, `%E%`, regexpType},
+		// SIMILAR TO and NOT SIMILAR TO
+		{SimilarTo, `abc`, `(b|c)%`, regexpType},
+		{NotSimilarTo, `abc`, `%(b|d)%`, regexpType},
+	}
+	for _, d := range testExprs {
+		expr := &ComparisonExpr{
+			Operator: d.op,
+			Left:     DString(d.left),
+			Right:    DString(d.right),
+		}
+		if _, err := defaultContext.EvalExpr(expr); err != nil {
+			t.Fatalf("%s: %v", d, err)
+		}
+		if expr.fn.fn == nil {
+			t.Errorf("%s: expected the comparison function to be looked up and memoized, but it wasn't", expr)
+		}
+		if d.cacheType != nil {
+			if expr.cache == nil {
+				t.Errorf("%s: expected expression cache population, but found an empty cache", expr)
+			} else if ty := reflect.TypeOf(expr.cache); ty != d.cacheType {
+				t.Errorf("%s: expected expression cache to have type %v, but found %v", expr, d.cacheType, ty)
+			}
+		} else {
+			if expr.cache != nil {
+				t.Errorf("%s: expected no expression cache population, but found %v", expr, expr.cache)
+			}
 		}
 	}
 }
