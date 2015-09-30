@@ -1425,6 +1425,7 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey roach
 // it iterates through the keys listed for garbage collection by the
 // keys slice. The engine iterator is seeked in turn to each listed
 // key, clearing all values with timestamps <= to expiration.
+// The timestamp parameter is used to compute the intent age on GC.
 func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_GCKey, timestamp roachpb.Timestamp) error {
 	iter := engine.NewIterator()
 
