@@ -1,4 +1,4 @@
-FROM golang:1.5
+FROM golang:1.5.1
 
 MAINTAINER Peter Mattis <peter@cockroachlabs.com>
 
