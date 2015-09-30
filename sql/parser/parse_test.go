@@ -526,6 +526,12 @@ SELECT 1 /* hello
 SELECT '1
        ^
 `},
+		{`SELECT * FROM t WHERE k=`,
+			`syntax error at or near "EOF"
+SELECT * FROM t WHERE k=
+                        ^
+`,
+		},
 		{`CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
 )`, `syntax error at or near "INDEX"

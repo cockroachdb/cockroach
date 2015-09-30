@@ -118,14 +118,14 @@ func unimplemented() {
 
 %type <str>   name opt_name
 
-%type <empty> subquery_op
+// %type <empty> subquery_op
 %type <qname> func_name
 %type <empty> opt_collate
 
 %type <qname> qualified_name
 %type <qname> insert_target
 
-%type <empty> math_op
+// %type <empty> math_op
 
 %type <isoLevel> iso_level
 %type <empty> opt_encoding
@@ -195,7 +195,7 @@ func unimplemented() {
 %type <expr>  case_expr case_arg case_default
 %type <when>  when_clause
 %type <whens> when_clause_list
-%type <empty> sub_type
+// %type <empty> sub_type
 %type <expr> ctext_expr
 %type <expr> numeric_only
 %type <str> alias_clause opt_alias_clause
@@ -2552,9 +2552,9 @@ a_expr:
   {
     $$ = &ComparisonExpr{Operator: NotIn, Left: $1, Right: $4}
   }
-| a_expr subquery_op sub_type select_with_parens %prec CONCAT { unimplemented() }
-| a_expr subquery_op sub_type '(' a_expr ')' %prec CONCAT { unimplemented() }
-| UNIQUE select_with_parens { unimplemented() }
+// | a_expr subquery_op sub_type select_with_parens %prec CONCAT { unimplemented() }
+// | a_expr subquery_op sub_type '(' a_expr ')' %prec CONCAT { unimplemented() }
+// | UNIQUE select_with_parens { unimplemented() }
 
 // Restricted expressions
 //
@@ -2936,33 +2936,33 @@ implicit_row:
     $$ = Tuple(append($2, $4))
   }
 
-sub_type:
-  ANY { unimplemented() }
-| SOME { unimplemented() }
-| ALL { unimplemented() }
+// sub_type:
+//   ANY { unimplemented() }
+// | SOME { unimplemented() }
+// | ALL { unimplemented() }
 
-math_op:
-  '+' { unimplemented() }
-| '-' { unimplemented() }
-| '*' { unimplemented() }
-| '/' { unimplemented() }
-| '%' { unimplemented() }
-| '&' { unimplemented() }
-| '|' { unimplemented() }
-| '^' { unimplemented() }
-| '#' { unimplemented() }
-| '<' { unimplemented() }
-| '>' { unimplemented() }
-| '=' { unimplemented() }
-| CONCAT { unimplemented() }
-| LESS_EQUALS { unimplemented() }
-| GREATER_EQUALS { unimplemented() }
-| NOT_EQUALS { unimplemented() }
+// math_op:
+//   '+' { unimplemented() }
+// | '-' { unimplemented() }
+// | '*' { unimplemented() }
+// | '/' { unimplemented() }
+// | '%' { unimplemented() }
+// | '&' { unimplemented() }
+// | '|' { unimplemented() }
+// | '^' { unimplemented() }
+// | '#' { unimplemented() }
+// | '<' { unimplemented() }
+// | '>' { unimplemented() }
+// | '=' { unimplemented() }
+// | CONCAT { unimplemented() }
+// | LESS_EQUALS { unimplemented() }
+// | GREATER_EQUALS { unimplemented() }
+// | NOT_EQUALS { unimplemented() }
 
-subquery_op:
-  math_op { unimplemented() }
-| LIKE { unimplemented() }
-| NOT_LA LIKE { unimplemented() }
+// subquery_op:
+//   math_op { unimplemented() }
+// | LIKE { unimplemented() }
+// | NOT_LA LIKE { unimplemented() }
   // cannot put SIMILAR TO here, because SIMILAR TO is a hack.
   // the regular expression is preprocessed by a function (similar_escape),
   // and the ~ operator for posix regular expressions is used.
