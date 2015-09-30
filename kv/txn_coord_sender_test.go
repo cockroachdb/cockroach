@@ -86,9 +86,8 @@ func newTxn(clock *hlc.Clock, baseKey roachpb.Key) *roachpb.Transaction {
 func createPutRequest(key roachpb.Key, value []byte, txn *roachpb.Transaction) *roachpb.PutRequest {
 	return &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:                 key,
-			DeprecatedTimestamp: txn.Timestamp,
-			Txn:                 txn,
+			Key: key,
+			Txn: txn,
 		},
 		Value: roachpb.Value{Bytes: value},
 	}
@@ -97,10 +96,9 @@ func createPutRequest(key roachpb.Key, value []byte, txn *roachpb.Transaction) *
 func createDeleteRangeRequest(key, endKey roachpb.Key, txn *roachpb.Transaction) *roachpb.DeleteRangeRequest {
 	return &roachpb.DeleteRangeRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:                 key,
-			EndKey:              endKey,
-			DeprecatedTimestamp: txn.Timestamp,
-			Txn:                 txn,
+			Key:    key,
+			EndKey: endKey,
+			Txn:    txn,
 		},
 	}
 }
@@ -380,8 +378,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	pReply := reply.(*roachpb.PutResponse)
 	if _, err := client.SendWrapped(s.Sender, nil, &roachpb.EndTransactionRequest{
 		RequestHeader: roachpb.RequestHeader{
-			DeprecatedTimestamp: txn.Timestamp,
-			Txn:                 pReply.Header().Txn,
+			Txn: pReply.Header().Txn,
 		},
 		Commit: true,
 	}); err != nil {
@@ -428,8 +425,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// end transaction failed.
 	etArgs := &roachpb.EndTransactionRequest{
 		RequestHeader: roachpb.RequestHeader{
-			DeprecatedTimestamp: txn.Timestamp,
-			Txn:                 txn,
+			Txn: txn,
 		},
 		Commit: true,
 	}
@@ -592,8 +588,7 @@ func TestTxnDrainingNode(t *testing.T) {
 	endTxn := func() {
 		if _, err := client.SendWrapped(s.Sender, nil, &roachpb.EndTransactionRequest{
 			RequestHeader: roachpb.RequestHeader{
-				DeprecatedTimestamp: txn.Timestamp,
-				Txn:                 txn,
+				Txn: txn,
 			},
 			Commit: true}); err != nil {
 			t.Fatal(err)
@@ -676,8 +671,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 		// Abort for clean shutdown.
 		if _, err := client.SendWrapped(s.Sender, nil, &roachpb.EndTransactionRequest{
 			RequestHeader: roachpb.RequestHeader{
-				DeprecatedTimestamp: txn.Timestamp,
-				Txn:                 txn,
+				Txn: txn,
 			},
 			Commit: false,
 		}); err != nil {

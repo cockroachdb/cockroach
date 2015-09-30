@@ -1155,7 +1155,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
 		}
 		// Set the timestamp for this request.
-		ts := args.Header().DeprecatedTimestamp
+		ts := ba.Timestamp
 		{
 			// TODO(tschottdorf): Special exception because of pending
 			// self-overlap discussion.
