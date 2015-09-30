@@ -1190,7 +1190,8 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 			header.Txn = ba.Txn // use latest Txn
 		}
 
-		reply, curIntents, err := r.executeCmd(batch, ms, args)
+		ts := header.Timestamp
+		reply, curIntents, err := r.executeCmd(batch, ms, ts, args)
 
 		// Collect intents skipped over the course of execution.
 		if len(curIntents) > 0 {
@@ -1205,7 +1206,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		}
 
 		// Add the response to the batch, updating the timestamp.
-		br.Timestamp.Forward(header.Timestamp)
+		br.Timestamp.Forward(ts)
 		br.Add(reply)
 		if isTxn {
 			if txn := reply.Header().Txn; txn != nil {
