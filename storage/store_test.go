@@ -1039,22 +1039,30 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 
 	// Now, try to read outside a transaction.
-	gArgs := getArgs(key)
-	getTS := store.ctx.Clock.Now()
-	gArgs.UserPriority = proto.Int32(math.MaxInt32)
-	if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{Timestamp: getTS}, &gArgs); err != nil {
-		t.Errorf("expected read to succeed: %s", err)
-	} else if gReply := reply.(*roachpb.GetResponse); gReply.Value != nil {
-		t.Errorf("expected value to be nil, got %+v", gReply.Value)
+	getTS := store.ctx.Clock.Now() // accessed later
+	{
+		gArgs := getArgs(key)
+		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+			Timestamp:    getTS,
+			UserPriority: proto.Int32(math.MaxInt32),
+		}, &gArgs); err != nil {
+			t.Errorf("expected read to succeed: %s", err)
+		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value != nil {
+			t.Errorf("expected value to be nil, got %+v", gReply.Value)
+		}
 	}
 
-	// Next, try to write outside of a transaction. We will succeed in pushing txn.
-	putTS := store.ctx.Clock.Now()
-	args.Value.Bytes = []byte("value2")
-	args.Txn = nil
-	args.UserPriority = proto.Int32(math.MaxInt32)
-	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{Timestamp: putTS}, &args); err != nil {
-		t.Errorf("expected success aborting pushee's txn; got %s", err)
+	{
+		// Next, try to write outside of a transaction. We will succeed in pushing txn.
+		putTS := store.ctx.Clock.Now()
+		args.Value.Bytes = []byte("value2")
+		args.Txn = nil
+		if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+			Timestamp:    putTS,
+			UserPriority: proto.Int32(math.MaxInt32),
+		}, &args); err != nil {
+			t.Errorf("expected success aborting pushee's txn; got %s", err)
+		}
 	}
 
 	// Read pushee's txn.
@@ -1215,7 +1223,7 @@ func TestStoreScanIntents(t *testing.T) {
 	var count int32
 	countPtr := &count
 
-	TestingCommandFilter = func(args roachpb.Request) error {
+	TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
 		if _, ok := args.(*roachpb.ScanRequest); ok {
 			atomic.AddInt32(countPtr, 1)
 		}
@@ -1326,7 +1334,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer setTxnAutoGC(false)()
 	var intercept atomic.Value
 	intercept.Store(true)
-	TestingCommandFilter = func(args roachpb.Request) error {
+	TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
 		if _, ok := args.(*roachpb.ResolveIntentRequest); ok && intercept.Load().(bool) {
 			return util.Errorf("error on purpose")
 		}

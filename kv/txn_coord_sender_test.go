@@ -156,10 +156,11 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	defer teardownHeartbeats(s.Sender)
 
 	key := roachpb.Key("key")
-	reply, err := client.SendWrapped(s.Sender, nil, &roachpb.PutRequest{
+	reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+		UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
+	}, &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:          key,
-			UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
+			Key: key,
 			Txn: &roachpb.Transaction{
 				Name:      "test txn",
 				Isolation: roachpb.SNAPSHOT,
@@ -192,10 +193,11 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	reply, err := client.SendWrapped(s.Sender, nil, &roachpb.PutRequest{
+	reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+		UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
+	}, &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:          roachpb.Key("key"),
-			UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
+			Key: roachpb.Key("key"),
 			Txn: &roachpb.Transaction{
 				Name:      "test txn",
 				Isolation: roachpb.SNAPSHOT,

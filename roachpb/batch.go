@@ -289,7 +289,6 @@ func (*BatchRequest) GetUser() string {
 // TODO(tschottdorf): provisional code.
 func (ba *BatchRequest) ToHeader() RequestHeader {
 	var h RequestHeader
-	h.UserPriority = ba.UserPriority
 	h.Txn = ba.Txn
 	return h
 }

@@ -82,7 +82,7 @@ const (
 // be run once for each replica and must produce consistent results
 // each time. Should only be used in tests in the storage and
 // storage_test packages.
-var TestingCommandFilter func(roachpb.Request) error
+var TestingCommandFilter func(roachpb.Request, roachpb.BatchRequest_Header) error
 
 // This flag controls whether Transaction entries are automatically gc'ed
 // upon EndTransaction if they only have local intents (which can be
@@ -158,7 +158,7 @@ type RangeManager interface {
 	Stopper() *stop.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
-	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.Timestamp, roachpb.PushTxnType) error
+	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.Timestamp, int32, roachpb.PushTxnType) error
 
 	// Range and replica manipulation methods.
 	LookupReplica(start, end roachpb.Key) *Replica
@@ -1176,9 +1176,8 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 
 		args.Header().Txn = ba.Txn // use latest Txn
 
-		var header roachpb.BatchRequest_Header
+		header := ba.BatchRequest_Header
 		header.Timestamp = ts
-		header.ReadConsistency = ba.ReadConsistency
 
 		reply, curIntents, err := r.executeCmd(batch, ms, header, args)
 		{
@@ -1358,7 +1357,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 			now := r.rm.Clock().Now()
 			err := r.rm.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
 				Intents: item.intents,
-			}, r, args, now, roachpb.CLEANUP_TXN)
+			}, r, args, now, 1 /* prio */, roachpb.CLEANUP_TXN)
 			if wiErr, ok := err.(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 			}

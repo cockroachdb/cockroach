@@ -55,7 +55,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if TestingCommandFilter != nil {
-		if err := TestingCommandFilter(args); err != nil {
+		if err := TestingCommandFilter(args, h); err != nil {
 			return nil, nil, err
 		}
 	}

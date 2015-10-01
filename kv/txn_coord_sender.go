@@ -296,10 +296,6 @@ func updateForBatch(args roachpb.Request, bHeader roachpb.BatchRequest_Header) e
 	// Disallow transaction, user and priority on individual calls, unless
 	// equal.
 	aHeader := args.Header()
-	if aPrio := aHeader.GetUserPriority(); aPrio != roachpb.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
-		return util.Errorf("conflicting user priority on call in batch")
-	}
-	aHeader.UserPriority = bHeader.UserPriority
 	aHeader.Txn = bHeader.Txn // reqs always take Txn from batch
 	return nil
 }

@@ -100,9 +100,9 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.BatchRequest_
 		ba.RangeID = h.RangeID
 		ba.CmdID = h.CmdID
 		ba.ReadConsistency = h.ReadConsistency
+		ba.UserPriority = h.UserPriority
 		{
 			h := args.Header()
-			ba.UserPriority = h.UserPriority
 			ba.Txn = h.Txn
 		}
 		ba.Add(args)

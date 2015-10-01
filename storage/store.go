@@ -1234,7 +1234,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			if ok {
 				args := ba.Requests[index].GetInner()
 				// TODO(tschottdorf): implications of using the batch ts here?
-				err = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.Timestamp, pushType)
+				err = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.Timestamp, ba.GetUserPriority(), pushType)
 				// Make sure that if an index is carried in the error, it
 				// remains the one corresponding to the batch here.
 				if iErr, ok := err.(roachpb.IndexedError); ok {
@@ -1311,9 +1311,8 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 // c) resolving intents upon EndTransaction which are not local to the given
 //    range. This is the only path in which the transaction is going to be
 //    in non-pending state and doesn't require a push.
-func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, pushTo roachpb.Timestamp, pushType roachpb.PushTxnType) error {
+func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, pushTo roachpb.Timestamp, priority int32, pushType roachpb.PushTxnType) error {
 	method := args.Method()
-	priority := args.Header().GetUserPriority()
 	pusherTxn := args.Header().Txn
 	_, _ = method, pushTo
 	readOnly := roachpb.IsReadOnly(args)

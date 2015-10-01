@@ -187,7 +187,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	key := "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
-	storage.TestingCommandFilter = func(args roachpb.Request) error {
+	storage.TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
 		if _, ok := args.(*roachpb.GetRequest); ok &&
 			args.Header().Key.Equal(roachpb.Key(key)) &&
 			args.Header().Txn == nil {
@@ -288,11 +288,13 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	priority := int32(math.MaxInt32)
 	requestHeader := roachpb.RequestHeader{
-		Key:          roachpb.Key(key),
-		UserPriority: &priority,
+		Key: roachpb.Key(key),
 	}
 	ts := clock.Now()
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{Timestamp: ts}, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+		Timestamp:    ts,
+		UserPriority: &priority,
+	}, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
 
@@ -307,7 +309,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	ts = clock.Now()
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{Timestamp: ts}, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+		Timestamp:    ts,
+		UserPriority: &priority,
+	}, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
 	}
 

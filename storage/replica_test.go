@@ -1091,8 +1091,8 @@ func TestRangeCommandQueue(t *testing.T) {
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
 	defer close(blockingDone) // make sure teardown can happen
-	TestingCommandFilter = func(args roachpb.Request) error {
-		if args.Header().GetUserPriority() == 42 {
+	TestingCommandFilter = func(_ roachpb.Request, h roachpb.BatchRequest_Header) error {
+		if h.GetUserPriority() == 42 {
 			blockingStart <- struct{}{}
 			<-blockingDone
 		}
@@ -1121,9 +1121,10 @@ func TestRangeCommandQueue(t *testing.T) {
 		cmd1Done := make(chan struct{})
 		tc.stopper.RunAsyncTask(func() {
 			args := readOrWriteArgs(key1, test.cmd1Read)
-			args.Header().UserPriority = proto.Int32(42)
 
-			_, err := client.SendWrapped(tc.Sender(), tc.rng.context(), args)
+			_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+				UserPriority: proto.Int32(42),
+			}, args)
 
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
@@ -1206,7 +1207,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	key := roachpb.Key("key1")
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
-	TestingCommandFilter = func(args roachpb.Request) error {
+	TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
 		put, ok := args.(*roachpb.PutRequest)
 		if ok && bytes.Equal(put.Key, key) && bytes.Equal(put.Value.Bytes, []byte{1}) {
 			blockingStart <- struct{}{}
@@ -1861,7 +1862,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	tc := testContext{}
 	key := roachpb.Key("a")
 	splitKey := key.Next()
-	TestingCommandFilter = func(args roachpb.Request) error {
+	TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
 		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey) {
 			return util.Errorf("boom")
 		}
