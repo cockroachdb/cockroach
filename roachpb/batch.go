@@ -290,7 +290,6 @@ func (*BatchRequest) GetUser() string {
 func (ba *BatchRequest) ToHeader() RequestHeader {
 	var h RequestHeader
 	h.CmdID = ba.CmdID
-	h.Replica = ba.Replica
 	h.RangeID = ba.RangeID
 	h.UserPriority = ba.UserPriority
 	h.Txn = ba.Txn

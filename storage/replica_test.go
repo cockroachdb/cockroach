@@ -185,7 +185,9 @@ func (tc *testContext) Start(t testing.TB) {
 
 func (tc *testContext) Sender() client.Sender {
 	return client.Wrap(tc.rng, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
-		ba.RangeID = tc.rng.Desc().RangeID
+		if tc.rng != nil && tc.rng.Desc() != nil {
+			ba.RangeID = tc.rng.Desc().RangeID
+		}
 		ba.Replica = roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()}
 		return ba
 	})
@@ -518,9 +520,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 	})
 
 	header := roachpb.RequestHeader{
-		Key:     roachpb.Key("a"),
-		RangeID: tc.rng.Desc().RangeID,
-		Replica: roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+		Key: roachpb.Key("a"),
 	}
 	testCases := []roachpb.Request{
 		// Admin split covers admin commands.
@@ -2246,10 +2246,8 @@ func TestRangeResolveIntentRange(t *testing.T) {
 	// Resolve the intents.
 	rArgs := &roachpb.ResolveIntentRangeRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:     roachpb.Key("a"),
-			EndKey:  roachpb.Key("c"),
-			RangeID: tc.rng.Desc().RangeID,
-			Replica: roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+			Key:    roachpb.Key("a"),
+			EndKey: roachpb.Key("c"),
 		},
 		IntentTxn: *txn,
 	}
@@ -2315,9 +2313,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	// Resolve the 2nd value.
 	rArgs := &roachpb.ResolveIntentRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:     pArgs.Key,
-			RangeID: tc.rng.Desc().RangeID,
-			Replica: roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+			Key: pArgs.Key,
 		},
 		IntentTxn: *pArgs.Txn,
 	}
@@ -2494,9 +2490,7 @@ func TestConditionFailedError(t *testing.T) {
 	}
 	args := roachpb.ConditionalPutRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:     key,
-			RangeID: 1,
-			Replica: roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+			Key: key,
 		},
 		Value: roachpb.Value{
 			Bytes: value,
@@ -2652,8 +2646,6 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	rlArgs := &roachpb.RangeLookupRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:             keys.RangeMetaKey(key),
-			RangeID:         tc.rng.Desc().RangeID,
-			Replica:         roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 			ReadConsistency: roachpb.INCONSISTENT,
 		},
 		MaxRanges: 1,
@@ -2796,10 +2788,8 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	// Resolve the intents.
 	rArgs := &roachpb.ResolveIntentRangeRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:     keys.RangeMetaKey(roachpb.Key("a")),
-			EndKey:  keys.RangeMetaKey(roachpb.Key("z")),
-			RangeID: tc.rng.Desc().RangeID,
-			Replica: roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
+			Key:    keys.RangeMetaKey(roachpb.Key("a")),
+			EndKey: keys.RangeMetaKey(roachpb.Key("z")),
 		},
 		IntentTxn: *txn,
 	}
@@ -2811,8 +2801,6 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	// Get original meta2 descriptor.
 	rlArgs := &roachpb.RangeLookupRequest{
 		RequestHeader: roachpb.RequestHeader{
-			RangeID:         tc.rng.Desc().RangeID,
-			Replica:         roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()},
 			ReadConsistency: roachpb.INCONSISTENT,
 		},
 		MaxRanges: 1,
@@ -3018,7 +3006,10 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	// Force the read command request a new lease.
 	clock := tc.clock
 	ts := clock.Update(clock.Now().Add(int64(DefaultLeaderLeaseDuration), 0))
-	_, err = client.SendWrappedWith(tc.store, nil, roachpb.BatchRequest_Header{Timestamp: ts}, &gArgs)
+	_, err = client.SendWrappedWith(tc.store, nil, roachpb.BatchRequest_Header{
+		Timestamp: ts,
+		RangeID:   1,
+	}, &gArgs)
 	if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
 		t.Fatalf("expected a RangeNotFoundError, get %s", err)
 	}

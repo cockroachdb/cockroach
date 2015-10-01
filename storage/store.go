@@ -743,7 +743,6 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	if rng, ok := s.replicas[rangeID]; ok {
 		return rng, nil
 	}
-	log.Warningf("AOU")
 	return nil, roachpb.NewRangeNotFoundError(rangeID)
 }
 
@@ -1724,4 +1723,9 @@ func (s *Store) testSender() client.Sender {
 		}
 		return ba
 	})
+}
+
+// TestSender is a temporary method to expose testSender() to storage_test.
+func (s *Store) TestSender() client.Sender {
+	return s.testSender()
 }

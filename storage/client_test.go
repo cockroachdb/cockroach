@@ -457,24 +457,20 @@ func (m *multiTestContext) expireLeaderLeases() {
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key []byte, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.GetRequest {
+func getArgs(key []byte) roachpb.GetRequest {
 	return roachpb.GetRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:     key,
-			RangeID: rangeID,
-			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
+			Key: key,
 		},
 	}
 }
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value []byte, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.PutRequest {
+func putArgs(key, value []byte) roachpb.PutRequest {
 	return roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:     key,
-			RangeID: rangeID,
-			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
+			Key: key,
 		},
 		Value: roachpb.Value{
 			Bytes: value,
@@ -484,23 +480,18 @@ func putArgs(key, value []byte, rangeID roachpb.RangeID, storeID roachpb.StoreID
 
 // incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key []byte, inc int64, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.IncrementRequest {
+func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
 	return roachpb.IncrementRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:     key,
-			RangeID: rangeID,
-			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
+			Key: key,
 		},
 		Increment: inc,
 	}
 }
 
-func truncateLogArgs(index uint64, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.TruncateLogRequest {
+func truncateLogArgs(index uint64) roachpb.TruncateLogRequest {
 	return roachpb.TruncateLogRequest{
-		RequestHeader: roachpb.RequestHeader{
-			RangeID: rangeID,
-			Replica: roachpb.ReplicaDescriptor{StoreID: storeID},
-		},
-		Index: index,
+		RequestHeader: roachpb.RequestHeader{},
+		Index:         index,
 	}
 }

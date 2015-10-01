@@ -81,9 +81,6 @@ message RequestHeader {
   // that the operation takes place on the key range from Key to EndKey,
   // including Key and excluding EndKey.
   optional bytes end_key = 4 [(gogoproto.casttype) = "Key"];
-  // Replica specifies the destination for the request. This is a specific
-  // instance of the available replicas belonging to RangeID.
-  optional ReplicaDescriptor replica = 5 [(gogoproto.nullable) = false];
   // RangeID specifies the ID of the Raft consensus group which the key
   // range belongs to. This is used by the receiving node to route the
   // request to the correct range.

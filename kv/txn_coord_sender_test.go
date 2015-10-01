@@ -506,14 +506,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 
 	var testPutReq = &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:          roachpb.Key("test-key"),
-			UserPriority: proto.Int32(-1),
-			Txn: &roachpb.Transaction{
-				Name: "test txn",
-			},
-			Replica: roachpb.ReplicaDescriptor{
-				NodeID: 12345,
-			},
+			Key: roachpb.Key("test-key"),
 		},
 	}
 
@@ -526,7 +519,15 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		var err error
 		{
 			var r roachpb.Response
-			if r, err = client.SendWrapped(ts, nil, proto.Clone(testPutReq).(roachpb.Request)); err != nil {
+			if r, err = client.SendWrappedWith(ts, nil, roachpb.BatchRequest_Header{
+				UserPriority: proto.Int32(-1),
+				Txn: &roachpb.Transaction{
+					Name: "test txn",
+				},
+				Replica: roachpb.ReplicaDescriptor{
+					NodeID: 12345,
+				},
+			}, proto.Clone(testPutReq).(roachpb.Request)); err != nil {
 				t.Fatal(err)
 			}
 			reply = r.(*roachpb.PutResponse)
