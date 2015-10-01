@@ -99,6 +99,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 		}
 		planMaker.setTxn(txn, planMaker.session.Txn.Timestamp.GoTime())
 	}
+	planMaker.evalCtx.GetLocation = planMaker.session.getLocation
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.

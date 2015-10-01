@@ -27,11 +27,38 @@ type Session struct {
 	// Indicates that the above transaction is mutating keys in the
 	// SystemDB span.
 	MutatesSystemDB bool `protobuf:"varint,4,opt,name=mutates_system_db" json:"mutates_system_db"`
+	// Types that are valid to be assigned to Timezone:
+	//	*Session_Location
+	//	*Session_Offset
+	Timezone isSession_Timezone `protobuf_oneof:"timezone"`
 }
 
 func (m *Session) Reset()         { *m = Session{} }
 func (m *Session) String() string { return proto.CompactTextString(m) }
 func (*Session) ProtoMessage()    {}
+
+type isSession_Timezone interface {
+	isSession_Timezone()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type Session_Location struct {
+	Location string `protobuf:"bytes,5,opt,name=location,oneof"`
+}
+type Session_Offset struct {
+	Offset int64 `protobuf:"varint,6,opt,name=offset,oneof"`
+}
+
+func (*Session_Location) isSession_Timezone() {}
+func (*Session_Offset) isSession_Timezone()   {}
+
+func (m *Session) GetTimezone() isSession_Timezone {
+	if m != nil {
+		return m.Timezone
+	}
+	return nil
+}
 
 func (m *Session) GetDatabase() string {
 	if m != nil {
@@ -59,6 +86,67 @@ func (m *Session) GetMutatesSystemDB() bool {
 		return m.MutatesSystemDB
 	}
 	return false
+}
+
+func (m *Session) GetLocation() string {
+	if x, ok := m.GetTimezone().(*Session_Location); ok {
+		return x.Location
+	}
+	return ""
+}
+
+func (m *Session) GetOffset() int64 {
+	if x, ok := m.GetTimezone().(*Session_Offset); ok {
+		return x.Offset
+	}
+	return 0
+}
+
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*Session) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), []interface{}) {
+	return _Session_OneofMarshaler, _Session_OneofUnmarshaler, []interface{}{
+		(*Session_Location)(nil),
+		(*Session_Offset)(nil),
+	}
+}
+
+func _Session_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*Session)
+	// timezone
+	switch x := m.Timezone.(type) {
+	case *Session_Location:
+		_ = b.EncodeVarint(5<<3 | proto.WireBytes)
+		_ = b.EncodeStringBytes(x.Location)
+	case *Session_Offset:
+		_ = b.EncodeVarint(6<<3 | proto.WireVarint)
+		_ = b.EncodeVarint(uint64(x.Offset))
+	case nil:
+	default:
+		return fmt.Errorf("Session.Timezone has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _Session_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*Session)
+	switch tag {
+	case 5: // timezone.location
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeStringBytes()
+		m.Timezone = &Session_Location{x}
+		return true, err
+	case 6: // timezone.offset
+		if wire != proto.WireVarint {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeVarint()
+		m.Timezone = &Session_Offset{int64(x)}
+		return true, err
+	default:
+		return false, nil
+	}
 }
 
 type Session_Transaction struct {
@@ -126,9 +214,31 @@ func (m *Session) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
+	if m.Timezone != nil {
+		nn2, err := m.Timezone.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += nn2
+	}
 	return i, nil
 }
 
+func (m *Session_Location) MarshalTo(data []byte) (int, error) {
+	i := 0
+	data[i] = 0x2a
+	i++
+	i = encodeVarintSession(data, i, uint64(len(m.Location)))
+	i += copy(data[i:], m.Location)
+	return i, nil
+}
+func (m *Session_Offset) MarshalTo(data []byte) (int, error) {
+	i := 0
+	data[i] = 0x30
+	i++
+	i = encodeVarintSession(data, i, uint64(m.Offset))
+	return i, nil
+}
 func (m *Session_Transaction) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -147,19 +257,19 @@ func (m *Session_Transaction) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintSession(data, i, uint64(m.Txn.Size()))
-	n2, err := m.Txn.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	data[i] = 0x12
-	i++
-	i = encodeVarintSession(data, i, uint64(m.Timestamp.Size()))
-	n3, err := m.Timestamp.MarshalTo(data[i:])
+	n3, err := m.Txn.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n3
+	data[i] = 0x12
+	i++
+	i = encodeVarintSession(data, i, uint64(m.Timestamp.Size()))
+	n4, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
 	return i, nil
 }
 
@@ -201,9 +311,25 @@ func (m *Session) Size() (n int) {
 		n += 1 + l + sovSession(uint64(l))
 	}
 	n += 2
+	if m.Timezone != nil {
+		n += m.Timezone.Size()
+	}
 	return n
 }
 
+func (m *Session_Location) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Location)
+	n += 1 + l + sovSession(uint64(l))
+	return n
+}
+func (m *Session_Offset) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovSession(uint64(m.Offset))
+	return n
+}
 func (m *Session_Transaction) Size() (n int) {
 	var l int
 	_ = l
@@ -357,6 +483,55 @@ func (m *Session) Unmarshal(data []byte) error {
 				}
 			}
 			m.MutatesSystemDB = bool(v != 0)
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Location", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthSession
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Timezone = &Session_Location{string(data[iNdEx:postIndex])}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Offset", wireType)
+			}
+			var v int64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Timezone = &Session_Offset{v}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipSession(data[iNdEx:])

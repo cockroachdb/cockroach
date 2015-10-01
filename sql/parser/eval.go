@@ -31,8 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-var errZeroModulus = errors.New("zero modulus")
-var errDivByZero = errors.New("division by zero")
+var (
+	errZeroModulus = errors.New("zero modulus")
+	errDivByZero   = errors.New("division by zero")
+)
 
 type unaryOp struct {
 	returnType Datum
@@ -587,6 +589,7 @@ type EvalContext struct {
 	NodeID        uint32
 	StmtTimestamp time.Time
 	TxnTimestamp  time.Time
+	GetLocation   func() (*time.Location, error)
 }
 
 var defaultContext EvalContext
@@ -1164,7 +1167,7 @@ func (ctx EvalContext) evalCastExpr(expr *CastExpr) (Datum, error) {
 	case *TimestampType:
 		switch d := d.(type) {
 		case DString:
-			return ParseTimestamp(d)
+			return ctx.ParseTimestamp(d)
 		case DDate:
 			return DTimestamp{Time: d.Time}, nil
 		}
@@ -1272,32 +1275,29 @@ func ParseDate(s DString) (DDate, error) {
 }
 
 // ParseTimestamp parses the timestamp.
-func ParseTimestamp(s DString) (DTimestamp, error) {
+func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 	str := string(s)
 	t, err := time.Parse(dateFormat, str)
 	if err == nil {
 		return DTimestamp{Time: t}, nil
 	}
-	t, err = time.Parse(timestampFormat, str)
-	if err == nil {
+	if t, err = time.Parse(TimestampWithOffsetZoneFormat, str); err == nil {
 		t = t.UTC()
 		return DTimestamp{Time: t}, nil
 	}
-	t, err = time.Parse(TimestampWithOffsetZoneFormat, str)
-	if err == nil {
+	location := time.UTC
+	if ctx.GetLocation != nil {
+		if location, err = ctx.GetLocation(); err != nil {
+			return DummyTimestamp, err
+		}
+	}
+	if t, err = time.ParseInLocation(timestampFormat, str, location); err == nil {
 		t = t.UTC()
 		return DTimestamp{Time: t}, nil
 	}
-	t, err = time.Parse(timestampWithNamedZoneFormat, str)
-	if err == nil {
-		// Parsing using a named time zone is imperfect for two reasons:
-		// 1. Some named time zones are ambiguous (PST can be US PST and
-		// phillipines PST), and 2. The code needs to have access to the entire
-		// database of named timed zones in order to get some time offset,
-		// and it's not clear what are the memory requirements for that.
-		// TODO(vivek): Implement SET TIME ZONE to set a time zone and use
-		// time.ParseInLocation()
-		return DummyTimestamp, util.Errorf("TODO(vivek): named time zone input not supported")
+	if t, err = time.ParseInLocation(timestampWithNamedZoneFormat, str, location); err == nil {
+		t = t.UTC()
+		return DTimestamp{Time: t}, nil
 	}
 	// Parse other formats in the future.
 	return DummyTimestamp, err

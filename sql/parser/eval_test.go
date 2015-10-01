@@ -313,7 +313,7 @@ func TestEvalExprError(t *testing.T) {
 		{`1 % 0`, `zero modulus`},
 		{`1 / 0`, `division by zero`},
 		{`'2010-09-28 12:00:00.1'::date`, `parsing time "2010-09-28 12:00:00.1": extra text`},
-		{`'2010-09-28 12:00:00.1 MST'::timestamp`, `named time zone input not supported`},
+		{`'2010-09-28 12:00.1 MST'::timestamp`, `parsing time "2010-09-28 12:00.1 MST" as "2006-01-02 15:04:05.999999999 MST": cannot parse ".1 MST" as ":"`},
 		{`'11h2m'::interval / 0`, `division by zero`},
 		{`'hello' || b'world'`, `unsupported binary operator: <string> || <bytes>`},
 		{`b'\xff\xfe\xfd'::string`, `invalid utf8: "\xff\xfe\xfd"`},

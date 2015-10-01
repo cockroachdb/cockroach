@@ -316,6 +316,12 @@ func TestParse(t *testing.T) {
 		{`SET a = $1`},
 		{`SET TRANSACTION ISOLATION LEVEL SNAPSHOT`},
 		{`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`},
+		{`SET TIME ZONE 'pst8pdt'`},
+		{`SET TIME ZONE 'Europe/Rome'`},
+		{`SET TIME ZONE -7`},
+		{`SET TIME ZONE -7.3`},
+		{`SET TIME ZONE DEFAULT`},
+		{`SET TIME ZONE LOCAL`},
 
 		// TODO(pmattis): Is this a postgres extension?
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a
@@ -460,6 +466,12 @@ func TestParse2(t *testing.T) {
 			`SELECT FROM t EXCEPT SELECT 1 FROM t`},
 		{`SELECT FROM t INTERSECT DISTINCT SELECT 1 FROM t`,
 			`SELECT FROM t INTERSECT SELECT 1 FROM t`},
+		{`SET TIME ZONE pst8pdt`,
+			`SET TIME ZONE 'pst8pdt'`},
+		{`SET TIME ZONE "Europe/Rome"`,
+			`SET TIME ZONE 'Europe/Rome'`},
+		{`SET TIME ZONE INTERVAL '-7h'`,
+			`SET TIME ZONE INTERVAL '-7h0m0s'`},
 	}
 	for _, d := range testData {
 		stmts, err := ParseTraditional(d.sql)
@@ -517,6 +529,10 @@ b = 2`, `syntax error at or near "="
 SET a = 1,
 b = 2
   ^
+`},
+		{`SET TIME ZONE INTERVAL 'foobar'`, `cannot evaluate to an interval type at or near "EOF"
+SET TIME ZONE INTERVAL 'foobar'
+                               ^
 `},
 		{`SELECT 1 /* hello`, `unterminated comment
 SELECT 1 /* hello

@@ -103,6 +103,8 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 		return p.Select(n)
 	case *parser.Set:
 		return p.Set(n)
+	case *parser.SetTimeZone:
+		return p.SetTimeZone(n)
 	case *parser.SetTransaction:
 		return p.SetTransaction(n)
 	case *parser.Show:

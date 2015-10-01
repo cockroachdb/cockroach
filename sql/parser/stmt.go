@@ -128,6 +128,9 @@ func (*Set) StatementType() StatementType { return Ack }
 func (*SetTransaction) StatementType() StatementType { return Ack }
 
 // StatementType implements the Statement interface.
+func (*SetTimeZone) StatementType() StatementType { return Ack }
+
+// StatementType implements the Statement interface.
 func (*Show) StatementType() StatementType { return Rows }
 
 // StatementType implements the Statement interface.

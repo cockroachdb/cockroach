@@ -264,3 +264,96 @@ SELECT extract(nanosecond from timestamp '2001-04-10 12:04:59.34565423')
 
 query error extract: unsupported timespan: nansecond
 SELECT extract(nansecond from timestamp '2001-04-10 12:04:59.34565423')
+
+# Test SET TIME ZONE
+
+# default time zone of UTC
+query TTT
+SELECT '2015-08-25 05:45:45.53453'::timestamp
+----
+2015-08-25 05:45:45.53453 +0000 UTC
+
+statement ok
+SET TIME ZONE 'Europe/Rome'
+
+query TTT
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 UTC
+
+statement ok
+SET TIME ZONE "America/New_York"
+
+query TTT
+SELECT '2015-08-24 23:45:45.53453 EST'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 UTC
+
+query TTT
+SELECT '2015-08-24 23:45:45.53453 EDT'::timestamp
+----
+2015-08-25 03:45:45.53453 +0000 UTC
+
+# PST is not interpreted properly.
+query TTT
+SELECT '2015-08-24 23:45:45.53453 PST'::timestamp
+----
+2015-08-24 23:45:45.53453 +0000 UTC
+
+# A missing time zome is interpretted in the same way as EDT
+query TTT
+SELECT '2015-08-24 23:45:45.53453'::timestamp
+----
+2015-08-25 03:45:45.53453 +0000 UTC
+
+statement error cannot find foobar.*
+SET TIME ZONE 'foobar'
+
+statement ok
+SET TIME ZONE INTERVAL '-7h'
+
+query TTT
+SELECT '2015-08-24 21:45:45.53453'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 UTC
+
+statement ok
+SET TIME ZONE -7
+
+query TTT
+SELECT '2015-08-24 21:45:45.53453'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 UTC
+
+statement ok
+SET TIME ZONE -7.5
+
+query TTT
+SELECT '2015-08-24 21:15:45.53453'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 UTC
+
+query TTT
+SELECT '2015-08-24 21:15:45.53453'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 UTC
+
+statement ok
+SET TIME ZONE LOCAL
+
+query TTT
+SELECT '2015-08-25 04:45:45.53453'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 UTC
+
+statement ok
+SET TIME ZONE DEFAULT
+
+query TTT
+SELECT '2015-08-25 04:45:45.53453'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 UTC
+
+# reset for what follows.
+statement ok
+SET TIME ZONE 'UTC'

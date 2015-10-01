@@ -46,3 +46,22 @@ type SetTransaction struct {
 func (node *SetTransaction) String() string {
 	return fmt.Sprintf("SET TRANSACTION ISOLATION LEVEL %s", node.Isolation)
 }
+
+// SetTimeZone represents a SET TIME ZONE statement.
+type SetTimeZone struct {
+	Value Expr
+}
+
+func (node *SetTimeZone) String() string {
+	prefix := "SET TIME ZONE"
+	switch v := node.Value.(type) {
+	case DInterval:
+		return fmt.Sprintf("%s INTERVAL '%s'", prefix, v)
+
+	case DString:
+		if zone := string(v); zone == "DEFAULT" || zone == "LOCAL" {
+			return fmt.Sprintf("%s %s", prefix, zone)
+		}
+	}
+	return fmt.Sprintf("%s %s", prefix, node.Value)
+}
