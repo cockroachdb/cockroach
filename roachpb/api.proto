@@ -78,12 +78,6 @@ message RequestHeader {
   // that the operation takes place on the key range from Key to EndKey,
   // including Key and excluding EndKey.
   optional bytes end_key = 4 [(gogoproto.casttype) = "Key"];
-  // Txn is set non-nil if a transaction is underway. To start a txn,
-  // the first request should set this field to non-nil with name and
-  // isolation level set as desired. The response will contain the
-  // fully-initialized transaction with txn ID, priority, initial
-  // timestamp, and maximum timestamp.
-  optional Transaction txn = 8;
 }
 
 // ResponseHeader is returned with every storage node response.

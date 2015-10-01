@@ -324,30 +324,18 @@ class RequestHeader : public ::google::protobuf::Message {
   ::std::string* release_end_key();
   void set_allocated_end_key(::std::string* end_key);
 
-  // optional .cockroach.roachpb.Transaction txn = 8;
-  bool has_txn() const;
-  void clear_txn();
-  static const int kTxnFieldNumber = 8;
-  const ::cockroach::roachpb::Transaction& txn() const;
-  ::cockroach::roachpb::Transaction* mutable_txn();
-  ::cockroach::roachpb::Transaction* release_txn();
-  void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RequestHeader)
  private:
   inline void set_has_key();
   inline void clear_has_key();
   inline void set_has_end_key();
   inline void clear_has_end_key();
-  inline void set_has_txn();
-  inline void clear_has_txn();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
-  ::cockroach::roachpb::Transaction* txn_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -6105,49 +6093,6 @@ inline void RequestHeader::set_allocated_end_key(::std::string* end_key) {
   }
   end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestHeader.end_key)
-}
-
-// optional .cockroach.roachpb.Transaction txn = 8;
-inline bool RequestHeader::has_txn() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void RequestHeader::set_has_txn() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void RequestHeader::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void RequestHeader::clear_txn() {
-  if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
-  clear_has_txn();
-}
-inline const ::cockroach::roachpb::Transaction& RequestHeader::txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestHeader.txn)
-  return txn_ != NULL ? *txn_ : *default_instance_->txn_;
-}
-inline ::cockroach::roachpb::Transaction* RequestHeader::mutable_txn() {
-  set_has_txn();
-  if (txn_ == NULL) {
-    txn_ = new ::cockroach::roachpb::Transaction;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestHeader.txn)
-  return txn_;
-}
-inline ::cockroach::roachpb::Transaction* RequestHeader::release_txn() {
-  clear_has_txn();
-  ::cockroach::roachpb::Transaction* temp = txn_;
-  txn_ = NULL;
-  return temp;
-}
-inline void RequestHeader::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
-  delete txn_;
-  txn_ = txn;
-  if (txn) {
-    set_has_txn();
-  } else {
-    clear_has_txn();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestHeader.txn)
 }
 
 // -------------------------------------------------------------------
