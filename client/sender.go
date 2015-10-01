@@ -100,7 +100,6 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.BatchRequest_
 		{
 			h := args.Header()
 			ba.CmdID = h.CmdID
-			ba.Replica = h.Replica
 			ba.RangeID = h.RangeID
 			ba.UserPriority = h.UserPriority
 			ba.Txn = h.Txn
@@ -131,4 +130,12 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.BatchRequest_
 // SendWrapped is identical to SendWrappedAt with a zero header.
 func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
 	return SendWrappedWith(sender, ctx, roachpb.BatchRequest_Header{}, args)
+}
+
+// Wrap returns a Sender which applies the given function before delegating to
+// the supplied Sender.
+func Wrap(sender Sender, f func(roachpb.BatchRequest) roachpb.BatchRequest) Sender {
+	return SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		return sender.Send(ctx, f(ba))
+	})
 }

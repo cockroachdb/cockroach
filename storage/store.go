@@ -1714,3 +1714,14 @@ func (s *Store) PublishStatus() error {
 func (s *Store) SetRangeRetryOptions(ro retry.Options) {
 	s.ctx.RangeRetryOptions = ro
 }
+
+// testSender sets RangeID to one (unless already non-zero) and sends to the
+// Store. For unit-testing only.
+func (s *Store) testSender() client.Sender {
+	return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
+		if ba.RangeID == 0 {
+			ba.RangeID = 1
+		}
+		return ba
+	})
+}
