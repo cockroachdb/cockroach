@@ -15,6 +15,13 @@
 #
 # Author: Tamir Duberstein (tamird@gmail.com)
 
+# NOTE: for some reason bash is necessary for updating the PATH to work
+# See http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile
+SHELL            := /bin/bash
+
+# Update the path to prefer binstubs over globals
+PATH             := node_modules/.bin:$(PATH)
+
 REPO_ROOT        := $(realpath ..)
 ORG_ROOT         := $(REPO_ROOT)/..
 GITHUB_ROOT      := $(ORG_ROOT)/..
@@ -36,10 +43,11 @@ GO_BINDATA := $(GOPATH_BIN)/go-bindata
 TYPESCRIPT_TARGET       := build/app.js
 TEST_TARGET             := build/test.js
 CSS_TARGET              := build/app.css
-STYL_OPTIONS            :=
+CSS_DEBUG_TARGET        := build/app_debug.css
 REMOTE_DEPS             := npm.installed bower.installed tsd.installed
 INDEX                   := index.html
 GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
+GOBINDATA_DEBUG_DEPS    := $(TYPESCRIPT_TARGET) $(CSS_DEBUG_TARGET)
 GOBINDATA_SOURCES       := $(BOWER_COMPONENTS)/d3/d3.min.js \
                            $(BOWER_COMPONENTS)/lodash/lodash.min.js \
                            $(BOWER_COMPONENTS)/mithril/mithril.js \
@@ -56,7 +64,6 @@ GOBINDATA_TARGET        := ./embedded.go
 GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
 
 .PHONY:
-all: STYL_OPTIONS += --compress
 all: $(GOBINDATA_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
 
@@ -65,7 +72,7 @@ debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
 bower.installed: bower.json npm.installed
-	$(NODE_MODULES)/.bin/bower install --config.interactive=false --allow-root
+	bower install --config.interactive=false --allow-root
 	touch $@
 
 npm.installed: npm-shrinkwrap.json
@@ -73,25 +80,35 @@ npm.installed: npm-shrinkwrap.json
 	touch $@
 
 tsd.installed: tsd.json npm.installed
-	$(NODE_MODULES)/.bin/tsd install
+	tsd install
 	touch $@
 
 $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
-	$(NODE_MODULES)/.bin/tsc -p $(TS_ROOT)
-	$(NODE_MODULES)/.bin/tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts' -not -path '*external*')
+	tsc -p $(TS_ROOT)
+	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts' -not -path '*external*')
 
 $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
-	$(NODE_MODULES)/.bin/tsc -p $(TEST_ROOT)
+	tsc -p $(TEST_ROOT)
 
 $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
-	$(NODE_MODULES)/.bin/stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out build/
+	stylus --compress $(STYL_ROOT)/app.styl --out $@
+
+$(CSS_DEBUG_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
+	stylus $(STYL_ROOT)/app.styl --out $@
 
 $(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
+	rm -f $(INDEX)
 	cp release/$(INDEX) $(INDEX)
+	chmod a-w $(INDEX)
 	$(GO_BINDATA) -nometadata -pkg ui -o $@ $(GOBINDATA_DEPS) $(INDEX) $(GOBINDATA_SOURCES)
 	gofmt -s -w $@
 	goimports -w $@
 
-$(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEPS) bower.installed debug/$(INDEX)
+$(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEBUG_DEPS) bower.installed debug/$(INDEX)
+	rm -f $(INDEX)
 	cp debug/$(INDEX) $(INDEX)
-	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_DEPS) $(INDEX) $(GOBINDATA_DEBUG_SOURCES)
+	chmod a-w $(INDEX)
+	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_DEBUG_DEPS) $(INDEX) $(GOBINDATA_DEBUG_SOURCES)
+
+watch: debug
+	gulp watch
