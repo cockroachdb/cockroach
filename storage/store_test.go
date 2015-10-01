@@ -540,7 +540,7 @@ func TestStoreSendUpdateTime(t *testing.T) {
 	args := getArgs([]byte("a"), 1, store.StoreID())
 	reqTS := store.ctx.Clock.Now()
 	reqTS.WallTime += (100 * time.Millisecond).Nanoseconds()
-	_, err := client.SendWrappedAt(store, nil, reqTS, &args)
+	_, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: reqTS}, &args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -589,7 +589,7 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	store.ctx.Clock.SetMaxOffset(maxOffset)
 	// Set args timestamp to exceed max offset.
 	ts := store.ctx.Clock.Now().Add(maxOffset.Nanoseconds()+1, 0)
-	if _, err := client.SendWrappedAt(store, nil, ts, &args); err == nil {
+	if _, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: ts}, &args); err == nil {
 		t.Error("expected max offset clock error")
 	}
 }
@@ -899,7 +899,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		ts := store.ctx.Clock.Now()
 		gArgs := getArgs(key, 1, store.StoreID())
 		gArgs.Txn = pusher
-		firstReply, err := client.SendWrappedAt(store, nil, ts, &gArgs)
+		firstReply, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: ts}, &gArgs)
 		if test.resolvable {
 			if err != nil {
 				t.Errorf("%d: expected read to succeed: %s", i, err)
@@ -968,7 +968,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// First, write original value.
 	args := putArgs(key, []byte("value1"), 1, store.StoreID())
 	ts := store.ctx.Clock.Now()
-	if _, err := client.SendWrappedAt(store, nil, ts, &args); err != nil {
+	if _, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: ts}, &args); err != nil {
 		t.Fatal(err)
 	}
 
@@ -976,7 +976,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	ts = store.ctx.Clock.Now()
 	args.Txn = pushee
 	args.Value.Bytes = []byte("value2")
-	if _, err := client.SendWrappedAt(store, nil, ts, &args); err != nil {
+	if _, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: ts}, &args); err != nil {
 		t.Fatal(err)
 	}
 
@@ -984,7 +984,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	gArgs := getArgs(key, 1, store.StoreID())
 	gTS := store.ctx.Clock.Now()
 	gArgs.Txn = pusher
-	if reply, err := client.SendWrappedAt(store, nil, gTS, &gArgs); err != nil {
+	if reply, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: gTS}, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
 	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
 		t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.Bytes)
@@ -995,7 +995,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// commit timestamp is equal to gArgs.Timestamp + 1.
 	etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
 	ts = pushee.Timestamp
-	reply, err := client.SendWrappedAt(store, nil, ts, &etArgs)
+	reply, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: ts}, &etArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1030,7 +1030,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	gArgs := getArgs(key, 1, store.StoreID())
 	getTS := store.ctx.Clock.Now()
 	gArgs.UserPriority = proto.Int32(math.MaxInt32)
-	if reply, err := client.SendWrappedAt(store, nil, getTS, &gArgs); err != nil {
+	if reply, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: getTS}, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
 	} else if gReply := reply.(*roachpb.GetResponse); gReply.Value != nil {
 		t.Errorf("expected value to be nil, got %+v", gReply.Value)
@@ -1041,7 +1041,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	args.Value.Bytes = []byte("value2")
 	args.Txn = nil
 	args.UserPriority = proto.Int32(math.MaxInt32)
-	if _, err := client.SendWrappedAt(store, nil, putTS, &args); err != nil {
+	if _, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: putTS}, &args); err != nil {
 		t.Errorf("expected success aborting pushee's txn; got %s", err)
 	}
 
@@ -1254,7 +1254,7 @@ func TestStoreScanIntents(t *testing.T) {
 		}
 		done := make(chan struct{})
 		go func() {
-			if reply, err := client.SendWrappedAt(store, nil, ts, &sArgs); err != nil {
+			if reply, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: ts}, &sArgs); err != nil {
 				t.Fatal(err)
 			} else {
 				sReply = reply.(*roachpb.ScanResponse)

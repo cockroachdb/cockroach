@@ -193,7 +193,7 @@ func TestGCQueueProcess(t *testing.T) {
 				dArgs.Txn.OrigTimestamp = datum.ts
 				dArgs.Txn.Timestamp = datum.ts
 			}
-			if _, err := client.SendWrappedAt(tc.rng, tc.rng.context(), datum.ts, &dArgs); err != nil {
+			if _, err := client.SendWrappedWith(tc.rng, tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: datum.ts}, &dArgs); err != nil {
 				t.Fatalf("%d: could not delete data: %s", i, err)
 			}
 		} else {
@@ -203,7 +203,7 @@ func TestGCQueueProcess(t *testing.T) {
 				pArgs.Txn.OrigTimestamp = datum.ts
 				pArgs.Txn.Timestamp = datum.ts
 			}
-			if _, err := client.SendWrappedAt(tc.rng, tc.rng.context(), datum.ts, &pArgs); err != nil {
+			if _, err := client.SendWrappedWith(tc.rng, tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: datum.ts}, &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
 		}

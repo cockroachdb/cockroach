@@ -62,7 +62,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	manuals[0].Increment(int64(500 * time.Millisecond))
 	incArgs := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
 	ts := clocks[0].Now()
-	if _, err := client.SendWrappedAt(mtc.stores[0], nil, ts, &incArgs); err != nil {
+	if _, err := client.SendWrappedWith(mtc.stores[0], nil, roachpb.BatchRequest_Header{Timestamp: ts}, &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -128,7 +128,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	for i := int64(0); i < 3; i++ {
 		incArgs := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
 		ts := roachpb.ZeroTimestamp.Add(startTime+((i+1)*30)*int64(time.Millisecond), 0)
-		if _, err := client.SendWrappedAt(mtc.stores[0], nil, ts, &incArgs); err != nil {
+		if _, err := client.SendWrappedWith(mtc.stores[0], nil, roachpb.BatchRequest_Header{Timestamp: ts}, &incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -139,7 +139,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
 	incArgs := incrementArgs([]byte("a"), 11, 1, mtc.stores[0].StoreID())
 	ts := roachpb.ZeroTimestamp.Add(int64((time.Duration(startTime)+maxOffset+1)*time.Millisecond), 0)
-	if _, err := client.SendWrappedAt(mtc.stores[0], nil, ts, &incArgs); err == nil {
+	if _, err := client.SendWrappedWith(mtc.stores[0], nil, roachpb.BatchRequest_Header{Timestamp: ts}, &incArgs); err == nil {
 		t.Fatalf("expected clock offset error but got nil")
 	}
 
@@ -294,7 +294,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		UserPriority: &priority,
 	}
 	ts := clock.Now()
-	if _, err := client.SendWrappedAt(store, nil, ts, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
+	if _, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: ts}, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
 
@@ -309,7 +309,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	ts = clock.Now()
-	if _, err := client.SendWrappedAt(store, nil, ts, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
+	if _, err := client.SendWrappedWith(store, nil, roachpb.BatchRequest_Header{Timestamp: ts}, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
 	}
 
