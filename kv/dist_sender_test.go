@@ -524,10 +524,11 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		ba := getArgs(testAddress).(*roachpb.BatchRequest)
+		key, endKey := keys.Range(*ba)
 		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
-			if !descStale && bytes.HasPrefix(ba.Key, keys.Meta2Prefix) {
+			if !descStale && bytes.HasPrefix(key, keys.Meta2Prefix) {
 				t.Errorf("unexpected extra lookup for non-stale replica descriptor at %s",
-					ba.Key)
+					key)
 			}
 
 			br := getReply().(*roachpb.BatchResponse)
@@ -536,7 +537,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			br.Add(r)
 			// If we just returned the stale descriptor, set up returning the
 			// good one next time.
-			if bytes.HasPrefix(ba.Key, keys.Meta2Prefix) {
+			if bytes.HasPrefix(key, keys.Meta2Prefix) {
 				if newRangeDescriptor.StartKey.Equal(badStartKey) {
 					newRangeDescriptor.StartKey = goodStartKey
 				} else {
@@ -548,8 +549,8 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
 		if !newRangeDescriptor.StartKey.Equal(goodStartKey) {
-			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: ba.Key,
-				RequestEndKey: ba.EndKey}
+			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: key,
+				RequestEndKey: endKey}
 		}
 		return []proto.Message{ba.CreateReply()}, nil
 	}
@@ -726,13 +727,14 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		if method != "Node.Batch" {
 			t.Fatalf("unexpected method:%s", method)
 		}
-		header := getArgs(testAddress).(*roachpb.BatchRequest).BatchRequest_Header
+		ba := getArgs(testAddress).(*roachpb.BatchRequest)
+		key, endKey := keys.Range(*ba)
 		batchReply := getReply().(*roachpb.BatchResponse)
 		reply := &roachpb.ScanResponse{}
 		batchReply.Add(reply)
 		results := []roachpb.KeyValue{}
 		for _, curKV := range existingKVs {
-			if header.Key.Less(curKV.Key.Next()) && curKV.Key.Less(header.EndKey) {
+			if key.Less(curKV.Key.Next()) && curKV.Key.Less(endKey) {
 				results = append(results, curKV)
 			}
 		}

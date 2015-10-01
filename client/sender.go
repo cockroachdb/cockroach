@@ -99,7 +99,6 @@ func SendWrappedAt(sender Sender, ctx context.Context, ts roachpb.Timestamp, arg
 		ba.Timestamp = ts
 		{
 			h := args.Header()
-			ba.Key, ba.EndKey = h.Key, h.EndKey
 			ba.CmdID = h.CmdID
 			ba.Replica = h.Replica
 			ba.RangeID = h.RangeID

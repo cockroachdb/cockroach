@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -120,7 +121,8 @@ func (ls *LocalSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roac
 	if ba.RangeID == 0 || ba.Replica.StoreID == 0 {
 		var repl *roachpb.ReplicaDescriptor
 		var rangeID roachpb.RangeID
-		rangeID, repl, err = ls.lookupReplica(ba.Key, ba.EndKey)
+		key, endKey := keys.Range(ba)
+		rangeID, repl, err = ls.lookupReplica(key, endKey)
 		if err == nil {
 			ba.RangeID = rangeID
 			ba.Replica = *repl
@@ -128,7 +130,6 @@ func (ls *LocalSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roac
 	}
 
 	ctx = log.Add(ctx,
-		log.Key, ba.Key,
 		log.RangeID, ba.RangeID)
 
 	if err == nil {

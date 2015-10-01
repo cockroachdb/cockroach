@@ -139,23 +139,12 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse) error {
 	return nil
 }
 
-// Add adds a request to the batch request. The batch key range is
-// expanded to include the key ranges of all requests which it comprises.
+// Add adds a request to the batch request.
 func (ba *BatchRequest) Add(requests ...Request) {
 	for _, args := range requests {
 		union := RequestUnion{}
 		if !union.SetValue(args) {
 			panic(fmt.Sprintf("unable to add %T to batch request", args))
-		}
-
-		h := args.Header()
-		if ba.Key == nil || !ba.Key.Less(h.Key) {
-			ba.Key = h.Key
-		} else if ba.EndKey.Less(h.Key) && !ba.Key.Equal(h.Key) {
-			ba.EndKey = h.Key
-		}
-		if ba.EndKey == nil || (h.EndKey != nil && ba.EndKey.Less(h.EndKey)) {
-			ba.EndKey = h.EndKey
 		}
 		ba.Requests = append(ba.Requests, union)
 	}
@@ -300,7 +289,6 @@ func (*BatchRequest) GetUser() string {
 // TODO(tschottdorf): provisional code.
 func (ba *BatchRequest) ToHeader() RequestHeader {
 	var h RequestHeader
-	h.Key, h.EndKey = ba.Key, ba.EndKey
 	h.CmdID = ba.CmdID
 	h.Replica = ba.Replica
 	h.RangeID = ba.RangeID

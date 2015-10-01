@@ -628,16 +628,6 @@ message BatchRequest {
     // CmdID is optionally specified for request idempotence
     // (i.e. replay protection).
     optional ClientCmdID cmd_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
-    // The key for request. If the request operates on a range, this
-    // represents the starting key for the range.
-    optional bytes key = 3 [(gogoproto.casttype) = "Key"];
-    // The end key is empty if the request spans only a single key. Otherwise,
-    // it must order strictly after Key. In such a case, the header indicates
-    // that the operation takes place on the key range from Key to EndKey,
-    // including Key and excluding EndKey.
-    optional bytes end_key = 4 [(gogoproto.casttype) = "Key"];
-    // Replica specifies the destination for the request. This is a specific
-    // instance of the available replicas belonging to RangeID.
     optional ReplicaDescriptor replica = 5 [(gogoproto.nullable) = false];
     // RangeID specifies the ID of the Raft consensus group which the key
     // range belongs to. This is used by the receiving node to route the

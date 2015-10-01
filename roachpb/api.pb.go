@@ -1618,17 +1618,7 @@ type BatchRequest_Header struct {
 	Timestamp Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
 	// CmdID is optionally specified for request idempotence
 	// (i.e. replay protection).
-	CmdID ClientCmdID `protobuf:"bytes,2,opt,name=cmd_id" json:"cmd_id"`
-	// The key for request. If the request operates on a range, this
-	// represents the starting key for the range.
-	Key Key `protobuf:"bytes,3,opt,name=key,casttype=Key" json:"key,omitempty"`
-	// The end key is empty if the request spans only a single key. Otherwise,
-	// it must order strictly after Key. In such a case, the header indicates
-	// that the operation takes place on the key range from Key to EndKey,
-	// including Key and excluding EndKey.
-	EndKey Key `protobuf:"bytes,4,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
-	// Replica specifies the destination for the request. This is a specific
-	// instance of the available replicas belonging to RangeID.
+	CmdID   ClientCmdID       `protobuf:"bytes,2,opt,name=cmd_id" json:"cmd_id"`
 	Replica ReplicaDescriptor `protobuf:"bytes,5,opt,name=replica" json:"replica"`
 	// RangeID specifies the ID of the Raft consensus group which the key
 	// range belongs to. This is used by the receiving node to route the
@@ -1674,20 +1664,6 @@ func (m *BatchRequest_Header) GetCmdID() ClientCmdID {
 		return m.CmdID
 	}
 	return ClientCmdID{}
-}
-
-func (m *BatchRequest_Header) GetKey() Key {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *BatchRequest_Header) GetEndKey() Key {
-	if m != nil {
-		return m.EndKey
-	}
-	return nil
 }
 
 func (m *BatchRequest_Header) GetReplica() ReplicaDescriptor {
@@ -3847,18 +3823,6 @@ func (m *BatchRequest_Header) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n108
-	if m.Key != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintApi(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
-	}
-	if m.EndKey != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintApi(data, i, uint64(len(m.EndKey)))
-		i += copy(data[i:], m.EndKey)
-	}
 	data[i] = 0x2a
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
@@ -4689,14 +4653,6 @@ func (m *BatchRequest_Header) Size() (n int) {
 	n += 1 + l + sovApi(uint64(l))
 	l = m.CmdID.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.EndKey != nil {
-		l = len(m.EndKey)
-		n += 1 + l + sovApi(uint64(l))
-	}
 	l = m.Replica.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.RangeID))
@@ -11521,62 +11477,6 @@ func (m *BatchRequest_Header) Unmarshal(data []byte) error {
 			if err := m.CmdID.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Key = append([]byte{}, data[iNdEx:postIndex]...)
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EndKey", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.EndKey = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {

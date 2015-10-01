@@ -610,7 +610,6 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	hb.Key = txn.Key
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
-	ba.Key = txn.Key
 	ba.Txn = &txn
 	ba.Add(hb)
 
