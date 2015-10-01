@@ -129,9 +129,6 @@ func usesTimestampCache(r roachpb.Request) bool {
 	if m < 0 || m >= roachpb.Method(len(tsCacheMethods)) {
 		return false
 	}
-	if roachpb.IsReadOnly(r) && r.Header().ReadConsistency == roachpb.INCONSISTENT {
-		return false
-	}
 	return tsCacheMethods[m]
 }
 
@@ -677,8 +674,9 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
 // the timestamp cache using the final timestamp of each command.
 func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, err error) {
 	r.Lock()
-	// Only update the timestamp cache if the command succeeded.
-	if err == nil {
+	// Only update the timestamp cache if the command succeeded and we're not
+	// doing inconsistent ops (in which case the ops are always read-only).
+	if err == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
 		for _, union := range ba.Requests {
 			args := union.GetInner()
 			if usesTimestampCache(args) {
