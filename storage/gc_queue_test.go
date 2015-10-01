@@ -188,22 +188,30 @@ func TestGCQueueProcess(t *testing.T) {
 	for i, datum := range data {
 		if datum.del {
 			dArgs := deleteArgs(datum.key)
+			var txn *roachpb.Transaction
 			if datum.txn {
-				dArgs.Txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
-				dArgs.Txn.OrigTimestamp = datum.ts
-				dArgs.Txn.Timestamp = datum.ts
+				txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
+				txn.OrigTimestamp = datum.ts
+				txn.Timestamp = datum.ts
 			}
-			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: datum.ts}, &dArgs); err != nil {
+			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+				Timestamp: datum.ts,
+				Txn:       txn,
+			}, &dArgs); err != nil {
 				t.Fatalf("%d: could not delete data: %s", i, err)
 			}
 		} else {
 			pArgs := putArgs(datum.key, []byte("value"))
+			var txn *roachpb.Transaction
 			if datum.txn {
-				pArgs.Txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
-				pArgs.Txn.OrigTimestamp = datum.ts
-				pArgs.Txn.Timestamp = datum.ts
+				txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
+				txn.OrigTimestamp = datum.ts
+				txn.Timestamp = datum.ts
 			}
-			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: datum.ts}, &pArgs); err != nil {
+			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+				Timestamp: datum.ts,
+				Txn:       txn,
+			}, &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
 		}
@@ -333,8 +341,9 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		// TODO(spencerkimball): benchmark with ~50k.
 		for j := 0; j < 5; j++ {
 			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%05d", i, j)), []byte("value"))
-			pArgs.Txn = txns[i]
-			if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &pArgs); err != nil {
+			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+				Txn: txns[i],
+			}, &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
 		}

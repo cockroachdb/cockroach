@@ -187,10 +187,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	key := "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
-	storage.TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
+	storage.TestingCommandFilter = func(args roachpb.Request, h roachpb.BatchRequest_Header) error {
 		if _, ok := args.(*roachpb.GetRequest); ok &&
 			args.Header().Key.Equal(roachpb.Key(key)) &&
-			args.Header().Txn == nil {
+			h.Txn == nil {
 			// The Reader executes two get operations, each of which triggers two get requests
 			// (the first request fails and triggers txn push, and then the second request
 			// succeeds). Returns an error for the fourth get request to avoid timestamp cache

@@ -158,7 +158,7 @@ type RangeManager interface {
 	Stopper() *stop.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
-	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.Timestamp, int32, roachpb.PushTxnType) error
+	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.BatchRequest_Header, roachpb.PushTxnType) error
 
 	// Range and replica manipulation methods.
 	LookupReplica(start, end roachpb.Key) *Replica
@@ -592,7 +592,8 @@ func (r *Replica) checkCmdHeader(header *roachpb.RequestHeader) error {
 // all be set to identical values between the batch request header and
 // all constituent batch requests. Also, either all requests must be
 // read-only, or none.
-// TODO(tschottdorf): should check that request is contained in range.
+// TODO(tschottdorf): should check that request is contained in range
+// and that EndTransaction only occurs at the very end.
 func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 	if ba.IsReadOnly() {
 		if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Txn != nil {
@@ -606,23 +607,6 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 		return util.Errorf("inconsistent mode is only available to reads")
 	}
 
-	for i := range ba.Requests {
-		args := ba.Requests[i].GetInner()
-		header := args.Header()
-		if args.Method() == roachpb.EndTransaction && len(ba.Requests) != 1 {
-			return util.Errorf("cannot mix EndTransaction with other operations in a batch")
-		}
-		// TODO(tschottdorf): disabled since execution forces at least the batch
-		// timestamp anyways, and this leads to errors on retries.
-		// Compare only WallTime since logical ticks are used for self-overlapping
-		// batches (see setBatchTimestamps()).
-		//if wt := header.Timestamp.WallTime; wt > 0 && wt != ba.Timestamp.WallTime {
-		//	return util.Errorf("conflicting timestamp %s on call in batch at %s", header.Timestamp, ba.Timestamp)
-		//}
-		if header.Txn != nil && !header.Txn.Equal(ba.Txn) {
-			return util.Errorf("conflicting transaction on call in transactional batch at position %d: %s", i, ba)
-		}
-	}
 	return nil
 }
 
@@ -677,7 +661,7 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, err e
 			args := union.GetInner()
 			if usesTimestampCache(args) {
 				header := args.Header()
-				r.tsCache.Add(header.Key, header.EndKey, ba.Timestamp, header.Txn.GetID(), roachpb.IsReadOnly(args))
+				r.tsCache.Add(header.Key, header.EndKey, ba.Timestamp, ba.Txn.GetID(), roachpb.IsReadOnly(args))
 			}
 		}
 	}
@@ -825,7 +809,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg 
 		args := union.GetInner()
 		header := args.Header()
 		if usesTimestampCache(args) {
-			rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, header.Txn.GetID())
+			rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, ba.Txn.GetID())
 
 			// Always push the timestamp forward if there's been a read which
 			// occurred after our txn timestamp.
@@ -839,7 +823,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg 
 				// there isn't an intent or the intent can be pushed by us.
 				//
 				// If we're not in a txn, it's trivial to just advance our timestamp.
-				if header.Txn == nil {
+				if ba.Txn == nil {
 					ba.Timestamp = wTS.Next()
 				}
 			}
@@ -1157,8 +1141,6 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 			}
 		}
 
-		args.Header().Txn = ba.Txn // use latest Txn
-
 		header := ba.BatchRequest_Header
 		header.Timestamp = ts
 
@@ -1324,6 +1306,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 	if len(intents) == 0 {
 		return
 	}
+	now := r.rm.Clock().Now()
 
 	for _, item := range intents {
 		ctx := r.context()
@@ -1333,10 +1316,10 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// still be careful though, a retry could happen and race with args.
 		args := proto.Clone(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
-			now := r.rm.Clock().Now()
+			h := roachpb.BatchRequest_Header{Timestamp: now}
 			err := r.rm.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
 				Intents: item.intents,
-			}, r, args, now, 1 /* prio */, roachpb.CLEANUP_TXN)
+			}, r, args, h, roachpb.CLEANUP_TXN)
 			if wiErr, ok := err.(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 			}

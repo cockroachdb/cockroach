@@ -359,8 +359,8 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*roachpb.ScanRequest)
-	scan.Txn = &roachpb.Transaction{Name: "MyTxn"}
-	reply, err = client.SendWrappedWith(tds, nil, roachpb.BatchRequest_Header{Timestamp: dr.Timestamp}, scan)
+	txn := &roachpb.Transaction{Name: "MyTxn"}
+	reply, err = client.SendWrappedWith(tds, nil, roachpb.BatchRequest_Header{Txn: txn}, scan)
 	if err != nil {
 		t.Fatal(err)
 	}

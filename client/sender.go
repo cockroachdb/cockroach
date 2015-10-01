@@ -96,15 +96,7 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.BatchRequest_
 	}
 	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
 		ba := &roachpb.BatchRequest{}
-		ba.Timestamp = h.Timestamp
-		ba.RangeID = h.RangeID
-		ba.CmdID = h.CmdID
-		ba.ReadConsistency = h.ReadConsistency
-		ba.UserPriority = h.UserPriority
-		{
-			h := args.Header()
-			ba.Txn = h.Txn
-		}
+		ba.BatchRequest_Header = h
 		ba.Add(args)
 		return ba, func(br *roachpb.BatchResponse) roachpb.Response {
 			unwrappedReply := br.Responses[0].GetInner()

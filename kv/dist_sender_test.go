@@ -758,8 +758,9 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 10).(*roachpb.ScanRequest)
 	// Set the Txn info to avoid an OpRequiresTxnError.
-	scan.Txn = &roachpb.Transaction{}
-	reply, err := client.SendWrapped(ds, nil, scan)
+	reply, err := client.SendWrappedWith(ds, nil, roachpb.BatchRequest_Header{
+		Txn: &roachpb.Transaction{},
+	}, scan)
 	if err != nil {
 		t.Fatalf("scan encountered error: %s", err)
 	}
