@@ -333,13 +333,6 @@ class RequestHeader : public ::google::protobuf::Message {
   ::std::string* release_end_key();
   void set_allocated_end_key(::std::string* end_key);
 
-  // optional int64 range_id = 6;
-  bool has_range_id() const;
-  void clear_range_id();
-  static const int kRangeIdFieldNumber = 6;
-  ::google::protobuf::int64 range_id() const;
-  void set_range_id(::google::protobuf::int64 value);
-
   // optional int32 user_priority = 7 [default = 1];
   bool has_user_priority() const;
   void clear_user_priority();
@@ -371,8 +364,6 @@ class RequestHeader : public ::google::protobuf::Message {
   inline void clear_has_key();
   inline void set_has_end_key();
   inline void clear_has_end_key();
-  inline void set_has_range_id();
-  inline void clear_has_range_id();
   inline void set_has_user_priority();
   inline void clear_has_user_priority();
   inline void set_has_txn();
@@ -386,7 +377,6 @@ class RequestHeader : public ::google::protobuf::Message {
   ::cockroach::roachpb::ClientCmdID* cmd_id_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
-  ::google::protobuf::int64 range_id_;
   ::cockroach::roachpb::Transaction* txn_;
   ::google::protobuf::int32 user_priority_;
   int read_consistency_;
@@ -6192,39 +6182,15 @@ inline void RequestHeader::set_allocated_end_key(::std::string* end_key) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestHeader.end_key)
 }
 
-// optional int64 range_id = 6;
-inline bool RequestHeader::has_range_id() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void RequestHeader::set_has_range_id() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void RequestHeader::clear_has_range_id() {
-  _has_bits_[0] &= ~0x00000008u;
-}
-inline void RequestHeader::clear_range_id() {
-  range_id_ = GOOGLE_LONGLONG(0);
-  clear_has_range_id();
-}
-inline ::google::protobuf::int64 RequestHeader::range_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestHeader.range_id)
-  return range_id_;
-}
-inline void RequestHeader::set_range_id(::google::protobuf::int64 value) {
-  set_has_range_id();
-  range_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.RequestHeader.range_id)
-}
-
 // optional int32 user_priority = 7 [default = 1];
 inline bool RequestHeader::has_user_priority() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void RequestHeader::set_has_user_priority() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void RequestHeader::clear_has_user_priority() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void RequestHeader::clear_user_priority() {
   user_priority_ = 1;
@@ -6242,13 +6208,13 @@ inline void RequestHeader::set_user_priority(::google::protobuf::int32 value) {
 
 // optional .cockroach.roachpb.Transaction txn = 8;
 inline bool RequestHeader::has_txn() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void RequestHeader::set_has_txn() {
-  _has_bits_[0] |= 0x00000020u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void RequestHeader::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void RequestHeader::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
@@ -6285,13 +6251,13 @@ inline void RequestHeader::set_allocated_txn(::cockroach::roachpb::Transaction* 
 
 // optional .cockroach.roachpb.ReadConsistencyType read_consistency = 9;
 inline bool RequestHeader::has_read_consistency() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void RequestHeader::set_has_read_consistency() {
-  _has_bits_[0] |= 0x00000040u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void RequestHeader::clear_has_read_consistency() {
-  _has_bits_[0] &= ~0x00000040u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void RequestHeader::clear_read_consistency() {
   read_consistency_ = 0;

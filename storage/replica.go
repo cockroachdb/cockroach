@@ -344,11 +344,6 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	args := &roachpb.LeaderLeaseRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: desc.StartKey,
-			CmdID: roachpb.ClientCmdID{
-				WallTime: r.rm.Clock().Now().WallTime,
-				Random:   rand.Int63(),
-			},
-			RangeID: desc.RangeID,
 		},
 		Lease: roachpb.Lease{
 			Start:      timestamp,
@@ -357,6 +352,11 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 		},
 	}
 	ba := &roachpb.BatchRequest{}
+	ba.RangeID = desc.RangeID
+	ba.CmdID = roachpb.ClientCmdID{
+		WallTime: r.rm.Clock().Now().WallTime,
+		Random:   rand.Int63(),
+	}
 	ba.Add(args)
 	// Send lease request directly to raft in order to skip unnecessary
 	// checks from normal request machinery, (e.g. the command queue).

@@ -264,10 +264,6 @@ type RequestHeader struct {
 	// that the operation takes place on the key range from Key to EndKey,
 	// including Key and excluding EndKey.
 	EndKey Key `protobuf:"bytes,4,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
-	// RangeID specifies the ID of the Raft consensus group which the key
-	// range belongs to. This is used by the receiving node to route the
-	// request to the correct range.
-	RangeID RangeID `protobuf:"varint,6,opt,name=range_id,casttype=RangeID" json:"range_id"`
 	// UserPriority specifies priority multiple for non-transactional
 	// commands. This value should be a positive integer [1, 2^31-1).
 	// It's properly viewed as a multiple for how likely this
@@ -315,13 +311,6 @@ func (m *RequestHeader) GetEndKey() Key {
 		return m.EndKey
 	}
 	return nil
-}
-
-func (m *RequestHeader) GetRangeID() RangeID {
-	if m != nil {
-		return m.RangeID
-	}
-	return 0
 }
 
 func (m *RequestHeader) GetUserPriority() int32 {
@@ -1816,9 +1805,6 @@ func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintApi(data, i, uint64(len(m.EndKey)))
 		i += copy(data[i:], m.EndKey)
 	}
-	data[i] = 0x30
-	i++
-	i = encodeVarintApi(data, i, uint64(m.RangeID))
 	if m.UserPriority != nil {
 		data[i] = 0x38
 		i++
@@ -3969,7 +3955,6 @@ func (m *RequestHeader) Size() (n int) {
 		l = len(m.EndKey)
 		n += 1 + l + sovApi(uint64(l))
 	}
-	n += 1 + sovApi(uint64(m.RangeID))
 	if m.UserPriority != nil {
 		n += 1 + sovApi(uint64(*m.UserPriority))
 	}
@@ -5125,25 +5110,6 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			}
 			m.EndKey = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
-		case 6:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
-			}
-			m.RangeID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.RangeID |= (RangeID(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		case 7:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UserPriority", wireType)

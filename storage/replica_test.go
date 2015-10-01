@@ -2879,8 +2879,7 @@ func TestRangeLookup(t *testing.T) {
 	for _, c := range testCases {
 		resp, err := client.SendWrapped(tc.Sender(), nil, &roachpb.RangeLookupRequest{
 			RequestHeader: roachpb.RequestHeader{
-				RangeID: 1,
-				Key:     c.key,
+				Key: c.key,
 			},
 			MaxRanges: 1,
 			Reverse:   c.reverse,

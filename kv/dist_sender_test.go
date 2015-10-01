@@ -324,7 +324,6 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 
 		args := tc.args
-		args.Header().RangeID = rangeID // Not used in this test, but why not.
 		args.Header().Key = roachpb.Key("a")
 		if roachpb.IsRange(args) {
 			args.Header().EndKey = roachpb.Key("b")
@@ -334,7 +333,9 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		if _, err := client.SendWrapped(ds, nil, args); err != nil {
+		if _, err := client.SendWrappedWith(ds, nil, roachpb.BatchRequest_Header{
+			RangeID: rangeID, // Not used in this test, but why not.
+		}, args); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
 	}
