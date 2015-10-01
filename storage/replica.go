@@ -594,6 +594,18 @@ func (r *Replica) checkCmdHeader(header *roachpb.RequestHeader) error {
 // read-only, or none.
 // TODO(tschottdorf): should check that request is contained in range.
 func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
+	if ba.IsReadOnly() {
+		if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Txn != nil {
+			// Disallow any inconsistent reads within txns.
+			return util.Errorf("cannot allow inconsistent reads within a transaction")
+		}
+		if ba.ReadConsistency == roachpb.CONSENSUS {
+			return util.Errorf("consensus reads not implemented")
+		}
+	} else if ba.ReadConsistency == roachpb.INCONSISTENT {
+		return util.Errorf("inconsistent mode is only available to reads")
+	}
+
 	for i := range ba.Requests {
 		args := ba.Requests[i].GetInner()
 		header := args.Header()
@@ -609,22 +621,6 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 		//}
 		if header.Txn != nil && !header.Txn.Equal(ba.Txn) {
 			return util.Errorf("conflicting transaction on call in transactional batch at position %d: %s", i, ba)
-		}
-		// This assertion should be made unnecessary by only having the field
-		// on BatchRequest.
-		if header.ReadConsistency != ba.ReadConsistency {
-			return util.Errorf("requests and batch must have same read consistency")
-		}
-		if roachpb.IsReadOnly(args) {
-			if header.ReadConsistency == roachpb.INCONSISTENT && header.Txn != nil {
-				// Disallow any inconsistent reads within txns.
-				return util.Errorf("cannot allow inconsistent reads within a transaction")
-			}
-			if header.ReadConsistency == roachpb.CONSENSUS {
-				return util.Errorf("consensus reads not implemented")
-			}
-		} else if header.ReadConsistency == roachpb.INCONSISTENT {
-			return util.Errorf("inconsistent mode is only available to reads")
 		}
 	}
 	return nil
@@ -1182,6 +1178,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 
 		var header roachpb.BatchRequest_Header
 		header.Timestamp = ts
+		header.ReadConsistency = ba.ReadConsistency
 
 		reply, curIntents, err := r.executeCmd(batch, ms, header, args)
 		{

@@ -322,17 +322,19 @@ func TestRangeReadConsistency(t *testing.T) {
 	}
 
 	// Try a consensus read and verify error.
-	gArgs.ReadConsistency = roachpb.CONSENSUS
 
-	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &gArgs); err == nil {
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		ReadConsistency: roachpb.CONSENSUS,
+	}, &gArgs); err == nil {
 		t.Errorf("expected error on consensus read")
 	}
 
 	// Try an inconsistent read within a transaction.
-	gArgs.ReadConsistency = roachpb.INCONSISTENT
 	gArgs.Txn = newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
 
-	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &gArgs); err == nil {
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		ReadConsistency: roachpb.INCONSISTENT,
+	}, &gArgs); err == nil {
 		t.Errorf("expected error on inconsistent read within a txn")
 	}
 
@@ -349,17 +351,18 @@ func TestRangeReadConsistency(t *testing.T) {
 			StoreID:   2,
 		},
 	})
-	gArgs.ReadConsistency = roachpb.CONSISTENT
-	gArgs.Txn = nil
 
-	_, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &gArgs)
+	gArgs.Txn = nil
+	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		ReadConsistency: roachpb.CONSISTENT,
+	}, &gArgs)
 	if _, ok := err.(*roachpb.NotLeaderError); !ok {
 		t.Errorf("expected not leader error; got %s", err)
 	}
 
-	gArgs.ReadConsistency = roachpb.INCONSISTENT
-
-	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &gArgs); err != nil {
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		ReadConsistency: roachpb.INCONSISTENT,
+	}, &gArgs); err != nil {
 		t.Errorf("expected success reading with inconsistent: %s", err)
 	}
 }
@@ -1229,9 +1232,10 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	cmd2Done := make(chan struct{})
 	go func() {
 		args := getArgs(key)
-		args.ReadConsistency = roachpb.INCONSISTENT
 
-		_, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
+		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &args)
 
 		if err != nil {
 			t.Fatal(err)
@@ -1297,10 +1301,12 @@ func TestRangeNoTSCacheInconsistent(t *testing.T) {
 	t0 := 1 * time.Second
 	tc.manualClock.Set(t0.Nanoseconds())
 	args := getArgs([]byte("a"))
-	args.ReadConsistency = roachpb.INCONSISTENT
 	ts := tc.clock.Now()
 
-	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: ts}, &args)
+	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		Timestamp:       ts,
+		ReadConsistency: roachpb.INCONSISTENT,
+	}, &args)
 
 	if err != nil {
 		t.Error(err)
@@ -2648,8 +2654,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	// Get original meta2 descriptor.
 	rlArgs := &roachpb.RangeLookupRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:             keys.RangeMetaKey(key),
-			ReadConsistency: roachpb.INCONSISTENT,
+			Key: keys.RangeMetaKey(key),
 		},
 		MaxRanges: 1,
 		Reverse:   isReverse,
@@ -2657,7 +2662,9 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	var rlReply *roachpb.RangeLookupResponse
 
-	reply, err := client.SendWrapped(tc.Sender(), tc.rng.context(), rlArgs)
+	reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		ReadConsistency: roachpb.INCONSISTENT,
+	}, rlArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2683,7 +2690,10 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	// inconsistent, there's no WriteIntentErorr.
 	rlArgs.Key = keys.RangeMetaKey(roachpb.Key("A"))
 
-	reply, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: roachpb.MinTimestamp}, rlArgs)
+	reply, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		Timestamp:       roachpb.MinTimestamp,
+		ReadConsistency: roachpb.INCONSISTENT,
+	}, rlArgs)
 	if err != nil {
 		t.Errorf("unexpected lookup error: %s", err)
 	}
@@ -2693,8 +2703,9 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	}
 
 	// Switch to consistent lookups, which should run into the intent.
-	rlArgs.ReadConsistency = roachpb.CONSISTENT
-	_, err = client.SendWrapped(tc.Sender(), tc.rng.context(), rlArgs)
+	_, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		ReadConsistency: roachpb.CONSISTENT,
+	}, rlArgs)
 	if _, ok := err.(*roachpb.WriteIntentError); !ok {
 		t.Fatalf("expected WriteIntentError, not %s", err)
 	}
@@ -2707,15 +2718,15 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 		t.Fatalf("wanted specific error, not %s", err)
 	}
 	// After changing back to inconsistent lookups, should be good to go.
-	rlArgs.ReadConsistency = roachpb.INCONSISTENT
-
 	var origSeen, newSeen bool
 	const count = 100
 
 	for i := 0; i < count && !(origSeen && newSeen); i++ {
 		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
 
-		reply, err = client.SendWrapped(tc.Sender(), tc.rng.context(), clonedRLArgs)
+		reply, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, clonedRLArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2803,9 +2814,6 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Get original meta2 descriptor.
 	rlArgs := &roachpb.RangeLookupRequest{
-		RequestHeader: roachpb.RequestHeader{
-			ReadConsistency: roachpb.INCONSISTENT,
-		},
 		MaxRanges: 1,
 		Reverse:   true,
 	}
@@ -2815,7 +2823,9 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	for _, c := range testCases {
 		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
 		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.Key(c.key))
-		reply, err := client.SendWrapped(tc.Sender(), tc.rng.context(), clonedRLArgs)
+		reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, clonedRLArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2842,7 +2852,9 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	for _, c := range testCases {
 		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
 		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.Key(c.key))
-		reply, err := client.SendWrapped(tc.Sender(), tc.rng.context(), clonedRLArgs)
+		reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, clonedRLArgs)
 		if err != nil {
 			t.Fatal(err)
 		}

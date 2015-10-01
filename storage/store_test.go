@@ -1150,15 +1150,18 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// will be able to read with INCONSISTENT.
 		gArgs := getArgs(keyA)
 
-		gArgs.ReadConsistency = roachpb.INCONSISTENT
-		if reply, err := client.SendWrapped(store.testSender(), nil, &gArgs); err != nil {
+		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
 		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
 			t.Errorf("expected value %q, got %+v", []byte("value1"), gReply.Value)
 		}
 		gArgs.Key = keyB
 
-		if reply, err := client.SendWrapped(store.testSender(), nil, &gArgs); err != nil {
+		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
 		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value != nil {
 			// The new value of B will not be read at first.
@@ -1167,7 +1170,9 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// However, it will be read eventually, as B's intent can be
 		// resolved asynchronously as txn B is committed.
 		util.SucceedsWithin(t, 500*time.Millisecond, func() error {
-			if reply, err := client.SendWrapped(store.testSender(), nil, &gArgs); err != nil {
+			if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+				ReadConsistency: roachpb.INCONSISTENT,
+			}, &gArgs); err != nil {
 				return util.Errorf("expected read to succeed: %s", err)
 			} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value2")) {
 				return util.Errorf("expected value %q, got %+v", []byte("value2"), gReply.Value)
@@ -1177,8 +1182,9 @@ func TestStoreReadInconsistent(t *testing.T) {
 
 		// Scan keys and verify results.
 		sArgs := scanArgs(keyA, keyB.Next())
-		sArgs.ReadConsistency = roachpb.INCONSISTENT
-		reply, err := client.SendWrapped(store.testSender(), nil, &sArgs)
+		reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &sArgs)
 		if err != nil {
 			t.Errorf("expected scan to succeed: %s", err)
 		}
@@ -1261,12 +1267,16 @@ func TestStoreScanIntents(t *testing.T) {
 		sArgs := scanArgs(keys[0], keys[9].Next())
 		var sReply *roachpb.ScanResponse
 		ts := store.Clock().Now()
+		consistency := roachpb.CONSISTENT
 		if !test.consistent {
-			sArgs.ReadConsistency = roachpb.INCONSISTENT
+			consistency = roachpb.INCONSISTENT
 		}
 		done := make(chan struct{})
 		go func() {
-			if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{Timestamp: ts}, &sArgs); err != nil {
+			if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+				Timestamp:       ts,
+				ReadConsistency: consistency,
+			}, &sArgs); err != nil {
 				t.Fatal(err)
 			} else {
 				sReply = reply.(*roachpb.ScanResponse)
@@ -1351,9 +1361,10 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 
 	// Scan the range repeatedly until we've verified count.
 	sArgs := scanArgs(keys[0], keys[9].Next())
-	sArgs.ReadConsistency = roachpb.INCONSISTENT
 	util.SucceedsWithin(t, time.Second, func() error {
-		if reply, err := client.SendWrapped(store.testSender(), nil, &sArgs); err != nil {
+		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &sArgs); err != nil {
 			return err
 		} else if sReply := reply.(*roachpb.ScanResponse); len(sReply.Rows) != 10 {
 			return util.Errorf("could not read rows as expected")

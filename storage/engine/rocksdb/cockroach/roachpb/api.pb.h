@@ -6196,6 +6196,7 @@ inline void RequestHeader::set_allocated_txn(::cockroach::roachpb::Transaction* 
 
 // optional .cockroach.roachpb.ReadConsistencyType read_consistency = 9;
 inline bool RequestHeader::has_read_consistency() const {
+<<<<<<< HEAD
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void RequestHeader::set_has_read_consistency() {
@@ -6203,6 +6204,15 @@ inline void RequestHeader::set_has_read_consistency() {
 }
 inline void RequestHeader::clear_has_read_consistency() {
   _has_bits_[0] &= ~0x00000010u;
+=======
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void RequestHeader::set_has_read_consistency() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void RequestHeader::clear_has_read_consistency() {
+  _has_bits_[0] &= ~0x00000020u;
+>>>>>>> a0fb5b0... make RequestHeader.ReadConsistency obsolete
 }
 inline void RequestHeader::clear_read_consistency() {
   read_consistency_ = 0;

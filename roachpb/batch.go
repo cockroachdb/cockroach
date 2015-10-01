@@ -291,7 +291,6 @@ func (ba *BatchRequest) ToHeader() RequestHeader {
 	var h RequestHeader
 	h.UserPriority = ba.UserPriority
 	h.Txn = ba.Txn
-	h.ReadConsistency = ba.ReadConsistency
 	return h
 }
 

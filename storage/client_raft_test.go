@@ -262,8 +262,9 @@ func TestReplicateRange(t *testing.T) {
 	// Verify that the same data is available on the replica.
 	util.SucceedsWithin(t, 1*time.Second, func() error {
 		getArgs := getArgs([]byte("a"))
-		getArgs.ReadConsistency = roachpb.INCONSISTENT
-		if reply, err := client.SendWrapped(rg1(mtc.stores[1]), nil, &getArgs); err != nil {
+		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &getArgs); err != nil {
 			return util.Errorf("failed to read data")
 		} else if v := mustGetInt(reply.(*roachpb.GetResponse).Value); v != 5 {
 			return util.Errorf("failed to read correct data: %d", v)
@@ -333,8 +334,9 @@ func TestRestoreReplicas(t *testing.T) {
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs([]byte("a"))
-		getArgs.ReadConsistency = roachpb.INCONSISTENT
-		reply, err := client.SendWrapped(rg1(mtc.stores[1]), nil, &getArgs)
+		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &getArgs)
 		if err != nil {
 			return false
 		}
@@ -488,8 +490,9 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Once it catches up, the effects of both commands can be seen.
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs([]byte("a"))
-		getArgs.ReadConsistency = roachpb.INCONSISTENT
-		reply, err := client.SendWrapped(rg1(mtc.stores[1]), nil, &getArgs)
+		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &getArgs)
 		if err != nil {
 			return false
 		}
@@ -519,8 +522,9 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs([]byte("a"))
-		getArgs.ReadConsistency = roachpb.INCONSISTENT
-		reply, err := client.SendWrapped(rg1(mtc.stores[1]), nil, &getArgs)
+		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &getArgs)
 		if err != nil {
 			return false
 		}
@@ -986,9 +990,9 @@ func TestReplicateAfterSplit(t *testing.T) {
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs(key)
 		// Reading on non-leader replica should use inconsistent read
-		getArgs.ReadConsistency = roachpb.INCONSISTENT
 		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.BatchRequest_Header{
-			RangeID: rangeID2,
+			RangeID:         rangeID2,
+			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs)
 		if err != nil {
 			return false

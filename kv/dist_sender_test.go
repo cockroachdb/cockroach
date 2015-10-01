@@ -328,13 +328,15 @@ func TestSendRPCOrder(t *testing.T) {
 		if roachpb.IsRange(args) {
 			args.Header().EndKey = roachpb.Key("b")
 		}
+		consistency := roachpb.CONSISTENT
 		if !tc.consistent {
-			args.Header().ReadConsistency = roachpb.INCONSISTENT
+			consistency = roachpb.INCONSISTENT
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
 		if _, err := client.SendWrappedWith(ds, nil, roachpb.BatchRequest_Header{
-			RangeID: rangeID, // Not used in this test, but why not.
+			RangeID:         rangeID, // Not used in this test, but why not.
+			ReadConsistency: consistency,
 		}, args); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}

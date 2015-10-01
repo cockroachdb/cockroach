@@ -353,8 +353,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	revScanArgs := func(key []byte, maxResults int32) *roachpb.RangeLookupRequest {
 		return &roachpb.RangeLookupRequest{
 			RequestHeader: roachpb.RequestHeader{
-				Key:             key,
-				ReadConsistency: roachpb.INCONSISTENT,
+				Key: key,
 			},
 			MaxRanges: maxResults,
 			Reverse:   true,
@@ -414,7 +413,9 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		resp, err := client.SendWrapped(rg1(store), nil, test.request)
+		resp, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, test.request)
 		if err != nil {
 			t.Fatalf("RangeLookup error: %s", err)
 		}

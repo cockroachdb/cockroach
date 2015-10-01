@@ -177,7 +177,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 func (r *Replica) Get(batch engine.Engine, h roachpb.BatchRequest_Header, args roachpb.GetRequest) (roachpb.GetResponse, []roachpb.Intent, error) {
 	var reply roachpb.GetResponse
 
-	val, intents, err := engine.MVCCGet(batch, args.Key, h.Timestamp, args.ReadConsistency == roachpb.CONSISTENT, args.Txn)
+	val, intents, err := engine.MVCCGet(batch, args.Key, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, args.Txn)
 	reply.Value = val
 	return reply, intents, err
 }
@@ -231,7 +231,7 @@ func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, h roach
 func (r *Replica) Scan(batch engine.Engine, h roachpb.BatchRequest_Header, args roachpb.ScanRequest) (roachpb.ScanResponse, []roachpb.Intent, error) {
 	var reply roachpb.ScanResponse
 
-	rows, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, h.Timestamp, args.ReadConsistency == roachpb.CONSISTENT, args.Txn)
+	rows, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, args.Txn)
 	reply.Rows = rows
 	return reply, intents, err
 }
@@ -242,7 +242,7 @@ func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.BatchRequest_Header
 	var reply roachpb.ReverseScanResponse
 
 	rows, intents, err := engine.MVCCReverseScan(batch, args.Key, args.EndKey, args.MaxResults, h.Timestamp,
-		args.ReadConsistency == roachpb.CONSISTENT, args.Txn)
+		h.ReadConsistency == roachpb.CONSISTENT, args.Txn)
 	reply.Rows = rows
 	return reply, intents, err
 }
@@ -534,7 +534,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.BatchRequest_Header
 	if rangeCount < 1 {
 		return reply, nil, util.Errorf("Range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
-	consistent := args.ReadConsistency != roachpb.INCONSISTENT
+	consistent := h.ReadConsistency != roachpb.INCONSISTENT
 	if consistent && args.ConsiderIntents {
 		return reply, nil, util.Errorf("can not read consistently and special-case intents")
 	}
