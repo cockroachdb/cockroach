@@ -97,10 +97,15 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.BatchRequest_
 	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
 		ba := &roachpb.BatchRequest{}
 		ba.Timestamp = h.Timestamp
+		ba.RangeID = h.RangeID
 		{
 			h := args.Header()
 			ba.CmdID = h.CmdID
-			ba.RangeID = h.RangeID
+			if ba.RangeID == 0 {
+				// TODO(tschottdorf): still necessary now since not all tests
+				// use the passed in batch header (yet).
+				ba.RangeID = h.RangeID
+			}
 			ba.UserPriority = h.UserPriority
 			ba.Txn = h.Txn
 			ba.ReadConsistency = h.ReadConsistency

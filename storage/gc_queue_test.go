@@ -187,7 +187,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 	for i, datum := range data {
 		if datum.del {
-			dArgs := deleteArgs(datum.key, tc.rng.Desc().RangeID, tc.store.StoreID())
+			dArgs := deleteArgs(datum.key)
 			if datum.txn {
 				dArgs.Txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
 				dArgs.Txn.OrigTimestamp = datum.ts
