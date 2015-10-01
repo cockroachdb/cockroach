@@ -30,7 +30,7 @@ import (
 
 // analyzeExpr analyzes and simplifies an expression, returning a list of
 // expressions of a list of expressions. The top-level list contains
-// disjunctions (a.k.a OR expressions). The second-level contains conjuntions
+// disjunctions (a.k.a OR expressions). The second-level contains conjunctions
 // (a.k.a. AND expressions). For example:
 //
 //   (a AND b) OR c -> [[a, b], c]
@@ -1222,8 +1222,6 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) parser.Expr {
 			return n
 		case parser.In, parser.NotIn:
 			tuple := n.Right.(parser.DTuple)
-			sort.Sort(tuple)
-			tuple = uniqTuple(tuple)
 			if len(tuple) == 0 {
 				return parser.DBool(false)
 			}
@@ -1276,20 +1274,6 @@ func makePrefixRange(prefix parser.DString, datum parser.Expr, complete bool) pa
 			Right:    parser.DString(roachpb.Key(prefix).PrefixEnd()),
 		},
 	}
-}
-
-func uniqTuple(tuple parser.DTuple) parser.DTuple {
-	n := 0
-	for i := 0; i < len(tuple); i++ {
-		if tuple[i] == parser.DNull {
-			continue
-		}
-		if n == 0 || tuple[n-1].Compare(tuple[i]) < 0 {
-			tuple[n] = tuple[i]
-			n++
-		}
-	}
-	return tuple[:n]
 }
 
 func mergeSorted(a, b parser.DTuple) parser.DTuple {

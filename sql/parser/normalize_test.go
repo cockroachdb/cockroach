@@ -52,6 +52,8 @@ func TestNormalizeExpr(t *testing.T) {
 		{`a AND false`, `false`},
 		{`a AND NULL`, `a AND NULL`},
 		{`1 IN (1, 2, 3)`, `true`},
+		{`1 IN (3, 2, 1)`, `true`},
+		{`a IN (3, 2, 1)`, `a IN (1, 2, 3)`},
 		{`1 IN (1, 2, a)`, `1 IN (1, 2, a)`},
 		{`a<1`, `a < 1`},
 		{`1>a`, `a < 1`},

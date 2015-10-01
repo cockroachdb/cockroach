@@ -444,32 +444,9 @@ func typeCheckTupleIN(arg, values Datum) error {
 	}
 
 	vtuple := values.(DTuple)
-
-	// TODO(pmattis): If we're evaluating the expression multiple times we should
-	// use a map when possible. This works as long as arg is not a tuple. Note
-	// that the usage of the map is currently disabled via the "&& false" because
-	// building the map is a pessimization if we're only evaluating the
-	// expression once. We need to determine when the expression will be
-	// evaluated multiple times before enabling. Also need to figure out a way to
-	// use the map approach for tuples. One idea is to encode the tuples into
-	// strings and then use a map of strings.
-	if _, ok := arg.(DTuple); !ok && false {
-		m := make(map[Datum]struct{}, len(vtuple))
-		for _, val := range vtuple {
-			if reflect.TypeOf(arg) != reflect.TypeOf(val) {
-				return fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
-					arg.Type(), EQ, val.Type())
-			}
-			m[val] = struct{}{}
-		}
-		if _, exists := m[arg]; exists {
-			return nil
-		}
-	} else {
-		for _, val := range vtuple {
-			if _, _, err := typeCheckComparisonOp(EQ, arg, val); err != nil {
-				return err
-			}
+	for _, val := range vtuple {
+		if _, _, err := typeCheckComparisonOp(EQ, arg, val); err != nil {
+			return err
 		}
 	}
 

@@ -520,41 +520,15 @@ var evalTupleEQ = cmpOp{
 }
 
 var evalTupleIN = cmpOp{
-	fn: func(arg, values Datum, _ *interface{}) (in DBool, err error) {
+	fn: func(arg, values Datum, _ *interface{}) (DBool, error) {
 		if arg == DNull {
 			return DBool(false), nil
 		}
 
 		vtuple := values.(DTuple)
-
-		if _, ok := arg.(DTuple); !ok {
-			defer func() {
-				if r := recover(); r != nil {
-					switch t := r.(type) {
-					case string:
-						err = errors.New(t)
-					default:
-						panic(t)
-					}
-				}
-			}()
-			i := sort.Search(len(vtuple), func(i int) bool { return vtuple[i].Compare(arg) >= 0 })
-			return DBool(i < len(vtuple) && vtuple[i].Compare(arg) == 0), nil
-		} else {
-			for _, val := range vtuple {
-				d, err := evalComparisonEq(arg, val)
-				if err != nil {
-					return DummyBool, err
-				}
-				if v, err := getBool(d); err != nil {
-					return DummyBool, err
-				} else if v {
-					return v, nil
-				}
-			}
-		}
-
-		return DBool(false), nil
+		i := sort.Search(len(vtuple), func(i int) bool { return vtuple[i].Compare(arg) >= 0 })
+		found := i < len(vtuple) && vtuple[i].Compare(arg) == 0
+		return DBool(found), nil
 	},
 }
 
