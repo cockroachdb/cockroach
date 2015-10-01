@@ -43,7 +43,7 @@ func adminMergeArgs(key []byte) roachpb.AdminMergeRequest {
 }
 
 func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb.RangeDescriptor, error) {
-	args := adminSplitArgs(roachpb.KeyMin, []byte("b"), 1, store.StoreID())
+	args := adminSplitArgs(roachpb.KeyMin, []byte("b"))
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		return nil, nil, err
 	}
@@ -298,11 +298,11 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	store := mtc.stores[0]
 
 	// Split into 3 ranges
-	argsSplit := adminSplitArgs(roachpb.KeyMin, []byte("d"), 1, store.StoreID())
+	argsSplit := adminSplitArgs(roachpb.KeyMin, []byte("d"))
 	if _, err := client.SendWrapped(rg1(store), nil, &argsSplit); err != nil {
 		t.Fatalf("Can't split range %s", err)
 	}
-	argsSplit = adminSplitArgs(roachpb.KeyMin, []byte("b"), 1, store.StoreID())
+	argsSplit = adminSplitArgs(roachpb.KeyMin, []byte("b"))
 	if _, err := client.SendWrapped(rg1(store), nil, &argsSplit); err != nil {
 		t.Fatalf("Can't split range %s", err)
 	}

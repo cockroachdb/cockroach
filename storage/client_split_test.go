@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
-func adminSplitArgs(key, splitKey []byte, rangeID roachpb.RangeID, storeID roachpb.StoreID) roachpb.AdminSplitRequest {
+func adminSplitArgs(key, splitKey []byte) roachpb.AdminSplitRequest {
 	return roachpb.AdminSplitRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
@@ -75,7 +75,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		keys.Meta2KeyMax,
 		keys.MakeTablePrefix(10 /* system descriptor ID */),
 	} {
-		args := adminSplitArgs(roachpb.KeyMin, key, 1, store.StoreID())
+		args := adminSplitArgs(roachpb.KeyMin, key)
 		_, err := client.SendWrapped(rg1(store), nil, &args)
 		if err == nil {
 			t.Fatalf("%q: split succeeded unexpectedly", key)
@@ -91,7 +91,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	defer stopper.Stop()
 
 	key := keys.TableDataPrefix
-	args := adminSplitArgs(key, key, 1, store.StoreID())
+	args := adminSplitArgs(key, key)
 	_, err := client.SendWrapped(rg1(store), nil, &args)
 	if err != nil {
 		t.Fatalf("%q: split unexpected error: %s", key, err)
@@ -117,7 +117,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	args := adminSplitArgs(roachpb.KeyMin, []byte("a"), 1, store.StoreID())
+	args := adminSplitArgs(roachpb.KeyMin, []byte("a"))
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 		t.Fatalf("split succeeded unexpectedly")
 	}
 	// Now try to split at start of new range.
-	args = adminSplitArgs(roachpb.KeyMin, []byte("a"), 2, store.StoreID())
+	args = adminSplitArgs(roachpb.KeyMin, []byte("a"))
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
 	}
@@ -147,7 +147,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	failureCount := int32(0)
 	for i := int32(0); i < concurrentCount; i++ {
 		go func() {
-			args := adminSplitArgs(roachpb.KeyMin, splitKey, 1, store.StoreID())
+			args := adminSplitArgs(roachpb.KeyMin, splitKey)
 			_, err := client.SendWrapped(rg1(store), nil, &args)
 			if err != nil {
 				atomic.AddInt32(&failureCount, 1)
@@ -198,14 +198,18 @@ func TestStoreRangeSplit(t *testing.T) {
 	// Increments are a good way of testing the response cache. Up here, we
 	// address them to the original range, then later to the one that contains
 	// the key.
+	lCmdID := roachpb.ClientCmdID{WallTime: 123, Random: 423}
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
-	lIncArgs.CmdID = roachpb.ClientCmdID{WallTime: 123, Random: 423}
-	if _, err := client.SendWrapped(rg1(store), nil, &lIncArgs); err != nil {
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+		CmdID: lCmdID,
+	}, &lIncArgs); err != nil {
 		t.Fatal(err)
 	}
 	rIncArgs := incrementArgs([]byte("wobble"), 10)
-	rIncArgs.CmdID = roachpb.ClientCmdID{WallTime: 12, Random: 42}
-	if _, err := client.SendWrapped(rg1(store), nil, &rIncArgs); err != nil {
+	rCmdID := roachpb.ClientCmdID{WallTime: 12, Random: 42}
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+		CmdID: rCmdID,
+	}, &rIncArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -217,7 +221,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	keyBytes, valBytes := ms.KeyBytes, ms.ValBytes
 
 	// Split the range.
-	args := adminSplitArgs(roachpb.KeyMin, splitKey, 1, store.StoreID())
+	args := adminSplitArgs(roachpb.KeyMin, splitKey)
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +260,9 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Send out an increment request copied from above (same ClientCmdID) which
 	// remains in the old range.
-	if reply, err := client.SendWrapped(rg1(store), nil, &lIncArgs); err != nil {
+	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+		CmdID: lCmdID,
+	}, &lIncArgs); err != nil {
 		t.Fatal(err)
 	} else if lIncReply := reply.(*roachpb.IncrementResponse); lIncReply.NewValue != 100 {
 		t.Errorf("response cache broken in old range, expected %d but got %d", lIncArgs.Increment, lIncReply.NewValue)
@@ -266,6 +272,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	// now to the newly created range (which should hold that key).
 	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
 		RangeID: newRng.Desc().RangeID,
+		CmdID:   rCmdID,
 	}, &rIncArgs); err != nil {
 		t.Fatal(err)
 	} else if rIncReply := reply.(*roachpb.IncrementResponse); rIncReply.NewValue != 10 {
@@ -310,7 +317,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	// Split the range after the last table data key.
 	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
-	args := adminSplitArgs(roachpb.KeyMin, keyPrefix, 1, store.StoreID())
+	args := adminSplitArgs(roachpb.KeyMin, keyPrefix)
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +351,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
 	midKey := append([]byte(nil), keyPrefix...)
 	midKey = append(midKey, []byte("Z")...)
-	args = adminSplitArgs(keyPrefix, midKey, 0, store.StoreID())
+	args = adminSplitArgs(keyPrefix, midKey)
 	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
 		RangeID: rng.Desc().RangeID,
 	}, &args); err != nil {

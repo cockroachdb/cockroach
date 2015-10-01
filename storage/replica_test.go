@@ -1204,7 +1204,8 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
 	TestingCommandFilter = func(args roachpb.Request) error {
-		if args.Header().CmdID.Random == 1 {
+		put, ok := args.(*roachpb.PutRequest)
+		if ok && bytes.Equal(put.Key, key) && bytes.Equal(put.Value.Bytes, []byte{1}) {
 			blockingStart <- struct{}{}
 			<-blockingDone
 		}
@@ -1212,8 +1213,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	}
 	cmd1Done := make(chan struct{})
 	go func() {
-		args := putArgs(key, []byte("value"))
-		args.CmdID.Random = 1
+		args := putArgs(key, []byte{1})
 
 		_, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
 
@@ -1435,12 +1435,11 @@ func TestRangeIdempotence(t *testing.T) {
 		defer wg.Done()
 		args := incrementArgs([]byte("a"), 1)
 		ts := tc.clock.Now()
-		if idx%2 == 0 {
-			args.CmdID = roachpb.ClientCmdID{WallTime: 1, Random: 1}
-		} else {
-			args.CmdID = roachpb.ClientCmdID{WallTime: 1, Random: int64(idx + 100)}
-		}
-		resp, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: ts}, &args)
+		cmdID := roachpb.ClientCmdID{WallTime: 1, Random: int64((idx % 2) * (idx + 100))}
+		resp, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+			Timestamp: ts, // remove
+			CmdID:     cmdID,
+		}, &args)
 		reply := resp.(*roachpb.IncrementResponse)
 		if err != nil {
 			t.Fatal(err)
@@ -1484,21 +1483,25 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 	defer tc.Stop()
 
 	args := incrementArgs([]byte("a"), 1)
-	args.CmdID = roachpb.ClientCmdID{WallTime: 1, Random: 1}
+	cmdID := roachpb.ClientCmdID{WallTime: 1, Random: 1}
 
-	if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); pErr != nil {
+	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		CmdID: cmdID,
+	}, &args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Overwrite repsonse cache entry with garbage for the last op.
-	key := keys.ResponseCacheKey(tc.rng.Desc().RangeID, &args.CmdID)
+	key := keys.ResponseCacheKey(tc.rng.Desc().RangeID, &cmdID)
 	err := engine.MVCCPut(tc.engine, nil, key, roachpb.ZeroTimestamp, roachpb.Value{Bytes: []byte("\xff")}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Now try increment again and verify error.
-	if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); pErr == nil {
+	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		CmdID: cmdID,
+	}, &args); pErr == nil {
 		t.Fatal(pErr)
 	}
 }
@@ -1521,8 +1524,9 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 		roachpb.ResponseWithError{Reply: &br, Err: pastError})
 
 	args := incrementArgs([]byte("a"), 1)
-	args.CmdID = cmdID
-	_, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
+	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		CmdID: cmdID,
+	}, &args)
 	if err == nil {
 		t.Fatal("expected to see cached error but got nil")
 	} else if !testutils.IsError(err, pastError.Error()) {

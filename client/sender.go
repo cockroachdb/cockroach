@@ -98,9 +98,9 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.BatchRequest_
 		ba := &roachpb.BatchRequest{}
 		ba.Timestamp = h.Timestamp
 		ba.RangeID = h.RangeID
+		ba.CmdID = h.CmdID
 		{
 			h := args.Header()
-			ba.CmdID = h.CmdID
 			ba.UserPriority = h.UserPriority
 			ba.Txn = h.Txn
 			ba.ReadConsistency = h.ReadConsistency

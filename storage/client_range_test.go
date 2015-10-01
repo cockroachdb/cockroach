@@ -325,10 +325,10 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	// Init test ranges:
 	// ["","a"), ["a","c"), ["c","e"), ["e","g") and ["g","\xff\xff").
 	splits := []roachpb.AdminSplitRequest{
-		adminSplitArgs(roachpb.Key("g"), roachpb.Key("g"), 1, store.StoreID()),
-		adminSplitArgs(roachpb.Key("e"), roachpb.Key("e"), 1, store.StoreID()),
-		adminSplitArgs(roachpb.Key("c"), roachpb.Key("c"), 1, store.StoreID()),
-		adminSplitArgs(roachpb.Key("a"), roachpb.Key("a"), 1, store.StoreID()),
+		adminSplitArgs(roachpb.Key("g"), roachpb.Key("g")),
+		adminSplitArgs(roachpb.Key("e"), roachpb.Key("e")),
+		adminSplitArgs(roachpb.Key("c"), roachpb.Key("c")),
+		adminSplitArgs(roachpb.Key("a"), roachpb.Key("a")),
 	}
 
 	for _, split := range splits {

@@ -70,9 +70,6 @@ enum ReadConsistencyType {
 
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
-  // CmdID is optionally specified for request idempotence
-  // (i.e. replay protection).
-  optional ClientCmdID cmd_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
   // The key for request. If the request operates on a range, this
   // represents the starting key for the range.
   optional bytes key = 3 [(gogoproto.casttype) = "Key"];

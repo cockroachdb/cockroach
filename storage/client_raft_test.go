@@ -115,7 +115,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		if _, err := increment(rangeID, key2, 5); err != nil {
 			t.Fatal(err)
 		}
-		splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey, rangeID, store.StoreID())
+		splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
 		if _, err := client.SendWrapped(rg1(store), nil, &splitArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -614,7 +614,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 		replica := store0.LookupReplica(roachpb.KeyMin, nil)
 		mtc.replicateRange(replica.Desc().RangeID, 0, 1, 2)
 		desc := replica.Desc()
-		splitArgs := adminSplitArgs(splitKey, splitKey, desc.RangeID, store0.StoreID())
+		splitArgs := adminSplitArgs(splitKey, splitKey)
 		if _, err := replica.AdminSplit(splitArgs, desc); err != nil {
 			t.Fatal(err)
 		}
@@ -960,7 +960,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 
 	store0 := mtc.stores[0]
 	// Make the split
-	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey, 1, store0.StoreID())
+	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
 	if _, err := client.SendWrapped(rg1(store0), nil, &splitArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -1050,8 +1050,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			t.Fatal("failed to look up min range")
 		}
 		desc := rng.Desc()
-		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("A%03d", i)), desc.RangeID,
-			mtc.stores[0].StoreID())
+		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("A%03d", i)))
 		if _, err := rng.AdminSplit(args, desc); err != nil {
 			t.Fatal(err)
 		}
@@ -1064,7 +1063,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			t.Fatal("failed to look up max range")
 		}
 		desc := rng.Desc()
-		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("B%03d", i)), desc.RangeID, mtc.stores[0].StoreID())
+		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("B%03d", i)))
 		if _, err := rng.AdminSplit(args, desc); err != nil {
 			t.Fatal(err)
 		}
@@ -1079,7 +1078,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	defer mtc.Stop()
 
 	// Make the split.
-	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"), roachpb.RangeID(1), mtc.stores[0].StoreID())
+	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
 	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &splitArgs); err != nil {
 		t.Fatal(err)
 	}

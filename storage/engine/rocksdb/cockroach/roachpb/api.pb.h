@@ -300,15 +300,6 @@ class RequestHeader : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.ClientCmdID cmd_id = 2;
-  bool has_cmd_id() const;
-  void clear_cmd_id();
-  static const int kCmdIdFieldNumber = 2;
-  const ::cockroach::roachpb::ClientCmdID& cmd_id() const;
-  ::cockroach::roachpb::ClientCmdID* mutable_cmd_id();
-  ::cockroach::roachpb::ClientCmdID* release_cmd_id();
-  void set_allocated_cmd_id(::cockroach::roachpb::ClientCmdID* cmd_id);
-
   // optional bytes key = 3;
   bool has_key() const;
   void clear_key();
@@ -358,8 +349,6 @@ class RequestHeader : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RequestHeader)
  private:
-  inline void set_has_cmd_id();
-  inline void clear_has_cmd_id();
   inline void set_has_key();
   inline void clear_has_key();
   inline void set_has_end_key();
@@ -374,7 +363,6 @@ class RequestHeader : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::cockroach::roachpb::ClientCmdID* cmd_id_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
   ::cockroach::roachpb::Transaction* txn_;
@@ -6033,58 +6021,15 @@ inline void ClientCmdID::set_random(::google::protobuf::int64 value) {
 
 // RequestHeader
 
-// optional .cockroach.roachpb.ClientCmdID cmd_id = 2;
-inline bool RequestHeader::has_cmd_id() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void RequestHeader::set_has_cmd_id() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void RequestHeader::clear_has_cmd_id() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void RequestHeader::clear_cmd_id() {
-  if (cmd_id_ != NULL) cmd_id_->::cockroach::roachpb::ClientCmdID::Clear();
-  clear_has_cmd_id();
-}
-inline const ::cockroach::roachpb::ClientCmdID& RequestHeader::cmd_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestHeader.cmd_id)
-  return cmd_id_ != NULL ? *cmd_id_ : *default_instance_->cmd_id_;
-}
-inline ::cockroach::roachpb::ClientCmdID* RequestHeader::mutable_cmd_id() {
-  set_has_cmd_id();
-  if (cmd_id_ == NULL) {
-    cmd_id_ = new ::cockroach::roachpb::ClientCmdID;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestHeader.cmd_id)
-  return cmd_id_;
-}
-inline ::cockroach::roachpb::ClientCmdID* RequestHeader::release_cmd_id() {
-  clear_has_cmd_id();
-  ::cockroach::roachpb::ClientCmdID* temp = cmd_id_;
-  cmd_id_ = NULL;
-  return temp;
-}
-inline void RequestHeader::set_allocated_cmd_id(::cockroach::roachpb::ClientCmdID* cmd_id) {
-  delete cmd_id_;
-  cmd_id_ = cmd_id;
-  if (cmd_id) {
-    set_has_cmd_id();
-  } else {
-    clear_has_cmd_id();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestHeader.cmd_id)
-}
-
 // optional bytes key = 3;
 inline bool RequestHeader::has_key() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return (_has_bits_[0] & 0x00000001u) != 0;
 }
 inline void RequestHeader::set_has_key() {
-  _has_bits_[0] |= 0x00000002u;
+  _has_bits_[0] |= 0x00000001u;
 }
 inline void RequestHeader::clear_has_key() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000001u;
 }
 inline void RequestHeader::clear_key() {
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
@@ -6131,13 +6076,13 @@ inline void RequestHeader::set_allocated_key(::std::string* key) {
 
 // optional bytes end_key = 4;
 inline bool RequestHeader::has_end_key() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 inline void RequestHeader::set_has_end_key() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000002u;
 }
 inline void RequestHeader::clear_has_end_key() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void RequestHeader::clear_end_key() {
   end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
@@ -6184,13 +6129,13 @@ inline void RequestHeader::set_allocated_end_key(::std::string* end_key) {
 
 // optional int32 user_priority = 7 [default = 1];
 inline bool RequestHeader::has_user_priority() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void RequestHeader::set_has_user_priority() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void RequestHeader::clear_has_user_priority() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void RequestHeader::clear_user_priority() {
   user_priority_ = 1;
@@ -6208,13 +6153,13 @@ inline void RequestHeader::set_user_priority(::google::protobuf::int32 value) {
 
 // optional .cockroach.roachpb.Transaction txn = 8;
 inline bool RequestHeader::has_txn() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void RequestHeader::set_has_txn() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void RequestHeader::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void RequestHeader::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
@@ -6251,13 +6196,13 @@ inline void RequestHeader::set_allocated_txn(::cockroach::roachpb::Transaction* 
 
 // optional .cockroach.roachpb.ReadConsistencyType read_consistency = 9;
 inline bool RequestHeader::has_read_consistency() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void RequestHeader::set_has_read_consistency() {
-  _has_bits_[0] |= 0x00000020u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void RequestHeader::clear_has_read_consistency() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void RequestHeader::clear_read_consistency() {
   read_consistency_ = 0;
