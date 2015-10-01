@@ -51,6 +51,15 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+func rg1(s *storage.Store) client.Sender {
+	return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
+		if ba.RangeID == 0 {
+			ba.RangeID = 1
+		}
+		return ba
+	})
+}
+
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for stopping the stopper on exit.
 func createTestStore(t *testing.T) (*storage.Store, *stop.Stopper) {

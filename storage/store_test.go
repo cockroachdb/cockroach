@@ -82,6 +82,15 @@ type responseAdder interface {
 	Add(reply roachpb.Response)
 }
 
+func (s *Store) testSender() client.Sender {
+	return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
+		if ba.RangeID == 0 {
+			ba.RangeID = 1
+		}
+		return ba
+	})
+}
+
 // Send forwards the call to the single store. This is a poor man's
 // version of kv.TxnCoordSender, but it serves the purposes of
 // supporting tests in this package. Transactions are not supported.

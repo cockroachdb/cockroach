@@ -185,10 +185,9 @@ func (tc *testContext) Start(t testing.TB) {
 
 func (tc *testContext) Sender() client.Sender {
 	return client.Wrap(tc.rng, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
-		if tc.rng != nil && tc.rng.Desc() != nil {
-			ba.RangeID = tc.rng.Desc().RangeID
+		if ba.RangeID != 0 {
+			ba.RangeID = 1
 		}
-		ba.Replica = roachpb.ReplicaDescriptor{StoreID: tc.store.StoreID()}
 		return ba
 	})
 }
