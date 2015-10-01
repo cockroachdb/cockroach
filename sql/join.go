@@ -49,6 +49,14 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) (*indexJoinNode, error)
 	table.isSecondaryIndex = false
 	table.initOrdering(0)
 
+	// Clear the index filter expression. We want to pass all of the rows to the
+	// table.
+	//
+	// TODO(pmattis): This is correct, though not optimal. An alternative would
+	// be to remove any expression that refers to a column that is not part of
+	// the index.
+	indexScan.filter = nil
+
 	// We want to the index scan to keep the same render target indexes for
 	// columns which are part of the primary key or part of the index. This
 	// allows sorting (which was calculated based on the output columns) to be
@@ -113,53 +121,56 @@ func (n *indexJoinNode) Values() parser.DTuple {
 }
 
 func (n *indexJoinNode) Next() bool {
-	// First, try to pull rows from the table.
-	if n.table.kvs != nil && n.table.Next() {
-		return true
-	}
-	if n.err = n.table.Err(); n.err != nil {
-		return false
-	}
-
-	// The table is out of rows. Pull primary keys from the index.
-	n.table.kvs = nil
-	n.table.kvIndex = 0
-	n.table.spans = n.table.spans[0:0]
-
-	for len(n.table.spans) < joinBatchSize {
-		if !n.index.Next() {
-			// The index is out of rows or an error occurred.
-			if n.err = n.index.Err(); n.err != nil {
-				return false
-			}
-			if len(n.table.spans) == 0 {
-				// The index is out of rows.
-				return false
-			}
-			break
+	// Loop looking up the next row. We either are going to pull a row from the
+	// table or a batch of rows from the index. If we pull a batch of rows from
+	// the index we perform another iteration of the loop looking for rows in the
+	// table. This outer loop is necessary because a batch of rows from the index
+	// might all be filtered when the resulting rows are read from the table.
+	for tableLookup := (n.table.kvs != nil); true; tableLookup = true {
+		// First, try to pull a row from the table.
+		if tableLookup && n.table.Next() {
+			return true
 		}
-		vals := n.index.Values()
-		if log.V(3) {
-			log.Infof("primary key vals: %v", vals)
-		}
-
-		var primaryIndexKey []byte
-		primaryIndexKey, _, n.err = encodeIndexKey(
-			n.table.index.ColumnIDs, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
-		if n.err != nil {
+		if n.err = n.table.Err(); n.err != nil {
 			return false
 		}
-		key := roachpb.Key(primaryIndexKey)
-		n.table.spans = append(n.table.spans, span{
-			start: key,
-			end:   key.PrefixEnd(),
-		})
-	}
 
-	if n.table.Next() {
-		return true
+		// The table is out of rows. Pull primary keys from the index.
+		n.table.kvs = nil
+		n.table.kvIndex = 0
+		n.table.spans = n.table.spans[0:0]
+
+		for len(n.table.spans) < joinBatchSize {
+			if !n.index.Next() {
+				// The index is out of rows or an error occurred.
+				if n.err = n.index.Err(); n.err != nil {
+					return false
+				}
+				if len(n.table.spans) == 0 {
+					// The index is out of rows.
+					return false
+				}
+				break
+			}
+
+			vals := n.index.Values()
+			var primaryIndexKey []byte
+			primaryIndexKey, _, n.err = encodeIndexKey(
+				n.table.index.ColumnIDs, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
+			if n.err != nil {
+				return false
+			}
+			key := roachpb.Key(primaryIndexKey)
+			n.table.spans = append(n.table.spans, span{
+				start: key,
+				end:   key.PrefixEnd(),
+			})
+		}
+
+		if log.V(3) {
+			log.Infof("table scan: %s", prettySpans(n.table.spans, 0))
+		}
 	}
-	n.err = n.table.Err()
 	return false
 }
 
