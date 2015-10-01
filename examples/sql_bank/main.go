@@ -37,7 +37,7 @@ import (
 var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in one transaction.")
 var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
 var concurrency = flag.Int("concurrency", 5, "Number of concurrent actors moving money.")
-var transferStyle = flag.String("transfer-style", "single-stmt", "\"single-stmt\" or \"txn\"")
+var transferStyle = flag.String("transfer-style", "txn", "\"single-stmt\" or \"txn\"")
 var usePostgres = flag.Bool("use-postgres", false, "Use postgres instead of cockroach.")
 var balanceCheckInterval = flag.Duration("balance-check-interval", 1*time.Second, "Interval of balance check.")
 
@@ -99,17 +99,10 @@ UPDATE bank.accounts
 				}
 			}
 			if fromBalance >= amount {
-				update := `UPDATE accounts SET balance=$1 WHERE id=$2`
-				if _, err = tx.Exec(update, fromBalance-amount, from); err != nil {
-					if log.V(1) {
-						log.Warning(err)
-					}
-					if err = tx.Rollback(); err != nil {
-						log.Fatal(err)
-					}
-					continue
-				}
-				if _, err = tx.Exec(update, toBalance+amount, to); err != nil {
+				update := `UPDATE bank.accounts
+  SET balance = CASE id WHEN $1 THEN $3 WHEN $2 THEN $4 END
+  WHERE id IN ($1, $2)`
+				if _, err = tx.Exec(update, to, from, toBalance+amount, fromBalance-amount, from); err != nil {
 					if log.V(1) {
 						log.Warning(err)
 					}
@@ -119,7 +112,6 @@ UPDATE bank.accounts
 					continue
 				}
 			}
-
 			if err = tx.Commit(); err != nil {
 				if log.V(1) {
 					log.Warning(err)
