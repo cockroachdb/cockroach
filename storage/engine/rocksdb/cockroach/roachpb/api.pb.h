@@ -324,13 +324,6 @@ class RequestHeader : public ::google::protobuf::Message {
   ::std::string* release_end_key();
   void set_allocated_end_key(::std::string* end_key);
 
-  // optional int32 user_priority = 7 [default = 1];
-  bool has_user_priority() const;
-  void clear_user_priority();
-  static const int kUserPriorityFieldNumber = 7;
-  ::google::protobuf::int32 user_priority() const;
-  void set_user_priority(::google::protobuf::int32 value);
-
   // optional .cockroach.roachpb.Transaction txn = 8;
   bool has_txn() const;
   void clear_txn();
@@ -346,8 +339,6 @@ class RequestHeader : public ::google::protobuf::Message {
   inline void clear_has_key();
   inline void set_has_end_key();
   inline void clear_has_end_key();
-  inline void set_has_user_priority();
-  inline void clear_has_user_priority();
   inline void set_has_txn();
   inline void clear_has_txn();
 
@@ -357,7 +348,6 @@ class RequestHeader : public ::google::protobuf::Message {
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
   ::cockroach::roachpb::Transaction* txn_;
-  ::google::protobuf::int32 user_priority_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -6117,39 +6107,15 @@ inline void RequestHeader::set_allocated_end_key(::std::string* end_key) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestHeader.end_key)
 }
 
-// optional int32 user_priority = 7 [default = 1];
-inline bool RequestHeader::has_user_priority() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void RequestHeader::set_has_user_priority() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void RequestHeader::clear_has_user_priority() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void RequestHeader::clear_user_priority() {
-  user_priority_ = 1;
-  clear_has_user_priority();
-}
-inline ::google::protobuf::int32 RequestHeader::user_priority() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestHeader.user_priority)
-  return user_priority_;
-}
-inline void RequestHeader::set_user_priority(::google::protobuf::int32 value) {
-  set_has_user_priority();
-  user_priority_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.RequestHeader.user_priority)
-}
-
 // optional .cockroach.roachpb.Transaction txn = 8;
 inline bool RequestHeader::has_txn() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void RequestHeader::set_has_txn() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void RequestHeader::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void RequestHeader::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();

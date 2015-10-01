@@ -261,16 +261,6 @@ type RequestHeader struct {
 	// that the operation takes place on the key range from Key to EndKey,
 	// including Key and excluding EndKey.
 	EndKey Key `protobuf:"bytes,4,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
-	// UserPriority specifies priority multiple for non-transactional
-	// commands. This value should be a positive integer [1, 2^31-1).
-	// It's properly viewed as a multiple for how likely this
-	// transaction will be to prevail if a write conflict occurs.
-	// Commands with UserPriority=100 will be 100x less likely to be
-	// aborted as conflicting transactions or non-transactional commands
-	// with UserPriority=1. This value is ignored if Txn is
-	// specified. If neither this value nor Txn is specified, the value
-	// defaults to 1.
-	UserPriority *int32 `protobuf:"varint,7,opt,name=user_priority,def=1" json:"user_priority,omitempty"`
 	// Txn is set non-nil if a transaction is underway. To start a txn,
 	// the first request should set this field to non-nil with name and
 	// isolation level set as desired. The response will contain the
@@ -282,8 +272,6 @@ type RequestHeader struct {
 func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
 func (m *RequestHeader) String() string { return proto.CompactTextString(m) }
 func (*RequestHeader) ProtoMessage()    {}
-
-const Default_RequestHeader_UserPriority int32 = 1
 
 func (m *RequestHeader) GetKey() Key {
 	if m != nil {
@@ -297,13 +285,6 @@ func (m *RequestHeader) GetEndKey() Key {
 		return m.EndKey
 	}
 	return nil
-}
-
-func (m *RequestHeader) GetUserPriority() int32 {
-	if m != nil && m.UserPriority != nil {
-		return *m.UserPriority
-	}
-	return Default_RequestHeader_UserPriority
 }
 
 func (m *RequestHeader) GetTxn() *Transaction {
@@ -1775,11 +1756,6 @@ func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
 		i++
 		i = encodeVarintApi(data, i, uint64(len(m.EndKey)))
 		i += copy(data[i:], m.EndKey)
-	}
-	if m.UserPriority != nil {
-		data[i] = 0x38
-		i++
-		i = encodeVarintApi(data, i, uint64(*m.UserPriority))
 	}
 	if m.Txn != nil {
 		data[i] = 0x42
@@ -3921,9 +3897,6 @@ func (m *RequestHeader) Size() (n int) {
 		l = len(m.EndKey)
 		n += 1 + l + sovApi(uint64(l))
 	}
-	if m.UserPriority != nil {
-		n += 1 + sovApi(uint64(*m.UserPriority))
-	}
 	if m.Txn != nil {
 		l = m.Txn.Size()
 		n += 1 + l + sovApi(uint64(l))
@@ -5045,26 +5018,6 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			}
 			m.EndKey = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
-		case 7:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field UserPriority", wireType)
-			}
-			var v int32
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				v |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.UserPriority = &v
 		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
