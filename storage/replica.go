@@ -1180,7 +1180,10 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 
 		args.Header().Txn = ba.Txn // use latest Txn
 
-		reply, curIntents, err := r.executeCmd(batch, ms, ts, args)
+		var header roachpb.BatchRequest_Header
+		header.Timestamp = ts
+
+		reply, curIntents, err := r.executeCmd(batch, ms, header, args)
 		{
 			// Undo any changes to the header.
 			*args.Header() = origHeader
