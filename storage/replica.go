@@ -1133,19 +1133,6 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		// Execute the command.
 		args := union.GetInner()
 
-		// Scrub the headers. Specifically, always use almost everything from
-		// the batch. We're trying to simulate the situation in which the
-		// individual requests contain nothing but the key (range) in their
-		// headers.
-		origHeader := *proto.Clone(args.Header()).(*roachpb.RequestHeader)
-		{
-			header := args.Header()
-			// TODO(tschottdorf): specify which fields to set here.
-			*header = ba.ToHeader()
-			// Only Key and EndKey are allowed to diverge from the iterated
-			// Batch header (Timestamp too, but that's exceptional).
-			header.Key, header.EndKey = origHeader.Key, origHeader.EndKey
-		}
 		// Set the timestamp for this request.
 		ts := ba.Timestamp
 		{
@@ -1162,14 +1149,10 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 			} else if !isTxn {
 				ts = ba.Timestamp
 			} else {
-				// TODO(tschottdorf): should really replace here and assert that
-				// header.Timestamp is empty, but, alas, not the case at the
-				// very least in some tests but also in practice (we bump the
-				// timestamp based on tsCache etc). A future refactor perhaps,
-				// or we decide this is how we want it.
-				// if ba.Txn.Timestamp.Less(origHeader.Timestamp) {
-				// 	panic(fmt.Sprintf("%s\n%d: txn < orig: %s < %s", ba, index, ba.Txn.Timestamp, origHeader.Timestamp))
-				// }
+				// TODO(tschottdorf): it can happen that the request timestamp
+				// is ahead of the Txn timestamp. A few tests do this on pur-
+				// pose; should undo that and see if there's a legitimate
+				// reason left to keep allowing this behavior.
 				ts.Forward(ba.Txn.Timestamp)
 			}
 		}
@@ -1180,10 +1163,6 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 		header.Timestamp = ts
 
 		reply, curIntents, err := r.executeCmd(batch, ms, header, args)
-		{
-			// Undo any changes to the header.
-			*args.Header() = origHeader
-		}
 
 		// Collect intents skipped over the course of execution.
 		if len(curIntents) > 0 {

@@ -285,14 +285,6 @@ func (*BatchRequest) GetUser() string {
 	return "node"
 }
 
-// ToHeader creates a RequestHeader from the batch's header.
-// TODO(tschottdorf): provisional code.
-func (ba *BatchRequest) ToHeader() RequestHeader {
-	var h RequestHeader
-	h.Txn = ba.Txn
-	return h
-}
-
 // GoError returns the non-nil error from the proto.Error union.
 func (br *BatchResponse) GoError() error {
 	return br.Error.GoError()
