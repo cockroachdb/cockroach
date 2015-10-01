@@ -340,13 +340,6 @@ class RequestHeader : public ::google::protobuf::Message {
   ::cockroach::roachpb::Transaction* release_txn();
   void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
 
-  // optional .cockroach.roachpb.ReadConsistencyType read_consistency = 9;
-  bool has_read_consistency() const;
-  void clear_read_consistency();
-  static const int kReadConsistencyFieldNumber = 9;
-  ::cockroach::roachpb::ReadConsistencyType read_consistency() const;
-  void set_read_consistency(::cockroach::roachpb::ReadConsistencyType value);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RequestHeader)
  private:
   inline void set_has_key();
@@ -357,8 +350,6 @@ class RequestHeader : public ::google::protobuf::Message {
   inline void clear_has_user_priority();
   inline void set_has_txn();
   inline void clear_has_txn();
-  inline void set_has_read_consistency();
-  inline void clear_has_read_consistency();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -367,7 +358,6 @@ class RequestHeader : public ::google::protobuf::Message {
   ::google::protobuf::internal::ArenaStringPtr end_key_;
   ::cockroach::roachpb::Transaction* txn_;
   ::google::protobuf::int32 user_priority_;
-  int read_consistency_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -6192,41 +6182,6 @@ inline void RequestHeader::set_allocated_txn(::cockroach::roachpb::Transaction* 
     clear_has_txn();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestHeader.txn)
-}
-
-// optional .cockroach.roachpb.ReadConsistencyType read_consistency = 9;
-inline bool RequestHeader::has_read_consistency() const {
-<<<<<<< HEAD
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-inline void RequestHeader::set_has_read_consistency() {
-  _has_bits_[0] |= 0x00000010u;
-}
-inline void RequestHeader::clear_has_read_consistency() {
-  _has_bits_[0] &= ~0x00000010u;
-=======
-  return (_has_bits_[0] & 0x00000020u) != 0;
-}
-inline void RequestHeader::set_has_read_consistency() {
-  _has_bits_[0] |= 0x00000020u;
-}
-inline void RequestHeader::clear_has_read_consistency() {
-  _has_bits_[0] &= ~0x00000020u;
->>>>>>> a0fb5b0... make RequestHeader.ReadConsistency obsolete
-}
-inline void RequestHeader::clear_read_consistency() {
-  read_consistency_ = 0;
-  clear_has_read_consistency();
-}
-inline ::cockroach::roachpb::ReadConsistencyType RequestHeader::read_consistency() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestHeader.read_consistency)
-  return static_cast< ::cockroach::roachpb::ReadConsistencyType >(read_consistency_);
-}
-inline void RequestHeader::set_read_consistency(::cockroach::roachpb::ReadConsistencyType value) {
-  assert(::cockroach::roachpb::ReadConsistencyType_IsValid(value));
-  set_has_read_consistency();
-  read_consistency_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.RequestHeader.read_consistency)
 }
 
 // -------------------------------------------------------------------

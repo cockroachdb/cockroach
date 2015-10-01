@@ -94,10 +94,6 @@ message RequestHeader {
   // fully-initialized transaction with txn ID, priority, initial
   // timestamp, and maximum timestamp.
   optional Transaction txn = 8;
-  // ReadConsistency specifies the consistency for read
-  // operations. The default is CONSISTENT. This value is ignored for
-  // write operations.
-  optional ReadConsistencyType read_consistency = 9 [(gogoproto.nullable) = false];
 }
 
 // ResponseHeader is returned with every storage node response.

@@ -277,10 +277,6 @@ type RequestHeader struct {
 	// fully-initialized transaction with txn ID, priority, initial
 	// timestamp, and maximum timestamp.
 	Txn *Transaction `protobuf:"bytes,8,opt,name=txn" json:"txn,omitempty"`
-	// ReadConsistency specifies the consistency for read
-	// operations. The default is CONSISTENT. This value is ignored for
-	// write operations.
-	ReadConsistency ReadConsistencyType `protobuf:"varint,9,opt,name=read_consistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
 }
 
 func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
@@ -315,13 +311,6 @@ func (m *RequestHeader) GetTxn() *Transaction {
 		return m.Txn
 	}
 	return nil
-}
-
-func (m *RequestHeader) GetReadConsistency() ReadConsistencyType {
-	if m != nil {
-		return m.ReadConsistency
-	}
-	return CONSISTENT
 }
 
 // ResponseHeader is returned with every storage node response.
@@ -1802,9 +1791,6 @@ func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
 		}
 		i += n1
 	}
-	data[i] = 0x48
-	i++
-	i = encodeVarintApi(data, i, uint64(m.ReadConsistency))
 	return i, nil
 }
 
@@ -3942,7 +3928,6 @@ func (m *RequestHeader) Size() (n int) {
 		l = m.Txn.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
-	n += 1 + sovApi(uint64(m.ReadConsistency))
 	return n
 }
 
@@ -5113,25 +5098,6 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 9:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ReadConsistency", wireType)
-			}
-			m.ReadConsistency = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.ReadConsistency |= (ReadConsistencyType(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])
