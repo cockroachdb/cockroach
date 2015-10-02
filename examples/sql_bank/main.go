@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"sync/atomic"
 	"time"
 
 	"github.com/lib/pq"
@@ -37,20 +36,21 @@ import (
 var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in one transaction.")
 var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
 var concurrency = flag.Int("concurrency", 5, "Number of concurrent actors moving money.")
-var transferStyle = flag.String("transfer-style", "single-stmt", "\"single-stmt\" or \"txn\"")
+var transferStyle = flag.String("transfer-style", "txn", "\"single-stmt\" or \"txn\"")
 var usePostgres = flag.Bool("use-postgres", false, "Use postgres instead of cockroach.")
 var balanceCheckInterval = flag.Duration("balance-check-interval", 1*time.Second, "Interval of balance check.")
 
-var numTransfers uint64
+type measurement struct {
+	read, write, total time.Duration
+}
 
-func moveMoney(db *sql.DB) {
+func moveMoney(db *sql.DB, readings chan measurement) {
 	for {
 		from, to := rand.Intn(*numAccounts), rand.Intn(*numAccounts)
 		if from == to {
 			continue
 		}
 		amount := rand.Intn(*maxTransfer)
-
 		switch *transferStyle {
 		case "single-stmt":
 			update := `
@@ -58,21 +58,30 @@ UPDATE bank.accounts
   SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
   WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank.accounts WHERE id = $1)
 `
-			if _, err := db.Exec(update, from, to, amount); err != nil {
+			start := time.Now()
+			result, err := db.Exec(update, from, to, amount)
+			if err != nil {
 				if log.V(1) {
 					log.Warning(err)
 				}
 				continue
 			}
-			// TODO(pmattis): We should only be updating numTransfers when rows were
-			// actually updated. See #2377.
-			atomic.AddUint64(&numTransfers, 1)
+			affected, err := result.RowsAffected()
+			if err != nil {
+				log.Fatal(err)
+			}
+			if affected > 0 {
+				d := time.Since(start)
+				readings <- measurement{read: d, write: d, total: d}
+			}
 
 		case "txn":
+			start := time.Now()
 			tx, err := db.Begin()
 			if err != nil {
 				log.Fatal(err)
 			}
+			startRead := time.Now()
 			rows, err := tx.Query(`SELECT id, balance FROM accounts WHERE id IN ($1, $2)`, from, to)
 			if err != nil {
 				if log.V(1) {
@@ -83,6 +92,7 @@ UPDATE bank.accounts
 				}
 				continue
 			}
+			readDuration := time.Since(startRead)
 			var fromBalance, toBalance int
 			for rows.Next() {
 				var id, balance int
@@ -98,18 +108,12 @@ UPDATE bank.accounts
 					panic(fmt.Sprintf("got unexpected account %d", id))
 				}
 			}
+			startWrite := time.Now()
 			if fromBalance >= amount {
-				update := `UPDATE accounts SET balance=$1 WHERE id=$2`
-				if _, err = tx.Exec(update, fromBalance-amount, from); err != nil {
-					if log.V(1) {
-						log.Warning(err)
-					}
-					if err = tx.Rollback(); err != nil {
-						log.Fatal(err)
-					}
-					continue
-				}
-				if _, err = tx.Exec(update, toBalance+amount, to); err != nil {
+				update := `UPDATE bank.accounts
+  SET balance = CASE id WHEN $1 THEN $3 WHEN $2 THEN $4 END
+  WHERE id IN ($1, $2)`
+				if _, err = tx.Exec(update, to, from, toBalance+amount, fromBalance-amount, from); err != nil {
 					if log.V(1) {
 						log.Warning(err)
 					}
@@ -119,7 +123,7 @@ UPDATE bank.accounts
 					continue
 				}
 			}
-
+			writeDuration := time.Since(startWrite)
 			if err = tx.Commit(); err != nil {
 				if log.V(1) {
 					log.Warning(err)
@@ -127,7 +131,7 @@ UPDATE bank.accounts
 				continue
 			}
 			if fromBalance >= amount {
-				atomic.AddUint64(&numTransfers, 1)
+				readings <- measurement{read: readDuration, write: writeDuration, total: time.Since(start)}
 			}
 		}
 	}
@@ -202,20 +206,30 @@ func main() {
 
 	verifyBank(db)
 
-	var lastNumTransfers uint64
 	lastNow := time.Now()
+	readings := make(chan measurement, 10000)
 
 	for i := 0; i < *concurrency; i++ {
-		go moveMoney(db)
+		go moveMoney(db, readings)
 	}
 
 	for range time.NewTicker(*balanceCheckInterval).C {
 		now := time.Now()
 		elapsed := time.Since(lastNow)
-		numTransfers := atomic.LoadUint64(&numTransfers)
-		log.Infof("%d transfers were executed at %.1f/second.", (numTransfers - lastNumTransfers), float64(numTransfers-lastNumTransfers)/elapsed.Seconds())
-		verifyBank(db)
-		lastNumTransfers = numTransfers
 		lastNow = now
+		transfers := len(readings)
+		log.Infof("%d transfers were executed at %.1f/second.", transfers, float64(transfers)/elapsed.Seconds())
+		if transfers > 0 {
+			var aggr measurement
+			for i := 0; i < transfers; i++ {
+				reading := <-readings
+				aggr.read += reading.read
+				aggr.write += reading.write
+				aggr.total += reading.total
+			}
+			d := time.Duration(transfers)
+			log.Infof("read time: %v, write time: %v, txn time: %v", aggr.read/d, aggr.write/d, aggr.total/d)
+		}
+		verifyBank(db)
 	}
 }
