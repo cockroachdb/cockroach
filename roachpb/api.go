@@ -88,7 +88,7 @@ func IsRange(args Request) bool {
 type Request interface {
 	proto.Message
 	// Header returns the request header.
-	Header() *RequestHeader
+	Header() *Span
 	// Method returns the request method.
 	Method() Method
 	// CreateReply creates a new response object.
@@ -179,7 +179,7 @@ func (rr *ResolveIntentRangeResponse) Combine(c Response) error {
 }
 
 // Header implements the Request interface for RequestHeader.
-func (rh *RequestHeader) Header() *RequestHeader {
+func (rh *Span) Header() *Span {
 	return rh
 }
 
@@ -407,7 +407,7 @@ func (*LeaderLeaseRequest) CreateReply() Response { return &LeaderLeaseResponse{
 // NewGet returns a Request initialized to get the value at key.
 func NewGet(key Key) Request {
 	return &GetRequest{
-		RequestHeader: RequestHeader{
+		Span: Span{
 			Key: key,
 		},
 	}
@@ -417,7 +417,7 @@ func NewGet(key Key) Request {
 // key by increment.
 func NewIncrement(key Key, increment int64) Request {
 	return &IncrementRequest{
-		RequestHeader: RequestHeader{
+		Span: Span{
 			Key: key,
 		},
 		Increment: increment,
@@ -428,7 +428,7 @@ func NewIncrement(key Key, increment int64) Request {
 func NewPut(key Key, value Value) Request {
 	value.InitChecksum(key)
 	return &PutRequest{
-		RequestHeader: RequestHeader{
+		Span: Span{
 			Key: key,
 		},
 		Value: value,
@@ -445,7 +445,7 @@ func NewConditionalPut(key Key, value, expValue Value) Request {
 		expValue.InitChecksum(key)
 	}
 	return &ConditionalPutRequest{
-		RequestHeader: RequestHeader{
+		Span: Span{
 			Key: key,
 		},
 		Value:    value,
@@ -456,7 +456,7 @@ func NewConditionalPut(key Key, value, expValue Value) Request {
 // NewDelete returns a Request initialized to delete the value at key.
 func NewDelete(key Key) Request {
 	return &DeleteRequest{
-		RequestHeader: RequestHeader{
+		Span: Span{
 			Key: key,
 		},
 	}
@@ -466,7 +466,7 @@ func NewDelete(key Key) Request {
 // the given key range (excluding the endpoint).
 func NewDeleteRange(startKey, endKey Key) Request {
 	return &DeleteRangeRequest{
-		RequestHeader: RequestHeader{
+		Span: Span{
 			Key:    startKey,
 			EndKey: endKey,
 		},
@@ -477,7 +477,7 @@ func NewDeleteRange(startKey, endKey Key) Request {
 // with max results.
 func NewScan(key, endKey Key, maxResults int64) Request {
 	return &ScanRequest{
-		RequestHeader: RequestHeader{
+		Span: Span{
 			Key:    key,
 			EndKey: endKey,
 		},
@@ -489,7 +489,7 @@ func NewScan(key, endKey Key, maxResults int64) Request {
 // start keys with max results.
 func NewReverseScan(key, endKey Key, maxResults int64) Request {
 	return &ReverseScanRequest{
-		RequestHeader: RequestHeader{
+		Span: Span{
 			Key:    key,
 			EndKey: endKey,
 		},

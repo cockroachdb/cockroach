@@ -456,7 +456,7 @@ func TestStoreExecuteNoop(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.RangeID = 1
 	ba.Replica = roachpb.ReplicaDescriptor{StoreID: store.StoreID()}
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
+	ba.Add(&roachpb.GetRequest{Span: roachpb.Span{Key: roachpb.Key("a")}})
 	ba.Add(&roachpb.NoopRequest{})
 
 	br, pErr := store.Send(context.Background(), ba)

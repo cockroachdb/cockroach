@@ -522,22 +522,22 @@ func TestRangeNotLeaderError(t *testing.T) {
 		},
 	})
 
-	header := roachpb.RequestHeader{
+	header := roachpb.Span{
 		Key: roachpb.Key("a"),
 	}
 	testCases := []roachpb.Request{
 		// Admin split covers admin commands.
 		&roachpb.AdminSplitRequest{
-			RequestHeader: header,
-			SplitKey:      roachpb.Key("a"),
+			Span:     header,
+			SplitKey: roachpb.Key("a"),
 		},
 		// Get covers read-only commands.
 		&roachpb.GetRequest{
-			RequestHeader: header,
+			Span: header,
 		},
 		// Put covers read-write commands.
 		&roachpb.PutRequest{
-			RequestHeader: header,
+			Span: header,
 			Value: roachpb.Value{
 				Bytes: []byte("value"),
 			},
@@ -864,7 +864,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 // the default replica for the specified key.
 func getArgs(key []byte) roachpb.GetRequest {
 	return roachpb.GetRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 	}
@@ -874,7 +874,7 @@ func getArgs(key []byte) roachpb.GetRequest {
 // the default replica for the specified key / value.
 func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 	return roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 		Value: roachpb.Value{
@@ -886,7 +886,7 @@ func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 // deleteArgs returns a DeleteRequest and DeleteResponse pair.
 func deleteArgs(key roachpb.Key) roachpb.DeleteRequest {
 	return roachpb.DeleteRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 	}
@@ -908,7 +908,7 @@ func readOrWriteArgs(key roachpb.Key, read bool) roachpb.Request {
 // addressed to the default replica for the specified key / value.
 func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
 	return roachpb.IncrementRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 		Increment: inc,
@@ -917,7 +917,7 @@ func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
 
 func scanArgs(start, end []byte) roachpb.ScanRequest {
 	return roachpb.ScanRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key:    start,
 			EndKey: end,
 		},
@@ -929,7 +929,7 @@ func scanArgs(start, end []byte) roachpb.ScanRequest {
 func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransactionRequest, h roachpb.Header) {
 	h.Txn = txn
 	return roachpb.EndTransactionRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: txn.Key, // not allowed when going through TxnCoordSender, but we're not
 		},
 		Commit: commit,
@@ -940,7 +940,7 @@ func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransaction
 // specified key.
 func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType) roachpb.PushTxnRequest {
 	return roachpb.PushTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: pushee.Key,
 		},
 		Now:       pusher.Timestamp,
@@ -955,7 +955,7 @@ func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnTy
 func heartbeatArgs(txn *roachpb.Transaction) (_ roachpb.HeartbeatTxnRequest, h roachpb.Header) {
 	h.Txn = txn
 	return roachpb.HeartbeatTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: txn.Key,
 		},
 	}, h
@@ -966,7 +966,7 @@ func heartbeatArgs(txn *roachpb.Transaction) (_ roachpb.HeartbeatTxnRequest, h r
 // contain the given roachpb.Value.
 func internalMergeArgs(key []byte, value roachpb.Value) roachpb.MergeRequest {
 	return roachpb.MergeRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 		Value: value,
@@ -1414,8 +1414,8 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 
 	// Resolve the intent.
 	rArgs := &roachpb.ResolveIntentRequest{
-		RequestHeader: *pArgs.Header(),
-		IntentTxn:     *txn,
+		Span:      *pArgs.Header(),
+		IntentTxn: *txn,
 	}
 	rArgs.IntentTxn.Status = roachpb.COMMITTED
 	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn, Timestamp: txn.Timestamp}, rArgs); err != nil {
@@ -2267,7 +2267,7 @@ func TestRangeResolveIntentRange(t *testing.T) {
 
 	// Resolve the intents.
 	rArgs := &roachpb.ResolveIntentRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key:    roachpb.Key("a"),
 			EndKey: roachpb.Key("c"),
 		},
@@ -2334,7 +2334,7 @@ func TestRangeStatsComputation(t *testing.T) {
 
 	// Resolve the 2nd value.
 	rArgs := &roachpb.ResolveIntentRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: pArgs.Key,
 		},
 		IntentTxn: *txn,
@@ -2511,7 +2511,7 @@ func TestConditionFailedError(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := roachpb.ConditionalPutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 		Value: roachpb.Value{
@@ -2665,7 +2665,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	// Get original meta2 descriptor.
 	rlArgs := &roachpb.RangeLookupRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: keys.RangeMetaKey(key),
 		},
 		MaxRanges: 1,
@@ -2811,7 +2811,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Resolve the intents.
 	rArgs := &roachpb.ResolveIntentRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key:    keys.RangeMetaKey(roachpb.Key("a")),
 			EndKey: keys.RangeMetaKey(roachpb.Key("z")),
 		},
@@ -2904,7 +2904,7 @@ func TestRangeLookup(t *testing.T) {
 
 	for _, c := range testCases {
 		resp, err := client.SendWrapped(tc.Sender(), nil, &roachpb.RangeLookupRequest{
-			RequestHeader: roachpb.RequestHeader{
+			Span: roachpb.Span{
 				Key: c.key,
 			},
 			MaxRanges: 1,
@@ -3117,19 +3117,19 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	ba.RangeID = tc.rng.Desc().RangeID
 	ba.Replica.StoreID = tc.store.StoreID()
 	ba.Add(&roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
-		Value:         roachpb.Value{Bytes: []byte("not nil")},
+		Span:  roachpb.Span{Key: roachpb.Key("k")},
+		Value: roachpb.Value{Bytes: []byte("not nil")},
 	})
 	// This one fails with a ConditionalPutError, which implements
 	// roachpb.IndexedError.
 	ba.Add(&roachpb.ConditionalPutRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
-		Value:         roachpb.Value{Bytes: []byte("irrelevant")},
-		ExpValue:      nil, // not true after above Put
+		Span:     roachpb.Span{Key: roachpb.Key("k")},
+		Value:    roachpb.Value{Bytes: []byte("irrelevant")},
+		ExpValue: nil, // not true after above Put
 	})
 	// This one is never executed.
 	ba.Add(&roachpb.GetRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
+		Span: roachpb.Span{Key: roachpb.Key("k")},
 	})
 
 	if _, pErr := tc.rng.Send(tc.rng.context(), ba); pErr == nil {

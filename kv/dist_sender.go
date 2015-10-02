@@ -212,7 +212,7 @@ func (ds *DistSender) rangeLookup(key roachpb.Key, options lookupOptions,
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 		MaxRanges:       ds.rangeLookupMaxRanges,

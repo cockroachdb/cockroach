@@ -792,7 +792,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	rScan := &roachpb.ReverseScanRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+		Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	}
 	if _, err := client.SendWrapped(ds, nil, rScan); err != nil {
 		t.Fatal(err)

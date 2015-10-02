@@ -87,7 +87,7 @@ func createPutRequest(key roachpb.Key, value []byte, txn *roachpb.Transaction) (
 	h := roachpb.Header{}
 	h.Txn = txn
 	return &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 		Value: roachpb.Value{Bytes: value},
@@ -98,7 +98,7 @@ func createDeleteRangeRequest(key, endKey roachpb.Key, txn *roachpb.Transaction)
 	h := roachpb.Header{}
 	h.Txn = txn
 	return &roachpb.DeleteRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key:    key,
 			EndKey: endKey,
 		},
@@ -165,7 +165,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 			Isolation: roachpb.SNAPSHOT,
 		},
 	}, &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 	})
@@ -203,7 +203,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 			Priority:  11,
 		},
 	}, &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: roachpb.Key("key"),
 		},
 	})
@@ -332,7 +332,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 // getTxn fetches the requested key and returns the transaction info.
 func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Transaction, error) {
 	hb := &roachpb.HeartbeatTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: txn.Key,
 		},
 	}
@@ -411,7 +411,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	txn2 := newTxn(s.Clock, key)
 	txn2.Priority = 2
 	pushArgs := &roachpb.PushTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: txn.Key,
 		},
 		Now:       s.Clock.Now(),
@@ -506,7 +506,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	}
 
 	var testPutReq = &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: roachpb.Key("test-key"),
 		},
 	}
@@ -617,7 +617,7 @@ func TestTxnDrainingNode(t *testing.T) {
 			Name: "test txn",
 		},
 	}, &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 	})

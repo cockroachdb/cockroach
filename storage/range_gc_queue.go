@@ -90,7 +90,7 @@ func (q *rangeGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.Sy
 	// inconsistent lookup in our own copy of the range.
 	b := &client.Batch{}
 	b.InternalAddRequest(&roachpb.RangeLookupRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: keys.RangeMetaKey(desc.StartKey),
 		},
 		MaxRanges: 1,

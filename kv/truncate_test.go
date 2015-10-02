@@ -75,11 +75,11 @@ func TestTruncate(t *testing.T) {
 		for _, ks := range test.keys {
 			if len(ks[1]) > 0 {
 				ba.Add(&roachpb.ScanRequest{
-					RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1])},
+					Span: roachpb.Span{Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1])},
 				})
 			} else {
 				ba.Add(&roachpb.GetRequest{
-					RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(ks[0])},
+					Span: roachpb.Span{Key: roachpb.Key(ks[0])},
 				})
 			}
 		}

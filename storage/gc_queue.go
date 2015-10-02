@@ -303,7 +303,7 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.T
 
 	// Attempt to push the transaction which created the intent.
 	pushArgs := &roachpb.PushTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: txn.Key,
 		},
 		Now:       now,

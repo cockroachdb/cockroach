@@ -339,7 +339,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 		return util.Errorf("can't find store %s in descriptor %+v", r.rm.StoreID(), desc)
 	}
 	args := &roachpb.LeaderLeaseRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: desc.StartKey,
 		},
 		Lease: roachpb.Lease{
@@ -580,7 +580,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 }
 
 // TODO(tschottdorf): almost obsolete.
-func (r *Replica) checkCmdHeader(header *roachpb.RequestHeader) error {
+func (r *Replica) checkCmdHeader(header *roachpb.Span) error {
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		return roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
 	}
@@ -1421,21 +1421,21 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 		var resolveArgs roachpb.Request
 		var local bool // whether this intent lives on this Range
 		{
-			header := roachpb.RequestHeader{
+			header := roachpb.Span{
 				Key:    intent.Key,
 				EndKey: intent.EndKey,
 			}
 
 			if len(intent.EndKey) == 0 {
 				resolveArgs = &roachpb.ResolveIntentRequest{
-					RequestHeader: header,
-					IntentTxn:     intent.Txn,
+					Span:      header,
+					IntentTxn: intent.Txn,
 				}
 				local = r.ContainsKey(intent.Key)
 			} else {
 				resolveArgs = &roachpb.ResolveIntentRangeRequest{
-					RequestHeader: header,
-					IntentTxn:     intent.Txn,
+					Span:      header,
+					IntentTxn: intent.Txn,
 				}
 				local = r.ContainsKeyRange(intent.Key, intent.EndKey)
 			}
