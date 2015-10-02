@@ -1233,41 +1233,40 @@ const (
 
 // ParseDate parses a date.
 func ParseDate(s DString) (DDate, error) {
-	str := string(s)
-	t, err := time.Parse(dateFormat, str)
-	if err == nil {
-		return DDate{Time: t}, nil
+	// No need to ParseInLocation here because we're only parsing dates.
+	t, err := time.Parse(dateFormat, string(s))
+	if err != nil {
+		return DummyDate, err
 	}
-	// Parse other formats in the future
-	return DummyDate, err
+
+	return DDate{Time: t}, nil
 }
 
 // ParseTimestamp parses the timestamp.
 func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
-	str := string(s)
-	t, err := time.Parse(dateFormat, str)
-	if err == nil {
-		return DTimestamp{Time: t}, nil
-	}
-	if t, err = time.Parse(TimestampWithOffsetZoneFormat, str); err == nil {
-		t = t.UTC()
-		return DTimestamp{Time: t}, nil
-	}
-	location := time.UTC
+	loc := time.UTC
 	if ctx.GetLocation != nil {
-		if location, err = ctx.GetLocation(); err != nil {
+		var err error
+		if loc, err = ctx.GetLocation(); err != nil {
 			return DummyTimestamp, err
 		}
 	}
-	if t, err = time.ParseInLocation(timestampFormat, str, location); err == nil {
-		t = t.UTC()
-		return DTimestamp{Time: t}, nil
+
+	str := string(s)
+	var err error
+
+	for _, format := range []string{
+		dateFormat,
+		TimestampWithOffsetZoneFormat,
+		timestampFormat,
+		timestampWithNamedZoneFormat,
+	} {
+		var t time.Time
+		if t, err = time.ParseInLocation(format, str, loc); err == nil {
+			return DTimestamp{Time: t.UTC()}, nil
+		}
 	}
-	if t, err = time.ParseInLocation(timestampWithNamedZoneFormat, str, location); err == nil {
-		t = t.UTC()
-		return DTimestamp{Time: t}, nil
-	}
-	// Parse other formats in the future.
+
 	return DummyTimestamp, err
 }
 
