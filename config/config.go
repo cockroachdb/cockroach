@@ -254,7 +254,7 @@ func (s *SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.Key) []roachpb.
 	}
 
 	// Build key prefixes for sequential table IDs until we reach endKey.
-	var splitKeys roachpb.KeySlice
+	var splitKeys []roachpb.Key
 	var key roachpb.Key
 	// endID could be smaller than startID if we don't have user tables.
 	for id := startID; id <= endID; id++ {
