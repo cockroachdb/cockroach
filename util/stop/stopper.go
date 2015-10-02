@@ -111,8 +111,8 @@ func (s *Stopper) RunTask(f func()) bool {
 		return false
 	}
 	// Call f.
+	defer s.runPostlude(taskKey)
 	f()
-	s.runPostlude(taskKey)
 	return true
 }
 
