@@ -315,7 +315,7 @@ func (v *Value) SetProto(msg proto.Message) error {
 	if err != nil {
 		return err
 	}
-	v.Bytes = data
+	v.SetBytes(data)
 	return nil
 }
 
