@@ -20,7 +20,7 @@ package storage
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
 )
 
@@ -80,7 +80,7 @@ func (cq *CommandQueue) onEvicted(key, value interface{}) {
 // confirmation that all gating commands have completed or failed, and then
 // call Add() to add the keys to the command queue. readOnly is true if the
 // requester is a read-only command; false for read-write.
-func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...keys.Span) {
+func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roachpb.Span) {
 	for _, span := range spans {
 		// This gives us a memory-efficient end key if end is empty.
 		start, end := span.Start, span.End
@@ -106,7 +106,7 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...keys
 //
 // Add should be invoked after waiting on already-executing, overlapping
 // commands via the WaitGroup initialized through GetWait().
-func (cq *CommandQueue) Add(readOnly bool, spans ...keys.Span) []interface{} {
+func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) []interface{} {
 	var r []interface{}
 	for _, span := range spans {
 		start, end := span.Start, span.End

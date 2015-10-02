@@ -19,24 +19,18 @@ package keys
 
 import "github.com/cockroachdb/cockroach/roachpb"
 
-// Span describes a span of keys: [start,end).
-// This will correspond to one or more range.
-type Span struct {
-	Start, End roachpb.Key
-}
-
 var (
 	// Meta1Span holds all first level addressing.
-	Meta1Span = Span{roachpb.KeyMin, Meta2Prefix}
+	Meta1Span = roachpb.Span{Start: roachpb.KeyMin, End: Meta2Prefix}
 
 	// UserDataSpan is the non-meta and non-structured portion of the key space.
-	UserDataSpan = Span{SystemMax, TableDataPrefix}
+	UserDataSpan = roachpb.Span{Start: SystemMax, End: TableDataPrefix}
 
 	// SystemDBSpan is the range of system objects for structured data.
-	SystemDBSpan = Span{TableDataPrefix, UserTableDataMin}
+	SystemDBSpan = roachpb.Span{Start: TableDataPrefix, End: UserTableDataMin}
 
 	// NoSplitSpans describes the ranges that should never be split.
 	// Meta1Span: needed to find other ranges.
 	// SystemDBSpan: system objects have interdepencies.
-	NoSplitSpans = []Span{Meta1Span, SystemDBSpan}
+	NoSplitSpans = []roachpb.Span{Meta1Span, SystemDBSpan}
 )

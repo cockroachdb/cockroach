@@ -622,11 +622,11 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		r.Lock()
 		var wg sync.WaitGroup
-		var spans []keys.Span
+		var spans []roachpb.Span
 		readOnly := ba.IsReadOnly()
 		for _, union := range ba.Requests {
 			h := union.GetInner().Header()
-			spans = append(spans, keys.Span{Start: h.Start, End: h.End})
+			spans = append(spans, roachpb.Span{Start: h.Start, End: h.End})
 		}
 		r.cmdQ.GetWait(readOnly, &wg, spans...)
 		cmdKeys = append(cmdKeys, r.cmdQ.Add(readOnly, spans...)...)
