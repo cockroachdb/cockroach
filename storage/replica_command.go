@@ -40,7 +40,7 @@ import (
 // appropriate storage API command. It returns the response, an error,
 // and a slice of intents that were skipped during execution.
 // If an error is returned, any returned intents should still be resolved.
-func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.Request) (roachpb.Response, []roachpb.Intent, error) {
+func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.Request) (roachpb.Response, []roachpb.Intent, error) {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
 	ts := h.Timestamp
@@ -174,7 +174,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 }
 
 // Get returns the value for a specified key.
-func (r *Replica) Get(batch engine.Engine, h roachpb.BatchRequest_Header, args roachpb.GetRequest) (roachpb.GetResponse, []roachpb.Intent, error) {
+func (r *Replica) Get(batch engine.Engine, h roachpb.Header, args roachpb.GetRequest) (roachpb.GetResponse, []roachpb.Intent, error) {
 	var reply roachpb.GetResponse
 
 	val, intents, err := engine.MVCCGet(batch, args.Key, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
@@ -183,7 +183,7 @@ func (r *Replica) Get(batch engine.Engine, h roachpb.BatchRequest_Header, args r
 }
 
 // Put sets the value for a specified key.
-func (r *Replica) Put(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.PutRequest) (roachpb.PutResponse, error) {
+func (r *Replica) Put(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.PutRequest) (roachpb.PutResponse, error) {
 	var reply roachpb.PutResponse
 
 	return reply, engine.MVCCPut(batch, ms, args.Key, h.Timestamp, args.Value, h.Txn)
@@ -192,7 +192,7 @@ func (r *Replica) Put(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Batch
 // ConditionalPut sets the value for a specified key only if
 // the expected value matches. If not, the return value contains
 // the actual value.
-func (r *Replica) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.ConditionalPutRequest) (roachpb.ConditionalPutResponse, error) {
+func (r *Replica) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.ConditionalPutRequest) (roachpb.ConditionalPutResponse, error) {
 	var reply roachpb.ConditionalPutResponse
 
 	return reply, engine.MVCCConditionalPut(batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
@@ -201,7 +201,7 @@ func (r *Replica) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, h ro
 // Increment increments the value (interpreted as varint64 encoded) and
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
-func (r *Replica) Increment(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.IncrementRequest) (roachpb.IncrementResponse, error) {
+func (r *Replica) Increment(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.IncrementRequest) (roachpb.IncrementResponse, error) {
 	var reply roachpb.IncrementResponse
 
 	newVal, err := engine.MVCCIncrement(batch, ms, args.Key, h.Timestamp, h.Txn, args.Increment)
@@ -210,7 +210,7 @@ func (r *Replica) Increment(batch engine.Engine, ms *engine.MVCCStats, h roachpb
 }
 
 // Delete deletes the key and value specified by key.
-func (r *Replica) Delete(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.DeleteRequest) (roachpb.DeleteResponse, error) {
+func (r *Replica) Delete(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.DeleteRequest) (roachpb.DeleteResponse, error) {
 	var reply roachpb.DeleteResponse
 
 	return reply, engine.MVCCDelete(batch, ms, args.Key, h.Timestamp, h.Txn)
@@ -218,7 +218,7 @@ func (r *Replica) Delete(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Ba
 
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
-func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.DeleteRangeRequest) (roachpb.DeleteRangeResponse, error) {
+func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.DeleteRangeRequest) (roachpb.DeleteRangeResponse, error) {
 	var reply roachpb.DeleteRangeResponse
 
 	numDel, err := engine.MVCCDeleteRange(batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, h.Timestamp, h.Txn)
@@ -228,7 +228,7 @@ func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, h roach
 
 // Scan scans the key range specified by start key through end key in ascending
 // order up to some maximum number of results.
-func (r *Replica) Scan(batch engine.Engine, h roachpb.BatchRequest_Header, args roachpb.ScanRequest) (roachpb.ScanResponse, []roachpb.Intent, error) {
+func (r *Replica) Scan(batch engine.Engine, h roachpb.Header, args roachpb.ScanRequest) (roachpb.ScanResponse, []roachpb.Intent, error) {
 	var reply roachpb.ScanResponse
 
 	rows, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
@@ -238,7 +238,7 @@ func (r *Replica) Scan(batch engine.Engine, h roachpb.BatchRequest_Header, args 
 
 // ReverseScan scans the key range specified by start key through end key in
 // descending order up to some maximum number of results.
-func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.BatchRequest_Header, args roachpb.ReverseScanRequest) (roachpb.ReverseScanResponse, []roachpb.Intent, error) {
+func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.Header, args roachpb.ReverseScanRequest) (roachpb.ReverseScanResponse, []roachpb.Intent, error) {
 	var reply roachpb.ReverseScanResponse
 
 	rows, intents, err := engine.MVCCReverseScan(batch, args.Key, args.EndKey, args.MaxResults, h.Timestamp,
@@ -251,7 +251,7 @@ func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.BatchRequest_Header
 // transaction according to the args.Commit parameter.
 // TODO(tschottdorf): return nil reply on any error. The error itself
 // must be the authoritative source of information.
-func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.EndTransactionRequest) (roachpb.EndTransactionResponse, []roachpb.Intent, error) {
+func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.EndTransactionRequest) (roachpb.EndTransactionResponse, []roachpb.Intent, error) {
 	var reply roachpb.EndTransactionResponse
 	ts := h.Timestamp // all we're going to use from the header.
 
@@ -526,7 +526,7 @@ func intersectIntent(intent roachpb.Intent, desc roachpb.RangeDescriptor) (middl
 // are likely to be desired by their current workload. The Reverse flag
 // specifies whether descriptors are prefetched in descending or ascending
 // order.
-func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.BatchRequest_Header, args roachpb.RangeLookupRequest) (roachpb.RangeLookupResponse, []roachpb.Intent, error) {
+func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachpb.RangeLookupRequest) (roachpb.RangeLookupResponse, []roachpb.Intent, error) {
 	var reply roachpb.RangeLookupResponse
 	ts := h.Timestamp // all we're going to use from the header.
 
@@ -708,7 +708,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.BatchRequest_Header
 // HeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
-func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.HeartbeatTxnRequest) (roachpb.HeartbeatTxnResponse, error) {
+func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.HeartbeatTxnRequest) (roachpb.HeartbeatTxnResponse, error) {
 	var reply roachpb.HeartbeatTxnResponse
 	ts := h.Timestamp // all we're going to use from the header.
 
@@ -750,7 +750,7 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roac
 // specified in the arguments. MVCCGarbageCollect is invoked on each
 // listed key along with the expiration timestamp. The GC metadata
 // specified in the args is persisted after GC.
-func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.GCRequest) (roachpb.GCResponse, error) {
+func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.GCRequest) (roachpb.GCResponse, error) {
 	var reply roachpb.GCResponse
 
 	// Garbage collect the specified keys by expiration timestamps.
@@ -800,7 +800,7 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchR
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionPushError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
-func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.PushTxnRequest) (roachpb.PushTxnResponse, error) {
+func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.PushTxnRequest) (roachpb.PushTxnResponse, error) {
 	var reply roachpb.PushTxnResponse
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
@@ -937,7 +937,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.B
 
 // ResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
-func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.ResolveIntentRequest) (roachpb.ResolveIntentResponse, error) {
+func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.ResolveIntentRequest) (roachpb.ResolveIntentResponse, error) {
 	var reply roachpb.ResolveIntentResponse
 
 	err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, h.Timestamp, &args.IntentTxn)
@@ -947,7 +947,7 @@ func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, h roa
 // ResolveIntentRange resolves write intents in the specified
 // key range according to the status of the transaction which created it.
 func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
-	h roachpb.BatchRequest_Header, args roachpb.ResolveIntentRangeRequest) (roachpb.ResolveIntentRangeResponse, error) {
+	h roachpb.Header, args roachpb.ResolveIntentRangeRequest) (roachpb.ResolveIntentRangeResponse, error) {
 	var reply roachpb.ResolveIntentRangeResponse
 
 	_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, h.Timestamp, &args.IntentTxn)
@@ -959,14 +959,14 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 // Cockroach for the efficient accumulation of certain values. Due to the
 // difficulty of making these operations transactional, merges are not currently
 // exposed directly to clients. Merged values are explicitly not MVCC data.
-func (r *Replica) Merge(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.MergeRequest) (roachpb.MergeResponse, error) {
+func (r *Replica) Merge(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.MergeRequest) (roachpb.MergeResponse, error) {
 	var reply roachpb.MergeResponse
 
 	return reply, engine.MVCCMerge(batch, ms, args.Key, args.Value)
 }
 
 // TruncateLog discards a prefix of the raft log.
-func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.TruncateLogRequest) (roachpb.TruncateLogResponse, error) {
+func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.TruncateLogRequest) (roachpb.TruncateLogResponse, error) {
 	var reply roachpb.TruncateLogResponse
 
 	// args.Index is the first index to keep.
@@ -996,7 +996,7 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roach
 // holder, the expiration will be extended or shortened as indicated. For a new
 // lease, all duties required of the range leader are commenced, including
 // clearing the command queue and timestamp cache.
-func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roachpb.BatchRequest_Header, args roachpb.LeaderLeaseRequest) (roachpb.LeaderLeaseResponse, error) {
+func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.LeaderLeaseRequest) (roachpb.LeaderLeaseResponse, error) {
 	var reply roachpb.LeaderLeaseResponse
 
 	r.Lock()

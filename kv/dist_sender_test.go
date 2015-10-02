@@ -334,7 +334,7 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		if _, err := client.SendWrappedWith(ds, nil, roachpb.BatchRequest_Header{
+		if _, err := client.SendWrappedWith(ds, nil, roachpb.Header{
 			RangeID:         rangeID, // Not used in this test, but why not.
 			ReadConsistency: consistency,
 		}, args); err != nil {
@@ -758,7 +758,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 10).(*roachpb.ScanRequest)
 	// Set the Txn info to avoid an OpRequiresTxnError.
-	reply, err := client.SendWrappedWith(ds, nil, roachpb.BatchRequest_Header{
+	reply, err := client.SendWrappedWith(ds, nil, roachpb.Header{
 		Txn: &roachpb.Transaction{},
 	}, scan)
 	if err != nil {

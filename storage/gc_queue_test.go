@@ -194,7 +194,7 @@ func TestGCQueueProcess(t *testing.T) {
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 			}
-			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 				Timestamp: datum.ts,
 				Txn:       txn,
 			}, &dArgs); err != nil {
@@ -208,7 +208,7 @@ func TestGCQueueProcess(t *testing.T) {
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 			}
-			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 				Timestamp: datum.ts,
 				Txn:       txn,
 			}, &pArgs); err != nil {
@@ -341,7 +341,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		// TODO(spencerkimball): benchmark with ~50k.
 		for j := 0; j < 5; j++ {
 			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%05d", i, j)), []byte("value"))
-			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 				Txn: txns[i],
 			}, &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)

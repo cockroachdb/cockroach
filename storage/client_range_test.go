@@ -62,7 +62,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	manuals[0].Increment(int64(500 * time.Millisecond))
 	incArgs := incrementArgs([]byte("a"), 5)
 	ts := clocks[0].Now()
-	if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.BatchRequest_Header{Timestamp: ts}, &incArgs); err != nil {
+	if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.Header{Timestamp: ts}, &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -128,7 +128,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	for i := int64(0); i < 3; i++ {
 		incArgs := incrementArgs([]byte("a"), 5)
 		ts := roachpb.ZeroTimestamp.Add(startTime+((i+1)*30)*int64(time.Millisecond), 0)
-		if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.BatchRequest_Header{Timestamp: ts}, &incArgs); err != nil {
+		if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.Header{Timestamp: ts}, &incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -139,7 +139,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
 	incArgs := incrementArgs([]byte("a"), 11)
 	ts := roachpb.ZeroTimestamp.Add(int64((time.Duration(startTime)+maxOffset+1)*time.Millisecond), 0)
-	if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.BatchRequest_Header{Timestamp: ts}, &incArgs); err == nil {
+	if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.Header{Timestamp: ts}, &incArgs); err == nil {
 		t.Fatalf("expected clock offset error but got nil")
 	}
 
@@ -187,7 +187,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	key := "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
-	storage.TestingCommandFilter = func(args roachpb.Request, h roachpb.BatchRequest_Header) error {
+	storage.TestingCommandFilter = func(args roachpb.Request, h roachpb.Header) error {
 		if _, ok := args.(*roachpb.GetRequest); ok &&
 			args.Header().Key.Equal(roachpb.Key(key)) &&
 			h.Txn == nil {
@@ -291,7 +291,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		Key: roachpb.Key(key),
 	}
 	ts := clock.Now()
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Timestamp:    ts,
 		UserPriority: &priority,
 	}, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
@@ -309,7 +309,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	ts = clock.Now()
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Timestamp:    ts,
 		UserPriority: &priority,
 	}, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
@@ -418,7 +418,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		resp, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+		resp, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, test.request)
 		if err != nil {

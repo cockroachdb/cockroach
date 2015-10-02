@@ -200,14 +200,14 @@ func TestStoreRangeSplit(t *testing.T) {
 	// the key.
 	lCmdID := roachpb.ClientCmdID{WallTime: 123, Random: 423}
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		CmdID: lCmdID,
 	}, &lIncArgs); err != nil {
 		t.Fatal(err)
 	}
 	rIncArgs := incrementArgs([]byte("wobble"), 10)
 	rCmdID := roachpb.ClientCmdID{WallTime: 12, Random: 42}
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		CmdID: rCmdID,
 	}, &rIncArgs); err != nil {
 		t.Fatal(err)
@@ -250,7 +250,7 @@ func TestStoreRangeSplit(t *testing.T) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 	gArgs = getArgs([]byte("x"))
-	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: newRng.Desc().RangeID,
 	}, &gArgs); err != nil {
 		t.Fatal(err)
@@ -260,7 +260,7 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Send out an increment request copied from above (same ClientCmdID) which
 	// remains in the old range.
-	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		CmdID: lCmdID,
 	}, &lIncArgs); err != nil {
 		t.Fatal(err)
@@ -270,7 +270,7 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Send out the same increment copied from above (same ClientCmdID), but
 	// now to the newly created range (which should hold that key).
-	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: newRng.Desc().RangeID,
 		CmdID:   rCmdID,
 	}, &rIncArgs); err != nil {
@@ -336,7 +336,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
-		if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+		if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 			RangeID: rng.Desc().RangeID,
 		}, &pArgs); err != nil {
 			t.Fatal(err)
@@ -352,7 +352,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	midKey := append([]byte(nil), keyPrefix...)
 	midKey = append(midKey, []byte("Z")...)
 	args = adminSplitArgs(keyPrefix, midKey)
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: rng.Desc().RangeID,
 	}, &args); err != nil {
 		t.Fatal(err)
@@ -400,7 +400,7 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 		key := append(append([]byte(nil), prefix...), randutil.RandBytes(src, 100)...)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
-		if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+		if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 			RangeID: rangeID,
 		}, &pArgs); err != nil {
 			t.Fatal(err)

@@ -60,6 +60,7 @@
 		LeaderLeaseResponse
 		RequestUnion
 		ResponseUnion
+		Header
 		BatchRequest
 		BatchResponse
 		Timestamp
@@ -1514,30 +1515,9 @@ func (m *ResponseUnion) GetNoop() *NoopResponse {
 	return nil
 }
 
-// A BatchRequest contains one or more requests to be executed in
-// parallel, or if applicable (based on write-only commands and
-// range-locality), as a single update.
-//
-// The RequestHeader should contain the Key of the first request
-// in the batch. It also contains the transaction itself; individual
-// calls must not have transactions specified. The same applies to
-// the User and UserPriority fields.
-type BatchRequest struct {
-	BatchRequest_Header `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Requests            []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
-}
-
-func (m *BatchRequest) Reset()      { *m = BatchRequest{} }
-func (*BatchRequest) ProtoMessage() {}
-
-func (m *BatchRequest) GetRequests() []RequestUnion {
-	if m != nil {
-		return m.Requests
-	}
-	return nil
-}
-
-type BatchRequest_Header struct {
+// A Header is attached to a BatchRequest, encapsulating routing and auxiliary
+// information required for executing it.
+type Header struct {
 	// Timestamp specifies time at which read or writes should be
 	// performed. If the timestamp is set to zero value, its value
 	// is initialized to the wall time of the receiving node.
@@ -1572,59 +1552,82 @@ type BatchRequest_Header struct {
 	ReadConsistency ReadConsistencyType `protobuf:"varint,9,opt,name=read_consistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
 }
 
-func (m *BatchRequest_Header) Reset()         { *m = BatchRequest_Header{} }
-func (m *BatchRequest_Header) String() string { return proto.CompactTextString(m) }
-func (*BatchRequest_Header) ProtoMessage()    {}
+func (m *Header) Reset()         { *m = Header{} }
+func (m *Header) String() string { return proto.CompactTextString(m) }
+func (*Header) ProtoMessage()    {}
 
-const Default_BatchRequest_Header_UserPriority int32 = 1
+const Default_Header_UserPriority int32 = 1
 
-func (m *BatchRequest_Header) GetTimestamp() Timestamp {
+func (m *Header) GetTimestamp() Timestamp {
 	if m != nil {
 		return m.Timestamp
 	}
 	return Timestamp{}
 }
 
-func (m *BatchRequest_Header) GetCmdID() ClientCmdID {
+func (m *Header) GetCmdID() ClientCmdID {
 	if m != nil {
 		return m.CmdID
 	}
 	return ClientCmdID{}
 }
 
-func (m *BatchRequest_Header) GetReplica() ReplicaDescriptor {
+func (m *Header) GetReplica() ReplicaDescriptor {
 	if m != nil {
 		return m.Replica
 	}
 	return ReplicaDescriptor{}
 }
 
-func (m *BatchRequest_Header) GetRangeID() RangeID {
+func (m *Header) GetRangeID() RangeID {
 	if m != nil {
 		return m.RangeID
 	}
 	return 0
 }
 
-func (m *BatchRequest_Header) GetUserPriority() int32 {
+func (m *Header) GetUserPriority() int32 {
 	if m != nil && m.UserPriority != nil {
 		return *m.UserPriority
 	}
-	return Default_BatchRequest_Header_UserPriority
+	return Default_Header_UserPriority
 }
 
-func (m *BatchRequest_Header) GetTxn() *Transaction {
+func (m *Header) GetTxn() *Transaction {
 	if m != nil {
 		return m.Txn
 	}
 	return nil
 }
 
-func (m *BatchRequest_Header) GetReadConsistency() ReadConsistencyType {
+func (m *Header) GetReadConsistency() ReadConsistencyType {
 	if m != nil {
 		return m.ReadConsistency
 	}
 	return CONSISTENT
+}
+
+// A BatchRequest contains one or more requests to be executed in
+// parallel, or if applicable (based on write-only commands and
+// range-locality), as a single update.
+//
+// The RequestHeader should contain the Key of the first request
+// in the batch. It also contains the transaction itself; individual
+// calls must not have transactions specified. The same applies to
+// the User and UserPriority fields.
+type BatchRequest struct {
+	Header   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Requests []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
+}
+
+func (m *BatchRequest) Reset()      { *m = BatchRequest{} }
+func (*BatchRequest) ProtoMessage() {}
+
+func (m *BatchRequest) GetRequests() []RequestUnion {
+	if m != nil {
+		return m.Requests
+	}
+	return nil
 }
 
 // A BatchResponse contains one or more responses, one per request
@@ -3643,6 +3646,69 @@ func (m *ResponseUnion) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *Header) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Header) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
+	n103, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n103
+	data[i] = 0x12
+	i++
+	i = encodeVarintApi(data, i, uint64(m.CmdID.Size()))
+	n104, err := m.CmdID.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n104
+	data[i] = 0x2a
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
+	n105, err := m.Replica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n105
+	data[i] = 0x30
+	i++
+	i = encodeVarintApi(data, i, uint64(m.RangeID))
+	if m.UserPriority != nil {
+		data[i] = 0x38
+		i++
+		i = encodeVarintApi(data, i, uint64(*m.UserPriority))
+	}
+	if m.Txn != nil {
+		data[i] = 0x42
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
+		n106, err := m.Txn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n106
+	}
+	data[i] = 0x48
+	i++
+	i = encodeVarintApi(data, i, uint64(m.ReadConsistency))
+	return i, nil
+}
+
 func (m *BatchRequest) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -3660,12 +3726,12 @@ func (m *BatchRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.BatchRequest_Header.Size()))
-	n103, err := m.BatchRequest_Header.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Header.Size()))
+	n107, err := m.Header.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n103
+	i += n107
 	if len(m.Requests) > 0 {
 		for _, msg := range m.Requests {
 			data[i] = 0x12
@@ -3678,69 +3744,6 @@ func (m *BatchRequest) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
-	return i, nil
-}
-
-func (m *BatchRequest_Header) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *BatchRequest_Header) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
-	n104, err := m.Timestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n104
-	data[i] = 0x12
-	i++
-	i = encodeVarintApi(data, i, uint64(m.CmdID.Size()))
-	n105, err := m.CmdID.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n105
-	data[i] = 0x2a
-	i++
-	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
-	n106, err := m.Replica.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n106
-	data[i] = 0x30
-	i++
-	i = encodeVarintApi(data, i, uint64(m.RangeID))
-	if m.UserPriority != nil {
-		data[i] = 0x38
-		i++
-		i = encodeVarintApi(data, i, uint64(*m.UserPriority))
-	}
-	if m.Txn != nil {
-		data[i] = 0x42
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
-		n107, err := m.Txn.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n107
-	}
-	data[i] = 0x48
-	i++
-	i = encodeVarintApi(data, i, uint64(m.ReadConsistency))
 	return i, nil
 }
 
@@ -4508,21 +4511,7 @@ func (m *ResponseUnion) Size() (n int) {
 	return n
 }
 
-func (m *BatchRequest) Size() (n int) {
-	var l int
-	_ = l
-	l = m.BatchRequest_Header.Size()
-	n += 1 + l + sovApi(uint64(l))
-	if len(m.Requests) > 0 {
-		for _, e := range m.Requests {
-			l = e.Size()
-			n += 1 + l + sovApi(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *BatchRequest_Header) Size() (n int) {
+func (m *Header) Size() (n int) {
 	var l int
 	_ = l
 	l = m.Timestamp.Size()
@@ -4540,6 +4529,20 @@ func (m *BatchRequest_Header) Size() (n int) {
 		n += 1 + l + sovApi(uint64(l))
 	}
 	n += 1 + sovApi(uint64(m.ReadConsistency))
+	return n
+}
+
+func (m *BatchRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Header.Size()
+	n += 1 + l + sovApi(uint64(l))
+	if len(m.Requests) > 0 {
+		for _, e := range m.Requests {
+			l = e.Size()
+			n += 1 + l + sovApi(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -11003,118 +11006,7 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *BatchRequest) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowApi
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: BatchRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: BatchRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BatchRequest_Header", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.BatchRequest_Header.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Requests", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Requests = append(m.Requests, RequestUnion{})
-			if err := m.Requests[len(m.Requests)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipApi(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthApi
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *BatchRequest_Header) Unmarshal(data []byte) error {
+func (m *Header) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -11324,6 +11216,117 @@ func (m *BatchRequest_Header) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipApi(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthApi
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BatchRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowApi
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BatchRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BatchRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Header", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Header.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Requests", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Requests = append(m.Requests, RequestUnion{})
+			if err := m.Requests[len(m.Requests)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])

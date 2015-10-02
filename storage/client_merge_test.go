@@ -120,7 +120,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 
 	// Write some values right of the split key.
 	pArgs = putArgs([]byte("ccc"), content)
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: bDesc.RangeID,
 	}, &pArgs); err != nil {
 		t.Fatal(err)
@@ -182,7 +182,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 		t.Fatal(err)
 	}
 	pArgs = putArgs([]byte("ccc"), content)
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: bDesc.RangeID,
 	}, &pArgs); err != nil {
 		t.Fatal(err)
@@ -196,7 +196,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 	gArgs = getArgs([]byte("ccc"))
-	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: bDesc.RangeID,
 	}, &gArgs); err != nil {
 		t.Fatal(err)
@@ -239,7 +239,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 	gArgs = getArgs([]byte("ccc"))
-	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: rangeB.Desc().RangeID,
 	}, &gArgs); err != nil {
 		t.Fatal(err)
@@ -253,7 +253,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 		t.Fatal(err)
 	}
 	pArgs = putArgs([]byte("cccc"), content)
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: rangeB.Desc().RangeID,
 	}, &pArgs); err != nil {
 		t.Fatal(err)

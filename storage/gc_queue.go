@@ -269,7 +269,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// Send GC request through range.
 	gcMeta.OldestIntentNanos = proto.Int64(oldestIntentNanos)
 	gcArgs.GCMeta = *gcMeta
-	if _, err := client.SendWrappedWith(repl, repl.context(), roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(repl, repl.context(), roachpb.Header{
 		// Technically not needed since we're talking directly to the Range.
 		RangeID: desc.RangeID,
 	}, gcArgs); err != nil {

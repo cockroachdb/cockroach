@@ -247,7 +247,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 
 	// Scan.
 	sa := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), 0).(*roachpb.ScanRequest)
-	reply, err := client.SendWrappedWith(ds, nil, roachpb.BatchRequest_Header{
+	reply, err := client.SendWrappedWith(ds, nil, roachpb.Header{
 		ReadConsistency: roachpb.INCONSISTENT,
 	}, sa)
 	if err != nil {
@@ -264,7 +264,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 
 	// ReverseScan.
 	rsa := roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), 0).(*roachpb.ReverseScanRequest)
-	reply, err = client.SendWrappedWith(ds, nil, roachpb.BatchRequest_Header{
+	reply, err = client.SendWrappedWith(ds, nil, roachpb.Header{
 		ReadConsistency: roachpb.INCONSISTENT,
 	}, rsa)
 	if err != nil {

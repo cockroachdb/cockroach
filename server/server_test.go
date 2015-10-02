@@ -324,7 +324,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		// The Put ts may have been pushed by tsCache,
 		// so make sure we see their values in our Scan.
 		delTS = reply.(*roachpb.PutResponse).Timestamp
-		reply, err = client.SendWrappedWith(tds, nil, roachpb.BatchRequest_Header{Timestamp: delTS}, scan)
+		reply, err = client.SendWrappedWith(tds, nil, roachpb.Header{Timestamp: delTS}, scan)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -345,7 +345,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			EndKey: roachpb.Key(writes[len(writes)-1]).Next(),
 		},
 	}
-	reply, err := client.SendWrappedWith(tds, nil, roachpb.BatchRequest_Header{Timestamp: delTS}, del)
+	reply, err := client.SendWrappedWith(tds, nil, roachpb.Header{Timestamp: delTS}, del)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,7 +360,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*roachpb.ScanRequest)
 	txn := &roachpb.Transaction{Name: "MyTxn"}
-	reply, err = client.SendWrappedWith(tds, nil, roachpb.BatchRequest_Header{Txn: txn}, scan)
+	reply, err = client.SendWrappedWith(tds, nil, roachpb.Header{Txn: txn}, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
