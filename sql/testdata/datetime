@@ -279,7 +279,7 @@ SET TIME ZONE 'Europe/Rome'
 query TTT
 SELECT '2015-08-25 05:45:45.53453 CET'::timestamp
 ----
-2015-08-25 04:45:45.53453 +0000 UTC
+2015-08-25 06:45:45.53453 +0200 CEST
 
 statement ok
 SET TIME ZONE "America/New_York"
@@ -287,24 +287,24 @@ SET TIME ZONE "America/New_York"
 query TTT
 SELECT '2015-08-24 23:45:45.53453 EST'::timestamp
 ----
-2015-08-25 04:45:45.53453 +0000 UTC
+2015-08-25 00:45:45.53453 -0400 EDT
 
 query TTT
 SELECT '2015-08-24 23:45:45.53453 EDT'::timestamp
 ----
-2015-08-25 03:45:45.53453 +0000 UTC
+2015-08-24 23:45:45.53453 -0400 EDT
 
 # PST is not interpreted properly.
 query TTT
 SELECT '2015-08-24 23:45:45.53453 PST'::timestamp
 ----
-2015-08-24 23:45:45.53453 +0000 UTC
+2015-08-24 19:45:45.53453 -0400 EDT
 
 # A missing time zome is interpretted in the same way as EDT
 query TTT
 SELECT '2015-08-24 23:45:45.53453'::timestamp
 ----
-2015-08-25 03:45:45.53453 +0000 UTC
+2015-08-24 23:45:45.53453 -0400 EDT
 
 statement error cannot find foobar.*
 SET TIME ZONE 'foobar'

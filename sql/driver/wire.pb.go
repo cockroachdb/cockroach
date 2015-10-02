@@ -279,6 +279,11 @@ type Datum_Timestamp struct {
 	// nsec specifies a non-negative nanosecond offset within sec.
 	// It must be in the range [0, 999999999].
 	Nsec uint32 `protobuf:"varint,2,opt,name=nsec" json:"nsec"`
+	// location is the name of the location which maps this timestamp
+	// to the time zone in which it is taken. It is a location name
+	// corresponding to a file in the IANA Time Zone database, such
+	// as "America/New_York".
+	Location string `protobuf:"bytes,3,opt,name=location" json:"location"`
 }
 
 func (m *Datum_Timestamp) Reset()         { *m = Datum_Timestamp{} }
@@ -297,6 +302,13 @@ func (m *Datum_Timestamp) GetNsec() uint32 {
 		return m.Nsec
 	}
 	return 0
+}
+
+func (m *Datum_Timestamp) GetLocation() string {
+	if m != nil {
+		return m.Location
+	}
+	return ""
 }
 
 // An SQL request to cockroach. A transaction can consist of multiple
@@ -678,6 +690,10 @@ func (m *Datum_Timestamp) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintWire(data, i, uint64(m.Nsec))
+	data[i] = 0x1a
+	i++
+	i = encodeVarintWire(data, i, uint64(len(m.Location)))
+	i += copy(data[i:], m.Location)
 	return i, nil
 }
 
@@ -1016,6 +1032,8 @@ func (m *Datum_Timestamp) Size() (n int) {
 	_ = l
 	n += 1 + sovWire(uint64(m.Sec))
 	n += 1 + sovWire(uint64(m.Nsec))
+	l = len(m.Location)
+	n += 1 + l + sovWire(uint64(l))
 	return n
 }
 
@@ -1448,6 +1466,35 @@ func (m *Datum_Timestamp) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Location", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Location = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipWire(data[iNdEx:])

@@ -97,7 +97,11 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 		if planMaker.session.MutatesSystemDB {
 			txn.SetSystemDBTrigger()
 		}
-		planMaker.setTxn(txn, planMaker.session.Txn.Timestamp.GoTime())
+		t, err := planMaker.session.Txn.Timestamp.GoTime()
+		if err != nil {
+			return args.CreateReply(), http.StatusBadRequest, err
+		}
+		planMaker.setTxn(txn, t)
 	}
 	planMaker.evalCtx.GetLocation = planMaker.session.getLocation
 
@@ -209,6 +213,12 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 			result.Union = &driver.Response_Result_Rows_{
 				Rows: resultRows,
 			}
+
+			loc, err := planMaker.session.getLocation()
+			if err != nil {
+				return err
+			}
+
 			for plan.Next() {
 				values := plan.Values()
 				row := driver.Response_Result_Rows_Row{Values: make([]driver.Datum, 0, len(values))}
@@ -244,7 +254,7 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 							Payload: &driver.Datum_DateVal{DateVal: int64(vt)},
 						})
 					case parser.DTimestamp:
-						wireTimestamp := driver.Timestamp(vt.Time)
+						wireTimestamp := driver.Timestamp(vt.Time.In(loc))
 						row.Values = append(row.Values, driver.Datum{
 							Payload: &driver.Datum_TimeVal{
 								TimeVal: &wireTimestamp,
@@ -322,24 +332,28 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 	if arg == nil {
 		return parser.DNull, true
 	}
-	switch t := arg.(type) {
+	switch vt := arg.(type) {
 	case *driver.Datum_BoolVal:
-		return parser.DBool(t.BoolVal), true
+		return parser.DBool(vt.BoolVal), true
 	case *driver.Datum_IntVal:
-		return parser.DInt(t.IntVal), true
+		return parser.DInt(vt.IntVal), true
 	case *driver.Datum_FloatVal:
-		return parser.DFloat(t.FloatVal), true
+		return parser.DFloat(vt.FloatVal), true
 	case *driver.Datum_BytesVal:
-		return parser.DBytes(t.BytesVal), true
+		return parser.DBytes(vt.BytesVal), true
 	case *driver.Datum_StringVal:
-		return parser.DString(t.StringVal), true
+		return parser.DString(vt.StringVal), true
 	case *driver.Datum_DateVal:
-		return parser.DDate(t.DateVal), true
+		return parser.DDate(vt.DateVal), true
 	case *driver.Datum_TimeVal:
-		return parser.DTimestamp{Time: t.TimeVal.GoTime()}, true
+		t, err := vt.TimeVal.GoTime()
+		if err != nil {
+			panic(err)
+		}
+		return parser.DTimestamp{Time: t}, true
 	case *driver.Datum_IntervalVal:
-		return parser.DInterval{Duration: time.Duration(t.IntervalVal)}, true
+		return parser.DInterval{Duration: time.Duration(vt.IntervalVal)}, true
 	default:
-		panic(fmt.Sprintf("unexpected type %T", t))
+		panic(fmt.Sprintf("unexpected type %T", vt))
 	}
 }
