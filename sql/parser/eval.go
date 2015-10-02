@@ -1271,7 +1271,8 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 	} {
 		var t time.Time
 		if t, err = time.ParseInLocation(format, str, loc); err == nil {
-			return DTimestamp{Time: t}, nil
+			// Always return the time in the session time zone.
+			return DTimestamp{Time: t.In(loc)}, nil
 		}
 	}
 
