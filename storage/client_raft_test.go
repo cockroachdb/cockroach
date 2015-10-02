@@ -600,11 +600,6 @@ func getRangeMetadata(key roachpb.Key, mtc *multiTestContext, t *testing.T) roac
 // over-replicated ranges and remove replicas from them.
 func TestStoreRangeDownReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	// #2547, this test is running very slow in circle CI and not completing
-	// with ten seconds. This *may* be due to the speed of the VMs, but test
-	// output also indicates that the test may be getting stuck. Disabling until
-	// it can be investigated.
-	t.Skip("TODO(mrtracy)")
 	mtc := startMultiTestContext(t, 5)
 	defer mtc.Stop()
 	store0 := mtc.stores[0]
