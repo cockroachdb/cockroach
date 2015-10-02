@@ -419,7 +419,7 @@ var builtins = map[string][]builtin{
 			types:      typeList{timestampType},
 			returnType: DummyInterval,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return DInterval{Duration: nowTimestamp(e).Sub(args[0].(DTimestamp).Time)}, nil
+				return DInterval{Duration: e.StmtTimestamp.Sub(args[0].(DTimestamp).Time)}, nil
 			},
 		},
 		builtin{
@@ -436,7 +436,7 @@ var builtins = map[string][]builtin{
 			types:      typeList{},
 			returnType: DummyDate,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return DDate{Time: nowTimestamp(e).Truncate(24 * time.Hour)}, nil
+				return DDate{Time: e.StmtTimestamp.Truncate(24 * time.Hour)}, nil
 			},
 		},
 	},
@@ -461,7 +461,7 @@ var builtins = map[string][]builtin{
 			types:      typeList{},
 			returnType: DummyTimestamp,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return DTimestamp{Time: e.TxnTimestamp}, nil
+				return e.TxnTimestamp, nil
 			},
 		},
 	},
@@ -848,12 +848,8 @@ var nowImpl = builtin{
 	types:      typeList{},
 	returnType: DummyTimestamp,
 	fn: func(e EvalContext, args DTuple) (Datum, error) {
-		return nowTimestamp(e), nil
+		return e.StmtTimestamp, nil
 	},
-}
-
-func nowTimestamp(e EvalContext) DTimestamp {
-	return DTimestamp{Time: e.StmtTimestamp}
 }
 
 var powImpl = floatBuiltin2(func(x, y float64) (Datum, error) {

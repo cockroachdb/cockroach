@@ -38,7 +38,7 @@ type planner struct {
 
 func (p *planner) setTxn(txn *client.Txn, timestamp time.Time) {
 	p.txn = txn
-	p.evalCtx.TxnTimestamp = timestamp
+	p.evalCtx.TxnTimestamp = parser.DTimestamp{Time: timestamp}
 }
 
 func (p *planner) resetTxn() {

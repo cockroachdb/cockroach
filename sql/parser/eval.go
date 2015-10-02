@@ -555,8 +555,8 @@ func init() {
 // the retrieval of state such as the node ID or statement start time.
 type EvalContext struct {
 	NodeID        uint32
-	StmtTimestamp time.Time
-	TxnTimestamp  time.Time
+	StmtTimestamp DTimestamp
+	TxnTimestamp  DTimestamp
 	GetLocation   func() (*time.Location, error)
 }
 

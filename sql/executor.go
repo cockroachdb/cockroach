@@ -108,7 +108,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
 	if planMaker.txn != nil {
-		planMaker.session.Txn = &Session_Transaction{Txn: planMaker.txn.Proto, Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp)}
+		planMaker.session.Txn = &Session_Transaction{Txn: planMaker.txn.Proto, Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time)}
 		planMaker.session.MutatesSystemDB = planMaker.txn.SystemDBTrigger()
 	} else {
 		planMaker.session.Txn = nil
@@ -185,7 +185,7 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 	// some of the common code back out into execStmts and have execStmt contain
 	// only the body of this closure.
 	f := func(timestamp time.Time) error {
-		planMaker.evalCtx.StmtTimestamp = timestamp
+		planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timestamp}
 		plan, err := planMaker.makePlan(stmt)
 		if err != nil {
 			return err
