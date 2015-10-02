@@ -56,7 +56,7 @@ func TestKeyAddress(t *testing.T) {
 	}
 	var lastKey roachpb.Key
 	for i, test := range testCases {
-		result := keys.KeyAddress(test.key)
+		result := keys.KeyAddress(test.key).Key()
 		if result.Compare(lastKey) <= 0 {
 			t.Errorf("%d: key address %q is <= %q", i, result, lastKey)
 		}

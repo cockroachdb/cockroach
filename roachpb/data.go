@@ -68,6 +68,7 @@ func MakeKey(keys ...Key) Key {
 }
 
 // KeySlice implements sort.Interface.
+// TODO(tschottdorf): unused except in tests.
 type KeySlice []Key
 
 func (s KeySlice) Len() int           { return len(s) }
@@ -131,6 +132,8 @@ func (k EncodedKey) PrefixEnd() EncodedKey {
 }
 
 // Less compares two keys.
+// TODO(tschottdorf): see whether we actually needs this. We shouldn't be
+// comparing keys whose local addressing isn't resolved.
 func (k Key) Less(l Key) bool {
 	return bytes.Compare(k, l) < 0
 }

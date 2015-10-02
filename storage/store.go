@@ -623,7 +623,7 @@ func (s *Store) startGossip() {
 // range and if so, reminds it to gossip the first range descriptor and
 // sentinel gossip.
 func (s *Store) maybeGossipFirstRange() error {
-	rng := s.LookupReplica(roachpb.KeyMin, nil)
+	rng := s.LookupReplica(keys.RKey(roachpb.KeyMin), nil)
 	if rng != nil {
 		return rng.maybeGossipFirstRange()
 	}
@@ -633,7 +633,7 @@ func (s *Store) maybeGossipFirstRange() error {
 // maybeGossipSystemConfig looks for the range containing SystemDB keys and
 // lets that range gossip them.
 func (s *Store) maybeGossipSystemConfig() error {
-	rng := s.LookupReplica(keys.SystemDBSpan.Start, nil)
+	rng := s.LookupReplica(keys.RKey(keys.SystemDBSpan.Start), nil)
 	if rng == nil {
 		// This store has no range with this configuration.
 		return nil
@@ -751,18 +751,16 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 // specified key range. Note that the specified keys are transformed
 // using Key.Address() to ensure we lookup replicas correctly for local
 // keys. When end is nil, a replica that contains start is looked up.
-func (s *Store) LookupReplica(start, end roachpb.Key) *Replica {
+func (s *Store) LookupReplica(start, end keys.RKey) *Replica {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	startAddr := keys.KeyAddress(start)
-	endAddr := keys.KeyAddress(end)
 
 	var rng *Replica
-	s.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(startAddr.Next()), func(i btree.Item) bool {
+	s.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(start.Next()), func(i btree.Item) bool {
 		rng = i.(*Replica)
 		return false
 	})
-	if rng == nil || !rng.Desc().ContainsKeyRange(startAddr, endAddr) {
+	if rng == nil || !rng.Desc().ContainsKeyRange(start, end) {
 		return nil
 	}
 	return rng

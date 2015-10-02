@@ -41,12 +41,12 @@ import (
 // TODO(tschottdorf): Consider returning a new BatchRequest, which has more
 // overhead in the common case of a batch which never needs truncation but is
 // less magical.
-func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to roachpb.Key) (func(), int, error) {
+func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to keys.RKey) (func(), int, error) {
 	if !desc.ContainsKey(from) {
-		from = desc.StartKey
+		from = keys.RKey(desc.StartKey)
 	}
 	if !desc.ContainsKeyRange(desc.StartKey, to) || to == nil {
-		to = desc.EndKey
+		to = keys.RKey(desc.EndKey)
 	}
 	truncateOne := func(args roachpb.Request) (bool, []func(), error) {
 		if _, ok := args.(*roachpb.NoopRequest); ok {
@@ -67,12 +67,12 @@ func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to 
 		keyAddr, endKeyAddr := keys.KeyAddress(key), keys.KeyAddress(endKey)
 		if keyAddr.Less(from) {
 			undo = append(undo, func() { header.Start = key })
-			header.Start = from
+			header.Start = from.Key()
 			keyAddr = from
 		}
 		if !endKeyAddr.Less(to) {
 			undo = append(undo, func() { header.End = endKey })
-			header.End = to
+			header.End = to.Key()
 			endKeyAddr = to
 		}
 		// Check whether the truncation has left any keys in the range. If not,
@@ -192,8 +192,8 @@ func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 // affect keys larger than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func prev(ba roachpb.BatchRequest, k roachpb.Key) roachpb.Key {
-	candidate := roachpb.KeyMin
+func prev(ba roachpb.BatchRequest, k keys.RKey) keys.RKey {
+	candidate := keys.RKey(roachpb.KeyMin)
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
 		addr := keys.KeyAddress(h.Start)
@@ -223,8 +223,8 @@ func prev(ba roachpb.BatchRequest, k roachpb.Key) roachpb.Key {
 // affect keys less than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func next(ba roachpb.BatchRequest, k roachpb.Key) roachpb.Key {
-	candidate := roachpb.KeyMax
+func next(ba roachpb.BatchRequest, k keys.RKey) keys.RKey {
+	candidate := keys.RKey(roachpb.KeyMax)
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
 		addr := keys.KeyAddress(h.Start)

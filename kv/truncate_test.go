@@ -94,7 +94,7 @@ func TestTruncate(t *testing.T) {
 		if len(desc.EndKey) == 0 {
 			desc.EndKey = roachpb.Key(test.to)
 		}
-		undo, num, err := truncate(ba, desc, roachpb.Key(test.from), roachpb.Key(test.to))
+		undo, num, err := truncate(ba, desc, keys.RKey(test.from), keys.RKey(test.to))
 		if err != nil {
 			t.Errorf("%d: %s", i, err)
 		}

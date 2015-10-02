@@ -452,7 +452,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) {
 	if len(ba.Txn.ID) == 0 {
 		// TODO(tschottdorf): should really choose the first txn write here.
 		firstKey := ba.Requests[0].GetInner().Header().Start
-		newTxn := roachpb.NewTransaction(ba.Txn.Name, keys.KeyAddress(firstKey), ba.GetUserPriority(),
+		newTxn := roachpb.NewTransaction(ba.Txn.Name, keys.KeyAddress(firstKey).Key(), ba.GetUserPriority(),
 			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
 		// Use existing priority as a minimum. This is used on transaction
 		// aborts to ratchet priority when creating successor transaction.

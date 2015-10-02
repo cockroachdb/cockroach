@@ -193,6 +193,27 @@ func TransactionKey(key roachpb.Key, id []byte) roachpb.Key {
 	return MakeRangeKey(key, LocalTransactionSuffix, roachpb.Key(id))
 }
 
+// RKey denotes a roachpb.Key whose local addressing has been accounted
+// for.
+// TODO(tschottdorf): a range descriptor should contain RKey, not Key;
+// but RKey is in keys and can't move to roachpb since it uses encoding.
+type RKey roachpb.Key
+
+// Key returns the RKey as a roachpb.Key.
+func (rk RKey) Key() roachpb.Key {
+	return roachpb.Key(rk)
+}
+
+// Less compares to RKeys.
+func (rk RKey) Less(otherRK RKey) bool {
+	return rk.Key().Less(otherRK.Key())
+}
+
+// Next returns the RKey that sorts immediately after the given one.
+func (rk RKey) Next() RKey {
+	return RKey(rk.Key().Next())
+}
+
 // KeyAddress returns the address for the key, used to lookup the
 // range containing the key. In the normal case, this is simply the
 // key's value. However, for local keys, such as transaction records,
@@ -209,13 +230,13 @@ func TransactionKey(key roachpb.Key, id []byte) roachpb.Key {
 // entries, and range stats).
 //
 // TODO(pmattis): Should KeyAddress return an error when the key is malformed?
-func KeyAddress(k roachpb.Key) roachpb.Key {
+func KeyAddress(k roachpb.Key) RKey {
 	if k == nil {
 		return nil
 	}
 
 	if !bytes.HasPrefix(k, LocalPrefix) {
-		return k
+		return RKey(k)
 	}
 	if bytes.HasPrefix(k, LocalRangePrefix) {
 		k = k[len(LocalRangePrefix):]
@@ -223,7 +244,7 @@ func KeyAddress(k roachpb.Key) roachpb.Key {
 		if err != nil {
 			panic(err)
 		}
-		return k
+		return RKey(k)
 	}
 	log.Fatalf("local key %q malformed; should contain prefix %q",
 		k, LocalRangePrefix)
@@ -238,7 +259,7 @@ func RangeMetaKey(key roachpb.Key) roachpb.Key {
 	if len(key) == 0 {
 		return roachpb.KeyMin
 	}
-	addr := KeyAddress(key)
+	addr := KeyAddress(key).Key()
 	if !bytes.HasPrefix(addr, MetaPrefix) {
 		return MakeKey(Meta2Prefix, addr)
 	}
@@ -339,10 +360,10 @@ func MakeTablePrefix(tableID uint32) []byte {
 // from range-local into range-global space. Those will currently slip
 // through the cracks.
 // TODO(tschottdorf): ideally method on *BatchRequest. See #2198.
-// TODO(tschottdorf): return a keys.Span?
-func Range(ba roachpb.BatchRequest) (roachpb.Key, roachpb.Key) {
-	from := roachpb.KeyMax
-	to := roachpb.KeyMin
+// TODO(tschottdorf): return a roachpb.Span?
+func Range(ba roachpb.BatchRequest) (RKey, RKey) {
+	from := RKey(roachpb.KeyMax)
+	to := RKey(roachpb.KeyMin)
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
 		if req.Method() == roachpb.Noop {
@@ -350,15 +371,15 @@ func Range(ba roachpb.BatchRequest) (roachpb.Key, roachpb.Key) {
 		}
 		h := req.Header()
 		key := KeyAddress(h.Start)
-		if key.Less(KeyAddress(from)) {
+		if key.Less(from) {
 			// Key is smaller than `from`.
 			from = key
 		}
-		if KeyAddress(to).Less(key) {
+		if to.Less(key) {
 			// Key is larger than `to`.
 			to = key.Next()
 		}
-		if endKey := KeyAddress(h.End); KeyAddress(to).Less(endKey) {
+		if endKey := KeyAddress(h.End); to.Less(endKey) {
 			// EndKey is larger than `to`.
 			to = endKey
 		}

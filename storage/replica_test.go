@@ -223,7 +223,7 @@ func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	return roachpb.NewTransaction(name, keys.KeyAddress(baseKey), userPriority,
+	return roachpb.NewTransaction(name, keys.KeyAddress(baseKey).Key(), userPriority,
 		isolation, now, offset)
 }
 
@@ -425,7 +425,7 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	splitTestRange(tc.store, roachpb.Key("a"), roachpb.Key("a"), t)
+	splitTestRange(tc.store, keys.RKey("a"), keys.RKey("a"), t)
 	gArgs := getArgs(roachpb.Key("b"))
 
 	_, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &gArgs)
@@ -1832,7 +1832,7 @@ func TestEndTransactionGC(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	splitKey := roachpb.Key("c")
+	splitKey := keys.RKey("c")
 	splitTestRange(tc.store, splitKey, splitKey, t)
 	for i, test := range []struct {
 		intents []roachpb.Intent
@@ -1843,11 +1843,11 @@ func TestEndTransactionGC(t *testing.T) {
 		// Two intents inside.
 		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: roachpb.Key("b")}}, true},
 		// Intent range spilling over right endpoint.
-		{[]roachpb.Intent{{Key: roachpb.Key("a"), EndKey: splitKey.Next()}}, false},
+		{[]roachpb.Intent{{Key: roachpb.Key("a"), EndKey: splitKey.Next().Key()}}, false},
 		// Intent range completely outside.
-		{[]roachpb.Intent{{Key: splitKey, EndKey: roachpb.Key("q")}}, false},
+		{[]roachpb.Intent{{Key: splitKey.Key(), EndKey: roachpb.Key("q")}}, false},
 		// Intent inside and outside.
-		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: splitKey}}, false},
+		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: splitKey.Key()}}, false},
 	} {
 		txn := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
 		args, h := endTxnArgs(txn, true)
@@ -1874,9 +1874,9 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	key := roachpb.Key("a")
-	splitKey := key.Next()
+	splitKey := keys.RKey(key).Next()
 	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
-		if args.Method() == roachpb.ResolveIntentRange && args.Header().Start.Equal(splitKey) {
+		if args.Method() == roachpb.ResolveIntentRange && args.Header().Start.Equal(splitKey.Key()) {
 			return util.Errorf("boom")
 		}
 		return nil
@@ -1895,14 +1895,14 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pArgs = putArgs(splitKey, []byte("value"))
+	pArgs = putArgs(splitKey.Key(), []byte("value"))
 	if _, err := client.SendWrappedWith(newRng, newRng.context(), h, &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// End the transaction and resolve the intents.
 	args, h := endTxnArgs(txn, true /* commit */)
-	args.Intents = []roachpb.Intent{{Key: key, EndKey: splitKey.Next()}}
+	args.Intents = []roachpb.Intent{{Key: key, EndKey: splitKey.Next().Key()}}
 	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); err != nil {
 		t.Fatal(err)
 	}

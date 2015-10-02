@@ -105,7 +105,7 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	key, endKey := keys.Range(ba)
 	rng := db.store.LookupReplica(key, endKey)
 	if rng == nil {
-		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(key, endKey, nil))
+		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(key.Key(), endKey.Key(), nil))
 	}
 	ba.RangeID = rng.Desc().RangeID
 	replica := rng.GetReplica()
@@ -303,21 +303,21 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 
 	testCases := []struct {
-		start, end roachpb.Key
+		start, end keys.RKey
 		expRng     *Replica
 	}{
-		{roachpb.Key("a"), roachpb.Key("a\x00"), rng2},
-		{roachpb.Key("a"), roachpb.Key("b"), rng2},
-		{roachpb.Key("a\xff\xff"), roachpb.Key("b"), rng2},
-		{roachpb.Key("c"), roachpb.Key("c\x00"), rng3},
-		{roachpb.Key("c"), roachpb.Key("d"), rng3},
-		{roachpb.Key("c\xff\xff"), roachpb.Key("d"), rng3},
-		{roachpb.Key("x60\xff\xff"), roachpb.Key("a"), nil},
-		{roachpb.Key("x60\xff\xff"), roachpb.Key("a\x00"), nil},
-		{roachpb.Key("d"), roachpb.Key("d"), nil},
-		{roachpb.Key("c\xff\xff"), roachpb.Key("d\x00"), nil},
-		{roachpb.Key("a"), nil, rng2},
-		{roachpb.Key("d"), nil, nil},
+		{keys.RKey("a"), keys.RKey("a\x00"), rng2},
+		{keys.RKey("a"), keys.RKey("b"), rng2},
+		{keys.RKey("a\xff\xff"), keys.RKey("b"), rng2},
+		{keys.RKey("c"), keys.RKey("c\x00"), rng3},
+		{keys.RKey("c"), keys.RKey("d"), rng3},
+		{keys.RKey("c\xff\xff"), keys.RKey("d"), rng3},
+		{keys.RKey("x60\xff\xff"), keys.RKey("a"), nil},
+		{keys.RKey("x60\xff\xff"), keys.RKey("a\x00"), nil},
+		{keys.RKey("d"), keys.RKey("d"), nil},
+		{keys.RKey("c\xff\xff"), keys.RKey("d\x00"), nil},
+		{keys.RKey("a"), nil, rng2},
+		{keys.RKey("d"), nil, nil},
 	}
 
 	for i, test := range testCases {
@@ -407,7 +407,7 @@ func TestStoreRangeSet(t *testing.T) {
 	// Split the first range to insert a new range as second range.
 	// The range is never visited with this iteration.
 	rng := createRange(store, 11, roachpb.Key("a000"), roachpb.Key("a01"))
-	if err = store.SplitRange(store.LookupReplica(roachpb.Key("a00"), nil), rng); err != nil {
+	if err = store.SplitRange(store.LookupReplica(keys.RKey("a00"), nil), rng); err != nil {
 		t.Fatal(err)
 	}
 	// Estimated count will still be 9, as it's cached.
@@ -416,7 +416,7 @@ func TestStoreRangeSet(t *testing.T) {
 	}
 
 	// Now, remove the next range in the iteration and verify we skip the removed range.
-	rng = store.LookupReplica(roachpb.Key("a01"), nil)
+	rng = store.LookupReplica(keys.RKey("a01"), nil)
 	if rng.Desc().RangeID != 2 {
 		t.Errorf("expected fetch of rangeID=2; got %d", rng.Desc().RangeID)
 	}
@@ -621,12 +621,12 @@ func TestStoreSendBadRange(t *testing.T) {
 // client_split_test.go and use AdminSplit instead of this function.
 // See #702
 // TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
-func splitTestRange(store *Store, key, splitKey roachpb.Key, t *testing.T) *Replica {
+func splitTestRange(store *Store, key, splitKey keys.RKey, t *testing.T) *Replica {
 	rng := store.LookupReplica(key, nil)
 	if rng == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
 	}
-	desc, err := store.NewRangeDescriptor(splitKey, rng.Desc().EndKey, rng.Desc().Replicas)
+	desc, err := store.NewRangeDescriptor(splitKey.Key(), rng.Desc().EndKey, rng.Desc().Replicas)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,7 +647,7 @@ func TestStoreSendOutOfRange(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	rng2 := splitTestRange(store, roachpb.KeyMin, roachpb.Key("b"), t)
+	rng2 := splitTestRange(store, keys.RKey(roachpb.KeyMin), keys.RKey(roachpb.Key("b")), t)
 
 	// Range 1 is from KeyMin to "b", so reading "b" from range 1 should
 	// fail because it's just after the range boundary.
@@ -694,37 +694,37 @@ func TestStoreRangesByKey(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	r0 := store.LookupReplica(roachpb.KeyMin, nil)
-	r1 := splitTestRange(store, roachpb.KeyMin, roachpb.Key("A"), t)
-	r2 := splitTestRange(store, roachpb.Key("A"), roachpb.Key("C"), t)
-	r3 := splitTestRange(store, roachpb.Key("C"), roachpb.Key("X"), t)
-	r4 := splitTestRange(store, roachpb.Key("X"), roachpb.Key("ZZ"), t)
+	r0 := store.LookupReplica(keys.RKey(roachpb.KeyMin), nil)
+	r1 := splitTestRange(store, keys.RKey(roachpb.KeyMin), keys.RKey("A"), t)
+	r2 := splitTestRange(store, keys.RKey("A"), keys.RKey("C"), t)
+	r3 := splitTestRange(store, keys.RKey("C"), keys.RKey("X"), t)
+	r4 := splitTestRange(store, keys.RKey("X"), keys.RKey("ZZ"), t)
 
-	if r := store.LookupReplica(roachpb.Key("0"), nil); r != r0 {
+	if r := store.LookupReplica(keys.RKey("0"), nil); r != r0 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r0.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("B"), nil); r != r1 {
+	if r := store.LookupReplica(keys.RKey("B"), nil); r != r1 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r1.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("C"), nil); r != r2 {
+	if r := store.LookupReplica(keys.RKey("C"), nil); r != r2 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r2.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("M"), nil); r != r2 {
+	if r := store.LookupReplica(keys.RKey("M"), nil); r != r2 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r2.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("X"), nil); r != r3 {
+	if r := store.LookupReplica(keys.RKey("X"), nil); r != r3 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r3.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("Z"), nil); r != r3 {
+	if r := store.LookupReplica(keys.RKey("Z"), nil); r != r3 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r3.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("ZZ"), nil); r != r4 {
+	if r := store.LookupReplica(keys.RKey("ZZ"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("\xff\x00"), nil); r != r4 {
+	if r := store.LookupReplica(keys.RKey("\xff\x00"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
-	if store.LookupReplica(roachpb.KeyMax, nil) != nil {
+	if store.LookupReplica(keys.RKey(roachpb.KeyMax), nil) != nil {
 		t.Errorf("expected roachpb.KeyMax to not have an associated range")
 	}
 }
@@ -741,9 +741,9 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		rng         *Replica
 		expMaxBytes int64
 	}{
-		{store.LookupReplica(roachpb.KeyMin, nil),
+		{store.LookupReplica(keys.RKey(roachpb.KeyMin), nil),
 			config.DefaultZoneConfig.RangeMaxBytes},
-		{splitTestRange(store, roachpb.KeyMin, keys.MakeTablePrefix(1000), t),
+		{splitTestRange(store, keys.RKey(roachpb.KeyMin), keys.MakeTablePrefix(1000), t),
 			1 << 20},
 		{splitTestRange(store, keys.MakeTablePrefix(1000), keys.MakeTablePrefix(1001), t),
 			config.DefaultZoneConfig.RangeMaxBytes},

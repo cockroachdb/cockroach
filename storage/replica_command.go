@@ -1294,7 +1294,7 @@ func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roach
 	// look up the descriptor here only to get the new end key and then
 	// repeat the lookup inside the transaction.
 	{
-		rightRng := r.rm.LookupReplica(origLeftDesc.EndKey, nil)
+		rightRng := r.rm.LookupReplica(keys.RKey(origLeftDesc.EndKey), nil)
 		if rightRng == nil {
 			return reply, util.Errorf("ranges not collocated")
 		}

@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -62,10 +63,10 @@ func TestBatchPrevNext(t *testing.T) {
 			args.Start, args.End = span.Start, span.End
 			ba.Add(args)
 		}
-		if next := next(ba, roachpb.Key(test.key)); !bytes.Equal(next, roachpb.Key(test.expFW)) {
+		if next := next(ba, keys.RKey(test.key)); !bytes.Equal(next, roachpb.Key(test.expFW)) {
 			t.Errorf("%d: next: expected %q, got %q", i, test.expFW, next)
 		}
-		if prev := prev(ba, roachpb.Key(test.key)); !bytes.Equal(prev, roachpb.Key(test.expBW)) {
+		if prev := prev(ba, keys.RKey(test.key)); !bytes.Equal(prev, roachpb.Key(test.expBW)) {
 			t.Errorf("%d: prev: expected %q, got %q", i, test.expBW, prev)
 		}
 	}

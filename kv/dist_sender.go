@@ -384,16 +384,17 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 // Note that `from` and `to` are not necessarily Key and EndKey from a
 // RequestHeader; it's assumed that they've been translated to key addresses
 // already (via KeyAddress).
-func (ds *DistSender) getDescriptors(from, to roachpb.Key, options lookupOptions) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
+func (ds *DistSender) getDescriptors(from, to keys.RKey, options lookupOptions) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
 	var desc *roachpb.RangeDescriptor
 	var err error
-	var descKey roachpb.Key
+	var descKey keys.RKey
 	if !options.useReverseScan {
 		descKey = from
 	} else {
 		descKey = to
 	}
-	desc, err = ds.rangeCache.LookupRangeDescriptor(descKey, options)
+	// TODO(tschottdorf): thread keys.RKey through the range cache code.
+	desc, err = ds.rangeCache.LookupRangeDescriptor(descKey.Key(), options)
 
 	if err != nil {
 		return nil, false, nil, roachpb.NewError(err)
@@ -402,13 +403,13 @@ func (ds *DistSender) getDescriptors(from, to roachpb.Key, options lookupOptions
 	// Checks whether need to get next range descriptor. If so, returns true.
 	needAnother := func(desc *roachpb.RangeDescriptor, isReverse bool) bool {
 		if isReverse {
-			return from.Less(desc.StartKey)
+			return from.Less(keys.RKey(desc.StartKey))
 		}
-		return desc.EndKey.Less(to)
+		return keys.RKey(desc.EndKey).Less(to)
 	}
 
 	evict := func() {
-		ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, options.useReverseScan)
+		ds.rangeCache.EvictCachedRangeDescriptor(descKey.Key(), desc, options.useReverseScan)
 	}
 
 	return desc, needAnother(desc, options.useReverseScan), evict, nil
@@ -719,7 +720,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// We use the StartKey of the current descriptor as opposed to the
 			// EndKey of the previous one since that doesn't have bugs when
 			// stale descriptors come into play.
-			to = prev(ba, desc.StartKey)
+			to = prev(ba, keys.RKey(desc.StartKey))
 		} else {
 			// In next iteration, query next range.
 			// It's important that we use the EndKey of the current descriptor
@@ -728,7 +729,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// one, and unless both descriptors are stale, the next descriptor's
 			// StartKey would move us to the beginning of the current range,
 			// resulting in a duplicate scan.
-			from = next(ba, desc.EndKey)
+			from = next(ba, keys.RKey(desc.EndKey))
 		}
 		trace.Event("querying next range")
 	}
