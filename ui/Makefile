@@ -46,8 +46,9 @@ CSS_TARGET              := build/app.css
 CSS_DEBUG_TARGET        := build/app_debug.css
 REMOTE_DEPS             := npm.installed bower.installed tsd.installed
 INDEX                   := index.html
-GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
-GOBINDATA_DEBUG_DEPS    := $(TYPESCRIPT_TARGET) $(CSS_DEBUG_TARGET)
+GOBINDATA_FONTS         := ./fonts/*
+GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET) $(GOBINDATA_FONTS)
+GOBINDATA_DEBUG_DEPS    := $(TYPESCRIPT_TARGET) $(CSS_DEBUG_TARGET) $(GOBINDATA_FONTS)
 GOBINDATA_SOURCES       := $(BOWER_COMPONENTS)/d3/d3.min.js \
                            $(BOWER_COMPONENTS)/lodash/lodash.min.js \
                            $(BOWER_COMPONENTS)/mithril/mithril.js \
@@ -91,10 +92,13 @@ $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	tsc -p $(TEST_ROOT)
 
 $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
-	stylus --compress $(STYL_ROOT)/app.styl --out $@
+	stylus $(STYL_ROOT)/app.styl \
+	       --compress \
+	       --out $@
 
 $(CSS_DEBUG_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
-	stylus $(STYL_ROOT)/app.styl --out $@
+	stylus $(STYL_ROOT)/app.styl \
+	       --out $@
 
 $(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
 	rm -f $(INDEX)
