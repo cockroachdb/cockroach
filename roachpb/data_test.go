@@ -22,6 +22,7 @@ import (
 	"math"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -265,6 +266,37 @@ func TestValueChecksumWithBytes(t *testing.T) {
 	v.Bytes = []byte("abcd")
 	if err := v.Verify(k); err == nil {
 		t.Error("expected checksum verification failure on different value")
+	}
+}
+
+func TestSetGetChecked(t *testing.T) {
+	v := Value{}
+
+	v.SetBytes(nil)
+	if _, err := v.GetBytesChecked(); err != nil {
+		t.Fatal(err)
+	}
+
+	v.SetFloat(1.1)
+	if _, err := v.GetFloat(); err != nil {
+		t.Fatal(err)
+	}
+
+	v.SetInt(1)
+	if _, err := v.GetInt(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := v.SetProto(&Value{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.GetBytesChecked(); err != nil {
+		t.Fatal(err)
+	}
+
+	v.SetTime(time.Time{})
+	if _, err := v.GetTime(); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -80,9 +80,9 @@ OK
 	}
 
 	expectedRows := [][]string{
-		{`"parentID"`, `"INT"`, `true`, `NULL`},
-		{`"name"`, `"STRING"`, `true`, `NULL`},
-		{`"id"`, `"INT"`, `true`, `NULL`},
+		{`parentID`, `INT`, `true`, `NULL`},
+		{`name`, `STRING`, `true`, `NULL`},
+		{`id`, `INT`, `true`, `NULL`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
@@ -93,13 +93,13 @@ OK
 	}
 
 	expected = `
-+------------+----------+------+---------+
-|   Field    |   Type   | Null | Default |
-+------------+----------+------+---------+
-| "parentID" | "INT"    | true | NULL    |
-| "name"     | "STRING" | true | NULL    |
-| "id"       | "INT"    | true | NULL    |
-+------------+----------+------+---------+
++----------+--------+------+---------+
+|  Field   |  Type  | Null | Default |
++----------+--------+------+---------+
+| parentID | INT    | true | NULL    |
+| name     | STRING | true | NULL    |
+| id       | INT    | true | NULL    |
++----------+--------+------+---------+
 `
 
 	if a, e := b.String(), expected[1:]; a != e {
@@ -113,11 +113,11 @@ OK
 	}
 
 	expected = `
-+----------+--------------+----+
-| parentID |     name     | id |
-+----------+--------------+----+
-| 1        | "descriptor" | 3  |
-+----------+--------------+----+
++----------+------------+----+
+| parentID |    name    | id |
++----------+------------+----+
+| 1        | descriptor | 3  |
++----------+------------+----+
 `
 	if a, e := b.String(), expected[1:]; a != e {
 		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)

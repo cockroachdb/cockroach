@@ -157,7 +157,7 @@ func formatVal(val interface{}) string {
 	switch t := val.(type) {
 	case nil:
 		return "NULL"
-	case string:
+	case []byte:
 		// Ensure that binary protobufs print escaped.
 		return fmt.Sprintf("%q", t)
 	}
