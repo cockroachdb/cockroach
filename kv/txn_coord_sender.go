@@ -286,24 +286,6 @@ func (tc *TxnCoordSender) startStats() {
 	}
 }
 
-// UpdateForBatch updates the first argument (the header of a request contained
-// in a batch) from the second one (the batch header), returning an error when
-// inconsistencies are found.
-// It is checked that the individual call does not have a UserPriority
-// or Txn set that differs from the batch's.
-// TODO(tschottdorf): will go with #2143.
-func updateForBatch(args roachpb.Request, bHeader roachpb.BatchRequest_Header) error {
-	// Disallow transaction, user and priority on individual calls, unless
-	// equal.
-	aHeader := args.Header()
-	if aPrio := aHeader.GetUserPriority(); aPrio != roachpb.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
-		return util.Errorf("conflicting user priority on call in batch")
-	}
-	aHeader.UserPriority = bHeader.UserPriority
-	aHeader.Txn = bHeader.Txn // reqs always take Txn from batch
-	return nil
-}
-
 // Send implements the batch.Sender interface. If the request is part of a
 // transaction, the TxnCoordSender adds the transaction to a map of active
 // transactions and begins heartbeating it. Every subsequent request for the
@@ -324,15 +306,6 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	defer trace.Finalize()
 	defer trace.Epoch("sending batch")()
 	ctx = tracer.ToCtx(ctx, trace)
-
-	// TODO(tschottdorf): No looping through the batch will be necessary once
-	// we've eliminated all the redundancies.
-	for _, arg := range ba.Requests {
-		trace.Event(fmt.Sprintf("%T", arg.GetValue()))
-		if err := updateForBatch(arg.GetInner(), ba.BatchRequest_Header); err != nil {
-			return nil, roachpb.NewError(err)
-		}
-	}
 
 	var id string // optional transaction ID
 	if ba.Txn != nil {
@@ -610,7 +583,6 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	hb.Key = txn.Key
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
-	ba.Key = txn.Key
 	ba.Txn = &txn
 	ba.Add(hb)
 

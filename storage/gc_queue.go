@@ -144,11 +144,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// timestamp to compute intent age. While this should be fine, could
 	// consider adding a Now timestamp to GCRequest which would be used
 	// instead.
-	gcArgs := &roachpb.GCRequest{
-		RequestHeader: roachpb.RequestHeader{
-			RangeID: desc.RangeID,
-		},
-	}
+	gcArgs := &roachpb.GCRequest{}
 	var mu sync.Mutex
 	var oldestIntentNanos int64 = math.MaxInt64
 	var expBaseKey roachpb.Key
@@ -273,7 +269,10 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// Send GC request through range.
 	gcMeta.OldestIntentNanos = proto.Int64(oldestIntentNanos)
 	gcArgs.GCMeta = *gcMeta
-	if _, err := client.SendWrapped(repl, repl.context(), gcArgs); err != nil {
+	if _, err := client.SendWrappedWith(repl, repl.context(), roachpb.BatchRequest_Header{
+		// Technically not needed since we're talking directly to the Range.
+		RangeID: desc.RangeID,
+	}, gcArgs); err != nil {
 		return err
 	}
 

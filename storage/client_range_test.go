@@ -60,9 +60,9 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	// Advance the leader's clock ahead of the followers (by more than
 	// MaxOffset but less than the leader lease) and execute a command.
 	manuals[0].Increment(int64(500 * time.Millisecond))
-	incArgs := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
+	incArgs := incrementArgs([]byte("a"), 5)
 	ts := clocks[0].Now()
-	if _, err := client.SendWrappedAt(mtc.stores[0], nil, ts, &incArgs); err != nil {
+	if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.BatchRequest_Header{Timestamp: ts}, &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -110,8 +110,8 @@ func TestRejectFutureCommand(t *testing.T) {
 
 	// First do a write. The first write will advance the clock by MaxOffset
 	// because of the read cache's low water mark.
-	getArgs := putArgs([]byte("b"), []byte("b"), 1, mtc.stores[0].StoreID())
-	if _, err := client.SendWrapped(mtc.stores[0], nil, &getArgs); err != nil {
+	getArgs := putArgs([]byte("b"), []byte("b"))
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &getArgs); err != nil {
 		t.Fatal(err)
 	}
 	if now := clock.Now(); now.WallTime != int64(maxOffset) {
@@ -126,9 +126,9 @@ func TestRejectFutureCommand(t *testing.T) {
 	// Commands with a future timestamp that is within the MaxOffset
 	// bound will be accepted and will cause the clock to advance.
 	for i := int64(0); i < 3; i++ {
-		incArgs := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
+		incArgs := incrementArgs([]byte("a"), 5)
 		ts := roachpb.ZeroTimestamp.Add(startTime+((i+1)*30)*int64(time.Millisecond), 0)
-		if _, err := client.SendWrappedAt(mtc.stores[0], nil, ts, &incArgs); err != nil {
+		if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.BatchRequest_Header{Timestamp: ts}, &incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -137,9 +137,9 @@ func TestRejectFutureCommand(t *testing.T) {
 	}
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
-	incArgs := incrementArgs([]byte("a"), 11, 1, mtc.stores[0].StoreID())
+	incArgs := incrementArgs([]byte("a"), 11)
 	ts := roachpb.ZeroTimestamp.Add(int64((time.Duration(startTime)+maxOffset+1)*time.Millisecond), 0)
-	if _, err := client.SendWrappedAt(mtc.stores[0], nil, ts, &incArgs); err == nil {
+	if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.BatchRequest_Header{Timestamp: ts}, &incArgs); err == nil {
 		t.Fatalf("expected clock offset error but got nil")
 	}
 
@@ -187,10 +187,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	key := "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
-	storage.TestingCommandFilter = func(args roachpb.Request) error {
+	storage.TestingCommandFilter = func(args roachpb.Request, h roachpb.BatchRequest_Header) error {
 		if _, ok := args.(*roachpb.GetRequest); ok &&
 			args.Header().Key.Equal(roachpb.Key(key)) &&
-			args.Header().Txn == nil {
+			h.Txn == nil {
 			// The Reader executes two get operations, each of which triggers two get requests
 			// (the first request fails and triggers txn push, and then the second request
 			// succeeds). Returns an error for the fourth get request to avoid timestamp cache
@@ -288,13 +288,13 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	priority := int32(math.MaxInt32)
 	requestHeader := roachpb.RequestHeader{
-		Key:          roachpb.Key(key),
-		RangeID:      1,
-		Replica:      roachpb.ReplicaDescriptor{StoreID: store.StoreID()},
-		UserPriority: &priority,
+		Key: roachpb.Key(key),
 	}
 	ts := clock.Now()
-	if _, err := client.SendWrappedAt(store, nil, ts, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+		Timestamp:    ts,
+		UserPriority: &priority,
+	}, &roachpb.GetRequest{RequestHeader: requestHeader}); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
 
@@ -309,7 +309,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	ts = clock.Now()
-	if _, err := client.SendWrappedAt(store, nil, ts, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+		Timestamp:    ts,
+		UserPriority: &priority,
+	}, &roachpb.GetRequest{RequestHeader: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
 	}
 
@@ -327,14 +330,14 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	// Init test ranges:
 	// ["","a"), ["a","c"), ["c","e"), ["e","g") and ["g","\xff\xff").
 	splits := []roachpb.AdminSplitRequest{
-		adminSplitArgs(roachpb.Key("g"), roachpb.Key("g"), 1, store.StoreID()),
-		adminSplitArgs(roachpb.Key("e"), roachpb.Key("e"), 1, store.StoreID()),
-		adminSplitArgs(roachpb.Key("c"), roachpb.Key("c"), 1, store.StoreID()),
-		adminSplitArgs(roachpb.Key("a"), roachpb.Key("a"), 1, store.StoreID()),
+		adminSplitArgs(roachpb.Key("g"), roachpb.Key("g")),
+		adminSplitArgs(roachpb.Key("e"), roachpb.Key("e")),
+		adminSplitArgs(roachpb.Key("c"), roachpb.Key("c")),
+		adminSplitArgs(roachpb.Key("a"), roachpb.Key("a")),
 	}
 
 	for _, split := range splits {
-		_, err := client.SendWrapped(store, nil, &split)
+		_, err := client.SendWrapped(rg1(store), nil, &split)
 		if err != nil {
 			t.Fatalf("%q: split unexpected error: %s", split.SplitKey, err)
 		}
@@ -343,24 +346,19 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	// Resolve the intents.
 	scanArgs := roachpb.ScanRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:     roachpb.KeyMin,
-			EndKey:  keys.RangeMetaKey(roachpb.KeyMax),
-			RangeID: 1,
-			Replica: roachpb.ReplicaDescriptor{StoreID: store.StoreID()},
+			Key:    roachpb.KeyMin,
+			EndKey: keys.RangeMetaKey(roachpb.KeyMax),
 		},
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
-		_, err := client.SendWrapped(store, nil, &scanArgs)
+		_, err := client.SendWrapped(rg1(store), nil, &scanArgs)
 		return err
 	})
 
 	revScanArgs := func(key []byte, maxResults int32) *roachpb.RangeLookupRequest {
 		return &roachpb.RangeLookupRequest{
 			RequestHeader: roachpb.RequestHeader{
-				Key:             key,
-				RangeID:         1,
-				Replica:         roachpb.ReplicaDescriptor{StoreID: store.StoreID()},
-				ReadConsistency: roachpb.INCONSISTENT,
+				Key: key,
 			},
 			MaxRanges: maxResults,
 			Reverse:   true,
@@ -420,7 +418,9 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		resp, err := client.SendWrapped(store, nil, test.request)
+		resp, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, test.request)
 		if err != nil {
 			t.Fatalf("RangeLookup error: %s", err)
 		}

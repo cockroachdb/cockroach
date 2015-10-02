@@ -213,8 +213,7 @@ func (ds *DistSender) rangeLookup(key roachpb.Key, options lookupOptions,
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:             key,
-			ReadConsistency: roachpb.INCONSISTENT,
+			Key: key,
 		},
 		MaxRanges:       ds.rangeLookupMaxRanges,
 		ConsiderIntents: options.considerIntents,
@@ -473,10 +472,6 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 // which doesn't need to be subdivided further before going to a range (so no
 // mixing of forward and reverse scans, etc).
 func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	// TODO(tschottdorf): prepare for removing Key and EndKey from BatchRequest,
-	// making sure that anything that relies on them goes bust.
-	ba.Key, ba.EndKey = nil, nil
-
 	isReverse := ba.IsReverse()
 
 	trace := tracer.FromCtx(ctx)
@@ -550,11 +545,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if trErr != nil {
 					return nil, roachpb.NewError(trErr)
 				}
-				// TODO(tschottdorf): make key range on batch redundant. The
-				// requests within dictate it anyways.
-				ba.Key, ba.EndKey = keys.Range(ba)
 				reply, err := ds.sendAttempt(trace, ba, desc)
-				ba.Key, ba.EndKey = nil, nil
 
 				if err != nil {
 					if log.V(1) {

@@ -83,24 +83,26 @@ func newTxn(clock *hlc.Clock, baseKey roachpb.Key) *roachpb.Transaction {
 
 // createPutRequest returns a ready-made request using the
 // specified key, value & txn ID.
-func createPutRequest(key roachpb.Key, value []byte, txn *roachpb.Transaction) *roachpb.PutRequest {
+func createPutRequest(key roachpb.Key, value []byte, txn *roachpb.Transaction) (*roachpb.PutRequest, roachpb.BatchRequest_Header) {
+	h := roachpb.BatchRequest_Header{}
+	h.Txn = txn
 	return &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
-			Txn: txn,
 		},
 		Value: roachpb.Value{Bytes: value},
-	}
+	}, h
 }
 
-func createDeleteRangeRequest(key, endKey roachpb.Key, txn *roachpb.Transaction) *roachpb.DeleteRangeRequest {
+func createDeleteRangeRequest(key, endKey roachpb.Key, txn *roachpb.Transaction) (*roachpb.DeleteRangeRequest, roachpb.BatchRequest_Header) {
+	h := roachpb.BatchRequest_Header{}
+	h.Txn = txn
 	return &roachpb.DeleteRangeRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    key,
 			EndKey: endKey,
-			Txn:    txn,
 		},
-	}
+	}, h
 }
 
 // TestTxnCoordSenderAddRequest verifies adding a request creates a
@@ -113,10 +115,10 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	defer teardownHeartbeats(s.Sender)
 
 	txn := newTxn(s.Clock, roachpb.Key("a"))
-	put := createPutRequest(roachpb.Key("a"), []byte("value"), txn)
+	put, h := createPutRequest(roachpb.Key("a"), []byte("value"), txn)
 
 	// Put request will create a new transaction.
-	reply, err := client.SendWrapped(s.Sender, nil, put)
+	reply, err := client.SendWrappedWith(s.Sender, nil, h, put)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,8 +136,8 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	s.Sender.Lock()
 	s.Manual.Set(1)
 	s.Sender.Unlock()
-	put.Txn.Writing = true
-	if _, err := client.SendWrapped(s.Sender, nil, put); err != nil {
+	h.Txn.Writing = true
+	if _, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.Sender.txns) != 1 {
@@ -156,14 +158,15 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	defer teardownHeartbeats(s.Sender)
 
 	key := roachpb.Key("key")
-	reply, err := client.SendWrapped(s.Sender, nil, &roachpb.PutRequest{
+	reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+		UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
+		Txn: &roachpb.Transaction{
+			Name:      "test txn",
+			Isolation: roachpb.SNAPSHOT,
+		},
+	}, &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:          key,
-			UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
-			Txn: &roachpb.Transaction{
-				Name:      "test txn",
-				Isolation: roachpb.SNAPSHOT,
-			},
+			Key: key,
 		},
 	})
 	if err != nil {
@@ -192,15 +195,16 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	reply, err := client.SendWrapped(s.Sender, nil, &roachpb.PutRequest{
+	reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+		UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
+		Txn: &roachpb.Transaction{
+			Name:      "test txn",
+			Isolation: roachpb.SNAPSHOT,
+			Priority:  11,
+		},
+	}, &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:          roachpb.Key("key"),
-			UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
-			Txn: &roachpb.Transaction{
-				Name:      "test txn",
-				Isolation: roachpb.SNAPSHOT,
-				Priority:  11,
-			},
+			Key: roachpb.Key("key"),
 		},
 	})
 	if err != nil {
@@ -234,13 +238,13 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	for _, rng := range ranges {
 		if rng.end != nil {
-			delRangeReq := createDeleteRangeRequest(rng.start, rng.end, txn)
-			if _, err := client.SendWrapped(s.Sender, nil, delRangeReq); err != nil {
+			delRangeReq, h := createDeleteRangeRequest(rng.start, rng.end, txn)
+			if _, err := client.SendWrappedWith(s.Sender, nil, h, delRangeReq); err != nil {
 				t.Fatal(err)
 			}
 		} else {
-			putReq := createPutRequest(rng.start, []byte("value"), txn)
-			if _, err := client.SendWrapped(s.Sender, nil, putReq); err != nil {
+			putReq, h := createPutRequest(rng.start, []byte("value"), txn)
+			if _, err := client.SendWrappedWith(s.Sender, nil, h, putReq); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -268,12 +272,12 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 
 	txn1 := newTxn(s.Clock, roachpb.Key("a"))
 	txn2 := newTxn(s.Clock, roachpb.Key("b"))
-	put1 := createPutRequest(roachpb.Key("a"), []byte("value"), txn1)
-	if _, err := client.SendWrapped(s.Sender, nil, put1); err != nil {
+	put1, h := createPutRequest(roachpb.Key("a"), []byte("value"), txn1)
+	if _, err := client.SendWrappedWith(s.Sender, nil, h, put1); err != nil {
 		t.Fatal(err)
 	}
-	put2 := createPutRequest(roachpb.Key("b"), []byte("value"), txn2)
-	if _, err := client.SendWrapped(s.Sender, nil, put2); err != nil {
+	put2, h := createPutRequest(roachpb.Key("b"), []byte("value"), txn2)
+	if _, err := client.SendWrappedWith(s.Sender, nil, h, put2); err != nil {
 		t.Fatal(err)
 	}
 
@@ -294,8 +298,8 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
 	initialTxn := newTxn(s.Clock, roachpb.Key("a"))
-	put := createPutRequest(roachpb.Key("a"), []byte("value"), initialTxn)
-	if reply, err := client.SendWrapped(s.Sender, nil, put); err != nil {
+	put, h := createPutRequest(roachpb.Key("a"), []byte("value"), initialTxn)
+	if reply, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
 		t.Fatal(err)
 	} else {
 		*initialTxn = *reply.Header().Txn
@@ -330,10 +334,11 @@ func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Tra
 	hb := &roachpb.HeartbeatTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
-			Txn: txn,
 		},
 	}
-	reply, err := client.SendWrapped(coord, nil, hb)
+	reply, err := client.SendWrappedWith(coord, nil, roachpb.BatchRequest_Header{
+		Txn: txn,
+	}, hb)
 	if err != nil {
 		return false, nil, err
 	}
@@ -370,18 +375,15 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 
 	txn := newTxn(s.Clock, roachpb.Key("a"))
 	key := roachpb.Key("a")
-	put := createPutRequest(key, []byte("value"), txn)
-	reply, err := client.SendWrapped(s.Sender, nil, put)
+	put, h := createPutRequest(key, []byte("value"), txn)
+	reply, err := client.SendWrappedWith(s.Sender, nil, h, put)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pReply := reply.(*roachpb.PutResponse)
-	if _, err := client.SendWrapped(s.Sender, nil, &roachpb.EndTransactionRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Txn: pReply.Header().Txn,
-		},
-		Commit: true,
-	}); err != nil {
+	if _, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+		Txn: pReply.Header().Txn,
+	}, &roachpb.EndTransactionRequest{Commit: true}); err != nil {
 		t.Fatal(err)
 	}
 	verifyCleanup(key, s.Sender, s.Eng, t)
@@ -398,8 +400,8 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	key := roachpb.Key("a")
 	txn := newTxn(s.Clock, key)
 	txn.Priority = 1
-	put := createPutRequest(key, []byte("value"), txn)
-	if reply, err := client.SendWrapped(s.Sender, nil, put); err != nil {
+	put, h := createPutRequest(key, []byte("value"), txn)
+	if reply, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
 		t.Fatal(err)
 	} else {
 		txn = reply.Header().Txn
@@ -424,12 +426,11 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// Now end the transaction and verify we've cleanup up, even though
 	// end transaction failed.
 	etArgs := &roachpb.EndTransactionRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Txn: txn,
-		},
 		Commit: true,
 	}
-	_, err := client.SendWrapped(s.Sender, nil, etArgs)
+	_, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+		Txn: txn,
+	}, etArgs)
 	switch err.(type) {
 	case *roachpb.TransactionAbortedError:
 		// Expected
@@ -450,8 +451,8 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
 	txn := newTxn(s.Clock, roachpb.Key("a"))
-	put := createPutRequest(roachpb.Key("a"), []byte("value"), txn)
-	if _, err := client.SendWrapped(s.Sender, nil, put); err != nil {
+	put, h := createPutRequest(roachpb.Key("a"), []byte("value"), txn)
+	if _, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
 		t.Fatal(err)
 	}
 
@@ -506,14 +507,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 
 	var testPutReq = &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:          roachpb.Key("test-key"),
-			UserPriority: proto.Int32(-1),
-			Txn: &roachpb.Transaction{
-				Name: "test txn",
-			},
-			Replica: roachpb.ReplicaDescriptor{
-				NodeID: 12345,
-			},
+			Key: roachpb.Key("test-key"),
 		},
 	}
 
@@ -526,7 +520,15 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		var err error
 		{
 			var r roachpb.Response
-			if r, err = client.SendWrapped(ts, nil, proto.Clone(testPutReq).(roachpb.Request)); err != nil {
+			if r, err = client.SendWrappedWith(ts, nil, roachpb.BatchRequest_Header{
+				UserPriority: proto.Int32(-1),
+				Txn: &roachpb.Transaction{
+					Name: "test txn",
+				},
+				Replica: roachpb.ReplicaDescriptor{
+					NodeID: 12345,
+				},
+			}, proto.Clone(testPutReq).(roachpb.Request)); err != nil {
 				t.Fatal(err)
 			}
 			reply = r.(*roachpb.PutResponse)
@@ -578,18 +580,17 @@ func TestTxnDrainingNode(t *testing.T) {
 	txn := newTxn(s.Clock, roachpb.Key("a"))
 	key := roachpb.Key("a")
 	beginTxn := func() {
-		put := createPutRequest(key, []byte("value"), txn)
-		if reply, err := client.SendWrapped(s.Sender, nil, put); err != nil {
+		put, h := createPutRequest(key, []byte("value"), txn)
+		if reply, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
 			t.Fatal(err)
 		} else {
 			txn = reply.Header().Txn
 		}
 	}
 	endTxn := func() {
-		if _, err := client.SendWrapped(s.Sender, nil, &roachpb.EndTransactionRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Txn: txn,
-			},
+		if _, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+			Txn: txn,
+		}, &roachpb.EndTransactionRequest{
 			Commit: true}); err != nil {
 			t.Fatal(err)
 		}
@@ -611,12 +612,13 @@ func TestTxnDrainingNode(t *testing.T) {
 
 	// Attempt to start another transaction, but it should be too late.
 	key = roachpb.Key("key")
-	_, err := client.SendWrapped(s.Sender, nil, &roachpb.PutRequest{
+	_, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+		Txn: &roachpb.Transaction{
+			Name: "test txn",
+		},
+	}, &roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
-			Txn: &roachpb.Transaction{
-				Name: "test txn",
-			},
 		},
 	})
 	if _, ok := err.(*roachpb.NodeUnavailableError); !ok {
@@ -644,12 +646,11 @@ func TestTxnMultipleCoord(t *testing.T) {
 		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), false, true},
 		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), true, false},
 	} {
-		{
-			txn := newTxn(s.Clock, roachpb.Key("a"))
-			txn.Writing = tc.writing
-			tc.args.Header().Txn = txn
-		}
-		reply, err := client.SendWrapped(s.Sender, nil, tc.args)
+		txn := newTxn(s.Clock, roachpb.Key("a"))
+		txn.Writing = tc.writing
+		reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+			Txn: txn,
+		}, tc.args)
 		if err == nil != tc.ok {
 			t.Errorf("%d: %T (writing=%t): success_expected=%t, but got: %v",
 				i, tc.args, tc.writing, tc.ok, err)
@@ -658,7 +659,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 			continue
 		}
 
-		txn := reply.Header().Txn
+		txn = reply.Header().Txn
 		// The transaction should come back rw if it started rw or if we just
 		// wrote.
 		isWrite := roachpb.IsTransactionWrite(tc.args)
@@ -669,10 +670,9 @@ func TestTxnMultipleCoord(t *testing.T) {
 			continue
 		}
 		// Abort for clean shutdown.
-		if _, err := client.SendWrapped(s.Sender, nil, &roachpb.EndTransactionRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Txn: txn,
-			},
+		if _, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+			Txn: txn,
+		}, &roachpb.EndTransactionRequest{
 			Commit: false,
 		}); err != nil {
 			t.Fatal(err)

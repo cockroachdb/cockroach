@@ -86,27 +86,17 @@ func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stoppe
 	return f(u, ctx, retryOptions, stopper)
 }
 
-// SendWrappedAt is a convenience function which wraps the request in a batch
+// SendWrappedWith is a convenience function which wraps the request in a batch
 // and sends it via the provided Sender at the given timestamp. It returns the
 // unwrapped response or an error. It's valid to pass a `nil` context;
 // context.Background() is used in that case.
-func SendWrappedAt(sender Sender, ctx context.Context, ts roachpb.Timestamp, args roachpb.Request) (roachpb.Response, error) {
+func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.BatchRequest_Header, args roachpb.Request) (roachpb.Response, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
 		ba := &roachpb.BatchRequest{}
-		ba.Timestamp = ts
-		{
-			h := args.Header()
-			ba.Key, ba.EndKey = h.Key, h.EndKey
-			ba.CmdID = h.CmdID
-			ba.Replica = h.Replica
-			ba.RangeID = h.RangeID
-			ba.UserPriority = h.UserPriority
-			ba.Txn = h.Txn
-			ba.ReadConsistency = h.ReadConsistency
-		}
+		ba.BatchRequest_Header = h
 		ba.Add(args)
 		return ba, func(br *roachpb.BatchResponse) roachpb.Response {
 			unwrappedReply := br.Responses[0].GetInner()
@@ -129,7 +119,15 @@ func SendWrappedAt(sender Sender, ctx context.Context, ts roachpb.Timestamp, arg
 	return unwrap(br), nil
 }
 
-// SendWrapped is identical to SendWrappedAt with a zero timestamp.
+// SendWrapped is identical to SendWrappedAt with a zero header.
 func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
-	return SendWrappedAt(sender, ctx, roachpb.ZeroTimestamp, args)
+	return SendWrappedWith(sender, ctx, roachpb.BatchRequest_Header{}, args)
+}
+
+// Wrap returns a Sender which applies the given function before delegating to
+// the supplied Sender.
+func Wrap(sender Sender, f func(roachpb.BatchRequest) roachpb.BatchRequest) Sender {
+	return SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		return sender.Send(ctx, f(ba))
+	})
 }

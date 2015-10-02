@@ -45,7 +45,7 @@ func TestMain(m *testing.M) {
 
 // checkEndTransactionTrigger verifies that an EndTransactionRequest
 // that includes intents for the SystemDB keys sets the proper trigger.
-func checkEndTransactionTrigger(req roachpb.Request) error {
+func checkEndTransactionTrigger(req roachpb.Request, _ roachpb.BatchRequest_Header) error {
 	args, ok := req.(*roachpb.EndTransactionRequest)
 	if !ok {
 		return nil

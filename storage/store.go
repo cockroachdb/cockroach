@@ -743,7 +743,6 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	if rng, ok := s.replicas[rangeID]; ok {
 		return rng, nil
 	}
-	log.Warningf("AOU")
 	return nil, roachpb.NewRangeNotFoundError(rangeID)
 }
 
@@ -1235,7 +1234,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			if ok {
 				args := ba.Requests[index].GetInner()
 				// TODO(tschottdorf): implications of using the batch ts here?
-				err = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.Timestamp, pushType)
+				err = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.BatchRequest_Header, pushType)
 				// Make sure that if an index is carried in the error, it
 				// remains the one corresponding to the batch here.
 				if iErr, ok := err.(roachpb.IndexedError); ok {
@@ -1312,12 +1311,10 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 // c) resolving intents upon EndTransaction which are not local to the given
 //    range. This is the only path in which the transaction is going to be
 //    in non-pending state and doesn't require a push.
-func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, pushTo roachpb.Timestamp, pushType roachpb.PushTxnType) error {
+func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, h roachpb.BatchRequest_Header, pushType roachpb.PushTxnType) error {
 	method := args.Method()
-	priority := args.Header().GetUserPriority()
-	pusherTxn := args.Header().Txn
-	_, _ = method, pushTo
-	readOnly := roachpb.IsReadOnly(args)
+	pusherTxn := h.Txn
+	readOnly := roachpb.IsReadOnly(args) // TODO(tschottdorf): pass as param
 	args = nil
 
 	if log.V(6) {
@@ -1348,7 +1345,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	// txn with only the priority set.
 	if pusherTxn == nil {
 		pusherTxn = &roachpb.Transaction{
-			Priority: roachpb.MakePriority(priority),
+			Priority: roachpb.MakePriority(h.GetUserPriority()),
 		}
 	}
 	var pushReqs []roachpb.Request
@@ -1359,7 +1356,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 			},
 			PusherTxn: *pusherTxn,
 			PusheeTxn: intent.Txn,
-			PushTo:    pushTo,
+			PushTo:    h.Timestamp,
 			// The timestamp is used by PushTxn for figuring out whether the
 			// transaction is abandoned. If we used the argument's timestamp
 			// here, we would run into busy loops because that timestamp
