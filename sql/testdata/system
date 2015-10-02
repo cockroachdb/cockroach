@@ -42,6 +42,12 @@ SELECT id FROM system.descriptor
 5
 1000
 
+# Verify we can read "protobuf" columns.
+query I
+SELECT length(descriptor) * (id - 1) FROM system.descriptor WHERE id = 1
+----
+0
+
 # Verify format of system tables.
 query TTT
 SHOW COLUMNS FROM system.namespace;
