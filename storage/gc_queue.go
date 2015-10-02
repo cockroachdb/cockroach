@@ -258,8 +258,8 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// Set start and end keys.
 	if len(gcArgs.Keys) > 0 {
 		done = false
-		gcArgs.Start = gcArgs.Keys[0].Key
-		gcArgs.End = gcArgs.Keys[len(gcArgs.Keys)-1].Key.Next()
+		gcArgs.Key = gcArgs.Keys[0].Key
+		gcArgs.EndKey = gcArgs.Keys[len(gcArgs.Keys)-1].Key.Next()
 	}
 
 	if done {
@@ -304,7 +304,7 @@ func (gcq *gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.T
 	// Attempt to push the transaction which created the intent.
 	pushArgs := &roachpb.PushTxnRequest{
 		Span: roachpb.Span{
-			Start: txn.Key,
+			Key: txn.Key,
 		},
 		Now:       now,
 		PusherTxn: roachpb.Transaction{Priority: roachpb.MaxPriority},

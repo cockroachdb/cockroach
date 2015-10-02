@@ -33,9 +33,9 @@ func TestBatchPrevNext(t *testing.T) {
 		var r []roachpb.Span
 		for i, str := range strs {
 			if i%2 == 0 {
-				r = append(r, roachpb.Span{Start: roachpb.Key(str)})
+				r = append(r, roachpb.Span{Key: roachpb.Key(str)})
 			} else {
-				r[len(r)-1].End = roachpb.Key(str)
+				r[len(r)-1].EndKey = roachpb.Key(str)
 			}
 		}
 		return r
@@ -60,7 +60,7 @@ func TestBatchPrevNext(t *testing.T) {
 		var ba roachpb.BatchRequest
 		for _, span := range test.spans {
 			args := &roachpb.ScanRequest{}
-			args.Start, args.End = span.Start, span.End
+			args.Key, args.EndKey = span.Key, span.EndKey
 			ba.Add(args)
 		}
 		if next := next(ba, keys.RKey(test.key)); !bytes.Equal(next, roachpb.Key(test.expFW)) {

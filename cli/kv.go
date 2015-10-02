@@ -340,14 +340,14 @@ func initScanArgs(args []string) (startKey, endKey roachpb.Key) {
 		startKey = roachpb.Key(unquoteArg(args[0], false))
 	} else {
 		// Start with the first key after the system key range.
-		startKey = keys.UserDataSpan.Start
+		startKey = keys.UserDataSpan.Key
 	}
 	if len(args) >= 2 {
 		endKey = roachpb.Key(unquoteArg(args[1], false))
 	} else {
 		// Exclude table data keys by default. The user can explicitly request them
 		// by passing \xff\xff for the end key.
-		endKey = keys.UserDataSpan.End
+		endKey = keys.UserDataSpan.EndKey
 	}
 	return startKey, endKey
 }

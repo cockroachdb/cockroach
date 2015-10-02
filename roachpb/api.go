@@ -198,7 +198,7 @@ func (rh *ResponseHeader) Verify(req Request) error {
 // Verify verifies the integrity of the get response value.
 func (gr *GetResponse) Verify(req Request) error {
 	if gr.Value != nil {
-		return gr.Value.Verify(req.Header().Start)
+		return gr.Value.Verify(req.Header().Key)
 	}
 	return nil
 }
@@ -408,7 +408,7 @@ func (*LeaderLeaseRequest) CreateReply() Response { return &LeaderLeaseResponse{
 func NewGet(key Key) Request {
 	return &GetRequest{
 		Span: Span{
-			Start: key,
+			Key: key,
 		},
 	}
 }
@@ -418,7 +418,7 @@ func NewGet(key Key) Request {
 func NewIncrement(key Key, increment int64) Request {
 	return &IncrementRequest{
 		Span: Span{
-			Start: key,
+			Key: key,
 		},
 		Increment: increment,
 	}
@@ -429,7 +429,7 @@ func NewPut(key Key, value Value) Request {
 	value.InitChecksum(key)
 	return &PutRequest{
 		Span: Span{
-			Start: key,
+			Key: key,
 		},
 		Value: value,
 	}
@@ -446,7 +446,7 @@ func NewConditionalPut(key Key, value, expValue Value) Request {
 	}
 	return &ConditionalPutRequest{
 		Span: Span{
-			Start: key,
+			Key: key,
 		},
 		Value:    value,
 		ExpValue: expValuePtr,
@@ -457,7 +457,7 @@ func NewConditionalPut(key Key, value, expValue Value) Request {
 func NewDelete(key Key) Request {
 	return &DeleteRequest{
 		Span: Span{
-			Start: key,
+			Key: key,
 		},
 	}
 }
@@ -467,8 +467,8 @@ func NewDelete(key Key) Request {
 func NewDeleteRange(startKey, endKey Key) Request {
 	return &DeleteRangeRequest{
 		Span: Span{
-			Start: startKey,
-			End:   endKey,
+			Key:    startKey,
+			EndKey: endKey,
 		},
 	}
 }
@@ -478,8 +478,8 @@ func NewDeleteRange(startKey, endKey Key) Request {
 func NewScan(key, endKey Key, maxResults int64) Request {
 	return &ScanRequest{
 		Span: Span{
-			Start: key,
-			End:   endKey,
+			Key:    key,
+			EndKey: endKey,
 		},
 		MaxResults: maxResults,
 	}
@@ -490,8 +490,8 @@ func NewScan(key, endKey Key, maxResults int64) Request {
 func NewReverseScan(key, endKey Key, maxResults int64) Request {
 	return &ReverseScanRequest{
 		Span: Span{
-			Start: key,
-			End:   endKey,
+			Key:    key,
+			EndKey: endKey,
 		},
 		MaxResults: maxResults,
 	}

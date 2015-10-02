@@ -75,11 +75,11 @@ func TestTruncate(t *testing.T) {
 		for _, ks := range test.keys {
 			if len(ks[1]) > 0 {
 				ba.Add(&roachpb.ScanRequest{
-					Span: roachpb.Span{Start: roachpb.Key(ks[0]), End: roachpb.Key(ks[1])},
+					Span: roachpb.Span{Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1])},
 				})
 			} else {
 				ba.Add(&roachpb.GetRequest{
-					Span: roachpb.Span{Start: roachpb.Key(ks[0])},
+					Span: roachpb.Span{Key: roachpb.Key(ks[0])},
 				})
 			}
 		}
@@ -101,12 +101,12 @@ func TestTruncate(t *testing.T) {
 		var reqs int
 		for j, arg := range ba.Requests {
 			req := arg.GetInner()
-			if h := req.Header(); !bytes.Equal(h.Start, roachpb.Key(test.expKeys[j][0])) || !bytes.Equal(h.End, roachpb.Key(test.expKeys[j][1])) {
+			if h := req.Header(); !bytes.Equal(h.Key, roachpb.Key(test.expKeys[j][0])) || !bytes.Equal(h.EndKey, roachpb.Key(test.expKeys[j][1])) {
 				t.Errorf("%d.%d: range mismatch: actual [%q,%q), wanted [%q,%q)", i, j,
-					h.Start, h.End, test.expKeys[j][0], test.expKeys[j][1])
-			} else if _, ok := req.(*roachpb.NoopRequest); ok != (len(h.Start) == 0) {
+					h.Key, h.EndKey, test.expKeys[j][0], test.expKeys[j][1])
+			} else if _, ok := req.(*roachpb.NoopRequest); ok != (len(h.Key) == 0) {
 				t.Errorf("%d.%d: expected NoopRequest, got %T", i, j, req)
-			} else if len(h.Start) != 0 {
+			} else if len(h.Key) != 0 {
 				reqs++
 			}
 		}

@@ -244,7 +244,7 @@ func NewReplica(desc *roachpb.RangeDescriptor, rm RangeManager) (*Replica, error
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
 
-	if r.ContainsKey(keys.SystemDBSpan.Start) {
+	if r.ContainsKey(keys.SystemDBSpan.Key) {
 		r.maybeGossipSystemConfig()
 	}
 
@@ -340,7 +340,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	}
 	args := &roachpb.LeaderLeaseRequest{
 		Span: roachpb.Span{
-			Start: desc.StartKey,
+			Key: desc.StartKey,
 		},
 		Lease: roachpb.Lease{
 			Start:      timestamp,
@@ -581,8 +581,8 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 
 // TODO(tschottdorf): almost obsolete.
 func (r *Replica) checkCmdHeader(header *roachpb.Span) error {
-	if !r.ContainsKeyRange(header.Start, header.End) {
-		return roachpb.NewRangeKeyMismatchError(header.Start, header.End, r.Desc())
+	if !r.ContainsKeyRange(header.Key, header.EndKey) {
+		return roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
 	}
 	return nil
 }
@@ -626,7 +626,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
 		readOnly := ba.IsReadOnly()
 		for _, union := range ba.Requests {
 			h := union.GetInner().Header()
-			spans = append(spans, roachpb.Span{Start: h.Start, End: h.End})
+			spans = append(spans, roachpb.Span{Key: h.Key, EndKey: h.EndKey})
 		}
 		r.cmdQ.GetWait(readOnly, &wg, spans...)
 		cmdKeys = append(cmdKeys, r.cmdQ.Add(readOnly, spans...)...)
@@ -661,7 +661,7 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, err e
 			args := union.GetInner()
 			if usesTimestampCache(args) {
 				header := args.Header()
-				r.tsCache.Add(header.Start, header.End, ba.Timestamp, ba.Txn.GetID(), roachpb.IsReadOnly(args))
+				r.tsCache.Add(header.Key, header.EndKey, ba.Timestamp, ba.Txn.GetID(), roachpb.IsReadOnly(args))
 			}
 		}
 	}
@@ -809,7 +809,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg 
 		args := union.GetInner()
 		header := args.Header()
 		if usesTimestampCache(args) {
-			rTS, wTS := r.tsCache.GetMax(header.Start, header.End, ba.Txn.GetID())
+			rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, ba.Txn.GetID())
 
 			// Always push the timestamp forward if there's been a read which
 			// occurred after our txn timestamp.
@@ -1422,8 +1422,8 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 		var local bool // whether this intent lives on this Range
 		{
 			header := roachpb.Span{
-				Start: intent.Key,
-				End:   intent.EndKey,
+				Key:    intent.Key,
+				EndKey: intent.EndKey,
 			}
 
 			if len(intent.EndKey) == 0 {
@@ -1514,7 +1514,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 // key/value pairs along with the sha1 checksum of the contents (key and value).
 func loadSystemDBSpan(eng engine.Engine) ([]roachpb.KeyValue, []byte, error) {
 	// TODO(tschottdorf): Currently this does not handle intents well.
-	kvs, _, err := engine.MVCCScan(eng, keys.SystemDBSpan.Start, keys.SystemDBSpan.End,
+	kvs, _, err := engine.MVCCScan(eng, keys.SystemDBSpan.Key, keys.SystemDBSpan.EndKey,
 		0, roachpb.MaxTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return nil, nil, err

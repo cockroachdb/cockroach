@@ -83,7 +83,7 @@ func (cq *CommandQueue) onEvicted(key, value interface{}) {
 func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roachpb.Span) {
 	for _, span := range spans {
 		// This gives us a memory-efficient end key if end is empty.
-		start, end := span.Start, span.End
+		start, end := span.Key, span.EndKey
 		if len(end) == 0 {
 			end = start.Next()
 			start = end[:len(start)]
@@ -109,7 +109,7 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) []interface{} {
 	var r []interface{}
 	for _, span := range spans {
-		start, end := span.Start, span.End
+		start, end := span.Key, span.EndKey
 		if len(end) == 0 {
 			end = start.Next()
 		}

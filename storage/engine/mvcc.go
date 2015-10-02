@@ -54,8 +54,8 @@ func init() {
 	for _, r := range keys.NoSplitSpans {
 		illegalSplitKeySpans = append(illegalSplitKeySpans,
 			encodedSpan{
-				start: MVCCEncodeKey(r.Start),
-				end:   MVCCEncodeKey(r.End),
+				start: MVCCEncodeKey(r.Key),
+				end:   MVCCEncodeKey(r.EndKey),
 			})
 	}
 }

@@ -62,7 +62,7 @@ func checkEndTransactionTrigger(req roachpb.Request, _ roachpb.Header) error {
 	var hasSystemKey bool
 	for _, it := range args.Intents {
 		addr := keys.KeyAddress(it.GetKey())
-		if bytes.Compare(addr, keys.SystemDBSpan.Start) >= 0 && bytes.Compare(addr, keys.SystemDBSpan.End) < 0 {
+		if bytes.Compare(addr, keys.SystemDBSpan.Key) >= 0 && bytes.Compare(addr, keys.SystemDBSpan.EndKey) < 0 {
 			hasSystemKey = true
 			break
 		}

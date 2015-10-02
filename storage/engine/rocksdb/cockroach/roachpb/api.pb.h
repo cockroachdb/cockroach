@@ -300,42 +300,42 @@ class Span : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional bytes start = 3;
-  bool has_start() const;
-  void clear_start();
-  static const int kStartFieldNumber = 3;
-  const ::std::string& start() const;
-  void set_start(const ::std::string& value);
-  void set_start(const char* value);
-  void set_start(const void* value, size_t size);
-  ::std::string* mutable_start();
-  ::std::string* release_start();
-  void set_allocated_start(::std::string* start);
+  // optional bytes key = 3;
+  bool has_key() const;
+  void clear_key();
+  static const int kKeyFieldNumber = 3;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  void set_key(const char* value);
+  void set_key(const void* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
 
-  // optional bytes end = 4;
-  bool has_end() const;
-  void clear_end();
-  static const int kEndFieldNumber = 4;
-  const ::std::string& end() const;
-  void set_end(const ::std::string& value);
-  void set_end(const char* value);
-  void set_end(const void* value, size_t size);
-  ::std::string* mutable_end();
-  ::std::string* release_end();
-  void set_allocated_end(::std::string* end);
+  // optional bytes end_key = 4;
+  bool has_end_key() const;
+  void clear_end_key();
+  static const int kEndKeyFieldNumber = 4;
+  const ::std::string& end_key() const;
+  void set_end_key(const ::std::string& value);
+  void set_end_key(const char* value);
+  void set_end_key(const void* value, size_t size);
+  ::std::string* mutable_end_key();
+  ::std::string* release_end_key();
+  void set_allocated_end_key(::std::string* end_key);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Span)
  private:
-  inline void set_has_start();
-  inline void clear_has_start();
-  inline void set_has_end();
-  inline void clear_has_end();
+  inline void set_has_key();
+  inline void clear_has_key();
+  inline void set_has_end_key();
+  inline void clear_has_end_key();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::internal::ArenaStringPtr start_;
-  ::google::protobuf::internal::ArenaStringPtr end_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  ::google::protobuf::internal::ArenaStringPtr end_key_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -5987,110 +5987,110 @@ inline void ClientCmdID::set_random(::google::protobuf::int64 value) {
 
 // Span
 
-// optional bytes start = 3;
-inline bool Span::has_start() const {
+// optional bytes key = 3;
+inline bool Span::has_key() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void Span::set_has_start() {
+inline void Span::set_has_key() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void Span::clear_has_start() {
+inline void Span::clear_has_key() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void Span::clear_start() {
-  start_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_start();
+inline void Span::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_key();
 }
-inline const ::std::string& Span::start() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Span.start)
-  return start_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline const ::std::string& Span::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Span.key)
+  return key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void Span::set_start(const ::std::string& value) {
-  set_has_start();
-  start_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Span.start)
+inline void Span::set_key(const ::std::string& value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Span.key)
 }
-inline void Span::set_start(const char* value) {
-  set_has_start();
-  start_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Span.start)
+inline void Span::set_key(const char* value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Span.key)
 }
-inline void Span::set_start(const void* value, size_t size) {
-  set_has_start();
-  start_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+inline void Span::set_key(const void* value, size_t size) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Span.start)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Span.key)
 }
-inline ::std::string* Span::mutable_start() {
-  set_has_start();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Span.start)
-  return start_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline ::std::string* Span::mutable_key() {
+  set_has_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Span.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* Span::release_start() {
-  clear_has_start();
-  return start_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline ::std::string* Span::release_key() {
+  clear_has_key();
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void Span::set_allocated_start(::std::string* start) {
-  if (start != NULL) {
-    set_has_start();
+inline void Span::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    set_has_key();
   } else {
-    clear_has_start();
+    clear_has_key();
   }
-  start_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), start);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Span.start)
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Span.key)
 }
 
-// optional bytes end = 4;
-inline bool Span::has_end() const {
+// optional bytes end_key = 4;
+inline bool Span::has_end_key() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void Span::set_has_end() {
+inline void Span::set_has_end_key() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void Span::clear_has_end() {
+inline void Span::clear_has_end_key() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void Span::clear_end() {
-  end_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_end();
+inline void Span::clear_end_key() {
+  end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_end_key();
 }
-inline const ::std::string& Span::end() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Span.end)
-  return end_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline const ::std::string& Span::end_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Span.end_key)
+  return end_key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void Span::set_end(const ::std::string& value) {
-  set_has_end();
-  end_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Span.end)
+inline void Span::set_end_key(const ::std::string& value) {
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Span.end_key)
 }
-inline void Span::set_end(const char* value) {
-  set_has_end();
-  end_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Span.end)
+inline void Span::set_end_key(const char* value) {
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Span.end_key)
 }
-inline void Span::set_end(const void* value, size_t size) {
-  set_has_end();
-  end_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+inline void Span::set_end_key(const void* value, size_t size) {
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Span.end)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Span.end_key)
 }
-inline ::std::string* Span::mutable_end() {
-  set_has_end();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Span.end)
-  return end_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline ::std::string* Span::mutable_end_key() {
+  set_has_end_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Span.end_key)
+  return end_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* Span::release_end() {
-  clear_has_end();
-  return end_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline ::std::string* Span::release_end_key() {
+  clear_has_end_key();
+  return end_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void Span::set_allocated_end(::std::string* end) {
-  if (end != NULL) {
-    set_has_end();
+inline void Span::set_allocated_end_key(::std::string* end_key) {
+  if (end_key != NULL) {
+    set_has_end_key();
   } else {
-    clear_has_end();
+    clear_has_end_key();
   }
-  end_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Span.end)
+  end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Span.end_key)
 }
 
 // -------------------------------------------------------------------

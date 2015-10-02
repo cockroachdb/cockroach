@@ -54,25 +54,25 @@ func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to 
 		}
 		header := args.Header()
 		if !roachpb.IsRange(args) {
-			if len(header.End) > 0 {
+			if len(header.EndKey) > 0 {
 				return false, nil, util.Errorf("%T is not a range command, but EndKey is set", args)
 			}
-			if !desc.ContainsKey(keys.KeyAddress(header.Start)) {
+			if !desc.ContainsKey(keys.KeyAddress(header.Key)) {
 				return true, nil, nil
 			}
 			return false, nil, nil
 		}
 		var undo []func()
-		key, endKey := header.Start, header.End
+		key, endKey := header.Key, header.EndKey
 		keyAddr, endKeyAddr := keys.KeyAddress(key), keys.KeyAddress(endKey)
 		if keyAddr.Less(from) {
-			undo = append(undo, func() { header.Start = key })
-			header.Start = from.Key()
+			undo = append(undo, func() { header.Key = key })
+			header.Key = from.Key()
 			keyAddr = from
 		}
 		if !endKeyAddr.Less(to) {
-			undo = append(undo, func() { header.End = endKey })
-			header.End = to.Key()
+			undo = append(undo, func() { header.EndKey = endKey })
+			header.EndKey = to.Key()
 			endKeyAddr = to
 		}
 		// Check whether the truncation has left any keys in the range. If not,
@@ -196,8 +196,8 @@ func prev(ba roachpb.BatchRequest, k keys.RKey) keys.RKey {
 	candidate := keys.RKey(roachpb.KeyMin)
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
-		addr := keys.KeyAddress(h.Start)
-		eAddr := keys.KeyAddress(h.End)
+		addr := keys.KeyAddress(h.Key)
+		eAddr := keys.KeyAddress(h.EndKey)
 		if len(eAddr) == 0 {
 			// Can probably avoid having to compute Next() here if
 			// we're in the mood for some more complexity.
@@ -227,9 +227,9 @@ func next(ba roachpb.BatchRequest, k keys.RKey) keys.RKey {
 	candidate := keys.RKey(roachpb.KeyMax)
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
-		addr := keys.KeyAddress(h.Start)
+		addr := keys.KeyAddress(h.Key)
 		if addr.Less(k) {
-			if eAddr := keys.KeyAddress(h.End); k.Less(eAddr) {
+			if eAddr := keys.KeyAddress(h.EndKey); k.Less(eAddr) {
 				// Starts below k, but continues beyond. Need to stay at k.
 				return k
 			}

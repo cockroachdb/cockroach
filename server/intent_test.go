@@ -80,9 +80,9 @@ func TestIntentResolution(t *testing.T) {
 			header := args.Header()
 			switch args.(type) {
 			case *roachpb.ResolveIntentRequest:
-				result = append(result, string(header.Start))
+				result = append(result, string(header.Key))
 			case *roachpb.ResolveIntentRangeRequest:
-				result = append(result, fmt.Sprintf("%s-%s", header.Start, header.End))
+				result = append(result, fmt.Sprintf("%s-%s", header.Key, header.EndKey))
 			}
 			if len(result) == len(tc.exp) {
 				closer <- struct{}{}

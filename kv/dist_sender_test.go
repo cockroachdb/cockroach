@@ -324,9 +324,9 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 
 		args := tc.args
-		args.Header().Start = roachpb.Key("a")
+		args.Header().Key = roachpb.Key("a")
 		if roachpb.IsRange(args) {
-			args.Header().End = roachpb.Key("b")
+			args.Header().EndKey = roachpb.Key("b")
 		}
 		consistency := roachpb.CONSISTENT
 		if !tc.consistent {
@@ -504,7 +504,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &roachpb.ReplicaDescriptor{}) && !tc.shouldClearLeader {
 			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %v", i, tc.shouldClearLeader, cur)
 		}
-		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(put.Start, false /* !inclusive */)
+		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(put.Key, false /* !inclusive */)
 		if cachedDesc == nil != tc.shouldClearReplica {
 			t.Errorf("%d: unexpected second replica lookup behaviour: wanted=%t", i, tc.shouldClearReplica)
 		}
@@ -792,7 +792,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	rScan := &roachpb.ReverseScanRequest{
-		Span: roachpb.Span{Start: roachpb.Key("a"), End: roachpb.Key("b")},
+		Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	}
 	if _, err := client.SendWrapped(ds, nil, rScan); err != nil {
 		t.Fatal(err)

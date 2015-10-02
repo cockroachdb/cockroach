@@ -81,7 +81,7 @@ func TestSSLEnforcement(t *testing.T) {
 	insecureContext.Insecure = true
 
 	kvGet := &roachpb.GetRequest{}
-	kvGet.Start = roachpb.Key("/")
+	kvGet.Key = roachpb.Key("/")
 
 	testCases := []struct {
 		method, key string
