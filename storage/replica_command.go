@@ -177,7 +177,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 func (r *Replica) Get(batch engine.Engine, h roachpb.Header, args roachpb.GetRequest) (roachpb.GetResponse, []roachpb.Intent, error) {
 	var reply roachpb.GetResponse
 
-	val, intents, err := engine.MVCCGet(batch, args.Key, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+	val, intents, err := engine.MVCCGet(batch, args.Start, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 	reply.Value = val
 	return reply, intents, err
 }
@@ -186,7 +186,7 @@ func (r *Replica) Get(batch engine.Engine, h roachpb.Header, args roachpb.GetReq
 func (r *Replica) Put(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.PutRequest) (roachpb.PutResponse, error) {
 	var reply roachpb.PutResponse
 
-	return reply, engine.MVCCPut(batch, ms, args.Key, h.Timestamp, args.Value, h.Txn)
+	return reply, engine.MVCCPut(batch, ms, args.Start, h.Timestamp, args.Value, h.Txn)
 }
 
 // ConditionalPut sets the value for a specified key only if
@@ -195,7 +195,7 @@ func (r *Replica) Put(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Heade
 func (r *Replica) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.ConditionalPutRequest) (roachpb.ConditionalPutResponse, error) {
 	var reply roachpb.ConditionalPutResponse
 
-	return reply, engine.MVCCConditionalPut(batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
+	return reply, engine.MVCCConditionalPut(batch, ms, args.Start, h.Timestamp, args.Value, args.ExpValue, h.Txn)
 }
 
 // Increment increments the value (interpreted as varint64 encoded) and
@@ -204,7 +204,7 @@ func (r *Replica) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, h ro
 func (r *Replica) Increment(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.IncrementRequest) (roachpb.IncrementResponse, error) {
 	var reply roachpb.IncrementResponse
 
-	newVal, err := engine.MVCCIncrement(batch, ms, args.Key, h.Timestamp, h.Txn, args.Increment)
+	newVal, err := engine.MVCCIncrement(batch, ms, args.Start, h.Timestamp, h.Txn, args.Increment)
 	reply.NewValue = newVal
 	return reply, err
 }
@@ -213,7 +213,7 @@ func (r *Replica) Increment(batch engine.Engine, ms *engine.MVCCStats, h roachpb
 func (r *Replica) Delete(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.DeleteRequest) (roachpb.DeleteResponse, error) {
 	var reply roachpb.DeleteResponse
 
-	return reply, engine.MVCCDelete(batch, ms, args.Key, h.Timestamp, h.Txn)
+	return reply, engine.MVCCDelete(batch, ms, args.Start, h.Timestamp, h.Txn)
 }
 
 // DeleteRange deletes the range of key/value pairs specified by
@@ -221,7 +221,7 @@ func (r *Replica) Delete(batch engine.Engine, ms *engine.MVCCStats, h roachpb.He
 func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.DeleteRangeRequest) (roachpb.DeleteRangeResponse, error) {
 	var reply roachpb.DeleteRangeResponse
 
-	numDel, err := engine.MVCCDeleteRange(batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, h.Timestamp, h.Txn)
+	numDel, err := engine.MVCCDeleteRange(batch, ms, args.Start, args.End, args.MaxEntriesToDelete, h.Timestamp, h.Txn)
 	reply.NumDeleted = numDel
 	return reply, err
 }
@@ -231,7 +231,7 @@ func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, h roach
 func (r *Replica) Scan(batch engine.Engine, h roachpb.Header, args roachpb.ScanRequest) (roachpb.ScanResponse, []roachpb.Intent, error) {
 	var reply roachpb.ScanResponse
 
-	rows, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+	rows, intents, err := engine.MVCCScan(batch, args.Start, args.End, args.MaxResults, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 	reply.Rows = rows
 	return reply, intents, err
 }
@@ -241,7 +241,7 @@ func (r *Replica) Scan(batch engine.Engine, h roachpb.Header, args roachpb.ScanR
 func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.Header, args roachpb.ReverseScanRequest) (roachpb.ReverseScanResponse, []roachpb.Intent, error) {
 	var reply roachpb.ReverseScanResponse
 
-	rows, intents, err := engine.MVCCReverseScan(batch, args.Key, args.EndKey, args.MaxResults, h.Timestamp,
+	rows, intents, err := engine.MVCCReverseScan(batch, args.Start, args.End, args.MaxResults, h.Timestamp,
 		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 	reply.Rows = rows
 	return reply, intents, err
@@ -258,8 +258,8 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	if h.Txn == nil {
 		return reply, nil, util.Errorf("no transaction specified to EndTransaction")
 	}
-	if !bytes.Equal(args.Key, h.Txn.Key) {
-		return reply, nil, util.Errorf("request key %s should match txn key %s", args.Key, h.Txn.Key)
+	if !bytes.Equal(args.Start, h.Txn.Key) {
+		return reply, nil, util.Errorf("request key %s should match txn key %s", args.Start, h.Txn.Key)
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
@@ -562,7 +562,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 		// We want to search for the metadata key greater than
 		// args.Key. Scan for both the requested key and the keys immediately
 		// afterwards, up to MaxRanges.
-		startKey, endKey, err := keys.MetaScanBounds(args.Key)
+		startKey, endKey, err := keys.MetaScanBounds(args.Start)
 		if err != nil {
 			return reply, nil, err
 		}
@@ -601,7 +601,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 			if err := proto.Unmarshal(b, &r); err != nil {
 				return nil, err
 			}
-			if !keys.RangeMetaKey(r.StartKey).Less(args.Key) {
+			if !keys.RangeMetaKey(r.StartKey).Less(args.Start) {
 				// This is the case in which we've picked up an extra descriptor
 				// we don't want.
 				return nil, nil
@@ -610,8 +610,8 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 			return &r, nil
 		}
 
-		if args.Key.Less(keys.Meta2KeyMax) {
-			startKey, endKey, err := keys.MetaScanBounds(args.Key)
+		if args.Start.Less(keys.Meta2KeyMax) {
+			startKey, endKey, err := keys.MetaScanBounds(args.Start)
 			if err != nil {
 				return reply, nil, err
 			}
@@ -626,7 +626,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 		// We want to search for the metadata key just less or equal to
 		// args.Key. Scan in reverse order for both the requested key and the
 		// keys immediately backwards, up to MaxRanges.
-		startKey, endKey, err := keys.MetaReverseScanBounds(args.Key)
+		startKey, endKey, err := keys.MetaReverseScanBounds(args.Start)
 		if err != nil {
 			return reply, nil, err
 		}
@@ -694,7 +694,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 	if count := int64(len(rds)); count == 0 {
 		// No matching results were returned from the scan. This should
 		// never happen with the above logic.
-		panic(fmt.Sprintf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %s", args.Key))
+		panic(fmt.Sprintf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %s", args.Start))
 	} else if count > rangeCount {
 		// We've possibly picked up an extra descriptor if we're in reverse
 		// mode due to the initial forward scan.
@@ -715,8 +715,8 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roac
 	if h.Txn == nil {
 		return reply, util.Errorf("no transaction specified to HeartbeatTxn")
 	}
-	if !bytes.Equal(args.Key, h.Txn.Key) {
-		return reply, util.Errorf("request key %s should match txn key %s", args.Key, h.Txn.Key)
+	if !bytes.Equal(args.Start, h.Txn.Key) {
+		return reply, util.Errorf("request key %s should match txn key %s", args.Start, h.Txn.Key)
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
@@ -803,8 +803,8 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header
 func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.PushTxnRequest) (roachpb.PushTxnResponse, error) {
 	var reply roachpb.PushTxnResponse
 
-	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
-		return reply, util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
+	if !bytes.Equal(args.Start, args.PusheeTxn.Key) {
+		return reply, util.Errorf("request key %s should match pushee's txn key %s", args.Start, args.PusheeTxn.Key)
 	}
 	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
@@ -940,7 +940,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.ResolveIntentRequest) (roachpb.ResolveIntentResponse, error) {
 	var reply roachpb.ResolveIntentResponse
 
-	err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, h.Timestamp, &args.IntentTxn)
+	err := engine.MVCCResolveWriteIntent(batch, ms, args.Start, h.Timestamp, &args.IntentTxn)
 	return reply, err
 }
 
@@ -950,7 +950,7 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	h roachpb.Header, args roachpb.ResolveIntentRangeRequest) (roachpb.ResolveIntentRangeResponse, error) {
 	var reply roachpb.ResolveIntentRangeResponse
 
-	_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, h.Timestamp, &args.IntentTxn)
+	_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Start, args.End, 0, h.Timestamp, &args.IntentTxn)
 	return reply, err
 }
 
@@ -962,7 +962,7 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 func (r *Replica) Merge(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.MergeRequest) (roachpb.MergeResponse, error) {
 	var reply roachpb.MergeResponse
 
-	return reply, engine.MVCCMerge(batch, ms, args.Key, args.Value)
+	return reply, engine.MVCCMerge(batch, ms, args.Start, args.Value)
 }
 
 // TruncateLog discards a prefix of the raft log.

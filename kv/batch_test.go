@@ -60,7 +60,7 @@ func TestBatchPrevNext(t *testing.T) {
 		var ba roachpb.BatchRequest
 		for _, span := range test.spans {
 			args := &roachpb.ScanRequest{}
-			args.Key, args.EndKey = span.Start, span.End
+			args.Start, args.End = span.Start, span.End
 			ba.Add(args)
 		}
 		if next := next(ba, roachpb.Key(test.key)); !bytes.Equal(next, roachpb.Key(test.expFW)) {

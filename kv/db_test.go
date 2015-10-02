@@ -165,9 +165,9 @@ func TestKVDBInternalMethods(t *testing.T) {
 	// Verify internal methods experience bad request errors.
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 	for i, args := range testCases {
-		args.Header().Key = roachpb.Key("a")
+		args.Header().Start = roachpb.Key("a")
 		if roachpb.IsRange(args) {
-			args.Header().EndKey = args.Header().Key.Next()
+			args.Header().End = args.Header().Start.Next()
 		}
 		b := &client.Batch{}
 		b.InternalAddRequest(args)
@@ -235,7 +235,7 @@ func TestAuthentication(t *testing.T) {
 	defer s.Stop()
 
 	arg := &roachpb.PutRequest{}
-	arg.Header().Key = roachpb.Key("a")
+	arg.Header().Start = roachpb.Key("a")
 	b := &client.Batch{}
 	b.InternalAddRequest(arg)
 

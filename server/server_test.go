@@ -307,9 +307,9 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
 	get := &roachpb.GetRequest{
-		Span: roachpb.Span{Key: writes[0]},
+		Span: roachpb.Span{Start: writes[0]},
 	}
-	get.EndKey = writes[len(writes)-1]
+	get.End = writes[len(writes)-1]
 	if _, err := client.SendWrapped(tds, nil, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
@@ -341,8 +341,8 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	del := &roachpb.DeleteRangeRequest{
 		Span: roachpb.Span{
-			Key:    writes[0],
-			EndKey: roachpb.Key(writes[len(writes)-1]).Next(),
+			Start: writes[0],
+			End:   roachpb.Key(writes[len(writes)-1]).Next(),
 		},
 	}
 	reply, err := client.SendWrappedWith(tds, nil, roachpb.Header{Timestamp: delTS}, del)

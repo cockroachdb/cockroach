@@ -456,7 +456,7 @@ func TestStoreExecuteNoop(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.RangeID = 1
 	ba.Replica = roachpb.ReplicaDescriptor{StoreID: store.StoreID()}
-	ba.Add(&roachpb.GetRequest{Span: roachpb.Span{Key: roachpb.Key("a")}})
+	ba.Add(&roachpb.GetRequest{Span: roachpb.Span{Start: roachpb.Key("a")}})
 	ba.Add(&roachpb.NoopRequest{})
 
 	br, pErr := store.Send(context.Background(), ba)
@@ -483,12 +483,12 @@ func TestStoreVerifyKeys(t *testing.T) {
 		t.Fatalf("unexpected error for key too long: %v", err)
 	}
 	// Try a start key == KeyMax.
-	gArgs.Key = roachpb.KeyMax
+	gArgs.Start = roachpb.KeyMax
 	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
 		t.Fatalf("expected error for start key == KeyMax: %v", err)
 	}
 	// Try a get with an end key specified (get requires only a start key and should fail).
-	gArgs.EndKey = roachpb.KeyMax
+	gArgs.End = roachpb.KeyMax
 	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
 		t.Fatalf("unexpected error for end key specified on a non-range-based operation: %v", err)
 	}
@@ -498,20 +498,20 @@ func TestStoreVerifyKeys(t *testing.T) {
 		t.Fatalf("unexpected error for end key too long: %v", err)
 	}
 	// Try a scan with end key < start key.
-	sArgs.Key = []byte("b")
-	sArgs.EndKey = []byte("a")
+	sArgs.Start = []byte("b")
+	sArgs.End = []byte("a")
 	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err, "must be greater than") {
 		t.Fatalf("unexpected error for end key < start: %v", err)
 	}
 	// Try a scan with start key == end key.
-	sArgs.Key = []byte("a")
-	sArgs.EndKey = sArgs.Key
+	sArgs.Start = []byte("a")
+	sArgs.End = sArgs.Start
 	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err, "must be greater than") {
 		t.Fatalf("unexpected error for start == end key: %v", err)
 	}
 	// Try a scan with range-local start key, but "regular" end key.
-	sArgs.Key = keys.MakeRangeKey([]byte("test"), []byte("sffx"), nil)
-	sArgs.EndKey = []byte("z")
+	sArgs.Start = keys.MakeRangeKey([]byte("test"), []byte("sffx"), nil)
+	sArgs.End = []byte("z")
 	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err, "range-local") {
 		t.Fatalf("unexpected error for local start, non-local end key: %v", err)
 	}
@@ -1142,7 +1142,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		txnA := newTransaction("testA", keyA, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		txnB := newTransaction("testB", keyB, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		for _, txn := range []*roachpb.Transaction{txnA, txnB} {
-			args.Key = txn.Key
+			args.Start = txn.Key
 			if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); err != nil {
 				t.Fatal(err)
 			}
@@ -1164,7 +1164,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
 			t.Errorf("expected value %q, got %+v", []byte("value1"), gReply.Value)
 		}
-		gArgs.Key = keyB
+		gArgs.Start = keyB
 
 		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
@@ -1396,7 +1396,7 @@ func TestStoreBadRequests(t *testing.T) {
 
 	// End key must not be specified for a non-range operation.
 	args1 := getArgs(roachpb.Key("a"))
-	args1.EndKey = roachpb.Key("b")
+	args1.End = roachpb.Key("b")
 
 	// End key must be specified for a range-operation.
 	args2 := scanArgs(roachpb.Key("a"), nil)

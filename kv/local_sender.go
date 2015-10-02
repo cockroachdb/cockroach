@@ -215,7 +215,7 @@ func (ls *LocalSender) rangeLookup(key roachpb.Key, options lookupOptions, _ *ro
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: key,
+			Start: key,
 		},
 		MaxRanges:       1,
 		ConsiderIntents: options.considerIntents,

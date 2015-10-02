@@ -256,28 +256,28 @@ func (m *ClientCmdID) GetRandom() int64 {
 type Span struct {
 	// The key for request. If the request operates on a range, this
 	// represents the starting key for the range.
-	Key Key `protobuf:"bytes,3,opt,name=key,casttype=Key" json:"key,omitempty"`
+	Start Key `protobuf:"bytes,3,opt,name=start,casttype=Key" json:"start,omitempty"`
 	// The end key is empty if the request spans only a single key. Otherwise,
 	// it must order strictly after Key. In such a case, the header indicates
 	// that the operation takes place on the key range from Key to EndKey,
 	// including Key and excluding EndKey.
-	EndKey Key `protobuf:"bytes,4,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
+	End Key `protobuf:"bytes,4,opt,name=end,casttype=Key" json:"end,omitempty"`
 }
 
 func (m *Span) Reset()         { *m = Span{} }
 func (m *Span) String() string { return proto.CompactTextString(m) }
 func (*Span) ProtoMessage()    {}
 
-func (m *Span) GetKey() Key {
+func (m *Span) GetStart() Key {
 	if m != nil {
-		return m.Key
+		return m.Start
 	}
 	return nil
 }
 
-func (m *Span) GetEndKey() Key {
+func (m *Span) GetEnd() Key {
 	if m != nil {
-		return m.EndKey
+		return m.End
 	}
 	return nil
 }
@@ -1735,17 +1735,17 @@ func (m *Span) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Key != nil {
+	if m.Start != nil {
 		data[i] = 0x1a
 		i++
-		i = encodeVarintApi(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
+		i = encodeVarintApi(data, i, uint64(len(m.Start)))
+		i += copy(data[i:], m.Start)
 	}
-	if m.EndKey != nil {
+	if m.End != nil {
 		data[i] = 0x22
 		i++
-		i = encodeVarintApi(data, i, uint64(len(m.EndKey)))
-		i += copy(data[i:], m.EndKey)
+		i = encodeVarintApi(data, i, uint64(len(m.End)))
+		i += copy(data[i:], m.End)
 	}
 	return i, nil
 }
@@ -3869,12 +3869,12 @@ func (m *ClientCmdID) Size() (n int) {
 func (m *Span) Size() (n int) {
 	var l int
 	_ = l
-	if m.Key != nil {
-		l = len(m.Key)
+	if m.Start != nil {
+		l = len(m.Start)
 		n += 1 + l + sovApi(uint64(l))
 	}
-	if m.EndKey != nil {
-		l = len(m.EndKey)
+	if m.End != nil {
+		l = len(m.End)
 		n += 1 + l + sovApi(uint64(l))
 	}
 	return n
@@ -4940,7 +4940,7 @@ func (m *Span) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Start", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -4964,11 +4964,11 @@ func (m *Span) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Key = append([]byte{}, data[iNdEx:postIndex]...)
+			m.Start = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EndKey", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field End", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -4992,7 +4992,7 @@ func (m *Span) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.EndKey = append([]byte{}, data[iNdEx:postIndex]...)
+			m.End = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

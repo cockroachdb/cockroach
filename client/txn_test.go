@@ -98,7 +98,7 @@ func testPut() roachpb.BatchRequest {
 	var ba roachpb.BatchRequest
 	ba.Timestamp = testTS
 	put := &roachpb.PutRequest{}
-	put.Key = testKey
+	put.Start = testKey
 	ba.Add(put)
 	return ba
 }

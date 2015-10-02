@@ -104,27 +104,27 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 			switch req := args.(type) {
 			case *roachpb.GetRequest:
 				row := &result.Rows[k]
-				row.Key = []byte(req.Key)
+				row.Key = []byte(req.Start)
 				if result.Err == nil {
 					row.Value = reply.(*roachpb.GetResponse).Value
 				}
 			case *roachpb.PutRequest:
 				row := &result.Rows[k]
-				row.Key = []byte(req.Key)
+				row.Key = []byte(req.Start)
 				if result.Err == nil {
 					row.Value = &req.Value
 					row.setTimestamp(reply.(*roachpb.PutResponse).Timestamp)
 				}
 			case *roachpb.ConditionalPutRequest:
 				row := &result.Rows[k]
-				row.Key = []byte(req.Key)
+				row.Key = []byte(req.Start)
 				if result.Err == nil {
 					row.Value = &req.Value
 					row.setTimestamp(reply.(*roachpb.ConditionalPutResponse).Timestamp)
 				}
 			case *roachpb.IncrementRequest:
 				row := &result.Rows[k]
-				row.Key = []byte(req.Key)
+				row.Key = []byte(req.Start)
 				if result.Err == nil {
 					t := reply.(*roachpb.IncrementResponse)
 					row.Value = &roachpb.Value{
@@ -157,7 +157,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 				}
 			case *roachpb.DeleteRequest:
 				row := &result.Rows[k]
-				row.Key = []byte(args.(*roachpb.DeleteRequest).Key)
+				row.Key = []byte(args.(*roachpb.DeleteRequest).Start)
 
 			case *roachpb.DeleteRangeRequest:
 			case *roachpb.EndTransactionRequest:
@@ -389,7 +389,7 @@ func (b *Batch) adminMerge(key interface{}) {
 	}
 	req := &roachpb.AdminMergeRequest{
 		Span: roachpb.Span{
-			Key: k,
+			Start: k,
 		},
 	}
 	b.reqs = append(b.reqs, req)
@@ -406,7 +406,7 @@ func (b *Batch) adminSplit(splitKey interface{}) {
 	}
 	req := &roachpb.AdminSplitRequest{
 		Span: roachpb.Span{
-			Key: k,
+			Start: k,
 		},
 	}
 	req.SplitKey = k

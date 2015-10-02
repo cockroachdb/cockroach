@@ -42,7 +42,7 @@ import (
 func adminSplitArgs(key, splitKey []byte) roachpb.AdminSplitRequest {
 	return roachpb.AdminSplitRequest{
 		Span: roachpb.Span{
-			Key: key,
+			Start: key,
 		},
 		SplitKey: splitKey,
 	}

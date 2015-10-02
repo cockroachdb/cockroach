@@ -1156,7 +1156,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()
-		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil {
+		if err := verifyKeys(header.Start, header.End, roachpb.IsRange(arg)); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -1352,7 +1352,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	for _, intent := range pushIntents {
 		pushReqs = append(pushReqs, &roachpb.PushTxnRequest{
 			Span: roachpb.Span{
-				Key: intent.Txn.Key,
+				Start: intent.Txn.Key,
 			},
 			PusherTxn: *pusherTxn,
 			PusheeTxn: intent.Txn,

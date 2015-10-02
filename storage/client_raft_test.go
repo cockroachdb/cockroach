@@ -167,7 +167,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	numIncrements := 0
 
 	storage.TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
-		if _, ok := args.(*roachpb.IncrementRequest); ok && args.Header().Key.Equal(roachpb.Key("a")) {
+		if _, ok := args.(*roachpb.IncrementRequest); ok && args.Header().Start.Equal(roachpb.Key("a")) {
 			numIncrements++
 		}
 		return nil
@@ -580,7 +580,7 @@ func getRangeMetadata(key roachpb.Key, mtc *multiTestContext, t *testing.T) roac
 	b := &client.Batch{}
 	b.InternalAddRequest(&roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(key),
+			Start: keys.RangeMetaKey(key),
 		},
 		MaxRanges: 1,
 	})

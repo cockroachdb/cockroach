@@ -135,7 +135,7 @@ func (db *DB) StoreData(r Resolution, data []TimeSeriesData) error {
 		b := &client.Batch{}
 		b.InternalAddRequest(&roachpb.MergeRequest{
 			Span: roachpb.Span{
-				Key: kv.Key,
+				Start: kv.Key,
 			},
 			Value: kv.Value,
 		})

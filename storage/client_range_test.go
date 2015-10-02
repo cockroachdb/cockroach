@@ -189,7 +189,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	var numGets int32
 	storage.TestingCommandFilter = func(args roachpb.Request, h roachpb.Header) error {
 		if _, ok := args.(*roachpb.GetRequest); ok &&
-			args.Header().Key.Equal(roachpb.Key(key)) &&
+			args.Header().Start.Equal(roachpb.Key(key)) &&
 			h.Txn == nil {
 			// The Reader executes two get operations, each of which triggers two get requests
 			// (the first request fails and triggers txn push, and then the second request
@@ -288,7 +288,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	priority := int32(math.MaxInt32)
 	requestHeader := roachpb.Span{
-		Key: roachpb.Key(key),
+		Start: roachpb.Key(key),
 	}
 	ts := clock.Now()
 	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
@@ -346,8 +346,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	// Resolve the intents.
 	scanArgs := roachpb.ScanRequest{
 		Span: roachpb.Span{
-			Key:    roachpb.KeyMin,
-			EndKey: keys.RangeMetaKey(roachpb.KeyMax),
+			Start: roachpb.KeyMin,
+			End:   keys.RangeMetaKey(roachpb.KeyMax),
 		},
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
@@ -358,7 +358,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	revScanArgs := func(key []byte, maxResults int32) *roachpb.RangeLookupRequest {
 		return &roachpb.RangeLookupRequest{
 			Span: roachpb.Span{
-				Key: key,
+				Start: key,
 			},
 			MaxRanges: maxResults,
 			Reverse:   true,

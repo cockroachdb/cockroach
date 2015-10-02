@@ -88,7 +88,7 @@ func createPutRequest(key roachpb.Key, value []byte, txn *roachpb.Transaction) (
 	h.Txn = txn
 	return &roachpb.PutRequest{
 		Span: roachpb.Span{
-			Key: key,
+			Start: key,
 		},
 		Value: roachpb.Value{Bytes: value},
 	}, h
@@ -99,8 +99,8 @@ func createDeleteRangeRequest(key, endKey roachpb.Key, txn *roachpb.Transaction)
 	h.Txn = txn
 	return &roachpb.DeleteRangeRequest{
 		Span: roachpb.Span{
-			Key:    key,
-			EndKey: endKey,
+			Start: key,
+			End:   endKey,
 		},
 	}, h
 }
@@ -166,7 +166,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 		},
 	}, &roachpb.PutRequest{
 		Span: roachpb.Span{
-			Key: key,
+			Start: key,
 		},
 	})
 	if err != nil {
@@ -204,7 +204,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 		},
 	}, &roachpb.PutRequest{
 		Span: roachpb.Span{
-			Key: roachpb.Key("key"),
+			Start: roachpb.Key("key"),
 		},
 	})
 	if err != nil {
@@ -333,7 +333,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Transaction, error) {
 	hb := &roachpb.HeartbeatTxnRequest{
 		Span: roachpb.Span{
-			Key: txn.Key,
+			Start: txn.Key,
 		},
 	}
 	reply, err := client.SendWrappedWith(coord, nil, roachpb.Header{
@@ -412,7 +412,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	txn2.Priority = 2
 	pushArgs := &roachpb.PushTxnRequest{
 		Span: roachpb.Span{
-			Key: txn.Key,
+			Start: txn.Key,
 		},
 		Now:       s.Clock.Now(),
 		PusherTxn: *txn2,
@@ -507,7 +507,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 
 	var testPutReq = &roachpb.PutRequest{
 		Span: roachpb.Span{
-			Key: roachpb.Key("test-key"),
+			Start: roachpb.Key("test-key"),
 		},
 	}
 
@@ -618,7 +618,7 @@ func TestTxnDrainingNode(t *testing.T) {
 		},
 	}, &roachpb.PutRequest{
 		Span: roachpb.Span{
-			Key: key,
+			Start: key,
 		},
 	})
 	if _, ok := err.(*roachpb.NodeUnavailableError); !ok {
@@ -701,7 +701,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 
 	var ba roachpb.BatchRequest
 	put := &roachpb.PutRequest{}
-	put.Key = roachpb.Key("test")
+	put.Start = roachpb.Key("test")
 	ba.Add(put)
 	ba.Add(&roachpb.EndTransactionRequest{})
 	ba.Txn = &roachpb.Transaction{Name: "test"}

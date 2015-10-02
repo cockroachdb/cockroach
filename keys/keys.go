@@ -349,7 +349,7 @@ func Range(ba roachpb.BatchRequest) (roachpb.Key, roachpb.Key) {
 			continue
 		}
 		h := req.Header()
-		key := KeyAddress(h.Key)
+		key := KeyAddress(h.Start)
 		if key.Less(KeyAddress(from)) {
 			// Key is smaller than `from`.
 			from = key
@@ -358,7 +358,7 @@ func Range(ba roachpb.BatchRequest) (roachpb.Key, roachpb.Key) {
 			// Key is larger than `to`.
 			to = key.Next()
 		}
-		if endKey := KeyAddress(h.EndKey); KeyAddress(to).Less(endKey) {
+		if endKey := KeyAddress(h.End); KeyAddress(to).Less(endKey) {
 			// EndKey is larger than `to`.
 			to = endKey
 		}

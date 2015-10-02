@@ -343,10 +343,10 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				// write on multiple coordinators.
 				return nil, roachpb.NewError(util.Errorf("client must not pass intents to EndTransaction"))
 			}
-			if len(et.Key) != 0 {
+			if len(et.Start) != 0 {
 				return nil, roachpb.NewError(util.Errorf("EndTransaction must not have a Key set"))
 			}
-			et.Key = ba.Txn.Key
+			et.Start = ba.Txn.Key
 
 			tc.Lock()
 			txnMeta, metaOK := tc.txns[id]
@@ -451,7 +451,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) {
 	}
 	if len(ba.Txn.ID) == 0 {
 		// TODO(tschottdorf): should really choose the first txn write here.
-		firstKey := ba.Requests[0].GetInner().Header().Key
+		firstKey := ba.Requests[0].GetInner().Header().Start
 		newTxn := roachpb.NewTransaction(ba.Txn.Name, keys.KeyAddress(firstKey), ba.GetUserPriority(),
 			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
 		// Use existing priority as a minimum. This is used on transaction
@@ -580,7 +580,7 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	}
 
 	hb := &roachpb.HeartbeatTxnRequest{}
-	hb.Key = txn.Key
+	hb.Start = txn.Key
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
 	ba.Txn = &txn

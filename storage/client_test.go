@@ -469,7 +469,7 @@ func (m *multiTestContext) expireLeaderLeases() {
 func getArgs(key []byte) roachpb.GetRequest {
 	return roachpb.GetRequest{
 		Span: roachpb.Span{
-			Key: key,
+			Start: key,
 		},
 	}
 }
@@ -479,7 +479,7 @@ func getArgs(key []byte) roachpb.GetRequest {
 func putArgs(key, value []byte) roachpb.PutRequest {
 	return roachpb.PutRequest{
 		Span: roachpb.Span{
-			Key: key,
+			Start: key,
 		},
 		Value: roachpb.Value{
 			Bytes: value,
@@ -492,7 +492,7 @@ func putArgs(key, value []byte) roachpb.PutRequest {
 func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
 	return roachpb.IncrementRequest{
 		Span: roachpb.Span{
-			Key: key,
+			Start: key,
 		},
 		Increment: inc,
 	}

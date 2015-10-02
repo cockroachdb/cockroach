@@ -93,7 +93,7 @@ func (ba *BatchRequest) GetIntents() []Intent {
 			continue
 		}
 		h := req.Header()
-		intents = append(intents, Intent{Key: h.Key, EndKey: h.EndKey})
+		intents = append(intents, Intent{Key: h.Start, EndKey: h.End})
 	}
 	return intents
 }
@@ -236,7 +236,7 @@ func (ba BatchRequest) String() string {
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
 		h := req.Header()
-		str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Key, h.EndKey))
+		str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Start, h.End))
 	}
 	return strings.Join(str, ", ")
 }
