@@ -644,7 +644,7 @@ func (n *scanNode) filterRow() bool {
 	if n.desc != nil {
 		for _, col := range n.visibleCols {
 			if !col.Nullable {
-				break
+				continue
 			}
 			if qval, ok := n.qvals[col.ID]; ok && qval.datum == nil {
 				qval.datum = parser.DNull

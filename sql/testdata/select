@@ -217,3 +217,17 @@ SELECT z FROM test.xyzw@unknown WHERE y = 5
 
 query error qualified name "foo.w" not found
 SELECT w FROM test.xyzw@foo WHERE y = 5
+
+statement ok
+CREATE TABLE boolean_table (
+  id INTEGER PRIMARY KEY NOT NULL,
+  value BOOLEAN
+)
+
+statement ok
+INSERT INTO boolean_table (id, value) VALUES (1, NULL)
+
+query I
+SELECT value FROM boolean_table
+----
+NULL
