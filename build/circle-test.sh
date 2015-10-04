@@ -111,7 +111,13 @@ time ${builder} make testrace \
 # acceptance tests on the Mac's, but circle-deps.sh only built the
 # acceptance tests for Linux.
 if [ "$(uname)" = "Linux" ]; then
-  time $(dirname $0)/../acceptance.test -test.v -test.timeout 5m --verbosity=1 --vmodule=monitor=2 | \
+  # Make a place for the containers to write their logs.
+  mkdir -p ${outdir}/acceptance
+
+  # Note that this test requires 2>&1 but the others don't because
+  # this one runs outside the builder container (and inside the
+  # container, something is already combining stdout and stderr).
+  time $(dirname $0)/../acceptance.test -test.v -test.timeout 5m --verbosity=1 --vmodule=monitor=2 -l ${outdir}/acceptance 2>&1 | \
     tr -d '\r' | tee "${outdir}/acceptance.log" | \
     grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
     awk '{print "acceptance:", $0}'

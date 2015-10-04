@@ -237,7 +237,11 @@ func (l *Cluster) initCluster() {
 	binds := []string{l.CertsDir + ":/certs"}
 
 	if logDirectory != nil && len(*logDirectory) > 0 {
-		l.LogDir = filepath.Join(pwd, *logDirectory)
+		if filepath.IsAbs(*logDirectory) {
+			l.LogDir = *logDirectory
+		} else {
+			l.LogDir = filepath.Join(pwd, *logDirectory)
+		}
 		binds = append(binds, l.LogDir+":/logs")
 	} else if l.ForceLogging {
 		l.LogDir, err = ioutil.TempDir(pwd, ".localcluster.logs.")
