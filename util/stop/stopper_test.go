@@ -281,3 +281,20 @@ func TestStopperNumTasks(t *testing.T) {
 	}
 	s.Stop()
 }
+
+// TestStopperRunTaskPanic ensures that tasks are not leaked when they panic.
+// RunAsyncTask has a similar bit of logic, but it is not testable because
+// we cannot insert a recover() call in the right place.
+func TestStopperRunTaskPanic(t *testing.T) {
+	s := stop.NewStopper()
+	// If RunTask were not panic-safe, Stop() would deadlock.
+	defer s.Stop()
+	func() {
+		defer func() {
+			_ = recover()
+		}()
+		s.RunTask(func() {
+			panic("ouch")
+		})
+	}()
+}
