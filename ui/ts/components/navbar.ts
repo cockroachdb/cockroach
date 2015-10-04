@@ -16,6 +16,7 @@ module Components {
     export interface Target {
       title: string;
       route: string;
+      iconHtml?: string;
     }
 
     export interface TargetSet {
@@ -31,18 +32,27 @@ module Components {
     export function controller(ts: TargetSet): any {}
 
     export function view(ctrl: any, ts: TargetSet): _mithril.MithrilVirtualElement {
-      return m("ul.navigation", _.map(ts.targets(), (t: Target) =>
-        m("li",
-          {
-            className: ts.isActive(t) ? "active" : ""
-          },
-          m("a",
+      return m("ul.navigation-sidebar", _.map(ts.targets(), (t: Target) =>
+          m("li",
             {
-              config: m.route,
-              href: ts.baseRoute + t.route
+              className: ts.isActive(t) ? "active" : ""
             },
-            t.title)
-         )
+            m("a",
+              {
+                config: m.route,
+                href: ts.baseRoute + t.route
+              },
+              [
+                (!t.iconHtml) ? null :
+                m("div", {
+                    class: "image-container"
+                  },
+                  [
+                    m.trust(t.iconHtml)
+                  ]),
+                m("div", t.title)
+              ])
+          )
       ));
     }
   }

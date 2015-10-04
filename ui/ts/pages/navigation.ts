@@ -4,6 +4,7 @@
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/navbar.ts" />
 /// <reference path="../util/property.ts" />
+/// <reference path="../svgIcons/icons.ts" />
 
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
@@ -28,11 +29,13 @@ module AdminViews {
         private static defaultTargets: NavigationBar.Target[] = [
           {
             title: "Nodes",
-            route: "/nodes"
+            route: "/nodes",
+            iconHtml: SvgIcons.nodesIcon
           },
           {
             title: "Stores",
-            route: "/stores"
+            route: "/stores",
+            iconHtml: SvgIcons.storesIcon
           }
         ];
 
