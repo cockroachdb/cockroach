@@ -18,7 +18,6 @@
 package storage_test
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -216,12 +215,15 @@ func TestTree(t *testing.T) {
 
 	// To test merging, we just call AdminMerge on the lowest key to merge all
 	// ranges back into a single one.
-	for i := 0; i < len(keys); i++ {
-		if err := db.AdminMerge(roachpb.KeyMin); err != nil {
-			t.Fatal(err)
+	// TODO(bdarnell): re-enable this when merging is more reliable.
+	// https://github.com/cockroachdb/cockroach/issues/2433
+	/*
+		for i := 0; i < len(keys); i++ {
+			if err := db.AdminMerge(roachpb.KeyMin); err != nil {
+				t.Fatal(err)
+			}
+			tree, nodes := loadTree(t, db)
+			VerifyTree(t, tree, nodes, fmt.Sprintf("remove %d", i))
 		}
-		tree, nodes := loadTree(t, db)
-		VerifyTree(t, tree, nodes, fmt.Sprintf("remove %d", i))
-	}
-
+	*/
 }

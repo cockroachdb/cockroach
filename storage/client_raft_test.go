@@ -835,6 +835,7 @@ func TestProgressWithDownNode(t *testing.T) {
 
 func TestReplicateAddAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(bdarnell): #768")
 
 	// Run the test twice, once adding the replacement before removing
 	// the downed node, and once removing the downed node first.
