@@ -223,7 +223,7 @@ func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	return roachpb.NewTransaction(name, keys.KeyAddress(baseKey).Key(), userPriority,
+	return roachpb.NewTransaction(name, keys.Addr(baseKey).Key(), userPriority,
 		isolation, now, offset)
 }
 

@@ -57,14 +57,14 @@ func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to 
 			if len(header.EndKey) > 0 {
 				return false, nil, util.Errorf("%T is not a range command, but EndKey is set", args)
 			}
-			if !desc.ContainsKey(keys.KeyAddress(header.Key)) {
+			if !desc.ContainsKey(keys.Addr(header.Key)) {
 				return true, nil, nil
 			}
 			return false, nil, nil
 		}
 		var undo []func()
 		key, endKey := header.Key, header.EndKey
-		keyAddr, endKeyAddr := keys.KeyAddress(key), keys.KeyAddress(endKey)
+		keyAddr, endKeyAddr := keys.Addr(key), keys.Addr(endKey)
 		if keyAddr.Less(from) {
 			undo = append(undo, func() { header.Key = key })
 			header.Key = from.Key()
@@ -196,8 +196,8 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
 	candidate := roachpb.RKey(roachpb.KeyMin)
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
-		addr := keys.KeyAddress(h.Key)
-		eAddr := keys.KeyAddress(h.EndKey)
+		addr := keys.Addr(h.Key)
+		eAddr := keys.Addr(h.EndKey)
 		if len(eAddr) == 0 {
 			// Can probably avoid having to compute Next() here if
 			// we're in the mood for some more complexity.
@@ -227,9 +227,9 @@ func next(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
 	candidate := roachpb.RKey(roachpb.KeyMax)
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
-		addr := keys.KeyAddress(h.Key)
+		addr := keys.Addr(h.Key)
 		if addr.Less(k) {
-			if eAddr := keys.KeyAddress(h.EndKey); k.Less(eAddr) {
+			if eAddr := keys.Addr(h.EndKey); k.Less(eAddr) {
 				// Starts below k, but continues beyond. Need to stay at k.
 				return k
 			}

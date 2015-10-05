@@ -131,7 +131,7 @@ func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *roachpb.Range
 	if err != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err.Error())
 	}
-	if !r.ContainsKey(keys.KeyAddress(roachpb.Key(key))) {
+	if !r.ContainsKey(keys.Addr(roachpb.Key(key))) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
 	log.Infof("doLookup: %s %+v", key, r)

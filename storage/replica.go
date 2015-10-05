@@ -489,7 +489,7 @@ func (r *Replica) ContainsKey(key roachpb.Key) bool {
 }
 
 func containsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
-	return desc.ContainsKey(keys.KeyAddress(key))
+	return desc.ContainsKey(keys.Addr(key))
 }
 
 // ContainsKeyRange returns whether this range contains the specified
@@ -499,7 +499,7 @@ func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
 }
 
 func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool {
-	return desc.ContainsKeyRange(keys.KeyAddress(start), keys.KeyAddress(end))
+	return desc.ContainsKeyRange(keys.Addr(start), keys.Addr(end))
 }
 
 // GetGCMetadata reads the latest GC metadata for this range.

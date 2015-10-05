@@ -66,7 +66,7 @@ func TestKeyAddress(t *testing.T) {
 		{nil, nil},
 	}
 	for i, test := range testCases {
-		result := KeyAddress(test.key).Key()
+		result := Addr(test.key).Key()
 		if !result.Equal(test.expAddress) {
 			t.Errorf("%d: expected address for key %q doesn't match %q", i, test.key, test.expAddress)
 		}

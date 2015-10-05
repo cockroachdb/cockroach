@@ -193,23 +193,22 @@ func TransactionKey(key roachpb.Key, id []byte) roachpb.Key {
 	return MakeRangeKey(key, LocalTransactionSuffix, roachpb.Key(id))
 }
 
-// KeyAddress returns the address for the key, used to lookup the
-// range containing the key. In the normal case, this is simply the
-// key's value. However, for local keys, such as transaction records,
-// range-spanning binary tree node pointers, and message queues, the
-// address is the trailing suffix of the key, with the local key
-// prefix removed. In this way, local keys address to the same range
-// as non-local keys, but are stored separately so that they don't
-// collide with user-space or global system keys.
+// Addr returns the address for the key, used to lookup the range containing
+// the key. In the normal case, this is simply the key's value. However, for
+// local keys, such as transaction records, range-spanning binary tree node
+// pointers, the address is the trailing suffix of the key, with the local key
+// prefix removed. In this way, local keys address to the same range as
+// non-local keys, but are stored separately so that they don't collide with
+// user-space or global system keys.
 //
-// However, not all local keys are addressable in the global map. Only
-// range local keys incorporating a range key (start key or transaction
-// key) are addressable (e.g. range metadata and txn records). Range
-// local keys incorporating the Range ID are not (e.g. response cache
-// entries, and range stats).
+// However, not all local keys are addressable in the global map. Only range
+// local keys incorporating a range key (start key or transaction key) are
+// addressable (e.g. range metadata and txn records). Range local keys
+// incorporating the Range ID are not (e.g. response cache entries, and range
+// stats).
 //
 // TODO(pmattis): Should KeyAddress return an error when the key is malformed?
-func KeyAddress(k roachpb.Key) roachpb.RKey {
+func Addr(k roachpb.Key) roachpb.RKey {
 	if k == nil {
 		return nil
 	}
@@ -348,7 +347,7 @@ func Range(ba roachpb.BatchRequest) (roachpb.RKey, roachpb.RKey) {
 			continue
 		}
 		h := req.Header()
-		key := KeyAddress(h.Key)
+		key := Addr(h.Key)
 		if key.Less(from) {
 			// Key is smaller than `from`.
 			from = key
@@ -357,7 +356,7 @@ func Range(ba roachpb.BatchRequest) (roachpb.RKey, roachpb.RKey) {
 			// Key is larger than `to`.
 			to = key.Next()
 		}
-		if endKey := KeyAddress(h.EndKey); to.Less(endKey) {
+		if endKey := Addr(h.EndKey); to.Less(endKey) {
 			// EndKey is larger than `to`.
 			to = endKey
 		}
