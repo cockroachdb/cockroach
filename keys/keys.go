@@ -209,6 +209,11 @@ func (rk RKey) Less(otherRK RKey) bool {
 	return rk.Key().Less(otherRK.Key())
 }
 
+// Equal checks two RKeys for byte-wise equality.
+func (rk RKey) Equal(otherRK RKey) bool {
+	return bytes.Compare(rk, otherRK) == 0
+}
+
 // Next returns the RKey that sorts immediately after the given one.
 func (rk RKey) Next() RKey {
 	return RKey(rk.Key().Next())
@@ -255,41 +260,40 @@ func KeyAddress(k roachpb.Key) RKey {
 // for the given key. For ordinary keys this returns a level 2
 // metadata key - for level 2 keys, it returns a level 1 key. For
 // level 1 keys and local keys, KeyMin is returned.
-func RangeMetaKey(key roachpb.Key) roachpb.Key {
+func RangeMetaKey(key RKey) RKey {
 	if len(key) == 0 {
-		return roachpb.KeyMin
+		return RKey(roachpb.KeyMin)
 	}
-	addr := KeyAddress(key).Key()
-	if !bytes.HasPrefix(addr, MetaPrefix) {
-		return MakeKey(Meta2Prefix, addr)
+	if !bytes.HasPrefix(key, MetaPrefix) {
+		return RKey(MakeKey(Meta2Prefix, key.Key()))
 	}
-	if bytes.HasPrefix(addr, Meta2Prefix) {
-		return MakeKey(Meta1Prefix, addr[len(Meta2Prefix):])
+	if bytes.HasPrefix(key, Meta2Prefix) {
+		return RKey(MakeKey(Meta1Prefix, key[len(Meta2Prefix):].Key()))
 	}
 
-	return roachpb.KeyMin
+	return RKey(roachpb.KeyMin)
 }
 
 // validateRangeMetaKey validates that the given key is a valid Range Metadata
 // key. This checks only the constraints common to forward and backwards scans:
 // correct prefix and not exceeding KeyMax.
-func validateRangeMetaKey(key roachpb.Key) error {
+func validateRangeMetaKey(key RKey) error {
 	// KeyMin is a valid key.
-	if key.Equal(roachpb.KeyMin) {
+	if key.Key().Equal(roachpb.KeyMin) {
 		return nil
 	}
 	// Key must be at least as long as Meta1Prefix.
 	if len(key) < len(Meta1Prefix) {
-		return NewInvalidRangeMetaKeyError("too short", key)
+		return NewInvalidRangeMetaKeyError("too short", key.Key())
 	}
 
-	prefix, body := roachpb.Key(key[:len(Meta1Prefix)]), roachpb.Key(key[len(Meta1Prefix):])
-	if !prefix.Equal(Meta2Prefix) && !prefix.Equal(Meta1Prefix) {
-		return NewInvalidRangeMetaKeyError("not a meta key", key)
+	prefix, body := RKey(key[:len(Meta1Prefix)]), RKey(key[len(Meta1Prefix):])
+	if !prefix.Key().Equal(Meta2Prefix) && !prefix.Key().Equal(Meta1Prefix) {
+		return NewInvalidRangeMetaKeyError("not a meta key", key.Key())
 	}
 
-	if roachpb.KeyMax.Less(body) {
-		return NewInvalidRangeMetaKeyError("body of meta key range lookup is > KeyMax", key)
+	if RKey(roachpb.KeyMax).Less(body) {
+		return NewInvalidRangeMetaKeyError("body of meta key range lookup is > KeyMax", key.Key())
 	}
 	return nil
 }
@@ -297,43 +301,43 @@ func validateRangeMetaKey(key roachpb.Key) error {
 // MetaScanBounds returns the range [start,end) within which the desired meta
 // record can be found by means of an engine scan. The given key must be a
 // valid RangeMetaKey as defined by validateRangeMetaKey.
-func MetaScanBounds(key roachpb.Key) (roachpb.Key, roachpb.Key, error) {
+func MetaScanBounds(key RKey) (RKey, RKey, error) {
 	if err := validateRangeMetaKey(key); err != nil {
 		return nil, nil, err
 	}
 
-	if key.Equal(Meta2KeyMax) {
-		return nil, nil, NewInvalidRangeMetaKeyError("Meta2KeyMax can't be used as the key of scan", key)
+	if key.Key().Equal(Meta2KeyMax) {
+		return nil, nil, NewInvalidRangeMetaKeyError("Meta2KeyMax can't be used as the key of scan", key.Key())
 	}
 
-	if key.Equal(roachpb.KeyMin) {
+	if key.Key().Equal(roachpb.KeyMin) {
 		// Special case KeyMin: find the first entry in meta1.
-		return Meta1Prefix, Meta1Prefix.PrefixEnd(), nil
+		return RKey(Meta1Prefix), RKey(Meta1Prefix.PrefixEnd()), nil
 	}
-	if key.Equal(Meta1KeyMax) {
+	if key.Key().Equal(Meta1KeyMax) {
 		// Special case Meta1KeyMax: this is the last key in Meta1, we don't want
 		// to start at Next().
-		return key, Meta1Prefix.PrefixEnd(), nil
+		return key, RKey(Meta1Prefix.PrefixEnd()), nil
 	}
 	// Otherwise find the first entry greater than the given key in the same meta prefix.
-	return key.Next(), roachpb.Key(key[:len(Meta1Prefix)]).PrefixEnd(), nil
+	return key.Next(), RKey(roachpb.Key(key[:len(Meta1Prefix)]).PrefixEnd()), nil
 }
 
 // MetaReverseScanBounds returns the range [start,end) within which the desired
 // meta record can be found by means of a reverse engine scan. The given key
 // must be a valid RangeMetaKey as defined by validateRangeMetaKey.
-func MetaReverseScanBounds(key roachpb.Key) (roachpb.Key, roachpb.Key, error) {
+func MetaReverseScanBounds(key RKey) (RKey, RKey, error) {
 	if err := validateRangeMetaKey(key); err != nil {
 		return nil, nil, err
 	}
 
-	if key.Equal(roachpb.KeyMin) || key.Equal(Meta1Prefix) {
-		return nil, nil, NewInvalidRangeMetaKeyError("KeyMin and Meta1Prefix can't be used as the key of reverse scan", key)
+	if key.Key().Equal(roachpb.KeyMin) || key.Key().Equal(Meta1Prefix) {
+		return nil, nil, NewInvalidRangeMetaKeyError("KeyMin and Meta1Prefix can't be used as the key of reverse scan", key.Key())
 	}
-	if key.Equal(Meta2Prefix) {
+	if key.Key().Equal(Meta2Prefix) {
 		// Special case Meta2Prefix: this is the first key in Meta2, and the scan
 		// interval covers all of Meta1.
-		return Meta1Prefix, key.Next(), nil
+		return RKey(Meta1Prefix), key.Next(), nil
 	}
 	// Otherwise find the first entry greater than the given key and find the last entry
 	// in the same prefix. For MVCCReverseScan the endKey is exclusive, if we want to find

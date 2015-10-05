@@ -210,12 +210,12 @@ func (ls *LocalSender) firstRange() (*roachpb.RangeDescriptor, error) {
 
 // rangeLookup implements the rangeDescriptorDB interface. It looks up
 // the descriptors for the given (meta) key.
-func (ls *LocalSender) rangeLookup(key roachpb.Key, options lookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
+func (ls *LocalSender) rangeLookup(key keys.RKey, options lookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: key,
+			Key: key.Key(),
 		},
 		MaxRanges:       1,
 		ConsiderIntents: options.considerIntents,

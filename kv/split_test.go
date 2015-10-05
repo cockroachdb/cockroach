@@ -98,13 +98,13 @@ func TestRangeSplitMeta(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	splitKeys := []roachpb.Key{roachpb.Key("G"), keys.RangeMetaKey(roachpb.Key("F")),
-		keys.RangeMetaKey(roachpb.Key("K")), keys.RangeMetaKey(roachpb.Key("H"))}
+	splitKeys := []keys.RKey{keys.RKey("G"), keys.RangeMetaKey(keys.RKey("F")),
+		keys.RangeMetaKey(keys.RKey("K")), keys.RangeMetaKey(keys.RKey("H"))}
 
 	// Execute the consecutive splits.
 	for _, splitKey := range splitKeys {
 		log.Infof("starting split at key %q...", splitKey)
-		if err := s.DB.AdminSplit(splitKey); err != nil {
+		if err := s.DB.AdminSplit(roachpb.Key(splitKey)); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof("split at key %q complete", splitKey)

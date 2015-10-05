@@ -207,13 +207,13 @@ type lookupOptions struct {
 // DistSender's Send() method, so there is no error inspection and
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
-func (ds *DistSender) rangeLookup(key roachpb.Key, options lookupOptions,
+func (ds *DistSender) rangeLookup(key keys.RKey, options lookupOptions,
 	desc *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: key,
+			Key: key.Key(),
 		},
 		MaxRanges:       ds.rangeLookupMaxRanges,
 		ConsiderIntents: options.considerIntents,
@@ -393,8 +393,7 @@ func (ds *DistSender) getDescriptors(from, to keys.RKey, options lookupOptions) 
 	} else {
 		descKey = to
 	}
-	// TODO(tschottdorf): thread keys.RKey through the range cache code.
-	desc, err = ds.rangeCache.LookupRangeDescriptor(descKey.Key(), options)
+	desc, err = ds.rangeCache.LookupRangeDescriptor(descKey, options)
 
 	if err != nil {
 		return nil, false, nil, roachpb.NewError(err)
@@ -409,7 +408,7 @@ func (ds *DistSender) getDescriptors(from, to keys.RKey, options lookupOptions) 
 	}
 
 	evict := func() {
-		ds.rangeCache.EvictCachedRangeDescriptor(descKey.Key(), desc, options.useReverseScan)
+		ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, options.useReverseScan)
 	}
 
 	return desc, needAnother(desc, options.useReverseScan), evict, nil

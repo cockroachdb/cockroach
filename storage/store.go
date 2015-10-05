@@ -153,17 +153,17 @@ func (e *rangeAlreadyExists) Error() string {
 
 // rangeKeyItem is a common interface for roachpb.Key and Range.
 type rangeKeyItem interface {
-	getKey() roachpb.Key
+	getKey() keys.RKey
 }
 
-// rangeBTreeKey is a type alias of roachpb.Key that implements the
+// rangeBTreeKey is a type alias of keys.RKey that implements the
 // rangeKeyItem interface and the btree.Item interface.
-type rangeBTreeKey roachpb.Key
+type rangeBTreeKey keys.RKey
 
 var _ rangeKeyItem = rangeBTreeKey{}
 
-func (k rangeBTreeKey) getKey() roachpb.Key {
-	return (roachpb.Key)(k)
+func (k rangeBTreeKey) getKey() keys.RKey {
+	return (keys.RKey)(k)
 }
 
 var _ btree.Item = rangeBTreeKey{}
@@ -174,8 +174,8 @@ func (k rangeBTreeKey) Less(i btree.Item) bool {
 
 var _ rangeKeyItem = &Replica{}
 
-func (r *Replica) getKey() roachpb.Key {
-	return r.Desc().EndKey
+func (r *Replica) getKey() keys.RKey {
+	return keys.RKey(r.Desc().EndKey)
 }
 
 var _ btree.Item = &Replica{}
@@ -815,13 +815,13 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	// Range addressing for meta2.
-	meta2Key := keys.RangeMetaKey(roachpb.KeyMax)
-	if err := engine.MVCCPutProto(batch, ms, meta2Key, now, nil, desc); err != nil {
+	meta2Key := keys.RangeMetaKey(keys.RKey(roachpb.KeyMax))
+	if err := engine.MVCCPutProto(batch, ms, meta2Key.Key(), now, nil, desc); err != nil {
 		return err
 	}
 	// Range addressing for meta1.
 	meta1Key := keys.RangeMetaKey(meta2Key)
-	if err := engine.MVCCPutProto(batch, ms, meta1Key, now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, meta1Key.Key(), now, nil, desc); err != nil {
 		return err
 	}
 
@@ -956,7 +956,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.Key, subsumedRangeID roachpb.RangeID) error {
 	subsumingDesc := subsumingRng.Desc()
 
-	if !subsumingDesc.EndKey.Less(updatedEndKey) {
+	if !keys.RKey(subsumingDesc.EndKey).Less(keys.RKey(updatedEndKey)) {
 		return util.Errorf("the new end key is not greater than the current one: %+v <= %+v",
 			updatedEndKey, subsumingDesc.EndKey)
 	}
