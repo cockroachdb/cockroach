@@ -4487,7 +4487,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:976
 		{
-			sqlVAL.stmt = nil
+			sqlVAL.stmt = &Show{Name: "TIME ZONE"}
 		}
 	case 138:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]

@@ -20,6 +20,7 @@ package driver
 import (
 	"database/sql/driver"
 	"errors"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -156,10 +157,18 @@ func (c *conn) send(stmt string, dArgs []Datum) (*Response_Result, error) {
 // Execute all the URL settings against the db to create
 // the correct session state.
 func (c *conn) applySettings(params map[string]string) error {
-	if db, ok := params["database"]; ok {
-		if _, err := c.Exec("SET DATABASE = "+db, nil); err != nil {
-			return err
+	var commands []string
+	for _, setting := range []struct {
+		name     string
+		operator string
+	}{
+		{name: "DATABASE", operator: " = "},
+		{name: "TIME ZONE", operator: " "},
+	} {
+		if val, ok := params[strings.ToLower(strings.Replace(setting.name, " ", "_", -1))]; ok {
+			commands = append(commands, strings.Join([]string{"SET " + setting.name, val}, setting.operator))
 		}
 	}
-	return nil
+	_, err := c.Exec(strings.Join(commands, ";"), nil)
+	return err
 }

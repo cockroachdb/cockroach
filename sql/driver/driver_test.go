@@ -19,11 +19,13 @@ package driver_test
 
 import (
 	"database/sql"
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -223,12 +225,48 @@ CREATE TABLE t.alltypes (
 func TestConnectionSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(nil)
-	url := "https://root@" + s.ServingAddr() + "?certs=test_certs"
-	// Create a new Database called t.
+	url := fmt.Sprintf(
+		"https://%s@%s?certs=%s&time_zone=%s",
+		security.RootUser,
+		s.ServingAddr(),
+		security.EmbeddedCertsDir,
+		time.Local,
+	)
+
 	db, err := sql.Open("cockroach", url)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	if rows, err := db.Query(`SHOW TIME ZONE`); err != nil {
+		t.Fatal(err)
+	} else {
+		defer rows.Close()
+
+		cols, err := rows.Columns()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if expected := []string{"TIME ZONE"}; !reflect.DeepEqual(cols, expected) {
+			t.Errorf("got unexpected columns:\n%s\nexpected:\n%s", cols, expected)
+		}
+
+		var timeZone sql.NullString
+		rows.Next()
+		if err := rows.Scan(&timeZone); err != nil {
+			t.Fatal(err)
+		}
+		if !(timeZone.Valid && timeZone.String == time.Local.String()) {
+			t.Errorf("got unexpected time zone:\n%s\nexpected:\n%s", timeZone.String, time.Local)
+		}
+
+		if rows.Next() {
+			t.Error("expected rows to be complete")
+		}
+	}
+
+	// Create a new Database called t.
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
 	}
