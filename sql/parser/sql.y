@@ -974,7 +974,7 @@ show_stmt:
   }
 | SHOW TIME ZONE
   {
-    $$ = nil
+    $$ = &Show{Name: "TIME ZONE"}
   }
 | SHOW TRANSACTION ISOLATION LEVEL
   {
