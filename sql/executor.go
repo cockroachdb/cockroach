@@ -154,7 +154,7 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 		// Start a transaction here and not in planMaker to prevent begin
 		// transaction from being called within an auto-transaction below.
 		planMaker.setTxn(client.NewTxn(e.db), time.Now())
-		planMaker.txn.SetDebugName("sql", 0)
+		planMaker.txn.SetDebugName(fmt.Sprintf("sql: %s", stmt), 0)
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if planMaker.txn == nil {
 			return result, errNoTransactionInProgress
