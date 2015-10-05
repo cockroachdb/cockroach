@@ -153,17 +153,17 @@ func (e *rangeAlreadyExists) Error() string {
 
 // rangeKeyItem is a common interface for roachpb.Key and Range.
 type rangeKeyItem interface {
-	getKey() keys.RKey
+	getKey() roachpb.RKey
 }
 
-// rangeBTreeKey is a type alias of keys.RKey that implements the
+// rangeBTreeKey is a type alias of roachpb.RKey that implements the
 // rangeKeyItem interface and the btree.Item interface.
-type rangeBTreeKey keys.RKey
+type rangeBTreeKey roachpb.RKey
 
 var _ rangeKeyItem = rangeBTreeKey{}
 
-func (k rangeBTreeKey) getKey() keys.RKey {
-	return (keys.RKey)(k)
+func (k rangeBTreeKey) getKey() roachpb.RKey {
+	return (roachpb.RKey)(k)
 }
 
 var _ btree.Item = rangeBTreeKey{}
@@ -174,8 +174,8 @@ func (k rangeBTreeKey) Less(i btree.Item) bool {
 
 var _ rangeKeyItem = &Replica{}
 
-func (r *Replica) getKey() keys.RKey {
-	return keys.RKey(r.Desc().EndKey)
+func (r *Replica) getKey() roachpb.RKey {
+	return roachpb.RKey(r.Desc().EndKey)
 }
 
 var _ btree.Item = &Replica{}
@@ -623,7 +623,7 @@ func (s *Store) startGossip() {
 // range and if so, reminds it to gossip the first range descriptor and
 // sentinel gossip.
 func (s *Store) maybeGossipFirstRange() error {
-	rng := s.LookupReplica(keys.RKey(roachpb.KeyMin), nil)
+	rng := s.LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
 	if rng != nil {
 		return rng.maybeGossipFirstRange()
 	}
@@ -633,7 +633,7 @@ func (s *Store) maybeGossipFirstRange() error {
 // maybeGossipSystemConfig looks for the range containing SystemDB keys and
 // lets that range gossip them.
 func (s *Store) maybeGossipSystemConfig() error {
-	rng := s.LookupReplica(keys.RKey(keys.SystemDBSpan.Key), nil)
+	rng := s.LookupReplica(roachpb.RKey(keys.SystemDBSpan.Key), nil)
 	if rng == nil {
 		// This store has no range with this configuration.
 		return nil
@@ -751,7 +751,7 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 // specified key range. Note that the specified keys are transformed
 // using Key.Address() to ensure we lookup replicas correctly for local
 // keys. When end is nil, a replica that contains start is looked up.
-func (s *Store) LookupReplica(start, end keys.RKey) *Replica {
+func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -815,7 +815,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	// Range addressing for meta2.
-	meta2Key := keys.RangeMetaKey(keys.RKey(roachpb.KeyMax))
+	meta2Key := keys.RangeMetaKey(roachpb.RKey(roachpb.KeyMax))
 	if err := engine.MVCCPutProto(batch, ms, meta2Key.Key(), now, nil, desc); err != nil {
 		return err
 	}
@@ -956,7 +956,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.Key, subsumedRangeID roachpb.RangeID) error {
 	subsumingDesc := subsumingRng.Desc()
 
-	if !keys.RKey(subsumingDesc.EndKey).Less(keys.RKey(updatedEndKey)) {
+	if !roachpb.RKey(subsumingDesc.EndKey).Less(roachpb.RKey(updatedEndKey)) {
 		return util.Errorf("the new end key is not greater than the current one: %+v <= %+v",
 			updatedEndKey, subsumingDesc.EndKey)
 	}

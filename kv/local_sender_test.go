@@ -22,7 +22,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
@@ -167,19 +166,19 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		ls.AddStore(s[i])
 	}
 
-	if _, r, err := ls.lookupReplica(keys.RKey("a"), keys.RKey("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(roachpb.RKey("a"), roachpb.RKey("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(keys.RKey("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(roachpb.RKey("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(keys.RKey("b"), keys.RKey("d")); r != nil || err == nil {
+	if _, r, err := ls.lookupReplica(roachpb.RKey("b"), roachpb.RKey("d")); r != nil || err == nil {
 		t.Errorf("expected store 0 and error got %d", r.StoreID)
 	}
-	if _, r, err := ls.lookupReplica(keys.RKey("x"), keys.RKey("z")); r.StoreID != s[1].Ident.StoreID {
+	if _, r, err := ls.lookupReplica(roachpb.RKey("x"), roachpb.RKey("z")); r.StoreID != s[1].Ident.StoreID {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(keys.RKey("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(roachpb.RKey("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
 

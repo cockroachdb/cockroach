@@ -41,12 +41,12 @@ import (
 // TODO(tschottdorf): Consider returning a new BatchRequest, which has more
 // overhead in the common case of a batch which never needs truncation but is
 // less magical.
-func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to keys.RKey) (func(), int, error) {
+func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to roachpb.RKey) (func(), int, error) {
 	if !desc.ContainsKey(from) {
-		from = keys.RKey(desc.StartKey)
+		from = roachpb.RKey(desc.StartKey)
 	}
 	if !desc.ContainsKeyRange(desc.StartKey, to) || to == nil {
-		to = keys.RKey(desc.EndKey)
+		to = roachpb.RKey(desc.EndKey)
 	}
 	truncateOne := func(args roachpb.Request) (bool, []func(), error) {
 		if _, ok := args.(*roachpb.NoopRequest); ok {
@@ -192,8 +192,8 @@ func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 // affect keys larger than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func prev(ba roachpb.BatchRequest, k keys.RKey) keys.RKey {
-	candidate := keys.RKey(roachpb.KeyMin)
+func prev(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
+	candidate := roachpb.RKey(roachpb.KeyMin)
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
 		addr := keys.KeyAddress(h.Key)
@@ -223,8 +223,8 @@ func prev(ba roachpb.BatchRequest, k keys.RKey) keys.RKey {
 // affect keys less than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func next(ba roachpb.BatchRequest, k keys.RKey) keys.RKey {
-	candidate := keys.RKey(roachpb.KeyMax)
+func next(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
+	candidate := roachpb.RKey(roachpb.KeyMax)
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
 		addr := keys.KeyAddress(h.Key)

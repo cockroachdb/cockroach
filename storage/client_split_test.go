@@ -164,8 +164,8 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	if a, e := store.ReplicaCount(), 2; a != e {
 		t.Fatalf("expected %d stores after concurrent splits; actual count=%d", e, a)
 	}
-	rng := store.LookupReplica(keys.RKey(roachpb.KeyMin), nil)
-	newRng := store.LookupReplica(keys.RKey(splitKey), nil)
+	rng := store.LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
+	newRng := store.LookupReplica(roachpb.RKey(splitKey), nil)
 	if !bytes.Equal(newRng.Desc().StartKey, splitKey) || !bytes.Equal(splitKey, rng.Desc().EndKey) {
 		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRng.Desc().StartKey, splitKey, rng.Desc().EndKey)
 	}
@@ -233,7 +233,7 @@ func TestStoreRangeSplit(t *testing.T) {
 		}
 	}
 
-	rng := store.LookupReplica(keys.RKey(roachpb.KeyMin), nil)
+	rng := store.LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
 	newRng := store.LookupReplica([]byte("m"), nil)
 	if !bytes.Equal(newRng.Desc().StartKey, splitKey) || !bytes.Equal(splitKey, rng.Desc().EndKey) {
 		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRng.Desc().StartKey, splitKey, rng.Desc().EndKey)
@@ -429,7 +429,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	}
 
 	// Wait for the range to be split along table boundaries.
-	originalRange := store.LookupReplica(keys.RKey(roachpb.KeyMin), nil)
+	originalRange := store.LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
 	var rng *storage.Replica
 	if err := util.IsTrueWithin(func() bool {
 		rng = store.LookupReplica(keys.MakeTablePrefix(1000), nil)
@@ -475,7 +475,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
 
-	origRng := store.LookupReplica(keys.RKey(roachpb.KeyMin), nil)
+	origRng := store.LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
 
 	// Set max bytes.
 	maxBytes := int64(1 << 16)

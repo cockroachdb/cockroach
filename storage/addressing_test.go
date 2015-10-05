@@ -80,25 +80,25 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		{true, roachpb.Key("a"), roachpb.Key("m"), roachpb.Key("m"), roachpb.Key("z"),
 			[][]byte{meta2Key(roachpb.Key("m"))}, [][]byte{meta2Key(roachpb.Key("z"))}},
 		// Split KeyMin-"a" at meta2(m).
-		{true, roachpb.KeyMin, keys.RangeMetaKey(keys.RKey("m")), keys.RangeMetaKey(keys.RKey("m")), roachpb.Key("a"),
+		{true, roachpb.KeyMin, keys.RangeMetaKey(roachpb.RKey("m")), keys.RangeMetaKey(roachpb.RKey("m")), roachpb.Key("a"),
 			[][]byte{meta1Key(roachpb.Key("m"))}, [][]byte{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
 		// Split meta2(m)-"a" at meta2(z).
-		{true, keys.RangeMetaKey(keys.RKey("m")), keys.RangeMetaKey(keys.RKey("z")), keys.RangeMetaKey(keys.RKey("z")), roachpb.Key("a"),
+		{true, keys.RangeMetaKey(roachpb.RKey("m")), keys.RangeMetaKey(roachpb.RKey("z")), keys.RangeMetaKey(roachpb.RKey("z")), roachpb.Key("a"),
 			[][]byte{meta1Key(roachpb.Key("z"))}, [][]byte{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
 		// Split meta2(m)-meta2(z) at meta2(r).
-		{true, keys.RangeMetaKey(keys.RKey("m")), keys.RangeMetaKey(keys.RKey("r")), keys.RangeMetaKey(keys.RKey("r")), keys.RangeMetaKey(keys.RKey("z")),
+		{true, keys.RangeMetaKey(roachpb.RKey("m")), keys.RangeMetaKey(roachpb.RKey("r")), keys.RangeMetaKey(roachpb.RKey("r")), keys.RangeMetaKey(roachpb.RKey("z")),
 			[][]byte{meta1Key(roachpb.Key("r"))}, [][]byte{meta1Key(roachpb.Key("z"))}},
 
 		// Now, merge all of our splits backwards...
 
 		// Merge meta2(m)-meta2(z).
-		{false, keys.RangeMetaKey(keys.RKey("m")), keys.RangeMetaKey(keys.RKey("r")), keys.RangeMetaKey(keys.RKey("m")), keys.RangeMetaKey(keys.RKey("z")),
+		{false, keys.RangeMetaKey(roachpb.RKey("m")), keys.RangeMetaKey(roachpb.RKey("r")), keys.RangeMetaKey(roachpb.RKey("m")), keys.RangeMetaKey(roachpb.RKey("z")),
 			[][]byte{meta1Key(roachpb.Key("r"))}, [][]byte{meta1Key(roachpb.Key("z"))}},
 		// Merge meta2(m)-"a".
-		{false, keys.RangeMetaKey(keys.RKey("m")), keys.RangeMetaKey(keys.RKey("z")), keys.RangeMetaKey(keys.RKey("m")), roachpb.Key("a"),
+		{false, keys.RangeMetaKey(roachpb.RKey("m")), keys.RangeMetaKey(roachpb.RKey("z")), keys.RangeMetaKey(roachpb.RKey("m")), roachpb.Key("a"),
 			[][]byte{meta1Key(roachpb.Key("z"))}, [][]byte{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
 		// Merge KeyMin-"a".
-		{false, roachpb.KeyMin, keys.RangeMetaKey(keys.RKey("m")), roachpb.KeyMin, roachpb.Key("a"),
+		{false, roachpb.KeyMin, keys.RangeMetaKey(roachpb.RKey("m")), roachpb.KeyMin, roachpb.Key("a"),
 			[][]byte{meta1Key(roachpb.Key("m"))}, [][]byte{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
 		// Merge "a"-"z".
 		{false, roachpb.Key("a"), roachpb.Key("m"), roachpb.Key("a"), roachpb.Key("z"),

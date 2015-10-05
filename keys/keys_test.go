@@ -76,35 +76,35 @@ func TestKeyAddress(t *testing.T) {
 func TestRangeMetaKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key, expKey RKey
+		key, expKey roachpb.RKey
 	}{
 		{
-			key:    RKey{},
-			expKey: RKey(roachpb.KeyMin),
+			key:    roachpb.RKey{},
+			expKey: roachpb.RKey(roachpb.KeyMin),
 		},
 		{
-			key:    RKey("\x00\x00meta2\x00zonefoo"),
-			expKey: RKey("\x00\x00meta1\x00zonefoo"),
+			key:    roachpb.RKey("\x00\x00meta2\x00zonefoo"),
+			expKey: roachpb.RKey("\x00\x00meta1\x00zonefoo"),
 		},
 		{
-			key:    RKey("\x00\x00meta1\x00zonefoo"),
-			expKey: RKey(roachpb.KeyMin),
+			key:    roachpb.RKey("\x00\x00meta1\x00zonefoo"),
+			expKey: roachpb.RKey(roachpb.KeyMin),
 		},
 		{
-			key:    RKey("foo"),
-			expKey: RKey("\x00\x00meta2foo"),
+			key:    roachpb.RKey("foo"),
+			expKey: roachpb.RKey("\x00\x00meta2foo"),
 		},
 		{
-			key:    RKey("foo"),
-			expKey: RKey("\x00\x00meta2foo"),
+			key:    roachpb.RKey("foo"),
+			expKey: roachpb.RKey("\x00\x00meta2foo"),
 		},
 		{
-			key:    RKey("\x00\x00meta2foo"),
-			expKey: RKey("\x00\x00meta1foo"),
+			key:    roachpb.RKey("\x00\x00meta2foo"),
+			expKey: roachpb.RKey("\x00\x00meta1foo"),
 		},
 		{
-			key:    RKey("\x00\x00meta1foo"),
-			expKey: RKey(roachpb.KeyMin),
+			key:    roachpb.RKey("\x00\x00meta1foo"),
+			expKey: roachpb.RKey(roachpb.KeyMin),
 		},
 	}
 	for i, test := range testCases {
@@ -174,7 +174,7 @@ func TestMetaScanBounds(t *testing.T) {
 		},
 	}
 	for i, test := range testCases {
-		resStart, resEnd, err := MetaScanBounds(RKey(test.key))
+		resStart, resEnd, err := MetaScanBounds(roachpb.RKey(test.key))
 
 		if err != nil && !testutils.IsError(err, test.expError) {
 			t.Errorf("expected error: %s ; got %s", test.expError, err)
@@ -245,7 +245,7 @@ func TestMetaReverseScanBounds(t *testing.T) {
 		},
 	}
 	for i, test := range testCases {
-		resStart, resEnd, err := MetaReverseScanBounds(RKey(test.key))
+		resStart, resEnd, err := MetaReverseScanBounds(roachpb.RKey(test.key))
 
 		if err != nil && !testutils.IsError(err, test.expError) {
 			t.Errorf("expected error: %s ; got %s", test.expError, err)
@@ -274,7 +274,7 @@ func TestValidateRangeMetaKey(t *testing.T) {
 		{roachpb.MakeKey(Meta2Prefix, roachpb.KeyMax.Next()), true},
 	}
 	for i, test := range testCases {
-		err := validateRangeMetaKey(RKey(test.key))
+		err := validateRangeMetaKey(roachpb.RKey(test.key))
 		if err != nil != test.expErr {
 			t.Errorf("%d: expected error? %t: %s", i, test.expErr, err)
 		}

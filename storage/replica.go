@@ -161,7 +161,7 @@ type RangeManager interface {
 	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.Header, roachpb.PushTxnType) error
 
 	// Range and replica manipulation methods.
-	LookupReplica(start, end keys.RKey) *Replica
+	LookupReplica(start, end roachpb.RKey) *Replica
 	MergeRange(subsumingRng *Replica, updatedEndKey roachpb.Key, subsumedRangeID roachpb.RangeID) error
 	NewRangeDescriptor(start, end roachpb.Key, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error)
 	NewSnapshot() engine.Engine

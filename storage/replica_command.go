@@ -562,7 +562,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 		// We want to search for the metadata key greater than
 		// args.Key. Scan for both the requested key and the keys immediately
 		// afterwards, up to MaxRanges.
-		startKey, endKey, err := keys.MetaScanBounds(keys.RKey(args.Key))
+		startKey, endKey, err := keys.MetaScanBounds(roachpb.RKey(args.Key))
 		if err != nil {
 			return reply, nil, err
 		}
@@ -601,7 +601,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 			if err := proto.Unmarshal(b, &r); err != nil {
 				return nil, err
 			}
-			if !keys.RangeMetaKey(keys.RKey(r.StartKey)).Less(keys.RKey(args.Key)) {
+			if !keys.RangeMetaKey(roachpb.RKey(r.StartKey)).Less(roachpb.RKey(args.Key)) {
 				// This is the case in which we've picked up an extra descriptor
 				// we don't want.
 				return nil, nil
@@ -611,7 +611,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 		}
 
 		if args.Key.Less(keys.Meta2KeyMax) {
-			startKey, endKey, err := keys.MetaScanBounds(keys.RKey(args.Key))
+			startKey, endKey, err := keys.MetaScanBounds(roachpb.RKey(args.Key))
 			if err != nil {
 				return reply, nil, err
 			}
@@ -626,7 +626,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 		// We want to search for the metadata key just less or equal to
 		// args.Key. Scan in reverse order for both the requested key and the
 		// keys immediately backwards, up to MaxRanges.
-		startKey, endKey, err := keys.MetaReverseScanBounds(keys.RKey(args.Key))
+		startKey, endKey, err := keys.MetaReverseScanBounds(roachpb.RKey(args.Key))
 		if err != nil {
 			return reply, nil, err
 		}
@@ -1294,7 +1294,7 @@ func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roach
 	// look up the descriptor here only to get the new end key and then
 	// repeat the lookup inside the transaction.
 	{
-		rightRng := r.rm.LookupReplica(keys.RKey(origLeftDesc.EndKey), nil)
+		rightRng := r.rm.LookupReplica(roachpb.RKey(origLeftDesc.EndKey), nil)
 		if rightRng == nil {
 			return reply, util.Errorf("ranges not collocated")
 		}

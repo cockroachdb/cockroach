@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -428,7 +427,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, sourceStoreIn
 		for _, dest := range dests {
 			// Use LookupRange(keys) instead of GetRange(rangeID) to ensure that the
 			// snapshot has been transferred and the descriptor initialized.
-			if m.stores[dest].LookupReplica(keys.RKey(rng.Desc().StartKey), nil) == nil {
+			if m.stores[dest].LookupReplica(roachpb.RKey(rng.Desc().StartKey), nil) == nil {
 				return util.Errorf("range not found on store %d", dest)
 			}
 		}

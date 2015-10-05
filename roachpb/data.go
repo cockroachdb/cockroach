@@ -49,6 +49,32 @@ var (
 	KeyMax = Key{0xff, 0xff}
 )
 
+// RKey denotes a Key whose local addressing has been accounted
+// for.
+// TODO(tschottdorf): a range descriptor should contain RKey, not Key;
+// but RKey is in keys and can't move to roachpb since it uses encoding.
+type RKey Key
+
+// Key returns the RKey as a Key.
+func (rk RKey) Key() Key {
+	return Key(rk)
+}
+
+// Less compares to RKeys.
+func (rk RKey) Less(otherRK RKey) bool {
+	return rk.Key().Less(otherRK.Key())
+}
+
+// Equal checks two RKeys for byte-wise equality.
+func (rk RKey) Equal(otherRK RKey) bool {
+	return bytes.Compare(rk, otherRK) == 0
+}
+
+// Next returns the RKey that sorts immediately after the given one.
+func (rk RKey) Next() RKey {
+	return RKey(rk.Key().Next())
+}
+
 // Key is a custom type for a byte string in proto
 // messages which refer to Cockroach keys.
 type Key []byte

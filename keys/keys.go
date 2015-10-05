@@ -193,32 +193,6 @@ func TransactionKey(key roachpb.Key, id []byte) roachpb.Key {
 	return MakeRangeKey(key, LocalTransactionSuffix, roachpb.Key(id))
 }
 
-// RKey denotes a roachpb.Key whose local addressing has been accounted
-// for.
-// TODO(tschottdorf): a range descriptor should contain RKey, not Key;
-// but RKey is in keys and can't move to roachpb since it uses encoding.
-type RKey roachpb.Key
-
-// Key returns the RKey as a roachpb.Key.
-func (rk RKey) Key() roachpb.Key {
-	return roachpb.Key(rk)
-}
-
-// Less compares to RKeys.
-func (rk RKey) Less(otherRK RKey) bool {
-	return rk.Key().Less(otherRK.Key())
-}
-
-// Equal checks two RKeys for byte-wise equality.
-func (rk RKey) Equal(otherRK RKey) bool {
-	return bytes.Compare(rk, otherRK) == 0
-}
-
-// Next returns the RKey that sorts immediately after the given one.
-func (rk RKey) Next() RKey {
-	return RKey(rk.Key().Next())
-}
-
 // KeyAddress returns the address for the key, used to lookup the
 // range containing the key. In the normal case, this is simply the
 // key's value. However, for local keys, such as transaction records,
@@ -235,13 +209,13 @@ func (rk RKey) Next() RKey {
 // entries, and range stats).
 //
 // TODO(pmattis): Should KeyAddress return an error when the key is malformed?
-func KeyAddress(k roachpb.Key) RKey {
+func KeyAddress(k roachpb.Key) roachpb.RKey {
 	if k == nil {
 		return nil
 	}
 
 	if !bytes.HasPrefix(k, LocalPrefix) {
-		return RKey(k)
+		return roachpb.RKey(k)
 	}
 	if bytes.HasPrefix(k, LocalRangePrefix) {
 		k = k[len(LocalRangePrefix):]
@@ -249,7 +223,7 @@ func KeyAddress(k roachpb.Key) RKey {
 		if err != nil {
 			panic(err)
 		}
-		return RKey(k)
+		return roachpb.RKey(k)
 	}
 	log.Fatalf("local key %q malformed; should contain prefix %q",
 		k, LocalRangePrefix)
@@ -260,24 +234,24 @@ func KeyAddress(k roachpb.Key) RKey {
 // for the given key. For ordinary keys this returns a level 2
 // metadata key - for level 2 keys, it returns a level 1 key. For
 // level 1 keys and local keys, KeyMin is returned.
-func RangeMetaKey(key RKey) RKey {
+func RangeMetaKey(key roachpb.RKey) roachpb.RKey {
 	if len(key) == 0 {
-		return RKey(roachpb.KeyMin)
+		return roachpb.RKey(roachpb.KeyMin)
 	}
 	if !bytes.HasPrefix(key, MetaPrefix) {
-		return RKey(MakeKey(Meta2Prefix, key.Key()))
+		return roachpb.RKey(MakeKey(Meta2Prefix, key.Key()))
 	}
 	if bytes.HasPrefix(key, Meta2Prefix) {
-		return RKey(MakeKey(Meta1Prefix, key[len(Meta2Prefix):].Key()))
+		return roachpb.RKey(MakeKey(Meta1Prefix, key[len(Meta2Prefix):].Key()))
 	}
 
-	return RKey(roachpb.KeyMin)
+	return roachpb.RKey(roachpb.KeyMin)
 }
 
 // validateRangeMetaKey validates that the given key is a valid Range Metadata
 // key. This checks only the constraints common to forward and backwards scans:
 // correct prefix and not exceeding KeyMax.
-func validateRangeMetaKey(key RKey) error {
+func validateRangeMetaKey(key roachpb.RKey) error {
 	// KeyMin is a valid key.
 	if key.Key().Equal(roachpb.KeyMin) {
 		return nil
@@ -287,12 +261,12 @@ func validateRangeMetaKey(key RKey) error {
 		return NewInvalidRangeMetaKeyError("too short", key.Key())
 	}
 
-	prefix, body := RKey(key[:len(Meta1Prefix)]), RKey(key[len(Meta1Prefix):])
+	prefix, body := roachpb.RKey(key[:len(Meta1Prefix)]), roachpb.RKey(key[len(Meta1Prefix):])
 	if !prefix.Key().Equal(Meta2Prefix) && !prefix.Key().Equal(Meta1Prefix) {
 		return NewInvalidRangeMetaKeyError("not a meta key", key.Key())
 	}
 
-	if RKey(roachpb.KeyMax).Less(body) {
+	if roachpb.RKey(roachpb.KeyMax).Less(body) {
 		return NewInvalidRangeMetaKeyError("body of meta key range lookup is > KeyMax", key.Key())
 	}
 	return nil
@@ -301,7 +275,7 @@ func validateRangeMetaKey(key RKey) error {
 // MetaScanBounds returns the range [start,end) within which the desired meta
 // record can be found by means of an engine scan. The given key must be a
 // valid RangeMetaKey as defined by validateRangeMetaKey.
-func MetaScanBounds(key RKey) (RKey, RKey, error) {
+func MetaScanBounds(key roachpb.RKey) (roachpb.RKey, roachpb.RKey, error) {
 	if err := validateRangeMetaKey(key); err != nil {
 		return nil, nil, err
 	}
@@ -312,21 +286,21 @@ func MetaScanBounds(key RKey) (RKey, RKey, error) {
 
 	if key.Key().Equal(roachpb.KeyMin) {
 		// Special case KeyMin: find the first entry in meta1.
-		return RKey(Meta1Prefix), RKey(Meta1Prefix.PrefixEnd()), nil
+		return roachpb.RKey(Meta1Prefix), roachpb.RKey(Meta1Prefix.PrefixEnd()), nil
 	}
 	if key.Key().Equal(Meta1KeyMax) {
 		// Special case Meta1KeyMax: this is the last key in Meta1, we don't want
 		// to start at Next().
-		return key, RKey(Meta1Prefix.PrefixEnd()), nil
+		return key, roachpb.RKey(Meta1Prefix.PrefixEnd()), nil
 	}
 	// Otherwise find the first entry greater than the given key in the same meta prefix.
-	return key.Next(), RKey(roachpb.Key(key[:len(Meta1Prefix)]).PrefixEnd()), nil
+	return key.Next(), roachpb.RKey(roachpb.Key(key[:len(Meta1Prefix)]).PrefixEnd()), nil
 }
 
 // MetaReverseScanBounds returns the range [start,end) within which the desired
 // meta record can be found by means of a reverse engine scan. The given key
 // must be a valid RangeMetaKey as defined by validateRangeMetaKey.
-func MetaReverseScanBounds(key RKey) (RKey, RKey, error) {
+func MetaReverseScanBounds(key roachpb.RKey) (roachpb.RKey, roachpb.RKey, error) {
 	if err := validateRangeMetaKey(key); err != nil {
 		return nil, nil, err
 	}
@@ -337,7 +311,7 @@ func MetaReverseScanBounds(key RKey) (RKey, RKey, error) {
 	if key.Key().Equal(Meta2Prefix) {
 		// Special case Meta2Prefix: this is the first key in Meta2, and the scan
 		// interval covers all of Meta1.
-		return RKey(Meta1Prefix), key.Next(), nil
+		return roachpb.RKey(Meta1Prefix), key.Next(), nil
 	}
 	// Otherwise find the first entry greater than the given key and find the last entry
 	// in the same prefix. For MVCCReverseScan the endKey is exclusive, if we want to find
@@ -365,9 +339,9 @@ func MakeTablePrefix(tableID uint32) []byte {
 // through the cracks.
 // TODO(tschottdorf): ideally method on *BatchRequest. See #2198.
 // TODO(tschottdorf): return a roachpb.Span?
-func Range(ba roachpb.BatchRequest) (RKey, RKey) {
-	from := RKey(roachpb.KeyMax)
-	to := RKey(roachpb.KeyMin)
+func Range(ba roachpb.BatchRequest) (roachpb.RKey, roachpb.RKey) {
+	from := roachpb.RKey(roachpb.KeyMax)
+	to := roachpb.RKey(roachpb.KeyMin)
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
 		if req.Method() == roachpb.Noop {

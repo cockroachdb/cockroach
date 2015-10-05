@@ -31,7 +31,7 @@ import (
 
 // rangeCacheKey is the key type used to store and sort values in the
 // RangeCache.
-type rangeCacheKey keys.RKey
+type rangeCacheKey roachpb.RKey
 
 func (a rangeCacheKey) String() string {
 	return roachpb.Key(a).String()
@@ -49,7 +49,7 @@ func (a rangeCacheKey) Compare(b llrb.Comparable) int {
 type rangeDescriptorDB interface {
 	// rangeLookup takes a meta key to look up descriptors for,
 	// for example \x00\x00meta1aa or \x00\x00meta2f.
-	rangeLookup(keys.RKey, lookupOptions, *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error)
+	rangeLookup(roachpb.RKey, lookupOptions, *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error)
 	// firstRange returns the descriptor for the first Range. This is the
 	// Range containing all \x00\x00meta1 entries.
 	firstRange() (*roachpb.RangeDescriptor, error)
@@ -112,7 +112,7 @@ func (rdc *rangeDescriptorCache) stringLocked() string {
 //
 // This method returns the RangeDescriptor for the range containing
 // the key's data, or an error if any occurred.
-func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key keys.RKey,
+func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
 	options lookupOptions) (*roachpb.RangeDescriptor, error) {
 	if _, r := rdc.getCachedRangeDescriptor(key, options.useReverseScan); r != nil {
 		return r, nil
@@ -123,7 +123,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key keys.RKey,
 	} else if log.V(1) {
 		log.Infof("lookup range descriptor: key=%s", key)
 	}
-	rs, err := func(key keys.RKey, options lookupOptions) ([]roachpb.RangeDescriptor, error) {
+	rs, err := func(key roachpb.RKey, options lookupOptions) ([]roachpb.RangeDescriptor, error) {
 		var (
 			// metadataKey is sent to rangeLookup to find the
 			// RangeDescriptor which contains key.
@@ -180,11 +180,11 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key keys.RKey,
 		// Before adding a new descriptor, make sure we clear out any
 		// pre-existing, overlapping descriptor which might have been
 		// re-inserted due to concurrent range lookups.
-		rangeKey := keys.RangeMetaKey(keys.RKey(rs[i].EndKey))
+		rangeKey := keys.RangeMetaKey(roachpb.RKey(rs[i].EndKey))
 		if log.V(1) {
 			log.Infof("adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
 		}
-		rdc.clearOverlappingCachedRangeDescriptors(keys.RKey(rs[i].EndKey), rangeKey, &rs[i])
+		rdc.clearOverlappingCachedRangeDescriptors(roachpb.RKey(rs[i].EndKey), rangeKey, &rs[i])
 		rdc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}
 	rdc.rangeCacheMu.Unlock()
@@ -198,7 +198,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key keys.RKey,
 // seenDesc should always be passed in and is used as the basis of a
 // compare-and-evict (as pointers); if it is nil, eviction is unconditional
 // but a warning will be logged.
-func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey keys.RKey,
+func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey roachpb.RKey,
 	seenDesc *roachpb.RangeDescriptor, inclusive bool) {
 	if seenDesc == nil {
 		log.Warningf("compare-and-evict for key %s with nil descriptor; clearing unconditionally", descKey)
@@ -247,7 +247,7 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey keys.RKey,
 // `inclusive` determines the behaviour at the range boundary: If set to true
 // and `key` is the EndKey and StartKey of two adjacent ranges, the first range
 // is returned instead of the second (which technically contains the given key).
-func (rdc *rangeDescriptorCache) getCachedRangeDescriptor(key keys.RKey, inclusive bool) (
+func (rdc *rangeDescriptorCache) getCachedRangeDescriptor(key roachpb.RKey, inclusive bool) (
 	rangeCacheKey, *roachpb.RangeDescriptor) {
 	rdc.rangeCacheMu.RLock()
 	defer rdc.rangeCacheMu.RUnlock()
@@ -257,11 +257,11 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptor(key keys.RKey, inclusi
 // getCachedRangeDescriptorLocked is a helper function to retrieve the
 // descriptor of the range which contains the given key, if present in the
 // cache. It is assumed that the caller holds a read lock on rdc.rangeCacheMu.
-func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key keys.RKey, inclusive bool) (
+func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey, inclusive bool) (
 	rangeCacheKey, *roachpb.RangeDescriptor) {
 	// The cache is indexed using the end-key of the range, but the
 	// end-key is non-inclusive by default.
-	var metaKey keys.RKey
+	var metaKey roachpb.RKey
 	if !inclusive {
 		metaKey = keys.RangeMetaKey(key.Next())
 	} else {
@@ -294,7 +294,7 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key keys.RKey, i
 
 // clearOverlappingCachedRangeDescriptors looks up and clears any
 // cache entries which overlap the specified key or descriptor.
-func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, metaKey keys.RKey, desc *roachpb.RangeDescriptor) {
+func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, metaKey roachpb.RKey, desc *roachpb.RangeDescriptor) {
 	if desc.StartKey.Equal(desc.EndKey) { // True for some unittests.
 		return
 	}
@@ -304,7 +304,7 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, met
 	k, v, ok := rdc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if ok {
 		descriptor := v.(*roachpb.RangeDescriptor)
-		if !key.Less(keys.RKey(descriptor.StartKey)) && !keys.RKey(descriptor.EndKey).Less(key) {
+		if !key.Less(roachpb.RKey(descriptor.StartKey)) && !roachpb.RKey(descriptor.EndKey).Less(key) {
 			if log.V(1) {
 				log.Infof("clearing overlapping descriptor: key=%s desc=%s", k, descriptor)
 			}
@@ -320,6 +320,6 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, met
 			log.Infof("clearing subsumed descriptor: key=%s desc=%s", k, v.(*roachpb.RangeDescriptor))
 		}
 		rdc.rangeCache.Del(k.(rangeCacheKey))
-	}, rangeCacheKey(keys.RangeMetaKey(keys.RKey(desc.StartKey)).Next()),
-		rangeCacheKey(keys.RangeMetaKey(keys.RKey(desc.EndKey))))
+	}, rangeCacheKey(keys.RangeMetaKey(roachpb.RKey(desc.StartKey)).Next()),
+		rangeCacheKey(keys.RangeMetaKey(roachpb.RKey(desc.EndKey))))
 }
