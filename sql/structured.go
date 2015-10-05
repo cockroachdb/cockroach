@@ -185,13 +185,16 @@ func (desc *TableDescriptor) AllocateIDs() error {
 			}
 		}
 		if index != &desc.PrimaryIndex {
-			var extraColumnIDs []ColumnID
+			// Need to clear ImplicitColumnIDs because it is used by
+			// containsColumnID.
+			index.ImplicitColumnIDs = nil
+			var implicitColumnIDs []ColumnID
 			for _, primaryColID := range desc.PrimaryIndex.ColumnIDs {
 				if !index.containsColumnID(primaryColID) {
-					extraColumnIDs = append(extraColumnIDs, primaryColID)
+					implicitColumnIDs = append(implicitColumnIDs, primaryColID)
 				}
 			}
-			index.ImplicitColumnIDs = extraColumnIDs
+			index.ImplicitColumnIDs = implicitColumnIDs
 
 			for _, colName := range index.StoreColumnNames {
 				col, err := desc.FindColumnByName(colName)

@@ -75,6 +75,15 @@ func TestAllocateIDs(t *testing.T) {
 		b, _ := json.MarshalIndent(desc, "", "  ")
 		t.Fatalf("expected %s, but found %s", a, b)
 	}
+
+	if err := desc.AllocateIDs(); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(expected, desc) {
+		a, _ := json.MarshalIndent(expected, "", "  ")
+		b, _ := json.MarshalIndent(desc, "", "  ")
+		t.Fatalf("expected %s, but found %s", a, b)
+	}
 }
 
 func TestValidateTableDesc(t *testing.T) {
