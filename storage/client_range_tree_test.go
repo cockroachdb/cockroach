@@ -66,7 +66,7 @@ func VerifyTree(t *testing.T, tree *roachpb.RangeTree, nodes map[string]roachpb.
 		t.Fatalf("%s: could not find root node with key %s", testName, tree.RootKey)
 	}
 
-	verifyBinarySearchTree(t, nodes, testName, &root, roachpb.KeyMin, roachpb.KeyMax)
+	verifyBinarySearchTree(t, nodes, testName, &root, roachpb.RKeyMin, roachpb.RKeyMax)
 	// Property 1 is always correct. All nodes are already colored.
 	verifyProperty2(t, testName, &root)
 	// Property 3 is always correct. All leaves are black.
@@ -117,7 +117,7 @@ func verifyBinarySearchTree(t *testing.T, nodes map[string]roachpb.RangeTreeNode
 		t.Errorf("%s: Failed Property BST - The key %s is not less than %s.", testName, node.Key, keyMax)
 	}
 	// We need the extra check since roachpb.KeyMin is actually a range start key.
-	if !keyMin.Less(node.Key) && !node.Key.Equal(roachpb.KeyMin) {
+	if !keyMin.Less(node.Key) && !node.Key.Equal(roachpb.RKeyMin) {
 		t.Errorf("%s: Failed Property BST - The key %s is not greater than %s.", testName, node.Key, keyMin)
 	}
 	left, right := getLeftAndRight(t, nodes, testName, node)
@@ -182,7 +182,7 @@ func TestSetupRangeTree(t *testing.T) {
 
 	tree, nodes := loadTree(t, db)
 	expectedTree := &roachpb.RangeTree{
-		RootKey: roachpb.KeyMin,
+		RootKey: roachpb.RKeyMin,
 	}
 	if !reflect.DeepEqual(tree, expectedTree) {
 		t.Fatalf("tree roots do not match - expected:%+v actual:%+v", expectedTree, tree)

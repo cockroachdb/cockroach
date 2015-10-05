@@ -139,7 +139,7 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 // not create copies, so the caller must not alter the returned data.
 func (tm *txnMetadata) intents() []roachpb.Intent {
 	intents := make([]roachpb.Intent, 0, tm.keys.Len())
-	for _, o := range tm.keys.GetOverlaps(roachpb.KeyMin.Key(), roachpb.KeyMax.Key()) {
+	for _, o := range tm.keys.GetOverlaps(roachpb.KeyMin, roachpb.KeyMax) {
 		intent := roachpb.Intent{
 			Key: o.Key.Start().(roachpb.Key),
 		}

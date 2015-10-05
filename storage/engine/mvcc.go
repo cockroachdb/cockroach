@@ -40,7 +40,7 @@ const (
 var (
 	// MVCCKeyMax is a maximum mvcc-encoded key value which sorts after
 	// all other keys.
-	MVCCKeyMax = MVCCEncodeKey(roachpb.KeyMax.Key())
+	MVCCKeyMax = MVCCEncodeKey(roachpb.KeyMax)
 )
 
 type encodedSpan struct {
@@ -1488,7 +1488,7 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_G
 // And split key equal to Meta2KeyMax (\x00\x00meta2\xff\xff) is
 // considered invalid.
 func IsValidSplitKey(key roachpb.Key) bool {
-	if key.Equal(keys.Meta2KeyMax.Key()) {
+	if keys.Meta2KeyMax.Equal(key) {
 		return false
 	}
 	return isValidEncodedSplitKey(MVCCEncodeKey(key))

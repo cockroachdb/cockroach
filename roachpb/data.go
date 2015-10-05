@@ -43,10 +43,14 @@ const (
 )
 
 var (
+	// RKeyMin is a minimum key value which sorts before all other keys.
+	RKeyMin = RKey("")
 	// KeyMin is a minimum key value which sorts before all other keys.
-	KeyMin = RKey("")
+	KeyMin = Key(RKeyMin)
+	// RKeyMax is a maximum key value which sorts after all other keys.
+	RKeyMax = RKey{0xff, 0xff}
 	// KeyMax is a maximum key value which sorts after all other keys.
-	KeyMax = RKey{0xff, 0xff}
+	KeyMax = Key(RKeyMax)
 )
 
 // RKey denotes a Key whose local addressing has been accounted for.
@@ -78,7 +82,7 @@ func (rk RKey) Next() RKey {
 // cases of nil and KeyMin always returns KeyMax.
 func (rk RKey) PrefixEnd() RKey {
 	if len(rk) == 0 {
-		return KeyMax
+		return RKeyMax
 	}
 	return RKey(bytesPrefixEnd(rk))
 }
@@ -147,7 +151,7 @@ func (k EncodedKey) Next() EncodedKey {
 // cases of nil and KeyMin always returns KeyMax.
 func (k Key) PrefixEnd() Key {
 	if len(k) == 0 {
-		return Key(KeyMax)
+		return Key(RKeyMax)
 	}
 	return Key(bytesPrefixEnd(k))
 }
@@ -156,7 +160,7 @@ func (k Key) PrefixEnd() Key {
 // this key as a prefix. See comments for Key.
 func (k EncodedKey) PrefixEnd() EncodedKey {
 	if len(k) == 0 {
-		return EncodedKey(KeyMax)
+		return EncodedKey(RKeyMax)
 	}
 	return EncodedKey(bytesPrefixEnd(k))
 }

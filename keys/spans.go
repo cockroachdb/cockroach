@@ -21,7 +21,7 @@ import "github.com/cockroachdb/cockroach/roachpb"
 
 var (
 	// Meta1Span holds all first level addressing.
-	Meta1Span = roachpb.Span{Key: roachpb.KeyMin.Key(), EndKey: Meta2Prefix.Key()}
+	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix.Key()}
 
 	// UserDataSpan is the non-meta and non-structured portion of the key space.
 	UserDataSpan = roachpb.Span{Key: SystemMax.Key(), EndKey: TableDataPrefix.Key()}

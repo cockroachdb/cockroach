@@ -294,7 +294,7 @@ func (r *Replica) SetMaxBytes(maxBytes int64) {
 
 // IsFirstRange returns true if this is the first range.
 func (r *Replica) IsFirstRange() bool {
-	return bytes.Equal(r.Desc().StartKey, roachpb.KeyMin)
+	return bytes.Equal(r.Desc().StartKey, roachpb.RKeyMin)
 }
 
 func loadLeaderLease(eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease, error) {

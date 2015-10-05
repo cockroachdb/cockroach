@@ -115,7 +115,7 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(start); err != nil {
 		return err
 	}
-	if !start.Less(roachpb.KeyMax.Key()) {
+	if !start.Less(roachpb.KeyMax) {
 		return util.Errorf("start key %q must be less than KeyMax", start)
 	}
 	if !checkEndKey {
@@ -130,7 +130,7 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(end); err != nil {
 		return err
 	}
-	if roachpb.KeyMax.Key().Less(end) {
+	if roachpb.KeyMax.Less(end) {
 		return util.Errorf("end key %q must be less than or equal to KeyMax", end)
 	}
 	if !start.Less(end) {
@@ -473,8 +473,8 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	s.engine.SetGCTimeouts(minTxnTS, minRCacheTS)
 
 	// Iterator over all range-local key-based data.
-	start := keys.RangeDescriptorKey(roachpb.KeyMin)
-	end := keys.RangeDescriptorKey(roachpb.KeyMax)
+	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
+	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
 
 	if s.multiraft, err = multiraft.NewMultiRaft(s.Ident.NodeID, s.Ident.StoreID, &multiraft.Config{
 		Transport:              s.ctx.Transport,
@@ -630,7 +630,7 @@ func (s *Store) startGossip() {
 // range and if so, reminds it to gossip the first range descriptor and
 // sentinel gossip.
 func (s *Store) maybeGossipFirstRange() error {
-	rng := s.LookupReplica(roachpb.KeyMin, nil)
+	rng := s.LookupReplica(roachpb.RKeyMin, nil)
 	if rng != nil {
 		return rng.maybeGossipFirstRange()
 	}
@@ -725,7 +725,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		return err
 	}
 	s.Ident = ident
-	kvs, err := engine.Scan(s.engine, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 1)
+	kvs, err := engine.Scan(s.engine, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 1)
 	if err != nil {
 		return util.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
@@ -790,8 +790,8 @@ func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	desc := &roachpb.RangeDescriptor{
 		RangeID:       1,
-		StartKey:      roachpb.KeyMin,
-		EndKey:        roachpb.KeyMax,
+		StartKey:      roachpb.RKeyMin,
+		EndKey:        roachpb.RKeyMax,
 		NextReplicaID: 2,
 		Replicas: []roachpb.ReplicaDescriptor{
 			{
@@ -822,7 +822,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	// Range addressing for meta2.
-	meta2Key := keys.RangeMetaKey(roachpb.KeyMax)
+	meta2Key := keys.RangeMetaKey(roachpb.RKeyMax)
 	if err := engine.MVCCPutProto(batch, ms, meta2Key.Key(), now, nil, desc); err != nil {
 		return err
 	}

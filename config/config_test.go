@@ -67,7 +67,7 @@ func TestObjectIDForKey(t *testing.T) {
 
 		// Boundaries of structured span.
 		{keys.TableDataPrefix, false, 0},
-		{roachpb.KeyMax, false, 0},
+		{roachpb.RKeyMax, false, 0},
 
 		// In system span, but no Uvarint ID.
 		{keys.MakeKey(keys.TableDataPrefix, roachpb.RKey("foo")), false, 0},
@@ -218,22 +218,22 @@ func TestComputeSplits(t *testing.T) {
 		splits []uint32
 	}{
 		// No data.
-		{nil, roachpb.KeyMin, roachpb.KeyMax, nil},
-		{nil, keys.MakeTablePrefix(start), roachpb.KeyMax, nil},
+		{nil, roachpb.RKeyMin, roachpb.RKeyMax, nil},
+		{nil, keys.MakeTablePrefix(start), roachpb.RKeyMax, nil},
 		{nil, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
-		{nil, roachpb.KeyMin, keys.MakeTablePrefix(start + 10), nil},
+		{nil, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), nil},
 
 		// No user data.
-		{baseSql, roachpb.KeyMin, roachpb.KeyMax, nil},
-		{baseSql, keys.MakeTablePrefix(start), roachpb.KeyMax, nil},
+		{baseSql, roachpb.RKeyMin, roachpb.RKeyMax, nil},
+		{baseSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, nil},
 		{baseSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
-		{baseSql, roachpb.KeyMin, keys.MakeTablePrefix(start + 10), nil},
+		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), nil},
 
 		// User descriptors.
-		{userSql, roachpb.KeyMin, roachpb.KeyMax, allSplits},
-		{userSql, keys.MakeTablePrefix(start), roachpb.KeyMax, allSplits[1:]},
+		{userSql, roachpb.RKeyMin, roachpb.RKeyMax, allSplits},
+		{userSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allSplits[1:]},
 		{userSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), allSplits[1:]},
-		{userSql, roachpb.KeyMin, keys.MakeTablePrefix(start + 10), allSplits},
+		{userSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), allSplits},
 		{userSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allSplits[5:]},
 		{userSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), nil},
 		{userSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), nil},

@@ -140,7 +140,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		storeID    roachpb.StoreID
 		start, end roachpb.RKey
 	}{
-		{2, roachpb.KeyMin, roachpb.RKey("c")},
+		{2, roachpb.RKeyMin, roachpb.RKey("c")},
 		{3, roachpb.RKey("x"), roachpb.RKey("z")},
 	}
 	for i, rng := range ranges {

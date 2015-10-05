@@ -152,11 +152,11 @@ func disabledTestRangeDataIterator(t *testing.T) {
 	}
 
 	// Create two more ranges, one before the test range and one after.
-	preRng := createRange(tc.store, 2, roachpb.KeyMin, roachpb.RKey("b"))
+	preRng := createRange(tc.store, 2, roachpb.RKeyMin, roachpb.RKey("b"))
 	if err := tc.store.AddReplicaTest(preRng); err != nil {
 		t.Fatal(err)
 	}
-	postRng := createRange(tc.store, 3, roachpb.RKey("c"), roachpb.KeyMax)
+	postRng := createRange(tc.store, 3, roachpb.RKey("c"), roachpb.RKeyMax)
 	if err := tc.store.AddReplicaTest(postRng); err != nil {
 		t.Fatal(err)
 	}

@@ -1322,7 +1322,7 @@ func verifyTree(t *testing.T, tc *treeContext, testName string) {
 		t.Fatal(err)
 	}
 
-	verifyBinarySearchTree(t, tc, testName, root, roachpb.KeyMin, roachpb.KeyMax)
+	verifyBinarySearchTree(t, tc, testName, root, roachpb.RKeyMin, roachpb.RKeyMax)
 	// Property 1 is always correct. All nodes are already colored.
 	verifyProperty2(t, tc, testName, root)
 	// Property 3 is always correct. All leaves are black.

@@ -133,7 +133,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
 			desc *roachpb.RangeDescriptor
 			err  error
 		)
-		if bytes.Equal(metadataKey, roachpb.KeyMin) {
+		if bytes.Equal(metadataKey, roachpb.RKeyMin) {
 			// In this case, the requested key is stored in the cluster's first
 			// range. Return the first range, which is always gossiped and not
 			// queried from the datastore.
@@ -234,7 +234,7 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey roachpb.RKey
 		// can also be evicted. This is necessary since the initial range
 		// [KeyMin,KeyMax) may turn into [KeyMin, "something"), after which
 		// larger ranges don't fit into it any more.
-		if bytes.Equal(descKey, roachpb.KeyMin) {
+		if bytes.Equal(descKey, roachpb.RKeyMin) {
 			break
 		}
 	}

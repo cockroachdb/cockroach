@@ -135,10 +135,10 @@ var (
 	Meta2Prefix = roachpb.RKey(MakeKey(MetaPrefix, roachpb.RKey("2")))
 	// Meta1KeyMax is the end of the range of the first level of key addressing.
 	// The value is a RangeDescriptor struct.
-	Meta1KeyMax = roachpb.RKey(MakeKey(Meta1Prefix, roachpb.KeyMax))
+	Meta1KeyMax = roachpb.RKey(MakeKey(Meta1Prefix, roachpb.RKeyMax))
 	// Meta2KeyMax is the end of the range of the second level of key addressing.
 	// The value is a RangeDescriptor struct.
-	Meta2KeyMax = roachpb.RKey(MakeKey(Meta2Prefix, roachpb.KeyMax))
+	Meta2KeyMax = roachpb.RKey(MakeKey(Meta2Prefix, roachpb.RKeyMax))
 
 	// MetaMax is the end of the range of addressing keys.
 	MetaMax = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("\x01")))

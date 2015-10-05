@@ -84,7 +84,7 @@ func (z *ZoneConfig) Validate() error {
 // ObjectIDForKey returns the object ID (table or database) for 'key',
 // or (_, false) if not within the structured key space.
 func ObjectIDForKey(key roachpb.RKey) (uint32, bool) {
-	if key.Equal(roachpb.KeyMax) {
+	if key.Equal(roachpb.RKeyMax) {
 		return 0, false
 	}
 	if key.Equal(keys.TableDataPrefix) {

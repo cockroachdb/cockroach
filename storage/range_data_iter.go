@@ -48,7 +48,7 @@ func newRangeDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *rangeDat
 	// space. We need the original StartKey to find the range metadata, but the
 	// actual data starts at LocalMax.
 	dataStartKey := d.StartKey.Key()
-	if d.StartKey.Equal(roachpb.KeyMin) {
+	if d.StartKey.Equal(roachpb.RKeyMin) {
 		dataStartKey = keys.LocalMax.Key()
 	}
 	ri := &rangeDataIterator{

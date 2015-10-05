@@ -1104,28 +1104,35 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
 	// other commands.
-	splitKey := keys.Addr(args.SplitKey)
-	if len(splitKey) == 0 {
-		snap := r.rm.NewSnapshot()
-		defer snap.Close()
-		foundSplitKey, err := engine.MVCCFindSplitKey(snap, desc.RangeID, desc.StartKey, desc.EndKey)
-		if err != nil {
-			return reply, util.Errorf("unable to determine split key: %s", err)
+	var splitKey roachpb.RKey
+	{
+		foundSplitKey := args.SplitKey
+		if len(foundSplitKey) == 0 {
+			snap := r.rm.NewSnapshot()
+			defer snap.Close()
+			var err error
+			foundSplitKey, err = engine.MVCCFindSplitKey(snap, desc.RangeID, desc.StartKey, desc.EndKey)
+			if err != nil {
+				return reply, util.Errorf("unable to determine split key: %s", err)
+			}
+		} else if !r.ContainsKey(foundSplitKey) {
+			return reply, roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc)
 		}
+
 		splitKey = keys.Addr(foundSplitKey)
+		if !splitKey.Equal(foundSplitKey) {
+			return reply, util.Errorf("cannot split range at range-local key %s", splitKey)
+		}
+		if !engine.IsValidSplitKey(foundSplitKey) {
+			return reply, util.Errorf("cannot split range at key %s", splitKey)
+		}
 	}
+
 	// First verify this condition so that it will not return
 	// roachpb.NewRangeKeyMismatchError if splitKey equals to desc.EndKey,
 	// otherwise it will cause infinite retry loop.
-	if splitKey.Equal(desc.StartKey.Key()) || splitKey.Equal(desc.EndKey.Key()) {
+	if desc.StartKey.Equal(splitKey) || desc.EndKey.Equal(splitKey) {
 		return reply, util.Errorf("range is already split at key %s", splitKey)
-	}
-	// Verify some properties of split key.
-	if !r.ContainsKey(splitKey.Key()) {
-		return reply, roachpb.NewRangeKeyMismatchError(splitKey.Key(), splitKey.Key(), desc)
-	}
-	if !engine.IsValidSplitKey(splitKey.Key()) {
-		return reply, util.Errorf("cannot split range at key %s", splitKey)
 	}
 
 	// Create new range descriptor with newly-allocated replica IDs and Range IDs.
@@ -1281,7 +1288,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roachpb.RangeDescriptor) (roachpb.AdminMergeResponse, error) {
 	var reply roachpb.AdminMergeResponse
 
-	if origLeftDesc.EndKey.Equal(roachpb.KeyMax) {
+	if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
 		// Merging the final range doesn't make sense.
 		return reply, util.Errorf("cannot merge final range")
 	}

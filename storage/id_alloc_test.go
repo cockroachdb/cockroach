@@ -151,7 +151,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	}
 
 	// Make Allocator invalid.
-	idAlloc.idKey.Store(roachpb.KeyMin.Key())
+	idAlloc.idKey.Store(roachpb.KeyMin)
 
 	// Should be able to get the allocated IDs, and there will be one
 	// background allocateBlock to get ID continuously.

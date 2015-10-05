@@ -41,8 +41,8 @@ import (
 
 // Constants for system-reserved keys in the KV map.
 var (
-	keyMin       = roachpb.KeyMin.Key()
-	keyMax       = roachpb.KeyMax.Key()
+	keyMin       = roachpb.KeyMin
+	keyMax       = roachpb.KeyMax
 	testKey1     = roachpb.Key("/db1")
 	testKey2     = roachpb.Key("/db2")
 	testKey3     = roachpb.Key("/db3")
@@ -1853,7 +1853,7 @@ func TestFindSplitKey(t *testing.T) {
 	}
 	snap := engine.NewSnapshot()
 	defer snap.Close()
-	humanSplitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.KeyMin, roachpb.KeyMax)
+	humanSplitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.RKeyMin, roachpb.RKeyMax)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2048,7 +2048,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		}
 		snap := engine.NewSnapshot()
 		defer snap.Close()
-		splitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.RKey("\x01"), roachpb.KeyMax)
+		splitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.RKey("\x01"), roachpb.RKeyMax)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 			continue

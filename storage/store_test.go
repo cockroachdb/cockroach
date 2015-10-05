@@ -483,17 +483,17 @@ func TestStoreVerifyKeys(t *testing.T) {
 		t.Fatalf("unexpected error for key too long: %v", err)
 	}
 	// Try a start key == KeyMax.
-	gArgs.Key = roachpb.KeyMax.Key()
+	gArgs.Key = roachpb.KeyMax
 	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
 		t.Fatalf("expected error for start key == KeyMax: %v", err)
 	}
 	// Try a get with an end key specified (get requires only a start key and should fail).
-	gArgs.EndKey = roachpb.KeyMax.Key()
+	gArgs.EndKey = roachpb.KeyMax
 	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
 		t.Fatalf("unexpected error for end key specified on a non-range-based operation: %v", err)
 	}
 	// Try a scan with too-long EndKey.
-	sArgs := scanArgs(roachpb.KeyMin, tooLongKey)
+	sArgs := scanArgs(roachpb.RKeyMin, tooLongKey)
 	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err, "length exceeded") {
 		t.Fatalf("unexpected error for end key too long: %v", err)
 	}
@@ -518,14 +518,14 @@ func TestStoreVerifyKeys(t *testing.T) {
 
 	// Try a put to meta2 key which would otherwise exceed maximum key
 	// length, but is accepted because of the meta prefix.
-	meta2KeyMax := keys.MakeKey(keys.Meta2Prefix, roachpb.KeyMax)
+	meta2KeyMax := keys.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax)
 	pArgs := putArgs(meta2KeyMax, []byte("value"))
 	if _, err := client.SendWrapped(store.testSender(), nil, &pArgs); err != nil {
 		t.Fatalf("unexpected error on put to meta2 value: %s", err)
 	}
 	// Try to put a range descriptor record for a start key which is
 	// maximum length.
-	key := append([]byte{}, roachpb.KeyMax...)
+	key := append([]byte{}, roachpb.RKeyMax...)
 	key[len(key)-1] = 0x01
 	pArgs = putArgs(keys.RangeDescriptorKey(key), []byte("value"))
 	if _, err := client.SendWrapped(store.testSender(), nil, &pArgs); err != nil {
@@ -647,7 +647,7 @@ func TestStoreSendOutOfRange(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	rng2 := splitTestRange(store, roachpb.KeyMin, roachpb.RKey(roachpb.Key("b")), t)
+	rng2 := splitTestRange(store, roachpb.RKeyMin, roachpb.RKey(roachpb.Key("b")), t)
 
 	// Range 1 is from KeyMin to "b", so reading "b" from range 1 should
 	// fail because it's just after the range boundary.
@@ -694,8 +694,8 @@ func TestStoreRangesByKey(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	r0 := store.LookupReplica(roachpb.KeyMin, nil)
-	r1 := splitTestRange(store, roachpb.KeyMin, roachpb.RKey("A"), t)
+	r0 := store.LookupReplica(roachpb.RKeyMin, nil)
+	r1 := splitTestRange(store, roachpb.RKeyMin, roachpb.RKey("A"), t)
 	r2 := splitTestRange(store, roachpb.RKey("A"), roachpb.RKey("C"), t)
 	r3 := splitTestRange(store, roachpb.RKey("C"), roachpb.RKey("X"), t)
 	r4 := splitTestRange(store, roachpb.RKey("X"), roachpb.RKey("ZZ"), t)
@@ -724,7 +724,7 @@ func TestStoreRangesByKey(t *testing.T) {
 	if r := store.LookupReplica(roachpb.RKey("\xff\x00"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
-	if store.LookupReplica(roachpb.KeyMax, nil) != nil {
+	if store.LookupReplica(roachpb.RKeyMax, nil) != nil {
 		t.Errorf("expected roachpb.KeyMax to not have an associated range")
 	}
 }
@@ -741,9 +741,9 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		rng         *Replica
 		expMaxBytes int64
 	}{
-		{store.LookupReplica(roachpb.KeyMin, nil),
+		{store.LookupReplica(roachpb.RKeyMin, nil),
 			config.DefaultZoneConfig.RangeMaxBytes},
-		{splitTestRange(store, roachpb.KeyMin, keys.MakeTablePrefix(1000), t),
+		{splitTestRange(store, roachpb.RKeyMin, keys.MakeTablePrefix(1000), t),
 			1 << 20},
 		{splitTestRange(store, keys.MakeTablePrefix(1000), keys.MakeTablePrefix(1001), t),
 			config.DefaultZoneConfig.RangeMaxBytes},
@@ -1392,12 +1392,12 @@ func TestStoreBadRequests(t *testing.T) {
 	args1 := getArgs(roachpb.Key("a"))
 	args1.EndKey = roachpb.Key("b")
 
-	args2 := getArgs(roachpb.KeyMax)
+	args2 := getArgs(roachpb.RKeyMax)
 
 	args3 := scanArgs(roachpb.Key("a"), roachpb.Key("a"))
 	args4 := scanArgs(roachpb.Key("b"), roachpb.Key("a"))
 
-	args5 := scanArgs(roachpb.KeyMin, roachpb.Key("a"))
+	args5 := scanArgs(roachpb.RKeyMin, roachpb.Key("a"))
 	args6 := scanArgs(keys.RangeTreeNodeKey(keys.RangeTreeRoot), roachpb.Key("a"))
 
 	tArgs0, _ := endTxnArgs(txn, false /* commit */)

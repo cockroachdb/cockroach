@@ -44,7 +44,7 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 	}
 	var startKey roachpb.RKey
 	if len(args) >= 1 {
-		startKey = keys.RangeMetaKey(roachpb.RKey(args[0]))
+		startKey = keys.RangeMetaKey(keys.Addr(roachpb.Key(args[0])))
 	} else {
 		startKey = roachpb.RKey(keys.Meta2Prefix)
 	}

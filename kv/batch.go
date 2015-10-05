@@ -193,7 +193,7 @@ func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
 func prev(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
-	candidate := roachpb.KeyMin
+	candidate := roachpb.RKeyMin
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
 		addr := keys.Addr(h.Key)
@@ -224,7 +224,7 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
 func next(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
-	candidate := roachpb.KeyMax
+	candidate := roachpb.RKeyMax
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
 		addr := keys.Addr(h.Key)

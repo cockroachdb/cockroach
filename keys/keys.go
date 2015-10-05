@@ -235,7 +235,7 @@ func Addr(k roachpb.Key) roachpb.RKey {
 // level 1 keys and local keys, KeyMin is returned.
 func RangeMetaKey(key roachpb.RKey) roachpb.RKey {
 	if len(key) == 0 {
-		return roachpb.KeyMin
+		return roachpb.RKeyMin
 	}
 	if !bytes.HasPrefix(key, MetaPrefix) {
 		return roachpb.RKey(MakeKey(Meta2Prefix, key))
@@ -244,7 +244,7 @@ func RangeMetaKey(key roachpb.RKey) roachpb.RKey {
 		return roachpb.RKey(MakeKey(Meta1Prefix, key[len(Meta2Prefix):]))
 	}
 
-	return roachpb.KeyMin
+	return roachpb.RKeyMin
 }
 
 // validateRangeMetaKey validates that the given key is a valid Range Metadata
@@ -252,7 +252,7 @@ func RangeMetaKey(key roachpb.RKey) roachpb.RKey {
 // correct prefix and not exceeding KeyMax.
 func validateRangeMetaKey(key roachpb.RKey) error {
 	// KeyMin is a valid key.
-	if key.Equal(roachpb.KeyMin) {
+	if key.Equal(roachpb.RKeyMin) {
 		return nil
 	}
 	// Key must be at least as long as Meta1Prefix.
@@ -260,12 +260,12 @@ func validateRangeMetaKey(key roachpb.RKey) error {
 		return NewInvalidRangeMetaKeyError("too short", key)
 	}
 
-	prefix, body := roachpb.RKey(key[:len(Meta1Prefix)]), roachpb.RKey(key[len(Meta1Prefix):])
+	prefix, body := key[:len(Meta1Prefix)], key[len(Meta1Prefix):]
 	if !prefix.Equal(Meta2Prefix) && !prefix.Equal(Meta1Prefix) {
 		return NewInvalidRangeMetaKeyError("not a meta key", key)
 	}
 
-	if roachpb.KeyMax.Less(body) {
+	if roachpb.RKeyMax.Less(body) {
 		return NewInvalidRangeMetaKeyError("body of meta key range lookup is > KeyMax", key)
 	}
 	return nil
@@ -283,7 +283,7 @@ func MetaScanBounds(key roachpb.RKey) (roachpb.RKey, roachpb.RKey, error) {
 		return nil, nil, NewInvalidRangeMetaKeyError("Meta2KeyMax can't be used as the key of scan", key)
 	}
 
-	if key.Equal(roachpb.KeyMin) {
+	if key.Equal(roachpb.RKeyMin) {
 		// Special case KeyMin: find the first entry in meta1.
 		return Meta1Prefix, Meta1Prefix.PrefixEnd(), nil
 	}
@@ -304,7 +304,7 @@ func MetaReverseScanBounds(key roachpb.RKey) (roachpb.RKey, roachpb.RKey, error)
 		return nil, nil, err
 	}
 
-	if key.Equal(roachpb.KeyMin) || key.Equal(Meta1Prefix) {
+	if key.Equal(roachpb.RKeyMin) || key.Equal(Meta1Prefix) {
 		return nil, nil, NewInvalidRangeMetaKeyError("KeyMin and Meta1Prefix can't be used as the key of reverse scan", key)
 	}
 	if key.Equal(Meta2Prefix) {
@@ -333,8 +333,8 @@ func MakeTablePrefix(tableID uint32) []byte {
 // Range returns a key range encompassing all the keys in the Batch.
 // TODO(tschottdorf): ideally method on *BatchRequest. See #2198.
 func Range(ba roachpb.BatchRequest) (roachpb.RKey, roachpb.RKey) {
-	from := roachpb.KeyMax
-	to := roachpb.KeyMin
+	from := roachpb.RKeyMax
+	to := roachpb.RKeyMin
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
 		if req.Method() == roachpb.Noop {

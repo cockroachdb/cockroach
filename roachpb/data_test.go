@@ -71,11 +71,11 @@ func TestKeyPrefixEnd(t *testing.T) {
 		key Key
 		end Key
 	}{
-		{Key{}, KeyMax.Key()},
+		{Key{}, KeyMax},
 		{Key{0}, Key{0x01}},
 		{Key{0xff}, Key{0xff}},
 		{Key{0xff, 0xff}, Key{0xff, 0xff}},
-		{KeyMax.Key(), KeyMax.Key()},
+		{KeyMax, KeyMax},
 		{Key{0xff, 0xfe}, Key{0xff, 0xff}},
 		{Key{0x00, 0x00}, Key{0x00, 0x01}},
 		{Key{0x00, 0xff}, Key{0x01, 0x00}},
@@ -161,8 +161,8 @@ func TestKeyString(t *testing.T) {
 	if Key("hello").String() != `"hello"` {
 		t.Errorf("expected key to display pretty version: %s", Key("hello"))
 	}
-	if KeyMax.String() != `"\xff\xff"` {
-		t.Errorf("expected key max to display pretty version: %s", KeyMax)
+	if RKeyMax.String() != `"\xff\xff"` {
+		t.Errorf("expected key max to display pretty version: %s", RKeyMax)
 	}
 }
 

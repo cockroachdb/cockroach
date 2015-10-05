@@ -52,8 +52,8 @@ import (
 func testRangeDescriptor() *roachpb.RangeDescriptor {
 	return &roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: roachpb.KeyMin,
-		EndKey:   roachpb.KeyMax,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
 		Replicas: []roachpb.ReplicaDescriptor{
 			{
 				ReplicaID: 1,
@@ -2482,8 +2482,8 @@ func TestRaftStorage(t *testing.T) {
 			}
 			rng, err := NewReplica(&roachpb.RangeDescriptor{
 				RangeID:  1,
-				StartKey: roachpb.KeyMin,
-				EndKey:   roachpb.KeyMax,
+				StartKey: roachpb.RKeyMin,
+				EndKey:   roachpb.RKeyMax,
 			}, store)
 			if err != nil {
 				t.Fatal(err)
@@ -2893,7 +2893,7 @@ func TestRangeLookup(t *testing.T) {
 		// up this range in gossip instead of executing the RPC, but
 		// RangeLookup is still used when up-to-date information is
 		// required.
-		{key: roachpb.KeyMin, reverse: false, expected: expected},
+		{key: roachpb.RKeyMin, reverse: false, expected: expected},
 		// Test with the last key in a meta prefix. This is an edge case in the
 		// implementation.
 		{key: keys.Meta1KeyMax, reverse: false, expected: expected},

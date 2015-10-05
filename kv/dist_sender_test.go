@@ -256,8 +256,8 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	descriptor := roachpb.RangeDescriptor{
-		StartKey: roachpb.KeyMin,
-		EndKey:   roachpb.KeyMax,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
 		RangeID:  rangeID,
 		Replicas: nil,
 	}
@@ -713,7 +713,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	var mergedRange = roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKey("a"),
-		EndKey:   roachpb.KeyMax,
+		EndKey:   roachpb.RKeyMax,
 		Replicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,

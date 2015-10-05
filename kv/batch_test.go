@@ -39,7 +39,7 @@ func TestBatchPrevNext(t *testing.T) {
 		}
 		return r
 	}
-	max, min := string(roachpb.KeyMax), string(roachpb.KeyMin)
+	max, min := string(roachpb.RKeyMax), string(roachpb.RKeyMin)
 	abc := span("a", "", "b", "", "c", "")
 	testCases := []struct {
 		spans             []roachpb.Span

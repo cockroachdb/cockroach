@@ -60,11 +60,11 @@ func TestKeyAddress(t *testing.T) {
 		key        roachpb.Key
 		expAddress roachpb.RKey
 	}{
-		{roachpb.Key{}, roachpb.KeyMin},
+		{roachpb.Key{}, roachpb.RKeyMin},
 		{roachpb.Key("123"), roachpb.RKey("123")},
 		{RangeDescriptorKey(roachpb.RKey("foo")), roachpb.RKey("foo")},
 		{TransactionKey(roachpb.RKey("baz"), roachpb.RKey(uuid.NewUUID4())), roachpb.RKey("baz")},
-		{TransactionKey(roachpb.KeyMax, roachpb.RKey(uuid.NewUUID4())), roachpb.KeyMax},
+		{TransactionKey(roachpb.RKeyMax, roachpb.RKey(uuid.NewUUID4())), roachpb.RKeyMax},
 		{nil, nil},
 	}
 	for i, test := range testCases {
@@ -82,7 +82,7 @@ func TestRangeMetaKey(t *testing.T) {
 	}{
 		{
 			key:    roachpb.RKey{},
-			expKey: roachpb.KeyMin,
+			expKey: roachpb.RKeyMin,
 		},
 		{
 			key:    roachpb.RKey("\x00\x00meta2\x00zonefoo"),
@@ -90,7 +90,7 @@ func TestRangeMetaKey(t *testing.T) {
 		},
 		{
 			key:    roachpb.RKey("\x00\x00meta1\x00zonefoo"),
-			expKey: roachpb.KeyMin,
+			expKey: roachpb.RKeyMin,
 		},
 		{
 			key:    roachpb.RKey("foo"),
@@ -106,7 +106,7 @@ func TestRangeMetaKey(t *testing.T) {
 		},
 		{
 			key:    roachpb.RKey("\x00\x00meta1foo"),
-			expKey: roachpb.KeyMin,
+			expKey: roachpb.RKeyMin,
 		},
 	}
 	for i, test := range testCases {
@@ -151,8 +151,8 @@ func TestMetaScanBounds(t *testing.T) {
 			expError: "",
 		},
 		{
-			key:      roachpb.MakeKey(Meta1Prefix, roachpb.KeyMax),
-			expStart: roachpb.MakeKey(Meta1Prefix, roachpb.KeyMax),
+			key:      roachpb.MakeKey(Meta1Prefix, roachpb.RKeyMax),
+			expStart: roachpb.MakeKey(Meta1Prefix, roachpb.RKeyMax),
 			expEnd:   Meta1Prefix.PrefixEnd(),
 			expError: "",
 		},
@@ -267,13 +267,13 @@ func TestValidateRangeMetaKey(t *testing.T) {
 		key    roachpb.RKey
 		expErr bool
 	}{
-		{roachpb.KeyMin, false},
+		{roachpb.RKeyMin, false},
 		{roachpb.RKey("\x00"), true},
 		{Meta1Prefix[:len(Meta1Prefix)-1], true},
 		{Meta1Prefix, false},
-		{roachpb.MakeKey(Meta1Prefix, roachpb.KeyMax), false},
-		{roachpb.MakeKey(Meta2Prefix, roachpb.KeyMax), false},
-		{roachpb.MakeKey(Meta2Prefix, roachpb.KeyMax.Next()), true},
+		{roachpb.MakeKey(Meta1Prefix, roachpb.RKeyMax), false},
+		{roachpb.MakeKey(Meta2Prefix, roachpb.RKeyMax), false},
+		{roachpb.MakeKey(Meta2Prefix, roachpb.RKeyMax.Next()), true},
 	}
 	for i, test := range testCases {
 		err := validateRangeMetaKey(test.key)
@@ -322,13 +322,13 @@ func TestBatchRange(t *testing.T) {
 		},
 		{
 			// Range-local point request.
-			req: [][2]string{{string(RangeDescriptorKey(roachpb.KeyMax)), ""}},
+			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKeyMax)), ""}},
 			exp: [2]string{"\xff\xff", "\xff\xff\x00"},
 		},
 		{
 			// Range-local to global such that the key ordering flips.
 			// Important that we get a valid range back.
-			req: [][2]string{{string(RangeDescriptorKey(roachpb.KeyMax)), "x"}},
+			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKeyMax)), "x"}},
 			exp: [2]string{"\xff\xff", "\xff\xff\x00"},
 		},
 		{
