@@ -185,6 +185,12 @@ func (p *planner) selectIndex(s *scanNode, ordering []int) (planNode, error) {
 	s.index = c.index
 	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 	s.spans = makeSpans(c.constraints, c.desc.ID, c.index.ID)
+	if len(s.spans) == 0 {
+		// There are no spans to scan.
+		s.desc = nil
+		s.index = nil
+		return s, nil
+	}
 	s.reverse = c.reverse
 
 	if log.V(3) {
@@ -405,6 +411,21 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 						constraint.start = c
 					}
 				case parser.In:
+					// Only allow the IN constraint if the previous constraints are all
+					// EQ. This is necessary to prevent overlapping spans from being
+					// generated. Consider the constraints [a >= 1, a <= 2, b IN (1,
+					// 2)]. This would turn into the spans /1/1-/3/2 and /1/2-/3/3.
+					ok := true
+					for _, c := range v.constraints {
+						ok = c.start == c.end && c.start.Operator == parser.EQ
+						if !ok {
+							break
+						}
+					}
+					if !ok {
+						continue
+					}
+
 					if !startDone && (constraint.start == nil || constraint.start.Operator != parser.EQ) {
 						constraint.start = c
 						constraint.tupleMap = tupleMap
@@ -659,6 +680,18 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 			spans[i].end = spans[i].end.PrefixEnd()
 		}
 	}
+
+	// Remove any spans which are empty. This can happen for constraints such as
+	// "a > 1 AND a < 2" which we do not simplify to false but which is treated
+	// as "a >= 2 AND a < 2" for span generation.
+	n := 0
+	for _, s := range spans {
+		if bytes.Compare(s.start, s.end) < 0 {
+			spans[n] = s
+			n++
+		}
+	}
+	spans = spans[:n]
 
 	return spans
 }
