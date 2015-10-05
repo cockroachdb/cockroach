@@ -96,11 +96,11 @@ func TestRocksDBCompaction(t *testing.T) {
 			Value: roachpb.Value{Bytes: encodePutResponse(makeTS(3, 0), t)},
 		},
 		{
-			Key:   keys.TransactionKey(roachpb.Key("a"), roachpb.Key(uuid.NewUUID4())),
+			Key:   keys.TransactionKey(roachpb.RKey("a"), roachpb.Key(uuid.NewUUID4())),
 			Value: roachpb.Value{Bytes: encodeTransaction(makeTS(1, 0), t)},
 		},
 		{
-			Key:   keys.TransactionKey(roachpb.Key("b"), roachpb.Key(uuid.NewUUID4())),
+			Key:   keys.TransactionKey(roachpb.RKey("b"), roachpb.Key(uuid.NewUUID4())),
 			Value: roachpb.Value{Bytes: encodeTransaction(makeTS(2, 0), t)},
 		},
 	}
@@ -112,7 +112,7 @@ func TestRocksDBCompaction(t *testing.T) {
 
 	// Compact range and scan remaining values to compare.
 	rocksdb.CompactRange(nil, nil)
-	actualKVs, _, err := MVCCScan(rocksdb, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.ZeroTimestamp, true, nil)
+	actualKVs, _, err := MVCCScan(rocksdb, keyMin, keyMax, 0, roachpb.ZeroTimestamp, true, nil)
 	if err != nil {
 		t.Fatalf("could not run scan: %v", err)
 	}
@@ -234,7 +234,7 @@ func runMVCCScan(numRows, numVersions int, b *testing.B) {
 			startKey := roachpb.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
-			kvs, _, err := MVCCScan(rocksdb, startKey, roachpb.KeyMax, int64(numRows), ts, true, nil)
+			kvs, _, err := MVCCScan(rocksdb, startKey, keyMax, int64(numRows), ts, true, nil)
 			if err != nil {
 				b.Fatalf("failed scan: %s", err)
 			}

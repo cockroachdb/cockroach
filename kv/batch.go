@@ -43,10 +43,10 @@ import (
 // less magical.
 func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to roachpb.RKey) (func(), int, error) {
 	if !desc.ContainsKey(from) {
-		from = roachpb.RKey(desc.StartKey)
+		from = desc.StartKey
 	}
 	if !desc.ContainsKeyRange(desc.StartKey, to) || to == nil {
-		to = roachpb.RKey(desc.EndKey)
+		to = desc.EndKey
 	}
 	truncateOne := func(args roachpb.Request) (bool, []func(), error) {
 		if _, ok := args.(*roachpb.NoopRequest); ok {
@@ -193,7 +193,7 @@ func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
 func prev(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
-	candidate := roachpb.RKey(roachpb.KeyMin)
+	candidate := roachpb.KeyMin
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
 		addr := keys.Addr(h.Key)
@@ -224,7 +224,7 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
 func next(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
-	candidate := roachpb.RKey(roachpb.KeyMax)
+	candidate := roachpb.KeyMax
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
 		addr := keys.Addr(h.Key)

@@ -113,7 +113,7 @@ func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
 	if float64(rng.stats.GetSize())/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof("splitting %s size=%d max=%d", rng, rng.stats.GetSize(), zone.RangeMaxBytes)
 		if _, err = client.SendWrapped(rng, rng.context(), &roachpb.AdminSplitRequest{
-			Span: roachpb.Span{Key: desc.StartKey},
+			Span: roachpb.Span{Key: desc.StartKey.Key()},
 		}); err != nil {
 			return err
 		}

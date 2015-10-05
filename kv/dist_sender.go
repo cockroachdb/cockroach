@@ -402,9 +402,9 @@ func (ds *DistSender) getDescriptors(from, to roachpb.RKey, options lookupOption
 	// Checks whether need to get next range descriptor. If so, returns true.
 	needAnother := func(desc *roachpb.RangeDescriptor, isReverse bool) bool {
 		if isReverse {
-			return from.Less(roachpb.RKey(desc.StartKey))
+			return from.Less(desc.StartKey)
 		}
-		return roachpb.RKey(desc.EndKey).Less(to)
+		return desc.EndKey.Less(to)
 	}
 
 	evict := func() {
@@ -719,7 +719,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// We use the StartKey of the current descriptor as opposed to the
 			// EndKey of the previous one since that doesn't have bugs when
 			// stale descriptors come into play.
-			to = prev(ba, roachpb.RKey(desc.StartKey))
+			to = prev(ba, desc.StartKey)
 		} else {
 			// In next iteration, query next range.
 			// It's important that we use the EndKey of the current descriptor
@@ -728,7 +728,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// one, and unless both descriptors are stale, the next descriptor's
 			// StartKey would move us to the beginning of the current range,
 			// resulting in a duplicate scan.
-			from = next(ba, roachpb.RKey(desc.EndKey))
+			from = next(ba, desc.EndKey)
 		}
 		trace.Event("querying next range")
 	}

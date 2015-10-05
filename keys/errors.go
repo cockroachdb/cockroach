@@ -31,7 +31,7 @@ type InvalidRangeMetaKeyError struct {
 }
 
 // NewInvalidRangeMetaKeyError returns a new InvalidRangeMetaKeyError
-func NewInvalidRangeMetaKeyError(msg string, k roachpb.Key) *InvalidRangeMetaKeyError {
+func NewInvalidRangeMetaKeyError(msg string, k []byte) *InvalidRangeMetaKeyError {
 	return &InvalidRangeMetaKeyError{Msg: msg, Key: k}
 }
 

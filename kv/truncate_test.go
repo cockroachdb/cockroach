@@ -14,7 +14,7 @@ import (
 func TestTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	loc := func(s string) string {
-		return string(keys.RangeDescriptorKey(roachpb.Key(s)))
+		return string(keys.RangeDescriptorKey(roachpb.RKey(s)))
 	}
 	testCases := []struct {
 		keys     [][2]string
@@ -86,13 +86,13 @@ func TestTruncate(t *testing.T) {
 		original := proto.Clone(ba).(*roachpb.BatchRequest)
 
 		desc := &roachpb.RangeDescriptor{
-			StartKey: roachpb.Key(test.desc[0]), EndKey: roachpb.Key(test.desc[1]),
+			StartKey: roachpb.RKey(test.desc[0]), EndKey: roachpb.RKey(test.desc[1]),
 		}
 		if len(desc.StartKey) == 0 {
-			desc.StartKey = roachpb.Key(test.from)
+			desc.StartKey = roachpb.RKey(test.from)
 		}
 		if len(desc.EndKey) == 0 {
-			desc.EndKey = roachpb.Key(test.to)
+			desc.EndKey = roachpb.RKey(test.to)
 		}
 		undo, num, err := truncate(ba, desc, roachpb.RKey(test.from), roachpb.RKey(test.to))
 		if err != nil {

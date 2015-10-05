@@ -57,12 +57,12 @@ func TestObjectIDForKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
-		key     roachpb.Key
+		key     roachpb.RKey
 		success bool
 		id      uint32
 	}{
 		// Before the structured span.
-		{roachpb.Key(""), false, 0},
+		{roachpb.RKey(""), false, 0},
 		{keys.SystemMax, false, 0},
 
 		// Boundaries of structured span.
@@ -70,10 +70,10 @@ func TestObjectIDForKey(t *testing.T) {
 		{roachpb.KeyMax, false, 0},
 
 		// In system span, but no Uvarint ID.
-		{keys.MakeKey(keys.TableDataPrefix, roachpb.Key("foo")), false, 0},
+		{keys.MakeKey(keys.TableDataPrefix, roachpb.RKey("foo")), false, 0},
 
 		// Valid, even if there are things after the ID.
-		{keys.MakeKey(keys.MakeTablePrefix(42), roachpb.Key("foo")), true, 42},
+		{keys.MakeKey(keys.MakeTablePrefix(42), roachpb.RKey("foo")), true, 42},
 		{keys.MakeTablePrefix(0), true, 0},
 		{keys.MakeTablePrefix(999), true, 999},
 	}
@@ -213,7 +213,7 @@ func TestComputeSplits(t *testing.T) {
 
 	testCases := []struct {
 		values     []roachpb.KeyValue
-		start, end roachpb.Key
+		start, end roachpb.RKey
 		// Use ints in the testcase definitions, more readable.
 		splits []uint32
 	}{
@@ -237,14 +237,14 @@ func TestComputeSplits(t *testing.T) {
 		{userSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allSplits[5:]},
 		{userSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), nil},
 		{userSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), nil},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.Key("foo")),
+		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
 			keys.MakeTablePrefix(start + 10), allSplits[1:]},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.Key("foo")),
+		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
 			keys.MakeTablePrefix(start + 5), allSplits[1:5]},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.Key("foo")),
-			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.Key("bar")), allSplits[1:]},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.Key("foo")),
-			keys.MakeKey(keys.MakeTablePrefix(start), roachpb.Key("morefoo")), nil},
+		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allSplits[1:]},
+		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("morefoo")), nil},
 	}
 
 	cfg := config.SystemConfig{}
@@ -256,7 +256,7 @@ func TestComputeSplits(t *testing.T) {
 		}
 
 		// Convert ints to actual keys.
-		expected := []roachpb.Key{}
+		expected := []roachpb.RKey{}
 		if tc.splits != nil {
 			for _, s := range tc.splits {
 				expected = append(expected, keys.MakeTablePrefix(s))

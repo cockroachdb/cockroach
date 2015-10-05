@@ -47,9 +47,9 @@ func newRangeDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *rangeDat
 	// The first range in the keyspace starts at KeyMin, which includes the node-local
 	// space. We need the original StartKey to find the range metadata, but the
 	// actual data starts at LocalMax.
-	dataStartKey := d.StartKey
+	dataStartKey := d.StartKey.Key()
 	if d.StartKey.Equal(roachpb.KeyMin) {
-		dataStartKey = keys.LocalMax
+		dataStartKey = keys.LocalMax.Key()
 	}
 	ri := &rangeDataIterator{
 		ranges: []keyRange{
@@ -63,7 +63,7 @@ func newRangeDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *rangeDat
 			},
 			{
 				start: engine.MVCCEncodeKey(dataStartKey),
-				end:   engine.MVCCEncodeKey(d.EndKey),
+				end:   engine.MVCCEncodeKey(d.EndKey.Key()),
 			},
 		},
 		iter: e.NewIterator(),

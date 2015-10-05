@@ -55,7 +55,7 @@ var (
 	LocalStorePrefix = MakeKey(LocalPrefix, roachpb.Key("s"))
 	// LocalStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
-	LocalStoreIdentSuffix = roachpb.Key("iden")
+	LocalStoreIdentSuffix = roachpb.RKey("iden")
 
 	// LocalRangeIDPrefix is the prefix identifying per-range data
 	// indexed by Range ID. The Range ID is appended to this prefix,
@@ -66,31 +66,31 @@ var (
 	//
 	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
 	// in storage/engine/db.cc.
-	LocalRangeIDPrefix = MakeKey(LocalPrefix, roachpb.Key("i"))
+	LocalRangeIDPrefix = roachpb.RKey(MakeKey(LocalPrefix, roachpb.Key("i")))
 	// LocalResponseCacheSuffix is the suffix for keys storing
 	// command responses used to guarantee idempotency (see ResponseCache).
 	// NOTE: if this value changes, it must be updated in C++
 	// (storage/engine/db.cc).
-	LocalResponseCacheSuffix = roachpb.Key("res-")
+	LocalResponseCacheSuffix = roachpb.RKey("res-")
 	// LocalRaftLeaderLeaseSuffix is the suffix for the raft leader lease.
-	LocalRaftLeaderLeaseSuffix = roachpb.Key("rfll")
+	LocalRaftLeaderLeaseSuffix = roachpb.RKey("rfll")
 	// LocalRaftHardStateSuffix is the Suffix for the raft HardState.
-	LocalRaftHardStateSuffix = roachpb.Key("rfth")
+	LocalRaftHardStateSuffix = roachpb.RKey("rfth")
 	// LocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
-	LocalRaftAppliedIndexSuffix = roachpb.Key("rfta")
+	LocalRaftAppliedIndexSuffix = roachpb.RKey("rfta")
 	// LocalRaftLogSuffix is the suffix for the raft log.
-	LocalRaftLogSuffix = roachpb.Key("rftl")
+	LocalRaftLogSuffix = roachpb.RKey("rftl")
 	// LocalRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
-	LocalRaftTruncatedStateSuffix = roachpb.Key("rftt")
+	LocalRaftTruncatedStateSuffix = roachpb.RKey("rftt")
 	// LocalRaftLastIndexSuffix is the suffix for raft's last index.
-	LocalRaftLastIndexSuffix = roachpb.Key("rfti")
+	LocalRaftLastIndexSuffix = roachpb.RKey("rfti")
 	// LocalRangeGCMetadataSuffix is the suffix for a range's GC metadata.
-	LocalRangeGCMetadataSuffix = roachpb.Key("rgcm")
+	LocalRangeGCMetadataSuffix = roachpb.RKey("rgcm")
 	// LocalRangeLastVerificationTimestampSuffix is the suffix for a range's
 	// last verification timestamp (for checking integrity of on-disk data).
-	LocalRangeLastVerificationTimestampSuffix = roachpb.Key("rlvt")
+	LocalRangeLastVerificationTimestampSuffix = roachpb.RKey("rlvt")
 	// LocalRangeStatsSuffix is the suffix for range statistics.
-	LocalRangeStatsSuffix = roachpb.Key("stat")
+	LocalRangeStatsSuffix = roachpb.RKey("stat")
 
 	// LocalRangePrefix is the prefix identifying per-range data indexed
 	// by range key (either start key, or some key in the range). The
@@ -101,74 +101,74 @@ var (
 	//
 	// NOTE: LocalRangePrefix must be kept in sync with the value in
 	// storage/engine/db.cc.
-	LocalRangePrefix = MakeKey(LocalPrefix, roachpb.Key("k"))
+	LocalRangePrefix = roachpb.Key(MakeKey(LocalPrefix, roachpb.RKey("k")))
 	LocalRangeMax    = LocalRangePrefix.PrefixEnd()
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
-	LocalRangeDescriptorSuffix = roachpb.Key("rdsc")
+	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")
 	// LocalRangeTreeNodeSuffix is the suffix for keys storing
 	// range tree nodes.  The value is a struct of type RangeTreeNode.
-	LocalRangeTreeNodeSuffix = roachpb.Key("rtn-")
+	LocalRangeTreeNodeSuffix = roachpb.RKey("rtn-")
 	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	// NOTE: if this value changes, it must be updated in C++
 	// (storage/engine/db.cc).
-	LocalTransactionSuffix = roachpb.Key("txn-")
+	LocalTransactionSuffix = roachpb.RKey("txn-")
 
 	// LocalMax is the end of the local key range.
-	LocalMax = LocalPrefix.PrefixEnd()
+	LocalMax = roachpb.RKey(LocalPrefix.PrefixEnd())
 
 	// SystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
-	SystemPrefix = roachpb.Key("\x00")
-	SystemMax    = roachpb.Key("\x01")
+	SystemPrefix = roachpb.RKey("\x00")
+	SystemMax    = roachpb.RKey("\x01")
 
 	// MetaPrefix is the prefix for range metadata keys. Notice that
 	// an extra null character in the prefix causes all range addressing
 	// records to sort before any system tables which they might describe.
-	MetaPrefix = MakeKey(SystemPrefix, roachpb.Key("\x00meta"))
+	MetaPrefix = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("\x00meta")))
 	// Meta1Prefix is the first level of key addressing. The value is a
 	// RangeDescriptor struct.
-	Meta1Prefix = MakeKey(MetaPrefix, roachpb.Key("1"))
+	Meta1Prefix = roachpb.RKey(MakeKey(MetaPrefix, roachpb.RKey("1")))
 	// Meta2Prefix is the second level of key addressing. The value is a
 	// RangeDescriptor struct.
-	Meta2Prefix = MakeKey(MetaPrefix, roachpb.Key("2"))
+	Meta2Prefix = roachpb.RKey(MakeKey(MetaPrefix, roachpb.RKey("2")))
 	// Meta1KeyMax is the end of the range of the first level of key addressing.
 	// The value is a RangeDescriptor struct.
-	Meta1KeyMax = MakeKey(Meta1Prefix, roachpb.KeyMax)
+	Meta1KeyMax = roachpb.RKey(MakeKey(Meta1Prefix, roachpb.KeyMax))
 	// Meta2KeyMax is the end of the range of the second level of key addressing.
 	// The value is a RangeDescriptor struct.
-	Meta2KeyMax = MakeKey(Meta2Prefix, roachpb.KeyMax)
+	Meta2KeyMax = roachpb.RKey(MakeKey(Meta2Prefix, roachpb.KeyMax))
 
 	// MetaMax is the end of the range of addressing keys.
-	MetaMax = MakeKey(SystemPrefix, roachpb.Key("\x01"))
+	MetaMax = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("\x01")))
 
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.
-	DescIDGenerator = MakeKey(SystemPrefix, roachpb.Key("desc-idgen"))
+	DescIDGenerator = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("desc-idgen")))
 	// NodeIDGenerator is the global node ID generator sequence.
-	NodeIDGenerator = MakeKey(SystemPrefix, roachpb.Key("node-idgen"))
+	NodeIDGenerator = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("node-idgen")))
 	// RangeIDGenerator is the global range ID generator sequence.
-	RangeIDGenerator = MakeKey(SystemPrefix, roachpb.Key("range-idgen"))
+	RangeIDGenerator = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("range-idgen")))
 	// StoreIDGenerator is the global store ID generator sequence.
-	StoreIDGenerator = MakeKey(SystemPrefix, roachpb.Key("store-idgen"))
+	StoreIDGenerator = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("store-idgen")))
 	// RangeTreeRoot specifies the root range in the range tree.
-	RangeTreeRoot = MakeKey(SystemPrefix, roachpb.Key("range-tree-root"))
+	RangeTreeRoot = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("range-tree-root")))
 
 	// StatusPrefix specifies the key prefix to store all status details.
-	StatusPrefix = MakeKey(SystemPrefix, roachpb.Key("status-"))
+	StatusPrefix = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("status-")))
 	// StatusStorePrefix stores all status info for stores.
-	StatusStorePrefix = MakeKey(StatusPrefix, roachpb.Key("store-"))
+	StatusStorePrefix = roachpb.RKey(MakeKey(StatusPrefix, roachpb.RKey("store-")))
 	// StatusNodePrefix stores all status info for nodes.
-	StatusNodePrefix = MakeKey(StatusPrefix, roachpb.Key("node-"))
+	StatusNodePrefix = roachpb.RKey(MakeKey(StatusPrefix, roachpb.RKey("node-")))
 
 	// TableDataPrefix prefixes all table data. It is specifically chosen to
 	// occur after the range of common user data prefixes so that tests which use
 	// those prefixes will not see table data.
-	TableDataPrefix = roachpb.Key("\xff")
+	TableDataPrefix = roachpb.RKey("\xff")
 
 	// UserTableDataMin is the start key of user structured data.
-	UserTableDataMin = MakeTablePrefix(MaxReservedDescID + 1)
+	UserTableDataMin = roachpb.RKey(MakeTablePrefix(MaxReservedDescID + 1))
 )
 
 // Various IDs used by the structured data layer.

@@ -223,7 +223,7 @@ func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	return roachpb.NewTransaction(name, keys.Addr(baseKey).Key(), userPriority,
+	return roachpb.NewTransaction(name, keys.Addr(baseKey), userPriority,
 		isolation, now, offset)
 }
 
@@ -246,8 +246,8 @@ func TestRangeContains(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	desc := &roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: roachpb.Key("a"),
-		EndKey:   roachpb.Key("b"),
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("b"),
 	}
 
 	stopper := stop.NewStopper()
@@ -930,7 +930,7 @@ func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransaction
 	h.Txn = txn
 	return roachpb.EndTransactionRequest{
 		Span: roachpb.Span{
-			Key: txn.Key, // not allowed when going through TxnCoordSender, but we're not
+			Key: txn.Key.Key(), // not allowed when going through TxnCoordSender, but we're not
 		},
 		Commit: commit,
 	}, h
@@ -941,7 +941,7 @@ func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransaction
 func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType) roachpb.PushTxnRequest {
 	return roachpb.PushTxnRequest{
 		Span: roachpb.Span{
-			Key: pushee.Key,
+			Key: pushee.Key.Key(),
 		},
 		Now:       pusher.Timestamp,
 		PushTo:    pusher.Timestamp,
@@ -956,7 +956,7 @@ func heartbeatArgs(txn *roachpb.Transaction) (_ roachpb.HeartbeatTxnRequest, h r
 	h.Txn = txn
 	return roachpb.HeartbeatTxnRequest{
 		Span: roachpb.Span{
-			Key: txn.Key,
+			Key: txn.Key.Key(),
 		},
 	}, h
 }
@@ -1575,7 +1575,7 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	// split of the default range; start key must be "" in this case.
 	args.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
 		SplitTrigger: &roachpb.SplitTrigger{
-			UpdatedDesc: roachpb.RangeDescriptor{StartKey: roachpb.Key("bar")},
+			UpdatedDesc: roachpb.RangeDescriptor{StartKey: roachpb.RKey("bar")},
 		},
 	}
 
@@ -1787,16 +1787,16 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	txn := newTransaction("test", roachpb.Key(""), 1, roachpb.SERIALIZABLE, tc.clock)
 
 	testCases := []struct {
-		key          roachpb.Key
+		key          roachpb.RKey
 		existStatus  roachpb.TransactionStatus
 		existEpoch   int32
 		existTS      roachpb.Timestamp
 		expErrRegexp string
 	}{
-		{roachpb.Key("a"), roachpb.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" id=.*: already committed"},
-		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted \"test\" id=.*"},
-		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" id=.*: epoch regression: 0"},
-		{roachpb.Key("d"), roachpb.PENDING, txn.Epoch, regressTS, "txn \"test\" id=.*: timestamp regression: 0.000000001,0"},
+		{roachpb.RKey("a"), roachpb.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" id=.*: already committed"},
+		{roachpb.RKey("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted \"test\" id=.*"},
+		{roachpb.RKey("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" id=.*: epoch regression: 0"},
+		{roachpb.RKey("d"), roachpb.PENDING, txn.Epoch, regressTS, "txn \"test\" id=.*: timestamp regression: 0.000000001,0"},
 	}
 	for _, test := range testCases {
 		// Establish existing txn state by writing directly to range engine.
@@ -1926,7 +1926,7 @@ func TestPushTxnBadKey(t *testing.T) {
 	pushee := newTransaction("test", roachpb.Key("b"), 1, roachpb.SERIALIZABLE, tc.clock)
 
 	args := pushTxnArgs(pusher, pushee, roachpb.ABORT_TXN)
-	args.Key = pusher.Key
+	args.Key = pusher.Key.Key()
 
 	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); !testutils.IsError(err, ".*should match pushee.*") {
 		t.Errorf("unexpected error %s", err)
@@ -2684,7 +2684,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	origDesc := rlReply.Ranges[0]
 	newDesc := origDesc
-	newDesc.EndKey = key
+	newDesc.EndKey = keys.Addr(key)
 
 	// Write the new descriptor as an intent.
 	data, err := proto.Marshal(&newDesc)
@@ -2767,10 +2767,10 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Test ranges: ["a","c"), ["c","f"), ["f","h") and ["h","y").
 	testRanges := []roachpb.RangeDescriptor{
-		{RangeID: 2, StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
-		{RangeID: 3, StartKey: roachpb.Key("c"), EndKey: roachpb.Key("f")},
-		{RangeID: 4, StartKey: roachpb.Key("f"), EndKey: roachpb.Key("h")},
-		{RangeID: 5, StartKey: roachpb.Key("h"), EndKey: roachpb.Key("y")},
+		{RangeID: 2, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
+		{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("f")},
+		{RangeID: 4, StartKey: roachpb.RKey("f"), EndKey: roachpb.RKey("h")},
+		{RangeID: 5, StartKey: roachpb.RKey("h"), EndKey: roachpb.RKey("y")},
 	}
 	// The range ["f","h") has dangling intent in meta2.
 	withIntentRangeIndex := 2
@@ -2884,7 +2884,7 @@ func TestRangeLookup(t *testing.T) {
 
 	expected := []roachpb.RangeDescriptor{*tc.rng.Desc()}
 	testCases := []struct {
-		key      roachpb.Key
+		key      roachpb.RKey
 		reverse  bool
 		expected []roachpb.RangeDescriptor
 	}{
@@ -2905,7 +2905,7 @@ func TestRangeLookup(t *testing.T) {
 	for _, c := range testCases {
 		resp, err := client.SendWrapped(tc.Sender(), nil, &roachpb.RangeLookupRequest{
 			Span: roachpb.Span{
-				Key: c.key,
+				Key: c.key.Key(),
 			},
 			MaxRanges: 1,
 			Reverse:   c.reverse,
@@ -3050,10 +3050,10 @@ func TestIntentIntersect(t *testing.T) {
 		EndKey: roachpb.Key("x"),
 	}
 
-	suffix := roachpb.Key("abcd")
+	suffix := roachpb.RKey("abcd")
 	iLc := roachpb.Intent{
-		Key:    keys.MakeRangeKey(roachpb.Key("c"), suffix, nil),
-		EndKey: keys.MakeRangeKey(roachpb.Key("x"), suffix, nil),
+		Key:    keys.MakeRangeKey(roachpb.RKey("c"), suffix, nil),
+		EndKey: keys.MakeRangeKey(roachpb.RKey("x"), suffix, nil),
 	}
 	kl1 := string(iLc.Key)
 	kl2 := string(iLc.EndKey)
@@ -3087,8 +3087,8 @@ func TestIntentIntersect(t *testing.T) {
 	} {
 		var all []string
 		in, out := intersectIntent(tc.intent, roachpb.RangeDescriptor{
-			StartKey: roachpb.Key(tc.from),
-			EndKey:   roachpb.Key(tc.to),
+			StartKey: roachpb.RKey(tc.from),
+			EndKey:   roachpb.RKey(tc.to),
 		})
 		if in != nil {
 			all = append(all, string(in.Key), string(in.EndKey))

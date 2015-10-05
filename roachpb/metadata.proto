@@ -59,11 +59,11 @@ message RangeDescriptor {
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
   // StartKey is the first key which may be contained by this range.
-  optional bytes start_key = 2 [(gogoproto.casttype) = "Key"];
+  optional bytes start_key = 2 [(gogoproto.casttype) = "RKey"];
   // EndKey marks the end of the range's possible keys.  EndKey itself is not
   // contained in this range - it will be contained in the immediately
   // subsequent range.
-  optional bytes end_key = 3 [(gogoproto.casttype) = "Key"];
+  optional bytes end_key = 3 [(gogoproto.casttype) = "RKey"];
   // Replicas is the set of nodes/stores on which replicas of this
   // range are stored, the ordering being arbitrary and subject to
   // permutation.
@@ -76,20 +76,20 @@ message RangeDescriptor {
 
 // RangeTree holds the root node of the range tree.
 message RangeTree {
-  optional bytes root_key = 1 [(gogoproto.casttype) = "Key"];
+  optional bytes root_key = 1 [(gogoproto.casttype) = "RKey"];
 }
 
 // RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
 message RangeTreeNode {
-  optional bytes key = 1 [(gogoproto.casttype) = "Key"];
+  optional bytes key = 1 [(gogoproto.casttype) = "RKey"];
 
   // Color is black if true, red if false.
   optional bool black = 2 [(gogoproto.nullable) = false];
 
   // If the parent key is null, this is the root node.
-  optional bytes parent_key = 3 [(gogoproto.casttype) = "Key"];
-  optional bytes left_key = 4 [(gogoproto.casttype) = "Key"];
-  optional bytes right_key = 5 [(gogoproto.casttype) = "Key"];
+  optional bytes parent_key = 3 [(gogoproto.casttype) = "RKey"];
+  optional bytes left_key = 4 [(gogoproto.casttype) = "RKey"];
+  optional bytes right_key = 5 [(gogoproto.casttype) = "RKey"];
 }
 
 // StoreCapacity contains capacity information for a storage device.

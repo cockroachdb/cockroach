@@ -42,11 +42,11 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
-	var startKey roachpb.Key
+	var startKey roachpb.RKey
 	if len(args) >= 1 {
-		startKey = keys.RangeMetaKey(roachpb.RKey(args[0])).Key()
+		startKey = keys.RangeMetaKey(roachpb.RKey(args[0]))
 	} else {
-		startKey = roachpb.RKey(keys.Meta2Prefix).Key()
+		startKey = roachpb.RKey(keys.Meta2Prefix)
 	}
 
 	kvDB, stopper := makeDBClient()

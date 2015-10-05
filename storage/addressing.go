@@ -29,11 +29,11 @@ import (
 type metaAction func(*client.Batch, roachpb.RKey, *roachpb.RangeDescriptor)
 
 func putMeta(b *client.Batch, key roachpb.RKey, desc *roachpb.RangeDescriptor) {
-	b.Put(key.Key(), desc)
+	b.Put(key, desc)
 }
 
 func delMeta(b *client.Batch, key roachpb.RKey, desc *roachpb.RangeDescriptor) {
-	b.Del(key.Key())
+	b.Del(key)
 }
 
 // splitRangeAddressing creates (or overwrites if necessary) the meta1
@@ -87,7 +87,7 @@ func rangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor, action meta
 	// the range is full of meta2. We must update the relevant meta1
 	// entry pointing to the end of this range.
 	if bytes.HasPrefix(desc.EndKey, keys.Meta2Prefix) {
-		action(b, keys.RangeMetaKey(roachpb.RKey(desc.EndKey)), desc)
+		action(b, keys.RangeMetaKey(desc.EndKey), desc)
 	} else {
 		// 3. the range ends with a normal user key, so we must update the
 		// relevant meta2 entry pointing to the end of this range.

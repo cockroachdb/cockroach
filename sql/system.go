@@ -146,7 +146,7 @@ func GetInitialSystemValues() []roachpb.KeyValue {
 	value := roachpb.Value{}
 	value.SetInt(int64(keys.MaxReservedDescID + 1))
 	ret[i] = roachpb.KeyValue{
-		Key:   keys.DescIDGenerator,
+		Key:   keys.DescIDGenerator.Key(),
 		Value: value,
 	}
 	i++

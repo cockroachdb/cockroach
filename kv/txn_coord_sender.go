@@ -139,7 +139,7 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 // not create copies, so the caller must not alter the returned data.
 func (tm *txnMetadata) intents() []roachpb.Intent {
 	intents := make([]roachpb.Intent, 0, tm.keys.Len())
-	for _, o := range tm.keys.GetOverlaps(roachpb.KeyMin, roachpb.KeyMax) {
+	for _, o := range tm.keys.GetOverlaps(roachpb.KeyMin.Key(), roachpb.KeyMax.Key()) {
 		intent := roachpb.Intent{
 			Key: o.Key.Start().(roachpb.Key),
 		}
@@ -346,7 +346,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			if len(et.Key) != 0 {
 				return nil, roachpb.NewError(util.Errorf("EndTransaction must not have a Key set"))
 			}
-			et.Key = ba.Txn.Key
+			et.Key = ba.Txn.Key.Key()
 
 			tc.Lock()
 			txnMeta, metaOK := tc.txns[id]
@@ -452,7 +452,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) {
 	if len(ba.Txn.ID) == 0 {
 		// TODO(tschottdorf): should really choose the first txn write here.
 		firstKey := ba.Requests[0].GetInner().Header().Key
-		newTxn := roachpb.NewTransaction(ba.Txn.Name, keys.Addr(firstKey).Key(), ba.GetUserPriority(),
+		newTxn := roachpb.NewTransaction(ba.Txn.Name, keys.Addr(firstKey), ba.GetUserPriority(),
 			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
 		// Use existing priority as a minimum. This is used on transaction
 		// aborts to ratchet priority when creating successor transaction.
@@ -580,7 +580,7 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	}
 
 	hb := &roachpb.HeartbeatTxnRequest{}
-	hb.Key = txn.Key
+	hb.Key = txn.Key.Key()
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
 	ba.Txn = &txn

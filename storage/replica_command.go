@@ -449,9 +449,9 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 // A range-local intent range is never split: It's returned as either
 // belonging to or outside of the descriptor's key range, and passing an intent
 // which begins range-local but ends non-local results in a panic.
-// TODO(tschottdorf) move to proto, make more gen-purpose.
+// TODO(tschottdorf) move to proto, make more gen-purpose. Check local addressing.
 func intersectIntent(intent roachpb.Intent, desc roachpb.RangeDescriptor) (middle *roachpb.Intent, outside []roachpb.Intent) {
-	start, end := desc.StartKey, desc.EndKey
+	start, end := desc.StartKey.Key(), desc.EndKey.Key()
 	if !intent.Key.Less(intent.EndKey) {
 		return
 	}
@@ -601,7 +601,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 			if err := proto.Unmarshal(b, &r); err != nil {
 				return nil, err
 			}
-			if !keys.RangeMetaKey(roachpb.RKey(r.StartKey)).Less(roachpb.RKey(args.Key)) {
+			if !keys.RangeMetaKey(r.StartKey).Less(roachpb.RKey(args.Key)) {
 				// This is the case in which we've picked up an extra descriptor
 				// we don't want.
 				return nil, nil
@@ -610,7 +610,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 			return &r, nil
 		}
 
-		if args.Key.Less(keys.Meta2KeyMax) {
+		if args.Key.Less(keys.Meta2KeyMax.Key()) {
 			startKey, endKey, err := keys.MetaScanBounds(roachpb.RKey(args.Key))
 			if err != nil {
 				return reply, nil, err
@@ -1097,13 +1097,14 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 // affirmative the descriptor is passed to AdminSplit, which performs a
 // Conditional Put on the RangeDescriptor to ensure that no other operation has
 // modified the range in the time the decision was being made.
+// TODO(tschottdorf): should assert that split key is not a local key.
 func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.RangeDescriptor) (roachpb.AdminSplitResponse, error) {
 	var reply roachpb.AdminSplitResponse
 
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
 	// other commands.
-	splitKey := roachpb.Key(args.SplitKey)
+	splitKey := keys.Addr(args.SplitKey)
 	if len(splitKey) == 0 {
 		snap := r.rm.NewSnapshot()
 		defer snap.Close()
@@ -1111,19 +1112,19 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 		if err != nil {
 			return reply, util.Errorf("unable to determine split key: %s", err)
 		}
-		splitKey = foundSplitKey
+		splitKey = keys.Addr(foundSplitKey)
 	}
 	// First verify this condition so that it will not return
 	// roachpb.NewRangeKeyMismatchError if splitKey equals to desc.EndKey,
 	// otherwise it will cause infinite retry loop.
-	if splitKey.Equal(desc.StartKey) || splitKey.Equal(desc.EndKey) {
+	if splitKey.Equal(desc.StartKey.Key()) || splitKey.Equal(desc.EndKey.Key()) {
 		return reply, util.Errorf("range is already split at key %s", splitKey)
 	}
 	// Verify some properties of split key.
-	if !r.ContainsKey(splitKey) {
-		return reply, roachpb.NewRangeKeyMismatchError(splitKey, splitKey, desc)
+	if !r.ContainsKey(splitKey.Key()) {
+		return reply, roachpb.NewRangeKeyMismatchError(splitKey.Key(), splitKey.Key(), desc)
 	}
-	if !engine.IsValidSplitKey(splitKey) {
+	if !engine.IsValidSplitKey(splitKey.Key()) {
 		return reply, util.Errorf("cannot split range at key %s", splitKey)
 	}
 
@@ -1294,7 +1295,7 @@ func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roach
 	// look up the descriptor here only to get the new end key and then
 	// repeat the lookup inside the transaction.
 	{
-		rightRng := r.rm.LookupReplica(roachpb.RKey(origLeftDesc.EndKey), nil)
+		rightRng := r.rm.LookupReplica(origLeftDesc.EndKey, nil)
 		if rightRng == nil {
 			return reply, util.Errorf("ranges not collocated")
 		}

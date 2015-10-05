@@ -249,7 +249,7 @@ func TestGCQueueProcess(t *testing.T) {
 		{key8, ts2},
 	}
 	// Read data directly from engine to avoid intent errors from MVCC.
-	kvs, err := engine.Scan(tc.store.Engine(), engine.MVCCEncodeKey(key1), engine.MVCCEncodeKey(keys.TableDataPrefix), 0)
+	kvs, err := engine.Scan(tc.store.Engine(), engine.MVCCEncodeKey(key1), engine.MVCCEncodeKey(keys.TableDataPrefix.Key()), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +362,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 	// Iterate through all values to ensure intents have been fully resolved.
 	meta := &engine.MVCCMetadata{}
-	err := tc.store.Engine().Iterate(engine.MVCCEncodeKey(roachpb.KeyMin), engine.MVCCEncodeKey(roachpb.KeyMax), func(kv roachpb.RawKeyValue) (bool, error) {
+	err := tc.store.Engine().Iterate(engine.MVCCEncodeKey(roachpb.KeyMin.Key()), engine.MVCCEncodeKey(roachpb.KeyMax.Key()), func(kv roachpb.RawKeyValue) (bool, error) {
 		if key, _, isValue, err := engine.MVCCDecodeKey(kv.Key); err != nil {
 			return false, err
 		} else if !isValue {

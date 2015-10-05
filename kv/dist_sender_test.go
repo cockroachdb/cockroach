@@ -41,8 +41,8 @@ import (
 
 var testRangeDescriptor = roachpb.RangeDescriptor{
 	RangeID:  1,
-	StartKey: roachpb.Key("a"),
-	EndKey:   roachpb.Key("z"),
+	StartKey: roachpb.RKey("a"),
+	EndKey:   roachpb.RKey("z"),
 	Replicas: []roachpb.ReplicaDescriptor{
 		{
 			NodeID:  1,
@@ -519,7 +519,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 	// Updated below, after it has first been returned.
-	badStartKey := roachpb.Key("m")
+	badStartKey := roachpb.RKey("m")
 	newRangeDescriptor := testRangeDescriptor
 	goodStartKey := newRangeDescriptor.StartKey
 	newRangeDescriptor.StartKey = badStartKey
@@ -576,8 +576,8 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 		t.Errorf("expected not to find first range descriptor")
 	}
 	expectedDesc := &roachpb.RangeDescriptor{}
-	expectedDesc.StartKey = roachpb.Key("a")
-	expectedDesc.EndKey = roachpb.Key("c")
+	expectedDesc.StartKey = roachpb.RKey("a")
+	expectedDesc.EndKey = roachpb.RKey("c")
 
 	// Add first RangeDescriptor to a node different from the node for
 	// this dist sender and ensure that this dist sender has the
@@ -617,8 +617,8 @@ func TestSendRPCRetry(t *testing.T) {
 	// Fill RangeDescriptor with 2 replicas
 	var descriptor = roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: roachpb.Key("a"),
-		EndKey:   roachpb.Key("z"),
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("z"),
 	}
 	for i := 1; i <= 2; i++ {
 		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
@@ -699,8 +699,8 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	// The stale first range descriptor which is unaware of the merge.
 	var firstRange = roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: roachpb.Key("a"),
-		EndKey:   roachpb.Key("b"),
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("b"),
 		Replicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
@@ -712,7 +712,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	// the stale range [a,b).
 	var mergedRange = roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: roachpb.Key("a"),
+		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.KeyMax,
 		Replicas: []roachpb.ReplicaDescriptor{
 			{

@@ -29,6 +29,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -73,7 +74,7 @@ func makeTS(walltime int64, logical int32) roachpb.Timestamp {
 
 // newTxn begins a transaction. For testing purposes, this comes with a ID
 // pre-initialized, but with the Writing flag set to false.
-func newTxn(clock *hlc.Clock, baseKey roachpb.Key) *roachpb.Transaction {
+func newTxn(clock *hlc.Clock, baseKey roachpb.RKey) *roachpb.Transaction {
 	f, l, fun := caller.Lookup(1)
 	name := fmt.Sprintf("%s:%d %s", f, l, fun)
 	txn := roachpb.NewTransaction("test", baseKey, 1, roachpb.SERIALIZABLE, clock.Now(), clock.MaxOffset().Nanoseconds())
@@ -114,7 +115,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	txn := newTxn(s.Clock, roachpb.Key("a"))
+	txn := newTxn(s.Clock, roachpb.RKey("a"))
 	put, h := createPutRequest(roachpb.Key("a"), []byte("value"), txn)
 
 	// Put request will create a new transaction.
@@ -234,7 +235,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
-	txn := newTxn(s.Clock, roachpb.Key("a"))
+	txn := newTxn(s.Clock, roachpb.RKey("a"))
 
 	for _, rng := range ranges {
 		if rng.end != nil {
@@ -270,8 +271,8 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	txn1 := newTxn(s.Clock, roachpb.Key("a"))
-	txn2 := newTxn(s.Clock, roachpb.Key("b"))
+	txn1 := newTxn(s.Clock, roachpb.RKey("a"))
+	txn2 := newTxn(s.Clock, roachpb.RKey("b"))
 	put1, h := createPutRequest(roachpb.Key("a"), []byte("value"), txn1)
 	if _, err := client.SendWrappedWith(s.Sender, nil, h, put1); err != nil {
 		t.Fatal(err)
@@ -297,7 +298,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	// Set heartbeat interval to 1ms for testing.
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
-	initialTxn := newTxn(s.Clock, roachpb.Key("a"))
+	initialTxn := newTxn(s.Clock, roachpb.RKey("a"))
 	put, h := createPutRequest(roachpb.Key("a"), []byte("value"), initialTxn)
 	if reply, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
 		t.Fatal(err)
@@ -333,7 +334,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Transaction, error) {
 	hb := &roachpb.HeartbeatTxnRequest{
 		Span: roachpb.Span{
-			Key: txn.Key,
+			Key: txn.Key.Key(),
 		},
 	}
 	reply, err := client.SendWrappedWith(coord, nil, roachpb.Header{
@@ -373,7 +374,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	txn := newTxn(s.Clock, roachpb.Key("a"))
+	txn := newTxn(s.Clock, roachpb.RKey("a"))
 	key := roachpb.Key("a")
 	put, h := createPutRequest(key, []byte("value"), txn)
 	reply, err := client.SendWrappedWith(s.Sender, nil, h, put)
@@ -398,7 +399,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 
 	// Create a transaction with intent at "a".
 	key := roachpb.Key("a")
-	txn := newTxn(s.Clock, key)
+	txn := newTxn(s.Clock, keys.Addr(key))
 	txn.Priority = 1
 	put, h := createPutRequest(key, []byte("value"), txn)
 	if reply, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
@@ -408,11 +409,11 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	}
 
 	// Push the transaction to abort it.
-	txn2 := newTxn(s.Clock, key)
+	txn2 := newTxn(s.Clock, keys.Addr(key))
 	txn2.Priority = 2
 	pushArgs := &roachpb.PushTxnRequest{
 		Span: roachpb.Span{
-			Key: txn.Key,
+			Key: txn.Key.Key(),
 		},
 		Now:       s.Clock.Now(),
 		PusherTxn: *txn2,
@@ -450,7 +451,7 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	// Set heartbeat interval to 1ms for testing.
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
-	txn := newTxn(s.Clock, roachpb.Key("a"))
+	txn := newTxn(s.Clock, roachpb.RKey("a"))
 	put, h := createPutRequest(roachpb.Key("a"), []byte("value"), txn)
 	if _, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
 		t.Fatal(err)
@@ -577,7 +578,7 @@ func TestTxnDrainingNode(t *testing.T) {
 		t.Fatal("stopper draining prematurely")
 	}
 
-	txn := newTxn(s.Clock, roachpb.Key("a"))
+	txn := newTxn(s.Clock, roachpb.RKey("a"))
 	key := roachpb.Key("a")
 	beginTxn := func() {
 		put, h := createPutRequest(key, []byte("value"), txn)
@@ -646,7 +647,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), false, true},
 		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), true, false},
 	} {
-		txn := newTxn(s.Clock, roachpb.Key("a"))
+		txn := newTxn(s.Clock, roachpb.RKey("a"))
 		txn.Writing = tc.writing
 		reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
 			Txn: txn,

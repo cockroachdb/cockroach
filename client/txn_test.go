@@ -25,6 +25,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -52,7 +53,7 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		ba.UserPriority = proto.Int32(-1)
 		if ba.Txn != nil && len(ba.Txn.ID) == 0 {
-			ba.Txn.Key = txnKey
+			ba.Txn.Key = keys.Addr(txnKey)
 			ba.Txn.ID = txnID
 		}
 

@@ -42,7 +42,7 @@ type treeContext struct {
 
 // SetupRangeTree creates a new RangeTree. This should only be called as part
 // of store.BootstrapRange.
-func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats, timestamp roachpb.Timestamp, startKey roachpb.Key) error {
+func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats, timestamp roachpb.Timestamp, startKey roachpb.RKey) error {
 	tree := &roachpb.RangeTree{
 		RootKey: startKey,
 	}
@@ -50,7 +50,7 @@ func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats, timestamp roachpb
 		Key:   startKey,
 		Black: true,
 	}
-	if err := engine.MVCCPutProto(batch, ms, keys.RangeTreeRoot, timestamp, nil, tree); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RangeTreeRoot.Key(), timestamp, nil, tree); err != nil {
 		return err
 	}
 	if err := engine.MVCCPutProto(batch, ms, keys.RangeTreeNodeKey(startKey), timestamp, nil, node); err != nil {
@@ -67,9 +67,9 @@ func (tc *treeContext) flush(b *client.Batch) error {
 	for key, cachedNode := range tc.nodes {
 		if cachedNode.dirty {
 			if cachedNode.node == nil {
-				b.Del(keys.RangeTreeNodeKey(roachpb.Key(key)))
+				b.Del(keys.RangeTreeNodeKey(roachpb.RKey(key)))
 			} else {
-				b.Put(keys.RangeTreeNodeKey(roachpb.Key(key)), cachedNode.node)
+				b.Put(keys.RangeTreeNodeKey(roachpb.RKey(key)), cachedNode.node)
 			}
 		}
 	}
@@ -92,7 +92,7 @@ func getRangeTree(txn *client.Txn) (*treeContext, error) {
 
 // setRoot sets the tree root key in the cache. It also marks the root for
 // writing during a flush.
-func (tc *treeContext) setRootKey(key roachpb.Key) {
+func (tc *treeContext) setRootKey(key roachpb.RKey) {
 	tc.tree.RootKey = key
 	tc.dirty = true
 }
@@ -108,7 +108,7 @@ func (tc *treeContext) setNode(node *roachpb.RangeTreeNode) {
 
 // dropNode sets a node in the cache to nil. It also marks the node as dirty for
 // writing during a flush.
-func (tc *treeContext) dropNode(key roachpb.Key) {
+func (tc *treeContext) dropNode(key roachpb.RKey) {
 	tc.nodes[string(key)] = cachedNode{
 		node:  nil,
 		dirty: true,
@@ -117,7 +117,7 @@ func (tc *treeContext) dropNode(key roachpb.Key) {
 
 // getNode returns the RangeTreeNode for the given key. If the key is nil, nil
 // is returned.
-func (tc *treeContext) getNode(key roachpb.Key) (*roachpb.RangeTreeNode, error) {
+func (tc *treeContext) getNode(key roachpb.RKey) (*roachpb.RangeTreeNode, error) {
 	if key == nil {
 		return nil, nil
 	}
@@ -272,7 +272,7 @@ func (tc *treeContext) rotateRight(node *roachpb.RangeTreeNode) (*roachpb.RangeT
 
 // InsertRange adds a new range to the RangeTree. This should only be called
 // from operations that create new ranges, such as AdminSplit.
-func InsertRange(txn *client.Txn, b *client.Batch, key roachpb.Key) error {
+func InsertRange(txn *client.Txn, b *client.Batch, key roachpb.RKey) error {
 	tc, err := getRangeTree(txn)
 	if err != nil {
 		return err
@@ -453,7 +453,7 @@ func (tc *treeContext) insertCase5(node *roachpb.RangeTreeNode) error {
 
 // DeleteRange removes a range from the RangeTree. This should only be called
 // from operations that remove ranges, such as AdminMerge.
-func DeleteRange(txn *client.Txn, b *client.Batch, key roachpb.Key) error {
+func DeleteRange(txn *client.Txn, b *client.Batch, key roachpb.RKey) error {
 	tc, err := getRangeTree(txn)
 	if err != nil {
 		return err

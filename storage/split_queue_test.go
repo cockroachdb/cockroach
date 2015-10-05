@@ -47,13 +47,13 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	}
 
 	testCases := []struct {
-		start, end roachpb.Key
+		start, end roachpb.RKey
 		bytes      int64
 		shouldQ    bool
 		priority   float64
 	}{
 		// No intersection, no bytes.
-		{roachpb.KeyMin, roachpb.Key("/"), 0, false, 0},
+		{roachpb.KeyMin, roachpb.RKey("/"), 0, false, 0},
 		// Intersection in zone, no bytes.
 		{keys.MakeTablePrefix(2001), roachpb.KeyMax, 0, true, 1},
 		// Already split at largest ID.
@@ -61,11 +61,11 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		// Multiple intersections, no bytes.
 		{roachpb.KeyMin, roachpb.KeyMax, 0, true, 1},
 		// No intersection, max bytes.
-		{roachpb.KeyMin, roachpb.Key("/"), 64 << 20, false, 0},
+		{roachpb.KeyMin, roachpb.RKey("/"), 64 << 20, false, 0},
 		// No intersection, max bytes+1.
-		{roachpb.KeyMin, roachpb.Key("/"), 64<<20 + 1, true, 1},
+		{roachpb.KeyMin, roachpb.RKey("/"), 64<<20 + 1, true, 1},
 		// No intersection, max bytes * 2.
-		{roachpb.KeyMin, roachpb.Key("/"), 64 << 21, true, 2},
+		{roachpb.KeyMin, roachpb.RKey("/"), 64 << 21, true, 2},
 		// Intersection, max bytes +1.
 		{keys.MakeTablePrefix(2000), roachpb.KeyMax, 32<<20 + 1, true, 2},
 		// Split needed at table boundary, but no zone config.

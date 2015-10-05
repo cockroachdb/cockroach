@@ -115,7 +115,7 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(start); err != nil {
 		return err
 	}
-	if !start.Less(roachpb.KeyMax) {
+	if !start.Less(roachpb.KeyMax.Key()) {
 		return util.Errorf("start key %q must be less than KeyMax", start)
 	}
 	if !checkEndKey {
@@ -130,7 +130,7 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(end); err != nil {
 		return err
 	}
-	if roachpb.KeyMax.Less(end) {
+	if roachpb.KeyMax.Key().Less(end) {
 		return util.Errorf("end key %q must be less than or equal to KeyMax", end)
 	}
 	if !start.Less(end) {
@@ -175,7 +175,7 @@ func (k rangeBTreeKey) Less(i btree.Item) bool {
 var _ rangeKeyItem = &Replica{}
 
 func (r *Replica) getKey() roachpb.RKey {
-	return roachpb.RKey(r.Desc().EndKey)
+	return r.Desc().EndKey
 }
 
 var _ btree.Item = &Replica{}
@@ -445,7 +445,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// Create ID allocators.
-	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper)
+	idAlloc, err := newIDAllocator(keys.RangeIDGenerator.Key(), s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper)
 	if err != nil {
 		return err
 	}
@@ -494,7 +494,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			if err != nil {
 				return false, err
 			}
-			if !suffix.Equal(keys.LocalRangeDescriptorSuffix) {
+			if !suffix.Equal(keys.LocalRangeDescriptorSuffix.Key()) {
 				return false, nil
 			}
 			var desc roachpb.RangeDescriptor
@@ -623,7 +623,7 @@ func (s *Store) startGossip() {
 // range and if so, reminds it to gossip the first range descriptor and
 // sentinel gossip.
 func (s *Store) maybeGossipFirstRange() error {
-	rng := s.LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
+	rng := s.LookupReplica(roachpb.KeyMin, nil)
 	if rng != nil {
 		return rng.maybeGossipFirstRange()
 	}
@@ -815,7 +815,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	// Range addressing for meta2.
-	meta2Key := keys.RangeMetaKey(roachpb.RKey(roachpb.KeyMax))
+	meta2Key := keys.RangeMetaKey(roachpb.KeyMax)
 	if err := engine.MVCCPutProto(batch, ms, meta2Key.Key(), now, nil, desc); err != nil {
 		return err
 	}
@@ -889,7 +889,7 @@ func (s *Store) Tracer() *tracer.Tracer { return s.ctx.Tracer }
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied roachpb.Replicas slice. It allocates new
 // replica IDs to fill out the supplied replicas.
-func (s *Store) NewRangeDescriptor(start, end roachpb.Key, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error) {
+func (s *Store) NewRangeDescriptor(start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error) {
 	id, err := s.rangeIDAlloc.Allocate()
 	if err != nil {
 		return nil, err
@@ -953,10 +953,10 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 // MergeRange expands the subsuming range to absorb the subsumed range.
 // This merge operation will fail if the two ranges are not collocated
 // on the same store. Must be called from the processRaft goroutine.
-func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.Key, subsumedRangeID roachpb.RangeID) error {
+func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error {
 	subsumingDesc := subsumingRng.Desc()
 
-	if !roachpb.RKey(subsumingDesc.EndKey).Less(roachpb.RKey(updatedEndKey)) {
+	if !subsumingDesc.EndKey.Less(updatedEndKey) {
 		return util.Errorf("the new end key is not greater than the current one: %+v <= %+v",
 			updatedEndKey, subsumingDesc.EndKey)
 	}
@@ -1350,7 +1350,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	for _, intent := range pushIntents {
 		pushReqs = append(pushReqs, &roachpb.PushTxnRequest{
 			Span: roachpb.Span{
-				Key: intent.Txn.Key,
+				Key: intent.Txn.Key.Key(),
 			},
 			PusherTxn: *pusherTxn,
 			PusheeTxn: intent.Txn,

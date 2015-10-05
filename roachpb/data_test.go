@@ -71,11 +71,11 @@ func TestKeyPrefixEnd(t *testing.T) {
 		key Key
 		end Key
 	}{
-		{Key{}, KeyMax},
+		{Key{}, KeyMax.Key()},
 		{Key{0}, Key{0x01}},
 		{Key{0xff}, Key{0xff}},
 		{Key{0xff, 0xff}, Key{0xff, 0xff}},
-		{KeyMax, KeyMax},
+		{KeyMax.Key(), KeyMax.Key()},
 		{Key{0xff, 0xfe}, Key{0xff, 0xff}},
 		{Key{0x00, 0x00}, Key{0x00, 0x01}},
 		{Key{0x00, 0xff}, Key{0x01, 0x00}},
@@ -340,7 +340,7 @@ func TestTransactionString(t *testing.T) {
 	ts1 := makeTS(10, 11)
 	txn := Transaction{
 		Name:          "name",
-		Key:           Key("foo"),
+		Key:           RKey("foo"),
 		ID:            id,
 		Priority:      957356782,
 		Isolation:     SERIALIZABLE,

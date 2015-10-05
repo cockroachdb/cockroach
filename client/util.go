@@ -32,12 +32,14 @@ func marshalKey(k interface{}) (roachpb.Key, error) {
 	switch t := k.(type) {
 	case string:
 		return roachpb.Key(t), nil
+	case roachpb.RKey:
+		return t.Key(), nil
 	case roachpb.Key:
 		return t, nil
 	case []byte:
 		return roachpb.Key(t), nil
 	}
-	return nil, fmt.Errorf("unable to marshal key: %T", k)
+	return nil, fmt.Errorf("unable to marshal key: %T %q", k, k)
 }
 
 // marshalValue returns a roachpb.Value initialized from the source

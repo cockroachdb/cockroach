@@ -245,7 +245,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 }
 
-func createRange(s *Store, rangeID roachpb.RangeID, start, end roachpb.Key) *Replica {
+func createRange(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *Replica {
 	desc := &roachpb.RangeDescriptor{
 		RangeID:  rangeID,
 		StartKey: start,
@@ -275,7 +275,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Error(err)
 	}
 	// Create a new range (id=2).
-	rng2 := createRange(store, 2, roachpb.Key("a"), roachpb.Key("b"))
+	rng2 := createRange(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
 	if err := store.AddReplicaTest(rng2); err != nil {
 		t.Fatal(err)
 	}
@@ -292,12 +292,12 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Fatal("expected error re-removing same range")
 	}
 	// Try to add a range with previously-used (but now removed) ID.
-	rng2Dup := createRange(store, 1, roachpb.Key("a"), roachpb.Key("b"))
+	rng2Dup := createRange(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
 	if err := store.AddReplicaTest(rng2Dup); err == nil {
 		t.Fatal("expected error inserting a duplicated range")
 	}
 	// Add another range with different key range and then test lookup.
-	rng3 := createRange(store, 3, roachpb.Key("c"), roachpb.Key("d"))
+	rng3 := createRange(store, 3, roachpb.RKey("c"), roachpb.RKey("d"))
 	if err := store.AddReplicaTest(rng3); err != nil {
 		t.Fatal(err)
 	}
@@ -343,7 +343,7 @@ func TestStoreRangeSet(t *testing.T) {
 	// Add 10 new ranges.
 	const newCount = 10
 	for i := 0; i < newCount; i++ {
-		rng := createRange(store, roachpb.RangeID(i+1), roachpb.Key(fmt.Sprintf("a%02d", i)), roachpb.Key(fmt.Sprintf("a%02d", i+1)))
+		rng := createRange(store, roachpb.RangeID(i+1), roachpb.RKey(fmt.Sprintf("a%02d", i)), roachpb.RKey(fmt.Sprintf("a%02d", i+1)))
 		if err := store.AddReplicaTest(rng); err != nil {
 			t.Fatal(err)
 		}
@@ -406,7 +406,7 @@ func TestStoreRangeSet(t *testing.T) {
 
 	// Split the first range to insert a new range as second range.
 	// The range is never visited with this iteration.
-	rng := createRange(store, 11, roachpb.Key("a000"), roachpb.Key("a01"))
+	rng := createRange(store, 11, roachpb.RKey("a000"), roachpb.RKey("a01"))
 	if err = store.SplitRange(store.LookupReplica(roachpb.RKey("a00"), nil), rng); err != nil {
 		t.Fatal(err)
 	}
@@ -483,12 +483,12 @@ func TestStoreVerifyKeys(t *testing.T) {
 		t.Fatalf("unexpected error for key too long: %v", err)
 	}
 	// Try a start key == KeyMax.
-	gArgs.Key = roachpb.KeyMax
+	gArgs.Key = roachpb.KeyMax.Key()
 	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
 		t.Fatalf("expected error for start key == KeyMax: %v", err)
 	}
 	// Try a get with an end key specified (get requires only a start key and should fail).
-	gArgs.EndKey = roachpb.KeyMax
+	gArgs.EndKey = roachpb.KeyMax.Key()
 	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
 		t.Fatalf("unexpected error for end key specified on a non-range-based operation: %v", err)
 	}
@@ -626,7 +626,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	if rng == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
 	}
-	desc, err := store.NewRangeDescriptor(splitKey.Key(), rng.Desc().EndKey, rng.Desc().Replicas)
+	desc, err := store.NewRangeDescriptor(splitKey, rng.Desc().EndKey, rng.Desc().Replicas)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,7 +647,7 @@ func TestStoreSendOutOfRange(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	rng2 := splitTestRange(store, roachpb.RKey(roachpb.KeyMin), roachpb.RKey(roachpb.Key("b")), t)
+	rng2 := splitTestRange(store, roachpb.KeyMin, roachpb.RKey(roachpb.Key("b")), t)
 
 	// Range 1 is from KeyMin to "b", so reading "b" from range 1 should
 	// fail because it's just after the range boundary.
@@ -677,7 +677,7 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 	// to rangeIDAllocCount * 3 + 1.
 	for i := 0; i < rangeIDAllocCount*3; i++ {
 		replicas := []roachpb.ReplicaDescriptor{{StoreID: store.StoreID()}}
-		desc, err := store.NewRangeDescriptor(roachpb.Key(fmt.Sprintf("%03d", i)), roachpb.Key(fmt.Sprintf("%03d", i+1)), replicas)
+		desc, err := store.NewRangeDescriptor(roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)), replicas)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -694,8 +694,8 @@ func TestStoreRangesByKey(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	r0 := store.LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
-	r1 := splitTestRange(store, roachpb.RKey(roachpb.KeyMin), roachpb.RKey("A"), t)
+	r0 := store.LookupReplica(roachpb.KeyMin, nil)
+	r1 := splitTestRange(store, roachpb.KeyMin, roachpb.RKey("A"), t)
 	r2 := splitTestRange(store, roachpb.RKey("A"), roachpb.RKey("C"), t)
 	r3 := splitTestRange(store, roachpb.RKey("C"), roachpb.RKey("X"), t)
 	r4 := splitTestRange(store, roachpb.RKey("X"), roachpb.RKey("ZZ"), t)
@@ -724,7 +724,7 @@ func TestStoreRangesByKey(t *testing.T) {
 	if r := store.LookupReplica(roachpb.RKey("\xff\x00"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
-	if store.LookupReplica(roachpb.RKey(roachpb.KeyMax), nil) != nil {
+	if store.LookupReplica(roachpb.KeyMax, nil) != nil {
 		t.Errorf("expected roachpb.KeyMax to not have an associated range")
 	}
 }
@@ -741,9 +741,9 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		rng         *Replica
 		expMaxBytes int64
 	}{
-		{store.LookupReplica(roachpb.RKey(roachpb.KeyMin), nil),
+		{store.LookupReplica(roachpb.KeyMin, nil),
 			config.DefaultZoneConfig.RangeMaxBytes},
-		{splitTestRange(store, roachpb.RKey(roachpb.KeyMin), keys.MakeTablePrefix(1000), t),
+		{splitTestRange(store, roachpb.KeyMin, keys.MakeTablePrefix(1000), t),
 			1 << 20},
 		{splitTestRange(store, keys.MakeTablePrefix(1000), keys.MakeTablePrefix(1001), t),
 			config.DefaultZoneConfig.RangeMaxBytes},
@@ -1142,7 +1142,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		txnA := newTransaction("testA", keyA, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		txnB := newTransaction("testB", keyB, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		for _, txn := range []*roachpb.Transaction{txnA, txnB} {
-			args.Key = txn.Key
+			args.Key = txn.Key.Key()
 			if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); err != nil {
 				t.Fatal(err)
 			}

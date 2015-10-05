@@ -77,8 +77,8 @@ func (tm *testModel) Start() {
 // underlying engine. Data is returned as a map of strings to roachpb.Values.
 func (tm *testModel) getActualData() map[string]*roachpb.Value {
 	// Scan over all TS Keys stored in the engine
-	startKey := keyDataPrefix
-	endKey := keyDataPrefix.PrefixEnd()
+	startKey := keyDataPrefix.Key()
+	endKey := startKey.PrefixEnd()
 	keyValues, _, err := engine.MVCCScan(tm.Eng, startKey, endKey, 0, tm.Clock.Now(), true, nil)
 	if err != nil {
 		tm.t.Fatalf("error scanning TS data from engine: %s", err.Error())

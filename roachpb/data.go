@@ -44,15 +44,12 @@ const (
 
 var (
 	// KeyMin is a minimum key value which sorts before all other keys.
-	KeyMin = Key("")
+	KeyMin = RKey("")
 	// KeyMax is a maximum key value which sorts after all other keys.
-	KeyMax = Key{0xff, 0xff}
+	KeyMax = RKey{0xff, 0xff}
 )
 
-// RKey denotes a Key whose local addressing has been accounted
-// for.
-// TODO(tschottdorf): a range descriptor should contain RKey, not Key;
-// but RKey is in keys and can't move to roachpb since it uses encoding.
+// RKey denotes a Key whose local addressing has been accounted for.
 type RKey Key
 
 // Key returns the RKey as a Key.
@@ -60,19 +57,34 @@ func (rk RKey) Key() Key {
 	return Key(rk)
 }
 
-// Less compares to RKeys.
+// Less compares two RKeys.
 func (rk RKey) Less(otherRK RKey) bool {
 	return rk.Key().Less(otherRK.Key())
 }
 
-// Equal checks two RKeys for byte-wise equality.
-func (rk RKey) Equal(otherRK RKey) bool {
-	return bytes.Compare(rk, otherRK) == 0
+// Equal checks for byte-wise equality.
+func (rk RKey) Equal(other []byte) bool {
+	return bytes.Compare(rk, other) == 0
 }
 
 // Next returns the RKey that sorts immediately after the given one.
 func (rk RKey) Next() RKey {
 	return RKey(rk.Key().Next())
+}
+
+// PrefixEnd determines the end key given key as a prefix, that is the
+// key that sorts precisely behind all keys starting with prefix: "1"
+// is added to the final byte and the carry propagated. The special
+// cases of nil and KeyMin always returns KeyMax.
+func (rk RKey) PrefixEnd() RKey {
+	if len(rk) == 0 {
+		return KeyMax
+	}
+	return RKey(bytesPrefixEnd(rk))
+}
+
+func (rk RKey) String() string {
+	return Key(rk).String()
 }
 
 // Key is a custom type for a byte string in proto
@@ -85,12 +97,12 @@ type EncodedKey []byte
 
 // MakeKey makes a new key which is the concatenation of the
 // given inputs, in order.
-func MakeKey(keys ...Key) Key {
+func MakeKey(keys ...[]byte) []byte {
 	byteSlices := make([][]byte, len(keys))
 	for i, k := range keys {
 		byteSlices[i] = []byte(k)
 	}
-	return Key(bytes.Join(byteSlices, nil))
+	return bytes.Join(byteSlices, nil)
 }
 
 // Returns the next possible byte by appending an \x00.
@@ -135,7 +147,7 @@ func (k EncodedKey) Next() EncodedKey {
 // cases of nil and KeyMin always returns KeyMax.
 func (k Key) PrefixEnd() Key {
 	if len(k) == 0 {
-		return KeyMax
+		return Key(KeyMax)
 	}
 	return Key(bytesPrefixEnd(k))
 }
@@ -150,7 +162,7 @@ func (k EncodedKey) PrefixEnd() EncodedKey {
 }
 
 // Less compares two keys.
-// TODO(tschottdorf): see whether we actually needs this. We shouldn't be
+// TODO(tschottdorf): see whether we actually need this. We shouldn't be
 // comparing keys whose local addressing isn't resolved.
 func (k Key) Less(l Key) bool {
 	return bytes.Compare(k, l) < 0
@@ -439,7 +451,7 @@ func (v *Value) computeChecksum(key []byte) uint32 {
 // randomly chosen value to yield a final priority, used to settle
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
-func NewTransaction(name string, baseKey Key, userPriority int32,
+func NewTransaction(name string, baseKey RKey, userPriority int32,
 	isolation IsolationType, now Timestamp, maxOffset int64) *Transaction {
 	// Compute priority by adjusting based on userPriority factor.
 	priority := MakePriority(userPriority)

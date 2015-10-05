@@ -47,8 +47,8 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 	for i := 0; i < count; i++ {
 		desc := &roachpb.RangeDescriptor{
 			RangeID:  roachpb.RangeID(i),
-			StartKey: roachpb.Key(fmt.Sprintf("%03d", i)),
-			EndKey:   roachpb.Key(fmt.Sprintf("%03d", i+1)),
+			StartKey: roachpb.RKey(fmt.Sprintf("%03d", i)),
+			EndKey:   roachpb.RKey(fmt.Sprintf("%03d", i+1)),
 		}
 		// Initialize the range stat so the scanner can use it.
 		rng := &Replica{

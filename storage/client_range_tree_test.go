@@ -28,7 +28,7 @@ import (
 )
 
 // loadNodes fetches a node and recursively all of its children.
-func loadNodes(t *testing.T, db *client.DB, key roachpb.Key, nodes map[string]roachpb.RangeTreeNode) {
+func loadNodes(t *testing.T, db *client.DB, key roachpb.RKey, nodes map[string]roachpb.RangeTreeNode) {
 	node := new(roachpb.RangeTreeNode)
 	if err := db.GetProto(keys.RangeTreeNodeKey(key), node); err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func getLeftAndRight(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testN
 // verifyBinarySearchTree checks to ensure that all keys to the left of the root
 // node are less than it, and all nodes to the right of the root node are
 // greater than it. It recursively walks the tree to perform this same check.
-func verifyBinarySearchTree(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testName string, node *roachpb.RangeTreeNode, keyMin, keyMax roachpb.Key) {
+func verifyBinarySearchTree(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testName string, node *roachpb.RangeTreeNode, keyMin, keyMax roachpb.RKey) {
 	if node == nil {
 		return
 	}

@@ -180,11 +180,11 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
 		// Before adding a new descriptor, make sure we clear out any
 		// pre-existing, overlapping descriptor which might have been
 		// re-inserted due to concurrent range lookups.
-		rangeKey := keys.RangeMetaKey(roachpb.RKey(rs[i].EndKey))
+		rangeKey := keys.RangeMetaKey(rs[i].EndKey)
 		if log.V(1) {
 			log.Infof("adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
 		}
-		rdc.clearOverlappingCachedRangeDescriptors(roachpb.RKey(rs[i].EndKey), rangeKey, &rs[i])
+		rdc.clearOverlappingCachedRangeDescriptors(rs[i].EndKey, rangeKey, &rs[i])
 		rdc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}
 	rdc.rangeCacheMu.Unlock()
@@ -278,7 +278,7 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 	// Check that key actually belongs to the range.
 	if !rd.ContainsKey(key) {
 		// The key is the EndKey and we're inclusive, so just return the range descriptor.
-		if inclusive && key.Key().Equal(rd.EndKey) {
+		if inclusive && key.Equal(rd.EndKey) {
 			return metaEndKey, rd
 		}
 		return nil, nil
@@ -286,7 +286,7 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 
 	// The key is the StartKey, but we're inclusive and thus need to return the
 	// previous range descriptor, but it is not in the cache yet.
-	if inclusive && key.Key().Equal(rd.StartKey) {
+	if inclusive && key.Equal(rd.StartKey) {
 		return nil, nil
 	}
 	return metaEndKey, rd
@@ -304,7 +304,7 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, met
 	k, v, ok := rdc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if ok {
 		descriptor := v.(*roachpb.RangeDescriptor)
-		if !key.Less(roachpb.RKey(descriptor.StartKey)) && !roachpb.RKey(descriptor.EndKey).Less(key) {
+		if !key.Less(descriptor.StartKey) && !descriptor.EndKey.Less(key) {
 			if log.V(1) {
 				log.Infof("clearing overlapping descriptor: key=%s desc=%s", k, descriptor)
 			}
@@ -320,6 +320,6 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, met
 			log.Infof("clearing subsumed descriptor: key=%s desc=%s", k, v.(*roachpb.RangeDescriptor))
 		}
 		rdc.rangeCache.Del(k.(rangeCacheKey))
-	}, rangeCacheKey(keys.RangeMetaKey(roachpb.RKey(desc.StartKey)).Next()),
-		rangeCacheKey(keys.RangeMetaKey(roachpb.RKey(desc.EndKey))))
+	}, rangeCacheKey(keys.RangeMetaKey(desc.StartKey).Next()),
+		rangeCacheKey(keys.RangeMetaKey(desc.EndKey)))
 }

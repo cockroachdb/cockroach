@@ -162,8 +162,8 @@ type RangeManager interface {
 
 	// Range and replica manipulation methods.
 	LookupReplica(start, end roachpb.RKey) *Replica
-	MergeRange(subsumingRng *Replica, updatedEndKey roachpb.Key, subsumedRangeID roachpb.RangeID) error
-	NewRangeDescriptor(start, end roachpb.Key, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error)
+	MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error
+	NewRangeDescriptor(start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, roachpb.RaftCommand) <-chan error
 	RemoveReplica(rng *Replica) error
@@ -340,7 +340,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	}
 	args := &roachpb.LeaderLeaseRequest{
 		Span: roachpb.Span{
-			Key: desc.StartKey,
+			Key: desc.StartKey.Key(),
 		},
 		Lease: roachpb.Lease{
 			Start:      timestamp,

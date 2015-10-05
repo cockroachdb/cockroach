@@ -87,7 +87,7 @@ func TestGetZoneConfig(t *testing.T) {
 
 	// We have no custom zone configs.
 	testCases := []struct {
-		key     roachpb.Key
+		key     roachpb.RKey
 		zoneCfg config.ZoneConfig
 	}{
 		{roachpb.KeyMin, *config.DefaultZoneConfig},
@@ -145,7 +145,7 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 
 	testCases = []struct {
-		key     roachpb.Key
+		key     roachpb.RKey
 		zoneCfg config.ZoneConfig
 	}{
 		{roachpb.KeyMin, *config.DefaultZoneConfig},

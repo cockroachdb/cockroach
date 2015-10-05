@@ -245,7 +245,7 @@ func TestReplicateRange(t *testing.T) {
 	// Verify that in time, no intents remain on meta addressing
 	// keys, and that range descriptor on the meta records is correct.
 	util.SucceedsWithin(t, 1*time.Second, func() error {
-		meta2 := keys.RangeMetaKey(roachpb.RKey(roachpb.KeyMax))
+		meta2 := keys.RangeMetaKey(roachpb.KeyMax)
 		meta1 := keys.RangeMetaKey(meta2)
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
@@ -607,10 +607,10 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	// Split off a range from the initial range for testing; there are
 	// complications if the metadata ranges are removed from store 1, this
 	// simplifies the test.
-	splitKey := roachpb.Key("m")
-	rightKey := roachpb.Key("z")
+	splitKey := roachpb.RKey("m")
+	rightKey := roachpb.RKey("z")
 	{
-		replica := store0.LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
+		replica := store0.LookupReplica(roachpb.KeyMin, nil)
 		mtc.replicateRange(replica.Desc().RangeID, 0, 1, 2)
 		desc := replica.Desc()
 		splitArgs := adminSplitArgs(splitKey, splitKey)
@@ -620,7 +620,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	}
 
 	// Replicate the new range to all five stores.
-	replica := store0.LookupReplica(roachpb.RKey(rightKey), nil)
+	replica := store0.LookupReplica(rightKey, nil)
 	desc := replica.Desc()
 	mtc.replicateRange(desc.RangeID, 0, 3, 4)
 
@@ -654,7 +654,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 		foundIDset := make(storeIDset)
 		foundLocalRangeDescs := make([]*roachpb.RangeDescriptor, 0, len(mtc.stores))
 		for _, s := range mtc.stores {
-			r := s.LookupReplica(roachpb.RKey(splitKey), nil)
+			r := s.LookupReplica(splitKey, nil)
 			if r != nil {
 				foundLocalRangeDescs = append(foundLocalRangeDescs, r.Desc())
 				foundIDset[s.StoreID()] = struct{}{}
@@ -669,7 +669,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 
 		// Look up the official range descriptor, make sure it agrees with the
 		// found replicas.
-		realRangeDesc := getRangeMetadata(roachpb.RKey(rightKey), mtc, t)
+		realRangeDesc := getRangeMetadata(rightKey, mtc, t)
 		realIDset := makeStoreIDset(realRangeDesc.Replicas)
 		if !reflect.DeepEqual(realIDset, foundIDset) {
 			return false, realIDset
@@ -908,7 +908,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		// The removed store no longer has any of the data from the range.
 		verify([]int64{39, 0, 39, 39})
 
-		desc := mtc.stores[0].LookupReplica(roachpb.RKey(roachpb.KeyMin), nil).Desc()
+		desc := mtc.stores[0].LookupReplica(roachpb.KeyMin, nil).Desc()
 		replicaIDsByStore := map[roachpb.StoreID]roachpb.ReplicaID{}
 		for _, rep := range desc.Replicas {
 			replicaIDsByStore[rep.StoreID] = rep.ReplicaID
@@ -1020,7 +1020,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			case <-stopper.ShouldStop():
 				return
 			default:
-				rng := mtc.stores[0].LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
+				rng := mtc.stores[0].LookupReplica(roachpb.KeyMin, nil)
 				if rng == nil {
 					t.Fatal("failed to look up min range")
 				}
@@ -1029,7 +1029,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 					t.Fatalf("failed to snapshot min range: %s", err)
 				}
 
-				rng = mtc.stores[0].LookupReplica(roachpb.RKey(roachpb.Key("Z")), nil)
+				rng = mtc.stores[0].LookupReplica(roachpb.RKey("Z"), nil)
 				if rng == nil {
 					t.Fatal("failed to look up max range")
 				}
@@ -1045,7 +1045,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 	// initial range.  The bug that this test was designed to find
 	// usually occurred within the first 5 iterations.
 	for i := 20; i > 0; i-- {
-		rng := mtc.stores[0].LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
+		rng := mtc.stores[0].LookupReplica(roachpb.KeyMin, nil)
 		if rng == nil {
 			t.Fatal("failed to look up min range")
 		}
@@ -1158,7 +1158,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(mtc.gossip)
 
 	// Replicate the range to all stores.
-	replica := mtc.stores[0].LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
+	replica := mtc.stores[0].LookupReplica(roachpb.KeyMin, nil)
 	mtc.replicateRange(replica.Desc().RangeID, 0, 1, 2)
 
 	// Initialize the gossip network.
@@ -1177,7 +1177,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 		mtc.stores[1].StoreID(),
 	}
 
-	rangeDesc := getRangeMetadata(roachpb.RKey(roachpb.KeyMin), mtc, t)
+	rangeDesc := getRangeMetadata(roachpb.KeyMin, mtc, t)
 	if e, a := 3, len(rangeDesc.Replicas); e != a {
 		t.Fatalf("expected %d replicas, only found %d, rangeDesc: %+v", e, a, rangeDesc)
 	}
@@ -1191,7 +1191,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	maxTime := 5 * time.Second
 	maxTimeout := time.After(maxTime)
 
-	for len(getRangeMetadata(roachpb.RKey(roachpb.KeyMin), mtc, t).Replicas) > 2 {
+	for len(getRangeMetadata(roachpb.KeyMin, mtc, t).Replicas) > 2 {
 		select {
 		case <-maxTimeout:
 			t.Fatalf("Failed to remove the dead replica within %s", maxTime)
@@ -1230,7 +1230,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 
 	// Replicate the first range to the first three stores.
 	store0 := mtc.stores[0]
-	replica := store0.LookupReplica(roachpb.RKey(roachpb.KeyMin), nil)
+	replica := store0.LookupReplica(roachpb.KeyMin, nil)
 	desc := replica.Desc()
 	mtc.replicateRange(desc.RangeID, 0, 1, 2)
 
@@ -1262,7 +1262,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 			t.Fatal("Failed to rebalance replica within 5 seconds")
 		case <-time.After(10 * time.Millisecond):
 			// Look up the official range descriptor, make sure fourth store is on it.
-			rangeDesc := getRangeMetadata(roachpb.RKey(roachpb.KeyMin), mtc, t)
+			rangeDesc := getRangeMetadata(roachpb.KeyMin, mtc, t)
 
 			// Test if we have already succeeded.
 			for _, repl := range rangeDesc.Replicas {

@@ -36,7 +36,7 @@ func TestKeySorting(t *testing.T) {
 		roachpb.Key("\x01").Less(roachpb.Key("\x01\x00"))) {
 		t.Fatalf("something is seriously wrong with this machine")
 	}
-	if !LocalPrefix.Less(MetaPrefix) {
+	if !LocalPrefix.Less(MetaPrefix.Key()) {
 		t.Fatalf("local key spilling into replicable ranges")
 	}
 	if !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) || !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) {
@@ -56,17 +56,18 @@ func TestMakeKey(t *testing.T) {
 func TestKeyAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key, expAddress roachpb.Key
+		key        roachpb.Key
+		expAddress roachpb.RKey
 	}{
 		{roachpb.Key{}, roachpb.KeyMin},
-		{roachpb.Key("123"), roachpb.Key("123")},
-		{RangeDescriptorKey(roachpb.Key("foo")), roachpb.Key("foo")},
-		{TransactionKey(roachpb.Key("baz"), roachpb.Key(uuid.NewUUID4())), roachpb.Key("baz")},
-		{TransactionKey(roachpb.KeyMax, roachpb.Key(uuid.NewUUID4())), roachpb.KeyMax},
+		{roachpb.Key("123"), roachpb.RKey("123")},
+		{RangeDescriptorKey(roachpb.RKey("foo")), roachpb.RKey("foo")},
+		{TransactionKey(roachpb.RKey("baz"), roachpb.RKey(uuid.NewUUID4())), roachpb.RKey("baz")},
+		{TransactionKey(roachpb.KeyMax, roachpb.RKey(uuid.NewUUID4())), roachpb.KeyMax},
 		{nil, nil},
 	}
 	for i, test := range testCases {
-		result := Addr(test.key).Key()
+		result := Addr(test.key)
 		if !result.Equal(test.expAddress) {
 			t.Errorf("%d: expected address for key %q doesn't match %q", i, test.key, test.expAddress)
 		}
@@ -80,7 +81,7 @@ func TestRangeMetaKey(t *testing.T) {
 	}{
 		{
 			key:    roachpb.RKey{},
-			expKey: roachpb.RKey(roachpb.KeyMin),
+			expKey: roachpb.KeyMin,
 		},
 		{
 			key:    roachpb.RKey("\x00\x00meta2\x00zonefoo"),
@@ -88,7 +89,7 @@ func TestRangeMetaKey(t *testing.T) {
 		},
 		{
 			key:    roachpb.RKey("\x00\x00meta1\x00zonefoo"),
-			expKey: roachpb.RKey(roachpb.KeyMin),
+			expKey: roachpb.KeyMin,
 		},
 		{
 			key:    roachpb.RKey("foo"),
@@ -104,7 +105,7 @@ func TestRangeMetaKey(t *testing.T) {
 		},
 		{
 			key:    roachpb.RKey("\x00\x00meta1foo"),
-			expKey: roachpb.RKey(roachpb.KeyMin),
+			expKey: roachpb.KeyMin,
 		},
 	}
 	for i, test := range testCases {
@@ -127,11 +128,11 @@ func TestMetaScanBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
-		key, expStart, expEnd roachpb.Key
+		key, expStart, expEnd roachpb.RKey
 		expError              string
 	}{
 		{
-			key:      roachpb.Key{},
+			key:      roachpb.RKey{},
 			expStart: Meta1Prefix,
 			expEnd:   Meta1Prefix.PrefixEnd(),
 			expError: "",
@@ -174,7 +175,7 @@ func TestMetaScanBounds(t *testing.T) {
 		},
 	}
 	for i, test := range testCases {
-		resStart, resEnd, err := MetaScanBounds(roachpb.RKey(test.key))
+		resStart, resEnd, err := MetaScanBounds(test.key)
 
 		if err != nil && !testutils.IsError(err, test.expError) {
 			t.Errorf("expected error: %s ; got %s", test.expError, err)
@@ -182,7 +183,7 @@ func TestMetaScanBounds(t *testing.T) {
 			t.Errorf("expected error: %s", test.expError)
 		}
 
-		if !resStart.Key().Equal(test.expStart) || !resEnd.Key().Equal(test.expEnd) {
+		if !resStart.Equal(test.expStart) || !resEnd.Equal(test.expEnd) {
 			t.Errorf("%d: range bounds %q-%q don't match expected bounds %q-%q for key %q", i, resStart, resEnd, test.expStart, test.expEnd, test.key)
 		}
 	}
@@ -192,11 +193,11 @@ func TestMetaReverseScanBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
-		key, expStart, expEnd roachpb.Key
+		key, expStart, expEnd roachpb.RKey
 		expError              string
 	}{
 		{
-			key:      roachpb.Key{},
+			key:      roachpb.RKey{},
 			expStart: nil,
 			expEnd:   nil,
 			expError: "KeyMin and Meta1Prefix can't be used as the key of reverse scan",
@@ -253,7 +254,7 @@ func TestMetaReverseScanBounds(t *testing.T) {
 			t.Errorf("expected error: %s", test.expError)
 		}
 
-		if !resStart.Key().Equal(test.expStart) || !resEnd.Key().Equal(test.expEnd) {
+		if !resStart.Equal(test.expStart) || !resEnd.Equal(test.expEnd) {
 			t.Errorf("%d: range bounds %q-%q don't match expected bounds %q-%q for key %q", i, resStart, resEnd, test.expStart, test.expEnd, test.key)
 		}
 	}
@@ -262,11 +263,11 @@ func TestMetaReverseScanBounds(t *testing.T) {
 func TestValidateRangeMetaKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key    roachpb.Key
+		key    roachpb.RKey
 		expErr bool
 	}{
 		{roachpb.KeyMin, false},
-		{roachpb.Key("\x00"), true},
+		{roachpb.RKey("\x00"), true},
 		{Meta1Prefix[:len(Meta1Prefix)-1], true},
 		{Meta1Prefix, false},
 		{roachpb.MakeKey(Meta1Prefix, roachpb.KeyMax), false},
@@ -274,7 +275,7 @@ func TestValidateRangeMetaKey(t *testing.T) {
 		{roachpb.MakeKey(Meta2Prefix, roachpb.KeyMax.Next()), true},
 	}
 	for i, test := range testCases {
-		err := validateRangeMetaKey(roachpb.RKey(test.key))
+		err := validateRangeMetaKey(test.key)
 		if err != nil != test.expErr {
 			t.Errorf("%d: expected error? %t: %s", i, test.expErr, err)
 		}

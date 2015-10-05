@@ -111,7 +111,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	}
 
 	if err := util.IsTrueWithin(func() bool {
-		if _, _, err := engine.MVCCScan(s.Eng, keys.LocalMax, roachpb.KeyMax, 0, roachpb.MaxTimestamp, true, nil); err != nil {
+		if _, _, err := engine.MVCCScan(s.Eng, keys.LocalMax.Key(), roachpb.KeyMax.Key(), 0, roachpb.MaxTimestamp, true, nil); err != nil {
 			log.Infof("mvcc scan should be clean: %s", err)
 			return false
 		}
@@ -210,7 +210,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// for timing of finishing the test writer and a possibly-ongoing
 	// asynchronous split.
 	if err := util.IsTrueWithin(func() bool {
-		if _, _, err := engine.MVCCScan(s.Eng, keys.LocalMax, roachpb.KeyMax, 0, roachpb.MaxTimestamp, true, nil); err != nil {
+		if _, _, err := engine.MVCCScan(s.Eng, keys.LocalMax.Key(), roachpb.KeyMax.Key(), 0, roachpb.MaxTimestamp, true, nil); err != nil {
 			log.Infof("mvcc scan should be clean: %s", err)
 			return false
 		}
