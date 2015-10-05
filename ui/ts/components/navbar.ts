@@ -13,10 +13,10 @@ module Components {
    * links. One of the links can be active.
    */
   export module NavigationBar {
+    import MithrilVirtualElement = _mithril.MithrilVirtualElement;
     export interface Target {
-      title: string;
+      view: string | MithrilVirtualElement[];
       route: string;
-      iconHtml?: string;
     }
 
     export interface TargetSet {
@@ -42,16 +42,8 @@ module Components {
                 config: m.route,
                 href: ts.baseRoute + t.route
               },
-              [
-                (!t.iconHtml) ? null :
-                m("div", {
-                    class: "image-container"
-                  },
-                  [
-                    m.trust(t.iconHtml)
-                  ]),
-                m("div", t.title)
-              ])
+              _.isString(t.view) ? m("div", t.view) : t.view
+              )
           )
       ));
     }

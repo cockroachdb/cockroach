@@ -30,14 +30,27 @@ module AdminViews {
           {
             title: "Nodes",
             route: "/nodes",
-            iconHtml: SvgIcons.nodesIcon
+            icon: SvgIcons.nodesIcon
           },
           {
             title: "Stores",
             route: "/stores",
-            iconHtml: SvgIcons.storesIcon
+            icon: SvgIcons.storesIcon
           }
-        ];
+        ].map(function(v: any): NavigationBar.Target {
+          return {
+            view: [
+              m("div", {
+                  class: "image-container"
+                },
+                [
+                  m.trust(v.icon)
+                ]),
+              m("div", v.title)
+            ],
+            route: v.route
+          };
+        });
 
         private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
           let currentRoute = m.route();
