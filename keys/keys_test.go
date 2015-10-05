@@ -19,6 +19,7 @@ package keys
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -278,6 +279,73 @@ func TestValidateRangeMetaKey(t *testing.T) {
 		err := validateRangeMetaKey(test.key)
 		if err != nil != test.expErr {
 			t.Errorf("%d: expected error? %t: %s", i, test.expErr, err)
+		}
+	}
+}
+
+func TestBatchRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	testCases := []struct {
+		req [][2]string
+		exp [2]string
+	}{
+		{
+			// Boring single request.
+			req: [][2]string{{"a", "b"}},
+			exp: [2]string{"a", "b"},
+		},
+		{
+			// Request with invalid range. It's important that this still
+			// results in a valid range.
+			req: [][2]string{{"b", "a"}},
+			exp: [2]string{"b", "b\x00"},
+		},
+		{
+			// Two overlapping ranges.
+			req: [][2]string{{"a", "c"}, {"b", "d"}},
+			exp: [2]string{"a", "d"},
+		},
+		{
+			// Two disjoint ranges.
+			req: [][2]string{{"a", "b"}, {"c", "d"}},
+			exp: [2]string{"a", "d"},
+		},
+		{
+			// Range and disjoint point request.
+			req: [][2]string{{"a", "b"}, {"c", ""}},
+			exp: [2]string{"a", "c\x00"},
+		},
+		{
+			// Three disjoint point requests.
+			req: [][2]string{{"a", ""}, {"b", ""}, {"c", ""}},
+			exp: [2]string{"a", "c\x00"},
+		},
+		{
+			// Range-local point request.
+			req: [][2]string{{string(RangeDescriptorKey(roachpb.KeyMax)), ""}},
+			exp: [2]string{"\xff\xff", "\xff\xff\x00"},
+		},
+		{
+			// Range-local to global such that the key ordering flips.
+			// Important that we get a valid range back.
+			req: [][2]string{{string(RangeDescriptorKey(roachpb.KeyMax)), "x"}},
+			exp: [2]string{"\xff\xff", "\xff\xff\x00"},
+		},
+		{
+			// Range-local to global without order messed up.
+			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKey("a"))), "x"}},
+			exp: [2]string{"a", "x"},
+		},
+	}
+
+	for i, c := range testCases {
+		var ba roachpb.BatchRequest
+		for _, pair := range c.req {
+			ba.Add(&roachpb.ScanRequest{Span: roachpb.Span{Key: roachpb.Key(pair[0]), EndKey: roachpb.Key(pair[1])}})
+		}
+		from, to := Range(ba)
+		if actPair := [2]string{string(from), string(to)}; !reflect.DeepEqual(actPair, c.exp) {
+			t.Fatalf("%d: expected [%q,%q), got [%q,%q)", i, c.exp[0], c.exp[1], actPair[0], actPair[1])
 		}
 	}
 }
