@@ -177,6 +177,12 @@ func simplifyAndExpr(n *parser.AndExpr) parser.Expr {
 			return d
 		}
 	}
+	// Simplifying exprs might have transformed one of the elements into an AND
+	// expression.
+	texprs, exprs := exprs, nil
+	for _, e := range texprs {
+		exprs = splitAndExpr(e, exprs)
+	}
 
 	// Loop over the expressions looking for simplifications.
 	//
@@ -195,7 +201,9 @@ outer:
 			if exprs[i] == nil {
 				// We found a simplification. Strip off the expression that is now nil
 				// and continue the outer loop.
-				exprs = exprs[:len(exprs)-1]
+				n := len(exprs) - 1
+				exprs[i] = exprs[n]
+				exprs = exprs[:n]
 				continue outer
 			}
 		}
@@ -679,6 +687,12 @@ func simplifyOrExpr(n *parser.OrExpr) parser.Expr {
 			return d
 		}
 	}
+	// Simplifying exprs might have transformed one of the elements into an OR
+	// expression.
+	texprs, exprs := exprs, nil
+	for _, e := range texprs {
+		exprs = splitOrExpr(e, exprs)
+	}
 
 	// Loop over the expressions looking for simplifications.
 	//
@@ -697,7 +711,9 @@ outer:
 			if exprs[i] == nil {
 				// We found a simplification. Strip off the expression that is now nil
 				// and continue the outer loop.
-				exprs = exprs[:len(exprs)-1]
+				n := len(exprs) - 1
+				exprs[i] = exprs[n]
+				exprs = exprs[:n]
 				continue outer
 			}
 		}
