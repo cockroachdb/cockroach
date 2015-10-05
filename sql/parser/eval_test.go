@@ -200,6 +200,7 @@ func TestEvalExpr(t *testing.T) {
 		{`'2010-09-28 12:00:00.1'::timestamp IN ('2010-09-28 12:00:00.1'::timestamp)`, `true`},
 		{`'34h'::interval IN ('34h'::interval)`, `true`},
 		{`(1,2) IN ((0+1,1+1), (3,4), (5,6))`, `true`},
+		{`(1, 2) IN ((2, 1), (3, 4))`, `false`},
 		// Func expressions.
 		{`length('hel'||'lo')`, `5`},
 		{`lower('HELLO')`, `'hello'`},

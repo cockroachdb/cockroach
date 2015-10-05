@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"strconv"
 	"time"
 
@@ -561,6 +562,26 @@ func (d DTuple) Less(i, j int) bool {
 
 func (d DTuple) Swap(i, j int) {
 	d[i], d[j] = d[j], d[i]
+}
+
+// Normalize sorts and uniques the datum tuple.
+func (d *DTuple) Normalize() {
+	sort.Sort(d)
+	d.makeUnique()
+}
+
+func (d *DTuple) makeUnique() {
+	n := 0
+	for i := 0; i < len(*d); i++ {
+		if (*d)[i] == DNull {
+			continue
+		}
+		if n == 0 || (*d)[n-1].Compare((*d)[i]) < 0 {
+			(*d)[n] = (*d)[i]
+			n++
+		}
+	}
+	*d = (*d)[:n]
 }
 
 type dNull struct{}
