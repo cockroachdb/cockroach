@@ -153,10 +153,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 		b := &client.Batch{}
 		b.DelRange("a", "b")
 		b.DelRange("e", "f")
-		// TODO(tschottdorf): write tests for range-local and range-global stuff;
-		// using KeyMin here currently fails miserably because it plows through
-		// internal data. See #2198.
-		// b.DelRange("aaa", roachpb.KeyMax)
+		b.DelRange(keys.LocalMax, roachpb.KeyMax)
 		return txn.CommitInBatch(b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)

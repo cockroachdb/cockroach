@@ -331,11 +331,9 @@ func MakeTablePrefix(tableID uint32) []byte {
 }
 
 // Range returns a key range encompassing all the keys in the Batch.
-// In particular, this resolves local addressing.
-// TODO(tschottdorf): testing.
+// TODO(tschottdorf): testing. Particularly [\localX, \globalA) -> [X, KeyMax).
 // TODO(tschottdorf): figure out where we can pin down requests which span
 // from range-local into range-global space. Those will currently slip
-// through the cracks.
 // TODO(tschottdorf): ideally method on *BatchRequest. See #2198.
 // TODO(tschottdorf): return a roachpb.Span?
 func Range(ba roachpb.BatchRequest) (roachpb.RKey, roachpb.RKey) {

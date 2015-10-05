@@ -346,7 +346,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	// Resolve the intents.
 	scanArgs := roachpb.ScanRequest{
 		Span: roachpb.Span{
-			Key:    roachpb.KeyMin.Key(),
+			Key:    keys.RangeMetaKey(roachpb.KeyMin.Next()).Key(),
 			EndKey: keys.RangeMetaKey(roachpb.KeyMax).Key(),
 		},
 	}

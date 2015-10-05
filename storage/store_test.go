@@ -1389,46 +1389,58 @@ func TestStoreBadRequests(t *testing.T) {
 
 	txn := newTransaction("test", roachpb.Key("a"), 1 /* priority */, roachpb.SERIALIZABLE, store.ctx.Clock)
 
-	var h [10]roachpb.Header
-
-	// Start key must be less than KeyMax.
-	args0 := getArgs(roachpb.KeyMax)
-
-	// End key must not be specified for a non-range operation.
 	args1 := getArgs(roachpb.Key("a"))
 	args1.EndKey = roachpb.Key("b")
 
-	// End key must be specified for a range-operation.
-	args2 := scanArgs(roachpb.Key("a"), nil)
+	args2 := getArgs(roachpb.KeyMax)
 
-	// End key must be great than start.
 	args3 := scanArgs(roachpb.Key("a"), roachpb.Key("a"))
 	args4 := scanArgs(roachpb.Key("b"), roachpb.Key("a"))
 
-	// Tests for operations that update transaction keys.
+	args5 := scanArgs(roachpb.KeyMin, roachpb.Key("a"))
+	args6 := scanArgs(keys.RangeTreeNodeKey(keys.RangeTreeRoot), roachpb.Key("a"))
 
-	// Txn must be specified
 	tArgs0, _ := endTxnArgs(txn, false /* commit */)
 	tArgs1, _ := heartbeatArgs(txn)
-	_ = tArgs1 // TODO(tschottdorf): appears unused.
 
-	// Txn key must be same as the request key.
-	var tArgs2 roachpb.EndTransactionRequest
-	tArgs2, h[6] = endTxnArgs(txn, false /* commit */)
-	h[6].Txn.Key = h[6].Txn.Key.Next()
+	tArgs2, tHeader2 := endTxnArgs(txn, false /* commit */)
+	tHeader2.Txn.Key = tHeader2.Txn.Key.Next()
 
-	var tArgs3 roachpb.HeartbeatTxnRequest
-	tArgs3, h[7] = heartbeatArgs(txn)
-	h[7].Txn.Key = h[7].Txn.Key.Next()
+	tArgs3, tHeader3 := heartbeatArgs(txn)
+	tHeader3.Txn.Key = tHeader3.Txn.Key.Next()
 
 	tArgs4 := pushTxnArgs(txn, txn, roachpb.ABORT_TXN)
 	tArgs4.PusheeTxn.Key = txn.Key.Next()
 
-	testCases := append([]roachpb.Request{}, &args0, &args1, &args2, &args3, &args4,
-		&tArgs0, &tArgs2, &tArgs3, &tArgs4)
+	testCases := []struct {
+		args   roachpb.Request
+		header *roachpb.Header
+		err    string
+	}{
+		// EndKey for non-Range is invalid.
+		{&args1, nil, "should not be specified"},
+		// Start key must be less than KeyMax.
+		{&args2, nil, "must be less than"},
+		// End key must be greater than start.
+		{&args3, nil, "must be greater than"},
+		{&args4, nil, "must be greater than"},
+		// Can't range from local to global.
+		{&args5, nil, "must be greater than LocalMax"},
+		{&args6, nil, "is range-local, but"},
+		// Txn must be specified in Header.
+		{&tArgs0, nil, "no transaction specified"},
+		{&tArgs1, nil, "no transaction specified"},
+		// Txn key must be same as the request key.
+		{&tArgs2, &tHeader2, "request key .* should match txn key .*"},
+		{&tArgs3, &tHeader3, "request key .* should match txn key .*"},
+		{&tArgs4, nil, "request key .* should match pushee"},
+	}
 	for i, test := range testCases {
-		if _, err := client.SendWrappedWith(store.testSender(), nil, h[i], test); err == nil {
-			t.Errorf("%d unexpected success of request %s", i, test)
+		if test.header == nil {
+			test.header = &roachpb.Header{}
+		}
+		if _, err := client.SendWrappedWith(store.testSender(), nil, *test.header, test.args); err == nil || test.err == "" || !testutils.IsError(err, test.err) {
+			t.Errorf("%d unexpected result: %s", i, err)
 		}
 	}
 }

@@ -136,9 +136,16 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	if !start.Less(end) {
 		return util.Errorf("end key %q must be greater than start %q", end, start)
 	}
-	if bytes.HasPrefix(start, keys.LocalRangePrefix) && !bytes.HasPrefix(end, keys.LocalRangePrefix) {
-		return util.Errorf("start key is range-local, but end key is not")
+	if bytes.HasPrefix(start, keys.LocalRangePrefix) {
+		if !bytes.HasPrefix(end, keys.LocalRangePrefix) {
+			return util.Errorf("start key is range-local, but end key is not")
+		}
+	} else if start.Less(keys.LocalMax.Key()) {
+		// It's a range op, not local but somehow plows through local data -
+		// not cool.
+		return util.Errorf("start key %q must be greater than LocalMax", start)
 	}
+
 	return nil
 }
 
