@@ -384,9 +384,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	}
 }
 
-// TestStartEqualsEndKeyScan verifies that specifying start=end for a
-// Scan/ReverseScan results in an error.
-func TestStartEqualsEndKeyScan(t *testing.T) {
+func TestBadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -404,4 +402,13 @@ func TestStartEqualsEndKeyScan(t *testing.T) {
 	if _, err := db.ReverseScan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
+
+	if err := db.DelRange("x", "a"); !testutils.IsError(err, "truncation resulted in empty batch") {
+		t.Fatalf("unexpected error on deletion on [x, a): %v", err)
+	}
+
+	if err := db.DelRange("", "z"); !testutils.IsError(err, "must be greater than LocalMax") {
+		t.Fatalf("unexpected error on deletion on [KeyMin, z): %v", err)
+	}
+
 }
