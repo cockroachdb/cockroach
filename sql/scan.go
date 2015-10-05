@@ -590,7 +590,11 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 		}
 
 		if log.V(2) {
-			log.Infof("Scan %s", prettyKey(kv.Key, 0))
+			if n.implicitVals != nil {
+				log.Infof("Scan %s -> %s", prettyKey(kv.Key, 0), prettyKeyVals(n.implicitVals))
+			} else {
+				log.Infof("Scan %s", prettyKey(kv.Key, 0))
+			}
 		}
 	}
 

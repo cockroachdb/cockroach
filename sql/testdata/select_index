@@ -112,6 +112,11 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 1 AND b > 'b'
 ----
 
 query ITTB
+EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
+----
+0 scan -
+
+query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b
 ----
 0 /t/primary/1/'b' NULL true

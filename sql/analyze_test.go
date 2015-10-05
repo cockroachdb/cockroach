@@ -228,6 +228,16 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a IS DISTINCT FROM NULL`, `a IS NOT NULL`},
 		{`a IS NOT DISTINCT FROM NULL`, `a IS NULL`},
 		{`c IS NOT NULL AND c IS NULL`, `false`},
+
+		// From a logic-test expression that we previously failed to simplify.
+		{`((a <= 0 AND h > 1.0) OR (a >= 6 AND a <= 3)) AND a >= 5`, `false`},
+
+		// From logic-test expessions that generated nil branches for AND/OR
+		// expressions.
+		{`((a < 0) AND (a < 0 AND b > 0)) OR (a > 1 AND a < 0)`,
+			`a < 0 AND b > 0`},
+		{`((a < 0) OR (a < 0 OR b > 0)) AND (a > 0 OR a < 1)`,
+			`a < 0 OR b > 0 AND a IS NOT NULL`},
 	}
 	for _, d := range testData {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)

@@ -3,12 +3,13 @@ CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,
   c INT,
+  d INT,
   INDEX b (b),
   UNIQUE INDEX c (c)
 )
 
 statement ok
-INSERT INTO t VALUES (1, 2, 3), (4, 5, 6)
+INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 
 query ITT
 EXPLAIN SELECT * FROM t WHERE b = 2
@@ -22,10 +23,10 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2
 ----
 0 /t/b/2/1 NULL true
 
-query III
+query IIII
 SELECT * FROM t WHERE b = 2
 ----
-1 2 3
+1 2 3 4
 
 query ITT
 EXPLAIN SELECT * FROM t WHERE c = 6
@@ -35,20 +36,20 @@ EXPLAIN SELECT * FROM t WHERE c = 6
 1 scan       t@primary
 
 query ITTB
-EXPLAIN (DEBUG) SELECT * FROM t WHERE c = 6
+EXPLAIN (DEBUG) SELECT * FROM t WHERE c = 7
 ----
-0 /t/c/6 /4 true
+0 /t/c/7 /5 true
 
-query III
-SELECT * FROM t WHERE c = 6
+query IIII
+SELECT * FROM t WHERE c = 7
 ----
-4 5 6
+5 6 7 8
 
-query III
+query IIII
 SELECT * FROM t WHERE c > 0 ORDER BY c DESC
 ----
-4 5 6
-1 2 3
+5 6 7 8
+1 2 3 4
 
 query ITT
 EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c DESC
@@ -59,6 +60,18 @@ EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c DESC
 
 query ITT
 EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c
+----
+0 index-join
+1 scan       t@c /1-
+1 scan       t@primary
+
+query IIII
+SELECT * FROM t WHERE c > 0 AND d = 8
+----
+5 6 7 8
+
+query ITT
+EXPLAIN SELECT * FROM t WHERE c > 0 AND d = 8
 ----
 0 index-join
 1 scan       t@c /1-
