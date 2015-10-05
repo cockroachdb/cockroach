@@ -607,7 +607,7 @@ func TestEncodeDecodeNull(t *testing.T) {
 }
 
 func TestEncodeDecodeTime(t *testing.T) {
-	zeroTime := time.Unix(0, 0).UTC()
+	zeroTime := time.Unix(0, 0)
 
 	// test cases are negative, increasing, duration offsets from the
 	// zeroTime. The positive, increasing, duration offsets are automatically

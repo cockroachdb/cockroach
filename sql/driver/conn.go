@@ -20,6 +20,7 @@ package driver
 import (
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -162,11 +163,11 @@ func (c *conn) applySettings(params map[string]string) error {
 		name     string
 		operator string
 	}{
-		{name: "DATABASE", operator: " = "},
-		{name: "TIME ZONE", operator: " "},
+		{name: "DATABASE", operator: "="},
+		{name: "TIME ZONE", operator: ""},
 	} {
 		if val, ok := params[strings.ToLower(strings.Replace(setting.name, " ", "_", -1))]; ok {
-			commands = append(commands, strings.Join([]string{"SET " + setting.name, val}, setting.operator))
+			commands = append(commands, fmt.Sprintf("SET %s %s \"%s\"", setting.name, setting.operator, val))
 		}
 	}
 	_, err := c.Exec(strings.Join(commands, ";"), nil)

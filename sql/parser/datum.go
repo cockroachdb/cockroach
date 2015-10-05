@@ -335,7 +335,13 @@ func (d DBytes) String() string {
 
 // DDate is the date Datum.
 type DDate struct {
-	time.Time
+	time.Time // Must always be UTC!
+}
+
+// MakeDDate constructs a DDate from a time.Time.
+func MakeDDate(t time.Time) DDate {
+	year, month, day := t.Date()
+	return DDate{Time: time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
 }
 
 // Type implements the Datum interface.

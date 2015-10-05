@@ -637,7 +637,7 @@ func (s Int32Slice) Less(i, j int) bool { return s[i] < s[j] }
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
-	t := time.Unix(l.Start.WallTime/1E9, 0)
+	t := time.Unix(l.Start.WallTime/1E9, 0).UTC()
 	tStr := t.Format("15:04:05.000")
 	return fmt.Sprintf("replica %s %s +%.3fs", l.Replica, tStr, float64(l.Expiration.WallTime-l.Start.WallTime)/1E9)
 }

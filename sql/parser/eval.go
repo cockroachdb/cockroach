@@ -555,12 +555,16 @@ func init() {
 // the retrieval of state such as the node ID or statement start time.
 type EvalContext struct {
 	NodeID        uint32
-	StmtTimestamp time.Time
-	TxnTimestamp  time.Time
+	StmtTimestamp DTimestamp
+	TxnTimestamp  DTimestamp
 	GetLocation   func() (*time.Location, error)
 }
 
-var defaultContext EvalContext
+var defaultContext = EvalContext{
+	GetLocation: func() (*time.Location, error) {
+		return time.UTC, nil
+	},
+}
 
 // EvalExpr evaluates an SQL expression. Expression evaluation is a mostly
 // straightforward walk over the parse tree. The only significant complexity is
@@ -1129,7 +1133,11 @@ func (ctx EvalContext) evalCastExpr(expr *CastExpr) (Datum, error) {
 		case DString:
 			return ParseDate(d)
 		case DTimestamp:
-			return DDate{Time: d.Truncate(24 * time.Hour)}, nil
+			loc, err := ctx.GetLocation()
+			if err != nil {
+				return DNull, err
+			}
+			return MakeDDate(d.Time.In(loc)), nil
 		}
 
 	case *TimestampType:
@@ -1233,41 +1241,41 @@ const (
 
 // ParseDate parses a date.
 func ParseDate(s DString) (DDate, error) {
-	str := string(s)
-	t, err := time.Parse(dateFormat, str)
-	if err == nil {
-		return DDate{Time: t}, nil
+	// No need to ParseInLocation here because we're only parsing dates.
+	t, err := time.Parse(dateFormat, string(s))
+	if err != nil {
+		return DummyDate, err
 	}
-	// Parse other formats in the future
-	return DummyDate, err
+
+	return MakeDDate(t), nil
 }
 
 // ParseTimestamp parses the timestamp.
 func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
-	str := string(s)
-	t, err := time.Parse(dateFormat, str)
-	if err == nil {
-		return DTimestamp{Time: t}, nil
-	}
-	if t, err = time.Parse(TimestampWithOffsetZoneFormat, str); err == nil {
-		t = t.UTC()
-		return DTimestamp{Time: t}, nil
-	}
-	location := time.UTC
+	loc := time.UTC
 	if ctx.GetLocation != nil {
-		if location, err = ctx.GetLocation(); err != nil {
+		var err error
+		if loc, err = ctx.GetLocation(); err != nil {
 			return DummyTimestamp, err
 		}
 	}
-	if t, err = time.ParseInLocation(timestampFormat, str, location); err == nil {
-		t = t.UTC()
-		return DTimestamp{Time: t}, nil
+
+	str := string(s)
+	var err error
+
+	for _, format := range []string{
+		dateFormat,
+		TimestampWithOffsetZoneFormat,
+		timestampFormat,
+		timestampWithNamedZoneFormat,
+	} {
+		var t time.Time
+		if t, err = time.ParseInLocation(format, str, loc); err == nil {
+			// Always return the time in the session time zone.
+			return DTimestamp{Time: t.In(loc)}, nil
+		}
 	}
-	if t, err = time.ParseInLocation(timestampWithNamedZoneFormat, str, location); err == nil {
-		t = t.UTC()
-		return DTimestamp{Time: t}, nil
-	}
-	// Parse other formats in the future.
+
 	return DummyTimestamp, err
 }
 

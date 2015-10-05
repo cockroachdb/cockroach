@@ -27,13 +27,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func setup(t *testing.T) (*server.TestServer, *sql.DB) {
+func setup(t *testing.T, loc *time.Location) (*server.TestServer, *sql.DB) {
 	s := server.StartTestServer(nil)
-	db, err := sql.Open("cockroach", "https://root@"+s.ServingAddr()+"?certs=test_certs")
+	db, err := sql.Open("cockroach",
+		fmt.Sprintf(
+			"https://%s@%s?certs=%s&time_zone=%s",
+			security.RootUser,
+			s.ServingAddr(),
+			security.EmbeddedCertsDir,
+			loc,
+		),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,14 +54,71 @@ func cleanup(s *server.TestServer, db *sql.DB) {
 	s.Stop()
 }
 
+func TestDates(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	// From https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+	locationNames := []string{
+		"Canada/Newfoundland", // half-hour zone
+		"Europe/London",       // same as UTC, except for DST
+		"Pacific/Kiritimati",  // maximum positive offset
+		"Pacific/Midway",      // maximum negative offset
+		"US/Pacific",          // negative offset
+		"UTC",
+	}
+
+	for _, locationName := range locationNames {
+		loc, err := time.LoadLocation(locationName)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+
+		s, db := setup(t, loc)
+		defer cleanup(s, db)
+
+		var date *driver.Date
+		for _, year := range []int{
+			1200, // distant past
+			2020, // present day, for DST rules
+			4000, // distant future
+		} {
+			for _, month := range []time.Month{
+				time.December, // winter
+				time.August,   // summer
+			} {
+				for hour := 0; hour < 24; hour++ {
+					timestamp := time.Date(year, month, 20, hour, 34, 45, 123, loc)
+
+					if err := db.QueryRow("SELECT $1::DATE", timestamp).Scan(&date); err != nil {
+						t.Fatal(err)
+					}
+
+					if expected := driver.MakeDate(timestamp); !date.Equal(expected.Time) {
+						t.Fatalf("expected date to be truncated to:\n%s\nbut got:\n%s", expected, date)
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestPlaceholders(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, db := setup(t)
+
+	// loc is selected so that timeVal below maps to a different date in
+	// loc and UTC.
+	loc, err := time.LoadLocation("Pacific/Midway")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s, db := setup(t, loc)
 	defer cleanup(s, db)
 
 	year, month, day := 3015, time.August, 30
-	timeVal := time.Date(year, month, day, 3, 34, 45, 345670000, time.UTC)
-	dateVal := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	timeVal := time.Date(year, month, day, 3, 34, 45, 345670000, loc)
+	dateVal := driver.Date{Time: time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
 	intervalVal, err := time.ParseDuration("34h2s")
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +159,7 @@ CREATE TABLE t.alltypes (
 		d sql.NullString
 		e sql.NullBool
 		f *time.Time
-		g *time.Time
+		g *driver.Date
 		h *time.Duration
 	)
 
@@ -169,8 +235,12 @@ CREATE TABLE t.alltypes (
 		}
 
 		if !(a == 123 && b.Float64 == 3.4 && c.String == "blah" && d.String == "foo" &&
-			e.Bool && f.Equal(timeVal) && g.Equal(dateVal) && *h == intervalVal) {
-			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g, h})
+			e.Bool && f.Equal(timeVal) && g.Equal(dateVal.Time) && *h == intervalVal) {
+			t.Errorf(
+				"expected:\n%+v\ngot:\n%+v",
+				[]interface{}{123, 3.4, "blah", "foo", true, timeVal, dateVal, intervalVal},
+				[]interface{}{a, b, c, d, e, f, g, h},
+			)
 		}
 
 		rows.Next()
@@ -183,7 +253,11 @@ CREATE TABLE t.alltypes (
 		}
 
 		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && !e.Valid && f == nil && g == nil && h == nil) {
-			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g, h})
+			t.Errorf(
+				"expected:\n%+v\ngot:\n%+v",
+				[]interface{}{123, "<NOT NULL>", "<NOT NULL>", "<NOT NULL>", "<NOT NULL>", "<NULL>", "<NULL>", "<NULL>"},
+				[]interface{}{a, b, c, d, e, f, g, h},
+			)
 		}
 
 		if rows.Next() {
@@ -213,7 +287,11 @@ CREATE TABLE t.alltypes (
 		}
 
 		if !(a == 456 && !b.Valid && !c.Valid && !d.Valid && !e.Valid && f == nil && g == nil && h == nil) {
-			t.Errorf("got unexpected results: %+v", []interface{}{a, b, c, d, e, f, g, h})
+			t.Errorf(
+				"expected:\n%+v\ngot:\n%+v",
+				[]interface{}{123, "<NOT NULL>", "<NOT NULL>", "<NOT NULL>", "<NOT NULL>", "<NULL>", "<NULL>", "<NULL>"},
+				[]interface{}{a, b, c, d, e, f, g, h},
+			)
 		}
 
 		if rows.Next() {
@@ -415,7 +493,7 @@ func concurrentIncrements(db *sql.DB, t *testing.T) {
 // are serializable and performant even at the SQL layer.
 func TestConcurrentIncrements(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, db := setup(t)
+	s, db := setup(t, time.Local)
 	defer cleanup(s, db)
 
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {

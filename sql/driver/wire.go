@@ -50,9 +50,13 @@ func makeDatum(val driver.Value) (Datum, error) {
 	case string:
 		datum.Payload = &Datum_StringVal{t}
 	case time.Time:
-		// Send absolute time devoid of time-zone.
 		timestamp := Timestamp(t)
 		datum.Payload = &Datum_TimeVal{
+			&timestamp,
+		}
+	case Date:
+		timestamp := Timestamp(t.Time)
+		datum.Payload = &Datum_DateVal{
 			&timestamp,
 		}
 	default:
@@ -60,6 +64,23 @@ func makeDatum(val driver.Value) (Datum, error) {
 	}
 
 	return datum, nil
+}
+
+// Date wraps time.Time and provides a custom String() method.
+type Date struct {
+	time.Time // Must always be UTC!
+}
+
+// MakeDate constructs a Date from a time.Time.
+func MakeDate(t time.Time) Date {
+	year, month, day := t.Date()
+	return Date{Time: time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
+}
+
+// String returns the underlying time formatted using the format string
+// "2006-01-02".
+func (d Date) String() string {
+	return d.Format("2006-01-02")
 }
 
 // Value implements the driver.Valuer interface.
@@ -80,9 +101,9 @@ func (d Datum) Value() (driver.Value, error) {
 	case *Datum_StringVal:
 		val = t.StringVal
 	case *Datum_DateVal:
-		val = t.DateVal.GoTime().UTC()
+		val = MakeDate(t.DateVal.GoTime())
 	case *Datum_TimeVal:
-		val = t.TimeVal.GoTime().UTC()
+		val = t.TimeVal.GoTime()
 	case *Datum_IntervalVal:
 		val = time.Duration(t.IntervalVal)
 	default:
@@ -92,9 +113,11 @@ func (d Datum) Value() (driver.Value, error) {
 	return val, nil
 }
 
-// GoTime converts the timestamp to a time.Time.
+// GoTime returns the receiver as a time.Time in UTC. It is critical
+// that the time.Time returned is in UTC, because that is the
+// storage/wire contract for dates and times.
 func (t Datum_Timestamp) GoTime() time.Time {
-	return time.Unix(t.Sec, int64(t.Nsec))
+	return time.Unix(t.Sec, int64(t.Nsec)).UTC()
 }
 
 // Timestamp converts a time.Time to a timestamp.
