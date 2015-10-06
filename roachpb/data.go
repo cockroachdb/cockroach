@@ -61,6 +61,14 @@ func (rk RKey) Key() Key {
 	return Key(rk)
 }
 
+// AsRawKey returns the RKey as a Key. This is to be used only in select
+// situations in which an RKey is known to not contain a wrapped locally-
+// addressed Key. Whenever the Key which created the RKey is still available,
+// it should be used instead.
+func (rk RKey) AsRawKey() Key {
+	return Key(rk)
+}
+
 // Less compares two RKeys.
 func (rk RKey) Less(otherRK RKey) bool {
 	return rk.Key().Less(otherRK.Key())

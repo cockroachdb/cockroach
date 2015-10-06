@@ -149,9 +149,9 @@ var (
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("node-idgen")))
 	// RangeIDGenerator is the global range ID generator sequence.
-	RangeIDGenerator = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("range-idgen")))
+	RangeIDGenerator = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("range-idgen")))
 	// StoreIDGenerator is the global store ID generator sequence.
-	StoreIDGenerator = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("store-idgen")))
+	StoreIDGenerator = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("store-idgen")))
 	// RangeTreeRoot specifies the root range in the range tree.
 	RangeTreeRoot = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("range-tree-root")))
 

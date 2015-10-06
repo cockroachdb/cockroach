@@ -452,7 +452,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// Create ID allocators.
-	idAlloc, err := newIDAllocator(keys.RangeIDGenerator.Key(), s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper)
+	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper)
 	if err != nil {
 		return err
 	}
@@ -823,12 +823,12 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 	// Range addressing for meta2.
 	meta2Key := keys.RangeMetaKey(roachpb.RKeyMax)
-	if err := engine.MVCCPutProto(batch, ms, meta2Key.Key(), now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, meta2Key.AsRawKey(), now, nil, desc); err != nil {
 		return err
 	}
 	// Range addressing for meta1.
 	meta1Key := keys.RangeMetaKey(meta2Key)
-	if err := engine.MVCCPutProto(batch, ms, meta1Key.Key(), now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, meta1Key.AsRawKey(), now, nil, desc); err != nil {
 		return err
 	}
 

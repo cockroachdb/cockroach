@@ -529,6 +529,10 @@ func intersectIntent(intent roachpb.Intent, desc roachpb.RangeDescriptor) (middl
 func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachpb.RangeLookupRequest) (roachpb.RangeLookupResponse, []roachpb.Intent, error) {
 	var reply roachpb.RangeLookupResponse
 	ts := h.Timestamp // all we're going to use from the header.
+	key := keys.Addr(args.Key)
+	if !key.Equal(args.Key) {
+		return reply, nil, util.Errorf("illegal lookup of range-local key")
+	}
 
 	rangeCount := int64(args.MaxRanges)
 	if rangeCount < 1 {
@@ -562,7 +566,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 		// We want to search for the metadata key greater than
 		// args.Key. Scan for both the requested key and the keys immediately
 		// afterwards, up to MaxRanges.
-		startKey, endKey, err := keys.MetaScanBounds(roachpb.RKey(args.Key))
+		startKey, endKey, err := keys.MetaScanBounds(key)
 		if err != nil {
 			return reply, nil, err
 		}
@@ -601,7 +605,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 			if err := proto.Unmarshal(b, &r); err != nil {
 				return nil, err
 			}
-			if !keys.RangeMetaKey(r.StartKey).Less(roachpb.RKey(args.Key)) {
+			if !keys.RangeMetaKey(r.StartKey).Less(key) {
 				// This is the case in which we've picked up an extra descriptor
 				// we don't want.
 				return nil, nil
@@ -610,8 +614,8 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 			return &r, nil
 		}
 
-		if args.Key.Less(keys.Meta2KeyMax.Key()) {
-			startKey, endKey, err := keys.MetaScanBounds(roachpb.RKey(args.Key))
+		if key.Less(keys.Meta2KeyMax) {
+			startKey, endKey, err := keys.MetaScanBounds(key)
 			if err != nil {
 				return reply, nil, err
 			}
@@ -626,7 +630,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 		// We want to search for the metadata key just less or equal to
 		// args.Key. Scan in reverse order for both the requested key and the
 		// keys immediately backwards, up to MaxRanges.
-		startKey, endKey, err := keys.MetaReverseScanBounds(roachpb.RKey(args.Key))
+		startKey, endKey, err := keys.MetaReverseScanBounds(key)
 		if err != nil {
 			return reply, nil, err
 		}

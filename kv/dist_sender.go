@@ -213,7 +213,9 @@ func (ds *DistSender) rangeLookup(key roachpb.RKey, options lookupOptions,
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: key.Key(),
+			// We can interpret the RKey as a Key here since it's a metadata
+			// lookup; those are never local.
+			Key: key.AsRawKey(),
 		},
 		MaxRanges:       ds.rangeLookupMaxRanges,
 		ConsiderIntents: options.considerIntents,

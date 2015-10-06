@@ -184,7 +184,7 @@ func (ls *LocalSender) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.R
 			"range %+v exists on additional store: %+v", rng, store)
 	}
 	if replica == nil {
-		err = roachpb.NewRangeKeyMismatchError(start.Key(), end.Key(), nil)
+		err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), nil)
 	}
 	return rangeID, replica, err
 }
@@ -215,7 +215,8 @@ func (ls *LocalSender) rangeLookup(key roachpb.RKey, options lookupOptions, _ *r
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: key.Key(),
+			// key is a meta key, so it's guaranteed not local-prefixed.
+			Key: key.AsRawKey(),
 		},
 		MaxRanges:       1,
 		ConsiderIntents: options.considerIntents,
