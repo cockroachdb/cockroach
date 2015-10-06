@@ -19,6 +19,7 @@ package server
 
 import (
 	"math/rand"
+	"reflect"
 	"testing"
 	"time"
 
@@ -63,81 +64,95 @@ func TestSendAndReceive(t *testing.T) {
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(nodeRPCContext, gossip.TestInterval, gossip.TestBootstrap)
 
-	// Create several servers, each of which has two stores (A multiraft node ID addresses
-	// a store).
+	// Create several servers, each of which has two stores (A multiraft
+	// node ID addresses a store). Node 1 has stores 1 and 2, node 2 has
+	// stores 3 and 4, etc.
+	//
+	// We suppose that range 1 is replicated across the odd-numbered
+	// stores in reverse order to ensure that the various IDs are not
+	// equal: replica 1 is store 5, replica 2 is store 3, and replica 3
+	// is store 1.
 	const numServers = 3
 	const storesPerServer = 2
 	const numStores = numServers * storesPerServer
-	// servers has length numServers.
-	servers := []*rpc.Server{}
-	// All the rest have length numStores (note that several stores share a transport).
 	nextNodeID := roachpb.NodeID(1)
-	nodeIDs := []roachpb.NodeID{}
-	transports := []multiraft.Transport{}
-	channels := []channelServer{}
+	nextStoreID := roachpb.StoreID(1)
+
+	// Per-node state.
+	transports := map[roachpb.NodeID]multiraft.Transport{}
+
+	// Per-store state.
+	storeNodes := map[roachpb.StoreID]roachpb.NodeID{}
+	channels := map[roachpb.StoreID]channelServer{}
+	replicaIDs := map[roachpb.StoreID]roachpb.ReplicaID{
+		1: 3,
+		3: 2,
+		5: 1,
+	}
+
 	for serverIndex := 0; serverIndex < numServers; serverIndex++ {
+		nodeID := nextNodeID
+		nextNodeID++
 		server := rpc.NewServer(util.CreateTestAddr("tcp"), nodeRPCContext)
 		if err := server.Start(); err != nil {
 			t.Fatal(err)
 		}
 		defer server.Close()
 
+		addr := server.Addr()
+		if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
+			&roachpb.NodeDescriptor{
+				Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+			},
+			time.Hour); err != nil {
+			t.Fatal(err)
+		}
+
 		transport, err := newRPCTransport(g, server, nodeRPCContext)
 		if err != nil {
 			t.Fatalf("Unexpected error creating transport, Error: %s", err)
 		}
 		defer transport.Close()
+		transports[nodeID] = transport
 
 		for store := 0; store < storesPerServer; store++ {
-			nodeID := nextNodeID
-			nextNodeID++
+			storeID := nextStoreID
+			nextStoreID++
+
+			storeNodes[storeID] = nodeID
 
 			channel := newChannelServer(10, 0)
-			if err := transport.Listen(roachpb.StoreID(nodeID), channel); err != nil {
+			if err := transport.Listen(storeID, channel); err != nil {
 				t.Fatal(err)
 			}
-
-			addr := server.Addr()
-			if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
-				&roachpb.NodeDescriptor{
-					Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-				},
-				time.Hour); err != nil {
-				t.Fatal(err)
-			}
-
-			nodeIDs = append(nodeIDs, nodeID)
-			transports = append(transports, transport)
-			channels = append(channels, channel)
+			channels[storeID] = channel
 		}
-
-		servers = append(servers, server)
 	}
 
-	// Each store sends one message to each store.
-	for from := 0; from < numStores; from++ {
-		for to := 0; to < numStores; to++ {
+	// Heartbeat messages: Each store sends one message to each store.
+	for fromStoreID, fromNodeID := range storeNodes {
+		for toStoreID, toNodeID := range storeNodes {
 			req := &multiraft.RaftMessageRequest{
-				GroupID: 1,
+				GroupID: 0,
 				Message: raftpb.Message{
-					From: uint64(nodeIDs[from]),
-					To:   uint64(nodeIDs[to]),
 					Type: raftpb.MsgHeartbeat,
+					From: uint64(fromStoreID),
+					To:   uint64(toStoreID),
 				},
 				FromReplica: roachpb.ReplicaDescriptor{
-					NodeID:    nodeIDs[from],
-					StoreID:   roachpb.StoreID(nodeIDs[from]),
-					ReplicaID: roachpb.ReplicaID(nodeIDs[from]),
+					NodeID:    fromNodeID,
+					StoreID:   fromStoreID,
+					ReplicaID: 0,
 				},
 				ToReplica: roachpb.ReplicaDescriptor{
-					NodeID:    nodeIDs[to],
-					StoreID:   roachpb.StoreID(nodeIDs[to]),
-					ReplicaID: roachpb.ReplicaID(nodeIDs[to]),
+					NodeID:    toNodeID,
+					StoreID:   toStoreID,
+					ReplicaID: 0,
 				},
 			}
 
-			if err := transports[from].Send(req); err != nil {
-				t.Errorf("Unable to send message from %d to %d: %s", nodeIDs[from], nodeIDs[to], err)
+			if err := transports[fromNodeID].Send(req); err != nil {
+				t.Errorf("Unable to send message from %d to %d: %s", fromNodeID, toNodeID, err)
 			}
 		}
 	}
@@ -146,13 +161,13 @@ func TestSendAndReceive(t *testing.T) {
 	// does not guarantee in-order delivery between independent
 	// transports, so we just verify that the right number of messages
 	// end up in each channel.
-	for to := 0; to < numStores; to++ {
-		for from := 0; from < numStores; from++ {
+	for toStoreID := range storeNodes {
+		for range storeNodes {
 			select {
-			case req := <-channels[to].ch:
-				if req.Message.To != uint64(nodeIDs[to]) {
-					t.Errorf("invalid message received on channel %d (expected from %d): %+v",
-						nodeIDs[to], nodeIDs[from], req)
+			case req := <-channels[toStoreID].ch:
+				if req.Message.To != uint64(toStoreID) {
+					t.Errorf("invalid message received on channel %d: %+v",
+						toStoreID, req)
 				}
 			case <-time.After(5 * time.Second):
 				t.Fatal("timed out waiting for message")
@@ -160,10 +175,51 @@ func TestSendAndReceive(t *testing.T) {
 		}
 
 		select {
-		case req := <-channels[to].ch:
-			t.Errorf("got unexpected message %+v on channel %d", req, nodeIDs[to])
+		case req := <-channels[toStoreID].ch:
+			t.Errorf("got unexpected message %+v on channel %d", req, toStoreID)
 		default:
 		}
+	}
+
+	// Real raft messages have different node/store/replica IDs.
+	// Send a message from replica 2 (on store 3, node 2) to replica 1 (on store 5, node 3)
+	fromStoreID := roachpb.StoreID(3)
+	toStoreID := roachpb.StoreID(5)
+	req := &multiraft.RaftMessageRequest{
+		GroupID: 1,
+		Message: raftpb.Message{
+			Type: raftpb.MsgApp,
+			From: uint64(replicaIDs[fromStoreID]),
+			To:   uint64(replicaIDs[toStoreID]),
+		},
+		FromReplica: roachpb.ReplicaDescriptor{
+			NodeID:    storeNodes[fromStoreID],
+			StoreID:   fromStoreID,
+			ReplicaID: replicaIDs[fromStoreID],
+		},
+		ToReplica: roachpb.ReplicaDescriptor{
+			NodeID:    storeNodes[toStoreID],
+			StoreID:   toStoreID,
+			ReplicaID: replicaIDs[toStoreID],
+		},
+	}
+	if err := transports[storeNodes[fromStoreID]].Send(req); err != nil {
+		t.Errorf("Unable to send message from %d to %d: %s", fromStoreID, toStoreID, err)
+	}
+	select {
+	case req2 := <-channels[toStoreID].ch:
+		if !reflect.DeepEqual(req, req2) {
+			t.Errorf("got unexpected message %+v", req2)
+		}
+
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for message")
+	}
+
+	select {
+	case req := <-channels[toStoreID].ch:
+		t.Errorf("got unexpected message %+v on channel %d", req, toStoreID)
+	default:
 	}
 }
 
