@@ -146,11 +146,11 @@ module AdminViews {
       class Controller {
         private static defaultTargets: NavigationBar.Target[] = [
           {
-            title: "Overview",
+            view: "Overview",
             route: ""
           },
           {
-            title: "Graphs",
+            view: "Graphs",
             route: "graph"
           }
         ];

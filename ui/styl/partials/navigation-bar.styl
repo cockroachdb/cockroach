@@ -20,32 +20,90 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 @require '../modules/*'
 @require 'typography.styl'
 
+
 // ---- Navigation ----
+$navbar-bg            = white
+$navbar-border        = #D1D1D1
+$main-nav-inactive    = $main-gray
+$main-nav-active-bg   = $main-navy
+$main-nav-active-font = white
+$main-nav-active-icon = $main-green
+$main-nav-hover       = $main-dark-gray
+
 #header
   position: fixed
   top: 0
   left: 0
   z-index: 1
-  width: 100%
+  width: $nav-width
   modular-font-size '1' 
-  height: 6rem 
-  background-color: -color('dark', 'x-dark')
-  padding: 2rem
+  height 100%
+  background-color: $navbar-bg
+  border-right 1px solid $navbar-border
+  margin 0
+  padding 0
+
+header
+  ul.navigation-sidebar
+    width 100%
+    li
+      width 100%
+      padding 0
+      border 0
+      font-family Lato-Bold
+      font-size 9px
+      text-transform uppercase
+      float left
+      color $main-nav-inactive
+      list-style-type none
+
+      path
+        fill $main-nav-inactive
+
+      &.active, &.active:hover
+        color $main-nav-active-font
+        background-color $main-nav-active-bg
+
+        path
+          fill $main-nav-active-icon
+
+      &:hover
+        color $main-nav-hover
+
+        path
+          fill $main-nav-hover
+
+      a
+        width 100%
+        height 80px
+        padding 20px
+        display: block
+        color: inherit
+        text-decoration: none
+        &:hover
+        &:visited
+        &:active
+          color: @color
+
+        div
+          margin auto
+          width 100%
+          text-align center
 
 header
   ul.navigation
-    li 
+    li
       float: left
       margin-right: 2.5rem
       color: -color('neutral', 'light')
       list-style-type: none
 
-      &.active 
+      &.active
         color: -color('light')
 
       &:hover
         color: -color('light', 'x-light')
-      
+
       a
         color: inherit
         text-decoration: none

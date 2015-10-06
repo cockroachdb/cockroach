@@ -18,6 +18,7 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
 @require 'typography.styl'
+@require '../modules/layout-vars.styl'
 
 *
   margin: 0  
@@ -32,7 +33,8 @@ body
 
 #root
   position: relative
-  top: 6rem 
+  top: 0
+  padding-left $nav-width
   min-height: calc(100% - 4rem)
   background-color: -color('light', 'x-light')
   color: -color('dark', 'light')

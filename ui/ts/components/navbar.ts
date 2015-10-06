@@ -13,8 +13,9 @@ module Components {
    * links. One of the links can be active.
    */
   export module NavigationBar {
+    import MithrilVirtualElement = _mithril.MithrilVirtualElement;
     export interface Target {
-      title: string;
+      view: string | MithrilVirtualElement | MithrilVirtualElement[];
       route: string;
     }
 
@@ -31,18 +32,19 @@ module Components {
     export function controller(ts: TargetSet): any {}
 
     export function view(ctrl: any, ts: TargetSet): _mithril.MithrilVirtualElement {
-      return m("ul.navigation", _.map(ts.targets(), (t: Target) =>
-        m("li",
-          {
-            className: ts.isActive(t) ? "active" : ""
-          },
-          m("a",
+      return m("ul.navigation-sidebar", _.map(ts.targets(), (t: Target) =>
+          m("li",
             {
-              config: m.route,
-              href: ts.baseRoute + t.route
+              className: ts.isActive(t) ? "active" : ""
             },
-            t.title)
-         )
+            m("a",
+              {
+                config: m.route,
+                href: ts.baseRoute + t.route
+              },
+              t.view
+              )
+          )
       ));
     }
   }
