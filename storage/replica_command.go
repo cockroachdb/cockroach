@@ -449,9 +449,10 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 // A range-local intent range is never split: It's returned as either
 // belonging to or outside of the descriptor's key range, and passing an intent
 // which begins range-local but ends non-local results in a panic.
-// TODO(tschottdorf) move to proto, make more gen-purpose. Check local addressing.
+// TODO(tschottdorf) move to proto, make more gen-purpose - kv.truncate does
+// some similar things.
 func intersectIntent(intent roachpb.Intent, desc roachpb.RangeDescriptor) (middle *roachpb.Intent, outside []roachpb.Intent) {
-	start, end := desc.StartKey.Key(), desc.EndKey.Key()
+	start, end := desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey()
 	if !intent.Key.Less(intent.EndKey) {
 		return
 	}
@@ -635,7 +636,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 			return reply, nil, err
 		}
 		// Reverse scan for descriptors.
-		revKvs, revIntents, err := engine.MVCCReverseScan(batch, startKey.Key(), endKey.Key(), rangeCount,
+		revKvs, revIntents, err := engine.MVCCReverseScan(batch, startKey, endKey, rangeCount,
 			ts, consistent, h.Txn)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.

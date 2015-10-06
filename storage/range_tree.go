@@ -50,7 +50,7 @@ func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats, timestamp roachpb
 		Key:   startKey,
 		Black: true,
 	}
-	if err := engine.MVCCPutProto(batch, ms, keys.RangeTreeRoot.Key(), timestamp, nil, tree); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RangeTreeRoot, timestamp, nil, tree); err != nil {
 		return err
 	}
 	if err := engine.MVCCPutProto(batch, ms, keys.RangeTreeNodeKey(startKey), timestamp, nil, node); err != nil {

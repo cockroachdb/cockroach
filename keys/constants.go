@@ -116,7 +116,7 @@ var (
 	LocalTransactionSuffix = roachpb.RKey("txn-")
 
 	// LocalMax is the end of the local key range.
-	LocalMax = roachpb.RKey(LocalPrefix.PrefixEnd())
+	LocalMax = LocalPrefix.PrefixEnd()
 
 	// SystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
@@ -126,7 +126,7 @@ var (
 	// MetaPrefix is the prefix for range metadata keys. Notice that
 	// an extra null character in the prefix causes all range addressing
 	// records to sort before any system tables which they might describe.
-	MetaPrefix = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("\x00meta")))
+	MetaPrefix = MakeKey(SystemPrefix, roachpb.RKey("\x00meta"))
 	// Meta1Prefix is the first level of key addressing. The value is a
 	// RangeDescriptor struct.
 	Meta1Prefix = roachpb.RKey(MakeKey(MetaPrefix, roachpb.RKey("1")))
@@ -141,19 +141,19 @@ var (
 	Meta2KeyMax = roachpb.RKey(MakeKey(Meta2Prefix, roachpb.RKeyMax))
 
 	// MetaMax is the end of the range of addressing keys.
-	MetaMax = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("\x01")))
+	MetaMax = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("\x01")))
 
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.
-	DescIDGenerator = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("desc-idgen")))
+	DescIDGenerator = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("desc-idgen")))
 	// NodeIDGenerator is the global node ID generator sequence.
-	NodeIDGenerator = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("node-idgen")))
+	NodeIDGenerator = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("node-idgen")))
 	// RangeIDGenerator is the global range ID generator sequence.
 	RangeIDGenerator = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("range-idgen")))
 	// StoreIDGenerator is the global store ID generator sequence.
 	StoreIDGenerator = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("store-idgen")))
 	// RangeTreeRoot specifies the root range in the range tree.
-	RangeTreeRoot = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("range-tree-root")))
+	RangeTreeRoot = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("range-tree-root")))
 
 	// StatusPrefix specifies the key prefix to store all status details.
 	StatusPrefix = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("status-")))

@@ -126,7 +126,7 @@ func (ms *MVCCStats) Subtract(oms *MVCCStats) {
 // the specified key should be tracked at all, and if so, whether the
 // key is system-local.
 func updateStatsForKey(ms *MVCCStats, key roachpb.Key) (bool, bool) {
-	return ms != nil, key.Less(keys.LocalMax.Key())
+	return ms != nil, bytes.Compare(key, keys.LocalMax) < 0
 }
 
 // updateStatsForInline updates stat counters for an inline value.
@@ -1513,8 +1513,8 @@ func isValidEncodedSplitKey(key roachpb.EncodedKey) bool {
 // The split key will never be chosen from the key ranges listed in
 // illegalSplitKeySpans.
 func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachpb.RKey) (roachpb.Key, error) {
-	if key.Less(keys.LocalMax) {
-		key = keys.LocalMax
+	if bytes.Compare(key, keys.LocalMax) < 0 {
+		key = keys.Addr(keys.LocalMax)
 	}
 	encStartKey := MVCCEncodeKey(key.Key())
 	encEndKey := MVCCEncodeKey(endKey.Key())

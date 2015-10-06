@@ -1398,7 +1398,7 @@ func TestStoreBadRequests(t *testing.T) {
 	args4 := scanArgs(roachpb.Key("b"), roachpb.Key("a"))
 
 	args5 := scanArgs(roachpb.RKeyMin, roachpb.Key("a"))
-	args6 := scanArgs(keys.RangeTreeNodeKey(keys.RangeTreeRoot), roachpb.Key("a"))
+	args6 := scanArgs(keys.RangeTreeNodeKey(keys.Addr(keys.RangeTreeRoot)), roachpb.Key("a"))
 
 	tArgs0, _ := endTxnArgs(txn, false /* commit */)
 	tArgs1, _ := heartbeatArgs(txn)
