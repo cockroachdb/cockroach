@@ -135,8 +135,13 @@ func MakeRangeKey(key, suffix, detail roachpb.RKey) roachpb.Key {
 	if len(suffix) != LocalSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, LocalSuffixLength))
 	}
-	return MakeKey(LocalRangePrefix,
-		encoding.EncodeBytes(nil, key), suffix, detail)
+	return MakeKey(MakeRangeKeyPrefix(key), suffix, detail)
+}
+
+// MakeRangeKeyPrefix creates a key prefix under which all range-local keys
+// can be found.
+func MakeRangeKeyPrefix(key roachpb.RKey) roachpb.Key {
+	return MakeKey(LocalRangePrefix, encoding.EncodeBytes(nil, key))
 }
 
 // DecodeRangeKey decodes the range key into range start key,
