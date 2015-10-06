@@ -12,6 +12,7 @@
     "gulp-typescript": "^2.9.0",
     "npm": "^3.3.4",
     "shonkwrap": "^1.1.2",
+    "stylint": "^1.2.3",
     "stylus": ">=0.51.1",
     "tsd": "^0.6.4",
     "tslint": ">=2.3.1-beta",

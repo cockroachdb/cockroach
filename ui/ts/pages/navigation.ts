@@ -4,6 +4,7 @@
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/navbar.ts" />
 /// <reference path="../util/property.ts" />
+/// <reference path="../svgIcons/icons.ts" />
 
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
@@ -28,13 +29,28 @@ module AdminViews {
         private static defaultTargets: NavigationBar.Target[] = [
           {
             title: "Nodes",
-            route: "/nodes"
+            route: "/nodes",
+            icon: SvgIcons.nodesIcon
           },
           {
             title: "Stores",
-            route: "/stores"
+            route: "/stores",
+            icon: SvgIcons.storesIcon
           }
-        ];
+        ].map(function(v: any): NavigationBar.Target {
+          return {
+            view: [
+              m("div", {
+                  class: "image-container"
+                },
+                [
+                  m.trust(v.icon)
+                ]),
+              m("div", v.title)
+            ],
+            route: v.route
+          };
+        });
 
         private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
           let currentRoute = m.route();
