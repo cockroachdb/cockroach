@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
 )
@@ -21,6 +22,7 @@ func TestTruncate(t *testing.T) {
 		expKeys  [][2]string
 		from, to string
 		desc     [2]string // optional, defaults to {from,to}
+		err      string
 	}{
 		{
 			// Keys inside of active range.
@@ -35,19 +37,35 @@ func TestTruncate(t *testing.T) {
 			from:    "b", to: "q",
 		},
 		{
-			// Range-local Keys outside of active range.
-			keys:    [][2]string{{loc("e")}, {loc("a"), loc("b")}, {loc("e"), loc("z")}},
-			expKeys: [][2]string{{}, {}, {}},
+			// Range-local keys inside of active range.
+			keys:    [][2]string{{loc("b")}, {loc("c")}},
+			expKeys: [][2]string{{loc("b")}, {loc("c")}},
 			from:    "b", to: "e",
 		},
 		{
-			// Range-local Keys overlapping active range in various ways.
-			// TODO(tschottdorf): those aren't handled nicely but I'll address
-			// it in #2198. Right now local ranges can wind up going all over
-			// the place.
-			keys:    [][2]string{{loc("b")}, {loc("a"), loc("b\x00")}, {loc("c"), loc("f")}, {loc("a"), loc("z")}},
-			expKeys: [][2]string{{loc("b")}, {"b", loc("b\x00")}, {loc("c"), "e"}, {"b", "e"}},
+			// Range-local key outside of active range.
+			keys:    [][2]string{{loc("a")}},
+			expKeys: [][2]string{{}},
 			from:    "b", to: "e",
+		},
+		{
+			// Range-local range contained in active range.
+			keys:    [][2]string{{loc("b"), loc("e") + "\x00"}},
+			expKeys: [][2]string{{loc("b"), loc("e") + "\x00"}},
+			from:    "b", to: "e\x00",
+		},
+
+		{
+			// Range-local range not contained in active range.
+			keys: [][2]string{{loc("a"), loc("b")}},
+			from: "b", to: "e",
+			err: "local key range must not span ranges",
+		},
+		{
+			// Mixed range-local vs global key range.
+			keys: [][2]string{{loc("c"), "d\x00"}},
+			from: "b", to: "e",
+			err: "local key mixed with global key",
 		},
 		{
 			// Key range touching and intersecting active range.
@@ -95,8 +113,11 @@ func TestTruncate(t *testing.T) {
 			desc.EndKey = roachpb.RKey(test.to)
 		}
 		undo, num, err := truncate(ba, desc, roachpb.RKey(test.from), roachpb.RKey(test.to))
-		if err != nil {
-			t.Errorf("%d: %s", i, err)
+		if err != nil || test.err != "" {
+			if test.err == "" || !testutils.IsError(err, test.err) {
+				t.Errorf("%d: %v (expected: %s)", i, err, test.err)
+			}
+			continue
 		}
 		var reqs int
 		for j, arg := range ba.Requests {

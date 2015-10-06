@@ -54,6 +54,7 @@ func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to 
 		}
 		header := args.Header()
 		if !roachpb.IsRange(args) {
+			// This is a point request.
 			if len(header.EndKey) > 0 {
 				return false, nil, util.Errorf("%T is not a range command, but EndKey is set", args)
 			}
@@ -62,17 +63,32 @@ func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to 
 			}
 			return false, nil, nil
 		}
+		// We're dealing with a range-spanning request.
 		var undo []func()
-		key, endKey := header.Key, header.EndKey
-		keyAddr, endKeyAddr := keys.Addr(key), keys.Addr(endKey)
+		keyAddr, endKeyAddr := keys.Addr(header.Key), keys.Addr(header.EndKey)
+		if l, r := !keyAddr.Equal(header.Key), !endKeyAddr.Equal(header.EndKey); l || r {
+			if !desc.ContainsKeyRange(keyAddr, endKeyAddr) {
+				return false, nil, util.Errorf("local key range must not span ranges")
+			}
+			if !l || !r {
+				return false, nil, util.Errorf("local key mixed with global key in range")
+			}
+		}
+		// Below, {end,}keyAddr equals header.{End,}Key, so nothing is local.
 		if keyAddr.Less(from) {
-			undo = append(undo, func() { header.Key = key })
-			header.Key = from.Key()
+			{
+				origKey := header.Key
+				undo = append(undo, func() { header.Key = origKey })
+			}
+			header.Key = from.AsRawKey() // "from" can't be local
 			keyAddr = from
 		}
 		if !endKeyAddr.Less(to) {
-			undo = append(undo, func() { header.EndKey = endKey })
-			header.EndKey = to.Key()
+			{
+				origEndKey := header.EndKey
+				undo = append(undo, func() { header.EndKey = origEndKey })
+			}
+			header.EndKey = to.AsRawKey() // "to" can't be local
 			endKeyAddr = to
 		}
 		// Check whether the truncation has left any keys in the range. If not,
