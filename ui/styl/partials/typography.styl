@@ -40,32 +40,32 @@ $font-size-table = {
 modular-font-size($font-size)
   font-size: remove-unit($font-size-table[$font-size]/$root-size) rem
 
-// Using the same strategy as sassline: establish the root size (rems) as 1/2
+// Using the same strategy as sassline establish the root size (rems) as 1/2
 // of our chosen baseline heigth. This allows easy, integer math for baseline units
 // using rems.
 html
-  font-size: $root-size
+  font-size $root-size
 
 body
-  line-height: 2rem
-  font-size: $font-base-size 
-  font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, sans-serif
-  font-weight: 400
+  line-height 2rem
+  font-size $font-base-size
+  font-family 'Source Sans Pro', 'Helvetica Neue', Helvetica, sans-serif
+  font-weight 400
 
 h1
   modular-font-size '3'
-  line-height: 4rem
-  font-weight: 600
+  line-height 4rem
+  font-weight 600
 
 h2
   modular-font-size '3'
-  line-height: 4rem
-  font-weight: 500
+  line-height 4rem
+  font-weight 500
 
 h3
   modular-font-size '1'
-  line-height: 2rem
-  font-weight: 600
+  line-height 2rem
+  font-weight 600
 
 @require '../modules/fonts.styl'
 
