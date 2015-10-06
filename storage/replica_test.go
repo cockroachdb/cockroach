@@ -2896,10 +2896,10 @@ func TestRangeLookup(t *testing.T) {
 		{key: roachpb.RKeyMin, reverse: false, expected: expected},
 		// Test with the last key in a meta prefix. This is an edge case in the
 		// implementation.
-		{key: keys.Meta1KeyMax, reverse: false, expected: expected},
-		{key: keys.Meta2KeyMax, reverse: false, expected: nil},
-		{key: keys.Meta1KeyMax, reverse: true, expected: expected},
-		{key: keys.Meta2KeyMax, reverse: true, expected: expected},
+		{key: keys.Addr(keys.Meta1KeyMax), reverse: false, expected: expected},
+		{key: keys.Addr(keys.Meta2KeyMax), reverse: false, expected: nil},
+		{key: keys.Addr(keys.Meta1KeyMax), reverse: true, expected: expected},
+		{key: keys.Addr(keys.Meta2KeyMax), reverse: true, expected: expected},
 	}
 
 	for _, c := range testCases {

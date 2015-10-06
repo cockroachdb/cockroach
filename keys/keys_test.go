@@ -37,7 +37,7 @@ func TestKeySorting(t *testing.T) {
 		roachpb.RKey("\x01").Less(roachpb.RKey("\x01\x00"))) {
 		t.Fatalf("something is seriously wrong with this machine")
 	}
-	if bytes.Compare(LocalPrefix, MetaPrefix) >= 0 {
+	if bytes.Compare(localPrefix, MetaPrefix) >= 0 {
 		t.Fatalf("local key spilling into replicated ranges")
 	}
 	if !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) || !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) {
@@ -194,7 +194,7 @@ func TestMetaReverseScanBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
-		key              roachpb.RKey
+		key              []byte
 		expStart, expEnd []byte
 		expError         string
 	}{
@@ -265,7 +265,7 @@ func TestMetaReverseScanBounds(t *testing.T) {
 func TestValidateRangeMetaKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key    roachpb.RKey
+		key    []byte
 		expErr bool
 	}{
 		{roachpb.RKeyMin, false},

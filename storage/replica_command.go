@@ -613,7 +613,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 			return &r, nil
 		}
 
-		if key.Less(keys.Meta2KeyMax) {
+		if key.Less(keys.Addr(keys.Meta2KeyMax)) {
 			startKey, endKey, err := keys.MetaScanBounds(key)
 			if err != nil {
 				return reply, nil, err

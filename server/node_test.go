@@ -118,7 +118,7 @@ func TestBootstrapCluster(t *testing.T) {
 	defer stopper.Stop()
 
 	// Scan the complete contents of the local database.
-	rows, err := localDB.Scan(keys.LocalPrefix.PrefixEnd(), roachpb.KeyMax, 0)
+	rows, err := localDB.Scan(keys.LocalMax, roachpb.KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
