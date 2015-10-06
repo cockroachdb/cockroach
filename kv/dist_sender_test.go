@@ -552,8 +552,8 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
 		if !newRangeDescriptor.StartKey.Equal(goodStartKey) {
-			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: key.Key(),
-				RequestEndKey: endKey.Key()}
+			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: key.AsRawKey(),
+				RequestEndKey: endKey.AsRawKey()}
 		}
 		return []proto.Message{ba.CreateReply()}, nil
 	}
@@ -737,7 +737,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		batchReply.Add(reply)
 		results := []roachpb.KeyValue{}
 		for _, curKV := range existingKVs {
-			if key.Key().Less(curKV.Key.Next()) && curKV.Key.Less(endKey.Key()) {
+			if key.Less(keys.Addr(curKV.Key).Next()) && keys.Addr(curKV.Key).Less(endKey) {
 				results = append(results, curKV)
 			}
 		}

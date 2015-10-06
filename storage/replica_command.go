@@ -453,14 +453,12 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 // some similar things.
 func intersectIntent(intent roachpb.Intent, desc roachpb.RangeDescriptor) (middle *roachpb.Intent, outside []roachpb.Intent) {
 	start, end := desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey()
-	if !intent.Key.Less(intent.EndKey) {
+	if len(intent.EndKey) == 0 {
+		outside = append(outside, intent)
 		return
 	}
-	if !start.Less(end) {
-		panic("can not intersect with empty key range")
-	}
-	if intent.Key.Less(keys.LocalRangeMax) {
-		if !intent.EndKey.Less(keys.LocalRangeMax) {
+	if bytes.Compare(intent.Key, keys.LocalRangeMax) < 0 {
+		if bytes.Compare(intent.EndKey, keys.LocalRangeMax) >= 0 {
 			panic("a local intent range may not have a non-local portion")
 		}
 		if containsKeyRange(desc, intent.Key, intent.EndKey) {
@@ -470,25 +468,25 @@ func intersectIntent(intent roachpb.Intent, desc roachpb.RangeDescriptor) (middl
 	}
 	// From now on, we're dealing with plain old key ranges - no more local
 	// addressing.
-	if intent.Key.Less(start) {
+	if bytes.Compare(intent.Key, start) < 0 {
 		// Intent spans a part to the left of [start, end).
 		iCopy := intent
-		if start.Less(intent.EndKey) {
+		if bytes.Compare(start, intent.EndKey) < 0 {
 			iCopy.EndKey = start
 		}
 		intent.Key = iCopy.EndKey
 		outside = append(outside, iCopy)
 	}
-	if intent.Key.Less(intent.EndKey) && end.Less(intent.EndKey) {
+	if bytes.Compare(intent.Key, intent.EndKey) < 0 && bytes.Compare(end, intent.EndKey) < 0 {
 		// Intent spans a part to the right of [start, end).
 		iCopy := intent
-		if iCopy.Key.Less(end) {
+		if bytes.Compare(iCopy.Key, end) < 0 {
 			iCopy.Key = end
 		}
 		intent.EndKey = iCopy.Key
 		outside = append(outside, iCopy)
 	}
-	if intent.Key.Less(intent.EndKey) && !intent.Key.Less(start) && !end.Less(intent.EndKey) {
+	if bytes.Compare(intent.Key, intent.EndKey) < 0 && bytes.Compare(intent.Key, start) >= 0 && bytes.Compare(end, intent.EndKey) >= 0 {
 		middle = &intent
 	}
 	return

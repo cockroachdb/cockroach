@@ -337,7 +337,8 @@ func MakeTablePrefix(tableID uint32) []byte {
 }
 
 // Range returns a key range encompassing all the keys in the Batch.
-// TODO(tschottdorf): ideally method on *BatchRequest. See #2198.
+// TODO(tschottdorf): there is no protection for doubly-local keys here;
+// maybe Range should return an error.
 func Range(ba roachpb.BatchRequest) (roachpb.RKey, roachpb.RKey) {
 	from := roachpb.RKeyMax
 	to := roachpb.RKeyMin

@@ -249,8 +249,8 @@ func TestReplicateRange(t *testing.T) {
 		meta1 := keys.Addr(keys.RangeMetaKey(meta2))
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
-			if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), key.Key(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {
-				return util.Errorf("failed to resolve %s", key.Key())
+			if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {
+				return util.Errorf("failed to resolve %s", key.AsRawKey())
 			}
 			if !reflect.DeepEqual(metaDesc, desc) {
 				return util.Errorf("descs not equal: %+v != %+v", metaDesc, desc)

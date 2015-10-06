@@ -103,7 +103,7 @@ type keySlice []roachpb.Key
 
 func (s keySlice) Len() int           { return len(s) }
 func (s keySlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s keySlice) Less(i, j int) bool { return s[i].Less(s[j]) }
+func (s keySlice) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
 
 // TestBootstrapCluster verifies the results of bootstrapping a
 // cluster. Uses an in memory engine.

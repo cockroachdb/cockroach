@@ -33,8 +33,8 @@ import (
 func TestKeySorting(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Reminder: Increasing the last byte by one < adding a null byte.
-	if !(roachpb.Key("").Less(roachpb.Key("\x00")) && roachpb.Key("\x00").Less(roachpb.Key("\x01")) &&
-		roachpb.Key("\x01").Less(roachpb.Key("\x01\x00"))) {
+	if !(roachpb.RKey("").Less(roachpb.RKey("\x00")) && roachpb.RKey("\x00").Less(roachpb.RKey("\x01")) &&
+		roachpb.RKey("\x01").Less(roachpb.RKey("\x01\x00"))) {
 		t.Fatalf("something is seriously wrong with this machine")
 	}
 	if bytes.Compare(LocalPrefix, MetaPrefix) >= 0 {

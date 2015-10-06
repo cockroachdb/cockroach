@@ -1843,11 +1843,11 @@ func TestEndTransactionGC(t *testing.T) {
 		// Two intents inside.
 		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: roachpb.Key("b")}}, true},
 		// Intent range spilling over right endpoint.
-		{[]roachpb.Intent{{Key: roachpb.Key("a"), EndKey: splitKey.Next().Key()}}, false},
+		{[]roachpb.Intent{{Key: roachpb.Key("a"), EndKey: splitKey.Next().AsRawKey()}}, false},
 		// Intent range completely outside.
-		{[]roachpb.Intent{{Key: splitKey.Key(), EndKey: roachpb.Key("q")}}, false},
+		{[]roachpb.Intent{{Key: splitKey.AsRawKey(), EndKey: roachpb.Key("q")}}, false},
 		// Intent inside and outside.
-		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: splitKey.Key()}}, false},
+		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: splitKey.AsRawKey()}}, false},
 	} {
 		txn := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
 		args, h := endTxnArgs(txn, true)
@@ -1876,7 +1876,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
-		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.Key()) {
+		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
 			return util.Errorf("boom")
 		}
 		return nil
@@ -1895,14 +1895,14 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pArgs = putArgs(splitKey.Key(), []byte("value"))
+	pArgs = putArgs(splitKey.AsRawKey(), []byte("value"))
 	if _, err := client.SendWrappedWith(newRng, newRng.context(), h, &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// End the transaction and resolve the intents.
 	args, h := endTxnArgs(txn, true /* commit */)
-	args.Intents = []roachpb.Intent{{Key: key, EndKey: splitKey.Next().Key()}}
+	args.Intents = []roachpb.Intent{{Key: key, EndKey: splitKey.Next().AsRawKey()}}
 	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -2905,7 +2905,7 @@ func TestRangeLookup(t *testing.T) {
 	for _, c := range testCases {
 		resp, err := client.SendWrapped(tc.Sender(), nil, &roachpb.RangeLookupRequest{
 			Span: roachpb.Span{
-				Key: c.key.Key(),
+				Key: c.key.AsRawKey(),
 			},
 			MaxRanges: 1,
 			Reverse:   c.reverse,
@@ -3063,7 +3063,7 @@ func TestIntentIntersect(t *testing.T) {
 		from, to string
 		exp      []string
 	}{
-		{intent: iPt, from: "", to: "z", exp: []string{"", ""}},
+		{intent: iPt, from: "", to: "z", exp: []string{"", "", "asd", ""}},
 
 		{intent: iRn, from: "", to: "a", exp: []string{"", "", "c", "x"}},
 		{intent: iRn, from: "", to: "c", exp: []string{"", "", "c", "x"}},

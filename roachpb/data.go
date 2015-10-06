@@ -56,11 +56,6 @@ var (
 // RKey denotes a Key whose local addressing has been accounted for.
 type RKey Key
 
-// Key returns the RKey as a Key.
-func (rk RKey) Key() Key {
-	return Key(rk)
-}
-
 // AsRawKey returns the RKey as a Key. This is to be used only in select
 // situations in which an RKey is known to not contain a wrapped locally-
 // addressed Key. Whenever the Key which created the RKey is still available,
@@ -71,17 +66,17 @@ func (rk RKey) AsRawKey() Key {
 
 // Less compares two RKeys.
 func (rk RKey) Less(otherRK RKey) bool {
-	return rk.Key().Less(otherRK.Key())
+	return bytes.Compare(rk, otherRK) < 0
 }
 
 // Equal checks for byte-wise equality.
 func (rk RKey) Equal(other []byte) bool {
-	return bytes.Compare(rk, other) == 0
+	return bytes.Equal(rk, other)
 }
 
 // Next returns the RKey that sorts immediately after the given one.
 func (rk RKey) Next() RKey {
-	return RKey(rk.Key().Next())
+	return RKey(bytesNext(rk))
 }
 
 // PrefixEnd determines the end key given key as a prefix, that is the
@@ -148,9 +143,8 @@ func (k Key) IsPrev(m Key) bool {
 }
 
 // Next returns the next key in lexicographic sort order.
-// TODO(tschottdorf): duplicate code with (Key).Next().
 func (k EncodedKey) Next() EncodedKey {
-	return EncodedKey(bytes.Join([][]byte{k, Key{0}}, nil))
+	return EncodedKey(bytesNext(k))
 }
 
 // PrefixEnd determines the end key given key as a prefix, that is the
@@ -171,13 +165,6 @@ func (k EncodedKey) PrefixEnd() EncodedKey {
 		return EncodedKey(RKeyMax)
 	}
 	return EncodedKey(bytesPrefixEnd(k))
-}
-
-// Less compares two keys.
-// TODO(tschottdorf): see whether we actually need this. We shouldn't be
-// comparing keys whose local addressing isn't resolved.
-func (k Key) Less(l Key) bool {
-	return bytes.Compare(k, l) < 0
 }
 
 // Less compares two keys.

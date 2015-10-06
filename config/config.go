@@ -132,7 +132,7 @@ func (s *SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 
 	l := len(s.Values)
 	index := sort.Search(l, func(i int) bool {
-		return !s.Values[i].Key.Less(key)
+		return bytes.Compare(s.Values[i].Key, key) >= 0
 	})
 	if index == l || !key.Equal(s.Values[index].Key) {
 		return 0, false
@@ -159,7 +159,7 @@ func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
 	// the descriptor table.
 	key := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID + 1))
 	index := sort.Search(len(s.Values), func(i int) bool {
-		return !s.Values[i].Key.Less(key)
+		return bytes.Compare(s.Values[i].Key, key) >= 0
 	})
 
 	if index == 0 {

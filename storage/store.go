@@ -115,7 +115,7 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(start); err != nil {
 		return err
 	}
-	if !start.Less(roachpb.KeyMax) {
+	if bytes.Compare(start, roachpb.KeyMax) >= 0 {
 		return util.Errorf("start key %q must be less than KeyMax", start)
 	}
 	if !checkEndKey {
@@ -130,20 +130,23 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(end); err != nil {
 		return err
 	}
-	if roachpb.KeyMax.Less(end) {
+	if bytes.Compare(roachpb.KeyMax, end) < 0 {
 		return util.Errorf("end key %q must be less than or equal to KeyMax", end)
 	}
-	if !start.Less(end) {
-		return util.Errorf("end key %q must be greater than start %q", end, start)
-	}
-	if bytes.HasPrefix(start, keys.LocalRangePrefix) {
-		if !bytes.HasPrefix(end, keys.LocalRangePrefix) {
-			return util.Errorf("start key is range-local, but end key is not")
+	{
+		sAddr, eAddr := keys.Addr(start), keys.Addr(end)
+		if !sAddr.Less(eAddr) {
+			return util.Errorf("end key %q must be greater than start %q", end, start)
 		}
-	} else if start.Less(keys.LocalMax) {
-		// It's a range op, not local but somehow plows through local data -
-		// not cool.
-		return util.Errorf("start key in [%q,%q) must be greater than LocalMax", start, end)
+		if !bytes.Equal(sAddr, start) {
+			if bytes.Equal(eAddr, end) {
+				return util.Errorf("start key is range-local, but end key is not")
+			}
+		} else if bytes.Compare(start, keys.LocalMax) < 0 {
+			// It's a range op, not local but somehow plows through local data -
+			// not cool.
+			return util.Errorf("start key in [%q,%q) must be greater than LocalMax", start, end)
+		}
 	}
 
 	return nil

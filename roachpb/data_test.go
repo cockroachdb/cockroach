@@ -35,7 +35,7 @@ func TestKeyNext(t *testing.T) {
 	if a.Equal(aNext) {
 		t.Errorf("expected key not equal to next")
 	}
-	if !a.Less(aNext) {
+	if bytes.Compare(a, aNext) >= 0 {
 		t.Errorf("expected next key to be greater")
 	}
 
@@ -60,10 +60,10 @@ func TestKeyPrefixEnd(t *testing.T) {
 	a := Key("a1")
 	aNext := a.Next()
 	aEnd := a.PrefixEnd()
-	if !a.Less(aEnd) {
+	if bytes.Compare(a, aEnd) >= 0 {
 		t.Errorf("expected end key to be greater")
 	}
-	if !aNext.Less(aEnd) {
+	if bytes.Compare(aNext, aEnd) >= 0 {
 		t.Errorf("expected end key to be greater than next")
 	}
 
@@ -111,7 +111,7 @@ func TestKeyLess(t *testing.T) {
 		{Key("a\x00"), Key("a\x01"), true},
 	}
 	for i, c := range testCases {
-		if c.a.Less(c.b) != c.less {
+		if (bytes.Compare(c.a, c.b) < 0) != c.less {
 			t.Fatalf("%d: unexpected %q < %q: %t", i, c.a, c.b, c.less)
 		}
 	}

@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"sort"
@@ -41,7 +42,7 @@ type metaSlice []metaRecord
 // Implementation of sort.Interface.
 func (ms metaSlice) Len() int           { return len(ms) }
 func (ms metaSlice) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
-func (ms metaSlice) Less(i, j int) bool { return ms[i].key.Less(ms[j].key) }
+func (ms metaSlice) Less(i, j int) bool { return bytes.Compare(ms[i].key, ms[j].key) < 0 }
 
 func meta1Key(key roachpb.RKey) []byte {
 	return keys.MakeKey(keys.Meta1Prefix, key)

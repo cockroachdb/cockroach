@@ -105,7 +105,7 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	key, endKey := keys.Range(ba)
 	rng := db.store.LookupReplica(key, endKey)
 	if rng == nil {
-		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(key.Key(), endKey.Key(), nil))
+		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(key.AsRawKey(), endKey.AsRawKey(), nil))
 	}
 	ba.RangeID = rng.Desc().RangeID
 	replica := rng.GetReplica()
