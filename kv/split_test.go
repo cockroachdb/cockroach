@@ -47,8 +47,8 @@ func setTestRetryOptions() {
 
 // startTestWriter creates a writer which initiates a sequence of
 // transactions, each which writes up to 10 times to random keys with
-// random values. If not nil, txnChannel is written to every time a
-// new transaction starts.
+// random values. If not nil, txnChannel is written to non-blockingly
+// every time a new transaction starts.
 func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup, retries *int32,
 	txnChannel chan struct{}, done <-chan struct{}, t *testing.T) {
 	src := rand.New(rand.NewSource(i))
@@ -66,7 +66,10 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 			first := true
 			err := db.Txn(func(txn *client.Txn) error {
 				if first && txnChannel != nil {
-					txnChannel <- struct{}{}
+					select {
+					case txnChannel <- struct{}{}:
+					default:
+					}
 				} else if !first && retries != nil {
 					atomic.AddInt32(retries, 1)
 				}
