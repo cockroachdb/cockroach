@@ -209,18 +209,20 @@ func TestSumRateInterpolation(t *testing.T) {
 
 // assertQuery generates a query result from the local test model and compares
 // it against the query returned from the server.
-func (tm *testModel) assertQuery(name string, agg *TimeSeriesQueryAggregator,
+func (tm *testModel) assertQuery(name string, sources []string, agg *TimeSeriesQueryAggregator,
 	r Resolution, start, end int64, expectedDatapointCount int, expectedSourceCount int) {
 	// Query the actual server.
 	q := TimeSeriesQueryRequest_Query{
 		Name:       name,
 		Aggregator: agg,
+		Sources:    sources,
 	}
 	actualDatapoints, actualSources, err := tm.DB.Query(q, r, start, end)
 	if err != nil {
 		tm.t.Fatal(err)
 	}
 	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
+		tm.t.Logf("actual datapoints: %v", actualDatapoints)
 		tm.t.Fatalf("query expected %d datapoints, got %d", e, a)
 	}
 	if a, e := len(actualSources), expectedSourceCount; a != e {
@@ -232,8 +234,20 @@ func (tm *testModel) assertQuery(name string, agg *TimeSeriesQueryAggregator,
 	expectedSources := make([]string, 0, 0)
 	dataSpans := make(map[string]*dataSpan)
 
+	// If no specific sources were provided, look for data from every source
+	// encountered by the test model.
+	var sourcesToCheck map[string]struct{}
+	if len(sources) == 0 {
+		sourcesToCheck = tm.seenSources
+	} else {
+		sourcesToCheck = make(map[string]struct{})
+		for _, s := range sources {
+			sourcesToCheck[s] = struct{}{}
+		}
+	}
+
 	// Iterate over all possible sources which may have data for this query.
-	for sourceName := range tm.seenSources {
+	for sourceName := range sourcesToCheck {
 		// Iterate over all possible key times at which query data may be present.
 		for time := start - (start % r.KeyDuration()); time < end; time += r.KeyDuration() {
 			// Construct a key for this source/time and retrieve it from model.
@@ -318,7 +332,7 @@ func TestQuery(t *testing.T) {
 	})
 	tm.assertKeyCount(4)
 	tm.assertModelCorrect()
-	tm.assertQuery("test.metric", nil, resolution1ns, 0, 60, 7, 1)
+	tm.assertQuery("test.metric", nil, nil, resolution1ns, 0, 60, 7, 1)
 
 	// Verify across multiple sources
 	tm.storeTimeSeriesData(resolution1ns, []TimeSeriesData{
@@ -346,10 +360,69 @@ func TestQuery(t *testing.T) {
 
 	tm.assertKeyCount(11)
 	tm.assertModelCorrect()
-	tm.assertQuery("test.multimetric", nil, resolution1ns, 0, 90, 8, 2)
-	tm.assertQuery("test.multimetric", TimeSeriesQueryAggregator_AVG.Enum(),
+	tm.assertQuery("test.multimetric", nil, nil, resolution1ns, 0, 90, 8, 2)
+	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_AVG.Enum(),
 		resolution1ns, 0, 90, 8, 2)
-	tm.assertQuery("test.multimetric", TimeSeriesQueryAggregator_AVG_RATE.Enum(),
+	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_AVG_RATE.Enum(),
 		resolution1ns, 0, 90, 8, 2)
-	tm.assertQuery("nodata", nil, resolution1ns, 0, 90, 0, 0)
+	tm.assertQuery("nodata", nil, nil, resolution1ns, 0, 90, 0, 0)
+
+	// Verify querying specific sources, thus excluding other available sources
+	// in the same time period.
+	tm.storeTimeSeriesData(resolution1ns, []TimeSeriesData{
+		{
+			Name:   "test.specificmetric",
+			Source: "source1",
+			Datapoints: []*TimeSeriesDatapoint{
+				datapoint(1, 9999),
+				datapoint(11, 9999),
+				datapoint(21, 9999),
+				datapoint(31, 9999),
+			},
+		},
+		{
+			Name:   "test.specificmetric",
+			Source: "source2",
+			Datapoints: []*TimeSeriesDatapoint{
+				datapoint(2, 10),
+				datapoint(12, 15),
+				datapoint(22, 25),
+				datapoint(32, 60),
+			},
+		},
+		{
+			Name:   "test.specificmetric",
+			Source: "source3",
+			Datapoints: []*TimeSeriesDatapoint{
+				datapoint(3, 9999),
+				datapoint(13, 9999),
+				datapoint(23, 9999),
+				datapoint(33, 9999),
+			},
+		},
+		{
+			Name:   "test.specificmetric",
+			Source: "source4",
+			Datapoints: []*TimeSeriesDatapoint{
+				datapoint(4, 15),
+				datapoint(14, 45),
+				datapoint(24, 60),
+				datapoint(32, 100),
+			},
+		},
+		{
+			Name:   "test.specificmetric",
+			Source: "source5",
+			Datapoints: []*TimeSeriesDatapoint{
+				datapoint(5, 9999),
+				datapoint(15, 9999),
+				datapoint(25, 9999),
+				datapoint(35, 9999),
+			},
+		},
+	})
+
+	tm.assertKeyCount(31)
+	tm.assertModelCorrect()
+	tm.assertQuery("test.specificmetric", []string{"source2", "source4", "source6"}, nil, resolution1ns, 0, 90, 7, 2)
 }
