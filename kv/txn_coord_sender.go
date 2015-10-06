@@ -616,6 +616,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.GetTxn())
 	err := pErr.GoError()
+	// TODO(bdarnell): We're writing to errors here (and where using ErrorWithIndex);
+	// since there's no concept of ownership copy-on-write is always preferable.
 	switch t := err.(type) {
 	case nil:
 		newTxn.Update(br.GetTxn())
