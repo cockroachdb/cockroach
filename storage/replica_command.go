@@ -568,7 +568,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 		}
 
 		// Scan for descriptors.
-		kvs, intents, err = engine.MVCCScan(batch, startKey.Key(), endKey.Key(), rangeCount,
+		kvs, intents, err = engine.MVCCScan(batch, startKey, endKey, rangeCount,
 			ts, consistent, h.Txn)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.
@@ -616,7 +616,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 				return reply, nil, err
 			}
 
-			kvs, intents, err = engine.MVCCScan(batch, startKey.Key(), endKey.Key(), 1,
+			kvs, intents, err = engine.MVCCScan(batch, startKey, endKey, 1,
 				ts, consistent, h.Txn)
 			if err != nil {
 				return reply, nil, err

@@ -129,7 +129,7 @@ func TestMetaScanBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
-		key, expStart, expEnd roachpb.RKey
+		key, expStart, expEnd []byte
 		expError              string
 	}{
 		{

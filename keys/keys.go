@@ -274,7 +274,8 @@ func validateRangeMetaKey(key roachpb.RKey) error {
 // MetaScanBounds returns the range [start,end) within which the desired meta
 // record can be found by means of an engine scan. The given key must be a
 // valid RangeMetaKey as defined by validateRangeMetaKey.
-func MetaScanBounds(key roachpb.RKey) (roachpb.RKey, roachpb.RKey, error) {
+// TODO(tschottdorf): too much casting going on inside.
+func MetaScanBounds(key roachpb.RKey) (roachpb.Key, roachpb.Key, error) {
 	if err := validateRangeMetaKey(key); err != nil {
 		return nil, nil, err
 	}
@@ -285,15 +286,15 @@ func MetaScanBounds(key roachpb.RKey) (roachpb.RKey, roachpb.RKey, error) {
 
 	if key.Equal(roachpb.RKeyMin) {
 		// Special case KeyMin: find the first entry in meta1.
-		return Meta1Prefix, Meta1Prefix.PrefixEnd(), nil
+		return roachpb.Key(Meta1Prefix), roachpb.Key(Meta1Prefix.PrefixEnd()), nil
 	}
 	if key.Equal(Meta1KeyMax) {
 		// Special case Meta1KeyMax: this is the last key in Meta1, we don't want
 		// to start at Next().
-		return key, Meta1Prefix.PrefixEnd(), nil
+		return roachpb.Key(Meta1KeyMax), roachpb.Key(Meta1Prefix.PrefixEnd()), nil
 	}
 	// Otherwise find the first entry greater than the given key in the same meta prefix.
-	return key.Next(), roachpb.RKey(key[:len(Meta1Prefix)].PrefixEnd()), nil
+	return roachpb.Key(key.Next()), roachpb.Key(key[:len(Meta1Prefix)].PrefixEnd()), nil
 }
 
 // MetaReverseScanBounds returns the range [start,end) within which the desired
