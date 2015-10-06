@@ -93,13 +93,13 @@ func TestNodeStatusRecorder(t *testing.T) {
 	}
 	desc1 := &roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: roachpb.Key("a"),
-		EndKey:   roachpb.Key("b"),
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("b"),
 	}
 	desc2 := &roachpb.RangeDescriptor{
 		RangeID:  2,
-		StartKey: roachpb.Key("b"),
-		EndKey:   roachpb.Key("c"),
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("c"),
 	}
 	stats := engine.MVCCStats{
 		LiveBytes:       1,

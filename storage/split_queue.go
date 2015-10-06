@@ -97,7 +97,7 @@ func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
 	if len(splitKeys) > 0 {
 		log.Infof("splitting %s at keys %v", rng, splitKeys)
 		for _, splitKey := range splitKeys {
-			if err := sq.db.AdminSplit(splitKey); err != nil {
+			if err := sq.db.AdminSplit(splitKey.AsRawKey()); err != nil {
 				return util.Errorf("unable to split %s at key %q: %s", rng, splitKey, err)
 			}
 		}
@@ -113,7 +113,7 @@ func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
 	if float64(rng.stats.GetSize())/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof("splitting %s size=%d max=%d", rng, rng.stats.GetSize(), zone.RangeMaxBytes)
 		if _, err = client.SendWrapped(rng, rng.context(), &roachpb.AdminSplitRequest{
-			RequestHeader: roachpb.RequestHeader{Key: desc.StartKey},
+			Span: roachpb.Span{Key: desc.StartKey.AsRawKey()},
 		}); err != nil {
 			return err
 		}

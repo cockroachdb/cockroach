@@ -52,8 +52,8 @@ import (
 func testRangeDescriptor() *roachpb.RangeDescriptor {
 	return &roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: roachpb.KeyMin,
-		EndKey:   roachpb.KeyMax,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
 		Replicas: []roachpb.ReplicaDescriptor{
 			{
 				ReplicaID: 1,
@@ -223,7 +223,7 @@ func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	return roachpb.NewTransaction(name, keys.KeyAddress(baseKey), userPriority,
+	return roachpb.NewTransaction(name, baseKey, userPriority,
 		isolation, now, offset)
 }
 
@@ -246,8 +246,8 @@ func TestRangeContains(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	desc := &roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: roachpb.Key("a"),
-		EndKey:   roachpb.Key("b"),
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("b"),
 	}
 
 	stopper := stop.NewStopper()
@@ -323,7 +323,7 @@ func TestRangeReadConsistency(t *testing.T) {
 
 	// Try a consensus read and verify error.
 
-	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		ReadConsistency: roachpb.CONSENSUS,
 	}, &gArgs); err == nil {
 		t.Errorf("expected error on consensus read")
@@ -332,7 +332,7 @@ func TestRangeReadConsistency(t *testing.T) {
 	// Try an inconsistent read within a transaction.
 	txn := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
 
-	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		Txn:             txn,
 		ReadConsistency: roachpb.INCONSISTENT,
 	}, &gArgs); err == nil {
@@ -354,14 +354,14 @@ func TestRangeReadConsistency(t *testing.T) {
 	})
 
 	// Send without Txn.
-	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		ReadConsistency: roachpb.CONSISTENT,
 	}, &gArgs)
 	if _, ok := err.(*roachpb.NotLeaderError); !ok {
 		t.Errorf("expected not leader error; got %s", err)
 	}
 
-	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		ReadConsistency: roachpb.INCONSISTENT,
 	}, &gArgs); err != nil {
 		t.Errorf("expected success reading with inconsistent: %s", err)
@@ -425,7 +425,7 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	splitTestRange(tc.store, roachpb.Key("a"), roachpb.Key("a"), t)
+	splitTestRange(tc.store, roachpb.RKey("a"), roachpb.RKey("a"), t)
 	gArgs := getArgs(roachpb.Key("b"))
 
 	_, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &gArgs)
@@ -522,22 +522,22 @@ func TestRangeNotLeaderError(t *testing.T) {
 		},
 	})
 
-	header := roachpb.RequestHeader{
+	header := roachpb.Span{
 		Key: roachpb.Key("a"),
 	}
 	testCases := []roachpb.Request{
 		// Admin split covers admin commands.
 		&roachpb.AdminSplitRequest{
-			RequestHeader: header,
-			SplitKey:      roachpb.Key("a"),
+			Span:     header,
+			SplitKey: roachpb.Key("a"),
 		},
 		// Get covers read-only commands.
 		&roachpb.GetRequest{
-			RequestHeader: header,
+			Span: header,
 		},
 		// Put covers read-write commands.
 		&roachpb.PutRequest{
-			RequestHeader: header,
+			Span: header,
 			Value: roachpb.Value{
 				Bytes: []byte("value"),
 			},
@@ -545,7 +545,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: now}, test)
+		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: now}, test)
 
 		if _, ok := err.(*roachpb.NotLeaderError); !ok {
 			t.Errorf("%d: expected not leader error: %s", i, err)
@@ -782,7 +782,7 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 
-	var hs [3]roachpb.BatchRequest_Header
+	var hs [3]roachpb.Header
 
 	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
 	req1 := putArgs(key, []byte("foo"))
@@ -823,7 +823,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 
 	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
 	req1 := putArgs(key, nil)
-	if _, err := client.SendWrappedWith(tc.Sender(), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(tc.Sender(), nil, roachpb.Header{
 		Txn: txn,
 	}, &req1); err != nil {
 		t.Fatal(err)
@@ -835,7 +835,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	}
 	// Execute a get to resolve the intent.
 	req3 := getArgs(key)
-	if _, err := client.SendWrappedWith(tc.Sender(), nil, roachpb.BatchRequest_Header{Timestamp: txn.Timestamp}, &req3); err != nil {
+	if _, err := client.SendWrappedWith(tc.Sender(), nil, roachpb.Header{Timestamp: txn.Timestamp}, &req3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -864,7 +864,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 // the default replica for the specified key.
 func getArgs(key []byte) roachpb.GetRequest {
 	return roachpb.GetRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 	}
@@ -874,7 +874,7 @@ func getArgs(key []byte) roachpb.GetRequest {
 // the default replica for the specified key / value.
 func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 	return roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 		Value: roachpb.Value{
@@ -886,7 +886,7 @@ func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 // deleteArgs returns a DeleteRequest and DeleteResponse pair.
 func deleteArgs(key roachpb.Key) roachpb.DeleteRequest {
 	return roachpb.DeleteRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 	}
@@ -908,7 +908,7 @@ func readOrWriteArgs(key roachpb.Key, read bool) roachpb.Request {
 // addressed to the default replica for the specified key / value.
 func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
 	return roachpb.IncrementRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 		Increment: inc,
@@ -917,7 +917,7 @@ func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
 
 func scanArgs(start, end []byte) roachpb.ScanRequest {
 	return roachpb.ScanRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key:    start,
 			EndKey: end,
 		},
@@ -926,10 +926,10 @@ func scanArgs(start, end []byte) roachpb.ScanRequest {
 
 // endTxnArgs returns a request and header for an EndTransaction RPC for the
 // specified key.
-func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransactionRequest, h roachpb.BatchRequest_Header) {
+func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransactionRequest, h roachpb.Header) {
 	h.Txn = txn
 	return roachpb.EndTransactionRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: txn.Key, // not allowed when going through TxnCoordSender, but we're not
 		},
 		Commit: commit,
@@ -940,7 +940,7 @@ func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransaction
 // specified key.
 func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType) roachpb.PushTxnRequest {
 	return roachpb.PushTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: pushee.Key,
 		},
 		Now:       pusher.Timestamp,
@@ -952,10 +952,10 @@ func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnTy
 }
 
 // heartbeatArgs returns request/response pair for HeartbeatTxn RPC.
-func heartbeatArgs(txn *roachpb.Transaction) (_ roachpb.HeartbeatTxnRequest, h roachpb.BatchRequest_Header) {
+func heartbeatArgs(txn *roachpb.Transaction) (_ roachpb.HeartbeatTxnRequest, h roachpb.Header) {
 	h.Txn = txn
 	return roachpb.HeartbeatTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: txn.Key,
 		},
 	}, h
@@ -966,7 +966,7 @@ func heartbeatArgs(txn *roachpb.Transaction) (_ roachpb.HeartbeatTxnRequest, h r
 // contain the given roachpb.Value.
 func internalMergeArgs(key []byte, value roachpb.Value) roachpb.MergeRequest {
 	return roachpb.MergeRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 		Value: value,
@@ -1017,7 +1017,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		tc.manualClock.Set(int64(DefaultLeaderLeaseDuration + 1000))
 
 		ts := tc.clock.Now()
-		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: ts}, test); err != nil {
+		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, test); err != nil {
 			t.Fatal(err)
 		}
 		if held, expired := hasLease(tc.rng, ts); !held || expired {
@@ -1048,7 +1048,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	gArgs := getArgs([]byte("a"))
 	ts := tc.clock.Now()
 
-	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: ts}, &gArgs)
+	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, &gArgs)
 
 	if err != nil {
 		t.Error(err)
@@ -1059,7 +1059,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	pArgs := putArgs([]byte("b"), []byte("1"))
 	ts = tc.clock.Now()
 
-	_, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: ts}, &pArgs)
+	_, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, &pArgs)
 
 	if err != nil {
 		t.Error(err)
@@ -1096,7 +1096,7 @@ func TestRangeCommandQueue(t *testing.T) {
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
 	defer close(blockingDone) // make sure teardown can happen
-	TestingCommandFilter = func(_ roachpb.Request, h roachpb.BatchRequest_Header) error {
+	TestingCommandFilter = func(_ roachpb.Request, h roachpb.Header) error {
 		if h.GetUserPriority() == 42 {
 			blockingStart <- struct{}{}
 			<-blockingDone
@@ -1127,7 +1127,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		tc.stopper.RunAsyncTask(func() {
 			args := readOrWriteArgs(key1, test.cmd1Read)
 
-			_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+			_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 				UserPriority: proto.Int32(42),
 			}, args)
 
@@ -1212,7 +1212,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	key := roachpb.Key("key1")
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
-	TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
+	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
 		put, ok := args.(*roachpb.PutRequest)
 		if ok && bytes.Equal(put.Key, key) && bytes.Equal(put.Value.Bytes, []byte{1}) {
 			blockingStart <- struct{}{}
@@ -1239,7 +1239,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	go func() {
 		args := getArgs(key)
 
-		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &args)
 
@@ -1309,7 +1309,7 @@ func TestRangeNoTSCacheInconsistent(t *testing.T) {
 	args := getArgs([]byte("a"))
 	ts := tc.clock.Now()
 
-	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		Timestamp:       ts,
 		ReadConsistency: roachpb.INCONSISTENT,
 	}, &args)
@@ -1319,7 +1319,7 @@ func TestRangeNoTSCacheInconsistent(t *testing.T) {
 	}
 	pArgs := putArgs([]byte("a"), []byte("value"))
 
-	reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: roachpb.ZeroTimestamp.Add(0, 1)}, &pArgs)
+	reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: roachpb.ZeroTimestamp.Add(0, 1)}, &pArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1346,7 +1346,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		pArgs := putArgs(key, []byte("value"))
 		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 
-		reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			Txn: txn,
 		}, &pArgs)
 		if err != nil {
@@ -1358,14 +1358,14 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		args := readOrWriteArgs(key, read)
 		ts := tc.clock.Now() // later timestamp
 
-		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			Timestamp: ts,
 		}, args); err == nil {
 			t.Errorf("test %d: expected failure", i)
 		}
 
 		// Write the intent again -- should not have its timestamp upgraded!
-		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			Txn: txn,
 		}, &pArgs); err != nil {
 			t.Fatalf("test %d: %s", i, err)
@@ -1392,7 +1392,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	// Start with a read to warm the timestamp cache.
 	gArgs := getArgs(key)
 
-	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		Txn: txn,
 	}, &gArgs); err != nil {
 		t.Fatal(err)
@@ -1401,7 +1401,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	// Now try a write and verify timestamp isn't incremented.
 	pArgs := putArgs(key, []byte("value"))
 
-	reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		Txn: txn,
 	}, &pArgs)
 	if err != nil {
@@ -1414,11 +1414,11 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 
 	// Resolve the intent.
 	rArgs := &roachpb.ResolveIntentRequest{
-		RequestHeader: *pArgs.Header(),
-		IntentTxn:     *txn,
+		Span:      *pArgs.Header(),
+		IntentTxn: *txn,
 	}
 	rArgs.IntentTxn.Status = roachpb.COMMITTED
-	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Txn: txn, Timestamp: txn.Timestamp}, rArgs); err != nil {
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn, Timestamp: txn.Timestamp}, rArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1427,7 +1427,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	expTS := ts
 	expTS.Logical++
 
-	if reply, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: ts}, &pArgs); err != nil {
+	if reply, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, &pArgs); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
 	pReply = reply.(*roachpb.PutResponse)
@@ -1454,7 +1454,7 @@ func TestRangeIdempotence(t *testing.T) {
 		args := incrementArgs([]byte("a"), 1)
 		ts := tc.clock.Now()
 		cmdID := roachpb.ClientCmdID{WallTime: 1, Random: int64((idx % 2) * (idx + 100))}
-		resp, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		resp, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			Timestamp: ts, // remove
 			CmdID:     cmdID,
 		}, &args)
@@ -1503,7 +1503,7 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 	args := incrementArgs([]byte("a"), 1)
 	cmdID := roachpb.ClientCmdID{WallTime: 1, Random: 1}
 
-	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		CmdID: cmdID,
 	}, &args); pErr != nil {
 		t.Fatal(pErr)
@@ -1517,7 +1517,7 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 	}
 
 	// Now try increment again and verify error.
-	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		CmdID: cmdID,
 	}, &args); pErr == nil {
 		t.Fatal(pErr)
@@ -1542,7 +1542,7 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 		roachpb.ResponseWithError{Reply: &br, Err: pastError})
 
 	args := incrementArgs([]byte("a"), 1)
-	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		CmdID: cmdID,
 	}, &args)
 	if err == nil {
@@ -1563,7 +1563,7 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	key := roachpb.Key("foo")
 	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 	pArgs := putArgs(key, []byte("only here to make this a rw transaction"))
-	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		Txn: txn,
 	}, &pArgs); err != nil {
 		t.Fatal(err)
@@ -1575,7 +1575,7 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	// split of the default range; start key must be "" in this case.
 	args.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
 		SplitTrigger: &roachpb.SplitTrigger{
-			UpdatedDesc: roachpb.RangeDescriptor{StartKey: roachpb.Key("bar")},
+			UpdatedDesc: roachpb.RangeDescriptor{StartKey: roachpb.RKey("bar")},
 		},
 	}
 
@@ -1832,7 +1832,7 @@ func TestEndTransactionGC(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	splitKey := roachpb.Key("c")
+	splitKey := roachpb.RKey("c")
 	splitTestRange(tc.store, splitKey, splitKey, t)
 	for i, test := range []struct {
 		intents []roachpb.Intent
@@ -1843,11 +1843,11 @@ func TestEndTransactionGC(t *testing.T) {
 		// Two intents inside.
 		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: roachpb.Key("b")}}, true},
 		// Intent range spilling over right endpoint.
-		{[]roachpb.Intent{{Key: roachpb.Key("a"), EndKey: splitKey.Next()}}, false},
+		{[]roachpb.Intent{{Key: roachpb.Key("a"), EndKey: splitKey.Next().AsRawKey()}}, false},
 		// Intent range completely outside.
-		{[]roachpb.Intent{{Key: splitKey, EndKey: roachpb.Key("q")}}, false},
+		{[]roachpb.Intent{{Key: splitKey.AsRawKey(), EndKey: roachpb.Key("q")}}, false},
 		// Intent inside and outside.
-		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: splitKey}}, false},
+		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: splitKey.AsRawKey()}}, false},
 	} {
 		txn := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
 		args, h := endTxnArgs(txn, true)
@@ -1874,9 +1874,9 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	key := roachpb.Key("a")
-	splitKey := key.Next()
-	TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
-		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey) {
+	splitKey := roachpb.RKey(key).Next()
+	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
 			return util.Errorf("boom")
 		}
 		return nil
@@ -1890,19 +1890,19 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 
 	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 	pArgs := putArgs(key, []byte("value"))
-	h := roachpb.BatchRequest_Header{Txn: txn}
+	h := roachpb.Header{Txn: txn}
 	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
-	pArgs = putArgs(splitKey, []byte("value"))
+	pArgs = putArgs(splitKey.AsRawKey(), []byte("value"))
 	if _, err := client.SendWrappedWith(newRng, newRng.context(), h, &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// End the transaction and resolve the intents.
 	args, h := endTxnArgs(txn, true /* commit */)
-	args.Intents = []roachpb.Intent{{Key: key, EndKey: splitKey.Next()}}
+	args.Intents = []roachpb.Intent{{Key: key, EndKey: splitKey.Next().AsRawKey()}}
 	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -2260,14 +2260,14 @@ func TestRangeResolveIntentRange(t *testing.T) {
 	txn := &roachpb.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
 	for _, key := range []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")} {
 		pArgs := putArgs(key, []byte("value1"))
-		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Txn: txn}, &pArgs); err != nil {
+		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Resolve the intents.
 	rArgs := &roachpb.ResolveIntentRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key:    roachpb.Key("a"),
 			EndKey: roachpb.Key("c"),
 		},
@@ -2326,7 +2326,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	pArgs = putArgs([]byte("b"), []byte("value2"))
 	txn := &roachpb.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
 
-	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Txn: txn}, &pArgs); err != nil {
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); err != nil {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 136, KeyBytes: 32, ValBytes: 104, IntentBytes: 26, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 63, SysCount: 1}
@@ -2334,7 +2334,7 @@ func TestRangeStatsComputation(t *testing.T) {
 
 	// Resolve the 2nd value.
 	rArgs := &roachpb.ResolveIntentRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: pArgs.Key,
 		},
 		IntentTxn: *txn,
@@ -2482,8 +2482,8 @@ func TestRaftStorage(t *testing.T) {
 			}
 			rng, err := NewReplica(&roachpb.RangeDescriptor{
 				RangeID:  1,
-				StartKey: roachpb.KeyMin,
-				EndKey:   roachpb.KeyMax,
+				StartKey: roachpb.RKeyMin,
+				EndKey:   roachpb.RKeyMax,
 			}, store)
 			if err != nil {
 				t.Fatal(err)
@@ -2511,7 +2511,7 @@ func TestConditionFailedError(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := roachpb.ConditionalPutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 		Value: roachpb.Value{
@@ -2522,7 +2522,7 @@ func TestConditionFailedError(t *testing.T) {
 		},
 	}
 
-	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Timestamp: roachpb.MinTimestamp}, &args)
+	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: roachpb.MinTimestamp}, &args)
 
 	if cErr, ok := err.(*roachpb.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
@@ -2665,8 +2665,8 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	// Get original meta2 descriptor.
 	rlArgs := &roachpb.RangeLookupRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: keys.RangeMetaKey(key),
+		Span: roachpb.Span{
+			Key: keys.RangeMetaKey(roachpb.RKey(key)),
 		},
 		MaxRanges: 1,
 		Reverse:   isReverse,
@@ -2674,7 +2674,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	var rlReply *roachpb.RangeLookupResponse
 
-	reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		ReadConsistency: roachpb.INCONSISTENT,
 	}, rlArgs)
 	if err != nil {
@@ -2684,25 +2684,25 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	origDesc := rlReply.Ranges[0]
 	newDesc := origDesc
-	newDesc.EndKey = key
+	newDesc.EndKey = keys.Addr(key)
 
 	// Write the new descriptor as an intent.
 	data, err := proto.Marshal(&newDesc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pArgs := putArgs(keys.RangeMetaKey(key), data)
+	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)), data)
 	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 
-	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Txn: txn}, &pArgs); err != nil {
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now lookup the range; should get the value. Since the lookup is
 	// inconsistent, there's no WriteIntentErorr.
-	rlArgs.Key = keys.RangeMetaKey(roachpb.Key("A"))
+	rlArgs.Key = keys.RangeMetaKey(roachpb.RKey("A"))
 
-	reply, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	reply, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		Timestamp:       roachpb.MinTimestamp,
 		ReadConsistency: roachpb.INCONSISTENT,
 	}, rlArgs)
@@ -2715,7 +2715,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	}
 
 	// Switch to consistent lookups, which should run into the intent.
-	_, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+	_, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		ReadConsistency: roachpb.CONSISTENT,
 	}, rlArgs)
 	if _, ok := err.(*roachpb.WriteIntentError); !ok {
@@ -2736,7 +2736,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	for i := 0; i < count && !(origSeen && newSeen); i++ {
 		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
 
-		reply, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		reply, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, clonedRLArgs)
 		if err != nil {
@@ -2767,10 +2767,10 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Test ranges: ["a","c"), ["c","f"), ["f","h") and ["h","y").
 	testRanges := []roachpb.RangeDescriptor{
-		{RangeID: 2, StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
-		{RangeID: 3, StartKey: roachpb.Key("c"), EndKey: roachpb.Key("f")},
-		{RangeID: 4, StartKey: roachpb.Key("f"), EndKey: roachpb.Key("h")},
-		{RangeID: 5, StartKey: roachpb.Key("h"), EndKey: roachpb.Key("y")},
+		{RangeID: 2, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
+		{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("f")},
+		{RangeID: 4, StartKey: roachpb.RKey("f"), EndKey: roachpb.RKey("h")},
+		{RangeID: 5, StartKey: roachpb.RKey("h"), EndKey: roachpb.RKey("y")},
 	}
 	// The range ["f","h") has dangling intent in meta2.
 	withIntentRangeIndex := 2
@@ -2801,9 +2801,9 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pArgs := putArgs(keys.RangeMetaKey(r.EndKey), data)
+			pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)), data)
 
-			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Txn: txn}, &pArgs); err != nil {
+			if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -2811,9 +2811,9 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Resolve the intents.
 	rArgs := &roachpb.ResolveIntentRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    keys.RangeMetaKey(roachpb.Key("a")),
-			EndKey: keys.RangeMetaKey(roachpb.Key("z")),
+		Span: roachpb.Span{
+			Key:    keys.RangeMetaKey(roachpb.RKey("a")),
+			EndKey: keys.RangeMetaKey(roachpb.RKey("z")),
 		},
 		IntentTxn: *txn,
 	}
@@ -2832,8 +2832,8 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	// Test ReverseScan without intents.
 	for _, c := range testCases {
 		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
-		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.Key(c.key))
-		reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key))
+		reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, clonedRLArgs)
 		if err != nil {
@@ -2852,17 +2852,17 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pArgs := putArgs(keys.RangeMetaKey(intentRange.EndKey), data)
+	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(intentRange.EndKey)), data)
 	txn2 := &roachpb.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
-	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{Txn: txn2}, &pArgs); err != nil {
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn2}, &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Test ReverseScan with intents.
 	for _, c := range testCases {
 		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
-		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.Key(c.key))
-		reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.BatchRequest_Header{
+		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key))
+		reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, clonedRLArgs)
 		if err != nil {
@@ -2884,7 +2884,7 @@ func TestRangeLookup(t *testing.T) {
 
 	expected := []roachpb.RangeDescriptor{*tc.rng.Desc()}
 	testCases := []struct {
-		key      roachpb.Key
+		key      roachpb.RKey
 		reverse  bool
 		expected []roachpb.RangeDescriptor
 	}{
@@ -2893,19 +2893,19 @@ func TestRangeLookup(t *testing.T) {
 		// up this range in gossip instead of executing the RPC, but
 		// RangeLookup is still used when up-to-date information is
 		// required.
-		{key: roachpb.KeyMin, reverse: false, expected: expected},
+		{key: roachpb.RKeyMin, reverse: false, expected: expected},
 		// Test with the last key in a meta prefix. This is an edge case in the
 		// implementation.
-		{key: keys.Meta1KeyMax, reverse: false, expected: expected},
-		{key: keys.Meta2KeyMax, reverse: false, expected: nil},
-		{key: keys.Meta1KeyMax, reverse: true, expected: expected},
-		{key: keys.Meta2KeyMax, reverse: true, expected: expected},
+		{key: keys.Addr(keys.Meta1KeyMax), reverse: false, expected: expected},
+		{key: keys.Addr(keys.Meta2KeyMax), reverse: false, expected: nil},
+		{key: keys.Addr(keys.Meta1KeyMax), reverse: true, expected: expected},
+		{key: keys.Addr(keys.Meta2KeyMax), reverse: true, expected: expected},
 	}
 
 	for _, c := range testCases {
 		resp, err := client.SendWrapped(tc.Sender(), nil, &roachpb.RangeLookupRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key: c.key,
+			Span: roachpb.Span{
+				Key: c.key.AsRawKey(),
 			},
 			MaxRanges: 1,
 			Reverse:   c.reverse,
@@ -3030,7 +3030,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	// Force the read command request a new lease.
 	clock := tc.clock
 	ts := clock.Update(clock.Now().Add(int64(DefaultLeaderLeaseDuration), 0))
-	_, err = client.SendWrappedWith(tc.store, nil, roachpb.BatchRequest_Header{
+	_, err = client.SendWrappedWith(tc.store, nil, roachpb.Header{
 		Timestamp: ts,
 		RangeID:   1,
 	}, &gArgs)
@@ -3050,10 +3050,10 @@ func TestIntentIntersect(t *testing.T) {
 		EndKey: roachpb.Key("x"),
 	}
 
-	suffix := roachpb.Key("abcd")
+	suffix := roachpb.RKey("abcd")
 	iLc := roachpb.Intent{
-		Key:    keys.MakeRangeKey(roachpb.Key("c"), suffix, nil),
-		EndKey: keys.MakeRangeKey(roachpb.Key("x"), suffix, nil),
+		Key:    keys.MakeRangeKey(roachpb.RKey("c"), suffix, nil),
+		EndKey: keys.MakeRangeKey(roachpb.RKey("x"), suffix, nil),
 	}
 	kl1 := string(iLc.Key)
 	kl2 := string(iLc.EndKey)
@@ -3063,7 +3063,7 @@ func TestIntentIntersect(t *testing.T) {
 		from, to string
 		exp      []string
 	}{
-		{intent: iPt, from: "", to: "z", exp: []string{"", ""}},
+		{intent: iPt, from: "", to: "z", exp: []string{"", "", "asd", ""}},
 
 		{intent: iRn, from: "", to: "a", exp: []string{"", "", "c", "x"}},
 		{intent: iRn, from: "", to: "c", exp: []string{"", "", "c", "x"}},
@@ -3087,8 +3087,8 @@ func TestIntentIntersect(t *testing.T) {
 	} {
 		var all []string
 		in, out := intersectIntent(tc.intent, roachpb.RangeDescriptor{
-			StartKey: roachpb.Key(tc.from),
-			EndKey:   roachpb.Key(tc.to),
+			StartKey: roachpb.RKey(tc.from),
+			EndKey:   roachpb.RKey(tc.to),
 		})
 		if in != nil {
 			all = append(all, string(in.Key), string(in.EndKey))
@@ -3117,19 +3117,19 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	ba.RangeID = tc.rng.Desc().RangeID
 	ba.Replica.StoreID = tc.store.StoreID()
 	ba.Add(&roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
-		Value:         roachpb.Value{Bytes: []byte("not nil")},
+		Span:  roachpb.Span{Key: roachpb.Key("k")},
+		Value: roachpb.Value{Bytes: []byte("not nil")},
 	})
 	// This one fails with a ConditionalPutError, which implements
 	// roachpb.IndexedError.
 	ba.Add(&roachpb.ConditionalPutRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
-		Value:         roachpb.Value{Bytes: []byte("irrelevant")},
-		ExpValue:      nil, // not true after above Put
+		Span:     roachpb.Span{Key: roachpb.Key("k")},
+		Value:    roachpb.Value{Bytes: []byte("irrelevant")},
+		ExpValue: nil, // not true after above Put
 	})
 	// This one is never executed.
 	ba.Add(&roachpb.GetRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
+		Span: roachpb.Span{Key: roachpb.Key("k")},
 	})
 
 	if _, pErr := tc.rng.Send(tc.rng.context(), ba); pErr == nil {

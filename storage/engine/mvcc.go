@@ -54,8 +54,8 @@ func init() {
 	for _, r := range keys.NoSplitSpans {
 		illegalSplitKeySpans = append(illegalSplitKeySpans,
 			encodedSpan{
-				start: MVCCEncodeKey(r.Start),
-				end:   MVCCEncodeKey(r.End),
+				start: MVCCEncodeKey(r.Key),
+				end:   MVCCEncodeKey(r.EndKey),
 			})
 	}
 }
@@ -126,7 +126,7 @@ func (ms *MVCCStats) Subtract(oms *MVCCStats) {
 // the specified key should be tracked at all, and if so, whether the
 // key is system-local.
 func updateStatsForKey(ms *MVCCStats, key roachpb.Key) (bool, bool) {
-	return ms != nil, key.Less(keys.LocalMax)
+	return ms != nil, bytes.Compare(key, keys.LocalMax) < 0
 }
 
 // updateStatsForInline updates stat counters for an inline value.
@@ -1488,7 +1488,7 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_G
 // And split key equal to Meta2KeyMax (\x00\x00meta2\xff\xff) is
 // considered invalid.
 func IsValidSplitKey(key roachpb.Key) bool {
-	if key.Equal(keys.Meta2KeyMax) {
+	if keys.Meta2KeyMax.Equal(key) {
 		return false
 	}
 	return isValidEncodedSplitKey(MVCCEncodeKey(key))
@@ -1512,12 +1512,12 @@ func isValidEncodedSplitKey(key roachpb.EncodedKey) bool {
 //
 // The split key will never be chosen from the key ranges listed in
 // illegalSplitKeySpans.
-func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachpb.Key) (roachpb.Key, error) {
-	if key.Less(keys.LocalMax) {
-		key = keys.LocalMax
+func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachpb.RKey) (roachpb.Key, error) {
+	if bytes.Compare(key, keys.LocalMax) < 0 {
+		key = keys.Addr(keys.LocalMax)
 	}
-	encStartKey := MVCCEncodeKey(key)
-	encEndKey := MVCCEncodeKey(endKey)
+	encStartKey := MVCCEncodeKey(key.AsRawKey())
+	encEndKey := MVCCEncodeKey(endKey.AsRawKey())
 
 	// Get range size from stats.
 	var ms MVCCStats

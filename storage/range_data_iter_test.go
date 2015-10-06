@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func prevKey(k roachpb.Key) roachpb.Key {
+func prevKey(k []byte) roachpb.Key {
 	length := len(k)
 
 	// When the byte array is empty.
@@ -69,8 +69,8 @@ func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
 		{keys.RangeLastVerificationTimestampKey(r.Desc().RangeID), ts0},
 		{keys.RangeStatsKey(r.Desc().RangeID), ts0},
 		{keys.RangeDescriptorKey(r.Desc().StartKey), ts},
-		{keys.TransactionKey(r.Desc().StartKey, []byte("1234")), ts0},
-		{keys.TransactionKey(r.Desc().StartKey.Next(), []byte("5678")), ts0},
+		{keys.TransactionKey(roachpb.Key(r.Desc().StartKey), []byte("1234")), ts0},
+		{keys.TransactionKey(roachpb.Key(r.Desc().StartKey.Next()), []byte("5678")), ts0},
 		{keys.TransactionKey(prevKey(r.Desc().EndKey), []byte("2468")), ts0},
 		// TODO(bdarnell): KeyMin.Next() results in a key in the reserved system-local space.
 		// Once we have resolved https://github.com/cockroachdb/cockroach/issues/437,
@@ -109,7 +109,7 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 	// records and config entries during the iteration. This is a rather
 	// nasty little hack, but since it's test code, meh.
 	newDesc := *tc.rng.Desc()
-	newDesc.StartKey = roachpb.Key("a")
+	newDesc.StartKey = roachpb.RKey("a")
 	if err := tc.rng.setDesc(&newDesc); err != nil {
 		t.Fatal(err)
 	}
@@ -145,18 +145,18 @@ func disabledTestRangeDataIterator(t *testing.T) {
 
 	// See notes in EmptyRange test method for adjustment to descriptor.
 	newDesc := *tc.rng.Desc()
-	newDesc.StartKey = roachpb.Key("b")
-	newDesc.EndKey = roachpb.Key("c")
+	newDesc.StartKey = roachpb.RKey("b")
+	newDesc.EndKey = roachpb.RKey("c")
 	if err := tc.rng.setDesc(&newDesc); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create two more ranges, one before the test range and one after.
-	preRng := createRange(tc.store, 2, roachpb.KeyMin, roachpb.Key("b"))
+	preRng := createRange(tc.store, 2, roachpb.RKeyMin, roachpb.RKey("b"))
 	if err := tc.store.AddReplicaTest(preRng); err != nil {
 		t.Fatal(err)
 	}
-	postRng := createRange(tc.store, 3, roachpb.Key("c"), roachpb.KeyMax)
+	postRng := createRange(tc.store, 3, roachpb.RKey("c"), roachpb.RKeyMax)
 	if err := tc.store.AddReplicaTest(postRng); err != nil {
 		t.Fatal(err)
 	}

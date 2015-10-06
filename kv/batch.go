@@ -41,7 +41,7 @@ import (
 // TODO(tschottdorf): Consider returning a new BatchRequest, which has more
 // overhead in the common case of a batch which never needs truncation but is
 // less magical.
-func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to roachpb.Key) (func(), int, error) {
+func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to roachpb.RKey) (func(), int, error) {
 	if !desc.ContainsKey(from) {
 		from = desc.StartKey
 	}
@@ -54,25 +54,41 @@ func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to 
 		}
 		header := args.Header()
 		if !roachpb.IsRange(args) {
+			// This is a point request.
 			if len(header.EndKey) > 0 {
 				return false, nil, util.Errorf("%T is not a range command, but EndKey is set", args)
 			}
-			if !desc.ContainsKey(keys.KeyAddress(header.Key)) {
+			if !desc.ContainsKey(keys.Addr(header.Key)) {
 				return true, nil, nil
 			}
 			return false, nil, nil
 		}
+		// We're dealing with a range-spanning request.
 		var undo []func()
-		key, endKey := header.Key, header.EndKey
-		keyAddr, endKeyAddr := keys.KeyAddress(key), keys.KeyAddress(endKey)
+		keyAddr, endKeyAddr := keys.Addr(header.Key), keys.Addr(header.EndKey)
+		if l, r := !keyAddr.Equal(header.Key), !endKeyAddr.Equal(header.EndKey); l || r {
+			if !desc.ContainsKeyRange(keyAddr, endKeyAddr) {
+				return false, nil, util.Errorf("local key range must not span ranges")
+			}
+			if !l || !r {
+				return false, nil, util.Errorf("local key mixed with global key in range")
+			}
+		}
+		// Below, {end,}keyAddr equals header.{End,}Key, so nothing is local.
 		if keyAddr.Less(from) {
-			undo = append(undo, func() { header.Key = key })
-			header.Key = from
+			{
+				origKey := header.Key
+				undo = append(undo, func() { header.Key = origKey })
+			}
+			header.Key = from.AsRawKey() // "from" can't be local
 			keyAddr = from
 		}
 		if !endKeyAddr.Less(to) {
-			undo = append(undo, func() { header.EndKey = endKey })
-			header.EndKey = to
+			{
+				origEndKey := header.EndKey
+				undo = append(undo, func() { header.EndKey = origEndKey })
+			}
+			header.EndKey = to.AsRawKey() // "to" can't be local
 			endKeyAddr = to
 		}
 		// Check whether the truncation has left any keys in the range. If not,
@@ -192,12 +208,12 @@ func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 // affect keys larger than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func prev(ba roachpb.BatchRequest, k roachpb.Key) roachpb.Key {
-	candidate := roachpb.KeyMin
+func prev(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
+	candidate := roachpb.RKeyMin
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
-		addr := keys.KeyAddress(h.Key)
-		eAddr := keys.KeyAddress(h.EndKey)
+		addr := keys.Addr(h.Key)
+		eAddr := keys.Addr(h.EndKey)
 		if len(eAddr) == 0 {
 			// Can probably avoid having to compute Next() here if
 			// we're in the mood for some more complexity.
@@ -223,13 +239,13 @@ func prev(ba roachpb.BatchRequest, k roachpb.Key) roachpb.Key {
 // affect keys less than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func next(ba roachpb.BatchRequest, k roachpb.Key) roachpb.Key {
-	candidate := roachpb.KeyMax
+func next(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
+	candidate := roachpb.RKeyMax
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
-		addr := keys.KeyAddress(h.Key)
+		addr := keys.Addr(h.Key)
 		if addr.Less(k) {
-			if eAddr := keys.KeyAddress(h.EndKey); k.Less(eAddr) {
+			if eAddr := keys.Addr(h.EndKey); k.Less(eAddr) {
 				// Starts below k, but continues beyond. Need to stay at k.
 				return k
 			}

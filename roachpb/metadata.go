@@ -107,6 +107,7 @@ func (a Attributes) SortedString() string {
 }
 
 // ContainsKey returns whether this RangeDescriptor contains the specified key.
+// TODO(tschottdorf): RKey.
 func (r *RangeDescriptor) ContainsKey(key []byte) bool {
 	return bytes.Compare(key, r.StartKey) >= 0 && bytes.Compare(key, r.EndKey) < 0
 }

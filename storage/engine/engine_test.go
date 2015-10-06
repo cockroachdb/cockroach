@@ -427,7 +427,7 @@ func TestEngineScan1(t *testing.T) {
 		// a special case in engine.scan, that's why we test it here.
 		startKeys := []roachpb.EncodedKey{roachpb.EncodedKey("cat"), roachpb.EncodedKey("")}
 		for _, startKey := range startKeys {
-			keyvals, err = Scan(engine, startKey, roachpb.EncodedKey(roachpb.KeyMax), 0)
+			keyvals, err = Scan(engine, startKey, roachpb.EncodedKey(roachpb.RKeyMax), 0)
 			if err != nil {
 				t.Fatalf("could not run scan: %v", err)
 			}
@@ -464,25 +464,25 @@ func TestEngineScan2(t *testing.T) {
 			roachpb.EncodedKey("aaa"),
 			roachpb.EncodedKey("ab"),
 			roachpb.EncodedKey("abc"),
-			roachpb.EncodedKey(roachpb.KeyMax),
+			roachpb.EncodedKey(roachpb.RKeyMax),
 		}
 
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 10, keys[0:5], engine, t)
-		verifyScan(roachpb.EncodedKey("a"), roachpb.EncodedKey(roachpb.KeyMax), 10, keys[0:5], engine, t)
+		verifyScan(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
+		verifyScan(roachpb.EncodedKey("a"), roachpb.EncodedKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
 
 		// Scan sub range.
 		verifyScan(roachpb.EncodedKey("aab"), roachpb.EncodedKey("abcc"), 10, keys[3:5], engine, t)
 		verifyScan(roachpb.EncodedKey("aa0"), roachpb.EncodedKey("abcc"), 10, keys[2:5], engine, t)
 
 		// Scan with max values.
-		verifyScan(roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 3, keys[0:3], engine, t)
-		verifyScan(roachpb.EncodedKey("a0"), roachpb.EncodedKey(roachpb.KeyMax), 3, keys[1:4], engine, t)
+		verifyScan(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 3, keys[0:3], engine, t)
+		verifyScan(roachpb.EncodedKey("a0"), roachpb.EncodedKey(roachpb.RKeyMax), 3, keys[1:4], engine, t)
 
 		// Scan with max value 0 gets all values.
-		verifyScan(roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 0, keys[0:5], engine, t)
+		verifyScan(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 0, keys[0:5], engine, t)
 	}, t)
 }
 
@@ -495,13 +495,13 @@ func TestEngineDeleteRange(t *testing.T) {
 			roachpb.EncodedKey("aaa"),
 			roachpb.EncodedKey("ab"),
 			roachpb.EncodedKey("abc"),
-			roachpb.EncodedKey(roachpb.KeyMax),
+			roachpb.EncodedKey(roachpb.RKeyMax),
 		}
 
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 10, keys[0:5], engine, t)
+		verifyScan(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
 
 		// Delete a range of keys
 		numDeleted, err := ClearRange(engine, roachpb.EncodedKey("aa"), roachpb.EncodedKey("abc"))
@@ -513,7 +513,7 @@ func TestEngineDeleteRange(t *testing.T) {
 			t.Errorf("Expected to delete 3 entries; was %v", numDeleted)
 		}
 		// Verify what's left
-		verifyScan(roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 10,
+		verifyScan(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 10,
 			[]roachpb.EncodedKey{roachpb.EncodedKey("a"), roachpb.EncodedKey("abc")}, engine, t)
 	}, t)
 }
@@ -553,8 +553,8 @@ func TestSnapshot(t *testing.T) {
 				valSnapshot, val1)
 		}
 
-		keyvals, _ := Scan(engine, key, roachpb.EncodedKey(roachpb.KeyMax), 0)
-		keyvalsSnapshot, error := Scan(snap, key, roachpb.EncodedKey(roachpb.KeyMax), 0)
+		keyvals, _ := Scan(engine, key, roachpb.EncodedKey(roachpb.RKeyMax), 0)
+		keyvalsSnapshot, error := Scan(snap, key, roachpb.EncodedKey(roachpb.RKeyMax), 0)
 		if error != nil {
 			t.Fatalf("error : %s", error)
 		}
@@ -610,8 +610,8 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify Scan.
-		keyvals, _ := Scan(engine, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 0)
-		keyvalsSnapshot, err := Scan(snap, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 0)
+		keyvals, _ := Scan(engine, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 0)
+		keyvalsSnapshot, err := Scan(snap, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -622,7 +622,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 		// Verify Iterate.
 		index := 0
-		if err := snap.Iterate(roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), func(kv roachpb.RawKeyValue) (bool, error) {
+		if err := snap.Iterate(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), func(kv roachpb.RawKeyValue) (bool, error) {
 			if !bytes.Equal(kv.Key, keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 					index, keys[index], vals[index], kv.Key, kv.Value)
@@ -659,11 +659,11 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify ApproximateSize.
-		approx, err := engine.ApproximateSize(roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax))
+		approx, err := engine.ApproximateSize(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax))
 		if err != nil {
 			t.Fatal(err)
 		}
-		approxSnapshot, err := snap.ApproximateSize(roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax))
+		approxSnapshot, err := snap.ApproximateSize(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax))
 		if err != nil {
 			t.Fatal(err)
 		}

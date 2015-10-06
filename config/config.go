@@ -83,8 +83,8 @@ func (z *ZoneConfig) Validate() error {
 
 // ObjectIDForKey returns the object ID (table or database) for 'key',
 // or (_, false) if not within the structured key space.
-func ObjectIDForKey(key roachpb.Key) (uint32, bool) {
-	if key.Equal(roachpb.KeyMax) {
+func ObjectIDForKey(key roachpb.RKey) (uint32, bool) {
+	if key.Equal(roachpb.RKeyMax) {
 		return 0, false
 	}
 	if key.Equal(keys.TableDataPrefix) {
@@ -132,7 +132,7 @@ func (s *SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 
 	l := len(s.Values)
 	index := sort.Search(l, func(i int) bool {
-		return !s.Values[i].Key.Less(key)
+		return bytes.Compare(s.Values[i].Key, key) >= 0
 	})
 	if index == l || !key.Equal(s.Values[index].Key) {
 		return 0, false
@@ -159,7 +159,7 @@ func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
 	// the descriptor table.
 	key := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID + 1))
 	index := sort.Search(len(s.Values), func(i int) bool {
-		return !s.Values[i].Key.Less(key)
+		return bytes.Compare(s.Values[i].Key, key) >= 0
 	})
 
 	if index == 0 {
@@ -193,7 +193,7 @@ func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
 
 // GetZoneConfigForKey looks up the zone config for the range containing 'key'.
 // It is the caller's responsibility to ensure that the range does not need to be split.
-func (s *SystemConfig) GetZoneConfigForKey(key roachpb.Key) (*ZoneConfig, error) {
+func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error) {
 	if objectID, ok := ObjectIDForKey(key); ok {
 		return s.GetZoneConfigForID(objectID)
 	}
@@ -220,12 +220,12 @@ func (s *SystemConfig) GetZoneConfigForID(id uint32) (*ZoneConfig, error) {
 // ComputeSplitKeys takes a start and end key and returns an array of keys
 // at which to split the span [start, end).
 // The only required splits are at each user table prefix.
-func (s *SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.Key) []roachpb.Key {
+func (s *SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.RKey {
 	if TestingDisableTableSplits {
 		return nil
 	}
 
-	tableStart := roachpb.Key(keys.UserTableDataMin)
+	tableStart := roachpb.RKey(keys.UserTableDataMin)
 	if !tableStart.Less(endKey) {
 		// This range is before the user tables span: no required splits.
 		return nil
@@ -254,8 +254,8 @@ func (s *SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.Key) []roachpb.
 	}
 
 	// Build key prefixes for sequential table IDs until we reach endKey.
-	var splitKeys roachpb.KeySlice
-	var key roachpb.Key
+	var splitKeys []roachpb.RKey
+	var key roachpb.RKey
 	// endID could be smaller than startID if we don't have user tables.
 	for id := startID; id <= endID; id++ {
 		key = keys.MakeTablePrefix(id)
@@ -275,6 +275,6 @@ func (s *SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.Key) []roachpb.
 
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
 // to zone configs.
-func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.Key) bool {
+func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
 	return len(s.ComputeSplitKeys(startKey, endKey)) > 0
 }

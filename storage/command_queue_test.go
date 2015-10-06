@@ -22,17 +22,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func getWait(cq *CommandQueue, from, to roachpb.Key, readOnly bool, wg *sync.WaitGroup) {
-	cq.GetWait(readOnly, wg, keys.Span{Start: from, End: to})
+	cq.GetWait(readOnly, wg, roachpb.Span{Key: from, EndKey: to})
 }
 
 func add(cq *CommandQueue, from, to roachpb.Key, readOnly bool) interface{} {
-	return cq.Add(readOnly, keys.Span{Start: from, End: to})[0]
+	return cq.Add(readOnly, roachpb.Span{Key: from, EndKey: to})[0]
 }
 
 // waitForCmd launches a goroutine to wait on the supplied
@@ -207,7 +206,7 @@ func TestCommandQueueSelfOverlap(t *testing.T) {
 	a := roachpb.Key("a")
 	k := add(cq, a, roachpb.Key("b"), false)
 	var wg sync.WaitGroup
-	cq.GetWait(false, &wg, []keys.Span{{Start: a}, {Start: a}, {Start: a}}...)
+	cq.GetWait(false, &wg, []roachpb.Span{{Key: a}, {Key: a}, {Key: a}}...)
 	cq.Remove([]interface{}{k})
 	wg.Wait()
 }

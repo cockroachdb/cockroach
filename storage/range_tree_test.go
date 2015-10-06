@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func createTreeContext(rootKey roachpb.Key, nodes []*roachpb.RangeTreeNode) *treeContext {
+func createTreeContext(rootKey roachpb.RKey, nodes []*roachpb.RangeTreeNode) *treeContext {
 	root := &roachpb.RangeTree{
 		RootKey: rootKey,
 	}
@@ -74,7 +74,7 @@ func TestIsRed(t *testing.T) {
 // expected value. It also makes sure that the node is marked as dirty in the
 // cache. If an actual value is passed it, that is compared with the value in
 // the cache as well.
-func checkTreeNode(t *testing.T, tc *treeContext, testNumber int, name string, key roachpb.Key, expected, actual *roachpb.RangeTreeNode) {
+func checkTreeNode(t *testing.T, tc *treeContext, testNumber int, name string, key roachpb.RKey, expected, actual *roachpb.RangeTreeNode) {
 	if expected != nil {
 		// Is the value correct?
 		cached, err := tc.getNode(expected.Key)
@@ -108,24 +108,24 @@ func checkTreeNode(t *testing.T, tc *treeContext, testNumber int, name string, k
 func TestReplaceNode(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	keyRoot := roachpb.Key("ROOT")
-	keyOld := roachpb.Key("O")
-	keyOldLeft := roachpb.Key("OL")
-	keyOldRight := roachpb.Key("OR")
-	keyNew := roachpb.Key("N")
-	keyNewLeft := roachpb.Key("NL")
-	keyNewRight := roachpb.Key("NR")
-	keyParent := roachpb.Key("P")
-	keyParentParent := roachpb.Key("PP")
-	keyParentLeft := roachpb.Key("PL")
-	keyParentRight := roachpb.Key("PR")
+	keyRoot := roachpb.RKey("ROOT")
+	keyOld := roachpb.RKey("O")
+	keyOldLeft := roachpb.RKey("OL")
+	keyOldRight := roachpb.RKey("OR")
+	keyNew := roachpb.RKey("N")
+	keyNewLeft := roachpb.RKey("NL")
+	keyNewRight := roachpb.RKey("NR")
+	keyParent := roachpb.RKey("P")
+	keyParentParent := roachpb.RKey("PP")
+	keyParentLeft := roachpb.RKey("PL")
+	keyParentRight := roachpb.RKey("PR")
 
 	testCases := []struct {
-		root           roachpb.Key
+		root           roachpb.RKey
 		parent         *roachpb.RangeTreeNode
 		oldNode        *roachpb.RangeTreeNode
 		newNode        *roachpb.RangeTreeNode
-		expectedRoot   roachpb.Key
+		expectedRoot   roachpb.RKey
 		expectedParent *roachpb.RangeTreeNode
 		expectedNew    *roachpb.RangeTreeNode
 		expectedErr    bool
@@ -305,16 +305,16 @@ func TestReplaceNode(t *testing.T) {
 func TestRotateRight(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	keyNode := roachpb.Key("N")
-	keyRight := roachpb.Key("R")
-	keyLeft := roachpb.Key("L")
-	keyLeftLeft := roachpb.Key("LL")
-	keyLeftRight := roachpb.Key("LR")
-	keyLeftRightLeft := roachpb.Key("LRL")
-	keyLeftRightRight := roachpb.Key("LRR")
-	keyParent := roachpb.Key("P")
-	keyParentLeft := roachpb.Key("PL")
-	keyParentRight := roachpb.Key("PR")
+	keyNode := roachpb.RKey("N")
+	keyRight := roachpb.RKey("R")
+	keyLeft := roachpb.RKey("L")
+	keyLeftLeft := roachpb.RKey("LL")
+	keyLeftRight := roachpb.RKey("LR")
+	keyLeftRightLeft := roachpb.RKey("LRL")
+	keyLeftRightRight := roachpb.RKey("LRR")
+	keyParent := roachpb.RKey("P")
+	keyParentLeft := roachpb.RKey("PL")
+	keyParentRight := roachpb.RKey("PR")
 
 	testCases := []struct {
 		node              *roachpb.RangeTreeNode
@@ -487,16 +487,16 @@ func TestRotateRight(t *testing.T) {
 func TestRotateLeft(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	keyNode := roachpb.Key("N")
-	keyLeft := roachpb.Key("L")
-	keyRight := roachpb.Key("R")
-	keyRightLeft := roachpb.Key("RL")
-	keyRightRight := roachpb.Key("RR")
-	keyRightLeftRight := roachpb.Key("RLR")
-	keyRightLeftLeft := roachpb.Key("RLL")
-	keyParent := roachpb.Key("P")
-	keyParentLeft := roachpb.Key("PL")
-	keyParentRight := roachpb.Key("PR")
+	keyNode := roachpb.RKey("N")
+	keyLeft := roachpb.RKey("L")
+	keyRight := roachpb.RKey("R")
+	keyRightLeft := roachpb.RKey("RL")
+	keyRightRight := roachpb.RKey("RR")
+	keyRightLeftRight := roachpb.RKey("RLR")
+	keyRightLeftLeft := roachpb.RKey("RLL")
+	keyParent := roachpb.RKey("P")
+	keyParentLeft := roachpb.RKey("PL")
+	keyParentRight := roachpb.RKey("PR")
 
 	testCases := []struct {
 		node              *roachpb.RangeTreeNode
@@ -668,22 +668,22 @@ func TestRotateLeft(t *testing.T) {
 func TestSwapNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	keyA := roachpb.Key("A")
-	keyAParent := roachpb.Key("AP")
-	keyAParentLeft := roachpb.Key("APL")
-	keyAParentRight := roachpb.Key("APR")
-	keyALeft := roachpb.Key("AL")
-	keyARight := roachpb.Key("AR")
-	keyB := roachpb.Key("B")
-	keyBParent := roachpb.Key("BP")
-	keyBParentLeft := roachpb.Key("BPL")
-	keyBParentRight := roachpb.Key("BPR")
-	keyBLeft := roachpb.Key("BL")
-	keyBRight := roachpb.Key("BR")
-	keyRoot := roachpb.Key("R")
+	keyA := roachpb.RKey("A")
+	keyAParent := roachpb.RKey("AP")
+	keyAParentLeft := roachpb.RKey("APL")
+	keyAParentRight := roachpb.RKey("APR")
+	keyALeft := roachpb.RKey("AL")
+	keyARight := roachpb.RKey("AR")
+	keyB := roachpb.RKey("B")
+	keyBParent := roachpb.RKey("BP")
+	keyBParentLeft := roachpb.RKey("BPL")
+	keyBParentRight := roachpb.RKey("BPR")
+	keyBLeft := roachpb.RKey("BL")
+	keyBRight := roachpb.RKey("BR")
+	keyRoot := roachpb.RKey("R")
 
 	testCases := []struct {
-		root            roachpb.Key
+		root            roachpb.RKey
 		a               *roachpb.RangeTreeNode
 		aParent         *roachpb.RangeTreeNode
 		aLeft           *roachpb.RangeTreeNode
@@ -692,7 +692,7 @@ func TestSwapNodes(t *testing.T) {
 		bParent         *roachpb.RangeTreeNode
 		bLeft           *roachpb.RangeTreeNode
 		bRight          *roachpb.RangeTreeNode
-		rootExpected    roachpb.Key
+		rootExpected    roachpb.RKey
 		aExpected       *roachpb.RangeTreeNode
 		aParentExpected *roachpb.RangeTreeNode
 		aLeftExpected   *roachpb.RangeTreeNode
@@ -1322,7 +1322,7 @@ func verifyTree(t *testing.T, tc *treeContext, testName string) {
 		t.Fatal(err)
 	}
 
-	verifyBinarySearchTree(t, tc, testName, root, roachpb.KeyMin, roachpb.KeyMax)
+	verifyBinarySearchTree(t, tc, testName, root, roachpb.RKeyMin, roachpb.RKeyMax)
 	// Property 1 is always correct. All nodes are already colored.
 	verifyProperty2(t, tc, testName, root)
 	// Property 3 is always correct. All leaves are black.
@@ -1335,7 +1335,7 @@ func verifyTree(t *testing.T, tc *treeContext, testName string) {
 // verifyBinarySearchTree checks to ensure that all keys to the left of the root
 // node are less than it, and all nodes to the right of the root node are
 // greater than it. It recursively walks the tree to perform this same check.
-func verifyBinarySearchTree(t *testing.T, tc *treeContext, testName string, node *roachpb.RangeTreeNode, keyMin, keyMax roachpb.Key) {
+func verifyBinarySearchTree(t *testing.T, tc *treeContext, testName string, node *roachpb.RangeTreeNode, keyMin, keyMax roachpb.RKey) {
 	if !node.Key.Less(keyMax) {
 		t.Errorf("%s: Failed Property BST - The key %s is not less than %s.", testName, node.Key, keyMax)
 	}
@@ -1426,7 +1426,7 @@ func TestTree(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	t.Skip("TODO(tschottdorf): flaky. See #2312")
 
-	keyRoot := roachpb.Key("m")
+	keyRoot := roachpb.RKey("m")
 	tc := createTreeContext(keyRoot, []*roachpb.RangeTreeNode{
 		{
 			Key:   keyRoot,
@@ -1449,7 +1449,7 @@ func TestTree(t *testing.T) {
 	//keys := []string{"f", "e", "d", "z"}
 	for _, key := range keysInsert {
 		node := &roachpb.RangeTreeNode{
-			Key: roachpb.Key(key),
+			Key: roachpb.RKey(key),
 		}
 		err := tc.insert(node)
 		if err != nil {
@@ -1460,7 +1460,7 @@ func TestTree(t *testing.T) {
 
 	// Try adding an already added key.
 	node := &roachpb.RangeTreeNode{
-		Key: roachpb.Key("z"),
+		Key: roachpb.RKey("z"),
 	}
 	if err := tc.insert(node); err == nil {
 		t.Fatal("inserting an already existing key should fail")
@@ -1478,7 +1478,7 @@ func TestTree(t *testing.T) {
 
 	for _, key := range keysDelete {
 		{
-			node, err := tc.getNode(roachpb.Key(key))
+			node, err := tc.getNode(roachpb.RKey(key))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1487,7 +1487,7 @@ func TestTree(t *testing.T) {
 			}
 		}
 		{
-			node, err := tc.getNode(roachpb.Key(key))
+			node, err := tc.getNode(roachpb.RKey(key))
 			if err != nil {
 				t.Fatal(err)
 			}

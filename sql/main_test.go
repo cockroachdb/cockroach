@@ -18,6 +18,7 @@
 package sql_test
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"testing"
@@ -45,7 +46,7 @@ func TestMain(m *testing.M) {
 
 // checkEndTransactionTrigger verifies that an EndTransactionRequest
 // that includes intents for the SystemDB keys sets the proper trigger.
-func checkEndTransactionTrigger(req roachpb.Request, _ roachpb.BatchRequest_Header) error {
+func checkEndTransactionTrigger(req roachpb.Request, _ roachpb.Header) error {
 	args, ok := req.(*roachpb.EndTransactionRequest)
 	if !ok {
 		return nil
@@ -60,7 +61,8 @@ func checkEndTransactionTrigger(req roachpb.Request, _ roachpb.BatchRequest_Head
 
 	var hasSystemKey bool
 	for _, it := range args.Intents {
-		if keys.SystemDBSpan.ContainsKey(it.GetKey()) {
+		addr := keys.Addr(it.GetKey())
+		if bytes.Compare(addr, keys.SystemDBSpan.Key) >= 0 && bytes.Compare(addr, keys.SystemDBSpan.EndKey) < 0 {
 			hasSystemKey = true
 			break
 		}

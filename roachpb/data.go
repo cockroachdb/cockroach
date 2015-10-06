@@ -43,11 +43,56 @@ const (
 )
 
 var (
+	// RKeyMin is a minimum key value which sorts before all other keys.
+	RKeyMin = RKey("")
 	// KeyMin is a minimum key value which sorts before all other keys.
-	KeyMin = Key("")
+	KeyMin = Key(RKeyMin)
+	// RKeyMax is a maximum key value which sorts after all other keys.
+	RKeyMax = RKey{0xff, 0xff}
 	// KeyMax is a maximum key value which sorts after all other keys.
-	KeyMax = Key{0xff, 0xff}
+	KeyMax = Key(RKeyMax)
 )
+
+// RKey denotes a Key whose local addressing has been accounted for.
+type RKey Key
+
+// AsRawKey returns the RKey as a Key. This is to be used only in select
+// situations in which an RKey is known to not contain a wrapped locally-
+// addressed Key. Whenever the Key which created the RKey is still available,
+// it should be used instead.
+func (rk RKey) AsRawKey() Key {
+	return Key(rk)
+}
+
+// Less compares two RKeys.
+func (rk RKey) Less(otherRK RKey) bool {
+	return bytes.Compare(rk, otherRK) < 0
+}
+
+// Equal checks for byte-wise equality.
+func (rk RKey) Equal(other []byte) bool {
+	return bytes.Equal(rk, other)
+}
+
+// Next returns the RKey that sorts immediately after the given one.
+func (rk RKey) Next() RKey {
+	return RKey(bytesNext(rk))
+}
+
+// PrefixEnd determines the end key given key as a prefix, that is the
+// key that sorts precisely behind all keys starting with prefix: "1"
+// is added to the final byte and the carry propagated. The special
+// cases of nil and KeyMin always returns KeyMax.
+func (rk RKey) PrefixEnd() RKey {
+	if len(rk) == 0 {
+		return RKeyMax
+	}
+	return RKey(bytesPrefixEnd(rk))
+}
+
+func (rk RKey) String() string {
+	return Key(rk).String()
+}
 
 // Key is a custom type for a byte string in proto
 // messages which refer to Cockroach keys.
@@ -59,20 +104,13 @@ type EncodedKey []byte
 
 // MakeKey makes a new key which is the concatenation of the
 // given inputs, in order.
-func MakeKey(keys ...Key) Key {
+func MakeKey(keys ...[]byte) []byte {
 	byteSlices := make([][]byte, len(keys))
 	for i, k := range keys {
 		byteSlices[i] = []byte(k)
 	}
-	return Key(bytes.Join(byteSlices, nil))
+	return bytes.Join(byteSlices, nil)
 }
-
-// KeySlice implements sort.Interface.
-type KeySlice []Key
-
-func (s KeySlice) Len() int           { return len(s) }
-func (s KeySlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s KeySlice) Less(i, j int) bool { return s[i].Less(s[j]) }
 
 // Returns the next possible byte by appending an \x00.
 func bytesNext(b []byte) []byte {
@@ -105,9 +143,8 @@ func (k Key) IsPrev(m Key) bool {
 }
 
 // Next returns the next key in lexicographic sort order.
-// TODO(tschottdorf): duplicate code with (Key).Next().
 func (k EncodedKey) Next() EncodedKey {
-	return EncodedKey(bytes.Join([][]byte{k, Key{0}}, nil))
+	return EncodedKey(bytesNext(k))
 }
 
 // PrefixEnd determines the end key given key as a prefix, that is the
@@ -116,7 +153,7 @@ func (k EncodedKey) Next() EncodedKey {
 // cases of nil and KeyMin always returns KeyMax.
 func (k Key) PrefixEnd() Key {
 	if len(k) == 0 {
-		return KeyMax
+		return Key(RKeyMax)
 	}
 	return Key(bytesPrefixEnd(k))
 }
@@ -125,14 +162,9 @@ func (k Key) PrefixEnd() Key {
 // this key as a prefix. See comments for Key.
 func (k EncodedKey) PrefixEnd() EncodedKey {
 	if len(k) == 0 {
-		return EncodedKey(KeyMax)
+		return EncodedKey(RKeyMax)
 	}
 	return EncodedKey(bytesPrefixEnd(k))
-}
-
-// Less compares two keys.
-func (k Key) Less(l Key) bool {
-	return bytes.Compare(k, l) < 0
 }
 
 // Less compares two keys.

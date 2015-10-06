@@ -138,10 +138,10 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	var d [2]*roachpb.RangeDescriptor
 	ranges := []struct {
 		storeID    roachpb.StoreID
-		start, end roachpb.Key
+		start, end roachpb.RKey
 	}{
-		{2, roachpb.Key(roachpb.KeyMin), roachpb.Key("c")},
-		{3, roachpb.Key("x"), roachpb.Key("z")},
+		{2, roachpb.RKeyMin, roachpb.RKey("c")},
+		{3, roachpb.RKey("x"), roachpb.RKey("z")},
 	}
 	for i, rng := range ranges {
 		e[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
@@ -166,19 +166,19 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		ls.AddStore(s[i])
 	}
 
-	if _, r, err := ls.lookupReplica(roachpb.Key("a"), roachpb.Key("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(roachpb.RKey("a"), roachpb.RKey("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.Key("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(roachpb.RKey("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.Key("b"), roachpb.Key("d")); r != nil || err == nil {
+	if _, r, err := ls.lookupReplica(roachpb.RKey("b"), roachpb.RKey("d")); r != nil || err == nil {
 		t.Errorf("expected store 0 and error got %d", r.StoreID)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.Key("x"), roachpb.Key("z")); r.StoreID != s[1].Ident.StoreID {
+	if _, r, err := ls.lookupReplica(roachpb.RKey("x"), roachpb.RKey("z")); r.StoreID != s[1].Ident.StoreID {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.Key("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(roachpb.RKey("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
 

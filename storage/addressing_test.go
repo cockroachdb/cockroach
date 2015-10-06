@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"sort"
@@ -41,14 +42,18 @@ type metaSlice []metaRecord
 // Implementation of sort.Interface.
 func (ms metaSlice) Len() int           { return len(ms) }
 func (ms metaSlice) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
-func (ms metaSlice) Less(i, j int) bool { return ms[i].key.Less(ms[j].key) }
+func (ms metaSlice) Less(i, j int) bool { return bytes.Compare(ms[i].key, ms[j].key) < 0 }
 
-func meta1Key(key roachpb.Key) roachpb.Key {
+func meta1Key(key roachpb.RKey) []byte {
 	return keys.MakeKey(keys.Meta1Prefix, key)
 }
 
-func meta2Key(key roachpb.Key) roachpb.Key {
+func meta2Key(key roachpb.RKey) []byte {
 	return keys.MakeKey(keys.Meta2Prefix, key)
+}
+
+func metaKey(key roachpb.RKey) []byte {
+	return keys.Addr(keys.RangeMetaKey(key))
 }
 
 // TestUpdateRangeAddressing verifies range addressing records are
@@ -63,52 +68,52 @@ func TestUpdateRangeAddressing(t *testing.T) {
 	// expect to be removed.
 	testCases := []struct {
 		split                   bool
-		leftStart, leftEnd      roachpb.Key
-		rightStart, rightEnd    roachpb.Key
-		leftExpNew, rightExpNew []roachpb.Key
+		leftStart, leftEnd      roachpb.RKey
+		rightStart, rightEnd    roachpb.RKey
+		leftExpNew, rightExpNew [][]byte
 	}{
 		// Start out with whole range.
-		{false, roachpb.KeyMin, roachpb.KeyMax, roachpb.KeyMin, roachpb.KeyMax,
-			[]roachpb.Key{}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.KeyMax)}},
+		{false, roachpb.RKeyMin, roachpb.RKeyMax, roachpb.RKeyMin, roachpb.RKeyMax,
+			[][]byte{}, [][]byte{meta1Key(roachpb.RKeyMax), meta2Key(roachpb.RKeyMax)}},
 		// Split KeyMin-KeyMax at key "a".
-		{true, roachpb.KeyMin, roachpb.Key("a"), roachpb.Key("a"), roachpb.KeyMax,
-			[]roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}, []roachpb.Key{meta2Key(roachpb.KeyMax)}},
+		{true, roachpb.RKeyMin, roachpb.RKey("a"), roachpb.RKey("a"), roachpb.RKeyMax,
+			[][]byte{meta1Key(roachpb.RKeyMax), meta2Key(roachpb.RKey("a"))}, [][]byte{meta2Key(roachpb.RKeyMax)}},
 		// Split "a"-KeyMax at key "z".
-		{true, roachpb.Key("a"), roachpb.Key("z"), roachpb.Key("z"), roachpb.KeyMax,
-			[]roachpb.Key{meta2Key(roachpb.Key("z"))}, []roachpb.Key{meta2Key(roachpb.KeyMax)}},
+		{true, roachpb.RKey("a"), roachpb.RKey("z"), roachpb.RKey("z"), roachpb.RKeyMax,
+			[][]byte{meta2Key(roachpb.RKey("z"))}, [][]byte{meta2Key(roachpb.RKeyMax)}},
 		// Split "a"-"z" at key "m".
-		{true, roachpb.Key("a"), roachpb.Key("m"), roachpb.Key("m"), roachpb.Key("z"),
-			[]roachpb.Key{meta2Key(roachpb.Key("m"))}, []roachpb.Key{meta2Key(roachpb.Key("z"))}},
+		{true, roachpb.RKey("a"), roachpb.RKey("m"), roachpb.RKey("m"), roachpb.RKey("z"),
+			[][]byte{meta2Key(roachpb.RKey("m"))}, [][]byte{meta2Key(roachpb.RKey("z"))}},
 		// Split KeyMin-"a" at meta2(m).
-		{true, roachpb.KeyMin, keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("m")), roachpb.Key("a"),
-			[]roachpb.Key{meta1Key(roachpb.Key("m"))}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
+		{true, roachpb.RKeyMin, metaKey(roachpb.RKey("m")), metaKey(roachpb.RKey("m")), roachpb.RKey("a"),
+			[][]byte{meta1Key(roachpb.RKey("m"))}, [][]byte{meta1Key(roachpb.RKeyMax), meta2Key(roachpb.RKey("a"))}},
 		// Split meta2(m)-"a" at meta2(z).
-		{true, keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("z")), keys.RangeMetaKey(roachpb.Key("z")), roachpb.Key("a"),
-			[]roachpb.Key{meta1Key(roachpb.Key("z"))}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
+		{true, metaKey(roachpb.RKey("m")), metaKey(roachpb.RKey("z")), metaKey(roachpb.RKey("z")), roachpb.RKey("a"),
+			[][]byte{meta1Key(roachpb.RKey("z"))}, [][]byte{meta1Key(roachpb.RKeyMax), meta2Key(roachpb.RKey("a"))}},
 		// Split meta2(m)-meta2(z) at meta2(r).
-		{true, keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("r")), keys.RangeMetaKey(roachpb.Key("r")), keys.RangeMetaKey(roachpb.Key("z")),
-			[]roachpb.Key{meta1Key(roachpb.Key("r"))}, []roachpb.Key{meta1Key(roachpb.Key("z"))}},
+		{true, metaKey(roachpb.RKey("m")), metaKey(roachpb.RKey("r")), metaKey(roachpb.RKey("r")), metaKey(roachpb.RKey("z")),
+			[][]byte{meta1Key(roachpb.RKey("r"))}, [][]byte{meta1Key(roachpb.RKey("z"))}},
 
 		// Now, merge all of our splits backwards...
 
 		// Merge meta2(m)-meta2(z).
-		{false, keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("r")), keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("z")),
-			[]roachpb.Key{meta1Key(roachpb.Key("r"))}, []roachpb.Key{meta1Key(roachpb.Key("z"))}},
+		{false, metaKey(roachpb.RKey("m")), metaKey(roachpb.RKey("r")), metaKey(roachpb.RKey("m")), metaKey(roachpb.RKey("z")),
+			[][]byte{meta1Key(roachpb.RKey("r"))}, [][]byte{meta1Key(roachpb.RKey("z"))}},
 		// Merge meta2(m)-"a".
-		{false, keys.RangeMetaKey(roachpb.Key("m")), keys.RangeMetaKey(roachpb.Key("z")), keys.RangeMetaKey(roachpb.Key("m")), roachpb.Key("a"),
-			[]roachpb.Key{meta1Key(roachpb.Key("z"))}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
+		{false, metaKey(roachpb.RKey("m")), metaKey(roachpb.RKey("z")), metaKey(roachpb.RKey("m")), roachpb.RKey("a"),
+			[][]byte{meta1Key(roachpb.RKey("z"))}, [][]byte{meta1Key(roachpb.RKeyMax), meta2Key(roachpb.RKey("a"))}},
 		// Merge KeyMin-"a".
-		{false, roachpb.KeyMin, keys.RangeMetaKey(roachpb.Key("m")), roachpb.KeyMin, roachpb.Key("a"),
-			[]roachpb.Key{meta1Key(roachpb.Key("m"))}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.Key("a"))}},
+		{false, roachpb.RKeyMin, metaKey(roachpb.RKey("m")), roachpb.RKeyMin, roachpb.RKey("a"),
+			[][]byte{meta1Key(roachpb.RKey("m"))}, [][]byte{meta1Key(roachpb.RKeyMax), meta2Key(roachpb.RKey("a"))}},
 		// Merge "a"-"z".
-		{false, roachpb.Key("a"), roachpb.Key("m"), roachpb.Key("a"), roachpb.Key("z"),
-			[]roachpb.Key{meta2Key(roachpb.Key("m"))}, []roachpb.Key{meta2Key(roachpb.Key("z"))}},
+		{false, roachpb.RKey("a"), roachpb.RKey("m"), roachpb.RKey("a"), roachpb.RKey("z"),
+			[][]byte{meta2Key(roachpb.RKey("m"))}, [][]byte{meta2Key(roachpb.RKey("z"))}},
 		// Merge "a"-KeyMax.
-		{false, roachpb.Key("a"), roachpb.Key("z"), roachpb.Key("a"), roachpb.KeyMax,
-			[]roachpb.Key{meta2Key(roachpb.Key("z"))}, []roachpb.Key{meta2Key(roachpb.KeyMax)}},
+		{false, roachpb.RKey("a"), roachpb.RKey("z"), roachpb.RKey("a"), roachpb.RKeyMax,
+			[][]byte{meta2Key(roachpb.RKey("z"))}, [][]byte{meta2Key(roachpb.RKeyMax)}},
 		// Merge KeyMin-KeyMax.
-		{false, roachpb.KeyMin, roachpb.Key("a"), roachpb.KeyMin, roachpb.KeyMax,
-			[]roachpb.Key{meta2Key(roachpb.Key("a"))}, []roachpb.Key{meta1Key(roachpb.KeyMax), meta2Key(roachpb.KeyMax)}},
+		{false, roachpb.RKeyMin, roachpb.RKey("a"), roachpb.RKeyMin, roachpb.RKeyMax,
+			[][]byte{meta2Key(roachpb.RKey("a"))}, [][]byte{meta1Key(roachpb.RKeyMax), meta2Key(roachpb.RKeyMax)}},
 	}
 	expMetas := metaSlice{}
 
@@ -144,11 +149,11 @@ func TestUpdateRangeAddressing(t *testing.T) {
 
 		// Continue to build up the expected metas slice, replacing any earlier
 		// version of same key.
-		addOrRemoveNew := func(keys []roachpb.Key, desc *roachpb.RangeDescriptor, add bool) {
+		addOrRemoveNew := func(keys [][]byte, desc *roachpb.RangeDescriptor, add bool) {
 			for _, n := range keys {
 				found := -1
 				for i := range expMetas {
-					if expMetas[i].key.Equal(n) {
+					if expMetas[i].key.Equal(roachpb.Key(n)) {
 						found = i
 						expMetas[i].desc = desc
 						break
@@ -203,8 +208,8 @@ func TestUpdateRangeAddressing(t *testing.T) {
 // of meta1 records.
 func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	left := &roachpb.RangeDescriptor{StartKey: roachpb.KeyMin, EndKey: meta1Key(roachpb.Key("a"))}
-	right := &roachpb.RangeDescriptor{StartKey: meta1Key(roachpb.Key("a")), EndKey: roachpb.KeyMax}
+	left := &roachpb.RangeDescriptor{StartKey: roachpb.RKeyMin, EndKey: meta1Key(roachpb.RKey("a"))}
+	right := &roachpb.RangeDescriptor{StartKey: meta1Key(roachpb.RKey("a")), EndKey: roachpb.RKeyMax}
 	if err := splitRangeAddressing(&client.Batch{}, left, right); err == nil {
 		t.Error("expected failure trying to update addressing records for meta1 split")
 	}

@@ -98,6 +98,13 @@ func formatKeys(keys []roachpb.Key) string {
 	return buf.String()
 }
 
+// keySlice implements sort.Interface.
+type keySlice []roachpb.Key
+
+func (s keySlice) Len() int           { return len(s) }
+func (s keySlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s keySlice) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
+
 // TestBootstrapCluster verifies the results of bootstrapping a
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
@@ -111,15 +118,15 @@ func TestBootstrapCluster(t *testing.T) {
 	defer stopper.Stop()
 
 	// Scan the complete contents of the local database.
-	rows, err := localDB.Scan(keys.LocalPrefix.PrefixEnd(), roachpb.KeyMax, 0)
+	rows, err := localDB.Scan(keys.LocalMax, roachpb.KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var foundKeys roachpb.KeySlice
+	var foundKeys keySlice
 	for _, kv := range rows {
 		foundKeys = append(foundKeys, kv.Key)
 	}
-	var expectedKeys = roachpb.KeySlice{
+	var expectedKeys = keySlice{
 		roachpb.MakeKey(roachpb.Key("\x00\x00meta1"), roachpb.KeyMax),
 		roachpb.MakeKey(roachpb.Key("\x00\x00meta2"), roachpb.KeyMax),
 		roachpb.Key("\x00node-idgen"),

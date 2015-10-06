@@ -105,7 +105,7 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	key, endKey := keys.Range(ba)
 	rng := db.store.LookupReplica(key, endKey)
 	if rng == nil {
-		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(key, endKey, nil))
+		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(key.AsRawKey(), endKey.AsRawKey(), nil))
 	}
 	ba.RangeID = rng.Desc().RangeID
 	replica := rng.GetReplica()
@@ -245,7 +245,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 }
 
-func createRange(s *Store, rangeID roachpb.RangeID, start, end roachpb.Key) *Replica {
+func createRange(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *Replica {
 	desc := &roachpb.RangeDescriptor{
 		RangeID:  rangeID,
 		StartKey: start,
@@ -275,7 +275,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Error(err)
 	}
 	// Create a new range (id=2).
-	rng2 := createRange(store, 2, roachpb.Key("a"), roachpb.Key("b"))
+	rng2 := createRange(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
 	if err := store.AddReplicaTest(rng2); err != nil {
 		t.Fatal(err)
 	}
@@ -292,32 +292,32 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Fatal("expected error re-removing same range")
 	}
 	// Try to add a range with previously-used (but now removed) ID.
-	rng2Dup := createRange(store, 1, roachpb.Key("a"), roachpb.Key("b"))
+	rng2Dup := createRange(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
 	if err := store.AddReplicaTest(rng2Dup); err == nil {
 		t.Fatal("expected error inserting a duplicated range")
 	}
 	// Add another range with different key range and then test lookup.
-	rng3 := createRange(store, 3, roachpb.Key("c"), roachpb.Key("d"))
+	rng3 := createRange(store, 3, roachpb.RKey("c"), roachpb.RKey("d"))
 	if err := store.AddReplicaTest(rng3); err != nil {
 		t.Fatal(err)
 	}
 
 	testCases := []struct {
-		start, end roachpb.Key
+		start, end roachpb.RKey
 		expRng     *Replica
 	}{
-		{roachpb.Key("a"), roachpb.Key("a\x00"), rng2},
-		{roachpb.Key("a"), roachpb.Key("b"), rng2},
-		{roachpb.Key("a\xff\xff"), roachpb.Key("b"), rng2},
-		{roachpb.Key("c"), roachpb.Key("c\x00"), rng3},
-		{roachpb.Key("c"), roachpb.Key("d"), rng3},
-		{roachpb.Key("c\xff\xff"), roachpb.Key("d"), rng3},
-		{roachpb.Key("x60\xff\xff"), roachpb.Key("a"), nil},
-		{roachpb.Key("x60\xff\xff"), roachpb.Key("a\x00"), nil},
-		{roachpb.Key("d"), roachpb.Key("d"), nil},
-		{roachpb.Key("c\xff\xff"), roachpb.Key("d\x00"), nil},
-		{roachpb.Key("a"), nil, rng2},
-		{roachpb.Key("d"), nil, nil},
+		{roachpb.RKey("a"), roachpb.RKey("a\x00"), rng2},
+		{roachpb.RKey("a"), roachpb.RKey("b"), rng2},
+		{roachpb.RKey("a\xff\xff"), roachpb.RKey("b"), rng2},
+		{roachpb.RKey("c"), roachpb.RKey("c\x00"), rng3},
+		{roachpb.RKey("c"), roachpb.RKey("d"), rng3},
+		{roachpb.RKey("c\xff\xff"), roachpb.RKey("d"), rng3},
+		{roachpb.RKey("x60\xff\xff"), roachpb.RKey("a"), nil},
+		{roachpb.RKey("x60\xff\xff"), roachpb.RKey("a\x00"), nil},
+		{roachpb.RKey("d"), roachpb.RKey("d"), nil},
+		{roachpb.RKey("c\xff\xff"), roachpb.RKey("d\x00"), nil},
+		{roachpb.RKey("a"), nil, rng2},
+		{roachpb.RKey("d"), nil, nil},
 	}
 
 	for i, test := range testCases {
@@ -343,7 +343,7 @@ func TestStoreRangeSet(t *testing.T) {
 	// Add 10 new ranges.
 	const newCount = 10
 	for i := 0; i < newCount; i++ {
-		rng := createRange(store, roachpb.RangeID(i+1), roachpb.Key(fmt.Sprintf("a%02d", i)), roachpb.Key(fmt.Sprintf("a%02d", i+1)))
+		rng := createRange(store, roachpb.RangeID(i+1), roachpb.RKey(fmt.Sprintf("a%02d", i)), roachpb.RKey(fmt.Sprintf("a%02d", i+1)))
 		if err := store.AddReplicaTest(rng); err != nil {
 			t.Fatal(err)
 		}
@@ -406,8 +406,8 @@ func TestStoreRangeSet(t *testing.T) {
 
 	// Split the first range to insert a new range as second range.
 	// The range is never visited with this iteration.
-	rng := createRange(store, 11, roachpb.Key("a000"), roachpb.Key("a01"))
-	if err = store.SplitRange(store.LookupReplica(roachpb.Key("a00"), nil), rng); err != nil {
+	rng := createRange(store, 11, roachpb.RKey("a000"), roachpb.RKey("a01"))
+	if err = store.SplitRange(store.LookupReplica(roachpb.RKey("a00"), nil), rng); err != nil {
 		t.Fatal(err)
 	}
 	// Estimated count will still be 9, as it's cached.
@@ -416,7 +416,7 @@ func TestStoreRangeSet(t *testing.T) {
 	}
 
 	// Now, remove the next range in the iteration and verify we skip the removed range.
-	rng = store.LookupReplica(roachpb.Key("a01"), nil)
+	rng = store.LookupReplica(roachpb.RKey("a01"), nil)
 	if rng.Desc().RangeID != 2 {
 		t.Errorf("expected fetch of rangeID=2; got %d", rng.Desc().RangeID)
 	}
@@ -456,7 +456,7 @@ func TestStoreExecuteNoop(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.RangeID = 1
 	ba.Replica = roachpb.ReplicaDescriptor{StoreID: store.StoreID()}
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
+	ba.Add(&roachpb.GetRequest{Span: roachpb.Span{Key: roachpb.Key("a")}})
 	ba.Add(&roachpb.NoopRequest{})
 
 	br, pErr := store.Send(context.Background(), ba)
@@ -493,7 +493,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 		t.Fatalf("unexpected error for end key specified on a non-range-based operation: %v", err)
 	}
 	// Try a scan with too-long EndKey.
-	sArgs := scanArgs(roachpb.KeyMin, tooLongKey)
+	sArgs := scanArgs(roachpb.RKeyMin, tooLongKey)
 	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err, "length exceeded") {
 		t.Fatalf("unexpected error for end key too long: %v", err)
 	}
@@ -518,14 +518,14 @@ func TestStoreVerifyKeys(t *testing.T) {
 
 	// Try a put to meta2 key which would otherwise exceed maximum key
 	// length, but is accepted because of the meta prefix.
-	meta2KeyMax := keys.MakeKey(keys.Meta2Prefix, roachpb.KeyMax)
+	meta2KeyMax := keys.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax)
 	pArgs := putArgs(meta2KeyMax, []byte("value"))
 	if _, err := client.SendWrapped(store.testSender(), nil, &pArgs); err != nil {
 		t.Fatalf("unexpected error on put to meta2 value: %s", err)
 	}
 	// Try to put a range descriptor record for a start key which is
 	// maximum length.
-	key := append([]byte{}, roachpb.KeyMax...)
+	key := append([]byte{}, roachpb.RKeyMax...)
 	key[len(key)-1] = 0x01
 	pArgs = putArgs(keys.RangeDescriptorKey(key), []byte("value"))
 	if _, err := client.SendWrapped(store.testSender(), nil, &pArgs); err != nil {
@@ -549,7 +549,7 @@ func TestStoreSendUpdateTime(t *testing.T) {
 	args := getArgs([]byte("a"))
 	reqTS := store.ctx.Clock.Now()
 	reqTS.WallTime += (100 * time.Millisecond).Nanoseconds()
-	_, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{Timestamp: reqTS}, &args)
+	_, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Timestamp: reqTS}, &args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -598,7 +598,7 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	store.ctx.Clock.SetMaxOffset(maxOffset)
 	// Set args timestamp to exceed max offset.
 	ts := store.ctx.Clock.Now().Add(maxOffset.Nanoseconds()+1, 0)
-	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{Timestamp: ts}, &args); err == nil {
+	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Timestamp: ts}, &args); err == nil {
 		t.Error("expected max offset clock error")
 	}
 }
@@ -609,7 +609,7 @@ func TestStoreSendBadRange(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	args := getArgs([]byte("0"))
-	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 		RangeID: 2, // no such range
 	}, &args); err == nil {
 		t.Error("expected invalid range")
@@ -621,7 +621,7 @@ func TestStoreSendBadRange(t *testing.T) {
 // client_split_test.go and use AdminSplit instead of this function.
 // See #702
 // TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
-func splitTestRange(store *Store, key, splitKey roachpb.Key, t *testing.T) *Replica {
+func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Replica {
 	rng := store.LookupReplica(key, nil)
 	if rng == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
@@ -647,7 +647,7 @@ func TestStoreSendOutOfRange(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	rng2 := splitTestRange(store, roachpb.KeyMin, roachpb.Key("b"), t)
+	rng2 := splitTestRange(store, roachpb.RKeyMin, roachpb.RKey(roachpb.Key("b")), t)
 
 	// Range 1 is from KeyMin to "b", so reading "b" from range 1 should
 	// fail because it's just after the range boundary.
@@ -659,7 +659,7 @@ func TestStoreSendOutOfRange(t *testing.T) {
 	// Range 2 is from "b" to KeyMax, so reading "a" from range 2 should
 	// fail because it's before the start of the range.
 	args = getArgs([]byte("a"))
-	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 		RangeID: rng2.Desc().RangeID,
 	}, &args); err == nil {
 		t.Error("expected key to be out of range")
@@ -677,7 +677,7 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 	// to rangeIDAllocCount * 3 + 1.
 	for i := 0; i < rangeIDAllocCount*3; i++ {
 		replicas := []roachpb.ReplicaDescriptor{{StoreID: store.StoreID()}}
-		desc, err := store.NewRangeDescriptor(roachpb.Key(fmt.Sprintf("%03d", i)), roachpb.Key(fmt.Sprintf("%03d", i+1)), replicas)
+		desc, err := store.NewRangeDescriptor(roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)), replicas)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -694,37 +694,37 @@ func TestStoreRangesByKey(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	r0 := store.LookupReplica(roachpb.KeyMin, nil)
-	r1 := splitTestRange(store, roachpb.KeyMin, roachpb.Key("A"), t)
-	r2 := splitTestRange(store, roachpb.Key("A"), roachpb.Key("C"), t)
-	r3 := splitTestRange(store, roachpb.Key("C"), roachpb.Key("X"), t)
-	r4 := splitTestRange(store, roachpb.Key("X"), roachpb.Key("ZZ"), t)
+	r0 := store.LookupReplica(roachpb.RKeyMin, nil)
+	r1 := splitTestRange(store, roachpb.RKeyMin, roachpb.RKey("A"), t)
+	r2 := splitTestRange(store, roachpb.RKey("A"), roachpb.RKey("C"), t)
+	r3 := splitTestRange(store, roachpb.RKey("C"), roachpb.RKey("X"), t)
+	r4 := splitTestRange(store, roachpb.RKey("X"), roachpb.RKey("ZZ"), t)
 
-	if r := store.LookupReplica(roachpb.Key("0"), nil); r != r0 {
+	if r := store.LookupReplica(roachpb.RKey("0"), nil); r != r0 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r0.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("B"), nil); r != r1 {
+	if r := store.LookupReplica(roachpb.RKey("B"), nil); r != r1 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r1.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("C"), nil); r != r2 {
+	if r := store.LookupReplica(roachpb.RKey("C"), nil); r != r2 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r2.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("M"), nil); r != r2 {
+	if r := store.LookupReplica(roachpb.RKey("M"), nil); r != r2 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r2.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("X"), nil); r != r3 {
+	if r := store.LookupReplica(roachpb.RKey("X"), nil); r != r3 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r3.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("Z"), nil); r != r3 {
+	if r := store.LookupReplica(roachpb.RKey("Z"), nil); r != r3 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r3.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("ZZ"), nil); r != r4 {
+	if r := store.LookupReplica(roachpb.RKey("ZZ"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
-	if r := store.LookupReplica(roachpb.Key("\xff\x00"), nil); r != r4 {
+	if r := store.LookupReplica(roachpb.RKey("\xff\x00"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
-	if store.LookupReplica(roachpb.KeyMax, nil) != nil {
+	if store.LookupReplica(roachpb.RKeyMax, nil) != nil {
 		t.Errorf("expected roachpb.KeyMax to not have an associated range")
 	}
 }
@@ -741,9 +741,9 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		rng         *Replica
 		expMaxBytes int64
 	}{
-		{store.LookupReplica(roachpb.KeyMin, nil),
+		{store.LookupReplica(roachpb.RKeyMin, nil),
 			config.DefaultZoneConfig.RangeMaxBytes},
-		{splitTestRange(store, roachpb.KeyMin, keys.MakeTablePrefix(1000), t),
+		{splitTestRange(store, roachpb.RKeyMin, keys.MakeTablePrefix(1000), t),
 			1 << 20},
 		{splitTestRange(store, keys.MakeTablePrefix(1000), keys.MakeTablePrefix(1001), t),
 			config.DefaultZoneConfig.RangeMaxBytes},
@@ -795,7 +795,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 
 		// First lay down intent using the pushee's txn.
 		pArgs := putArgs(key, []byte("value"))
-		h := roachpb.BatchRequest_Header{Txn: pushee}
+		h := roachpb.Header{Txn: pushee}
 		if _, err := client.SendWrappedWith(store.testSender(), nil, h, &pArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -845,7 +845,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 
 	// First lay down intent using the pushee's txn.
 	args := incrementArgs(key, 1)
-	h := roachpb.BatchRequest_Header{Txn: pushee}
+	h := roachpb.Header{Txn: pushee}
 	if _, err := client.SendWrappedWith(store.testSender(), nil, h, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -901,7 +901,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		}
 
 		// Second, lay down intent using the pushee's txn.
-		h := roachpb.BatchRequest_Header{Txn: pushee}
+		h := roachpb.Header{Txn: pushee}
 		args.Value.Bytes = []byte("value2")
 		if _, err := client.SendWrappedWith(store.testSender(), nil, h, &args); err != nil {
 			t.Fatal(err)
@@ -981,12 +981,12 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// First, write original value.
 	args := putArgs(key, []byte("value1"))
 	ts := store.ctx.Clock.Now()
-	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{Timestamp: ts}, &args); err != nil {
+	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Timestamp: ts}, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Lay down intent using the pushee's txn.
-	h := roachpb.BatchRequest_Header{Txn: pushee}
+	h := roachpb.Header{Txn: pushee}
 	h.Timestamp = store.ctx.Clock.Now()
 	args.Value.Bytes = []byte("value2")
 	if _, err := client.SendWrappedWith(store.testSender(), nil, h, &args); err != nil {
@@ -1035,7 +1035,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	// First, lay down intent from pushee.
 	args := putArgs(key, []byte("value1"))
-	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{Txn: pushee}, &args); err != nil {
+	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: pushee}, &args); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1043,7 +1043,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	getTS := store.ctx.Clock.Now() // accessed later
 	{
 		gArgs := getArgs(key)
-		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			Timestamp:    getTS,
 			UserPriority: proto.Int32(math.MaxInt32),
 		}, &gArgs); err != nil {
@@ -1057,7 +1057,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 		// Next, try to write outside of a transaction. We will succeed in pushing txn.
 		putTS := store.ctx.Clock.Now()
 		args.Value.Bytes = []byte("value2")
-		if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+		if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			Timestamp:    putTS,
 			UserPriority: proto.Int32(math.MaxInt32),
 		}, &args); err != nil {
@@ -1143,7 +1143,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		txnB := newTransaction("testB", keyB, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 			args.Key = txn.Key
-			if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{Txn: txn}, &args); err != nil {
+			if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1157,7 +1157,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// will be able to read with INCONSISTENT.
 		gArgs := getArgs(keyA)
 
-		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
@@ -1166,7 +1166,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		}
 		gArgs.Key = keyB
 
-		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
@@ -1177,7 +1177,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// However, it will be read eventually, as B's intent can be
 		// resolved asynchronously as txn B is committed.
 		util.SucceedsWithin(t, 500*time.Millisecond, func() error {
-			if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+			if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 				ReadConsistency: roachpb.INCONSISTENT,
 			}, &gArgs); err != nil {
 				return util.Errorf("expected read to succeed: %s", err)
@@ -1189,7 +1189,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 
 		// Scan keys and verify results.
 		sArgs := scanArgs(keyA, keyB.Next())
-		reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+		reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &sArgs)
 		if err != nil {
@@ -1222,7 +1222,7 @@ func TestStoreScanIntents(t *testing.T) {
 	var count int32
 	countPtr := &count
 
-	TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
+	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
 		if _, ok := args.(*roachpb.ScanRequest); ok {
 			atomic.AddInt32(countPtr, 1)
 		}
@@ -1263,7 +1263,7 @@ func TestStoreScanIntents(t *testing.T) {
 				txn = newTransaction(fmt.Sprintf("test-%d", i), key, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 			}
 			args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)))
-			if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{Txn: txn}, &args); err != nil {
+			if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1279,7 +1279,7 @@ func TestStoreScanIntents(t *testing.T) {
 		}
 		done := make(chan struct{})
 		go func() {
-			if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+			if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 				Timestamp:       ts,
 				ReadConsistency: consistency,
 			}, &sArgs); err != nil {
@@ -1332,7 +1332,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer setTxnAutoGC(false)()
 	var intercept atomic.Value
 	intercept.Store(true)
-	TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
+	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
 		if _, ok := args.(*roachpb.ResolveIntentRequest); ok && intercept.Load().(bool) {
 			return util.Errorf("error on purpose")
 		}
@@ -1349,7 +1349,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("key%02d", j))
 		keys = append(keys, key)
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)))
-		if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{Txn: txn}, &args); err != nil {
+		if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1367,7 +1367,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	// Scan the range repeatedly until we've verified count.
 	sArgs := scanArgs(keys[0], keys[9].Next())
 	util.SucceedsWithin(t, time.Second, func() error {
-		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.BatchRequest_Header{
+		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &sArgs); err != nil {
 			return err
@@ -1389,46 +1389,58 @@ func TestStoreBadRequests(t *testing.T) {
 
 	txn := newTransaction("test", roachpb.Key("a"), 1 /* priority */, roachpb.SERIALIZABLE, store.ctx.Clock)
 
-	var h [10]roachpb.BatchRequest_Header
-
-	// Start key must be less than KeyMax.
-	args0 := getArgs(roachpb.KeyMax)
-
-	// End key must not be specified for a non-range operation.
 	args1 := getArgs(roachpb.Key("a"))
 	args1.EndKey = roachpb.Key("b")
 
-	// End key must be specified for a range-operation.
-	args2 := scanArgs(roachpb.Key("a"), nil)
+	args2 := getArgs(roachpb.RKeyMax)
 
-	// End key must be great than start.
 	args3 := scanArgs(roachpb.Key("a"), roachpb.Key("a"))
 	args4 := scanArgs(roachpb.Key("b"), roachpb.Key("a"))
 
-	// Tests for operations that update transaction keys.
+	args5 := scanArgs(roachpb.RKeyMin, roachpb.Key("a"))
+	args6 := scanArgs(keys.RangeTreeNodeKey(keys.Addr(keys.RangeTreeRoot)), roachpb.Key("a"))
 
-	// Txn must be specified
 	tArgs0, _ := endTxnArgs(txn, false /* commit */)
 	tArgs1, _ := heartbeatArgs(txn)
-	_ = tArgs1 // TODO(tschottdorf): appears unused.
 
-	// Txn key must be same as the request key.
-	var tArgs2 roachpb.EndTransactionRequest
-	tArgs2, h[6] = endTxnArgs(txn, false /* commit */)
-	h[6].Txn.Key = h[6].Txn.Key.Next()
+	tArgs2, tHeader2 := endTxnArgs(txn, false /* commit */)
+	tHeader2.Txn.Key = tHeader2.Txn.Key.Next()
 
-	var tArgs3 roachpb.HeartbeatTxnRequest
-	tArgs3, h[7] = heartbeatArgs(txn)
-	h[7].Txn.Key = h[7].Txn.Key.Next()
+	tArgs3, tHeader3 := heartbeatArgs(txn)
+	tHeader3.Txn.Key = tHeader3.Txn.Key.Next()
 
 	tArgs4 := pushTxnArgs(txn, txn, roachpb.ABORT_TXN)
 	tArgs4.PusheeTxn.Key = txn.Key.Next()
 
-	testCases := append([]roachpb.Request{}, &args0, &args1, &args2, &args3, &args4,
-		&tArgs0, &tArgs2, &tArgs3, &tArgs4)
+	testCases := []struct {
+		args   roachpb.Request
+		header *roachpb.Header
+		err    string
+	}{
+		// EndKey for non-Range is invalid.
+		{&args1, nil, "should not be specified"},
+		// Start key must be less than KeyMax.
+		{&args2, nil, "must be less than"},
+		// End key must be greater than start.
+		{&args3, nil, "must be greater than"},
+		{&args4, nil, "must be greater than"},
+		// Can't range from local to global.
+		{&args5, nil, "must be greater than LocalMax"},
+		{&args6, nil, "is range-local, but"},
+		// Txn must be specified in Header.
+		{&tArgs0, nil, "no transaction specified"},
+		{&tArgs1, nil, "no transaction specified"},
+		// Txn key must be same as the request key.
+		{&tArgs2, &tHeader2, "request key .* should match txn key .*"},
+		{&tArgs3, &tHeader3, "request key .* should match txn key .*"},
+		{&tArgs4, nil, "request key .* should match pushee"},
+	}
 	for i, test := range testCases {
-		if _, err := client.SendWrappedWith(store.testSender(), nil, h[i], test); err == nil {
-			t.Errorf("%d unexpected success of request %s", i, test)
+		if test.header == nil {
+			test.header = &roachpb.Header{}
+		}
+		if _, err := client.SendWrappedWith(store.testSender(), nil, *test.header, test.args); err == nil || test.err == "" || !testutils.IsError(err, test.err) {
+			t.Errorf("%d unexpected result: %s", i, err)
 		}
 	}
 }

@@ -87,11 +87,11 @@ func TestGetZoneConfig(t *testing.T) {
 
 	// We have no custom zone configs.
 	testCases := []struct {
-		key     roachpb.Key
+		key     roachpb.RKey
 		zoneCfg config.ZoneConfig
 	}{
-		{roachpb.KeyMin, *config.DefaultZoneConfig},
-		{keys.TableDataPrefix, *config.DefaultZoneConfig},
+		{roachpb.RKeyMin, *config.DefaultZoneConfig},
+		{keys.Addr(keys.TableDataPrefix), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(1), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(keys.MaxReservedDescID), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(db1), *config.DefaultZoneConfig},
@@ -145,11 +145,11 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 
 	testCases = []struct {
-		key     roachpb.Key
+		key     roachpb.RKey
 		zoneCfg config.ZoneConfig
 	}{
-		{roachpb.KeyMin, *config.DefaultZoneConfig},
-		{keys.TableDataPrefix, *config.DefaultZoneConfig},
+		{roachpb.RKeyMin, *config.DefaultZoneConfig},
+		{keys.Addr(keys.TableDataPrefix), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(1), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(keys.MaxReservedDescID), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(db1), db1Cfg},

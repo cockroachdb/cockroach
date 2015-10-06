@@ -115,7 +115,7 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(start); err != nil {
 		return err
 	}
-	if !start.Less(roachpb.KeyMax) {
+	if bytes.Compare(start, roachpb.KeyMax) >= 0 {
 		return util.Errorf("start key %q must be less than KeyMax", start)
 	}
 	if !checkEndKey {
@@ -130,15 +130,25 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(end); err != nil {
 		return err
 	}
-	if roachpb.KeyMax.Less(end) {
+	if bytes.Compare(roachpb.KeyMax, end) < 0 {
 		return util.Errorf("end key %q must be less than or equal to KeyMax", end)
 	}
-	if !start.Less(end) {
-		return util.Errorf("end key %q must be greater than start %q", end, start)
+	{
+		sAddr, eAddr := keys.Addr(start), keys.Addr(end)
+		if !sAddr.Less(eAddr) {
+			return util.Errorf("end key %q must be greater than start %q", end, start)
+		}
+		if !bytes.Equal(sAddr, start) {
+			if bytes.Equal(eAddr, end) {
+				return util.Errorf("start key is range-local, but end key is not")
+			}
+		} else if bytes.Compare(start, keys.LocalMax) < 0 {
+			// It's a range op, not local but somehow plows through local data -
+			// not cool.
+			return util.Errorf("start key in [%q,%q) must be greater than LocalMax", start, end)
+		}
 	}
-	if bytes.HasPrefix(start, keys.LocalRangePrefix) && !bytes.HasPrefix(end, keys.LocalRangePrefix) {
-		return util.Errorf("start key is range-local, but end key is not")
-	}
+
 	return nil
 }
 
@@ -153,17 +163,17 @@ func (e *rangeAlreadyExists) Error() string {
 
 // rangeKeyItem is a common interface for roachpb.Key and Range.
 type rangeKeyItem interface {
-	getKey() roachpb.Key
+	getKey() roachpb.RKey
 }
 
-// rangeBTreeKey is a type alias of roachpb.Key that implements the
+// rangeBTreeKey is a type alias of roachpb.RKey that implements the
 // rangeKeyItem interface and the btree.Item interface.
-type rangeBTreeKey roachpb.Key
+type rangeBTreeKey roachpb.RKey
 
 var _ rangeKeyItem = rangeBTreeKey{}
 
-func (k rangeBTreeKey) getKey() roachpb.Key {
-	return (roachpb.Key)(k)
+func (k rangeBTreeKey) getKey() roachpb.RKey {
+	return (roachpb.RKey)(k)
 }
 
 var _ btree.Item = rangeBTreeKey{}
@@ -174,7 +184,7 @@ func (k rangeBTreeKey) Less(i btree.Item) bool {
 
 var _ rangeKeyItem = &Replica{}
 
-func (r *Replica) getKey() roachpb.Key {
+func (r *Replica) getKey() roachpb.RKey {
 	return r.Desc().EndKey
 }
 
@@ -466,8 +476,8 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	s.engine.SetGCTimeouts(minTxnTS, minRCacheTS)
 
 	// Iterator over all range-local key-based data.
-	start := keys.RangeDescriptorKey(roachpb.KeyMin)
-	end := keys.RangeDescriptorKey(roachpb.KeyMax)
+	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
+	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
 
 	if s.multiraft, err = multiraft.NewMultiRaft(s.Ident.NodeID, s.Ident.StoreID, &multiraft.Config{
 		Transport:              s.ctx.Transport,
@@ -494,7 +504,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			if err != nil {
 				return false, err
 			}
-			if !suffix.Equal(keys.LocalRangeDescriptorSuffix) {
+			if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
 				return false, nil
 			}
 			var desc roachpb.RangeDescriptor
@@ -623,7 +633,7 @@ func (s *Store) startGossip() {
 // range and if so, reminds it to gossip the first range descriptor and
 // sentinel gossip.
 func (s *Store) maybeGossipFirstRange() error {
-	rng := s.LookupReplica(roachpb.KeyMin, nil)
+	rng := s.LookupReplica(roachpb.RKeyMin, nil)
 	if rng != nil {
 		return rng.maybeGossipFirstRange()
 	}
@@ -633,7 +643,7 @@ func (s *Store) maybeGossipFirstRange() error {
 // maybeGossipSystemConfig looks for the range containing SystemDB keys and
 // lets that range gossip them.
 func (s *Store) maybeGossipSystemConfig() error {
-	rng := s.LookupReplica(keys.SystemDBSpan.Start, nil)
+	rng := s.LookupReplica(roachpb.RKey(keys.SystemDBSpan.Key), nil)
 	if rng == nil {
 		// This store has no range with this configuration.
 		return nil
@@ -718,7 +728,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		return err
 	}
 	s.Ident = ident
-	kvs, err := engine.Scan(s.engine, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 1)
+	kvs, err := engine.Scan(s.engine, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 1)
 	if err != nil {
 		return util.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
@@ -751,18 +761,16 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 // specified key range. Note that the specified keys are transformed
 // using Key.Address() to ensure we lookup replicas correctly for local
 // keys. When end is nil, a replica that contains start is looked up.
-func (s *Store) LookupReplica(start, end roachpb.Key) *Replica {
+func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	startAddr := keys.KeyAddress(start)
-	endAddr := keys.KeyAddress(end)
 
 	var rng *Replica
-	s.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(startAddr.Next()), func(i btree.Item) bool {
+	s.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(start.Next()), func(i btree.Item) bool {
 		rng = i.(*Replica)
 		return false
 	})
-	if rng == nil || !rng.Desc().ContainsKeyRange(startAddr, endAddr) {
+	if rng == nil || !rng.Desc().ContainsKeyRange(start, end) {
 		return nil
 	}
 	return rng
@@ -785,8 +793,8 @@ func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	desc := &roachpb.RangeDescriptor{
 		RangeID:       1,
-		StartKey:      roachpb.KeyMin,
-		EndKey:        roachpb.KeyMax,
+		StartKey:      roachpb.RKeyMin,
+		EndKey:        roachpb.RKeyMax,
 		NextReplicaID: 2,
 		Replicas: []roachpb.ReplicaDescriptor{
 			{
@@ -817,12 +825,12 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	// Range addressing for meta2.
-	meta2Key := keys.RangeMetaKey(roachpb.KeyMax)
+	meta2Key := keys.RangeMetaKey(roachpb.RKeyMax)
 	if err := engine.MVCCPutProto(batch, ms, meta2Key, now, nil, desc); err != nil {
 		return err
 	}
 	// Range addressing for meta1.
-	meta1Key := keys.RangeMetaKey(meta2Key)
+	meta1Key := keys.RangeMetaKey(keys.Addr(meta2Key))
 	if err := engine.MVCCPutProto(batch, ms, meta1Key, now, nil, desc); err != nil {
 		return err
 	}
@@ -891,7 +899,7 @@ func (s *Store) Tracer() *tracer.Tracer { return s.ctx.Tracer }
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied roachpb.Replicas slice. It allocates new
 // replica IDs to fill out the supplied replicas.
-func (s *Store) NewRangeDescriptor(start, end roachpb.Key, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error) {
+func (s *Store) NewRangeDescriptor(start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error) {
 	id, err := s.rangeIDAlloc.Allocate()
 	if err != nil {
 		return nil, err
@@ -955,7 +963,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 // MergeRange expands the subsuming range to absorb the subsumed range.
 // This merge operation will fail if the two ranges are not collocated
 // on the same store. Must be called from the processRaft goroutine.
-func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.Key, subsumedRangeID roachpb.RangeID) error {
+func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error {
 	subsumingDesc := subsumingRng.Desc()
 
 	if !subsumingDesc.EndKey.Less(updatedEndKey) {
@@ -1234,7 +1242,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			if ok {
 				args := ba.Requests[index].GetInner()
 				// TODO(tschottdorf): implications of using the batch ts here?
-				err = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.BatchRequest_Header, pushType)
+				err = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.Header, pushType)
 				// Make sure that if an index is carried in the error, it
 				// remains the one corresponding to the batch here.
 				if iErr, ok := err.(roachpb.IndexedError); ok {
@@ -1311,7 +1319,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 // c) resolving intents upon EndTransaction which are not local to the given
 //    range. This is the only path in which the transaction is going to be
 //    in non-pending state and doesn't require a push.
-func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, h roachpb.BatchRequest_Header, pushType roachpb.PushTxnType) error {
+func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, h roachpb.Header, pushType roachpb.PushTxnType) error {
 	method := args.Method()
 	pusherTxn := h.Txn
 	readOnly := roachpb.IsReadOnly(args) // TODO(tschottdorf): pass as param
@@ -1351,7 +1359,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	var pushReqs []roachpb.Request
 	for _, intent := range pushIntents {
 		pushReqs = append(pushReqs, &roachpb.PushTxnRequest{
-			RequestHeader: roachpb.RequestHeader{
+			Span: roachpb.Span{
 				Key: intent.Txn.Key,
 			},
 			PusherTxn: *pusherTxn,

@@ -76,7 +76,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 	get := func(store *storage.Store, rangeID roachpb.RangeID, key roachpb.Key) int64 {
 		args := getArgs(key)
-		resp, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+		resp, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 			RangeID: rangeID,
 		}, &args)
 		if err != nil {
@@ -102,7 +102,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 		increment := func(rangeID roachpb.RangeID, key roachpb.Key, value int64) (*roachpb.IncrementResponse, error) {
 			args := incrementArgs(key, value)
-			resp, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+			resp, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 				RangeID: rangeID,
 			}, &args)
 			incResp, _ := resp.(*roachpb.IncrementResponse)
@@ -115,11 +115,11 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		if _, err := increment(rangeID, key2, 5); err != nil {
 			t.Fatal(err)
 		}
-		splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+		splitArgs := adminSplitArgs(roachpb.RKeyMin, splitKey)
 		if _, err := client.SendWrapped(rg1(store), nil, &splitArgs); err != nil {
 			t.Fatal(err)
 		}
-		rangeID2 = store.LookupReplica(key2, nil).Desc().RangeID
+		rangeID2 = store.LookupReplica(roachpb.RKey(key2), nil).Desc().RangeID
 		if rangeID2 == rangeID {
 			t.Errorf("got same range id after split")
 		}
@@ -144,7 +144,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		t.Fatal(err)
 	}
 	incArgs = incrementArgs(key2, 0)
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: rangeID2,
 	}, &incArgs); err != nil {
 		t.Fatal(err)
@@ -166,7 +166,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	numIncrements := 0
 
-	storage.TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
+	storage.TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
 		if _, ok := args.(*roachpb.IncrementRequest); ok && args.Header().Key.Equal(roachpb.Key("a")) {
 			numIncrements++
 		}
@@ -245,12 +245,12 @@ func TestReplicateRange(t *testing.T) {
 	// Verify that in time, no intents remain on meta addressing
 	// keys, and that range descriptor on the meta records is correct.
 	util.SucceedsWithin(t, 1*time.Second, func() error {
-		meta2 := keys.RangeMetaKey(roachpb.KeyMax)
-		meta1 := keys.RangeMetaKey(meta2)
-		for _, key := range []roachpb.Key{meta2, meta1} {
+		meta2 := keys.Addr(keys.RangeMetaKey(roachpb.RKeyMax))
+		meta1 := keys.Addr(keys.RangeMetaKey(meta2))
+		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
-			if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {
-				return util.Errorf("failed to resolve %s", key)
+			if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {
+				return util.Errorf("failed to resolve %s", key.AsRawKey())
 			}
 			if !reflect.DeepEqual(metaDesc, desc) {
 				return util.Errorf("descs not equal: %+v != %+v", metaDesc, desc)
@@ -262,7 +262,7 @@ func TestReplicateRange(t *testing.T) {
 	// Verify that the same data is available on the replica.
 	util.SucceedsWithin(t, 1*time.Second, func() error {
 		getArgs := getArgs([]byte("a"))
-		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.BatchRequest_Header{
+		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs); err != nil {
 			return util.Errorf("failed to read data")
@@ -334,7 +334,7 @@ func TestRestoreReplicas(t *testing.T) {
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs([]byte("a"))
-		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.BatchRequest_Header{
+		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs)
 		if err != nil {
@@ -376,7 +376,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	var runFilter atomic.Value
 	runFilter.Store(true)
 
-	storage.TestingCommandFilter = func(args roachpb.Request, _ roachpb.BatchRequest_Header) error {
+	storage.TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
 		if runFilter.Load().(bool) {
 			if et, ok := args.(*roachpb.EndTransactionRequest); ok && et.Commit {
 				return util.Errorf("boom")
@@ -490,7 +490,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Once it catches up, the effects of both commands can be seen.
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs([]byte("a"))
-		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.BatchRequest_Header{
+		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs)
 		if err != nil {
@@ -522,7 +522,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs([]byte("a"))
-		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.BatchRequest_Header{
+		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs)
 		if err != nil {
@@ -559,7 +559,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	// The range should become available on every node.
 	if err := util.IsTrueWithin(func() bool {
 		for _, s := range mtc.stores {
-			r := s.LookupReplica(roachpb.Key("a"), roachpb.Key("b"))
+			r := s.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
 			if r == nil {
 				return false
 			}
@@ -572,14 +572,14 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 
 // getRangeMetadata retrieves the current range descriptor for the target
 // range.
-func getRangeMetadata(key roachpb.Key, mtc *multiTestContext, t *testing.T) roachpb.RangeDescriptor {
+func getRangeMetadata(key roachpb.RKey, mtc *multiTestContext, t *testing.T) roachpb.RangeDescriptor {
 	// Calls to RangeLookup typically use inconsistent reads, but we
 	// want to do a consistent read here. This is important when we are
 	// considering one of the metadata ranges: we must not do an
 	// inconsistent lookup in our own copy of the range.
 	b := &client.Batch{}
 	b.InternalAddRequest(&roachpb.RangeLookupRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: keys.RangeMetaKey(key),
 		},
 		MaxRanges: 1,
@@ -607,10 +607,10 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	// Split off a range from the initial range for testing; there are
 	// complications if the metadata ranges are removed from store 1, this
 	// simplifies the test.
-	splitKey := roachpb.Key("m")
-	rightKey := roachpb.Key("z")
+	splitKey := roachpb.RKey("m")
+	rightKey := roachpb.RKey("z")
 	{
-		replica := store0.LookupReplica(roachpb.KeyMin, nil)
+		replica := store0.LookupReplica(roachpb.RKeyMin, nil)
 		mtc.replicateRange(replica.Desc().RangeID, 0, 1, 2)
 		desc := replica.Desc()
 		splitArgs := adminSplitArgs(splitKey, splitKey)
@@ -754,7 +754,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := util.IsTrueWithin(func() bool {
-		r := mtc.stores[1].LookupReplica(roachpb.Key("a"), roachpb.Key("b"))
+		r := mtc.stores[1].LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
 		if r == nil {
 			return false
 		}
@@ -774,7 +774,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := util.IsTrueWithin(func() bool {
-		r := mtc.stores[2].LookupReplica(roachpb.Key("a"), roachpb.Key("b"))
+		r := mtc.stores[2].LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
 		if r == nil {
 			return false
 		}
@@ -908,7 +908,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		// The removed store no longer has any of the data from the range.
 		verify([]int64{39, 0, 39, 39})
 
-		desc := mtc.stores[0].LookupReplica(roachpb.KeyMin, nil).Desc()
+		desc := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil).Desc()
 		replicaIDsByStore := map[roachpb.StoreID]roachpb.ReplicaID{}
 		for _, rep := range desc.Replicas {
 			replicaIDsByStore[rep.StoreID] = rep.ReplicaID
@@ -960,18 +960,18 @@ func TestReplicateAfterSplit(t *testing.T) {
 
 	store0 := mtc.stores[0]
 	// Make the split
-	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+	splitArgs := adminSplitArgs(roachpb.RKeyMin, splitKey)
 	if _, err := client.SendWrapped(rg1(store0), nil, &splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
-	rangeID2 := store0.LookupReplica(key, nil).Desc().RangeID
+	rangeID2 := store0.LookupReplica(roachpb.RKey(key), nil).Desc().RangeID
 	if rangeID2 == rangeID {
 		t.Errorf("got same range id after split")
 	}
 	// Issue an increment for later check.
 	incArgs := incrementArgs(key, 11)
-	if _, err := client.SendWrappedWith(rg1(store0), nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(rg1(store0), nil, roachpb.Header{
 		RangeID: rangeID2,
 	}, &incArgs); err != nil {
 		t.Fatal(err)
@@ -979,14 +979,14 @@ func TestReplicateAfterSplit(t *testing.T) {
 	// Now add the second replica.
 	mtc.replicateRange(rangeID2, 0, 1)
 
-	if mtc.stores[1].LookupReplica(key, nil).GetMaxBytes() == 0 {
+	if mtc.stores[1].LookupReplica(roachpb.RKey(key), nil).GetMaxBytes() == 0 {
 		t.Error("Range MaxBytes is not set after snapshot applied")
 	}
 	// Once it catches up, the effects of increment commands can be seen.
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs(key)
 		// Reading on non-leader replica should use inconsistent read
-		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.BatchRequest_Header{
+		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			RangeID:         rangeID2,
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs)
@@ -1020,7 +1020,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			case <-stopper.ShouldStop():
 				return
 			default:
-				rng := mtc.stores[0].LookupReplica(roachpb.KeyMin, nil)
+				rng := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
 				if rng == nil {
 					t.Fatal("failed to look up min range")
 				}
@@ -1029,7 +1029,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 					t.Fatalf("failed to snapshot min range: %s", err)
 				}
 
-				rng = mtc.stores[0].LookupReplica(roachpb.Key("Z"), nil)
+				rng = mtc.stores[0].LookupReplica(roachpb.RKey("Z"), nil)
 				if rng == nil {
 					t.Fatal("failed to look up max range")
 				}
@@ -1045,12 +1045,12 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 	// initial range.  The bug that this test was designed to find
 	// usually occurred within the first 5 iterations.
 	for i := 20; i > 0; i-- {
-		rng := mtc.stores[0].LookupReplica(roachpb.KeyMin, nil)
+		rng := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
 		if rng == nil {
 			t.Fatal("failed to look up min range")
 		}
 		desc := rng.Desc()
-		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("A%03d", i)))
+		args := adminSplitArgs(roachpb.RKeyMin, []byte(fmt.Sprintf("A%03d", i)))
 		if _, err := rng.AdminSplit(args, desc); err != nil {
 			t.Fatal(err)
 		}
@@ -1058,12 +1058,12 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 
 	// Split again, carving chunks off the beginning of the final range.
 	for i := 0; i < 20; i++ {
-		rng := mtc.stores[0].LookupReplica(roachpb.Key("Z"), nil)
+		rng := mtc.stores[0].LookupReplica(roachpb.RKey("Z"), nil)
 		if rng == nil {
 			t.Fatal("failed to look up max range")
 		}
 		desc := rng.Desc()
-		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("B%03d", i)))
+		args := adminSplitArgs(roachpb.RKeyMin, []byte(fmt.Sprintf("B%03d", i)))
 		if _, err := rng.AdminSplit(args, desc); err != nil {
 			t.Fatal(err)
 		}
@@ -1078,7 +1078,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	defer mtc.Stop()
 
 	// Make the split.
-	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
+	splitArgs := adminSplitArgs(roachpb.RKeyMin, []byte("b"))
 	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &splitArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -1158,7 +1158,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(mtc.gossip)
 
 	// Replicate the range to all stores.
-	replica := mtc.stores[0].LookupReplica(roachpb.KeyMin, nil)
+	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
 	mtc.replicateRange(replica.Desc().RangeID, 0, 1, 2)
 
 	// Initialize the gossip network.
@@ -1177,7 +1177,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 		mtc.stores[1].StoreID(),
 	}
 
-	rangeDesc := getRangeMetadata(roachpb.KeyMin, mtc, t)
+	rangeDesc := getRangeMetadata(roachpb.RKeyMin, mtc, t)
 	if e, a := 3, len(rangeDesc.Replicas); e != a {
 		t.Fatalf("expected %d replicas, only found %d, rangeDesc: %+v", e, a, rangeDesc)
 	}
@@ -1191,7 +1191,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	maxTime := 5 * time.Second
 	maxTimeout := time.After(maxTime)
 
-	for len(getRangeMetadata(roachpb.KeyMin, mtc, t).Replicas) > 2 {
+	for len(getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas) > 2 {
 		select {
 		case <-maxTimeout:
 			t.Fatalf("Failed to remove the dead replica within %s", maxTime)
@@ -1230,7 +1230,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 
 	// Replicate the first range to the first three stores.
 	store0 := mtc.stores[0]
-	replica := store0.LookupReplica(roachpb.KeyMin, nil)
+	replica := store0.LookupReplica(roachpb.RKeyMin, nil)
 	desc := replica.Desc()
 	mtc.replicateRange(desc.RangeID, 0, 1, 2)
 
@@ -1262,7 +1262,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 			t.Fatal("Failed to rebalance replica within 5 seconds")
 		case <-time.After(10 * time.Millisecond):
 			// Look up the official range descriptor, make sure fourth store is on it.
-			rangeDesc := getRangeMetadata(roachpb.KeyMin, mtc, t)
+			rangeDesc := getRangeMetadata(roachpb.RKeyMin, mtc, t)
 
 			// Test if we have already succeeded.
 			for _, repl := range rangeDesc.Replicas {

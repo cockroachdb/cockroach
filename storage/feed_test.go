@@ -35,13 +35,13 @@ func TestStoreEventFeed(t *testing.T) {
 	// not need to be added to a Store.
 	desc1 := &roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: roachpb.Key("a"),
-		EndKey:   roachpb.Key("b"),
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("b"),
 	}
 	desc2 := &roachpb.RangeDescriptor{
 		RangeID:  2,
-		StartKey: roachpb.Key("b"),
-		EndKey:   roachpb.Key("c"),
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("c"),
 	}
 	rng1 := &Replica{
 		stats: &rangeStats{
@@ -105,8 +105,8 @@ func TestStoreEventFeed(t *testing.T) {
 				StoreID: roachpb.StoreID(1),
 				Desc: &roachpb.RangeDescriptor{
 					RangeID:  1,
-					StartKey: roachpb.Key("a"),
-					EndKey:   roachpb.Key("b"),
+					StartKey: roachpb.RKey("a"),
+					EndKey:   roachpb.RKey("b"),
 				},
 				Stats: engine.MVCCStats{
 					LiveBytes:       400,
@@ -125,8 +125,8 @@ func TestStoreEventFeed(t *testing.T) {
 				StoreID: roachpb.StoreID(1),
 				Desc: &roachpb.RangeDescriptor{
 					RangeID:  1,
-					StartKey: roachpb.Key("a"),
-					EndKey:   roachpb.Key("b"),
+					StartKey: roachpb.RKey("a"),
+					EndKey:   roachpb.RKey("b"),
 				},
 				Stats: engine.MVCCStats{
 					LiveBytes:       400,
@@ -150,8 +150,8 @@ func TestStoreEventFeed(t *testing.T) {
 				StoreID: roachpb.StoreID(1),
 				Desc: &roachpb.RangeDescriptor{
 					RangeID:  2,
-					StartKey: roachpb.Key("b"),
-					EndKey:   roachpb.Key("c"),
+					StartKey: roachpb.RKey("b"),
+					EndKey:   roachpb.RKey("c"),
 				},
 				Stats: engine.MVCCStats{
 					LiveBytes:       200,
@@ -171,8 +171,8 @@ func TestStoreEventFeed(t *testing.T) {
 				Original: UpdateRangeEvent{
 					Desc: &roachpb.RangeDescriptor{
 						RangeID:  1,
-						StartKey: roachpb.Key("a"),
-						EndKey:   roachpb.Key("b"),
+						StartKey: roachpb.RKey("a"),
+						EndKey:   roachpb.RKey("b"),
 					},
 					Stats: engine.MVCCStats{
 						LiveBytes:       400,
@@ -190,8 +190,8 @@ func TestStoreEventFeed(t *testing.T) {
 				New: RegisterRangeEvent{
 					Desc: &roachpb.RangeDescriptor{
 						RangeID:  2,
-						StartKey: roachpb.Key("b"),
-						EndKey:   roachpb.Key("c"),
+						StartKey: roachpb.RKey("b"),
+						EndKey:   roachpb.RKey("c"),
 					},
 					Stats: engine.MVCCStats{
 						LiveBytes:       200,
@@ -212,8 +212,8 @@ func TestStoreEventFeed(t *testing.T) {
 				Merged: UpdateRangeEvent{
 					Desc: &roachpb.RangeDescriptor{
 						RangeID:  1,
-						StartKey: roachpb.Key("a"),
-						EndKey:   roachpb.Key("b"),
+						StartKey: roachpb.RKey("a"),
+						EndKey:   roachpb.RKey("b"),
 					},
 					Stats: engine.MVCCStats{
 						LiveBytes:       400,
@@ -231,8 +231,8 @@ func TestStoreEventFeed(t *testing.T) {
 				Removed: RemoveRangeEvent{
 					Desc: &roachpb.RangeDescriptor{
 						RangeID:  2,
-						StartKey: roachpb.Key("b"),
-						EndKey:   roachpb.Key("c"),
+						StartKey: roachpb.RKey("b"),
+						EndKey:   roachpb.RKey("c"),
 					},
 					Stats: engine.MVCCStats{
 						LiveBytes:       200,

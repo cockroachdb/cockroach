@@ -59,7 +59,7 @@ func getNumRanges(db *client.DB) (int, error) {
 	return len(rows), nil
 }
 
-func rangesMatchSplits(ranges []roachpb.Key, splits []roachpb.Key) bool {
+func rangesMatchSplits(ranges []roachpb.Key, splits []roachpb.RKey) bool {
 	if len(ranges) != len(splits) {
 		return false
 	}
@@ -104,7 +104,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 
 	// Verify the actual splits.
 	objectID := uint32(keys.MaxReservedDescID + 1)
-	splits := roachpb.KeySlice{keys.MakeTablePrefix(objectID), roachpb.KeyMax}
+	splits := []roachpb.RKey{keys.MakeTablePrefix(objectID), roachpb.RKeyMax}
 	ranges, err := getRangeKeys(kvDB)
 	if err != nil {
 		t.Fatal(err)
@@ -130,7 +130,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	}
 
 	// Verify the actual splits.
-	splits = roachpb.KeySlice{keys.MakeTablePrefix(objectID), keys.MakeTablePrefix(objectID + 1), roachpb.KeyMax}
+	splits = []roachpb.RKey{keys.MakeTablePrefix(objectID), keys.MakeTablePrefix(objectID + 1), roachpb.RKeyMax}
 	ranges, err = getRangeKeys(kvDB)
 	if err != nil {
 		t.Fatal(err)

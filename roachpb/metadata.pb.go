@@ -77,11 +77,11 @@ func (m *ReplicaDescriptor) GetReplicaID() ReplicaID {
 type RangeDescriptor struct {
 	RangeID RangeID `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
 	// StartKey is the first key which may be contained by this range.
-	StartKey Key `protobuf:"bytes,2,opt,name=start_key,casttype=Key" json:"start_key,omitempty"`
+	StartKey RKey `protobuf:"bytes,2,opt,name=start_key,casttype=RKey" json:"start_key,omitempty"`
 	// EndKey marks the end of the range's possible keys.  EndKey itself is not
 	// contained in this range - it will be contained in the immediately
 	// subsequent range.
-	EndKey Key `protobuf:"bytes,3,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
+	EndKey RKey `protobuf:"bytes,3,opt,name=end_key,casttype=RKey" json:"end_key,omitempty"`
 	// Replicas is the set of nodes/stores on which replicas of this
 	// range are stored, the ordering being arbitrary and subject to
 	// permutation.
@@ -101,14 +101,14 @@ func (m *RangeDescriptor) GetRangeID() RangeID {
 	return 0
 }
 
-func (m *RangeDescriptor) GetStartKey() Key {
+func (m *RangeDescriptor) GetStartKey() RKey {
 	if m != nil {
 		return m.StartKey
 	}
 	return nil
 }
 
-func (m *RangeDescriptor) GetEndKey() Key {
+func (m *RangeDescriptor) GetEndKey() RKey {
 	if m != nil {
 		return m.EndKey
 	}
@@ -131,14 +131,14 @@ func (m *RangeDescriptor) GetNextReplicaID() ReplicaID {
 
 // RangeTree holds the root node of the range tree.
 type RangeTree struct {
-	RootKey Key `protobuf:"bytes,1,opt,name=root_key,casttype=Key" json:"root_key,omitempty"`
+	RootKey RKey `protobuf:"bytes,1,opt,name=root_key,casttype=RKey" json:"root_key,omitempty"`
 }
 
 func (m *RangeTree) Reset()         { *m = RangeTree{} }
 func (m *RangeTree) String() string { return proto.CompactTextString(m) }
 func (*RangeTree) ProtoMessage()    {}
 
-func (m *RangeTree) GetRootKey() Key {
+func (m *RangeTree) GetRootKey() RKey {
 	if m != nil {
 		return m.RootKey
 	}
@@ -147,20 +147,20 @@ func (m *RangeTree) GetRootKey() Key {
 
 // RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
 type RangeTreeNode struct {
-	Key Key `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
+	Key RKey `protobuf:"bytes,1,opt,name=key,casttype=RKey" json:"key,omitempty"`
 	// Color is black if true, red if false.
 	Black bool `protobuf:"varint,2,opt,name=black" json:"black"`
 	// If the parent key is null, this is the root node.
-	ParentKey Key `protobuf:"bytes,3,opt,name=parent_key,casttype=Key" json:"parent_key,omitempty"`
-	LeftKey   Key `protobuf:"bytes,4,opt,name=left_key,casttype=Key" json:"left_key,omitempty"`
-	RightKey  Key `protobuf:"bytes,5,opt,name=right_key,casttype=Key" json:"right_key,omitempty"`
+	ParentKey RKey `protobuf:"bytes,3,opt,name=parent_key,casttype=RKey" json:"parent_key,omitempty"`
+	LeftKey   RKey `protobuf:"bytes,4,opt,name=left_key,casttype=RKey" json:"left_key,omitempty"`
+	RightKey  RKey `protobuf:"bytes,5,opt,name=right_key,casttype=RKey" json:"right_key,omitempty"`
 }
 
 func (m *RangeTreeNode) Reset()         { *m = RangeTreeNode{} }
 func (m *RangeTreeNode) String() string { return proto.CompactTextString(m) }
 func (*RangeTreeNode) ProtoMessage()    {}
 
-func (m *RangeTreeNode) GetKey() Key {
+func (m *RangeTreeNode) GetKey() RKey {
 	if m != nil {
 		return m.Key
 	}
@@ -174,21 +174,21 @@ func (m *RangeTreeNode) GetBlack() bool {
 	return false
 }
 
-func (m *RangeTreeNode) GetParentKey() Key {
+func (m *RangeTreeNode) GetParentKey() RKey {
 	if m != nil {
 		return m.ParentKey
 	}
 	return nil
 }
 
-func (m *RangeTreeNode) GetLeftKey() Key {
+func (m *RangeTreeNode) GetLeftKey() RKey {
 	if m != nil {
 		return m.LeftKey
 	}
 	return nil
 }
 
-func (m *RangeTreeNode) GetRightKey() Key {
+func (m *RangeTreeNode) GetRightKey() RKey {
 	if m != nil {
 		return m.RightKey
 	}

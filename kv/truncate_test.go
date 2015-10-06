@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
 )
@@ -14,13 +15,14 @@ import (
 func TestTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	loc := func(s string) string {
-		return string(keys.RangeDescriptorKey(roachpb.Key(s)))
+		return string(keys.RangeDescriptorKey(roachpb.RKey(s)))
 	}
 	testCases := []struct {
 		keys     [][2]string
 		expKeys  [][2]string
 		from, to string
 		desc     [2]string // optional, defaults to {from,to}
+		err      string
 	}{
 		{
 			// Keys inside of active range.
@@ -35,19 +37,35 @@ func TestTruncate(t *testing.T) {
 			from:    "b", to: "q",
 		},
 		{
-			// Range-local Keys outside of active range.
-			keys:    [][2]string{{loc("e")}, {loc("a"), loc("b")}, {loc("e"), loc("z")}},
-			expKeys: [][2]string{{}, {}, {}},
+			// Range-local keys inside of active range.
+			keys:    [][2]string{{loc("b")}, {loc("c")}},
+			expKeys: [][2]string{{loc("b")}, {loc("c")}},
 			from:    "b", to: "e",
 		},
 		{
-			// Range-local Keys overlapping active range in various ways.
-			// TODO(tschottdorf): those aren't handled nicely but I'll address
-			// it in #2198. Right now local ranges can wind up going all over
-			// the place.
-			keys:    [][2]string{{loc("b")}, {loc("a"), loc("b\x00")}, {loc("c"), loc("f")}, {loc("a"), loc("z")}},
-			expKeys: [][2]string{{loc("b")}, {"b", loc("b\x00")}, {loc("c"), "e"}, {"b", "e"}},
+			// Range-local key outside of active range.
+			keys:    [][2]string{{loc("a")}},
+			expKeys: [][2]string{{}},
 			from:    "b", to: "e",
+		},
+		{
+			// Range-local range contained in active range.
+			keys:    [][2]string{{loc("b"), loc("e") + "\x00"}},
+			expKeys: [][2]string{{loc("b"), loc("e") + "\x00"}},
+			from:    "b", to: "e\x00",
+		},
+
+		{
+			// Range-local range not contained in active range.
+			keys: [][2]string{{loc("a"), loc("b")}},
+			from: "b", to: "e",
+			err: "local key range must not span ranges",
+		},
+		{
+			// Mixed range-local vs global key range.
+			keys: [][2]string{{loc("c"), "d\x00"}},
+			from: "b", to: "e",
+			err: "local key mixed with global key",
 		},
 		{
 			// Key range touching and intersecting active range.
@@ -75,28 +93,31 @@ func TestTruncate(t *testing.T) {
 		for _, ks := range test.keys {
 			if len(ks[1]) > 0 {
 				ba.Add(&roachpb.ScanRequest{
-					RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1])},
+					Span: roachpb.Span{Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1])},
 				})
 			} else {
 				ba.Add(&roachpb.GetRequest{
-					RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(ks[0])},
+					Span: roachpb.Span{Key: roachpb.Key(ks[0])},
 				})
 			}
 		}
 		original := proto.Clone(ba).(*roachpb.BatchRequest)
 
 		desc := &roachpb.RangeDescriptor{
-			StartKey: roachpb.Key(test.desc[0]), EndKey: roachpb.Key(test.desc[1]),
+			StartKey: roachpb.RKey(test.desc[0]), EndKey: roachpb.RKey(test.desc[1]),
 		}
 		if len(desc.StartKey) == 0 {
-			desc.StartKey = roachpb.Key(test.from)
+			desc.StartKey = roachpb.RKey(test.from)
 		}
 		if len(desc.EndKey) == 0 {
-			desc.EndKey = roachpb.Key(test.to)
+			desc.EndKey = roachpb.RKey(test.to)
 		}
-		undo, num, err := truncate(ba, desc, roachpb.Key(test.from), roachpb.Key(test.to))
-		if err != nil {
-			t.Errorf("%d: %s", i, err)
+		undo, num, err := truncate(ba, desc, roachpb.RKey(test.from), roachpb.RKey(test.to))
+		if err != nil || test.err != "" {
+			if test.err == "" || !testutils.IsError(err, test.err) {
+				t.Errorf("%d: %v (expected: %s)", i, err, test.err)
+			}
+			continue
 		}
 		var reqs int
 		for j, arg := range ba.Requests {

@@ -41,6 +41,8 @@ import (
 
 // Constants for system-reserved keys in the KV map.
 var (
+	keyMin       = roachpb.KeyMin
+	keyMax       = roachpb.KeyMax
 	testKey1     = roachpb.Key("/db1")
 	testKey2     = roachpb.Key("/db2")
 	testKey3     = roachpb.Key("/db3")
@@ -913,7 +915,7 @@ func TestMVCCScan(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	kvs, _, err = MVCCScan(engine, testKey4, roachpb.KeyMax, 0, makeTS(1, 0), true, nil)
+	kvs, _, err = MVCCScan(engine, testKey4, keyMax, 0, makeTS(1, 0), true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -924,7 +926,7 @@ func TestMVCCScan(t *testing.T) {
 	}
 
 	_, _, err = MVCCGet(engine, testKey1, makeTS(1, 0), true, txn2)
-	kvs, _, err = MVCCScan(engine, roachpb.KeyMin, testKey2, 0, makeTS(1, 0), true, nil)
+	kvs, _, err = MVCCScan(engine, keyMin, testKey2, 0, makeTS(1, 0), true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1031,7 +1033,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 	engine := createTestEngine(stopper)
 
 	// A scan with consistent=false should fail in a txn.
-	if _, _, err := MVCCScan(engine, roachpb.KeyMin, roachpb.KeyMax, 0, makeTS(1, 0), false, txn1); err == nil {
+	if _, _, err := MVCCScan(engine, keyMin, keyMax, 0, makeTS(1, 0), false, txn1); err == nil {
 		t.Error("expected an error scanning with consistent=false in txn")
 	}
 
@@ -1111,7 +1113,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if num != 2 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _, _ := MVCCScan(engine, roachpb.KeyMin, roachpb.KeyMax, 0, makeTS(2, 0), true, nil)
+	kvs, _, _ := MVCCScan(engine, keyMin, keyMax, 0, makeTS(2, 0), true, nil)
 	if len(kvs) != 2 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
@@ -1120,28 +1122,28 @@ func TestMVCCDeleteRange(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	num, err = MVCCDeleteRange(engine, nil, testKey4, roachpb.KeyMax, 0, makeTS(2, 0), nil)
+	num, err = MVCCDeleteRange(engine, nil, testKey4, keyMax, 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if num != 1 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _, _ = MVCCScan(engine, roachpb.KeyMin, roachpb.KeyMax, 0, makeTS(2, 0), true, nil)
+	kvs, _, _ = MVCCScan(engine, keyMin, keyMax, 0, makeTS(2, 0), true, nil)
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[0].Value.Bytes, value1.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 
-	num, err = MVCCDeleteRange(engine, nil, roachpb.KeyMin, testKey2, 0, makeTS(2, 0), nil)
+	num, err = MVCCDeleteRange(engine, nil, keyMin, testKey2, 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if num != 1 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _, _ = MVCCScan(engine, roachpb.KeyMin, roachpb.KeyMax, 0, makeTS(2, 0), true, nil)
+	kvs, _, _ = MVCCScan(engine, keyMin, keyMax, 0, makeTS(2, 0), true, nil)
 	if len(kvs) != 0 {
 		t.Fatal("the value should be empty")
 	}
@@ -1851,7 +1853,7 @@ func TestFindSplitKey(t *testing.T) {
 	}
 	snap := engine.NewSnapshot()
 	defer snap.Close()
-	humanSplitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.KeyMin, roachpb.KeyMax)
+	humanSplitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.RKeyMin, roachpb.RKeyMax)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1958,7 +1960,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 		defer snap.Close()
 		rangeStart := test.keys[0]
 		rangeEnd := test.keys[len(test.keys)-1].Next()
-		splitKey, err := MVCCFindSplitKey(snap, rangeID, rangeStart, rangeEnd)
+		splitKey, err := MVCCFindSplitKey(snap, rangeID, keys.Addr(rangeStart), keys.Addr(rangeEnd))
 		if test.expError {
 			if err == nil {
 				t.Errorf("%d: expected error", i)
@@ -2046,7 +2048,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		}
 		snap := engine.NewSnapshot()
 		defer snap.Close()
-		splitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.Key("\x01"), roachpb.KeyMax)
+		splitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.RKey("\x01"), roachpb.RKeyMax)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 			continue
@@ -2344,7 +2346,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		if i%10 == 0 {
 			// Compute the stats manually.
 			iter := engine.NewIterator()
-			iter.Seek(roachpb.KeyMin)
+			iter.Seek(keyMin)
 			expMS, err := MVCCComputeStats(iter, int64(i+1)*1E9)
 			iter.Close()
 			if err != nil {
@@ -2406,7 +2408,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 		}
 	}
-	kvsn, err := Scan(engine, MVCCEncodeKey(roachpb.KeyMin), MVCCEncodeKey(roachpb.KeyMax), 0)
+	kvsn, err := Scan(engine, MVCCEncodeKey(keyMin), MVCCEncodeKey(keyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2439,7 +2441,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		MVCCEncodeKey(roachpb.Key("b-del")),
 		MVCCEncodeVersionKey(roachpb.Key("b-del"), ts3),
 	}
-	kvs, err := Scan(engine, MVCCEncodeKey(roachpb.KeyMin), MVCCEncodeKey(roachpb.KeyMax), 0)
+	kvs, err := Scan(engine, MVCCEncodeKey(keyMin), MVCCEncodeKey(keyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2459,7 +2461,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 
 	// Verify aggregated stats match computed stats after GC.
 	iter := engine.NewIterator()
-	iter.Seek(roachpb.KeyMin)
+	iter.Seek(keyMin)
 	expMS, err := MVCCComputeStats(iter, ts3.WallTime)
 	iter.Close()
 	if err != nil {

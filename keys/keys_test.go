@@ -19,6 +19,7 @@ package keys
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -32,12 +33,12 @@ import (
 func TestKeySorting(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Reminder: Increasing the last byte by one < adding a null byte.
-	if !(roachpb.Key("").Less(roachpb.Key("\x00")) && roachpb.Key("\x00").Less(roachpb.Key("\x01")) &&
-		roachpb.Key("\x01").Less(roachpb.Key("\x01\x00"))) {
+	if !(roachpb.RKey("").Less(roachpb.RKey("\x00")) && roachpb.RKey("\x00").Less(roachpb.RKey("\x01")) &&
+		roachpb.RKey("\x01").Less(roachpb.RKey("\x01\x00"))) {
 		t.Fatalf("something is seriously wrong with this machine")
 	}
-	if !LocalPrefix.Less(MetaPrefix) {
-		t.Fatalf("local key spilling into replicable ranges")
+	if bytes.Compare(localPrefix, MetaPrefix) >= 0 {
+		t.Fatalf("local key spilling into replicated ranges")
 	}
 	if !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) || !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) {
 		t.Fatalf("equality between keys failed")
@@ -56,17 +57,18 @@ func TestMakeKey(t *testing.T) {
 func TestKeyAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key, expAddress roachpb.Key
+		key        roachpb.Key
+		expAddress roachpb.RKey
 	}{
-		{roachpb.Key{}, roachpb.KeyMin},
-		{roachpb.Key("123"), roachpb.Key("123")},
-		{RangeDescriptorKey(roachpb.Key("foo")), roachpb.Key("foo")},
-		{TransactionKey(roachpb.Key("baz"), roachpb.Key(uuid.NewUUID4())), roachpb.Key("baz")},
-		{TransactionKey(roachpb.KeyMax, roachpb.Key(uuid.NewUUID4())), roachpb.KeyMax},
+		{roachpb.Key{}, roachpb.RKeyMin},
+		{roachpb.Key("123"), roachpb.RKey("123")},
+		{RangeDescriptorKey(roachpb.RKey("foo")), roachpb.RKey("foo")},
+		{TransactionKey(roachpb.Key("baz"), uuid.NewUUID4()), roachpb.RKey("baz")},
+		{TransactionKey(roachpb.KeyMax, roachpb.RKey(uuid.NewUUID4())), roachpb.RKeyMax},
 		{nil, nil},
 	}
 	for i, test := range testCases {
-		result := KeyAddress(test.key)
+		result := Addr(test.key)
 		if !result.Equal(test.expAddress) {
 			t.Errorf("%d: expected address for key %q doesn't match %q", i, test.key, test.expAddress)
 		}
@@ -76,40 +78,40 @@ func TestKeyAddress(t *testing.T) {
 func TestRangeMetaKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key, expKey roachpb.Key
+		key, expKey roachpb.RKey
 	}{
 		{
-			key:    roachpb.Key{},
-			expKey: roachpb.KeyMin,
+			key:    roachpb.RKey{},
+			expKey: roachpb.RKeyMin,
 		},
 		{
-			key:    roachpb.Key("\x00\x00meta2\x00zonefoo"),
-			expKey: roachpb.Key("\x00\x00meta1\x00zonefoo"),
+			key:    roachpb.RKey("\x00\x00meta2\x00zonefoo"),
+			expKey: roachpb.RKey("\x00\x00meta1\x00zonefoo"),
 		},
 		{
-			key:    roachpb.Key("\x00\x00meta1\x00zonefoo"),
-			expKey: roachpb.KeyMin,
+			key:    roachpb.RKey("\x00\x00meta1\x00zonefoo"),
+			expKey: roachpb.RKeyMin,
 		},
 		{
-			key:    roachpb.Key("foo"),
-			expKey: roachpb.Key("\x00\x00meta2foo"),
+			key:    roachpb.RKey("foo"),
+			expKey: roachpb.RKey("\x00\x00meta2foo"),
 		},
 		{
-			key:    roachpb.Key("foo"),
-			expKey: roachpb.Key("\x00\x00meta2foo"),
+			key:    roachpb.RKey("foo"),
+			expKey: roachpb.RKey("\x00\x00meta2foo"),
 		},
 		{
-			key:    roachpb.Key("\x00\x00meta2foo"),
-			expKey: roachpb.Key("\x00\x00meta1foo"),
+			key:    roachpb.RKey("\x00\x00meta2foo"),
+			expKey: roachpb.RKey("\x00\x00meta1foo"),
 		},
 		{
-			key:    roachpb.Key("\x00\x00meta1foo"),
-			expKey: roachpb.KeyMin,
+			key:    roachpb.RKey("\x00\x00meta1foo"),
+			expKey: roachpb.RKeyMin,
 		},
 	}
 	for i, test := range testCases {
 		result := RangeMetaKey(test.key)
-		if !result.Equal(test.expKey) {
+		if !bytes.Equal(result, test.expKey) {
 			t.Errorf("%d: expected range meta for key %q doesn't match %q", i, test.key, test.expKey)
 		}
 	}
@@ -127,11 +129,11 @@ func TestMetaScanBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
-		key, expStart, expEnd roachpb.Key
+		key, expStart, expEnd []byte
 		expError              string
 	}{
 		{
-			key:      roachpb.Key{},
+			key:      roachpb.RKey{},
 			expStart: Meta1Prefix,
 			expEnd:   Meta1Prefix.PrefixEnd(),
 			expError: "",
@@ -149,8 +151,8 @@ func TestMetaScanBounds(t *testing.T) {
 			expError: "",
 		},
 		{
-			key:      roachpb.MakeKey(Meta1Prefix, roachpb.KeyMax),
-			expStart: roachpb.MakeKey(Meta1Prefix, roachpb.KeyMax),
+			key:      roachpb.MakeKey(Meta1Prefix, roachpb.RKeyMax),
+			expStart: roachpb.MakeKey(Meta1Prefix, roachpb.RKeyMax),
 			expEnd:   Meta1Prefix.PrefixEnd(),
 			expError: "",
 		},
@@ -192,11 +194,12 @@ func TestMetaReverseScanBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
-		key, expStart, expEnd roachpb.Key
-		expError              string
+		key              []byte
+		expStart, expEnd []byte
+		expError         string
 	}{
 		{
-			key:      roachpb.Key{},
+			key:      roachpb.RKey{},
 			expStart: nil,
 			expEnd:   nil,
 			expError: "KeyMin and Meta1Prefix can't be used as the key of reverse scan",
@@ -232,7 +235,7 @@ func TestMetaReverseScanBounds(t *testing.T) {
 			expError: "",
 		},
 		{
-			key:      Meta2Prefix,
+			key:      Addr(Meta2Prefix),
 			expStart: Meta1Prefix,
 			expEnd:   Meta2Prefix.Next(),
 			expError: "",
@@ -245,7 +248,7 @@ func TestMetaReverseScanBounds(t *testing.T) {
 		},
 	}
 	for i, test := range testCases {
-		resStart, resEnd, err := MetaReverseScanBounds(test.key)
+		resStart, resEnd, err := MetaReverseScanBounds(roachpb.RKey(test.key))
 
 		if err != nil && !testutils.IsError(err, test.expError) {
 			t.Errorf("expected error: %s ; got %s", test.expError, err)
@@ -262,21 +265,88 @@ func TestMetaReverseScanBounds(t *testing.T) {
 func TestValidateRangeMetaKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key    roachpb.Key
+		key    []byte
 		expErr bool
 	}{
-		{roachpb.KeyMin, false},
-		{roachpb.Key("\x00"), true},
+		{roachpb.RKeyMin, false},
+		{roachpb.RKey("\x00"), true},
 		{Meta1Prefix[:len(Meta1Prefix)-1], true},
 		{Meta1Prefix, false},
-		{roachpb.MakeKey(Meta1Prefix, roachpb.KeyMax), false},
-		{roachpb.MakeKey(Meta2Prefix, roachpb.KeyMax), false},
-		{roachpb.MakeKey(Meta2Prefix, roachpb.KeyMax.Next()), true},
+		{roachpb.MakeKey(Meta1Prefix, roachpb.RKeyMax), false},
+		{roachpb.MakeKey(Meta2Prefix, roachpb.RKeyMax), false},
+		{roachpb.MakeKey(Meta2Prefix, roachpb.RKeyMax.Next()), true},
 	}
 	for i, test := range testCases {
 		err := validateRangeMetaKey(test.key)
 		if err != nil != test.expErr {
 			t.Errorf("%d: expected error? %t: %s", i, test.expErr, err)
+		}
+	}
+}
+
+func TestBatchRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	testCases := []struct {
+		req [][2]string
+		exp [2]string
+	}{
+		{
+			// Boring single request.
+			req: [][2]string{{"a", "b"}},
+			exp: [2]string{"a", "b"},
+		},
+		{
+			// Request with invalid range. It's important that this still
+			// results in a valid range.
+			req: [][2]string{{"b", "a"}},
+			exp: [2]string{"b", "b\x00"},
+		},
+		{
+			// Two overlapping ranges.
+			req: [][2]string{{"a", "c"}, {"b", "d"}},
+			exp: [2]string{"a", "d"},
+		},
+		{
+			// Two disjoint ranges.
+			req: [][2]string{{"a", "b"}, {"c", "d"}},
+			exp: [2]string{"a", "d"},
+		},
+		{
+			// Range and disjoint point request.
+			req: [][2]string{{"a", "b"}, {"c", ""}},
+			exp: [2]string{"a", "c\x00"},
+		},
+		{
+			// Three disjoint point requests.
+			req: [][2]string{{"a", ""}, {"b", ""}, {"c", ""}},
+			exp: [2]string{"a", "c\x00"},
+		},
+		{
+			// Range-local point request.
+			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKeyMax)), ""}},
+			exp: [2]string{"\xff\xff", "\xff\xff\x00"},
+		},
+		{
+			// Range-local to global such that the key ordering flips.
+			// Important that we get a valid range back.
+			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKeyMax)), "x"}},
+			exp: [2]string{"\xff\xff", "\xff\xff\x00"},
+		},
+		{
+			// Range-local to global without order messed up.
+			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKey("a"))), "x"}},
+			exp: [2]string{"a", "x"},
+		},
+	}
+
+	for i, c := range testCases {
+		var ba roachpb.BatchRequest
+		for _, pair := range c.req {
+			ba.Add(&roachpb.ScanRequest{Span: roachpb.Span{Key: roachpb.Key(pair[0]), EndKey: roachpb.Key(pair[1])}})
+		}
+		from, to := Range(ba)
+		if actPair := [2]string{string(from), string(to)}; !reflect.DeepEqual(actPair, c.exp) {
+			t.Fatalf("%d: expected [%q,%q), got [%q,%q)", i, c.exp[0], c.exp[1], actPair[0], actPair[1])
 		}
 	}
 }

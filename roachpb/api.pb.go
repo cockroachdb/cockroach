@@ -14,7 +14,7 @@
 
 	It has these top-level messages:
 		ClientCmdID
-		RequestHeader
+		Span
 		ResponseHeader
 		GetRequest
 		GetResponse
@@ -60,6 +60,7 @@
 		LeaderLeaseResponse
 		RequestUnion
 		ResponseUnion
+		Header
 		BatchRequest
 		BatchResponse
 		Timestamp
@@ -251,8 +252,8 @@ func (m *ClientCmdID) GetRandom() int64 {
 	return 0
 }
 
-// RequestHeader is supplied with every storage node request.
-type RequestHeader struct {
+// Span is supplied with every storage node request.
+type Span struct {
 	// The key for request. If the request operates on a range, this
 	// represents the starting key for the range.
 	Key Key `protobuf:"bytes,3,opt,name=key,casttype=Key" json:"key,omitempty"`
@@ -263,18 +264,18 @@ type RequestHeader struct {
 	EndKey Key `protobuf:"bytes,4,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
 }
 
-func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
-func (m *RequestHeader) String() string { return proto.CompactTextString(m) }
-func (*RequestHeader) ProtoMessage()    {}
+func (m *Span) Reset()         { *m = Span{} }
+func (m *Span) String() string { return proto.CompactTextString(m) }
+func (*Span) ProtoMessage()    {}
 
-func (m *RequestHeader) GetKey() Key {
+func (m *Span) GetKey() Key {
 	if m != nil {
 		return m.Key
 	}
 	return nil
 }
 
-func (m *RequestHeader) GetEndKey() Key {
+func (m *Span) GetEndKey() Key {
 	if m != nil {
 		return m.EndKey
 	}
@@ -288,7 +289,7 @@ type ResponseHeader struct {
 	// supplied to the request was 0, the wall time of the node
 	// servicing the request will be set here. Additionally, in the case
 	// of writes, this value may be increased from the timestamp passed
-	// with the RequestHeader if the key being written was either read
+	// with the Span if the key being written was either read
 	// or written more recently.
 	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 	// Transaction is non-nil if the request specified a non-nil
@@ -317,7 +318,7 @@ func (m *ResponseHeader) GetTxn() *Transaction {
 
 // A GetRequest is the argument for the Get() method.
 type GetRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *GetRequest) Reset()         { *m = GetRequest{} }
@@ -344,8 +345,8 @@ func (m *GetResponse) GetValue() *Value {
 
 // A PutRequest is the argument to the Put() method.
 type PutRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Value         Value `protobuf:"bytes,2,opt,name=value" json:"value"`
+	Span  `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Value Value `protobuf:"bytes,2,opt,name=value" json:"value"`
 }
 
 func (m *PutRequest) Reset()         { *m = PutRequest{} }
@@ -375,7 +376,7 @@ func (*PutResponse) ProtoMessage()    {}
 // - If key exists, but value is empty and ExpValue is not nil but empty, sets value.
 // - Otherwise, returns error and the actual value of the key in the response.
 type ConditionalPutRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The value to put.
 	Value Value `protobuf:"bytes,2,opt,name=value" json:"value"`
 	// ExpValue.Bytes empty to test for non-existence. Specify as nil
@@ -419,8 +420,8 @@ func (*ConditionalPutResponse) ProtoMessage()    {}
 // by Put() or ConditionalPut(). Similarly, Put() and ConditionalPut()
 // cannot be invoked on an incremented key.
 type IncrementRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Increment     int64 `protobuf:"varint,2,opt,name=increment" json:"increment"`
+	Span      `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Increment int64 `protobuf:"varint,2,opt,name=increment" json:"increment"`
 }
 
 func (m *IncrementRequest) Reset()         { *m = IncrementRequest{} }
@@ -455,7 +456,7 @@ func (m *IncrementResponse) GetNewValue() int64 {
 
 // A DeleteRequest is the argument to the Delete() method.
 type DeleteRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *DeleteRequest) Reset()         { *m = DeleteRequest{} }
@@ -474,7 +475,7 @@ func (*DeleteResponse) ProtoMessage()    {}
 // A DeleteRangeRequest is the argument to the DeleteRange() method. It
 // specifies the range of keys to delete.
 type DeleteRangeRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// If 0, *all* entries between Key (inclusive) and EndKey
 	// (exclusive) are deleted. Must be >= 0.
 	MaxEntriesToDelete int64 `protobuf:"varint,2,opt,name=max_entries_to_delete" json:"max_entries_to_delete"`
@@ -514,7 +515,7 @@ func (m *DeleteRangeResponse) GetNumDeleted() int64 {
 // start and end keys for an ascending scan of [start,end) and the maximum
 // number of results.
 type ScanRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// If 0, there is no limit on the number of retrieved entries. Must be >= 0.
 	MaxResults int64 `protobuf:"varint,2,opt,name=max_results" json:"max_results"`
 }
@@ -552,7 +553,7 @@ func (m *ScanResponse) GetRows() []KeyValue {
 // start and end keys for a descending scan of [start,end) and the maximum
 // number of results.
 type ReverseScanRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// If 0, there is no limit on the number of retrieved entries. Must be >= 0.
 	MaxResults int64 `protobuf:"varint,2,opt,name=max_results" json:"max_results"`
 }
@@ -589,7 +590,7 @@ func (m *ReverseScanResponse) GetRows() []KeyValue {
 // An EndTransactionRequest is the argument to the EndTransaction() method. It
 // specifies whether to commit or roll back an extant transaction.
 type EndTransactionRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// False to abort and rollback.
 	Commit bool `protobuf:"varint,2,opt,name=commit" json:"commit"`
 	// Optional commit triggers. Note that commit triggers are for
@@ -662,7 +663,7 @@ func (m *EndTransactionResponse) GetResolved() []Key {
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
-// existing range which contains RequestHeader.Key is split by
+// existing range which contains Span.Key is split by
 // split_key. If split_key is not specified, then this method will
 // determine a split key that is roughly halfway through the
 // range. The existing range is resized to cover only its start key to
@@ -682,8 +683,8 @@ func (m *EndTransactionResponse) GetResolved() []Key {
 // metadata (e.g. response cache and range stats must be copied or
 // recomputed).
 type AdminSplitRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	SplitKey      Key `protobuf:"bytes,2,opt,name=split_key,casttype=Key" json:"split_key,omitempty"`
+	Span     `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	SplitKey Key `protobuf:"bytes,2,opt,name=split_key,casttype=Key" json:"split_key,omitempty"`
 }
 
 func (m *AdminSplitRequest) Reset()         { *m = AdminSplitRequest{} }
@@ -717,7 +718,7 @@ func (*AdminSplitResponse) ProtoMessage()    {}
 // of the subsumed range. If AdminMerge is called on the final range
 // in the key space, it is a noop.
 type AdminMergeRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *AdminMergeRequest) Reset()         { *m = AdminMergeRequest{} }
@@ -746,8 +747,8 @@ func (*AdminMergeResponse) ProtoMessage()    {}
 // range descriptor cache. The additional ranges are scanned in the same
 // direction as lookup (forward v.s. reverse).
 type RangeLookupRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	MaxRanges     int32 `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
+	Span      `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	MaxRanges int32 `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
 	// ConsiderIntents indicates whether or not intents encountered
 	// while looking up the range info should randomly be returned
 	// to the caller. This is intended to be used when retrying due
@@ -810,7 +811,7 @@ func (m *RangeLookupResponse) GetRanges() []RangeDescriptor {
 // heartbeat message is different from the heartbeat message in the
 // gossip protocol.
 type HeartbeatTxnRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *HeartbeatTxnRequest) Reset()         { *m = HeartbeatTxnRequest{} }
@@ -832,9 +833,9 @@ func (*HeartbeatTxnResponse) ProtoMessage()    {}
 // A GCRequest is arguments to the GC() method. It's sent by range
 // leaders after scanning range data to find expired MVCC values.
 type GCRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	GCMeta        GCMetadata        `protobuf:"bytes,2,opt,name=gc_meta" json:"gc_meta"`
-	Keys          []GCRequest_GCKey `protobuf:"bytes,3,rep,name=keys" json:"keys"`
+	Span   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	GCMeta GCMetadata        `protobuf:"bytes,2,opt,name=gc_meta" json:"gc_meta"`
+	Keys   []GCRequest_GCKey `protobuf:"bytes,3,rep,name=keys" json:"keys"`
 }
 
 func (m *GCRequest) Reset()         { *m = GCRequest{} }
@@ -902,7 +903,7 @@ func (*GCResponse) ProtoMessage()    {}
 // course of action is determined by the specified push type, and by
 // the owning txn's status and priority.
 type PushTxnRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Transaction which encountered the intent, if applicable. For a
 	// non-transactional operation, pusher_txn will be nil. Used to
 	// compare priorities and timestamps if priorities are equal.
@@ -997,7 +998,7 @@ func (m *PushTxnResponse) GetPusheeTxn() *Transaction {
 // calling PushTxn to clean up write intents: either to remove, commit
 // or move them forward in time.
 type ResolveIntentRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The transaction whose intent is being resolved.
 	IntentTxn Transaction `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
 }
@@ -1028,7 +1029,7 @@ func (*ResolveIntentResponse) ProtoMessage()    {}
 // clean up write intents: either to remove, commit or move them forward in
 // time.
 type ResolveIntentRangeRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The transaction whose intents are being resolved.
 	IntentTxn Transaction `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
 }
@@ -1055,7 +1056,7 @@ func (*NoopResponse) ProtoMessage()    {}
 
 // A NoopRequest is a no-op.
 type NoopRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *NoopRequest) Reset()         { *m = NoopRequest{} }
@@ -1076,8 +1077,8 @@ func (*ResolveIntentRangeResponse) ProtoMessage()    {}
 // specifies a key and a value which should be merged into the
 // existing value at that key.
 type MergeRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Value         Value `protobuf:"bytes,2,opt,name=value" json:"value"`
+	Span  `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Value Value `protobuf:"bytes,2,opt,name=value" json:"value"`
 }
 
 func (m *MergeRequest) Reset()         { *m = MergeRequest{} }
@@ -1106,7 +1107,7 @@ func (*MergeResponse) ProtoMessage()    {}
 // to identical as possible. The raft leader can also inform decisions about the cutoff point
 // with its knowledge of the replicas' acknowledgement status.
 type TruncateLogRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Log entries < this index are to be discarded.
 	Index uint64 `protobuf:"varint,2,opt,name=index" json:"index"`
 }
@@ -1135,8 +1136,8 @@ func (*TruncateLogResponse) ProtoMessage()    {}
 // method. It is sent by the store on behalf of one of its ranges upon receipt
 // of a leader election event for that range.
 type LeaderLeaseRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Lease         Lease `protobuf:"bytes,2,opt,name=lease" json:"lease"`
+	Span  `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Lease Lease `protobuf:"bytes,2,opt,name=lease" json:"lease"`
 }
 
 func (m *LeaderLeaseRequest) Reset()         { *m = LeaderLeaseRequest{} }
@@ -1514,30 +1515,9 @@ func (m *ResponseUnion) GetNoop() *NoopResponse {
 	return nil
 }
 
-// A BatchRequest contains one or more requests to be executed in
-// parallel, or if applicable (based on write-only commands and
-// range-locality), as a single update.
-//
-// The RequestHeader should contain the Key of the first request
-// in the batch. It also contains the transaction itself; individual
-// calls must not have transactions specified. The same applies to
-// the User and UserPriority fields.
-type BatchRequest struct {
-	BatchRequest_Header `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Requests            []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
-}
-
-func (m *BatchRequest) Reset()      { *m = BatchRequest{} }
-func (*BatchRequest) ProtoMessage() {}
-
-func (m *BatchRequest) GetRequests() []RequestUnion {
-	if m != nil {
-		return m.Requests
-	}
-	return nil
-}
-
-type BatchRequest_Header struct {
+// A Header is attached to a BatchRequest, encapsulating routing and auxiliary
+// information required for executing it.
+type Header struct {
 	// Timestamp specifies time at which read or writes should be
 	// performed. If the timestamp is set to zero value, its value
 	// is initialized to the wall time of the receiving node.
@@ -1572,59 +1552,82 @@ type BatchRequest_Header struct {
 	ReadConsistency ReadConsistencyType `protobuf:"varint,9,opt,name=read_consistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
 }
 
-func (m *BatchRequest_Header) Reset()         { *m = BatchRequest_Header{} }
-func (m *BatchRequest_Header) String() string { return proto.CompactTextString(m) }
-func (*BatchRequest_Header) ProtoMessage()    {}
+func (m *Header) Reset()         { *m = Header{} }
+func (m *Header) String() string { return proto.CompactTextString(m) }
+func (*Header) ProtoMessage()    {}
 
-const Default_BatchRequest_Header_UserPriority int32 = 1
+const Default_Header_UserPriority int32 = 1
 
-func (m *BatchRequest_Header) GetTimestamp() Timestamp {
+func (m *Header) GetTimestamp() Timestamp {
 	if m != nil {
 		return m.Timestamp
 	}
 	return Timestamp{}
 }
 
-func (m *BatchRequest_Header) GetCmdID() ClientCmdID {
+func (m *Header) GetCmdID() ClientCmdID {
 	if m != nil {
 		return m.CmdID
 	}
 	return ClientCmdID{}
 }
 
-func (m *BatchRequest_Header) GetReplica() ReplicaDescriptor {
+func (m *Header) GetReplica() ReplicaDescriptor {
 	if m != nil {
 		return m.Replica
 	}
 	return ReplicaDescriptor{}
 }
 
-func (m *BatchRequest_Header) GetRangeID() RangeID {
+func (m *Header) GetRangeID() RangeID {
 	if m != nil {
 		return m.RangeID
 	}
 	return 0
 }
 
-func (m *BatchRequest_Header) GetUserPriority() int32 {
+func (m *Header) GetUserPriority() int32 {
 	if m != nil && m.UserPriority != nil {
 		return *m.UserPriority
 	}
-	return Default_BatchRequest_Header_UserPriority
+	return Default_Header_UserPriority
 }
 
-func (m *BatchRequest_Header) GetTxn() *Transaction {
+func (m *Header) GetTxn() *Transaction {
 	if m != nil {
 		return m.Txn
 	}
 	return nil
 }
 
-func (m *BatchRequest_Header) GetReadConsistency() ReadConsistencyType {
+func (m *Header) GetReadConsistency() ReadConsistencyType {
 	if m != nil {
 		return m.ReadConsistency
 	}
 	return CONSISTENT
+}
+
+// A BatchRequest contains one or more requests to be executed in
+// parallel, or if applicable (based on write-only commands and
+// range-locality), as a single update.
+//
+// The Span should contain the Key of the first request
+// in the batch. It also contains the transaction itself; individual
+// calls must not have transactions specified. The same applies to
+// the User and UserPriority fields.
+type BatchRequest struct {
+	Header   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Requests []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
+}
+
+func (m *BatchRequest) Reset()      { *m = BatchRequest{} }
+func (*BatchRequest) ProtoMessage() {}
+
+func (m *BatchRequest) GetRequests() []RequestUnion {
+	if m != nil {
+		return m.Requests
+	}
+	return nil
 }
 
 // A BatchResponse contains one or more responses, one per request
@@ -1655,7 +1658,7 @@ type BatchResponse_Header struct {
 	// supplied to the request was 0, the wall time of the node
 	// servicing the request will be set here. Additionally, in the case
 	// of writes, this value may be increased from the timestamp passed
-	// with the RequestHeader if the key being written was either read
+	// with the Span if the key being written was either read
 	// or written more recently.
 	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 	// Transaction is non-nil if the request specified a non-nil
@@ -1717,7 +1720,7 @@ func (m *ClientCmdID) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *RequestHeader) Marshal() (data []byte, err error) {
+func (m *Span) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
 	n, err := m.MarshalTo(data)
@@ -1727,7 +1730,7 @@ func (m *RequestHeader) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *RequestHeader) MarshalTo(data []byte) (int, error) {
+func (m *Span) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1800,8 +1803,8 @@ func (m *GetRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n3, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n3, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -1862,8 +1865,8 @@ func (m *PutRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n6, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n6, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -1922,8 +1925,8 @@ func (m *ConditionalPutRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n9, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n9, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -1992,8 +1995,8 @@ func (m *IncrementRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n13, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n13, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2050,8 +2053,8 @@ func (m *DeleteRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n15, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n15, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2102,8 +2105,8 @@ func (m *DeleteRangeRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n17, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n17, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2160,8 +2163,8 @@ func (m *ScanRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n19, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n19, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2227,8 +2230,8 @@ func (m *ReverseScanRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n21, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n21, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2294,8 +2297,8 @@ func (m *EndTransactionRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n23, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n23, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2387,8 +2390,8 @@ func (m *AdminSplitRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n26, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n26, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2445,8 +2448,8 @@ func (m *AdminMergeRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n28, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n28, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2497,8 +2500,8 @@ func (m *RangeLookupRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n30, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n30, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2580,8 +2583,8 @@ func (m *HeartbeatTxnRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n32, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n32, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2632,8 +2635,8 @@ func (m *GCRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n34, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n34, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2736,8 +2739,8 @@ func (m *PushTxnRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n38, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n38, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2833,8 +2836,8 @@ func (m *ResolveIntentRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n45, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n45, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2893,8 +2896,8 @@ func (m *ResolveIntentRangeRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n48, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n48, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2953,8 +2956,8 @@ func (m *NoopRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n51, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n51, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -3005,8 +3008,8 @@ func (m *MergeRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n53, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n53, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -3065,8 +3068,8 @@ func (m *TruncateLogRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n56, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n56, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -3120,8 +3123,8 @@ func (m *LeaderLeaseRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n58, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Span.Size()))
+	n58, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -3643,6 +3646,69 @@ func (m *ResponseUnion) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *Header) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Header) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
+	n103, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n103
+	data[i] = 0x12
+	i++
+	i = encodeVarintApi(data, i, uint64(m.CmdID.Size()))
+	n104, err := m.CmdID.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n104
+	data[i] = 0x2a
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
+	n105, err := m.Replica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n105
+	data[i] = 0x30
+	i++
+	i = encodeVarintApi(data, i, uint64(m.RangeID))
+	if m.UserPriority != nil {
+		data[i] = 0x38
+		i++
+		i = encodeVarintApi(data, i, uint64(*m.UserPriority))
+	}
+	if m.Txn != nil {
+		data[i] = 0x42
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
+		n106, err := m.Txn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n106
+	}
+	data[i] = 0x48
+	i++
+	i = encodeVarintApi(data, i, uint64(m.ReadConsistency))
+	return i, nil
+}
+
 func (m *BatchRequest) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -3660,12 +3726,12 @@ func (m *BatchRequest) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.BatchRequest_Header.Size()))
-	n103, err := m.BatchRequest_Header.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Header.Size()))
+	n107, err := m.Header.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n103
+	i += n107
 	if len(m.Requests) > 0 {
 		for _, msg := range m.Requests {
 			data[i] = 0x12
@@ -3678,69 +3744,6 @@ func (m *BatchRequest) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
-	return i, nil
-}
-
-func (m *BatchRequest_Header) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *BatchRequest_Header) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
-	n104, err := m.Timestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n104
-	data[i] = 0x12
-	i++
-	i = encodeVarintApi(data, i, uint64(m.CmdID.Size()))
-	n105, err := m.CmdID.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n105
-	data[i] = 0x2a
-	i++
-	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
-	n106, err := m.Replica.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n106
-	data[i] = 0x30
-	i++
-	i = encodeVarintApi(data, i, uint64(m.RangeID))
-	if m.UserPriority != nil {
-		data[i] = 0x38
-		i++
-		i = encodeVarintApi(data, i, uint64(*m.UserPriority))
-	}
-	if m.Txn != nil {
-		data[i] = 0x42
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
-		n107, err := m.Txn.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n107
-	}
-	data[i] = 0x48
-	i++
-	i = encodeVarintApi(data, i, uint64(m.ReadConsistency))
 	return i, nil
 }
 
@@ -3863,7 +3866,7 @@ func (m *ClientCmdID) Size() (n int) {
 	return n
 }
 
-func (m *RequestHeader) Size() (n int) {
+func (m *Span) Size() (n int) {
 	var l int
 	_ = l
 	if m.Key != nil {
@@ -3892,7 +3895,7 @@ func (m *ResponseHeader) Size() (n int) {
 func (m *GetRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	return n
 }
@@ -3912,7 +3915,7 @@ func (m *GetResponse) Size() (n int) {
 func (m *PutRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.Value.Size()
 	n += 1 + l + sovApi(uint64(l))
@@ -3930,7 +3933,7 @@ func (m *PutResponse) Size() (n int) {
 func (m *ConditionalPutRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.Value.Size()
 	n += 1 + l + sovApi(uint64(l))
@@ -3952,7 +3955,7 @@ func (m *ConditionalPutResponse) Size() (n int) {
 func (m *IncrementRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.Increment))
 	return n
@@ -3970,7 +3973,7 @@ func (m *IncrementResponse) Size() (n int) {
 func (m *DeleteRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	return n
 }
@@ -3986,7 +3989,7 @@ func (m *DeleteResponse) Size() (n int) {
 func (m *DeleteRangeRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.MaxEntriesToDelete))
 	return n
@@ -4004,7 +4007,7 @@ func (m *DeleteRangeResponse) Size() (n int) {
 func (m *ScanRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.MaxResults))
 	return n
@@ -4027,7 +4030,7 @@ func (m *ScanResponse) Size() (n int) {
 func (m *ReverseScanRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.MaxResults))
 	return n
@@ -4050,7 +4053,7 @@ func (m *ReverseScanResponse) Size() (n int) {
 func (m *EndTransactionRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 2
 	if m.InternalCommitTrigger != nil {
@@ -4084,7 +4087,7 @@ func (m *EndTransactionResponse) Size() (n int) {
 func (m *AdminSplitRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.SplitKey != nil {
 		l = len(m.SplitKey)
@@ -4104,7 +4107,7 @@ func (m *AdminSplitResponse) Size() (n int) {
 func (m *AdminMergeRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	return n
 }
@@ -4120,7 +4123,7 @@ func (m *AdminMergeResponse) Size() (n int) {
 func (m *RangeLookupRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.MaxRanges))
 	n += 2
@@ -4145,7 +4148,7 @@ func (m *RangeLookupResponse) Size() (n int) {
 func (m *HeartbeatTxnRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	return n
 }
@@ -4161,7 +4164,7 @@ func (m *HeartbeatTxnResponse) Size() (n int) {
 func (m *GCRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.GCMeta.Size()
 	n += 1 + l + sovApi(uint64(l))
@@ -4197,7 +4200,7 @@ func (m *GCResponse) Size() (n int) {
 func (m *PushTxnRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.PusherTxn.Size()
 	n += 1 + l + sovApi(uint64(l))
@@ -4226,7 +4229,7 @@ func (m *PushTxnResponse) Size() (n int) {
 func (m *ResolveIntentRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.IntentTxn.Size()
 	n += 1 + l + sovApi(uint64(l))
@@ -4244,7 +4247,7 @@ func (m *ResolveIntentResponse) Size() (n int) {
 func (m *ResolveIntentRangeRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.IntentTxn.Size()
 	n += 1 + l + sovApi(uint64(l))
@@ -4262,7 +4265,7 @@ func (m *NoopResponse) Size() (n int) {
 func (m *NoopRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	return n
 }
@@ -4278,7 +4281,7 @@ func (m *ResolveIntentRangeResponse) Size() (n int) {
 func (m *MergeRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.Value.Size()
 	n += 1 + l + sovApi(uint64(l))
@@ -4296,7 +4299,7 @@ func (m *MergeResponse) Size() (n int) {
 func (m *TruncateLogRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.Index))
 	return n
@@ -4313,7 +4316,7 @@ func (m *TruncateLogResponse) Size() (n int) {
 func (m *LeaderLeaseRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.Lease.Size()
 	n += 1 + l + sovApi(uint64(l))
@@ -4508,21 +4511,7 @@ func (m *ResponseUnion) Size() (n int) {
 	return n
 }
 
-func (m *BatchRequest) Size() (n int) {
-	var l int
-	_ = l
-	l = m.BatchRequest_Header.Size()
-	n += 1 + l + sovApi(uint64(l))
-	if len(m.Requests) > 0 {
-		for _, e := range m.Requests {
-			l = e.Size()
-			n += 1 + l + sovApi(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *BatchRequest_Header) Size() (n int) {
+func (m *Header) Size() (n int) {
 	var l int
 	_ = l
 	l = m.Timestamp.Size()
@@ -4540,6 +4529,20 @@ func (m *BatchRequest_Header) Size() (n int) {
 		n += 1 + l + sovApi(uint64(l))
 	}
 	n += 1 + sovApi(uint64(m.ReadConsistency))
+	return n
+}
+
+func (m *BatchRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Header.Size()
+	n += 1 + l + sovApi(uint64(l))
+	if len(m.Requests) > 0 {
+		for _, e := range m.Requests {
+			l = e.Size()
+			n += 1 + l + sovApi(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -4906,7 +4909,7 @@ func (m *ClientCmdID) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *RequestHeader) Unmarshal(data []byte) error {
+func (m *Span) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -4929,10 +4932,10 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: RequestHeader: wiretype end group for non-group")
+			return fmt.Errorf("proto: Span: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RequestHeader: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Span: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 3:
@@ -5156,7 +5159,7 @@ func (m *GetRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -5180,7 +5183,7 @@ func (m *GetRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -5349,7 +5352,7 @@ func (m *PutRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -5373,7 +5376,7 @@ func (m *PutRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -5539,7 +5542,7 @@ func (m *ConditionalPutRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -5563,7 +5566,7 @@ func (m *ConditionalPutRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -5762,7 +5765,7 @@ func (m *IncrementRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -5786,7 +5789,7 @@ func (m *IncrementRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -5960,7 +5963,7 @@ func (m *DeleteRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -5984,7 +5987,7 @@ func (m *DeleteRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -6120,7 +6123,7 @@ func (m *DeleteRangeRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -6144,7 +6147,7 @@ func (m *DeleteRangeRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -6318,7 +6321,7 @@ func (m *ScanRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -6342,7 +6345,7 @@ func (m *ScanRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -6528,7 +6531,7 @@ func (m *ReverseScanRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -6552,7 +6555,7 @@ func (m *ReverseScanRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -6738,7 +6741,7 @@ func (m *EndTransactionRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -6762,7 +6765,7 @@ func (m *EndTransactionRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7030,7 +7033,7 @@ func (m *AdminSplitRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -7054,7 +7057,7 @@ func (m *AdminSplitRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7218,7 +7221,7 @@ func (m *AdminMergeRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -7242,7 +7245,7 @@ func (m *AdminMergeRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7378,7 +7381,7 @@ func (m *RangeLookupRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -7402,7 +7405,7 @@ func (m *RangeLookupRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7628,7 +7631,7 @@ func (m *HeartbeatTxnRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -7652,7 +7655,7 @@ func (m *HeartbeatTxnRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7788,7 +7791,7 @@ func (m *GCRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -7812,7 +7815,7 @@ func (m *GCRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -8117,7 +8120,7 @@ func (m *PushTxnRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -8141,7 +8144,7 @@ func (m *PushTxnRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -8449,7 +8452,7 @@ func (m *ResolveIntentRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -8473,7 +8476,7 @@ func (m *ResolveIntentRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -8639,7 +8642,7 @@ func (m *ResolveIntentRangeRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -8663,7 +8666,7 @@ func (m *ResolveIntentRangeRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -8829,7 +8832,7 @@ func (m *NoopRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -8853,7 +8856,7 @@ func (m *NoopRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -8989,7 +8992,7 @@ func (m *MergeRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -9013,7 +9016,7 @@ func (m *MergeRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -9179,7 +9182,7 @@ func (m *TruncateLogRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -9203,7 +9206,7 @@ func (m *TruncateLogRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -9358,7 +9361,7 @@ func (m *LeaderLeaseRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -9382,7 +9385,7 @@ func (m *LeaderLeaseRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -11003,118 +11006,7 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *BatchRequest) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowApi
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: BatchRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: BatchRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BatchRequest_Header", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.BatchRequest_Header.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Requests", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Requests = append(m.Requests, RequestUnion{})
-			if err := m.Requests[len(m.Requests)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipApi(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthApi
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *BatchRequest_Header) Unmarshal(data []byte) error {
+func (m *Header) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -11324,6 +11216,117 @@ func (m *BatchRequest_Header) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipApi(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthApi
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BatchRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowApi
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BatchRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BatchRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Header", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Header.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Requests", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Requests = append(m.Requests, RequestUnion{})
+			if err := m.Requests[len(m.Requests)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])

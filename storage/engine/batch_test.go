@@ -63,7 +63,7 @@ func TestBatchBasics(t *testing.T) {
 		{Key: roachpb.EncodedKey("b"), Value: []byte("value")},
 		{Key: roachpb.EncodedKey("c"), Value: appender("foo")},
 	}
-	kvs, err := Scan(e, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 0)
+	kvs, err := Scan(e, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestBatchBasics(t *testing.T) {
 		{Key: roachpb.EncodedKey("c"), Value: appender("foobar")},
 	}
 	// Scan values from batch directly.
-	kvs, err = Scan(b, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 0)
+	kvs, err = Scan(b, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestBatchBasics(t *testing.T) {
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	kvs, err = Scan(e, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 0)
+	kvs, err = Scan(e, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +365,7 @@ func TestBatchScanWithDelete(t *testing.T) {
 	if err := b.Clear(roachpb.EncodedKey("a")); err != nil {
 		t.Fatal(err)
 	}
-	kvs, err := Scan(b, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 0)
+	kvs, err := Scan(b, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A scan with max=1 should scan "b".
-	kvs, err := Scan(b, roachpb.EncodedKey(roachpb.KeyMin), roachpb.EncodedKey(roachpb.KeyMax), 1)
+	kvs, err := Scan(b, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 1)
 	if err != nil {
 		t.Fatal(err)
 	}

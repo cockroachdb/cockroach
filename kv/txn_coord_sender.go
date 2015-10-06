@@ -27,7 +27,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -452,7 +451,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) {
 	if len(ba.Txn.ID) == 0 {
 		// TODO(tschottdorf): should really choose the first txn write here.
 		firstKey := ba.Requests[0].GetInner().Header().Key
-		newTxn := roachpb.NewTransaction(ba.Txn.Name, keys.KeyAddress(firstKey), ba.GetUserPriority(),
+		newTxn := roachpb.NewTransaction(ba.Txn.Name, firstKey, ba.GetUserPriority(),
 			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
 		// Use existing priority as a minimum. This is used on transaction
 		// aborts to ratchet priority when creating successor transaction.

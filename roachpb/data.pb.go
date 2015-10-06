@@ -550,9 +550,8 @@ func (m *NodeList) GetNodes() []int32 {
 type Transaction struct {
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	// Key is the key which anchors the transaction. This is typically
-	// the first key read or written during the transaction and
-	// determines which range in the cluster will hold the transaction
-	// record.
+	// the first key read or written during the transaction and determines which
+	// range in the cluster will hold the transaction record.
 	Key Key `protobuf:"bytes,2,opt,name=key,casttype=Key" json:"key,omitempty"`
 	// ID is a unique UUID value which identifies the transaction.
 	ID        []byte            `protobuf:"bytes,3,opt,name=id" json:"id,omitempty"`

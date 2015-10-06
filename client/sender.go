@@ -90,13 +90,13 @@ func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stoppe
 // and sends it via the provided Sender at the given timestamp. It returns the
 // unwrapped response or an error. It's valid to pass a `nil` context;
 // context.Background() is used in that case.
-func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.BatchRequest_Header, args roachpb.Request) (roachpb.Response, error) {
+func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.Header, args roachpb.Request) (roachpb.Response, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
 		ba := &roachpb.BatchRequest{}
-		ba.BatchRequest_Header = h
+		ba.Header = h
 		ba.Add(args)
 		return ba, func(br *roachpb.BatchResponse) roachpb.Response {
 			unwrappedReply := br.Responses[0].GetInner()
@@ -121,7 +121,7 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.BatchRequest_
 
 // SendWrapped is identical to SendWrappedAt with a zero header.
 func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
-	return SendWrappedWith(sender, ctx, roachpb.BatchRequest_Header{}, args)
+	return SendWrappedWith(sender, ctx, roachpb.Header{}, args)
 }
 
 // Wrap returns a Sender which applies the given function before delegating to

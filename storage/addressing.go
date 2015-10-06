@@ -91,12 +91,12 @@ func rangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor, action meta
 	} else {
 		// 3. the range ends with a normal user key, so we must update the
 		// relevant meta2 entry pointing to the end of this range.
-		action(b, keys.MakeKey(keys.Meta2Prefix, desc.EndKey), desc)
+		action(b, roachpb.Key(keys.MakeKey(keys.Meta2Prefix, desc.EndKey)), desc)
 		// 3a. the range starts with KeyMin or a meta2 addressing record,
 		// update the meta1 entry for KeyMax.
-		if bytes.Equal(desc.StartKey, roachpb.KeyMin) ||
+		if bytes.Equal(desc.StartKey, roachpb.RKeyMin) ||
 			bytes.HasPrefix(desc.StartKey, keys.Meta2Prefix) {
-			action(b, keys.MakeKey(keys.Meta1Prefix, roachpb.KeyMax), desc)
+			action(b, roachpb.Key(keys.MakeKey(keys.Meta1Prefix, roachpb.RKeyMax)), desc)
 		}
 	}
 	return nil

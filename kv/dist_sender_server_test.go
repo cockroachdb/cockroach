@@ -153,10 +153,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 		b := &client.Batch{}
 		b.DelRange("a", "b")
 		b.DelRange("e", "f")
-		// TODO(tschottdorf): write tests for range-local and range-global stuff;
-		// using KeyMin here currently fails miserably because it plows through
-		// internal data. See #2198.
-		// b.DelRange("aaa", roachpb.KeyMax)
+		b.DelRange(keys.LocalMax, roachpb.KeyMax)
 		return txn.CommitInBatch(b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
@@ -247,7 +244,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 
 	// Scan.
 	sa := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), 0).(*roachpb.ScanRequest)
-	reply, err := client.SendWrappedWith(ds, nil, roachpb.BatchRequest_Header{
+	reply, err := client.SendWrappedWith(ds, nil, roachpb.Header{
 		ReadConsistency: roachpb.INCONSISTENT,
 	}, sa)
 	if err != nil {
@@ -264,7 +261,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 
 	// ReverseScan.
 	rsa := roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), 0).(*roachpb.ReverseScanRequest)
-	reply, err = client.SendWrappedWith(ds, nil, roachpb.BatchRequest_Header{
+	reply, err = client.SendWrappedWith(ds, nil, roachpb.Header{
 		ReadConsistency: roachpb.INCONSISTENT,
 	}, rsa)
 	if err != nil {
@@ -387,9 +384,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	}
 }
 
-// TestStartEqualsEndKeyScan verifies that specifying start=end for a
-// Scan/ReverseScan results in an error.
-func TestStartEqualsEndKeyScan(t *testing.T) {
+func TestBadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -407,4 +402,13 @@ func TestStartEqualsEndKeyScan(t *testing.T) {
 	if _, err := db.ReverseScan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
+
+	if err := db.DelRange("x", "a"); !testutils.IsError(err, "truncation resulted in empty batch") {
+		t.Fatalf("unexpected error on deletion on [x, a): %v", err)
+	}
+
+	if err := db.DelRange("", "z"); !testutils.IsError(err, "must be greater than LocalMax") {
+		t.Fatalf("unexpected error on deletion on [KeyMin, z): %v", err)
+	}
+
 }

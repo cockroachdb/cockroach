@@ -388,7 +388,7 @@ func (b *Batch) adminMerge(key interface{}) {
 		return
 	}
 	req := &roachpb.AdminMergeRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: k,
 		},
 	}
@@ -405,7 +405,7 @@ func (b *Batch) adminSplit(splitKey interface{}) {
 		return
 	}
 	req := &roachpb.AdminSplitRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: k,
 		},
 	}

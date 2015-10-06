@@ -207,13 +207,15 @@ type lookupOptions struct {
 // DistSender's Send() method, so there is no error inspection and
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
-func (ds *DistSender) rangeLookup(key roachpb.Key, options lookupOptions,
+func (ds *DistSender) rangeLookup(key roachpb.RKey, options lookupOptions,
 	desc *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: key,
+		Span: roachpb.Span{
+			// We can interpret the RKey as a Key here since it's a metadata
+			// lookup; those are never local.
+			Key: key.AsRawKey(),
 		},
 		MaxRanges:       ds.rangeLookupMaxRanges,
 		ConsiderIntents: options.considerIntents,
@@ -384,10 +386,10 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 // Note that `from` and `to` are not necessarily Key and EndKey from a
 // RequestHeader; it's assumed that they've been translated to key addresses
 // already (via KeyAddress).
-func (ds *DistSender) getDescriptors(from, to roachpb.Key, options lookupOptions) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
+func (ds *DistSender) getDescriptors(from, to roachpb.RKey, options lookupOptions) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
 	var desc *roachpb.RangeDescriptor
 	var err error
-	var descKey roachpb.Key
+	var descKey roachpb.RKey
 	if !options.useReverseScan {
 		descKey = from
 	} else {

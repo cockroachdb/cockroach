@@ -83,22 +83,22 @@ func newTxn(clock *hlc.Clock, baseKey roachpb.Key) *roachpb.Transaction {
 
 // createPutRequest returns a ready-made request using the
 // specified key, value & txn ID.
-func createPutRequest(key roachpb.Key, value []byte, txn *roachpb.Transaction) (*roachpb.PutRequest, roachpb.BatchRequest_Header) {
-	h := roachpb.BatchRequest_Header{}
+func createPutRequest(key roachpb.Key, value []byte, txn *roachpb.Transaction) (*roachpb.PutRequest, roachpb.Header) {
+	h := roachpb.Header{}
 	h.Txn = txn
 	return &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 		Value: roachpb.Value{Bytes: value},
 	}, h
 }
 
-func createDeleteRangeRequest(key, endKey roachpb.Key, txn *roachpb.Transaction) (*roachpb.DeleteRangeRequest, roachpb.BatchRequest_Header) {
-	h := roachpb.BatchRequest_Header{}
+func createDeleteRangeRequest(key, endKey roachpb.Key, txn *roachpb.Transaction) (*roachpb.DeleteRangeRequest, roachpb.Header) {
+	h := roachpb.Header{}
 	h.Txn = txn
 	return &roachpb.DeleteRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key:    key,
 			EndKey: endKey,
 		},
@@ -158,14 +158,14 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	defer teardownHeartbeats(s.Sender)
 
 	key := roachpb.Key("key")
-	reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+	reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
 		UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
 		Txn: &roachpb.Transaction{
 			Name:      "test txn",
 			Isolation: roachpb.SNAPSHOT,
 		},
 	}, &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 	})
@@ -195,7 +195,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+	reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
 		UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
 		Txn: &roachpb.Transaction{
 			Name:      "test txn",
@@ -203,7 +203,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 			Priority:  11,
 		},
 	}, &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: roachpb.Key("key"),
 		},
 	})
@@ -332,11 +332,11 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 // getTxn fetches the requested key and returns the transaction info.
 func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Transaction, error) {
 	hb := &roachpb.HeartbeatTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: txn.Key,
 		},
 	}
-	reply, err := client.SendWrappedWith(coord, nil, roachpb.BatchRequest_Header{
+	reply, err := client.SendWrappedWith(coord, nil, roachpb.Header{
 		Txn: txn,
 	}, hb)
 	if err != nil {
@@ -381,7 +381,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 	pReply := reply.(*roachpb.PutResponse)
-	if _, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+	if _, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
 		Txn: pReply.Header().Txn,
 	}, &roachpb.EndTransactionRequest{Commit: true}); err != nil {
 		t.Fatal(err)
@@ -411,7 +411,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	txn2 := newTxn(s.Clock, key)
 	txn2.Priority = 2
 	pushArgs := &roachpb.PushTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: txn.Key,
 		},
 		Now:       s.Clock.Now(),
@@ -428,7 +428,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	etArgs := &roachpb.EndTransactionRequest{
 		Commit: true,
 	}
-	_, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+	_, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
 		Txn: txn,
 	}, etArgs)
 	switch err.(type) {
@@ -506,7 +506,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	}
 
 	var testPutReq = &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: roachpb.Key("test-key"),
 		},
 	}
@@ -520,7 +520,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		var err error
 		{
 			var r roachpb.Response
-			if r, err = client.SendWrappedWith(ts, nil, roachpb.BatchRequest_Header{
+			if r, err = client.SendWrappedWith(ts, nil, roachpb.Header{
 				UserPriority: proto.Int32(-1),
 				Txn: &roachpb.Transaction{
 					Name: "test txn",
@@ -588,7 +588,7 @@ func TestTxnDrainingNode(t *testing.T) {
 		}
 	}
 	endTxn := func() {
-		if _, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+		if _, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
 			Txn: txn,
 		}, &roachpb.EndTransactionRequest{
 			Commit: true}); err != nil {
@@ -612,12 +612,12 @@ func TestTxnDrainingNode(t *testing.T) {
 
 	// Attempt to start another transaction, but it should be too late.
 	key = roachpb.Key("key")
-	_, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+	_, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
 		Txn: &roachpb.Transaction{
 			Name: "test txn",
 		},
 	}, &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+		Span: roachpb.Span{
 			Key: key,
 		},
 	})
@@ -648,7 +648,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 	} {
 		txn := newTxn(s.Clock, roachpb.Key("a"))
 		txn.Writing = tc.writing
-		reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+		reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
 			Txn: txn,
 		}, tc.args)
 		if err == nil != tc.ok {
@@ -670,7 +670,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 			continue
 		}
 		// Abort for clean shutdown.
-		if _, err := client.SendWrappedWith(s.Sender, nil, roachpb.BatchRequest_Header{
+		if _, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
 			Txn: txn,
 		}, &roachpb.EndTransactionRequest{
 			Commit: false,

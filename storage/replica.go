@@ -82,7 +82,7 @@ const (
 // be run once for each replica and must produce consistent results
 // each time. Should only be used in tests in the storage and
 // storage_test packages.
-var TestingCommandFilter func(roachpb.Request, roachpb.BatchRequest_Header) error
+var TestingCommandFilter func(roachpb.Request, roachpb.Header) error
 
 // This flag controls whether Transaction entries are automatically gc'ed
 // upon EndTransaction if they only have local intents (which can be
@@ -158,12 +158,12 @@ type RangeManager interface {
 	Stopper() *stop.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
-	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.BatchRequest_Header, roachpb.PushTxnType) error
+	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.Header, roachpb.PushTxnType) error
 
 	// Range and replica manipulation methods.
-	LookupReplica(start, end roachpb.Key) *Replica
-	MergeRange(subsumingRng *Replica, updatedEndKey roachpb.Key, subsumedRangeID roachpb.RangeID) error
-	NewRangeDescriptor(start, end roachpb.Key, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error)
+	LookupReplica(start, end roachpb.RKey) *Replica
+	MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error
+	NewRangeDescriptor(start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, roachpb.RaftCommand) <-chan error
 	RemoveReplica(rng *Replica) error
@@ -244,7 +244,7 @@ func NewReplica(desc *roachpb.RangeDescriptor, rm RangeManager) (*Replica, error
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
 
-	if r.ContainsKey(keys.SystemDBSpan.Start) {
+	if r.ContainsKey(keys.SystemDBSpan.Key) {
 		r.maybeGossipSystemConfig()
 	}
 
@@ -294,7 +294,7 @@ func (r *Replica) SetMaxBytes(maxBytes int64) {
 
 // IsFirstRange returns true if this is the first range.
 func (r *Replica) IsFirstRange() bool {
-	return bytes.Equal(r.Desc().StartKey, roachpb.KeyMin)
+	return bytes.Equal(r.Desc().StartKey, roachpb.RKeyMin)
 }
 
 func loadLeaderLease(eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
@@ -339,8 +339,8 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 		return util.Errorf("can't find store %s in descriptor %+v", r.rm.StoreID(), desc)
 	}
 	args := &roachpb.LeaderLeaseRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: desc.StartKey,
+		Span: roachpb.Span{
+			Key: desc.StartKey.AsRawKey(),
 		},
 		Lease: roachpb.Lease{
 			Start:      timestamp,
@@ -489,7 +489,7 @@ func (r *Replica) ContainsKey(key roachpb.Key) bool {
 }
 
 func containsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
-	return desc.ContainsKey(keys.KeyAddress(key))
+	return desc.ContainsKey(keys.Addr(key))
 }
 
 // ContainsKeyRange returns whether this range contains the specified
@@ -499,7 +499,7 @@ func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
 }
 
 func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool {
-	return desc.ContainsKeyRange(keys.KeyAddress(start), keys.KeyAddress(end))
+	return desc.ContainsKeyRange(keys.Addr(start), keys.Addr(end))
 }
 
 // GetGCMetadata reads the latest GC metadata for this range.
@@ -580,7 +580,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 }
 
 // TODO(tschottdorf): almost obsolete.
-func (r *Replica) checkCmdHeader(header *roachpb.RequestHeader) error {
+func (r *Replica) checkCmdHeader(header *roachpb.Span) error {
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		return roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
 	}
@@ -622,11 +622,11 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		r.Lock()
 		var wg sync.WaitGroup
-		var spans []keys.Span
+		var spans []roachpb.Span
 		readOnly := ba.IsReadOnly()
 		for _, union := range ba.Requests {
 			h := union.GetInner().Header()
-			spans = append(spans, keys.Span{Start: h.Key, End: h.EndKey})
+			spans = append(spans, roachpb.Span{Key: h.Key, EndKey: h.EndKey})
 		}
 		r.cmdQ.GetWait(readOnly, &wg, spans...)
 		cmdKeys = append(cmdKeys, r.cmdQ.Add(readOnly, spans...)...)
@@ -718,7 +718,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
 func (r *Replica) addReadOnlyCmd(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-	header := ba.BatchRequest_Header
+	header := ba.Header
 	trace := tracer.FromCtx(ctx)
 
 	// Add the read to the command queue to gate subsequent
@@ -1141,7 +1141,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *ro
 			}
 		}
 
-		header := ba.BatchRequest_Header
+		header := ba.Header
 		header.Timestamp = ts
 
 		reply, curIntents, err := r.executeCmd(batch, ms, header, args)
@@ -1316,7 +1316,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// still be careful though, a retry could happen and race with args.
 		args := proto.Clone(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
-			h := roachpb.BatchRequest_Header{Timestamp: now}
+			h := roachpb.Header{Timestamp: now}
 			err := r.rm.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
 				Intents: item.intents,
 			}, r, args, h, roachpb.CLEANUP_TXN)
@@ -1421,21 +1421,21 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 		var resolveArgs roachpb.Request
 		var local bool // whether this intent lives on this Range
 		{
-			header := roachpb.RequestHeader{
+			header := roachpb.Span{
 				Key:    intent.Key,
 				EndKey: intent.EndKey,
 			}
 
 			if len(intent.EndKey) == 0 {
 				resolveArgs = &roachpb.ResolveIntentRequest{
-					RequestHeader: header,
-					IntentTxn:     intent.Txn,
+					Span:      header,
+					IntentTxn: intent.Txn,
 				}
 				local = r.ContainsKey(intent.Key)
 			} else {
 				resolveArgs = &roachpb.ResolveIntentRangeRequest{
-					RequestHeader: header,
-					IntentTxn:     intent.Txn,
+					Span:      header,
+					IntentTxn: intent.Txn,
 				}
 				local = r.ContainsKeyRange(intent.Key, intent.EndKey)
 			}
@@ -1514,7 +1514,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 // key/value pairs along with the sha1 checksum of the contents (key and value).
 func loadSystemDBSpan(eng engine.Engine) ([]roachpb.KeyValue, []byte, error) {
 	// TODO(tschottdorf): Currently this does not handle intents well.
-	kvs, _, err := engine.MVCCScan(eng, keys.SystemDBSpan.Start, keys.SystemDBSpan.End,
+	kvs, _, err := engine.MVCCScan(eng, keys.SystemDBSpan.Key, keys.SystemDBSpan.EndKey,
 		0, roachpb.MaxTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return nil, nil, err

@@ -162,7 +162,7 @@ func (ls *LocalSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roac
 // Returns RangeID and replica on success; RangeKeyMismatch error
 // if not found.
 // This is only for testing usage; performance doesn't matter.
-func (ls *LocalSender) lookupReplica(start, end roachpb.Key) (rangeID roachpb.RangeID, replica *roachpb.ReplicaDescriptor, err error) {
+func (ls *LocalSender) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, replica *roachpb.ReplicaDescriptor, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	var rng *storage.Replica
@@ -184,7 +184,7 @@ func (ls *LocalSender) lookupReplica(start, end roachpb.Key) (rangeID roachpb.Ra
 			"range %+v exists on additional store: %+v", rng, store)
 	}
 	if replica == nil {
-		err = roachpb.NewRangeKeyMismatchError(start, end, nil)
+		err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), nil)
 	}
 	return rangeID, replica, err
 }
@@ -192,7 +192,7 @@ func (ls *LocalSender) lookupReplica(start, end roachpb.Key) (rangeID roachpb.Ra
 // firstRange implements the rangeDescriptorDB interface. It returns the
 // range descriptor which contains KeyMin.
 func (ls *LocalSender) firstRange() (*roachpb.RangeDescriptor, error) {
-	_, replica, err := ls.lookupReplica(roachpb.KeyMin, nil)
+	_, replica, err := ls.lookupReplica(roachpb.RKeyMin, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (ls *LocalSender) firstRange() (*roachpb.RangeDescriptor, error) {
 		return nil, err
 	}
 
-	rpl := store.LookupReplica(roachpb.KeyMin, nil)
+	rpl := store.LookupReplica(roachpb.RKeyMin, nil)
 	if rpl == nil {
 		panic("firstRange found no first range")
 	}
@@ -210,12 +210,13 @@ func (ls *LocalSender) firstRange() (*roachpb.RangeDescriptor, error) {
 
 // rangeLookup implements the rangeDescriptorDB interface. It looks up
 // the descriptors for the given (meta) key.
-func (ls *LocalSender) rangeLookup(key roachpb.Key, options lookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
+func (ls *LocalSender) rangeLookup(key roachpb.RKey, options lookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: key,
+		Span: roachpb.Span{
+			// key is a meta key, so it's guaranteed not local-prefixed.
+			Key: key.AsRawKey(),
 		},
 		MaxRanges:       1,
 		ConsiderIntents: options.considerIntents,
