@@ -436,7 +436,11 @@ var builtins = map[string][]builtin{
 			types:      typeList{},
 			returnType: DummyDate,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return MakeDDate(e.StmtTimestamp.Time), nil
+				d, err := e.sessionTimestamp(e.StmtTimestamp.Time)
+				if err != nil {
+					return DummyDate, err
+				}
+				return MakeDDate(d.Time), nil
 			},
 		},
 	},
@@ -450,8 +454,8 @@ var builtins = map[string][]builtin{
 			types:      typeList{},
 			returnType: DummyTimestamp,
 			impure:     true,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DTimestamp{Time: time.Now()}, nil
+			fn: func(e EvalContext, args DTuple) (Datum, error) {
+				return e.sessionTimestamp(time.Now())
 			},
 		},
 	},
@@ -461,7 +465,7 @@ var builtins = map[string][]builtin{
 			types:      typeList{},
 			returnType: DummyTimestamp,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return e.TxnTimestamp, nil
+				return e.sessionTimestamp(e.TxnTimestamp.Time)
 			},
 		},
 	},
@@ -848,7 +852,7 @@ var nowImpl = builtin{
 	types:      typeList{},
 	returnType: DummyTimestamp,
 	fn: func(e EvalContext, args DTuple) (Datum, error) {
-		return e.StmtTimestamp, nil
+		return e.sessionTimestamp(e.StmtTimestamp.Time)
 	},
 }
 
