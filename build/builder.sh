@@ -57,5 +57,5 @@ docker run -i ${tty-} ${rm} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="CACHE=/${buildcache_dir}" \
   --env="PAGER=cat" \
-  --env="TSD_GITHUB_TOKEN=${TSD_GITHUB_TOKEN}" \
+  --env="TSD_GITHUB_TOKEN=${TSD_GITHUB_TOKEN-}" \
   "${image}" "$@"

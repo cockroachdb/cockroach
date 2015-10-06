@@ -50,28 +50,39 @@ We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wi
   [this tip](http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
   on forking in Go, which ensures that Go import paths will be correct.
 
-`git checkout -b $USER/update-readme`
+  `git checkout -b update-readme`
 
-+ Hack away and commit your changes locally using `git add` and `git commit`.
++ Hack away and commit your changes locally using `git add` and `git commit`. Remember to write tests! The following are helpful for running specific subsets of tests:
+  ```
+  make test
+  # Run all tests in ./storage
+  make test PKG=./storage
+  # Run all kv tests matching `^TestFoo` with a timeout of 10s
+  make test PKG=./kv TESTS='^TestFoo' TESTTIMEOUT=10s
+  ```
 
-`git commit -a -m 'update CONTRIBUTING.md'`
+  When you're ready to commit, do just that with a succinct title and informative
+  message. For example,
 
-+ Run tests. It's usually enough to run `make test testrace`. You can also run `make acceptance` to have better test coverage. Running acceptance tests requires the Docker setup.
+  ```bash
+  $ git commit
+  > 'update CONTRIBUTING.md
+  >
+  > Added details on running specific tests via `make`, and
+  > the CircleCI-equivalent test suite.
+  >
+  > Fixed some formatting.'
+  ```
 
-+ When you’re ready for review, create a remote branch from your local branch. You may want to `git fetch origin` and run `git rebase origin/master` on your local feature branch before.
++ Run the whole CI test suite locally: `./build/circle-local.sh`. This requires the Docker setup; if you don't have/want that, `go generate ./... && make check test testrace` is a good first approximation.
 
-`git push -u origin $USER/update-readme`
++ When you’re ready for review, groom your work: each commit should pass tests and contain a substantial (but not overwhelming) unit of work. You may also want to `git fetch origin` and run `git rebase -i --exec "make check test" origin/master` to make sure you're submitting your changes on top of the newest version of our code. Next, push to your fork:
+
+  `git push -u <yourfork> update-readme`
 
 + Then [create a pull request using GitHub’s UI](https://help.github.com/articles/creating-a-pull-request).
 
-+ Address feedback in new commits. Wait (or ask) for new feedback on those commits if they are not straightforward.
-
-+ Once ready to land your change, squash your commits. Where n is the number of commits in your branch, run
-`git rebase -i HEAD~n`
-
- and subsequently update your remote (you will have to force the push, `git push -f $USER mybranch`). The pull request will update.
-
-+ If you do not have write access to the repository and your pull request requires a manual merge, you may be asked to rebase again,
-  `git fetch origin; git rebase -i origin/master` and update the PR again. Otherwise, you are free to merge your branch into origin/master directly or rebase first as you deem appropriate.
-
 + If you get a test failure in CircleCI, check the Test Failure tab to see why the test failed. When the failure is logged in `excerpt.txt`, you can find the file from the Artifacts tab and see log messages. (You need to sign in to see the Artifacts tab.)
+
++ Address feedback in new commits. Wait (or ask) for new feedback on those commits if they are not straightforward. An `LGTM` ("looks good to me") by someone qualified is usually posted when you're free to go ahead and merge. Most new contributors aren't allowed to merge themselves; in that case, we'll do it for you. You may also be asked to re-groom your commits.
+
