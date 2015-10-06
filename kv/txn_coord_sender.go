@@ -295,7 +295,9 @@ func (tc *TxnCoordSender) startStats() {
 // write intents; they're tagged to an outgoing EndTransaction request, with
 // the receiving replica in charge of resolving them.
 func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	tc.maybeBeginTxn(&ba)
+	if err := tc.maybeBeginTxn(&ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 	ba.CmdID = ba.GetOrCreateCmdID(tc.clock.PhysicalNow())
 	var startNS int64
 
@@ -333,6 +335,10 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 
 		if rArgs, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			et := rArgs.(*roachpb.EndTransactionRequest)
+			if len(et.Key) != 0 {
+				return nil, roachpb.NewError(util.Errorf("EndTransaction must not have a Key set"))
+			}
+			et.Key = ba.Txn.Key
 			// Remember when EndTransaction started in case we want to
 			// be linearizable.
 			startNS = tc.clock.PhysicalNow()
@@ -342,11 +348,6 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				// write on multiple coordinators.
 				return nil, roachpb.NewError(util.Errorf("client must not pass intents to EndTransaction"))
 			}
-			if len(et.Key) != 0 {
-				return nil, roachpb.NewError(util.Errorf("EndTransaction must not have a Key set"))
-			}
-			et.Key = ba.Txn.Key
-
 			tc.Lock()
 			txnMeta, metaOK := tc.txns[id]
 			if id != "" && metaOK {
@@ -441,17 +442,21 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 // in the request but has a nil ID. The new transaction is initialized
 // using the name and isolation in the otherwise uninitialized txn.
 // The Priority, if non-zero is used as a minimum.
-func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) {
+//
+// No transactional writes are allowed unless preceded by a begin
+// transaction request within the same batch. The exception is if the
+// transaction is already in state txn.Writing=true.
+func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	if ba.Txn == nil {
-		return
+		return nil
 	}
 	if len(ba.Requests) == 0 {
-		panic("empty batch with txn")
+		return util.Errorf("empty batch with txn")
 	}
 	if len(ba.Txn.ID) == 0 {
-		// TODO(tschottdorf): should really choose the first txn write here.
-		firstKey := ba.Requests[0].GetInner().Header().Key
-		newTxn := roachpb.NewTransaction(ba.Txn.Name, firstKey, ba.GetUserPriority(),
+		// Create transaction without a key. The key is set when a begin
+		// transaction request is received.
+		newTxn := roachpb.NewTransaction(ba.Txn.Name, nil, ba.GetUserPriority(),
 			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
 		// Use existing priority as a minimum. This is used on transaction
 		// aborts to ratchet priority when creating successor transaction.
@@ -460,6 +465,25 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) {
 		}
 		ba.Txn = newTxn
 	}
+
+	// Check for a begin transaction to set txn key based on the key of
+	// the first transactional write. Also enforce that no transactional
+	// writes occur before a begin transaction.
+	var haveBeginTxn bool
+	for _, req := range ba.Requests {
+		args := req.GetInner()
+		if bt, ok := args.(*roachpb.BeginTransactionRequest); ok {
+			if haveBeginTxn || ba.Txn.Writing {
+				return util.Errorf("begin transaction requested twice in the same transaction")
+			}
+			haveBeginTxn = true
+			ba.Txn.Key = bt.Key
+		}
+		if roachpb.IsTransactionWrite(args) && !haveBeginTxn && !ba.Txn.Writing {
+			return util.Errorf("transactional write before begin transaction")
+		}
+	}
+	return nil
 }
 
 // cleanupTxn is called when a transaction ends. The transaction record is

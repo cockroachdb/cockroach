@@ -618,7 +618,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-
+	t.Error("foo")
 	// Replicate the new range to all five stores.
 	replica := store0.LookupReplica(rightKey, nil)
 	desc := replica.Desc()

@@ -219,6 +219,16 @@ message ReverseScanResponse {
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
 }
 
+// A BeginTransactionRequest is the argument to the BeginTransaction() method.
+message BeginTransactionRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A BeginTransactionResponse is the return value from the BeginTransaction() method.
+message BeginTransactionResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // An EndTransactionRequest is the argument to the EndTransaction() method. It
 // specifies whether to commit or roll back an extant transaction.
 message EndTransactionRequest {
@@ -534,20 +544,21 @@ message RequestUnion {
   optional DeleteRequest delete = 5;
   optional DeleteRangeRequest delete_range = 6;
   optional ScanRequest scan = 7;
-  optional EndTransactionRequest end_transaction = 8;
-  optional AdminSplitRequest admin_split = 9;
-  optional AdminMergeRequest admin_merge = 10;
-  optional HeartbeatTxnRequest heartbeat_txn = 11;
-  optional GCRequest gc = 12;
-  optional PushTxnRequest push_txn = 13;
-  optional RangeLookupRequest range_lookup = 14;
-  optional ResolveIntentRequest resolve_intent = 15;
-  optional ResolveIntentRangeRequest resolve_intent_range = 16;
-  optional MergeRequest merge = 17;
-  optional TruncateLogRequest truncate_log = 18;
-  optional LeaderLeaseRequest leader_lease = 19;
-  optional ReverseScanRequest reverse_scan = 20;
-  optional NoopRequest noop = 21;
+  optional BeginTransactionRequest begin_transaction = 8;
+  optional EndTransactionRequest end_transaction = 9;
+  optional AdminSplitRequest admin_split = 10;
+  optional AdminMergeRequest admin_merge = 11;
+  optional HeartbeatTxnRequest heartbeat_txn = 12;
+  optional GCRequest gc = 13;
+  optional PushTxnRequest push_txn = 14;
+  optional RangeLookupRequest range_lookup = 15;
+  optional ResolveIntentRequest resolve_intent = 16;
+  optional ResolveIntentRangeRequest resolve_intent_range = 17;
+  optional MergeRequest merge = 18;
+  optional TruncateLogRequest truncate_log = 19;
+  optional LeaderLeaseRequest leader_lease = 20;
+  optional ReverseScanRequest reverse_scan = 21;
+  optional NoopRequest noop = 22;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -562,20 +573,21 @@ message ResponseUnion {
   optional DeleteResponse delete = 5;
   optional DeleteRangeResponse delete_range = 6;
   optional ScanResponse scan = 7;
-  optional EndTransactionResponse end_transaction = 8;
-  optional AdminSplitResponse admin_split = 9;
-  optional AdminMergeResponse admin_merge = 10;
-  optional HeartbeatTxnResponse heartbeat_txn = 11;
-  optional GCResponse gc = 12;
-  optional PushTxnResponse push_txn = 13;
-  optional RangeLookupResponse range_lookup = 14;
-  optional ResolveIntentResponse resolve_intent = 15;
-  optional ResolveIntentRangeResponse resolve_intent_range = 16;
-  optional MergeResponse merge = 17;
-  optional TruncateLogResponse truncate_log = 18;
-  optional LeaderLeaseResponse leader_lease = 19;
-  optional ReverseScanResponse reverse_scan = 20;
-  optional NoopResponse noop = 21;
+  optional BeginTransactionResponse begin_transaction = 8;
+  optional EndTransactionResponse end_transaction = 9;
+  optional AdminSplitResponse admin_split = 10;
+  optional AdminMergeResponse admin_merge = 11;
+  optional HeartbeatTxnResponse heartbeat_txn = 12;
+  optional GCResponse gc = 13;
+  optional PushTxnResponse push_txn = 14;
+  optional RangeLookupResponse range_lookup = 15;
+  optional ResolveIntentResponse resolve_intent = 16;
+  optional ResolveIntentRangeResponse resolve_intent_range = 17;
+  optional MergeResponse merge = 18;
+  optional TruncateLogResponse truncate_log = 19;
+  optional LeaderLeaseResponse leader_lease = 20;
+  optional ReverseScanResponse reverse_scan = 21;
+  optional NoopResponse noop = 22;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

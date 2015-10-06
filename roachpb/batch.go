@@ -196,7 +196,7 @@ func (ba *BatchRequest) flags() int {
 	return flags
 }
 
-// Split separate the requests contained in a batch so that each subset of
+// Split separates the requests contained in a batch so that each subset of
 // requests can be executed by a Store (without changing order). In particular,
 // Admin and EndTransaction requests are always singled out and mutating
 // requests separated from reads.
@@ -209,11 +209,12 @@ func (ba BatchRequest) Split() [][]RequestUnion {
 		if (newFlags & isAlone) != 0 {
 			return false
 		}
-		// Otherwise, the flags below must remain the same
-		// with the new request added.
+		// Otherwise, the flags below must remain the same with the new
+		// request added.
+		//
 		// Note that we're not checking isRead: The invariants we're
 		// enforcing are that a batch can't mix non-writes with writes.
-		// Checking isRead would ConditionalPut and Put to conflict,
+		// Checking isRead would cause ConditionalPut and Put to conflict,
 		// which is not what we want.
 		const mask = isWrite | isAdmin | isReverse
 		return (mask & exFlags) == (mask & newFlags)

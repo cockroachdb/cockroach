@@ -51,6 +51,8 @@ const (
 	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
 	// the latter endpoint excluded.
 	ReverseScan
+	// BeginTransaction starts a new transaction.
+	BeginTransaction
 	// EndTransaction either commits or aborts an ongoing transaction.
 	EndTransaction
 	// AdminSplit is called to coordinate a split of a range.

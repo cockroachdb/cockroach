@@ -29,17 +29,18 @@ import (
 )
 
 var allExternalMethods = [...]roachpb.Request{
-	roachpb.Get:            &roachpb.GetRequest{},
-	roachpb.Put:            &roachpb.PutRequest{},
-	roachpb.ConditionalPut: &roachpb.ConditionalPutRequest{},
-	roachpb.Increment:      &roachpb.IncrementRequest{},
-	roachpb.Delete:         &roachpb.DeleteRequest{},
-	roachpb.DeleteRange:    &roachpb.DeleteRangeRequest{},
-	roachpb.Scan:           &roachpb.ScanRequest{},
-	roachpb.ReverseScan:    &roachpb.ReverseScanRequest{},
-	roachpb.EndTransaction: &roachpb.EndTransactionRequest{},
-	roachpb.AdminSplit:     &roachpb.AdminSplitRequest{},
-	roachpb.AdminMerge:     &roachpb.AdminMergeRequest{},
+	roachpb.Get:              &roachpb.GetRequest{},
+	roachpb.Put:              &roachpb.PutRequest{},
+	roachpb.ConditionalPut:   &roachpb.ConditionalPutRequest{},
+	roachpb.Increment:        &roachpb.IncrementRequest{},
+	roachpb.Delete:           &roachpb.DeleteRequest{},
+	roachpb.DeleteRange:      &roachpb.DeleteRangeRequest{},
+	roachpb.Scan:             &roachpb.ScanRequest{},
+	roachpb.ReverseScan:      &roachpb.ReverseScanRequest{},
+	roachpb.BeginTransaction: &roachpb.BeginTransactionRequest{},
+	roachpb.EndTransaction:   &roachpb.EndTransactionRequest{},
+	roachpb.AdminSplit:       &roachpb.AdminSplitRequest{},
+	roachpb.AdminMerge:       &roachpb.AdminMergeRequest{},
 }
 
 // A DBServer provides an HTTP server endpoint serving the key-value API.

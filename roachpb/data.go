@@ -620,6 +620,9 @@ func (t *Transaction) Update(o *Transaction) {
 		*t = *proto.Clone(o).(*Transaction)
 		return
 	}
+	if len(t.Key) == 0 {
+		t.Key = o.Key
+	}
 	if o.Status != PENDING {
 		t.Status = o.Status
 	}

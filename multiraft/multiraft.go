@@ -1119,6 +1119,7 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 						var err error
 						switch cc.Type {
 						case raftpb.ConfChangeAddNode:
+							log.Infof("adding node %d to raft replica group for node %d", replica.NodeID, s.nodeID)
 							err = s.addNode(replica.NodeID, g)
 						case raftpb.ConfChangeRemoveNode:
 							err = s.removeNode(replica.NodeID, g)

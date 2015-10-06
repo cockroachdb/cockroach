@@ -171,6 +171,7 @@ func TestBatchSplit(t *testing.T) {
 	put := &PutRequest{}
 	spl := &AdminSplitRequest{}
 	dr := &DeleteRangeRequest{}
+	bt := &BeginTransactionRequest{}
 	et := &EndTransactionRequest{}
 	rv := &ReverseScanRequest{}
 	testCases := []struct {
@@ -182,6 +183,7 @@ func TestBatchSplit(t *testing.T) {
 		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 1, 1}},
 		{[]Request{spl, get, scan, spl, get}, []int{1, 2, 1, 1}},
 		{[]Request{spl, spl, get, spl}, []int{1, 1, 1, 1}},
+		{[]Request{bt, put, et}, []int{2, 1}},
 	}
 
 	for i, test := range testCases {

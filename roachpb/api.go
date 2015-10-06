@@ -304,6 +304,9 @@ func (*ScanRequest) Method() Method { return Scan }
 func (*ReverseScanRequest) Method() Method { return ReverseScan }
 
 // Method implements the Request interface.
+func (*BeginTransactionRequest) Method() Method { return BeginTransaction }
+
+// Method implements the Request interface.
 func (*EndTransactionRequest) Method() Method { return EndTransaction }
 
 // Method implements the Request interface.
@@ -365,6 +368,9 @@ func (*ScanRequest) CreateReply() Response { return &ScanResponse{} }
 
 // CreateReply implements the Request interface.
 func (*ReverseScanRequest) CreateReply() Response { return &ReverseScanResponse{} }
+
+// CreateReply implements the Request interface.
+func (*BeginTransactionRequest) CreateReply() Response { return &BeginTransactionResponse{} }
 
 // CreateReply implements the Request interface.
 func (*EndTransactionRequest) CreateReply() Response { return &EndTransactionResponse{} }
@@ -508,6 +514,7 @@ func (*DeleteRequest) flags() int             { return isWrite | isTxnWrite }
 func (*DeleteRangeRequest) flags() int        { return isWrite | isTxnWrite | isRange }
 func (*ScanRequest) flags() int               { return isRead | isRange }
 func (*ReverseScanRequest) flags() int        { return isRead | isRange | isReverse }
+func (*BeginTransactionRequest) flags() int   { return isWrite }
 func (*EndTransactionRequest) flags() int     { return isWrite | isAlone }
 func (*AdminSplitRequest) flags() int         { return isAdmin | isAlone }
 func (*AdminMergeRequest) flags() int         { return isAdmin | isAlone }

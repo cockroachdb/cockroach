@@ -779,6 +779,10 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			pusher.Priority = 1 // Pusher will lose.
 		}
 
+		bt, btH := beginTxnArgs(key, pushee)
+		if _, err := client.SendWrappedWith(store.testSender(), nil, btH, &bt); err != nil {
+			t.Fatal(err)
+		}
 		// First lay down intent using the pushee's txn.
 		pArgs := putArgs(key, []byte("value"))
 		h := roachpb.Header{Txn: pushee}
@@ -829,6 +833,12 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	pushee.Priority = 1
 	pusher.Priority = 2 // Pusher will win.
 
+	// Begin pushee's transaction.
+	bt, btH := beginTxnArgs(key, pushee)
+	if _, err := client.SendWrappedWith(store.testSender(), nil, btH, &bt); err != nil {
+		t.Fatal(err)
+	}
+
 	// First lay down intent using the pushee's txn.
 	args := incrementArgs(key, 1)
 	h := roachpb.Header{Txn: pushee}
@@ -878,6 +888,12 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		} else {
 			pushee.Priority = 2
 			pusher.Priority = 1 // Pusher will lose.
+		}
+
+		// Begin pushee's transaction.
+		bt, btH := beginTxnArgs(key, pushee)
+		if _, err := client.SendWrappedWith(store.testSender(), nil, btH, &bt); err != nil {
+			t.Fatal(err)
 		}
 
 		// First, write original value.
@@ -964,6 +980,12 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	pushee.Priority = 2
 	pusher.Priority = 1 // Pusher would lose based on priority.
 
+	// Begin pushee's transaction.
+	bt, btH := beginTxnArgs(key, pushee)
+	if _, err := client.SendWrappedWith(store.testSender(), nil, btH, &bt); err != nil {
+		t.Fatal(err)
+	}
+
 	// First, write original value.
 	args := putArgs(key, []byte("value1"))
 	ts := store.ctx.Clock.Now()
@@ -1018,6 +1040,12 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	key := roachpb.Key("a")
 	pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
 	pushee.Priority = 0 // pushee should lose all conflicts
+
+	// Begin pushee's transaction.
+	bt, btH := beginTxnArgs(key, pushee)
+	if _, err := client.SendWrappedWith(store.testSender(), nil, btH, &bt); err != nil {
+		t.Fatal(err)
+	}
 
 	// First, lay down intent from pushee.
 	args := putArgs(key, []byte("value1"))
@@ -1128,6 +1156,10 @@ func TestStoreReadInconsistent(t *testing.T) {
 		txnA := newTransaction("testA", keyA, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		txnB := newTransaction("testB", keyB, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		for _, txn := range []*roachpb.Transaction{txnA, txnB} {
+			bt, btH := beginTxnArgs(txn.Key, txn)
+			if _, err := client.SendWrappedWith(store.testSender(), nil, btH, &bt); err != nil {
+				t.Fatal(err)
+			}
 			args.Key = txn.Key
 			if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); err != nil {
 				t.Fatal(err)
@@ -1247,6 +1279,10 @@ func TestStoreScanIntents(t *testing.T) {
 					priority = -roachpb.MaxPriority
 				}
 				txn = newTransaction(fmt.Sprintf("test-%d", i), key, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
+				bt, btH := beginTxnArgs(txn.Key, txn)
+				if _, err := client.SendWrappedWith(store.testSender(), nil, btH, &bt); err != nil {
+					t.Fatal(err)
+				}
 			}
 			args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)))
 			if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); err != nil {
@@ -1330,6 +1366,11 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 
 	// Lay down 10 intents to scan over.
 	txn := newTransaction("test", roachpb.Key("foo"), 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+	bt, btH := beginTxnArgs(txn.Key, txn)
+	if _, err := client.SendWrappedWith(store.testSender(), nil, btH, &bt); err != nil {
+		t.Fatal(err)
+	}
+
 	keys := []roachpb.Key{}
 	for j := 0; j < 10; j++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", j))
