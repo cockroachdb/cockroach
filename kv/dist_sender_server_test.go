@@ -52,7 +52,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
-	key := keys.MakeKey(keys.Meta1Prefix, roachpb.RKeyMax)
+	key := keys.MakeKey(keys.Meta1Prefix, roachpb.KeyMax)
 	now := s.Clock().Now()
 	txn := roachpb.NewTransaction("txn", roachpb.Key("foobar"), 0, roachpb.SERIALIZABLE, now, 0)
 	if err := engine.MVCCPutProto(s.Ctx.Engines[0], nil, key, now, txn, &roachpb.RangeDescriptor{}); err != nil {
@@ -153,7 +153,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 		b := &client.Batch{}
 		b.DelRange("a", "b")
 		b.DelRange("e", "f")
-		b.DelRange(keys.LocalMax, roachpb.RKeyMax)
+		b.DelRange(keys.LocalMax, roachpb.KeyMax)
 		return txn.CommitInBatch(b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
@@ -319,7 +319,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 	// Case 3: Test roachpb.KeyMax
 	// This span covers the system DB keys.
 	wanted := 1 + len(sql.GetInitialSystemValues())
-	if rows, err := db.ReverseScan("g", roachpb.RKeyMax, 0); err != nil {
+	if rows, err := db.ReverseScan("g", roachpb.KeyMax, 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != wanted {
 		t.Errorf("expected %d rows; got %d", wanted, l)

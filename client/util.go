@@ -32,8 +32,6 @@ func marshalKey(k interface{}) (roachpb.Key, error) {
 	switch t := k.(type) {
 	case string:
 		return roachpb.Key(t), nil
-	case roachpb.RKey:
-		return t.Key(), nil
 	case roachpb.Key:
 		return t, nil
 	case []byte:

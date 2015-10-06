@@ -1516,8 +1516,8 @@ func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachp
 	if bytes.Compare(key, keys.LocalMax) < 0 {
 		key = keys.Addr(keys.LocalMax)
 	}
-	encStartKey := MVCCEncodeKey(key.Key())
-	encEndKey := MVCCEncodeKey(endKey.Key())
+	encStartKey := MVCCEncodeKey(key.AsRawKey())
+	encEndKey := MVCCEncodeKey(endKey.AsRawKey())
 
 	// Get range size from stats.
 	var ms MVCCStats

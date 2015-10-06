@@ -42,16 +42,20 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
-	var startKey roachpb.RKey
-	if len(args) >= 1 {
-		startKey = keys.RangeMetaKey(keys.Addr(roachpb.Key(args[0])))
-	} else {
-		startKey = roachpb.RKey(keys.Meta2Prefix)
+
+	var startKey roachpb.Key
+	{
+		k := roachpb.KeyMin.Next()
+		if len(args) > 0 {
+			k = roachpb.Key(args[0])
+		}
+		startKey = keys.RangeMetaKey(keys.Addr(k))
 	}
+	endKey := keys.Meta2Prefix.PrefixEnd()
 
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
-	rows, err := kvDB.Scan(startKey, keys.Meta2Prefix.PrefixEnd(), maxResults)
+	rows, err := kvDB.Scan(startKey, endKey, maxResults)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
 		osExit(1)

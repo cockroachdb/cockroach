@@ -44,7 +44,7 @@ func (a rangeCacheKey) Compare(b llrb.Comparable) int {
 }
 
 func meta(k roachpb.RKey) roachpb.RKey {
-	return keys.RangeMetaKey(k)
+	return keys.Addr(keys.RangeMetaKey(k))
 }
 
 // rangeDescriptorDB is a type which can query range descriptors from an

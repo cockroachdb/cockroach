@@ -91,7 +91,7 @@ func TestGetZoneConfig(t *testing.T) {
 		zoneCfg config.ZoneConfig
 	}{
 		{roachpb.RKeyMin, *config.DefaultZoneConfig},
-		{keys.TableDataPrefix, *config.DefaultZoneConfig},
+		{keys.Addr(keys.TableDataPrefix), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(1), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(keys.MaxReservedDescID), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(db1), *config.DefaultZoneConfig},
@@ -149,7 +149,7 @@ func TestGetZoneConfig(t *testing.T) {
 		zoneCfg config.ZoneConfig
 	}{
 		{roachpb.RKeyMin, *config.DefaultZoneConfig},
-		{keys.TableDataPrefix, *config.DefaultZoneConfig},
+		{keys.Addr(keys.TableDataPrefix), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(1), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(keys.MaxReservedDescID), *config.DefaultZoneConfig},
 		{keys.MakeTablePrefix(db1), db1Cfg},

@@ -340,7 +340,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	}
 	args := &roachpb.LeaderLeaseRequest{
 		Span: roachpb.Span{
-			Key: desc.StartKey.Key(),
+			Key: desc.StartKey.AsRawKey(),
 		},
 		Lease: roachpb.Lease{
 			Start:      timestamp,

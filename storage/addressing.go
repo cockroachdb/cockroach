@@ -26,13 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-type metaAction func(*client.Batch, roachpb.RKey, *roachpb.RangeDescriptor)
+type metaAction func(*client.Batch, roachpb.Key, *roachpb.RangeDescriptor)
 
-func putMeta(b *client.Batch, key roachpb.RKey, desc *roachpb.RangeDescriptor) {
+func putMeta(b *client.Batch, key roachpb.Key, desc *roachpb.RangeDescriptor) {
 	b.Put(key, desc)
 }
 
-func delMeta(b *client.Batch, key roachpb.RKey, desc *roachpb.RangeDescriptor) {
+func delMeta(b *client.Batch, key roachpb.Key, desc *roachpb.RangeDescriptor) {
 	b.Del(key)
 }
 
@@ -91,12 +91,12 @@ func rangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor, action meta
 	} else {
 		// 3. the range ends with a normal user key, so we must update the
 		// relevant meta2 entry pointing to the end of this range.
-		action(b, roachpb.RKey(keys.MakeKey(keys.Meta2Prefix, desc.EndKey)), desc)
+		action(b, roachpb.Key(keys.MakeKey(keys.Meta2Prefix, desc.EndKey)), desc)
 		// 3a. the range starts with KeyMin or a meta2 addressing record,
 		// update the meta1 entry for KeyMax.
 		if bytes.Equal(desc.StartKey, roachpb.RKeyMin) ||
 			bytes.HasPrefix(desc.StartKey, keys.Meta2Prefix) {
-			action(b, roachpb.RKey(keys.MakeKey(keys.Meta1Prefix, roachpb.RKeyMax)), desc)
+			action(b, roachpb.Key(keys.MakeKey(keys.Meta1Prefix, roachpb.RKeyMax)), desc)
 		}
 	}
 	return nil

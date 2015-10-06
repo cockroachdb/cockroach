@@ -62,11 +62,11 @@ func TestObjectIDForKey(t *testing.T) {
 		id      uint32
 	}{
 		// Before the structured span.
-		{roachpb.RKey(""), false, 0},
-		{keys.SystemMax, false, 0},
+		{roachpb.RKeyMin, false, 0},
+		{keys.Addr(keys.SystemMax), false, 0},
 
 		// Boundaries of structured span.
-		{keys.TableDataPrefix, false, 0},
+		{keys.Addr(keys.TableDataPrefix), false, 0},
 		{roachpb.RKeyMax, false, 0},
 
 		// In system span, but no Uvarint ID.

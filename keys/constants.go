@@ -120,8 +120,8 @@ var (
 
 	// SystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
-	SystemPrefix = roachpb.RKey("\x00")
-	SystemMax    = roachpb.RKey("\x01")
+	SystemPrefix = roachpb.Key("\x00")
+	SystemMax    = roachpb.Key("\x01")
 
 	// MetaPrefix is the prefix for range metadata keys. Notice that
 	// an extra null character in the prefix causes all range addressing
@@ -132,7 +132,7 @@ var (
 	Meta1Prefix = roachpb.RKey(MakeKey(MetaPrefix, roachpb.RKey("1")))
 	// Meta2Prefix is the second level of key addressing. The value is a
 	// RangeDescriptor struct.
-	Meta2Prefix = roachpb.RKey(MakeKey(MetaPrefix, roachpb.RKey("2")))
+	Meta2Prefix = roachpb.Key(MakeKey(MetaPrefix, roachpb.RKey("2")))
 	// Meta1KeyMax is the end of the range of the first level of key addressing.
 	// The value is a RangeDescriptor struct.
 	Meta1KeyMax = roachpb.RKey(MakeKey(Meta1Prefix, roachpb.RKeyMax))
@@ -158,17 +158,17 @@ var (
 	// StatusPrefix specifies the key prefix to store all status details.
 	StatusPrefix = roachpb.RKey(MakeKey(SystemPrefix, roachpb.RKey("status-")))
 	// StatusStorePrefix stores all status info for stores.
-	StatusStorePrefix = roachpb.RKey(MakeKey(StatusPrefix, roachpb.RKey("store-")))
+	StatusStorePrefix = roachpb.Key(MakeKey(StatusPrefix, roachpb.RKey("store-")))
 	// StatusNodePrefix stores all status info for nodes.
-	StatusNodePrefix = roachpb.RKey(MakeKey(StatusPrefix, roachpb.RKey("node-")))
+	StatusNodePrefix = roachpb.Key(MakeKey(StatusPrefix, roachpb.RKey("node-")))
 
 	// TableDataPrefix prefixes all table data. It is specifically chosen to
 	// occur after the range of common user data prefixes so that tests which use
 	// those prefixes will not see table data.
-	TableDataPrefix = roachpb.RKey("\xff")
+	TableDataPrefix = roachpb.Key("\xff")
 
 	// UserTableDataMin is the start key of user structured data.
-	UserTableDataMin = roachpb.RKey(MakeTablePrefix(MaxReservedDescID + 1))
+	UserTableDataMin = roachpb.Key(MakeTablePrefix(MaxReservedDescID + 1))
 )
 
 // Various IDs used by the structured data layer.

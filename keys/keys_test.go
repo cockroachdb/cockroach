@@ -111,7 +111,7 @@ func TestRangeMetaKey(t *testing.T) {
 	}
 	for i, test := range testCases {
 		result := RangeMetaKey(test.key)
-		if !result.Equal(test.expKey) {
+		if !bytes.Equal(result, test.expKey) {
 			t.Errorf("%d: expected range meta for key %q doesn't match %q", i, test.key, test.expKey)
 		}
 	}
@@ -235,7 +235,7 @@ func TestMetaReverseScanBounds(t *testing.T) {
 			expError: "",
 		},
 		{
-			key:      Meta2Prefix,
+			key:      Addr(Meta2Prefix),
 			expStart: Meta1Prefix,
 			expEnd:   Meta2Prefix.Next(),
 			expError: "",

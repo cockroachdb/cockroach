@@ -21,13 +21,13 @@ import "github.com/cockroachdb/cockroach/roachpb"
 
 var (
 	// Meta1Span holds all first level addressing.
-	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix.Key()}
+	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
 
 	// UserDataSpan is the non-meta and non-structured portion of the key space.
-	UserDataSpan = roachpb.Span{Key: SystemMax.Key(), EndKey: TableDataPrefix.Key()}
+	UserDataSpan = roachpb.Span{Key: SystemMax, EndKey: TableDataPrefix}
 
 	// SystemDBSpan is the range of system objects for structured data.
-	SystemDBSpan = roachpb.Span{Key: TableDataPrefix.Key(), EndKey: UserTableDataMin.Key()}
+	SystemDBSpan = roachpb.Span{Key: TableDataPrefix, EndKey: UserTableDataMin}
 
 	// NoSplitSpans describes the ranges that should never be split.
 	// Meta1Span: needed to find other ranges.

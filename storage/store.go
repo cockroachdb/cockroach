@@ -143,7 +143,7 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	} else if start.Less(keys.LocalMax) {
 		// It's a range op, not local but somehow plows through local data -
 		// not cool.
-		return util.Errorf("start key %q must be greater than LocalMax", start)
+		return util.Errorf("start key in [%q,%q) must be greater than LocalMax", start, end)
 	}
 
 	return nil
@@ -823,12 +823,12 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 	// Range addressing for meta2.
 	meta2Key := keys.RangeMetaKey(roachpb.RKeyMax)
-	if err := engine.MVCCPutProto(batch, ms, meta2Key.AsRawKey(), now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, meta2Key, now, nil, desc); err != nil {
 		return err
 	}
 	// Range addressing for meta1.
-	meta1Key := keys.RangeMetaKey(meta2Key)
-	if err := engine.MVCCPutProto(batch, ms, meta1Key.AsRawKey(), now, nil, desc); err != nil {
+	meta1Key := keys.RangeMetaKey(keys.Addr(meta2Key))
+	if err := engine.MVCCPutProto(batch, ms, meta1Key, now, nil, desc); err != nil {
 		return err
 	}
 

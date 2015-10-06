@@ -606,7 +606,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 			if err := proto.Unmarshal(b, &r); err != nil {
 				return nil, err
 			}
-			if !keys.RangeMetaKey(r.StartKey).Less(key) {
+			if !keys.Addr(keys.RangeMetaKey(r.StartKey)).Less(key) {
 				// This is the case in which we've picked up an extra descriptor
 				// we don't want.
 				return nil, nil

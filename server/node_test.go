@@ -118,7 +118,7 @@ func TestBootstrapCluster(t *testing.T) {
 	defer stopper.Stop()
 
 	// Scan the complete contents of the local database.
-	rows, err := localDB.Scan(keys.LocalPrefix.PrefixEnd(), roachpb.RKeyMax, 0)
+	rows, err := localDB.Scan(keys.LocalPrefix.PrefixEnd(), roachpb.KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,8 +127,8 @@ func TestBootstrapCluster(t *testing.T) {
 		foundKeys = append(foundKeys, kv.Key)
 	}
 	var expectedKeys = keySlice{
-		roachpb.MakeKey(roachpb.Key("\x00\x00meta1"), roachpb.RKeyMax),
-		roachpb.MakeKey(roachpb.Key("\x00\x00meta2"), roachpb.RKeyMax),
+		roachpb.MakeKey(roachpb.Key("\x00\x00meta1"), roachpb.KeyMax),
+		roachpb.MakeKey(roachpb.Key("\x00\x00meta2"), roachpb.KeyMax),
 		roachpb.Key("\x00node-idgen"),
 		roachpb.Key("\x00range-tree-root"),
 		roachpb.Key("\x00store-idgen"),

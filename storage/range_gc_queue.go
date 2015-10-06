@@ -91,7 +91,7 @@ func (q *rangeGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.Sy
 	b := &client.Batch{}
 	b.InternalAddRequest(&roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(desc.StartKey).Key(),
+			Key: keys.RangeMetaKey(desc.StartKey),
 		},
 		MaxRanges: 1,
 	})

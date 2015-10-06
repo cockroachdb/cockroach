@@ -346,8 +346,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	// Resolve the intents.
 	scanArgs := roachpb.ScanRequest{
 		Span: roachpb.Span{
-			Key:    keys.RangeMetaKey(roachpb.RKeyMin.Next()).Key(),
-			EndKey: keys.RangeMetaKey(roachpb.RKeyMax).Key(),
+			Key:    keys.RangeMetaKey(roachpb.RKeyMin.Next()),
+			EndKey: keys.RangeMetaKey(roachpb.RKeyMax),
 		},
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
@@ -373,7 +373,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}{
 		// Test key in the middle of the range.
 		{
-			request: revScanArgs(keys.RangeMetaKey(roachpb.RKey("f")).Key(), 2),
+			request: revScanArgs(keys.RangeMetaKey(roachpb.RKey("f")), 2),
 			// ["e","g") and ["c","e").
 			expected: []roachpb.RangeDescriptor{
 				{StartKey: roachpb.RKey("e"), EndKey: roachpb.RKey("g")},
@@ -382,7 +382,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		},
 		// Test key in the end key of the range.
 		{
-			request: revScanArgs(keys.RangeMetaKey(roachpb.RKey("g")).Key(), 3),
+			request: revScanArgs(keys.RangeMetaKey(roachpb.RKey("g")), 3),
 			// ["e","g"), ["c","e") and ["a","c").
 			expected: []roachpb.RangeDescriptor{
 				{StartKey: roachpb.RKey("e"), EndKey: roachpb.RKey("g")},
@@ -391,7 +391,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			},
 		},
 		{
-			request: revScanArgs(keys.RangeMetaKey(roachpb.RKey("e")).Key(), 2),
+			request: revScanArgs(keys.RangeMetaKey(roachpb.RKey("e")), 2),
 			// ["c","e") and ["a","c").
 			expected: []roachpb.RangeDescriptor{
 				{StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
