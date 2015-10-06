@@ -455,7 +455,7 @@ func (v *Value) computeChecksum(key []byte) uint32 {
 // randomly chosen value to yield a final priority, used to settle
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
-func NewTransaction(name string, baseKey RKey, userPriority int32,
+func NewTransaction(name string, baseKey Key, userPriority int32,
 	isolation IsolationType, now Timestamp, maxOffset int64) *Transaction {
 	// Compute priority by adjusting based on userPriority factor.
 	priority := MakePriority(userPriority)

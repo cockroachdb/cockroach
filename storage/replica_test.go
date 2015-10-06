@@ -223,7 +223,7 @@ func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	return roachpb.NewTransaction(name, keys.Addr(baseKey), userPriority,
+	return roachpb.NewTransaction(name, baseKey, userPriority,
 		isolation, now, offset)
 }
 
@@ -930,7 +930,7 @@ func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransaction
 	h.Txn = txn
 	return roachpb.EndTransactionRequest{
 		Span: roachpb.Span{
-			Key: txn.Key.Key(), // not allowed when going through TxnCoordSender, but we're not
+			Key: txn.Key, // not allowed when going through TxnCoordSender, but we're not
 		},
 		Commit: commit,
 	}, h
@@ -941,7 +941,7 @@ func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransaction
 func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType) roachpb.PushTxnRequest {
 	return roachpb.PushTxnRequest{
 		Span: roachpb.Span{
-			Key: pushee.Key.Key(),
+			Key: pushee.Key,
 		},
 		Now:       pusher.Timestamp,
 		PushTo:    pusher.Timestamp,
@@ -956,7 +956,7 @@ func heartbeatArgs(txn *roachpb.Transaction) (_ roachpb.HeartbeatTxnRequest, h r
 	h.Txn = txn
 	return roachpb.HeartbeatTxnRequest{
 		Span: roachpb.Span{
-			Key: txn.Key.Key(),
+			Key: txn.Key,
 		},
 	}, h
 }
@@ -1787,16 +1787,16 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	txn := newTransaction("test", roachpb.Key(""), 1, roachpb.SERIALIZABLE, tc.clock)
 
 	testCases := []struct {
-		key          roachpb.RKey
+		key          roachpb.Key
 		existStatus  roachpb.TransactionStatus
 		existEpoch   int32
 		existTS      roachpb.Timestamp
 		expErrRegexp string
 	}{
-		{roachpb.RKey("a"), roachpb.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" id=.*: already committed"},
-		{roachpb.RKey("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted \"test\" id=.*"},
-		{roachpb.RKey("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" id=.*: epoch regression: 0"},
-		{roachpb.RKey("d"), roachpb.PENDING, txn.Epoch, regressTS, "txn \"test\" id=.*: timestamp regression: 0.000000001,0"},
+		{roachpb.Key("a"), roachpb.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" id=.*: already committed"},
+		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted \"test\" id=.*"},
+		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" id=.*: epoch regression: 0"},
+		{roachpb.Key("d"), roachpb.PENDING, txn.Epoch, regressTS, "txn \"test\" id=.*: timestamp regression: 0.000000001,0"},
 	}
 	for _, test := range testCases {
 		// Establish existing txn state by writing directly to range engine.
@@ -1926,7 +1926,7 @@ func TestPushTxnBadKey(t *testing.T) {
 	pushee := newTransaction("test", roachpb.Key("b"), 1, roachpb.SERIALIZABLE, tc.clock)
 
 	args := pushTxnArgs(pusher, pushee, roachpb.ABORT_TXN)
-	args.Key = pusher.Key.Key()
+	args.Key = pusher.Key
 
 	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); !testutils.IsError(err, ".*should match pushee.*") {
 		t.Errorf("unexpected error %s", err)

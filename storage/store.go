@@ -1357,7 +1357,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	for _, intent := range pushIntents {
 		pushReqs = append(pushReqs, &roachpb.PushTxnRequest{
 			Span: roachpb.Span{
-				Key: intent.Txn.Key.Key(),
+				Key: intent.Txn.Key,
 			},
 			PusherTxn: *pusherTxn,
 			PusheeTxn: intent.Txn,

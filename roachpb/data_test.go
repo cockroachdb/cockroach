@@ -340,7 +340,7 @@ func TestTransactionString(t *testing.T) {
 	ts1 := makeTS(10, 11)
 	txn := Transaction{
 		Name:          "name",
-		Key:           RKey("foo"),
+		Key:           Key("foo"),
 		ID:            id,
 		Priority:      957356782,
 		Isolation:     SERIALIZABLE,

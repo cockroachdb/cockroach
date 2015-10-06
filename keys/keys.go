@@ -189,8 +189,8 @@ func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
 // TransactionKey returns a transaction key based on the provided
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.
-func TransactionKey(key roachpb.RKey, id []byte) roachpb.Key {
-	return MakeRangeKey(key, LocalTransactionSuffix, roachpb.RKey(id))
+func TransactionKey(key roachpb.Key, id []byte) roachpb.Key {
+	return MakeRangeKey(Addr(key), LocalTransactionSuffix, roachpb.RKey(id))
 }
 
 // Addr returns the address for the key, used to lookup the range containing

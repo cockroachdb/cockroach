@@ -27,7 +27,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -346,7 +345,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			if len(et.Key) != 0 {
 				return nil, roachpb.NewError(util.Errorf("EndTransaction must not have a Key set"))
 			}
-			et.Key = ba.Txn.Key.Key()
+			et.Key = ba.Txn.Key
 
 			tc.Lock()
 			txnMeta, metaOK := tc.txns[id]
@@ -452,7 +451,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) {
 	if len(ba.Txn.ID) == 0 {
 		// TODO(tschottdorf): should really choose the first txn write here.
 		firstKey := ba.Requests[0].GetInner().Header().Key
-		newTxn := roachpb.NewTransaction(ba.Txn.Name, keys.Addr(firstKey), ba.GetUserPriority(),
+		newTxn := roachpb.NewTransaction(ba.Txn.Name, firstKey, ba.GetUserPriority(),
 			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
 		// Use existing priority as a minimum. This is used on transaction
 		// aborts to ratchet priority when creating successor transaction.
@@ -580,7 +579,7 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	}
 
 	hb := &roachpb.HeartbeatTxnRequest{}
-	hb.Key = txn.Key.Key()
+	hb.Key = txn.Key
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
 	ba.Txn = &txn

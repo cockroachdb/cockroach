@@ -96,11 +96,11 @@ func TestRocksDBCompaction(t *testing.T) {
 			Value: roachpb.Value{Bytes: encodePutResponse(makeTS(3, 0), t)},
 		},
 		{
-			Key:   keys.TransactionKey(roachpb.RKey("a"), roachpb.Key(uuid.NewUUID4())),
+			Key:   keys.TransactionKey(roachpb.Key("a"), roachpb.Key(uuid.NewUUID4())),
 			Value: roachpb.Value{Bytes: encodeTransaction(makeTS(1, 0), t)},
 		},
 		{
-			Key:   keys.TransactionKey(roachpb.RKey("b"), roachpb.Key(uuid.NewUUID4())),
+			Key:   keys.TransactionKey(roachpb.Key("b"), roachpb.Key(uuid.NewUUID4())),
 			Value: roachpb.Value{Bytes: encodeTransaction(makeTS(2, 0), t)},
 		},
 	}

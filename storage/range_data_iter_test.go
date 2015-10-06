@@ -69,9 +69,9 @@ func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
 		{keys.RangeLastVerificationTimestampKey(r.Desc().RangeID), ts0},
 		{keys.RangeStatsKey(r.Desc().RangeID), ts0},
 		{keys.RangeDescriptorKey(r.Desc().StartKey), ts},
-		{keys.TransactionKey(r.Desc().StartKey, []byte("1234")), ts0},
-		{keys.TransactionKey(r.Desc().StartKey.Next(), []byte("5678")), ts0},
-		{keys.TransactionKey(keys.Addr(prevKey(r.Desc().EndKey)), []byte("2468")), ts0},
+		{keys.TransactionKey(roachpb.Key(r.Desc().StartKey), []byte("1234")), ts0},
+		{keys.TransactionKey(roachpb.Key(r.Desc().StartKey.Next()), []byte("5678")), ts0},
+		{keys.TransactionKey(prevKey(r.Desc().EndKey), []byte("2468")), ts0},
 		// TODO(bdarnell): KeyMin.Next() results in a key in the reserved system-local space.
 		// Once we have resolved https://github.com/cockroachdb/cockroach/issues/437,
 		// replace this with something that reliably generates the first valid key in the range.
