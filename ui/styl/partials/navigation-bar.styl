@@ -57,21 +57,30 @@ header
       color $main-nav-inactive
       list-style-type none
 
-      path
-        fill $main-nav-inactive
-
-      &.active, &.active:hover
-        color $main-nav-active-font
-        background-color $main-nav-active-bg
-
+      &.normal
         path
-          fill $main-nav-active-icon
+          fill $main-nav-inactive
 
-      &:hover
-        color $main-nav-hover
+        &.active, &.active:hover
+          color $main-nav-active-font
+          background-color $main-nav-active-bg
 
-        path
-          fill $main-nav-hover
+          path
+            fill $main-nav-active-icon
+
+        &:hover
+          color $main-nav-hover
+
+          path
+            fill $main-nav-hover
+
+      &.cockroach
+        padding-top 10px
+        height $top-bar-height
+        border-bottom 1px solid $navbar-border
+
+        &.active
+          background-color $navbar-bg
 
       a
         width 100%
