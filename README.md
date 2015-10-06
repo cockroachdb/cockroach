@@ -49,7 +49,7 @@ docker run -t -i -p 26257:26257 cockroachdb/cockroach shell
 ```
 
 If the docker command fails but Docker is installed, you probably need to initialize it. Here's a common error message:
-```bash
+```
 Get http:///var/run/docker.sock/v1.20/containers/json: dial unix /var/run/docker.sock: no such file or directory.
 * Are you trying to connect to a TLS-enabled daemon without TLS?
 * Is your docker daemon up and running?
