@@ -33,37 +33,37 @@ $stats-table-td--bg-sorted   = -color('light', 'x-light')
 
 // ---- Data table ---- 
 .stats-table
-  color: -color('dark')
+  color -color('dark')
   table
-    border-collapse: collapse;
-    border-top: $stats-table--border-top
-    margin-bottom: 2rem
+    border-collapse collapse
+    border-top $stats-table--border-top
+    margin-bottom 2rem
   tr
-    height: 4rem
-    border-bottom: $stats-table-tr--border
+    height 4rem
+    border-bottom $stats-table-tr--border
   th
-    color: $stats-table-th--fg
-    font-weight: normal
-    alternating-background: $stats-table-th--bg $stats-table-th--bg-alt
+    color $stats-table-th--fg
+    font-weight normal
+    alternating-background $stats-table-th--bg $stats-table-th--bg-alt
     &.sorted
-      background-color: $stats-table-th--bg-sorted
+      background-color $stats-table-th--bg-sorted
       &:after
-        content:"▼"
+        content "▼"
       &.ascending
         &:after
-          content:"▲"
+          content "▲"
           
   td
-    alternating-background: $stats-table-td--bg $stats-table-td--bg-alt
+    alternating-background $stats-table-td--bg $stats-table-td--bg-alt
     &.sorted
-      background-color: $stats-table-td--bg-sorted 
+      background-color $stats-table-td--bg-sorted
 
   td
   th
-    padding-left: 1rem
-    padding-right: 1rem
+    padding-left 1rem
+    padding-right 1rem
 
 .stat
   .title
-    display: inline-block
-    width: 20rem
+    display inline-block
+    width 20rem

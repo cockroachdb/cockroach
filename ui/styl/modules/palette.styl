@@ -18,14 +18,14 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
 // -tone-range generates a set of tones based on a lightest and darkest color.
-// 'x-light' will be the lightest color, 'x-dark' the darkest, 
+// 'x-light' will be the lightest color, 'x-dark' the darkest,
 // with 'base' a 50% mix.
 -tone-range($lightest, $darkest)
-  return {
+  return $ret = { //stylint complains about brackets if we don't use this format
     'x-light': $lightest,
     'light': mix($lightest, $darkest, 75%),
     'base': mix($lightest, $darkest),
-    'dark': mix($lightest, $darkest, 25%), 
+    'dark': mix($lightest, $darkest, 25%),
     'x-dark': $darkest,
   }
 

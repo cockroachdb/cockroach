@@ -93,7 +93,8 @@ $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	tsc -p $(TEST_ROOT)
 
-$(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
+$(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed .stylintrc
+	stylint -c .stylintrc $(STYL_ROOT)
 	stylus $(STYL_ROOT)/app.styl \
 	       --compress \
 	       --out $@
