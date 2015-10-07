@@ -17,8 +17,14 @@ if [ "${1-}" = "docker" ]; then
   # Create the cache directories to avoid errors on `ln` below.
   mkdir -p /uicache/{bower_components,node_modules,typings}
 
-  # Symlink the cache into the source tree.
-  ln -s /uicache/{bower_components,node_modules,typings} ui/
+  # Symlink the cache into the source tree if they don't exist.
+  # In circleci they never do, but this script can also be run
+  # locally where they might.
+  for i in bower_components node_modules typings; do
+    if ! [ -e ui/$i ]; then
+      ln -s /uicache/$i ui/$i
+    fi
+  done
   time make -C ui {bower,npm,tsd}.installed
 
   # Restore previously cached build artifacts.
