@@ -20,6 +20,7 @@ package status
 import (
 	"fmt"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 type RuntimeStatRecorder struct {
 	nodeID        roachpb.NodeID
 	clock         *hlc.Clock
+	source        string
 	lastDataCount int
 
 	// The last recorded values of some statistics are kept to compute
@@ -53,6 +55,7 @@ func NewRuntimeStatRecorder(nodeID roachpb.NodeID, clock *hlc.Clock) *RuntimeSta
 	return &RuntimeStatRecorder{
 		nodeID: nodeID,
 		clock:  clock,
+		source: strconv.FormatInt(int64(nodeID), 10),
 	}
 }
 
@@ -61,7 +64,8 @@ func NewRuntimeStatRecorder(nodeID roachpb.NodeID, clock *hlc.Clock) *RuntimeSta
 func (rsr *RuntimeStatRecorder) record(timestampNanos int64, name string,
 	data float64) ts.TimeSeriesData {
 	return ts.TimeSeriesData{
-		Name: fmt.Sprintf(runtimeStatTimeSeriesNameFmt, name, rsr.nodeID),
+		Name:   fmt.Sprintf(runtimeStatTimeSeriesNameFmt, name),
+		Source: rsr.source,
 		Datapoints: []*ts.TimeSeriesDatapoint{
 			{
 				TimestampNanos: timestampNanos,

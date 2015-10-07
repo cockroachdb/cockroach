@@ -19,6 +19,7 @@ package status
 
 import (
 	"fmt"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -40,13 +41,13 @@ const (
 	// This format has been chosen to put the StoreID as the suffix of keys, in
 	// anticipation of an initially simple query system where only key suffixes
 	// can be wildcarded.
-	storeTimeSeriesNameFmt = "cr.store.%s.%d"
+	storeTimeSeriesNameFmt = "cr.store.%s"
 	// nodeTimeSeriesFmt is the current format for time series keys which record
 	// node-specific data.
-	nodeTimeSeriesNameFmt = "cr.node.%s.%d"
+	nodeTimeSeriesNameFmt = "cr.node.%s"
 	// runtimeStatTimeSeriesFmt is the current format for time series keys which
 	// record runtime system stats on a node.
-	runtimeStatTimeSeriesNameFmt = "cr.node.sys.%s.%d"
+	runtimeStatTimeSeriesNameFmt = "cr.node.sys.%s"
 )
 
 // NodeStatusRecorder is used to periodically persist the status of a node as a
@@ -54,6 +55,7 @@ const (
 type NodeStatusRecorder struct {
 	*NodeStatusMonitor
 	clock            *hlc.Clock
+	source           string // Source string used when storing time series data for this node.
 	lastDataCount    int
 	lastSummaryCount int
 }
@@ -71,7 +73,8 @@ func NewNodeStatusRecorder(monitor *NodeStatusMonitor, clock *hlc.Clock) *NodeSt
 func (nsr *NodeStatusRecorder) recordInt(timestampNanos int64, name string,
 	data int64) ts.TimeSeriesData {
 	return ts.TimeSeriesData{
-		Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, nsr.desc.NodeID),
+		Name:   fmt.Sprintf(nodeTimeSeriesNameFmt, name),
+		Source: nsr.source,
 		Datapoints: []*ts.TimeSeriesDatapoint{
 			{
 				TimestampNanos: timestampNanos,
@@ -94,6 +97,9 @@ func (nsr *NodeStatusRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 		}
 		return nil
 	}
+	if nsr.source == "" {
+		nsr.source = strconv.FormatInt(int64(nsr.desc.NodeID), 10)
+	}
 
 	data := make([]ts.TimeSeriesData, 0, nsr.lastDataCount)
 
@@ -105,7 +111,11 @@ func (nsr *NodeStatusRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	// Record per store stats.
 	nsr.visitStoreMonitors(func(ssm *StoreStatusMonitor) {
 		now := nsr.clock.PhysicalNow()
-		ssr := storeStatusRecorder{ssm, now}
+		ssr := storeStatusRecorder{
+			StoreStatusMonitor: ssm,
+			timestampNanos:     now,
+			source:             strconv.FormatInt(int64(ssm.ID), 10),
+		}
 		data = append(data, ssr.recordInt("livebytes", ssr.stats.LiveBytes))
 		data = append(data, ssr.recordInt("keybytes", ssr.stats.KeyBytes))
 		data = append(data, ssr.recordInt("valbytes", ssr.stats.ValBytes))
@@ -195,6 +205,7 @@ func (nsr *NodeStatusRecorder) GetStatusSummaries() (*NodeStatus, []storage.Stor
 // from a single StoreStatusMonitor.
 type storeStatusRecorder struct {
 	*StoreStatusMonitor
+	source         string
 	timestampNanos int64
 }
 
@@ -202,7 +213,8 @@ type storeStatusRecorder struct {
 // ts.TimeSeriesData object.
 func (ssr *storeStatusRecorder) recordInt(name string, data int64) ts.TimeSeriesData {
 	return ts.TimeSeriesData{
-		Name: fmt.Sprintf(storeTimeSeriesNameFmt, name, ssr.ID),
+		Name:   fmt.Sprintf(storeTimeSeriesNameFmt, name),
+		Source: ssr.source,
 		Datapoints: []*ts.TimeSeriesDatapoint{
 			{
 				TimestampNanos: ssr.timestampNanos,
