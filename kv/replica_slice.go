@@ -140,20 +140,18 @@ func (rs replicaSlice) MoveToFront(i int) {
 	rs[0] = front
 }
 
-func (rs replicaSlice) SortRandomOrder(i int) {
-	l := len(rs) - 1
-	if i > l {
-		log.Infof("out of bound index")
+func (rs replicaSlice) SortRandomOrder(firstNotInOrder int) {
+	last := len(rs) - 1
+	if firstNotInOrder > last {
+		panic("out of bound index")
 	}
 
-	firstNotInOrder := i
-	rndLen := l - i
+	rndLen := last - firstNotInOrder
 	rndOrder := rand.Perm(rndLen)
-	rsRand := rs
 
 	for i := 0; i < firstNotInOrder-1; i++ {
 		rndOrder[i] = rndOrder[i] + firstNotInOrder - 1
-		rsRand[i] = rsRand[rndOrder[i]]
+		rs[i] = rs[rndOrder[i]]
 	}
-	copy(rs[firstNotInOrder:l], rsRand[0:rndLen])
+	copy(rs[firstNotInOrder:last], rs[0:rndLen])
 }

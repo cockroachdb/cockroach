@@ -119,12 +119,12 @@ func TestReplicaSetRandomOrder(t *testing.T) {
 		rs = append(rs, replicaInfo{ReplicaDescriptor: roachpb.ReplicaDescriptor{StoreID: roachpb.StoreID(i + 1)}})
 	}
 
-	rs.MoveToFront(2)
+	rs.SortRandomOrder(2)
 	expNot := []roachpb.StoreID{1, 2, 4, 5, 3}
 	if stores := getStores(rs); reflect.DeepEqual(stores, expNot) {
 		t.Errorf("expected order %s, got %s", expNot, stores)
 	}
-	rs.MoveToFront(3)
+	rs.SortRandomOrder(1)
 	expNot = []roachpb.StoreID{1, 2, 3, 4, 5}
 	if stores := getStores(rs); reflect.DeepEqual(stores, expNot) {
 		t.Errorf("expected order %s, got %s", expNot, stores)

@@ -255,8 +255,7 @@ func (ds *DistSender) optimizeReplicaOrder(replicas replicaSlice) rpc.OrderingPo
 	}
 	// Sort replicas by attribute affinity, which we treat as a stand-in for
 	// proximity (for now).
-	len := replicas.SortByCommonAttributePrefix(nodeDesc.Attrs.Attrs)
-	if len > 0 {
+	if replicas.SortByCommonAttributePrefix(nodeDesc.Attrs.Attrs) > 0 {
 		// There's at least some attribute prefix, and we hope that the
 		// replicas that come early in the slice are now located close to
 		// us and hence better candidates.
