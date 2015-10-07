@@ -73,7 +73,16 @@ module AdminViews {
       }
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
-        return m("header", m.component(NavigationBar, ctrl.TargetSet()));
+        return m(
+          "header",
+          m.component(
+            NavigationBar,
+            {
+              ts: ctrl.TargetSet(),
+              orientation: NavigationBar.NavbarOrientation.Vertical
+            }
+          )
+        );
       }
     }
   }

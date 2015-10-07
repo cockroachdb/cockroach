@@ -19,6 +19,10 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 
 @require 'typography.styl'
 @require '../modules/layout-vars.styl'
+@require '../modules/palette.styl'
+
+$topbar-border = $secondary-gray-1
+$last-updated-color = $secondary-gray-2
 
 *
   margin 0
@@ -43,8 +47,33 @@ body
     display table
     clear both
 
-.primary
-  background-color -color('light')
+.section.primary
+  background-color white
+  border-bottom 1px solid $topbar-border
+  height $top-bar-height
+  padding-top 0
+
+  h2
+    font-size 3.6rem
+    font-family Lato-Medium
+    color $main-navy
+    line-height $top-bar-height
+    padding-top 0
+    margin-top 0
+    display inline-block
+
+  .last-updated
+    display inline-block
+    margin-left 25px
+    line-height $top-bar-height
+    vertical-align bottom
+    font-size 1.1rem
+    font-family Lato-Medium
+    color $last-updated-color
+
+    strong
+      font-family Lato-Bold
+
 
 .section
   padding 1rem 2rem

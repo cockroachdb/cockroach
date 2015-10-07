@@ -30,18 +30,22 @@ module Components {
       isActive: (t: Target) => boolean;
     }
 
-    export function controller(ts: TargetSet): any {}
+    export function controller(): any {}
 
-    export function view(ctrl: any, ts: TargetSet): _mithril.MithrilVirtualElement {
-      return m("ul.navigation-sidebar", _.map(ts.targets(), (t: Target) =>
+    export enum NavbarOrientation {Vertical, Horizontal};
+
+    export function view(ctrl: any, args: {ts: TargetSet; orientation: NavbarOrientation; }): _mithril.MithrilVirtualElement {
+      return m(
+        (args.orientation === NavbarOrientation.Vertical ? "ul.navigation-sidebar" : "ul.navigation"),
+        _.map(args.ts.targets(), (t: Target) =>
           m("li",
             {
-              className: (ts.isActive(t) ? "active" : "") + (t.liClass ? " " + t.liClass : " normal")
+              className: (args.ts.isActive(t) ? "active" : "") + (t.liClass ? " " + t.liClass : " normal")
             },
             m("a",
               {
                 config: m.route,
-                href: ts.baseRoute + t.route
+                href: args.ts.baseRoute + t.route
               },
               t.view
               )
