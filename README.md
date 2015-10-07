@@ -28,33 +28,16 @@ CockroachDB is currently in alpha. See our
 
 ## Running CockroachDB Locally
 
-Getting started is most convenient using a recent version (>1.2) of [Docker](http://docs.docker.com/installation/).
+### Environment Setup
 
-If you don't want to use Docker,
+#### Native (read: without Docker)
+
 * set up the dev environment (see [CONTRIBUTING.md](CONTRIBUTING.md))
 * `make build`
-* ignore the initial calls to `docker` below.
 
-#### Bootstrap and talk to a single node
+#### Using Docker
 
-Getting a RoachNode up and running is easy. If you have the `cockroach` binary, skip over the next shell session. Most users however will want to run the following:
-
-```bash
-# Get the latest image from the registry. Skip if you already have an image
-# or if you built it yourself.
-docker pull cockroachdb/cockroach
-# Open a shell on a Cockroach container.
-docker run -t -i -p 26257:26257 cockroachdb/cockroach shell
-# root@82cb657cdc42:/cockroach#
-```
-
-If the docker command fails but Docker is installed, you probably need to initialize it. Here's a common error message:
-```
-Get http:///var/run/docker.sock/v1.20/containers/json: dial unix /var/run/docker.sock: no such file or directory.
-* Are you trying to connect to a TLS-enabled daemon without TLS?
-* Is your docker daemon up and running?
-```
-On OSX ([official docs](https://docs.docker.com/installation/mac/#from-your-shell)):
+Install Docker! On OSX ([official docs](https://docs.docker.com/installation/mac/#from-your-shell)):
 ```bash
 # install docker and docker-machine:
 $ brew install docker docker-machine
@@ -69,35 +52,29 @@ $ eval $(docker-machine env default)
 ```
 Other operating systems will have a similar set of commands. Please check Docker's documentation for more info.
 
+Pull the CockroachDB Docker image and drop into a shell within it:
+```bash
+docker pull cockroachdb/cockroach
+docker run -t -i cockroachdb/cockroach shell
+# root@82cb657cdc42:/cockroach#
+```
 
-Now we're in an environment that has everything set up, and we start by first initializing the cluster and then firing up the node:
+### Bootstrap and talk to a single node
+
+Note: If you’re using Docker as described above, run all the commands described below in the container’s shell.
+
+Setting up Cockroach is easy, but starting a test node is even easier. All it takes is running:
 
 ```bash
-DIR=$(mktemp -d /tmp/dbXXXXXX)
-# Initialize CA, server, and client certificates. Default directory is --certs=certs
-./cockroach cert create-ca
-./cockroach cert create-node 127.0.0.1 localhost $(hostname)
-./cockroach cert create-client root
-# Initialize data directories.
-./cockroach init --stores=ssd=$DIR
-# Start the server.
-./cockroach start --stores=ssd="$DIR" --gossip=self= &
+./cockroach start --dev &
 ```
-This initializes and starts a single-node cluster in the background.
-
-By default, a range in CockroachDB wants to replicate to a minimum of three nodes. You can run a single node, but you will receive the following error:
-
-```
-failure processing range range=1 ["" - "\xff\xff") from replicate queue: allocator.go:204: unable to allocate a target store; no candidates available
-```
-In a single-node context, this error is expected and harmless. The node is running.
 
 ##### Built-in client
 
 Now let's talk to this node. The easiest way to do that is to use the `cockroach` binary - it comes with a built-in sql client:
 
 ```bash
-$ ./cockroach sql --addr $(docker-machine ip default):26257
+./cockroach sql --dev
 # Welcome to the cockroach SQL interface.
 # All statements must be terminated by a semicolon.
 # To exit: CTRL + D.
@@ -119,7 +96,6 @@ OK
 | "zones"      |
 +--------------+
 ```
-Note that this example assumes you're running the cockroach server on a docker-machine as described above.
 
 Check out `./cockroach help` to see all available commands.
 
@@ -127,8 +103,41 @@ Check out `./cockroach help` to see all available commands.
 ## Deploying CockroachDB in production
 
 To run a CockroachDB cluster on various cloud platforms using [docker machine](http://docs.docker.com/machine/),
-see [cockroach-prod](https://github.com/cockroachdb/cockroach-prod)
+see [cockroach-prod](https://github.com/cockroachdb/cockroach-prod).
 
+## Running a multi-node cluster
+
+We'll set up a three-node cluster below.
+
+The code assumes that $NODE{1,2,3} are the host names of the three nodes in the cluster.
+
+```bash
+# Create certificates
+./cockroach cert create-ca
+./cockroach cert create-node 127.0.0.1 localhost $NODE1 $NODE2 $NODE3
+./cockroach cert create-client root
+# Distribute certificates
+for n in $NODE1 $NODE2 $NODE3; do
+  scp -r certs ${n}:certs
+done
+```
+
+Now, on node 1, initialize the cluster (to `/data`; yours may vary):
+
+```bash
+./cockroach init --stores=ssd=/data
+```
+
+Then, start the cluster by starting each individual node.
+
+```bash
+./cockroach start --stores=ssd=/data --gossip=${NODE1}:26257,${NODE2}:26257,${NODE3}:26257
+```
+
+Verify that the cluster is connected on the web UI by directing your browser at
+```
+https://<any_node>:26257
+```
 
 ## Get in touch
 
