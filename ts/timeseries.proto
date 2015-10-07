@@ -83,6 +83,9 @@ message TimeSeriesQueryRequest {
         optional string name = 1 [(gogoproto.nullable) = false];
         // The aggregation function to apply to points in the result.
         optional TimeSeriesQueryAggregator aggregator = 2 [default = AVG];
+        // An optional list of sources to restrict the time series query. If no
+        // sources are provided, all sources will be queried.
+        repeated string sources = 3;
     }
 
     // A set of Queries for this request. A request must have at least one

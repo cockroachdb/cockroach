@@ -21,6 +21,7 @@ import (
 	"container/heap"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -400,14 +401,39 @@ func (db *DB) Query(query TimeSeriesQueryRequest_Query, r Resolution,
 	// Normalize startNanos and endNanos the nearest SampleDuration boundary.
 	startNanos -= startNanos % r.SampleDuration()
 
-	// Based on the supplied timestamps and resolution, construct start and end
-	// keys for a scan that will return every key with data relevant to the
-	// query.
-	startKey := MakeDataKey(query.Name, "" /* source */, r, startNanos)
-	endKey := MakeDataKey(query.Name, "" /* source */, r, endNanos).PrefixEnd()
-	rows, err := db.db.Scan(startKey, endKey, 0)
-	if err != nil {
-		return nil, nil, err
+	var rows []client.KeyValue
+	if len(query.Sources) == 0 {
+		// Based on the supplied timestamps and resolution, construct start and end
+		// keys for a scan that will return every key with data relevant to the
+		// query.
+		startKey := MakeDataKey(query.Name, "" /* source */, r, startNanos)
+		endKey := MakeDataKey(query.Name, "" /* source */, r, endNanos).PrefixEnd()
+		var err error
+		rows, err = db.db.Scan(startKey, endKey, 0)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		b := db.db.NewBatch()
+		// Iterate over all key timestamps which may contain data for the given
+		// sources, based on the given start/end time and the resolution.
+		for currentTimestamp := startNanos; currentTimestamp <= endNanos; currentTimestamp += r.KeyDuration() {
+			for _, source := range query.Sources {
+				key := MakeDataKey(query.Name, source, r, currentTimestamp)
+				b.Get(key)
+			}
+		}
+		err := db.db.Run(b)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, result := range b.Results {
+			row := result.Rows[0]
+			if row.Value == nil {
+				continue
+			}
+			rows = append(rows, row)
+		}
 	}
 
 	// Construct a new dataSpan for each distinct source encountered in the

@@ -186,6 +186,9 @@ type TimeSeriesQueryRequest_Query struct {
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	// The aggregation function to apply to points in the result.
 	Aggregator *TimeSeriesQueryAggregator `protobuf:"varint,2,opt,name=aggregator,enum=cockroach.ts.TimeSeriesQueryAggregator,def=1" json:"aggregator,omitempty"`
+	// An optional list of sources to restrict the time series query. If no
+	// sources are provided, all sources will be queried.
+	Sources []string `protobuf:"bytes,3,rep,name=sources" json:"sources,omitempty"`
 }
 
 func (m *TimeSeriesQueryRequest_Query) Reset()         { *m = TimeSeriesQueryRequest_Query{} }
@@ -206,6 +209,13 @@ func (m *TimeSeriesQueryRequest_Query) GetAggregator() TimeSeriesQueryAggregator
 		return *m.Aggregator
 	}
 	return Default_TimeSeriesQueryRequest_Query_Aggregator
+}
+
+func (m *TimeSeriesQueryRequest_Query) GetSources() []string {
+	if m != nil {
+		return m.Sources
+	}
+	return nil
 }
 
 // TimeSeriesQueryResponse is the standard response for time series queries
@@ -400,6 +410,21 @@ func (m *TimeSeriesQueryRequest_Query) MarshalTo(data []byte) (int, error) {
 		i++
 		i = encodeVarintTimeseries(data, i, uint64(*m.Aggregator))
 	}
+	if len(m.Sources) > 0 {
+		for _, s := range m.Sources {
+			data[i] = 0x1a
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
 	return i, nil
 }
 
@@ -559,6 +584,12 @@ func (m *TimeSeriesQueryRequest_Query) Size() (n int) {
 	n += 1 + l + sovTimeseries(uint64(l))
 	if m.Aggregator != nil {
 		n += 1 + sovTimeseries(uint64(*m.Aggregator))
+	}
+	if len(m.Sources) > 0 {
+		for _, s := range m.Sources {
+			l = len(s)
+			n += 1 + l + sovTimeseries(uint64(l))
+		}
 	}
 	return n
 }
@@ -1034,6 +1065,35 @@ func (m *TimeSeriesQueryRequest_Query) Unmarshal(data []byte) error {
 				}
 			}
 			m.Aggregator = &v
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sources", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTimeseries
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTimeseries
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Sources = append(m.Sources, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTimeseries(data[iNdEx:])

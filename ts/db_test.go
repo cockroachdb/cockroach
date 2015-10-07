@@ -50,7 +50,7 @@ import (
 type testModel struct {
 	t           testing.TB
 	modelData   map[string]*roachpb.Value
-	seenSources map[string]bool
+	seenSources map[string]struct{}
 	*kv.LocalTestCluster
 	DB *DB
 }
@@ -61,7 +61,7 @@ func newTestModel(t *testing.T) *testModel {
 	return &testModel{
 		t:                t,
 		modelData:        make(map[string]*roachpb.Value),
-		seenSources:      make(map[string]bool),
+		seenSources:      make(map[string]struct{}),
 		LocalTestCluster: &kv.LocalTestCluster{},
 	}
 }
@@ -156,7 +156,7 @@ func (tm *testModel) assertKeyCount(expected int) {
 
 func (tm *testModel) storeInModel(r Resolution, data TimeSeriesData) {
 	// Note the source, used to construct keys for model queries.
-	tm.seenSources[data.Source] = true
+	tm.seenSources[data.Source] = struct{}{}
 
 	// Process and store data in the model.
 	internalData, err := data.ToInternal(r.KeyDuration(), r.SampleDuration())
