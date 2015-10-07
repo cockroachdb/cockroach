@@ -112,6 +112,10 @@ module Models {
          */
         series(): string;
         /**
+         * sources returns the data sources to which this query is restrained.
+         */
+        sources(): string[];
+        /**
          * title returns a display-friendly title for this series.
          */
         title(): string;
@@ -123,10 +127,12 @@ module Models {
       class AvgSelector implements Selector {
         constructor(private seriesName: string) { }
         title: Utils.ChainProperty<string, AvgSelector> = Utils.ChainProp(this, this.seriesName);
+        sources: Utils.ChainProperty<string[], AvgSelector> = Utils.ChainProp(this, []);
         series: () => string = () => { return this.seriesName; };
         request: () => Proto.QueryRequest = (): Proto.QueryRequest => {
           return {
             name: this.seriesName,
+            sources: this.sources(),
             aggregator: Proto.QueryAggregator.AVG
           };
         };
@@ -137,12 +143,14 @@ module Models {
        * of the supplied time series.
        */
       class AvgRateSelector implements Selector {
-        constructor(private seriesName: string) { }
+        constructor(private seriesName: string) {}
         title: Utils.ChainProperty<string, AvgRateSelector> = Utils.ChainProp(this, this.seriesName);
+        sources: Utils.ChainProperty<string[], AvgRateSelector> = Utils.ChainProp(this, []);
         series: () => string = () => { return this.seriesName; };
         request: () => Proto.QueryRequest = (): Proto.QueryRequest => {
           return {
             name: this.seriesName,
+            sources: this.sources(),
             aggregator: Proto.QueryAggregator.AVG_RATE
           };
         };
