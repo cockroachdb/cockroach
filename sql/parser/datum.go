@@ -338,12 +338,6 @@ type DDate struct {
 	time.Time // Must always be UTC!
 }
 
-// MakeDDate constructs a DDate from a time.Time.
-func MakeDDate(t time.Time) DDate {
-	year, month, day := t.Date()
-	return DDate{Time: time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
-}
-
 // Type implements the Datum interface.
 func (d DDate) Type() string {
 	return "date"
@@ -435,9 +429,8 @@ func (d DTimestamp) IsMin() bool {
 	return d.Before(d.Add(-1))
 }
 
-// TODO:(vivek) implement SET TIME ZONE to improve presentation.
 func (d DTimestamp) String() string {
-	return d.Format(TimestampWithOffsetZoneFormat)
+	return d.UTC().Format(TimestampWithOffsetZoneFormat)
 }
 
 // DInterval is the interval Datum.

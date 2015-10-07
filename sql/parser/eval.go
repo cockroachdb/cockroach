@@ -566,6 +566,16 @@ var defaultContext = EvalContext{
 	},
 }
 
+// makeDDate constructs a DDate from a time.Time in the session time zone.
+func (ctx EvalContext) makeDDate(t time.Time) (Datum, error) {
+	loc, err := ctx.GetLocation()
+	if err != nil {
+		return DNull, err
+	}
+	year, month, day := t.In(loc).Date()
+	return DDate{Time: time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}, nil
+}
+
 // EvalExpr evaluates an SQL expression. Expression evaluation is a mostly
 // straightforward walk over the parse tree. The only significant complexity is
 // the handling of types and implicit conversions. See binOps and cmpOps for
@@ -1133,11 +1143,7 @@ func (ctx EvalContext) evalCastExpr(expr *CastExpr) (Datum, error) {
 		case DString:
 			return ParseDate(d)
 		case DTimestamp:
-			loc, err := ctx.GetLocation()
-			if err != nil {
-				return DNull, err
-			}
-			return MakeDDate(d.Time.In(loc)), nil
+			return ctx.makeDDate(d.Time)
 		}
 
 	case *TimestampType:
@@ -1145,7 +1151,12 @@ func (ctx EvalContext) evalCastExpr(expr *CastExpr) (Datum, error) {
 		case DString:
 			return ctx.ParseTimestamp(d)
 		case DDate:
-			return DTimestamp{Time: d.Time}, nil
+			loc, err := ctx.GetLocation()
+			if err != nil {
+				return DNull, err
+			}
+			year, month, day := d.Date()
+			return DTimestamp{Time: time.Date(year, month, day, 0, 0, 0, 0, loc)}, nil
 		}
 
 	case *IntervalType:
@@ -1246,8 +1257,7 @@ func ParseDate(s DString) (DDate, error) {
 	if err != nil {
 		return DummyDate, err
 	}
-
-	return MakeDDate(t), nil
+	return DDate{Time: t}, nil
 }
 
 // ParseTimestamp parses the timestamp.
@@ -1271,8 +1281,7 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 	} {
 		var t time.Time
 		if t, err = time.ParseInLocation(format, str, loc); err == nil {
-			// Always return the time in the session time zone.
-			return DTimestamp{Time: t.In(loc)}, nil
+			return DTimestamp{Time: t}, nil
 		}
 	}
 

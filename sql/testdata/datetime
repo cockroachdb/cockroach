@@ -317,6 +317,18 @@ SELECT '2015-08-24 21:45:45.53453'::timestamp
 ----
 2015-08-25 04:45:45.53453 +0000 UTC
 
+# Check that casting from a timestamp to a date and vice versa
+# uses the time zone.
+query TTT
+SELECT b::date FROM u WHERE a = 123
+----
+2015-08-29
+
+query TTT
+SELECT c::timestamp FROM u WHERE a = 123
+----
+2015-08-30 07:00:00 +0000 UTC
+
 statement ok
 SET TIME ZONE -7
 

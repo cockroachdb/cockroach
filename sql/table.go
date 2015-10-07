@@ -369,7 +369,7 @@ func decodeTableKey(valType parser.Datum, key []byte) (parser.Datum, []byte, err
 		return parser.DBytes(r), rkey, err
 	case parser.DDate:
 		rkey, t, err := encoding.DecodeTime(key)
-		return parser.MakeDDate(t), rkey, err
+		return parser.DDate{Time: t}, rkey, err
 	case parser.DTimestamp:
 		rkey, t, err := encoding.DecodeTime(key)
 		return parser.DTimestamp{Time: t}, rkey, err
@@ -516,7 +516,7 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		if err != nil {
 			return nil, err
 		}
-		return parser.MakeDDate(v), nil
+		return parser.DDate{Time: v}, nil
 	case ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {
