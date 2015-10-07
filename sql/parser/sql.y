@@ -2853,8 +2853,14 @@ func_expr_common_subexpr:
   {
     $$ = &CoalesceExpr{Name: "COALESCE", Exprs: $3}
   }
-| GREATEST '(' expr_list ')' { unimplemented() }
-| LEAST '(' expr_list ')' { unimplemented() }
+| GREATEST '(' expr_list ')'
+  {
+    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+  }
+| LEAST '(' expr_list ')'
+  {
+    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+  }
 
 // Aggregate decoration clauses
 within_group_clause:
