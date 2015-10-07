@@ -80,7 +80,7 @@ func (t *rpcTransport) RaftMessage(args proto.Message, callback func(proto.Messa
 	req := args.(*multiraft.RaftMessageRequest)
 
 	t.mu.Lock()
-	server, ok := t.servers[roachpb.StoreID(req.Message.To)]
+	server, ok := t.servers[req.ToReplica.StoreID]
 	t.mu.Unlock()
 
 	if !ok {
