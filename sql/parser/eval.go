@@ -526,7 +526,6 @@ var evalTupleIN = cmpOp{
 		if arg == DNull {
 			return DBool(false), nil
 		}
-
 		vtuple := values.(DTuple)
 		i := sort.Search(len(vtuple), func(i int) bool { return vtuple[i].Compare(arg) >= 0 })
 		found := i < len(vtuple) && vtuple[i].Compare(arg) == 0
@@ -564,6 +563,14 @@ var defaultContext = EvalContext{
 	GetLocation: func() (*time.Location, error) {
 		return time.UTC, nil
 	},
+}
+
+func (ctx EvalContext) sessionTimestamp(t time.Time) (DTimestamp, error) {
+	loc, err := ctx.GetLocation()
+	if err != nil {
+		return DummyTimestamp, err
+	}
+	return DTimestamp{Time: t.In(loc)}, nil
 }
 
 // EvalExpr evaluates an SQL expression. Expression evaluation is a mostly
@@ -1145,7 +1152,12 @@ func (ctx EvalContext) evalCastExpr(expr *CastExpr) (Datum, error) {
 		case DString:
 			return ctx.ParseTimestamp(d)
 		case DDate:
-			return DTimestamp{Time: d.Time}, nil
+			loc, err := ctx.GetLocation()
+			if err != nil {
+				return DNull, err
+			}
+			year, month, day := d.Time.Date()
+			return DTimestamp{Time: time.Date(year, month, day, 0, 0, 0, 0, loc)}, nil
 		}
 
 	case *IntervalType:

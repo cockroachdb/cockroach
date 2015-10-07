@@ -85,6 +85,10 @@ true true
 
 # TIMESTAMP/DATE builtins.
 
+# SET TIME ZONE affects the builtins
+statement ok
+SET TIME ZONE INTERVAL '-7h'
+
 query T
 SELECT age(timestamp '2001-04-10 22:06:45', timestamp '1957-06-13')
 ----
@@ -181,6 +185,9 @@ query I
 SELECT COUNT(DISTINCT v) FROM kv
 ----
 4
+
+statement ok
+SET TIME ZONE UTC
 
 query T
 SELECT extract(year from timestamp '2001-04-10 12:04:59')
