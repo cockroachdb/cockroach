@@ -85,6 +85,13 @@ DIR=$(mktemp -d /tmp/dbXXXXXX)
 ```
 This initializes and starts a single-node cluster in the background.
 
+By default, a range in CockroachDB wants to replicate to a minimum of three nodes. You can run a single node, but you will receive the following error:
+
+```
+failure processing range range=1 ["" - "\xff\xff") from replicate queue: allocator.go:204: unable to allocate a target store; no candidates available
+```
+In a single-node context, this error is expected and harmless. The node is running.
+
 ##### Built-in client
 
 Now let's talk to this node. The easiest way to do that is to use the `cockroach` binary - it comes with a built-in sql client:
