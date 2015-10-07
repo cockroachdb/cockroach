@@ -47,10 +47,26 @@ uicache_dir="uicache"
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
 # computer.
+#
+# This script supports both circleci and development hosts, so it must
+# support cases where the architecture inside the container is
+# different from that outside the container. We map /src/ directly
+# into the container because it is architecture-independent, and /pkg/
+# because every subdirectory is tagged with its architecture. We also
+# map certain subdirectories of ${GOPATH}/pkg into ${GOROOT}/pkg so
+# they can be used to cache race and netgo builds of the standard
+# library. /bin/ is mapped separately to avoid clobbering the host's
+# binaries. Note that the path used for the /bin/ mapping is also used
+# in the defaultBinary function of localcluster.go.
+#
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.
 docker run -i ${tty-} ${rm} \
-  --volume="${gopath0}:/go" \
+  --volume="${gopath0}/src:/go/src" \
+  --volume="${gopath0}/pkg:/go/pkg" \
+  --volume="${gopath0}/pkg/linux_amd64_netgo:/usr/src/go/pkg/linux_amd64_netgo" \
+  --volume="${gopath0}/pkg/linux_amd64_race:/usr/src/go/pkg/linux_amd64_race" \
+  --volume="${gopath0}/bin/linux_amd64:/go/bin" \
   --volume="${HOME}/${buildcache_dir}:/${buildcache_dir}" \
   --volume="${HOME}/${uicache_dir}:/${uicache_dir}" \
   --volume="${PWD}:/go/src/github.com/cockroachdb/cockroach" \
