@@ -33,7 +33,7 @@ import (
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *planner) Update(n *parser.Update) (planNode, error) {
-	tableDesc, err := p.getAliasedTableDesc(n.Table)
+	tableDesc, err := p.getAliasedTableDesc(n.Table, false /* !allowCache */)
 	if err != nil {
 		return nil, err
 	}

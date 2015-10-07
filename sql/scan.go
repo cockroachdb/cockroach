@@ -237,7 +237,7 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 		return nil
 
 	case 1:
-		if n.desc, n.err = p.getAliasedTableDesc(from[0]); n.err != nil {
+		if n.desc, n.err = p.getAliasedTableDesc(from[0], true /* allowCache */); n.err != nil {
 			return n.err
 		}
 

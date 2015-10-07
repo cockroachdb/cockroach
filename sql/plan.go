@@ -133,7 +133,7 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 // getAliasedTableDesc looks up the table descriptor for an alias table expression.
 // NOTE: it looks it up in the descriptor cache, so this should only be called
 // from frequent ops (INSERT, SELECT, DELETE, UPDATE).
-func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*TableDescriptor, error) {
+func (p *planner) getAliasedTableDesc(n parser.TableExpr, allowCache bool) (*TableDescriptor, error) {
 	ate, ok := n.(*parser.AliasedTableExpr)
 	if !ok {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
@@ -142,7 +142,13 @@ func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*TableDescriptor, err
 	if !ok {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	desc, _, err := p.getCachedTableDesc(table)
+	var desc *TableDescriptor
+	var err error
+	if allowCache {
+		desc, _, err = p.getCachedTableDesc(table)
+	} else {
+		desc, err = p.getTableDesc(table)
+	}
 	if err != nil {
 		return nil, err
 	}
