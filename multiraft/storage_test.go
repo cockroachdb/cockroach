@@ -36,8 +36,9 @@ func (b *BlockableStorage) Unblock() {
 	b.mu.Unlock()
 }
 
-func (b *BlockableStorage) GroupStorage(g roachpb.RangeID) WriteableGroupStorage {
-	return &blockableGroupStorage{b, b.storage.GroupStorage(g)}
+func (b *BlockableStorage) GroupStorage(g roachpb.RangeID, r roachpb.ReplicaID) (WriteableGroupStorage, error) {
+	gs, err := b.storage.GroupStorage(g, r)
+	return &blockableGroupStorage{b, gs}, err
 }
 
 func (b *BlockableStorage) ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {

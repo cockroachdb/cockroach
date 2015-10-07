@@ -41,7 +41,12 @@ var _ WriteableGroupStorage = (*raft.MemoryStorage)(nil)
 // The Storage interface is supplied by the application to manage persistent storage
 // of raft data.
 type Storage interface {
-	GroupStorage(groupID roachpb.RangeID) WriteableGroupStorage
+	// GroupStorage returns an interface which can be used to access the
+	// storage for the specified group. May return ErrGroupDeleted if
+	// the group cannot be found or if the given replica ID is known to
+	// be out of date.
+	GroupStorage(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (WriteableGroupStorage, error)
+
 	ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error)
 	ReplicaIDForStore(groupID roachpb.RangeID, storeID roachpb.StoreID) (roachpb.ReplicaID, error)
 	ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb.ReplicaDescriptor, error)
@@ -73,7 +78,7 @@ func NewMemoryStorage() *MemoryStorage {
 }
 
 // GroupStorage implements the Storage interface.
-func (m *MemoryStorage) GroupStorage(groupID roachpb.RangeID) WriteableGroupStorage {
+func (m *MemoryStorage) GroupStorage(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (WriteableGroupStorage, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	g, ok := m.groups[groupID]
@@ -81,7 +86,7 @@ func (m *MemoryStorage) GroupStorage(groupID roachpb.RangeID) WriteableGroupStor
 		g = raft.NewMemoryStorage()
 		m.groups[groupID] = g
 	}
-	return g
+	return g, nil
 }
 
 // ReplicaDescriptor implements the Storage interface by returning a
@@ -106,9 +111,10 @@ func (m *MemoryStorage) ReplicasFromSnapshot(_ raftpb.Snapshot) ([]roachpb.Repli
 
 // groupWriteRequest represents a set of changes to make to a group.
 type groupWriteRequest struct {
-	state    raftpb.HardState
-	entries  []raftpb.Entry
-	snapshot raftpb.Snapshot
+	replicaID roachpb.ReplicaID
+	state     raftpb.HardState
+	entries   []raftpb.Entry
+	snapshot  raftpb.Snapshot
 }
 
 // writeRequest is a collection of groupWriteRequests.
@@ -178,12 +184,15 @@ func (w *writeTask) start(stopper *stop.Stopper) {
 			response := &writeResponse{make(map[roachpb.RangeID]*groupWriteResponse)}
 
 			for groupID, groupReq := range request.groups {
-				group := w.storage.GroupStorage(groupID)
-				if group == nil {
+				group, err := w.storage.GroupStorage(groupID, groupReq.replicaID)
+				if err == ErrGroupDeleted {
 					if log.V(4) {
-						log.Infof("dropping write to group %v", groupID)
+						log.Infof("dropping write to deleted group %v", groupID)
 					}
 					continue
+				} else if err != nil {
+					log.Fatalf("GroupStorage(group %s, replica %s) failed: %s", groupID,
+						groupReq.replicaID, err)
 				}
 				groupResp := &groupWriteResponse{raftpb.HardState{}, -1, -1, groupReq.entries}
 				response.groups[groupID] = groupResp

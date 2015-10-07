@@ -261,15 +261,27 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("range=%d [%s-%s)", desc.RangeID, desc.StartKey, desc.EndKey)
 }
 
-// Destroy cleans up all data associated with this range.
+// Destroy cleans up all data associated with this range, leaving a tombstone.
 func (r *Replica) Destroy() error {
-	iter := newRangeDataIterator(r.Desc(), r.rm.Engine())
+	desc := r.Desc()
+	iter := newRangeDataIterator(desc, r.rm.Engine())
 	defer iter.Close()
 	batch := r.rm.Engine().NewBatch()
 	defer batch.Close()
 	for ; iter.Valid(); iter.Next() {
 		_ = batch.Clear(iter.Key())
 	}
+
+	// Save a tombstone. The range cannot be re-replicated onto this
+	// node without having a replica ID of at least desc.NextReplicaID.
+	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
+	tombstone := &roachpb.RaftTombstone{
+		NextReplicaID: desc.NextReplicaID,
+	}
+	if err := engine.MVCCPutProto(batch, nil, tombstoneKey, roachpb.ZeroTimestamp, nil, tombstone); err != nil {
+		return err
+	}
+
 	return batch.Commit()
 }
 

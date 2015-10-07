@@ -28,6 +28,7 @@ package storage_test
 import (
 	"fmt"
 	"net"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
@@ -216,16 +218,35 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 }
 
 func (m *multiTestContext) Stop() {
-	stoppers := append([]*stop.Stopper{m.clientStopper, m.transportStopper}, m.stoppers...)
-	// Quiesce all the stoppers so that we can stop all stoppers in unison.
-	for _, s := range stoppers {
-		s.Quiesce()
-	}
-	for _, s := range stoppers {
-		s.Stop()
-	}
-	for _, s := range m.engineStoppers {
-		s.Stop()
+	done := make(chan struct{})
+	go func() {
+		stoppers := append([]*stop.Stopper{m.clientStopper, m.transportStopper}, m.stoppers...)
+		// Quiesce all the stoppers so that we can stop all stoppers in unison.
+		for _, s := range stoppers {
+			s.Quiesce()
+		}
+		for _, s := range stoppers {
+			s.Stop()
+		}
+		for _, s := range m.engineStoppers {
+			s.Stop()
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		// If we've already failed, just attach another failure to the
+		// test, since a timeout during shutdown after a failure is
+		// probably not interesting, and will prevent the display of any
+		// pending t.Error. If we're timing out but the test was otherwise
+		// a success, panic so we see stack traces from other goroutines.
+		if m.t.Failed() {
+			m.t.Error("timed out during shutdown")
+		} else {
+			panic("timed out during shutdown")
+		}
 	}
 }
 
@@ -455,6 +476,37 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, source, des
 	// Removing a range doesn't have any immediately-visible side
 	// effects, (and the removed node may be stopped) so return as soon
 	// as the removal has committed on the leader.
+}
+
+// readIntFromEngines reads the current integer value at the given key
+// from all configured engines, filling in zeros when the value is not
+// found. Returns a slice of the same length as mtc.engines.
+func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
+	results := make([]int64, len(m.engines))
+	for i, eng := range m.engines {
+		val, _, err := engine.MVCCGet(eng, key, m.clock.Now(), true, nil)
+		if err == nil {
+			results[i], err = val.GetInt()
+		}
+		if err != nil {
+			log.Errorf("error reading %s from engine %d", key, i)
+			results[i] = 0
+		}
+	}
+	return results
+}
+
+// waitForValues waits up to the given duration for the integer values
+// at the given key to match the expected slice (across all engines).
+// Fails the test if they do not match.
+func (m *multiTestContext) waitForValues(key roachpb.Key, d time.Duration, expected []int64) {
+	util.SucceedsWithinDepth(1, m.t, d, func() error {
+		actual := m.readIntFromEngines(key)
+		if !reflect.DeepEqual(expected, actual) {
+			return util.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
 }
 
 // expireLeaderLeases increments the context's manual clock far enough into the

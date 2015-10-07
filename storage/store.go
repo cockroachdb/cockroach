@@ -1535,11 +1535,23 @@ func (s *Store) processRaft() {
 }
 
 // GroupStorage implements the multiraft.Storage interface.
-func (s *Store) GroupStorage(groupID roachpb.RangeID) multiraft.WriteableGroupStorage {
+func (s *Store) GroupStorage(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (multiraft.WriteableGroupStorage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r, ok := s.replicas[groupID]
 	if !ok {
+		// Before creating the group, see if there is a tombstone which
+		// would indicate that this is a stale message.
+		tombstoneKey := keys.RaftTombstoneKey(groupID)
+		var tombstone roachpb.RaftTombstone
+		if ok, err := engine.MVCCGetProto(s.Engine(), tombstoneKey, roachpb.ZeroTimestamp, true, nil, &tombstone); err != nil {
+			return nil, err
+		} else if ok {
+			if replicaID < tombstone.NextReplicaID {
+				return nil, multiraft.ErrGroupDeleted
+			}
+		}
+
 		var err error
 		r, err = NewReplica(&roachpb.RangeDescriptor{
 			RangeID: groupID,
@@ -1547,17 +1559,17 @@ func (s *Store) GroupStorage(groupID roachpb.RangeID) multiraft.WriteableGroupSt
 			// snapshot.
 		}, s)
 		if err != nil {
-			panic(err) // TODO(bdarnell)
+			return nil, err
 		}
 		// Add the range to range map, but not rangesByKey since
 		// the range's start key is unknown. The range will be
 		// added to rangesByKey later when a snapshot is applied.
 		if err = s.addReplicaToRangeMap(r); err != nil {
-			panic(err) // TODO(bdarnell)
+			return nil, err
 		}
 		s.uninitReplicas[r.Desc().RangeID] = r
 	}
-	return r
+	return r, nil
 }
 
 // ReplicaDescriptor implements the multiraft.Storage interface.

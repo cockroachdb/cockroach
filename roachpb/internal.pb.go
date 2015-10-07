@@ -206,6 +206,22 @@ func (m *RaftTruncatedState) GetTerm() uint64 {
 	return 0
 }
 
+// RaftTombstone contains information about a replica that has been deleted.
+type RaftTombstone struct {
+	NextReplicaID ReplicaID `protobuf:"varint,1,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
+}
+
+func (m *RaftTombstone) Reset()         { *m = RaftTombstone{} }
+func (m *RaftTombstone) String() string { return proto.CompactTextString(m) }
+func (*RaftTombstone) ProtoMessage()    {}
+
+func (m *RaftTombstone) GetNextReplicaID() ReplicaID {
+	if m != nil {
+		return m.NextReplicaID
+	}
+	return 0
+}
+
 // RaftSnapshotData is the payload of a raftpb.Snapshot. It contains a raw copy of
 // all of the range's data and metadata, including the raft log, response cache, etc.
 type RaftSnapshotData struct {
@@ -389,6 +405,27 @@ func (m *RaftTruncatedState) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *RaftTombstone) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RaftTombstone) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintInternal(data, i, uint64(m.NextReplicaID))
+	return i, nil
+}
+
 func (m *RaftSnapshotData) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -529,6 +566,13 @@ func (m *RaftTruncatedState) Size() (n int) {
 	_ = l
 	n += 1 + sovInternal(uint64(m.Index))
 	n += 1 + sovInternal(uint64(m.Term))
+	return n
+}
+
+func (m *RaftTombstone) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovInternal(uint64(m.NextReplicaID))
 	return n
 }
 
@@ -1028,6 +1072,75 @@ func (m *RaftTruncatedState) Unmarshal(data []byte) error {
 				b := data[iNdEx]
 				iNdEx++
 				m.Term |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipInternal(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RaftTombstone) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowInternal
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RaftTombstone: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RaftTombstone: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NextReplicaID", wireType)
+			}
+			m.NextReplicaID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowInternal
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.NextReplicaID |= (ReplicaID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

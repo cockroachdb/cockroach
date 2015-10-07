@@ -100,6 +100,7 @@
 		InternalTimeSeriesData
 		InternalTimeSeriesSample
 		RaftTruncatedState
+		RaftTombstone
 		RaftSnapshotData
 		Attributes
 		ReplicaDescriptor

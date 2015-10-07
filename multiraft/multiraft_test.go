@@ -109,7 +109,10 @@ func (c *testCluster) createGroup(groupID roachpb.RangeID, firstNode, numReplica
 		c.groups[groupID] = append(c.groups[groupID], nodeIndex)
 	}
 	for i := 0; i < numReplicas; i++ {
-		gs := c.storages[firstNode+i].GroupStorage(groupID)
+		gs, err := c.storages[firstNode+i].GroupStorage(groupID, 0)
+		if err != nil {
+			c.t.Fatal(err)
+		}
 		memStorage := gs.(*blockableGroupStorage).s.(*raft.MemoryStorage)
 		if err := memStorage.SetHardState(raftpb.HardState{
 			Commit: 10,
@@ -130,7 +133,7 @@ func (c *testCluster) createGroup(groupID roachpb.RangeID, firstNode, numReplica
 		}
 
 		node := c.nodes[firstNode+i]
-		err := node.CreateGroup(groupID)
+		err = node.CreateGroup(groupID)
 		if err != nil {
 			c.t.Fatal(err)
 		}

@@ -33,6 +33,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* RaftTruncatedState_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   RaftTruncatedState_reflection_ = NULL;
+const ::google::protobuf::Descriptor* RaftTombstone_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  RaftTombstone_reflection_ = NULL;
 const ::google::protobuf::Descriptor* RaftSnapshotData_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   RaftSnapshotData_reflection_ = NULL;
@@ -118,7 +121,22 @@ void protobuf_AssignDesc_cockroach_2froachpb_2finternal_2eproto() {
       sizeof(RaftTruncatedState),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftTruncatedState, _internal_metadata_),
       -1);
-  RaftSnapshotData_descriptor_ = file->message_type(4);
+  RaftTombstone_descriptor_ = file->message_type(4);
+  static const int RaftTombstone_offsets_[1] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftTombstone, next_replica_id_),
+  };
+  RaftTombstone_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      RaftTombstone_descriptor_,
+      RaftTombstone::default_instance_,
+      RaftTombstone_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftTombstone, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(RaftTombstone),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftTombstone, _internal_metadata_),
+      -1);
+  RaftSnapshotData_descriptor_ = file->message_type(5);
   static const int RaftSnapshotData_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData, range_descriptor_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData, kv_),
@@ -171,6 +189,8 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       RaftTruncatedState_descriptor_, &RaftTruncatedState::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      RaftTombstone_descriptor_, &RaftTombstone::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       RaftSnapshotData_descriptor_, &RaftSnapshotData::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       RaftSnapshotData_KeyValue_descriptor_, &RaftSnapshotData_KeyValue::default_instance());
@@ -187,6 +207,8 @@ void protobuf_ShutdownFile_cockroach_2froachpb_2finternal_2eproto() {
   delete InternalTimeSeriesSample_reflection_;
   delete RaftTruncatedState::default_instance_;
   delete RaftTruncatedState_reflection_;
+  delete RaftTombstone::default_instance_;
+  delete RaftTombstone_reflection_;
   delete RaftSnapshotData::default_instance_;
   delete RaftSnapshotData_reflection_;
   delete RaftSnapshotData_KeyValue::default_instance_;
@@ -219,25 +241,29 @@ void protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto() {
     "t\030\001 \001(\005B\004\310\336\037\000\022\023\n\005count\030\006 \001(\rB\004\310\336\037\000\022\021\n\003su"
     "m\030\007 \001(\001B\004\310\336\037\000\022\013\n\003max\030\010 \001(\001\022\013\n\003min\030\t \001(\001\""
     "=\n\022RaftTruncatedState\022\023\n\005index\030\001 \001(\004B\004\310\336"
-    "\037\000\022\022\n\004term\030\002 \001(\004B\004\310\336\037\000\"\300\001\n\020RaftSnapshotD"
-    "ata\022B\n\020range_descriptor\030\001 \001(\0132\".cockroac"
-    "h.roachpb.RangeDescriptorB\004\310\336\037\000\022@\n\002KV\030\002 "
-    "\003(\0132,.cockroach.roachpb.RaftSnapshotData"
-    ".KeyValueB\006\342\336\037\002KV\032&\n\010KeyValue\022\013\n\003key\030\001 \001"
-    "(\014\022\r\n\005value\030\002 \001(\014B\031Z\007roachpb\340\342\036\001\310\342\036\001\320\342\036\001"
-    "\220\343\036\000", 884);
+    "\037\000\022\022\n\004term\030\002 \001(\004B\004\310\336\037\000\"L\n\rRaftTombstone\022"
+    ";\n\017next_replica_id\030\001 \001(\005B\"\310\336\037\000\342\336\037\rNextRe"
+    "plicaID\372\336\037\tReplicaID\"\300\001\n\020RaftSnapshotDat"
+    "a\022B\n\020range_descriptor\030\001 \001(\0132\".cockroach."
+    "roachpb.RangeDescriptorB\004\310\336\037\000\022@\n\002KV\030\002 \003("
+    "\0132,.cockroach.roachpb.RaftSnapshotData.K"
+    "eyValueB\006\342\336\037\002KV\032&\n\010KeyValue\022\013\n\003key\030\001 \001(\014"
+    "\022\r\n\005value\030\002 \001(\014B\031Z\007roachpb\340\342\036\001\310\342\036\001\320\342\036\001\220\343"
+    "\036\000", 962);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/internal.proto", &protobuf_RegisterTypes);
   RaftCommand::default_instance_ = new RaftCommand();
   InternalTimeSeriesData::default_instance_ = new InternalTimeSeriesData();
   InternalTimeSeriesSample::default_instance_ = new InternalTimeSeriesSample();
   RaftTruncatedState::default_instance_ = new RaftTruncatedState();
+  RaftTombstone::default_instance_ = new RaftTombstone();
   RaftSnapshotData::default_instance_ = new RaftSnapshotData();
   RaftSnapshotData_KeyValue::default_instance_ = new RaftSnapshotData_KeyValue();
   RaftCommand::default_instance_->InitAsDefaultInstance();
   InternalTimeSeriesData::default_instance_->InitAsDefaultInstance();
   InternalTimeSeriesSample::default_instance_->InitAsDefaultInstance();
   RaftTruncatedState::default_instance_->InitAsDefaultInstance();
+  RaftTombstone::default_instance_->InitAsDefaultInstance();
   RaftSnapshotData::default_instance_->InitAsDefaultInstance();
   RaftSnapshotData_KeyValue::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2froachpb_2finternal_2eproto);
@@ -1952,6 +1978,265 @@ void RaftTruncatedState::clear_term() {
   set_has_term();
   term_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RaftTruncatedState.term)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#ifndef _MSC_VER
+const int RaftTombstone::kNextReplicaIdFieldNumber;
+#endif  // !_MSC_VER
+
+RaftTombstone::RaftTombstone()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.RaftTombstone)
+}
+
+void RaftTombstone::InitAsDefaultInstance() {
+}
+
+RaftTombstone::RaftTombstone(const RaftTombstone& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RaftTombstone)
+}
+
+void RaftTombstone::SharedCtor() {
+  _cached_size_ = 0;
+  next_replica_id_ = 0;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+RaftTombstone::~RaftTombstone() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.RaftTombstone)
+  SharedDtor();
+}
+
+void RaftTombstone::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void RaftTombstone::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* RaftTombstone::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return RaftTombstone_descriptor_;
+}
+
+const RaftTombstone& RaftTombstone::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto();
+  return *default_instance_;
+}
+
+RaftTombstone* RaftTombstone::default_instance_ = NULL;
+
+RaftTombstone* RaftTombstone::New(::google::protobuf::Arena* arena) const {
+  RaftTombstone* n = new RaftTombstone;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void RaftTombstone::Clear() {
+  next_replica_id_ = 0;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool RaftTombstone::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.RaftTombstone)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional int32 next_replica_id = 1;
+      case 1: {
+        if (tag == 8) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &next_replica_id_)));
+          set_has_next_replica_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.RaftTombstone)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.RaftTombstone)
+  return false;
+#undef DO_
+}
+
+void RaftTombstone::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.RaftTombstone)
+  // optional int32 next_replica_id = 1;
+  if (has_next_replica_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->next_replica_id(), output);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.RaftTombstone)
+}
+
+::google::protobuf::uint8* RaftTombstone::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.RaftTombstone)
+  // optional int32 next_replica_id = 1;
+  if (has_next_replica_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(1, this->next_replica_id(), target);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.RaftTombstone)
+  return target;
+}
+
+int RaftTombstone::ByteSize() const {
+  int total_size = 0;
+
+  // optional int32 next_replica_id = 1;
+  if (has_next_replica_id()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int32Size(
+        this->next_replica_id());
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void RaftTombstone::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const RaftTombstone* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const RaftTombstone>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void RaftTombstone::MergeFrom(const RaftTombstone& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_next_replica_id()) {
+      set_next_replica_id(from.next_replica_id());
+    }
+  }
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void RaftTombstone::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void RaftTombstone::CopyFrom(const RaftTombstone& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool RaftTombstone::IsInitialized() const {
+
+  return true;
+}
+
+void RaftTombstone::Swap(RaftTombstone* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void RaftTombstone::InternalSwap(RaftTombstone* other) {
+  std::swap(next_replica_id_, other->next_replica_id_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata RaftTombstone::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = RaftTombstone_descriptor_;
+  metadata.reflection = RaftTombstone_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// RaftTombstone
+
+// optional int32 next_replica_id = 1;
+bool RaftTombstone::has_next_replica_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void RaftTombstone::set_has_next_replica_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void RaftTombstone::clear_has_next_replica_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void RaftTombstone::clear_next_replica_id() {
+  next_replica_id_ = 0;
+  clear_has_next_replica_id();
+}
+ ::google::protobuf::int32 RaftTombstone::next_replica_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftTombstone.next_replica_id)
+  return next_replica_id_;
+}
+ void RaftTombstone::set_next_replica_id(::google::protobuf::int32 value) {
+  set_has_next_replica_id();
+  next_replica_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RaftTombstone.next_replica_id)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

@@ -586,7 +586,7 @@ func (s *state) start() {
 							log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
 						}
 						if err := s.createGroup(req.GroupID, req.ToReplica.ReplicaID); err != nil {
-							log.Warningf("Error creating group %d: %s", req.GroupID, err)
+							log.Warningf("Error creating group %d in response to incoming message: %s", req.GroupID, err)
 							break
 						}
 					}
@@ -769,7 +769,10 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 		log.Infof("node %v creating group %v", s.nodeID, groupID)
 	}
 
-	gs := s.Storage.GroupStorage(groupID)
+	gs, err := s.Storage.GroupStorage(groupID, replicaID)
+	if err != nil {
+		return err
+	}
 	_, cs, err := gs.InitialState()
 	if err != nil {
 		return err
@@ -982,6 +985,15 @@ func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 		g.writing = true
 
 		gwr := &groupWriteRequest{}
+		var err error
+		gwr.replicaID, err = s.Storage.ReplicaIDForStore(roachpb.RangeID(groupID), s.storeID)
+		if err != nil {
+			if log.V(1) {
+				log.Warningf("failed to look up replica ID for range %v (disabling replica ID check): %s",
+					groupID, err)
+			}
+			gwr.replicaID = 0
+		}
 		if !raft.IsEmptyHardState(ready.HardState) {
 			gwr.state = ready.HardState
 		}

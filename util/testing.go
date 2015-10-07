@@ -136,6 +136,12 @@ func IsTrueWithin(trueFunc func() bool, duration time.Duration) error {
 // an exponential backoff starting at 1ns and ending at the specified
 // duration.
 func SucceedsWithin(t Tester, duration time.Duration, fn func() error) {
+	SucceedsWithinDepth(1, t, duration, fn)
+}
+
+// SucceedsWithinDepth is like SucceedsWithin() but with an additional
+// stack depth offset.
+func SucceedsWithinDepth(depth int, t Tester, duration time.Duration, fn func() error) {
 	deadline := time.Now().Add(duration)
 	var lastErr error
 	for wait := time.Duration(1); time.Now().Before(deadline); wait *= 2 {
@@ -148,7 +154,7 @@ func SucceedsWithin(t Tester, duration time.Duration, fn func() error) {
 		}
 		time.Sleep(wait)
 	}
-	t.Fatal(ErrorfSkipFrames(1, "condition failed to evaluate within %s: %s", duration, lastErr))
+	t.Fatal(ErrorfSkipFrames(1+depth, "condition failed to evaluate within %s: %s", duration, lastErr))
 }
 
 // Panics calls the supplied function and returns true if and only if it panics.

@@ -44,6 +44,7 @@ class RaftCommand;
 class InternalTimeSeriesData;
 class InternalTimeSeriesSample;
 class RaftTruncatedState;
+class RaftTombstone;
 class RaftSnapshotData;
 class RaftSnapshotData_KeyValue;
 
@@ -499,6 +500,95 @@ class RaftTruncatedState : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static RaftTruncatedState* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class RaftTombstone : public ::google::protobuf::Message {
+ public:
+  RaftTombstone();
+  virtual ~RaftTombstone();
+
+  RaftTombstone(const RaftTombstone& from);
+
+  inline RaftTombstone& operator=(const RaftTombstone& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const RaftTombstone& default_instance();
+
+  void Swap(RaftTombstone* other);
+
+  // implements Message ----------------------------------------------
+
+  inline RaftTombstone* New() const { return New(NULL); }
+
+  RaftTombstone* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const RaftTombstone& from);
+  void MergeFrom(const RaftTombstone& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(RaftTombstone* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional int32 next_replica_id = 1;
+  bool has_next_replica_id() const;
+  void clear_next_replica_id();
+  static const int kNextReplicaIdFieldNumber = 1;
+  ::google::protobuf::int32 next_replica_id() const;
+  void set_next_replica_id(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.RaftTombstone)
+ private:
+  inline void set_has_next_replica_id();
+  inline void clear_has_next_replica_id();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::int32 next_replica_id_;
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2finternal_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2finternal_2eproto();
+
+  void InitAsDefaultInstance();
+  static RaftTombstone* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -1093,6 +1183,34 @@ inline void RaftTruncatedState::set_term(::google::protobuf::uint64 value) {
 
 // -------------------------------------------------------------------
 
+// RaftTombstone
+
+// optional int32 next_replica_id = 1;
+inline bool RaftTombstone::has_next_replica_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void RaftTombstone::set_has_next_replica_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void RaftTombstone::clear_has_next_replica_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void RaftTombstone::clear_next_replica_id() {
+  next_replica_id_ = 0;
+  clear_has_next_replica_id();
+}
+inline ::google::protobuf::int32 RaftTombstone::next_replica_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftTombstone.next_replica_id)
+  return next_replica_id_;
+}
+inline void RaftTombstone::set_next_replica_id(::google::protobuf::int32 value) {
+  set_has_next_replica_id();
+  next_replica_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RaftTombstone.next_replica_id)
+}
+
+// -------------------------------------------------------------------
+
 // RaftSnapshotData_KeyValue
 
 // optional bytes key = 1;
@@ -1279,6 +1397,8 @@ RaftSnapshotData::mutable_kv() {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
