@@ -147,40 +147,92 @@ CREATE TABLE xyz (
 )
 
 statement ok
-INSERT INTO xyz VALUES (1, 2, 3), (4, 5, 6)
+INSERT INTO xyz VALUES (1, 2, 3), (4, 5, 6), (7, NULL, 8)
+
+query I
+SELECT MIN(x) FROM xyz
+----
+1
 
 query ITT
 EXPLAIN SELECT MIN(x) FROM xyz
 ----
 0 group MIN(x)
-1 scan  xyz@xy -
+1 scan  xyz@xy 1:-
+
+query I
+SELECT MAX(x) FROM xyz
+----
+7
 
 query ITT
 EXPLAIN SELECT MAX(x) FROM xyz
 ----
 0 group    MAX(x)
-1 revscan  xyz@xy -
+1 revscan  xyz@xy 1:-
+
+query I
+SELECT MIN(y) FROM xyz WHERE x = 1
+----
+2
 
 query ITT
 EXPLAIN SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 0 group MIN(y)
-1 scan  xyz@xy /1-/2
+1 scan  xyz@xy 1:/1/#-/2
+
+query I
+SELECT MAX(y) FROM xyz WHERE x = 1
+----
+2
 
 query ITT
 EXPLAIN SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 0 group   MAX(y)
-1 revscan xyz@xy /1-/2
+1 revscan xyz@xy 1:/1/#-/2
+
+query I
+SELECT MIN(y) FROM xyz WHERE x = 7
+----
+NULL
+
+query ITT
+EXPLAIN SELECT MIN(y) FROM xyz WHERE x = 7
+----
+0 group MIN(y)
+1 scan  xyz@xy 1:/7/#-/8
+
+query I
+SELECT MAX(y) FROM xyz WHERE x = 7
+----
+NULL
+
+query ITT
+EXPLAIN SELECT MAX(y) FROM xyz WHERE x = 7
+----
+0 group   MAX(y)
+1 revscan xyz@xy 1:/7/#-/8
+
+query I
+SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3)
+----
+1
 
 query ITT
 EXPLAIN SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3)
 ----
 0 group MIN(x)
-1 scan  xyz@zyx /3/2-/3/3
+1 scan  xyz@zyx 1:/3/2/#-/3/3
+
+query I
+SELECT MAX(x) FROM xyz WHERE (z, y) = (3, 2)
+----
+1
 
 query ITT
 EXPLAIN SELECT MAX(x) FROM xyz WHERE (z, y) = (3, 2)
 ----
 0 group   MAX(x)
-1 revscan xyz@zyx /3/2-/3/3
+1 revscan xyz@zyx 1:/3/2/#-/3/3
