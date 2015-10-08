@@ -495,3 +495,73 @@ query B
 SELECT experimental_uuid_v4() != experimental_uuid_v4(), length(experimental_uuid_v4())
 ----
 true 16
+
+query error syntax error at or near.*
+SELECT GREATEST()
+
+query error syntax error at or near.*
+SELECT LEAST()
+
+query T
+SELECT GREATEST(4, 5, 7, 1, 2)
+----
+7
+
+query T
+SELECT LEAST(4, 5, 7, 1, 2)
+----
+1
+
+query T
+SELECT GREATEST(4, NULL, 7, 1, 2)
+----
+7
+
+query T
+SELECT GREATEST(NULL, NULL, 7, NULL, 2)
+----
+7
+
+query T
+SELECT GREATEST(NULL, NULL, NULL, NULL, 2)
+----
+2
+
+query T
+SELECT GREATEST(2, NULL, NULL, NULL, NULL)
+----
+2
+
+query T
+SELECT LEAST(4, NULL, 7, 1, 2)
+----
+1
+
+query T
+SELECT GREATEST(NULL, NULL, NULL)
+----
+NULL
+
+query T
+SELECT LEAST(NULL, NULL, NULL)
+----
+NULL
+
+query error GREATEST: unsupported comparison operator: <int> < <string>
+SELECT GREATEST(2, '4')
+
+query error LEAST: unsupported comparison operator: <string> < <int>
+SELECT LEAST(2, '4')
+
+query T
+SELECT GREATEST('foo', 'bar', 'foobar')
+----
+foobar
+
+query T
+SELECT LEAST('foo', 'bar', 'foobar')
+----
+bar
+
+query error GREATEST: unsupported comparison operator: <int> < <float>
+SELECT GREATEST(1, 1.2)

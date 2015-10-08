@@ -507,7 +507,7 @@ var evalTupleEQ = cmpOp{
 			return DBool(false), nil
 		}
 		for i := range left {
-			d, err := evalComparisonEq(left[i], right[i])
+			d, err := evalComparison(EQ, left[i], right[i])
 			if err != nil {
 				return DummyBool, err
 			}
@@ -839,7 +839,7 @@ func (ctx EvalContext) evalNullIfExpr(expr *NullIfExpr) (Datum, error) {
 	if err != nil {
 		return DNull, err
 	}
-	cond, err := evalComparisonEq(expr1, expr2)
+	cond, err := evalComparison(EQ, expr1, expr2)
 	if err != nil {
 		return DNull, err
 	}
@@ -1004,7 +1004,7 @@ func (ctx EvalContext) evalCaseExpr(expr *CaseExpr) (Datum, error) {
 			if err != nil {
 				return DNull, err
 			}
-			d, err := evalComparisonEq(val, arg)
+			d, err := evalComparison(EQ, val, arg)
 			if err != nil {
 				return DNull, err
 			}
@@ -1167,17 +1167,17 @@ func (ctx EvalContext) evalCastExpr(expr *CastExpr) (Datum, error) {
 	return DNull, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)
 }
 
-func evalComparisonEq(left, right Datum) (Datum, error) {
+func evalComparison(op ComparisonOp, left, right Datum) (Datum, error) {
 	if left == DNull || right == DNull {
 		return DNull, nil
 	}
 
-	if f, ok := cmpOps[cmpArgs{EQ, reflect.TypeOf(left), reflect.TypeOf(right)}]; ok {
+	if f, ok := cmpOps[cmpArgs{op, reflect.TypeOf(left), reflect.TypeOf(right)}]; ok {
 		return f.fn(left, right, nil)
 	}
 
 	return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
-		left.Type(), EQ, right.Type())
+		left.Type(), op, right.Type())
 }
 
 // foldComparisonExpr folds a given comparison operation and its datum into an

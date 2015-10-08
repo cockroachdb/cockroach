@@ -412,6 +412,24 @@ var builtins = map[string][]builtin{
 		},
 	},
 
+	"greatest": {
+		builtin{
+			types: nil,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				return pickFromTuple(true /* greatest */, args)
+			},
+		},
+	},
+
+	"least": {
+		builtin{
+			types: nil,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				return pickFromTuple(false /* !greatest */, args)
+			},
+		},
+	},
+
 	// Timestamp/Date functions.
 
 	"age": {
@@ -949,6 +967,29 @@ func round(x float64, n int64) (Datum, error) {
 	const b = 64
 	y, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', int(n), b), b)
 	return DFloat(y), err
+}
+
+// Pick the greatest (or least value) from a tuple.
+func pickFromTuple(greatest bool, args DTuple) (Datum, error) {
+	g := args[0]
+	// Pick a greater (or smaller) value.
+	for _, d := range args[1:] {
+		var eval Datum
+		var err error
+		if greatest {
+			eval, err = evalComparison(LT, g, d)
+		} else {
+			eval, err = evalComparison(LT, d, g)
+		}
+		if err != nil {
+			return DNull, err
+		}
+		if eval == DBool(true) ||
+			(eval == DNull && g == DNull) {
+			g = d
+		}
+	}
+	return g, nil
 }
 
 var uniqueBytesState struct {
