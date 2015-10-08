@@ -32,11 +32,9 @@ module Components {
 
     export function controller(): any {}
 
-    export enum NavbarOrientation {Vertical, Horizontal};
-
-    export function view(ctrl: any, args: {ts: TargetSet; orientation: NavbarOrientation; }): _mithril.MithrilVirtualElement {
+    export function view(ctrl: any, args: {ts: TargetSet; }): _mithril.MithrilVirtualElement {
       return m(
-        (args.orientation === NavbarOrientation.Vertical ? "ul.navigation-sidebar" : "ul.navigation"),
+        "ul.nav",
         _.map(args.ts.targets(), (t: Target) =>
           m("li",
             {

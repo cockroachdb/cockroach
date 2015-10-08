@@ -21,8 +21,9 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 @require '../modules/layout-vars.styl'
 @require '../modules/palette.styl'
 
-$topbar-border = $secondary-gray-1
+$topbar-border      = $secondary-gray-1
 $last-updated-color = $secondary-gray-2
+$subnav-background  = $secondary-gray-3
 
 *
   margin 0
@@ -34,12 +35,12 @@ $last-updated-color = $secondary-gray-2
 html
 body
   height 100%
+  background-color $secondary-gray-4
 
 #root
   position relative
   padding-left $nav-width
   min-height calc(100% - 4rem)
-  background-color -color('light', 'x-light')
   color -color('dark', 'light')
 
   &:after
@@ -47,11 +48,30 @@ body
     display table
     clear both
 
-.section.primary
+.section
+  padding 1rem 2rem
+
+  &:after
+    content ""
+    display table
+    clear both
+
+  .topbar + &
+    padding-top $top-bar-height + 10px
+
+  .nav + &
+    padding-top $top-bar-height + $subnav-height + 10px
+
+.topbar
+  padding 0 3rem 1rem
   background-color white
   border-bottom 1px solid $topbar-border
   height $top-bar-height
-  padding-top 0
+  width "calc(100% - %s)" % $nav-width
+  position fixed
+  top 0
+  right 0
+  z-index 1
 
   h2
     font-size 3.6rem
@@ -74,11 +94,16 @@ body
     strong
       font-family Lato-Bold
 
+.page .nav
+  padding 0 3rem 1rem
+  background-color $subnav-background
+  text-transform uppercase
+  letter-spacing 2.17px
+  border-bottom 1px solid $secondary-gray-1
+  height $subnav-height
+  position fixed
+  top $top-bar-height
+  right 0
+  width "calc(100% - %s)" % $nav-width
+  z-index 1
 
-.section
-  padding 1rem 2rem
-
-  &:after
-    content ""
-    display table
-    clear both

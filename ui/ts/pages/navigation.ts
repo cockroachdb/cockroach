@@ -78,8 +78,7 @@ module AdminViews {
           m.component(
             NavigationBar,
             {
-              ts: ctrl.TargetSet(),
-              orientation: NavigationBar.NavbarOrientation.Vertical
+              ts: ctrl.TargetSet()
             }
           )
         );

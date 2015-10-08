@@ -29,6 +29,11 @@ $main-nav-active-bg   = $main-navy
 $main-nav-active-font = white
 $main-nav-active-icon = $main-green
 $main-nav-hover       = $main-dark-gray
+$subnav-active-color  = $secondary-green-1
+$subnav-text-color    = $secondary-slate-gray
+$subnav-hover-color   = $main-dark-gray
+
+$subnav-underline-height = 3px
 
 #header
   position fixed
@@ -44,7 +49,7 @@ $main-nav-hover       = $main-dark-gray
   padding 0
 
 header
-  ul.navigation-sidebar
+  ul.nav
     width 100%
     li
       width 100%
@@ -100,21 +105,29 @@ header
           text-align center
 
 .page
-  ul.navigation
+  ul.nav
     modular-font-size '1'
-    color -color('dark', 'x-dark')
+    color $subnav-text-color
     list-style-type none
-    padding-left 2rem
-    line-height 4rem
+    line-height $subnav-height - $subnav-underline-height
+
+    font-family Lato-Bold
+    font-size 1.3rem
 
     li
-      display inline
-      margin-left 3rem
+      display inline-block
+      margin-right 3rem
 
-      &.active
+      &.active, &.active:hover
+        color $subnav-active-color
         font-weight 600
-
+        border-bottom $subnav-underline-height solid $subnav-active-color
+        
+      &:hover
+        color $main-nav-hover
       a
+        height 100%
+        display block
         color inherit
         text-decoration none
         &:hover

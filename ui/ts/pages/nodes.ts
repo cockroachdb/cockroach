@@ -283,10 +283,8 @@ module AdminViews {
         }
 
         return m(".page", [
-          m(".section.primary", m.component(Components.Topbar, {title: title})),
-          m(".section.subnav", [
-            m.component(NavigationBar, {ts: ctrl.TargetSet(), orientation: NavigationBar.NavbarOrientation.Horizontal}),
-          ]),
+          m.component(Components.Topbar, {title: title}),
+          m.component(NavigationBar, {ts: ctrl.TargetSet()}),
           m(".section", primaryContent)
         ]);
       }
