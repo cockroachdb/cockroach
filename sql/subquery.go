@@ -89,6 +89,7 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 				rows = append(rows, valuesCopy)
 			}
 		}
+		rows.Normalize()
 		result = rows
 	} else {
 		result = parser.DNull
