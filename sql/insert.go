@@ -32,7 +32,12 @@ import (
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(n *parser.Insert) (planNode, error) {
-	tableDesc, _, err := p.getCachedTableDesc(n.Table)
+	// TODO(marcb): We can't use the cached descriptor here because a recent
+	// update of the schema (e.g. the addition of an index) might not be
+	// reflected in the cached version (yet). Perhaps schema modification
+	// routines such as CREATE INDEX should not return until the schema change
+	// has been pushed everywhere.
+	tableDesc, err := p.getTableDesc(n.Table)
 	if err != nil {
 		return nil, err
 	}
