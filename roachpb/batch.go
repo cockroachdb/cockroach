@@ -190,12 +190,16 @@ func (ba *BatchRequest) flags() int {
 
 // Split separate the requests contained in a batch so that each subset of
 // requests can be executed by a Store (without changing order). In particular,
-// Admin and EndTransaction requests are always singled out and mutating
-// requests separated from reads.
-func (ba BatchRequest) Split() [][]RequestUnion {
-	compatible := func(exFlags, newFlags int) bool {
+// Admin requests are always singled out and mutating requests separated from
+// reads. The boolean parameter indicates whether EndTransaction should be
+// special-cased: If false, an EndTransaction request will never be split into
+// a new chunk (otherwise, it is treated according to its flags). This allows
+// sending a whole transaction in a single Batch when addressing a single
+// range.
+func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
+	compatible := func(method Method, exFlags, newFlags int) bool {
 		// If no flags are set so far, everything goes.
-		if exFlags == 0 {
+		if exFlags == 0 || (!canSplitET && method == EndTransaction) {
 			return true
 		}
 		if (newFlags & isAlone) != 0 {
@@ -215,8 +219,9 @@ func (ba BatchRequest) Split() [][]RequestUnion {
 		part := ba.Requests
 		var gFlags int
 		for i, union := range ba.Requests {
-			flags := union.GetInner().flags()
-			if !compatible(gFlags, flags) {
+			args := union.GetInner()
+			flags := args.flags()
+			if !compatible(args.Method(), gFlags, flags) {
 				part = ba.Requests[:i]
 				break
 			}

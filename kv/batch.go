@@ -177,7 +177,7 @@ func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		}
 	}
 
-	parts := ba.Split()
+	parts := ba.Split(true /* canSplitET */)
 	var rplChunks []*roachpb.BatchResponse
 	for _, part := range parts {
 		ba.Requests = part
