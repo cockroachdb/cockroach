@@ -460,10 +460,6 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	// required, set the timestamp using the local clock.
 	// TODO(tschottdorf): right place for this?
 	if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
-		// Make sure that after the call, args hasn't changed.
-		defer func(timestamp roachpb.Timestamp) {
-			ba.Timestamp = timestamp
-		}(ba.Timestamp)
 		ba.Timestamp = ds.clock.Now()
 	}
 
