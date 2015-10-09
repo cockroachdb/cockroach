@@ -19,6 +19,7 @@ package kv
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"sync/atomic"
 	"time"
@@ -466,14 +467,62 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		ba.Timestamp = ds.clock.Now()
 	}
 
-	// TODO(tschottdorf): provisional instantiation.
-	return newChunkingSender(ds.sendChunk).Send(ctx, ba)
+	if len(ba.Requests) < 1 {
+		panic("empty batch")
+	}
+
+	// Deterministically create ClientCmdIDs for all parts of the batch if
+	// a CmdID is already set (otherwise, leave them empty).
+	var nextID func() roachpb.ClientCmdID
+	empty := roachpb.ClientCmdID{}
+	if empty == ba.CmdID {
+		nextID = func() roachpb.ClientCmdID {
+			return empty
+		}
+	} else {
+		rng := rand.New(rand.NewSource(ba.CmdID.Random))
+		id := ba.CmdID
+		nextID = func() roachpb.ClientCmdID {
+			curID := id             // copy
+			id.Random = rng.Int63() // adjust for next call
+			return curID
+		}
+	}
+
+	parts := ba.Split(true /* canSplitET */)
+	var rplChunks []*roachpb.BatchResponse
+	for _, part := range parts {
+		ba.Requests = part
+		ba.CmdID = nextID()
+		rpl, err, _ := ds.sendChunk(ctx, ba)
+		if err != nil {
+			return nil, err
+		}
+		// Propagate transaction from last reply to next request. The final
+		// update is taken and put into the response's main header.
+		ba.Txn.Update(rpl.Header().Txn)
+
+		rplChunks = append(rplChunks, rpl)
+	}
+
+	reply := rplChunks[0]
+	for _, rpl := range rplChunks[1:] {
+		reply.Responses = append(reply.Responses, rpl.Responses...)
+	}
+	lastHeader := rplChunks[len(rplChunks)-1].BatchResponse_Header
+	reply.Error = lastHeader.Error
+	reply.Timestamp = lastHeader.Timestamp
+	reply.Txn = ba.Txn
+	return reply, nil
 }
 
 // sendChunk is in charge of sending an "admissible" piece of batch, i.e. one
 // which doesn't need to be subdivided further before going to a range (so no
-// mixing of forward and reverse scans, etc).
-func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+// mixing of forward and reverse scans, etc). The parameters and return values
+// correspond to client.Sender with the exception of the returned boolean,
+// which is true to indicate that the caller should retry but needs to send
+// EndTransaction in a separate request.
+func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error, bool) {
 	isReverse := ba.IsReverse()
 
 	trace := tracer.FromCtx(ctx)
@@ -520,7 +569,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// case where we don't need to re-run is if the read
 			// consistency is not required.
 			if needAnother && ba.Txn == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
-				return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
+				return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{}), false
 			}
 
 			// It's possible that the returned descriptor misses parts of the
@@ -635,7 +684,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 		// Immediately return if querying a range failed non-retryably.
 		if pErr != nil {
-			return nil, pErr
+			return nil, pErr, false
 		}
 
 		first := br == nil
@@ -646,7 +695,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// This was the second or later call in a cross-Range request.
 			// Combine the new response with the existing one.
 			if err := br.Combine(curReply); err != nil {
-				// TODO(tschottdorf): return nil, roachpb.NewError(err)
+				// TODO(tschottdorf): return nil, roachpb.NewError(err), false
 				panic(err)
 			}
 		}
@@ -713,7 +762,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 		// If this was the last range accessed by this call, exit loop.
 		if !needAnother {
-			return br, nil
+			return br, nil, false
 		}
 
 		if isReverse {
