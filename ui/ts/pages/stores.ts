@@ -4,6 +4,7 @@
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
 /// <reference path="../components/navbar.ts" />
+/// <reference path="../components/topbar.ts" />
 /// <reference path="../util/format.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
@@ -34,6 +35,7 @@ module AdminViews {
      * StoresPage show a list of all the available nodes.
      */
     export module StoresPage {
+      import Topbar = Components.Topbar;
       class Controller {
         private static comparisonColumns: Table.TableColumn<StoreStatus>[] = [
           {
@@ -130,8 +132,8 @@ module AdminViews {
           rows: storeStatuses.allStatuses
         };
         return m(".page", [
-          m(".section.primary", m("h2", "Stores Overview")),
-          m(".section.primary", ctrl.RenderPrimaryStats()),
+          m.component(Topbar, {title: "Stores"}),
+          m(".section", ctrl.RenderPrimaryStats()),
           m(".section", m(".stats-table", Components.Table.create(comparisonData)))
         ]);
       }
@@ -314,10 +316,8 @@ module AdminViews {
         }
 
         return m(".page", [
-          m(".section.primary", [
-            m.component(NavigationBar, ctrl.TargetSet()),
-            m("h2", title)
-          ]),
+          m.component(Components.Topbar, {title: title}),
+          m.component(NavigationBar, {ts: ctrl.TargetSet()}),
           m(".section", primaryContent)
         ]);
       }

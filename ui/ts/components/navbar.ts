@@ -17,6 +17,7 @@ module Components {
     export interface Target {
       view: string | MithrilVirtualElement | MithrilVirtualElement[];
       route: string;
+      liClass?: string;
     }
 
     export interface TargetSet {
@@ -29,18 +30,20 @@ module Components {
       isActive: (t: Target) => boolean;
     }
 
-    export function controller(ts: TargetSet): any {}
+    export function controller(): any {}
 
-    export function view(ctrl: any, ts: TargetSet): _mithril.MithrilVirtualElement {
-      return m("ul.navigation-sidebar", _.map(ts.targets(), (t: Target) =>
+    export function view(ctrl: any, args: {ts: TargetSet; }): _mithril.MithrilVirtualElement {
+      return m(
+        "ul.nav",
+        _.map(args.ts.targets(), (t: Target) =>
           m("li",
             {
-              className: ts.isActive(t) ? "active" : ""
+              className: (args.ts.isActive(t) ? "active" : "") + (t.liClass ? " " + t.liClass : " normal")
             },
             m("a",
               {
                 config: m.route,
-                href: ts.baseRoute + t.route
+                href: args.ts.baseRoute + t.route
               },
               t.view
               )

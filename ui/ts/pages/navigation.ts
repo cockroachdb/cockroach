@@ -28,6 +28,12 @@ module AdminViews {
       class Controller {
         private static defaultTargets: NavigationBar.Target[] = [
           {
+            title: "",
+            route: "/",
+            icon: SvgIcons.cockroachIcon,
+            liClass: "cockroach"
+          },
+          {
             title: "Nodes",
             route: "/nodes",
             icon: SvgIcons.nodesIcon
@@ -37,13 +43,14 @@ module AdminViews {
             route: "/stores",
             icon: SvgIcons.storesIcon
           }
-        ].map(function(v: {title: string; route: string; icon: string; }): NavigationBar.Target {
+        ].map(function(v: {title: string; route: string; icon: string; liClass?: string; }): NavigationBar.Target {
           return {
             view: [
               m(".image-container", m.trust(v.icon)),
               m("div", v.title)
             ],
-            route: v.route
+            route: v.route,
+            liClass: v.liClass
           };
         });
 
@@ -66,7 +73,15 @@ module AdminViews {
       }
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
-        return m("header", m.component(NavigationBar, ctrl.TargetSet()));
+        return m(
+          "header",
+          m.component(
+            NavigationBar,
+            {
+              ts: ctrl.TargetSet()
+            }
+          )
+        );
       }
     }
   }

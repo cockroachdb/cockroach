@@ -39,20 +39,36 @@ $palette = {
 -color($color, val='base')
   return $palette[$color][val]
 
+// These colors are specified by the Cockroach UI-Kit designs.
+
+// Main colors
 $main-green = #7DBC42 // Main Highlight color, Status: Active
 $main-navy  = #151F34 // Main Highlight color, Main Headers
 
-// Nav
+// Main navigation colors
 $main-dark-gray = #595F6C // Main Navigation Rollover
 $main-gray      = #9F9F9F // Main Navigation
 
+// Secondary colors
 $secondary-gold   = #F2BE2C // Status: Idle, Chart Color
 $secondary-salmon = #F16969 // Status: Inactive, Chart Color
-$secondary-blue   = #F16969 // Text Link, Chart Color
+$secondary-blue   = #4E9FD1 // Text Link, Chart Color
 $secondary-teal   = #47E2AA // Chart Color
 $secondary-purple = #D77FBF // Chart Color
 
-// Nav
+// Secondary nav colors
 $secondary-slate-gray = #7C8495 // Secondary Navigation
 $secondary-light-gray = #A6A6B2 // Secondary Headers
+
+// These colors weren't specified in the original UI-kit,
+// but were present in the design.
+
+// TODO: Discuss with designer to see if any can/should
+// be replaced by the primary/secondary palette colors.
+
+$secondary-gray-1  = #D1D1D1 // navbar/topbar borders
+$secondary-gray-2  = #C7C7D0 // last updated color
+$secondary-gray-3  = #E7EBF1 // subnav background
+$secondary-gray-4  = #F2F4F7 // main background
+$secondary-green-1 = #66AA26 // subnav active
 
