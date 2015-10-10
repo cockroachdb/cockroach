@@ -261,12 +261,11 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		return raftpb.Snapshot{}, err
 	}
 
-	curDesc := r.Desc()
 	var desc roachpb.RangeDescriptor
 	// We ignore intents on the range descriptor (consistent=false) because we
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
-	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(curDesc.StartKey),
+	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(r.Desc().StartKey),
 		r.rm.Clock().Now(), false /* !consistent */, nil, &desc)
 	if err != nil {
 		return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
@@ -280,7 +279,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 	// Iterate over all the data in the range, including local-only data like
 	// the response cache.
-	for iter := newRangeDataIterator(curDesc, snap); iter.Valid(); iter.Next() {
+	for iter := newRangeDataIterator(&desc, snap); iter.Valid(); iter.Next() {
 		snapData.KV = append(snapData.KV,
 			&roachpb.RaftSnapshotData_KeyValue{Key: iter.Key(), Value: iter.Value()})
 	}
