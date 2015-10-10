@@ -337,7 +337,7 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 	case *driver.Datum_StringVal:
 		return parser.DString(t.StringVal), true
 	case *driver.Datum_DateVal:
-		return parser.MakeDDate(t.DateVal.GoTime()), true
+		return parser.DDate{Time: t.DateVal.GoTime()}, true
 	case *driver.Datum_TimeVal:
 		return parser.DTimestamp{Time: t.TimeVal.GoTime()}, true
 	case *driver.Datum_IntervalVal:
