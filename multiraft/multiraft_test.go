@@ -133,8 +133,7 @@ func (c *testCluster) createGroup(groupID roachpb.RangeID, firstNode, numReplica
 		}
 
 		node := c.nodes[firstNode+i]
-		err = node.CreateGroup(groupID)
-		if err != nil {
+		if err := node.CreateGroup(groupID); err != nil {
 			c.t.Fatal(err)
 		}
 	}

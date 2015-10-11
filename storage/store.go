@@ -1547,7 +1547,8 @@ func (s *Store) GroupStorage(groupID roachpb.RangeID, replicaID roachpb.ReplicaI
 		if ok, err := engine.MVCCGetProto(s.Engine(), tombstoneKey, roachpb.ZeroTimestamp, true, nil, &tombstone); err != nil {
 			return nil, err
 		} else if ok {
-			if replicaID < tombstone.NextReplicaID {
+			if replicaID != multiraft.InvalidReplicaID &&
+				replicaID < tombstone.NextReplicaID {
 				return nil, multiraft.ErrGroupDeleted
 			}
 		}

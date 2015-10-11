@@ -489,7 +489,7 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 			results[i], err = val.GetInt()
 		}
 		if err != nil {
-			log.Errorf("error reading %s from engine %d", key, i)
+			log.Errorf("error reading %s from engine %d: %s", key, i, err)
 			results[i] = 0
 		}
 	}

@@ -44,6 +44,10 @@ const (
 	// message/snapshot descriptors (whose necessity is short-lived but
 	// cannot be recovered through other means if evicted)?
 	maxReplicaDescCacheSize = 1000
+
+	// InvalidReplicaID is passed to the GroupStorage method when a
+	// replica ID cannot be determined.
+	InvalidReplicaID = roachpb.ReplicaID(-1)
 )
 
 // An ErrGroupDeleted is returned for commands which are pending while their
@@ -586,7 +590,7 @@ func (s *state) start() {
 							log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
 						}
 						if err := s.createGroup(req.GroupID, req.ToReplica.ReplicaID); err != nil {
-							log.Warningf("Error creating group %d in response to incoming message: %s", req.GroupID, err)
+							log.Warningf("Error creating group %d (in response to incoming message): %s", req.GroupID, err)
 							break
 						}
 					}
@@ -992,7 +996,7 @@ func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 				log.Warningf("failed to look up replica ID for range %v (disabling replica ID check): %s",
 					groupID, err)
 			}
-			gwr.replicaID = 0
+			gwr.replicaID = InvalidReplicaID
 		}
 		if !raft.IsEmptyHardState(ready.HardState) {
 			gwr.state = ready.HardState
