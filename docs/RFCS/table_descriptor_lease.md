@@ -1,7 +1,7 @@
 - Feature Name: table_descriptor_lease
 - Status: draft
 - Start Date: 2015-10-09
-- RFC PR:
+- RFC PR: [#2810](https://github.com/cockroachdb/cockroach/pull/2036)
 - Cockroach Issue: [#2036](https://github.com/cockroachdb/cockroach/issues/2036)
 
 # Summary
@@ -51,16 +51,16 @@ following steps:
   index do so, but insert and update operations which would add new
   elements and read operations do not use the index.
 * Wait for the table descriptor change to propagate to all nodes in
-  the cluster.
+  the cluster and all uses of the previous version to finish.
 * Mark the index as write-only: insert, update and delete operations
   would add entries for the index, but read operations would not use
   the index.
 * Wait for the table descriptor change to propagate to all nodes in
-  the cluster.
+  the cluster and all uses of the previous version to finish.
 * Backfill the index.
 * Mark the index in the table descriptor as read-write.
 * Wait for the table descriptor change to propagate to all nodes in
-  the cluster.
+  the cluster and all uses of the previous version to finish.
 
 This RFC is focused on how to wait for the table descriptor change
 propagate to all nodes in the cluster. Additionally, we need
@@ -87,34 +87,17 @@ lease.
 
 # Detailed design
 
-Leases will be managed and dispensed by a centralized lease
-service. Initially there will be a single lease service master, but a
-future enhancement to shard by descriptor ID should be
-straightforward.
-
-The lease master will be "elected" by performing a conditional put to
-a known key in the KV store. The value of the key will be the node ID
-of the master concatened with an expiration timestamp:
-
-```
-  /lease-master -> /<nodeID>/<expiration>
-```
-
-When a node starts up it will read the `/lease-master` key and see if
-there is an active master. If the expiration time is in the past the
-node will attempt to become the master itself by conditionally putting
-the key. A background goroutine will periodically check to make sure
-the existing master is still active and attempt to become the master
-if it is not. The lease master itself will periodically refresh a
-comfortable amount of time before it expires. If we set the expiration
-time to 20s in the future, the master might refresh its status every
-10s.
-
-The lease master will provide the following service for read leases:
+The lease for a table will be managed and dispensed by a per-table
+lease service. The node running the lease service will be the raft
+leader of the range containining the first key in the table
+(i.e. `/<tableID>`). The lease master for a table will provide the
+following service:
 
 ```proto
 message WatchRequest {
   optional int32 nodeID;
+  optional int32 descID;
+  optional int32 version;
 }
 
 message WatchResponse {
@@ -136,6 +119,7 @@ message AcquireRequest {
 
 message AcquireResponse {
   optional message<Error> error;
+  optional message<TableDescriptor> desc;
   optional int64 expiration;
 }
 
@@ -161,7 +145,7 @@ message PublishResponse {
 service TableLeaseService {
   // Watch registers the node for updates to descriptor versions. A
   // watch should be registered before any other lease operation.
-  rpc Watch(WatchRequest) returns (stream WatchResponse) {}
+  rpc Watch(WatchRequest) returns (WatchResponse) {}
   
   // Acquire acquires a read lease for the specified descriptor and
   // version. The lease is associated with the specified node. An
@@ -185,21 +169,26 @@ service TableLeaseService {
 }
 ```
 
-When a node starts up it will register a `Watch` with the lease master
-in order to receive a stream of version updates for all
-descriptors. Each node will maintain a map from `<descriptorID,
-version>` to `<TableDescriptor, expiration, localRefCount>`. When the
-node needs to use a descriptor for an operation it will look in its
-local map. If the descriptor is not there it will be read from the KV
-store and a lease will be acquired by sending an `Acquire` message to
-the lease master. The node will maintain the invariant that a new
-reference to a descriptor will only be added to the most recent
+Each node will maintain a map from `<descriptorID, version>` to
+`<TableDescriptor, expiration, localRefCount>`. When the node needs to
+use a descriptor for an operation it will look in its local map. If
+the descriptor is not there the node will register a `Watch` with the
+lease master in order to receive a stream of version updates for the
+table descriptor. Next it will send an `Acquire` message to the lease
+master which will return the desired `TableDescriptor` along with the
+expiration of the lease. The node will maintain the invariant that a
+new reference to a descriptor will only be added to the most recent
 version. When the reference count for an older version falls to 0 the
-node will send a `Release` message to the lease master.
+node will send a `Release` message to the lease master. The local
+reference count will be incremented when a transaction first uses a
+table and decremented when the transaction commits/aborts.
 
-The `Watch` responses will notify the node when a new version of a
-descriptor is available which it will then read from the KV store if
-the node has a lease for the descriptor.
+A `Watch` request will watch for activity to a particular version of a
+descriptor. The watch request will wait until the state of the
+specified version has changed. A node can use a watch request to be
+notified when a new version of a descriptor is created by watching for
+the next descriptor version. And a schema change operation can watch
+for a descriptor version to become `DEAD` (i.e. have no leases on it).
 
 When performing a schema change operation, the modification to the
 table descriptor is performed using the `Publish` operation which will
@@ -219,20 +208,9 @@ assume 5m for the rest of this doc, though experimentation may tune
 this number). A node will renew recently used descriptors before their
 leases expires and ensure that when handing out a descriptor for local
 usage the lease will not expire for at least `<leaseDuration>/2`
-minutes. When a node starts it will issue a `Release` message with the
-`all` field set to true to indicate it wants to release any leases
-held by its previous incarnation. This will ensure that a transient
-failure does not require the lease expiration to occur before allowing
-a schema modification. When a node dies permanently or becomes
-unresponsive (e.g. detached from the network) the lease master will
-have to wait for any leases that node held to expire. This will result
-in an inability to perform more than one schema modification step to
-the descriptors referred to by those leases. The maximum amount of
-time this condition can exist is the lease duration.
+minutes.
 
-If the lease master dies a new master will be "elected" within
-20s. Lease state will be stored in a `leaseTable` that will be read
-when the master starts:
+Lease state will be stored in a `leaseTable`:
 
 ```sql
 CREATE TABLE leaseTable (
@@ -255,6 +233,20 @@ When the lease master is unavailable (because it has died and a new
 master has not yet started), new leases cannot be granted but existing
 leases remain valid until they expire.
 
+When a node starts it will scan the `leaseTable` to find out what
+leases were held by its previous incarnation. The newly started node
+cannot know if any transactions are still being committed that are
+using those leases (i.e. the `EndTransation` was sent but is stil
+winding its way through raft committal), so it will ensure that those
+leases are not released until they expire.
+
+When a node holding leases dies permanently or becomes unresponsive
+(e.g. detached from the network) the lease master will have to wait
+for any leases that node held to expire. This will result in an
+inability to perform more than one schema modification step to the
+descriptors referred to by those leases. The maximum amount of time
+this condition can exist is the lease duration.
+
 # Drawbacks
 
 * This is complex. Perhaps overly complex. Where can it be simplified?
@@ -265,12 +257,14 @@ leases remain valid until they expire.
 
 # Alternatives
 
-* The master could avoid storing the lease state, but we would have to
-  wait for the lease duration at master startup before allowing any
-  schema modifications. There might be some hacks around this. For
-  example, if the master starts up and it is the first master (because
-  no `/lease-master` key existed) then it can avoid
-  waiting. Alternately, the master can persist only the largest lease
+* We could use an existing lock service such as etcd or Zookeeper. The
+  primary benefit would be the builtin watch functionality. We would
+  still need the logic for local reference counts.
+
+* The lease master could avoid storing the lease state, but we would
+  have to wait for the lease duration at master startup before
+  allowing any schema modifications. There might be some hacks around
+  this. For example, The master can persist only the largest lease
   expiration and wait until that expiration passes before allowing
   schema modifications. On the other hand, persisting the lease state
   allows inspection of it via the SQL console.
@@ -279,6 +273,18 @@ leases remain valid until they expire.
   early release leases adds complexity. We could just wait for leases
   to expire, though that would cause a 3-step schema modification to
   take at least 10m to complete.
+
+* We could avoid having a lease master. Nodes would add/remove leases
+  directly to/from the `leaseTable`. Publish would require some sort
+  of conditional put on the new version. Watching would be replaced by
+  polling. While this seems feasible, it also seems quite a bit more
+  subtle than a centralized coordinator for leases for a table.
+
+* We could continue to distribute descriptors using gossip and add
+  some sort of high-priority flag to indicate that we want to skip the
+  current 2s/hop delay in gossip. This would replace the watch
+  mechanism for discovery of new descriptors, though we would still
+  need a watch mechanism for discovery of `DEAD` descriptors.
 
 # Unresolved questions
 
@@ -296,6 +302,10 @@ leases remain valid until they expire.
   aborted. So the question becomes how common are operations that will
   take longer than `leaseDuration/2` and how problematic is it if they
   are aborted?
+
+* How to direct RPCs to the leader for a particular range? The table
+  leasing code is SQL specific, but all existing special handling for
+  leader operations happens in `storage`.
 
 * Do we have to worry about clock skew? The expiration times are
   significantly above expected cluster clock offsets.
