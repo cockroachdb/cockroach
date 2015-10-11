@@ -124,7 +124,6 @@ func (q *rangeGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.Sy
 		if err := rng.rm.RemoveReplica(rng); err != nil {
 			return err
 		}
-		// TODO(bdarnell): update Destroy to leave tombstones for removed ranges (#768)
 		// TODO(bdarnell): add some sort of locking to prevent the range
 		// from being recreated while the underlying data is being destroyed.
 		if err := rng.Destroy(); err != nil {

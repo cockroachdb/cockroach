@@ -74,6 +74,8 @@ var (
 	LocalResponseCacheSuffix = []byte("res-")
 	// localRaftLeaderLeaseSuffix is the suffix for the raft leader lease.
 	localRaftLeaderLeaseSuffix = []byte("rfll")
+	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
+	localRaftTombstoneSuffix = []byte("rftb")
 	// localRaftHardStateSuffix is the Suffix for the raft HardState.
 	localRaftHardStateSuffix = []byte("rfth")
 	// localRaftAppliedIndexSuffix is the suffix for the raft applied index.

@@ -835,7 +835,6 @@ func TestProgressWithDownNode(t *testing.T) {
 
 func TestReplicateAddAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(bdarnell): #768")
 
 	// Run the test twice, once adding the replacement before removing
 	// the downed node, and once removing the downed node first.
@@ -1133,7 +1132,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // number of repetitions adds an unacceptable amount of test runtime).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(bdarnell): #768")
+	t.Skip("TODO(bdarnell): fix TestRaftRemoveRace")
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
@@ -1279,4 +1278,90 @@ func TestStoreRangeRebalance(t *testing.T) {
 			mtc.stores[1].ForceReplicationScan(t)
 		}
 	}
+}
+
+// TestReplicateRogueRemovedNode ensures that a rogue removed node
+// (i.e. a node that has been removed from the range but doesn't know
+// it yet because it was down or partitioned away when it happened)
+// cannot cause other removed nodes to recreate their ranges.
+func TestReplicateRogueRemovedNode(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	// First put the range on all three nodes.
+	raftID := roachpb.RangeID(1)
+	mtc.replicateRange(raftID, 0, 1, 2)
+
+	// Put some data in the range so we'll have something to test for.
+	incArgs := incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for all nodes to catch up.
+	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{5, 5, 5})
+
+	// Stop node 2; while it is down remove the range from nodes 2 and 1.
+	mtc.stopStore(2)
+	mtc.unreplicateRange(raftID, 0, 2)
+	mtc.unreplicateRange(raftID, 0, 1)
+
+	// Make a write on node 0; this will not be replicated because 0 is the only node left.
+	incArgs = incrementArgs([]byte("a"), 11)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for the range to be GC'd on node 1.
+	mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration+
+		storage.RangeGCQueueInactivityThreshold) + 1)
+	mtc.stores[1].ForceRangeGCScan(t)
+
+	// Store 0 has two writes, 1 has erased everything, and 2 still has the first write.
+	mtc.waitForValues(roachpb.Key("a"), time.Second, []int64{16, 0, 5})
+
+	// Bring node 2 back up.
+	mtc.restartStore(2)
+
+	// Try to issue a command on node 2. It should not be able to commit
+	// (so we add it asynchronously).
+	startWG := sync.WaitGroup{}
+	startWG.Add(1)
+	finishWG := sync.WaitGroup{}
+	finishWG.Add(1)
+	go func() {
+		rng, err := mtc.stores[2].GetReplica(raftID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		incArgs := incrementArgs([]byte("a"), 23)
+		startWG.Done()
+		defer finishWG.Done()
+		if _, err := client.SendWrapped(rng, nil, &incArgs); err == nil {
+			t.Fatal("expected error during shutdown")
+		}
+	}()
+	startWG.Wait()
+
+	// Sleep a bit to let the command proposed on node 2 proceed if it's
+	// going to. Prior to the introduction of replica tombstones, this
+	// would lead to split-brain: Node 2 would wake up node 1 and they
+	// would form a quorum, even though node 0 had removed them both.
+	// Now the tombstone on node 1 prevents it from rejoining the rogue
+	// copy of the group.
+	time.Sleep(100 * time.Millisecond)
+	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{16, 0, 5})
+
+	// Run garbage collection on node 2. The lack of an active leader
+	// lease will cause GC to do a consistent range lookup, where it
+	// will see that the range has been moved and delete the old
+	// replica.
+	mtc.stores[2].ForceRangeGCScan(t)
+	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{16, 0, 0})
+
+	// Now that the group has been GC'd, the goroutine that was
+	// attempting to write has finished (with an error).
+	finishWG.Wait()
 }

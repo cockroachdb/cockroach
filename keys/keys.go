@@ -104,6 +104,11 @@ func RaftLeaderLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDKey(rangeID, localRaftLeaderLeaseSuffix, roachpb.RKey{})
 }
 
+// RaftTombstoneKey returns a system-local key for a raft tombstone.
+func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDKey(rangeID, localRaftTombstoneSuffix, roachpb.RKey{})
+}
+
 // RaftLastIndexKey returns a system-local key for a raft last index.
 func RaftLastIndexKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDKey(rangeID, localRaftLastIndexSuffix, roachpb.RKey{})
