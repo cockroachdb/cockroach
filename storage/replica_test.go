@@ -782,20 +782,25 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 
-	var hs [3]roachpb.Header
-
 	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
+	h := roachpb.Header{Txn: txn}
+
 	req1 := putArgs(key, []byte("foo"))
-	hs[1].Txn = txn
-
-	req2, h2 := endTxnArgs(txn, true /* commit */)
-	hs[2] = h2
+	req2, _ := endTxnArgs(txn, true /* commit */)
 	req2.Intents = []roachpb.Intent{{Key: key}}
-
 	req3 := getArgs(key)
 
-	for i, req := range []roachpb.Request{&req1, &req2, &req3} {
-		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), hs[i], req); err != nil {
+	testCases := []struct {
+		req roachpb.Request
+		h   roachpb.Header
+	}{
+		{&req1, h},
+		{&req2, h},
+		{&req3, roachpb.Header{}},
+	}
+
+	for i, test := range testCases {
+		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), test.h, test.req); err != nil {
 			t.Fatal(err)
 		}
 
