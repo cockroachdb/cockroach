@@ -360,7 +360,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 			Replica:    *replica,
 		},
 	}
-	ba := &roachpb.BatchRequest{}
+	ba := roachpb.BatchRequest{}
 	ba.RangeID = desc.RangeID
 	ba.CmdID = roachpb.ClientCmdID{
 		WallTime: r.rm.Clock().Now().WallTime,
@@ -567,10 +567,10 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		br, err = r.addAdminCmd(ctx, ba)
 	} else if ba.IsReadOnly() {
 		defer trace.Epoch("read-only path")()
-		br, err = r.addReadOnlyCmd(ctx, &ba)
+		br, err = r.addReadOnlyCmd(ctx, ba)
 	} else if ba.IsWrite() {
 		defer trace.Epoch("read-write path")()
-		br, err = r.addWriteCmd(ctx, &ba, nil)
+		br, err = r.addWriteCmd(ctx, ba, nil)
 	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
@@ -664,7 +664,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
 
 // endCmds removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
-func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, err error) {
+func (r *Replica) endCmds(cmdKeys []interface{}, ba roachpb.BatchRequest, err error) {
 	r.Lock()
 	// Only update the timestamp cache if the command succeeded and we're not
 	// doing inconsistent ops (in which case the ops are always read-only).
@@ -729,14 +729,14 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Replica) addReadOnlyCmd(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 	header := ba.Header
 	trace := tracer.FromCtx(ctx)
 
 	// Add the read to the command queue to gate subsequent
 	// overlapping commands until this command completes.
 	qDone := trace.Epoch("command queue")
-	cmdKeys, err := r.beginCmds(ba)
+	cmdKeys, err := r.beginCmds(&ba)
 	qDone()
 	if err != nil {
 		return nil, err
@@ -773,7 +773,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba *roachpb.BatchRequest) 
 // error returned. If a WaitGroup is supplied, it is signaled when the command
 // enters Raft or the function returns with a preprocessing error, whichever
 // happens earlier.
-func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg *sync.WaitGroup) (*roachpb.BatchResponse, error) {
+func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *sync.WaitGroup) (*roachpb.BatchResponse, error) {
 	signal := func() {
 		if wg != nil {
 			wg.Done()
@@ -793,7 +793,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg 
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
 	qDone := trace.Epoch("command queue")
-	cmdKeys, err := r.beginCmds(ba)
+	cmdKeys, err := r.beginCmds(&ba)
 	qDone()
 	if err != nil {
 		return nil, err
@@ -866,7 +866,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba *roachpb.BatchRequest, wg 
 // initializes a client command ID if one hasn't been. It then
 // proposes the command to Raft and returns the error channel and
 // pending command struct for receiving.
-func (r *Replica) proposeRaftCommand(ctx context.Context, ba *roachpb.BatchRequest) (<-chan error, *pendingCmd) {
+func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchRequest) (<-chan error, *pendingCmd) {
 	pendingCmd := &pendingCmd{
 		ctx:  ctx,
 		done: make(chan roachpb.ResponseWithError, 1),
@@ -881,7 +881,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba *roachpb.BatchReque
 	raftCmd := roachpb.RaftCommand{
 		RangeID:       desc.RangeID,
 		OriginReplica: *replica,
-		Cmd:           *ba,
+		Cmd:           ba,
 	}
 	cmdID := ba.GetOrCreateCmdID(r.rm.Clock().PhysicalNow())
 	idKey := makeCmdIDKey(cmdID)
@@ -921,7 +921,7 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roach
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
-	br, err := r.applyRaftCommand(ctx, index, raftCmd.OriginReplica, &raftCmd.Cmd)
+	br, err := r.applyRaftCommand(ctx, index, raftCmd.OriginReplica, raftCmd.Cmd)
 	err = r.maybeSetCorrupt(err)
 	execDone()
 	if err != nil {
@@ -942,7 +942,7 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roach
 // When certain critical operations fail, a replicaCorruptionError may be
 // returned and must be handled by the caller.
 func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originReplica roachpb.ReplicaDescriptor,
-	ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 	if index <= 0 {
 		log.Fatalc(ctx, "raft command index is <= 0")
 	}
@@ -999,7 +999,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
 func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, originReplica roachpb.ReplicaDescriptor,
-	ba *roachpb.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *roachpb.BatchResponse, []intentsWithArg, error) {
+	ba roachpb.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *roachpb.BatchResponse, []intentsWithArg, error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.rm.Engine().NewBatch()
 
@@ -1100,7 +1100,7 @@ type intentsWithArg struct {
 	intents []roachpb.Intent
 }
 
-func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, []intentsWithArg, error) {
+func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roachpb.BatchRequest) (*roachpb.BatchResponse, []intentsWithArg, error) {
 	br := &roachpb.BatchResponse{}
 	br.Timestamp = ba.Timestamp
 	var intents []intentsWithArg
@@ -1427,7 +1427,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 	trace.Event("resolving intents [async]")
 
 	var reqsRemote []roachpb.Request
-	baLocal := &roachpb.BatchRequest{}
+	baLocal := roachpb.BatchRequest{}
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
 		var resolveArgs roachpb.Request

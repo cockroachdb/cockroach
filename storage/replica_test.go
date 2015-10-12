@@ -279,7 +279,7 @@ func TestRangeContains(t *testing.T) {
 }
 
 func setLeaderLease(t *testing.T, r *Replica, l *roachpb.Lease) {
-	args := &roachpb.BatchRequest{}
+	args := roachpb.BatchRequest{}
 	args.Add(&roachpb.LeaderLeaseRequest{Lease: *l})
 	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args)
 	var err error
@@ -408,7 +408,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	})
 
 	// Submit a proposal to Raft.
-	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), &ba)
+	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
 	if err := <-errChan; err != nil {
 		t.Fatal(err)
 	}
@@ -719,7 +719,7 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 			StoreID:   2,
 		},
 	}
-	args := &roachpb.BatchRequest{}
+	args := roachpb.BatchRequest{}
 	args.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
 	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), args)
 	var err error
