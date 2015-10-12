@@ -70,6 +70,19 @@ func (r *Range) addReplica(s *Store) {
 	}
 }
 
+// removeReplica removes an existing replica from the passed in store. It
+// removes it from both the range descriptor and the store map.
+func (r *Range) removeReplica(s *Store) {
+	var updatedReplicas []roachpb.ReplicaDescriptor
+	for _, replica := range r.desc.Replicas {
+		if replica.StoreID != s.desc.StoreID {
+			updatedReplicas = append(updatedReplicas, replica)
+		}
+	}
+	r.desc.Replicas = updatedReplicas
+	delete(r.replicas, s.desc.StoreID)
+}
+
 // getStoreIDs returns the list of all stores where this range has replicas.
 func (r *Range) getStoreIDs() []roachpb.StoreID {
 	var storeIDs []roachpb.StoreID
@@ -109,6 +122,16 @@ func (r *Range) getAllocateTarget() (roachpb.StoreID, error) {
 		return 0, err
 	}
 	return newStore.StoreID, nil
+}
+
+// getRemoveTarget calls removeTarget on the allocator and returns the storeID
+// that is the best candidate for removal.
+func (r *Range) getRemoveTarget() (roachpb.StoreID, error) {
+	removeTarget, err := r.allocator.RemoveTarget(r.desc.Replicas)
+	if err != nil {
+		return 0, err
+	}
+	return removeTarget.StoreID, nil
 }
 
 // String returns a human readable string with details about the range.

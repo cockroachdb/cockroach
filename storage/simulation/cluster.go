@@ -281,9 +281,15 @@ func (c *Cluster) performActions() {
 				usedRanges[topRangeID] = storeID
 				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREPAIR\n", c.epoch, storeID, topRangeID)
 			case storage.AllocatorRemove:
-				// TODO(bram): implement this.
+				removeStoreID, err := r.getRemoveTarget()
+				if err != nil {
+					fmt.Fprintf(c.actionWriter, "%d:\tError: %s\n", c.epoch, err)
+					continue
+				}
+				r.removeReplica(c.stores[removeStoreID])
 				usedRanges[topRangeID] = storeID
-				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREMOVE\n", c.epoch, storeID, topRangeID)
+				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREMOVE:%d\n",
+					c.epoch, storeID, topRangeID, removeStoreID)
 			case storage.AllocatorNoop:
 				if topReplica.rebalance {
 					// TODO(bram): implement this.
