@@ -27,8 +27,8 @@ module AdminViews {
     import StoreStatus = Models.Proto.StoreStatus;
     let storeStatuses: Models.Status.Stores = new Models.Status.Stores();
 
-    function _storeMetric(storeId: string, metric: string): string {
-      return "cr.store." + metric + "." + storeId;
+    function _storeMetric(metric: string): string {
+      return "cr.store." + metric;
     }
 
     /**
@@ -177,42 +177,48 @@ module AdminViews {
           this._query = Metrics.NewQuery();
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.Avg(_storeMetric(storeId, "keycount"))
+              Metrics.Select.Avg(_storeMetric("keycount"))
+                .sources([storeId])
                 .title("Key Count")
               )
               .label("Count")
             );
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.Avg(_storeMetric(storeId, "livecount"))
+              Metrics.Select.Avg(_storeMetric("livecount"))
+                .sources([storeId])
                 .title("Live Value Count")
               )
               .label("Count")
             );
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.Avg(_storeMetric(storeId, "valcount"))
+              Metrics.Select.Avg(_storeMetric("valcount"))
+                .sources([storeId])
                 .title("Total Value Count")
               )
               .label("Count")
             );
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.Avg(_storeMetric(storeId, "intentcount"))
+              Metrics.Select.Avg(_storeMetric("intentcount"))
+                .sources([storeId])
                 .title("Intent Count")
               )
               .label("Count")
             );
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.Avg(_storeMetric(storeId, "ranges"))
+              Metrics.Select.Avg(_storeMetric("ranges"))
+                .sources([storeId])
                 .title("Range Count")
               )
               .label("Count")
             );
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.Avg(_storeMetric(storeId, "livebytes"))
+              Metrics.Select.Avg(_storeMetric("livebytes"))
+                .sources([storeId])
                 .title("Live Bytes")
               )
               .label("Bytes")

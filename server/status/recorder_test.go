@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -41,7 +42,10 @@ func (a byTimeAndName) Less(i, j int) bool {
 	if a[i].Name != a[j].Name {
 		return a[i].Name < a[j].Name
 	}
-	return a[i].Datapoints[0].TimestampNanos < a[j].Datapoints[0].TimestampNanos
+	if a[i].Datapoints[0].TimestampNanos != a[j].Datapoints[0].TimestampNanos {
+		return a[i].Datapoints[0].TimestampNanos < a[j].Datapoints[0].TimestampNanos
+	}
+	return a[i].Source < a[j].Source
 }
 
 var _ sort.Interface = byTimeAndName{}
@@ -205,7 +209,8 @@ func TestNodeStatusRecorder(t *testing.T) {
 
 	generateNodeData := func(nodeId int, name string, time, val int64) ts.TimeSeriesData {
 		return ts.TimeSeriesData{
-			Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, roachpb.StoreID(nodeId)),
+			Name:   fmt.Sprintf(nodeTimeSeriesNameFmt, name),
+			Source: strconv.FormatInt(int64(nodeId), 10),
 			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: time,
@@ -217,7 +222,8 @@ func TestNodeStatusRecorder(t *testing.T) {
 
 	generateStoreData := func(storeId int, name string, time, val int64) ts.TimeSeriesData {
 		return ts.TimeSeriesData{
-			Name: fmt.Sprintf(storeTimeSeriesNameFmt, name, roachpb.StoreID(storeId)),
+			Name:   fmt.Sprintf(storeTimeSeriesNameFmt, name),
+			Source: strconv.FormatInt(int64(storeId), 10),
 			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: time,
@@ -278,7 +284,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 	sort.Sort(byTimeAndName(actual))
 	sort.Sort(byTimeAndName(expected))
 	if a, e := actual, expected; !reflect.DeepEqual(a, e) {
-		t.Errorf("recorder did not yield expected time series collection; expected %v, got %v", e, a)
+		t.Errorf("recorder did not yield expected time series collection; expected:\n %v, got:\n %v", e, a)
 	}
 
 	expectedNodeSummary := &NodeStatus{
@@ -329,9 +335,9 @@ func TestNodeStatusRecorder(t *testing.T) {
 	sort.Sort(byStoreDescID(storeSummaries))
 	sort.Sort(byStoreID(nodeSummary.StoreIDs))
 	if a, e := nodeSummary, expectedNodeSummary; !reflect.DeepEqual(a, e) {
-		t.Errorf("recorder did not produce expected NodeSummary; expected %v, got %v", e, a)
+		t.Errorf("recorder did not produce expected NodeSummary; expected:\n %v\n got:\n %v", e, a)
 	}
 	if a, e := storeSummaries, expectedStoreSummaries; !reflect.DeepEqual(a, e) {
-		t.Errorf("recorder did not produce expected StoreSummaries; expected %v, got %v", e, a)
+		t.Errorf("recorder did not produce expected StoreSummaries; expected:\n %v, got:\n %v", e, a)
 	}
 }

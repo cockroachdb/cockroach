@@ -239,6 +239,7 @@ module Models {
      */
     export interface QueryRequest {
       name: string;
+      sources: string[];
       aggregator: QueryAggregator;
     }
 

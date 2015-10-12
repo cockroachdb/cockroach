@@ -29,8 +29,8 @@ module AdminViews {
 
     let nodeStatuses: Models.Status.Nodes = new Models.Status.Nodes();
 
-    function _nodeMetric(nodeId: string, metric: string): string {
-      return "cr.node." + metric + "." + nodeId;
+    function _nodeMetric(metric: string): string {
+      return "cr.node." + metric;
     }
 
     /**
@@ -175,13 +175,15 @@ module AdminViews {
           this._query = Metrics.NewQuery();
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric(nodeId, "calls.success"))
+              Metrics.Select.AvgRate(_nodeMetric("calls.success"))
+                .sources([nodeId])
                 .title("Successful Calls")
               )
               .label("Count / 10 sec."));
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric(nodeId, "calls.error"))
+              Metrics.Select.AvgRate(_nodeMetric("calls.error"))
+                .sources([nodeId])
                 .title("Error Calls")
               )
               .label("Count / 10 sec."));
