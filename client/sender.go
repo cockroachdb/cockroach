@@ -94,29 +94,17 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.Header, args 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ba, unwrap := func(args roachpb.Request) (*roachpb.BatchRequest, func(*roachpb.BatchResponse) roachpb.Response) {
-		ba := &roachpb.BatchRequest{}
-		ba.Header = h
-		ba.Add(args)
-		return ba, func(br *roachpb.BatchResponse) roachpb.Response {
-			unwrappedReply := br.Responses[0].GetInner()
-			// The ReplyTxn is propagated from one response to the next request,
-			// and we adopt the mechanism that whenever the Txn changes, it needs
-			// to be set in the reply, for example to ratchet up the transaction
-			// timestamp on writes when necessary.
-			// This is internally necessary to sequentially execute the batch,
-			// so it makes some sense to take the burden of updating the Txn
-			// from TxnCoordSender - it will only need to act on retries/aborts
-			// in the future.
-			unwrappedReply.Header().Txn = br.Txn
-			return unwrappedReply
-		}
-	}(args)
-	br, pErr := sender.Send(ctx, *ba)
+	ba := roachpb.BatchRequest{}
+	ba.Header = h
+	ba.Add(args)
+
+	br, pErr := sender.Send(ctx, ba)
 	if err := pErr.GoError(); err != nil {
 		return nil, err
 	}
-	return unwrap(br), nil
+	unwrappedReply := br.Responses[0].GetInner()
+	unwrappedReply.Header().Txn = br.Txn
+	return unwrappedReply, nil
 }
 
 // SendWrapped is identical to SendWrappedAt with a zero header.
