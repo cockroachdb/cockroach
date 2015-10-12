@@ -114,12 +114,11 @@ func (c *Cluster) addNewNodeWithStore() {
 func (c *Cluster) addStore(nodeID roachpb.NodeID, output bool) *Store {
 	n := c.nodes[nodeID]
 	s := n.addNewStore()
-	storeID, _ := s.getIDs()
-	c.stores[storeID] = s
+	c.stores[s.desc.StoreID] = s
 
 	// Save a sorted array of store IDs to avoid having to calculate them
 	// multiple times.
-	c.storeIDs = append(c.storeIDs, storeID)
+	c.storeIDs = append(c.storeIDs, s.desc.StoreID)
 	sort.Sort(c.storeIDs)
 
 	if output {

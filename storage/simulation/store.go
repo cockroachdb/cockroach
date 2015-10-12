@@ -50,11 +50,6 @@ func newStore(storeID roachpb.StoreID, nodeDesc roachpb.NodeDescriptor, gossip *
 	}
 }
 
-// getIDs returns the store's ID and its node's IDs.
-func (s *Store) getIDs() (roachpb.StoreID, roachpb.NodeID) {
-	return s.desc.StoreID, s.desc.Node.NodeID
-}
-
 // getDesc returns the store descriptor. The rangeCount is required to
 // determine the current capacity.
 func (s *Store) getDesc(rangeCount int) roachpb.StoreDescriptor {

@@ -60,12 +60,11 @@ func newRange(rangeID roachpb.RangeID, allocator storage.Allocator) *Range {
 // addReplica adds a new replica on the passed in store. It adds it to
 // both the range descriptor and the store map.
 func (r *Range) addReplica(s *Store) {
-	storeID, nodeID := s.getIDs()
 	r.desc.Replicas = append(r.desc.Replicas, roachpb.ReplicaDescriptor{
-		NodeID:  nodeID,
-		StoreID: storeID,
+		NodeID:  s.desc.Node.NodeID,
+		StoreID: s.desc.StoreID,
 	})
-	r.replicas[storeID] = replica{
+	r.replicas[s.desc.StoreID] = replica{
 		store: s,
 	}
 }
