@@ -68,12 +68,15 @@ func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWrit
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	storePool := storage.NewStorePool(g, storage.TestTimeUntilStoreDeadOff, stopper)
 	c := &Cluster{
-		stopper:         stopper,
-		clock:           clock,
-		rpc:             rpcContext,
-		gossip:          g,
-		storePool:       storePool,
-		allocator:       storage.MakeAllocator(storePool, storage.RebalancingOptions{}),
+		stopper:   stopper,
+		clock:     clock,
+		rpc:       rpcContext,
+		gossip:    g,
+		storePool: storePool,
+		allocator: storage.MakeAllocator(storePool, storage.RebalancingOptions{
+			AllowRebalance: true,
+			Deterministic:  true,
+		}),
 		storeGossiper:   gossiputil.NewStoreGossiper(g),
 		nodes:           make(map[roachpb.NodeID]*Node),
 		stores:          make(map[roachpb.StoreID]*Store),
@@ -163,15 +166,16 @@ func (c *Cluster) splitRange(rangeID roachpb.RangeID) {
 	newRange.splitRange(originalRange)
 }
 
-// runEpoch steps through a single instance of the simulator. Each epoch
-// performs the following steps:
+// runEpoch steps through a single instance of the simulator. Returns true if no
+// actions were performed during this epoch.
+// Each epoch performs the following steps:
 // 1) The status of every store is gossiped so the store pool is up to date.
 // 2) Each replica on every range calls the allocator to determine if there are
 //    any actions required.
 // 3) The replica on each range with the highest priority executes it's action.
 // 4) The rangesByStore map is recalculated.
 // 5) The current status of the cluster is output.
-func (c *Cluster) runEpoch() {
+func (c *Cluster) runEpoch() bool {
 	c.epoch++
 
 	// Gossip all the store updates.
@@ -183,13 +187,15 @@ func (c *Cluster) runEpoch() {
 	c.prepareActions()
 
 	// Execute the determined operations.
-	c.performActions()
+	stable := c.performActions()
 
 	// Recalculate the ranges IDs by store map.
 	c.calculateRangeIDsByStore()
 
 	// Output the update.
 	c.OutputEpoch()
+
+	return stable
 }
 
 // gossipStores gossips all the most recent status for all stores.
@@ -211,7 +217,9 @@ func (c *Cluster) prepareActions() {
 			replica.action, replica.priority = r.allocator.ComputeAction(r.zone, &r.desc)
 			if replica.action == storage.AllocatorNoop {
 				replica.rebalance = r.allocator.ShouldRebalance(storeID)
-				replica.priority = 0
+				// Set the priority to 1 so that rebalances will occur in
+				// performActions.
+				replica.priority = 1
 			} else {
 				replica.rebalance = false
 			}
@@ -220,8 +228,9 @@ func (c *Cluster) prepareActions() {
 	}
 }
 
-// performActions performs a single action, if required, for each range.
-func (c *Cluster) performActions() {
+// performActions performs a single action, if required, for each range. Returns
+// true if no actions were performed.
+func (c *Cluster) performActions() bool {
 	// Once a store has started performing an action on a range, it "locks" the
 	// range and any subsequent store that tries to perform another action
 	// on the range will encounter a conflict and forfeit its action for the
@@ -231,6 +240,7 @@ func (c *Cluster) performActions() {
 	// succeeds. In a real cluster, the transaction with the higher
 	// transactional priority will succeed and the others will abort.
 	usedRanges := make(map[roachpb.RangeID]roachpb.StoreID)
+	stable := true
 	// Each store can perform a single action per epoch.
 	for _, storeID := range c.storeIDs {
 		// Find the range with the highest priority action for the replica on
@@ -266,6 +276,7 @@ func (c *Cluster) performActions() {
 			r := c.ranges[topRangeID]
 			switch topReplica.action {
 			case storage.AllocatorAdd:
+				stable = false
 				newStoreID, err := r.getAllocateTarget()
 				if err != nil {
 					fmt.Fprintf(c.actionWriter, "%d:\tError: %s\n", c.epoch, err)
@@ -276,10 +287,12 @@ func (c *Cluster) performActions() {
 				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tADD:%d\n",
 					c.epoch, storeID, topRangeID, newStoreID)
 			case storage.AllocatorRemoveDead:
+				stable = false
 				// TODO(bram): implement this.
 				usedRanges[topRangeID] = storeID
 				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREPAIR\n", c.epoch, storeID, topRangeID)
 			case storage.AllocatorRemove:
+				stable = false
 				removeStoreID, err := r.getRemoveTarget()
 				if err != nil {
 					fmt.Fprintf(c.actionWriter, "%d:\tError: %s\n", c.epoch, err)
@@ -291,6 +304,7 @@ func (c *Cluster) performActions() {
 					c.epoch, storeID, topRangeID, removeStoreID)
 			case storage.AllocatorNoop:
 				if topReplica.rebalance {
+					stable = false
 					// TODO(bram): implement this.
 					usedRanges[topRangeID] = storeID
 					fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREBLANCE\n", c.epoch, storeID, topRangeID)
@@ -298,6 +312,7 @@ func (c *Cluster) performActions() {
 			}
 		}
 	}
+	return stable
 }
 
 // calculateRangeIDsByStore fills in the list of range ids mapped to each
