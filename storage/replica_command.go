@@ -1482,6 +1482,7 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 		if existingRep.NodeID == replica.NodeID &&
 			existingRep.StoreID == replica.StoreID {
 			found = i
+			replica.ReplicaID = existingRep.ReplicaID
 			break
 		}
 	}

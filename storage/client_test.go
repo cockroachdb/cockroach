@@ -223,10 +223,15 @@ func (m *multiTestContext) Stop() {
 		stoppers := append([]*stop.Stopper{m.clientStopper, m.transportStopper}, m.stoppers...)
 		// Quiesce all the stoppers so that we can stop all stoppers in unison.
 		for _, s := range stoppers {
-			s.Quiesce()
+			// Stoppers may be nil if stopStore has been called without restartStore.
+			if s != nil {
+				s.Quiesce()
+			}
 		}
 		for _, s := range stoppers {
-			s.Stop()
+			if s != nil {
+				s.Stop()
+			}
 		}
 		for _, s := range m.engineStoppers {
 			s.Stop()

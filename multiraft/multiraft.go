@@ -44,10 +44,6 @@ const (
 	// message/snapshot descriptors (whose necessity is short-lived but
 	// cannot be recovered through other means if evicted)?
 	maxReplicaDescCacheSize = 1000
-
-	// InvalidReplicaID is passed to the GroupStorage method when a
-	// replica ID cannot be determined.
-	InvalidReplicaID = roachpb.ReplicaID(-1)
 )
 
 // An ErrGroupDeleted is returned for commands which are pending while their
@@ -385,6 +381,10 @@ func (m *MultiRaft) ChangeGroupMembership(groupID roachpb.RangeID, commandID str
 		log.Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
 	}
 	ch := make(chan error, 1)
+	if err := replica.Validate(); err != nil {
+		ch <- err
+		return ch
+	}
 	m.proposalChan <- &proposal{
 		groupID:   groupID,
 		commandID: commandID,
@@ -996,7 +996,7 @@ func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 				log.Warningf("failed to look up replica ID for range %v (disabling replica ID check): %s",
 					groupID, err)
 			}
-			gwr.replicaID = InvalidReplicaID
+			gwr.replicaID = 0
 		}
 		if !raft.IsEmptyHardState(ready.HardState) {
 			gwr.state = ready.HardState
@@ -1301,6 +1301,9 @@ func (s *state) ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.Rep
 		return rep.(roachpb.ReplicaDescriptor), nil
 	}
 	rep, err := s.Storage.ReplicaDescriptor(groupID, replicaID)
+	if err == nil {
+		err = rep.Validate()
+	}
 	if err == nil {
 		s.replicaDescCache.Add(replicaDescCacheKey{groupID, replicaID}, rep)
 	}

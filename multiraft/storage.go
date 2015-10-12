@@ -44,9 +44,9 @@ type Storage interface {
 	// GroupStorage returns an interface which can be used to access the
 	// storage for the specified group. May return ErrGroupDeleted if
 	// the group cannot be found or if the given replica ID is known to
-	// be out of date. The replicaID may be InvalidReplicaID if the
-	// replica ID is not known; replica-staleness checks should be
-	// disabled in this case.
+	// be out of date. The replicaID may be zero if the replica ID is
+	// not known; replica-staleness checks should be disabled in this
+	// case.
 	GroupStorage(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (WriteableGroupStorage, error)
 
 	ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error)

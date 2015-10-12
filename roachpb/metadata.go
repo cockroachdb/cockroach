@@ -144,7 +144,10 @@ func (r *RangeDescriptor) Validate() error {
 		return util.Errorf("NextReplicaID must be non-zero")
 	}
 	seen := map[ReplicaID]struct{}{}
-	for _, rep := range r.Replicas {
+	for i, rep := range r.Replicas {
+		if err := rep.Validate(); err != nil {
+			return util.Errorf("replica %d is invalid: %s", i, err)
+		}
 		if _, ok := seen[rep.ReplicaID]; ok {
 			return util.Errorf("ReplicaID %d was reused", rep.ReplicaID)
 		}
@@ -153,6 +156,20 @@ func (r *RangeDescriptor) Validate() error {
 			return util.Errorf("ReplicaID %d must be less than NextReplicaID %d",
 				rep.ReplicaID, r.NextReplicaID)
 		}
+	}
+	return nil
+}
+
+// Validate performs some basic validation of the contents of a replica descriptor.
+func (r ReplicaDescriptor) Validate() error {
+	if r.NodeID == 0 {
+		return util.Errorf("NodeID must not be zero")
+	}
+	if r.StoreID == 0 {
+		return util.Errorf("StoreID must not be zero")
+	}
+	if r.ReplicaID == 0 {
+		return util.Errorf("ReplicaID must not be zero")
 	}
 	return nil
 }
