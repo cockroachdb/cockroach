@@ -734,33 +734,33 @@ func (s *state) removeNode(nodeID roachpb.NodeID, g *group) error {
 }
 
 func (s *state) handleMessage(req *RaftMessageRequest) {
+	// We only want to lazily create the group if it's not heartbeat-related;
+	// our heartbeats are coalesced and contain a dummy GroupID.
 	switch req.Message.Type {
 	case raftpb.MsgHeartbeat:
 		s.fanoutHeartbeat(req)
+		return
 	case raftpb.MsgHeartbeatResp:
 		s.fanoutHeartbeatResponse(req)
-	default:
-		s.CacheReplicaDescriptor(req.GroupID, req.FromReplica)
-		s.CacheReplicaDescriptor(req.GroupID, req.ToReplica)
-		// We only want to lazily create the group if it's not heartbeat-related;
-		// our heartbeats are coalesced and contain a dummy GroupID.
-		// TODO(tschottdorf) still shouldn't hurt to move this part outside,
-		// but suddenly tests will start failing. Should investigate.
-		if _, ok := s.groups[req.GroupID]; !ok {
-			if log.V(1) {
-				log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
-			}
-			if err := s.createGroup(req.GroupID, req.ToReplica.ReplicaID); err != nil {
-				log.Warningf("Error creating group %d (in response to incoming message): %s", req.GroupID, err)
-				break
-			}
-		}
+		return
+	}
 
-		if err := s.multiNode.Step(context.Background(), uint64(req.GroupID), req.Message); err != nil {
-			if log.V(4) {
-				log.Infof("node %v: multinode step to group %v failed for message %.200s", s.nodeID, req.GroupID,
-					raft.DescribeMessage(req.Message, s.EntryFormatter))
-			}
+	s.CacheReplicaDescriptor(req.GroupID, req.FromReplica)
+	s.CacheReplicaDescriptor(req.GroupID, req.ToReplica)
+	if _, ok := s.groups[req.GroupID]; !ok {
+		if log.V(1) {
+			log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
+		}
+		if err := s.createGroup(req.GroupID, req.ToReplica.ReplicaID); err != nil {
+			log.Warningf("Error creating group %d (in response to incoming message): %s", req.GroupID, err)
+			return
+		}
+	}
+
+	if err := s.multiNode.Step(context.Background(), uint64(req.GroupID), req.Message); err != nil {
+		if log.V(4) {
+			log.Infof("node %v: multinode step to group %v failed for message %.200s", s.nodeID, req.GroupID,
+				raft.DescribeMessage(req.Message, s.EntryFormatter))
 		}
 	}
 }
