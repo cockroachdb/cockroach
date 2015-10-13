@@ -1132,7 +1132,6 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // number of repetitions adds an unacceptable amount of test runtime).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(bdarnell): fix TestRaftRemoveRace")
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
@@ -1364,4 +1363,44 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// Now that the group has been GC'd, the goroutine that was
 	// attempting to write has finished (with an error).
 	finishWG.Wait()
+}
+
+func TestReplicateReAddAfterDown(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	// First put the range on all three nodes.
+	raftID := roachpb.RangeID(1)
+	mtc.replicateRange(raftID, 0, 1, 2)
+
+	// Put some data in the range so we'll have something to test for.
+	incArgs := incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for all nodes to catch up.
+	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{5, 5, 5})
+
+	// Stop node 2; while it is down remove the range from it. Since the node is
+	// down it won't see the removal and clean up its replica.
+	mtc.stopStore(2)
+	mtc.unreplicateRange(raftID, 0, 2)
+
+	// Perform another write.
+	incArgs = incrementArgs([]byte("a"), 11)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{16, 16, 5})
+
+	// Bring it back up and re-add the range.
+	// This re-uses the existing replica but changes its replica ID.
+	mtc.restartStore(2)
+	mtc.replicateRange(raftID, 0, 2)
+
+	// The range should be synced back up.
+	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{16, 16, 16})
 }

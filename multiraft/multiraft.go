@@ -430,7 +430,8 @@ type proposal struct {
 
 // group represents the state of a consensus group.
 type group struct {
-	id roachpb.RangeID
+	groupID   roachpb.RangeID
+	replicaID roachpb.ReplicaID
 
 	// committedTerm is the term of the most recently committed entry.
 	committedTerm uint64
@@ -700,7 +701,7 @@ func (s *state) addNode(nodeID roachpb.NodeID, g *group) error {
 	}
 
 	if g != nil {
-		newNode.registerGroup(g.id)
+		newNode.registerGroup(g.groupID)
 		g.nodeIDs = append(g.nodeIDs, nodeID)
 	}
 	return nil
@@ -721,7 +722,7 @@ func (s *state) removeNode(nodeID roachpb.NodeID, g *group) error {
 		}
 	}
 	// TODO(bdarnell): when a node has no more groups, remove it.
-	node.unregisterGroup(g.id)
+	node.unregisterGroup(g.groupID)
 
 	// Cancel any outstanding proposals.
 	if nodeID == s.nodeID {
@@ -747,12 +748,37 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 
 	s.CacheReplicaDescriptor(req.GroupID, req.FromReplica)
 	s.CacheReplicaDescriptor(req.GroupID, req.ToReplica)
-	if _, ok := s.groups[req.GroupID]; !ok {
+	if g, ok := s.groups[req.GroupID]; ok {
+		if g.replicaID > req.ToReplica.ReplicaID {
+			log.Warningf("node %v: got message for group %s with stale replica ID %s (expected %s)",
+				s.nodeID, req.GroupID, req.ToReplica.ReplicaID, g.replicaID)
+			return
+		} else if g.replicaID < req.ToReplica.ReplicaID {
+			// The message has a newer ReplicaID than we know about. This
+			// means that this node has been removed from a group and
+			// re-added to it, before our GC process was able to remove the
+			// remnants of the old group.
+			log.Infof("node %v: got message for group %s with newer replica ID (%s vs %s), recreating group",
+				s.nodeID, req.GroupID, req.ToReplica.ReplicaID, g.replicaID)
+			// TODO(bdarnell): remove second argument to removeGroup.
+			if err := s.removeGroup(req.GroupID, nil); err != nil {
+				log.Warningf("Error removing group %d (in response to incoming message): %s",
+					req.GroupID, err)
+				return
+			}
+			if err := s.createGroup(req.GroupID, req.ToReplica.ReplicaID); err != nil {
+				log.Warningf("Error recreating group %d (in response to incoming message): %s",
+					req.GroupID, err)
+				return
+			}
+		}
+	} else {
 		if log.V(1) {
 			log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
 		}
 		if err := s.createGroup(req.GroupID, req.ToReplica.ReplicaID); err != nil {
-			log.Warningf("Error creating group %d (in response to incoming message): %s", req.GroupID, err)
+			log.Warningf("Error creating group %d (in response to incoming message): %s",
+				req.GroupID, err)
 			return
 		}
 	}
@@ -771,7 +797,11 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 // messages (in which case the replicaID comes from the incoming
 // message, since nothing is on disk yet).
 func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) error {
-	if _, ok := s.groups[groupID]; ok {
+	if g, ok := s.groups[groupID]; ok {
+		if replicaID != 0 && g.replicaID != replicaID {
+			return util.Errorf("cannot create group %s with replica ID %s; already exists with replica ID %s",
+				groupID, replicaID, g.replicaID)
+		}
 		return nil
 	}
 	if log.V(3) {
@@ -796,11 +826,13 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 		if repDesc.StoreID == s.storeID {
 			if replicaID == 0 {
 				replicaID = repDesc.ReplicaID
-			} else if replicaID != repDesc.ReplicaID {
+			} else if replicaID < repDesc.ReplicaID {
+				// Note that our ConfState may be stale, so if we were given a
+				// replica ID we only consult the ConfState to ensure we don't
+				// regress.
 				return util.Errorf("inconsistent replica ID: passed %d, but found %s by scanning ConfState for store %s",
 					replicaID, repDesc.ReplicaID, s.storeID)
 			}
-			replicaID = repDesc.ReplicaID
 			break
 		}
 	}
@@ -837,8 +869,9 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 		return err
 	}
 	g := &group{
-		id:      groupID,
-		pending: map[string]*proposal{},
+		groupID:   groupID,
+		replicaID: replicaID,
+		pending:   map[string]*proposal{},
 	}
 	s.groups[groupID] = g
 
@@ -1136,7 +1169,7 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 		fromReplica.StoreID = roachpb.StoreID(msg.From)
 	} else {
 		// Regular message: To/From fields are replica IDs.
-		groupID = g.id
+		groupID = g.groupID
 		var err error
 		toReplica, err = s.ReplicaDescriptor(groupID, roachpb.ReplicaID(msg.To))
 		if err != nil {
@@ -1192,9 +1225,9 @@ func (s *state) maybeSendLeaderEvent(groupID roachpb.RangeID, g *group, ready *r
 			if ready.SoftState.Lead == 0 {
 				g.leader = roachpb.ReplicaDescriptor{}
 			} else {
-				if repl, err := s.ReplicaDescriptor(g.id, roachpb.ReplicaID(ready.SoftState.Lead)); err != nil {
+				if repl, err := s.ReplicaDescriptor(g.groupID, roachpb.ReplicaID(ready.SoftState.Lead)); err != nil {
 					log.Warningf("node %s: failed to look up address of replica %d in group %d: %s",
-						s.nodeID, ready.SoftState.Lead, g.id, err)
+						s.nodeID, ready.SoftState.Lead, g.groupID, err)
 					g.leader = roachpb.ReplicaDescriptor{}
 				} else {
 					g.leader = repl
