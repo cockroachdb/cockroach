@@ -26,6 +26,7 @@ module Components {
      * series query.
      */
     export module LineGraph {
+      import MithrilElementConfig = _mithril.MithrilElementConfig;
       /**
        * ViewModel is the model for a specific LineGraph - in addition to
        * the backing Query object, it also maintains other per-component
@@ -74,7 +75,7 @@ module Components {
          * after it is added to DOM. We use NVD3 to draw the data from
          * the query.
          */
-        drawGraph: any = (element: Element, isInitialized: boolean, context: any) => {
+        drawGraph: MithrilElementConfig = (element: Element, isInitialized: boolean, context: any) => {
           if (!isInitialized) {
             nv.addGraph(this.chart);
           }
