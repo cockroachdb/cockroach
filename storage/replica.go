@@ -40,9 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/gogo/protobuf/proto"
 )
@@ -140,39 +138,6 @@ type pendingCmd struct {
 	done chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
 
-// A RangeManager is an interface satisfied by Store through which ranges
-// contained in the store can access the methods required for splitting.
-// TODO(tschottdorf): consider moving LocalSender to storage, in which
-// case this can be unexported.
-type RangeManager interface {
-	// Accessors for shared state.
-	ClusterID() string
-	StoreID() roachpb.StoreID
-	Clock() *hlc.Clock
-	Engine() engine.Engine
-	DB() *client.DB
-	allocator() Allocator
-	Gossip() *gossip.Gossip
-	splitQueue() *splitQueue
-	replicaGCQueue() *replicaGCQueue
-	Stopper() *stop.Stopper
-	EventFeed() StoreEventFeed
-	Context(context.Context) context.Context
-	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.Header, roachpb.PushTxnType) error
-
-	// Range and replica manipulation methods.
-	LookupReplica(start, end roachpb.RKey) *Replica
-	GetReplica(rangeID roachpb.RangeID) (*Replica, error)
-	MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error
-	NewRangeDescriptor(start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error)
-	NewSnapshot() engine.Engine
-	ProposeRaftCommand(cmdIDKey, roachpb.RaftCommand) <-chan error
-	RemoveReplica(rng *Replica) error
-	Tracer() *tracer.Tracer
-	SplitRange(origRng, newRng *Replica) error
-	processRangeDescriptorUpdate(rng *Replica) error
-}
-
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -181,9 +146,9 @@ type RangeManager interface {
 // as appropriate.
 type Replica struct {
 	desc     unsafe.Pointer // Atomic pointer for *roachpb.RangeDescriptor
-	rm       RangeManager   // Makes some store methods available
-	stats    *rangeStats    // Range statistics
-	maxBytes int64          // Max bytes before split.
+	rm       *Store
+	stats    *rangeStats // Range statistics
+	maxBytes int64       // Max bytes before split.
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
@@ -193,6 +158,9 @@ type Replica struct {
 	lease        unsafe.Pointer // Information for leader lease, updated atomically
 	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
 	respCache    *ResponseCache // Provides idempotence for retries
+
+	// proposeRaftCommandFn can be set to mock out the propose operation.
+	proposeRaftCommandFn func(cmdIDKey, roachpb.RaftCommand) <-chan error
 
 	sync.RWMutex                 // Protects the following fields:
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
@@ -216,7 +184,7 @@ type Replica struct {
 var _ client.Sender = &Replica{}
 
 // NewReplica initializes the replica using the given metadata.
-func NewReplica(desc *roachpb.RangeDescriptor, rm RangeManager) (*Replica, error) {
+func NewReplica(desc *roachpb.RangeDescriptor, rm *Store) (*Replica, error) {
 	r := &Replica{
 		rm:          rm,
 		cmdQ:        NewCommandQueue(),
@@ -897,7 +865,12 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 	r.Lock()
 	r.pendingCmds[idKey] = pendingCmd
 	r.Unlock()
-	errChan := r.rm.ProposeRaftCommand(idKey, raftCmd)
+	var errChan <-chan error
+	if r.proposeRaftCommandFn != nil {
+		errChan = r.proposeRaftCommandFn(idKey, raftCmd)
+	} else {
+		errChan = r.rm.ProposeRaftCommand(idKey, raftCmd)
+	}
 
 	return errChan, pendingCmd
 }
