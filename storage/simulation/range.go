@@ -112,7 +112,7 @@ func (r *Range) splitRange(originalRange *Range) {
 	}
 }
 
-// getAllocateTarget calls allocateTarget for the range and returns the top
+// getAllocateTarget calls AllocateTarget for the range and returns the top
 // target store.
 func (r *Range) getAllocateTarget() (roachpb.StoreID, error) {
 	newStore, err := r.allocator.AllocateTarget(r.zone.ReplicaAttrs[0], r.desc.Replicas, true, nil)
@@ -122,14 +122,24 @@ func (r *Range) getAllocateTarget() (roachpb.StoreID, error) {
 	return newStore.StoreID, nil
 }
 
-// getRemoveTarget calls removeTarget on the allocator and returns the storeID
+// getRemoveTarget calls RemoveTarget on the allocator and returns the storeID
 // that is the best candidate for removal.
 func (r *Range) getRemoveTarget() (roachpb.StoreID, error) {
-	removeTarget, err := r.allocator.RemoveTarget(r.desc.Replicas)
+	removeStore, err := r.allocator.RemoveTarget(r.desc.Replicas)
 	if err != nil {
 		return 0, err
 	}
-	return removeTarget.StoreID, nil
+	return removeStore.StoreID, nil
+}
+
+// getAllocateTarget calls RebalanceTarget on the allocator and returns the
+// storeID in which the new range should be added.
+func (r *Range) getRebalanceTarget() *roachpb.StoreID {
+	rebalanceTarget := r.allocator.RebalanceTarget(r.zone.ReplicaAttrs[0], r.desc.Replicas)
+	if rebalanceTarget == nil {
+		return nil
+	}
+	return &rebalanceTarget.StoreID
 }
 
 // String returns a human readable string with details about the range.
