@@ -235,13 +235,13 @@ type Store struct {
 	ctx               StoreContext
 	db                *client.DB
 	engine            engine.Engine   // The underlying key-value store
-	_allocator        Allocator       // Makes allocation decisions
+	allocator         Allocator       // Makes allocation decisions
 	rangeIDAlloc      *idAllocator    // Range ID allocator
 	gcQueue           *gcQueue        // Garbage collection queue
-	_splitQueue       *splitQueue     // Range splitting queue
+	splitQueue        *splitQueue     // Range splitting queue
 	verifyQueue       *verifyQueue    // Checksum verification queue
 	replicateQueue    *replicateQueue // Replication queue
-	_replicaGCQueue   *replicaGCQueue // Replica GC queue
+	replicaGCQueue    *replicaGCQueue // Replica GC queue
 	scanner           *replicaScanner // Replica scanner
 	feed              StoreEventFeed  // Event Feed
 	removeReplicaChan chan removeReplicaOp
@@ -355,7 +355,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		ctx:               ctx,
 		db:                ctx.DB, // TODO(tschottdorf) remove redundancy.
 		engine:            eng,
-		_allocator:        MakeAllocator(ctx.StorePool, ctx.RebalancingOptions),
+		allocator:         MakeAllocator(ctx.StorePool, ctx.RebalancingOptions),
 		replicas:          map[roachpb.RangeID]*Replica{},
 		replicasByKey:     btree.New(64 /* degree */),
 		uninitReplicas:    map[roachpb.RangeID]*Replica{},
@@ -367,11 +367,11 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	// Add range scanner and configure with queues.
 	s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
 	s.gcQueue = newGCQueue(s.ctx.Gossip)
-	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
+	s.splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
-	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock, s.ctx.RebalancingOptions)
-	s._replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip, s.GroupLocker())
-	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._replicaGCQueue)
+	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.RebalancingOptions)
+	s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip, s.GroupLocker())
+	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue)
 
 	return s
 }
@@ -641,7 +641,7 @@ func (s *Store) systemGossipUpdate(cfg *config.SystemConfig) {
 		if zone, err := cfg.GetZoneConfigForKey(rng.Desc().StartKey); err == nil {
 			rng.SetMaxBytes(zone.RangeMaxBytes)
 		}
-		s.splitQueue().MaybeAdd(rng, s.ctx.Clock.Now())
+		s.splitQueue.MaybeAdd(rng, s.ctx.Clock.Now())
 	}
 }
 
@@ -665,7 +665,7 @@ func (s *Store) GossipStore() {
 // DisableReplicaGCQueue disables or enables the replica GC queue.
 // Exposed only for testing.
 func (s *Store) DisableReplicaGCQueue(disabled bool) {
-	s.replicaGCQueue().SetDisabled(disabled)
+	s.replicaGCQueue.SetDisabled(disabled)
 }
 
 // ForceReplicationScan iterates over all ranges and enqueues any that
@@ -686,7 +686,7 @@ func (s *Store) ForceReplicaGCScan(t util.Tester) {
 	defer s.mu.Unlock()
 
 	for _, r := range s.replicas {
-		s._replicaGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
+		s.replicaGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
 }
 
@@ -850,17 +850,8 @@ func (s *Store) Engine() engine.Engine { return s.engine }
 // DB accessor.
 func (s *Store) DB() *client.DB { return s.ctx.DB }
 
-// Allocator accessor.
-func (s *Store) allocator() Allocator { return s._allocator }
-
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
-
-// splitQueue accessor.
-func (s *Store) splitQueue() *splitQueue { return s._splitQueue }
-
-// replicaGCQueue accessor.
-func (s *Store) replicaGCQueue() *replicaGCQueue { return s._replicaGCQueue }
 
 // Stopper accessor.
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }
