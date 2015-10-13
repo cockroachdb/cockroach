@@ -28,9 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-// TestRangeGCQueueDropReplica verifies that a removed replica is
+// TestReplicaGCQueueDropReplica verifies that a removed replica is
 // immediately cleaned up.
-func TestRangeGCQueueDropReplica(t *testing.T) {
+func TestReplicaGCQueueDropReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	mtc := startMultiTestContext(t, 3)
@@ -53,21 +53,21 @@ func TestRangeGCQueueDropReplica(t *testing.T) {
 	mtc.restartStore(1)
 }
 
-// TestRangeGCQueueDropReplicaOnScan verifies that the range GC queue
+// TestReplicaGCQueueDropReplicaOnScan verifies that the range GC queue
 // removes a range from a store that no longer should have a replica.
-func TestRangeGCQueueDropReplicaGCOnScan(t *testing.T) {
+func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
-	// Disable the range gc queue to prevent direct removal of range.
-	mtc.stores[1].DisableRangeGCQueue(true)
+	// Disable the replica gc queue to prevent direct removal of replica.
+	mtc.stores[1].DisableReplicaGCQueue(true)
 
 	rangeID := roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 0, 1, 2)
 	mtc.unreplicateRange(rangeID, 0, 1)
 
-	// Wait long enough for the direct range GC to have had a chance and been
+	// Wait long enough for the direct replica GC to have had a chance and been
 	// discarded because the queue is disabled.
 	time.Sleep(10 * time.Millisecond)
 	if _, err := mtc.stores[1].GetReplica(rangeID); err != nil {
@@ -75,15 +75,16 @@ func TestRangeGCQueueDropReplicaGCOnScan(t *testing.T) {
 	}
 
 	// Enable the queue.
-	mtc.stores[1].DisableRangeGCQueue(false)
+	mtc.stores[1].DisableReplicaGCQueue(false)
 
-	// Increment the clock's timestamp to make the range GC queue process the range.
-	mtc.manualClock.Increment(int64(storage.RangeGCQueueInactivityThreshold+storage.DefaultLeaderLeaseDuration) + 1)
+	// Increment the clock's timestamp to make the replica GC queue process the range.
+	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold+
+		storage.DefaultLeaderLeaseDuration) + 1)
 
 	// Make sure the range is removed from the store.
 	util.SucceedsWithin(t, time.Second, func() error {
 		store := mtc.stores[1]
-		store.ForceRangeGCScan(t)
+		store.ForceReplicaGCScan(t)
 		if _, err := store.GetReplica(rangeID); !testutils.IsError(err, "range .* was not found") {
 			return util.Errorf("expected range removal: %s", err)
 		}

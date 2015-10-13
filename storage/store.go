@@ -270,8 +270,8 @@ type Store struct {
 	_splitQueue       *splitQueue     // Range splitting queue
 	verifyQueue       *verifyQueue    // Checksum verification queue
 	replicateQueue    replicateQueue  // Replication queue
-	_rangeGCQueue     *rangeGCQueue   // Range GC queue
-	scanner           *replicaScanner // Range scanner
+	_replicaGCQueue   *replicaGCQueue // Replica GC queue
+	scanner           *replicaScanner // Replica scanner
 	feed              StoreEventFeed  // Event Feed
 	removeReplicaChan chan removeReplicaOp
 	proposeChan       chan proposeOp
@@ -395,8 +395,8 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
 	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock, s.ctx.RebalancingOptions)
-	s._rangeGCQueue = newRangeGCQueue(s.db, s.ctx.Gossip)
-	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue)
+	s._replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip)
+	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._replicaGCQueue)
 
 	return s
 }
@@ -687,10 +687,10 @@ func (s *Store) GossipStore() {
 	}
 }
 
-// DisableRangeGCQueue disables or enables the range GC queue.
+// DisableReplicaGCQueue disables or enables the replica GC queue.
 // Exposed only for testing.
-func (s *Store) DisableRangeGCQueue(disabled bool) {
-	s.rangeGCQueue().SetDisabled(disabled)
+func (s *Store) DisableReplicaGCQueue(disabled bool) {
+	s.replicaGCQueue().SetDisabled(disabled)
 }
 
 // ForceReplicationScan iterates over all ranges and enqueues any that
@@ -704,14 +704,14 @@ func (s *Store) ForceReplicationScan(t util.Tester) {
 	}
 }
 
-// ForceRangeGCScan iterates over all ranges and enqueues any that
+// ForceReplicaGCScan iterates over all ranges and enqueues any that
 // may need to be GC'd. Exposed only for testing.
-func (s *Store) ForceRangeGCScan(t util.Tester) {
+func (s *Store) ForceReplicaGCScan(t util.Tester) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for _, r := range s.replicas {
-		s._rangeGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
+		s._replicaGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
 }
 
@@ -884,8 +884,8 @@ func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
 // splitQueue accessor.
 func (s *Store) splitQueue() *splitQueue { return s._splitQueue }
 
-// rangeGCQueue accessor.
-func (s *Store) rangeGCQueue() *rangeGCQueue { return s._rangeGCQueue }
+// replicaGCQueue accessor.
+func (s *Store) replicaGCQueue() *replicaGCQueue { return s._replicaGCQueue }
 
 // Stopper accessor.
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }

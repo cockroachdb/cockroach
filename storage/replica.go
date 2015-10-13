@@ -154,7 +154,7 @@ type RangeManager interface {
 	allocator() Allocator
 	Gossip() *gossip.Gossip
 	splitQueue() *splitQueue
-	rangeGCQueue() *rangeGCQueue
+	replicaGCQueue() *replicaGCQueue
 	Stopper() *stop.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
