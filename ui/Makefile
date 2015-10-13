@@ -97,10 +97,12 @@ $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed .stylint
 	stylint -c .stylintrc $(STYL_ROOT)
 	stylus $(STYL_ROOT)/app.styl \
 	       --compress \
+	       --include-css \
 	       --out $@
 
 $(CSS_DEBUG_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
 	stylus $(STYL_ROOT)/app.styl \
+	       --include-css \
 	       --out $@
 
 $(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
