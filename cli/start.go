@@ -119,6 +119,12 @@ func runStart(_ *cobra.Command, _ []string) {
 	// Default user for servers.
 	context.User = security.NodeUser
 
+	if context.EphemeralSingleNode {
+		// TODO(marc): set this in the zones table when we have an entry
+		// for the default cluster-wide zone config.
+		config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
+	}
+
 	stopper := stop.NewStopper()
 	if context.EphemeralSingleNode {
 		context.Stores = "mem=1073741824"
@@ -147,12 +153,6 @@ func runStart(_ *cobra.Command, _ []string) {
 	if err := s.Start(false); err != nil {
 		log.Errorf("cockroach server exited with error: %s", err)
 		return
-	}
-
-	if context.EphemeralSingleNode {
-		// TODO(marc): set this in the zones table when we have an entry
-		// for the default cluster-wide zone config.
-		config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
 	}
 
 	signalCh := make(chan os.Signal, 1)
