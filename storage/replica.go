@@ -264,7 +264,7 @@ func (r *Replica) String() string {
 // Destroy cleans up all data associated with this range, leaving a tombstone.
 func (r *Replica) Destroy() error {
 	desc := r.Desc()
-	iter := newRangeDataIterator(desc, r.rm.Engine())
+	iter := newReplicaDataIterator(desc, r.rm.Engine())
 	defer iter.Close()
 	batch := r.rm.Engine().NewBatch()
 	defer batch.Close()

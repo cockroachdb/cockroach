@@ -89,7 +89,7 @@ func (vq *verifyQueue) process(now roachpb.Timestamp, rng *Replica,
 	_ *config.SystemConfig) error {
 
 	snap := rng.rm.Engine().NewSnapshot()
-	iter := newRangeDataIterator(rng.Desc(), snap)
+	iter := newReplicaDataIterator(rng.Desc(), snap)
 	defer iter.Close()
 	defer snap.Close()
 

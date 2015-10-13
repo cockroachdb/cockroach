@@ -95,9 +95,9 @@ func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
 	return keys
 }
 
-// TestRangeDataIterator verifies correct operation of iterator if
+// TestReplicaDataIterator verifies correct operation of iterator if
 // a range contains no data and never has.
-func TestRangeDataIteratorEmptyRange(t *testing.T) {
+func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
@@ -114,14 +114,14 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := newRangeDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
+	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		t.Error("expected empty iteration")
 	}
 }
 
-// TestRangeDataIterator creates three ranges {"a"-"b" (pre), "b"-"c"
+// TestReplicaDataIterator creates three ranges {"a"-"b" (pre), "b"-"c"
 // (main test range), "c"-"d" (post)} and fills each with data. It
 // first verifies the contents of the "b"-"c" range, then deletes it
 // and verifies it's empty. Finally, it verifies the pre and post
@@ -135,7 +135,7 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 // the group storage is written to and confuses the iterator test.
 // Setting tc.dormantRaft = true isn't enough since there are two more ranges
 // added below, and those also get started automatically.
-func disabledTestRangeDataIterator(t *testing.T) {
+func disabledTestReplicaDataIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
@@ -166,7 +166,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 	curKeys := createRangeData(tc.rng, t)
 	postKeys := createRangeData(postRng, t)
 
-	iter := newRangeDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
+	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
 	defer iter.Close()
 	i := 0
 	for ; iter.Valid(); iter.Next() {
@@ -197,7 +197,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 	if err := tc.rng.Destroy(); err != nil {
 		t.Fatal(err)
 	}
-	iter = newRangeDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
+	iter = newReplicaDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
 	defer iter.Close()
 	if iter.Valid() {
 		t.Errorf("expected empty iteration; got first key %q", iter.Key())
@@ -211,7 +211,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 		{preRng, preKeys},
 		{postRng, postKeys},
 	} {
-		iter = newRangeDataIterator(test.r.Desc(), test.r.rm.Engine())
+		iter = newReplicaDataIterator(test.r.Desc(), test.r.rm.Engine())
 		defer iter.Close()
 		i = 0
 		for ; iter.Valid(); iter.Next() {

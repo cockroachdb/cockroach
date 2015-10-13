@@ -1228,7 +1228,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 
 	// Compute stats for updated range.
 	now := r.rm.Clock().Timestamp()
-	iter := newRangeDataIterator(&split.UpdatedDesc, batch)
+	iter := newReplicaDataIterator(&split.UpdatedDesc, batch)
 	ms, err := engine.MVCCComputeStats(iter, now.WallTime)
 	iter.Close()
 	if err != nil {
@@ -1252,7 +1252,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	}
 
 	// Compute stats for new range.
-	iter = newRangeDataIterator(&split.NewDesc, batch)
+	iter = newReplicaDataIterator(&split.NewDesc, batch)
 	ms, err = engine.MVCCComputeStats(iter, now.WallTime)
 	iter.Close()
 	if err != nil {
@@ -1414,7 +1414,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 
 	// Compute stats for updated range.
 	now := r.rm.Clock().Timestamp()
-	iter := newRangeDataIterator(&merge.UpdatedDesc, batch)
+	iter := newReplicaDataIterator(&merge.UpdatedDesc, batch)
 	ms, err := engine.MVCCComputeStats(iter, now.WallTime)
 	iter.Close()
 	if err != nil {

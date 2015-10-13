@@ -122,7 +122,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	snap := repl.rm.Engine().NewSnapshot()
 	desc := repl.Desc()
-	iter := newRangeDataIterator(desc, snap)
+	iter := newReplicaDataIterator(desc, snap)
 	defer iter.Close()
 	defer snap.Close()
 
