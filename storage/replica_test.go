@@ -3074,17 +3074,14 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Mock the RangeManager, simulate proposeRaftCommand return an ErrGroupDeleted error.
+	// Mock proposeRaftCommand to return an ErrGroupDeleted error.
 	proposeRaftCommandFn := func(cmdIDKey, roachpb.RaftCommand) <-chan error {
 		ch := make(chan error, 1)
 		ch <- multiraft.ErrGroupDeleted
 		return ch
 	}
-	testRangeManager := &mockRangeManager{
-		Store: tc.store,
-		mockProposeRaftCommand: proposeRaftCommandFn,
-	}
-	rng, err := NewReplica(testRangeDescriptor(), testRangeManager)
+	rng, err := NewReplica(testRangeDescriptor(), tc.store)
+	rng.proposeRaftCommandFn = proposeRaftCommandFn
 	if err != nil {
 		t.Fatal(err)
 	}
