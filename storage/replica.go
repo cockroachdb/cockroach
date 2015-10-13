@@ -1546,6 +1546,6 @@ func loadSystemDBSpan(eng engine.Engine) ([]roachpb.KeyValue, []byte, error) {
 func (r *Replica) maybeAddToSplitQueue() {
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
-		r.store.splitQueue().MaybeAdd(r, r.store.Clock().Now())
+		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 }

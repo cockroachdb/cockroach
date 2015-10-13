@@ -1493,7 +1493,7 @@ func (r *Replica) changeReplicasTrigger(change *roachpb.ChangeReplicasTrigger) e
 	}
 	// If we're removing the current replica, add it to the range GC queue.
 	if change.ChangeType == roachpb.REMOVE_REPLICA && r.store.StoreID() == change.Replica.StoreID {
-		if err := r.store.replicaGCQueue().Add(r, 1.0); err != nil {
+		if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
 			// Log the error; this shouldn't prevent the commit; the range
 			// will be GC'd eventually.
 			log.Errorf("unable to add range %s to GC queue: %s", r, err)
