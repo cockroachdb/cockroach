@@ -1,0 +1,93 @@
+@charset "UTF-8";
+
+@font-face {
+    font-family: "cockroach";
+    src: url("../fonts/cockroach.woff");
+    font-weight: normal;
+    font-style: normal;
+
+}
+
+[data-icon]:before {
+    font-family: "cockroach" !important;
+    content: attr(data-icon);
+    font-style: normal !important;
+    font-weight: normal !important;
+    font-variant: normal !important;
+    text-transform: none !important;
+    speak: none;
+    line-height: 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+[class^="icon-"]:before,
+[class*=" icon-"]:before {
+    font-family: "cockroach" !important;
+    font-style: normal !important;
+    font-weight: normal !important;
+    font-variant: normal !important;
+    text-transform: none !important;
+    speak: none;
+    line-height: 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-cockroach-01:before {
+    content: "a";
+}
+.icon-cockroach-02:before {
+    content: "b";
+}
+.icon-cockroach-03:before {
+    content: "c";
+}
+.icon-cockroach-04:before {
+    content: "d";
+}
+.icon-cockroach-06:before {
+    content: "f";
+}
+.icon-cockroach-05:before {
+    content: "e";
+}
+.icon-cockroach-09:before {
+    content: "i";
+}
+.icon-cockroach-14:before {
+    content: "n";
+}
+.icon-cockroach-07:before {
+    content: "g";
+}
+.icon-cockroach-16:before {
+    content: "p";
+}
+.icon-cockroach-18:before {
+    content: "r";
+}
+.icon-cockroach-11:before {
+    content: "k";
+}
+.icon-cockroach-15:before {
+    content: "o";
+}
+.icon-cockroach-19:before {
+    content: "s";
+}
+.icon-cockroach-08:before {
+    content: "h";
+}
+.icon-cockroach-13:before {
+    content: "m";
+}
+.icon-cockroach-12:before {
+    content: "l";
+}
+.icon-cockroach-17:before {
+    content: "q";
+}
+.icon-cockroach-10:before {
+    content: "j";
+}
