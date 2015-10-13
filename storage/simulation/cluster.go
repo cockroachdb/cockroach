@@ -166,8 +166,8 @@ func (c *Cluster) splitRange(rangeID roachpb.RangeID) {
 	newRange.splitRange(originalRange)
 }
 
-// runEpoch steps through a single instance of the simulator. runEpoch returns
-// a boolean that if true means that this epoch made no changes to the cluster.
+// runEpoch steps through a single instance of the simulator. Returns true if no
+// actions were performed during this epoch.
 // Each epoch performs the following steps:
 // 1) The status of every store is gossiped so the store pool is up to date.
 // 2) Each replica on every range calls the allocator to determine if there are
@@ -228,7 +228,8 @@ func (c *Cluster) prepareActions() {
 	}
 }
 
-// performActions performs a single action, if required, for each range.
+// performActions performs a single action, if required, for each range. Returns
+// true if no actions were performed.
 func (c *Cluster) performActions() bool {
 	// Once a store has started performing an action on a range, it "locks" the
 	// range and any subsequent store that tries to perform another action
