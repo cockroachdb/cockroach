@@ -1,7 +1,7 @@
 - Feature Name: range_replica_naming
-- Status: in-progress
+- Status: completed
 - Start Date: 2015-07-29
-- RFC PR:
+- RFC PR: #1864
 - Cockroach Issue:
 
 # Summary
