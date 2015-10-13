@@ -304,10 +304,17 @@ func (c *Cluster) performActions() bool {
 					c.epoch, storeID, topRangeID, removeStoreID)
 			case storage.AllocatorNoop:
 				if topReplica.rebalance {
+					rebalanceStoreID, found := r.getRebalanceTarget()
+					if !found {
+						fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREBALANCE:no target\n",
+							c.epoch, storeID, topRangeID)
+						continue
+					}
 					stable = false
-					// TODO(bram): implement this.
+					r.addReplica(c.stores[rebalanceStoreID])
 					usedRanges[topRangeID] = storeID
-					fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREBLANCE\n", c.epoch, storeID, topRangeID)
+					fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREBALANCE:%d\n",
+						c.epoch, storeID, topRangeID, rebalanceStoreID)
 				}
 			}
 		}
