@@ -88,7 +88,7 @@ func (*verifyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 func (*verifyQueue) process(now roachpb.Timestamp, rng *Replica,
 	_ *config.SystemConfig) error {
 
-	snap := rng.rm.Engine().NewSnapshot()
+	snap := rng.store.Engine().NewSnapshot()
 	iter := newReplicaDataIterator(rng.Desc(), snap)
 	defer iter.Close()
 	defer snap.Close()

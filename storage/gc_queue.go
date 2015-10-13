@@ -120,7 +120,7 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	sysCfg *config.SystemConfig) error {
 
-	snap := repl.rm.Engine().NewSnapshot()
+	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
 	iter := newReplicaDataIterator(desc, snap)
 	defer iter.Close()
@@ -316,7 +316,7 @@ func (*gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Trans
 	}
 	b := &client.Batch{}
 	b.InternalAddRequest(pushArgs)
-	br, err := repl.rm.DB().RunWithResponse(b)
+	br, err := repl.store.DB().RunWithResponse(b)
 	if err != nil {
 		log.Warningf("push of txn %s failed: %s", txn, err)
 		updateOldestIntent(txn.OrigTimestamp.WallTime)

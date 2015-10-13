@@ -152,7 +152,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	// high water mark for all ops serviced, so that received ops
 	// without a timestamp specified are guaranteed one higher than any
 	// op already executed for overlapping keys.
-	r.rm.Clock().Update(ts)
+	r.store.Clock().Update(ts)
 
 	// Propagate the request timestamp (which may have changed).
 	// TODO(tschottdorf): really? Think this should be done by executeBatch.
@@ -171,7 +171,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 		// Note that we can use this node's clock (which may be different from
 		// other replicas') because this error attaches the existing timestamp
 		// to the node itself when retrying.
-		tErr.ExistingTimestamp.Forward(r.rm.Clock().Now())
+		tErr.ExistingTimestamp.Forward(r.store.Clock().Now())
 	}
 
 	return reply, intents, err
@@ -318,7 +318,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	if err != nil {
 		return reply, nil, err
 	} else if !ok {
-		return reply, nil, util.Errorf("transaction does not exist: %s on store %d", h.Txn, r.rm.StoreID())
+		return reply, nil, util.Errorf("transaction does not exist: %s on store %d", h.Txn, r.store.StoreID())
 	}
 
 	for i := range args.Intents {
@@ -1115,9 +1115,9 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 	// clock offset to account for any difference in clocks
 	// between the expiration (set by a remote node) and this
 	// node.
-	if r.getLease().Replica.StoreID == r.rm.StoreID() &&
+	if r.getLease().Replica.StoreID == r.store.StoreID() &&
 		prevLease.Replica.StoreID != r.getLease().Replica.StoreID {
-		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
+		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.store.Clock().MaxOffset()), 0))
 		log.Infof("range %d: new leader lease %s", rangeID, args.Lease)
 	}
 
@@ -1153,7 +1153,7 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 	{
 		foundSplitKey := args.SplitKey
 		if len(foundSplitKey) == 0 {
-			snap := r.rm.NewSnapshot()
+			snap := r.store.NewSnapshot()
 			defer snap.Close()
 			var err error
 			foundSplitKey, err = engine.MVCCFindSplitKey(snap, desc.RangeID, desc.StartKey, desc.EndKey)
@@ -1181,7 +1181,7 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 	}
 
 	// Create new range descriptor with newly-allocated replica IDs and Range IDs.
-	newDesc, err := r.rm.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
+	newDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
 		return reply, util.Errorf("unable to allocate new range descriptor: %s", err)
 	}
@@ -1192,7 +1192,7 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 
 	log.Infof("initiating a split of %s at key %s", r, splitKey)
 
-	if err := r.rm.DB().Txn(func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(func(txn *client.Txn) error {
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
@@ -1269,7 +1269,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	}
 
 	// Compute stats for updated range.
-	now := r.rm.Clock().Timestamp()
+	now := r.store.Clock().Timestamp()
 	iter := newReplicaDataIterator(&split.UpdatedDesc, batch)
 	ms, err := engine.MVCCComputeStats(iter, now.WallTime)
 	iter.Close()
@@ -1288,7 +1288,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	// Add the new split replica to the store. This step atomically
 	// updates the EndKey of the updated replica and also adds the
 	// new replica to the store's replica map.
-	newRng, err := NewReplica(&split.NewDesc, r.rm)
+	newRng, err := NewReplica(&split.NewDesc, r.store)
 	if err != nil {
 		return err
 	}
@@ -1310,7 +1310,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	r.Unlock()
 
 	batch.Defer(func() {
-		if err := r.rm.SplitRange(r, newRng); err != nil {
+		if err := r.store.SplitRange(r, newRng); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf("failed to update Store after split: %s", err)
 		}
@@ -1347,7 +1347,7 @@ func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roach
 	// look up the descriptor here only to get the new end key and then
 	// repeat the lookup inside the transaction.
 	{
-		rightRng := r.rm.LookupReplica(origLeftDesc.EndKey, nil)
+		rightRng := r.store.LookupReplica(origLeftDesc.EndKey, nil)
 		if rightRng == nil {
 			return reply, util.Errorf("ranges not collocated")
 		}
@@ -1356,7 +1356,7 @@ func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roach
 		log.Infof("initiating a merge of %s into %s", rightRng, r)
 	}
 
-	if err := r.rm.DB().Txn(func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(func(txn *client.Txn) error {
 		// Update the range descriptor for the receiving range.
 		{
 			b := &client.Batch{}
@@ -1455,7 +1455,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 	}
 
 	// Compute stats for updated range.
-	now := r.rm.Clock().Timestamp()
+	now := r.store.Clock().Timestamp()
 	iter := newReplicaDataIterator(&merge.UpdatedDesc, batch)
 	ms, err := engine.MVCCComputeStats(iter, now.WallTime)
 	iter.Close()
@@ -1471,11 +1471,11 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 	// could merge the timestamp caches for efficiency. But it's unlikely
 	// and not worth the extra logic and potential for error.
 	r.Lock()
-	r.tsCache.Clear(r.rm.Clock())
+	r.tsCache.Clear(r.store.Clock())
 	r.Unlock()
 
 	batch.Defer(func() {
-		if err := r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRangeID); err != nil {
+		if err := r.store.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRangeID); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf("failed to update store after merging range: %s", err)
 		}
@@ -1492,8 +1492,8 @@ func (r *Replica) changeReplicasTrigger(change *roachpb.ChangeReplicasTrigger) e
 		return err
 	}
 	// If we're removing the current replica, add it to the range GC queue.
-	if change.ChangeType == roachpb.REMOVE_REPLICA && r.rm.StoreID() == change.Replica.StoreID {
-		if err := r.rm.replicaGCQueue().Add(r, 1.0); err != nil {
+	if change.ChangeType == roachpb.REMOVE_REPLICA && r.store.StoreID() == change.Replica.StoreID {
+		if err := r.store.replicaGCQueue().Add(r, 1.0); err != nil {
 			// Log the error; this shouldn't prevent the commit; the range
 			// will be GC'd eventually.
 			log.Errorf("unable to add range %s to GC queue: %s", r, err)
@@ -1555,7 +1555,7 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 
 	r.Unlock()
 
-	err := r.rm.DB().Txn(func(txn *client.Txn) error {
+	err := r.store.DB().Txn(func(txn *client.Txn) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		b := &client.Batch{}

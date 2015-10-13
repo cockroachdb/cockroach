@@ -39,7 +39,7 @@ var _ multiraft.WriteableGroupStorage = &Replica{}
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
 	desc := r.Desc()
-	found, err := engine.MVCCGetProto(r.rm.Engine(), keys.RaftHardStateKey(desc.RangeID),
+	found, err := engine.MVCCGetProto(r.store.Engine(), keys.RaftHardStateKey(desc.RangeID),
 		roachpb.ZeroTimestamp, true, nil, &hs)
 	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -92,7 +92,7 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 
 	rangeID := r.Desc().RangeID
 
-	_, err := engine.MVCCIterate(r.rm.Engine(),
+	_, err := engine.MVCCIterate(r.store.Engine(),
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
 		roachpb.ZeroTimestamp,
@@ -145,7 +145,7 @@ func (r *Replica) raftTruncatedState() (roachpb.RaftTruncatedState, error) {
 		return *ts, nil
 	}
 	ts := roachpb.RaftTruncatedState{}
-	ok, err := engine.MVCCGetProto(r.rm.Engine(), keys.RaftTruncatedStateKey(r.Desc().RangeID),
+	ok, err := engine.MVCCGetProto(r.store.Engine(), keys.RaftTruncatedStateKey(r.Desc().RangeID),
 		roachpb.ZeroTimestamp, true, nil, &ts)
 	if err != nil {
 		return ts, err
@@ -218,7 +218,7 @@ func setAppliedIndex(eng engine.Engine, rangeID roachpb.RangeID, appliedIndex ui
 // loadLastIndex retrieves the last index from storage.
 func (r *Replica) loadLastIndex() (uint64, error) {
 	lastIndex := uint64(0)
-	v, _, err := engine.MVCCGet(r.rm.Engine(),
+	v, _, err := engine.MVCCGet(r.store.Engine(),
 		keys.RaftLastIndexKey(r.Desc().RangeID),
 		roachpb.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
@@ -258,7 +258,7 @@ func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) 
 // Snapshot implements the raft.Storage interface.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
-	snap := r.rm.NewSnapshot()
+	snap := r.store.NewSnapshot()
 	defer snap.Close()
 	var snapData roachpb.RaftSnapshotData
 
@@ -274,7 +274,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
 	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(r.Desc().StartKey),
-		r.rm.Clock().Now(), false /* !consistent */, nil, &desc)
+		r.store.Clock().Now(), false /* !consistent */, nil, &desc)
 	if err != nil {
 		return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
 	}
@@ -323,7 +323,7 @@ func (r *Replica) Append(entries []raftpb.Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
-	batch := r.rm.Engine().NewBatch()
+	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
 
 	rangeID := r.Desc().RangeID
@@ -371,7 +371,7 @@ func (r *Replica) updateRangeInfo() error {
 	// since the original range and the new range might belong
 	// to different zones.
 	// Load the system config.
-	cfg := r.rm.Gossip().GetSystemConfig()
+	cfg := r.store.Gossip().GetSystemConfig()
 	if cfg == nil {
 		// This could be before the system config was ever gossiped,
 		// or it expired. Let the gossip callback set the info.
@@ -402,7 +402,7 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 	// First, save the HardState.  The HardState must not be changed
 	// because it may record a previous vote cast by this node.
 	hardStateKey := keys.RaftHardStateKey(rangeID)
-	hardState, _, err := engine.MVCCGet(r.rm.Engine(), hardStateKey, roachpb.ZeroTimestamp, true /* consistent */, nil)
+	hardState, _, err := engine.MVCCGet(r.store.Engine(), hardStateKey, roachpb.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return err
 	}
@@ -410,11 +410,11 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 	// Extract the updated range descriptor.
 	desc := snapData.RangeDescriptor
 
-	batch := r.rm.Engine().NewBatch()
+	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
 
 	// Delete everything in the range and recreate it from the snapshot.
-	for iter := newReplicaDataIterator(&desc, r.rm.Engine()); iter.Valid(); iter.Next() {
+	for iter := newReplicaDataIterator(&desc, r.store.Engine()); iter.Valid(); iter.Next() {
 		if err := batch.Clear(iter.Key()); err != nil {
 			return err
 		}
@@ -494,6 +494,6 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 
 // SetHardState implements the multiraft.WriteableGroupStorage interface.
 func (r *Replica) SetHardState(st raftpb.HardState) error {
-	return engine.MVCCPutProto(r.rm.Engine(), nil, keys.RaftHardStateKey(r.Desc().RangeID),
+	return engine.MVCCPutProto(r.store.Engine(), nil, keys.RaftHardStateKey(r.Desc().RangeID),
 		roachpb.ZeroTimestamp, nil, &st)
 }

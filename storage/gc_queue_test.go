@@ -52,7 +52,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 
 	// Put an empty GC metadata; all that's read from it is last scan nanos.
 	key := keys.RangeGCMetadataKey(tc.rng.Desc().RangeID)
-	if err := engine.MVCCPutProto(tc.rng.rm.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &roachpb.GCMetadata{}); err != nil {
+	if err := engine.MVCCPutProto(tc.rng.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &roachpb.GCMetadata{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -109,7 +109,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 			IntentAge:   test.intentAge,
 			GCBytesAge:  test.gcBytesAge,
 		}
-		if err := tc.rng.stats.SetMVCCStats(tc.rng.rm.Engine(), stats); err != nil {
+		if err := tc.rng.stats.SetMVCCStats(tc.rng.store.Engine(), stats); err != nil {
 			t.Fatal(err)
 		}
 		shouldQ, priority := gcQ.shouldQueue(test.now, tc.rng, cfg)

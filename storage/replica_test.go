@@ -434,7 +434,7 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 // range replica and whether it's expired for the given timestamp.
 func hasLease(rng *Replica, timestamp roachpb.Timestamp) (bool, bool) {
 	l := rng.getLease()
-	return l.OwnedBy(rng.rm.StoreID()), !l.Covers(timestamp)
+	return l.OwnedBy(rng.store.StoreID()), !l.Covers(timestamp)
 }
 
 func TestRangeLeaderLease(t *testing.T) {
@@ -1843,7 +1843,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
 		txnKey := keys.TransactionKey(test.key, txn.ID)
-		if err := engine.MVCCPutProto(tc.rng.rm.Engine(), nil, txnKey, roachpb.ZeroTimestamp,
+		if err := engine.MVCCPutProto(tc.rng.store.Engine(), nil, txnKey, roachpb.ZeroTimestamp,
 			nil, &existTxn); err != nil {
 			t.Fatal(err)
 		}
@@ -1898,7 +1898,7 @@ func TestEndTransactionGC(t *testing.T) {
 		}
 		var readTxn roachpb.Transaction
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
-		ok, err := engine.MVCCGetProto(tc.rng.rm.Engine(), txnKey, roachpb.ZeroTimestamp,
+		ok, err := engine.MVCCGetProto(tc.rng.store.Engine(), txnKey, roachpb.ZeroTimestamp,
 			true /* consistent */, nil /* txn */, &readTxn)
 		if err != nil {
 			t.Fatal(err)
@@ -2675,7 +2675,7 @@ func TestReplicaCorruption(t *testing.T) {
 	newIndex := 2*atomic.LoadUint64(&tc.rng.appliedIndex) + 1
 	atomic.StoreUint64(&tc.rng.appliedIndex, newIndex)
 	// Not really needed, but let's be thorough.
-	err = setAppliedIndex(tc.rng.rm.Engine(), tc.rng.Desc().RangeID, newIndex)
+	err = setAppliedIndex(tc.rng.store.Engine(), tc.rng.Desc().RangeID, newIndex)
 	if err != nil {
 		t.Fatal(err)
 	}
