@@ -240,11 +240,8 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 							Payload: &driver.Datum_StringVal{StringVal: string(vt)},
 						})
 					case parser.DDate:
-						wireTimestamp := driver.Timestamp(vt.Time)
 						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_DateVal{
-								DateVal: &wireTimestamp,
-							},
+							Payload: &driver.Datum_DateVal{DateVal: int64(vt)},
 						})
 					case parser.DTimestamp:
 						wireTimestamp := driver.Timestamp(vt.Time)
@@ -337,7 +334,7 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 	case *driver.Datum_StringVal:
 		return parser.DString(t.StringVal), true
 	case *driver.Datum_DateVal:
-		return parser.DDate{Time: t.DateVal.GoTime()}, true
+		return parser.DDate(t.DateVal), true
 	case *driver.Datum_TimeVal:
 		return parser.DTimestamp{Time: t.TimeVal.GoTime()}, true
 	case *driver.Datum_IntervalVal:

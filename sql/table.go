@@ -248,7 +248,7 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 	case parser.DBytes:
 		return encoding.EncodeString(b, string(t)), nil
 	case parser.DDate:
-		return encoding.EncodeTime(b, t.Time), nil
+		return encoding.EncodeVarint(b, int64(t)), nil
 	case parser.DTimestamp:
 		return encoding.EncodeTime(b, t.Time), nil
 	case parser.DInterval:
@@ -368,8 +368,8 @@ func decodeTableKey(valType parser.Datum, key []byte) (parser.Datum, []byte, err
 		rkey, r, err := encoding.DecodeString(key, nil)
 		return parser.DBytes(r), rkey, err
 	case parser.DDate:
-		rkey, t, err := encoding.DecodeTime(key)
-		return parser.DDate{Time: t}, rkey, err
+		rkey, t, err := encoding.DecodeVarint(key)
+		return parser.DDate(t), rkey, err
 	case parser.DTimestamp:
 		rkey, t, err := encoding.DecodeTime(key)
 		return parser.DTimestamp{Time: t}, rkey, err
@@ -455,7 +455,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, er
 		}
 	case ColumnType_DATE:
 		if v, ok := val.(parser.DDate); ok {
-			return v.Time, nil
+			return int64(v), nil
 		}
 	case ColumnType_TIMESTAMP:
 		if v, ok := val.(parser.DTimestamp); ok {
@@ -512,11 +512,11 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		}
 		return parser.DBytes(v), nil
 	case ColumnType_DATE:
-		v, err := value.GetTime()
+		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
-		return parser.DDate{Time: v}, nil
+		return parser.DDate(v), nil
 	case ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {

@@ -37,6 +37,9 @@ var (
 	errDivByZero   = errors.New("division by zero")
 )
 
+// secondsInDay is the number of seconds in a day.
+const secondsInDay = 24 * 60 * 60
+
 type unaryOp struct {
 	returnType Datum
 	fn         func(Datum) (Datum, error)
@@ -136,13 +139,15 @@ var binOps = map[binArgs]binOp{
 	binArgs{Plus, dateType, intervalType}: {
 		returnType: DummyTimestamp,
 		fn: func(left Datum, right Datum) (Datum, error) {
-			return DTimestamp{Time: left.(DDate).Add(right.(DInterval).Duration)}, nil
+			t := time.Unix(int64(left.(DDate))*secondsInDay, 0).UTC()
+			return DTimestamp{Time: t.Add(right.(DInterval).Duration)}, nil
 		},
 	},
 	binArgs{Plus, intervalType, dateType}: {
 		returnType: DummyTimestamp,
 		fn: func(left Datum, right Datum) (Datum, error) {
-			return DTimestamp{Time: right.(DDate).Add(left.(DInterval).Duration)}, nil
+			t := time.Unix(int64(right.(DDate))*secondsInDay, 0).UTC()
+			return DTimestamp{Time: t.Add(left.(DInterval).Duration)}, nil
 		},
 	},
 	binArgs{Plus, timestampType, intervalType}: {
@@ -163,7 +168,6 @@ var binOps = map[binArgs]binOp{
 			return DInterval{Duration: left.(DInterval).Duration + right.(DInterval).Duration}, nil
 		},
 	},
-
 	binArgs{Minus, intType, intType}: {
 		returnType: DummyInt,
 		fn: func(left Datum, right Datum) (Datum, error) {
@@ -179,13 +183,14 @@ var binOps = map[binArgs]binOp{
 	binArgs{Minus, dateType, intervalType}: {
 		returnType: DummyTimestamp,
 		fn: func(left Datum, right Datum) (Datum, error) {
-			return DTimestamp{Time: left.(DDate).Add(-right.(DInterval).Duration)}, nil
+			t := time.Unix(int64(left.(DDate))*secondsInDay, 0).UTC()
+			return DTimestamp{Time: t.Add(-right.(DInterval).Duration)}, nil
 		},
 	},
 	binArgs{Minus, dateType, dateType}: {
 		returnType: DummyInterval,
 		fn: func(left Datum, right Datum) (Datum, error) {
-			return DInterval{Duration: left.(DDate).Sub(right.(DDate).Time)}, nil
+			return DInterval{Duration: time.Duration(left.(DDate)-right.(DDate)) * 24 * time.Hour}, nil
 		},
 	},
 	binArgs{Minus, timestampType, timestampType}: {
@@ -197,13 +202,15 @@ var binOps = map[binArgs]binOp{
 	binArgs{Minus, timestampType, dateType}: {
 		returnType: DummyInterval,
 		fn: func(left Datum, right Datum) (Datum, error) {
-			return DInterval{Duration: left.(DTimestamp).Sub(right.(DDate).Time)}, nil
+			t := time.Unix(int64(right.(DDate))*secondsInDay, 0).UTC()
+			return DInterval{Duration: left.(DTimestamp).Sub(t)}, nil
 		},
 	},
 	binArgs{Minus, dateType, timestampType}: {
 		returnType: DummyInterval,
 		fn: func(left Datum, right Datum) (Datum, error) {
-			return DInterval{Duration: left.(DDate).Sub(right.(DTimestamp).Time)}, nil
+			t := time.Unix(int64(left.(DDate))*secondsInDay, 0).UTC()
+			return DInterval{Duration: t.Sub(right.(DTimestamp).Time)}, nil
 		},
 	},
 	binArgs{Minus, timestampType, intervalType}: {
@@ -358,7 +365,7 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{EQ, dateType, dateType}: {
 		fn: func(left Datum, right Datum, _ *interface{}) (DBool, error) {
-			return DBool(left.(DDate).Equal(right.(DDate).Time)), nil
+			return DBool(left.(DDate) == right.(DDate)), nil
 		},
 	},
 	cmpArgs{EQ, timestampType, timestampType}: {
@@ -399,7 +406,7 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{LT, dateType, dateType}: {
 		fn: func(left Datum, right Datum, _ *interface{}) (DBool, error) {
-			return DBool(left.(DDate).Before(right.(DDate).Time)), nil
+			return DBool(left.(DDate) < right.(DDate)), nil
 		},
 	},
 	cmpArgs{LT, timestampType, timestampType}: {
@@ -440,7 +447,7 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{LE, dateType, dateType}: {
 		fn: func(left Datum, right Datum, _ *interface{}) (DBool, error) {
-			return DBool(right.(DDate).Before(left.(DDate).Time)), nil
+			return DBool(right.(DDate) < left.(DDate)), nil
 		},
 	},
 	cmpArgs{LE, timestampType, timestampType}: {
@@ -567,13 +574,14 @@ var defaultContext = EvalContext{
 }
 
 // makeDDate constructs a DDate from a time.Time in the session time zone.
-func (ctx EvalContext) makeDDate(t time.Time) (Datum, error) {
+func (ctx EvalContext) makeDDate(t time.Time) (DDate, error) {
 	loc, err := ctx.GetLocation()
 	if err != nil {
-		return DNull, err
+		return DummyDate, err
 	}
 	year, month, day := t.In(loc).Date()
-	return DDate{Time: time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}, nil
+	secs := time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Unix()
+	return DDate(secs / secondsInDay), nil
 }
 
 // EvalExpr evaluates an SQL expression. Expression evaluation is a mostly
@@ -1155,7 +1163,7 @@ func (ctx EvalContext) evalCastExpr(expr *CastExpr) (Datum, error) {
 			if err != nil {
 				return DNull, err
 			}
-			year, month, day := d.Date()
+			year, month, day := time.Unix(int64(d)*secondsInDay, 0).UTC().Date()
 			return DTimestamp{Time: time.Date(year, month, day, 0, 0, 0, 0, loc)}, nil
 		}
 
@@ -1257,7 +1265,7 @@ func ParseDate(s DString) (DDate, error) {
 	if err != nil {
 		return DummyDate, err
 	}
-	return DDate{Time: t}, nil
+	return defaultContext.makeDDate(t)
 }
 
 // ParseTimestamp parses the timestamp.

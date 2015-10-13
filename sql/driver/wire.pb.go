@@ -71,7 +71,7 @@ type Datum_StringVal struct {
 	StringVal string `protobuf:"bytes,5,opt,name=string_val,oneof"`
 }
 type Datum_DateVal struct {
-	DateVal *Datum_Timestamp `protobuf:"bytes,6,opt,name=date_val,oneof"`
+	DateVal int64 `protobuf:"varint,6,opt,name=date_val,oneof"`
 }
 type Datum_TimeVal struct {
 	TimeVal *Datum_Timestamp `protobuf:"bytes,7,opt,name=time_val,oneof"`
@@ -131,11 +131,11 @@ func (m *Datum) GetStringVal() string {
 	return ""
 }
 
-func (m *Datum) GetDateVal() *Datum_Timestamp {
+func (m *Datum) GetDateVal() int64 {
 	if x, ok := m.GetPayload().(*Datum_DateVal); ok {
 		return x.DateVal
 	}
-	return nil
+	return 0
 }
 
 func (m *Datum) GetTimeVal() *Datum_Timestamp {
@@ -190,10 +190,8 @@ func _Datum_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 		_ = b.EncodeVarint(5<<3 | proto.WireBytes)
 		_ = b.EncodeStringBytes(x.StringVal)
 	case *Datum_DateVal:
-		_ = b.EncodeVarint(6<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.DateVal); err != nil {
-			return err
-		}
+		_ = b.EncodeVarint(6<<3 | proto.WireVarint)
+		_ = b.EncodeVarint(uint64(x.DateVal))
 	case *Datum_TimeVal:
 		_ = b.EncodeVarint(7<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.TimeVal); err != nil {
@@ -248,12 +246,11 @@ func _Datum_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) 
 		m.Payload = &Datum_StringVal{x}
 		return true, err
 	case 6: // payload.date_val
-		if wire != proto.WireBytes {
+		if wire != proto.WireVarint {
 			return true, proto.ErrInternalBadWireType
 		}
-		msg := new(Datum_Timestamp)
-		err := b.DecodeMessage(msg)
-		m.Payload = &Datum_DateVal{msg}
+		x, err := b.DecodeVarint()
+		m.Payload = &Datum_DateVal{int64(x)}
 		return true, err
 	case 7: // payload.time_val
 		if wire != proto.WireBytes {
@@ -634,16 +631,9 @@ func (m *Datum_StringVal) MarshalTo(data []byte) (int, error) {
 }
 func (m *Datum_DateVal) MarshalTo(data []byte) (int, error) {
 	i := 0
-	if m.DateVal != nil {
-		data[i] = 0x32
-		i++
-		i = encodeVarintWire(data, i, uint64(m.DateVal.Size()))
-		n2, err := m.DateVal.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
-	}
+	data[i] = 0x30
+	i++
+	i = encodeVarintWire(data, i, uint64(m.DateVal))
 	return i, nil
 }
 func (m *Datum_TimeVal) MarshalTo(data []byte) (int, error) {
@@ -652,11 +642,11 @@ func (m *Datum_TimeVal) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x3a
 		i++
 		i = encodeVarintWire(data, i, uint64(m.TimeVal.Size()))
-		n3, err := m.TimeVal.MarshalTo(data[i:])
+		n2, err := m.TimeVal.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n3
+		i += n2
 	}
 	return i, nil
 }
@@ -793,11 +783,11 @@ func (m *Response_Result) MarshalTo(data []byte) (int, error) {
 		i += copy(data[i:], *m.Error)
 	}
 	if m.Union != nil {
-		nn4, err := m.Union.MarshalTo(data[i:])
+		nn3, err := m.Union.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += nn4
+		i += nn3
 	}
 	return i, nil
 }
@@ -808,11 +798,11 @@ func (m *Response_Result_DDL_) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x12
 		i++
 		i = encodeVarintWire(data, i, uint64(m.DDL.Size()))
-		n5, err := m.DDL.MarshalTo(data[i:])
+		n4, err := m.DDL.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n5
+		i += n4
 	}
 	return i, nil
 }
@@ -829,11 +819,11 @@ func (m *Response_Result_Rows_) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x22
 		i++
 		i = encodeVarintWire(data, i, uint64(m.Rows.Size()))
-		n6, err := m.Rows.MarshalTo(data[i:])
+		n5, err := m.Rows.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n6
+		i += n5
 	}
 	return i, nil
 }
@@ -1003,10 +993,7 @@ func (m *Datum_StringVal) Size() (n int) {
 func (m *Datum_DateVal) Size() (n int) {
 	var l int
 	_ = l
-	if m.DateVal != nil {
-		l = m.DateVal.Size()
-		n += 1 + l + sovWire(uint64(l))
-	}
+	n += 1 + sovWire(uint64(m.DateVal))
 	return n
 }
 func (m *Datum_TimeVal) Size() (n int) {
@@ -1302,10 +1289,10 @@ func (m *Datum) Unmarshal(data []byte) error {
 			m.Payload = &Datum_StringVal{string(data[iNdEx:postIndex])}
 			iNdEx = postIndex
 		case 6:
-			if wireType != 2 {
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field DateVal", wireType)
 			}
-			var msglen int
+			var v int64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowWire
@@ -1315,24 +1302,12 @@ func (m *Datum) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				v |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if msglen < 0 {
-				return ErrInvalidLengthWire
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			v := &Datum_Timestamp{}
-			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
 			m.Payload = &Datum_DateVal{v}
-			iNdEx = postIndex
 		case 7:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field TimeVal", wireType)

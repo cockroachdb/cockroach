@@ -45,7 +45,7 @@ message Datum {
     double float_val = 3;
     bytes bytes_val = 4;
     string string_val = 5;
-    Timestamp date_val = 6;
+    int64 date_val = 6;
     Timestamp time_val = 7;
     int64 interval_val = 8;
   }
