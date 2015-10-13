@@ -12,7 +12,9 @@ var gulp = require('gulp')
 // generate css from styl files
 gulp.task('stylus', function () {
     return gulp.src('styl/app.styl')
-        .pipe(stylus())
+        .pipe(stylus({
+            "include css": true
+        }))
         .pipe(rename('app_debug.css'))
         .pipe(gulp.dest('build'))
         .pipe(livereload());
@@ -44,7 +46,7 @@ gulp.task('watch', function () {
 
     livereload.listen();
 
-    gulp.watch('styl/**/*.styl', ['stylus']);
+    gulp.watch(['styl/**/*.styl', 'styl/**/*.css'], ['stylus']);
     gulp.watch('ts/**/*.ts', ['typescript']);
     gulp.watch('debug/index.html', ['copyIndex']);
 });
