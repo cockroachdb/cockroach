@@ -72,13 +72,12 @@ func (r *Range) addReplica(s *Store) {
 // removeReplica removes an existing replica from the passed in store. It
 // removes it from both the range descriptor and the store map.
 func (r *Range) removeReplica(s *Store) {
-	var updatedReplicas []roachpb.ReplicaDescriptor
-	for _, replica := range r.desc.Replicas {
-		if replica.StoreID != s.desc.StoreID {
-			updatedReplicas = append(updatedReplicas, replica)
+	for i, replica := range r.desc.Replicas {
+		if replica.StoreID == s.desc.StoreID {
+			r.desc.Replicas = append(r.desc.Replicas[:i], r.desc.Replicas[i+1:]...)
+			break
 		}
 	}
-	r.desc.Replicas = updatedReplicas
 	delete(r.replicas, s.desc.StoreID)
 }
 
