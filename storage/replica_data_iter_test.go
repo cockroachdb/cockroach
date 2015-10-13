@@ -88,7 +88,7 @@ func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
 
 	keys := []roachpb.EncodedKey{}
 	for _, keyTS := range keyTSs {
-		if err := engine.MVCCPut(r.rm.Engine(), nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil); err != nil {
+		if err := engine.MVCCPut(r.store.Engine(), nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil); err != nil {
 			t.Fatal(err)
 		}
 		keys = append(keys, engine.MVCCEncodeKey(keyTS.key))
@@ -118,7 +118,7 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
+	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine())
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		t.Error("expected empty iteration")
@@ -162,7 +162,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	curKeys := createRangeData(tc.rng, t)
 	postKeys := createRangeData(postRng, t)
 
-	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
+	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine())
 	defer iter.Close()
 	i := 0
 	for ; iter.Valid(); iter.Next() {
@@ -193,7 +193,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	if err := tc.rng.Destroy(); err != nil {
 		t.Fatal(err)
 	}
-	iter = newReplicaDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
+	iter = newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine())
 	defer iter.Close()
 	if iter.Valid() {
 		t.Errorf("expected empty iteration; got first key %q", iter.Key())
@@ -207,7 +207,7 @@ func TestReplicaDataIterator(t *testing.T) {
 		{preRng, preKeys},
 		{postRng, postKeys},
 	} {
-		iter = newReplicaDataIterator(test.r.Desc(), test.r.rm.Engine())
+		iter = newReplicaDataIterator(test.r.Desc(), test.r.store.Engine())
 		defer iter.Close()
 		i = 0
 		for ; iter.Valid(); iter.Next() {
