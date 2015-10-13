@@ -6,7 +6,7 @@
 
 # Summary
 
-Implement a table descriptor lease service to allow safe usage of
+Implement a table descriptor lease mechanism to allow safe usage of
 cached table descriptors.
 
 # Motivation
@@ -24,9 +24,9 @@ it is not safe to use these gossipped table descriptors in almost any
 circumstance. Consider the statements:
 
 ```sql
-  CREATE TABLE test (key INT PRIMARY KEY, value INT);
-  CREATE INDEX foo ON test (value);
-  INSERT INTO test VALUES (1, 2);
+CREATE TABLE test (key INT PRIMARY KEY, value INT);
+CREATE INDEX foo ON test (value);
+INSERT INTO test VALUES (1, 2);
 ```
 
 Depending on when the gossip of the schema change is received, the
@@ -63,11 +63,12 @@ following steps:
   the cluster and all uses of the previous version to finish.
 
 This RFC is focused on how to wait for the table descriptor change
-propagate to all nodes in the cluster. Additionally, we need
-mechanisms to ensure that multiple updates to a table descriptor are
-not performed concurrently and that write operations never commit once
-a table descriptor is too old (i.e. not one of the two most recent
-versions).
+propagate to all nodes in the cluster. More accurately, it is focused
+on how to determine when the previous version of the descriptor is no
+longer in use. Additionally, we need mechanisms to ensure that
+multiple updates to a table descriptor are not performed concurrently
+and that write operations never commit once a table descriptor is too
+old (i.e. not one of the two most recent versions).
 
 At a high-level, we want to provide read and write leases for table
 descriptors. When a schema change is to be performed, the operation
@@ -87,206 +88,139 @@ lease.
 
 # Detailed design
 
-The lease for a table will be managed and dispensed by a per-table
-lease service. The node running the lease service will be the raft
-leader of the range containining the first key in the table
-(i.e. `/<tableID>`). The lease master for a table will provide the
-following service:
+Table descriptors will be extended with a version number that is
+incremented on every change to the descriptor:
 
 ```proto
-message WatchRequest {
-  optional int32 nodeID;
-  optional int32 descID;
-  optional int32 version;
-}
-
-message WatchResponse {
-  enum State {
-    CURRENT
-    DRAINING
-    DEAD
-  }
-  optional int32 descID;
-  optional int32 version;
-  optional State state;
-}
-
-message AcquireRequest {
-  optional int32 nodeID;
-  optional int32 descID;
-  optional int32 version;
-}
-
-message AcquireResponse {
-  optional message<Error> error;
-  optional message<TableDescriptor> desc;
-  optional int64 expiration;
-}
-
-message ReleaseRequest {
-  optional int32 nodeID;
-  optional int32 descID;
-  optional int32 version;
-  optional bool all;  // Release all leases held by the node.
-}
-
-message ReleaseResponse {
-  optional message<Error> error;
-}
-
-message PublishRequest {
-  optional message<TableDescriptor> desc;
-}
-
-message PublishResponse {
-  optional message<Error> error;
-}
-
-service TableLeaseService {
-  // Watch registers the node for updates to descriptor versions. A
-  // watch should be registered before any other lease operation.
-  rpc Watch(WatchRequest) returns (WatchResponse) {}
-  
-  // Acquire acquires a read lease for the specified descriptor and
-  // version. The lease is associated with the specified node. An
-  // error will be returned if the specified version is not the most
-  // recent version for the descriptor.
-  rpc Acquire(AcquireRequest) returns (AcquireResponse) {}
-
-  // Release allows a read lease to be released before it
-  // expires. This should be used when a watch request indicates a new
-  // version of a descriptor is available and the lease holder
-  // determines it is no longer using the old version.
-  rpc Release(ReleaseRequest) returns (ReleaseResponse) {}
-
-  // Publish publishes a table descriptor change, writing the table
-  // descriptor to the KV store on success and notifying all watches
-  // of the new version. An error is returned if the version of the
-  // table descriptor is not equal to the current version + 1. An
-  // error is returned if there are two active versions of the table
-  // descriptor.
-  rpc Publish(PublishRequest) returns (PublishResponse) {}
+message TableDescriptor {
+  ...
+  optional uint32 id;
+  optional uint32 version;
+  ...
 }
 ```
 
-Each node will maintain a map from `<descriptorID, version>` to
-`<TableDescriptor, expiration, localRefCount>`. When the node needs to
-use a descriptor for an operation it will look in its local map. If
-the descriptor is not there the node will register a `Watch` with the
-lease master in order to receive a stream of version updates for the
-table descriptor. Next it will send an `Acquire` message to the lease
-master which will return the desired `TableDescriptor` along with the
-expiration of the lease. The node will maintain the invariant that a
-new reference to a descriptor will only be added to the most recent
-version. When the reference count for an older version falls to 0 the
-node will send a `Release` message to the lease master. The local
-reference count will be incremented when a transaction first uses a
-table and decremented when the transaction commits/aborts.
-
-A `Watch` request will watch for activity to a particular version of a
-descriptor. The watch request will wait until the state of the
-specified version has changed. A node can use a watch request to be
-notified when a new version of a descriptor is created by watching for
-the next descriptor version. And a schema change operation can watch
-for a descriptor version to become `DEAD` (i.e. have no leases on it).
-
-When performing a schema change operation, the modification to the
-table descriptor is performed using the `Publish` operation which will
-fail if the version is invalid (i.e. too old) or if there are already
-two active versions of the descriptor in the cluster. On success, the
-`Publish` operation will write the new descriptor to the KV store and
-notify all watches of the new descriptor which will cause those nodes
-to stop using the old descriptor for new operations. As existing
-operations complete they will release their local reference to the old
-descriptor which will cause the reference count to drop to 0 and
-result in the lease being released. When all of the leases for the old
-descriptor have been released, the lease master will send out a
-notification to the watches that the version is `DEAD`.
-
-Leases will be granted for a duration measured in minutes (we'll
-assume 5m for the rest of this doc, though experimentation may tune
-this number). A node will renew recently used descriptors before their
-leases expires and ensure that when handing out a descriptor for local
-usage the lease will not expire for at least `<leaseDuration>/2`
-minutes.
-
-Lease state will be stored in a `leaseTable`:
+Leases will be tied to a specific version of the descriptor. Lease
+state will be stored in a new `system.lease` table:
 
 ```sql
-CREATE TABLE leaseTable (
+CREATE TABLE system.lease (
   DescID     INT,
   Version    INT,
   NodeID     INT,
   Expiration TIMESTAMP,
-  PRIMARY KEY (DescID, Version, NodeID)
+  PRIMARY KEY (DescID, Version, NodeID, Expiration)
 )
 ```
 
 Entries in the lease table will be added and removed as leases are
 acquired and released. A background goroutine will periodically delete
-expired leases. The master will maintain the invariant that for a
-given descriptor there are only two active versions (i.e. non-expired
-versions) in the lease table and that the two versions correspond to
-the table descriptor in the KV store and its immediate predecessor.
+expired leases. 
 
-When the lease master is unavailable (because it has died and a new
-master has not yet started), new leases cannot be granted but existing
-leases remain valid until they expire.
+Leases will be granted for a duration measured in minutes (we'll
+assume 5m for the rest of this doc, though experimentation may tune
+this number). A node will acquire a lease before using it in an
+operation and may release the lease when the last local operation
+completes that was using the lease.
 
-When a node starts it will scan the `leaseTable` to find out what
-leases were held by its previous incarnation. The newly started node
-cannot know if any transactions are still being committed that are
-using those leases (i.e. the `EndTransation` was sent but is stil
-winding its way through raft committal), so it will ensure that those
-leases are not released until they expire.
+The leader of the range containing a table descriptor will gossip the
+most recent version of that table descriptor using the gossip key
+`"table-<descID>"` and the value will be the version number. The
+gossiping of the most recent table versions allows nodes to
+asynchronously discover when a new table version is written. But note
+that it is not necessary for correctness as the protocol for acquiring
+a lease ensures that only the most recent version of a descriptor can
+have a new lease granted on it.
+
+Lease acquisition will perform the following steps in a transaction:
+
+* `SELECT descriptor FROM system.descriptor WHERE id = <descID>`
+* `INSERT INTO system.lease VALUES (<desc.ID>, <desc.version>, <nodeID>, <expiration>)`
+
+Nodes will maintain a map from `<descID, version>` to
+`<TableDescriptor, expiration, localRefCount>`. The local reference
+count will be incremented when a transaction first uses a table and
+decremented when the transaction commits/aborts. When the node
+discovers a new version of the table, either via gossip or by
+acquiring a lease and discovering the version has changed it can
+release the lease on the old version when there are no more local
+references:
+
+* `DELETE FROM system.lease WHERE (DescID, Version, NodeID, Expiration) = (<descID>, <version>, <nodeID>, <expiration>)`
+
+A schema change operation needs to ensure that there is only one
+version of a descriptor in use in the cluster before a mutation of the
+descriptor. The operation will perform the following steps
+transactionally:
+
+* `SELECT descriptor FROM system.descriptor WHERE id = <descID>`
+* `SELECT DISTINCT version FROM system.lease WHERE descID = <descID> AND expiration > current_time()`
+* Ensure that there is only one active version which is equal to the current version.
+* Perform the edits to the descriptor and bump the descriptor version.
+* `UPDATE system.descriptor WHERE id = <descID> SET descriptor = <desc>`
+
+Note that the updating of the table descriptor will cause the table
+version to be gossipped alerting nodes to the new version and causing
+them to release leases on the old version. The expectation is that
+nodes will fairly quickly transition to using the new version and
+release all leases to the old version allowing another step in the
+schema change operation to take place. The schema change operation
+must poll the `system.lease` table waiting for the number of active
+versions of a descriptor to fall to 1 or 0. This polling will be
+performed at a short interval (1s), perhaps with a small amount of
+back-off.
 
 When a node holding leases dies permanently or becomes unresponsive
-(e.g. detached from the network) the lease master will have to wait
-for any leases that node held to expire. This will result in an
+(e.g. detached from the network) schema change operations will have to
+wait for any leases that node held to expire. This will result in an
 inability to perform more than one schema modification step to the
 descriptors referred to by those leases. The maximum amount of time
-this condition can exist is the lease duration.
+this condition can exist is the lease duration (5m). Note that
+attempting to release leases granted by a previous incarnation of a
+node is not safe because an in-flight but uncommitted transaction
+using those leases might still exist in the system.
+
+As described above, leases will be retained for the lifetime of a
+transaction. In a multi-statement transaction we need to ensure that
+the same version of each table is used throughout the transaction. To
+do this we will add the descriptor IDs and versions to the transaction
+structure. When a node receives a SQL statement within a
+multi-statement transaction, it will gather leases for all the tables
+in the transaction proto. If any of the leases are at a version
+incompatible with the version provided, it will abort the transaction.
 
 # Drawbacks
 
-* This is complex. Perhaps overly complex. Where can it be simplified?
-
-* The watch mechanism is described with the assumption of streaming
-  responses. Unless we adopt gRPC sooner, we'll have to fallback to
-  some sort of cursor mechanism.
+* The lack of a central authority for a lease places additional stress
+  on the correct implementation of the transactions to acquire a lease
+  and publish a new version of a descriptor.
 
 # Alternatives
 
-* We could use an existing lock service such as etcd or Zookeeper. The
-  primary benefit would be the builtin watch functionality. We would
-  still need the logic for local reference counts.
+* Earlier versions of this proposal utilized a centralized lease
+  service. Such a service has some conceptual niceties (a single
+  authority for managing the lease state of a table), yet introduces
+  another service that must be squeezed into the system. Such a lease
+  service would undoubtedly store state in the KV layer as well. Given
+  that the KV layer provides robust transactions the benefit is
+  smaller than it might otherwise have been.
 
-* The lease master could avoid storing the lease state, but we would
-  have to wait for the lease duration at master startup before
-  allowing any schema modifications. There might be some hacks around
-  this. For example, The master can persist only the largest lease
-  expiration and wait until that expiration passes before allowing
-  schema modifications. On the other hand, persisting the lease state
-  allows inspection of it via the SQL console.
+* We could use an existing lock service such as etcd or Zookeeper. The
+  primary benefit would be the builtin watch functionality, but we can
+  get some of that functionality from gossip. We would still need the
+  logic for local reference counts.
 
 * Keeping track of local references to descriptor versions in order to
   early release leases adds complexity. We could just wait for leases
   to expire, though that would cause a 3-step schema modification to
   take at least 10m to complete.
 
-* We could avoid having a lease master. Nodes would add/remove leases
-  directly to/from the `leaseTable`. Publish would require some sort
-  of conditional put on the new version. Watching would be replaced by
-  polling. While this seems feasible, it also seems quite a bit more
-  subtle than a centralized coordinator for leases for a table.
-
-* We could continue to distribute descriptors using gossip and add
-  some sort of high-priority flag to indicate that we want to skip the
-  current 2s/hop delay in gossip. This would replace the watch
-  mechanism for discovery of new descriptors, though we would still
-  need a watch mechanism for discovery of `DEAD` descriptors.
-
 # Unresolved questions
+
+* Gossip currently introduces a 2s/hop delay in transmitting gossip
+  info. It would be nice to figure out how to introduce some sort of
+  "high-priority" flag for gossipping of descriptor version info to
+  reduce the latency in notifying nodes of a new descriptor version.
 
 * We need a mechanism to enforce that write operations do not commit
   if they reference a table descriptor lease which has expired. The F1
@@ -302,10 +236,6 @@ this condition can exist is the lease duration.
   aborted. So the question becomes how common are operations that will
   take longer than `leaseDuration/2` and how problematic is it if they
   are aborted?
-
-* How to direct RPCs to the leader for a particular range? The table
-  leasing code is SQL specific, but all existing special handling for
-  leader operations happens in `storage`.
 
 * Do we have to worry about clock skew? The expiration times are
   significantly above expected cluster clock offsets.
