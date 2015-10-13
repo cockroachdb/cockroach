@@ -28,7 +28,7 @@ const (
 	// TODO(bram): Do we still need these? The default zone config might be
 	// enough.
 	bytesPerRange    = 64 << 20 // 64 MiB
-	capacityPerStore = 1 << 40  // 1 TiB - 32768 ranges per	store
+	capacityPerStore = 1 << 40  // 1 TiB - 32768 ranges per store
 )
 
 // Store is a simulated cockroach store. To access the replicas in a store, use
