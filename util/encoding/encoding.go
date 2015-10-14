@@ -539,8 +539,7 @@ func EncodeTime(b []byte, t time.Time) []byte {
 // DecodeTime decodes a time.Time value which was encoded using
 // EncodeTime. The remainder of the input buffer and the decoded
 // time.Time are returned. It is critical that the time.Time returned
-// is in UTC, because that is the storage/wire contract for dates and
-// times.
+// is in UTC, because that is the contract for stored times.
 func DecodeTime(b []byte) ([]byte, time.Time, error) {
 	if PeekType(b) != Time {
 		return nil, time.Time{}, util.Errorf("did not find marker")
