@@ -199,20 +199,6 @@ var binOps = map[binArgs]binOp{
 			return DInterval{Duration: left.(DTimestamp).Sub(right.(DTimestamp).Time)}, nil
 		},
 	},
-	binArgs{Minus, timestampType, dateType}: {
-		returnType: DummyInterval,
-		fn: func(left Datum, right Datum) (Datum, error) {
-			t := time.Unix(int64(right.(DDate))*secondsInDay, 0).UTC()
-			return DInterval{Duration: left.(DTimestamp).Sub(t)}, nil
-		},
-	},
-	binArgs{Minus, dateType, timestampType}: {
-		returnType: DummyInterval,
-		fn: func(left Datum, right Datum) (Datum, error) {
-			t := time.Unix(int64(left.(DDate))*secondsInDay, 0).UTC()
-			return DInterval{Duration: t.Sub(right.(DTimestamp).Time)}, nil
-		},
-	},
 	binArgs{Minus, timestampType, intervalType}: {
 		returnType: DummyTimestamp,
 		fn: func(left Datum, right Datum) (Datum, error) {
