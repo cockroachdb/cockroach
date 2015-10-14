@@ -150,6 +150,10 @@ func (ts *TestServer) Start() error {
 		ts.Ctx = NewTestContext()
 	}
 
+	// TODO(marc): set this in the zones table when we have an entry
+	// for the default cluster-wide zone config.
+	config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
+
 	var err error
 	ts.Server, err = NewServer(ts.Ctx, stop.NewStopper())
 	if err != nil {
@@ -177,9 +181,6 @@ func (ts *TestServer) Start() error {
 		return err
 	}
 
-	// TODO(marc): set this in the zones table when we have an entry
-	// for the default cluster-wide zone config.
-	config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
 	return nil
 }
 

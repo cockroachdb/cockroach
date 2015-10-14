@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
@@ -40,7 +39,6 @@ func TestPut(t *testing.T) {
 
 	db, dbStopper := makeDBClient(t, l, 0)
 	defer dbStopper.Stop()
-	config.DefaultZoneConfig.RangeMaxBytes = *rangeMaxBytes
 	checkRangeReplication(t, l, 20*time.Second)
 
 	errs := make(chan error, *numNodes)
