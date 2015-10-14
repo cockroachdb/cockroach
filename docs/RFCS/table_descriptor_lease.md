@@ -216,6 +216,14 @@ incompatible with the version provided, it will abort the transaction.
   on the correct implementation of the transactions to acquire a lease
   and publish a new version of a descriptor.
 
+* Since we don't keep old versions of the descriptor around, a
+  transaction which straddles both a node restart and a bump to the
+  descriptor version will be aborted because it won't be able to get a
+  lease to the old version of the descriptor. If this becomes a
+  problem in practice we can think about mechanisms to retrieve the
+  old version of the descriptor if a lease on that version still
+  exists from a previous incarnation of the descriptor.
+
 # Alternatives
 
 * Earlier versions of this proposal utilized a centralized lease
