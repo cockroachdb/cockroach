@@ -88,6 +88,14 @@ lease.
 
 # Detailed design
 
+The design maintains two invariants:
+
+* Leases can only be granted on the newest version of a
+  descriptor. This ensures that once a new version of a descriptor is
+  created, no new leases will be granted for the old version.
+* There can be at most 2 active versions of a table in the cluster at
+  any time.
+
 Table descriptors will be extended with a version number that is
 incremented on every change to the descriptor:
 
@@ -114,14 +122,15 @@ CREATE TABLE system.lease (
 ```
 
 Entries in the lease table will be added and removed as leases are
-acquired and released. A background goroutine will periodically delete
-expired leases. 
+acquired and released. A background goroutine running on the leader
+for the system range will periodically delete expired leases.
 
 Leases will be granted for a duration measured in minutes (we'll
 assume 5m for the rest of this doc, though experimentation may tune
 this number). A node will acquire a lease before using it in an
 operation and may release the lease when the last local operation
-completes that was using the lease.
+completes that was using the lease and a new version of the descriptor
+exists.
 
 The leader of the range containing a table descriptor will gossip the
 most recent version of that table descriptor using the gossip key
@@ -154,7 +163,7 @@ descriptor. The operation will perform the following steps
 transactionally:
 
 * `SELECT descriptor FROM system.descriptor WHERE id = <descID>`
-* `SELECT DISTINCT version FROM system.lease WHERE descID = <descID> AND expiration > current_time()`
+* `SELECT DISTINCT version FROM system.lease WHERE descID = <descID> AND expiration > now()`
 * Ensure that there is only one active version which is equal to the current version.
 * Perform the edits to the descriptor and bump the descriptor version.
 * `UPDATE system.descriptor WHERE id = <descID> SET descriptor = <desc>`
@@ -169,6 +178,18 @@ must poll the `system.lease` table waiting for the number of active
 versions of a descriptor to fall to 1 or 0. This polling will be
 performed at a short interval (1s), perhaps with a small amount of
 back-off.
+
+The polling loop needs to be mildly careful to not cause a lot of
+aborted transactions trying to acquire leases on the new version of
+the table. It will do this by performing a simpler initial check
+looking for any non-expired leases of the old version:
+
+```sql
+SELECT COUNT(DISTINCT version) FROM system.lease WHERE descID = <descID> AND version = <prevVersion> AND expiration > now()`
+```
+
+This pre-check is only scanning the previous version of the descriptor
+for which no new leases will be added.
 
 When a node holding leases dies permanently or becomes unresponsive
 (e.g. detached from the network) schema change operations will have to
@@ -216,6 +237,14 @@ incompatible with the version provided, it will abort the transaction.
   take at least 10m to complete.
 
 # Unresolved questions
+
+* Keeping only a single version of the descriptor in
+  `systems.descriptor` table means that a node using `v1` that dies
+  and restarts will have no way of accessing `v1` if the version has
+  advanced to `v2`. This is problematic if a transaction straddles
+  that restart boundary and would cause any such transaction to be
+  aborted, even if the lease the previous incarnation of the node held
+  is still valid.
 
 * Gossip currently introduces a 2s/hop delay in transmitting gossip
   info. It would be nice to figure out how to introduce some sort of
