@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -384,7 +385,7 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan 
 		})
 		if err == nil {
 			defer r.Close()
-			_, err = io.Copy(os.Stdout, r)
+			_, err = io.Copy(os.Stderr, r)
 		}
 		close(l.stopper)
 	}
@@ -446,10 +447,12 @@ func (l *Cluster) Stop() {
 
 	if l.dns != nil {
 		maybePanic(l.dns.Kill())
+		maybePanic(l.dns.Remove())
 		l.dns = nil
 	}
 	if l.vols != nil {
 		maybePanic(l.vols.Kill())
+		maybePanic(l.vols.Remove())
 		l.vols = nil
 	}
 	if l.CertsDir != "" {
@@ -459,6 +462,17 @@ func (l *Cluster) Stop() {
 	for i, n := range l.Nodes {
 		if n != nil {
 			maybePanic(n.Kill())
+			if len(l.LogDir) > 0 {
+				// TODO(bdarnell): make these filenames more consistent with
+				// structured logs?
+				w, err := os.Create(filepath.Join(l.LogDir, node(i),
+					fmt.Sprintf("stderr.%s.log", strings.Replace(
+						time.Now().Format(time.RFC3339), ":", "_", -1))))
+				maybePanic(err)
+				defer w.Close()
+				maybePanic(n.Logs(w))
+			}
+			maybePanic(n.Remove())
 			l.Nodes[i] = nil
 		}
 	}
