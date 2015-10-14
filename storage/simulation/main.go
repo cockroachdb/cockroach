@@ -40,13 +40,26 @@ func main() {
 	for i := 0; i < 10; i++ {
 		c.splitRangeRandom()
 	}
+	c.flush()
 
 	// TODO(bram): only flush when on manual stepping (once that enabled).
-	c.flush()
-	for i := 0; i < 100; i++ {
-		c.runEpoch()
+	// Run until stable or at the 100th epoch.
+	for c.runEpoch() != true && c.epoch < 100 {
 		c.flush()
 	}
+	c.flush()
+	fmt.Println(c)
+
+	// Split the last range 50 times.
+	for i := 0; i < 70; i++ {
+		c.splitRangeLast()
+	}
+
+	// Run until stable or at the 1000th epoch.
+	for c.runEpoch() != true && c.epoch < 1000 {
+		c.flush()
+	}
+	c.flush()
 
 	fmt.Println(c)
 }
