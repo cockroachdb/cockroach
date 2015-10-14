@@ -10,23 +10,30 @@ module Visualizations {
 
   let formatFn: (n: number) => string;
 
+  interface NumberVisualizationData {
+    value: number;
+  }
+
+  interface NumberVisualizationConfig {
+    format?: string; // TODO: better automatic formatting
+    formatFn?: (n: number) => string;
+    zoom?: string; // TODO: compute fontsize/zoom automatically
+    data: NumberVisualizationData;
+  }
+
   export module NumberVisualization {
-    export function controller(): any {
-      return {};
-    }
+    export function controller(): any {}
 
-    export function view(ctrl: any, info: VisualizationInfo): MithrilVirtualElement {
+    export function view(ctrl: any, info: NumberVisualizationConfig): MithrilVirtualElement {
 
-      formatFn = info.visualizationArguments.formatFn || d3.format(info.visualizationArguments.format || ".3s");
+      formatFn = info.formatFn || d3.format(info.format || ".3s");
 
       let data: VisualizationData = _.isArray(info.data) ? info.data[0] : info.data;
 
       return m(
         ".visualization",
-        {style: "width:" + info.width.toString() + "px; height:" + info.height.toString() + "px; " +
-          "line-height:" + info.height.toString() + "px; " },
         [
-          m(".number", {style: "zoom:" + (info.visualizationArguments.zoom || "100%") + ";"}, formatFn(data.value))
+          m(".number", {style: "zoom:" + (info.zoom || "100%") + ";"}, formatFn(data.value))
         ]);
     }
   }
