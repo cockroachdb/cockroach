@@ -50,7 +50,6 @@ func main() {
 	c.flush()
 	fmt.Println(c)
 
-	// Split the last range 50 times.
 	for i := 0; i < 70; i++ {
 		c.splitRangeLast()
 	}
