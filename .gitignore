@@ -15,6 +15,7 @@
 *.WARNING.*
 *.FATAL
 *.FATAL.*
+stderr.*
 
 # Folders
 _obj

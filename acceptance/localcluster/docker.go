@@ -20,10 +20,12 @@ package localcluster
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -166,24 +168,12 @@ func (c *Container) Remove() error {
 	return c.client.RemoveContainer(c.ID, false, true)
 }
 
-func (c *Container) mustRemove() {
-	maybePanic(c.Remove())
-}
-
-// Kill stops a running container and removes it.
+// Kill stops a running container, without removing it.
 func (c *Container) Kill() error {
 	// Paused containers cannot be killed. Attempt to unpause it first
 	// (which might fail) before killing.
 	_ = c.Unpause()
-	err := c.client.KillContainer(c.ID, "9")
-	if err != nil {
-		return err
-	}
-	return c.Remove()
-}
-
-func (c *Container) mustKill() {
-	maybePanic(c.Kill())
+	return c.client.KillContainer(c.ID, "9")
 }
 
 // Start starts a non-running container.
@@ -253,14 +243,14 @@ func (c *Container) Wait() error {
 		return err
 	}
 	if r.StatusCode != 0 {
-		_ = c.Logs()
+		_ = c.Logs(os.Stderr)
 		return fmt.Errorf("non-zero exit code: %d", r.StatusCode)
 	}
 	return nil
 }
 
-// Logs outputs the containers logs to stdout/stderr.
-func (c *Container) Logs() error {
+// Logs outputs the containers logs to the given io.Writer.
+func (c *Container) Logs(w io.Writer) error {
 	r, err := c.client.ContainerLogs(c.ID, &dockerclient.LogOptions{
 		Stdout: true,
 		Stderr: true,
@@ -269,8 +259,24 @@ func (c *Container) Logs() error {
 		return err
 	}
 	defer r.Close()
-	_, err = io.Copy(os.Stdout, r)
-	return err
+	// The docker log output is not quite plaintext: each line has a
+	// prefix consisting of one byte file descriptor (stdout vs stderr),
+	// three bytes padding, four byte length. We could use this to
+	// disentangle stdout and stderr if we wanted to output them into
+	// separate streams, but we don't really care.
+	for {
+		var header uint64
+		if err := binary.Read(r, binary.BigEndian, &header); err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+		size := header & math.MaxUint32
+		if _, err := io.CopyN(w, r, int64(size)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Inspect retrieves detailed info about a container.
