@@ -844,7 +844,7 @@ func (l *loggingT) getTermColorProfile() *colorProfile {
 			case "ansi", "xterm-color":
 				l.colorProfile = colorProfile8
 				color = true
-			case "xterm-256color":
+			case "xterm-256color", "screen-256color":
 				l.colorProfile = colorProfile256
 				color = true
 			}
