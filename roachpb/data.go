@@ -670,8 +670,7 @@ var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
 	t := time.Unix(l.Start.WallTime/1E9, 0).UTC()
-	tStr := t.Format("15:04:05.000")
-	return fmt.Sprintf("replica %s %s +%.3fs", l.Replica, tStr, float64(l.Expiration.WallTime-l.Start.WallTime)/1E9)
+	return fmt.Sprintf("replica %s %s +%.3fs", l.Replica, t, float64(l.Expiration.WallTime-l.Start.WallTime)/1E9)
 }
 
 // Covers returns true if the given timestamp is strictly less than the
