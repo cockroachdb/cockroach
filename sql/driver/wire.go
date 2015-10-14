@@ -30,6 +30,9 @@ const (
 	// Endpoint is the URL path prefix which accepts incoming
 	// HTTP requests for the SQL API.
 	Endpoint = "/sql/"
+
+	// secondsInDay is the number of seconds in a day.
+	secondsInDay = 24 * 60 * 60
 )
 
 func makeDatum(val driver.Value) (Datum, error) {
@@ -55,10 +58,7 @@ func makeDatum(val driver.Value) (Datum, error) {
 			&timestamp,
 		}
 	case Date:
-		timestamp := Timestamp(t.Time)
-		datum.Payload = &Datum_DateVal{
-			&timestamp,
-		}
+		datum.Payload = &Datum_DateVal{int64(t)}
 	default:
 		return datum, util.Errorf("unsupported type %T", t)
 	}
@@ -66,21 +66,20 @@ func makeDatum(val driver.Value) (Datum, error) {
 	return datum, nil
 }
 
-// Date wraps time.Time and provides a custom String() method.
-type Date struct {
-	time.Time // Must always be UTC!
-}
+// Date is the number of days since the Unix epoch.
+// It provides a custom String() method.
+type Date int64
 
 // MakeDate constructs a Date from a time.Time.
 func MakeDate(t time.Time) Date {
 	year, month, day := t.Date()
-	return Date{Time: time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
+	return Date(time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Unix() / secondsInDay)
 }
 
 // String returns the underlying time formatted using the format string
 // "2006-01-02".
 func (d Date) String() string {
-	return d.Format("2006-01-02")
+	return time.Unix(int64(d)*secondsInDay, 0).UTC().Format("2006-01-02")
 }
 
 // Value implements the driver.Valuer interface.
@@ -101,7 +100,7 @@ func (d Datum) Value() (driver.Value, error) {
 	case *Datum_StringVal:
 		val = t.StringVal
 	case *Datum_DateVal:
-		val = MakeDate(t.DateVal.GoTime())
+		val = Date(t.DateVal)
 	case *Datum_TimeVal:
 		val = t.TimeVal.GoTime()
 	case *Datum_IntervalVal:

@@ -41,7 +41,7 @@ var (
 	// DummyBytes is a placeholder DBytes value.
 	DummyBytes = DBytes("")
 	// DummyDate is a placeholder DDate value.
-	DummyDate = DDate{}
+	DummyDate = DDate(0)
 	// DummyTimestamp is a placeholder DTimestamp value.
 	DummyTimestamp = DTimestamp{}
 	// DummyInterval is a placeholder DInterval value.
@@ -333,10 +333,9 @@ func (d DBytes) String() string {
 	return encodeSQLBytes(string(d))
 }
 
-// DDate is the date Datum.
-type DDate struct {
-	time.Time // Must always be UTC!
-}
+// DDate is the date Datum represented as the number of days after
+// the Unix epoch.
+type DDate int64
 
 // Type implements the Datum interface.
 func (d DDate) Type() string {
@@ -353,10 +352,10 @@ func (d DDate) Compare(other Datum) int {
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
-	if d.Before(v.Time) {
+	if d < v {
 		return -1
 	}
-	if v.Before(d.Time) {
+	if v < d {
 		return 1
 	}
 	return 0
@@ -364,23 +363,21 @@ func (d DDate) Compare(other Datum) int {
 
 // Next implements the Datum interface.
 func (d DDate) Next() Datum {
-	return DDate{Time: d.AddDate(0, 0, 1)}
+	return d + 1
 }
 
 // IsMax implements the Datum interface.
 func (d DDate) IsMax() bool {
-	// Adding a day overflows to a smaller value.
-	return d.After(d.Next().(DDate).Time)
+	return d == math.MaxInt64
 }
 
 // IsMin implements the Datum interface.
 func (d DDate) IsMin() bool {
-	// Subtracting a day underflows to a larger value.
-	return d.Before(d.AddDate(0, 0, -1))
+	return d == math.MinInt64
 }
 
 func (d DDate) String() string {
-	return d.Format(dateFormat)
+	return time.Unix(int64(d)*secondsInDay, 0).UTC().Format(dateFormat)
 }
 
 // DTimestamp is the timestamp Datum.

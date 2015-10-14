@@ -94,7 +94,7 @@ func TestDates(t *testing.T) {
 						t.Fatal(err)
 					}
 
-					if expected := driver.MakeDate(timestamp); !date.Equal(expected.Time) {
+					if expected := driver.MakeDate(timestamp); *date != expected {
 						t.Fatalf("expected date to be truncated to:\n%s\nbut got:\n%s", expected, date)
 					}
 				}
@@ -118,7 +118,7 @@ func TestPlaceholders(t *testing.T) {
 
 	year, month, day := 3015, time.August, 30
 	timeVal := time.Date(year, month, day, 3, 34, 45, 345670000, loc)
-	dateVal := driver.Date{Time: time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
+	dateVal := driver.MakeDate(time.Date(year, month, day, 0, 0, 0, 0, time.UTC))
 	intervalVal, err := time.ParseDuration("34h2s")
 	if err != nil {
 		t.Fatal(err)
@@ -235,7 +235,7 @@ CREATE TABLE t.alltypes (
 		}
 
 		if !(a == 123 && b.Float64 == 3.4 && c.String == "blah" && d.String == "foo" &&
-			e.Bool && f.Equal(timeVal) && g.Equal(dateVal.Time) && *h == intervalVal) {
+			e.Bool && f.Equal(timeVal) && *g == dateVal && *h == intervalVal) {
 			t.Errorf(
 				"expected:\n%+v\ngot:\n%+v",
 				[]interface{}{123, 3.4, "blah", "foo", true, timeVal, dateVal, intervalVal},
