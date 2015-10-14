@@ -86,7 +86,7 @@ type Context struct {
 	// communicated between hosts on the gossip network.
 	GossipInterval time.Duration
 
-	// // Enables running the node as a single-node in-memory cluster.
+	// Enables running the node as a single-node in-memory cluster.
 	EphemeralSingleNode bool
 
 	// Enables linearizable behaviour of operations on this node by making sure
