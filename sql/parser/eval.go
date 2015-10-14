@@ -430,7 +430,7 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{LE, dateType, dateType}: {
 		fn: func(left Datum, right Datum, _ *interface{}) (DBool, error) {
-			return DBool(right.(DDate) < left.(DDate)), nil
+			return DBool(left.(DDate) <= right.(DDate)), nil
 		},
 	},
 	cmpArgs{LE, timestampType, timestampType}: {
