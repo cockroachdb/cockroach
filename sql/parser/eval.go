@@ -185,9 +185,9 @@ var binOps = map[binArgs]binOp{
 		},
 	},
 	binArgs{Minus, dateType, dateType}: {
-		returnType: DummyInterval,
+		returnType: DummyInt,
 		fn: func(left Datum, right Datum) (Datum, error) {
-			return DInterval{Duration: time.Duration(left.(DDate)-right.(DDate)) * 24 * time.Hour}, nil
+			return DInt(left.(DDate) - right.(DDate)), nil
 		},
 	},
 	binArgs{Minus, timestampType, timestampType}: {

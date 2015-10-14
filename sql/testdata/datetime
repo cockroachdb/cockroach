@@ -106,7 +106,7 @@ SELECT now() - current_date()::timestamp < interval '24h10s'
 true
 
 query T
-SELECT current_date - current_date() = interval '0s'
+SELECT current_date - current_date() = 0
 ----
 true
 
