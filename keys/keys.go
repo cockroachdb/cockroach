@@ -358,8 +358,8 @@ func Range(ba roachpb.BatchRequest) (roachpb.RKey, roachpb.RKey) {
 			// Key is smaller than `from`.
 			from = key
 		}
-		if to.Less(key) {
-			// Key is larger than `to`.
+		if !key.Less(to) {
+			// Key.Next() is larger than `to`.
 			to = key.Next()
 		}
 		if endKey := Addr(h.EndKey); to.Less(endKey) {

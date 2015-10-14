@@ -322,6 +322,11 @@ func TestBatchRange(t *testing.T) {
 			exp: [2]string{"a", "c\x00"},
 		},
 		{
+			// Disjoint range request and point request.
+			req: [][2]string{{"a", "b"}, {"b", ""}},
+			exp: [2]string{"a", "b\x00"},
+		},
+		{
 			// Range-local point request.
 			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKeyMax)), ""}},
 			exp: [2]string{"\xff\xff", "\xff\xff\x00"},
