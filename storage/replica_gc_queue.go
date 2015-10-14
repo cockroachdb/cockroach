@@ -30,50 +30,50 @@ import (
 )
 
 const (
-	// rangeGCQueueMaxSize is the max size of the gc queue.
-	rangeGCQueueMaxSize = 100
+	// replicaGCQueueMaxSize is the max size of the gc queue.
+	replicaGCQueueMaxSize = 100
 
-	// rangeGCQueueTimerDuration is the duration between GCs of queued ranges.
-	rangeGCQueueTimerDuration = 10 * time.Second
+	// replicaGCQueueTimerDuration is the duration between GCs of queued replicas.
+	replicaGCQueueTimerDuration = 10 * time.Second
 
-	// RangeGCQueueInactivityThreshold is the inactivity duration after which
+	// ReplicaGCQueueInactivityThreshold is the inactivity duration after which
 	// a range will be considered for garbage collection. Exported for testing.
-	RangeGCQueueInactivityThreshold = 10 * 24 * time.Hour // 10 days
+	ReplicaGCQueueInactivityThreshold = 10 * 24 * time.Hour // 10 days
 )
 
-// rangeGCQueue manages a queue of ranges to be considered for garbage
+// replicaGCQueue manages a queue of replicas to be considered for garbage
 // collections. The GC process asynchronously removes local data for
 // ranges that have been rebalanced away from this store.
-type rangeGCQueue struct {
+type replicaGCQueue struct {
 	*baseQueue
 	db *client.DB
 }
 
-// newRangeGCQueue returns a new instance of rangeGCQueue.
-func newRangeGCQueue(db *client.DB, gossip *gossip.Gossip) *rangeGCQueue {
-	q := &rangeGCQueue{
+// newReplicaGCQueue returns a new instance of replicaGCQueue.
+func newReplicaGCQueue(db *client.DB, gossip *gossip.Gossip) *replicaGCQueue {
+	q := &replicaGCQueue{
 		db: db,
 	}
-	q.baseQueue = newBaseQueue("rangeGC", q, gossip, rangeGCQueueMaxSize)
+	q.baseQueue = newBaseQueue("replicaGC", q, gossip, replicaGCQueueMaxSize)
 	return q
 }
 
-func (q *rangeGCQueue) needsLeaderLease() bool {
+func (q *replicaGCQueue) needsLeaderLease() bool {
 	return false
 }
 
-func (q *rangeGCQueue) acceptsUnsplitRanges() bool {
+func (q *replicaGCQueue) acceptsUnsplitRanges() bool {
 	return true
 }
 
-// shouldQueue determines whether a range should be queued for GC, and
-// if so at what priority. Ranges which have been inactive for longer
-// than rangeGCQueueInactivityThreshold are considered for possible GC
+// shouldQueue determines whether a replica should be queued for GC, and
+// if so at what priority. Replicas which have been inactive for longer
+// than ReplicaGCQueueInactivityThreshold are considered for possible GC
 // at equal priority.
-func (q *rangeGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
+func (q *replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 	_ *config.SystemConfig) (bool, float64) {
 
-	if l := rng.getLease(); l.Expiration.Add(RangeGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now) {
+	if l := rng.getLease(); l.Expiration.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now) {
 		return true, 0
 	}
 	return false, 0
@@ -81,7 +81,7 @@ func (q *rangeGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
-func (q *rangeGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.SystemConfig) error {
+func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.SystemConfig) error {
 	desc := rng.Desc()
 
 	// Calls to RangeLookup typically use inconsistent reads, but we
@@ -158,6 +158,6 @@ func (q *rangeGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.Sy
 	return nil
 }
 
-func (q *rangeGCQueue) timer() time.Duration {
-	return rangeGCQueueTimerDuration
+func (q *replicaGCQueue) timer() time.Duration {
+	return replicaGCQueueTimerDuration
 }

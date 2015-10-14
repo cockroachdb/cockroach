@@ -705,13 +705,13 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 				break
 			}
 
-			// Kick off a manual RangeGC Scan on any store which is not part of the
+			// Kick off a manual ReplicaGC Scan on any store which is not part of the
 			// current replica set. Kick off a Replication scan on *one* store which
 			// is part of the replica set.
 			kickedOffReplicationQueue := false
 			for _, store := range mtc.stores {
 				if _, ok := idSet[store.StoreID()]; !ok {
-					store.ForceRangeGCScan(t)
+					store.ForceReplicaGCScan(t)
 				} else if !kickedOffReplicationQueue {
 					store.ForceReplicationScan(t)
 					kickedOffReplicationQueue = true
@@ -900,9 +900,9 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		}
 		verify([]int64{39, 5, 39, 39})
 
-		// Wait out the leader lease and the unleased duration to make the range GC'able.
-		mtc.manualClock.Increment(int64(storage.RangeGCQueueInactivityThreshold+storage.DefaultLeaderLeaseDuration) + 1)
-		mtc.stores[1].ForceRangeGCScan(t)
+		// Wait out the leader lease and the unleased duration to make the replica GC'able.
+		mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold+storage.DefaultLeaderLeaseDuration) + 1)
+		mtc.stores[1].ForceReplicaGCScan(t)
 
 		// The removed store no longer has any of the data from the range.
 		verify([]int64{39, 0, 39, 39})
@@ -1314,10 +1314,10 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait for the range to be GC'd on node 1.
+	// Wait for the replica to be GC'd on node 1.
 	mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration+
-		storage.RangeGCQueueInactivityThreshold) + 1)
-	mtc.stores[1].ForceRangeGCScan(t)
+		storage.ReplicaGCQueueInactivityThreshold) + 1)
+	mtc.stores[1].ForceReplicaGCScan(t)
 
 	// Store 0 has two writes, 1 has erased everything, and 2 still has the first write.
 	mtc.waitForValues(roachpb.Key("a"), time.Second, []int64{16, 0, 5})
@@ -1358,7 +1358,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// lease will cause GC to do a consistent range lookup, where it
 	// will see that the range has been moved and delete the old
 	// replica.
-	mtc.stores[2].ForceRangeGCScan(t)
+	mtc.stores[2].ForceReplicaGCScan(t)
 	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{16, 0, 0})
 
 	// Now that the group has been GC'd, the goroutine that was

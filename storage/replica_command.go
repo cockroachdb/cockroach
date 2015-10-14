@@ -1228,7 +1228,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 
 	// Compute stats for updated range.
 	now := r.rm.Clock().Timestamp()
-	iter := newRangeDataIterator(&split.UpdatedDesc, batch)
+	iter := newReplicaDataIterator(&split.UpdatedDesc, batch)
 	ms, err := engine.MVCCComputeStats(iter, now.WallTime)
 	iter.Close()
 	if err != nil {
@@ -1252,7 +1252,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	}
 
 	// Compute stats for new range.
-	iter = newRangeDataIterator(&split.NewDesc, batch)
+	iter = newReplicaDataIterator(&split.NewDesc, batch)
 	ms, err = engine.MVCCComputeStats(iter, now.WallTime)
 	iter.Close()
 	if err != nil {
@@ -1414,7 +1414,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 
 	// Compute stats for updated range.
 	now := r.rm.Clock().Timestamp()
-	iter := newRangeDataIterator(&merge.UpdatedDesc, batch)
+	iter := newReplicaDataIterator(&merge.UpdatedDesc, batch)
 	ms, err := engine.MVCCComputeStats(iter, now.WallTime)
 	iter.Close()
 	if err != nil {
@@ -1451,7 +1451,7 @@ func (r *Replica) changeReplicasTrigger(change *roachpb.ChangeReplicasTrigger) e
 	}
 	// If we're removing the current replica, add it to the range GC queue.
 	if change.ChangeType == roachpb.REMOVE_REPLICA && r.rm.StoreID() == change.Replica.StoreID {
-		if err := r.rm.rangeGCQueue().Add(r, 1.0); err != nil {
+		if err := r.rm.replicaGCQueue().Add(r, 1.0); err != nil {
 			// Log the error; this shouldn't prevent the commit; the range
 			// will be GC'd eventually.
 			log.Errorf("unable to add range %s to GC queue: %s", r, err)

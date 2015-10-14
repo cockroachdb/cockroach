@@ -29,20 +29,20 @@ type keyRange struct {
 	start, end roachpb.EncodedKey
 }
 
-// rangeDataIterator provides a complete iteration over all key / value
+// replicaDataIterator provides a complete iteration over all key / value
 // rows in a range, including all system-local metadata and user data.
 // The ranges keyRange slice specifies the key ranges which comprise
 // all of the range's data.
 //
-// A rangeDataIterator provides the same API as an Engine iterator
+// A replicaDataIterator provides the same API as an Engine iterator
 // with the exception of the Seek() method.
-type rangeDataIterator struct {
+type replicaDataIterator struct {
 	curIndex int
 	ranges   []keyRange
 	iter     engine.Iterator
 }
 
-func newRangeDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *rangeDataIterator {
+func newReplicaDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *replicaDataIterator {
 	// The first range in the keyspace starts at KeyMin, which includes the node-local
 	// space. We need the original StartKey to find the range metadata, but the
 	// actual data starts at LocalMax.
@@ -50,7 +50,7 @@ func newRangeDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *rangeDat
 	if d.StartKey.Equal(roachpb.RKeyMin) {
 		dataStartKey = keys.LocalMax
 	}
-	ri := &rangeDataIterator{
+	ri := &replicaDataIterator{
 		ranges: []keyRange{
 			{
 				start: engine.MVCCEncodeKey(keys.MakeRangeIDPrefix(d.RangeID)),
@@ -73,54 +73,54 @@ func newRangeDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *rangeDat
 }
 
 // Close closes the underlying iterator.
-func (ri *rangeDataIterator) Close() {
+func (ri *replicaDataIterator) Close() {
 	ri.curIndex = len(ri.ranges)
 	ri.iter.Close()
 }
 
 // Seek seeks to the specified key.
-func (ri *rangeDataIterator) Seek(key []byte) {
+func (ri *replicaDataIterator) Seek(key []byte) {
 	ri.iter.Seek(key)
 	ri.advance()
 }
 
 // Valid returns whether the underlying iterator is valid.
-func (ri *rangeDataIterator) Valid() bool {
+func (ri *replicaDataIterator) Valid() bool {
 	return ri.iter.Valid()
 }
 
 // Next returns the next raw key value in the iteration, or nil if
 // iteration is done.
-func (ri *rangeDataIterator) Next() {
+func (ri *replicaDataIterator) Next() {
 	ri.iter.Next()
 	ri.advance()
 }
 
 // Key returns the current Key for the iteration if valid.
-func (ri *rangeDataIterator) Key() roachpb.EncodedKey {
+func (ri *replicaDataIterator) Key() roachpb.EncodedKey {
 	return ri.iter.Key()
 }
 
 // Value returns the current Value for the iteration if valid.
-func (ri *rangeDataIterator) Value() []byte {
+func (ri *replicaDataIterator) Value() []byte {
 	return ri.iter.Value()
 }
 
 // ValueProto unmarshals the current value into the provided message
 // if valid.
-func (ri *rangeDataIterator) ValueProto(msg proto.Message) error {
+func (ri *replicaDataIterator) ValueProto(msg proto.Message) error {
 	return proto.Unmarshal(ri.iter.Value(), msg)
 }
 
 // Error returns the Error for the iteration if applicable.
-func (ri *rangeDataIterator) Error() error {
+func (ri *replicaDataIterator) Error() error {
 	return ri.iter.Error()
 }
 
 // advance moves the iterator forward through the ranges until a valid
 // key is found or the iteration is done and the iterator becomes
 // invalid.
-func (ri *rangeDataIterator) advance() {
+func (ri *replicaDataIterator) advance() {
 	for {
 		if !ri.iter.Valid() || ri.iter.Key().Less(ri.ranges[ri.curIndex].end) {
 			return
@@ -136,10 +136,10 @@ func (ri *rangeDataIterator) advance() {
 	}
 }
 
-func (ri *rangeDataIterator) SeekReverse(key []byte) {
-	panic("cannot reverse scan rangeDataIterator")
+func (ri *replicaDataIterator) SeekReverse(key []byte) {
+	panic("cannot reverse scan replicaDataIterator")
 }
 
-func (ri *rangeDataIterator) Prev() {
-	panic("cannot reverse scan rangeDataIterator")
+func (ri *replicaDataIterator) Prev() {
+	panic("cannot reverse scan replicaDataIterator")
 }
