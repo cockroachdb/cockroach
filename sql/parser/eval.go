@@ -136,18 +136,16 @@ var binOps = map[binArgs]binOp{
 			return left.(DFloat) + right.(DFloat), nil
 		},
 	},
-	binArgs{Plus, dateType, intervalType}: {
-		returnType: DummyTimestamp,
+	binArgs{Plus, dateType, intType}: {
+		returnType: DummyDate,
 		fn: func(left Datum, right Datum) (Datum, error) {
-			t := time.Unix(int64(left.(DDate))*secondsInDay, 0).UTC()
-			return DTimestamp{Time: t.Add(right.(DInterval).Duration)}, nil
+			return left.(DDate) + DDate(right.(DInt)), nil
 		},
 	},
-	binArgs{Plus, intervalType, dateType}: {
-		returnType: DummyTimestamp,
+	binArgs{Plus, intType, dateType}: {
+		returnType: DummyDate,
 		fn: func(left Datum, right Datum) (Datum, error) {
-			t := time.Unix(int64(right.(DDate))*secondsInDay, 0).UTC()
-			return DTimestamp{Time: t.Add(left.(DInterval).Duration)}, nil
+			return DDate(left.(DInt)) + right.(DDate), nil
 		},
 	},
 	binArgs{Plus, timestampType, intervalType}: {
@@ -180,11 +178,10 @@ var binOps = map[binArgs]binOp{
 			return left.(DFloat) - right.(DFloat), nil
 		},
 	},
-	binArgs{Minus, dateType, intervalType}: {
-		returnType: DummyTimestamp,
+	binArgs{Minus, dateType, intType}: {
+		returnType: DummyDate,
 		fn: func(left Datum, right Datum) (Datum, error) {
-			t := time.Unix(int64(left.(DDate))*secondsInDay, 0).UTC()
-			return DTimestamp{Time: t.Add(-right.(DInterval).Duration)}, nil
+			return left.(DDate) - DDate(right.(DInt)), nil
 		},
 	},
 	binArgs{Minus, dateType, dateType}: {
