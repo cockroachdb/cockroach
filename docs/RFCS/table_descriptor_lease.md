@@ -163,10 +163,16 @@ descriptor. The operation will perform the following steps
 transactionally:
 
 * `SELECT descriptor FROM system.descriptor WHERE id = <descID>`
-* `SELECT DISTINCT version FROM system.lease WHERE descID = <descID> AND expiration > now()`
+* Set `desc.ModificationTime` to `now()`.
+* `SELECT DISTINCT version FROM system.lease WHERE descID = <descID> AND expiration > <desc.ModificationTime>`
 * Ensure that there is only one active version which is equal to the current version.
-* Perform the edits to the descriptor and bump the descriptor version.
+* Perform the edits to the descriptor.
+* Increment `desc.Version`.
 * `UPDATE system.descriptor WHERE id = <descID> SET descriptor = <desc>`
+
+The table descriptor `ModificationTime` would be fed to the
+`hlc.Clock.Update` whenver a lease is acquired to ensure that the node
+is not allowed to use a descriptor "from the future".
 
 Note that the updating of the table descriptor will cause the table
 version to be gossipped alerting nodes to the new version and causing
