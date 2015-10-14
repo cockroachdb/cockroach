@@ -98,6 +98,7 @@ func TestStatusServer(t *testing.T) {
 	l.ForceLogging = true
 	l.Start()
 	defer l.Stop()
+	defer assertNoEvents(t, l)
 	checkRangeReplication(t, l, 20*time.Second)
 
 	// Get the ids for each node.

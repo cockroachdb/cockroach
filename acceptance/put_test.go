@@ -36,6 +36,7 @@ func TestPut(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
 	l.Start()
 	defer l.Stop()
+	defer assertNoEvents(t, l)
 
 	db, dbStopper := makeDBClient(t, l, 0)
 	defer dbStopper.Stop()

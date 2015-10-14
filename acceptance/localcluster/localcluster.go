@@ -126,6 +126,7 @@ func Create(numNodes int, stopper chan struct{}) *Cluster {
 		client:  newDockerClient(),
 		stopper: stopper,
 		Nodes:   make([]*Container, numNodes),
+		Events:  make(chan Event, 1000),
 	}
 }
 

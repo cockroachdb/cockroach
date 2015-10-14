@@ -25,11 +25,26 @@ import (
 	"os/signal"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 )
 
 var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
 var numNodes = flag.Int("num", 3, "the number of nodes to start (if not otherwise specified by a test)")
 var stopper = make(chan struct{})
+
+func assertNoEvents(t *testing.T, l *localcluster.Cluster) {
+	for {
+		select {
+		case e := <-l.Events:
+			if e.Status != "create" && e.Status != "start" {
+				t.Errorf("unexpected event: %v", e)
+			}
+		default:
+			return
+		}
+	}
+}
 
 func TestMain(m *testing.M) {
 	go func() {

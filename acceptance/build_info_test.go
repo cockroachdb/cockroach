@@ -31,6 +31,7 @@ func TestBuildInfo(t *testing.T) {
 	l := localcluster.Create(1, stopper)
 	l.Start()
 	defer l.Stop()
+	defer assertNoEvents(t, l)
 
 	util.SucceedsWithin(t, 10*time.Second, func() error {
 		select {
