@@ -430,7 +430,8 @@ type proposal struct {
 
 // group represents the state of a consensus group.
 type group struct {
-	id roachpb.RangeID
+	groupID   roachpb.RangeID
+	replicaID roachpb.ReplicaID
 
 	// committedTerm is the term of the most recently committed entry.
 	committedTerm uint64
@@ -497,6 +498,8 @@ type state struct {
 	// Buffer the events and send them in batch to avoid the deadlock
 	// between s.Events channel and callbackChan.
 	pendingEvents []interface{}
+
+	readyGroups map[uint64]raft.Ready
 }
 
 func newState(m *MultiRaft) *state {
@@ -521,10 +524,10 @@ func (s *state) start() {
 			log.Infof("node %v starting", s.nodeID)
 		}
 		s.writeTask.start(s.stopper)
-		// These maps form a kind of state machine: We don't want to read from the
-		// ready channel until the groups we got from the last read have made their
-		// way through the rest of the pipeline.
-		var readyGroups map[uint64]raft.Ready
+		// The maps s.readyGroups and writingGroups form a kind of state
+		// machine: We don't want to read from the ready channel until the
+		// groups we got from the last read have made their way through
+		// the rest of the pipeline.
 		var writingGroups map[uint64]raft.Ready
 		// Counts up to heartbeat interval and is then reset.
 		ticks := 0
@@ -549,7 +552,7 @@ func (s *state) start() {
 			// set raftReady back to nil. This advances our read-from-raft /
 			// write-to-storage state machine to the next step: wait for the
 			// write task to be ready to persist the new data.
-			if readyGroups != nil {
+			if s.readyGroups != nil {
 				//writeReady = s.writeTask.ready
 			} else if writingGroups == nil {
 				raftReady = s.multiNode.Ready()
@@ -573,35 +576,8 @@ func (s *state) start() {
 					log.Infof("node %v: group %v got message %.200s", s.nodeID, req.GroupID,
 						raft.DescribeMessage(req.Message, s.EntryFormatter))
 				}
-				switch req.Message.Type {
-				case raftpb.MsgHeartbeat:
-					s.fanoutHeartbeat(req)
-				case raftpb.MsgHeartbeatResp:
-					s.fanoutHeartbeatResponse(req)
-				default:
-					s.CacheReplicaDescriptor(req.GroupID, req.FromReplica)
-					s.CacheReplicaDescriptor(req.GroupID, req.ToReplica)
-					// We only want to lazily create the group if it's not heartbeat-related;
-					// our heartbeats are coalesced and contain a dummy GroupID.
-					// TODO(tschottdorf) still shouldn't hurt to move this part outside,
-					// but suddenly tests will start failing. Should investigate.
-					if _, ok := s.groups[req.GroupID]; !ok {
-						if log.V(1) {
-							log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
-						}
-						if err := s.createGroup(req.GroupID, req.ToReplica.ReplicaID); err != nil {
-							log.Warningf("Error creating group %d (in response to incoming message): %s", req.GroupID, err)
-							break
-						}
-					}
+				s.handleMessage(req)
 
-					if err := s.multiNode.Step(context.Background(), uint64(req.GroupID), req.Message); err != nil {
-						if log.V(4) {
-							log.Infof("node %v: multinode step to group %v failed for message %.200s", s.nodeID, req.GroupID,
-								raft.DescribeMessage(req.Message, s.EntryFormatter))
-						}
-					}
-				}
 			case op := <-s.createGroupChan:
 				if log.V(6) {
 					log.Infof("node %v: got op %#v", s.nodeID, op)
@@ -612,25 +588,25 @@ func (s *state) start() {
 				if log.V(6) {
 					log.Infof("node %v: got op %#v", s.nodeID, op)
 				}
-				op.ch <- s.removeGroup(op.groupID, readyGroups)
+				op.ch <- s.removeGroup(op.groupID)
 
 			case prop := <-s.proposalChan:
 				s.propose(prop)
 
-			case readyGroups = <-raftReady:
+			case s.readyGroups = <-raftReady:
 				// readyGroups are saved in a local variable until they can be sent to
 				// the write task (and then the real work happens after the write is
 				// complete). All we do for now is log them.
-				s.logRaftReady(readyGroups)
+				s.logRaftReady()
 
 				select {
 				case s.writeTask.ready <- struct{}{}:
 				case <-s.stopper.ShouldStop():
 					return
 				}
-				s.handleWriteReady(readyGroups)
-				writingGroups = readyGroups
-				readyGroups = nil
+				s.handleWriteReady()
+				writingGroups = s.readyGroups
+				s.readyGroups = nil
 
 				select {
 				case resp := <-s.writeTask.out:
@@ -727,7 +703,7 @@ func (s *state) addNode(nodeID roachpb.NodeID, g *group) error {
 	}
 
 	if g != nil {
-		newNode.registerGroup(g.id)
+		newNode.registerGroup(g.groupID)
 		g.nodeIDs = append(g.nodeIDs, nodeID)
 	}
 	return nil
@@ -748,7 +724,7 @@ func (s *state) removeNode(nodeID roachpb.NodeID, g *group) error {
 		}
 	}
 	// TODO(bdarnell): when a node has no more groups, remove it.
-	node.unregisterGroup(g.id)
+	node.unregisterGroup(g.groupID)
 
 	// Cancel any outstanding proposals.
 	if nodeID == s.nodeID {
@@ -760,13 +736,73 @@ func (s *state) removeNode(nodeID roachpb.NodeID, g *group) error {
 	return nil
 }
 
+func (s *state) handleMessage(req *RaftMessageRequest) {
+	// We only want to lazily create the group if it's not heartbeat-related;
+	// our heartbeats are coalesced and contain a dummy GroupID.
+	switch req.Message.Type {
+	case raftpb.MsgHeartbeat:
+		s.fanoutHeartbeat(req)
+		return
+	case raftpb.MsgHeartbeatResp:
+		s.fanoutHeartbeatResponse(req)
+		return
+	}
+
+	s.CacheReplicaDescriptor(req.GroupID, req.FromReplica)
+	s.CacheReplicaDescriptor(req.GroupID, req.ToReplica)
+	if g, ok := s.groups[req.GroupID]; ok {
+		if g.replicaID > req.ToReplica.ReplicaID {
+			log.Warningf("node %v: got message for group %s with stale replica ID %s (expected %s)",
+				s.nodeID, req.GroupID, req.ToReplica.ReplicaID, g.replicaID)
+			return
+		} else if g.replicaID < req.ToReplica.ReplicaID {
+			// The message has a newer ReplicaID than we know about. This
+			// means that this node has been removed from a group and
+			// re-added to it, before our GC process was able to remove the
+			// remnants of the old group.
+			log.Infof("node %v: got message for group %s with newer replica ID (%s vs %s), recreating group",
+				s.nodeID, req.GroupID, req.ToReplica.ReplicaID, g.replicaID)
+			if err := s.removeGroup(req.GroupID); err != nil {
+				log.Warningf("Error removing group %d (in response to incoming message): %s",
+					req.GroupID, err)
+				return
+			}
+			if err := s.createGroup(req.GroupID, req.ToReplica.ReplicaID); err != nil {
+				log.Warningf("Error recreating group %d (in response to incoming message): %s",
+					req.GroupID, err)
+				return
+			}
+		}
+	} else {
+		if log.V(1) {
+			log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
+		}
+		if err := s.createGroup(req.GroupID, req.ToReplica.ReplicaID); err != nil {
+			log.Warningf("Error creating group %d (in response to incoming message): %s",
+				req.GroupID, err)
+			return
+		}
+	}
+
+	if err := s.multiNode.Step(context.Background(), uint64(req.GroupID), req.Message); err != nil {
+		if log.V(4) {
+			log.Infof("node %v: multinode step to group %v failed for message %.200s", s.nodeID, req.GroupID,
+				raft.DescribeMessage(req.Message, s.EntryFormatter))
+		}
+	}
+}
+
 // createGroup is called in two situations: by the application at
 // startup (in which case the replicaID argument is zero and the
 // replicaID will be loaded from storage), and in response to incoming
 // messages (in which case the replicaID comes from the incoming
 // message, since nothing is on disk yet).
 func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) error {
-	if _, ok := s.groups[groupID]; ok {
+	if g, ok := s.groups[groupID]; ok {
+		if replicaID != 0 && g.replicaID != replicaID {
+			return util.Errorf("cannot create group %s with replica ID %s; already exists with replica ID %s",
+				groupID, replicaID, g.replicaID)
+		}
 		return nil
 	}
 	if log.V(3) {
@@ -791,11 +827,13 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 		if repDesc.StoreID == s.storeID {
 			if replicaID == 0 {
 				replicaID = repDesc.ReplicaID
-			} else if replicaID != repDesc.ReplicaID {
+			} else if replicaID < repDesc.ReplicaID {
+				// Note that our ConfState may be stale, so if we were given a
+				// replica ID we only consult the ConfState to ensure we don't
+				// regress.
 				return util.Errorf("inconsistent replica ID: passed %d, but found %s by scanning ConfState for store %s",
 					replicaID, repDesc.ReplicaID, s.storeID)
 			}
-			replicaID = repDesc.ReplicaID
 			break
 		}
 	}
@@ -832,8 +870,9 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 		return err
 	}
 	g := &group{
-		id:      groupID,
-		pending: map[string]*proposal{},
+		groupID:   groupID,
+		replicaID: replicaID,
+		pending:   map[string]*proposal{},
 	}
 	s.groups[groupID] = g
 
@@ -880,7 +919,7 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 	return nil
 }
 
-func (s *state) removeGroup(groupID roachpb.RangeID, readyGroups map[uint64]raft.Ready) error {
+func (s *state) removeGroup(groupID roachpb.RangeID) error {
 	// Group creation is lazy and idempotent; so is removal.
 	g, ok := s.groups[groupID]
 	if !ok {
@@ -904,8 +943,8 @@ func (s *state) removeGroup(groupID roachpb.RangeID, readyGroups map[uint64]raft
 	}
 
 	// Delete any entries for this group in readyGroups.
-	if readyGroups != nil {
-		delete(readyGroups, uint64(groupID))
+	if s.readyGroups != nil {
+		delete(s.readyGroups, uint64(groupID))
 	}
 
 	delete(s.groups, groupID)
@@ -944,8 +983,8 @@ func (s *state) propose(p *proposal) {
 	p.fn()
 }
 
-func (s *state) logRaftReady(readyGroups map[uint64]raft.Ready) {
-	for groupID, ready := range readyGroups {
+func (s *state) logRaftReady() {
+	for groupID, ready := range s.readyGroups {
 		if log.V(5) {
 			log.Infof("node %v: group %v raft ready", s.nodeID, groupID)
 			if ready.SoftState != nil {
@@ -972,12 +1011,12 @@ func (s *state) logRaftReady(readyGroups map[uint64]raft.Ready) {
 
 // handleWriteReady converts a set of raft.Ready structs into a writeRequest
 // to be persisted, marks the group as writing and sends it to the writeTask.
-func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
+func (s *state) handleWriteReady() {
 	if log.V(6) {
 		log.Infof("node %v write ready, preparing request", s.nodeID)
 	}
 	writeRequest := newWriteRequest()
-	for groupID, ready := range readyGroups {
+	for groupID, ready := range s.readyGroups {
 		raftGroupID := roachpb.RangeID(groupID)
 		g, ok := s.groups[raftGroupID]
 		if !ok {
@@ -1131,7 +1170,7 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 		fromReplica.StoreID = roachpb.StoreID(msg.From)
 	} else {
 		// Regular message: To/From fields are replica IDs.
-		groupID = g.id
+		groupID = g.groupID
 		var err error
 		toReplica, err = s.ReplicaDescriptor(groupID, roachpb.ReplicaID(msg.To))
 		if err != nil {
@@ -1187,9 +1226,9 @@ func (s *state) maybeSendLeaderEvent(groupID roachpb.RangeID, g *group, ready *r
 			if ready.SoftState.Lead == 0 {
 				g.leader = roachpb.ReplicaDescriptor{}
 			} else {
-				if repl, err := s.ReplicaDescriptor(g.id, roachpb.ReplicaID(ready.SoftState.Lead)); err != nil {
+				if repl, err := s.ReplicaDescriptor(g.groupID, roachpb.ReplicaID(ready.SoftState.Lead)); err != nil {
 					log.Warningf("node %s: failed to look up address of replica %d in group %d: %s",
-						s.nodeID, ready.SoftState.Lead, g.id, err)
+						s.nodeID, ready.SoftState.Lead, g.groupID, err)
 					g.leader = roachpb.ReplicaDescriptor{}
 				} else {
 					g.leader = repl
