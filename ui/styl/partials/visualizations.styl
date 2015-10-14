@@ -19,19 +19,22 @@ Author: Max Lang (max@cockroachlabs.com)
 
 @require '../modules/palette.styl'
 
-.visualization-wrapper
-  background-color white
-  border 1px solid $secondary-gray-1
-  display inline-block
-  // prevents borders from doubling up
-  margin-left -1px
-  margin-top -1px
-
-
-// Layout Constants. Change these values in visualizations.ts if you change them here.
 $viz-top = 30px
 $viz-bottom = 65px
 $viz-sides = 62px
+
+.visualization-wrapper
+  display inline-flex
+  background-color white
+  border 1px solid $secondary-gray-1
+  // prevents borders from doubling up
+  margin-left -1px
+  margin-top -1px
+  flex-direction column
+  justify-content space-between
+  align-items stretch
+  width 323px
+  height 289px
 
 .viz-top
   height $viz-top
@@ -54,9 +57,13 @@ $viz-sides = 62px
     color $secondary-light-gray
 
 
+
 .visualization
-  clear both
-  margin 0 $viz-sides
+  height 100%
+  width 100%
+  padding 0 $viz-sides
+  display flex
+  align-items center
 
   .number
     font-family Lato-Light
@@ -64,4 +71,5 @@ $viz-sides = 62px
     color $main-green
     width 100%
     text-align center
+    display block
 

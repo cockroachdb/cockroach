@@ -94,46 +94,45 @@ module AdminViews {
             return m(".primary-stats", [
                 {
                   title: "Total Ranges",
-                  data: {value: allStats.range_count},
                   visualizationArguments: {
-                    format: ".0s"
+                    format: ".0s",
+                    data: {value: allStats.range_count}
                   }
                 },
                 {
                   title: "Total Live Bytes",
-                  data: {value: allStats.stats.live_bytes},
                   visualizationArguments: {
                     formatFn: function (v: number): string {
                       return Utils.Format.Bytes(v);
                     },
-                    zoom: "50%"
+                    zoom: "50%",
+                    data: {value: allStats.stats.live_bytes}
                   }
                 },
                 {
                   title: "Leader Ranges",
-                  data: {value: allStats.leader_range_count},
                   visualizationArguments: {
-                    format: ".0s"
+                    format: ".0s",
+                    data: {value: allStats.leader_range_count}
                   }
                 },
                 {
                   title: "Available",
-                  data: {value: allStats.available_range_count / allStats.leader_range_count},
                   visualizationArguments: {
-                    format: "3%"
+                    format: "3%",
+                    data: {value: allStats.available_range_count / allStats.leader_range_count}
                   }
                 },
                 {
                   title: "Fully Replicated",
-                  data: {value: allStats.replicated_range_count / allStats.leader_range_count},
                   visualizationArguments: {
-                    format: "3%"
+                    format: "3%",
+                    data: {value: allStats.replicated_range_count / allStats.leader_range_count}
                   }
                 }
               ].map(function (v: any): MithrilComponent<any> {
-                v.width = v.width || 323;
-                v.height = v.height || 289;
-                v.visualizationComponent = v.visualizationComponent || Visualizations.NumberVisualization;
+                v.virtualVisualizationElement =
+                  m.component(Visualizations.NumberVisualization, v.visualizationArguments);
                 return m.component(Visualizations.VisualizationWrapper, v);
               })
             );
