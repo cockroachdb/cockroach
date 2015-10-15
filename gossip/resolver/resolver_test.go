@@ -27,6 +27,7 @@ import (
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 
 func TestParseResolverSpec(t *testing.T) {
+	def := util.EnsureHostPort(":")
 	testCases := []struct {
 		input           string
 		success         bool
@@ -34,17 +35,24 @@ func TestParseResolverSpec(t *testing.T) {
 		resolverAddress string
 	}{
 		// Ports are not checked at parsing time. They are at GetAddress time though.
-		{"127.0.0.1:26257", true, "tcp", "127.0.0.1:26257"},
-		{":26257", true, "tcp", util.EnsureHost(":26257")},
-		{"127.0.0.1", true, "tcp", "127.0.0.1"},
-		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1"},
-		{"lb=127.0.0.1", true, "lb", "127.0.0.1"},
+		{"127.0.0.1:26222", true, "tcp", "127.0.0.1:26222"},
+		{":26257", true, "tcp", def},
+		{"127.0.0.1", true, "tcp", "127.0.0.1:26257"},
+		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:26257"},
+		{"tcp=127.0.0.1:23456", true, "tcp", "127.0.0.1:23456"},
+		{"lb=127.0.0.1", true, "lb", "127.0.0.1:26257"},
 		{"unix=/tmp/unix-socket12345", true, "unix", "/tmp/unix-socket12345"},
 		{"http-lb=localhost:26257", true, "http-lb", "localhost:26257"},
-		{"http-lb=:26257", true, "http-lb", util.EnsureHost(":26257")},
+		{"http-lb=newhost:1234", true, "http-lb", "newhost:1234"},
+		{"http-lb=:26257", true, "http-lb", def},
+		{"http-lb=:", true, "http-lb", def},
 		{"", false, "", ""},
 		{"foo=127.0.0.1", false, "", ""},
 		{"lb=", false, "", ""},
+		{"", false, "tcp", ""},
+		{":", true, "tcp", def},
+		{"tcp=", false, "tcp", ""},
+		{"tcp=:", true, "tcp", def},
 	}
 
 	for tcNum, tc := range testCases {
@@ -72,13 +80,13 @@ func TestGetAddress(t *testing.T) {
 		addressType  string
 		addressValue string
 	}{
-		{"tcp=127.0.0.1:26257", true, true, "tcp", "127.0.0.1:26257"},
-		{"tcp=127.0.0.1", false, false, "", ""},
+		{"tcp=127.0.0.1:26222", true, true, "tcp", "127.0.0.1:26222"},
+		{"tcp=127.0.0.1", true, true, "tcp", "127.0.0.1:26257"},
 		{"tcp=localhost:80", true, true, "tcp", "localhost:80"},
 		// We should test unresolvable dns too, but this would be fragile.
 		{"lb=localhost:80", true, false, "tcp", "localhost:80"},
 		{"lb=127.0.0.1:80", true, false, "tcp", "127.0.0.1:80"},
-		{"lb=127.0.0.1", false, false, "", ""},
+		{"lb=127.0.0.1", true, false, "tcp", "127.0.0.1:26257"},
 		{"unix=/tmp/foo", true, true, "unix", "/tmp/foo"},
 	}
 
