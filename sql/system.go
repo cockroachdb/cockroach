@@ -42,6 +42,15 @@ CREATE TABLE system.descriptor (
   descriptor BLOB
 );`
 
+	leaseTableSchema = `
+CREATE TABLE system.lease (
+  descID     INT,
+  version    INT,
+  nodeID     INT,
+  expiration TIMESTAMP,
+  PRIMARY KEY (descID, version, expiration, nodeID)
+);`
+
 	usersTableSchema = `
 CREATE TABLE system.users (
   username       CHAR PRIMARY KEY,
@@ -72,6 +81,9 @@ var (
 	// DescriptorTable is the descriptor for the descriptor table.
 	DescriptorTable = createSystemTable(keys.DescriptorTableID, descriptorTableSchema)
 
+	// LeaseTable is the descriptor for the lease table.
+	LeaseTable = createSystemTable(keys.LeaseTableID, leaseTableSchema)
+
 	// UsersTable is the descriptor for the users table.
 	UsersTable = createSystemTable(keys.UsersTableID, usersTableSchema)
 
@@ -86,6 +98,7 @@ var (
 		keys.SystemDatabaseID:  privilege.ReadData,
 		keys.NamespaceTableID:  privilege.ReadData,
 		keys.DescriptorTableID: privilege.ReadData,
+		keys.LeaseTableID:      privilege.ReadData,
 		keys.UsersTableID:      privilege.ReadWriteData,
 		keys.ZonesTableID:      privilege.ReadWriteData,
 	}
@@ -131,6 +144,7 @@ func GetInitialSystemValues() []roachpb.KeyValue {
 		{keys.RootNamespaceID, &SystemDB},
 		{SystemDB.ID, &NamespaceTable},
 		{SystemDB.ID, &DescriptorTable},
+		{SystemDB.ID, &LeaseTable},
 		{SystemDB.ID, &UsersTable},
 		{SystemDB.ID, &ZonesTable},
 	}

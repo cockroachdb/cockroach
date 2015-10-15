@@ -290,7 +290,7 @@ func (t *Timestamp) Backward(s Timestamp) {
 }
 
 // GoTime converts the timestamp to a time.Time.
-func (t *Timestamp) GoTime() time.Time {
+func (t Timestamp) GoTime() time.Time {
 	sec := t.WallTime / 1e9
 	nsec := t.WallTime % 1e9
 	return time.Unix(sec, nsec)

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -48,9 +49,9 @@ type Executor struct {
 	systemConfigMu sync.RWMutex
 }
 
-// NewExecutor creates an Executor and registers a callback on the
+// newExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(db client.DB, gossip *gossip.Gossip) *Executor {
+func newExecutor(db client.DB, gossip *gossip.Gossip, clock *hlc.Clock) *Executor {
 	exec := &Executor{db: db}
 	gossip.RegisterSystemConfigCallback(exec.updateSystemConfig)
 	return exec

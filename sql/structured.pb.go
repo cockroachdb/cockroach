@@ -9,6 +9,7 @@ import fmt "fmt"
 import math "math"
 
 // discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
 
 import io "io"
 
@@ -241,16 +242,20 @@ type TableDescriptor struct {
 	Alias string `protobuf:"bytes,2,opt,name=alias" json:"alias"`
 	ID    ID     `protobuf:"varint,3,opt,name=id,casttype=ID" json:"id"`
 	// ID of the parent database.
-	ParentID ID                 `protobuf:"varint,4,opt,name=parent_id,casttype=ID" json:"parent_id"`
-	Columns  []ColumnDescriptor `protobuf:"bytes,5,rep,name=columns" json:"columns"`
+	ParentID ID `protobuf:"varint,4,opt,name=parent_id,casttype=ID" json:"parent_id"`
+	// Monotonically increasing version of the table descriptor.
+	Version uint32 `protobuf:"varint,5,opt,name=version" json:"version"`
+	// Last modification time of the table descriptor.
+	ModificationTime cockroach_roachpb1.Timestamp `protobuf:"bytes,6,opt,name=modification_time" json:"modification_time"`
+	Columns          []ColumnDescriptor           `protobuf:"bytes,7,rep,name=columns" json:"columns"`
 	// next_column_id is used to ensure that deleted column ids are not reused.
-	NextColumnID ColumnID        `protobuf:"varint,6,opt,name=next_column_id,casttype=ColumnID" json:"next_column_id"`
-	PrimaryIndex IndexDescriptor `protobuf:"bytes,7,opt,name=primary_index" json:"primary_index"`
+	NextColumnID ColumnID        `protobuf:"varint,8,opt,name=next_column_id,casttype=ColumnID" json:"next_column_id"`
+	PrimaryIndex IndexDescriptor `protobuf:"bytes,9,opt,name=primary_index" json:"primary_index"`
 	// indexes are all the secondary indexes.
-	Indexes []IndexDescriptor `protobuf:"bytes,8,rep,name=indexes" json:"indexes"`
+	Indexes []IndexDescriptor `protobuf:"bytes,10,rep,name=indexes" json:"indexes"`
 	// next_index_id is used to ensure that deleted index ids are not reused.
-	NextIndexID IndexID              `protobuf:"varint,9,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
-	Privileges  *PrivilegeDescriptor `protobuf:"bytes,10,opt,name=privileges" json:"privileges,omitempty"`
+	NextIndexID IndexID              `protobuf:"varint,11,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
+	Privileges  *PrivilegeDescriptor `protobuf:"bytes,12,opt,name=privileges" json:"privileges,omitempty"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -283,6 +288,20 @@ func (m *TableDescriptor) GetParentID() ID {
 		return m.ParentID
 	}
 	return 0
+}
+
+func (m *TableDescriptor) GetVersion() uint32 {
+	if m != nil {
+		return m.Version
+	}
+	return 0
+}
+
+func (m *TableDescriptor) GetModificationTime() cockroach_roachpb1.Timestamp {
+	if m != nil {
+		return m.ModificationTime
+	}
+	return cockroach_roachpb1.Timestamp{}
 }
 
 func (m *TableDescriptor) GetColumns() []ColumnDescriptor {
@@ -545,32 +564,20 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x20
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.ParentID))
-	if len(m.Columns) > 0 {
-		for _, msg := range m.Columns {
-			data[i] = 0x2a
-			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	data[i] = 0x30
+	data[i] = 0x28
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.NextColumnID))
-	data[i] = 0x3a
+	i = encodeVarintStructured(data, i, uint64(m.Version))
+	data[i] = 0x32
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.PrimaryIndex.Size()))
-	n2, err := m.PrimaryIndex.MarshalTo(data[i:])
+	i = encodeVarintStructured(data, i, uint64(m.ModificationTime.Size()))
+	n2, err := m.ModificationTime.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n2
-	if len(m.Indexes) > 0 {
-		for _, msg := range m.Indexes {
-			data[i] = 0x42
+	if len(m.Columns) > 0 {
+		for _, msg := range m.Columns {
+			data[i] = 0x3a
 			i++
 			i = encodeVarintStructured(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -580,18 +587,41 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
-	data[i] = 0x48
+	data[i] = 0x40
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.NextColumnID))
+	data[i] = 0x4a
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.PrimaryIndex.Size()))
+	n3, err := m.PrimaryIndex.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	if len(m.Indexes) > 0 {
+		for _, msg := range m.Indexes {
+			data[i] = 0x52
+			i++
+			i = encodeVarintStructured(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	data[i] = 0x58
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.NextIndexID))
 	if m.Privileges != nil {
-		data[i] = 0x52
+		data[i] = 0x62
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
-		n3, err := m.Privileges.MarshalTo(data[i:])
+		n4, err := m.Privileges.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n3
+		i += n4
 	}
 	return i, nil
 }
@@ -622,11 +652,11 @@ func (m *DatabaseDescriptor) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
-		n4, err := m.Privileges.MarshalTo(data[i:])
+		n5, err := m.Privileges.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n4
+		i += n5
 	}
 	return i, nil
 }
@@ -724,6 +754,9 @@ func (m *TableDescriptor) Size() (n int) {
 	n += 1 + l + sovStructured(uint64(l))
 	n += 1 + sovStructured(uint64(m.ID))
 	n += 1 + sovStructured(uint64(m.ParentID))
+	n += 1 + sovStructured(uint64(m.Version))
+	l = m.ModificationTime.Size()
+	n += 1 + l + sovStructured(uint64(l))
 	if len(m.Columns) > 0 {
 		for _, e := range m.Columns {
 			l = e.Size()
@@ -1400,6 +1433,55 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
+			}
+			m.Version = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Version |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ModificationTime", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ModificationTime.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 7:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
 			}
@@ -1430,7 +1512,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 6:
+		case 8:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NextColumnID", wireType)
 			}
@@ -1449,7 +1531,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 7:
+		case 9:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PrimaryIndex", wireType)
 			}
@@ -1479,7 +1561,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 8:
+		case 10:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Indexes", wireType)
 			}
@@ -1510,7 +1592,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 9:
+		case 11:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NextIndexID", wireType)
 			}
@@ -1529,7 +1611,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 10:
+		case 12:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Privileges", wireType)
 			}
