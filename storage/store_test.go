@@ -23,7 +23,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -475,15 +474,8 @@ func TestStoreVerifyKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	tooLongKey := roachpb.Key(strings.Repeat("x", roachpb.KeyMaxLength+1))
-
-	// Start with a too-long key on a get.
-	gArgs := getArgs(tooLongKey)
-	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err, "exceeded") {
-		t.Fatalf("unexpected error for key too long: %v", err)
-	}
 	// Try a start key == KeyMax.
-	gArgs.Key = roachpb.KeyMax
+	gArgs := getArgs(roachpb.KeyMax)
 	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
 		t.Fatalf("expected error for start key == KeyMax: %v", err)
 	}
@@ -492,14 +484,8 @@ func TestStoreVerifyKeys(t *testing.T) {
 	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
 		t.Fatalf("unexpected error for end key specified on a non-range-based operation: %v", err)
 	}
-	// Try a scan with too-long EndKey.
-	sArgs := scanArgs(roachpb.RKeyMin, tooLongKey)
-	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err, "length exceeded") {
-		t.Fatalf("unexpected error for end key too long: %v", err)
-	}
 	// Try a scan with end key < start key.
-	sArgs.Key = []byte("b")
-	sArgs.EndKey = []byte("a")
+	sArgs := scanArgs([]byte("b"), []byte("a"))
 	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err, "must be greater than") {
 		t.Fatalf("unexpected error for end key < start: %v", err)
 	}
