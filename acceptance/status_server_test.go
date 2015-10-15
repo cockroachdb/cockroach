@@ -97,7 +97,11 @@ func TestStatusServer(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
 	l.ForceLogging = true
 	l.Start()
-	defer l.Stop()
+	defer func() {
+		if err := l.AssertAndStop(nil); err != nil {
+			t.Fatal(err)
+		}
+	}()
 	checkRangeReplication(t, l, 20*time.Second)
 
 	// Get the ids for each node.

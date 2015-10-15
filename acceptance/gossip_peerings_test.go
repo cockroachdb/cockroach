@@ -20,7 +20,6 @@
 package acceptance
 
 import (
-	"fmt"
 	"math/rand"
 	"strings"
 	"testing"
@@ -45,11 +44,6 @@ func checkGossip(t *testing.T, l *localcluster.Cluster, d time.Duration,
 		case <-stopper:
 			t.Fatalf("interrupted")
 			return nil
-		case e := <-l.Events:
-			if log.V(1) {
-				log.Infof("%+v", e)
-			}
-			return fmt.Errorf("event: %+v", e)
 		case <-time.After(1 * time.Second):
 		}
 
@@ -103,9 +97,24 @@ func hasClusterID(infos map[string]interface{}) error {
 
 func TestGossipPeerings(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
-	l.Events = make(chan localcluster.Event, 10)
 	l.Start()
-	defer l.Stop()
+	rand.Seed(randutil.NewPseudoSeed())
+	pickedNode := rand.Intn(len(l.Nodes)-1) + 1
+
+	defer func() {
+		if err := l.AssertAndStop([]localcluster.Event{
+			{NodeIndex: 0, Status: "kill"},
+			{NodeIndex: 0, Status: "die"},
+			{NodeIndex: 0, Status: "stop"},
+			{NodeIndex: 0, Status: "restart"},
+			{NodeIndex: pickedNode, Status: "kill"},
+			{NodeIndex: pickedNode, Status: "die"},
+			{NodeIndex: pickedNode, Status: "stop"},
+			{NodeIndex: pickedNode, Status: "restart"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
 
@@ -117,8 +126,6 @@ func TestGossipPeerings(t *testing.T) {
 	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
 
 	// Restart another node.
-	rand.Seed(randutil.NewPseudoSeed())
-	pickedNode := rand.Intn(len(l.Nodes)-1) + 1
 	log.Infof("restarting node %d", pickedNode)
 	if err := l.Nodes[pickedNode].Restart(5); err != nil {
 		t.Fatal(err)
@@ -132,7 +139,12 @@ func TestGossipPeerings(t *testing.T) {
 func TestGossipRestart(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
 	l.Start()
-	defer l.Stop()
+	var expEvents []localcluster.Event
+	defer func() {
+		if err := l.AssertAndStop(expEvents); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	log.Infof("waiting for initial gossip connections")
 	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
@@ -148,13 +160,21 @@ func TestGossipRestart(t *testing.T) {
 	checkRangeReplication(t, l, 10*time.Second)
 
 	log.Infof("stopping all nodes")
-	for _, node := range l.Nodes {
+	for i, node := range l.Nodes {
 		node.Stop(5)
+		expEvents = append(expEvents, []localcluster.Event{
+			{NodeIndex: i, Status: "kill"},
+			{NodeIndex: i, Status: "die"},
+			{NodeIndex: i, Status: "stop"},
+		}...)
 	}
 
 	log.Infof("restarting all nodes")
-	for _, node := range l.Nodes {
+	for i, node := range l.Nodes {
 		node.Restart(5)
+		expEvents = append(expEvents, []localcluster.Event{
+			{NodeIndex: i, Status: "restart"},
+		}...)
 	}
 
 	log.Infof("waiting for gossip to be connected")

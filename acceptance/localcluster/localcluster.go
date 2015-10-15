@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -127,6 +128,7 @@ func Create(numNodes int, stopper chan struct{}) *Cluster {
 		client:  newDockerClient(),
 		stopper: stopper,
 		Nodes:   make([]*Container, numNodes),
+		Events:  make(chan Event, 1000),
 	}
 }
 
@@ -136,7 +138,7 @@ func Create(numNodes int, stopper chan struct{}) *Cluster {
 // the process is exited with a failure code.
 func (l *Cluster) stopOnPanic() {
 	if r := recover(); r != nil {
-		l.Stop()
+		l.stop()
 		if r != l {
 			panic(r)
 		}
@@ -426,8 +428,31 @@ func (l *Cluster) Start() {
 	}
 }
 
+// AssertAndStop drains the Events channel and stops the cluster.
+// If the drained events (excluding "start" and "create") don't
+// match the passed slice, an error is returned.
+func (l *Cluster) AssertAndStop(expected []Event) error {
+	defer l.stop()
+	var events []Event
+	for {
+		select {
+		case e := <-l.Events:
+			if e.Status != "start" && e.Status != "create" {
+				events = append(events, e)
+			}
+			continue
+		default:
+		}
+		break
+	}
+	if !reflect.DeepEqual(expected, events) {
+		return fmt.Errorf("expected events %v, got %v", expected, events)
+	}
+	return nil
+}
+
 // Stop stops the clusters. It is safe to stop the cluster multiple times.
-func (l *Cluster) Stop() {
+func (l *Cluster) stop() {
 	if *waitOnStop {
 		log.Infof("waiting for interrupt")
 		select {
