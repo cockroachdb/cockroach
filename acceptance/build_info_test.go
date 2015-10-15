@@ -30,7 +30,11 @@ import (
 func TestBuildInfo(t *testing.T) {
 	l := localcluster.Create(1, stopper)
 	l.Start()
-	defer l.Stop()
+	defer func() {
+		if err := l.AssertAndStop(nil); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	util.SucceedsWithin(t, 10*time.Second, func() error {
 		select {
