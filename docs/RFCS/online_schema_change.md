@@ -75,7 +75,11 @@ create invalid data when two consecutive versions of the descriptor
 are in use concurrently. The table lease mechanism will be used to
 ensure that there are only two active versions of a descriptor in use
 in a cluster and the scheme change implementation will ensure that
-these two versions follow the state transition invariant.
+these two versions follow the state transition invariant. The state
+transition diagram (Figure 3) in [Online, Asynchronous Schema Change
+in
+F1](http://static.googleusercontent.com/media/research.google.com/en//pubs/archive/41376.pdf)
+is a useful reference.
 
 When an index is added to a table a potentially time consuming
 backfill operation needs to be performed to create the index
@@ -117,6 +121,11 @@ backfilling work transactionally in order to avoid anomalies involving
 deletions. Backfilling might duplicate work performed by concurrent
 insertions or updates, but the blind overwrites of identical data are
 safe.
+
+Dropping an index involves a single `DelRange` operation. Dropping a
+column is more involved and will be performed as a back-delete
+process, similar to the above backfill process, which loops over the
+primary index for the table and deletes the column keys.
 
 Since schema change operations are potentially long running they need
 to be restartable or abortable if the node performing them dies. We
