@@ -566,8 +566,6 @@ func (t *Transaction) Restart(userPriority, upgradePriority int32, timestamp Tim
 // Update ratchets priority, timestamp and original timestamp values (among
 // others) for the transaction. If t.ID is empty, then the transaction is
 // copied from o.
-// TODO(tschottdorf): Make sure this updates all required fields. This method
-// is prone to code rot.
 func (t *Transaction) Update(o *Transaction) {
 	if o == nil {
 		return
