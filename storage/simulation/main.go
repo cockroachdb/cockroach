@@ -18,47 +18,105 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+var maxEpoch = flag.Int("maxEpoch", 10000, "Maximum epoch to simulate.")
+var actionOutputFile = flag.String("action", "", "Output file that shows all actions taken in cluster.")
+var epochOutputFile = flag.String("epoch", "", "Output file that shows stats for all epochs.")
+var startingNodes = flag.Int("startingNodes", 3, "Number of initial nodes in the cluster.")
+var scriptInputFile = flag.String("script", "default.script", "Input script file to describe simulated actions.")
 
 func main() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
+	flag.Parse()
+	// Give the flags some boundaries.
+	if *startingNodes < 0 {
+		*startingNodes = 0
+	}
+	if *maxEpoch < 0 {
+		*maxEpoch = 0
+	}
+
+	// Clean the output file strings so they can be compared easily or set them
+	// to nil if there is no file path.
+	if len(*actionOutputFile) > 0 {
+		*actionOutputFile = filepath.Clean(*actionOutputFile)
+	} else {
+		actionOutputFile = nil
+	}
+	if len(*epochOutputFile) > 0 {
+		*epochOutputFile = filepath.Clean(*epochOutputFile)
+	} else {
+		epochOutputFile = nil
+	}
+	*scriptInputFile = filepath.Clean(*scriptInputFile)
+
 	fmt.Printf("A simulation of the cluster's rebalancing.\n\n")
+	fmt.Printf("Maximum Epoch for simulation set to %d.\n", *maxEpoch)
+	fmt.Printf("Cluster is starting with %d nodes.\n", *startingNodes)
+	fmt.Printf("Script file is %s\n", *scriptInputFile)
 
-	// TODO(bram): Setup flags to allow filenames for these outputs. Print both
-	// to action and epoch to os.Stdout as well.
-	epochWriter := os.Stdout
-	actionWriter := os.Stdout
-	c := createCluster(stopper, 5, epochWriter, actionWriter)
+	var epochWriter io.Writer = os.Stdout
+	var actionWriter io.Writer = os.Stdout
 
-	// Split a random range 100 times.
-	for i := 0; i < 10; i++ {
-		c.splitRangeRandom()
+	// Do we have an action output file?
+	if actionOutputFile != nil {
+		actionOutputF, err := os.OpenFile(*actionOutputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
+		if err != nil {
+			fmt.Printf("Could not create or open action file:%s - %s", *actionOutputFile, err)
+			os.Exit(1)
+		}
+		defer actionOutputF.Close()
+		fmt.Printf("Action Output will be written to %s.\n", *actionOutputFile)
+		actionWriter = io.MultiWriter(os.Stdout, actionOutputF)
+	} else {
+		fmt.Printf("Action Output will only be written to console.\n")
 	}
-	c.flush()
 
-	// TODO(bram): only flush when on manual stepping (once that enabled).
+	// Do we have an epoch output file?
+	if epochOutputFile != nil {
+		// Is it the same as the action output file?
+		if actionOutputFile != nil && *actionOutputFile == *epochOutputFile {
+			epochWriter = actionWriter
+			fmt.Printf("Epoch Output will also be written to %s.\n", *epochOutputFile)
+		} else {
+			epochOutputF, err := os.OpenFile(*epochOutputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
+			if err != nil {
+				fmt.Printf("Could not create or open epoch file:%s - %s", *epochOutputFile, err)
+				os.Exit(1)
+			}
+			defer epochOutputF.Close()
+			fmt.Printf("Epoch Output will be written to %s.\n", *epochOutputFile)
+			epochWriter = io.MultiWriter(os.Stdout, epochOutputF)
+		}
+	} else {
+		fmt.Printf("Epoch Output will only be written to console.\n")
+	}
+
+	fmt.Printf("\nParsing Script:\n")
+	s, err := createScript(*maxEpoch, *scriptInputFile)
+	if err != nil {
+		fmt.Printf("Could not correctly parse script file:%s - %s", *scriptInputFile, err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("\nPreparing Cluster:\n")
+	c := createCluster(stopper, *startingNodes, epochWriter, actionWriter, s)
+
 	// Run until stable or at the 100th epoch.
-	for c.runEpoch() != true && c.epoch < 100 {
-		c.flush()
-	}
+	fmt.Printf("\nRunning Simulation:\n")
+	c.OutputEpochHeader()
 	c.flush()
-	fmt.Println(c)
-
-	for i := 0; i < 70; i++ {
-		c.splitRangeLast()
+	for c.runEpoch() != true {
 	}
-
-	// Run until stable or at the 1000th epoch.
-	for c.runEpoch() != true && c.epoch < 1000 {
-		c.flush()
-	}
-	c.flush()
-
 	fmt.Println(c)
 }
