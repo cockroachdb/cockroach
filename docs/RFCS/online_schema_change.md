@@ -111,7 +111,7 @@ transactions that process a fraction of the table at a time:
 ```
 
 The above pseudo-code is intended to give the gist of how backfilling
-will work. We'll iterate over the primary indexn transactionally
+will work. We'll iterate over the primary index transactionally
 retrieving keys and generating index entries. We perform the
 backfilling work transactionally in order to avoid anomalies involving
 deletions. Backfilling might duplicate work performed by concurrent
@@ -126,7 +126,9 @@ first range of the table (i.e. containing the key `/<tableID>`). When
 a node receives a schema change operation such as `CREATE INDEX` it
 will forward the operation to this "table leader". When the table
 leader restarts it will load the associated table descriptor and
-restart or abort the schema change operation.
+restart or abort the schema change operation. Note that aborting a
+schema change operation needs to maintain the invariant that the
+descriptor version only increase.
 
 For initial implementation simplicity, we will only allow a single
 schema change operation at a time per table. This restriction can be
@@ -140,5 +142,10 @@ changes on a table (e.g. concurrently adding multiple indexes).
 # Unresolved questions
 
 * Is there a way to avoid performing the backfilling work
-  transactionally? Is it worth optimizing?
+  transactionally? Is it worth optimizing? Delete, in particular,
+  seems problematic. If we scan a portion of the primary index
+  non-transactionally and then generate index keys, a concurrent
+  delete can come in and delete one of the rows and not generate a
+  delete of the index key unless we left a "tombstone" deletion for
+  the index key.
 
