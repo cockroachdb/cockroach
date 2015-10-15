@@ -137,7 +137,14 @@ changes on a table (e.g. concurrently adding multiple indexes).
 
 # Drawbacks
 
+* None. This is rock solid.
+
 # Alternatives
+
+* No real good ones. We could try to come up with some sort of global
+  table lock mechanism and then synchronously perform the
+  backfill. This seems as difficult as the current proposal and much
+  worse for the user experience.
 
 # Unresolved questions
 
@@ -149,3 +156,11 @@ changes on a table (e.g. concurrently adding multiple indexes).
   delete of the index key unless we left a "tombstone" deletion for
   the index key.
 
+* If the node performing the backfill gets restarted we should figure
+  out a way to avoid restarting the backfill from scratch. One thought
+  is that the backfill operation can periodically checkpoint the high
+  water mark of its progress (perhaps in the descriptor itself).
+
+* Figure out how to distribute the backfill work. Ideally we would
+  have each range of the primary index generate and write the index
+  keys. I feel this is best left to a separate RFC.
