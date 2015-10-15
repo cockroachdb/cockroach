@@ -22,6 +22,10 @@ import (
 	"os"
 )
 
+const (
+	defaultPort = "26257"
+)
+
 // EnsureHost takes a host:port pair, where the host portion is optional.
 // If a host is present, the output is equal to the input. Otherwise,
 // the output will contain a host portion equal to the hostname (or
@@ -36,4 +40,19 @@ func EnsureHost(addr string) string {
 		host = "127.0.0.1"
 	}
 	return net.JoinHostPort(host, port)
+}
+
+// EnsureFullAddr check if addr is a host:port pair. It make sure to have both.
+func EnsureFullAddr(addr string) string {
+	// Ensure host first
+	addr = EnsureHost(addr)
+
+	// Check port
+	_, port, _ := net.SplitHostPort(addr)
+	if port != "" {
+		return addr
+	}
+
+	// Fill default port 26257
+	return net.JoinHostPort(addr, defaultPort)
 }
