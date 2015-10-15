@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -83,28 +82,6 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
 }
 
-// verifyKeyLength verifies key length. Extra key length is allowed for
-// the local key prefix (for example, a transaction record), and also for
-// keys prefixed with the meta1 or meta2 addressing prefixes. There is a
-// special case for both key-local AND meta1 or meta2 addressing prefixes.
-func verifyKeyLength(key roachpb.Key) error {
-	maxLength := roachpb.KeyMaxLength
-	if bytes.HasPrefix(key, keys.LocalRangePrefix) {
-		key = key[len(keys.LocalRangePrefix):]
-		var err error
-		if _, key, err = encoding.DecodeBytes(key, nil); err != nil {
-			return err
-		}
-	}
-	if bytes.HasPrefix(key, keys.MetaPrefix) {
-		key = key[len(keys.Meta1Prefix):]
-	}
-	if len(key) > maxLength {
-		return util.Errorf("maximum key length exceeded for %q", key)
-	}
-	return nil
-}
-
 // verifyKeys verifies keys. If checkEndKey is true, then the end key
 // is verified to be non-nil and greater than start key. If
 // checkEndKey is false, end key is verified to be nil. Additionally,
@@ -112,9 +89,6 @@ func verifyKeyLength(key roachpb.Key) error {
 // than or equal to KeyMax. It also verifies that a key range that
 // contains range-local keys is completely range-local.
 func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
-	if err := verifyKeyLength(start); err != nil {
-		return err
-	}
 	if bytes.Compare(start, roachpb.KeyMax) >= 0 {
 		return util.Errorf("start key %q must be less than KeyMax", start)
 	}
@@ -126,9 +100,6 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	}
 	if end == nil {
 		return util.Errorf("end key must be specified")
-	}
-	if err := verifyKeyLength(end); err != nil {
-		return err
 	}
 	if bytes.Compare(roachpb.KeyMax, end) < 0 {
 		return util.Errorf("end key %q must be less than or equal to KeyMax", end)

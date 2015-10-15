@@ -36,8 +36,6 @@ import (
 )
 
 const (
-	// KeyMaxLength is the maximum length of a Key in bytes.
-	KeyMaxLength = 4096
 	// MaxPriority is the maximum allowed priority.
 	MaxPriority = math.MaxInt32
 )

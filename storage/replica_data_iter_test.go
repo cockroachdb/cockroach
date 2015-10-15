@@ -28,12 +28,16 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func prevKey(k []byte) roachpb.Key {
+func fakePrevKey(k []byte) roachpb.Key {
+	const maxLen = 100
 	length := len(k)
 
 	// When the byte array is empty.
 	if length == 0 {
 		panic(fmt.Sprint("cannot get the prev key of an empty key"))
+	}
+	if length > maxLen {
+		panic(fmt.Sprintf("test does not support key longer than %d characters: %q", maxLen, k))
 	}
 
 	// If the last byte is a 0, then drop it.
@@ -46,7 +50,7 @@ func prevKey(k []byte) roachpb.Key {
 	return bytes.Join([][]byte{
 		k[0 : length-1],
 		{k[length-1] - 1},
-		bytes.Repeat([]byte{0xff}, roachpb.KeyMaxLength-length),
+		bytes.Repeat([]byte{0xff}, maxLen-length),
 	}, nil)
 }
 
@@ -71,7 +75,7 @@ func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
 		{keys.RangeDescriptorKey(r.Desc().StartKey), ts},
 		{keys.TransactionKey(roachpb.Key(r.Desc().StartKey), []byte("1234")), ts0},
 		{keys.TransactionKey(roachpb.Key(r.Desc().StartKey.Next()), []byte("5678")), ts0},
-		{keys.TransactionKey(prevKey(r.Desc().EndKey), []byte("2468")), ts0},
+		{keys.TransactionKey(fakePrevKey(r.Desc().EndKey), []byte("2468")), ts0},
 		// TODO(bdarnell): KeyMin.Next() results in a key in the reserved system-local space.
 		// Once we have resolved https://github.com/cockroachdb/cockroach/issues/437,
 		// replace this with something that reliably generates the first valid key in the range.
@@ -79,7 +83,7 @@ func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
 		// The following line is similar to StartKey.Next() but adds more to the key to
 		// avoid falling into the system-local space.
 		{append(append([]byte{}, r.Desc().StartKey...), '\x01'), ts},
-		{prevKey(r.Desc().EndKey), ts},
+		{fakePrevKey(r.Desc().EndKey), ts},
 	}
 
 	keys := []roachpb.EncodedKey{}
@@ -126,17 +130,9 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 // first verifies the contents of the "b"-"c" range, then deletes it
 // and verifies it's empty. Finally, it verifies the pre and post
 // ranges still contain the expected data.
-//
-// TODO This test fails since we automatically elect a leader upon
-// creation of the group. It's relying on the Raft storage not having written
-// anything during the duration of the test.
-//
-// TODO(tschottdorf): Since leaders are auto-elected upon creating the range,
-// the group storage is written to and confuses the iterator test.
-// Setting tc.dormantRaft = true isn't enough since there are two more ranges
-// added below, and those also get started automatically.
-func disabledTestReplicaDataIterator(t *testing.T) {
+func TestReplicaDataIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(tschottdorf): long broken; relies on Range not writing on creation, but Raft elections write state")
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
