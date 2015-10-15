@@ -1,5 +1,5 @@
 - Feature Name: table_descriptor_lease
-- Status: draft
+- Status: in-progress
 - Start Date: 2015-10-09
 - RFC PR: [#2810](https://github.com/cockroachdb/cockroach/pull/2036)
 - Cockroach Issue: [#2036](https://github.com/cockroachdb/cockroach/issues/2036)
