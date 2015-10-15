@@ -138,6 +138,9 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	if desc.NextIndexID == 0 {
 		desc.NextIndexID = 1
 	}
+	if desc.Version == 0 {
+		desc.Version = 1
+	}
 
 	columnNames := map[string]ColumnID{}
 	for i := range desc.Columns {

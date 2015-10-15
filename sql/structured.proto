@@ -20,6 +20,7 @@ package cockroach.sql;
 option go_package = "sql";
 
 import "gogoproto/gogo.proto";
+import "cockroach/roachpb/data.proto";
 import "cockroach/sql/privilege.proto";
 
 option (gogoproto.sizer_all) = true;
@@ -99,17 +100,21 @@ message TableDescriptor {
   // ID of the parent database.
   optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
-  repeated ColumnDescriptor columns = 5 [(gogoproto.nullable) = false];
+  // Monotonically increasing version of the table descriptor.
+  optional uint32 version = 5 [(gogoproto.nullable) = false];
+  // Last modification time of the table descriptor.
+  optional roachpb.Timestamp modification_time = 6 [(gogoproto.nullable) = false];
+  repeated ColumnDescriptor columns = 7 [(gogoproto.nullable) = false];
   // next_column_id is used to ensure that deleted column ids are not reused.
-  optional uint32 next_column_id = 6 [(gogoproto.nullable) = false,
+  optional uint32 next_column_id = 8 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextColumnID", (gogoproto.casttype) = "ColumnID"];
-  optional IndexDescriptor primary_index = 7 [(gogoproto.nullable) = false];
+  optional IndexDescriptor primary_index = 9 [(gogoproto.nullable) = false];
   // indexes are all the secondary indexes.
-  repeated IndexDescriptor indexes = 8 [(gogoproto.nullable) = false];
+  repeated IndexDescriptor indexes = 10 [(gogoproto.nullable) = false];
   // next_index_id is used to ensure that deleted index ids are not reused.
-  optional uint32 next_index_id = 9 [(gogoproto.nullable) = false,
+  optional uint32 next_index_id = 11 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
-  optional PrivilegeDescriptor privileges = 10;
+  optional PrivilegeDescriptor privileges = 12;
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

@@ -130,6 +130,50 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 	}
 }
 
+func (p *planner) query(sql string) (planNode, error) {
+	stmts, err := parser.ParseTraditional(sql)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, util.Errorf("expected single statement, found %d", len(stmts))
+	}
+	return p.makePlan(stmts[0])
+}
+
+func (p *planner) queryRow(sql string) (parser.DTuple, error) {
+	plan, err := p.query(sql)
+	if err != nil {
+		return nil, err
+	}
+	if !plan.Next() {
+		if err := plan.Err(); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	values := plan.Values()
+	if plan.Next() {
+		return nil, util.Errorf("%s: unexpected multiple results", sql)
+	}
+	if err := plan.Err(); err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+func (p *planner) exec(sql string) (int, error) {
+	plan, err := p.query(sql)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for plan.Next() {
+		count++
+	}
+	return count, plan.Err()
+}
+
 // getAliasedTableDesc looks up the table descriptor for an alias table expression.
 // NOTE: it looks it up in the descriptor cache, so this should only be called
 // from frequent ops (INSERT, SELECT, DELETE, UPDATE).
