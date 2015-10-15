@@ -26,6 +26,12 @@ import (
 
 func TestTypeCheckExpr(t *testing.T) {
 	testData := []string{
+		`NULL + 1`,
+		`NULL + 1.1`,
+		`NULL + '2006-09-23'::date`,
+		`NULL + '1h'::interval`,
+		`NULL + 'hello'`,
+		`NULL + 'hello'::bytes`,
 		`NULL = 1`,
 		`1 = NULL`,
 		`true AND NULL`,
