@@ -159,8 +159,11 @@ changes on a table (e.g. concurrently adding multiple indexes).
 * If the node performing the backfill gets restarted we should figure
   out a way to avoid restarting the backfill from scratch. One thought
   is that the backfill operation can periodically checkpoint the high
-  water mark of its progress (perhaps in the descriptor itself).
+  water mark of its progress: either in the descriptor itself (taking
+  care not to bump the version) or in a separate backfill checkpoint
+  table.
 
 * Figure out how to distribute the backfill work. Ideally we would
   have each range of the primary index generate and write the index
-  keys. I feel this is best left to a separate RFC.
+  keys. Given that this is not an urgent need, I feel this is best
+  left to a separate RFC.
