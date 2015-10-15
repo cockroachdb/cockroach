@@ -913,25 +913,23 @@ func (ctx EvalContext) evalComparisonExpr(expr *ComparisonExpr) (Datum, error) {
 func (ctx EvalContext) evalBinaryExpr(expr *BinaryExpr) (Datum, error) {
 	left, err := ctx.EvalExpr(expr.Left)
 	if err != nil {
-		return DNull, err
+		return nil, err
+	}
+	if left == DNull {
+		return DNull, nil
 	}
 	right, err := ctx.EvalExpr(expr.Right)
 	if err != nil {
-		return DNull, err
+		return nil, err
+	}
+	if right == DNull {
+		return DNull, nil
 	}
 
 	if expr.fn.fn == nil {
 		if _, err := typeCheckBinaryExpr(expr); err != nil {
-			return DNull, err
+			return nil, err
 		}
-	}
-
-	if expr.ltype != reflect.TypeOf(left) || expr.rtype != reflect.TypeOf(right) {
-		// The argument types no longer match the memoized function. This happens
-		// when a non-NULL argument becomes NULL. For example, "SELECT col+1 FROM
-		// table" where col is nullable. The SELECT does not error, but returns a
-		// NULL value for that select expression.
-		return DNull, nil
 	}
 	return expr.fn.fn(left, right)
 }

@@ -283,10 +283,17 @@ func typeCheckBinaryExpr(expr *BinaryExpr) (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
+	if dummyLeft == DNull {
+		return DNull, nil
+	}
 	dummyRight, err := TypeCheckExpr(expr.Right)
 	if err != nil {
 		return nil, err
 	}
+	if dummyRight == DNull {
+		return DNull, nil
+	}
+
 	expr.ltype = reflect.TypeOf(dummyLeft)
 	expr.rtype = reflect.TypeOf(dummyRight)
 

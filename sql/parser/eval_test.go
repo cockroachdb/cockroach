@@ -40,6 +40,7 @@ func TestEvalExpr(t *testing.T) {
 		{`3 * 4`, `12`},
 		{`3.1 % 2.0`, `1.1`},
 		{`5 % 3`, `2`},
+		{`1 + NULL`, `NULL`},
 		// Division is always done on floats.
 		{`4 / 5`, `0.8`},
 		{`1.0 / 0.0`, `+Inf`},
