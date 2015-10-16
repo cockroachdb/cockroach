@@ -114,13 +114,12 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 				// This packs all matching replicas together.
 				rs.Swap(firstNotOrdered, i)
 				firstNotOrdered++
-			} else {
-				rs.SortRandomOrder(firstNotOrdered, topIndex-1)
 			}
 		}
 		if firstNotOrdered == 0 {
 			return bucket
 		}
+		rs.SortRandomOrder(firstNotOrdered, topIndex-1)
 		topIndex = firstNotOrdered - 1
 	}
 	return len(attrs)
