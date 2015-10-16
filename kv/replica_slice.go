@@ -131,7 +131,7 @@ func (rs replicaSlice) MoveToFront(i int) {
 		panic("out of bound index")
 	}
 	front := rs[i]
-	// Move the first i-1 elements to the right
+	// Move the first i elements to the right
 	copy(rs[1:i+1], rs[0:i])
 	rs[0] = front
 }
