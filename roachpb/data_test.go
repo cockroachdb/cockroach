@@ -19,8 +19,10 @@ package roachpb
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
+	"reflect"
 	"testing"
 	"time"
 
@@ -382,6 +384,53 @@ func TestNodeList(t *testing.T) {
 			t.Fatalf("%d: false negative hit for %d on slice %v",
 				i, n, sn.Nodes)
 		}
+	}
+}
+
+func TestTransactionUpdate(t *testing.T) {
+	nodes := NodeList{
+		Nodes: []int32{101, 103, 105},
+	}
+	ts := makeTS(10, 11)
+
+	txn := Transaction{
+		Name:          "name",
+		Key:           Key("foo"),
+		ID:            uuid.NewUUID4(),
+		Priority:      957356782,
+		Isolation:     SNAPSHOT,
+		Status:        COMMITTED,
+		Epoch:         2,
+		LastHeartbeat: &ts,
+		Timestamp:     makeTS(20, 21),
+		OrigTimestamp: makeTS(30, 31),
+		MaxTimestamp:  makeTS(40, 41),
+		CertainNodes:  nodes,
+		Writing:       true,
+	}
+
+	noZeroField := func(txn Transaction) error {
+		ele := reflect.ValueOf(&txn).Elem()
+		eleT := ele.Type()
+		for i := 0; i < ele.NumField(); i++ {
+			f := ele.Field(i)
+			zero := reflect.Zero(f.Type())
+			if reflect.DeepEqual(f.Interface(), zero.Interface()) {
+				return fmt.Errorf("expected %s field to be non-zero", eleT.Field(i).Name)
+			}
+		}
+		return nil
+	}
+
+	if err := noZeroField(txn); err != nil {
+		t.Fatal(err)
+	}
+
+	var txn2 Transaction
+	txn2.Update(&txn)
+
+	if err := noZeroField(txn2); err != nil {
+		t.Fatal(err)
 	}
 }
 
