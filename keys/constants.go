@@ -65,12 +65,12 @@ var (
 	// ID in the case of response cache entry.
 	//
 	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
-	// in storage/engine/db.cc.
+	// in storage/engine/rocksdb/db.cc.
 	LocalRangeIDPrefix = roachpb.RKey(MakeKey(localPrefix, roachpb.Key("i")))
 	// LocalResponseCacheSuffix is the suffix for keys storing
 	// command responses used to guarantee idempotency (see ResponseCache).
 	// NOTE: if this value changes, it must be updated in C++
-	// (storage/engine/db.cc).
+	// (storage/engine/rocksdb/db.cc).
 	LocalResponseCacheSuffix = []byte("res-")
 	// localRaftLeaderLeaseSuffix is the suffix for the raft leader lease.
 	localRaftLeaderLeaseSuffix = []byte("rfll")
@@ -102,7 +102,7 @@ var (
 	// key info, such as the txn ID in the case of a transaction record.
 	//
 	// NOTE: LocalRangePrefix must be kept in sync with the value in
-	// storage/engine/db.cc.
+	// storage/engine/rocksdb/db.cc.
 	LocalRangePrefix = roachpb.Key(MakeKey(localPrefix, roachpb.RKey("k")))
 	LocalRangeMax    = LocalRangePrefix.PrefixEnd()
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
@@ -114,7 +114,7 @@ var (
 	// localTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	// NOTE: if this value changes, it must be updated in C++
-	// (storage/engine/db.cc).
+	// (storage/engine/rocksdb/db.cc).
 	localTransactionSuffix = roachpb.RKey("txn-")
 
 	// LocalMax is the end of the local key range.
