@@ -481,6 +481,58 @@ SELECT translate('a‰ÒÁ', 'aÒ', '∏p')
 ----
 ∏‰pÁ
 
+query T
+SELECT regexp_replace('foobarbaz', 'b..', 'X')
+----
+fooXbaz
+
+query T
+SELECT regexp_replace('foobarbaz', 'b..', 'X', 'g')
+----
+fooXX
+
+query T
+SELECT regexp_replace('foobarbaz', 'b(..)', E'X\\1Y', 'g')
+----
+fooXarYXazY
+
+query T
+SELECT regexp_replace('foobarbaz', 'b(.)(.)', E'X\\2\\1\\3Y', 'g')
+----
+fooXraYXzaY
+
+query T
+SELECT regexp_replace(E'fooBa\nrbaz', 'b(..)', E'X\\&Y', 'gi')
+----
+fooXBa
+YrXbazY
+
+query T
+SELECT regexp_replace(E'fooBa\nrbaz', 'b(..)', E'X\\&Y', 'gmi')
+----
+fooBa
+rXbazY
+
+query T
+SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'gpi')
+----
+fooBar
+XbazY
+
+query T
+SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'gwi')
+----
+fooXBarY
+XbazY
+
+query T
+SELECT regexp_replace('foobarbaz', 'nope', 'NO')
+----
+foobarbaz
+
+query error regexp_replace: invalid regexp flag: 'z'
+SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'z')
+
 query B
 SELECT experimental_unique_bytes() < experimental_unique_bytes(), length(experimental_unique_bytes())
 ----

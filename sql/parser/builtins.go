@@ -28,6 +28,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -289,6 +290,13 @@ var builtins = map[string][]builtin{
 		}
 		return DString(string(runes)), nil
 	}, DummyString)},
+
+	"regexp_replace": {
+		stringBuiltin3(func(s, pattern, to string) (Datum, error) {
+			return regexpReplace(s, pattern, to, "")
+		}, DummyString),
+		stringBuiltin4(regexpReplace, DummyString),
+	},
 
 	"initcap": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(strings.Title(strings.ToLower(s))), nil
@@ -925,6 +933,16 @@ func stringBuiltin3(f func(string, string, string) (Datum, error), returnType Da
 	}
 }
 
+func stringBuiltin4(f func(string, string, string, string) (Datum, error), returnType Datum) builtin {
+	return builtin{
+		types:      typeList{stringType, stringType, stringType, stringType},
+		returnType: returnType,
+		fn: func(_ EvalContext, args DTuple) (Datum, error) {
+			return f(string(args[0].(DString)), string(args[1].(DString)), string(args[2].(DString)), string(args[3].(DString)))
+		},
+	}
+}
+
 func bytesBuiltin1(f func(string) (Datum, error), returnType Datum) builtin {
 	return builtin{
 		types:      typeList{bytesType},
@@ -941,6 +959,125 @@ func datumToString(datum Datum) (string, error) {
 	}
 
 	return "", fmt.Errorf("argument type unsupported: %s", datum.Type())
+}
+
+var replaceSubRe = regexp.MustCompile(`\\[&1-9]`)
+
+func regexpReplace(s, pattern, to, sqlFlags string) (Datum, error) {
+	pattern, global, err := regexpEvalFlags(pattern, sqlFlags)
+	if err != nil {
+		return nil, err
+	}
+
+	patternRe, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	matchCount := 1
+	if global {
+		matchCount = -1
+	}
+
+	replaceIndex := 0
+	var newString bytes.Buffer
+
+	// regexp.ReplaceAllStringFunc cannot be used here because it does not provide
+	// access to regexp submatches for expansion in the replacement string.
+	// regexp.ReplaceAllString cannot be used here because it does not allow
+	// replacement of a specific number of matches, and does not expose the full
+	// match for expansion in the replacement string.
+	//
+	// regexp.FindAllStringSubmatchIndex must therefore be used, which returns a 2D
+	// int array. The outer array is iterated over with this for-range loop, and corresponds
+	// to each match of the pattern in the string s. Inside each outer array is an int
+	// array with index pairs. The first pair in a given match n ([n][0] & [n][1]) represents
+	// the start and end index in s of the matched pattern. Subsequent pairs ([n][2] & [n][3],
+	// and so on) represent the start and end index in s of matched subexpressions within the
+	// pattern.
+	for _, matchIndex := range patternRe.FindAllStringSubmatchIndex(s, matchCount) {
+		start := matchIndex[0]
+		end := matchIndex[1]
+
+		// Add sections of s either before the first match or between matches.
+		preMatch := s[replaceIndex:start]
+		newString.WriteString(preMatch)
+
+		// Add the replacement string for the current match.
+		match := s[start:end]
+		matchTo := replaceSubRe.ReplaceAllStringFunc(to, func(repl string) string {
+			subRef := repl[len(repl)-1]
+			if subRef == '&' {
+				return match
+			}
+
+			sub, err := strconv.Atoi(string(subRef))
+			if err != nil {
+				panic(fmt.Sprintf("Invalid integer submatch reference seen: %v", err))
+			}
+			if 2*sub >= len(matchIndex) {
+				// regexpReplace expects references to "out-of-bounds" capture groups
+				// to be ignored, so replace with an empty string.
+				return ""
+			}
+
+			subStart := matchIndex[2*sub]
+			subEnd := matchIndex[2*sub+1]
+			return s[subStart:subEnd]
+		})
+		newString.WriteString(matchTo)
+
+		replaceIndex = end
+	}
+
+	// Add the section of s past the final match.
+	newString.WriteString(s[replaceIndex:])
+
+	return DString(newString.String()), nil
+}
+
+// regexpEvalFlags evaluates the provided Postgres regexp flags in
+// accordance with their definitions provided at
+// http://www.postgresql.org/docs/9.0/static/functions-matching.html#POSIX-EMBEDDED-OPTIONS-TABLE.
+// It then returns an adjusted regexp pattern, and a flag specifying if more
+// than one match should be found or not.
+func regexpEvalFlags(pattern, sqlFlags string) (string, bool, error) {
+	global := false
+	goReFlags := map[rune]struct{}{'s': {}, 'm': {}}
+
+	for _, flag := range sqlFlags {
+		switch flag {
+		case 'g':
+			global = true
+		case 'i':
+			goReFlags['i'] = struct{}{}
+		case 'c':
+			delete(goReFlags, 'i')
+		case 's':
+			goReFlags['s'] = struct{}{}
+		case 'm', 'n':
+			delete(goReFlags, 's')
+			delete(goReFlags, 'm')
+		case 'p':
+			goReFlags['s'] = struct{}{}
+			delete(goReFlags, 'm')
+		case 'w':
+			delete(goReFlags, 's')
+			goReFlags['m'] = struct{}{}
+		default:
+			return "", false, fmt.Errorf("invalid regexp flag: %q", flag)
+		}
+	}
+
+	if len(goReFlags) == 0 {
+		return pattern, global, nil
+	}
+
+	var flagString bytes.Buffer
+	for flag := range goReFlags {
+		flagString.WriteRune(flag)
+	}
+	return fmt.Sprintf("(?%s:%s)", flagString.String(), pattern), global, nil
 }
 
 func round(x float64, n int64) (Datum, error) {
