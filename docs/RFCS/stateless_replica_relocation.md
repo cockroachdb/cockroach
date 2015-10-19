@@ -91,7 +91,7 @@ The final complication is how to ensure that the replicate queue promptly
 identifies ranges outside of their ideal target state. As a queue it will be
 attached to the replica scanner, but we will also want to enqueue a replica
 immediately whenever we knowingly perturb the replication state. Thus,
-components initating a relocation (e.g. rebalance or repair) should immediately
+components initiating a relocation (e.g. rebalance or repair) should immediately
 enqueue their target replicas after changing the replication state. 
 
 # Drawbacks
@@ -113,8 +113,8 @@ Even if this was necessary, it might be possible to express by manipulating the
 factors behind the individual stateless decisions.
 
 ### Thrashing of complementary operation
-Because there is no relocation state, the possibilty of "thrashing" is introduced. For
-example: 
+Because there is no relocation state, the possibility of "thrashing" is introduced.
+For example:
 
 1. Rebalance operation adds a new replica to the range.
 2. The replicate queue picks up the range and detects the need to remove a
@@ -186,7 +186,7 @@ decisions.
 # Alternatives
 The main alternative would be some sort of stateful system, where relocation
 operations would be expressed explicitly (i.e. "Move replica from X to Y") and
-then seen to completion. For reasons outlined in the "motiviation" section, this
+then seen to completion. For reasons outlined in the "motivation" section, this
 is considered sub-optimal when making distributed decisions.
 
 ### Relocation Master
