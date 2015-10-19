@@ -174,7 +174,7 @@ func TestEngineBatch(t *testing.T) {
 			if m.Value == nil {
 				return nil
 			}
-			return m.Value.Bytes
+			return m.Value.GetBytes()
 		}
 
 		for i := 0; i < numShuffles; i++ {
@@ -225,8 +225,8 @@ func TestEngineBatch(t *testing.T) {
 				if err := iter.ValueProto(m); err != nil {
 					t.Fatal(err)
 				}
-				if !bytes.Equal(m.Value.Bytes, expectedValue) {
-					t.Errorf("%d: expected %s, but got %s", i, expectedValue, m.Value.Bytes)
+				if !bytes.Equal(m.Value.GetBytes(), expectedValue) {
+					t.Errorf("%d: expected %s, but got %s", i, expectedValue, m.Value.GetBytes())
 				}
 			}
 			iter.Close()

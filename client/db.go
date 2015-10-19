@@ -83,7 +83,7 @@ func (kv *KeyValue) PrettyValue() string {
 		}
 		return fmt.Sprintf("%s", v)
 	}
-	return fmt.Sprintf("%q", kv.Value.Bytes)
+	return fmt.Sprintf("%q", kv.Value.GetBytes())
 }
 
 func (kv *KeyValue) setTimestamp(t roachpb.Timestamp) {
@@ -106,7 +106,7 @@ func (kv *KeyValue) ValueBytes() []byte {
 	if kv.Value == nil {
 		return nil
 	}
-	return kv.Value.Bytes
+	return kv.Value.GetBytes()
 }
 
 // ValueInt returns the value decoded as an int64. This method will panic if
@@ -124,11 +124,11 @@ func (kv *KeyValue) ValueInt() int64 {
 
 // ValueProto parses the byte slice value as a proto message.
 func (kv *KeyValue) ValueProto(msg proto.Message) error {
-	if kv.Value == nil || kv.Value.Bytes == nil {
+	if kv.Value == nil || kv.Value.GetBytes() == nil {
 		msg.Reset()
 		return nil
 	}
-	return proto.Unmarshal(kv.Value.Bytes, msg)
+	return proto.Unmarshal(kv.Value.GetBytes(), msg)
 }
 
 // Result holds the result for a single DB or Txn operation (e.g. Get, Put,

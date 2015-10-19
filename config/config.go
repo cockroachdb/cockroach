@@ -110,7 +110,7 @@ func (s *SystemConfig) GetValue(key roachpb.Key) ([]byte, bool) {
 		return nil, false
 	}
 
-	return kv.Value.Bytes, true
+	return kv.Value.GetBytes(), true
 }
 
 // Get searches the kv list for 'key' and returns the key/value if found.

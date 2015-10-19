@@ -315,7 +315,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 	var delTS roachpb.Timestamp
 	for i, k := range writes {
-		put := roachpb.NewPut(k, roachpb.Value{Bytes: k})
+		put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
 		reply, err := client.SendWrapped(tds, nil, put)
 		if err != nil {
 			t.Fatal(err)
@@ -400,7 +400,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		}
 
 		for _, k := range tc.keys {
-			put := roachpb.NewPut(k, roachpb.Value{Bytes: k})
+			put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
 			if _, err := client.SendWrapped(tds, nil, put); err != nil {
 				t.Fatal(err)
 			}
@@ -561,7 +561,7 @@ func TestSystemDBGossip(t *testing.T) {
 
 	// Make sure the returned value is valAt(2).
 	var got sql.DatabaseDescriptor
-	if err := proto.Unmarshal(val.Bytes, &got); err != nil {
+	if err := proto.Unmarshal(val.GetBytes(), &got); err != nil {
 		t.Fatal(err)
 	}
 	if got.ID != 2 {

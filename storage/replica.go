@@ -1542,7 +1542,7 @@ func loadSystemDBSpan(eng engine.Engine) ([]roachpb.KeyValue, []byte, error) {
 		if _, err := sha.Write(kv.Key); err != nil {
 			return nil, nil, err
 		}
-		if _, err := sha.Write(kv.Value.Bytes); err != nil {
+		if _, err := sha.Write(kv.Value.GetBytes()); err != nil {
 			return nil, nil, err
 		}
 	}

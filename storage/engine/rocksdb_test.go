@@ -89,19 +89,19 @@ func TestRocksDBCompaction(t *testing.T) {
 	kvs := []roachpb.KeyValue{
 		{
 			Key:   keys.ResponseCacheKey(1, cmdID),
-			Value: roachpb.Value{Bytes: encodePutResponse(makeTS(2, 0), t)},
+			Value: roachpb.MakeValueFromBytes(encodePutResponse(makeTS(2, 0), t)),
 		},
 		{
 			Key:   keys.ResponseCacheKey(2, cmdID),
-			Value: roachpb.Value{Bytes: encodePutResponse(makeTS(3, 0), t)},
+			Value: roachpb.MakeValueFromBytes(encodePutResponse(makeTS(3, 0), t)),
 		},
 		{
 			Key:   keys.TransactionKey(roachpb.Key("a"), roachpb.Key(uuid.NewUUID4())),
-			Value: roachpb.Value{Bytes: encodeTransaction(makeTS(1, 0), t)},
+			Value: roachpb.MakeValueFromBytes(encodeTransaction(makeTS(1, 0), t)),
 		},
 		{
 			Key:   keys.TransactionKey(roachpb.Key("b"), roachpb.Key(uuid.NewUUID4())),
-			Value: roachpb.Value{Bytes: encodeTransaction(makeTS(2, 0), t)},
+			Value: roachpb.MakeValueFromBytes(encodeTransaction(makeTS(2, 0), t)),
 		},
 	}
 	for _, kv := range kvs {
@@ -179,7 +179,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) (*RocksDB, *stop.
 			// Only write values if this iteration is less than the random
 			// number of versions chosen for this key.
 			if t <= nvs[i] {
-				value := roachpb.Value{Bytes: randutil.RandBytes(rng, 1024)}
+				value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, 1024))
 				value.InitChecksum(keys[i])
 				if err := MVCCPut(batch, nil, keys[i], ts, value, nil); err != nil {
 					b.Fatal(err)
@@ -325,8 +325,8 @@ func runMVCCGet(numVersions int, b *testing.B) {
 			ts := makeTS(walltime, 0)
 			if v, _, err := MVCCGet(rocksdb, key, ts, true, nil); err != nil {
 				b.Fatalf("failed get: %s", err)
-			} else if len(v.Bytes) != 1024 {
-				b.Fatalf("unexpected value size: %d", len(v.Bytes))
+			} else if len(v.GetBytes()) != 1024 {
+				b.Fatalf("unexpected value size: %d", len(v.GetBytes()))
 			}
 		}
 	})
@@ -348,7 +348,7 @@ func BenchmarkMVCCGet100Versions(b *testing.B) {
 
 func runMVCCPut(valueSize int, b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
-	value := roachpb.Value{Bytes: randutil.RandBytes(rng, valueSize)}
+	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	stopper := stop.NewStopper()
@@ -387,7 +387,7 @@ func BenchmarkMVCCPut10000(b *testing.B) {
 
 func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
-	value := roachpb.Value{Bytes: randutil.RandBytes(rng, valueSize)}
+	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	stopper := stop.NewStopper()
@@ -472,7 +472,7 @@ func runMVCCMerge(value *roachpb.Value, numKeys int, b *testing.B) {
 			continue
 		}
 		if testing.Verbose() {
-			fmt.Printf("%q: [%d]byte\n", key, len(val.Bytes))
+			fmt.Printf("%q: [%d]byte\n", key, len(val.GetBytes()))
 		}
 	}
 

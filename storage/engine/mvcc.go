@@ -396,10 +396,10 @@ func MVCCSetRangeStats(engine Engine, rangeID roachpb.RangeID, ms *MVCCStats) er
 func MVCCGetProto(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction, msg proto.Message) (bool, error) {
 	// TODO(tschottdorf) Consider returning skipped intents to the caller.
 	value, _, err := MVCCGet(engine, key, timestamp, consistent, txn)
-	found := value != nil && len(value.Bytes) > 0
+	found := value != nil && len(value.GetBytes()) > 0
 	// If we found a result, parse it regardless of the error returned by MVCCGet.
 	if found && msg != nil {
-		unmarshalErr := proto.Unmarshal(value.Bytes, msg)
+		unmarshalErr := proto.Unmarshal(value.GetBytes(), msg)
 		// If the unmarshal failed, return its result. Otherwise, pass
 		// through the underlying error (which may be a WriteIntentError
 		// to be handled specially alongside the returned value).
@@ -897,7 +897,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 		// Now we're sure the top value is **our** intent.
 		// If what's there is what we intent to write, it's probably a
 		// retry on top of a half-executed batch.
-		if existVal != nil && bytes.Equal(value.Bytes, existVal.Bytes) {
+		if existVal != nil && bytes.Equal(value.GetBytes(), existVal.GetBytes()) {
 			return true
 		}
 		return false
@@ -918,7 +918,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 		// Handle check for existence when there is no key.
 		if existVal == nil {
 			return &roachpb.ConditionFailedError{}
-		} else if expValue.Bytes != nil && !bytes.Equal(expValue.Bytes, existVal.Bytes) {
+		} else if expValue.GetBytes() != nil && !bytes.Equal(expValue.GetBytes(), existVal.GetBytes()) {
 			return &roachpb.ConditionFailedError{
 				ActualValue: existVal,
 			}
@@ -948,7 +948,7 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, value roachpb.Valu
 	if err = engine.Merge(metaKey, data); err != nil {
 		return err
 	}
-	updateStatsOnMerge(ms, key, int64(len(value.Bytes)))
+	updateStatsOnMerge(ms, key, int64(len(value.GetBytes())))
 	return nil
 }
 

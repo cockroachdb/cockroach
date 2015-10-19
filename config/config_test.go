@@ -49,7 +49,7 @@ func descriptor(descriptorID uint32) roachpb.KeyValue {
 func kv(k, v []byte) roachpb.KeyValue {
 	return roachpb.KeyValue{
 		Key:   k,
-		Value: roachpb.Value{Bytes: v},
+		Value: roachpb.MakeValueFromBytes(v),
 	}
 }
 

@@ -88,7 +88,7 @@ func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
 
 	keys := []roachpb.EncodedKey{}
 	for _, keyTS := range keyTSs {
-		if err := engine.MVCCPut(r.rm.Engine(), nil, keyTS.key, keyTS.ts, roachpb.Value{Bytes: []byte("value")}, nil); err != nil {
+		if err := engine.MVCCPut(r.rm.Engine(), nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil); err != nil {
 			t.Fatal(err)
 		}
 		keys = append(keys, engine.MVCCEncodeKey(keyTS.key))

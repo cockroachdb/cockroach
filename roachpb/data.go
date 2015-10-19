@@ -317,6 +317,36 @@ func (v *Value) Verify(key []byte) error {
 	return nil
 }
 
+// MakeValueFromString returns a value with bytes and tag set.
+func MakeValueFromString(s string) Value {
+	v := Value{}
+	v.SetBytes([]byte(s))
+	return v
+}
+
+// MakeValueFromBytes returns a value with bytes and tag set.
+func MakeValueFromBytes(bs []byte) Value {
+	v := Value{}
+	v.SetBytes(bs)
+	return v
+}
+
+// MakeValueFromBytesAndTimestamp returns a value with bytes, timestamp and
+// tag set.
+func MakeValueFromBytesAndTimestamp(bs []byte, t Timestamp) Value {
+	v := Value{Timestamp: &t}
+	v.SetBytes(bs)
+	return v
+}
+
+// MakeValueFromStringAndTimestamp returns a value with bytes, timestamp and
+// tag set.
+func MakeValueFromStringAndTimestamp(s string, t Timestamp) Value {
+	v := Value{Timestamp: &t}
+	v.SetBytes([]byte(s))
+	return v
+}
+
 // SetBytes sets the bytes and tag field of the receiver.
 func (v *Value) SetBytes(b []byte) {
 	v.Bytes = b
