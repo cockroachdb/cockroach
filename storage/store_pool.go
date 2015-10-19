@@ -304,9 +304,15 @@ func (sl *StoreList) add(s *roachpb.StoreDescriptor) {
 // TODO(embark, spencer): consider using a reverse index map from
 // Attr->stores, for efficiency. Ensure that entries in this map still
 // have an opportunity to be garbage collected.
-func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic bool) *StoreList {
+func (sp *StorePool) getStoreList(required roachpb.Attributes, excludeNodes []roachpb.NodeID, deterministic bool) StoreList {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
+
+	// Convert list of excluded nodes to a map for quick lookup.
+	excludeMap := map[roachpb.NodeID]struct{}{}
+	for _, nodeID := range excludeNodes {
+		excludeMap[nodeID] = struct{}{}
+	}
 
 	var storeIDs roachpb.StoreIDSlice
 	for storeID := range sp.stores {
@@ -317,9 +323,12 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 	if deterministic {
 		sort.Sort(storeIDs)
 	}
-	sl := new(StoreList)
+	sl := StoreList{}
 	for _, storeID := range storeIDs {
 		detail := sp.stores[roachpb.StoreID(storeID)]
+		if _, ok := excludeMap[detail.desc.Node.NodeID]; ok {
+			continue
+		}
 		if !detail.dead && required.IsSubset(*detail.desc.CombinedAttrs()) {
 			desc := detail.desc
 			sl.add(&desc)

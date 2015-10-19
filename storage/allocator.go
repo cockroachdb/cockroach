@@ -20,7 +20,6 @@
 package storage
 
 import (
-	"math"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -104,25 +103,24 @@ type Allocator struct {
 	storePool *StorePool
 	randGen   *rand.Rand
 	options   RebalancingOptions
+	balancer  balancer
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
 func MakeAllocator(storePool *StorePool, options RebalancingOptions) Allocator {
+	var randSource rand.Source
+	if options.Deterministic {
+		randSource = rand.NewSource(777)
+	} else {
+		randSource = rand.NewSource(rand.Int63())
+	}
+	randGen := rand.New(randSource)
 	return Allocator{
 		storePool: storePool,
-		randGen:   rand.New(rand.NewSource(rand.Int63())),
+		randGen:   randGen,
 		options:   options,
+		balancer:  defaultBalancer{randGen},
 	}
-}
-
-// getUsedNodes returns a set of node IDs which are already being used
-// to store replicas.
-func getUsedNodes(existing []roachpb.ReplicaDescriptor) map[roachpb.NodeID]struct{} {
-	usedNodes := map[roachpb.NodeID]struct{}{}
-	for _, replica := range existing {
-		usedNodes[replica.NodeID] = struct{}{}
-	}
-	return usedNodes
 }
 
 // ComputeAction determines the exact operation needed to repair the supplied
@@ -171,36 +169,18 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDes
 // set of stores being considered.
 func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roachpb.ReplicaDescriptor, relaxConstraints bool,
 	filter func(storeDesc *roachpb.StoreDescriptor, count, used *stat) bool) (*roachpb.StoreDescriptor, error) {
+	existingNodes := make([]roachpb.NodeID, 0, len(existing))
+	for _, repl := range existing {
+		existingNodes = append(existingNodes, repl.NodeID)
+	}
+
 	// Because more redundancy is better than less, if relaxConstraints, the
 	// matching here is lenient, and tries to find a target by relaxing an
 	// attribute constraint, from last attribute to first.
 	for attrs := append([]string(nil), required.Attrs...); ; attrs = attrs[:len(attrs)-1] {
-		stores, sl := a.selectRandom(3, roachpb.Attributes{Attrs: attrs}, existing)
-
-		// Choose the store with the least fraction of bytes used.
-		var leastStore *roachpb.StoreDescriptor
-		for _, s := range stores {
-			// Filter store descriptor.
-			if filter != nil && !filter(s, &sl.count, &sl.used) {
-				continue
-			}
-			if leastStore == nil {
-				leastStore = s
-				continue
-			}
-			// Use counts instead of capacities if the cluster has mean
-			// fraction used below a threshold level. This is primarily useful
-			// for balancing load evenly in nascent deployments.
-			if sl.used.mean < minFractionUsedThreshold {
-				if s.Capacity.RangeCount < leastStore.Capacity.RangeCount {
-					leastStore = s
-				}
-			} else if s.Capacity.FractionUsed() < leastStore.Capacity.FractionUsed() {
-				leastStore = s
-			}
-		}
-		if leastStore != nil {
-			return leastStore, nil
+		sl := a.storePool.getStoreList(roachpb.Attributes{Attrs: attrs}, existingNodes, a.options.Deterministic)
+		if target := a.balancer.selectGood(sl); target != nil {
+			return target, nil
 		}
 		if len(attrs) == 0 {
 			return nil, util.Errorf("unable to allocate a target store; no candidates available")
@@ -224,44 +204,23 @@ func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor) (roachpb.R
 	}
 
 	// Retrieve store descriptors for the provided replicas from the StorePool.
-	type replStore struct {
-		repl  roachpb.ReplicaDescriptor
-		store *roachpb.StoreDescriptor
-	}
-	replStores := make([]replStore, len(existing))
-	usedStat := stat{}
+	sl := StoreList{}
 	for i := range existing {
 		desc := a.storePool.getStoreDescriptor(existing[i].StoreID)
 		if desc == nil {
 			continue
 		}
-		replStores[i] = replStore{
-			repl:  existing[i],
-			store: desc,
-		}
-		usedStat.update(desc.Capacity.FractionUsed())
+		sl.add(desc)
 	}
 
-	// Based on store statistics, determine which replica is the "worst" and
-	// thus should be removed.
-	var worst replStore
-	for i, rs := range replStores {
-		if i == 0 {
-			worst = rs
-			continue
-		}
-
-		if usedStat.mean < minFractionUsedThreshold {
-			if rs.store.Capacity.RangeCount > worst.store.Capacity.RangeCount {
-				worst = rs
+	if bad := a.balancer.selectBad(sl); bad != nil {
+		for i := range existing {
+			if existing[i].StoreID == bad.StoreID {
+				return existing[i], nil
 			}
-			continue
-		}
-		if rs.store.Capacity.FractionUsed() > worst.store.Capacity.FractionUsed() {
-			worst = rs
 		}
 	}
-	return worst.repl, nil
+	return roachpb.ReplicaDescriptor{}, util.Errorf("RemoveTarget() could not select an appropriate replica to be remove")
 }
 
 // RebalanceTarget returns a suitable store for a rebalance target
@@ -270,44 +229,30 @@ func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor) (roachpb.R
 // follow some additional criteria. Namely, if chosen, it must further
 // the goal of balancing the cluster.
 //
+// The supplied parameters are the StoreID of the replica being rebalanced, the
+// required attributes for the replica being rebalanced, and a list of the
+// existing replicas of the range (which must include the replica being
+// rebalanced).
+//
 // Simply ignoring a rebalance opportunity in the event that the
 // target chosen by AllocateTarget() doesn't fit balancing criteria
 // is perfectly fine, as other stores in the cluster will also be
 // doing their probabilistic best to rebalance. This helps prevent
 // a stampeding herd targeting an abnormally under-utilized store.
-func (a Allocator) RebalanceTarget(required roachpb.Attributes, existing []roachpb.ReplicaDescriptor) *roachpb.StoreDescriptor {
-	filter := func(s *roachpb.StoreDescriptor, count, used *stat) bool {
-		// In clusters with very low disk usage, a store is eligible to be a
-		// rebalancing target if the number of ranges on that store is below
-		// average. This is primarily useful for distributing load evenly in a
-		// nascent deployment.
-		if used.mean < minFractionUsedThreshold {
-			return float64(s.Capacity.RangeCount) < count.mean
-		}
-		// A store is eligible to be a rebalancing target if its disk usage is
-		// sufficiently below the mean usage for stores with matching
-		// attributes.
-		maxFractionUsed := used.mean * (1 - rebalanceFromMean)
-		if maxFractionUsedThreshold < maxFractionUsed {
-			// In clusters with very high average usage, rebalancing is clamped
-			// at maxFractionUsedThreshold: even if a store's usage is below
-			// average, it will not be a rebalancing target if usage is above
-			// this maximum threshold.
-			maxFractionUsed = maxFractionUsedThreshold
-		}
-		return s.Capacity.FractionUsed() < maxFractionUsed
-	}
+func (a Allocator) RebalanceTarget(storeID roachpb.StoreID, required roachpb.Attributes, existing []roachpb.ReplicaDescriptor) *roachpb.StoreDescriptor {
 	if !a.options.AllowRebalance {
 		return nil
 	}
-	// Note that relaxConstraints is false; on a rebalance, there is
-	// no sense in relaxing constraints; wait until a better option
-	// is available.
-	s, err := a.AllocateTarget(required, existing, false /* relaxConstraints */, filter)
-	if err != nil {
-		return nil
+	existingNodes := make([]roachpb.NodeID, 0, len(existing))
+	for _, repl := range existing {
+		existingNodes = append(existingNodes, repl.NodeID)
 	}
-	return s
+	storeDesc := a.storePool.getStoreDescriptor(storeID)
+	sl := a.storePool.getStoreList(required, existingNodes, a.options.Deterministic)
+	if replacement := a.balancer.improve(storeDesc, sl); replacement != nil {
+		return replacement
+	}
+	return nil
 }
 
 // ShouldRebalance returns whether the specified store should attempt to
@@ -321,70 +266,22 @@ func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 		return false
 	}
 	if log.V(2) {
-		log.Infof("Attempting to rebalance from store %d", storeID)
+		log.Infof("ShouldRebalance from store %d", storeID)
 	}
 	storeDesc := a.storePool.getStoreDescriptor(storeID)
 	if storeDesc == nil {
 		if log.V(2) {
 			log.Warningf(
-				"shouldRebalance couldn't find store with id %d in StorePool",
+				"ShouldRebalance couldn't find store with id %d in StorePool",
 				storeID)
 		}
 		return false
 	}
 
-	sl := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), a.options.Deterministic)
+	sl := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), []roachpb.NodeID{storeDesc.Node.NodeID}, a.options.Deterministic)
 
-	// In clusters with very low disk usage, a store is eligible for rebalancing
-	// if the number of ranges on the store is above average. This is primarily
-	// useful for distributing load in a nascent deployment.
-	if sl.used.mean < minFractionUsedThreshold {
-		if log.V(2) {
-			log.Infof("Attempting to rebalance using range counts, count = %d, mean = %f", storeDesc.Capacity.RangeCount, sl.count.mean)
-		}
-		return float64(storeDesc.Capacity.RangeCount) > math.Ceil(sl.count.mean)
-	}
-	// A store is eligible for rebalancing if its disk usage is sufficiently above
-	// the mean usage for stores with matching attributes.
-	minFractionUsed := sl.used.mean * (1 + rebalanceFromMean)
-	if maxFractionUsedThreshold < minFractionUsed {
-		// In clusters with very high usage, we will allow replicas to seek
-		// rebalancing opportunities even if they are below the cluster's average
-		// usage.
-		minFractionUsed = maxFractionUsedThreshold
-	}
-	if log.V(2) {
-		log.Infof("Attempting to rebalance using total fraction used, threshold = %f, used = %f", minFractionUsed, storeDesc.Capacity.FractionUsed())
-	}
-	return storeDesc.Capacity.FractionUsed() > minFractionUsed
-}
-
-// selectRandom chooses count random store descriptors which match the
-// required attributes and do not include any of the existing
-// replicas. If the supplied filter is nil, it is ignored. Returns the
-// list of matching descriptors, and the store list matching the
-// required attributes.
-func (a Allocator) selectRandom(count int, required roachpb.Attributes, existing []roachpb.ReplicaDescriptor) ([]*roachpb.StoreDescriptor, *StoreList) {
-	var descs []*roachpb.StoreDescriptor
-	sl := a.storePool.getStoreList(required, a.options.Deterministic)
-	used := getUsedNodes(existing)
-
-	// Randomly permute available stores matching the required attributes.
-	for _, idx := range a.randGen.Perm(len(sl.stores)) {
-		// Skip used nodes.
-		if _, ok := used[sl.stores[idx].Node.NodeID]; ok {
-			continue
-		}
-		// Add this store; exit loop if we've satisfied count.
-		descs = append(descs, sl.stores[idx])
-		if len(descs) >= count {
-			break
-		}
-	}
-	if len(descs) == 0 {
-		return nil, nil
-	}
-	return descs, sl
+	// ShouldRebalance is true if a suitable replacement can be found.
+	return a.balancer.improve(storeDesc, sl) != nil
 }
 
 // computeQuorum computes the quorum value for the given number of nodes.
