@@ -197,9 +197,6 @@ func (ctx *Context) InitNode() error {
 	}
 	ctx.GossipBootstrapResolvers = resolvers
 
-	// Ensure host and port exist
-	ctx.Addr = util.EnsureFullAddr(ctx.Addr)
-
 	return nil
 }
 

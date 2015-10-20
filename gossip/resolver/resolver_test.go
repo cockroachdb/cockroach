@@ -34,14 +34,14 @@ func TestParseResolverSpec(t *testing.T) {
 		resolverAddress string
 	}{
 		// Ports are not checked at parsing time. They are at GetAddress time though.
-		{"127.0.0.1:26257", true, "tcp", "127.0.0.1:26257"},
-		{":26257", true, "tcp", util.EnsureHost(":26257")},
+		{"127.0.0.1:26222", true, "tcp", "127.0.0.1:26222"},
+		{":26257", true, "tcp", util.EnsureHostPort(":26257")},
 		{"127.0.0.1", true, "tcp", "127.0.0.1:26257"},
 		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:26257"},
 		{"lb=127.0.0.1", true, "lb", "127.0.0.1:26257"},
 		{"unix=/tmp/unix-socket12345", true, "unix", "/tmp/unix-socket12345"},
 		{"http-lb=localhost:26257", true, "http-lb", "localhost:26257"},
-		{"http-lb=:26257", true, "http-lb", util.EnsureHost(":26257")},
+		{"http-lb=:26257", true, "http-lb", util.EnsureHostPort(":26257")},
 		{"", false, "", ""},
 		{"foo=127.0.0.1", false, "", ""},
 		{"lb=", false, "", ""},
@@ -72,7 +72,7 @@ func TestGetAddress(t *testing.T) {
 		addressType  string
 		addressValue string
 	}{
-		{"tcp=127.0.0.1:26257", true, true, "tcp", "127.0.0.1:26257"},
+		{"tcp=127.0.0.1:26222", true, true, "tcp", "127.0.0.1:26222"},
 		{"tcp=127.0.0.1", true, true, "tcp", "127.0.0.1:26257"},
 		{"tcp=localhost:80", true, true, "tcp", "localhost:80"},
 		// We should test unresolvable dns too, but this would be fragile.

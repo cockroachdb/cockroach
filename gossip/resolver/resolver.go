@@ -79,7 +79,7 @@ func NewResolver(context *base.Context, spec string) (Resolver, error) {
 	// For non-unix resolvers, make sure we fill in the host when not specified (eg: ":26257")
 	if typ != "unix" {
 		// Ensure addr has port
-		addr = util.EnsureFullAddr(addr)
+		addr = util.EnsureHostPort(addr)
 	}
 
 	// Create the actual resolver.
