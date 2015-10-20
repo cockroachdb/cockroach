@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -46,13 +47,15 @@ const (
 // ranges that have been rebalanced away from this store.
 type replicaGCQueue struct {
 	*baseQueue
-	db *client.DB
+	db     *client.DB
+	locker sync.Locker
 }
 
 // newReplicaGCQueue returns a new instance of replicaGCQueue.
-func newReplicaGCQueue(db *client.DB, gossip *gossip.Gossip) *replicaGCQueue {
+func newReplicaGCQueue(db *client.DB, gossip *gossip.Gossip, locker sync.Locker) *replicaGCQueue {
 	q := &replicaGCQueue{
-		db: db,
+		db:     db,
+		locker: locker,
 	}
 	q.baseQueue = newBaseQueue("replicaGC", q, gossip, replicaGCQueueMaxSize)
 	return q
@@ -124,8 +127,21 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		if err := rng.rm.RemoveReplica(rng); err != nil {
 			return err
 		}
-		// TODO(bdarnell): add some sort of locking to prevent the range
-		// from being recreated while the underlying data is being destroyed.
+
+		// Lock the store to prevent a new replica of the range from being
+		// added while we're deleting the previous one. We'd really like
+		// to do this before calling RemoveReplica, but this could
+		// deadlock with other work on the Store.processRaft goroutine.
+		// Instead, we check after acquiring the lock to make sure the
+		// range is still absent.
+		q.locker.Lock()
+		defer q.locker.Unlock()
+
+		if _, err := rng.rm.GetReplica(desc.RangeID); err == nil {
+			log.Infof("replica recreated during deletion; aborting deletion")
+			return nil
+		}
+
 		if err := rng.Destroy(); err != nil {
 			return err
 		}

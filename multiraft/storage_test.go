@@ -53,6 +53,10 @@ func (b *BlockableStorage) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb
 	return b.storage.ReplicasFromSnapshot(snap)
 }
 
+func (b *BlockableStorage) GroupLocker() sync.Locker {
+	return b.storage.GroupLocker()
+}
+
 type blockableGroupStorage struct {
 	b *BlockableStorage
 	s WriteableGroupStorage
