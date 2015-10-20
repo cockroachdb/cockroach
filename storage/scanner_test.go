@@ -235,7 +235,7 @@ func TestScannerTiming(t *testing.T) {
 	const runTime = 100 * time.Millisecond
 	const maxError = 7500 * time.Microsecond
 	durations := []time.Duration{
-		10 * time.Millisecond,
+		15 * time.Millisecond,
 		25 * time.Millisecond,
 	}
 	for i, duration := range durations {
@@ -246,9 +246,9 @@ func TestScannerTiming(t *testing.T) {
 		mc := hlc.NewManualClock(0)
 		clock := hlc.NewClock(mc.UnixNano)
 		stopper := stop.NewStopper()
-		defer stopper.Stop()
 		s.Start(clock, stopper)
 		time.Sleep(runTime)
+		stopper.Stop()
 
 		avg := s.avgScan()
 		log.Infof("%d: average scan: %s", i, avg)
