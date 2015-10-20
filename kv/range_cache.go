@@ -188,7 +188,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
 		if log.V(1) {
 			log.Infof("adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
 		}
-		rdc.clearOverlappingCachedRangeDescriptors(rs[i].EndKey, rangeKey, &rs[i])
+		rdc.clearOverlappingCachedRangeDescriptors(&rs[i])
 		rdc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}
 	rdc.rangeCacheMu.Unlock()
@@ -297,18 +297,22 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 }
 
 // clearOverlappingCachedRangeDescriptors looks up and clears any
-// cache entries which overlap the specified key or descriptor.
-func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, metaKey roachpb.RKey, desc *roachpb.RangeDescriptor) {
+// cache entries which overlap the specified descriptor.
+func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(desc *roachpb.RangeDescriptor) {
 	if desc.StartKey.Equal(desc.EndKey) { // True for some unittests.
 		return
 	}
+
+	key := desc.EndKey
+	metaKey := meta(key)
+
 	// Clear out any descriptors which subsume the key which we're going
 	// to cache. For example, if an existing KeyMin->KeyMax descriptor
 	// should be cleared out in favor of a KeyMin->"m" descriptor.
 	k, v, ok := rdc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if ok {
 		descriptor := v.(*roachpb.RangeDescriptor)
-		if !key.Less(descriptor.StartKey) && !descriptor.EndKey.Less(key) {
+		if descriptor.StartKey.Less(key) && !descriptor.EndKey.Less(key) {
 			if log.V(1) {
 				log.Infof("clearing overlapping descriptor: key=%s desc=%s", k, descriptor)
 			}
