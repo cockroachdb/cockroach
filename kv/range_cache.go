@@ -299,10 +299,6 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 // clearOverlappingCachedRangeDescriptors looks up and clears any
 // cache entries which overlap the specified descriptor.
 func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(desc *roachpb.RangeDescriptor) {
-	if desc.StartKey.Equal(desc.EndKey) { // True for some unittests.
-		return
-	}
-
 	key := desc.EndKey
 	metaKey := meta(key)
 
