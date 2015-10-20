@@ -99,6 +99,11 @@ transactions that process a fraction of the table at a time:
     var lastKey roachpb.Key
     err := db.Txn(func(txn *Txn) error {
       txn.SetPriority(VeryLowPriority)
+      lease := txn.Get(table_master_key)
+      if !lease.Expired() {
+        return errExistingLease
+      }
+      txn.Put(table_master_key, Lease{nodeid: nodeid, time: now() + delta})
       scan, err := txn.Scan(startKey, endKey, 1000)
       if err != nil {
         return err
@@ -108,7 +113,7 @@ transactions that process a fraction of the table at a time:
       return txn.CommitInBatch(b)
     })
     if err != nil {
-      // Abort!
+      // Abort if the leadership is lost.
     }
     startKey = lastKey.Next()
   }
@@ -131,8 +136,22 @@ Since schema change operations are potentially long running they need
 to be restartable or abortable if the node performing them dies. We
 accomplish this by performing the schema change operation for a table
 on a well known node: the replica holding the leader lease for the
-first range of the table (i.e. containing the key `/<tableID>`). When
-a node receives a schema change operation such as `CREATE INDEX` it
+first range of the table (i.e. containing the key `/<tableID>`), known
+as the "table leader". Each node discovers via gossip the list of
+all configured tables, and attempts to acquire a local leader lease on the
+first range for each table. A table leader goroutine is started for
+every successful leader lease acquired; it executes schema changes on its
+table, and exits as soon as it discovers it has lost the leader lease
+for the first range of the table.
+
+The table leader  will divide up its processing into small enough
+chunks, to allow it to relinquish leadership in a timely manner.
+A safe hand-off from one leader to another is achieved, through the
+leader writing a table leader lease timestamp to the table descriptor
+in the same transaction as its work. A new leader waits until the table
+leader lease expires before it starts working.
+
+When a node receives a schema change operation such as `CREATE INDEX` it
 will forward the operation to this "table leader". When the table
 leader restarts it will load the associated table descriptor and
 restart or abort the schema change operation. Note that aborting a
@@ -168,9 +187,9 @@ changes on a table (e.g. concurrently adding multiple indexes).
 * If the node performing the backfill gets restarted we should figure
   out a way to avoid restarting the backfill from scratch. One thought
   is that the backfill operation can periodically checkpoint the high
-  water mark of its progress: either in the descriptor itself (taking
-  care not to bump the version) or in a separate backfill checkpoint
-  table.
+  water mark of its progress along with the table master lease timestamp:
+  either in the descriptor itself (taking care not to bump the version)
+  or in a separate backfill checkpoint table.
 
 * Figure out how to distribute the backfill work. Ideally we would
   have each range of the primary index generate and write the index
