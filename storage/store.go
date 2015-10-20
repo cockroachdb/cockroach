@@ -1429,7 +1429,7 @@ func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd roachpb.RaftCommand) 
 	return s.multiraft.SubmitCommand(cmd.RangeID, string(idKey), data)
 }
 
-// processRaft processes read/write commands that have been committed
+// processRaft processes write commands that have been committed
 // by the raft consensus algorithm, dispatching them to the
 // appropriate range. This method starts a goroutine to process Raft
 // commands indefinitely or until the stopper signals.
