@@ -102,7 +102,9 @@ func (d Datum) Value() (driver.Value, error) {
 	case *Datum_DateVal:
 		val = Date(t.DateVal)
 	case *Datum_TimeVal:
-		val = t.TimeVal.GoTime()
+		// UTC is an arbitrary choice here. Once we have access to the
+		// session time zone, we should use that instead.
+		val = t.TimeVal.GoTime().UTC()
 	case *Datum_IntervalVal:
 		val = time.Duration(t.IntervalVal)
 	default:
@@ -112,11 +114,9 @@ func (d Datum) Value() (driver.Value, error) {
 	return val, nil
 }
 
-// GoTime returns the receiver as a time.Time in UTC. It is critical
-// that the time.Time returned is in UTC, because that is the
-// storage/wire contract for dates and times.
+// GoTime returns the receiver as a time.Time.
 func (t Datum_Timestamp) GoTime() time.Time {
-	return time.Unix(t.Sec, int64(t.Nsec)).UTC()
+	return time.Unix(t.Sec, int64(t.Nsec))
 }
 
 // Timestamp converts a time.Time to a timestamp.
