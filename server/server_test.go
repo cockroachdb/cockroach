@@ -561,7 +561,7 @@ func TestSystemDBGossip(t *testing.T) {
 
 	// Make sure the returned value is valAt(2).
 	var got sql.DatabaseDescriptor
-	if err := proto.Unmarshal(val.GetBytes(), &got); err != nil {
+	if err := proto.Unmarshal(val.GetRawBytes(), &got); err != nil {
 		t.Fatal(err)
 	}
 	if got.ID != 2 {

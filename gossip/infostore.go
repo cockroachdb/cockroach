@@ -164,7 +164,7 @@ func (is *infoStore) addInfo(key string, i *info) error {
 	if i.seq > is.MaxSeq {
 		is.MaxSeq = i.seq
 	}
-	is.processCallbacks(key, i.Value.GetBytes())
+	is.processCallbacks(key, i.Value.GetRawBytes())
 	return nil
 }
 
@@ -201,7 +201,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
 		for key, i := range infos {
-			method(key, i.Value.GetBytes())
+			method(key, i.Value.GetRawBytes())
 		}
 	}()
 }

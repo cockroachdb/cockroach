@@ -902,8 +902,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		if test.resolvable {
 			if err != nil {
 				t.Errorf("%d: expected read to succeed: %s", i, err)
-			} else if gReply := firstReply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetBytes(), []byte("value1")) {
-				t.Errorf("%d: expected bytes to be %q, got %q", i, "value1", gReply.Value.GetBytes())
+			} else if gReply := firstReply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
+				t.Errorf("%d: expected bytes to be %q, got %q", i, "value1", gReply.Value.GetRawBytes())
 			}
 
 			// Finally, try to end the pushee's transaction; if we have
@@ -936,8 +936,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			if test.pusheeIso == roachpb.SNAPSHOT {
 				if err != nil {
 					t.Errorf("expected read to succeed: %s", err)
-				} else if gReply := firstReply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetBytes(), []byte("value1")) {
-					t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.GetBytes())
+				} else if gReply := firstReply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
+					t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.GetRawBytes())
 				}
 			} else {
 				if err == nil {
@@ -986,8 +986,8 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	h.Timestamp = gTS
 	if reply, err := client.SendWrappedWith(store.testSender(), nil, h, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
-	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetBytes(), []byte("value1")) {
-		t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.GetBytes())
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
+		t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.GetRawBytes())
 	}
 
 	// Finally, try to end the pushee's transaction; since it's got
@@ -1147,7 +1147,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
-		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.GetBytes(), []byte("value1")) {
+		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
 			t.Errorf("expected value %q, got %+v", []byte("value1"), gReply.Value)
 		}
 		gArgs.Key = keyB
@@ -1167,7 +1167,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 				ReadConsistency: roachpb.INCONSISTENT,
 			}, &gArgs); err != nil {
 				return util.Errorf("expected read to succeed: %s", err)
-			} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.GetBytes(), []byte("value2")) {
+			} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value2")) {
 				return util.Errorf("expected value %q, got %+v", []byte("value2"), gReply.Value)
 			}
 			return nil
@@ -1188,10 +1188,10 @@ func TestStoreReadInconsistent(t *testing.T) {
 			t.Errorf("expected key %q; got %q", keyA, key)
 		} else if key := sReply.Rows[1].Key; !key.Equal(keyB) {
 			t.Errorf("expected key %q; got %q", keyB, key)
-		} else if val := sReply.Rows[0].Value.GetBytes(); !bytes.Equal(val, []byte("value1")) {
-			t.Errorf("expected value %q, got %q", []byte("value1"), sReply.Rows[0].Value.GetBytes())
-		} else if val := sReply.Rows[1].Value.GetBytes(); !bytes.Equal(val, []byte("value2")) {
-			t.Errorf("expected value %q, got %q", []byte("value2"), sReply.Rows[1].Value.GetBytes())
+		} else if val := sReply.Rows[0].Value.GetRawBytes(); !bytes.Equal(val, []byte("value1")) {
+			t.Errorf("expected value %q, got %q", []byte("value1"), sReply.Rows[0].Value.GetRawBytes())
+		} else if val := sReply.Rows[1].Value.GetRawBytes(); !bytes.Equal(val, []byte("value2")) {
+			t.Errorf("expected value %q, got %q", []byte("value2"), sReply.Rows[1].Value.GetRawBytes())
 		}
 	}
 }

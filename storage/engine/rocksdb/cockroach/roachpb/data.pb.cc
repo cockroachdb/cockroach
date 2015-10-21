@@ -98,7 +98,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
       -1);
   Value_descriptor_ = file->message_type(1);
   static const int Value_offsets_[4] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Value, bytes_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Value, raw_bytes_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Value, checksum_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Value, timestamp_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Value, tag_),
@@ -436,74 +436,74 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "h.roachpb\032 cockroach/roachpb/metadata.pr"
     "oto\032\024gogoproto/gogo.proto\"A\n\tTimestamp\022\027"
     "\n\twall_time\030\001 \001(\003B\004\310\336\037\000\022\025\n\007logical\030\002 \001(\005"
-    "B\004\310\336\037\000:\004\230\240\037\000\"\212\001\n\005Value\022\r\n\005bytes\030\001 \001(\014\022\020\n"
-    "\010checksum\030\003 \001(\007\022/\n\ttimestamp\030\004 \001(\0132\034.coc"
-    "kroach.roachpb.Timestamp\022/\n\003tag\030\005 \001(\0162\034."
-    "cockroach.roachpb.ValueTypeB\004\310\336\037\000\"O\n\010Key"
-    "Value\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\022-\n\005value\030\002 \001"
-    "(\0132\030.cockroach.roachpb.ValueB\004\310\336\037\000\"9\n\013Ra"
-    "wKeyValue\022\033\n\003key\030\001 \001(\014B\016\372\336\037\nEncodedKey\022\r"
-    "\n\005value\030\002 \001(\014\"\214\001\n\nStoreIdent\022%\n\ncluster_"
-    "id\030\001 \001(\tB\021\310\336\037\000\342\336\037\tClusterID\022)\n\007node_id\030\002"
-    " \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006NodeID\022,\n\010store_"
-    "id\030\003 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007StoreID\"\212\001\n"
-    "\014SplitTrigger\022>\n\014updated_desc\030\001 \001(\0132\".co"
-    "ckroach.roachpb.RangeDescriptorB\004\310\336\037\000\022:\n"
-    "\010new_desc\030\002 \001(\0132\".cockroach.roachpb.Rang"
-    "eDescriptorB\004\310\336\037\000\"\215\001\n\014MergeTrigger\022>\n\014up"
-    "dated_desc\030\001 \001(\0132\".cockroach.roachpb.Ran"
-    "geDescriptorB\004\310\336\037\000\022=\n\021subsumed_range_id\030"
-    "\002 \001(\003B\"\310\336\037\000\342\336\037\017SubsumedRangeID\372\336\037\007RangeI"
-    "D\"\361\002\n\025ChangeReplicasTrigger\022)\n\007node_id\030\001"
-    " \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006NodeID\022,\n\010store_"
-    "id\030\002 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007StoreID\022\?\n\013"
-    "change_type\030\003 \001(\0162$.cockroach.roachpb.Re"
-    "plicaChangeTypeB\004\310\336\037\000\022;\n\007replica\030\004 \001(\0132$"
-    ".cockroach.roachpb.ReplicaDescriptorB\004\310\336"
-    "\037\000\022D\n\020updated_replicas\030\005 \003(\0132$.cockroach"
-    ".roachpb.ReplicaDescriptorB\004\310\336\037\000\022;\n\017next"
-    "_replica_id\030\006 \001(\005B\"\310\336\037\000\342\336\037\rNextReplicaID"
-    "\372\336\037\tReplicaID\"C\n\023ModifiedSpanTrigger\022,\n\016"
-    "system_db_span\030\001 \001(\010B\024\310\336\037\000\342\336\037\014SystemDBSp"
-    "an\"\231\002\n\025InternalCommitTrigger\0226\n\rsplit_tr"
-    "igger\030\001 \001(\0132\037.cockroach.roachpb.SplitTri"
-    "gger\0226\n\rmerge_trigger\030\002 \001(\0132\037.cockroach."
-    "roachpb.MergeTrigger\022I\n\027change_replicas_"
-    "trigger\030\003 \001(\0132(.cockroach.roachpb.Change"
-    "ReplicasTrigger\022E\n\025modified_span_trigger"
-    "\030\004 \001(\0132&.cockroach.roachpb.ModifiedSpanT"
-    "rigger\"\035\n\010NodeList\022\021\n\005nodes\030\001 \003(\005B\002\020\001\"\252\004"
-    "\n\013Transaction\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022\024\n\003key"
-    "\030\002 \001(\014B\007\372\336\037\003Key\022\022\n\002id\030\003 \001(\014B\006\342\336\037\002ID\022\026\n\010p"
-    "riority\030\004 \001(\005B\004\310\336\037\000\0229\n\tisolation\030\005 \001(\0162 "
-    ".cockroach.roachpb.IsolationTypeB\004\310\336\037\000\022:"
-    "\n\006status\030\006 \001(\0162$.cockroach.roachpb.Trans"
-    "actionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001(\005B\004\310\336\037\000\022"
-    "4\n\016last_heartbeat\030\010 \001(\0132\034.cockroach.roac"
-    "hpb.Timestamp\0225\n\ttimestamp\030\t \001(\0132\034.cockr"
-    "oach.roachpb.TimestampB\004\310\336\037\000\022:\n\016orig_tim"
-    "estamp\030\n \001(\0132\034.cockroach.roachpb.Timesta"
-    "mpB\004\310\336\037\000\0229\n\rmax_timestamp\030\013 \001(\0132\034.cockro"
-    "ach.roachpb.TimestampB\004\310\336\037\000\0228\n\rcertain_n"
-    "odes\030\014 \001(\0132\033.cockroach.roachpb.NodeListB"
-    "\004\310\336\037\000\022\025\n\007Writing\030\r \001(\010B\004\310\336\037\000:\004\230\240\037\000\"\265\001\n\005L"
-    "ease\0221\n\005start\030\001 \001(\0132\034.cockroach.roachpb."
-    "TimestampB\004\310\336\037\000\0226\n\nexpiration\030\002 \001(\0132\034.co"
-    "ckroach.roachpb.TimestampB\004\310\336\037\000\022;\n\007repli"
-    "ca\030\003 \001(\0132$.cockroach.roachpb.ReplicaDesc"
-    "riptorB\004\310\336\037\000:\004\230\240\037\000\"k\n\006Intent\022\024\n\003key\030\001 \001("
-    "\014B\007\372\336\037\003Key\022\030\n\007end_key\030\002 \001(\014B\007\372\336\037\003Key\0221\n\003"
-    "txn\030\003 \001(\0132\036.cockroach.roachpb.Transactio"
-    "nB\004\310\336\037\000\"H\n\nGCMetadata\022\035\n\017last_scan_nanos"
-    "\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos\030\002 \001("
-    "\003*Q\n\tValueType\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005"
-    "FLOAT\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022\016\n\nTIMESERI"
-    "ES\020d*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA"
-    "\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolatio"
-    "nType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210"
-    "\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n"
-    "\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\031Z\007roach"
-    "pb\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 2858);
+    "B\004\310\336\037\000:\004\230\240\037\000\"\216\001\n\005Value\022\021\n\traw_bytes\030\001 \001("
+    "\014\022\020\n\010checksum\030\003 \001(\007\022/\n\ttimestamp\030\004 \001(\0132\034"
+    ".cockroach.roachpb.Timestamp\022/\n\003tag\030\005 \001("
+    "\0162\034.cockroach.roachpb.ValueTypeB\004\310\336\037\000\"O\n"
+    "\010KeyValue\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\022-\n\005value"
+    "\030\002 \001(\0132\030.cockroach.roachpb.ValueB\004\310\336\037\000\"9"
+    "\n\013RawKeyValue\022\033\n\003key\030\001 \001(\014B\016\372\336\037\nEncodedK"
+    "ey\022\r\n\005value\030\002 \001(\014\"\214\001\n\nStoreIdent\022%\n\nclus"
+    "ter_id\030\001 \001(\tB\021\310\336\037\000\342\336\037\tClusterID\022)\n\007node_"
+    "id\030\002 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006NodeID\022,\n\010st"
+    "ore_id\030\003 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007StoreID"
+    "\"\212\001\n\014SplitTrigger\022>\n\014updated_desc\030\001 \001(\0132"
+    "\".cockroach.roachpb.RangeDescriptorB\004\310\336\037"
+    "\000\022:\n\010new_desc\030\002 \001(\0132\".cockroach.roachpb."
+    "RangeDescriptorB\004\310\336\037\000\"\215\001\n\014MergeTrigger\022>"
+    "\n\014updated_desc\030\001 \001(\0132\".cockroach.roachpb"
+    ".RangeDescriptorB\004\310\336\037\000\022=\n\021subsumed_range"
+    "_id\030\002 \001(\003B\"\310\336\037\000\342\336\037\017SubsumedRangeID\372\336\037\007Ra"
+    "ngeID\"\361\002\n\025ChangeReplicasTrigger\022)\n\007node_"
+    "id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006NodeID\022,\n\010st"
+    "ore_id\030\002 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007StoreID"
+    "\022\?\n\013change_type\030\003 \001(\0162$.cockroach.roachp"
+    "b.ReplicaChangeTypeB\004\310\336\037\000\022;\n\007replica\030\004 \001"
+    "(\0132$.cockroach.roachpb.ReplicaDescriptor"
+    "B\004\310\336\037\000\022D\n\020updated_replicas\030\005 \003(\0132$.cockr"
+    "oach.roachpb.ReplicaDescriptorB\004\310\336\037\000\022;\n\017"
+    "next_replica_id\030\006 \001(\005B\"\310\336\037\000\342\336\037\rNextRepli"
+    "caID\372\336\037\tReplicaID\"C\n\023ModifiedSpanTrigger"
+    "\022,\n\016system_db_span\030\001 \001(\010B\024\310\336\037\000\342\336\037\014System"
+    "DBSpan\"\231\002\n\025InternalCommitTrigger\0226\n\rspli"
+    "t_trigger\030\001 \001(\0132\037.cockroach.roachpb.Spli"
+    "tTrigger\0226\n\rmerge_trigger\030\002 \001(\0132\037.cockro"
+    "ach.roachpb.MergeTrigger\022I\n\027change_repli"
+    "cas_trigger\030\003 \001(\0132(.cockroach.roachpb.Ch"
+    "angeReplicasTrigger\022E\n\025modified_span_tri"
+    "gger\030\004 \001(\0132&.cockroach.roachpb.ModifiedS"
+    "panTrigger\"\035\n\010NodeList\022\021\n\005nodes\030\001 \003(\005B\002\020"
+    "\001\"\252\004\n\013Transaction\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022\024\n"
+    "\003key\030\002 \001(\014B\007\372\336\037\003Key\022\022\n\002id\030\003 \001(\014B\006\342\336\037\002ID\022"
+    "\026\n\010priority\030\004 \001(\005B\004\310\336\037\000\0229\n\tisolation\030\005 \001"
+    "(\0162 .cockroach.roachpb.IsolationTypeB\004\310\336"
+    "\037\000\022:\n\006status\030\006 \001(\0162$.cockroach.roachpb.T"
+    "ransactionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001(\005B\004\310"
+    "\336\037\000\0224\n\016last_heartbeat\030\010 \001(\0132\034.cockroach."
+    "roachpb.Timestamp\0225\n\ttimestamp\030\t \001(\0132\034.c"
+    "ockroach.roachpb.TimestampB\004\310\336\037\000\022:\n\016orig"
+    "_timestamp\030\n \001(\0132\034.cockroach.roachpb.Tim"
+    "estampB\004\310\336\037\000\0229\n\rmax_timestamp\030\013 \001(\0132\034.co"
+    "ckroach.roachpb.TimestampB\004\310\336\037\000\0228\n\rcerta"
+    "in_nodes\030\014 \001(\0132\033.cockroach.roachpb.NodeL"
+    "istB\004\310\336\037\000\022\025\n\007Writing\030\r \001(\010B\004\310\336\037\000:\004\230\240\037\000\"\265"
+    "\001\n\005Lease\0221\n\005start\030\001 \001(\0132\034.cockroach.roac"
+    "hpb.TimestampB\004\310\336\037\000\0226\n\nexpiration\030\002 \001(\0132"
+    "\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022;\n\007r"
+    "eplica\030\003 \001(\0132$.cockroach.roachpb.Replica"
+    "DescriptorB\004\310\336\037\000:\004\230\240\037\000\"k\n\006Intent\022\024\n\003key\030"
+    "\001 \001(\014B\007\372\336\037\003Key\022\030\n\007end_key\030\002 \001(\014B\007\372\336\037\003Key"
+    "\0221\n\003txn\030\003 \001(\0132\036.cockroach.roachpb.Transa"
+    "ctionB\004\310\336\037\000\"H\n\nGCMetadata\022\035\n\017last_scan_n"
+    "anos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos\030"
+    "\002 \001(\003*Q\n\tValueType\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001"
+    "\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022\016\n\nTIME"
+    "SERIES\020d*>\n\021ReplicaChangeType\022\017\n\013ADD_REP"
+    "LICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsol"
+    "ationType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020"
+    "\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDING\020"
+    "\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\031Z\007r"
+    "oachpb\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 2862);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -955,7 +955,7 @@ void Timestamp::clear_logical() {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int Value::kBytesFieldNumber;
+const int Value::kRawBytesFieldNumber;
 const int Value::kChecksumFieldNumber;
 const int Value::kTimestampFieldNumber;
 const int Value::kTagFieldNumber;
@@ -982,7 +982,7 @@ Value::Value(const Value& from)
 void Value::SharedCtor() {
   ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
-  bytes_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  raw_bytes_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   checksum_ = 0u;
   timestamp_ = NULL;
   tag_ = 0;
@@ -995,7 +995,7 @@ Value::~Value() {
 }
 
 void Value::SharedDtor() {
-  bytes_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  raw_bytes_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != default_instance_) {
     delete timestamp_;
   }
@@ -1037,8 +1037,8 @@ void Value::Clear() {
 
   if (_has_bits_[0 / 32] & 15u) {
     ZR_(checksum_, tag_);
-    if (has_bytes()) {
-      bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    if (has_raw_bytes()) {
+      raw_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
     if (has_timestamp()) {
       if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
@@ -1064,11 +1064,11 @@ bool Value::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional bytes bytes = 1;
+      // optional bytes raw_bytes = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
-                input, this->mutable_bytes()));
+                input, this->mutable_raw_bytes()));
         } else {
           goto handle_unusual;
         }
@@ -1149,10 +1149,10 @@ failure:
 void Value::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.Value)
-  // optional bytes bytes = 1;
-  if (has_bytes()) {
+  // optional bytes raw_bytes = 1;
+  if (has_raw_bytes()) {
     ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
-      1, this->bytes(), output);
+      1, this->raw_bytes(), output);
   }
 
   // optional fixed32 checksum = 3;
@@ -1182,11 +1182,11 @@ void Value::SerializeWithCachedSizes(
 ::google::protobuf::uint8* Value::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.Value)
-  // optional bytes bytes = 1;
-  if (has_bytes()) {
+  // optional bytes raw_bytes = 1;
+  if (has_raw_bytes()) {
     target =
       ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
-        1, this->bytes(), target);
+        1, this->raw_bytes(), target);
   }
 
   // optional fixed32 checksum = 3;
@@ -1219,11 +1219,11 @@ int Value::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 15) {
-    // optional bytes bytes = 1;
-    if (has_bytes()) {
+    // optional bytes raw_bytes = 1;
+    if (has_raw_bytes()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::BytesSize(
-          this->bytes());
+          this->raw_bytes());
     }
 
     // optional fixed32 checksum = 3;
@@ -1271,9 +1271,9 @@ void Value::MergeFrom(const ::google::protobuf::Message& from) {
 void Value::MergeFrom(const Value& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_bytes()) {
-      set_has_bytes();
-      bytes_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.bytes_);
+    if (from.has_raw_bytes()) {
+      set_has_raw_bytes();
+      raw_bytes_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.raw_bytes_);
     }
     if (from.has_checksum()) {
       set_checksum(from.checksum());
@@ -1312,7 +1312,7 @@ void Value::Swap(Value* other) {
   InternalSwap(other);
 }
 void Value::InternalSwap(Value* other) {
-  bytes_.Swap(&other->bytes_);
+  raw_bytes_.Swap(&other->raw_bytes_);
   std::swap(checksum_, other->checksum_);
   std::swap(timestamp_, other->timestamp_);
   std::swap(tag_, other->tag_);
@@ -1332,57 +1332,57 @@ void Value::InternalSwap(Value* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // Value
 
-// optional bytes bytes = 1;
-bool Value::has_bytes() const {
+// optional bytes raw_bytes = 1;
+bool Value::has_raw_bytes() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void Value::set_has_bytes() {
+void Value::set_has_raw_bytes() {
   _has_bits_[0] |= 0x00000001u;
 }
-void Value::clear_has_bytes() {
+void Value::clear_has_raw_bytes() {
   _has_bits_[0] &= ~0x00000001u;
 }
-void Value::clear_bytes() {
-  bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_bytes();
+void Value::clear_raw_bytes() {
+  raw_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_raw_bytes();
 }
- const ::std::string& Value::bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Value.bytes)
-  return bytes_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+ const ::std::string& Value::raw_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Value.raw_bytes)
+  return raw_bytes_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void Value::set_bytes(const ::std::string& value) {
-  set_has_bytes();
-  bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Value.bytes)
+ void Value::set_raw_bytes(const ::std::string& value) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Value.raw_bytes)
 }
- void Value::set_bytes(const char* value) {
-  set_has_bytes();
-  bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Value.bytes)
+ void Value::set_raw_bytes(const char* value) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Value.raw_bytes)
 }
- void Value::set_bytes(const void* value, size_t size) {
-  set_has_bytes();
-  bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+ void Value::set_raw_bytes(const void* value, size_t size) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Value.bytes)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Value.raw_bytes)
 }
- ::std::string* Value::mutable_bytes() {
-  set_has_bytes();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Value.bytes)
-  return bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+ ::std::string* Value::mutable_raw_bytes() {
+  set_has_raw_bytes();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Value.raw_bytes)
+  return raw_bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- ::std::string* Value::release_bytes() {
-  clear_has_bytes();
-  return bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+ ::std::string* Value::release_raw_bytes() {
+  clear_has_raw_bytes();
+  return raw_bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void Value::set_allocated_bytes(::std::string* bytes) {
-  if (bytes != NULL) {
-    set_has_bytes();
+ void Value::set_allocated_raw_bytes(::std::string* raw_bytes) {
+  if (raw_bytes != NULL) {
+    set_has_raw_bytes();
   } else {
-    clear_has_bytes();
+    clear_has_raw_bytes();
   }
-  bytes_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), bytes);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Value.bytes)
+  raw_bytes_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), raw_bytes);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Value.raw_bytes)
 }
 
 // optional fixed32 checksum = 3;

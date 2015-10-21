@@ -221,8 +221,8 @@ func (m *Timestamp) GetLogical() int32 {
 // Value specifies the value at a key. Multiple values at the same key
 // are supported based on timestamp.
 type Value struct {
-	// bytes is the byte slice value.
-	Bytes []byte `protobuf:"bytes,1,opt,name=bytes" json:"bytes,omitempty"`
+	// raw_bytes is the byte slice value.
+	RawBytes []byte `protobuf:"bytes,1,opt,name=raw_bytes" json:"raw_bytes,omitempty"`
 	// checksum is a CRC-32-IEEE checksum of the key + value, in that order.
 	// If this is an integer value, then the value is interpreted as an 8
 	// byte, big-endian encoded value. This value is set by the client on
@@ -240,9 +240,9 @@ func (m *Value) Reset()         { *m = Value{} }
 func (m *Value) String() string { return proto.CompactTextString(m) }
 func (*Value) ProtoMessage()    {}
 
-func (m *Value) GetBytes() []byte {
+func (m *Value) GetRawBytes() []byte {
 	if m != nil {
-		return m.Bytes
+		return m.RawBytes
 	}
 	return nil
 }
@@ -836,11 +836,11 @@ func (m *Value) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Bytes != nil {
+	if m.RawBytes != nil {
 		data[i] = 0xa
 		i++
-		i = encodeVarintData(data, i, uint64(len(m.Bytes)))
-		i += copy(data[i:], m.Bytes)
+		i = encodeVarintData(data, i, uint64(len(m.RawBytes)))
+		i += copy(data[i:], m.RawBytes)
 	}
 	if m.Checksum != nil {
 		data[i] = 0x1d
@@ -1426,8 +1426,8 @@ func (m *Timestamp) Size() (n int) {
 func (m *Value) Size() (n int) {
 	var l int
 	_ = l
-	if m.Bytes != nil {
-		l = len(m.Bytes)
+	if m.RawBytes != nil {
+		l = len(m.RawBytes)
 		n += 1 + l + sovData(uint64(l))
 	}
 	if m.Checksum != nil {
@@ -1759,7 +1759,7 @@ func (m *Value) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Bytes", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RawBytes", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -1783,7 +1783,7 @@ func (m *Value) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Bytes = append([]byte{}, data[iNdEx:postIndex]...)
+			m.RawBytes = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		case 3:
 			if wireType != 5 {

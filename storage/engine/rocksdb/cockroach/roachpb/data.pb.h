@@ -302,17 +302,17 @@ class Value : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional bytes bytes = 1;
-  bool has_bytes() const;
-  void clear_bytes();
-  static const int kBytesFieldNumber = 1;
-  const ::std::string& bytes() const;
-  void set_bytes(const ::std::string& value);
-  void set_bytes(const char* value);
-  void set_bytes(const void* value, size_t size);
-  ::std::string* mutable_bytes();
-  ::std::string* release_bytes();
-  void set_allocated_bytes(::std::string* bytes);
+  // optional bytes raw_bytes = 1;
+  bool has_raw_bytes() const;
+  void clear_raw_bytes();
+  static const int kRawBytesFieldNumber = 1;
+  const ::std::string& raw_bytes() const;
+  void set_raw_bytes(const ::std::string& value);
+  void set_raw_bytes(const char* value);
+  void set_raw_bytes(const void* value, size_t size);
+  ::std::string* mutable_raw_bytes();
+  ::std::string* release_raw_bytes();
+  void set_allocated_raw_bytes(::std::string* raw_bytes);
 
   // optional fixed32 checksum = 3;
   bool has_checksum() const;
@@ -339,8 +339,8 @@ class Value : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Value)
  private:
-  inline void set_has_bytes();
-  inline void clear_has_bytes();
+  inline void set_has_raw_bytes();
+  inline void clear_has_raw_bytes();
   inline void set_has_checksum();
   inline void clear_has_checksum();
   inline void set_has_timestamp();
@@ -351,7 +351,7 @@ class Value : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::internal::ArenaStringPtr bytes_;
+  ::google::protobuf::internal::ArenaStringPtr raw_bytes_;
   ::cockroach::roachpb::Timestamp* timestamp_;
   ::google::protobuf::uint32 checksum_;
   int tag_;
@@ -1977,57 +1977,57 @@ inline void Timestamp::set_logical(::google::protobuf::int32 value) {
 
 // Value
 
-// optional bytes bytes = 1;
-inline bool Value::has_bytes() const {
+// optional bytes raw_bytes = 1;
+inline bool Value::has_raw_bytes() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void Value::set_has_bytes() {
+inline void Value::set_has_raw_bytes() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void Value::clear_has_bytes() {
+inline void Value::clear_has_raw_bytes() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void Value::clear_bytes() {
-  bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_bytes();
+inline void Value::clear_raw_bytes() {
+  raw_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_raw_bytes();
 }
-inline const ::std::string& Value::bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Value.bytes)
-  return bytes_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline const ::std::string& Value::raw_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Value.raw_bytes)
+  return raw_bytes_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void Value::set_bytes(const ::std::string& value) {
-  set_has_bytes();
-  bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Value.bytes)
+inline void Value::set_raw_bytes(const ::std::string& value) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Value.raw_bytes)
 }
-inline void Value::set_bytes(const char* value) {
-  set_has_bytes();
-  bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Value.bytes)
+inline void Value::set_raw_bytes(const char* value) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Value.raw_bytes)
 }
-inline void Value::set_bytes(const void* value, size_t size) {
-  set_has_bytes();
-  bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+inline void Value::set_raw_bytes(const void* value, size_t size) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Value.bytes)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Value.raw_bytes)
 }
-inline ::std::string* Value::mutable_bytes() {
-  set_has_bytes();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Value.bytes)
-  return bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline ::std::string* Value::mutable_raw_bytes() {
+  set_has_raw_bytes();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Value.raw_bytes)
+  return raw_bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* Value::release_bytes() {
-  clear_has_bytes();
-  return bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline ::std::string* Value::release_raw_bytes() {
+  clear_has_raw_bytes();
+  return raw_bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void Value::set_allocated_bytes(::std::string* bytes) {
-  if (bytes != NULL) {
-    set_has_bytes();
+inline void Value::set_allocated_raw_bytes(::std::string* raw_bytes) {
+  if (raw_bytes != NULL) {
+    set_has_raw_bytes();
   } else {
-    clear_has_bytes();
+    clear_has_raw_bytes();
   }
-  bytes_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), bytes);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Value.bytes)
+  raw_bytes_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), raw_bytes);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Value.raw_bytes)
 }
 
 // optional fixed32 checksum = 3;

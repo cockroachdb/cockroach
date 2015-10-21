@@ -1211,7 +1211,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	blockingDone := make(chan struct{})
 	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
 		put, ok := args.(*roachpb.PutRequest)
-		if ok && bytes.Equal(put.Key, key) && bytes.Equal(put.Value.GetBytes(), []byte{1}) {
+		if ok && bytes.Equal(put.Key, key) && bytes.Equal(put.Value.GetRawBytes(), []byte{1}) {
 			blockingStart <- struct{}{}
 			<-blockingDone
 		}
@@ -2386,7 +2386,7 @@ func TestMerge(t *testing.T) {
 	if resp.Value == nil {
 		t.Fatal("GetResponse had nil value")
 	}
-	if a, e := resp.Value.GetBytes(), []byte(stringExpected); !bytes.Equal(a, e) {
+	if a, e := resp.Value.GetRawBytes(), []byte(stringExpected); !bytes.Equal(a, e) {
 		t.Errorf("Get did not return expected value: %s != %s", string(a), e)
 	}
 }
@@ -2521,7 +2521,7 @@ func TestConditionFailedError(t *testing.T) {
 	if cErr, ok := err.(*roachpb.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
 			err, err)
-	} else if v := cErr.ActualValue; v == nil || !bytes.Equal(v.GetBytes(), value) {
+	} else if v := cErr.ActualValue; v == nil || !bytes.Equal(v.GetRawBytes(), value) {
 		t.Errorf("ConditionFailedError with bytes %q expected, but got %+v",
 			value, v)
 	}
@@ -3145,7 +3145,7 @@ func TestWriteWithoutCmdID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Add(&roachpb.PutRequest{
 		Span:  roachpb.Span{Key: roachpb.Key("k")},
-		Value: roachpb.Value{Bytes: []byte("not nil")},
+		Value: roachpb.MakeValueFromString("not nil"),
 	})
 
 	if _, pErr := tc.rng.Send(tc.rng.context(), ba); !testutils.IsError(pErr.GoError(), "write request without CmdID") {

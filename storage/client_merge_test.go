@@ -192,16 +192,16 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	gArgs := getArgs([]byte("aaa"))
 	if reply, err := client.SendWrapped(rg1(store), nil, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetBytes(), content) {
-		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetBytes(), content)
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), content) {
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetRawBytes(), content)
 	}
 	gArgs = getArgs([]byte("ccc"))
 	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: bDesc.RangeID,
 	}, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetBytes(), content) {
-		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetBytes(), content)
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), content) {
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetRawBytes(), content)
 	}
 
 	// Merge the b range back into the a range.
@@ -235,16 +235,16 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	gArgs = getArgs([]byte("aaa"))
 	if reply, err := client.SendWrapped(rg1(store), nil, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetBytes(), content) {
-		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetBytes(), content)
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), content) {
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetRawBytes(), content)
 	}
 	gArgs = getArgs([]byte("ccc"))
 	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: rangeB.Desc().RangeID,
 	}, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetBytes(), content) {
-		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetBytes(), content)
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), content) {
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetRawBytes(), content)
 	}
 
 	// Put new values after the merge on both sides.
@@ -263,14 +263,14 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	gArgs = getArgs([]byte("aaaa"))
 	if reply, err := client.SendWrapped(rg1(store), nil, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetBytes(), content) {
-		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetBytes(), content)
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), content) {
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetRawBytes(), content)
 	}
 	gArgs = getArgs([]byte("cccc"))
 	if reply, err := client.SendWrapped(rg1(store), nil, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetBytes(), content) {
-		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetBytes(), content)
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), content) {
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetRawBytes(), content)
 	}
 }
 

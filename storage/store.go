@@ -483,7 +483,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				return false, nil
 			}
 			var desc roachpb.RangeDescriptor
-			if err := proto.Unmarshal(kv.Value.GetBytes(), &desc); err != nil {
+			if err := proto.Unmarshal(kv.Value.GetRawBytes(), &desc); err != nil {
 				return false, err
 			}
 			rng, err := NewReplica(&desc, s)
