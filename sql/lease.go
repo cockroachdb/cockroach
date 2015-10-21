@@ -51,7 +51,7 @@ const (
 
 var (
 	leaseValTypes          []parser.Datum
-	leaseColIDToRowIndex   = make(map[ColumnID]int, 4)
+	leaseColIDToRowIndex   map[ColumnID]int
 	errLeaseVersionChanged = errors.New("lease version changed")
 )
 
@@ -62,6 +62,7 @@ func init() {
 		leaseExpirationRowIndex: "expiration",
 		leaseNodeIDRowIndex:     "nodeID",
 	}
+	leaseColIDToRowIndex = make(map[ColumnID]int, len(columns))
 	for i, name := range columns {
 		col, err := LeaseTable.FindColumnByName(name)
 		if err != nil {
@@ -72,18 +73,6 @@ func init() {
 			log.Fatalf("column %s invalid", col.Name)
 		}
 		leaseColIDToRowIndex[col.ID] = i
-
-		// Verify the column is at the expected location in the primary index.
-		index := -1
-		for i := range LeaseTable.PrimaryIndex.ColumnIDs {
-			if col.ID == LeaseTable.PrimaryIndex.ColumnIDs[i] {
-				index = i
-				break
-			}
-		}
-		if i != index {
-			log.Fatalf("unexpected index of \"%s\" in primary key: %d vs %d", name, i, index)
-		}
 	}
 
 	var err error
