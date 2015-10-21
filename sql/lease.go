@@ -201,6 +201,9 @@ func (s LeaseStore) Acquire(tableID ID, minVersion uint32) (*LeaseState, error) 
 		}
 		b := &client.Batch{}
 		b.Put(leaseKey, nil)
+		// TODO(pmattis): Setting the system DB trigger is currently necessary
+		// because the lease table resides in the system DB span. Perhaps it
+		// shouldn't.
 		txn.SetSystemDBTrigger()
 		return txn.CommitInBatch(b)
 	})
@@ -236,6 +239,8 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Get the current version of the table descriptor non-transactionally.
+		//
+		// TODO(pmattis): Do an inconsistent read here?
 		if err := s.db.GetProto(descKey, desc); err != nil {
 			return err
 		}
@@ -302,8 +307,8 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 // of a descriptor.
 func (s LeaseStore) countLeases(descID ID, version uint32, expiration int64) (int, error) {
 	// Scan from /descID/version/expiration to /descID/version+1. Note that this
-	// requires the prefix of the primary key is on the columns (descID, version,
-	// expiration).
+	// requires that the prefix of the primary key is on the columns (descID,
+	// version, expiration).
 	startKey, endKey := makeLeaseScanKeys(descID, version, expiration)
 	rows, err := s.db.Scan(startKey, endKey, 0)
 	if err != nil {
