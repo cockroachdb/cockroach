@@ -40,14 +40,10 @@ import (
 type qvalue struct {
 	datum parser.Datum
 	col   ColumnDescriptor
-
-	// Tricky: we embed a parser.Expr so that qvalue implements parser.expr()!
-	// Note that we can't just have qvalue.expr() as that method is defined in
-	// the wrong package.
-	parser.Expr
 }
 
 var _ parser.DReference = &qvalue{}
+var _ parser.Expr = &qvalue{}
 
 func (q *qvalue) Datum() parser.Datum {
 	return q.datum
@@ -55,6 +51,10 @@ func (q *qvalue) Datum() parser.Datum {
 
 func (q *qvalue) String() string {
 	return q.col.Name
+}
+
+func (q *qvalue) TypeCheck() (parser.Datum, error) {
+	return q.datum.TypeCheck()
 }
 
 type qvalMap map[ColumnID]*qvalue
@@ -386,7 +386,7 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	}
 	if n.err == nil {
 		var whereType parser.Datum
-		whereType, n.err = parser.TypeCheckExpr(n.filter)
+		whereType, n.err = n.filter.TypeCheck()
 		if n.err == nil {
 			if !(whereType == parser.DummyBool || whereType == parser.DNull) {
 				n.err = fmt.Errorf("argument of WHERE must be type %s, not type %s", parser.DummyBool.Type(), whereType.Type())

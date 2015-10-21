@@ -891,7 +891,7 @@ func (ctx EvalContext) evalComparisonExpr(expr *ComparisonExpr) (Datum, error) {
 
 	// Make sure the expression's cmpOp function is memoized
 	if expr.fn.fn == nil {
-		if _, err := typeCheckComparisonExpr(expr); err != nil {
+		if _, err := expr.TypeCheck(); err != nil {
 			return DNull, err
 		}
 
@@ -927,7 +927,7 @@ func (ctx EvalContext) evalBinaryExpr(expr *BinaryExpr) (Datum, error) {
 	}
 
 	if expr.fn.fn == nil {
-		if _, err := typeCheckBinaryExpr(expr); err != nil {
+		if _, err := expr.TypeCheck(); err != nil {
 			return nil, err
 		}
 	}
@@ -940,7 +940,7 @@ func (ctx EvalContext) evalUnaryExpr(expr *UnaryExpr) (Datum, error) {
 		return DNull, err
 	}
 	if expr.fn.fn == nil {
-		if _, err := typeCheckUnaryExpr(expr); err != nil {
+		if _, err := expr.TypeCheck(); err != nil {
 			return DNull, err
 		}
 	}
@@ -967,7 +967,7 @@ func (ctx EvalContext) evalFuncExpr(expr *FuncExpr) (Datum, error) {
 	}
 
 	if expr.fn.fn == nil {
-		if _, err := typeCheckFuncExpr(expr); err != nil {
+		if _, err := expr.TypeCheck(); err != nil {
 			return DNull, err
 		}
 	}

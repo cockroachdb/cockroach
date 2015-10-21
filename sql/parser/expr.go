@@ -28,44 +28,10 @@ import (
 // Expr represents an expression.
 type Expr interface {
 	fmt.Stringer
-	expr()
+	// TypeCheck returns the zero value of the expression's type, or an
+	// error if the expression doesn't type-check.
+	TypeCheck() (Datum, error)
 }
-
-func (*AndExpr) expr()        {}
-func (*OrExpr) expr()         {}
-func (*NotExpr) expr()        {}
-func (*ParenExpr) expr()      {}
-func (*ComparisonExpr) expr() {}
-func (*RangeCond) expr()      {}
-func (*IsOfTypeExpr) expr()   {}
-func (*ExistsExpr) expr()     {}
-func (*IfExpr) expr()         {}
-func (*NullIfExpr) expr()     {}
-func (*CoalesceExpr) expr()   {}
-func (IntVal) expr()          {}
-func (NumVal) expr()          {}
-func (DefaultVal) expr()      {}
-func (ValArg) expr()          {}
-func (*QualifiedName) expr()  {}
-func (Tuple) expr()           {}
-func (Row) expr()             {}
-func (Array) expr()           {}
-func (*Subquery) expr()       {}
-func (*BinaryExpr) expr()     {}
-func (*UnaryExpr) expr()      {}
-func (*FuncExpr) expr()       {}
-func (*CaseExpr) expr()       {}
-func (*CastExpr) expr()       {}
-func (DBool) expr()           {}
-func (DInt) expr()            {}
-func (DFloat) expr()          {}
-func (DString) expr()         {}
-func (DBytes) expr()          {}
-func (DDate) expr()           {}
-func (DTimestamp) expr()      {}
-func (DInterval) expr()       {}
-func (DTuple) expr()          {}
-func (dNull) expr()           {}
 
 // AndExpr represents an AND expression.
 type AndExpr struct {

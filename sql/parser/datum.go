@@ -46,8 +46,8 @@ var (
 	DummyTimestamp = DTimestamp{}
 	// DummyInterval is a placeholder DInterval value.
 	DummyInterval = DInterval{}
-	// DummyTuple is a placeholder DTuple value.
-	DummyTuple = DTuple{}
+	// dummyTuple is a placeholder DTuple value.
+	dummyTuple = DTuple{}
 
 	// DNull is the NULL Datum.
 	DNull = dNull{}
@@ -60,7 +60,7 @@ var (
 	_ Datum = DummyDate
 	_ Datum = DummyTimestamp
 	_ Datum = DummyInterval
-	_ Datum = DummyTuple
+	_ Datum = dummyTuple
 	_ Datum = DNull
 
 	boolType      = reflect.TypeOf(DummyBool)
@@ -71,7 +71,7 @@ var (
 	dateType      = reflect.TypeOf(DummyDate)
 	timestampType = reflect.TypeOf(DummyTimestamp)
 	intervalType  = reflect.TypeOf(DummyInterval)
-	tupleType     = reflect.TypeOf(DummyTuple)
+	tupleType     = reflect.TypeOf(dummyTuple)
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.

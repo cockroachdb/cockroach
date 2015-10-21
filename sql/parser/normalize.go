@@ -392,7 +392,7 @@ func (v *isConstVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 			return nil, expr
 		case *FuncExpr:
 			// typeCheckFuncExpr populates t.fn.impure.
-			if _, err := typeCheckFuncExpr(t); err != nil || t.fn.impure {
+			if _, err := t.TypeCheck(); err != nil || t.fn.impure {
 				v.isConst = false
 				return nil, expr
 			}

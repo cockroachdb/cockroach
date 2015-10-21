@@ -83,11 +83,11 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 	s.columns = make([]string, 0, len(funcs))
 	s.render = make([]parser.Expr, 0, len(funcs))
 	for _, f := range funcs {
-		if len(f.val.Exprs) != 1 {
-			panic(fmt.Sprintf("%s has %d arguments (expected 1)", f.val.Name, len(f.val.Exprs)))
+		if len(f.val.expr.Exprs) != 1 {
+			panic(fmt.Sprintf("%s has %d arguments (expected 1)", f.val.expr.Name, len(f.val.expr.Exprs)))
 		}
 		s.columns = append(s.columns, f.val.String())
-		s.render = append(s.render, f.val.Exprs[0])
+		s.render = append(s.render, f.val.expr.Exprs[0])
 	}
 
 	group.desiredOrdering = desiredAggregateOrdering(group.funcs)
@@ -198,7 +198,7 @@ func (n *groupNode) isNotNullFilter(expr parser.Expr) parser.Expr {
 	f := n.funcs[i-1]
 	isNotNull := &parser.ComparisonExpr{
 		Operator: parser.IsNot,
-		Left:     f.val.Exprs[0],
+		Left:     f.val.expr.Exprs[0],
 		Right:    parser.DNull,
 	}
 	if expr == nil {
@@ -220,10 +220,10 @@ func desiredAggregateOrdering(funcs []*aggregateFunc) []int {
 	for i, f := range funcs {
 		switch f.impl.(type) {
 		case *maxAggregate, *minAggregate:
-			if limit != 0 || len(f.val.Exprs) != 1 {
+			if limit != 0 || len(f.val.expr.Exprs) != 1 {
 				return nil
 			}
-			switch f.val.Exprs[0].(type) {
+			switch f.val.expr.Exprs[0].(type) {
 			case *qvalue:
 				limit = i + 1
 				if _, ok := f.impl.(*maxAggregate); ok {
@@ -262,7 +262,7 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 		if impl, ok := aggregates[strings.ToLower(string(t.Name.Base))]; ok {
 			f := &aggregateFunc{
 				val: aggregateValue{
-					FuncExpr: t,
+					expr: t,
 				},
 				impl: impl.New(),
 			}
@@ -309,16 +309,22 @@ func checkAggregateExpr(expr parser.Expr) error {
 
 type aggregateValue struct {
 	datum parser.Datum
-	// Tricky: we embed a parser.FuncExpr so that aggregateValue implements
-	// parser.expr()! Note that we can't just implement aggregateValue.expr() as
-	// that interface method is defined in the wrong package.
-	*parser.FuncExpr
+	expr  *parser.FuncExpr
 }
 
 var _ parser.DReference = &aggregateValue{}
+var _ parser.Expr = &aggregateValue{}
 
-func (v *aggregateValue) Datum() parser.Datum {
-	return v.datum
+func (av *aggregateValue) Datum() parser.Datum {
+	return av.datum
+}
+
+func (av *aggregateValue) String() string {
+	return av.expr.String()
+}
+
+func (av *aggregateValue) TypeCheck() (parser.Datum, error) {
+	return av.expr.TypeCheck()
 }
 
 type aggregateFunc struct {
