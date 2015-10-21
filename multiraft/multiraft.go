@@ -46,7 +46,7 @@ const (
 	maxReplicaDescCacheSize = 1000
 )
 
-// An ErrGroupDeleted is returned for commands which are pending while their
+// ErrGroupDeleted is returned for commands which are pending while their
 // group is deleted.
 var ErrGroupDeleted = errors.New("raft group deleted")
 
