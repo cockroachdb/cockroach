@@ -101,6 +101,7 @@ type Cluster struct {
 	mu             sync.Mutex // Protects the fields below
 	dns            *Container
 	vols           *Container
+	numNodes       int
 	Nodes          []*Container
 	events         chan Event
 	expectedEvents chan Event
@@ -128,7 +129,7 @@ func Create(numNodes int, stopper chan struct{}) *Cluster {
 	return &Cluster{
 		client:         newDockerClient(),
 		stopper:        stopper,
-		Nodes:          make([]*Container, 0, numNodes),
+		numNodes:       numNodes,
 		events:         make(chan Event, 1000),
 		expectedEvents: make(chan Event, 1000),
 	}
@@ -142,6 +143,7 @@ func (l *Cluster) expectEvent(c *Container, msgs ...string) {
 		for _, status := range msgs {
 			l.expectedEvents <- Event{NodeIndex: index, Status: status}
 		}
+		break
 	}
 }
 
@@ -213,7 +215,7 @@ func (l *Cluster) initCluster() {
 	l.panicOnStop()
 
 	vols := map[string]struct{}{}
-	for i := 0; i < cap(l.Nodes); i++ {
+	for i := 0; i < l.numNodes; i++ {
 		vols[data(i)] = struct{}{}
 	}
 	create := func() (*Container, error) {
@@ -279,8 +281,8 @@ func (l *Cluster) initCluster() {
 
 	maybePanic(c.Start(binds, nil, nil))
 	maybePanic(c.Wait())
-	l.vols.Name = "volumes"
 	l.vols = c
+	l.vols.Name = "volumes"
 }
 
 func (l *Cluster) createRoach(i int, cmd ...string) *Container {
@@ -318,7 +320,7 @@ func (l *Cluster) createCACert() {
 func (l *Cluster) createNodeCerts() {
 	log.Infof("creating node certs")
 	nodes := []string{dockerIP().String()}
-	for i := 0; i < cap(l.Nodes); i++ {
+	for i := 0; i < l.numNodes; i++ {
 		nodes = append(nodes, node(i))
 	}
 	maybePanic(security.RunCreateNodeCert(l.CertsDir, 512, nodes))
@@ -326,7 +328,7 @@ func (l *Cluster) createNodeCerts() {
 
 func (l *Cluster) startNode(i int) *Container {
 	gossipNodes := []string{}
-	for i := 0; i < cap(l.Nodes); i++ {
+	for i := 0; i < l.numNodes; i++ {
 		gossipNodes = append(gossipNodes, fmt.Sprintf("%s:%d", node(i), cockroachPort))
 	}
 
@@ -366,9 +368,7 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan 
 
 	if e.Error != nil {
 		log.Errorf("monitoring error: %s", e.Error)
-		if l.events != nil {
-			l.events <- Event{NodeIndex: -1, Status: eventDie}
-		}
+		l.events <- Event{NodeIndex: -1, Status: eventDie}
 		return false
 	}
 
@@ -377,9 +377,7 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan 
 			if log.V(1) {
 				log.Errorf("node=%d status=%s", i, e.Status)
 			}
-			if l.events != nil {
-				l.events <- Event{NodeIndex: i, Status: e.Status}
-			}
+			l.events <- Event{NodeIndex: i, Status: e.Status}
 			return true
 		}
 	}
@@ -438,8 +436,9 @@ func (l *Cluster) Start() {
 
 	l.monitorStopper = make(chan struct{})
 	go l.monitor(l.monitorStopper)
-	for i := 0; i < cap(l.Nodes); i++ {
-		l.Nodes = append(l.Nodes, l.startNode(i))
+	l.Nodes = make([]*Container, l.numNodes)
+	for i := range l.Nodes {
+		l.Nodes[i] = l.startNode(i)
 	}
 }
 
@@ -450,35 +449,35 @@ func (l *Cluster) Start() {
 // Currently, the only events generated (and asserted against) are "die" and
 // "restart", to maximize compatibility across different versions of Docker.
 func (l *Cluster) Assert(t util.Tester) {
+	filter := func(ch chan Event, wait time.Duration) *Event {
+		for {
+			select {
+			case act := <-ch:
+				if act.Status != "die" && act.Status != "restart" {
+					continue
+				}
+				return &act
+			case <-time.After(wait):
+			}
+			break
+		}
+		return nil
+	}
+
 	var events []Event
 	for {
-		select {
-		case exp := <-l.expectedEvents:
-			for {
-				select {
-				case act := <-l.events:
-					if act.Status != "die" && act.Status != "restart" {
-						continue
-					}
-					if exp.NodeIndex != act.NodeIndex || exp.Status != act.Status {
-						t.Fatalf("expected event %v, got %v (after %v)", exp, act, events)
-					}
-					events = append(events, act)
-				case <-time.After(time.Second):
-					t.Fatalf("expected event %v, got none (after %v)", exp, events)
-				}
-				break
-			}
-			events = append(events, exp)
-			continue
-		default:
+		exp := filter(l.expectedEvents, time.Duration(0))
+		if exp == nil {
+			break
 		}
-		break
+		act := filter(l.events, time.Second)
+		if act == nil || (exp.NodeIndex != act.NodeIndex || exp.Status != act.Status) {
+			t.Fatalf("expected event %v, got %v (after %v)", exp, act, events)
+		}
+		events = append(events, *exp)
 	}
-	select {
-	default:
-	case act := <-l.expectedEvents:
-		t.Fatalf("unexpected event %v (after %v)", act, events)
+	if cur := filter(l.events, time.Duration(0)); cur != nil {
+		t.Fatalf("unexpected extra event %v (after %v)", cur, events)
 	}
 	log.Infof("asserted %v", events)
 }
