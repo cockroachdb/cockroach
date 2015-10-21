@@ -35,11 +35,7 @@ import (
 func TestPut(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
 	l.Start()
-	defer func() {
-		if err := l.AssertAndStop(nil); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	defer l.AssertAndStop(t)
 
 	db, dbStopper := makeDBClient(t, l, 0)
 	defer dbStopper.Stop()
