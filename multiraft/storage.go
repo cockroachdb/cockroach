@@ -52,6 +52,13 @@ type Storage interface {
 	ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error)
 	ReplicaIDForStore(groupID roachpb.RangeID, storeID roachpb.StoreID) (roachpb.ReplicaID, error)
 	ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb.ReplicaDescriptor, error)
+
+	// GroupLocker returns a lock which (if non-nil) will be acquired
+	// when a group is being created (which entails multiple calls to
+	// Storage and StateMachine methods and may race with the removal of
+	// a previous incarnation of a group). If it returns a non-nil value
+	// it must return the same value on every call.
+	GroupLocker() sync.Locker
 }
 
 // The StateMachine interface is supplied by the application to manage a persistent
@@ -109,6 +116,11 @@ func (m *MemoryStorage) ReplicaIDForStore(groupID roachpb.RangeID, storeID roach
 // ReplicasFromSnapshot implements the Storage interface.
 func (m *MemoryStorage) ReplicasFromSnapshot(_ raftpb.Snapshot) ([]roachpb.ReplicaDescriptor, error) {
 	return nil, nil
+}
+
+// GroupLocker implements the Storage interface by returning nil.
+func (m *MemoryStorage) GroupLocker() sync.Locker {
+	return nil
 }
 
 // groupWriteRequest represents a set of changes to make to a group.

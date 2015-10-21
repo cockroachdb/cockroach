@@ -798,6 +798,11 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 // messages (in which case the replicaID comes from the incoming
 // message, since nothing is on disk yet).
 func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) error {
+	locker := s.Storage.GroupLocker()
+	if locker != nil {
+		locker.Lock()
+		defer locker.Unlock()
+	}
 	if g, ok := s.groups[groupID]; ok {
 		if replicaID != 0 && g.replicaID != replicaID {
 			return util.Errorf("cannot create group %s with replica ID %s; already exists with replica ID %s",

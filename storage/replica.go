@@ -162,6 +162,7 @@ type RangeManager interface {
 
 	// Range and replica manipulation methods.
 	LookupReplica(start, end roachpb.RKey) *Replica
+	GetReplica(rangeID roachpb.RangeID) (*Replica, error)
 	MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error
 	NewRangeDescriptor(start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error)
 	NewSnapshot() engine.Engine

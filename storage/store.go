@@ -251,11 +251,15 @@ type Store struct {
 	stopper           *stop.Stopper
 	startedAt         int64
 	nodeDesc          *roachpb.NodeDescriptor
-	initComplete      sync.WaitGroup               // Signaled by async init tasks
-	mu                sync.RWMutex                 // Protects variables below...
-	replicas          map[roachpb.RangeID]*Replica // Map of replicas by Range ID
-	replicasByKey     *btree.BTree                 // btree keyed by ranges end keys.
-	uninitReplicas    map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
+	initComplete      sync.WaitGroup // Signaled by async init tasks
+
+	// Synchronizes raft group creation and range GC.
+	raftGroupLocker sync.Mutex
+
+	mu             sync.RWMutex                 // Protects variables below...
+	replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
+	replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
+	uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 }
 
 var _ client.Sender = &Store{}
@@ -366,7 +370,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
 	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock, s.ctx.RebalancingOptions)
-	s._replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip)
+	s._replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip, s.GroupLocker())
 	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._replicaGCQueue)
 
 	return s
@@ -1574,6 +1578,11 @@ func (s *Store) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb.ReplicaDes
 		return nil, err
 	}
 	return parsedSnap.RangeDescriptor.Replicas, nil
+}
+
+// GroupLocker implements the multiraft.Storage interface.
+func (s *Store) GroupLocker() sync.Locker {
+	return &s.raftGroupLocker
 }
 
 // AppliedIndex implements the multiraft.StateMachine interface.
