@@ -349,7 +349,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	desc := r.Desc()
 	_, replica := desc.FindReplica(r.rm.StoreID())
 	if replica == nil {
-		return util.Errorf("can't find store %s in descriptor %+v", r.rm.StoreID(), desc)
+		return roachpb.NewRangeNotFoundError(desc.RangeID)
 	}
 	args := &roachpb.LeaderLeaseRequest{
 		Span: roachpb.Span{
@@ -876,7 +876,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 	_, replica := desc.FindReplica(r.rm.StoreID())
 	if replica == nil {
 		errChan := make(chan error, 1)
-		errChan <- util.Errorf("could not find own replica in descriptor")
+		errChan <- roachpb.NewRangeNotFoundError(desc.RangeID)
 		return errChan, pendingCmd
 	}
 	raftCmd := roachpb.RaftCommand{
@@ -1484,6 +1484,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 					switch err.(type) {
 					case *roachpb.RangeKeyMismatchError:
 					case *roachpb.NotLeaderError:
+					case *roachpb.RangeNotFoundError:
 					default:
 						// TODO(tschottdorf): Does this need to be a panic?
 						panic(fmt.Sprintf("intent resolution failed with unexpected error: %s", err))
