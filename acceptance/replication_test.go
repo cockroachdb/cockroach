@@ -76,7 +76,7 @@ func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, d time.D
 func TestRangeReplication(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
 	l.Start()
-	defer l.Stop()
+	defer l.AssertAndStop(t)
 
 	checkRangeReplication(t, l, 20*time.Second)
 }

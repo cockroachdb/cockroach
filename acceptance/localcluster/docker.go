@@ -130,23 +130,22 @@ func dockerIP() net.IP {
 // Container provides the programmatic interface for a single docker
 // container.
 type Container struct {
-	ID            string
-	containerInfo dockerclient.ContainerInfo
-	client        dockerclient.Client
+	ID      string
+	Name    string
+	cluster *Cluster
 }
 
 // createContainer creates a new container using the specified options. Per the
 // docker API, the created container is not running and must be started
 // explicitly.
-func createContainer(client dockerclient.Client, config dockerclient.ContainerConfig) (*Container, error) {
-	id, err := client.CreateContainer(&config, "")
+func createContainer(l *Cluster, config dockerclient.ContainerConfig) (*Container, error) {
+	id, err := l.client.CreateContainer(&config, "")
 	if err != nil {
 		return nil, err
 	}
 	return &Container{
-		ID:            id,
-		containerInfo: dockerclient.ContainerInfo{Id: id},
-		client:        client,
+		ID:      id,
+		cluster: l,
 	}, nil
 }
 
@@ -165,7 +164,7 @@ func (c *Container) Remove() error {
 		// circleci, just leave the containers around.
 		return nil
 	}
-	return c.client.RemoveContainer(c.ID, false, true)
+	return c.cluster.client.RemoveContainer(c.ID, false, true)
 }
 
 // Kill stops a running container, without removing it.
@@ -173,7 +172,11 @@ func (c *Container) Kill() error {
 	// Paused containers cannot be killed. Attempt to unpause it first
 	// (which might fail) before killing.
 	_ = c.Unpause()
-	return c.client.KillContainer(c.ID, "9")
+	if err := c.cluster.client.KillContainer(c.ID, "9"); err != nil {
+		return err
+	}
+	c.cluster.expectEvent(c, "die")
+	return nil
 }
 
 // Start starts a non-running container.
@@ -185,37 +188,51 @@ func (c *Container) Start(binds []string, dns, vols *Container) error {
 		PublishAllPorts: true,
 	}
 	if dns != nil {
-		config.Dns = append(config.Dns, dns.containerInfo.NetworkSettings.IPAddress)
+		ci, err := dns.Inspect()
+		if err != nil {
+			return err
+		}
+		config.Dns = append(config.Dns, ci.NetworkSettings.IPAddress)
 	}
 	if vols != nil {
 		config.VolumesFrom = append(config.VolumesFrom, vols.ID)
 	}
-	return c.client.StartContainer(c.ID, config)
+	return c.cluster.client.StartContainer(c.ID, config)
 }
 
 // Pause pauses a running container.
 func (c *Container) Pause() error {
-	return c.client.PauseContainer(c.ID)
+	return c.cluster.client.PauseContainer(c.ID)
 }
 
 // Unpause resumes a paused container.
 func (c *Container) Unpause() error {
-	return c.client.UnpauseContainer(c.ID)
+	return c.cluster.client.UnpauseContainer(c.ID)
 }
 
 // Restart restarts a running container.
 // Container will be killed after 'timeout' seconds if it fails to stop.
 func (c *Container) Restart(timeoutSeconds int) error {
-	if err := c.client.RestartContainer(c.ID, timeoutSeconds); err != nil {
+	var exp []string
+	if ci, err := c.Inspect(); err != nil {
+		return err
+	} else if ci.State.Running {
+		exp = append(exp, "die")
+	}
+	if err := c.cluster.client.RestartContainer(c.ID, timeoutSeconds); err != nil {
 		return err
 	}
-	// We need to refresh the container metadata. Ports change on restart.
-	return c.Inspect()
+	c.cluster.expectEvent(c, append(exp, "restart")...)
+	return nil
 }
 
 // Stop a running container.
 func (c *Container) Stop(timeoutSeconds int) error {
-	return c.client.StopContainer(c.ID, timeoutSeconds)
+	if err := c.cluster.client.StopContainer(c.ID, timeoutSeconds); err != nil {
+		return err
+	}
+	c.cluster.expectEvent(c, "die")
+	return nil
 }
 
 // Wait waits for a running container to exit.
@@ -223,7 +240,7 @@ func (c *Container) Wait() error {
 	// TODO(pmattis): dockerclient does not support the "wait" method
 	// (yet), so perform the http call ourselves. Remove once "wait"
 	// support is added to dockerclient.
-	dc := c.client.(*dockerclient.DockerClient)
+	dc := c.cluster.client.(*dockerclient.DockerClient)
 	resp, err := dc.HTTPClient.Post(
 		fmt.Sprintf("%s/containers/%s/wait", dc.URL, c.ID), util.JSONContentType, nil)
 	if err != nil {
@@ -251,7 +268,7 @@ func (c *Container) Wait() error {
 
 // Logs outputs the containers logs to the given io.Writer.
 func (c *Container) Logs(w io.Writer) error {
-	r, err := c.client.ContainerLogs(c.ID, &dockerclient.LogOptions{
+	r, err := c.cluster.client.ContainerLogs(c.ID, &dockerclient.LogOptions{
 		Stdout: true,
 		Stderr: true,
 	})
@@ -280,26 +297,25 @@ func (c *Container) Logs(w io.Writer) error {
 }
 
 // Inspect retrieves detailed info about a container.
-func (c *Container) Inspect() error {
-	out, err := c.client.InspectContainer(c.ID)
-	if err != nil {
-		return err
-	}
-	c.containerInfo = *out
-	return nil
+func (c *Container) Inspect() (*dockerclient.ContainerInfo, error) {
+	return c.cluster.client.InspectContainer(c.ID)
 }
 
 // Addr returns the address to connect to the specified port.
 func (c *Container) Addr(name string) *net.TCPAddr {
+	containerInfo, err := c.Inspect()
+	if err != nil {
+		return nil
+	}
 	if name == "" {
 		// No port specified, pick a random one (random because iteration
 		// over maps is randomized).
-		for port := range c.containerInfo.NetworkSettings.Ports {
+		for port := range containerInfo.NetworkSettings.Ports {
 			name = port
 			break
 		}
 	}
-	bindings, ok := c.containerInfo.NetworkSettings.Ports[name]
+	bindings, ok := containerInfo.NetworkSettings.Ports[name]
 	if !ok || len(bindings) == 0 {
 		return nil
 	}

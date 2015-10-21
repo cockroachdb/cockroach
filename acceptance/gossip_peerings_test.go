@@ -20,7 +20,6 @@
 package acceptance
 
 import (
-	"fmt"
 	"math/rand"
 	"strings"
 	"testing"
@@ -45,11 +44,6 @@ func checkGossip(t *testing.T, l *localcluster.Cluster, d time.Duration,
 		case <-stopper:
 			t.Fatalf("interrupted")
 			return nil
-		case e := <-l.Events:
-			if log.V(1) {
-				log.Infof("%+v", e)
-			}
-			return fmt.Errorf("event: %+v", e)
 		case <-time.After(1 * time.Second):
 		}
 
@@ -103,9 +97,8 @@ func hasClusterID(infos map[string]interface{}) error {
 
 func TestGossipPeerings(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
-	l.Events = make(chan localcluster.Event, 10)
 	l.Start()
-	defer l.Stop()
+	defer l.AssertAndStop(t)
 
 	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
 
@@ -132,7 +125,7 @@ func TestGossipPeerings(t *testing.T) {
 func TestGossipRestart(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
 	l.Start()
-	defer l.Stop()
+	defer l.AssertAndStop(t)
 
 	log.Infof("waiting for initial gossip connections")
 	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
