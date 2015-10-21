@@ -26,10 +26,10 @@ const (
 	defaultPort = "26257"
 )
 
-// EnsureHost takes a host:port pair, where the host portion is optional.
-// If a host is present, the output is equal to the input. Otherwise,
-// the output will contain a host portion equal to the hostname (or
-// "127.0.0.1" as a fallback).
+// EnsureHostPort takes a host:port pair, where the host portion is optional.
+// If host and port are present, the output is equal to the input. If port is
+// not present, use default port 26257. If host is not present, host will be
+// equal to the hostname (or "127.0.0.1" as a fallback).
 func EnsureHostPort(addr string) string {
 	host, port, err := net.SplitHostPort(addr)
 	if host != "" || err != nil {
