@@ -98,7 +98,6 @@ func hasClusterID(infos map[string]interface{}) error {
 func TestGossipPeerings(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
 	l.Start()
-
 	defer l.AssertAndStop(t)
 
 	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
