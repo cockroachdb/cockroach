@@ -86,44 +86,52 @@ func (d Date) String() string {
 func (d Datum) Value() (driver.Value, error) {
 	var val driver.Value
 
-	switch t := d.Payload.(type) {
+	switch vt := d.Payload.(type) {
 	case nil:
-		val = t
+		val = vt
 	case *Datum_BoolVal:
-		val = t.BoolVal
+		val = vt.BoolVal
 	case *Datum_IntVal:
-		val = t.IntVal
+		val = vt.IntVal
 	case *Datum_FloatVal:
-		val = t.FloatVal
+		val = vt.FloatVal
 	case *Datum_BytesVal:
-		val = t.BytesVal
+		val = vt.BytesVal
 	case *Datum_StringVal:
-		val = t.StringVal
+		val = vt.StringVal
 	case *Datum_DateVal:
-		val = Date(t.DateVal)
+		val = Date(vt.DateVal)
 	case *Datum_TimeVal:
-		val = t.TimeVal.GoTime()
+		t, err := vt.TimeVal.GoTime()
+		if err != nil {
+			return nil, err
+		}
+		val = t
 	case *Datum_IntervalVal:
-		val = time.Duration(t.IntervalVal)
+		val = time.Duration(vt.IntervalVal)
 	default:
-		return nil, util.Errorf("unsupported type %T", t)
+		return nil, util.Errorf("unsupported type %T", vt)
 	}
 
 	return val, nil
 }
 
-// GoTime returns the receiver as a time.Time in UTC. It is critical
-// that the time.Time returned is in UTC, because that is the
-// storage/wire contract for dates and times.
-func (t Datum_Timestamp) GoTime() time.Time {
-	return time.Unix(t.Sec, int64(t.Nsec)).UTC()
+// GoTime converts the timestamp to a time.Time.
+func (t Datum_Timestamp) GoTime() (time.Time, error) {
+	loc, err := time.LoadLocation(t.Location)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return time.Unix(t.Sec, int64(t.Nsec)).In(loc), nil
 }
 
 // Timestamp converts a time.Time to a timestamp.
 func Timestamp(t time.Time) Datum_Timestamp {
 	return Datum_Timestamp{
-		Sec:  t.Unix(),
-		Nsec: uint32(t.Nanosecond()),
+		Sec:      t.Unix(),
+		Nsec:     uint32(t.Nanosecond()),
+		Location: t.Location().String(),
 	}
 }
 

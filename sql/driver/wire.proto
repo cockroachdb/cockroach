@@ -34,6 +34,11 @@ message Datum {
     // nsec specifies a non-negative nanosecond offset within sec.
     // It must be in the range [0, 999999999].
     optional uint32 nsec = 2 [(gogoproto.nullable) = false];
+    // location is the name of the location which maps this timestamp
+    // to the time zone in which it is taken. It is a location name
+    // corresponding to a file in the IANA Time Zone database, such
+    // as "America/New_York".
+    optional string location = 3 [(gogoproto.nullable) = false];
   }
 
   // Using explicit proto types provides convenient access when using json. If
