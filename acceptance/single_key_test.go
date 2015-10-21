@@ -35,11 +35,7 @@ import (
 func TestSingleKey(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
 	l.Start()
-	defer func() {
-		if err := l.AssertAndStop(nil); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	defer l.AssertAndStop(t)
 
 	checkRangeReplication(t, l, 20*time.Second)
 
