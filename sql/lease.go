@@ -295,6 +295,9 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 // countLeases returns the number of unexpired leases for a particular version
 // of a descriptor.
 func (s LeaseStore) countLeases(descID ID, version uint32, expiration int64) (int, error) {
+	// SELECT COUNT(*) FROM system.lease
+	//   WHERE descID = <descID> AND version = <version> AND expiration > <expiration>
+
 	// Scan from /descID/version/expiration to /descID/version+1. Note that this
 	// requires that the prefix of the primary key is on the columns (descID,
 	// version, expiration).
@@ -314,8 +317,8 @@ func (s LeaseStore) countLeases(descID ID, version uint32, expiration int64) (in
 // newest lease for a particular version and finding the newest lease for the
 // most recent version.
 type leaseSet struct {
-	// The lease state data is stored in a sorted slice. Ordering is maintained
-	// by insert and remove.
+	// The lease state data is stored in a sorted slice ordered by <version,
+	// expiration>. Ordering is maintained by insert and remove.
 	data []*LeaseState
 }
 
@@ -331,7 +334,10 @@ func (l *leaseSet) String() string {
 }
 
 func (l *leaseSet) insert(s *LeaseState) {
-	i := l.findIndex(s.Version, s.expiration)
+	i, match := l.findIndex(s.Version, s.expiration)
+	if match {
+		panic("unable to insert duplicate lease")
+	}
 	if i == len(l.data) {
 		l.data = append(l.data, s)
 		return
@@ -342,12 +348,8 @@ func (l *leaseSet) insert(s *LeaseState) {
 }
 
 func (l *leaseSet) remove(s *LeaseState) {
-	i := l.findIndex(s.Version, s.expiration)
-	if i == len(l.data) {
-		return
-	}
-	e := l.data[i]
-	if e.Version != s.Version || e.expiration != s.expiration {
+	i, match := l.findIndex(s.Version, s.expiration)
+	if !match {
 		return
 	}
 	copy(l.data[i:], l.data[i+1:])
@@ -355,25 +357,27 @@ func (l *leaseSet) remove(s *LeaseState) {
 }
 
 func (l *leaseSet) find(version uint32, expiration int64) *LeaseState {
-	i := l.findIndex(version, expiration)
-	if i == len(l.data) {
-		return nil
-	}
-	s := l.data[i]
-	if s.Version == version && s.expiration == expiration {
-		return s
+	if i, match := l.findIndex(version, expiration); match {
+		return l.data[i]
 	}
 	return nil
 }
 
-func (l *leaseSet) findIndex(version uint32, expiration int64) int {
-	return sort.Search(len(l.data), func(i int) bool {
+func (l *leaseSet) findIndex(version uint32, expiration int64) (int, bool) {
+	i := sort.Search(len(l.data), func(i int) bool {
 		s := l.data[i]
 		if s.Version == version {
 			return s.expiration >= expiration
 		}
 		return s.Version > version
 	})
+	if i < len(l.data) {
+		s := l.data[i]
+		if s.Version == version && s.expiration == expiration {
+			return i, true
+		}
+	}
+	return i, false
 }
 
 func (l *leaseSet) findNewest(version uint32) *LeaseState {
@@ -381,6 +385,7 @@ func (l *leaseSet) findNewest(version uint32) *LeaseState {
 		return nil
 	}
 	if version == 0 {
+		// No explicitly version, return the newest lease of the latest version.
 		return l.data[len(l.data)-1]
 	}
 	// Find the index of the first lease with version > targetVersion.
@@ -390,6 +395,8 @@ func (l *leaseSet) findNewest(version uint32) *LeaseState {
 	if i == 0 {
 		return nil
 	}
+	// i-1 is the index of the newest lease for the previous version (the version
+	// we're looking for).
 	s := l.data[i-1]
 	if s.Version == version {
 		return s
