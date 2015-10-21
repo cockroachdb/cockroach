@@ -49,7 +49,8 @@ const (
 	gossipInterval = 1 * time.Minute
 	// publishStatusInterval is the interval for publishing periodic statistics
 	// from stores to the internal event feed.
-	publishStatusInterval = 10 * time.Second
+	publishStatusInterval    = 10 * time.Second
+	keyLeaderElectionInteval = 5 * time.Second
 )
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -69,6 +70,8 @@ type Node struct {
 	feed       status.NodeEventFeed   // Feed publisher for local events
 	status     *status.NodeStatusMonitor
 	startedAt  int64
+	// Should be protected by a mutex
+	notifyKeys map[string]*keyState
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -162,9 +165,10 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 // NewNode returns a new instance of Node.
 func NewNode(ctx storage.StoreContext) *Node {
 	return &Node{
-		ctx:     ctx,
-		status:  status.NewNodeStatusMonitor(),
-		lSender: kv.NewLocalSender(),
+		ctx:        ctx,
+		status:     status.NewNodeStatusMonitor(),
+		lSender:    kv.NewLocalSender(),
+		notifyKeys: make(map[string]*keyState),
 	}
 }
 
@@ -246,6 +250,7 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 
 	n.startPublishStatuses(stopper)
 	n.startGossip(stopper)
+	n.startKeyLeaderElections(stopper)
 	log.Infoc(n.context(), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
 }
@@ -402,6 +407,7 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 			select {
 			case <-ticker.C:
 				n.gossipStores()
+
 			case <-stopper.ShouldStop():
 				return
 			}
@@ -416,6 +422,59 @@ func (n *Node) gossipStores() {
 		return nil
 	}); err != nil {
 		panic(err)
+	}
+}
+
+// startKeyLeaderElections loops on a periodic ticker to elect the local
+// node as a key's leader. Starts a goroutine to loop until the node is
+// closed.
+func (n *Node) startKeyLeaderElections(stopper *stop.Stopper) {
+	stopper.RunWorker(func() {
+		ticker := time.NewTicker(keyLeaderElectionInteval)
+		defer ticker.Stop()
+		n.keyLeaderElection()
+		for {
+			select {
+			case <-ticker.C:
+				n.keyLeaderElection()
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
+func (n *Node) keyLeaderElection() {
+	if log.V(2) {
+		log.Info("visit all local stores to check if any of the keys are leaders")
+	}
+	for _, ks := range n.notifyKeys {
+		var isLeader, found bool
+		if err := n.lSender.VisitStores(func(s *storage.Store) error {
+			if found {
+				return nil
+			}
+			rng := s.LookupReplica(keys.Addr(ks.key), nil)
+			if rng != nil {
+				found = true
+				if rng.IsLeader() {
+					isLeader = true
+				}
+			}
+			return nil
+		}); err != nil {
+			panic(err)
+		}
+		if isLeader && !ks.isLeader {
+			log.Info("found leader.")
+			ks.isLeader = true
+			ks.report <- keyLeaderNotification{key: ks.key, isLeader: true}
+			log.Info("notified about leader")
+		} else if !isLeader && ks.isLeader {
+			log.Info("leader has moved.")
+			ks.isLeader = false
+			ks.report <- keyLeaderNotification{key: ks.key, isLeader: false}
+		}
 	}
 }
 
@@ -470,4 +529,21 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	n.feed.CallComplete(*ba, pErr)
 	br.Error = pErr
 	return br, nil
+}
+
+type keyState struct {
+	key      roachpb.Key
+	isLeader bool
+	report   chan<- keyLeaderNotification
+}
+
+// Register a key to follow. Report whether the node is a leader for the range containing the key.
+// Report a leadership change.
+func (n *Node) registerNotifyKeyLeader(key roachpb.Key, s *stop.Stopper, report chan<- keyLeaderNotification) {
+	// record key somewhere
+	n.notifyKeys[string(key)] = &keyState{key: key, isLeader: false, report: report}
+}
+
+func (n *Node) unregisterNotifyKeyLeader(key roachpb.Key) {
+	delete(n.notifyKeys, string(key))
 }
