@@ -130,9 +130,9 @@ func dockerIP() net.IP {
 // Container provides the programmatic interface for a single docker
 // container.
 type Container struct {
-	ID            string
-	containerInfo dockerclient.ContainerInfo
-	cluster       *Cluster
+	ID      string
+	Name    string
+	cluster *Cluster
 }
 
 // createContainer creates a new container using the specified options. Per the
@@ -144,9 +144,8 @@ func createContainer(l *Cluster, config dockerclient.ContainerConfig) (*Containe
 		return nil, err
 	}
 	return &Container{
-		ID:            id,
-		containerInfo: dockerclient.ContainerInfo{Id: id},
-		cluster:       l,
+		ID:      id,
+		cluster: l,
 	}, nil
 }
 
@@ -189,7 +188,11 @@ func (c *Container) Start(binds []string, dns, vols *Container) error {
 		PublishAllPorts: true,
 	}
 	if dns != nil {
-		config.Dns = append(config.Dns, dns.containerInfo.NetworkSettings.IPAddress)
+		ci, err := dns.Inspect()
+		if err != nil {
+			return err
+		}
+		config.Dns = append(config.Dns, ci.NetworkSettings.IPAddress)
 	}
 	if vols != nil {
 		config.VolumesFrom = append(config.VolumesFrom, vols.ID)
@@ -211,17 +214,16 @@ func (c *Container) Unpause() error {
 // Container will be killed after 'timeout' seconds if it fails to stop.
 func (c *Container) Restart(timeoutSeconds int) error {
 	var exp []string
-	if err := c.Inspect(); err != nil {
+	if ci, err := c.Inspect(); err != nil {
 		return err
-	} else if c.containerInfo.State.Running {
+	} else if ci.State.Running {
 		exp = append(exp, "die")
 	}
 	if err := c.cluster.client.RestartContainer(c.ID, timeoutSeconds); err != nil {
 		return err
 	}
 	c.cluster.expectEvent(c, append(exp, "restart")...)
-	// We need to refresh the container metadata. Ports change on restart.
-	return c.Inspect()
+	return nil
 }
 
 // Stop a running container.
@@ -295,26 +297,25 @@ func (c *Container) Logs(w io.Writer) error {
 }
 
 // Inspect retrieves detailed info about a container.
-func (c *Container) Inspect() error {
-	out, err := c.cluster.client.InspectContainer(c.ID)
-	if err != nil {
-		return err
-	}
-	c.containerInfo = *out
-	return nil
+func (c *Container) Inspect() (*dockerclient.ContainerInfo, error) {
+	return c.cluster.client.InspectContainer(c.ID)
 }
 
 // Addr returns the address to connect to the specified port.
 func (c *Container) Addr(name string) *net.TCPAddr {
+	containerInfo, err := c.Inspect()
+	if err != nil {
+		return nil
+	}
 	if name == "" {
 		// No port specified, pick a random one (random because iteration
 		// over maps is randomized).
-		for port := range c.containerInfo.NetworkSettings.Ports {
+		for port := range containerInfo.NetworkSettings.Ports {
 			name = port
 			break
 		}
 	}
-	bindings, ok := c.containerInfo.NetworkSettings.Ports[name]
+	bindings, ok := containerInfo.NetworkSettings.Ports[name]
 	if !ok || len(bindings) == 0 {
 		return nil
 	}
