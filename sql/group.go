@@ -320,6 +320,12 @@ func (av *aggregateValue) String() string {
 	return av.expr.String()
 }
 
+func (av *aggregateValue) Walk(v parser.Visitor) {
+	// I expected to implement:
+	// av.datum = parser.WalkExpr(v, av.datum).(parser.Datum)
+	// But it seems `av.datum` is sometimes nil.
+}
+
 func (av *aggregateValue) TypeCheck() (parser.Datum, error) {
 	return av.expr.TypeCheck()
 }

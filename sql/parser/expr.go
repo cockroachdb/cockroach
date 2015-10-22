@@ -28,6 +28,10 @@ import (
 // Expr represents an expression.
 type Expr interface {
 	fmt.Stringer
+	// Walk replaces each child of the receiver with the return of
+	// `WalkExpr(v, child)`. For childless (leaf) Exprs, its
+	// implementation is empty.
+	Walk(Visitor)
 	// TypeCheck returns the zero value of the expression's type, or an
 	// error if the expression doesn't type-check.
 	TypeCheck() (Datum, error)
