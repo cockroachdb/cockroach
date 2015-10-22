@@ -1254,7 +1254,7 @@ func (r *Replica) maybeGossipFirstRange() error {
 		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.rm.StoreID(), desc.RangeID)
 	}
 	if err := r.rm.Gossip().AddInfo(gossip.KeySentinel, []byte(r.rm.ClusterID()), clusterIDGossipTTL); err != nil {
-		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
+		log.Errorc(ctx, "failed to gossip sentinel: %s", err)
 	}
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping first range from store %d, range %d", r.rm.StoreID(), desc.RangeID)
