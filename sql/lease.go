@@ -48,12 +48,8 @@ var (
 	errLeaseVersionChanged = errors.New("lease version changed")
 )
 
-func nanosToTime(nanos int64) time.Time {
-	return time.Unix(0, nanos)
-}
-
 func nanosToDTimestamp(nanos int64) parser.DTimestamp {
-	return parser.DTimestamp{Time: nanosToTime(nanos)}
+	return parser.DTimestamp{Time: time.Unix(0, nanos)}
 }
 
 // LeaseState holds the state for a lease. Exported only for testing.
@@ -69,7 +65,7 @@ func (s *LeaseState) String() string {
 
 // Expiration returns the expiration time of the lease.
 func (s *LeaseState) Expiration() time.Time {
-	return nanosToTime(s.expiration)
+	return time.Unix(0, s.expiration)
 }
 
 // Refcount returns the reference count of the lease.
