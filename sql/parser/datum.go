@@ -613,11 +613,3 @@ func (d dNull) IsMin() bool {
 func (d dNull) String() string {
 	return "NULL"
 }
-
-// VariableExpr is an Expr that may change per row. It is used to
-// signal the evaluation/simplification machinery that the underlying
-// Expr is not constant.
-type VariableExpr interface {
-	Expr
-	Variable()
-}

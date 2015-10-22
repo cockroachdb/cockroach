@@ -410,11 +410,8 @@ func isConst(expr Expr) bool {
 }
 
 func isVar(expr Expr) bool {
-	switch expr.(type) {
-	case VariableExpr, *QualifiedName, ValArg:
-		return true
-	}
-	return false
+	_, ok := expr.(VariableExpr)
+	return ok
 }
 
 type containsVarsVisitor struct {

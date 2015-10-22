@@ -46,6 +46,14 @@ type Expr interface {
 	Eval(EvalContext) (Datum, error)
 }
 
+// VariableExpr is an Expr that may change per row. It is used to
+// signal the evaluation/simplification machinery that the underlying
+// Expr is not constant.
+type VariableExpr interface {
+	Expr
+	Variable()
+}
+
 // AndExpr represents an AND expression.
 type AndExpr struct {
 	Left, Right Expr
@@ -253,10 +261,15 @@ func (node DefaultVal) String() string {
 	return "DEFAULT"
 }
 
+var _ VariableExpr = ValArg{}
+
 // ValArg represents a named bind var argument.
 type ValArg struct {
 	name string
 }
+
+// Variable implements the VariableExpr interface.
+func (ValArg) Variable() {}
 
 func (node ValArg) String() string {
 	return fmt.Sprintf("$%s", node.name)
@@ -270,12 +283,17 @@ const (
 	columnName
 )
 
+var _ VariableExpr = &QualifiedName{}
+
 // QualifiedName is a base name and an optional indirection expression.
 type QualifiedName struct {
 	Base       Name
 	Indirect   Indirection
 	normalized nameType
 }
+
+// Variable implements the VariableExpr interface.
+func (*QualifiedName) Variable() {}
 
 // StarExpr is a convenience function that represents an unqualified "*".
 func StarExpr() *QualifiedName {
