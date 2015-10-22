@@ -351,11 +351,6 @@ func (expr *OrExpr) TypeCheck() (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *ParenExpr) TypeCheck() (Datum, error) {
-	return expr.Expr.TypeCheck()
-}
-
-// TypeCheck implements the Expr interface.
 func (expr *QualifiedName) TypeCheck() (Datum, error) {
 	return nil, fmt.Errorf("qualified name \"%s\" not found", expr)
 }
