@@ -1285,7 +1285,6 @@ func TestStoreRangeRebalance(t *testing.T) {
 // cannot cause other removed nodes to recreate their ranges.
 func TestReplicateRogueRemovedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(bdarnell): https://github.com/cockroachdb/cockroach/issues/2880")
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
