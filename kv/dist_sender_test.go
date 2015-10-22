@@ -527,11 +527,11 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		ba := getArgs(testAddress).(*roachpb.BatchRequest)
-		key, endKey := keys.Range(*ba)
+		rs := keys.Range(*ba)
 		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
-			if !descStale && bytes.HasPrefix(key, keys.Meta2Prefix) {
+			if !descStale && bytes.HasPrefix(rs.Key, keys.Meta2Prefix) {
 				t.Errorf("unexpected extra lookup for non-stale replica descriptor at %s",
-					key)
+					rs.Key)
 			}
 
 			br := getReply().(*roachpb.BatchResponse)
@@ -540,7 +540,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			br.Add(r)
 			// If we just returned the stale descriptor, set up returning the
 			// good one next time.
-			if bytes.HasPrefix(key, keys.Meta2Prefix) {
+			if bytes.HasPrefix(rs.Key, keys.Meta2Prefix) {
 				if newRangeDescriptor.StartKey.Equal(badStartKey) {
 					newRangeDescriptor.StartKey = goodStartKey
 				} else {
@@ -552,8 +552,8 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
 		if !newRangeDescriptor.StartKey.Equal(goodStartKey) {
-			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: key.AsRawKey(),
-				RequestEndKey: endKey.AsRawKey()}
+			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: rs.Key.AsRawKey(),
+				RequestEndKey: rs.EndKey.AsRawKey()}
 		}
 		return []proto.Message{ba.CreateReply()}, nil
 	}
@@ -731,13 +731,13 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 			t.Fatalf("unexpected method:%s", method)
 		}
 		ba := getArgs(testAddress).(*roachpb.BatchRequest)
-		key, endKey := keys.Range(*ba)
+		rs := keys.Range(*ba)
 		batchReply := getReply().(*roachpb.BatchResponse)
 		reply := &roachpb.ScanResponse{}
 		batchReply.Add(reply)
 		results := []roachpb.KeyValue{}
 		for _, curKV := range existingKVs {
-			if key.Less(keys.Addr(curKV.Key).Next()) && keys.Addr(curKV.Key).Less(endKey) {
+			if rs.Key.Less(keys.Addr(curKV.Key).Next()) && keys.Addr(curKV.Key).Less(rs.EndKey) {
 				results = append(results, curKV)
 			}
 		}

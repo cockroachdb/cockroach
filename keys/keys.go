@@ -344,7 +344,7 @@ func MakeTablePrefix(tableID uint32) []byte {
 // Range returns a key range encompassing all the keys in the Batch.
 // TODO(tschottdorf): there is no protection for doubly-local keys here;
 // maybe Range should return an error.
-func Range(ba roachpb.BatchRequest) (roachpb.RKey, roachpb.RKey) {
+func Range(ba roachpb.BatchRequest) roachpb.RSpan {
 	from := roachpb.RKeyMax
 	to := roachpb.RKeyMin
 	for _, arg := range ba.Requests {
@@ -367,5 +367,5 @@ func Range(ba roachpb.BatchRequest) (roachpb.RKey, roachpb.RKey) {
 			to = endKey
 		}
 	}
-	return from, to
+	return roachpb.RSpan{Key: from, EndKey: to}
 }
