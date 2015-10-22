@@ -315,7 +315,6 @@ func (expr *IfExpr) TypeCheck() (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr *IsOfTypeExpr) TypeCheck() (Datum, error) {
-	// TODO(tamird): this is a lie.
 	if _, err := expr.Expr.TypeCheck(); err != nil {
 		return nil, err
 	}
@@ -363,7 +362,7 @@ func (expr *QualifiedName) TypeCheck() (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr *RangeCond) TypeCheck() (Datum, error) {
-	return nil, util.Errorf("NormalizeExpr transforms this into an AndExpr")
+	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // TypeCheck implements the Expr interface.
@@ -413,7 +412,7 @@ func (expr NumVal) TypeCheck() (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr Row) TypeCheck() (Datum, error) {
-	return nil, util.Errorf("NormalizeExpr transforms this into a Tuple")
+	return Tuple(expr).TypeCheck()
 }
 
 // TypeCheck implements the Expr interface.
@@ -431,7 +430,7 @@ func (expr Tuple) TypeCheck() (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr ValArg) TypeCheck() (Datum, error) {
-	return nil, util.Errorf("Placeholders should have been replaced before type checking.")
+	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // TypeCheck implements the Expr interface.
