@@ -306,6 +306,11 @@ func (l *Cluster) createRoach(i int, cmd ...string) *Container {
 		ExposedPorts: map[string]struct{}{fmt.Sprintf("%d/tcp", cockroachPort): {}},
 		Entrypoint:   entrypoint,
 		Cmd:          cmd,
+		Labels: map[string]string{
+			// Allow for `docker ps --filter label=Hostname=roach0` or `--filter label=Roach`.
+			"Hostname": hostname,
+			"Roach":    "",
+		},
 	})
 	if err != nil {
 		panic(err)
