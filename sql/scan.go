@@ -44,7 +44,7 @@ type qvalue struct {
 
 var _ parser.VariableExpr = &qvalue{}
 
-func (q *qvalue) Variable() {}
+func (*qvalue) Variable() {}
 
 func (q *qvalue) String() string {
 	return q.col.Name

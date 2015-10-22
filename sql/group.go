@@ -314,7 +314,7 @@ type aggregateValue struct {
 
 var _ parser.VariableExpr = &aggregateValue{}
 
-func (av *aggregateValue) Variable() {}
+func (*aggregateValue) Variable() {}
 
 func (av *aggregateValue) String() string {
 	return av.expr.String()
