@@ -908,7 +908,7 @@ zone_value:
     expr := &CastExpr{Expr: DString($2), Type: $1}
     // Use an empty EvalContext.
     var ctx EvalContext
-    d, err := ctx.EvalExpr(expr)
+    d, err := expr.Eval(ctx)
     if err != nil {
       sqllex.Error("cannot evaluate to an interval type")
       return 1

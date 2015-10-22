@@ -43,7 +43,7 @@ func (p *planner) Values(n parser.Values) (planNode, error) {
 				return nil, err
 			}
 		}
-		data, err := p.evalCtx.EvalExpr(tuple)
+		data, err := tuple.Eval(p.evalCtx)
 		if err != nil {
 			return nil, err
 		}

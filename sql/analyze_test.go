@@ -88,11 +88,11 @@ func checkEquivExpr(a, b parser.Expr, qvals qvalMap) error {
 		for _, q := range qvals {
 			q.datum = v
 		}
-		da, err := (parser.EvalContext{}).EvalExpr(a)
+		da, err := a.Eval(parser.EvalContext{})
 		if err != nil {
 			return fmt.Errorf("%s: %v", a, err)
 		}
-		db, err := (parser.EvalContext{}).EvalExpr(b)
+		db, err := b.Eval(parser.EvalContext{})
 		if err != nil {
 			return fmt.Errorf("%s: %v", b, err)
 		}

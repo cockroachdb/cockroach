@@ -57,6 +57,10 @@ func (q *qvalue) TypeCheck() (parser.Datum, error) {
 	return q.datum.TypeCheck()
 }
 
+func (q *qvalue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
+	return q.datum.Eval(ctx)
+}
+
 type qvalMap map[ColumnID]*qvalue
 type colKindMap map[ColumnID]ColumnType_Kind
 
@@ -668,7 +672,7 @@ func (n *scanNode) filterRow() bool {
 	}
 
 	var d parser.Datum
-	d, n.err = n.planner.evalCtx.EvalExpr(n.filter)
+	d, n.err = n.filter.Eval(n.planner.evalCtx)
 	if n.err != nil {
 		return false
 	}
@@ -688,7 +692,7 @@ func (n *scanNode) renderRow() {
 		n.row = make([]parser.Datum, len(n.render))
 	}
 	for i, e := range n.render {
-		n.row[i], n.err = n.planner.evalCtx.EvalExpr(e)
+		n.row[i], n.err = e.Eval(n.planner.evalCtx)
 		if n.err != nil {
 			return
 		}

@@ -31,6 +31,15 @@ type Expr interface {
 	// TypeCheck returns the zero value of the expression's type, or an
 	// error if the expression doesn't type-check.
 	TypeCheck() (Datum, error)
+	// Eval evaluates an SQL expression. Expression evaluation is a mostly
+	// straightforward walk over the parse tree. The only significant complexity is
+	// the handling of types and implicit conversions. See binOps and cmpOps for
+	// more details. Note that expression evaluation returns an error if certain
+	// node types are encountered: ValArg, QualifiedName or Subquery. These nodes
+	// should be replaced prior to expression evaluation by an appropriate
+	// WalkExpr. For example, ValArg should be replace by the argument passed from
+	// the client.
+	Eval(EvalContext) (Datum, error)
 }
 
 // AndExpr represents an AND expression.

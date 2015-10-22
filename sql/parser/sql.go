@@ -4390,7 +4390,7 @@ sqldefault:
 			expr := &CastExpr{Expr: DString(sqlDollar[2].str), Type: sqlDollar[1].colType}
 			// Use an empty EvalContext.
 			var ctx EvalContext
-			d, err := ctx.EvalExpr(expr)
+			d, err := expr.Eval(ctx)
 			if err != nil {
 				sqllex.Error("cannot evaluate to an interval type")
 				return 1

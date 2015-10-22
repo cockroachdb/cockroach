@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 )
 
-func TestEvalExpr(t *testing.T) {
+func TestEval(t *testing.T) {
 	testData := []struct {
 		expr     string
 		expected string
@@ -319,7 +319,7 @@ func TestEvalExpr(t *testing.T) {
 		if expr, err = defaultContext.NormalizeExpr(expr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		r, err := defaultContext.EvalExpr(expr)
+		r, err := expr.Eval(defaultContext)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -329,7 +329,7 @@ func TestEvalExpr(t *testing.T) {
 	}
 }
 
-func TestEvalExprError(t *testing.T) {
+func TestEvalError(t *testing.T) {
 	testData := []struct {
 		expr     string
 		expected string
@@ -350,7 +350,7 @@ func TestEvalExprError(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		expr := q[0].(*Select).Exprs[0].Expr
-		if _, err := defaultContext.EvalExpr(expr); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+		if _, err := expr.Eval(defaultContext); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}
@@ -379,7 +379,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 			Left:     DString(d.left),
 			Right:    DString(d.right),
 		}
-		if _, err := defaultContext.EvalExpr(expr); err != nil {
+		if _, err := expr.Eval(defaultContext); err != nil {
 			t.Fatalf("%s: %v", d, err)
 		}
 		if expr.fn.fn == nil {
