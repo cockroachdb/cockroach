@@ -50,6 +50,10 @@ func (q *qvalue) String() string {
 	return q.col.Name
 }
 
+func (q *qvalue) Walk(v parser.Visitor) {
+	q.datum = parser.WalkExpr(v, q.datum).(parser.Datum)
+}
+
 func (q *qvalue) TypeCheck() (parser.Datum, error) {
 	return q.datum.TypeCheck()
 }
