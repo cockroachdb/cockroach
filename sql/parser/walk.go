@@ -29,129 +29,185 @@ type Visitor interface {
 	Visit(expr Expr, pre bool) (Visitor, Expr)
 }
 
-// WalkExpr traverses the nodes in an expression. It starts by calling
-// v.Visit(expr, true). If the visitor returned by v.Visit(expr, true) is not
-// nil it recursively calls WalkExpr on the children of the node returned by
-// v.Visit(expr, true) and finishes with a call to v.Visit(expr, false).
+// Walk implements the Expr interface.
+func (expr *AndExpr) Walk(v Visitor) {
+	expr.Left = WalkExpr(v, expr.Left)
+	expr.Right = WalkExpr(v, expr.Right)
+}
+
+// Walk implements the Expr interface.
+func (expr *BinaryExpr) Walk(v Visitor) {
+	expr.Left = WalkExpr(v, expr.Left)
+	expr.Right = WalkExpr(v, expr.Right)
+}
+
+// Walk implements the Expr interface.
+func (expr *CaseExpr) Walk(v Visitor) {
+	if expr.Expr != nil {
+		expr.Expr = WalkExpr(v, expr.Expr)
+	}
+	for _, w := range expr.Whens {
+		w.Cond = WalkExpr(v, w.Cond)
+		w.Val = WalkExpr(v, w.Val)
+	}
+	if expr.Else != nil {
+		expr.Else = WalkExpr(v, expr.Else)
+	}
+}
+
+// Walk implements the Expr interface.
+func (expr *CastExpr) Walk(v Visitor) {
+	expr.Expr = WalkExpr(v, expr.Expr)
+}
+
+// Walk implements the Expr interface.
+func (expr *CoalesceExpr) Walk(v Visitor) {
+	for i := range expr.Exprs {
+		expr.Exprs[i] = WalkExpr(v, expr.Exprs[i])
+	}
+}
+
+// Walk implements the Expr interface.
+func (expr *ComparisonExpr) Walk(v Visitor) {
+	expr.Left = WalkExpr(v, expr.Left)
+	expr.Right = WalkExpr(v, expr.Right)
+}
+
+// Walk implements the Expr interface.
+func (expr *ExistsExpr) Walk(v Visitor) {
+	WalkStmt(v, expr.Subquery.Select)
+}
+
+// Walk implements the Expr interface.
+func (expr *FuncExpr) Walk(v Visitor) {
+	for i := range expr.Exprs {
+		expr.Exprs[i] = WalkExpr(v, expr.Exprs[i])
+	}
+}
+
+// Walk implements the Expr interface.
+func (expr *IfExpr) Walk(v Visitor) {
+	expr.Cond = WalkExpr(v, expr.Cond)
+	expr.True = WalkExpr(v, expr.True)
+	expr.Else = WalkExpr(v, expr.Else)
+}
+
+// Walk implements the Expr interface.
+func (expr *IsOfTypeExpr) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr *NotExpr) Walk(v Visitor) {
+	expr.Expr = WalkExpr(v, expr.Expr)
+}
+
+// Walk implements the Expr interface.
+func (expr *NullIfExpr) Walk(v Visitor) {
+	expr.Expr1 = WalkExpr(v, expr.Expr1)
+	expr.Expr2 = WalkExpr(v, expr.Expr2)
+}
+
+// Walk implements the Expr interface.
+func (expr *OrExpr) Walk(v Visitor) {
+	expr.Left = WalkExpr(v, expr.Left)
+	expr.Right = WalkExpr(v, expr.Right)
+}
+
+// Walk implements the Expr interface.
+func (expr *ParenExpr) Walk(v Visitor) {
+	expr.Expr = WalkExpr(v, expr.Expr)
+}
+
+// Walk implements the Expr interface.
+func (expr *QualifiedName) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr *RangeCond) Walk(v Visitor) {
+	expr.Left = WalkExpr(v, expr.Left)
+	expr.From = WalkExpr(v, expr.From)
+	expr.To = WalkExpr(v, expr.To)
+}
+
+// Walk implements the Expr interface.
+func (expr *Subquery) Walk(v Visitor) {
+	WalkStmt(v, expr.Select)
+}
+
+// Walk implements the Expr interface.
+func (expr *UnaryExpr) Walk(v Visitor) {
+	expr.Expr = WalkExpr(v, expr.Expr)
+}
+
+// Walk implements the Expr interface.
+func (expr Array) Walk(v Visitor) {
+	for i := range expr {
+		expr[i] = WalkExpr(v, expr[i])
+	}
+}
+
+// Walk implements the Expr interface.
+func (expr DefaultVal) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr IntVal) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr NumVal) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr Row) Walk(v Visitor) {
+	for i := range expr {
+		expr[i] = WalkExpr(v, expr[i])
+	}
+}
+
+// Walk implements the Expr interface.
+func (expr Tuple) Walk(v Visitor) {
+	for i := range expr {
+		expr[i] = WalkExpr(v, expr[i])
+	}
+}
+
+// Walk implements the Expr interface.
+func (expr ValArg) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr DBool) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr DBytes) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr DDate) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr DFloat) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr DInt) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr DInterval) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr dNull) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr DString) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr DTimestamp) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
+func (expr DTuple) Walk(_ Visitor) {}
+
+// WalkExpr traverses the nodes in an expression.
 func WalkExpr(v Visitor, expr Expr) Expr {
 	v, expr = v.Visit(expr, true)
 	if v == nil {
 		return expr
 	}
 
-	switch t := expr.(type) {
-	case *AndExpr:
-		t.Left = WalkExpr(v, t.Left)
-		t.Right = WalkExpr(v, t.Right)
-
-	case *OrExpr:
-		t.Left = WalkExpr(v, t.Left)
-		t.Right = WalkExpr(v, t.Right)
-
-	case *NotExpr:
-		t.Expr = WalkExpr(v, t.Expr)
-
-	case *ParenExpr:
-		t.Expr = WalkExpr(v, t.Expr)
-
-	case *ComparisonExpr:
-		t.Left = WalkExpr(v, t.Left)
-		t.Right = WalkExpr(v, t.Right)
-
-	case *RangeCond:
-		t.Left = WalkExpr(v, t.Left)
-		t.From = WalkExpr(v, t.From)
-		t.To = WalkExpr(v, t.To)
-
-	case *IsOfTypeExpr:
-		t.Expr = WalkExpr(v, t.Expr)
-
-	case *ExistsExpr:
-		WalkStmt(v, t.Subquery.Select)
-
-	case *IfExpr:
-		t.Cond = WalkExpr(v, t.Cond)
-		t.True = WalkExpr(v, t.True)
-		t.Else = WalkExpr(v, t.Else)
-
-	case *NullIfExpr:
-		t.Expr1 = WalkExpr(v, t.Expr1)
-		t.Expr2 = WalkExpr(v, t.Expr2)
-
-	case *CoalesceExpr:
-		for i := range t.Exprs {
-			t.Exprs[i] = WalkExpr(v, t.Exprs[i])
-		}
-
-	case IntVal:
-		// Terminal node: nothing to do.
-
-	case NumVal:
-		// Terminal node: nothing to do.
-
-	case DefaultVal:
-		// Terminal node: nothing to do.
-
-	case ValArg:
-		// Terminal node: nothing to do.
-
-	case *QualifiedName:
-		// Terminal node: nothing to do.
-
-	case Row:
-		for i := range t {
-			t[i] = WalkExpr(v, t[i])
-		}
-
-	case Tuple:
-		for i := range t {
-			t[i] = WalkExpr(v, t[i])
-		}
-
-	case Array:
-		for i := range t {
-			t[i] = WalkExpr(v, t[i])
-		}
-
-	case DReference:
-		// Terminal node: nothing to do.
-
-	case Datum:
-		// Terminal node: nothing to do.
-
-	case *Subquery:
-		WalkStmt(v, t.Select)
-
-	case *BinaryExpr:
-		t.Left = WalkExpr(v, t.Left)
-		t.Right = WalkExpr(v, t.Right)
-
-	case *UnaryExpr:
-		t.Expr = WalkExpr(v, t.Expr)
-
-	case *FuncExpr:
-		for i := range t.Exprs {
-			t.Exprs[i] = WalkExpr(v, t.Exprs[i])
-		}
-
-	case *CaseExpr:
-		if t.Expr != nil {
-			t.Expr = WalkExpr(v, t.Expr)
-		}
-		for _, w := range t.Whens {
-			w.Cond = WalkExpr(v, w.Cond)
-			w.Val = WalkExpr(v, w.Val)
-		}
-		if t.Else != nil {
-			t.Else = WalkExpr(v, t.Else)
-		}
-
-	case *CastExpr:
-		t.Expr = WalkExpr(v, t.Expr)
-
-	default:
-		panic(fmt.Sprintf("walk: unsupported expression type: %T", expr))
-	}
+	expr.Walk(v)
 
 	_, expr = v.Visit(expr, false)
 	return expr

@@ -117,7 +117,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 				rowVals = append(rowVals, parser.DNull)
 				continue
 			}
-			d, err := p.evalCtx.EvalExpr(defaultExprs[i])
+			d, err := defaultExprs[i].Eval(p.evalCtx)
 			if err != nil {
 				return nil, err
 			}

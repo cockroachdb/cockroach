@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 )
 
-func TestTypeCheckExpr(t *testing.T) {
+func TestTypeCheck(t *testing.T) {
 	testData := []string{
 		`NULL + 1`,
 		`NULL + 1.1`,
@@ -62,13 +62,13 @@ func TestTypeCheckExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d, err)
 		}
 		expr := q[0].(*Select).Exprs[0].Expr
-		if _, err := TypeCheckExpr(expr); err != nil {
+		if _, err := expr.TypeCheck(); err != nil {
 			t.Errorf("%s: unexpected error %s", d, err)
 		}
 	}
 }
 
-func TestTypeCheckExprError(t *testing.T) {
+func TestTypeCheckError(t *testing.T) {
 	testData := []struct {
 		expr     string
 		expected string
@@ -110,7 +110,7 @@ func TestTypeCheckExprError(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		expr := q[0].(*Select).Exprs[0].Expr
-		if _, err := TypeCheckExpr(expr); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+		if _, err := expr.TypeCheck(); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}

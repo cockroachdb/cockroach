@@ -28,44 +28,23 @@ import (
 // Expr represents an expression.
 type Expr interface {
 	fmt.Stringer
-	expr()
+	// Walk replaces each child of the receiver with the return of
+	// `WalkExpr(v, child)`. For childless (leaf) Exprs, its
+	// implementation is empty.
+	Walk(Visitor)
+	// TypeCheck returns the zero value of the expression's type, or an
+	// error if the expression doesn't type-check.
+	TypeCheck() (Datum, error)
+	// Eval evaluates an SQL expression. Expression evaluation is a mostly
+	// straightforward walk over the parse tree. The only significant complexity is
+	// the handling of types and implicit conversions. See binOps and cmpOps for
+	// more details. Note that expression evaluation returns an error if certain
+	// node types are encountered: ValArg, QualifiedName or Subquery. These nodes
+	// should be replaced prior to expression evaluation by an appropriate
+	// WalkExpr. For example, ValArg should be replace by the argument passed from
+	// the client.
+	Eval(EvalContext) (Datum, error)
 }
-
-func (*AndExpr) expr()        {}
-func (*OrExpr) expr()         {}
-func (*NotExpr) expr()        {}
-func (*ParenExpr) expr()      {}
-func (*ComparisonExpr) expr() {}
-func (*RangeCond) expr()      {}
-func (*IsOfTypeExpr) expr()   {}
-func (*ExistsExpr) expr()     {}
-func (*IfExpr) expr()         {}
-func (*NullIfExpr) expr()     {}
-func (*CoalesceExpr) expr()   {}
-func (IntVal) expr()          {}
-func (NumVal) expr()          {}
-func (DefaultVal) expr()      {}
-func (ValArg) expr()          {}
-func (*QualifiedName) expr()  {}
-func (Tuple) expr()           {}
-func (Row) expr()             {}
-func (Array) expr()           {}
-func (*Subquery) expr()       {}
-func (*BinaryExpr) expr()     {}
-func (*UnaryExpr) expr()      {}
-func (*FuncExpr) expr()       {}
-func (*CaseExpr) expr()       {}
-func (*CastExpr) expr()       {}
-func (DBool) expr()           {}
-func (DInt) expr()            {}
-func (DFloat) expr()          {}
-func (DString) expr()         {}
-func (DBytes) expr()          {}
-func (DDate) expr()           {}
-func (DTimestamp) expr()      {}
-func (DInterval) expr()       {}
-func (DTuple) expr()          {}
-func (dNull) expr()           {}
 
 // AndExpr represents an AND expression.
 type AndExpr struct {

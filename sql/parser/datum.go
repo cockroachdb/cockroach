@@ -46,8 +46,8 @@ var (
 	DummyTimestamp = DTimestamp{}
 	// DummyInterval is a placeholder DInterval value.
 	DummyInterval = DInterval{}
-	// DummyTuple is a placeholder DTuple value.
-	DummyTuple = DTuple{}
+	// dummyTuple is a placeholder DTuple value.
+	dummyTuple = DTuple{}
 
 	// DNull is the NULL Datum.
 	DNull = dNull{}
@@ -60,7 +60,7 @@ var (
 	_ Datum = DummyDate
 	_ Datum = DummyTimestamp
 	_ Datum = DummyInterval
-	_ Datum = DummyTuple
+	_ Datum = dummyTuple
 	_ Datum = DNull
 
 	boolType      = reflect.TypeOf(DummyBool)
@@ -71,7 +71,7 @@ var (
 	dateType      = reflect.TypeOf(DummyDate)
 	timestampType = reflect.TypeOf(DummyTimestamp)
 	intervalType  = reflect.TypeOf(DummyInterval)
-	tupleType     = reflect.TypeOf(DummyTuple)
+	tupleType     = reflect.TypeOf(dummyTuple)
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
@@ -614,8 +614,10 @@ func (d dNull) String() string {
 	return "NULL"
 }
 
-// DReference holds a pointer to a Datum. It is used as a level of indirection
-// to replace QualifiedNames with a node whose value can change on each row.
-type DReference interface {
-	Datum() Datum
+// VariableExpr is an Expr that may change per row. It is used to
+// signal the evaluation/simplification machinery that the underlying
+// Expr is not constant.
+type VariableExpr interface {
+	Expr
+	Variable()
 }

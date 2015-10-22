@@ -40,21 +40,26 @@ import (
 type qvalue struct {
 	datum parser.Datum
 	col   ColumnDescriptor
-
-	// Tricky: we embed a parser.Expr so that qvalue implements parser.expr()!
-	// Note that we can't just have qvalue.expr() as that method is defined in
-	// the wrong package.
-	parser.Expr
 }
 
-var _ parser.DReference = &qvalue{}
+var _ parser.VariableExpr = &qvalue{}
 
-func (q *qvalue) Datum() parser.Datum {
-	return q.datum
-}
+func (q *qvalue) Variable() {}
 
 func (q *qvalue) String() string {
 	return q.col.Name
+}
+
+func (q *qvalue) Walk(v parser.Visitor) {
+	q.datum = parser.WalkExpr(v, q.datum).(parser.Datum)
+}
+
+func (q *qvalue) TypeCheck() (parser.Datum, error) {
+	return q.datum.TypeCheck()
+}
+
+func (q *qvalue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
+	return q.datum.Eval(ctx)
 }
 
 type qvalMap map[ColumnID]*qvalue
@@ -386,7 +391,7 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	}
 	if n.err == nil {
 		var whereType parser.Datum
-		whereType, n.err = parser.TypeCheckExpr(n.filter)
+		whereType, n.err = n.filter.TypeCheck()
 		if n.err == nil {
 			if !(whereType == parser.DummyBool || whereType == parser.DNull) {
 				n.err = fmt.Errorf("argument of WHERE must be type %s, not type %s", parser.DummyBool.Type(), whereType.Type())
@@ -668,7 +673,7 @@ func (n *scanNode) filterRow() bool {
 	}
 
 	var d parser.Datum
-	d, n.err = n.planner.evalCtx.EvalExpr(n.filter)
+	d, n.err = n.filter.Eval(n.planner.evalCtx)
 	if n.err != nil {
 		return false
 	}
@@ -688,7 +693,7 @@ func (n *scanNode) renderRow() {
 		n.row = make([]parser.Datum, len(n.render))
 	}
 	for i, e := range n.render {
-		n.row[i], n.err = n.planner.evalCtx.EvalExpr(e)
+		n.row[i], n.err = e.Eval(n.planner.evalCtx)
 		if n.err != nil {
 			return
 		}
