@@ -31,7 +31,7 @@ const (
 	namespaceTableSchema = `
 CREATE TABLE system.namespace (
   parentID INT,
-  name     CHAR,
+  name     STRING,
   id       INT,
   PRIMARY KEY (parentID, name)
 );`
@@ -39,7 +39,7 @@ CREATE TABLE system.namespace (
 	descriptorTableSchema = `
 CREATE TABLE system.descriptor (
   id         INT PRIMARY KEY,
-  descriptor BLOB
+  descriptor BYTES
 );`
 
 	leaseTableSchema = `
@@ -53,15 +53,15 @@ CREATE TABLE system.lease (
 
 	usersTableSchema = `
 CREATE TABLE system.users (
-  username       CHAR PRIMARY KEY,
-  hashedPassword BLOB
+  username       STRING PRIMARY KEY,
+  hashedPassword BYTES
 );`
 
 	// Zone settings per DB/Table.
 	zonesTableSchema = `
 CREATE TABLE system.zones (
   id     INT PRIMARY KEY,
-  config BLOB
+  config BYTES
 );`
 )
 
@@ -98,7 +98,7 @@ var (
 		keys.SystemDatabaseID:  privilege.ReadData,
 		keys.NamespaceTableID:  privilege.ReadData,
 		keys.DescriptorTableID: privilege.ReadData,
-		keys.LeaseTableID:      privilege.ReadData,
+		keys.LeaseTableID:      privilege.ReadWriteData,
 		keys.UsersTableID:      privilege.ReadWriteData,
 		keys.ZonesTableID:      privilege.ReadWriteData,
 	}

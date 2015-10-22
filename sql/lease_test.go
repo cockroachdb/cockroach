@@ -140,7 +140,7 @@ func TestLeaseManager(testingT *testing.T) {
 	const descID = keys.LeaseTableID
 
 	// We can't acquire a lease on a non-existent table.
-	expected := "empty table name" // TODO(pmattis): This error seems wrong.
+	expected := "table ID 10000 not found"
 	if _, err := t.acquire(1, 10000, 0); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}

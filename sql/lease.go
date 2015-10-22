@@ -27,11 +27,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TODO(pmattis): Periodically renew leases for tables that were used recently and
@@ -42,94 +44,16 @@ const (
 	minLeaseDuration = int64(time.Minute)
 )
 
-const (
-	leaseDescIDRowIndex = iota
-	leaseVersionRowIndex
-	leaseExpirationRowIndex
-	leaseNodeIDRowIndex
-)
-
 var (
-	leaseValTypes          []parser.Datum
-	leaseColIDToRowIndex   map[ColumnID]int
 	errLeaseVersionChanged = errors.New("lease version changed")
 )
-
-func init() {
-	columns := [...]string{
-		leaseDescIDRowIndex:     "descID",
-		leaseVersionRowIndex:    "version",
-		leaseExpirationRowIndex: "expiration",
-		leaseNodeIDRowIndex:     "nodeID",
-	}
-	leaseColIDToRowIndex = make(map[ColumnID]int, len(columns))
-	for i, name := range columns {
-		col, err := LeaseTable.FindColumnByName(name)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if col.ID == 0 {
-			// This shouldn't happen, just being paranoid.
-			log.Fatalf("column %s invalid", col.Name)
-		}
-		leaseColIDToRowIndex[col.ID] = i
-	}
-
-	var err error
-	leaseValTypes, err = makeKeyVals(&LeaseTable, LeaseTable.PrimaryIndex.ColumnIDs)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
 
 func nanosToTime(nanos int64) time.Time {
 	return time.Unix(0, nanos)
 }
 
-func makeLeaseKey(nodeID uint32, descID ID, version uint32, expiration int64) []byte {
-	index := LeaseTable.PrimaryIndex
-	rowVals := make([]parser.Datum, len(index.ColumnIDs))
-	rowVals[leaseDescIDRowIndex] = parser.DInt(descID)
-	rowVals[leaseExpirationRowIndex] = parser.DTimestamp{Time: nanosToTime(expiration)}
-	rowVals[leaseNodeIDRowIndex] = parser.DInt(nodeID)
-	rowVals[leaseVersionRowIndex] = parser.DInt(version)
-
-	prefix := MakeIndexKeyPrefix(LeaseTable.ID, index.ID)
-	k, _, err := encodeIndexKey(index.ColumnIDs, leaseColIDToRowIndex, rowVals, prefix)
-	if err != nil {
-		panic(err) // Should never happen, we're careful to only encode supported datum types.
-	}
-	return k
-}
-
-func makeLeaseScanKeys(descID ID, version uint32, expiration int64) ([]byte, []byte) {
-	index := LeaseTable.PrimaryIndex
-
-	prefix := MakeIndexKeyPrefix(LeaseTable.ID, index.ID)
-	startKey := append([]byte(nil), prefix...)
-	startKey, err := encodeTableKey(startKey, parser.DInt(descID))
-	if err != nil {
-		panic(err) // Should never happen, we're careful to only encode supported datum types.
-	}
-	startKey, err = encodeTableKey(startKey, parser.DInt(version))
-	if err != nil {
-		panic(err) // Should never happen, we're careful to only encode supported datum types.
-	}
-	startKey, err = encodeTableKey(startKey, parser.DTimestamp{Time: nanosToTime(expiration)})
-	if err != nil {
-		panic(err) // Should never happen, we're careful to only encode supported datum types.
-	}
-
-	endKey := prefix
-	endKey, err = encodeTableKey(endKey, parser.DInt(descID))
-	if err != nil {
-		panic(err) // Should never happen, we're careful to only encode supported datum types.
-	}
-	endKey, err = encodeTableKey(endKey, parser.DInt(version)+1)
-	if err != nil {
-		panic(err) // Should never happen, we're careful to only encode supported datum types.
-	}
-	return startKey, endKey
+func nanosToDTimestamp(nanos int64) parser.DTimestamp {
+	return parser.DTimestamp{Time: nanosToTime(nanos)}
 }
 
 // LeaseState holds the state for a lease. Exported only for testing.
@@ -171,45 +95,68 @@ func (s LeaseStore) jitteredLeaseDuration() int64 {
 func (s LeaseStore) Acquire(tableID ID, minVersion uint32) (*LeaseState, error) {
 	lease := &LeaseState{}
 	lease.expiration = s.clock.Now().WallTime + s.jitteredLeaseDuration()
-	descKey := MakeDescMetadataKey(tableID)
 
 	err := s.db.Txn(func(txn *client.Txn) error {
-		if err := txn.GetProto(descKey, &lease.TableDescriptor); err != nil {
+		p := planner{txn: txn, user: security.RootUser}
+		plan, err := p.query(
+			fmt.Sprintf(`SELECT descriptor FROM system.descriptor WHERE id = %d`, tableID))
+		if err != nil {
 			return err
 		}
+		if !plan.Next() {
+			return fmt.Errorf("table ID %d not found", tableID)
+		}
+		if err := proto.Unmarshal([]byte(plan.Values()[0].(parser.DBytes)), &lease.TableDescriptor); err != nil {
+			return err
+		}
+		if plan.Next() {
+			return fmt.Errorf("unexpected multiple results on SELECT")
+		}
+		if err := plan.Err(); err != nil {
+			return err
+		}
+
 		if err := lease.Validate(); err != nil {
 			return err
 		}
 		if lease.Version < minVersion {
 			return fmt.Errorf("version %d of table %d does not exist yet", minVersion, tableID)
 		}
-		// Add an entry to the lease table.
-		leaseKey := makeLeaseKey(s.nodeID, lease.ID, lease.Version, lease.expiration)
-		if log.V(3) {
-			log.Infof("acquire: %s", prettyKey(leaseKey, 0))
+
+		plan, err = p.query(
+			fmt.Sprintf(`INSERT INTO system.lease (descID, version, nodeID, expiration) VALUES (%d, %d, %d, '%s'::timestamp)`,
+				lease.ID, lease.Version, s.nodeID, nanosToDTimestamp(lease.expiration)))
+		if err != nil {
+			return err
 		}
-		b := &client.Batch{}
-		b.Put(leaseKey, nil)
-		// TODO(pmattis): Setting the system DB trigger is currently necessary
-		// because the lease table resides in the system DB span. Perhaps it
-		// shouldn't.
-		txn.SetSystemDBTrigger()
-		return txn.CommitInBatch(b)
+		if !plan.Next() {
+			return fmt.Errorf("INSERT failed")
+		}
+		if plan.Next() {
+			return fmt.Errorf("unexpected multiple results on INSERT")
+		}
+		return plan.Err()
 	})
 	return lease, err
 }
 
 // Release a previously acquired table descriptor lease.
 func (s LeaseStore) Release(lease *LeaseState) error {
-	leaseKey := makeLeaseKey(s.nodeID, lease.ID, lease.Version, lease.expiration)
-	if log.V(3) {
-		log.Infof("release: %s", prettyKey(leaseKey, 0))
-	}
 	return s.db.Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
-		b.Del(leaseKey)
-		txn.SetSystemDBTrigger()
-		return txn.CommitInBatch(b)
+		p := planner{txn: txn, user: security.RootUser}
+		plan, err := p.query(
+			fmt.Sprintf(`DELETE FROM system.lease WHERE (descID, version, nodeID, expiration) = (%d, %d, %d, '%s'::timestamp)`,
+				lease.ID, lease.Version, s.nodeID, nanosToDTimestamp(lease.expiration)))
+		if err != nil {
+			return err
+		}
+		if !plan.Next() {
+			return fmt.Errorf("DELETE failed")
+		}
+		if plan.Next() {
+			return fmt.Errorf("unexpected multiple results on DELETE")
+		}
+		return plan.Err()
 	})
 }
 
@@ -295,21 +242,25 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 // countLeases returns the number of unexpired leases for a particular version
 // of a descriptor.
 func (s LeaseStore) countLeases(descID ID, version uint32, expiration int64) (int, error) {
-	// SELECT COUNT(*) FROM system.lease
-	//   WHERE descID = <descID> AND version = <version> AND expiration > <expiration>
-
-	// Scan from /descID/version/expiration to /descID/version+1. Note that this
-	// requires that the prefix of the primary key is on the columns (descID,
-	// version, expiration).
-	startKey, endKey := makeLeaseScanKeys(descID, version, expiration)
-	rows, err := s.db.Scan(startKey, endKey, 0)
-	if err != nil {
-		return -1, err
-	}
-	// Note that we don't have to decode the rows here because the lease table
-	// has one key-value pair per row and we took care that our start and end
-	// keys for the scan include exactly the data we want.
-	return len(rows), nil
+	var count int
+	err := s.db.Txn(func(txn *client.Txn) error {
+		p := planner{txn: txn, user: security.RootUser}
+		plan, err := p.query(
+			fmt.Sprintf(`SELECT COUNT(version) FROM system.lease WHERE descID = %d AND version = %d AND expiration > '%s'::timestamp`,
+				descID, version, nanosToDTimestamp(expiration)))
+		if err != nil {
+			return err
+		}
+		if !plan.Next() {
+			return fmt.Errorf("SELECT failed")
+		}
+		count = (int)(plan.Values()[0].(parser.DInt))
+		if plan.Next() {
+			return fmt.Errorf("unexpected multiple results on SELECT")
+		}
+		return plan.Err()
+	})
+	return count, err
 }
 
 // leaseSet maintains an ordered set of LeaseState objects. It supports

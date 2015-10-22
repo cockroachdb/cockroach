@@ -20,59 +20,9 @@ package sql
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-func TestMakeLeaseKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
-
-	testData := []struct {
-		nodeID     uint32
-		descID     ID
-		version    uint32
-		expiration time.Time
-		expected   string
-	}{
-		{1, 2, 3, time.Date(2015, 10, 20, 15, 22, 10, 0, time.UTC),
-			"/1/2/3/2015-10-20 15:22:10+00:00/1"},
-		{4, 5, 6, time.Date(2015, 10, 20, 15, 26, 30, 0, time.UTC),
-			"/1/5/6/2015-10-20 15:26:30+00:00/4"},
-	}
-	for _, d := range testData {
-		key := makeLeaseKey(d.nodeID, d.descID, d.version, d.expiration.UnixNano())
-		if s := prettyKey(key, 1); d.expected != s {
-			t.Fatalf("expected %s, but found %s", d.expected, s)
-		}
-	}
-}
-
-func TestMakeLeaseScanKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)
-
-	testData := []struct {
-		descID        ID
-		version       uint32
-		expiration    time.Time
-		expectedStart string
-		expectedEnd   string
-	}{
-		{1, 2, time.Date(2015, 10, 20, 15, 28, 17, 0, time.UTC),
-			"/1/1/2/2015-10-20 15:28:17+00:00", "/1/1/3"},
-		{3, 4, time.Date(2015, 10, 20, 15, 32, 48, 0, time.UTC),
-			"/1/3/4/2015-10-20 15:32:48+00:00", "/1/3/5"},
-	}
-	for _, d := range testData {
-		startKey, endKey := makeLeaseScanKeys(d.descID, d.version, d.expiration.UnixNano())
-		if s := prettyKey(startKey, 1); d.expectedStart != s {
-			t.Fatalf("expected %s, but found %s", d.expectedStart, s)
-		}
-		if s := prettyKey(endKey, 1); d.expectedEnd != s {
-			t.Fatalf("expected %s, but found %s", d.expectedEnd, s)
-		}
-	}
-}
 
 func TestLeaseSet(t *testing.T) {
 	defer leaktest.AfterTest(t)

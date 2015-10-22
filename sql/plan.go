@@ -130,6 +130,17 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 	}
 }
 
+func (p *planner) query(sql string) (planNode, error) {
+	stmts, err := parser.ParseTraditional(sql)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, util.Errorf("expected single statement, found %d", len(stmts))
+	}
+	return p.makePlan(stmts[0])
+}
+
 // getAliasedTableDesc looks up the table descriptor for an alias table expression.
 // NOTE: it looks it up in the descriptor cache, so this should only be called
 // from frequent ops (INSERT, SELECT, DELETE, UPDATE).
