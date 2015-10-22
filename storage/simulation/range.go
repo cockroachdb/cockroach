@@ -135,8 +135,8 @@ func (r *Range) getRemoveTarget() (roachpb.StoreID, error) {
 // getRebalanceTarget queries the allocator for the store that would be the best
 // candidate to add a replica for rebalancing. Returns true only if a target is
 // found.
-func (r *Range) getRebalanceTarget() (roachpb.StoreID, bool) {
-	rebalanceTarget := r.allocator.RebalanceTarget(r.zone.ReplicaAttrs[0], r.desc.Replicas)
+func (r *Range) getRebalanceTarget(storeID roachpb.StoreID) (roachpb.StoreID, bool) {
+	rebalanceTarget := r.allocator.RebalanceTarget(storeID, r.zone.ReplicaAttrs[0], r.desc.Replicas)
 	if rebalanceTarget == nil {
 		return 0, false
 	}

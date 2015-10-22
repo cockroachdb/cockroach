@@ -148,7 +148,7 @@ func (rq replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg *c
 	case AllocatorNoop:
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
-		rebalanceStore := rq.allocator.RebalanceTarget(zone.ReplicaAttrs[0], desc.Replicas)
+		rebalanceStore := rq.allocator.RebalanceTarget(repl.rm.StoreID(), zone.ReplicaAttrs[0], desc.Replicas)
 		if rebalanceStore == nil {
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queueing this replica.
