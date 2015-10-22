@@ -233,7 +233,7 @@ func (v *normalizeVisitor) normalizeOrExpr(n *OrExpr) (Visitor, Expr) {
 func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, Expr) {
 	switch n.Operator {
 	case EQ, GE, GT, LE, LT:
-		// We want var nodes (DReference, QualifiedName, etc) to be immediate
+		// We want var nodes (NonConstExpr, QualifiedName, etc) to be immediate
 		// children of the comparison expression and not second or third
 		// children. That is, we want trees that look like:
 		//
@@ -257,7 +257,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 		for {
 			if isConst(n.Left) {
 				switch n.Right.(type) {
-				case *BinaryExpr, DReference, *QualifiedName, ValArg:
+				case *BinaryExpr, NonConstExpr, *QualifiedName, ValArg:
 					break
 				default:
 					return v, n
@@ -402,7 +402,7 @@ func (v *isConstVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 }
 
 // isConst returns true if the expression contains only constant values
-// (i.e. it does not contain a DReference).
+// (i.e. it does not contain NonConstExprs, QualifiedNames, etc).
 func isConst(expr Expr) bool {
 	v := isConstVisitor{isConst: true}
 	expr = WalkExpr(&v, expr)
@@ -411,7 +411,7 @@ func isConst(expr Expr) bool {
 
 func isVar(expr Expr) bool {
 	switch expr.(type) {
-	case DReference, *QualifiedName, ValArg:
+	case NonConstExpr, *QualifiedName, ValArg:
 		return true
 	}
 	return false

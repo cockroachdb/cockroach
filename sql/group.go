@@ -312,12 +312,9 @@ type aggregateValue struct {
 	expr  *parser.FuncExpr
 }
 
-var _ parser.DReference = &aggregateValue{}
-var _ parser.Expr = &aggregateValue{}
+var _ parser.NonConstExpr = &aggregateValue{}
 
-func (v *aggregateValue) Datum() parser.Datum {
-	return v.datum
-}
+func (v *aggregateValue) NonConst() {}
 
 func (v *aggregateValue) String() string {
 	return v.expr.String()
