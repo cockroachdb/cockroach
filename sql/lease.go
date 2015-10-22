@@ -98,21 +98,17 @@ func (s LeaseStore) Acquire(tableID ID, minVersion uint32) (*LeaseState, error) 
 
 	err := s.db.Txn(func(txn *client.Txn) error {
 		p := planner{txn: txn, user: security.RootUser}
-		plan, err := p.query(
-			fmt.Sprintf(`SELECT descriptor FROM system.descriptor WHERE id = %d`, tableID))
+
+		const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = %d`
+		sql := fmt.Sprintf(getDescriptor, tableID)
+		values, err := p.queryRow(sql)
 		if err != nil {
 			return err
 		}
-		if !plan.Next() {
+		if values == nil {
 			return fmt.Errorf("table ID %d not found", tableID)
 		}
-		if err := proto.Unmarshal([]byte(plan.Values()[0].(parser.DBytes)), &lease.TableDescriptor); err != nil {
-			return err
-		}
-		if plan.Next() {
-			return fmt.Errorf("unexpected multiple results on SELECT")
-		}
-		if err := plan.Err(); err != nil {
+		if err := proto.Unmarshal([]byte(values[0].(parser.DBytes)), &lease.TableDescriptor); err != nil {
 			return err
 		}
 
@@ -123,19 +119,18 @@ func (s LeaseStore) Acquire(tableID ID, minVersion uint32) (*LeaseState, error) 
 			return fmt.Errorf("version %d of table %d does not exist yet", minVersion, tableID)
 		}
 
-		plan, err = p.query(
-			fmt.Sprintf(`INSERT INTO system.lease (descID, version, nodeID, expiration) VALUES (%d, %d, %d, '%s'::timestamp)`,
-				lease.ID, lease.Version, s.nodeID, nanosToDTimestamp(lease.expiration)))
+		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
+			`VALUES (%d, %d, %d, '%s'::timestamp)`
+		sql = fmt.Sprintf(insertLease, lease.ID, lease.Version, s.nodeID,
+			nanosToDTimestamp(lease.expiration))
+		count, err := p.exec(sql)
 		if err != nil {
 			return err
 		}
-		if !plan.Next() {
-			return fmt.Errorf("INSERT failed")
+		if count != 1 {
+			return fmt.Errorf("%s: unexpected result count: %d", sql, count)
 		}
-		if plan.Next() {
-			return fmt.Errorf("unexpected multiple results on INSERT")
-		}
-		return plan.Err()
+		return nil
 	})
 	return lease, err
 }
@@ -144,19 +139,19 @@ func (s LeaseStore) Acquire(tableID ID, minVersion uint32) (*LeaseState, error) 
 func (s LeaseStore) Release(lease *LeaseState) error {
 	return s.db.Txn(func(txn *client.Txn) error {
 		p := planner{txn: txn, user: security.RootUser}
-		plan, err := p.query(
-			fmt.Sprintf(`DELETE FROM system.lease WHERE (descID, version, nodeID, expiration) = (%d, %d, %d, '%s'::timestamp)`,
-				lease.ID, lease.Version, s.nodeID, nanosToDTimestamp(lease.expiration)))
+
+		const deleteLease = `DELETE FROM system.lease ` +
+			`WHERE (descID, version, nodeID, expiration) = (%d, %d, %d, '%s'::timestamp)`
+		sql := fmt.Sprintf(deleteLease, lease.ID, lease.Version, s.nodeID,
+			nanosToDTimestamp(lease.expiration))
+		count, err := p.exec(sql)
 		if err != nil {
 			return err
 		}
-		if !plan.Next() {
-			return fmt.Errorf("DELETE failed")
+		if count != 1 {
+			return fmt.Errorf("%s: unexpected result count: %d", sql, count)
 		}
-		if plan.Next() {
-			return fmt.Errorf("unexpected multiple results on DELETE")
-		}
-		return plan.Err()
+		return nil
 	})
 }
 
@@ -245,20 +240,16 @@ func (s LeaseStore) countLeases(descID ID, version uint32, expiration int64) (in
 	var count int
 	err := s.db.Txn(func(txn *client.Txn) error {
 		p := planner{txn: txn, user: security.RootUser}
-		plan, err := p.query(
-			fmt.Sprintf(`SELECT COUNT(version) FROM system.lease WHERE descID = %d AND version = %d AND expiration > '%s'::timestamp`,
-				descID, version, nanosToDTimestamp(expiration)))
+
+		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
+			`WHERE descID = %d AND version = %d AND expiration > '%s'::timestamp`
+		sql := fmt.Sprintf(countLeases, descID, version, nanosToDTimestamp(expiration))
+		values, err := p.queryRow(sql)
 		if err != nil {
 			return err
 		}
-		if !plan.Next() {
-			return fmt.Errorf("SELECT failed")
-		}
-		count = (int)(plan.Values()[0].(parser.DInt))
-		if plan.Next() {
-			return fmt.Errorf("unexpected multiple results on SELECT")
-		}
-		return plan.Err()
+		count = (int)(values[0].(parser.DInt))
+		return nil
 	})
 	return count, err
 }
