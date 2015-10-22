@@ -740,7 +740,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			s = t
 		case DBytes:
 			if !utf8.ValidString(string(t)) {
-				return DNull, fmt.Errorf("invalid utf8: %q", string(t))
+				return nil, fmt.Errorf("invalid utf8: %q", string(t))
 			}
 			s = DString(t)
 		}
@@ -798,7 +798,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		// case *DecimalType:
 	}
 
-	return DNull, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)
+	return nil, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)
 }
 
 // Eval implements the Expr interface.
@@ -850,7 +850,7 @@ func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
 
 		// If cmpOp's function is still nil, return unsupported op error
 		if expr.fn.fn == nil {
-			return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+			return nil, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
 				left.Type(), expr.Operator, right.Type())
 		}
 	}
@@ -898,7 +898,7 @@ func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 
 	res, err := expr.fn.fn(ctx, args)
 	if err != nil {
-		return DNull, fmt.Errorf("%s: %v", expr.Name, err)
+		return nil, fmt.Errorf("%s: %v", expr.Name, err)
 	}
 	return res, nil
 }
@@ -1062,17 +1062,17 @@ func (t *ParenExpr) Eval(ctx EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (t *QualifiedName) Eval(_ EvalContext) (Datum, error) {
-	return DNull, fmt.Errorf("qualified name \"%s\" not found", t)
+	return nil, fmt.Errorf("qualified name \"%s\" not found", t)
 }
 
 // Eval implements the Expr interface.
 func (t *RangeCond) Eval(_ EvalContext) (Datum, error) {
-	return DNull, util.Errorf("NormalizeExpr transforms this into an AndExpr")
+	return nil, util.Errorf("unhandled type %T", t)
 }
 
 // Eval implements the Expr interface.
 func (t *Subquery) Eval(_ EvalContext) (Datum, error) {
-	return DNull, util.Errorf("The subquery should have been executed before expression evaluation and the result placed into the expression tree.")
+	return nil, util.Errorf("unhandled type %T", t)
 }
 
 // Eval implements the Expr interface.
@@ -1098,18 +1098,18 @@ func (expr *UnaryExpr) Eval(ctx EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (t Array) Eval(_ EvalContext) (Datum, error) {
-	return DNull, util.Errorf("unhandled type %T", t)
+	return nil, util.Errorf("unhandled type %T", t)
 }
 
 // Eval implements the Expr interface.
 func (t DefaultVal) Eval(_ EvalContext) (Datum, error) {
-	return DNull, util.Errorf("unhandled type %T", t)
+	return nil, util.Errorf("unhandled type %T", t)
 }
 
 // Eval implements the Expr interface.
 func (t IntVal) Eval(_ EvalContext) (Datum, error) {
 	if t < 0 {
-		return DNull, fmt.Errorf("integer value out of range: %s", t)
+		return nil, fmt.Errorf("integer value out of range: %s", t)
 	}
 	return DInt(t), nil
 }
@@ -1124,8 +1124,8 @@ func (t NumVal) Eval(_ EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (t Row) Eval(_ EvalContext) (Datum, error) {
-	return DNull, util.Errorf("NormalizeExpr transforms this into a Tuple")
+func (t Row) Eval(ctx EvalContext) (Datum, error) {
+	return Tuple(t).Eval(ctx)
 }
 
 // Eval implements the Expr interface.
@@ -1143,7 +1143,7 @@ func (t Tuple) Eval(ctx EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (t ValArg) Eval(_ EvalContext) (Datum, error) {
-	return DNull, util.Errorf("Placeholders should have been replaced before type checking.")
+	return nil, util.Errorf("unhandled type %T", t)
 }
 
 // Eval implements the Expr interface.
@@ -1205,7 +1205,7 @@ func evalComparison(op ComparisonOp, left, right Datum) (Datum, error) {
 		return f.fn(left, right, nil)
 	}
 
-	return DNull, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+	return nil, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
 		left.Type(), op, right.Type())
 }
 
