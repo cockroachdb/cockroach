@@ -182,7 +182,9 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 	// Load the system config.
 	cfg := bq.gossip.GetSystemConfig()
 	if cfg == nil {
-		log.Infof("no system config available. skipping...")
+		if log.V(1) {
+			log.Infof("no system config available. skipping...")
+		}
 		return
 	}
 

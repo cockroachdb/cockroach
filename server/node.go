@@ -201,6 +201,7 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 	var err error
 	if id == 0 {
 		id, err = allocateNodeID(n.ctx.DB)
+		log.Infof("new node allocated ID %d", id)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -208,10 +209,11 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 			log.Fatal("new node allocated illegal ID 0")
 		}
 
+	} else {
+		log.Infof("node ID %d initialized", id)
 	}
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.Descriptor.NodeID = id
-	log.Infof("new node allocated ID %d", n.Descriptor.NodeID)
 	if err = n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 		log.Fatalf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
