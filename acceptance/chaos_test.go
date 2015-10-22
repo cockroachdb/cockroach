@@ -51,7 +51,7 @@ func TestChaos(t *testing.T) {
 	var count int64
 	counts := make([]int64, *numNodes)
 	clients := make([]struct {
-		*sync.RWMutex
+		sync.RWMutex
 		db      *client.DB
 		stopper *stop.Stopper
 	}, *numNodes)
@@ -65,7 +65,6 @@ func TestChaos(t *testing.T) {
 	}
 
 	for i := 0; i < *numNodes; i++ {
-		clients[i].RWMutex = &sync.RWMutex{}
 		initClient(i)
 		go func(i int) {
 			r, _ := randutil.NewPseudoRand()
@@ -109,6 +108,11 @@ func TestChaos(t *testing.T) {
 		rnd, seed := randutil.NewPseudoRand()
 		log.Warningf("monkey starts (seed %d)", seed)
 		for round := 1; time.Now().Before(deadline); round++ {
+			select {
+			case <-stopper:
+				return
+			default:
+			}
 			nodes := rnd.Perm(*numNodes)[:rnd.Intn(*numNodes)+1]
 
 			log.Infof("round %d: restarting nodes %v", round, nodes)
@@ -123,10 +127,9 @@ func TestChaos(t *testing.T) {
 				clients[i].Unlock()
 			}
 			for cur := atomic.LoadInt64(&count); time.Now().Before(deadline) &&
-				atomic.LoadInt64(&count) == cur; {
-				log.Warningf("monkey sleeping while cluster recovers...")
-				time.Sleep(time.Second)
+				atomic.LoadInt64(&count) == cur; time.Sleep(time.Second) {
 				l.Assert(t)
+				log.Warningf("monkey sleeping while cluster recovers...")
 			}
 		}
 	}()
@@ -154,5 +157,4 @@ func TestChaos(t *testing.T) {
 
 	elapsed := time.Since(start)
 	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
-
 }
