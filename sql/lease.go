@@ -55,6 +55,9 @@ func nanosToDTimestamp(nanos int64) parser.DTimestamp {
 // LeaseState holds the state for a lease. Exported only for testing.
 type LeaseState struct {
 	TableDescriptor
+	// Expiration timestamp as nanoseconds since the unix epoch. We're not using
+	// time.Time here because this value is generated using hlc.Clock.Now() which
+	// has less range than time.Time.
 	expiration int64
 	refcount   int
 }
