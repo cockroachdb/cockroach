@@ -150,7 +150,7 @@ func (n *groupNode) Next() bool {
 	// Render the results.
 	n.row = make([]parser.Datum, len(n.render))
 	for i, r := range n.render {
-		n.row[i], n.err = n.planner.evalCtx.EvalExpr(r)
+		n.row[i], n.err = r.Eval(n.planner.evalCtx)
 		if n.err != nil {
 			return false
 		}
@@ -325,6 +325,10 @@ func (av *aggregateValue) String() string {
 
 func (av *aggregateValue) TypeCheck() (parser.Datum, error) {
 	return av.expr.TypeCheck()
+}
+
+func (av *aggregateValue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
+	return av.datum.Eval(ctx)
 }
 
 type aggregateFunc struct {

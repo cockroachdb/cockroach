@@ -55,7 +55,7 @@ func (p *planner) limit(n *parser.Select, plan planNode) (planNode, error) {
 			if err != nil {
 				return nil, err
 			}
-			dstDatum, err := p.evalCtx.EvalExpr(normalized)
+			dstDatum, err := normalized.Eval(p.evalCtx)
 			if err != nil {
 				return nil, err
 			}

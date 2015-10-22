@@ -69,10 +69,10 @@ func (v *normalizeVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 			// parsed "9223372036854775808" as a signed int and is the only negative
 			// IntVal that can be output from the scanner.
 			//
-			// TODO(pmattis): Seems like this should happen in EvalExpr, yet if we
+			// TODO(pmattis): Seems like this should happen in Eval, yet if we
 			// put it there we blow up during normalization when we try to
-			// EvalExpr("9223372036854775808") a few lines down from here before
-			// doing EvalExpr("- 9223372036854775808"). Perhaps we can move
+			// Eval("9223372036854775808") a few lines down from here before
+			// doing Eval("- 9223372036854775808"). Perhaps we can move
 			// expression evaluation during normalization to the downward
 			// traversal. Or do it during the downward traversal for const
 			// UnaryExprs.
@@ -87,7 +87,7 @@ func (v *normalizeVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 			// traversal in order to avoid evaluating sub-expressions which should
 			// not be evaluated due to the case/conditional.
 			if isConst(expr) {
-				expr, v.err = v.ctx.EvalExpr(expr)
+				expr, v.err = expr.Eval(v.ctx)
 				if v.err != nil {
 					return nil, expr
 				}
@@ -109,7 +109,7 @@ func (v *normalizeVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 			}
 		}
 
-		expr, v.err = v.ctx.EvalExpr(expr)
+		expr, v.err = expr.Eval(v.ctx)
 		if v.err != nil {
 			return nil, expr
 		}
@@ -165,7 +165,7 @@ func (v *normalizeVisitor) normalizeRangeCond(n *RangeCond) Expr {
 func (v *normalizeVisitor) normalizeAndExpr(n *AndExpr) (Visitor, Expr) {
 	// Use short-circuit evaluation to simplify AND expressions.
 	if isConst(n.Left) {
-		n.Left, v.err = v.ctx.EvalExpr(n.Left)
+		n.Left, v.err = n.Left.Eval(v.ctx)
 		if v.err != nil {
 			return nil, n
 		}
@@ -180,7 +180,7 @@ func (v *normalizeVisitor) normalizeAndExpr(n *AndExpr) (Visitor, Expr) {
 		return v, n
 	}
 	if isConst(n.Right) {
-		n.Right, v.err = v.ctx.EvalExpr(n.Right)
+		n.Right, v.err = n.Right.Eval(v.ctx)
 		if v.err != nil {
 			return nil, n
 		}
@@ -200,7 +200,7 @@ func (v *normalizeVisitor) normalizeAndExpr(n *AndExpr) (Visitor, Expr) {
 func (v *normalizeVisitor) normalizeOrExpr(n *OrExpr) (Visitor, Expr) {
 	// Use short-circuit evaluation to simplify OR expressions.
 	if isConst(n.Left) {
-		n.Left, v.err = v.ctx.EvalExpr(n.Left)
+		n.Left, v.err = n.Left.Eval(v.ctx)
 		if v.err != nil {
 			return nil, n
 		}
@@ -214,7 +214,7 @@ func (v *normalizeVisitor) normalizeOrExpr(n *OrExpr) (Visitor, Expr) {
 		}
 	}
 	if isConst(n.Right) {
-		n.Right, v.err = v.ctx.EvalExpr(n.Right)
+		n.Right, v.err = n.Right.Eval(v.ctx)
 		if v.err != nil {
 			return nil, n
 		}
@@ -300,7 +300,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 					}
 					// Clear the function cache now that we've changed the operator.
 					left.fn.fn = nil
-					n.Right, v.err = v.ctx.EvalExpr(left)
+					n.Right, v.err = left.Eval(v.ctx)
 					if v.err != nil {
 						return nil, nil
 					}
@@ -327,7 +327,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 					} else {
 						n.Operator = invertComparisonOp(n.Operator)
 					}
-					n.Left, v.err = v.ctx.EvalExpr(left)
+					n.Left, v.err = left.Eval(v.ctx)
 					if v.err != nil {
 						return nil, nil
 					}
