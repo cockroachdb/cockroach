@@ -31,7 +31,7 @@ const (
 	namespaceTableSchema = `
 CREATE TABLE system.namespace (
   parentID INT,
-  name     CHAR,
+  name     STRING,
   id       INT,
   PRIMARY KEY (parentID, name)
 );`
@@ -39,20 +39,29 @@ CREATE TABLE system.namespace (
 	descriptorTableSchema = `
 CREATE TABLE system.descriptor (
   id         INT PRIMARY KEY,
-  descriptor BLOB
+  descriptor BYTES
+);`
+
+	leaseTableSchema = `
+CREATE TABLE system.lease (
+  descID     INT,
+  version    INT,
+  nodeID     INT,
+  expiration TIMESTAMP,
+  PRIMARY KEY (descID, version, expiration, nodeID)
 );`
 
 	usersTableSchema = `
 CREATE TABLE system.users (
-  username       CHAR PRIMARY KEY,
-  hashedPassword BLOB
+  username       STRING PRIMARY KEY,
+  hashedPassword BYTES
 );`
 
 	// Zone settings per DB/Table.
 	zonesTableSchema = `
 CREATE TABLE system.zones (
   id     INT PRIMARY KEY,
-  config BLOB
+  config BYTES
 );`
 )
 
@@ -72,6 +81,9 @@ var (
 	// DescriptorTable is the descriptor for the descriptor table.
 	DescriptorTable = createSystemTable(keys.DescriptorTableID, descriptorTableSchema)
 
+	// LeaseTable is the descriptor for the lease table.
+	LeaseTable = createSystemTable(keys.LeaseTableID, leaseTableSchema)
+
 	// UsersTable is the descriptor for the users table.
 	UsersTable = createSystemTable(keys.UsersTableID, usersTableSchema)
 
@@ -86,6 +98,7 @@ var (
 		keys.SystemDatabaseID:  privilege.ReadData,
 		keys.NamespaceTableID:  privilege.ReadData,
 		keys.DescriptorTableID: privilege.ReadData,
+		keys.LeaseTableID:      privilege.ReadWriteData,
 		keys.UsersTableID:      privilege.ReadWriteData,
 		keys.ZonesTableID:      privilege.ReadWriteData,
 	}
@@ -131,6 +144,7 @@ func GetInitialSystemValues() []roachpb.KeyValue {
 		{keys.RootNamespaceID, &SystemDB},
 		{SystemDB.ID, &NamespaceTable},
 		{SystemDB.ID, &DescriptorTable},
+		{SystemDB.ID, &LeaseTable},
 		{SystemDB.ID, &UsersTable},
 		{SystemDB.ID, &ZonesTable},
 	}

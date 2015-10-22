@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
@@ -41,8 +42,8 @@ type HTTPServer struct {
 }
 
 // MakeHTTPServer creates an HTTPServer.
-func MakeHTTPServer(ctx *base.Context, db client.DB, gossip *gossip.Gossip) HTTPServer {
-	return HTTPServer{context: ctx, Executor: NewExecutor(db, gossip)}
+func MakeHTTPServer(ctx *base.Context, db client.DB, gossip *gossip.Gossip, clock *hlc.Clock) HTTPServer {
+	return HTTPServer{context: ctx, Executor: newExecutor(db, gossip, clock)}
 }
 
 // ServeHTTP serves the SQL API by treating the request URL path

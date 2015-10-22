@@ -53,6 +53,7 @@ func TestAllocateIDs(t *testing.T) {
 	expected := sql.TableDescriptor{
 		ID:       keys.MaxReservedDescID + 2,
 		ParentID: keys.MaxReservedDescID + 1,
+		Version:  1,
 		Name:     "foo",
 		Columns: []sql.ColumnDescriptor{
 			{ID: 1, Name: "a"},

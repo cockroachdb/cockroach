@@ -190,6 +190,7 @@ const (
 	SystemDatabaseID  = 1
 	NamespaceTableID  = 2
 	DescriptorTableID = 3
-	UsersTableID      = 4
-	ZonesTableID      = 5
+	LeaseTableID      = 4
+	UsersTableID      = 5
+	ZonesTableID      = 6
 )
