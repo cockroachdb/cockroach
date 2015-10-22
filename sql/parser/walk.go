@@ -234,7 +234,7 @@ func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 	if !ok {
 		return v, expr
 	}
-	d, found := v.args.Arg(string(placeholder))
+	d, found := v.args.Arg(placeholder.name)
 	if !found {
 		v.err = fmt.Errorf("arg %s not found", placeholder)
 		return nil, expr

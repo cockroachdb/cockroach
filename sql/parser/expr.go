@@ -254,10 +254,12 @@ func (node DefaultVal) String() string {
 }
 
 // ValArg represents a named bind var argument.
-type ValArg string
+type ValArg struct {
+	name string
+}
 
 func (node ValArg) String() string {
-	return fmt.Sprintf("$%s", string(node))
+	return fmt.Sprintf("$%s", node.name)
 }
 
 type nameType int
