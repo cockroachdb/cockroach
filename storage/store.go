@@ -1399,9 +1399,14 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd roachpb.RaftCommand) <-ch
 
 // proposeRaftCommandImpl runs on the processRaft goroutine.
 func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd roachpb.RaftCommand) <-chan error {
-	// Lazily create group. TODO(bdarnell): make this non-lazy
-	err := s.multiraft.CreateGroup(cmd.RangeID)
-	if err != nil {
+	// If the range has been removed since the proposal started, drop it now.
+	if _, ok := s.replicas[cmd.RangeID]; !ok {
+		ch := make(chan error, 1)
+		ch <- roachpb.NewRangeNotFoundError(cmd.RangeID)
+		return ch
+	}
+	// Lazily create group.
+	if err := s.multiraft.CreateGroup(cmd.RangeID); err != nil {
 		ch := make(chan error, 1)
 		ch <- err
 		return ch
