@@ -284,14 +284,14 @@ func (m *TransactionStatusError) GetMsg() string {
 // belonging to another transaction were encountered leading to a
 // read/write or write/write conflict. The keys at which the intent
 // was encountered are set, as are the txn records for the intents'
-// transactions. Resolved is set if the intent was successfully
+// transactions. resolved is set if the intent was successfully
 // resolved, meaning the client may retry the operation
-// immediately. If Resolved is false, the client should back off and
+// immediately. If resolved is false, the client should back off and
 // retry.
 type WriteIntentError struct {
 	Intents  []Intent `protobuf:"bytes,1,rep,name=intents" json:"intents"`
 	Resolved bool     `protobuf:"varint,2,opt,name=resolved" json:"resolved"`
-	// The Index, if given, contains the index of the request (in the batch)
+	// The index, if given, contains the index of the request (in the batch)
 	// whose execution caused the error.
 	Index *ErrPosition `protobuf:"bytes,3,opt,name=index" json:"index,omitempty"`
 }
@@ -576,7 +576,7 @@ func (m *ErrPosition) GetIndex() int32 {
 // Error is a generic representation including a string message
 // and information about retryability.
 type Error struct {
-	// Message is a human-readable error message.
+	// message is a human-readable error message.
 	Message string `protobuf:"bytes,1,opt,name=message" json:"message"`
 	// If retryable is true, the error condition may be transient and the failed
 	// operation may be retried (within the same transaction).
@@ -587,7 +587,7 @@ type Error struct {
 	// If an ErrorDetail is present, it may contain additional structured data
 	// about the error.
 	Detail *ErrorDetail `protobuf:"bytes,4,opt,name=detail" json:"detail,omitempty"`
-	// The Index, if given, contains the index of the request (in the batch)
+	// The index, if given, contains the index of the request (in the batch)
 	// whose execution caused the error.
 	Index *ErrPosition `protobuf:"bytes,5,opt,name=index" json:"index,omitempty"`
 }

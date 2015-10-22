@@ -40,9 +40,9 @@ func (m *Attributes) GetAttrs() []string {
 type ReplicaDescriptor struct {
 	NodeID  NodeID  `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
 	StoreID StoreID `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
-	// ReplicaID uniquely identifies a replica instance. If a range is removed from
+	// replica_id uniquely identifies a replica instance. If a range is removed from
 	// a store and then re-added to the same store, the new instance will have a
-	// higher ReplicaID.
+	// higher replica_id.
 	ReplicaID ReplicaID `protobuf:"varint,3,opt,name=replica_id,casttype=ReplicaID" json:"replica_id"`
 }
 
@@ -76,17 +76,17 @@ func (m *ReplicaDescriptor) GetReplicaID() ReplicaID {
 // and a list of replicas where the range is stored.
 type RangeDescriptor struct {
 	RangeID RangeID `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
-	// StartKey is the first key which may be contained by this range.
+	// start_key is the first key which may be contained by this range.
 	StartKey RKey `protobuf:"bytes,2,opt,name=start_key,casttype=RKey" json:"start_key,omitempty"`
-	// EndKey marks the end of the range's possible keys.  EndKey itself is not
+	// end_key marks the end of the range's possible keys.  EndKey itself is not
 	// contained in this range - it will be contained in the immediately
 	// subsequent range.
 	EndKey RKey `protobuf:"bytes,3,opt,name=end_key,casttype=RKey" json:"end_key,omitempty"`
-	// Replicas is the set of nodes/stores on which replicas of this
+	// replicas is the set of nodes/stores on which replicas of this
 	// range are stored, the ordering being arbitrary and subject to
 	// permutation.
 	Replicas []ReplicaDescriptor `protobuf:"bytes,4,rep,name=replicas" json:"replicas"`
-	// NextReplicaID is a counter used to generate replica IDs.
+	// next_replica_id is a counter used to generate replica IDs.
 	NextReplicaID ReplicaID `protobuf:"varint,5,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
 }
 
