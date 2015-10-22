@@ -121,8 +121,8 @@ func (ls *LocalSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roac
 	if ba.RangeID == 0 || ba.Replica.StoreID == 0 {
 		var repl *roachpb.ReplicaDescriptor
 		var rangeID roachpb.RangeID
-		key, endKey := keys.Range(ba)
-		rangeID, repl, err = ls.lookupReplica(key, endKey)
+		rs := keys.Range(ba)
+		rangeID, repl, err = ls.lookupReplica(rs.Key, rs.EndKey)
 		if err == nil {
 			ba.RangeID = rangeID
 			ba.Replica = *repl

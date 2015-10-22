@@ -27,31 +27,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-// rSpan is a key range passed to the truncate function.
-type rSpan struct {
-	key, endKey roachpb.RKey
-}
-
-// newRSpan returns an rSpan encompassing all the keys in the batch request.
-func newRSpan(ba roachpb.BatchRequest) rSpan {
-	key, endKey := keys.Range(ba)
-	return rSpan{key: key, endKey: endKey}
-}
-
-// intersect returns the intersection of the current span and the
-// descriptor's range.
-func (rs rSpan) intersect(desc *roachpb.RangeDescriptor) rSpan {
-	key := rs.key
-	if !desc.ContainsKey(key) {
-		key = desc.StartKey
-	}
-	endKey := rs.endKey
-	if !desc.ContainsKeyRange(desc.StartKey, endKey) || endKey == nil {
-		endKey = desc.EndKey
-	}
-	return rSpan{key, endKey}
-}
-
 // truncate restricts all contained requests to the given key range.
 // Even on error, the returned closure must be executed; it undoes any
 // truncations performed.
@@ -67,7 +42,7 @@ func (rs rSpan) intersect(desc *roachpb.RangeDescriptor) rSpan {
 // overhead in the common case of a batch which never needs truncation but is
 // less magical.
 func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, rs rSpan) (func(), int, error) {
-	rs = rs.intersect(desc)
+	rs = rs.Intersect(desc)
 
 	truncateOne := func(args roachpb.Request) (bool, []func(), error) {
 		if _, ok := args.(*roachpb.NoopRequest); ok {
@@ -96,21 +71,21 @@ func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, rs rSpan)
 			}
 		}
 		// Below, {end,}keyAddr equals header.{End,}Key, so nothing is local.
-		if keyAddr.Less(rs.key) {
+		if keyAddr.Less(rs.Key) {
 			{
 				origKey := header.Key
 				undo = append(undo, func() { header.Key = origKey })
 			}
-			header.Key = rs.key.AsRawKey() // "key" can't be local
-			keyAddr = rs.key
+			header.Key = rs.Key.AsRawKey() // "key" can't be local
+			keyAddr = rs.Key
 		}
-		if !endKeyAddr.Less(rs.endKey) {
+		if !endKeyAddr.Less(rs.EndKey) {
 			{
 				origEndKey := header.EndKey
 				undo = append(undo, func() { header.EndKey = origEndKey })
 			}
-			header.EndKey = rs.endKey.AsRawKey() // "endKey" can't be local
-			endKeyAddr = rs.endKey
+			header.EndKey = rs.EndKey.AsRawKey() // "endKey" can't be local
+			endKeyAddr = rs.EndKey
 		}
 		// Check whether the truncation has left any keys in the range. If not,
 		// we need to cut it out of the request.

@@ -19,7 +19,6 @@
 package roachpb
 
 import (
-	"bytes"
 	"sort"
 	"strconv"
 	"strings"
@@ -107,24 +106,18 @@ func (a Attributes) SortedString() string {
 }
 
 // ContainsKey returns whether this RangeDescriptor contains the specified key.
-// TODO(tschottdorf): RKey.
 func (r *RangeDescriptor) ContainsKey(key []byte) bool {
-	return bytes.Compare(key, r.StartKey) >= 0 && bytes.Compare(key, r.EndKey) < 0
+	rs := RSpan{Key: r.StartKey, EndKey: r.EndKey}
+	return rs.ContainsKey(key)
 }
 
 // ContainsKeyRange returns whether this RangeDescriptor contains the specified
 // key range from start (inclusive) to end (exclusive).
 // If end is empty, returns ContainsKey(start).
+// TODO(tschottdorf): RKey.
 func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
-	if len(end) == 0 {
-		return r.ContainsKey(start)
-	}
-	if comp := bytes.Compare(end, start); comp < 0 {
-		return false
-	} else if comp == 0 {
-		return r.ContainsKey(start)
-	}
-	return bytes.Compare(start, r.StartKey) >= 0 && bytes.Compare(r.EndKey, end) >= 0
+	rs := RSpan{Key: r.StartKey, EndKey: r.EndKey}
+	return rs.ContainsKeyRange(start, end)
 }
 
 // FindReplica returns the replica which matches the specified store
