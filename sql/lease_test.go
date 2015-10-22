@@ -222,6 +222,7 @@ func TestLeaseManager(testingT *testing.T) {
 	t.mustRelease(2, l8)
 	t.expectLeases(descID, "/3/2 /4/1")
 	t.mustRelease(1, l9)
+	t.expectLeases(descID, "/3/2 /4/1")
 }
 
 func TestLeaseManagerReacquire(testingT *testing.T) {
@@ -243,7 +244,8 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	}
 	t.expectLeases(descID, "/1/1")
 
-	// Push the clock up near the lease expiration.
+	// Push the clock up near the lease expiration. The 20s is less than
+	// minLeaseDuration.
 	t.server.Clock().Update(roachpb.Timestamp{
 		WallTime: l1.Expiration().Add(-20 * time.Second).UnixNano(),
 	})
@@ -255,6 +257,10 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	}
 	if l3.Refcount() != 1 {
 		t.Fatalf("expected refcount of 1, but found %d", l3.Refcount())
+	}
+	if l3.Expiration().Before(l1.Expiration()) {
+		t.Fatalf("expected new lease expiration (%s) to be after old lease expiration (%s)",
+			l3.Expiration(), l1.Expiration())
 	}
 	t.expectLeases(descID, "/1/1 /1/1")
 
@@ -277,7 +283,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	// Start two goroutines that are concurrently trying to publish a new version
 	// of the descriptor. The first goroutine progresses to the update function
 	// and then signals the second goroutine to start which is allowed to proceed
-	// through completion. The first goroutine is then signalled and when it
+	// through completion. The first goroutine is then signaled and when it
 	// attempts to publish the new version it will encounter an update error and
 	// retry the transaction. Upon retry it will see that the descriptor version
 	// has changed and have to proceed to its outer retry loop and wait for the
@@ -324,4 +330,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	}(n1update, n2start)
 
 	wg.Wait()
+
+	t.mustAcquire(1, descID, 0)
+	t.expectLeases(descID, "/3/1")
 }

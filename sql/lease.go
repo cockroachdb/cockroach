@@ -207,7 +207,8 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 				return errLeaseVersionChanged
 			}
 
-			// Update the descriptor.
+			// Run the update closure which is intended to perform a single step in a
+			// multi-step schema change operation.
 			if err := update(desc); err != nil {
 				return err
 			}
