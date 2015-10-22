@@ -22,6 +22,89 @@ import (
 	"math"
 )
 
+type normalizableExpr interface {
+	Expr
+	normalize(*normalizeVisitor) Expr
+}
+
+func (expr *AndExpr) normalize(v *normalizeVisitor) Expr {
+	return v.normalizeAndExpr(expr)
+}
+
+// func (expr *BinaryExpr) normalize(v *normalizeVisitor) Expr   {}
+// func (expr *CaseExpr) normalize(v *normalizeVisitor) Expr     {}
+// func (expr *CastExpr) normalize(v *normalizeVisitor) Expr     {}
+// func (expr *CoalesceExpr) normalize(v *normalizeVisitor) Expr {}
+func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
+	return v.normalizeComparisonExpr(expr)
+}
+
+// func (expr *ExistsExpr) normalize(v *normalizeVisitor) Expr   {}
+// func (expr *FuncExpr) normalize(v *normalizeVisitor) Expr     {}
+// func (expr *IfExpr) normalize(v *normalizeVisitor) Expr       {}
+// func (expr *IsOfTypeExpr) normalize(v *normalizeVisitor) Expr {}
+// func (expr *NotExpr) normalize(v *normalizeVisitor) Expr      {}
+// func (expr *NullIfExpr) normalize(v *normalizeVisitor) Expr   {}
+func (expr *OrExpr) normalize(v *normalizeVisitor) Expr {
+	return v.normalizeOrExpr(expr)
+}
+
+func (expr *ParenExpr) normalize(v *normalizeVisitor) Expr {
+	return expr.Expr
+}
+
+// func (expr *QualifiedName) normalize(v *normalizeVisitor) Expr {}
+func (expr *RangeCond) normalize(v *normalizeVisitor) Expr {
+	return v.normalizeRangeCond(expr)
+}
+
+// func (expr *Subquery) normalize(v *normalizeVisitor) Expr      {}
+func (expr *UnaryExpr) normalize(v *normalizeVisitor) Expr {
+	// Ugliness: when we see a UnaryMinus, check to see if the expression
+	// being negated is math.MinInt64. This IntVal is only possible if we
+	// parsed "9223372036854775808" as a signed int and is the only negative
+	// IntVal that can be output from the scanner.
+	//
+	// TODO(pmattis): Seems like this should happen in Eval, yet if we
+	// put it there we blow up during normalization when we try to
+	// Eval("9223372036854775808") a few lines down from here before
+	// doing Eval("- 9223372036854775808"). Perhaps we can move
+	// expression evaluation during normalization to the downward
+	// traversal. Or do it during the downward traversal for const
+	// UnaryExprs.
+	if expr.Operator == UnaryMinus {
+		if d, ok := expr.Expr.(IntVal); ok && d == math.MinInt64 {
+			return DInt(math.MinInt64)
+		}
+	}
+
+	return expr
+}
+
+// func (expr Array) normalize(v *normalizeVisitor) Expr          {}
+// func (expr DefaultVal) normalize(v *normalizeVisitor) Expr     {}
+// func (expr IntVal) normalize(v *normalizeVisitor) Expr         {}
+// func (expr NumVal) normalize(v *normalizeVisitor) Expr         {}
+func (expr Row) normalize(v *normalizeVisitor) Expr {
+	return Tuple(expr)
+}
+
+// func (expr Tuple) normalize(v *normalizeVisitor) Expr          {}
+// func (expr ValArg) normalize(v *normalizeVisitor) Expr         {}
+// func (expr DBool) normalize(v *normalizeVisitor) Expr          {}
+// func (expr DBytes) normalize(v *normalizeVisitor) Expr         {}
+// func (expr DDate) normalize(v *normalizeVisitor) Expr          {}
+// func (expr DFloat) normalize(v *normalizeVisitor) Expr         {}
+// func (expr DInt) normalize(v *normalizeVisitor) Expr           {}
+// func (expr DInterval) normalize(v *normalizeVisitor) Expr      {}
+// func (expr dNull) normalize(v *normalizeVisitor) Expr          {}
+// func (expr DString) normalize(v *normalizeVisitor) Expr        {}
+// func (expr DTimestamp) normalize(v *normalizeVisitor) Expr     {}
+func (expr DTuple) normalize(_ *normalizeVisitor) Expr {
+	expr.Normalize()
+	return expr
+}
+
 // NormalizeExpr normalizes an expression, simplifying where possible, but
 // guaranteeing that the result of evaluating the expression is
 // unchanged. Example normalizations:
@@ -50,38 +133,16 @@ func (v *normalizeVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 		return nil, expr
 	}
 
+	// Normalize expressions that know how to normalize themselves.
+	if normalizeable, ok := expr.(normalizableExpr); ok {
+		expr = normalizeable.normalize(v)
+		if v.err != nil {
+			return nil, expr
+		}
+	}
+
 	if pre {
-		switch t := expr.(type) {
-		case *ParenExpr:
-			// (a) -> a
-			return v.Visit(t.Expr, true)
-
-		case Row:
-			// ROW(a, b, c) -> (a, b, c)
-			return v.Visit(Tuple(t), true)
-
-		case *RangeCond:
-			return v.Visit(v.normalizeRangeCond(t), true)
-
-		case *UnaryExpr:
-			// Ugliness: when we see a UnaryMinus, check to see if the expression
-			// being negated is math.MinInt64. This IntVal is only possible if we
-			// parsed "9223372036854775808" as a signed int and is the only negative
-			// IntVal that can be output from the scanner.
-			//
-			// TODO(pmattis): Seems like this should happen in Eval, yet if we
-			// put it there we blow up during normalization when we try to
-			// Eval("9223372036854775808") a few lines down from here before
-			// doing Eval("- 9223372036854775808"). Perhaps we can move
-			// expression evaluation during normalization to the downward
-			// traversal. Or do it during the downward traversal for const
-			// UnaryExprs.
-			if t.Operator == UnaryMinus {
-				if d, ok := t.Expr.(IntVal); ok && d == math.MinInt64 {
-					return v, DInt(math.MinInt64)
-				}
-			}
-
+		switch expr.(type) {
 		case *CaseExpr, *IfExpr, *NullIfExpr, *CoalesceExpr:
 			// Conditional expressions need to be evaluated during the downward
 			// traversal in order to avoid evaluating sub-expressions which should
@@ -93,38 +154,16 @@ func (v *normalizeVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 				}
 			}
 		}
-
-		return v, expr
-	}
-
-	// Evaluate constant expressions.
-	if isConst(expr) {
-		// Normalize constant In and NotIn comparison expressions with DTuple datum.
-		if cmp, ok := expr.(*ComparisonExpr); ok {
-			switch cmp.Operator {
-			case In, NotIn:
-				tuple := cmp.Right.(DTuple)
-				tuple.Normalize()
-				cmp.Right = tuple
+	} else {
+		// Evaluate all constant expressions.
+		if isConst(expr) {
+			expr, v.err = expr.Eval(v.ctx)
+			if v.err != nil {
+				return nil, expr
 			}
 		}
-
-		expr, v.err = expr.Eval(v.ctx)
-		if v.err != nil {
-			return nil, expr
-		}
-	} else {
-		switch t := expr.(type) {
-		case *AndExpr:
-			return v.normalizeAndExpr(t)
-
-		case *OrExpr:
-			return v.normalizeOrExpr(t)
-
-		case *ComparisonExpr:
-			return v.normalizeComparisonExpr(t)
-		}
 	}
+
 	return v, expr
 }
 
@@ -162,75 +201,75 @@ func (v *normalizeVisitor) normalizeRangeCond(n *RangeCond) Expr {
 	return expr
 }
 
-func (v *normalizeVisitor) normalizeAndExpr(n *AndExpr) (Visitor, Expr) {
+func (v *normalizeVisitor) normalizeAndExpr(n *AndExpr) Expr {
 	// Use short-circuit evaluation to simplify AND expressions.
 	if isConst(n.Left) {
 		n.Left, v.err = n.Left.Eval(v.ctx)
 		if v.err != nil {
-			return nil, n
+			return n
 		}
 		if n.Left != DNull {
 			if d, err := getBool(n.Left.(Datum)); err != nil {
-				return v, DNull
+				return DNull
 			} else if !d {
-				return v, n.Left
+				return n.Left
 			}
-			return v, n.Right
+			return n.Right
 		}
-		return v, n
+		return n
 	}
 	if isConst(n.Right) {
 		n.Right, v.err = n.Right.Eval(v.ctx)
 		if v.err != nil {
-			return nil, n
+			return n
 		}
 		if n.Right != DNull {
 			if d, err := getBool(n.Right.(Datum)); err != nil {
-				return v, DNull
+				return DNull
 			} else if d {
-				return v, n.Left
+				return n.Left
 			}
-			return v, n.Right
+			return n.Right
 		}
-		return v, n
+		return n
 	}
-	return v, n
+	return n
 }
 
-func (v *normalizeVisitor) normalizeOrExpr(n *OrExpr) (Visitor, Expr) {
+func (v *normalizeVisitor) normalizeOrExpr(n *OrExpr) Expr {
 	// Use short-circuit evaluation to simplify OR expressions.
 	if isConst(n.Left) {
 		n.Left, v.err = n.Left.Eval(v.ctx)
 		if v.err != nil {
-			return nil, n
+			return n
 		}
 		if n.Left != DNull {
 			if d, err := getBool(n.Left.(Datum)); err != nil {
-				return v, DNull
+				return DNull
 			} else if d {
-				return v, n.Left
+				return n.Left
 			}
-			return v, n.Right
+			return n.Right
 		}
 	}
 	if isConst(n.Right) {
 		n.Right, v.err = n.Right.Eval(v.ctx)
 		if v.err != nil {
-			return nil, n
+			return n
 		}
 		if n.Right != DNull {
 			if d, err := getBool(n.Right.(Datum)); err != nil {
-				return v, DNull
+				return DNull
 			} else if d {
-				return v, n.Right
+				return n.Right
 			}
-			return v, n.Left
+			return n.Left
 		}
 	}
-	return v, n
+	return n
 }
 
-func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, Expr) {
+func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) Expr {
 	switch n.Operator {
 	case EQ, GE, GT, LE, LT:
 		// We want var nodes (VariableExpr, QualifiedName, etc) to be immediate
@@ -260,7 +299,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 				case *BinaryExpr, VariableExpr, *QualifiedName, ValArg:
 					break
 				default:
-					return v, n
+					return n
 				}
 				// The left side is const and the right side is a binary expression or a
 				// variable. Flip the comparison op so that the right side is const and
@@ -268,12 +307,12 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 				n.Operator = invertComparisonOp(n.Operator)
 				n.Left, n.Right = n.Right, n.Left
 			} else if !isConst(n.Right) {
-				return v, n
+				return n
 			}
 
 			left, ok := n.Left.(*BinaryExpr)
 			if !ok {
-				return v, n
+				return n
 			}
 
 			// The right is const and the left side is a binary expression. Rotate the
@@ -302,7 +341,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 					left.fn.fn = nil
 					n.Right, v.err = left.Eval(v.ctx)
 					if v.err != nil {
-						return nil, nil
+						return nil
 					}
 					if !isVar(n.Left) {
 						// Continue as long as the left side of the comparison is not a
@@ -329,7 +368,7 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 					}
 					n.Left, v.err = left.Eval(v.ctx)
 					if v.err != nil {
-						return nil, nil
+						return nil
 					}
 					n.Left, n.Right = n.Right, n.Left
 					if !isVar(n.Left) {
@@ -346,14 +385,14 @@ func (v *normalizeVisitor) normalizeComparisonExpr(n *ComparisonExpr) (Visitor, 
 	case In, NotIn:
 		// If the right tuple in an In or NotIn comparison expression is constant, it can
 		// be normalized.
-		if isConst(n.Right) {
-			tuple := n.Right.(DTuple)
+		tuple, ok := n.Right.(DTuple)
+		if ok {
 			tuple.Normalize()
 			n.Right = tuple
 		}
 	}
 
-	return v, n
+	return n
 }
 
 func invertComparisonOp(op ComparisonOp) ComparisonOp {
