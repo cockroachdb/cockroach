@@ -140,9 +140,9 @@ func TestGossipRestart(t *testing.T) {
 	log.Infof("waiting for range replication")
 	checkRangeReplication(t, l, 10*time.Second)
 
-	log.Infof("stopping all nodes")
+	log.Infof("killing all nodes")
 	for _, node := range l.Nodes {
-		node.Stop(5)
+		node.Kill()
 	}
 
 	log.Infof("restarting all nodes")
@@ -154,4 +154,15 @@ func TestGossipRestart(t *testing.T) {
 	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
 	checkGossip(t, l, time.Second, hasClusterID)
 	checkGossip(t, l, time.Second, hasSentinel)
+
+	for i := range l.Nodes {
+		db, dbStopper := makeDBClient(t, l, i)
+		if kv, err := db.Inc("count", 1); err != nil {
+			t.Fatal(err)
+		} else if v := kv.ValueInt(); v != int64(i+1) {
+			t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
+		}
+		dbStopper.Stop()
+	}
+
 }
