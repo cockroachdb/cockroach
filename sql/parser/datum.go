@@ -614,8 +614,10 @@ func (d dNull) String() string {
 	return "NULL"
 }
 
-// DReference holds a pointer to a Datum. It is used as a level of indirection
-// to replace QualifiedNames with a node whose value can change on each row.
-type DReference interface {
-	Datum() Datum
+// VariableExpr is an Expr that may change per row. It is used to
+// signal the evaluation/simplification machinery that the underlying
+// Expr is not constant.
+type VariableExpr interface {
+	Expr
+	NonConst()
 }
