@@ -389,16 +389,12 @@ func (t *tableState) acquire(version uint32, store LeaseStore) (*LeaseState, err
 
 		if t.acquiring != nil {
 			// There is already a lease acquisition in progress. Wait for it to complete.
-			t.mu.Unlock()
-			<-t.acquiring
-			t.mu.Lock()
+			t.acquireWait()
 		} else {
 			// There is no active lease acquisition so we'll go ahead and perform
 			// one.
 			t.acquiring = make(chan struct{})
-			t.mu.Unlock()
-			s, err := store.Acquire(t.id, version)
-			t.mu.Lock()
+			s, err := t.acquireNodeLease(version, store)
 			close(t.acquiring)
 			t.acquiring = nil
 			if err != nil {
@@ -409,6 +405,22 @@ func (t *tableState) acquire(version uint32, store LeaseStore) (*LeaseState, err
 
 		// A new lease was added, so loop and perform the lookup again.
 	}
+}
+
+func (t *tableState) acquireWait() {
+	// We're called with mu locked, but need to unlock it while we wait for the
+	// in-progress lease acquisition to finish.
+	t.mu.Unlock()
+	defer t.mu.Lock()
+	<-t.acquiring
+}
+
+func (t *tableState) acquireNodeLease(version uint32, store LeaseStore) (*LeaseState, error) {
+	// We're called with mu locked, but need to unlock it during lease
+	// acquisition.
+	t.mu.Unlock()
+	defer t.mu.Lock()
+	return store.Acquire(t.id, version)
 }
 
 func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
@@ -430,10 +442,18 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 				// on the next operation due to not being able to get the lease.
 			}
 			t.active.remove(s)
-			return store.Release(s)
+			return t.releaseNodeLease(s, store)
 		}
 	}
 	return nil
+}
+
+func (t *tableState) releaseNodeLease(lease *LeaseState, store LeaseStore) error {
+	// We're called with mu locked, but need to unlock it while releasing the
+	// lease.
+	t.mu.Unlock()
+	defer t.mu.Lock()
+	return store.Release(lease)
 }
 
 // LeaseManager manages acquiring and releasing per-table leases. Exported only
