@@ -27,11 +27,36 @@ import (
 	"golang.org/x/net/context"
 )
 
+// rSpan is a key range passed to the truncate function.
+type rSpan struct {
+	key, endKey roachpb.RKey
+}
+
+// newRSpan returns an rSpan encompassing all the keys in the batch request.
+func newRSpan(ba roachpb.BatchRequest) rSpan {
+	key, endKey := keys.Range(ba)
+	return rSpan{key: key, endKey: endKey}
+}
+
+// intersect returns the intersection of the current span and the
+// descriptor's range.
+func (rs rSpan) intersect(desc *roachpb.RangeDescriptor) rSpan {
+	key := rs.key
+	if !desc.ContainsKey(key) {
+		key = desc.StartKey
+	}
+	endKey := rs.endKey
+	if !desc.ContainsKeyRange(desc.StartKey, endKey) || endKey == nil {
+		endKey = desc.EndKey
+	}
+	return rSpan{key, endKey}
+}
+
 // truncate restricts all contained requests to the given key range.
 // Even on error, the returned closure must be executed; it undoes any
 // truncations performed.
 // First, the boundaries of the truncation are obtained: This is the
-// intersection between [from,to) and the descriptor's range.
+// intersection between the given span and the descriptor's range.
 // Secondly, all requests contained in the batch are "truncated" to
 // the resulting range, inserting NoopRequest appropriately to
 // replace requests which are left without a key range to operate on.
@@ -41,13 +66,9 @@ import (
 // TODO(tschottdorf): Consider returning a new BatchRequest, which has more
 // overhead in the common case of a batch which never needs truncation but is
 // less magical.
-func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to roachpb.RKey) (func(), int, error) {
-	if !desc.ContainsKey(from) {
-		from = desc.StartKey
-	}
-	if !desc.ContainsKeyRange(desc.StartKey, to) || to == nil {
-		to = desc.EndKey
-	}
+func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, rs rSpan) (func(), int, error) {
+	rs = rs.intersect(desc)
+
 	truncateOne := func(args roachpb.Request) (bool, []func(), error) {
 		if _, ok := args.(*roachpb.NoopRequest); ok {
 			return true, nil, nil
@@ -75,21 +96,21 @@ func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, from, to 
 			}
 		}
 		// Below, {end,}keyAddr equals header.{End,}Key, so nothing is local.
-		if keyAddr.Less(from) {
+		if keyAddr.Less(rs.key) {
 			{
 				origKey := header.Key
 				undo = append(undo, func() { header.Key = origKey })
 			}
-			header.Key = from.AsRawKey() // "from" can't be local
-			keyAddr = from
+			header.Key = rs.key.AsRawKey() // "key" can't be local
+			keyAddr = rs.key
 		}
-		if !endKeyAddr.Less(to) {
+		if !endKeyAddr.Less(rs.endKey) {
 			{
 				origEndKey := header.EndKey
 				undo = append(undo, func() { header.EndKey = origEndKey })
 			}
-			header.EndKey = to.AsRawKey() // "to" can't be local
-			endKeyAddr = to
+			header.EndKey = rs.endKey.AsRawKey() // "endKey" can't be local
+			endKeyAddr = rs.endKey
 		}
 		// Check whether the truncation has left any keys in the range. If not,
 		// we need to cut it out of the request.
