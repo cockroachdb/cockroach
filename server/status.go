@@ -246,16 +246,7 @@ func (s *statusServer) handleDetailsLocal(w http.ResponseWriter, r *http.Request
 	if addr, err := s.gossip.GetNodeIDAddress(s.gossip.GetNodeID()); err == nil {
 		local.Address = addr.(util.UnresolvedAddr)
 	}
-	b, contentType, err := util.MarshalResponse(r, local, []util.EncodingType{util.JSONEncoding})
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	if _, err := w.Write(b); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	respondAsJSON(w, r, local)
 }
 
 // handleDetails handles GET requests for node details.
@@ -283,16 +274,7 @@ func (s *statusServer) handleLogFilesListLocal(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	b, contentType, err := util.MarshalResponse(r, logFiles, []util.EncodingType{util.JSONEncoding})
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	if _, err := w.Write(b); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	respondAsJSON(w, r, logFiles)
 }
 
 // handleLogFilesList handles GET requests for a list of available log files.
@@ -339,16 +321,7 @@ func (s *statusServer) handleLogFileLocal(w http.ResponseWriter, r *http.Request
 		entries = append(entries, entry)
 	}
 
-	b, contentType, err := util.MarshalResponse(r, entries, []util.EncodingType{util.JSONEncoding})
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	if _, err := w.Write(b); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	respondAsJSON(w, r, entries)
 }
 
 // handleLogFile handles GET requests for a single log file.
@@ -472,16 +445,7 @@ func (s *statusServer) handleLogsLocal(w http.ResponseWriter, r *http.Request, _
 		return
 	}
 
-	b, contentType, err := util.MarshalResponse(r, entries, []util.EncodingType{util.JSONEncoding})
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	if _, err := w.Write(b); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	respondAsJSON(w, r, entries)
 }
 
 // handleLogs handles GET requests for log entires.
@@ -556,16 +520,7 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 		}
 		nodeStatuses = append(nodeStatuses, *nodeStatus)
 	}
-	b, contentType, err := util.MarshalResponse(r, nodeStatuses, []util.EncodingType{util.JSONEncoding})
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	if _, err := w.Write(b); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	respondAsJSON(w, r, nodeStatuses)
 }
 
 // handleNodeStatus handles GET requests for a single node's status.
@@ -584,16 +539,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	b, contentType, err := util.MarshalResponse(r, nodeStatus, []util.EncodingType{util.JSONEncoding})
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	if _, err := w.Write(b); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	respondAsJSON(w, r, nodeStatus)
 }
 
 // handleStoresStatus handles GET requests for all store statuses.
@@ -618,16 +564,7 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 		}
 		storeStatuses = append(storeStatuses, *storeStatus)
 	}
-	b, contentType, err := util.MarshalResponse(r, storeStatuses, []util.EncodingType{util.JSONEncoding})
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	if _, err := w.Write(b); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	respondAsJSON(w, r, storeStatuses)
 }
 
 // handleStoreStatus handles GET requests for a single node's status.
@@ -648,8 +585,11 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	respondAsJSON(w, r, storeStatus)
+}
 
-	b, contentType, err := util.MarshalResponse(r, storeStatus, []util.EncodingType{util.JSONEncoding})
+func respondAsJSON(w http.ResponseWriter, r *http.Request, response interface{}) {
+	b, contentType, err := util.MarshalResponse(r, response, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

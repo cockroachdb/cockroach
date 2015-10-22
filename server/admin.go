@@ -23,14 +23,11 @@ import (
 	// endpoints with the http.DefaultServeMux.
 	_ "expvar"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"time"
 	// This is imported for its side-effect of registering pprof
 	// endpoints with the http.DefaultServeMux.
 	_ "net/http/pprof"
-	"net/url"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util"
@@ -109,73 +106,4 @@ func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request) {
 func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
 	handler, _ := http.DefaultServeMux.Handler(r)
 	handler.ServeHTTP(w, r)
-}
-
-// handleRESTAction handles RESTful admin actions.
-func (s *adminServer) handleRESTAction(handler actionHandler, w http.ResponseWriter, r *http.Request, prefix string) {
-	switch r.Method {
-	case "GET":
-		s.handleGetAction(handler, w, r, prefix)
-	case "PUT", "POST":
-		s.handlePutAction(handler, w, r, prefix)
-	case "DELETE":
-		s.handleDeleteAction(handler, w, r, prefix)
-	default:
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-	}
-}
-
-func unescapePath(path, prefix string) (string, error) {
-	result, err := url.QueryUnescape(strings.TrimPrefix(path, prefix))
-	if err != nil {
-		return "", err
-	}
-	return result, nil
-}
-
-func (s *adminServer) handlePutAction(handler actionHandler, w http.ResponseWriter, r *http.Request, prefix string) {
-	path, err := unescapePath(r.URL.Path, prefix)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	b, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer r.Body.Close()
-	if err = handler.Put(path, b, r); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func (s *adminServer) handleGetAction(handler actionHandler, w http.ResponseWriter, r *http.Request, prefix string) {
-	path, err := unescapePath(r.URL.Path, prefix)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	b, contentType, err := handler.Get(path, r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	fmt.Fprintf(w, "%s", string(b))
-}
-
-func (s *adminServer) handleDeleteAction(handler actionHandler, w http.ResponseWriter, r *http.Request, prefix string) {
-	path, err := unescapePath(r.URL.Path, prefix)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err = handler.Delete(path, r); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
 }
