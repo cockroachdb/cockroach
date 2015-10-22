@@ -83,7 +83,7 @@ func init() {
 }
 
 func nanosToTime(nanos int64) time.Time {
-	return time.Unix(nanos/1e9, nanos%1e9)
+	return time.Unix(0, nanos)
 }
 
 func makeLeaseKey(nodeID uint32, descID ID, version uint32, expiration int64) []byte {
@@ -532,6 +532,8 @@ func (m *LeaseManager) Release(lease *LeaseState) error {
 	if t == nil {
 		return util.Errorf("table %d not found", lease.ID)
 	}
+	// TODO(pmattis): Can/should we delete from LeaseManager.tables if the
+	// tableState becomes empty?
 	return t.release(lease, m.LeaseStore)
 }
 

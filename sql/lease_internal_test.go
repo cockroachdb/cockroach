@@ -108,6 +108,7 @@ func TestLeaseSet(t *testing.T) {
 		{insert{2, 2}, "2:1 2:2 2:3 2:4"},
 		{insert{3, 1}, "2:1 2:2 2:3 2:4 3:1"},
 		{newest{0}, "3:1"},
+		{newest{1}, "<nil>"},
 		{newest{2}, "2:4"},
 		{newest{3}, "3:1"},
 		{newest{4}, "<nil>"},
