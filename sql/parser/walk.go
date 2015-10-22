@@ -113,7 +113,7 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 			t[i] = WalkExpr(v, t[i])
 		}
 
-	case DReference:
+	case VariableExpr:
 		// Terminal node: nothing to do.
 
 	case Datum:

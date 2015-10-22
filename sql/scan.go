@@ -42,12 +42,9 @@ type qvalue struct {
 	col   ColumnDescriptor
 }
 
-var _ parser.DReference = &qvalue{}
-var _ parser.Expr = &qvalue{}
+var _ parser.VariableExpr = &qvalue{}
 
-func (q *qvalue) Datum() parser.Datum {
-	return q.datum
-}
+func (q *qvalue) Variable() {}
 
 func (q *qvalue) String() string {
 	return q.col.Name
