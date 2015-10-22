@@ -1056,11 +1056,6 @@ func (expr *OrExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (t *ParenExpr) Eval(ctx EvalContext) (Datum, error) {
-	return t.Expr.Eval(ctx)
-}
-
-// Eval implements the Expr interface.
 func (t *QualifiedName) Eval(_ EvalContext) (Datum, error) {
 	return nil, fmt.Errorf("qualified name \"%s\" not found", t)
 }

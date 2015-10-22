@@ -83,7 +83,7 @@ func (node *NotExpr) String() string {
 
 // ParenExpr represents a parenthesized expression.
 type ParenExpr struct {
-	Expr Expr
+	Expr
 }
 
 func (node *ParenExpr) String() string {
