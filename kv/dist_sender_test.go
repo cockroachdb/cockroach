@@ -390,7 +390,8 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	put := roachpb.NewPut(roachpb.Key("a"), roachpb.Value{Bytes: []byte("value")})
+	v := roachpb.MakeValueFromString("value")
+	put := roachpb.NewPut(roachpb.Key("a"), v)
 	if _, err := client.SendWrapped(ds, nil, put); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
@@ -433,7 +434,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	put := roachpb.NewPut(roachpb.Key("a"), roachpb.Value{Bytes: []byte("value")})
+	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
 	// Fatal error on descriptor lookup, propagated to reply.
 	if _, err := client.SendWrapped(ds, nil, put); err.Error() != "fatal boom" {
 		t.Errorf("unexpected error: %s", err)
@@ -495,8 +496,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 		ds := NewDistSender(ctx, g)
 		ds.updateLeaderCache(1, leader)
-
-		put := roachpb.NewPut(roachpb.Key("a"), roachpb.Value{Bytes: []byte("value")}).(*roachpb.PutRequest)
+		put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value")).(*roachpb.PutRequest)
 
 		if _, err := client.SendWrapped(ds, nil, put); err != nil && !testutils.IsError(err, "boom") {
 			t.Errorf("put encountered unexpected error: %s", err)
@@ -723,8 +723,8 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	}
 	// Assume we have two key-value pairs, a=1 and c=2.
 	existingKVs := []roachpb.KeyValue{
-		{Key: roachpb.Key("a"), Value: roachpb.Value{Bytes: []byte("1")}},
-		{Key: roachpb.Key("c"), Value: roachpb.Value{Bytes: []byte("2")}},
+		{Key: roachpb.Key("a"), Value: roachpb.MakeValueFromString("1")},
+		{Key: roachpb.Key("c"), Value: roachpb.MakeValueFromString("2")},
 	}
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		if method != "Node.Batch" {

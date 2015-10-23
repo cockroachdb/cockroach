@@ -141,7 +141,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		metas := metaSlice{}
 		for _, kv := range kvs {
 			scannedDesc := &roachpb.RangeDescriptor{}
-			if err := proto.Unmarshal(kv.Value.Bytes, scannedDesc); err != nil {
+			if err := proto.Unmarshal(kv.Value.GetRawBytes(), scannedDesc); err != nil {
 				t.Fatal(err)
 			}
 			metas = append(metas, metaRecord{key: kv.Key, desc: scannedDesc})

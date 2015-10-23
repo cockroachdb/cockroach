@@ -230,7 +230,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
     // response cache GC timeout.
     if (is_rcache) {
       cockroach::roachpb::BatchResponse b_reply;
-      if (!b_reply.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
+      if (!b_reply.ParseFromArray(meta.value().raw_bytes().data(), meta.value().raw_bytes().size())) {
         // *error_msg = (char*)"failed to parse response cache entry";
         return false;
       }
@@ -243,7 +243,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
       // system-wide minimum write intent is periodically computed via
       // map-reduce over all ranges and gossiped.
       cockroach::roachpb::Transaction txn;
-      if (!txn.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
+      if (!txn.ParseFromArray(meta.value().raw_bytes().data(), meta.value().raw_bytes().size())) {
         // *error_msg = (char*)"failed to parse transaction entry";
         return false;
       }
@@ -356,12 +356,12 @@ bool MergeTimeSeriesValues(cockroach::roachpb::Value *left, const cockroach::roa
     // Attempt to parse TimeSeriesData from both Values.
     cockroach::roachpb::InternalTimeSeriesData left_ts;
     cockroach::roachpb::InternalTimeSeriesData right_ts;
-    if (!left_ts.ParseFromString(left->bytes())) {
+    if (!left_ts.ParseFromString(left->raw_bytes())) {
         rocksdb::Warn(logger,
                 "left InternalTimeSeriesData could not be parsed from bytes.");
         return false;
     }
-    if (!right_ts.ParseFromString(right.bytes())) {
+    if (!right_ts.ParseFromString(right.raw_bytes())) {
         rocksdb::Warn(logger,
                 "right InternalTimeSeriesData could not be parsed from bytes.");
         return false;
@@ -386,7 +386,7 @@ bool MergeTimeSeriesValues(cockroach::roachpb::Value *left, const cockroach::roa
     // full merge.
     if (!full_merge) {
         left_ts.MergeFrom(right_ts);
-        left_ts.SerializeToString(left->mutable_bytes());
+        left_ts.SerializeToString(left->mutable_raw_bytes());
         return true;
     }
 
@@ -438,7 +438,7 @@ bool MergeTimeSeriesValues(cockroach::roachpb::Value *left, const cockroach::roa
     }
 
     // Serialize the new TimeSeriesData into the left value's byte field.
-    new_ts.SerializeToString(left->mutable_bytes());
+    new_ts.SerializeToString(left->mutable_raw_bytes());
     return true;
 }
 
@@ -451,7 +451,7 @@ bool MergeTimeSeriesValues(cockroach::roachpb::Value *left, const cockroach::roa
 bool ConsolidateTimeSeriesValue(cockroach::roachpb::Value *val, rocksdb::Logger* logger) {
     // Attempt to parse TimeSeriesData from both Values.
     cockroach::roachpb::InternalTimeSeriesData val_ts;
-    if (!val_ts.ParseFromString(val->bytes())) {
+    if (!val_ts.ParseFromString(val->raw_bytes())) {
         rocksdb::Warn(logger,
                 "InternalTimeSeriesData could not be parsed from bytes.");
         return false;
@@ -486,14 +486,14 @@ bool ConsolidateTimeSeriesValue(cockroach::roachpb::Value *val, rocksdb::Logger*
     }
 
     // Serialize the new TimeSeriesData into the value's byte field.
-    new_ts.SerializeToString(val->mutable_bytes());
+    new_ts.SerializeToString(val->mutable_raw_bytes());
     return true;
 }
 
 bool MergeValues(cockroach::roachpb::Value *left, const cockroach::roachpb::Value &right,
         bool full_merge, rocksdb::Logger* logger) {
-    if (left->has_bytes()) {
-        if (!right.has_bytes()) {
+    if (left->has_raw_bytes()) {
+        if (!right.has_raw_bytes()) {
             rocksdb::Warn(logger,
                     "inconsistent value types for merge (left = bytes, right = ?)");
             return false;
@@ -507,7 +507,7 @@ bool MergeValues(cockroach::roachpb::Value *left, const cockroach::roachpb::Valu
             }
             return MergeTimeSeriesValues(left, right, full_merge, logger);
         } else {
-            *left->mutable_bytes() += right.bytes();
+            *left->mutable_raw_bytes() += right.raw_bytes();
         }
         return true;
     } else {

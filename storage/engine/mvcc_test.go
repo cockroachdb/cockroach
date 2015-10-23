@@ -54,10 +54,10 @@ var (
 	txn1e2Commit = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 2, Status: roachpb.COMMITTED}
 	txn2         = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn2")}
 	txn2Commit   = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn2"), Status: roachpb.COMMITTED}
-	value1       = roachpb.Value{Bytes: []byte("testValue1")}
-	value2       = roachpb.Value{Bytes: []byte("testValue2")}
-	value3       = roachpb.Value{Bytes: []byte("testValue3")}
-	value4       = roachpb.Value{Bytes: []byte("testValue4")}
+	value1       = roachpb.MakeValueFromString("testValue1")
+	value2       = roachpb.MakeValueFromString("testValue2")
+	value3       = roachpb.MakeValueFromString("testValue3")
+	value4       = roachpb.MakeValueFromString("testValue4")
 	valueEmpty   = roachpb.Value{}
 )
 
@@ -171,9 +171,9 @@ func TestMVCCPutWithTxn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(value1.Bytes, value.Bytes) {
+		if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
-				value1.Bytes, value.Bytes)
+				value1.GetRawBytes(), value.GetRawBytes())
 		}
 	}
 }
@@ -194,9 +194,9 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(value1.Bytes, value.Bytes) {
+		if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
-				value1.Bytes, value.Bytes)
+				value1.GetRawBytes(), value.GetRawBytes())
 		}
 	}
 }
@@ -224,9 +224,9 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value.Bytes, value2.Bytes) {
+	if !bytes.Equal(value.GetRawBytes(), value2.GetRawBytes()) {
 		t.Fatalf("the value should be %s, but got %s",
-			value2.Bytes, value.Bytes)
+			value2.GetRawBytes(), value.GetRawBytes())
 	}
 
 	// Another put operation with earlier logical time. Will NOT be ignored.
@@ -239,9 +239,9 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value.Bytes, value2.Bytes) {
+	if !bytes.Equal(value.GetRawBytes(), value2.GetRawBytes()) {
 		t.Fatalf("the value should be %s, but got %s",
-			value2.Bytes, value.Bytes)
+			value2.GetRawBytes(), value.GetRawBytes())
 	}
 }
 
@@ -327,9 +327,9 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value1.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+			value1.GetRawBytes(), value.GetRawBytes())
 	}
 
 	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, nil)
@@ -342,9 +342,9 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value2.Bytes, value.Bytes) {
+	if !bytes.Equal(value2.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value2.Bytes, value.Bytes)
+			value2.GetRawBytes(), value.GetRawBytes())
 	}
 
 	// Read the old version.
@@ -352,9 +352,9 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value1.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+			value1.GetRawBytes(), value.GetRawBytes())
 	}
 }
 
@@ -467,8 +467,8 @@ func TestMVCCGetUncertainty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if val == nil || !bytes.Equal(val.Bytes, value1.Bytes) {
-		t.Fatalf("wanted %q, got %v", value1.Bytes, val)
+	if val == nil || !bytes.Equal(val.GetRawBytes(), value1.GetRawBytes()) {
+		t.Fatalf("wanted %q, got %v", value1.GetRawBytes(), val)
 	}
 
 	// Now using testKey2.
@@ -635,13 +635,14 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 	engine := createTestEngine(stopper)
 
 	ts := []roachpb.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(0, 3), makeTS(0, 4), makeTS(0, 5), makeTS(0, 6)}
+
 	fixtureKVs := []roachpb.KeyValue{
-		{Key: testKey1, Value: roachpb.Value{Bytes: []byte("testValue1 pre"), Timestamp: &ts[0]}},
-		{Key: testKey4, Value: roachpb.Value{Bytes: []byte("testValue4 pre"), Timestamp: &ts[1]}},
-		{Key: testKey1, Value: roachpb.Value{Bytes: []byte("testValue1"), Timestamp: &ts[2]}},
-		{Key: testKey2, Value: roachpb.Value{Bytes: []byte("testValue2"), Timestamp: &ts[3]}},
-		{Key: testKey3, Value: roachpb.Value{Bytes: []byte("testValue3"), Timestamp: &ts[4]}},
-		{Key: testKey4, Value: roachpb.Value{Bytes: []byte("testValue4"), Timestamp: &ts[5]}},
+		{Key: testKey1, Value: roachpb.MakeValueFromStringAndTimestamp("testValue1 pre", ts[0])},
+		{Key: testKey4, Value: roachpb.MakeValueFromStringAndTimestamp("testValue4 pre", ts[1])},
+		{Key: testKey1, Value: roachpb.MakeValueFromStringAndTimestamp("testValue1", ts[2])},
+		{Key: testKey2, Value: roachpb.MakeValueFromStringAndTimestamp("testValue2", ts[3])},
+		{Key: testKey3, Value: roachpb.MakeValueFromStringAndTimestamp("testValue3", ts[4])},
+		{Key: testKey4, Value: roachpb.MakeValueFromStringAndTimestamp("testValue4", ts[5])},
 	}
 	for i, kv := range fixtureKVs {
 		var txn *roachpb.Transaction
@@ -771,8 +772,8 @@ func TestMVCCGetInconsistent(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if !bytes.Equal(val.Bytes, value1.Bytes) {
-			t.Errorf("@%s expected %q; got %q", ts, value1.Bytes, val.Bytes)
+		if !bytes.Equal(val.GetRawBytes(), value1.GetRawBytes()) {
+			t.Errorf("@%s expected %q; got %q", ts, value1.GetRawBytes(), val.GetRawBytes())
 		}
 	}
 
@@ -807,11 +808,14 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	v1 := roachpb.MakeValueFromBytes(value1)
+	v2 := roachpb.MakeValueFromBytes(value2)
+
 	// Put two values to key 1, the latest with a txn.
-	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), roachpb.Value{Bytes: value1}, nil); err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), v1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(engine, nil, testKey1, makeTS(2, 0), roachpb.Value{Bytes: value2}, txn1); err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(2, 0), v2, txn1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -844,7 +848,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	}
 
 	// Write a single intent for key 2 and verify get returns empty.
-	if err := MVCCPut(engine, nil, testKey2, makeTS(2, 0), roachpb.Value{Bytes: value1}, txn2); err != nil {
+	if err := MVCCPut(engine, nil, testKey2, makeTS(2, 0), v1, txn2); err != nil {
 		t.Fatal(err)
 	}
 	found, err := MVCCGetProto(engine, testKey2, makeTS(2, 0), false, nil, val)
@@ -861,7 +865,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	if err := MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(engine, nil, testKey3, makeTS(2, 0), roachpb.Value{Bytes: value2}, txn1); err != nil {
+	if err := MVCCPut(engine, nil, testKey3, makeTS(2, 0), v2, txn1); err != nil {
 		t.Fatal(err)
 	}
 	val.Reset()
@@ -898,8 +902,8 @@ func TestMVCCScan(t *testing.T) {
 	if len(kvs) != 2 ||
 		!bytes.Equal(kvs[0].Key, testKey2) ||
 		!bytes.Equal(kvs[1].Key, testKey3) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value2.Bytes) ||
-		!bytes.Equal(kvs[1].Value.Bytes, value3.Bytes) {
+		!bytes.Equal(kvs[0].Value.GetRawBytes(), value2.GetRawBytes()) ||
+		!bytes.Equal(kvs[1].Value.GetRawBytes(), value3.GetRawBytes()) {
 		t.Fatal("the value should not be empty")
 	}
 
@@ -910,8 +914,8 @@ func TestMVCCScan(t *testing.T) {
 	if len(kvs) != 2 ||
 		!bytes.Equal(kvs[0].Key, testKey2) ||
 		!bytes.Equal(kvs[1].Key, testKey3) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value3.Bytes) ||
-		!bytes.Equal(kvs[1].Value.Bytes, value2.Bytes) {
+		!bytes.Equal(kvs[0].Value.GetRawBytes(), value3.GetRawBytes()) ||
+		!bytes.Equal(kvs[1].Value.GetRawBytes(), value2.GetRawBytes()) {
 		t.Fatal("the value should not be empty")
 	}
 
@@ -921,7 +925,7 @@ func TestMVCCScan(t *testing.T) {
 	}
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey4) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value4.Bytes) {
+		!bytes.Equal(kvs[0].Value.GetRawBytes(), value4.GetRawBytes()) {
 		t.Fatal("the value should not be empty")
 	}
 
@@ -932,7 +936,7 @@ func TestMVCCScan(t *testing.T) {
 	}
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value1.Bytes) {
+		!bytes.Equal(kvs[0].Value.GetRawBytes(), value1.GetRawBytes()) {
 		t.Fatal("the value should not be empty")
 	}
 }
@@ -954,7 +958,7 @@ func TestMVCCScanMaxNum(t *testing.T) {
 	}
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey2) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value2.Bytes) {
+		!bytes.Equal(kvs[0].Value.GetRawBytes(), value2.GetRawBytes()) {
 		t.Fatal("the value should not be empty")
 	}
 }
@@ -989,8 +993,8 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 	if len(kvs) != 2 ||
 		!bytes.Equal(kvs[0].Key, roachpb.Key("/a")) ||
 		!bytes.Equal(kvs[1].Key, roachpb.Key("/aa")) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value2.Bytes) ||
-		!bytes.Equal(kvs[1].Value.Bytes, value2.Bytes) {
+		!bytes.Equal(kvs[0].Value.GetRawBytes(), value2.GetRawBytes()) ||
+		!bytes.Equal(kvs[1].Value.GetRawBytes(), value2.GetRawBytes()) {
 		t.Fatal("the value should not be empty")
 	}
 }
@@ -1013,8 +1017,8 @@ func TestMVCCScanInTxn(t *testing.T) {
 	if len(kvs) != 2 ||
 		!bytes.Equal(kvs[0].Key, testKey2) ||
 		!bytes.Equal(kvs[1].Key, testKey3) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value2.Bytes) ||
-		!bytes.Equal(kvs[1].Value.Bytes, value3.Bytes) {
+		!bytes.Equal(kvs[0].Value.GetRawBytes(), value2.GetRawBytes()) ||
+		!bytes.Equal(kvs[1].Value.GetRawBytes(), value3.GetRawBytes()) {
 		t.Fatal("the value should not be empty")
 	}
 
@@ -1072,9 +1076,9 @@ func TestMVCCScanInconsistent(t *testing.T) {
 	}
 
 	expKVs := []roachpb.KeyValue{
-		{Key: testKey1, Value: roachpb.Value{Bytes: value1.Bytes, Timestamp: &ts1}},
-		{Key: testKey2, Value: roachpb.Value{Bytes: value2.Bytes, Timestamp: &ts4}},
-		{Key: testKey4, Value: roachpb.Value{Bytes: value4.Bytes, Timestamp: &ts6}},
+		{Key: testKey1, Value: roachpb.MakeValueFromBytesAndTimestamp(value1.GetRawBytes(), ts1)},
+		{Key: testKey2, Value: roachpb.MakeValueFromBytesAndTimestamp(value2.GetRawBytes(), ts4)},
+		{Key: testKey4, Value: roachpb.MakeValueFromBytesAndTimestamp(value4.GetRawBytes(), ts6)},
 	}
 	if !reflect.DeepEqual(kvs, expKVs) {
 		t.Errorf("expected key values equal %v != %v", kvs, expKVs)
@@ -1087,8 +1091,8 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 	expKVs = []roachpb.KeyValue{
-		{Key: testKey1, Value: roachpb.Value{Bytes: value1.Bytes, Timestamp: &ts1}},
-		{Key: testKey2, Value: roachpb.Value{Bytes: value1.Bytes, Timestamp: &ts3}},
+		{Key: testKey1, Value: roachpb.MakeValueFromBytesAndTimestamp(value1.GetRawBytes(), ts1)},
+		{Key: testKey2, Value: roachpb.MakeValueFromBytesAndTimestamp(value1.GetRawBytes(), ts3)},
 	}
 	if !reflect.DeepEqual(kvs, expKVs) {
 		t.Errorf("expected key values equal %v != %v", kvs, expKVs)
@@ -1117,8 +1121,8 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if len(kvs) != 2 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value1.Bytes) ||
-		!bytes.Equal(kvs[1].Value.Bytes, value4.Bytes) {
+		!bytes.Equal(kvs[0].Value.GetRawBytes(), value1.GetRawBytes()) ||
+		!bytes.Equal(kvs[1].Value.GetRawBytes(), value4.GetRawBytes()) {
 		t.Fatal("the value should not be empty")
 	}
 
@@ -1132,7 +1136,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	kvs, _, _ = MVCCScan(engine, keyMin, keyMax, 0, makeTS(2, 0), true, nil)
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value1.Bytes) {
+		!bytes.Equal(kvs[0].Value.GetRawBytes(), value1.GetRawBytes()) {
 		t.Fatal("the value should not be empty")
 	}
 
@@ -1238,9 +1242,9 @@ func TestMVCCConditionalPut(t *testing.T) {
 	default:
 		t.Fatalf("unexpected error %T", e)
 	case *roachpb.ConditionFailedError:
-		if !bytes.Equal(e.ActualValue.Bytes, value1.Bytes) {
+		if !bytes.Equal(e.ActualValue.GetRawBytes(), value1.GetRawBytes()) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
-				e.ActualValue.Bytes, value1.Bytes)
+				e.ActualValue.GetRawBytes(), value1.GetRawBytes())
 		}
 	}
 
@@ -1253,9 +1257,9 @@ func TestMVCCConditionalPut(t *testing.T) {
 	default:
 		t.Fatalf("unexpected error %T", e)
 	case *roachpb.ConditionFailedError:
-		if !bytes.Equal(e.ActualValue.Bytes, value1.Bytes) {
+		if !bytes.Equal(e.ActualValue.GetRawBytes(), value1.GetRawBytes()) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
-				e.ActualValue.Bytes, value1.Bytes)
+				e.ActualValue.GetRawBytes(), value1.GetRawBytes())
 		}
 	}
 
@@ -1271,9 +1275,9 @@ func TestMVCCConditionalPut(t *testing.T) {
 	}
 	// Verify we get value2 as expected.
 	value, _, err := MVCCGet(engine, testKey1, clock.Now(), true, nil)
-	if !bytes.Equal(value2.Bytes, value.Bytes) {
+	if !bytes.Equal(value2.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+			value1.GetRawBytes(), value.GetRawBytes())
 	}
 }
 
@@ -1311,8 +1315,8 @@ func TestMVCCReverseScan(t *testing.T) {
 	if len(kvs) != 2 ||
 		!bytes.Equal(kvs[0].Key, testKey3) ||
 		!bytes.Equal(kvs[1].Key, testKey2) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value1.Bytes) ||
-		!bytes.Equal(kvs[1].Value.Bytes, value3.Bytes) {
+		!bytes.Equal(kvs[0].Value.GetRawBytes(), value1.GetRawBytes()) ||
+		!bytes.Equal(kvs[1].Value.GetRawBytes(), value3.GetRawBytes()) {
 		t.Errorf("unexpected value: %v", kvs)
 	}
 }
@@ -1325,9 +1329,9 @@ func TestMVCCResolveTxn(t *testing.T) {
 
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	value, _, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, txn1)
-	if !bytes.Equal(value1.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+			value1.GetRawBytes(), value.GetRawBytes())
 	}
 
 	// Resolve will write with txn1's timestamp which is 0,1.
@@ -1337,9 +1341,9 @@ func TestMVCCResolveTxn(t *testing.T) {
 	}
 
 	value, _, err = MVCCGet(engine, testKey1, makeTS(0, 1), true, nil)
-	if !bytes.Equal(value1.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+			value1.GetRawBytes(), value.GetRawBytes())
 	}
 }
 
@@ -1438,9 +1442,9 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	if !value.Timestamp.Equal(makeTS(1, 0)) {
 		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
 	}
-	if !bytes.Equal(value2.Bytes, value.Bytes) {
+	if !bytes.Equal(value2.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value.Bytes, value2.Bytes)
+			value.GetRawBytes(), value2.GetRawBytes())
 	}
 }
 
@@ -1495,9 +1499,9 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	if !value.Timestamp.Equal(makeTS(1, 0)) {
 		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
 	}
-	if !bytes.Equal(value3.Bytes, value.Bytes) {
+	if !bytes.Equal(value3.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value3.Bytes, value.Bytes)
+			value3.GetRawBytes(), value.GetRawBytes())
 	}
 }
 
@@ -1541,8 +1545,8 @@ func TestMVCCReadWithDiffEpochs(t *testing.T) {
 			} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
 				t.Errorf("test %d: expected write intent error; got %v", i, err)
 			}
-		} else if err != nil || value == nil || !bytes.Equal(test.expValue.Bytes, value.Bytes) {
-			t.Errorf("test %d: expected value %q, err nil; got %+v, %v", i, test.expValue.Bytes, value, err)
+		} else if err != nil || value == nil || !bytes.Equal(test.expValue.GetRawBytes(), value.GetRawBytes()) {
+			t.Errorf("test %d: expected value %q, err nil; got %+v, %v", i, test.expValue.GetRawBytes(), value, err)
 		}
 	}
 }
@@ -1586,8 +1590,8 @@ func TestMVCCReadWithPushedTimestamp(t *testing.T) {
 	}
 	// Attempt to read using naive txn's previous timestamp.
 	value, _, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, txn1)
-	if err != nil || value == nil || !bytes.Equal(value.Bytes, value1.Bytes) {
-		t.Errorf("expected value %q, err nil; got %+v, %v", value1.Bytes, value, err)
+	if err != nil || value == nil || !bytes.Equal(value.GetRawBytes(), value1.GetRawBytes()) {
+		t.Errorf("expected value %q, err nil; got %+v, %v", value1.GetRawBytes(), value, err)
 	}
 }
 
@@ -1613,9 +1617,9 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 
 	// Key2 should be committed.
 	value, _, err = MVCCGet(engine, testKey2, makeTS(0, 1), true, nil)
-	if !bytes.Equal(value2.Bytes, value.Bytes) {
+	if !bytes.Equal(value2.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value2.Bytes, value.Bytes)
+			value2.GetRawBytes(), value.GetRawBytes())
 	}
 }
 
@@ -1633,9 +1637,9 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value1.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+			value1.GetRawBytes(), value.GetRawBytes())
 	}
 
 	// Resolve with a higher commit timestamp -- this should rewrite the
@@ -1655,9 +1659,9 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 	if !value.Timestamp.Equal(makeTS(1, 0)) {
 		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
 	}
-	if !bytes.Equal(value1.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+			value1.GetRawBytes(), value.GetRawBytes())
 	}
 }
 
@@ -1674,9 +1678,9 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value1.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+			value1.GetRawBytes(), value.GetRawBytes())
 	}
 
 	// Resolve with a higher commit timestamp, but with still-pending transaction.
@@ -1697,9 +1701,9 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 	if !value.Timestamp.Equal(makeTS(1, 0)) {
 		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
 	}
-	if !bytes.Equal(value1.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+			value1.GetRawBytes(), value.GetRawBytes())
 	}
 }
 
@@ -1750,27 +1754,27 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 	}
 
 	value, _, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, nil)
-	if !bytes.Equal(value1.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+			value1.GetRawBytes(), value.GetRawBytes())
 	}
 
 	value, _, err = MVCCGet(engine, testKey2, makeTS(0, 1), true, nil)
-	if !bytes.Equal(value2.Bytes, value.Bytes) {
+	if !bytes.Equal(value2.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value2.Bytes, value.Bytes)
+			value2.GetRawBytes(), value.GetRawBytes())
 	}
 
 	value, _, err = MVCCGet(engine, testKey3, makeTS(0, 1), true, txn2)
-	if !bytes.Equal(value3.Bytes, value.Bytes) {
+	if !bytes.Equal(value3.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value3.Bytes, value.Bytes)
+			value3.GetRawBytes(), value.GetRawBytes())
 	}
 
 	value, _, err = MVCCGet(engine, testKey4, makeTS(0, 1), true, nil)
-	if !bytes.Equal(value4.Bytes, value.Bytes) {
+	if !bytes.Equal(value4.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value4.Bytes, value.Bytes)
+			value4.GetRawBytes(), value.GetRawBytes())
 	}
 }
 
@@ -1841,7 +1845,7 @@ func TestFindSplitKey(t *testing.T) {
 	for i := 0; i < splitReservoirSize; i++ {
 		k := fmt.Sprintf("%09d", i)
 		v := strings.Repeat("X", 10-len(k))
-		val := roachpb.Value{Bytes: []byte(v)}
+		val := roachpb.MakeValueFromString(v)
 		// Write the key and value through MVCC
 		if err := MVCCPut(engine, ms, []byte(k), makeTS(0, 1), val, nil); err != nil {
 			t.Fatal(err)
@@ -1946,7 +1950,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 		engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 		ms := &MVCCStats{}
-		val := roachpb.Value{Bytes: []byte(strings.Repeat("X", 10))}
+		val := roachpb.MakeValueFromString(strings.Repeat("X", 10))
 		for _, k := range test.keys {
 			if err := MVCCPut(engine, ms, []byte(k), makeTS(0, 1), val, nil); err != nil {
 				t.Fatal(err)
@@ -2037,7 +2041,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 			if test.expSplit == j {
 				expKey = key
 			}
-			val := roachpb.Value{Bytes: []byte(strings.Repeat("X", test.valSizes[j]))}
+			val := roachpb.MakeValueFromString(strings.Repeat("X", test.valSizes[j]))
 			if err := MVCCPut(engine, ms, key, makeTS(0, 1), val, nil); err != nil {
 				t.Fatal(err)
 			}
@@ -2128,7 +2132,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 
 	// Put a value.
-	value := roachpb.Value{Bytes: []byte("value")}
+	value := roachpb.MakeValueFromString("value")
 	if err := MVCCPut(engine, ms, key, ts, value, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -2190,7 +2194,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	ts4 := makeTS(4*1E9, 0)
 	txn.Timestamp = ts4
 	key2 := roachpb.Key("b")
-	value2 := roachpb.Value{Bytes: []byte("value")}
+	value2 := roachpb.MakeValueFromString("value")
 	if err := MVCCPut(engine, ms, key2, ts4, value2, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -2247,7 +2251,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 
 	// Write a transaction record which is a system-local key.
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	txnVal := roachpb.Value{Bytes: []byte("txn-data")}
+	txnVal := roachpb.MakeValueFromString("txn-data")
 	if err := MVCCPut(engine, ms, txnKey, roachpb.ZeroTimestamp, txnVal, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -2321,7 +2325,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 				}
 			}
 		} else {
-			rngVal := roachpb.Value{Bytes: randutil.RandBytes(rng, int(rng.Int31n(128)))}
+			rngVal := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, int(rng.Int31n(128))))
 			if log.V(1) {
 				log.Infof("*** PUT index %d; TXN=%t", i, txn != nil)
 			}
@@ -2372,9 +2376,9 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	ts1 := makeTS(1E9, 0)
 	ts2 := makeTS(2E9, 0)
 	ts3 := makeTS(3E9, 0)
-	val1 := roachpb.Value{Bytes: bytes, Timestamp: &ts1}
-	val2 := roachpb.Value{Bytes: bytes, Timestamp: &ts2}
-	val3 := roachpb.Value{Bytes: bytes, Timestamp: &ts3}
+	val1 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts1)
+	val2 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts2)
+	val3 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts3)
 
 	testData := []struct {
 		key       roachpb.Key
@@ -2481,8 +2485,8 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 	bytes := []byte("value")
 	ts1 := makeTS(1E9, 0)
 	ts2 := makeTS(2E9, 0)
-	val1 := roachpb.Value{Bytes: bytes, Timestamp: &ts1}
-	val2 := roachpb.Value{Bytes: bytes, Timestamp: &ts2}
+	val1 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts1)
+	val2 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts2)
 	key := roachpb.Key("a")
 	vals := []roachpb.Value{val1, val2}
 	for _, val := range vals {
@@ -2508,7 +2512,7 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	bytes := []byte("value")
 	ts1 := makeTS(1E9, 0)
 	ts2 := makeTS(2E9, 0)
-	val1 := roachpb.Value{Bytes: bytes, Timestamp: &ts1}
+	val1 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts1)
 	key := roachpb.Key("a")
 	if err := MVCCPut(engine, nil, key, ts1, val1, nil); err != nil {
 		t.Fatal(err)

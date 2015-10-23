@@ -56,11 +56,8 @@ func mustMarshal(m proto.Message) []byte {
 }
 
 func appender(s string) []byte {
-	v := &MVCCMetadata{
-		Value: &roachpb.Value{
-			Bytes: []byte(s),
-		},
-	}
+	val := roachpb.MakeValueFromString(s)
+	v := &MVCCMetadata{Value: &val}
 	return mustMarshal(v)
 }
 

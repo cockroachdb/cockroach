@@ -222,7 +222,7 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDe
 		}
 		nodeDescriptor := &roachpb.NodeDescriptor{}
 
-		if err := proto.Unmarshal(i.Value.Bytes, nodeDescriptor); err != nil {
+		if err := proto.Unmarshal(i.Value.GetRawBytes(), nodeDescriptor); err != nil {
 			return nil, err
 		}
 
@@ -277,7 +277,7 @@ func (g *Gossip) GetInfo(key string) ([]byte, error) {
 		if err := i.Value.Verify([]byte(key)); err != nil {
 			return nil, err
 		}
-		return i.Value.Bytes, nil
+		return i.Value.GetRawBytes(), nil
 	}
 	return nil, util.Errorf("key %q does not exist or has expired", key)
 }

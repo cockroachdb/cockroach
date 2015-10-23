@@ -500,13 +500,13 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		}
 		return parser.DFloat(v), nil
 	case ColumnType_STRING:
-		v, err := value.GetBytesChecked()
+		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		return parser.DString(v), nil
 	case ColumnType_BYTES:
-		v, err := value.GetBytesChecked()
+		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}

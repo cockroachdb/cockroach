@@ -90,7 +90,7 @@ func createPutRequest(key roachpb.Key, value []byte, txn *roachpb.Transaction) (
 		Span: roachpb.Span{
 			Key: key,
 		},
-		Value: roachpb.Value{Bytes: value},
+		Value: roachpb.MakeValueFromBytes(value),
 	}, h
 }
 

@@ -95,7 +95,7 @@ func (p *planner) getCachedDescriptor(plainKey descriptorKey, descriptor descrip
 			descriptor.TypeName(), plainKey.Name())
 	}
 
-	if err := proto.Unmarshal(kv.Value.Bytes, descriptor); err != nil {
+	if err := proto.Unmarshal(kv.Value.GetRawBytes(), descriptor); err != nil {
 		return err
 	}
 

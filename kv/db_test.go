@@ -100,12 +100,12 @@ func TestKVDBCoverage(t *testing.T) {
 
 	// Put values in anticipation of scan & delete range.
 	keyValues := []roachpb.KeyValue{
-		{Key: roachpb.Key("a"), Value: roachpb.Value{Bytes: value1}},
-		{Key: roachpb.Key("b"), Value: roachpb.Value{Bytes: value2}},
-		{Key: roachpb.Key("c"), Value: roachpb.Value{Bytes: value3}},
+		{Key: roachpb.Key("a"), Value: roachpb.MakeValueFromBytes(value1)},
+		{Key: roachpb.Key("b"), Value: roachpb.MakeValueFromBytes(value2)},
+		{Key: roachpb.Key("c"), Value: roachpb.MakeValueFromBytes(value3)},
 	}
 	for _, kv := range keyValues {
-		if err := db.Put(kv.Key, kv.Value.Bytes); err != nil {
+		if err := db.Put(kv.Key, kv.Value.GetRawBytes()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -115,8 +115,8 @@ func TestKVDBCoverage(t *testing.T) {
 		t.Fatalf("expected %d rows in scan; got %d", len(keyValues), len(rows))
 	} else {
 		for i, kv := range keyValues {
-			if !bytes.Equal(rows[i].ValueBytes(), kv.Value.Bytes) {
-				t.Errorf("%d: key %q, values %q != %q", i, kv.Key, rows[i].ValueBytes(), kv.Value.Bytes)
+			if !bytes.Equal(rows[i].ValueBytes(), kv.Value.GetRawBytes()) {
+				t.Errorf("%d: key %q, values %q != %q", i, kv.Key, rows[i].ValueBytes(), kv.Value.GetRawBytes())
 			}
 		}
 	}
@@ -128,8 +128,8 @@ func TestKVDBCoverage(t *testing.T) {
 		t.Fatalf("expected %d rows in scan; got %d", len(keyValues), len(rows))
 	} else {
 		for i, kv := range keyValues {
-			if !bytes.Equal(rows[len(keyValues)-1-i].ValueBytes(), kv.Value.Bytes) {
-				t.Errorf("%d: key %q, values %q != %q", i, kv.Key, rows[len(keyValues)-i].ValueBytes(), kv.Value.Bytes)
+			if !bytes.Equal(rows[len(keyValues)-1-i].ValueBytes(), kv.Value.GetRawBytes()) {
+				t.Errorf("%d: key %q, values %q != %q", i, kv.Key, rows[len(keyValues)-i].ValueBytes(), kv.Value.GetRawBytes())
 			}
 		}
 	}

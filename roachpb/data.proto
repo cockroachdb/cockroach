@@ -62,8 +62,8 @@ enum ValueType {
 // Value specifies the value at a key. Multiple values at the same key
 // are supported based on timestamp.
 message Value {
-  // bytes is the byte slice value.
-  optional bytes bytes = 1;
+  // raw_bytes is the byte slice value.
+  optional bytes raw_bytes = 1;
   // checksum is a CRC-32-IEEE checksum of the key + value, in that order.
   // If this is an integer value, then the value is interpreted as an 8
   // byte, big-endian encoded value. This value is set by the client on

@@ -82,7 +82,7 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	size := uint64(0)
 	var ent raftpb.Entry
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
-		err := proto.Unmarshal(kv.Value.GetBytes(), &ent)
+		err := proto.Unmarshal(kv.Value.GetRawBytes(), &ent)
 		if err != nil {
 			return false, err
 		}
@@ -194,7 +194,7 @@ func (r *Replica) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 	}
 	if v != nil {
 		var err error
-		_, appliedIndex, err = encoding.DecodeUint64(v.Bytes)
+		_, appliedIndex, err = encoding.DecodeUint64(v.GetRawBytes())
 		if err != nil {
 			return 0, err
 		}
@@ -207,7 +207,7 @@ func setAppliedIndex(eng engine.Engine, rangeID roachpb.RangeID, appliedIndex ui
 	return engine.MVCCPut(eng, nil, /* stats */
 		keys.RaftAppliedIndexKey(rangeID),
 		roachpb.ZeroTimestamp,
-		roachpb.Value{Bytes: encoding.EncodeUint64(nil, appliedIndex)},
+		roachpb.MakeValueFromBytes(encoding.EncodeUint64(nil, appliedIndex)),
 		nil /* txn */)
 }
 
@@ -222,7 +222,7 @@ func (r *Replica) loadLastIndex() (uint64, error) {
 	}
 	if v != nil {
 		var err error
-		_, lastIndex, err = encoding.DecodeUint64(v.Bytes)
+		_, lastIndex, err = encoding.DecodeUint64(v.GetRawBytes())
 		if err != nil {
 			return 0, err
 		}
@@ -242,9 +242,8 @@ func (r *Replica) loadLastIndex() (uint64, error) {
 // setLastIndex persists a new last index.
 func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) error {
 	return engine.MVCCPut(eng, nil, keys.RaftLastIndexKey(rangeID),
-		roachpb.ZeroTimestamp, roachpb.Value{
-			Bytes: encoding.EncodeUint64(nil, lastIndex),
-		}, nil)
+		roachpb.ZeroTimestamp,
+		roachpb.MakeValueFromBytes(encoding.EncodeUint64(nil, lastIndex)), nil)
 }
 
 // Snapshot implements the raft.Storage interface.

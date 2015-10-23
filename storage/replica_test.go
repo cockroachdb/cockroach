@@ -532,10 +532,8 @@ func TestRangeNotLeaderError(t *testing.T) {
 		},
 		// Put covers read-write commands.
 		&roachpb.PutRequest{
-			Span: header,
-			Value: roachpb.Value{
-				Bytes: []byte("value"),
-			},
+			Span:  header,
+			Value: roachpb.MakeValueFromString("value"),
 		},
 	}
 
@@ -878,9 +876,7 @@ func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 		Span: roachpb.Span{
 			Key: key,
 		},
-		Value: roachpb.Value{
-			Bytes: value,
-		},
+		Value: roachpb.MakeValueFromBytes(value),
 	}
 }
 
@@ -1215,7 +1211,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	blockingDone := make(chan struct{})
 	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
 		put, ok := args.(*roachpb.PutRequest)
-		if ok && bytes.Equal(put.Key, key) && bytes.Equal(put.Value.Bytes, []byte{1}) {
+		if ok && bytes.Equal(put.Key, key) && bytes.Equal(put.Value.GetRawBytes(), []byte{1}) {
 			blockingStart <- struct{}{}
 			<-blockingDone
 		}
@@ -1512,7 +1508,7 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 
 	// Overwrite repsonse cache entry with garbage for the last op.
 	key := keys.ResponseCacheKey(tc.rng.Desc().RangeID, &cmdID)
-	err := engine.MVCCPut(tc.engine, nil, key, roachpb.ZeroTimestamp, roachpb.Value{Bytes: []byte("\xff")}, nil)
+	err := engine.MVCCPut(tc.engine, nil, key, roachpb.ZeroTimestamp, roachpb.MakeValueFromString("\xff"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2373,7 +2369,7 @@ func TestMerge(t *testing.T) {
 	stringExpected := "abcd"
 
 	for _, str := range stringArgs {
-		mergeArgs := internalMergeArgs(key, roachpb.Value{Bytes: []byte(str)})
+		mergeArgs := internalMergeArgs(key, roachpb.MakeValueFromString(str))
 
 		if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &mergeArgs); err != nil {
 			t.Fatalf("unexpected error from Merge: %s", err.Error())
@@ -2390,7 +2386,7 @@ func TestMerge(t *testing.T) {
 	if resp.Value == nil {
 		t.Fatal("GetResponse had nil value")
 	}
-	if a, e := resp.Value.Bytes, []byte(stringExpected); !bytes.Equal(a, e) {
+	if a, e := resp.Value.GetRawBytes(), []byte(stringExpected); !bytes.Equal(a, e) {
 		t.Errorf("Get did not return expected value: %s != %s", string(a), e)
 	}
 }
@@ -2511,16 +2507,13 @@ func TestConditionFailedError(t *testing.T) {
 	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
+	val := roachpb.MakeValueFromString("moo")
 	args := roachpb.ConditionalPutRequest{
 		Span: roachpb.Span{
 			Key: key,
 		},
-		Value: roachpb.Value{
-			Bytes: value,
-		},
-		ExpValue: &roachpb.Value{
-			Bytes: []byte("moo"),
-		},
+		Value:    roachpb.MakeValueFromBytes(value),
+		ExpValue: &val,
 	}
 
 	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: roachpb.MinTimestamp}, &args)
@@ -2528,7 +2521,7 @@ func TestConditionFailedError(t *testing.T) {
 	if cErr, ok := err.(*roachpb.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
 			err, err)
-	} else if v := cErr.ActualValue; v == nil || !bytes.Equal(v.Bytes, value) {
+	} else if v := cErr.ActualValue; v == nil || !bytes.Equal(v.GetRawBytes(), value) {
 		t.Errorf("ConditionFailedError with bytes %q expected, but got %+v",
 			value, v)
 	}
@@ -3117,13 +3110,13 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Add(&roachpb.PutRequest{
 		Span:  roachpb.Span{Key: roachpb.Key("k")},
-		Value: roachpb.Value{Bytes: []byte("not nil")},
+		Value: roachpb.MakeValueFromString("not nil"),
 	})
 	// This one fails with a ConditionalPutError, which implements
 	// roachpb.IndexedError.
 	ba.Add(&roachpb.ConditionalPutRequest{
 		Span:     roachpb.Span{Key: roachpb.Key("k")},
-		Value:    roachpb.Value{Bytes: []byte("irrelevant")},
+		Value:    roachpb.MakeValueFromString("irrelevant"),
 		ExpValue: nil, // not true after above Put
 	})
 	// This one is never executed.
@@ -3152,7 +3145,7 @@ func TestWriteWithoutCmdID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Add(&roachpb.PutRequest{
 		Span:  roachpb.Span{Key: roachpb.Key("k")},
-		Value: roachpb.Value{Bytes: []byte("not nil")},
+		Value: roachpb.MakeValueFromString("not nil"),
 	})
 
 	if _, pErr := tc.rng.Send(tc.rng.context(), ba); !testutils.IsError(pErr.GoError(), "write request without CmdID") {

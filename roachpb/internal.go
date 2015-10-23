@@ -33,8 +33,8 @@ func (ts *InternalTimeSeriesData) ToValue() (*Value, error) {
 		return nil, err
 	}
 	return &Value{
-		Bytes: b,
-		Tag:   ValueType_TIMESERIES,
+		RawBytes: b,
+		Tag:      ValueType_TIMESERIES,
 	}, nil
 }
 
@@ -45,7 +45,7 @@ func InternalTimeSeriesDataFromValue(value *Value) (*InternalTimeSeriesData, err
 		return nil, fmt.Errorf("value is not tagged as containing TimeSeriesData: %v", value)
 	}
 	var ts InternalTimeSeriesData
-	err := proto.Unmarshal(value.Bytes, &ts)
+	err := proto.Unmarshal(value.RawBytes, &ts)
 	if err != nil {
 		return nil, fmt.Errorf("TimeSeriesData could not be unmarshalled from value: %v %s", value, err)
 	}

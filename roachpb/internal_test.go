@@ -61,7 +61,7 @@ func TestTimeSeriesToValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error marshaling TimeSeriesData: %s", err.Error())
 	}
-	if a, e := valueOriginal.Bytes, tsEncoded; !bytes.Equal(a, e) {
+	if a, e := valueOriginal.RawBytes, tsEncoded; !bytes.Equal(a, e) {
 		t.Errorf("bytes field was not properly encoded: expected %v, got %v", e, a)
 	}
 
@@ -76,7 +76,7 @@ func TestTimeSeriesToValue(t *testing.T) {
 
 	// Make sure ExtractTimeSeries doesn't work on non-TimeSeries values
 	valueNotTs := &Value{
-		Bytes: []byte("testvalue"),
+		RawBytes: []byte("testvalue"),
 	}
 	if _, err := InternalTimeSeriesDataFromValue(valueNotTs); err == nil {
 		t.Errorf("did not receive expected error when extracting TimeSeries from regular Byte value.")

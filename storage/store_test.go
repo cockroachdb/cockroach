@@ -888,7 +888,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 		// Second, lay down intent using the pushee's txn.
 		h := roachpb.Header{Txn: pushee}
-		args.Value.Bytes = []byte("value2")
+		args.Value.SetBytes([]byte("value2"))
 		if _, err := client.SendWrappedWith(store.testSender(), nil, h, &args); err != nil {
 			t.Fatal(err)
 		}
@@ -902,8 +902,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		if test.resolvable {
 			if err != nil {
 				t.Errorf("%d: expected read to succeed: %s", i, err)
-			} else if gReply := firstReply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
-				t.Errorf("%d: expected bytes to be %q, got %q", i, "value1", gReply.Value.Bytes)
+			} else if gReply := firstReply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
+				t.Errorf("%d: expected bytes to be %q, got %q", i, "value1", gReply.Value.GetRawBytes())
 			}
 
 			// Finally, try to end the pushee's transaction; if we have
@@ -936,8 +936,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			if test.pusheeIso == roachpb.SNAPSHOT {
 				if err != nil {
 					t.Errorf("expected read to succeed: %s", err)
-				} else if gReply := firstReply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
-					t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.Bytes)
+				} else if gReply := firstReply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
+					t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.GetRawBytes())
 				}
 			} else {
 				if err == nil {
@@ -974,7 +974,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// Lay down intent using the pushee's txn.
 	h := roachpb.Header{Txn: pushee}
 	h.Timestamp = store.ctx.Clock.Now()
-	args.Value.Bytes = []byte("value2")
+	args.Value.SetBytes([]byte("value2"))
 	if _, err := client.SendWrappedWith(store.testSender(), nil, h, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -986,8 +986,8 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	h.Timestamp = gTS
 	if reply, err := client.SendWrappedWith(store.testSender(), nil, h, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
-	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
-		t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.Bytes)
+	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
+		t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.GetRawBytes())
 	}
 
 	// Finally, try to end the pushee's transaction; since it's got
@@ -1042,7 +1042,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	{
 		// Next, try to write outside of a transaction. We will succeed in pushing txn.
 		putTS := store.ctx.Clock.Now()
-		args.Value.Bytes = []byte("value2")
+		args.Value.SetBytes([]byte("value2"))
 		if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			Timestamp:    putTS,
 			UserPriority: proto.Int32(math.MaxInt32),
@@ -1124,7 +1124,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		if canPush {
 			priority = -1
 		}
-		args.Value.Bytes = []byte("value2")
+		args.Value.SetBytes([]byte("value2"))
 		txnA := newTransaction("testA", keyA, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		txnB := newTransaction("testB", keyB, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 		for _, txn := range []*roachpb.Transaction{txnA, txnB} {
@@ -1147,7 +1147,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
-		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
+		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
 			t.Errorf("expected value %q, got %+v", []byte("value1"), gReply.Value)
 		}
 		gArgs.Key = keyB
@@ -1167,7 +1167,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 				ReadConsistency: roachpb.INCONSISTENT,
 			}, &gArgs); err != nil {
 				return util.Errorf("expected read to succeed: %s", err)
-			} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value2")) {
+			} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value2")) {
 				return util.Errorf("expected value %q, got %+v", []byte("value2"), gReply.Value)
 			}
 			return nil
@@ -1188,10 +1188,10 @@ func TestStoreReadInconsistent(t *testing.T) {
 			t.Errorf("expected key %q; got %q", keyA, key)
 		} else if key := sReply.Rows[1].Key; !key.Equal(keyB) {
 			t.Errorf("expected key %q; got %q", keyB, key)
-		} else if val := sReply.Rows[0].Value.Bytes; !bytes.Equal(val, []byte("value1")) {
-			t.Errorf("expected value %q, got %q", []byte("value1"), sReply.Rows[0].Value.Bytes)
-		} else if val := sReply.Rows[1].Value.Bytes; !bytes.Equal(val, []byte("value2")) {
-			t.Errorf("expected value %q, got %q", []byte("value2"), sReply.Rows[1].Value.Bytes)
+		} else if val := sReply.Rows[0].Value.GetRawBytes(); !bytes.Equal(val, []byte("value1")) {
+			t.Errorf("expected value %q, got %q", []byte("value1"), sReply.Rows[0].Value.GetRawBytes())
+		} else if val := sReply.Rows[1].Value.GetRawBytes(); !bytes.Equal(val, []byte("value2")) {
+			t.Errorf("expected value %q, got %q", []byte("value2"), sReply.Rows[1].Value.GetRawBytes())
 		}
 	}
 }

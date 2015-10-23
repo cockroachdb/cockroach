@@ -668,7 +668,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 				// Intent is a deletion.
 				continue
 			}
-			rd, err := checkAndUnmarshal(val.Bytes)
+			rd, err := checkAndUnmarshal(val.GetRawBytes())
 			if err != nil {
 				return reply, nil, err
 			}
@@ -685,7 +685,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 	// Decode all scanned range descriptors which haven't been unmarshaled yet.
 	for _, kv := range kvs[len(rds):] {
 		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
-		rd, err := checkAndUnmarshal(kv.Value.Bytes)
+		rd, err := checkAndUnmarshal(kv.Value.GetRawBytes())
 		if err != nil {
 			return reply, nil, err
 		}

@@ -443,7 +443,7 @@ func NewPut(key Key, value Value) Request {
 func NewConditionalPut(key Key, value, expValue Value) Request {
 	value.InitChecksum(key)
 	var expValuePtr *Value
-	if expValue.Bytes != nil {
+	if expValue.GetRawBytes() != nil {
 		expValuePtr = &expValue
 		expValue.InitChecksum(key)
 	}

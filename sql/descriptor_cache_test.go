@@ -202,7 +202,7 @@ func TestDescriptorCache(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s not found", configDescKey)
 	}
-	cfg.Values[configDescIndex].Value.Bytes = raw
+	cfg.Values[configDescIndex].Value.SetBytes(raw)
 	if err := s.Gossip().AddInfoProto(gossip.KeySystemConfig, cfg, 0); err != nil {
 		t.Fatal(err)
 	}

@@ -73,7 +73,7 @@ func TestNodeEventFeed(t *testing.T) {
 		},
 		{
 			publishTo: func(nef status.NodeEventFeed) {
-				nef.CallComplete(wrap(roachpb.NewPut(roachpb.Key("abc"), roachpb.Value{Bytes: []byte("def")})), nil)
+				nef.CallComplete(wrap(roachpb.NewPut(roachpb.Key("abc"), roachpb.MakeValueFromString("def"))), nil)
 			},
 			expected: &status.CallSuccessEvent{
 				NodeID: roachpb.NodeID(1),

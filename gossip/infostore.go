@@ -117,15 +117,10 @@ func (is *infoStore) newInfo(val []byte, ttl time.Duration) *info {
 	if ttl == 0 {
 		ttlStamp = math.MaxInt64
 	}
-
+	v := roachpb.MakeValueFromBytesAndTimestamp(val, roachpb.Timestamp{WallTime: now})
 	return &info{
 		Info: Info{
-			Value: roachpb.Value{
-				Bytes: val,
-				Timestamp: &roachpb.Timestamp{
-					WallTime: now,
-				},
-			},
+			Value:    v,
 			TTLStamp: ttlStamp,
 			NodeID:   is.NodeID,
 		},
@@ -169,7 +164,7 @@ func (is *infoStore) addInfo(key string, i *info) error {
 	if i.seq > is.MaxSeq {
 		is.MaxSeq = i.seq
 	}
-	is.processCallbacks(key, i.Value.Bytes)
+	is.processCallbacks(key, i.Value.GetRawBytes())
 	return nil
 }
 
@@ -206,7 +201,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
 		for key, i := range infos {
-			method(key, i.Value.Bytes)
+			method(key, i.Value.GetRawBytes())
 		}
 	}()
 }

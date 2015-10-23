@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 // Batch provides for the parallel execution of a number of database
@@ -127,10 +126,8 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
 					t := reply.(*roachpb.IncrementResponse)
-					row.Value = &roachpb.Value{
-						Bytes: encoding.EncodeUint64(nil, uint64(t.NewValue)),
-						Tag:   roachpb.ValueType_INT,
-					}
+					row.Value = &roachpb.Value{}
+					row.Value.SetInt(t.NewValue)
 					row.setTimestamp(t.Timestamp)
 				}
 			case *roachpb.ScanRequest:

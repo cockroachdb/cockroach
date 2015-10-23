@@ -261,9 +261,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 	offset := 4000 * time.Millisecond
 	s.Clock.SetMaxOffset(offset)
 	key := roachpb.Key("key")
-	value := roachpb.Value{
-		Bytes: nil, // Set for each Put
-	}
+	value := roachpb.Value{}
 	// With the correct restart behaviour, we see only one restart
 	// and the value read is the very first one (as nothing else
 	// has been written)
@@ -275,7 +273,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 		s.Manual.Increment(1)
 		futureTS := s.Clock.Now()
 		futureTS.WallTime++
-		value.Bytes = []byte(fmt.Sprintf("value-%d", i))
+		value.SetBytes([]byte(fmt.Sprintf("value-%d", i)))
 		if err := engine.MVCCPut(s.Eng, nil, key, futureTS, value, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -323,11 +321,13 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	// Write keySlow at now+offset, keyFast at now+2*offset
 	futureTS := s.Clock.Now()
 	futureTS.WallTime += offsetNS
-	if err := engine.MVCCPut(s.Eng, nil, keySlow, futureTS, roachpb.Value{Bytes: valSlow}, nil); err != nil {
+	val := roachpb.MakeValueFromBytes(valSlow)
+	if err := engine.MVCCPut(s.Eng, nil, keySlow, futureTS, val, nil); err != nil {
 		t.Fatal(err)
 	}
 	futureTS.WallTime += offsetNS
-	if err := engine.MVCCPut(s.Eng, nil, keyFast, futureTS, roachpb.Value{Bytes: valFast}, nil); err != nil {
+	val.SetBytes(valFast)
+	if err := engine.MVCCPut(s.Eng, nil, keyFast, futureTS, val, nil); err != nil {
 		t.Fatal(err)
 	}
 
