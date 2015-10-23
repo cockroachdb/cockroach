@@ -617,11 +617,10 @@ func Flush() {
 
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
-	// Boolean flags. Not handled atomically because the flag.Value interface
-	// does not let us avoid the =true, and that shorthand is necessary for
-	// compatibility. TODO: does this matter enough to fix? Seems unlikely.
-	toStderr        bool          // The -logtostderr flag.
-	alsoToStderr    bool          // The -alsologtostderr flag.
+	// Boolean flags.
+	toStderr     bool // The -logtostderr flag. Updated atomically.
+	alsoToStderr bool // The -alsologtostderr flag. Updated atomically.
+
 	color           string        // The -color flag.
 	hasColorProfile *bool         // Non-nil if the color profile has been determined
 	colorProfile    *colorProfile // Set via call to getTermColorProfile
