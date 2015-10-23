@@ -719,16 +719,17 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 			StoreID:   2,
 		},
 	}
-	args := roachpb.BatchRequest{}
-	args.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
-	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), args)
+	ba := roachpb.BatchRequest{}
+	ba.CmdID = ba.GetOrCreateCmdID(0)
+	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
+	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
 	var err error
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		err = (<-pendingCmd.done).Err
 	}
-	if err == nil {
-		t.Error("error: successfully obtained lease for a store that was not in the RangeDescriptor", err)
+	if !testutils.IsError(err, "replica not found") {
+		t.Errorf("unexpected error obtaining lease for invalid store: %v", err)
 	}
 }
 

@@ -1017,12 +1017,14 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 	// Verify details of new lease request. The start of this lease must
 	// obviously precede its expiration.
 	if !args.Lease.Start.Less(args.Lease.Expiration) {
+		rErr.Message = "expiration precedes start"
 		return reply, rErr
 	}
 
 	// Verify that requestion replica is part of the current replica set.
 	desc := r.Desc()
 	if idx, _ := desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
+		rErr.Message = "replica not found"
 		return reply, rErr
 	}
 
@@ -1050,11 +1052,13 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 
 	if isExtension {
 		if effectiveStart.Less(prevLease.Start) {
+			rErr.Message = "extension moved start timestamp backwards"
 			return reply, rErr
 		}
 		// Note that the lease expiration can be shortened by the holder.
 		// This could be used to effect a faster lease handoff.
 	} else if effectiveStart.Less(prevLease.Expiration) {
+		rErr.Message = "requested lease overlaps previous lease"
 		return reply, rErr
 	}
 
