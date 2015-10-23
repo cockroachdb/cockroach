@@ -17,13 +17,50 @@
 
 package logflags
 
-import "flag"
+import (
+	"flag"
+	"strconv"
+	"sync"
+)
+
+type atomicBool struct {
+	sync.Mutex
+	b *bool
+}
+
+func (ab *atomicBool) IsBoolFlag() bool {
+	return true
+}
+
+func (ab *atomicBool) String() string {
+	ab.Lock()
+	defer ab.Unlock()
+	return strconv.FormatBool(*ab.b)
+}
+
+func (ab *atomicBool) Set(s string) error {
+	ab.Lock()
+	defer ab.Unlock()
+	b, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	*ab.b = b
+	return nil
+}
+
+func (ab *atomicBool) Get() string {
+	return ab.String()
+}
+
+var _ flag.Value = &atomicBool{}
 
 // InitFlags creates logging flags which update the given variables.
 func InitFlags(toStderr *bool, alsoToStderr *bool, logDir, color *string,
 	verbosity, vmodule, traceLocation flag.Value) {
-	flag.BoolVar(toStderr, "logtostderr", true, "log to standard error instead of files")
-	flag.BoolVar(alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
+	*toStderr = true // wonky way of specifying a default
+	flag.Var(&atomicBool{b: toStderr}, "logtostderr", "log to standard error instead of files")
+	flag.Var(&atomicBool{b: alsoToStderr}, "alsologtostderr", "log to standard error as well as files")
 	flag.StringVar(color, "color", "auto", "colorize standard error output according to severity")
 	flag.Var(verbosity, "verbosity", "log level for V logs")
 	// TODO(tschottdorf): decide if we need this.
