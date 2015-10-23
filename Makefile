@@ -173,7 +173,7 @@ $(GLOCK):
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
 .bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE
-	@glock sync github.com/cockroachdb/cockroach
+	@$(GLOCK) sync github.com/cockroachdb/cockroach
 	touch $@
 
 -include .bootstrap
