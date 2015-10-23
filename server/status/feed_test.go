@@ -92,7 +92,11 @@ func TestNodeEventFeed(t *testing.T) {
 		{
 			publishTo: func(nef status.NodeEventFeed) {
 				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), &roachpb.Error{
-					Index:   &roachpb.ErrPosition{Index: 0},
+					Detail: &roachpb.ErrorDetail{
+						WriteIntent: &roachpb.WriteIntentError{
+							Index: &roachpb.ErrPosition{Index: 0},
+						},
+					},
 					Message: "boo",
 				})
 			},
@@ -302,7 +306,11 @@ func TestNodeEventFeedTransactionRestart(t *testing.T) {
 	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), &roachpb.Error{
 		TransactionRestart: roachpb.TransactionRestart_ABORT})
 	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), &roachpb.Error{
-		Index:              &roachpb.ErrPosition{Index: 0},
+		Detail: &roachpb.ErrorDetail{
+			WriteIntent: &roachpb.WriteIntentError{
+				Index: &roachpb.ErrPosition{Index: 0},
+			},
+		},
 		TransactionRestart: roachpb.TransactionRestart_ABORT,
 	})
 

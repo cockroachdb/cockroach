@@ -595,9 +595,6 @@ type Error struct {
 	// If an ErrorDetail is present, it may contain additional structured data
 	// about the error.
 	Detail *ErrorDetail `protobuf:"bytes,4,opt,name=detail" json:"detail,omitempty"`
-	// The index, if given, contains the index of the request (in the batch)
-	// whose execution caused the error.
-	Index *ErrPosition `protobuf:"bytes,5,opt,name=index" json:"index,omitempty"`
 }
 
 func (m *Error) Reset()      { *m = Error{} }
@@ -627,13 +624,6 @@ func (m *Error) GetTransactionRestart() TransactionRestart {
 func (m *Error) GetDetail() *ErrorDetail {
 	if m != nil {
 		return m.Detail
-	}
-	return nil
-}
-
-func (m *Error) GetIndex() *ErrPosition {
-	if m != nil {
-		return m.Index
 	}
 	return nil
 }
@@ -1359,16 +1349,6 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		}
 		i += n34
 	}
-	if m.Index != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.Index.Size()))
-		n35, err := m.Index.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n35
-	}
 	return i, nil
 }
 
@@ -1646,10 +1626,6 @@ func (m *Error) Size() (n int) {
 	n += 1 + sovErrors(uint64(m.TransactionRestart))
 	if m.Detail != nil {
 		l = m.Detail.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.Index != nil {
-		l = m.Index.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
 	return n
@@ -4077,39 +4053,6 @@ func (m *Error) Unmarshal(data []byte) error {
 				m.Detail = &ErrorDetail{}
 			}
 			if err := m.Detail.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 5:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthErrors
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Index == nil {
-				m.Index = &ErrPosition{}
-			}
-			if err := m.Index.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
