@@ -3140,3 +3140,32 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	}
 
 }
+
+// TestWriteWithoutCmdID verifies that a write is required to have a CmdID set.
+func TestWriteWithoutCmdID(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// A write needs a CmdID or it will error out.
+	ba := roachpb.BatchRequest{}
+	ba.Add(&roachpb.PutRequest{
+		Span:  roachpb.Span{Key: roachpb.Key("k")},
+		Value: roachpb.Value{Bytes: []byte("not nil")},
+	})
+
+	if _, pErr := tc.rng.Send(tc.rng.context(), ba); !testutils.IsError(pErr.GoError(), "write request without CmdID") {
+		t.Fatalf("expected an error, but not this one: %v", pErr.GoError())
+	}
+
+	// A read should be fine without.
+	ba = roachpb.BatchRequest{}
+	ba.Add(&roachpb.GetRequest{
+		Span: roachpb.Span{Key: roachpb.Key("k")},
+	})
+
+	if _, pErr := tc.rng.Send(tc.rng.context(), ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+}

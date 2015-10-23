@@ -1006,6 +1006,9 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 
 	// Check the response cache for this batch to ensure idempotency.
 	if ba.IsWrite() {
+		if ba.CmdID == roachpb.ZeroCmdID {
+			return btch, nil, nil, util.Errorf("write request without CmdID: %s", ba)
+		}
 		if replyWithErr, readErr := r.respCache.GetResponse(btch, ba.CmdID); readErr != nil {
 			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
 		} else if replyWithErr.Reply != nil {
@@ -1032,7 +1035,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 				// was present in the cached entry (if any).
 				return btch, replyWithErr.Reply, nil, replyWithErr.Err
 			}
-			log.Warningf("TODO(tschottdorf): manifestation of #2297: %s hit cache for: %+v", ba, replyWithErr.Reply)
+			log.Warningf("TODO(tschottdorf): #2297: %s hit cache for: <%T,%T>", ba, replyWithErr.Reply, replyWithErr.Err)
 		}
 	}
 
