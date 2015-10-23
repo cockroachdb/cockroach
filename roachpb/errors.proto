@@ -148,8 +148,9 @@ message ConditionFailedError {
 // A LeaseRejectedError indicates that the requested replica could
 // not acquire the desired lease because of an existing leader lease.
 message LeaseRejectedError {
-  optional Lease Requested = 1 [(gogoproto.nullable) = false];
-  optional Lease Existing = 2 [(gogoproto.nullable) = false];
+  optional string message = 1 [(gogoproto.nullable) = false];
+  optional Lease requested = 2 [(gogoproto.nullable) = false];
+  optional Lease existing = 3 [(gogoproto.nullable) = false];
 }
 
 // A SendError indicates that a message could not be delivered to

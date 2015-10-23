@@ -384,12 +384,20 @@ func (m *ConditionFailedError) GetIndex() *ErrPosition {
 // A LeaseRejectedError indicates that the requested replica could
 // not acquire the desired lease because of an existing leader lease.
 type LeaseRejectedError struct {
-	Requested Lease `protobuf:"bytes,1,opt,name=Requested" json:"Requested"`
-	Existing  Lease `protobuf:"bytes,2,opt,name=Existing" json:"Existing"`
+	Message   string `protobuf:"bytes,1,opt,name=message" json:"message"`
+	Requested Lease  `protobuf:"bytes,2,opt,name=requested" json:"requested"`
+	Existing  Lease  `protobuf:"bytes,3,opt,name=existing" json:"existing"`
 }
 
 func (m *LeaseRejectedError) Reset()      { *m = LeaseRejectedError{} }
 func (*LeaseRejectedError) ProtoMessage() {}
+
+func (m *LeaseRejectedError) GetMessage() string {
+	if m != nil {
+		return m.Message
+	}
+	return ""
+}
 
 func (m *LeaseRejectedError) GetRequested() Lease {
 	if m != nil {
@@ -1071,13 +1079,17 @@ func (m *LeaseRejectedError) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
+	i = encodeVarintErrors(data, i, uint64(len(m.Message)))
+	i += copy(data[i:], m.Message)
+	data[i] = 0x12
+	i++
 	i = encodeVarintErrors(data, i, uint64(m.Requested.Size()))
 	n17, err := m.Requested.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n17
-	data[i] = 0x12
+	data[i] = 0x1a
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Existing.Size()))
 	n18, err := m.Existing.MarshalTo(data[i:])
@@ -1534,6 +1546,8 @@ func (m *ConditionFailedError) Size() (n int) {
 func (m *LeaseRejectedError) Size() (n int) {
 	var l int
 	_ = l
+	l = len(m.Message)
+	n += 1 + l + sovErrors(uint64(l))
 	l = m.Requested.Size()
 	n += 1 + l + sovErrors(uint64(l))
 	l = m.Existing.Size()
@@ -3115,6 +3129,35 @@ func (m *LeaseRejectedError) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Message", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Message = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Requested", wireType)
 			}
 			var msglen int
@@ -3143,7 +3186,7 @@ func (m *LeaseRejectedError) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 2:
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Existing", wireType)
 			}
