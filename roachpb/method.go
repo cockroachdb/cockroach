@@ -51,7 +51,11 @@ const (
 	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
 	// the latter endpoint excluded.
 	ReverseScan
-	// BeginTransaction starts a new transaction.
+	// BeginTransaction writes a new transaction record, marking the
+	// beginning of the write-portion of a transaction. It is sent
+	// exclusively by the coordinating node along with the first
+	// transactional write and neither sent nor received by the client
+	// itself.
 	BeginTransaction
 	// EndTransaction either commits or aborts an ongoing transaction.
 	EndTransaction

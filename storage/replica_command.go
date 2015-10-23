@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -252,6 +251,16 @@ func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.Header, args roachp
 	return reply, intents, err
 }
 
+func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
+	if h.Txn == nil {
+		return util.Errorf("no transaction specified to HeartbeatTxn")
+	}
+	if !bytes.Equal(args.Header().Key, h.Txn.Key) {
+		return util.Errorf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
+	}
+	return nil
+}
+
 // BeginTransaction writes the initial transaction record. Fails in
 // the event that a transaction record is already written. This may
 // occur if a transaction is started with a batch containing writes
@@ -261,13 +270,9 @@ func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.Header, args roachp
 func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.BeginTransactionRequest) (roachpb.BeginTransactionResponse, error) {
 	var reply roachpb.BeginTransactionResponse
 
-	if h.Txn == nil {
-		return reply, util.Errorf("no transaction specified to BeginTransaction")
+	if err := verifyTransaction(h, &args); err != nil {
+		return reply, err
 	}
-	if !bytes.Equal(args.Key, h.Txn.Key) {
-		return reply, util.Errorf("request key %s should match txn key %s", args.Key, h.Txn.Key)
-	}
-
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
 	// Verify transaction does not already exist.
@@ -284,12 +289,11 @@ func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h 
 			// this run should have an upgraded epoch. This is a pass
 			// through to set the new transaction record.
 		} else {
-			return reply, util.Errorf("non-aborted transaction exists already: %s", txn)
+			return reply, roachpb.NewTransactionStatusError(txn, "non-aborted transaction exists already")
 		}
 	}
 
 	// Write the txn record.
-	log.Infof("begin txn %s on store %d", uuid.UUID(h.Txn.ID).Short(), r.rm.StoreID())
 	err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, h.Txn)
 	return reply, err
 }
@@ -302,11 +306,8 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	var reply roachpb.EndTransactionResponse
 	ts := h.Timestamp // all we're going to use from the header.
 
-	if h.Txn == nil {
-		return reply, nil, util.Errorf("no transaction specified to EndTransaction")
-	}
-	if !bytes.Equal(args.Key, h.Txn.Key) {
-		return reply, nil, util.Errorf("request key %s should match txn key %s", args.Key, h.Txn.Key)
+	if err := verifyTransaction(h, &args); err != nil {
+		return reply, nil, err
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
@@ -314,7 +315,6 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	// Fetch existing transaction.
 	reply.Txn = &roachpb.Transaction{}
 	ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, reply.Txn)
-	log.Infof("fetching on end txn %s on store %d: %t", uuid.UUID(h.Txn.ID).Short(), r.rm.StoreID(), ok)
 	if err != nil {
 		return reply, nil, err
 	} else if !ok {
@@ -444,7 +444,6 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			if log.V(1) {
 				log.Infof("auto-gc'ed %s (%d intents)", h.Txn.Short(), len(args.Intents))
 			}
-			log.Infof("clearing out txn record on store %d", r.rm.StoreID())
 			err = engine.MVCCDelete(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
 		} else {
 			err = engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */, reply.Txn)
@@ -759,11 +758,8 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roac
 	var reply roachpb.HeartbeatTxnResponse
 	ts := h.Timestamp // all we're going to use from the header.
 
-	if h.Txn == nil {
-		return reply, util.Errorf("no transaction specified to HeartbeatTxn")
-	}
-	if !bytes.Equal(args.Key, h.Txn.Key) {
-		return reply, util.Errorf("request key %s should match txn key %s", args.Key, h.Txn.Key)
+	if err := verifyTransaction(h, &args); err != nil {
+		return reply, err
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
@@ -776,7 +772,7 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roac
 		// This could mean the heartbeat is a delayed relic or it could
 		// mean that the BeginTransaction call was delayed. In either
 		// case, there's no reason to persist a new transaction record.
-		return reply, nil
+		return reply, util.Errorf("heartbeat for transaction %s failed; record not present", h.Txn)
 	}
 
 	if txn.Status == roachpb.PENDING {
@@ -1559,7 +1555,6 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 
 	r.Unlock()
 
-	log.Infof("starting change replicas from %s to %s", desc, updatedDesc)
 	err := r.rm.DB().Txn(func(txn *client.Txn) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.

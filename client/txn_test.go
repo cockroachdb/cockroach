@@ -300,7 +300,9 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 		return ba.CreateReply(), nil
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
-		txn.Get("foo")
+		if _, err := txn.Get("foo"); err != nil {
+			return err
+		}
 		return txn.Put("a", "b")
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
