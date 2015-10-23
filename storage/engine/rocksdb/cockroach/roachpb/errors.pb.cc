@@ -293,7 +293,8 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ConditionFailedError, _internal_metadata_),
       -1);
   LeaseRejectedError_descriptor_ = file->message_type(13);
-  static const int LeaseRejectedError_offsets_[2] = {
+  static const int LeaseRejectedError_offsets_[3] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaseRejectedError, message_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaseRejectedError, requested_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaseRejectedError, existing_),
   };
@@ -529,45 +530,46 @@ void protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto() {
     "ror\"u\n\024ConditionFailedError\022.\n\014actual_va"
     "lue\030\001 \001(\0132\030.cockroach.roachpb.Value\022-\n\005i"
     "ndex\030\002 \001(\0132\036.cockroach.roachpb.ErrPositi"
-    "on\"y\n\022LeaseRejectedError\0221\n\tRequested\030\001 "
-    "\001(\0132\030.cockroach.roachpb.LeaseB\004\310\336\037\000\0220\n\010E"
-    "xisting\030\002 \001(\0132\030.cockroach.roachpb.LeaseB"
-    "\004\310\336\037\000\";\n\tSendError\022\025\n\007message\030\001 \001(\tB\004\310\336\037"
-    "\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\"\361\007\n\013ErrorDeta"
-    "il\0225\n\nnot_leader\030\001 \001(\0132!.cockroach.roach"
-    "pb.NotLeaderError\022>\n\017range_not_found\030\002 \001"
-    "(\0132%.cockroach.roachpb.RangeNotFoundErro"
-    "r\022D\n\022range_key_mismatch\030\003 \001(\0132(.cockroac"
-    "h.roachpb.RangeKeyMismatchError\022_\n read_"
-    "within_uncertainty_interval\030\004 \001(\01325.cock"
-    "roach.roachpb.ReadWithinUncertaintyInter"
-    "valError\022G\n\023transaction_aborted\030\005 \001(\0132*."
-    "cockroach.roachpb.TransactionAbortedErro"
-    "r\022A\n\020transaction_push\030\006 \001(\0132\'.cockroach."
-    "roachpb.TransactionPushError\022C\n\021transact"
-    "ion_retry\030\007 \001(\0132(.cockroach.roachpb.Tran"
-    "sactionRetryError\022E\n\022transaction_status\030"
-    "\010 \001(\0132).cockroach.roachpb.TransactionSta"
-    "tusError\0229\n\014write_intent\030\t \001(\0132#.cockroa"
-    "ch.roachpb.WriteIntentError\022:\n\rwrite_too"
-    "_old\030\n \001(\0132#.cockroach.roachpb.WriteTooO"
-    "ldError\022>\n\017op_requires_txn\030\013 \001(\0132%.cockr"
-    "oach.roachpb.OpRequiresTxnError\022A\n\020condi"
-    "tion_failed\030\014 \001(\0132\'.cockroach.roachpb.Co"
-    "nditionFailedError\022=\n\016lease_rejected\030\r \001"
-    "(\0132%.cockroach.roachpb.LeaseRejectedErro"
-    "r\022A\n\020node_unavailable\030\016 \001(\0132\'.cockroach."
-    "roachpb.NodeUnavailableError\022*\n\004send\030\017 \001"
-    "(\0132\034.cockroach.roachpb.SendError:\004\310\240\037\001\"\""
-    "\n\013ErrPosition\022\023\n\005index\030\001 \001(\005B\004\310\336\037\000\"\340\001\n\005E"
-    "rror\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable"
-    "\030\002 \001(\010B\004\310\336\037\000\022H\n\023transaction_restart\030\003 \001("
-    "\0162%.cockroach.roachpb.TransactionRestart"
-    "B\004\310\336\037\000\022.\n\006detail\030\004 \001(\0132\036.cockroach.roach"
-    "pb.ErrorDetail\022-\n\005index\030\005 \001(\0132\036.cockroac"
-    "h.roachpb.ErrPosition*;\n\022TransactionRest"
-    "art\022\t\n\005ABORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE"
-    "\020\002B\035Z\007roachpb\330\341\036\000\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 3153);
+    "on\"\220\001\n\022LeaseRejectedError\022\025\n\007message\030\001 \001"
+    "(\tB\004\310\336\037\000\0221\n\trequested\030\002 \001(\0132\030.cockroach."
+    "roachpb.LeaseB\004\310\336\037\000\0220\n\010existing\030\003 \001(\0132\030."
+    "cockroach.roachpb.LeaseB\004\310\336\037\000\";\n\tSendErr"
+    "or\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002"
+    " \001(\010B\004\310\336\037\000\"\361\007\n\013ErrorDetail\0225\n\nnot_leader"
+    "\030\001 \001(\0132!.cockroach.roachpb.NotLeaderErro"
+    "r\022>\n\017range_not_found\030\002 \001(\0132%.cockroach.r"
+    "oachpb.RangeNotFoundError\022D\n\022range_key_m"
+    "ismatch\030\003 \001(\0132(.cockroach.roachpb.RangeK"
+    "eyMismatchError\022_\n read_within_uncertain"
+    "ty_interval\030\004 \001(\01325.cockroach.roachpb.Re"
+    "adWithinUncertaintyIntervalError\022G\n\023tran"
+    "saction_aborted\030\005 \001(\0132*.cockroach.roachp"
+    "b.TransactionAbortedError\022A\n\020transaction"
+    "_push\030\006 \001(\0132\'.cockroach.roachpb.Transact"
+    "ionPushError\022C\n\021transaction_retry\030\007 \001(\0132"
+    "(.cockroach.roachpb.TransactionRetryErro"
+    "r\022E\n\022transaction_status\030\010 \001(\0132).cockroac"
+    "h.roachpb.TransactionStatusError\0229\n\014writ"
+    "e_intent\030\t \001(\0132#.cockroach.roachpb.Write"
+    "IntentError\022:\n\rwrite_too_old\030\n \001(\0132#.coc"
+    "kroach.roachpb.WriteTooOldError\022>\n\017op_re"
+    "quires_txn\030\013 \001(\0132%.cockroach.roachpb.OpR"
+    "equiresTxnError\022A\n\020condition_failed\030\014 \001("
+    "\0132\'.cockroach.roachpb.ConditionFailedErr"
+    "or\022=\n\016lease_rejected\030\r \001(\0132%.cockroach.r"
+    "oachpb.LeaseRejectedError\022A\n\020node_unavai"
+    "lable\030\016 \001(\0132\'.cockroach.roachpb.NodeUnav"
+    "ailableError\022*\n\004send\030\017 \001(\0132\034.cockroach.r"
+    "oachpb.SendError:\004\310\240\037\001\"\"\n\013ErrPosition\022\023\n"
+    "\005index\030\001 \001(\005B\004\310\336\037\000\"\340\001\n\005Error\022\025\n\007message\030"
+    "\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022H\n\023"
+    "transaction_restart\030\003 \001(\0162%.cockroach.ro"
+    "achpb.TransactionRestartB\004\310\336\037\000\022.\n\006detail"
+    "\030\004 \001(\0132\036.cockroach.roachpb.ErrorDetail\022-"
+    "\n\005index\030\005 \001(\0132\036.cockroach.roachpb.ErrPos"
+    "ition*;\n\022TransactionRestart\022\t\n\005ABORT\020\000\022\013"
+    "\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\035Z\007roachpb\330\341\036"
+    "\000\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 3177);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -5229,6 +5231,7 @@ void ConditionFailedError::clear_index() {
 // ===================================================================
 
 #ifndef _MSC_VER
+const int LeaseRejectedError::kMessageFieldNumber;
 const int LeaseRejectedError::kRequestedFieldNumber;
 const int LeaseRejectedError::kExistingFieldNumber;
 #endif  // !_MSC_VER
@@ -5253,7 +5256,9 @@ LeaseRejectedError::LeaseRejectedError(const LeaseRejectedError& from)
 }
 
 void LeaseRejectedError::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
+  message_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   requested_ = NULL;
   existing_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -5265,6 +5270,7 @@ LeaseRejectedError::~LeaseRejectedError() {
 }
 
 void LeaseRejectedError::SharedDtor() {
+  message_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != default_instance_) {
     delete requested_;
     delete existing_;
@@ -5297,7 +5303,10 @@ LeaseRejectedError* LeaseRejectedError::New(::google::protobuf::Arena* arena) co
 }
 
 void LeaseRejectedError::Clear() {
-  if (_has_bits_[0 / 32] & 3u) {
+  if (_has_bits_[0 / 32] & 7u) {
+    if (has_message()) {
+      message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    }
     if (has_requested()) {
       if (requested_ != NULL) requested_->::cockroach::roachpb::Lease::Clear();
     }
@@ -5321,22 +5330,39 @@ bool LeaseRejectedError::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.roachpb.Lease Requested = 1;
+      // optional string message = 1;
       case 1: {
         if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_message()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+            this->message().data(), this->message().length(),
+            ::google::protobuf::internal::WireFormat::PARSE,
+            "cockroach.roachpb.LeaseRejectedError.message");
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_requested;
+        break;
+      }
+
+      // optional .cockroach.roachpb.Lease requested = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_requested:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_requested()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(18)) goto parse_Existing;
+        if (input->ExpectTag(26)) goto parse_existing;
         break;
       }
 
-      // optional .cockroach.roachpb.Lease Existing = 2;
-      case 2: {
-        if (tag == 18) {
-         parse_Existing:
+      // optional .cockroach.roachpb.Lease existing = 3;
+      case 3: {
+        if (tag == 26) {
+         parse_existing:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_existing()));
         } else {
@@ -5371,16 +5397,26 @@ failure:
 void LeaseRejectedError::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.LeaseRejectedError)
-  // optional .cockroach.roachpb.Lease Requested = 1;
-  if (has_requested()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, *this->requested_, output);
+  // optional string message = 1;
+  if (has_message()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->message().data(), this->message().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "cockroach.roachpb.LeaseRejectedError.message");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      1, this->message(), output);
   }
 
-  // optional .cockroach.roachpb.Lease Existing = 2;
+  // optional .cockroach.roachpb.Lease requested = 2;
+  if (has_requested()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      2, *this->requested_, output);
+  }
+
+  // optional .cockroach.roachpb.Lease existing = 3;
   if (has_existing()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      2, *this->existing_, output);
+      3, *this->existing_, output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -5393,18 +5429,29 @@ void LeaseRejectedError::SerializeWithCachedSizes(
 ::google::protobuf::uint8* LeaseRejectedError::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.LeaseRejectedError)
-  // optional .cockroach.roachpb.Lease Requested = 1;
+  // optional string message = 1;
+  if (has_message()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->message().data(), this->message().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "cockroach.roachpb.LeaseRejectedError.message");
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteStringToArray(
+        1, this->message(), target);
+  }
+
+  // optional .cockroach.roachpb.Lease requested = 2;
   if (has_requested()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        1, *this->requested_, target);
+        2, *this->requested_, target);
   }
 
-  // optional .cockroach.roachpb.Lease Existing = 2;
+  // optional .cockroach.roachpb.Lease existing = 3;
   if (has_existing()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        2, *this->existing_, target);
+        3, *this->existing_, target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -5418,15 +5465,22 @@ void LeaseRejectedError::SerializeWithCachedSizes(
 int LeaseRejectedError::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
-    // optional .cockroach.roachpb.Lease Requested = 1;
+  if (_has_bits_[0 / 32] & 7) {
+    // optional string message = 1;
+    if (has_message()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::StringSize(
+          this->message());
+    }
+
+    // optional .cockroach.roachpb.Lease requested = 2;
     if (has_requested()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->requested_);
     }
 
-    // optional .cockroach.roachpb.Lease Existing = 2;
+    // optional .cockroach.roachpb.Lease existing = 3;
     if (has_existing()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -5460,6 +5514,10 @@ void LeaseRejectedError::MergeFrom(const ::google::protobuf::Message& from) {
 void LeaseRejectedError::MergeFrom(const LeaseRejectedError& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_message()) {
+      set_has_message();
+      message_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.message_);
+    }
     if (from.has_requested()) {
       mutable_requested()->::cockroach::roachpb::Lease::MergeFrom(from.requested());
     }
@@ -5494,6 +5552,7 @@ void LeaseRejectedError::Swap(LeaseRejectedError* other) {
   InternalSwap(other);
 }
 void LeaseRejectedError::InternalSwap(LeaseRejectedError* other) {
+  message_.Swap(&other->message_);
   std::swap(requested_, other->requested_);
   std::swap(existing_, other->existing_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
@@ -5512,22 +5571,75 @@ void LeaseRejectedError::InternalSwap(LeaseRejectedError* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // LeaseRejectedError
 
-// optional .cockroach.roachpb.Lease Requested = 1;
-bool LeaseRejectedError::has_requested() const {
+// optional string message = 1;
+bool LeaseRejectedError::has_message() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void LeaseRejectedError::set_has_requested() {
+void LeaseRejectedError::set_has_message() {
   _has_bits_[0] |= 0x00000001u;
 }
-void LeaseRejectedError::clear_has_requested() {
+void LeaseRejectedError::clear_has_message() {
   _has_bits_[0] &= ~0x00000001u;
+}
+void LeaseRejectedError::clear_message() {
+  message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_message();
+}
+ const ::std::string& LeaseRejectedError::message() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaseRejectedError.message)
+  return message_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void LeaseRejectedError::set_message(const ::std::string& value) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.LeaseRejectedError.message)
+}
+ void LeaseRejectedError::set_message(const char* value) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.LeaseRejectedError.message)
+}
+ void LeaseRejectedError::set_message(const char* value, size_t size) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.LeaseRejectedError.message)
+}
+ ::std::string* LeaseRejectedError::mutable_message() {
+  set_has_message();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaseRejectedError.message)
+  return message_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ ::std::string* LeaseRejectedError::release_message() {
+  clear_has_message();
+  return message_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void LeaseRejectedError::set_allocated_message(::std::string* message) {
+  if (message != NULL) {
+    set_has_message();
+  } else {
+    clear_has_message();
+  }
+  message_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), message);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LeaseRejectedError.message)
+}
+
+// optional .cockroach.roachpb.Lease requested = 2;
+bool LeaseRejectedError::has_requested() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void LeaseRejectedError::set_has_requested() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void LeaseRejectedError::clear_has_requested() {
+  _has_bits_[0] &= ~0x00000002u;
 }
 void LeaseRejectedError::clear_requested() {
   if (requested_ != NULL) requested_->::cockroach::roachpb::Lease::Clear();
   clear_has_requested();
 }
  const ::cockroach::roachpb::Lease& LeaseRejectedError::requested() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaseRejectedError.Requested)
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaseRejectedError.requested)
   return requested_ != NULL ? *requested_ : *default_instance_->requested_;
 }
  ::cockroach::roachpb::Lease* LeaseRejectedError::mutable_requested() {
@@ -5535,7 +5647,7 @@ void LeaseRejectedError::clear_requested() {
   if (requested_ == NULL) {
     requested_ = new ::cockroach::roachpb::Lease;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaseRejectedError.Requested)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaseRejectedError.requested)
   return requested_;
 }
  ::cockroach::roachpb::Lease* LeaseRejectedError::release_requested() {
@@ -5552,25 +5664,25 @@ void LeaseRejectedError::clear_requested() {
   } else {
     clear_has_requested();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LeaseRejectedError.Requested)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LeaseRejectedError.requested)
 }
 
-// optional .cockroach.roachpb.Lease Existing = 2;
+// optional .cockroach.roachpb.Lease existing = 3;
 bool LeaseRejectedError::has_existing() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 void LeaseRejectedError::set_has_existing() {
-  _has_bits_[0] |= 0x00000002u;
+  _has_bits_[0] |= 0x00000004u;
 }
 void LeaseRejectedError::clear_has_existing() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 void LeaseRejectedError::clear_existing() {
   if (existing_ != NULL) existing_->::cockroach::roachpb::Lease::Clear();
   clear_has_existing();
 }
  const ::cockroach::roachpb::Lease& LeaseRejectedError::existing() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaseRejectedError.Existing)
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaseRejectedError.existing)
   return existing_ != NULL ? *existing_ : *default_instance_->existing_;
 }
  ::cockroach::roachpb::Lease* LeaseRejectedError::mutable_existing() {
@@ -5578,7 +5690,7 @@ void LeaseRejectedError::clear_existing() {
   if (existing_ == NULL) {
     existing_ = new ::cockroach::roachpb::Lease;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaseRejectedError.Existing)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaseRejectedError.existing)
   return existing_;
 }
  ::cockroach::roachpb::Lease* LeaseRejectedError::release_existing() {
@@ -5595,7 +5707,7 @@ void LeaseRejectedError::clear_existing() {
   } else {
     clear_has_existing();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LeaseRejectedError.Existing)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LeaseRejectedError.existing)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

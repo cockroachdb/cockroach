@@ -188,6 +188,7 @@ func (tc *testContext) Sender() client.Sender {
 		if ba.RangeID != 0 {
 			ba.RangeID = 1
 		}
+		ba.CmdID = ba.GetOrCreateCmdID(0)
 		return ba
 	})
 }
@@ -279,9 +280,10 @@ func TestRangeContains(t *testing.T) {
 }
 
 func setLeaderLease(t *testing.T, r *Replica, l *roachpb.Lease) {
-	args := roachpb.BatchRequest{}
-	args.Add(&roachpb.LeaderLeaseRequest{Lease: *l})
-	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args)
+	ba := roachpb.BatchRequest{}
+	ba.CmdID = ba.GetOrCreateCmdID(0)
+	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *l})
+	errChan, pendingCmd := r.proposeRaftCommand(r.context(), ba)
 	var err error
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
@@ -389,10 +391,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
 	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
-	ba := roachpb.BatchRequest{}
-	ba.Timestamp = tc.clock.Now()
 	pArgs := putArgs(roachpb.Key("a"), []byte("asd"))
-	ba.Add(&pArgs)
 
 	// Lose the lease.
 	start := tc.rng.getLease().Expiration.Add(1, 0)
@@ -407,15 +406,11 @@ func TestApplyCmdLeaseError(t *testing.T) {
 		},
 	})
 
-	// Submit a proposal to Raft.
-	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
-	if err := <-errChan; err != nil {
-		t.Fatal(err)
-	}
-	if err := (<-pendingCmd.done).Err; err == nil {
-		t.Fatalf("expected an error")
-	} else if _, ok := err.(*roachpb.NotLeaderError); !ok {
-		t.Fatalf("expected not leader error in return, got %s", err)
+	_, err := client.SendWrappedWith(tc.Sender(), nil, roachpb.Header{
+		Timestamp: tc.clock.Now().Add(-100, 0),
+	}, &pArgs)
+	if _, ok := err.(*roachpb.NotLeaderError); !ok {
+		t.Fatalf("expected not leader error in return, got %v", err)
 	}
 }
 
@@ -719,16 +714,17 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 			StoreID:   2,
 		},
 	}
-	args := roachpb.BatchRequest{}
-	args.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
-	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), args)
+	ba := roachpb.BatchRequest{}
+	ba.CmdID = ba.GetOrCreateCmdID(0)
+	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
+	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
 	var err error
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		err = (<-pendingCmd.done).Err
 	}
-	if err == nil {
-		t.Error("error: successfully obtained lease for a store that was not in the RangeDescriptor", err)
+	if !testutils.IsError(err, "replica not found") {
+		t.Errorf("unexpected error obtaining lease for invalid store: %v", err)
 	}
 }
 
@@ -3119,8 +3115,6 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	defer tc.Stop()
 
 	ba := roachpb.BatchRequest{}
-	ba.RangeID = tc.rng.Desc().RangeID
-	ba.Replica.StoreID = tc.store.StoreID()
 	ba.Add(&roachpb.PutRequest{
 		Span:  roachpb.Span{Key: roachpb.Key("k")},
 		Value: roachpb.Value{Bytes: []byte("not nil")},
@@ -3137,7 +3131,7 @@ func TestBatchErrorWithIndex(t *testing.T) {
 		Span: roachpb.Span{Key: roachpb.Key("k")},
 	})
 
-	if _, pErr := tc.rng.Send(tc.rng.context(), ba); pErr == nil {
+	if _, pErr := tc.Sender().Send(tc.rng.context(), ba); pErr == nil {
 		t.Fatal("expected an error")
 	} else if iErr, ok := pErr.GoError().(roachpb.IndexedError); !ok {
 		t.Fatalf("expected indexed error, got %s", pErr)
@@ -3145,4 +3139,33 @@ func TestBatchErrorWithIndex(t *testing.T) {
 		t.Fatalf("invalid index or error type: %s", iErr)
 	}
 
+}
+
+// TestWriteWithoutCmdID verifies that a write is required to have a CmdID set.
+func TestWriteWithoutCmdID(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// A write needs a CmdID or it will error out.
+	ba := roachpb.BatchRequest{}
+	ba.Add(&roachpb.PutRequest{
+		Span:  roachpb.Span{Key: roachpb.Key("k")},
+		Value: roachpb.Value{Bytes: []byte("not nil")},
+	})
+
+	if _, pErr := tc.rng.Send(tc.rng.context(), ba); !testutils.IsError(pErr.GoError(), "write request without CmdID") {
+		t.Fatalf("expected an error, but not this one: %v", pErr.GoError())
+	}
+
+	// A read should be fine without.
+	ba = roachpb.BatchRequest{}
+	ba.Add(&roachpb.GetRequest{
+		Span: roachpb.Span{Key: roachpb.Key("k")},
+	})
+
+	if _, pErr := tc.rng.Send(tc.rng.context(), ba); pErr != nil {
+		t.Fatal(pErr)
+	}
 }

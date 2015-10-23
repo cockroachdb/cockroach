@@ -207,7 +207,7 @@ func (e *NotLeaderError) Error() string {
 
 // Error formats error.
 func (e *LeaseRejectedError) Error() string {
-	return fmt.Sprintf("cannot replace lease %s with %s", e.Existing, e.Requested)
+	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested, e.Message)
 }
 
 // CanRetry indicates that this error can not be retried; it should never

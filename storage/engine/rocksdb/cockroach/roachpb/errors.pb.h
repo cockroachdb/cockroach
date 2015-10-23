@@ -1463,19 +1463,31 @@ class LeaseRejectedError : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.Lease Requested = 1;
+  // optional string message = 1;
+  bool has_message() const;
+  void clear_message();
+  static const int kMessageFieldNumber = 1;
+  const ::std::string& message() const;
+  void set_message(const ::std::string& value);
+  void set_message(const char* value);
+  void set_message(const char* value, size_t size);
+  ::std::string* mutable_message();
+  ::std::string* release_message();
+  void set_allocated_message(::std::string* message);
+
+  // optional .cockroach.roachpb.Lease requested = 2;
   bool has_requested() const;
   void clear_requested();
-  static const int kRequestedFieldNumber = 1;
+  static const int kRequestedFieldNumber = 2;
   const ::cockroach::roachpb::Lease& requested() const;
   ::cockroach::roachpb::Lease* mutable_requested();
   ::cockroach::roachpb::Lease* release_requested();
   void set_allocated_requested(::cockroach::roachpb::Lease* requested);
 
-  // optional .cockroach.roachpb.Lease Existing = 2;
+  // optional .cockroach.roachpb.Lease existing = 3;
   bool has_existing() const;
   void clear_existing();
-  static const int kExistingFieldNumber = 2;
+  static const int kExistingFieldNumber = 3;
   const ::cockroach::roachpb::Lease& existing() const;
   ::cockroach::roachpb::Lease* mutable_existing();
   ::cockroach::roachpb::Lease* release_existing();
@@ -1483,6 +1495,8 @@ class LeaseRejectedError : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.LeaseRejectedError)
  private:
+  inline void set_has_message();
+  inline void clear_has_message();
   inline void set_has_requested();
   inline void clear_has_requested();
   inline void set_has_existing();
@@ -1491,6 +1505,7 @@ class LeaseRejectedError : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
+  ::google::protobuf::internal::ArenaStringPtr message_;
   ::cockroach::roachpb::Lease* requested_;
   ::cockroach::roachpb::Lease* existing_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
@@ -3123,22 +3138,75 @@ inline void ConditionFailedError::set_allocated_index(::cockroach::roachpb::ErrP
 
 // LeaseRejectedError
 
-// optional .cockroach.roachpb.Lease Requested = 1;
-inline bool LeaseRejectedError::has_requested() const {
+// optional string message = 1;
+inline bool LeaseRejectedError::has_message() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void LeaseRejectedError::set_has_requested() {
+inline void LeaseRejectedError::set_has_message() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void LeaseRejectedError::clear_has_requested() {
+inline void LeaseRejectedError::clear_has_message() {
   _has_bits_[0] &= ~0x00000001u;
+}
+inline void LeaseRejectedError::clear_message() {
+  message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_message();
+}
+inline const ::std::string& LeaseRejectedError::message() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaseRejectedError.message)
+  return message_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void LeaseRejectedError::set_message(const ::std::string& value) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.LeaseRejectedError.message)
+}
+inline void LeaseRejectedError::set_message(const char* value) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.LeaseRejectedError.message)
+}
+inline void LeaseRejectedError::set_message(const char* value, size_t size) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.LeaseRejectedError.message)
+}
+inline ::std::string* LeaseRejectedError::mutable_message() {
+  set_has_message();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaseRejectedError.message)
+  return message_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* LeaseRejectedError::release_message() {
+  clear_has_message();
+  return message_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void LeaseRejectedError::set_allocated_message(::std::string* message) {
+  if (message != NULL) {
+    set_has_message();
+  } else {
+    clear_has_message();
+  }
+  message_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), message);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LeaseRejectedError.message)
+}
+
+// optional .cockroach.roachpb.Lease requested = 2;
+inline bool LeaseRejectedError::has_requested() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void LeaseRejectedError::set_has_requested() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void LeaseRejectedError::clear_has_requested() {
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void LeaseRejectedError::clear_requested() {
   if (requested_ != NULL) requested_->::cockroach::roachpb::Lease::Clear();
   clear_has_requested();
 }
 inline const ::cockroach::roachpb::Lease& LeaseRejectedError::requested() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaseRejectedError.Requested)
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaseRejectedError.requested)
   return requested_ != NULL ? *requested_ : *default_instance_->requested_;
 }
 inline ::cockroach::roachpb::Lease* LeaseRejectedError::mutable_requested() {
@@ -3146,7 +3214,7 @@ inline ::cockroach::roachpb::Lease* LeaseRejectedError::mutable_requested() {
   if (requested_ == NULL) {
     requested_ = new ::cockroach::roachpb::Lease;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaseRejectedError.Requested)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaseRejectedError.requested)
   return requested_;
 }
 inline ::cockroach::roachpb::Lease* LeaseRejectedError::release_requested() {
@@ -3163,25 +3231,25 @@ inline void LeaseRejectedError::set_allocated_requested(::cockroach::roachpb::Le
   } else {
     clear_has_requested();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LeaseRejectedError.Requested)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LeaseRejectedError.requested)
 }
 
-// optional .cockroach.roachpb.Lease Existing = 2;
+// optional .cockroach.roachpb.Lease existing = 3;
 inline bool LeaseRejectedError::has_existing() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void LeaseRejectedError::set_has_existing() {
-  _has_bits_[0] |= 0x00000002u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void LeaseRejectedError::clear_has_existing() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void LeaseRejectedError::clear_existing() {
   if (existing_ != NULL) existing_->::cockroach::roachpb::Lease::Clear();
   clear_has_existing();
 }
 inline const ::cockroach::roachpb::Lease& LeaseRejectedError::existing() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaseRejectedError.Existing)
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaseRejectedError.existing)
   return existing_ != NULL ? *existing_ : *default_instance_->existing_;
 }
 inline ::cockroach::roachpb::Lease* LeaseRejectedError::mutable_existing() {
@@ -3189,7 +3257,7 @@ inline ::cockroach::roachpb::Lease* LeaseRejectedError::mutable_existing() {
   if (existing_ == NULL) {
     existing_ = new ::cockroach::roachpb::Lease;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaseRejectedError.Existing)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaseRejectedError.existing)
   return existing_;
 }
 inline ::cockroach::roachpb::Lease* LeaseRejectedError::release_existing() {
@@ -3206,7 +3274,7 @@ inline void LeaseRejectedError::set_allocated_existing(::cockroach::roachpb::Lea
   } else {
     clear_has_existing();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LeaseRejectedError.Existing)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LeaseRejectedError.existing)
 }
 
 // -------------------------------------------------------------------
