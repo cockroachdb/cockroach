@@ -173,8 +173,7 @@ func (x *ReadConsistencyType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// TxnPushType determines what action to take when pushing a
-// transaction.
+// TxnPushType determines what action to take when pushing a transaction.
 type PushTxnType int32
 
 const (
@@ -285,7 +284,7 @@ func (m *Span) GetEndKey() Key {
 
 // ResponseHeader is returned with every storage node response.
 type ResponseHeader struct {
-	// Timestamp specifies time at which read or write actually was
+	// timestamp specifies time at which read or write actually was
 	// performed. In the case of both reads and writes, if the timestamp
 	// supplied to the request was 0, the wall time of the node
 	// servicing the request will be set here. Additionally, in the case
@@ -293,9 +292,9 @@ type ResponseHeader struct {
 	// with the Span if the key being written was either read
 	// or written more recently.
 	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
-	// Transaction is non-nil if the request specified a non-nil
-	// transaction. The transaction timestamp and/or priority may have
-	// been updated, depending on the outcome of the request.
+	// txn is non-nil if the request specified a non-nil transaction.
+	// The transaction timestamp and/or priority may have been updated,
+	// depending on the outcome of the request.
 	Txn *Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
 }
 
@@ -372,15 +371,15 @@ func (*PutResponse) ProtoMessage()    {}
 
 // A ConditionalPutRequest is the argument to the ConditionalPut() method.
 //
-// - Returns true and sets value if ExpValue equals existing value.
-// - If key doesn't exist and ExpValue is nil, sets value.
-// - If key exists, but value is empty and ExpValue is not nil but empty, sets value.
+// - Returns true and sets value if exp_value equals existing value.
+// - If key doesn't exist and exp_value is nil, sets value.
+// - If key exists, but value is empty and exp_value is not nil but empty, sets value.
 // - Otherwise, returns error and the actual value of the key in the response.
 type ConditionalPutRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The value to put.
 	Value Value `protobuf:"bytes,2,opt,name=value" json:"value"`
-	// ExpValue.Bytes empty to test for non-existence. Specify as nil
+	// Set exp_value.bytes empty to test for non-existence. Specify as nil
 	// to indicate there should be no existing entry. This is different
 	// from the expectation that the value exists but is empty.
 	ExpValue *Value `protobuf:"bytes,3,opt,name=exp_value" json:"exp_value,omitempty"`
@@ -477,7 +476,7 @@ func (*DeleteResponse) ProtoMessage()    {}
 // specifies the range of keys to delete.
 type DeleteRangeRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	// If 0, *all* entries between Key (inclusive) and EndKey
+	// If 0, *all* entries between key (inclusive) and end_key
 	// (exclusive) are deleted. Must be >= 0.
 	MaxEntriesToDelete int64 `protobuf:"varint,2,opt,name=max_entries_to_delete" json:"max_entries_to_delete"`
 }
@@ -664,7 +663,7 @@ func (m *EndTransactionResponse) GetResolved() []Key {
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
-// existing range which contains Span.Key is split by
+// existing range which contains header.key is split by
 // split_key. If split_key is not specified, then this method will
 // determine a split key that is roughly halfway through the
 // range. The existing range is resized to cover only its start key to
@@ -714,7 +713,7 @@ func (*AdminSplitResponse) ProtoMessage()    {}
 // two consecutive ranges (i.e. the range which contains keys which
 // sort first). This range will be the subsuming range and the right
 // hand range will be subsumed. After the merge operation, the
-// subsumed_range will no longer exist and the subsuming range will
+// subsumed range will no longer exist and the subsuming range will
 // now encompass all keys from its original start key to the end key
 // of the subsumed range. If AdminMerge is called on the final range
 // in the key space, it is a noop.
@@ -750,7 +749,7 @@ func (*AdminMergeResponse) ProtoMessage()    {}
 type RangeLookupRequest struct {
 	Span      `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	MaxRanges int32 `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
-	// ConsiderIntents indicates whether or not intents encountered
+	// consider_intents indicates whether or not intents encountered
 	// while looking up the range info should randomly be returned
 	// to the caller. This is intended to be used when retrying due
 	// to range addressing errors.
@@ -1519,35 +1518,35 @@ func (m *ResponseUnion) GetNoop() *NoopResponse {
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
 // information required for executing it.
 type Header struct {
-	// Timestamp specifies time at which read or writes should be
+	// timestamp specifies time at which read or writes should be
 	// performed. If the timestamp is set to zero value, its value
 	// is initialized to the wall time of the receiving node.
 	Timestamp Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
-	// CmdID is optionally specified for request idempotence
+	// cmd_id is optionally specified for request idempotence
 	// (i.e. replay protection).
 	CmdID   ClientCmdID       `protobuf:"bytes,2,opt,name=cmd_id" json:"cmd_id"`
 	Replica ReplicaDescriptor `protobuf:"bytes,5,opt,name=replica" json:"replica"`
-	// RangeID specifies the ID of the Raft consensus group which the key
+	// range_id specifies the ID of the Raft consensus group which the key
 	// range belongs to. This is used by the receiving node to route the
 	// request to the correct range.
 	RangeID RangeID `protobuf:"varint,6,opt,name=range_id,casttype=RangeID" json:"range_id"`
-	// UserPriority specifies priority multiple for non-transactional
+	// user_priority specifies priority multiple for non-transactional
 	// commands. This value should be a positive integer [1, 2^31-1).
 	// It's properly viewed as a multiple for how likely this
 	// transaction will be to prevail if a write conflict occurs.
-	// Commands with UserPriority=100 will be 100x less likely to be
+	// Commands with user_priority=100 will be 100x less likely to be
 	// aborted as conflicting transactions or non-transactional commands
-	// with UserPriority=1. This value is ignored if Txn is
-	// specified. If neither this value nor Txn is specified, the value
+	// with user_priority=1. This value is ignored if Txn is
+	// specified. If neither this value nor txn is specified, the value
 	// defaults to 1.
 	UserPriority *int32 `protobuf:"varint,7,opt,name=user_priority,def=1" json:"user_priority,omitempty"`
-	// Txn is set non-nil if a transaction is underway. To start a txn,
+	// txn is set non-nil if a transaction is underway. To start a txn,
 	// the first request should set this field to non-nil with name and
 	// isolation level set as desired. The response will contain the
 	// fully-initialized transaction with txn ID, priority, initial
 	// timestamp, and maximum timestamp.
 	Txn *Transaction `protobuf:"bytes,8,opt,name=txn" json:"txn,omitempty"`
-	// ReadConsistency specifies the consistency for read
+	// read_consistency specifies the consistency for read
 	// operations. The default is CONSISTENT. This value is ignored for
 	// write operations.
 	ReadConsistency ReadConsistencyType `protobuf:"varint,9,opt,name=read_consistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
@@ -1652,9 +1651,9 @@ func (m *BatchResponse) GetResponses() []ResponseUnion {
 }
 
 type BatchResponse_Header struct {
-	// Error is non-nil if an error occurred.
+	// error is non-nil if an error occurred.
 	Error *Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
-	// Timestamp specifies time at which read or write actually was
+	// timestamp specifies time at which read or write actually was
 	// performed. In the case of both reads and writes, if the timestamp
 	// supplied to the request was 0, the wall time of the node
 	// servicing the request will be set here. Additionally, in the case
@@ -1662,7 +1661,7 @@ type BatchResponse_Header struct {
 	// with the Span if the key being written was either read
 	// or written more recently.
 	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
-	// Transaction is non-nil if the request specified a non-nil
+	// txn is non-nil if the request specified a non-nil
 	// transaction. The transaction timestamp and/or priority may have
 	// been updated, depending on the outcome of the request.
 	Txn *Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`

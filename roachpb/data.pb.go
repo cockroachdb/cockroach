@@ -221,9 +221,9 @@ func (m *Timestamp) GetLogical() int32 {
 // Value specifies the value at a key. Multiple values at the same key
 // are supported based on timestamp.
 type Value struct {
-	// Bytes is the byte slice value.
+	// bytes is the byte slice value.
 	Bytes []byte `protobuf:"bytes,1,opt,name=bytes" json:"bytes,omitempty"`
-	// Checksum is a CRC-32-IEEE checksum of the key + value, in that order.
+	// checksum is a CRC-32-IEEE checksum of the key + value, in that order.
 	// If this is an integer value, then the value is interpreted as an 8
 	// byte, big-endian encoded value. This value is set by the client on
 	// writes to do end-to-end integrity verification. If the checksum is
@@ -232,7 +232,7 @@ type Value struct {
 	Checksum *uint32 `protobuf:"fixed32,3,opt,name=checksum" json:"checksum,omitempty"`
 	// Timestamp of value.
 	Timestamp *Timestamp `protobuf:"bytes,4,opt,name=timestamp" json:"timestamp,omitempty"`
-	// Tag is the optional type of the value.
+	// tag is the optional type of the value.
 	Tag ValueType `protobuf:"varint,5,opt,name=tag,enum=cockroach.roachpb.ValueType" json:"tag"`
 }
 
@@ -480,7 +480,7 @@ func (m *ModifiedSpanTrigger) GetSystemDBSpan() bool {
 	return false
 }
 
-// CommitTrigger encapsulates all of the internal-only commit triggers.
+// InternalCommitTrigger encapsulates all of the internal-only commit triggers.
 // Only one may be set.
 type InternalCommitTrigger struct {
 	SplitTrigger          *SplitTrigger          `protobuf:"bytes,1,opt,name=split_trigger" json:"split_trigger,omitempty"`
@@ -549,11 +549,11 @@ func (m *NodeList) GetNodes() []int32 {
 // TODO(vivek): Remove parts of Transaction that expose internals.
 type Transaction struct {
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
-	// Key is the key which anchors the transaction. This is typically
+	// key is the key which anchors the transaction. This is typically
 	// the first key read or written during the transaction and determines which
 	// range in the cluster will hold the transaction record.
 	Key Key `protobuf:"bytes,2,opt,name=key,casttype=Key" json:"key,omitempty"`
-	// ID is a unique UUID value which identifies the transaction.
+	// id is a unique UUID value which identifies the transaction.
 	ID        []byte            `protobuf:"bytes,3,opt,name=id" json:"id,omitempty"`
 	Priority  int32             `protobuf:"varint,4,opt,name=priority" json:"priority"`
 	Isolation IsolationType     `protobuf:"varint,5,opt,name=isolation,enum=cockroach.roachpb.IsolationType" json:"isolation"`
@@ -570,11 +570,11 @@ type Transaction struct {
 	// transaction will retry.
 	OrigTimestamp Timestamp `protobuf:"bytes,10,opt,name=orig_timestamp" json:"orig_timestamp"`
 	// Initial Timestamp + clock skew. Reads which encounter values with
-	// timestamps between Timestamp and MaxTimestamp trigger a txn
+	// timestamps between timestamp and max_timestamp trigger a txn
 	// retry error, unless the node being read is listed in certain_nodes
 	// (in which case no more read uncertainty can occur).
-	// The case MaxTimestamp < Timestamp is possible for transactions which have
-	// been pushed; in this case, MaxTimestamp should be ignored.
+	// The case max_timestamp < timestamp is possible for transactions which have
+	// been pushed; in this case, max_timestamp should be ignored.
 	MaxTimestamp Timestamp `protobuf:"bytes,11,opt,name=max_timestamp" json:"max_timestamp"`
 	// A sorted list of ids of nodes for which a ReadWithinUncertaintyIntervalError
 	// occurred during a prior read. The purpose of keeping this information is
@@ -587,7 +587,7 @@ type Transaction struct {
 	// is either the one of the encountered future write returned in the error
 	// or (if higher, which is in the majority of cases), the time of the node
 	// serving the key at the time of the failed read.
-	// Additionally storing the node, we make sure to set MaxTimestamp=Timestamp
+	// Additionally storing the node, we make sure to set max_timestamp=timestamp
 	// at the time of the read for nodes whose clock we've taken into acount,
 	// which amounts to reading without any uncertainty.
 	//

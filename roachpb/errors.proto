@@ -109,14 +109,14 @@ message TransactionStatusError {
 // belonging to another transaction were encountered leading to a
 // read/write or write/write conflict. The keys at which the intent
 // was encountered are set, as are the txn records for the intents'
-// transactions. Resolved is set if the intent was successfully
+// transactions. resolved is set if the intent was successfully
 // resolved, meaning the client may retry the operation
-// immediately. If Resolved is false, the client should back off and
+// immediately. If resolved is false, the client should back off and
 // retry.
 message WriteIntentError {
   repeated Intent intents = 1 [(gogoproto.nullable) = false];
   optional bool resolved = 2 [(gogoproto.nullable) = false];
-  // The Index, if given, contains the index of the request (in the batch)
+  // The index, if given, contains the index of the request (in the batch)
   // whose execution caused the error.
   optional ErrPosition index = 3;
 }
@@ -207,7 +207,7 @@ message ErrPosition {
 // Error is a generic representation including a string message
 // and information about retryability.
 message Error {
-  // Message is a human-readable error message.
+  // message is a human-readable error message.
   optional string message = 1 [(gogoproto.nullable) = false];
 
   // If retryable is true, the error condition may be transient and the failed
@@ -222,7 +222,7 @@ message Error {
   // about the error.
   optional ErrorDetail detail = 4;
 
-  // The Index, if given, contains the index of the request (in the batch)
+  // The index, if given, contains the index of the request (in the batch)
   // whose execution caused the error.
   optional ErrPosition index = 5;
 }
