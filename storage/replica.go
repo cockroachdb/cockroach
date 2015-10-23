@@ -1429,6 +1429,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 
 	var reqsRemote []roachpb.Request
 	baLocal := roachpb.BatchRequest{}
+	baLocal.CmdID = baLocal.GetOrCreateCmdID(r.rm.Clock().PhysicalNow())
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
 		var resolveArgs roachpb.Request
