@@ -485,7 +485,9 @@ func (l *Cluster) Assert(t util.Tester) {
 	if cur := filter(l.events, time.Duration(0)); cur != nil {
 		t.Fatalf("unexpected extra event %v (after %v)", cur, events)
 	}
-	log.Infof("asserted %v", events)
+	if log.V(2) {
+		log.Infof("asserted %v", events)
+	}
 }
 
 // AssertAndStop calls Assert and then stops the cluster. It is safe to stop
