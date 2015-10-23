@@ -488,9 +488,9 @@ func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
 			{Offset: 0, Count: 1, Sum: 5.0},
 		},
 	}
-	value, err := ts.ToValue()
-	if err != nil {
+	var value roachpb.Value
+	if err := value.SetProto(ts); err != nil {
 		b.Fatal(err)
 	}
-	runMVCCMerge(value, 1024, b)
+	runMVCCMerge(&value, 1024, b)
 }

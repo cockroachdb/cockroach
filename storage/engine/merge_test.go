@@ -80,11 +80,11 @@ func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
 		}
 		ts.Samples = append(ts.Samples, newSample)
 	}
-	v, err := ts.ToValue()
-	if err != nil {
+	var v roachpb.Value
+	if err := v.SetProto(ts); err != nil {
 		panic(err)
 	}
-	return mustMarshal(&MVCCMetadata{Value: v})
+	return mustMarshal(&MVCCMetadata{Value: &v})
 }
 
 // TestGoMerge tests the function goMerge but not the integration with
@@ -295,7 +295,7 @@ func unmarshalTimeSeries(t testing.TB, b []byte) *roachpb.InternalTimeSeriesData
 	if err := proto.Unmarshal(b, &mvccValue); err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}
-	valueTS, err := roachpb.InternalTimeSeriesDataFromValue(mvccValue.Value)
+	valueTS, err := mvccValue.Value.GetTimeseries()
 	if err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}

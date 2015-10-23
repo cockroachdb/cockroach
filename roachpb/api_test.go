@@ -99,7 +99,7 @@ func TestCombinable(t *testing.T) {
 	sr1 := &ScanResponse{
 		ResponseHeader: ResponseHeader{Timestamp: MinTimestamp},
 		Rows: []KeyValue{
-			{Key: Key("A"), Value: Value{RawBytes: []byte("V")}},
+			{Key: Key("A"), Value: MakeValueFromString("V")},
 		},
 	}
 
@@ -110,7 +110,7 @@ func TestCombinable(t *testing.T) {
 	sr2 := &ScanResponse{
 		ResponseHeader: ResponseHeader{Timestamp: MinTimestamp},
 		Rows: []KeyValue{
-			{Key: Key("B"), Value: Value{RawBytes: []byte("W")}},
+			{Key: Key("B"), Value: MakeValueFromString("W")},
 		},
 	}
 	sr2.Timestamp = MaxTimestamp

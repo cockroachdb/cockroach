@@ -18,40 +18,6 @@
 
 package roachpb
 
-import (
-	"fmt"
-
-	"github.com/gogo/protobuf/proto"
-)
-
-// ToValue generates a Value message which contains an encoded copy of this
-// TimeSeriesData in its "bytes" field. The returned Value will also have its
-// "tag" string set to the TIME_SERIES constant.
-func (ts *InternalTimeSeriesData) ToValue() (*Value, error) {
-	b, err := proto.Marshal(ts)
-	if err != nil {
-		return nil, err
-	}
-	return &Value{
-		RawBytes: b,
-		Tag:      ValueType_TIMESERIES,
-	}, nil
-}
-
-// InternalTimeSeriesDataFromValue attempts to extract an InternalTimeSeriesData
-// message from the "bytes" field of the given value.
-func InternalTimeSeriesDataFromValue(value *Value) (*InternalTimeSeriesData, error) {
-	if value.GetTag() != ValueType_TIMESERIES {
-		return nil, fmt.Errorf("value is not tagged as containing TimeSeriesData: %v", value)
-	}
-	var ts InternalTimeSeriesData
-	err := proto.Unmarshal(value.RawBytes, &ts)
-	if err != nil {
-		return nil, fmt.Errorf("TimeSeriesData could not be unmarshalled from value: %v %s", value, err)
-	}
-	return &ts, nil
-}
-
 // Average returns the average value for this sample.
 func (samp *InternalTimeSeriesSample) Average() float64 {
 	if samp.Count == 0 {

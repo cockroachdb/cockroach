@@ -49,7 +49,7 @@ import (
 // data matches.
 type testModel struct {
 	t           testing.TB
-	modelData   map[string]*roachpb.Value
+	modelData   map[string]roachpb.Value
 	seenSources map[string]struct{}
 	*kv.LocalTestCluster
 	DB *DB
@@ -60,7 +60,7 @@ type testModel struct {
 func newTestModel(t *testing.T) *testModel {
 	return &testModel{
 		t:                t,
-		modelData:        make(map[string]*roachpb.Value),
+		modelData:        make(map[string]roachpb.Value),
 		seenSources:      make(map[string]struct{}),
 		LocalTestCluster: &kv.LocalTestCluster{},
 	}
@@ -75,7 +75,7 @@ func (tm *testModel) Start() {
 
 // getActualData returns the actual value of all time series keys in the
 // underlying engine. Data is returned as a map of strings to roachpb.Values.
-func (tm *testModel) getActualData() map[string]*roachpb.Value {
+func (tm *testModel) getActualData() map[string]roachpb.Value {
 	// Scan over all TS Keys stored in the engine
 	startKey := keyDataPrefix
 	endKey := startKey.PrefixEnd()
@@ -84,10 +84,9 @@ func (tm *testModel) getActualData() map[string]*roachpb.Value {
 		tm.t.Fatalf("error scanning TS data from engine: %s", err.Error())
 	}
 
-	kvMap := make(map[string]*roachpb.Value)
+	kvMap := make(map[string]roachpb.Value)
 	for _, kv := range keyValues {
-		val := kv.Value
-		kvMap[string(kv.Key)] = &val
+		kvMap[string(kv.Key)] = kv.Value
 	}
 
 	return kvMap
@@ -114,14 +113,14 @@ func (tm *testModel) assertModelCorrect() {
 			if vModel, ok := tm.modelData[k]; !ok {
 				fmt.Fprintf(&buf, "\tKey %s/%s@%d, r:%d from actual data was not found in model", n, s, ts, r)
 			} else {
-				if !proto.Equal(vActual, vModel) {
+				if !proto.Equal(&vActual, &vModel) {
 					fmt.Fprintf(&buf, "\tKey %s/%s@%d, r:%d differs between model and actual:", n, s, ts, r)
-					if its, err := roachpb.InternalTimeSeriesDataFromValue(vActual); err != nil {
+					if its, err := vActual.GetTimeseries(); err != nil {
 						fmt.Fprintf(&buf, "\tActual value is not a valid time series: %v", vActual)
 					} else {
 						fmt.Fprintf(&buf, "\tActual value: %v", its)
 					}
-					if its, err := roachpb.InternalTimeSeriesDataFromValue(vModel); err != nil {
+					if its, err := vModel.GetTimeseries(); err != nil {
 						fmt.Fprintf(&buf, "\tModel value is not a valid time series: %v", vModel)
 					} else {
 						fmt.Fprintf(&buf, "\tModel value: %v", its)
@@ -171,7 +170,7 @@ func (tm *testModel) storeInModel(r Resolution, data TimeSeriesData) {
 		existing, ok := tm.modelData[keyStr]
 		var newTs *roachpb.InternalTimeSeriesData
 		if ok {
-			existingTs, err := roachpb.InternalTimeSeriesDataFromValue(existing)
+			existingTs, err := existing.GetTimeseries()
 			if err != nil {
 				tm.t.Fatalf("test could not extract time series from existing model value: %s", err.Error())
 			}
@@ -185,8 +184,8 @@ func (tm *testModel) storeInModel(r Resolution, data TimeSeriesData) {
 				tm.t.Fatalf("test could not merge time series into model value: %s", err.Error())
 			}
 		}
-		val, err := newTs.ToValue()
-		if err != nil {
+		var val roachpb.Value
+		if err := val.SetProto(newTs); err != nil {
 			tm.t.Fatal(err)
 		}
 		tm.modelData[keyStr] = val
