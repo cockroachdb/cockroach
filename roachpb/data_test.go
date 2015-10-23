@@ -255,7 +255,7 @@ func TestValueChecksumEmpty(t *testing.T) {
 
 func TestValueChecksumWithBytes(t *testing.T) {
 	k := []byte("key")
-	v := Value{RawBytes: []byte("abc")}
+	v := MakeValueFromString("abc")
 	v.InitChecksum(k)
 	if err := v.Verify(k); err != nil {
 		t.Error(err)
@@ -265,7 +265,7 @@ func TestValueChecksumWithBytes(t *testing.T) {
 		t.Error("expected checksum verification failure on different key")
 	}
 	// Mess with value.
-	v.RawBytes = []byte("abcd")
+	v.SetBytes([]byte("abcd"))
 	if err := v.Verify(k); err == nil {
 		t.Error("expected checksum verification failure on different value")
 	}
@@ -293,6 +293,13 @@ func TestSetGetChecked(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := v.GetBytes(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := v.SetProto(&InternalTimeSeriesData{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.GetTimeseries(); err != nil {
 		t.Fatal(err)
 	}
 

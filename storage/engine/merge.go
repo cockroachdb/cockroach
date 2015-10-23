@@ -31,12 +31,12 @@ func MergeInternalTimeSeriesData(sources ...*roachpb.InternalTimeSeriesData) (
 	// to bytes. This is the format required by the engine.
 	srcBytes := make([][]byte, 0, len(sources))
 	for _, src := range sources {
-		val, err := src.ToValue()
-		if err != nil {
+		var val roachpb.Value
+		if err := val.SetProto(src); err != nil {
 			return nil, err
 		}
 		bytes, err := proto.Marshal(&MVCCMetadata{
-			Value: val,
+			Value: &val,
 		})
 		if err != nil {
 			return nil, err
@@ -61,7 +61,7 @@ func MergeInternalTimeSeriesData(sources ...*roachpb.InternalTimeSeriesData) (
 	if err := proto.Unmarshal(mergedBytes, &mvccValue); err != nil {
 		return nil, err
 	}
-	mergedTS, err := roachpb.InternalTimeSeriesDataFromValue(mvccValue.Value)
+	mergedTS, err := mvccValue.Value.GetTimeseries()
 	if err != nil {
 		return nil, err
 	}

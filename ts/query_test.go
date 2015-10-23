@@ -252,13 +252,13 @@ func (tm *testModel) assertQuery(name string, sources []string, agg *TimeSeriesQ
 		for time := start - (start % r.KeyDuration()); time < end; time += r.KeyDuration() {
 			// Construct a key for this source/time and retrieve it from model.
 			key := MakeDataKey(name, sourceName, r, time)
-			value := tm.modelData[string(key)]
-			if value == nil {
+			value, ok := tm.modelData[string(key)]
+			if !ok {
 				continue
 			}
 
 			// Add data from the key to the correct dataSpan.
-			data, err := roachpb.InternalTimeSeriesDataFromValue(value)
+			data, err := value.GetTimeseries()
 			if err != nil {
 				tm.t.Fatal(err)
 			}

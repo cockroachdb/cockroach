@@ -112,13 +112,13 @@ func (db *DB) StoreData(r Resolution, data []TimeSeriesData) error {
 			return err
 		}
 		for _, idata := range idatas {
-			value, err := idata.ToValue()
-			if err != nil {
+			var value roachpb.Value
+			if err := value.SetProto(idata); err != nil {
 				return err
 			}
 			kvs = append(kvs, roachpb.KeyValue{
 				Key:   MakeDataKey(d.Name, d.Source, r, idata.StartTimestampNanos),
-				Value: *value,
+				Value: value,
 			})
 		}
 	}

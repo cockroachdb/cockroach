@@ -367,13 +367,21 @@ func (v *Value) SetInt(i int64) {
 	v.Tag = ValueType_INT
 }
 
-// SetProto encodes the specified proto message into the bytes field of the receiver.
+// SetProto encodes the specified proto message into the bytes field of
+// the receiver. If the proto message is an InternalTimeSeriesData,
+// the tag will be set to TIMESERIES rather than BYTES.
 func (v *Value) SetProto(msg proto.Message) error {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		return err
 	}
 	v.SetBytes(data)
+
+	// Special handling for ts data.
+	if _, ok := msg.(*InternalTimeSeriesData); ok {
+		v.Tag = ValueType_TIMESERIES
+	}
+
 	return nil
 }
 
@@ -444,6 +452,20 @@ var crc32Pool = sync.Pool{
 	New: func() interface{} {
 		return crc32.NewIEEE()
 	},
+}
+
+// GetTimeseries decodes an InternalTimeSeriesData value from the bytes
+// field of the receiver. An error will be returned if the tag is not
+// TIMESERIES or if decoding fails.
+func (v *Value) GetTimeseries() (*InternalTimeSeriesData, error) {
+	if tag := v.GetTag(); tag != ValueType_TIMESERIES {
+		return nil, fmt.Errorf("value type is not TIMESERIES: %s", tag)
+	}
+	ts := &InternalTimeSeriesData{}
+	if err := proto.Unmarshal(v.RawBytes, ts); err != nil {
+		return nil, err
+	}
+	return ts, nil
 }
 
 // computeChecksum computes a checksum based on the provided key and
