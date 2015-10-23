@@ -20,5 +20,5 @@ package log
 import "github.com/cockroachdb/cockroach/util/log/logflags"
 
 func init() {
-	logflags.InitFlags(&logging.toStderr, &logging.alsoToStderr, logDir, &logging.color, &logging.verbosity, &logging.vmodule, &logging.traceLocation)
+	logflags.InitFlags(&logging.mu, &logging.toStderr, &logging.alsoToStderr, logDir, &logging.color, &logging.verbosity, &logging.vmodule, &logging.traceLocation)
 }
