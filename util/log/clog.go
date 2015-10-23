@@ -617,10 +617,6 @@ func Flush() {
 
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
-	// Boolean flags.
-	toStderr     bool // The -logtostderr flag. Updated atomically.
-	alsoToStderr bool // The -alsologtostderr flag. Updated atomically.
-
 	color           string        // The -color flag.
 	hasColorProfile *bool         // Non-nil if the color profile has been determined
 	colorProfile    *colorProfile // Set via call to getTermColorProfile
@@ -637,6 +633,11 @@ type loggingT struct {
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
+
+	// Boolean flags. Also protected by mu (see flags.go).
+	toStderr     bool // The -logtostderr flag.
+	alsoToStderr bool // The -alsologtostderr flag.
+
 	mu sync.Mutex
 	// file holds writer for each of the log types.
 	file [NumSeverity]flushSyncWriter

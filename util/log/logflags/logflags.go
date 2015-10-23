@@ -24,7 +24,7 @@ import (
 )
 
 type atomicBool struct {
-	sync.Mutex
+	sync.Locker
 	b *bool
 }
 
@@ -55,12 +55,13 @@ func (ab *atomicBool) Get() string {
 
 var _ flag.Value = &atomicBool{}
 
-// InitFlags creates logging flags which update the given variables.
-func InitFlags(toStderr *bool, alsoToStderr *bool, logDir, color *string,
+// InitFlags creates logging flags which update the given variables. The passed mutex is
+// locked while the boolean variables are accessed during flag updates.
+func InitFlags(mu sync.Locker, toStderr *bool, alsoToStderr *bool, logDir, color *string,
 	verbosity, vmodule, traceLocation flag.Value) {
 	*toStderr = true // wonky way of specifying a default
-	flag.Var(&atomicBool{b: toStderr}, "logtostderr", "log to standard error instead of files")
-	flag.Var(&atomicBool{b: alsoToStderr}, "alsologtostderr", "log to standard error as well as files")
+	flag.Var(&atomicBool{Locker: mu, b: toStderr}, "logtostderr", "log to standard error instead of files")
+	flag.Var(&atomicBool{Locker: mu, b: alsoToStderr}, "alsologtostderr", "log to standard error as well as files")
 	flag.StringVar(color, "color", "auto", "colorize standard error output according to severity")
 	flag.Var(verbosity, "verbosity", "log level for V logs")
 	// TODO(tschottdorf): decide if we need this.
