@@ -111,31 +111,38 @@ type queueImpl interface {
 // baseQueue is not thread safe and is intended for usage only from
 // the scanner's goroutine.
 type baseQueue struct {
-	name       string
-	impl       queueImpl
-	gossip     *gossip.Gossip
-	maxSize    int                              // Maximum number of replicas to queue
-	incoming   chan struct{}                    // Channel signaled when a new replica is added to the queue.
-	sync.Mutex                                  // Mutex protects priorityQ and replicas
-	priorityQ  priorityQueue                    // The priority queue
-	replicas   map[roachpb.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)
+	name string
+	// The constructor of the queueImpl structure MUST return a pointer.
+	// This is because assigning queueImpl to a function-local, then
+	// passing a pointer to it to `makeBaseQueue`, and then returning it
+	// from the constructor function will return a queueImpl containing
+	// a pointer to a structure which is a copy of the one within which
+	// it is contained. DANGER.
+	impl        queueImpl
+	gossip      *gossip.Gossip
+	maxSize     int                              // Maximum number of replicas to queue
+	incoming    chan struct{}                    // Channel signaled when a new replica is added to the queue.
+	sync.Locker                                  // Protects priorityQ and replicas
+	priorityQ   priorityQueue                    // The priority queue
+	replicas    map[roachpb.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)
 	// Some tests in this package disable queues.
 	disabled int32 // updated atomically
 }
 
-// newBaseQueue returns a new instance of baseQueue with the
+// makeBaseQueue returns a new instance of baseQueue with the
 // specified shouldQueue function to determine which replicas to queue
 // and maxSize to limit the growth of the queue. Note that
 // maxSize doesn't prevent new replicas from being added, it just
 // limits the total size. Higher priority replicas can still be
 // added; their addition simply removes the lowest priority replica.
-func newBaseQueue(name string, impl queueImpl, gossip *gossip.Gossip, maxSize int) *baseQueue {
-	return &baseQueue{
+func makeBaseQueue(name string, impl queueImpl, gossip *gossip.Gossip, maxSize int) baseQueue {
+	return baseQueue{
 		name:     name,
 		impl:     impl,
 		gossip:   gossip,
 		maxSize:  maxSize,
 		incoming: make(chan struct{}, 1),
+		Locker:   new(sync.Mutex),
 		replicas: map[roachpb.RangeID]*replicaItem{},
 	}
 }

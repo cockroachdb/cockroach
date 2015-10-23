@@ -157,7 +157,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 			return shouldAddMap[r], priorityMap[r]
 		},
 	}
-	bq := newBaseQueue("test", testQueue, g, 2)
+	bq := makeBaseQueue("test", testQueue, g, 2)
 	bq.MaybeAdd(r1, roachpb.ZeroTimestamp)
 	bq.MaybeAdd(r2, roachpb.ZeroTimestamp)
 	if bq.Length() != 2 {
@@ -234,7 +234,7 @@ func TestBaseQueueAdd(t *testing.T) {
 			return false, 0.0
 		},
 	}
-	bq := newBaseQueue("test", testQueue, g, 1)
+	bq := makeBaseQueue("test", testQueue, g, 1)
 	bq.MaybeAdd(r, roachpb.ZeroTimestamp)
 	if bq.Length() != 0 {
 		t.Fatalf("expected length 0; got %d", bq.Length())
@@ -270,7 +270,7 @@ func TestBaseQueueProcess(t *testing.T) {
 			return
 		},
 	}
-	bq := newBaseQueue("test", testQueue, g, 2)
+	bq := makeBaseQueue("test", testQueue, g, 2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
@@ -315,7 +315,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 			return
 		},
 	}
-	bq := newBaseQueue("test", testQueue, g, 2)
+	bq := makeBaseQueue("test", testQueue, g, 2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
@@ -374,7 +374,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		acceptUnsplit: false,
 	}
 
-	bq := newBaseQueue("test", testQueue, g, 2)
+	bq := makeBaseQueue("test", testQueue, g, 2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
