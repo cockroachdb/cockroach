@@ -63,6 +63,7 @@ func TestPut(t *testing.T) {
 	}
 
 	for i := 0; i < *numNodes; {
+		baseCount := atomic.LoadInt64(&count)
 		select {
 		case <-stopper:
 			t.Fatalf("interrupted")
@@ -74,7 +75,8 @@ func TestPut(t *testing.T) {
 		case <-time.After(1 * time.Second):
 			// Periodically print out progress so that we know the test is still
 			// running.
-			log.Infof("%d", atomic.LoadInt64(&count))
+			count := atomic.LoadInt64(&count)
+			log.Infof("%d (%d/s)", count, count-baseCount)
 		}
 	}
 
