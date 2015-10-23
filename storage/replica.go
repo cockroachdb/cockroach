@@ -1015,8 +1015,15 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// TODO(tschottdorf): this is a hack to avoid wrong replies served
 			// back. See #2297. Not 100% correct, only correct enough to get
 			// tests passing (multi-range requests going wrong).
-			var ok bool
-			if replyWithErr.Reply != nil {
+			// Treat RangeKeyMismatchError specially. We don't want the correct
+			// range to pretend it's mismatching. All other errors have no
+			// sanity check as to whether they actually belong to the request,
+			// there's no information to deduce that from.
+			ok := true
+			if _, isMismatch := replyWithErr.Err.(*roachpb.RangeKeyMismatchError); isMismatch {
+				ok = false
+			}
+			if ok && replyWithErr.Err == nil {
 				ok = len(replyWithErr.Reply.Responses) == len(ba.Requests)
 				for i, union := range replyWithErr.Reply.Responses {
 					if !ok {
@@ -1034,8 +1041,9 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 				// We successfully read from the response cache, so return whatever error
 				// was present in the cached entry (if any).
 				return btch, replyWithErr.Reply, nil, replyWithErr.Err
+			} else if replyWithErr.Err == nil {
+				log.Warningf("TODO(tschottdorf): #2297: %s hit cache for: <%s,%T>", ba, replyWithErr.Reply, replyWithErr.Err)
 			}
-			log.Warningf("TODO(tschottdorf): #2297: %s hit cache for: <%T,%T>", ba, replyWithErr.Reply, replyWithErr.Err)
 		}
 	}
 

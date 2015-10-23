@@ -1639,9 +1639,8 @@ type BatchResponse struct {
 	Responses            []ResponseUnion `protobuf:"bytes,2,rep,name=responses" json:"responses"`
 }
 
-func (m *BatchResponse) Reset()         { *m = BatchResponse{} }
-func (m *BatchResponse) String() string { return proto.CompactTextString(m) }
-func (*BatchResponse) ProtoMessage()    {}
+func (m *BatchResponse) Reset()      { *m = BatchResponse{} }
+func (*BatchResponse) ProtoMessage() {}
 
 func (m *BatchResponse) GetResponses() []ResponseUnion {
 	if m != nil {

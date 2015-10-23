@@ -636,6 +636,7 @@ message BatchRequest {
 // error in the response header is set to the first error from the
 // slice of responses, if applicable.
 message BatchResponse {
+  option (gogoproto.goproto_stringer) = false;
   message Header {
     // error is non-nil if an error occurred.
     optional Error error = 1;
