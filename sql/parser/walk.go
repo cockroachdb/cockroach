@@ -93,7 +93,7 @@ func (expr *IfExpr) Walk(v Visitor) {
 }
 
 // Walk implements the Expr interface.
-func (expr *IsOfTypeExpr) Walk(_ Visitor) {}
+func (*IsOfTypeExpr) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
 func (expr *NotExpr) Walk(v Visitor) {
@@ -118,7 +118,7 @@ func (expr *ParenExpr) Walk(v Visitor) {
 }
 
 // Walk implements the Expr interface.
-func (expr *QualifiedName) Walk(_ Visitor) {}
+func (*QualifiedName) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
 func (expr *RangeCond) Walk(v Visitor) {
@@ -145,13 +145,13 @@ func (expr Array) Walk(v Visitor) {
 }
 
 // Walk implements the Expr interface.
-func (expr DefaultVal) Walk(_ Visitor) {}
+func (DefaultVal) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr IntVal) Walk(_ Visitor) {}
+func (IntVal) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr NumVal) Walk(_ Visitor) {}
+func (NumVal) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
 func (expr Row) Walk(v Visitor) {
@@ -168,37 +168,37 @@ func (expr Tuple) Walk(v Visitor) {
 }
 
 // Walk implements the Expr interface.
-func (expr ValArg) Walk(_ Visitor) {}
+func (ValArg) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr DBool) Walk(_ Visitor) {}
+func (DBool) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr DBytes) Walk(_ Visitor) {}
+func (DBytes) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr DDate) Walk(_ Visitor) {}
+func (DDate) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr DFloat) Walk(_ Visitor) {}
+func (DFloat) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr DInt) Walk(_ Visitor) {}
+func (DInt) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr DInterval) Walk(_ Visitor) {}
+func (DInterval) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr dNull) Walk(_ Visitor) {}
+func (dNull) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr DString) Walk(_ Visitor) {}
+func (DString) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr DTimestamp) Walk(_ Visitor) {}
+func (DTimestamp) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr DTuple) Walk(_ Visitor) {}
+func (DTuple) Walk(_ Visitor) {}
 
 // WalkExpr traverses the nodes in an expression.
 func WalkExpr(v Visitor, expr Expr) Expr {
@@ -234,7 +234,7 @@ func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 	if !ok {
 		return v, expr
 	}
-	d, found := v.args.Arg(string(placeholder))
+	d, found := v.args.Arg(placeholder.name)
 	if !found {
 		v.err = fmt.Errorf("arg %s not found", placeholder)
 		return nil, expr

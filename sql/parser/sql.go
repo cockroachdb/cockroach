@@ -4317,7 +4317,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:844
 		{
-			sqlVAL.expr = ValArg(sqlDollar[1].str)
+			sqlVAL.expr = ValArg{name: sqlDollar[1].str}
 		}
 	case 110:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -6580,7 +6580,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2713
 		{
-			sqlVAL.expr = ValArg(sqlDollar[1].str)
+			sqlVAL.expr = ValArg{name: sqlDollar[1].str}
 		}
 	case 516:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
