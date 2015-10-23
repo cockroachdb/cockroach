@@ -2068,15 +2068,6 @@ class Error : public ::google::protobuf::Message {
   ::cockroach::roachpb::ErrorDetail* release_detail();
   void set_allocated_detail(::cockroach::roachpb::ErrorDetail* detail);
 
-  // optional .cockroach.roachpb.ErrPosition index = 5;
-  bool has_index() const;
-  void clear_index();
-  static const int kIndexFieldNumber = 5;
-  const ::cockroach::roachpb::ErrPosition& index() const;
-  ::cockroach::roachpb::ErrPosition* mutable_index();
-  ::cockroach::roachpb::ErrPosition* release_index();
-  void set_allocated_index(::cockroach::roachpb::ErrPosition* index);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Error)
  private:
   inline void set_has_message();
@@ -2087,8 +2078,6 @@ class Error : public ::google::protobuf::Message {
   inline void clear_has_transaction_restart();
   inline void set_has_detail();
   inline void clear_has_detail();
-  inline void set_has_index();
-  inline void clear_has_index();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -2097,7 +2086,6 @@ class Error : public ::google::protobuf::Message {
   bool retryable_;
   int transaction_restart_;
   ::cockroach::roachpb::ErrorDetail* detail_;
-  ::cockroach::roachpb::ErrPosition* index_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
@@ -4182,49 +4170,6 @@ inline void Error::set_allocated_detail(::cockroach::roachpb::ErrorDetail* detai
     clear_has_detail();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Error.detail)
-}
-
-// optional .cockroach.roachpb.ErrPosition index = 5;
-inline bool Error::has_index() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-inline void Error::set_has_index() {
-  _has_bits_[0] |= 0x00000010u;
-}
-inline void Error::clear_has_index() {
-  _has_bits_[0] &= ~0x00000010u;
-}
-inline void Error::clear_index() {
-  if (index_ != NULL) index_->::cockroach::roachpb::ErrPosition::Clear();
-  clear_has_index();
-}
-inline const ::cockroach::roachpb::ErrPosition& Error::index() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Error.index)
-  return index_ != NULL ? *index_ : *default_instance_->index_;
-}
-inline ::cockroach::roachpb::ErrPosition* Error::mutable_index() {
-  set_has_index();
-  if (index_ == NULL) {
-    index_ = new ::cockroach::roachpb::ErrPosition;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Error.index)
-  return index_;
-}
-inline ::cockroach::roachpb::ErrPosition* Error::release_index() {
-  clear_has_index();
-  ::cockroach::roachpb::ErrPosition* temp = index_;
-  index_ = NULL;
-  return temp;
-}
-inline void Error::set_allocated_index(::cockroach::roachpb::ErrPosition* index) {
-  delete index_;
-  index_ = index;
-  if (index) {
-    set_has_index();
-  } else {
-    clear_has_index();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Error.index)
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS

@@ -56,7 +56,6 @@ type IndexedError interface {
 
 var _ IndexedError = &WriteIntentError{}
 var _ IndexedError = &ConditionFailedError{}
-var _ IndexedError = &internalError{}
 
 // ErrorIndex implements IndexedError.
 func (e *ConditionFailedError) ErrorIndex() (int32, bool) {
@@ -121,18 +120,6 @@ func (e *internalError) Transaction() *Transaction {
 	return nil
 }
 
-// ErrorIndex implements IndexedError.
-func (e *internalError) ErrorIndex() (int32, bool) {
-	if e.Index == nil {
-		return 0, false
-	}
-	return e.Index.Index, true
-}
-
-func (e *internalError) SetErrorIndex(index int32) {
-	e.Index = &ErrPosition{Index: index}
-}
-
 // GoError returns the non-nil error from the roachpb.Error union.
 func (e *Error) GoError() error {
 	if e == nil {
@@ -180,11 +167,6 @@ func (e *Error) SetGoError(err error) {
 	if r, ok := err.(TransactionRestartError); ok {
 		isTxnError = true
 		e.TransactionRestart = r.CanRestartTransaction()
-	}
-	if r, ok := err.(IndexedError); ok {
-		if index, ok := r.ErrorIndex(); ok {
-			e.Index = &ErrPosition{Index: index}
-		}
 	}
 	// If the specific error type exists in the detail union, set it.
 	detail := &ErrorDetail{}

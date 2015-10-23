@@ -370,12 +370,11 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrPosition, _internal_metadata_),
       -1);
   Error_descriptor_ = file->message_type(17);
-  static const int Error_offsets_[5] = {
+  static const int Error_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, message_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, retryable_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, transaction_restart_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, detail_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, index_),
   };
   Error_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -561,15 +560,14 @@ void protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto() {
     "lable\030\016 \001(\0132\'.cockroach.roachpb.NodeUnav"
     "ailableError\022*\n\004send\030\017 \001(\0132\034.cockroach.r"
     "oachpb.SendError:\004\310\240\037\001\"\"\n\013ErrPosition\022\023\n"
-    "\005index\030\001 \001(\005B\004\310\336\037\000\"\340\001\n\005Error\022\025\n\007message\030"
+    "\005index\030\001 \001(\005B\004\310\336\037\000\"\261\001\n\005Error\022\025\n\007message\030"
     "\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022H\n\023"
     "transaction_restart\030\003 \001(\0162%.cockroach.ro"
     "achpb.TransactionRestartB\004\310\336\037\000\022.\n\006detail"
-    "\030\004 \001(\0132\036.cockroach.roachpb.ErrorDetail\022-"
-    "\n\005index\030\005 \001(\0132\036.cockroach.roachpb.ErrPos"
-    "ition*;\n\022TransactionRestart\022\t\n\005ABORT\020\000\022\013"
-    "\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\035Z\007roachpb\330\341\036"
-    "\000\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 3177);
+    "\030\004 \001(\0132\036.cockroach.roachpb.ErrorDetail*;"
+    "\n\022TransactionRestart\022\t\n\005ABORT\020\000\022\013\n\007BACKO"
+    "FF\020\001\022\r\n\tIMMEDIATE\020\002B\035Z\007roachpb\330\341\036\000\340\342\036\001\310\342"
+    "\036\001\320\342\036\001\220\343\036\000", 3130);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -7860,7 +7858,6 @@ const int Error::kMessageFieldNumber;
 const int Error::kRetryableFieldNumber;
 const int Error::kTransactionRestartFieldNumber;
 const int Error::kDetailFieldNumber;
-const int Error::kIndexFieldNumber;
 #endif  // !_MSC_VER
 
 Error::Error()
@@ -7871,7 +7868,6 @@ Error::Error()
 
 void Error::InitAsDefaultInstance() {
   detail_ = const_cast< ::cockroach::roachpb::ErrorDetail*>(&::cockroach::roachpb::ErrorDetail::default_instance());
-  index_ = const_cast< ::cockroach::roachpb::ErrPosition*>(&::cockroach::roachpb::ErrPosition::default_instance());
 }
 
 Error::Error(const Error& from)
@@ -7889,7 +7885,6 @@ void Error::SharedCtor() {
   retryable_ = false;
   transaction_restart_ = 0;
   detail_ = NULL;
-  index_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -7902,7 +7897,6 @@ void Error::SharedDtor() {
   message_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != default_instance_) {
     delete detail_;
-    delete index_;
   }
 }
 
@@ -7940,16 +7934,13 @@ void Error::Clear() {
            ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
 } while (0)
 
-  if (_has_bits_[0 / 32] & 31u) {
+  if (_has_bits_[0 / 32] & 15u) {
     ZR_(retryable_, transaction_restart_);
     if (has_message()) {
       message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
     if (has_detail()) {
       if (detail_ != NULL) detail_->::cockroach::roachpb::ErrorDetail::Clear();
-    }
-    if (has_index()) {
-      if (index_ != NULL) index_->::cockroach::roachpb::ErrPosition::Clear();
     }
   }
 
@@ -8032,19 +8023,6 @@ bool Error::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(42)) goto parse_index;
-        break;
-      }
-
-      // optional .cockroach.roachpb.ErrPosition index = 5;
-      case 5: {
-        if (tag == 42) {
-         parse_index:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_index()));
-        } else {
-          goto handle_unusual;
-        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -8101,12 +8079,6 @@ void Error::SerializeWithCachedSizes(
       4, *this->detail_, output);
   }
 
-  // optional .cockroach.roachpb.ErrPosition index = 5;
-  if (has_index()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      5, *this->index_, output);
-  }
-
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -8146,13 +8118,6 @@ void Error::SerializeWithCachedSizes(
         4, *this->detail_, target);
   }
 
-  // optional .cockroach.roachpb.ErrPosition index = 5;
-  if (has_index()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        5, *this->index_, target);
-  }
-
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -8164,7 +8129,7 @@ void Error::SerializeWithCachedSizes(
 int Error::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 31) {
+  if (_has_bits_[0 / 32] & 15) {
     // optional string message = 1;
     if (has_message()) {
       total_size += 1 +
@@ -8188,13 +8153,6 @@ int Error::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->detail_);
-    }
-
-    // optional .cockroach.roachpb.ErrPosition index = 5;
-    if (has_index()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->index_);
     }
 
   }
@@ -8237,9 +8195,6 @@ void Error::MergeFrom(const Error& from) {
     if (from.has_detail()) {
       mutable_detail()->::cockroach::roachpb::ErrorDetail::MergeFrom(from.detail());
     }
-    if (from.has_index()) {
-      mutable_index()->::cockroach::roachpb::ErrPosition::MergeFrom(from.index());
-    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -8272,7 +8227,6 @@ void Error::InternalSwap(Error* other) {
   std::swap(retryable_, other->retryable_);
   std::swap(transaction_restart_, other->transaction_restart_);
   std::swap(detail_, other->detail_);
-  std::swap(index_, other->index_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -8432,49 +8386,6 @@ void Error::clear_detail() {
     clear_has_detail();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Error.detail)
-}
-
-// optional .cockroach.roachpb.ErrPosition index = 5;
-bool Error::has_index() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-void Error::set_has_index() {
-  _has_bits_[0] |= 0x00000010u;
-}
-void Error::clear_has_index() {
-  _has_bits_[0] &= ~0x00000010u;
-}
-void Error::clear_index() {
-  if (index_ != NULL) index_->::cockroach::roachpb::ErrPosition::Clear();
-  clear_has_index();
-}
- const ::cockroach::roachpb::ErrPosition& Error::index() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Error.index)
-  return index_ != NULL ? *index_ : *default_instance_->index_;
-}
- ::cockroach::roachpb::ErrPosition* Error::mutable_index() {
-  set_has_index();
-  if (index_ == NULL) {
-    index_ = new ::cockroach::roachpb::ErrPosition;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Error.index)
-  return index_;
-}
- ::cockroach::roachpb::ErrPosition* Error::release_index() {
-  clear_has_index();
-  ::cockroach::roachpb::ErrPosition* temp = index_;
-  index_ = NULL;
-  return temp;
-}
- void Error::set_allocated_index(::cockroach::roachpb::ErrPosition* index) {
-  delete index_;
-  index_ = index;
-  if (index) {
-    set_has_index();
-  } else {
-    clear_has_index();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Error.index)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

@@ -221,8 +221,4 @@ message Error {
   // If an ErrorDetail is present, it may contain additional structured data
   // about the error.
   optional ErrorDetail detail = 4;
-
-  // The index, if given, contains the index of the request (in the batch)
-  // whose execution caused the error.
-  optional ErrPosition index = 5;
 }

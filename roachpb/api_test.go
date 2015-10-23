@@ -59,13 +59,6 @@ func TestSetGoErrorGeneric(t *testing.T) {
 	if rErr, ok := br.Error.GoError().(retry.Retryable); !ok || !rErr.CanRetry() {
 		t.Error("generated GoError is not retryable")
 	}
-	if br.Error.GetIndex().GetIndex() != 99 {
-		t.Errorf("expected generic error to have index set")
-	}
-	if iErr, ok := br.Error.GoError().(IndexedError); !ok ||
-		func() int32 { i, _ := iErr.ErrorIndex(); return i }() != 99 {
-		t.Errorf("generated GoError lost the index")
-	}
 }
 
 // TestResponseHeaderNilError verifies that a nil error can be set
