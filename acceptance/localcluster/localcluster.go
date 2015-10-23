@@ -485,16 +485,19 @@ func (l *Cluster) Assert(t util.Tester) {
 	if cur := filter(l.events, time.Duration(0)); cur != nil {
 		t.Fatalf("unexpected extra event %v (after %v)", cur, events)
 	}
-	log.Infof("asserted %v", events)
+	if log.V(2) {
+		log.Infof("asserted %v", events)
+	}
 }
 
-// AssertAndStop calls Assert and then stops the cluster.
+// AssertAndStop calls Assert and then stops the cluster. It is safe to stop
+// the cluster multiple times.
 func (l *Cluster) AssertAndStop(t util.Tester) {
 	defer l.stop()
 	l.Assert(t)
 }
 
-// Stop stops the clusters. It is safe to stop the cluster multiple times.
+// stop stops the cluster.
 func (l *Cluster) stop() {
 	if *waitOnStop {
 		log.Infof("waiting for interrupt")
@@ -528,16 +531,24 @@ func (l *Cluster) stop() {
 		l.CertsDir = ""
 	}
 	for i, n := range l.Nodes {
+		ci, err := n.Inspect()
+		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
 		maybePanic(n.Kill())
 		if len(l.LogDir) > 0 {
 			// TODO(bdarnell): make these filenames more consistent with
 			// structured logs?
-			w, err := os.Create(filepath.Join(l.LogDir, node(i),
+			file := filepath.Join(l.LogDir, node(i),
 				fmt.Sprintf("stderr.%s.log", strings.Replace(
-					time.Now().Format(time.RFC3339), ":", "_", -1))))
+					time.Now().Format(time.RFC3339), ":", "_", -1)))
+			w, err := os.Create(file)
 			maybePanic(err)
 			defer w.Close()
 			maybePanic(n.Logs(w))
+			if crashed {
+				log.Infof("node %d: stderr at %s", i, file)
+			}
+		} else if crashed {
+			log.Warningf("node %d died: %s", i, ci.State)
 		}
 		maybePanic(n.Remove())
 	}

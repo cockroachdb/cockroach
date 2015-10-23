@@ -77,6 +77,7 @@ func TestPut(t *testing.T) {
 			// running.
 			count := atomic.LoadInt64(&count)
 			log.Infof("%d (%d/s)", count, count-baseCount)
+			l.Assert(t)
 		}
 	}
 

@@ -67,6 +67,14 @@ func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
 	return nil, false
 }
 
+func (br *BatchResponse) String() string {
+	var str []string
+	for _, union := range br.Responses {
+		str = append(str, fmt.Sprintf("%T", union.GetInner()))
+	}
+	return strings.Join(str, ", ")
+}
+
 // First returns the first response of the given type, if possible.
 func (br *BatchResponse) First() Response {
 	if len(br.Responses) > 0 {

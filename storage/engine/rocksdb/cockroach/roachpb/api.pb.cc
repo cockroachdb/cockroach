@@ -1502,18 +1502,19 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "hRequest\0223\n\006header\030\001 \001(\0132\031.cockroach.roa"
     "chpb.HeaderB\010\310\336\037\000\320\336\037\001\0227\n\010requests\030\002 \003(\0132"
     "\037.cockroach.roachpb.RequestUnionB\004\310\336\037\000:\004"
-    "\230\240\037\000\"\245\002\n\rBatchResponse\022A\n\006header\030\001 \001(\0132\'"
+    "\230\240\037\000\"\253\002\n\rBatchResponse\022A\n\006header\030\001 \001(\0132\'"
     ".cockroach.roachpb.BatchResponse.HeaderB"
     "\010\310\336\037\000\320\336\037\001\0229\n\tresponses\030\002 \003(\0132 .cockroach"
     ".roachpb.ResponseUnionB\004\310\336\037\000\032\225\001\n\006Header\022"
     "\'\n\005error\030\001 \001(\0132\030.cockroach.roachpb.Error"
     "\0225\n\ttimestamp\030\002 \001(\0132\034.cockroach.roachpb."
     "TimestampB\004\310\336\037\000\022+\n\003txn\030\003 \001(\0132\036.cockroach"
-    ".roachpb.Transaction*L\n\023ReadConsistencyT"
-    "ype\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014IN"
-    "CONSISTENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n\016PUS"
-    "H_TIMESTAMP\020\000\022\r\n\tABORT_TXN\020\001\022\017\n\013CLEANUP_"
-    "TXN\020\002\032\004\210\243\036\000B\031Z\007roachpb\340\342\036\001\310\342\036\001\320\342\036\001\220\343\036\000", 8638);
+    ".roachpb.Transaction:\004\230\240\037\000*L\n\023ReadConsis"
+    "tencyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001"
+    "\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022"
+    "\022\n\016PUSH_TIMESTAMP\020\000\022\r\n\tABORT_TXN\020\001\022\017\n\013CL"
+    "EANUP_TXN\020\002\032\004\210\243\036\000B\031Z\007roachpb\340\342\036\001\310\342\036\001\320\342\036\001"
+    "\220\343\036\000", 8644);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/api.proto", &protobuf_RegisterTypes);
   ClientCmdID::default_instance_ = new ClientCmdID();
