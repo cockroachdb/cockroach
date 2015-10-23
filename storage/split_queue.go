@@ -38,7 +38,7 @@ const (
 // splitQueue manages a queue of ranges slated to be split due to size
 // or along intersecting zone config boundaries.
 type splitQueue struct {
-	*baseQueue
+	baseQueue
 	db *client.DB
 }
 
@@ -47,22 +47,22 @@ func newSplitQueue(db *client.DB, gossip *gossip.Gossip) *splitQueue {
 	sq := &splitQueue{
 		db: db,
 	}
-	sq.baseQueue = newBaseQueue("split", sq, gossip, splitQueueMaxSize)
+	sq.baseQueue = makeBaseQueue("split", sq, gossip, splitQueueMaxSize)
 	return sq
 }
 
-func (sq *splitQueue) needsLeaderLease() bool {
+func (*splitQueue) needsLeaderLease() bool {
 	return true
 }
 
-func (sq *splitQueue) acceptsUnsplitRanges() bool {
+func (*splitQueue) acceptsUnsplitRanges() bool {
 	return true
 }
 
 // shouldQueue determines whether a range should be queued for
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone.
-func (sq *splitQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
+func (*splitQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := rng.Desc()
@@ -122,6 +122,6 @@ func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
 }
 
 // timer returns interval between processing successive queued splits.
-func (sq *splitQueue) timer() time.Duration {
+func (*splitQueue) timer() time.Duration {
 	return splitQueueTimerDuration
 }

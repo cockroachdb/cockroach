@@ -60,23 +60,23 @@ const (
 // The shouldQueue function combines the need for both tasks into a
 // single priority. If any task is overdue, shouldQueue returns true.
 type gcQueue struct {
-	*baseQueue
+	baseQueue
 }
 
 // newGCQueue returns a new instance of gcQueue.
 func newGCQueue(gossip *gossip.Gossip) *gcQueue {
 	gcq := &gcQueue{}
-	gcq.baseQueue = newBaseQueue("gc", gcq, gossip, gcQueueMaxSize)
+	gcq.baseQueue = makeBaseQueue("gc", gcq, gossip, gcQueueMaxSize)
 	return gcq
 }
 
-func (gcq *gcQueue) needsLeaderLease() bool {
+func (*gcQueue) needsLeaderLease() bool {
 	return true
 }
 
 // acceptsUnsplitRanges is false because the proper GC
 // policy cannot be determined for ranges that span zone configs.
-func (gcq *gcQueue) acceptsUnsplitRanges() bool {
+func (*gcQueue) acceptsUnsplitRanges() bool {
 	return false
 }
 
@@ -84,7 +84,7 @@ func (gcq *gcQueue) acceptsUnsplitRanges() bool {
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
-func (gcq *gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
+func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := repl.Desc()
@@ -290,7 +290,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 // timer returns a constant duration to space out GC processing
 // for successive queued replicas.
-func (gcq *gcQueue) timer() time.Duration {
+func (*gcQueue) timer() time.Duration {
 	return gcQueueTimerDuration
 }
 
@@ -298,7 +298,7 @@ func (gcq *gcQueue) timer() time.Duration {
 // cannot be aborted, the oldestIntentNanos value is atomically
 // updated to the min of oldestIntentNanos and the intent's
 // timestamp. The wait group is signaled on completion.
-func (gcq *gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction, updateOldestIntent func(int64), wg *sync.WaitGroup) {
+func (*gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction, updateOldestIntent func(int64), wg *sync.WaitGroup) {
 	defer wg.Done() // signal wait group always on completion
 	if log.V(1) {
 		log.Infof("pushing txn %s ts=%s", txn, txn.OrigTimestamp)

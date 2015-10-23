@@ -40,34 +40,33 @@ const (
 // replicateQueue manages a queue of replicas which may need to add an
 // additional replica to their range.
 type replicateQueue struct {
-	*baseQueue
+	baseQueue
 	allocator Allocator
 	clock     *hlc.Clock
 }
 
-// makeReplicateQueue returns a new instance of replicateQueue.
-func makeReplicateQueue(gossip *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
-	options RebalancingOptions) replicateQueue {
-	rq := replicateQueue{
+// newReplicateQueue returns a new instance of replicateQueue.
+func newReplicateQueue(gossip *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
+	options RebalancingOptions) *replicateQueue {
+	rq := &replicateQueue{
 		allocator: allocator,
 		clock:     clock,
 	}
-	// rq must be a pointer in order to setup the reference cycle.
-	rq.baseQueue = newBaseQueue("replicate", &rq, gossip, replicateQueueMaxSize)
+	rq.baseQueue = makeBaseQueue("replicate", rq, gossip, replicateQueueMaxSize)
 	return rq
 }
 
-func (rq replicateQueue) needsLeaderLease() bool {
+func (*replicateQueue) needsLeaderLease() bool {
 	return true
 }
 
 // acceptsUnsplitRanges is false because the proper replication
 // policy cannot be determined for ranges that span zone configs.
-func (rq *replicateQueue) acceptsUnsplitRanges() bool {
+func (*replicateQueue) acceptsUnsplitRanges() bool {
 	return false
 }
 
-func (rq replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
+func (rq *replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := repl.Desc()
@@ -92,7 +91,7 @@ func (rq replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	return shouldRebalance, 0
 }
 
-func (rq replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg *config.SystemConfig) error {
+func (rq *replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg *config.SystemConfig) error {
 	desc := repl.Desc()
 	// Find the zone config for this range.
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
@@ -168,6 +167,6 @@ func (rq replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg *c
 	return nil
 }
 
-func (rq replicateQueue) timer() time.Duration {
+func (*replicateQueue) timer() time.Duration {
 	return replicateQueueTimerDuration
 }

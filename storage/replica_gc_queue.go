@@ -46,7 +46,7 @@ const (
 // collections. The GC process asynchronously removes local data for
 // ranges that have been rebalanced away from this store.
 type replicaGCQueue struct {
-	*baseQueue
+	baseQueue
 	db     *client.DB
 	locker sync.Locker
 }
@@ -57,15 +57,15 @@ func newReplicaGCQueue(db *client.DB, gossip *gossip.Gossip, locker sync.Locker)
 		db:     db,
 		locker: locker,
 	}
-	q.baseQueue = newBaseQueue("replicaGC", q, gossip, replicaGCQueueMaxSize)
+	q.baseQueue = makeBaseQueue("replicaGC", q, gossip, replicaGCQueueMaxSize)
 	return q
 }
 
-func (q *replicaGCQueue) needsLeaderLease() bool {
+func (*replicaGCQueue) needsLeaderLease() bool {
 	return false
 }
 
-func (q *replicaGCQueue) acceptsUnsplitRanges() bool {
+func (*replicaGCQueue) acceptsUnsplitRanges() bool {
 	return true
 }
 
@@ -73,7 +73,7 @@ func (q *replicaGCQueue) acceptsUnsplitRanges() bool {
 // if so at what priority. Replicas which have been inactive for longer
 // than ReplicaGCQueueInactivityThreshold are considered for possible GC
 // at equal priority.
-func (q *replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
+func (*replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 	_ *config.SystemConfig) (bool, float64) {
 
 	if l := rng.getLease(); l.Expiration.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now) {
@@ -174,6 +174,6 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 	return nil
 }
 
-func (q *replicaGCQueue) timer() time.Duration {
+func (*replicaGCQueue) timer() time.Duration {
 	return replicaGCQueueTimerDuration
 }

@@ -240,7 +240,7 @@ type Store struct {
 	gcQueue           *gcQueue        // Garbage collection queue
 	_splitQueue       *splitQueue     // Range splitting queue
 	verifyQueue       *verifyQueue    // Checksum verification queue
-	replicateQueue    replicateQueue  // Replication queue
+	replicateQueue    *replicateQueue // Replication queue
 	_replicaGCQueue   *replicaGCQueue // Replica GC queue
 	scanner           *replicaScanner // Replica scanner
 	feed              StoreEventFeed  // Event Feed
@@ -369,7 +369,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.gcQueue = newGCQueue(s.ctx.Gossip)
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
-	s.replicateQueue = makeReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock, s.ctx.RebalancingOptions)
+	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock, s.ctx.RebalancingOptions)
 	s._replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip, s.GroupLocker())
 	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._replicaGCQueue)
 
