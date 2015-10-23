@@ -674,7 +674,11 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba roachpb.BatchRequest, err er
 			args := union.GetInner()
 			if usesTimestampCache(args) {
 				header := args.Header()
-				r.tsCache.Add(header.Key, header.EndKey, ba.Timestamp, ba.Txn.GetID(), roachpb.IsReadOnly(args))
+				var txnID []byte
+				if ba.Txn != nil {
+					txnID = ba.Txn.ID
+				}
+				r.tsCache.Add(header.Key, header.EndKey, ba.Timestamp, txnID, roachpb.IsReadOnly(args))
 			}
 		}
 	}
@@ -820,9 +824,13 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	r.Lock()
 	for _, union := range ba.Requests {
 		args := union.GetInner()
-		header := args.Header()
 		if usesTimestampCache(args) {
-			rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, ba.Txn.GetID())
+			header := args.Header()
+			var txnID []byte
+			if ba.Txn != nil {
+				txnID = ba.Txn.ID
+			}
+			rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, txnID)
 
 			// Always push the timestamp forward if there's been a read which
 			// occurred after our txn timestamp.
@@ -1550,7 +1558,9 @@ func loadSystemDBSpan(eng engine.Engine) ([]roachpb.KeyValue, []byte, error) {
 		if _, err := sha.Write(kv.Key); err != nil {
 			return nil, nil, err
 		}
-		if _, err := sha.Write(kv.Value.GetRawBytes()); err != nil {
+		// There are all kinds of different types here, so we can't use the
+		// typed getters.
+		if _, err := sha.Write(kv.Value.RawBytes); err != nil {
 			return nil, nil, err
 		}
 	}

@@ -204,20 +204,6 @@ type Timestamp struct {
 func (m *Timestamp) Reset()      { *m = Timestamp{} }
 func (*Timestamp) ProtoMessage() {}
 
-func (m *Timestamp) GetWallTime() int64 {
-	if m != nil {
-		return m.WallTime
-	}
-	return 0
-}
-
-func (m *Timestamp) GetLogical() int32 {
-	if m != nil {
-		return m.Logical
-	}
-	return 0
-}
-
 // Value specifies the value at a key. Multiple values at the same key
 // are supported based on timestamp.
 type Value struct {
@@ -240,34 +226,6 @@ func (m *Value) Reset()         { *m = Value{} }
 func (m *Value) String() string { return proto.CompactTextString(m) }
 func (*Value) ProtoMessage()    {}
 
-func (m *Value) GetRawBytes() []byte {
-	if m != nil {
-		return m.RawBytes
-	}
-	return nil
-}
-
-func (m *Value) GetChecksum() uint32 {
-	if m != nil && m.Checksum != nil {
-		return *m.Checksum
-	}
-	return 0
-}
-
-func (m *Value) GetTimestamp() *Timestamp {
-	if m != nil {
-		return m.Timestamp
-	}
-	return nil
-}
-
-func (m *Value) GetTag() ValueType {
-	if m != nil {
-		return m.Tag
-	}
-	return ValueType_UNKNOWN
-}
-
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
 // from ScanRequest/ScanResponse. It embeds a Key and a Value.
 type KeyValue struct {
@@ -279,20 +237,6 @@ func (m *KeyValue) Reset()         { *m = KeyValue{} }
 func (m *KeyValue) String() string { return proto.CompactTextString(m) }
 func (*KeyValue) ProtoMessage()    {}
 
-func (m *KeyValue) GetKey() Key {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *KeyValue) GetValue() Value {
-	if m != nil {
-		return m.Value
-	}
-	return Value{}
-}
-
 // RawKeyValue contains the raw bytes of the value for a key.
 type RawKeyValue struct {
 	Key   EncodedKey `protobuf:"bytes,1,opt,name=key,casttype=EncodedKey" json:"key,omitempty"`
@@ -302,20 +246,6 @@ type RawKeyValue struct {
 func (m *RawKeyValue) Reset()         { *m = RawKeyValue{} }
 func (m *RawKeyValue) String() string { return proto.CompactTextString(m) }
 func (*RawKeyValue) ProtoMessage()    {}
-
-func (m *RawKeyValue) GetKey() EncodedKey {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *RawKeyValue) GetValue() []byte {
-	if m != nil {
-		return m.Value
-	}
-	return nil
-}
 
 // A StoreIdent uniquely identifies a store in the cluster. The
 // StoreIdent is written to the underlying storage engine at a
@@ -329,27 +259,6 @@ type StoreIdent struct {
 func (m *StoreIdent) Reset()         { *m = StoreIdent{} }
 func (m *StoreIdent) String() string { return proto.CompactTextString(m) }
 func (*StoreIdent) ProtoMessage()    {}
-
-func (m *StoreIdent) GetClusterID() string {
-	if m != nil {
-		return m.ClusterID
-	}
-	return ""
-}
-
-func (m *StoreIdent) GetNodeID() NodeID {
-	if m != nil {
-		return m.NodeID
-	}
-	return 0
-}
-
-func (m *StoreIdent) GetStoreID() StoreID {
-	if m != nil {
-		return m.StoreID
-	}
-	return 0
-}
 
 // A SplitTrigger is run after a successful commit of an AdminSplit
 // command. It provides the updated range descriptor covering the
@@ -365,20 +274,6 @@ func (m *SplitTrigger) Reset()         { *m = SplitTrigger{} }
 func (m *SplitTrigger) String() string { return proto.CompactTextString(m) }
 func (*SplitTrigger) ProtoMessage()    {}
 
-func (m *SplitTrigger) GetUpdatedDesc() RangeDescriptor {
-	if m != nil {
-		return m.UpdatedDesc
-	}
-	return RangeDescriptor{}
-}
-
-func (m *SplitTrigger) GetNewDesc() RangeDescriptor {
-	if m != nil {
-		return m.NewDesc
-	}
-	return RangeDescriptor{}
-}
-
 // A MergeTrigger is run after a successful commit of an AdminMerge
 // command. It provides the updated range descriptor that now encompasses
 // what was originally both ranges. This information allows the final bookkeeping
@@ -391,20 +286,6 @@ type MergeTrigger struct {
 func (m *MergeTrigger) Reset()         { *m = MergeTrigger{} }
 func (m *MergeTrigger) String() string { return proto.CompactTextString(m) }
 func (*MergeTrigger) ProtoMessage()    {}
-
-func (m *MergeTrigger) GetUpdatedDesc() RangeDescriptor {
-	if m != nil {
-		return m.UpdatedDesc
-	}
-	return RangeDescriptor{}
-}
-
-func (m *MergeTrigger) GetSubsumedRangeID() RangeID {
-	if m != nil {
-		return m.SubsumedRangeID
-	}
-	return 0
-}
 
 type ChangeReplicasTrigger struct {
 	NodeID     NodeID            `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
@@ -421,48 +302,6 @@ func (m *ChangeReplicasTrigger) Reset()         { *m = ChangeReplicasTrigger{} }
 func (m *ChangeReplicasTrigger) String() string { return proto.CompactTextString(m) }
 func (*ChangeReplicasTrigger) ProtoMessage()    {}
 
-func (m *ChangeReplicasTrigger) GetNodeID() NodeID {
-	if m != nil {
-		return m.NodeID
-	}
-	return 0
-}
-
-func (m *ChangeReplicasTrigger) GetStoreID() StoreID {
-	if m != nil {
-		return m.StoreID
-	}
-	return 0
-}
-
-func (m *ChangeReplicasTrigger) GetChangeType() ReplicaChangeType {
-	if m != nil {
-		return m.ChangeType
-	}
-	return ADD_REPLICA
-}
-
-func (m *ChangeReplicasTrigger) GetReplica() ReplicaDescriptor {
-	if m != nil {
-		return m.Replica
-	}
-	return ReplicaDescriptor{}
-}
-
-func (m *ChangeReplicasTrigger) GetUpdatedReplicas() []ReplicaDescriptor {
-	if m != nil {
-		return m.UpdatedReplicas
-	}
-	return nil
-}
-
-func (m *ChangeReplicasTrigger) GetNextReplicaID() ReplicaID {
-	if m != nil {
-		return m.NextReplicaID
-	}
-	return 0
-}
-
 // ModifiedSpanTrigger indicates that a specific span has been modified.
 // This can be used to trigger scan-and-gossip for the given span.
 type ModifiedSpanTrigger struct {
@@ -472,13 +311,6 @@ type ModifiedSpanTrigger struct {
 func (m *ModifiedSpanTrigger) Reset()         { *m = ModifiedSpanTrigger{} }
 func (m *ModifiedSpanTrigger) String() string { return proto.CompactTextString(m) }
 func (*ModifiedSpanTrigger) ProtoMessage()    {}
-
-func (m *ModifiedSpanTrigger) GetSystemDBSpan() bool {
-	if m != nil {
-		return m.SystemDBSpan
-	}
-	return false
-}
 
 // InternalCommitTrigger encapsulates all of the internal-only commit triggers.
 // Only one may be set.
@@ -532,13 +364,6 @@ type NodeList struct {
 func (m *NodeList) Reset()         { *m = NodeList{} }
 func (m *NodeList) String() string { return proto.CompactTextString(m) }
 func (*NodeList) ProtoMessage()    {}
-
-func (m *NodeList) GetNodes() []int32 {
-	if m != nil {
-		return m.Nodes
-	}
-	return nil
-}
 
 // A Transaction is a unit of work performed on the database.
 // Cockroach transactions support two isolation levels: snapshot
@@ -603,97 +428,6 @@ type Transaction struct {
 func (m *Transaction) Reset()      { *m = Transaction{} }
 func (*Transaction) ProtoMessage() {}
 
-func (m *Transaction) GetName() string {
-	if m != nil {
-		return m.Name
-	}
-	return ""
-}
-
-func (m *Transaction) GetKey() Key {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *Transaction) GetID() []byte {
-	if m != nil {
-		return m.ID
-	}
-	return nil
-}
-
-func (m *Transaction) GetPriority() int32 {
-	if m != nil {
-		return m.Priority
-	}
-	return 0
-}
-
-func (m *Transaction) GetIsolation() IsolationType {
-	if m != nil {
-		return m.Isolation
-	}
-	return SERIALIZABLE
-}
-
-func (m *Transaction) GetStatus() TransactionStatus {
-	if m != nil {
-		return m.Status
-	}
-	return PENDING
-}
-
-func (m *Transaction) GetEpoch() int32 {
-	if m != nil {
-		return m.Epoch
-	}
-	return 0
-}
-
-func (m *Transaction) GetLastHeartbeat() *Timestamp {
-	if m != nil {
-		return m.LastHeartbeat
-	}
-	return nil
-}
-
-func (m *Transaction) GetTimestamp() Timestamp {
-	if m != nil {
-		return m.Timestamp
-	}
-	return Timestamp{}
-}
-
-func (m *Transaction) GetOrigTimestamp() Timestamp {
-	if m != nil {
-		return m.OrigTimestamp
-	}
-	return Timestamp{}
-}
-
-func (m *Transaction) GetMaxTimestamp() Timestamp {
-	if m != nil {
-		return m.MaxTimestamp
-	}
-	return Timestamp{}
-}
-
-func (m *Transaction) GetCertainNodes() NodeList {
-	if m != nil {
-		return m.CertainNodes
-	}
-	return NodeList{}
-}
-
-func (m *Transaction) GetWriting() bool {
-	if m != nil {
-		return m.Writing
-	}
-	return false
-}
-
 // Lease contains information about leader leases including the
 // expiration and lease holder.
 type Lease struct {
@@ -710,27 +444,6 @@ type Lease struct {
 func (m *Lease) Reset()      { *m = Lease{} }
 func (*Lease) ProtoMessage() {}
 
-func (m *Lease) GetStart() Timestamp {
-	if m != nil {
-		return m.Start
-	}
-	return Timestamp{}
-}
-
-func (m *Lease) GetExpiration() Timestamp {
-	if m != nil {
-		return m.Expiration
-	}
-	return Timestamp{}
-}
-
-func (m *Lease) GetReplica() ReplicaDescriptor {
-	if m != nil {
-		return m.Replica
-	}
-	return ReplicaDescriptor{}
-}
-
 // Intent is used to communicate the location of an intent.
 type Intent struct {
 	Key    Key         `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
@@ -741,27 +454,6 @@ type Intent struct {
 func (m *Intent) Reset()         { *m = Intent{} }
 func (m *Intent) String() string { return proto.CompactTextString(m) }
 func (*Intent) ProtoMessage()    {}
-
-func (m *Intent) GetKey() Key {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *Intent) GetEndKey() Key {
-	if m != nil {
-		return m.EndKey
-	}
-	return nil
-}
-
-func (m *Intent) GetTxn() Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return Transaction{}
-}
 
 // GCMetadata holds information about the last complete key/value
 // garbage collection scan of a range.
@@ -776,20 +468,6 @@ type GCMetadata struct {
 func (m *GCMetadata) Reset()         { *m = GCMetadata{} }
 func (m *GCMetadata) String() string { return proto.CompactTextString(m) }
 func (*GCMetadata) ProtoMessage()    {}
-
-func (m *GCMetadata) GetLastScanNanos() int64 {
-	if m != nil {
-		return m.LastScanNanos
-	}
-	return 0
-}
-
-func (m *GCMetadata) GetOldestIntentNanos() int64 {
-	if m != nil && m.OldestIntentNanos != nil {
-		return *m.OldestIntentNanos
-	}
-	return 0
-}
 
 func init() {
 	proto.RegisterEnum("cockroach.roachpb.ValueType", ValueType_name, ValueType_value)

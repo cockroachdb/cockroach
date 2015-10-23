@@ -86,27 +86,6 @@ func (m *ColumnType) Reset()         { *m = ColumnType{} }
 func (m *ColumnType) String() string { return proto.CompactTextString(m) }
 func (*ColumnType) ProtoMessage()    {}
 
-func (m *ColumnType) GetKind() ColumnType_Kind {
-	if m != nil {
-		return m.Kind
-	}
-	return ColumnType_BOOL
-}
-
-func (m *ColumnType) GetWidth() int32 {
-	if m != nil {
-		return m.Width
-	}
-	return 0
-}
-
-func (m *ColumnType) GetPrecision() int32 {
-	if m != nil {
-		return m.Precision
-	}
-	return 0
-}
-
 type ColumnDescriptor struct {
 	Name     string     `protobuf:"bytes,1,opt,name=name" json:"name"`
 	ID       ColumnID   `protobuf:"varint,2,opt,name=id,casttype=ColumnID" json:"id"`
@@ -120,41 +99,6 @@ type ColumnDescriptor struct {
 func (m *ColumnDescriptor) Reset()         { *m = ColumnDescriptor{} }
 func (m *ColumnDescriptor) String() string { return proto.CompactTextString(m) }
 func (*ColumnDescriptor) ProtoMessage()    {}
-
-func (m *ColumnDescriptor) GetName() string {
-	if m != nil {
-		return m.Name
-	}
-	return ""
-}
-
-func (m *ColumnDescriptor) GetID() ColumnID {
-	if m != nil {
-		return m.ID
-	}
-	return 0
-}
-
-func (m *ColumnDescriptor) GetType() ColumnType {
-	if m != nil {
-		return m.Type
-	}
-	return ColumnType{}
-}
-
-func (m *ColumnDescriptor) GetNullable() bool {
-	if m != nil {
-		return m.Nullable
-	}
-	return false
-}
-
-func (m *ColumnDescriptor) GetDefaultExpr() string {
-	if m != nil && m.DefaultExpr != nil {
-		return *m.DefaultExpr
-	}
-	return ""
-}
 
 type IndexDescriptor struct {
 	Name   string  `protobuf:"bytes,1,opt,name=name" json:"name"`
@@ -182,55 +126,6 @@ type IndexDescriptor struct {
 func (m *IndexDescriptor) Reset()         { *m = IndexDescriptor{} }
 func (m *IndexDescriptor) String() string { return proto.CompactTextString(m) }
 func (*IndexDescriptor) ProtoMessage()    {}
-
-func (m *IndexDescriptor) GetName() string {
-	if m != nil {
-		return m.Name
-	}
-	return ""
-}
-
-func (m *IndexDescriptor) GetID() IndexID {
-	if m != nil {
-		return m.ID
-	}
-	return 0
-}
-
-func (m *IndexDescriptor) GetUnique() bool {
-	if m != nil {
-		return m.Unique
-	}
-	return false
-}
-
-func (m *IndexDescriptor) GetColumnNames() []string {
-	if m != nil {
-		return m.ColumnNames
-	}
-	return nil
-}
-
-func (m *IndexDescriptor) GetStoreColumnNames() []string {
-	if m != nil {
-		return m.StoreColumnNames
-	}
-	return nil
-}
-
-func (m *IndexDescriptor) GetColumnIDs() []ColumnID {
-	if m != nil {
-		return m.ColumnIDs
-	}
-	return nil
-}
-
-func (m *IndexDescriptor) GetImplicitColumnIDs() []ColumnID {
-	if m != nil {
-		return m.ImplicitColumnIDs
-	}
-	return nil
-}
 
 // A TableDescriptor represents a table and is stored in a structured metadata
 // key. The TableDescriptor has a globally-unique ID, while its member

@@ -31,7 +31,10 @@ func (samp *InternalTimeSeriesSample) Maximum() float64 {
 	if samp.Count < 2 {
 		return samp.Sum
 	}
-	return samp.GetMax()
+	if samp.Min != nil {
+		return *samp.Max
+	}
+	return 0
 }
 
 // Minimum returns the minimum value encountered by this sample.
@@ -39,5 +42,8 @@ func (samp *InternalTimeSeriesSample) Minimum() float64 {
 	if samp.Count < 2 {
 		return samp.Sum
 	}
-	return samp.GetMin()
+	if samp.Min != nil {
+		return *samp.Min
+	}
+	return 0
 }

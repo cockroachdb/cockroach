@@ -306,10 +306,9 @@ func (v *Value) InitChecksum(key []byte) {
 // Verify verifies the value's Checksum matches a newly-computed
 // checksum of the value's contents. If the value's Checksum is not
 // set the verification is a noop.
-func (v *Value) Verify(key []byte) error {
+func (v Value) Verify(key []byte) error {
 	if v.Checksum != nil {
-		cksum := v.computeChecksum(key)
-		if v.GetChecksum() != cksum {
+		if cksum := v.computeChecksum(key); cksum != *v.Checksum {
 			return fmt.Errorf("invalid checksum (%d) for key %s, value [% x]",
 				cksum, Key(key), v)
 		}
@@ -392,11 +391,11 @@ func (v *Value) SetTime(t time.Time) {
 	v.Tag = ValueType_TIME
 }
 
-// GetBytes retrieves the bytes value from receiver returning an error
-// if the tag is not BYTES.
-func (v *Value) GetBytes() ([]byte, error) {
-	if tag := v.GetTag(); tag != ValueType_BYTES {
-		return nil, fmt.Errorf("value type is not BYTES: %s", tag)
+// GetBytes returns the bytes field of the receiver. If the tag is not
+// BYTES an error will be returned.
+func (v Value) GetBytes() ([]byte, error) {
+	if tag := v.Tag; tag != ValueType_BYTES {
+		return nil, fmt.Errorf("value type is not %s: %s", ValueType_BYTES, tag)
 	}
 	return v.RawBytes, nil
 }
@@ -404,9 +403,9 @@ func (v *Value) GetBytes() ([]byte, error) {
 // GetFloat decodes a float64 value from the bytes field of the receiver. If
 // the bytes field is not 8 bytes in length or the tag is not FLOAT an error
 // will be returned.
-func (v *Value) GetFloat() (float64, error) {
-	if tag := v.GetTag(); tag != ValueType_FLOAT {
-		return 0, fmt.Errorf("value type is not FLOAT: %s", tag)
+func (v Value) GetFloat() (float64, error) {
+	if tag := v.Tag; tag != ValueType_FLOAT {
+		return 0, fmt.Errorf("value type is not %s: %s", ValueType_FLOAT, tag)
 	}
 	if len(v.RawBytes) != 8 {
 		return 0, fmt.Errorf("float64 value should be exactly 8 bytes: %d", len(v.RawBytes))
@@ -421,9 +420,9 @@ func (v *Value) GetFloat() (float64, error) {
 // GetInt decodes an int64 value from the bytes field of the receiver. If the
 // bytes field is not 8 bytes in length or the tag is not INT an error will be
 // returned.
-func (v *Value) GetInt() (int64, error) {
-	if tag := v.GetTag(); tag != ValueType_INT {
-		return 0, fmt.Errorf("value type is not INT: %s", tag)
+func (v Value) GetInt() (int64, error) {
+	if tag := v.Tag; tag != ValueType_INT {
+		return 0, fmt.Errorf("value type is not %s: %s", ValueType_INT, tag)
 	}
 	if len(v.RawBytes) != 8 {
 		return 0, fmt.Errorf("uint64 value should be exactly 8 bytes: %d", len(v.RawBytes))
@@ -435,11 +434,28 @@ func (v *Value) GetInt() (int64, error) {
 	return int64(u), nil
 }
 
+// GetProto unmarshals the bytes field of the receiver into msg. If
+// unmarshalling fails or the tag is not BYTES, an error will be
+// returned.
+func (v Value) GetProto(msg proto.Message) error {
+	expectedTag := ValueType_BYTES
+
+	// Special handling for ts data.
+	if _, ok := msg.(*InternalTimeSeriesData); ok {
+		expectedTag = ValueType_TIMESERIES
+	}
+
+	if tag := v.Tag; tag != expectedTag {
+		return fmt.Errorf("value type is not %s: %s", expectedTag, tag)
+	}
+	return proto.Unmarshal(v.RawBytes, msg)
+}
+
 // GetTime decodes a time value from the bytes field of the receiver. If the
 // tag is not TIME an error will be returned.
-func (v *Value) GetTime() (time.Time, error) {
-	if tag := v.GetTag(); tag != ValueType_TIME {
-		return time.Time{}, fmt.Errorf("value type is not TIME: %s", tag)
+func (v Value) GetTime() (time.Time, error) {
+	if tag := v.Tag; tag != ValueType_TIME {
+		return time.Time{}, fmt.Errorf("value type is not %s: %s", ValueType_TIME, tag)
 	}
 	_, t, err := encoding.DecodeTime(v.RawBytes)
 	if err != nil {
@@ -457,21 +473,15 @@ var crc32Pool = sync.Pool{
 // GetTimeseries decodes an InternalTimeSeriesData value from the bytes
 // field of the receiver. An error will be returned if the tag is not
 // TIMESERIES or if decoding fails.
-func (v *Value) GetTimeseries() (*InternalTimeSeriesData, error) {
-	if tag := v.GetTag(); tag != ValueType_TIMESERIES {
-		return nil, fmt.Errorf("value type is not TIMESERIES: %s", tag)
-	}
-	ts := &InternalTimeSeriesData{}
-	if err := proto.Unmarshal(v.RawBytes, ts); err != nil {
-		return nil, err
-	}
-	return ts, nil
+func (v Value) GetTimeseries() (InternalTimeSeriesData, error) {
+	ts := InternalTimeSeriesData{}
+	return ts, v.GetProto(&ts)
 }
 
 // computeChecksum computes a checksum based on the provided key and
 // the contents of the value. If the value contains a byte slice, the
 // checksum includes it directly.
-func (v *Value) computeChecksum(key []byte) uint32 {
+func (v Value) computeChecksum(key []byte) uint32 {
 	crc := crc32Pool.Get().(hash.Hash32)
 	if _, err := crc.Write(key); err != nil {
 		panic(err)
@@ -674,8 +684,8 @@ func (t Transaction) String() string {
 }
 
 // Short returns the short form of the Transaction's UUID.
-func (t *Transaction) Short() string {
-	return uuid.UUID(t.GetID()).Short()
+func (t Transaction) Short() string {
+	return uuid.UUID(t.ID).Short()
 }
 
 // NewGCMetadata returns a GCMetadata initialized to have a ByteCounts

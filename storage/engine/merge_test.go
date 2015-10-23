@@ -299,5 +299,5 @@ func unmarshalTimeSeries(t testing.TB, b []byte) *roachpb.InternalTimeSeriesData
 	if err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}
-	return valueTS
+	return &valueTS
 }

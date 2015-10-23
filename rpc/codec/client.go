@@ -82,7 +82,7 @@ func (c *clientCodec) ReadResponseHeader(r *rpc.Response) error {
 	}
 
 	r.Seq = c.respHeader.Id
-	r.ServiceMethod = c.respHeader.GetMethod()
+	r.ServiceMethod = c.respHeader.Method
 	r.Error = c.respHeader.Error
 	return nil
 }

@@ -644,7 +644,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	// since there's no concept of ownership copy-on-write is always preferable.
 	switch t := err.(type) {
 	case nil:
-		newTxn.Update(br.GetTxn())
+		newTxn.Update(br.Txn)
 		// Move txn timestamp forward to response timestamp if applicable.
 		// TODO(tschottdorf): see (*Replica).executeBatch and comments within.
 		// Looks like this isn't necessary any more, nor did it prevent a bug

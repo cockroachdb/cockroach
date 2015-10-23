@@ -240,20 +240,6 @@ func (m *ClientCmdID) Reset()         { *m = ClientCmdID{} }
 func (m *ClientCmdID) String() string { return proto.CompactTextString(m) }
 func (*ClientCmdID) ProtoMessage()    {}
 
-func (m *ClientCmdID) GetWallTime() int64 {
-	if m != nil {
-		return m.WallTime
-	}
-	return 0
-}
-
-func (m *ClientCmdID) GetRandom() int64 {
-	if m != nil {
-		return m.Random
-	}
-	return 0
-}
-
 // Span is supplied with every storage node request.
 type Span struct {
 	// The key for request. If the request operates on a range, this
@@ -269,20 +255,6 @@ type Span struct {
 func (m *Span) Reset()         { *m = Span{} }
 func (m *Span) String() string { return proto.CompactTextString(m) }
 func (*Span) ProtoMessage()    {}
-
-func (m *Span) GetKey() Key {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *Span) GetEndKey() Key {
-	if m != nil {
-		return m.EndKey
-	}
-	return nil
-}
 
 // ResponseHeader is returned with every storage node response.
 type ResponseHeader struct {
@@ -304,20 +276,6 @@ func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
 func (m *ResponseHeader) String() string { return proto.CompactTextString(m) }
 func (*ResponseHeader) ProtoMessage()    {}
 
-func (m *ResponseHeader) GetTimestamp() Timestamp {
-	if m != nil {
-		return m.Timestamp
-	}
-	return Timestamp{}
-}
-
-func (m *ResponseHeader) GetTxn() *Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return nil
-}
-
 // A GetRequest is the argument for the Get() method.
 type GetRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
@@ -338,13 +296,6 @@ func (m *GetResponse) Reset()         { *m = GetResponse{} }
 func (m *GetResponse) String() string { return proto.CompactTextString(m) }
 func (*GetResponse) ProtoMessage()    {}
 
-func (m *GetResponse) GetValue() *Value {
-	if m != nil {
-		return m.Value
-	}
-	return nil
-}
-
 // A PutRequest is the argument to the Put() method.
 type PutRequest struct {
 	Span  `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
@@ -354,13 +305,6 @@ type PutRequest struct {
 func (m *PutRequest) Reset()         { *m = PutRequest{} }
 func (m *PutRequest) String() string { return proto.CompactTextString(m) }
 func (*PutRequest) ProtoMessage()    {}
-
-func (m *PutRequest) GetValue() Value {
-	if m != nil {
-		return m.Value
-	}
-	return Value{}
-}
 
 // A PutResponse is the return value from the Put() method.
 type PutResponse struct {
@@ -391,20 +335,6 @@ func (m *ConditionalPutRequest) Reset()         { *m = ConditionalPutRequest{} }
 func (m *ConditionalPutRequest) String() string { return proto.CompactTextString(m) }
 func (*ConditionalPutRequest) ProtoMessage()    {}
 
-func (m *ConditionalPutRequest) GetValue() Value {
-	if m != nil {
-		return m.Value
-	}
-	return Value{}
-}
-
-func (m *ConditionalPutRequest) GetExpValue() *Value {
-	if m != nil {
-		return m.ExpValue
-	}
-	return nil
-}
-
 // A ConditionalPutResponse is the return value from the
 // ConditionalPut() method.
 type ConditionalPutResponse struct {
@@ -430,13 +360,6 @@ func (m *IncrementRequest) Reset()         { *m = IncrementRequest{} }
 func (m *IncrementRequest) String() string { return proto.CompactTextString(m) }
 func (*IncrementRequest) ProtoMessage()    {}
 
-func (m *IncrementRequest) GetIncrement() int64 {
-	if m != nil {
-		return m.Increment
-	}
-	return 0
-}
-
 // An IncrementResponse is the return value from the Increment
 // method. The new value after increment is specified in NewValue. If
 // the value could not be decoded as specified, Error will be set.
@@ -448,13 +371,6 @@ type IncrementResponse struct {
 func (m *IncrementResponse) Reset()         { *m = IncrementResponse{} }
 func (m *IncrementResponse) String() string { return proto.CompactTextString(m) }
 func (*IncrementResponse) ProtoMessage()    {}
-
-func (m *IncrementResponse) GetNewValue() int64 {
-	if m != nil {
-		return m.NewValue
-	}
-	return 0
-}
 
 // A DeleteRequest is the argument to the Delete() method.
 type DeleteRequest struct {
@@ -487,13 +403,6 @@ func (m *DeleteRangeRequest) Reset()         { *m = DeleteRangeRequest{} }
 func (m *DeleteRangeRequest) String() string { return proto.CompactTextString(m) }
 func (*DeleteRangeRequest) ProtoMessage()    {}
 
-func (m *DeleteRangeRequest) GetMaxEntriesToDelete() int64 {
-	if m != nil {
-		return m.MaxEntriesToDelete
-	}
-	return 0
-}
-
 // A DeleteRangeResponse is the return value from the DeleteRange()
 // method.
 type DeleteRangeResponse struct {
@@ -505,13 +414,6 @@ type DeleteRangeResponse struct {
 func (m *DeleteRangeResponse) Reset()         { *m = DeleteRangeResponse{} }
 func (m *DeleteRangeResponse) String() string { return proto.CompactTextString(m) }
 func (*DeleteRangeResponse) ProtoMessage()    {}
-
-func (m *DeleteRangeResponse) GetNumDeleted() int64 {
-	if m != nil {
-		return m.NumDeleted
-	}
-	return 0
-}
 
 // A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for an ascending scan of [start,end) and the maximum
@@ -526,13 +428,6 @@ func (m *ScanRequest) Reset()         { *m = ScanRequest{} }
 func (m *ScanRequest) String() string { return proto.CompactTextString(m) }
 func (*ScanRequest) ProtoMessage()    {}
 
-func (m *ScanRequest) GetMaxResults() int64 {
-	if m != nil {
-		return m.MaxResults
-	}
-	return 0
-}
-
 // A ScanResponse is the return value from the Scan() method.
 type ScanResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
@@ -543,13 +438,6 @@ type ScanResponse struct {
 func (m *ScanResponse) Reset()         { *m = ScanResponse{} }
 func (m *ScanResponse) String() string { return proto.CompactTextString(m) }
 func (*ScanResponse) ProtoMessage()    {}
-
-func (m *ScanResponse) GetRows() []KeyValue {
-	if m != nil {
-		return m.Rows
-	}
-	return nil
-}
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
 // start and end keys for a descending scan of [start,end) and the maximum
@@ -564,13 +452,6 @@ func (m *ReverseScanRequest) Reset()         { *m = ReverseScanRequest{} }
 func (m *ReverseScanRequest) String() string { return proto.CompactTextString(m) }
 func (*ReverseScanRequest) ProtoMessage()    {}
 
-func (m *ReverseScanRequest) GetMaxResults() int64 {
-	if m != nil {
-		return m.MaxResults
-	}
-	return 0
-}
-
 // A ReverseScanResponse is the return value from the ReverseScan() method.
 type ReverseScanResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
@@ -581,13 +462,6 @@ type ReverseScanResponse struct {
 func (m *ReverseScanResponse) Reset()         { *m = ReverseScanResponse{} }
 func (m *ReverseScanResponse) String() string { return proto.CompactTextString(m) }
 func (*ReverseScanResponse) ProtoMessage()    {}
-
-func (m *ReverseScanResponse) GetRows() []KeyValue {
-	if m != nil {
-		return m.Rows
-	}
-	return nil
-}
 
 // A BeginTransactionRequest is the argument to the BeginTransaction() method.
 type BeginTransactionRequest struct {
@@ -625,27 +499,6 @@ func (m *EndTransactionRequest) Reset()         { *m = EndTransactionRequest{} }
 func (m *EndTransactionRequest) String() string { return proto.CompactTextString(m) }
 func (*EndTransactionRequest) ProtoMessage()    {}
 
-func (m *EndTransactionRequest) GetCommit() bool {
-	if m != nil {
-		return m.Commit
-	}
-	return false
-}
-
-func (m *EndTransactionRequest) GetInternalCommitTrigger() *InternalCommitTrigger {
-	if m != nil {
-		return m.InternalCommitTrigger
-	}
-	return nil
-}
-
-func (m *EndTransactionRequest) GetIntents() []Intent {
-	if m != nil {
-		return m.Intents
-	}
-	return nil
-}
-
 // An EndTransactionResponse is the return value from the
 // EndTransaction() method. The final transaction record is returned
 // as part of the response header. In particular, transaction status
@@ -667,20 +520,6 @@ type EndTransactionResponse struct {
 func (m *EndTransactionResponse) Reset()         { *m = EndTransactionResponse{} }
 func (m *EndTransactionResponse) String() string { return proto.CompactTextString(m) }
 func (*EndTransactionResponse) ProtoMessage()    {}
-
-func (m *EndTransactionResponse) GetCommitWait() int64 {
-	if m != nil {
-		return m.CommitWait
-	}
-	return 0
-}
-
-func (m *EndTransactionResponse) GetResolved() []Key {
-	if m != nil {
-		return m.Resolved
-	}
-	return nil
-}
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
 // existing range which contains header.key is split by
@@ -710,13 +549,6 @@ type AdminSplitRequest struct {
 func (m *AdminSplitRequest) Reset()         { *m = AdminSplitRequest{} }
 func (m *AdminSplitRequest) String() string { return proto.CompactTextString(m) }
 func (*AdminSplitRequest) ProtoMessage()    {}
-
-func (m *AdminSplitRequest) GetSplitKey() Key {
-	if m != nil {
-		return m.SplitKey
-	}
-	return nil
-}
 
 // An AdminSplitResponse is the return value from the AdminSplit()
 // method.
@@ -783,27 +615,6 @@ func (m *RangeLookupRequest) Reset()         { *m = RangeLookupRequest{} }
 func (m *RangeLookupRequest) String() string { return proto.CompactTextString(m) }
 func (*RangeLookupRequest) ProtoMessage()    {}
 
-func (m *RangeLookupRequest) GetMaxRanges() int32 {
-	if m != nil {
-		return m.MaxRanges
-	}
-	return 0
-}
-
-func (m *RangeLookupRequest) GetConsiderIntents() bool {
-	if m != nil {
-		return m.ConsiderIntents
-	}
-	return false
-}
-
-func (m *RangeLookupRequest) GetReverse() bool {
-	if m != nil {
-		return m.Reverse
-	}
-	return false
-}
-
 // A RangeLookupResponse is the return value from the RangeLookup()
 // method. It returns metadata for the range containing the requested
 // key, optionally returning the metadata for additional consecutive
@@ -817,13 +628,6 @@ type RangeLookupResponse struct {
 func (m *RangeLookupResponse) Reset()         { *m = RangeLookupResponse{} }
 func (m *RangeLookupResponse) String() string { return proto.CompactTextString(m) }
 func (*RangeLookupResponse) ProtoMessage()    {}
-
-func (m *RangeLookupResponse) GetRanges() []RangeDescriptor {
-	if m != nil {
-		return m.Ranges
-	}
-	return nil
-}
 
 // A HeartbeatTxnRequest is arguments to the HeartbeatTxn()
 // method. It's sent by transaction coordinators to let the system
@@ -862,20 +666,6 @@ func (m *GCRequest) Reset()         { *m = GCRequest{} }
 func (m *GCRequest) String() string { return proto.CompactTextString(m) }
 func (*GCRequest) ProtoMessage()    {}
 
-func (m *GCRequest) GetGCMeta() GCMetadata {
-	if m != nil {
-		return m.GCMeta
-	}
-	return GCMetadata{}
-}
-
-func (m *GCRequest) GetKeys() []GCRequest_GCKey {
-	if m != nil {
-		return m.Keys
-	}
-	return nil
-}
-
 type GCRequest_GCKey struct {
 	Key       Key       `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
 	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
@@ -884,20 +674,6 @@ type GCRequest_GCKey struct {
 func (m *GCRequest_GCKey) Reset()         { *m = GCRequest_GCKey{} }
 func (m *GCRequest_GCKey) String() string { return proto.CompactTextString(m) }
 func (*GCRequest_GCKey) ProtoMessage()    {}
-
-func (m *GCRequest_GCKey) GetKey() Key {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *GCRequest_GCKey) GetTimestamp() Timestamp {
-	if m != nil {
-		return m.Timestamp
-	}
-	return Timestamp{}
-}
 
 // A GCResponse is the return value from the GC() method.
 type GCResponse struct {
@@ -955,41 +731,6 @@ func (m *PushTxnRequest) Reset()         { *m = PushTxnRequest{} }
 func (m *PushTxnRequest) String() string { return proto.CompactTextString(m) }
 func (*PushTxnRequest) ProtoMessage()    {}
 
-func (m *PushTxnRequest) GetPusherTxn() Transaction {
-	if m != nil {
-		return m.PusherTxn
-	}
-	return Transaction{}
-}
-
-func (m *PushTxnRequest) GetPusheeTxn() Transaction {
-	if m != nil {
-		return m.PusheeTxn
-	}
-	return Transaction{}
-}
-
-func (m *PushTxnRequest) GetPushTo() Timestamp {
-	if m != nil {
-		return m.PushTo
-	}
-	return Timestamp{}
-}
-
-func (m *PushTxnRequest) GetNow() Timestamp {
-	if m != nil {
-		return m.Now
-	}
-	return Timestamp{}
-}
-
-func (m *PushTxnRequest) GetPushType() PushTxnType {
-	if m != nil {
-		return m.PushType
-	}
-	return PUSH_TIMESTAMP
-}
-
 // A PushTxnResponse is the return value from the PushTxn() method. It
 // returns success and the resulting state of PusheeTxn if the
 // conflict was resolved in favor of the caller; the caller should
@@ -1006,13 +747,6 @@ func (m *PushTxnResponse) Reset()         { *m = PushTxnResponse{} }
 func (m *PushTxnResponse) String() string { return proto.CompactTextString(m) }
 func (*PushTxnResponse) ProtoMessage()    {}
 
-func (m *PushTxnResponse) GetPusheeTxn() *Transaction {
-	if m != nil {
-		return m.PusheeTxn
-	}
-	return nil
-}
-
 // A ResolveIntentRequest is arguments to the ResolveIntent()
 // method. It is sent by transaction coordinators after success
 // calling PushTxn to clean up write intents: either to remove, commit
@@ -1026,13 +760,6 @@ type ResolveIntentRequest struct {
 func (m *ResolveIntentRequest) Reset()         { *m = ResolveIntentRequest{} }
 func (m *ResolveIntentRequest) String() string { return proto.CompactTextString(m) }
 func (*ResolveIntentRequest) ProtoMessage()    {}
-
-func (m *ResolveIntentRequest) GetIntentTxn() Transaction {
-	if m != nil {
-		return m.IntentTxn
-	}
-	return Transaction{}
-}
 
 // A ResolveIntentResponse is the return value from the
 // ResolveIntent() method.
@@ -1057,13 +784,6 @@ type ResolveIntentRangeRequest struct {
 func (m *ResolveIntentRangeRequest) Reset()         { *m = ResolveIntentRangeRequest{} }
 func (m *ResolveIntentRangeRequest) String() string { return proto.CompactTextString(m) }
 func (*ResolveIntentRangeRequest) ProtoMessage()    {}
-
-func (m *ResolveIntentRangeRequest) GetIntentTxn() Transaction {
-	if m != nil {
-		return m.IntentTxn
-	}
-	return Transaction{}
-}
 
 // A NoopResponse is the return value from a no-op operation.
 type NoopResponse struct {
@@ -1105,13 +825,6 @@ func (m *MergeRequest) Reset()         { *m = MergeRequest{} }
 func (m *MergeRequest) String() string { return proto.CompactTextString(m) }
 func (*MergeRequest) ProtoMessage()    {}
 
-func (m *MergeRequest) GetValue() Value {
-	if m != nil {
-		return m.Value
-	}
-	return Value{}
-}
-
 // MergeResponse is the response to a Merge() operation.
 type MergeResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
@@ -1136,13 +849,6 @@ func (m *TruncateLogRequest) Reset()         { *m = TruncateLogRequest{} }
 func (m *TruncateLogRequest) String() string { return proto.CompactTextString(m) }
 func (*TruncateLogRequest) ProtoMessage()    {}
 
-func (m *TruncateLogRequest) GetIndex() uint64 {
-	if m != nil {
-		return m.Index
-	}
-	return 0
-}
-
 // TruncateLogResponse is the response to a TruncateLog() operation.
 type TruncateLogResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
@@ -1163,13 +869,6 @@ type LeaderLeaseRequest struct {
 func (m *LeaderLeaseRequest) Reset()         { *m = LeaderLeaseRequest{} }
 func (m *LeaderLeaseRequest) String() string { return proto.CompactTextString(m) }
 func (*LeaderLeaseRequest) ProtoMessage()    {}
-
-func (m *LeaderLeaseRequest) GetLease() Lease {
-	if m != nil {
-		return m.Lease
-	}
-	return Lease{}
-}
 
 // A LeaderLeaseResponse is the response to a LeaderLease()
 // operation.
@@ -1212,160 +911,6 @@ func (m *RequestUnion) Reset()         { *m = RequestUnion{} }
 func (m *RequestUnion) String() string { return proto.CompactTextString(m) }
 func (*RequestUnion) ProtoMessage()    {}
 
-func (m *RequestUnion) GetGet() *GetRequest {
-	if m != nil {
-		return m.Get
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetPut() *PutRequest {
-	if m != nil {
-		return m.Put
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetConditionalPut() *ConditionalPutRequest {
-	if m != nil {
-		return m.ConditionalPut
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetIncrement() *IncrementRequest {
-	if m != nil {
-		return m.Increment
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetDelete() *DeleteRequest {
-	if m != nil {
-		return m.Delete
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetDeleteRange() *DeleteRangeRequest {
-	if m != nil {
-		return m.DeleteRange
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetScan() *ScanRequest {
-	if m != nil {
-		return m.Scan
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetBeginTransaction() *BeginTransactionRequest {
-	if m != nil {
-		return m.BeginTransaction
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetEndTransaction() *EndTransactionRequest {
-	if m != nil {
-		return m.EndTransaction
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetAdminSplit() *AdminSplitRequest {
-	if m != nil {
-		return m.AdminSplit
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetAdminMerge() *AdminMergeRequest {
-	if m != nil {
-		return m.AdminMerge
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetHeartbeatTxn() *HeartbeatTxnRequest {
-	if m != nil {
-		return m.HeartbeatTxn
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetGc() *GCRequest {
-	if m != nil {
-		return m.Gc
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetPushTxn() *PushTxnRequest {
-	if m != nil {
-		return m.PushTxn
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetRangeLookup() *RangeLookupRequest {
-	if m != nil {
-		return m.RangeLookup
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetResolveIntent() *ResolveIntentRequest {
-	if m != nil {
-		return m.ResolveIntent
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetResolveIntentRange() *ResolveIntentRangeRequest {
-	if m != nil {
-		return m.ResolveIntentRange
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetMerge() *MergeRequest {
-	if m != nil {
-		return m.Merge
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetTruncateLog() *TruncateLogRequest {
-	if m != nil {
-		return m.TruncateLog
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetLeaderLease() *LeaderLeaseRequest {
-	if m != nil {
-		return m.LeaderLease
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetReverseScan() *ReverseScanRequest {
-	if m != nil {
-		return m.ReverseScan
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetNoop() *NoopRequest {
-	if m != nil {
-		return m.Noop
-	}
-	return nil
-}
-
 // A ResponseUnion contains exactly one of the optional responses.
 // The values added here must match those in RequestUnion.
 type ResponseUnion struct {
@@ -1396,160 +941,6 @@ type ResponseUnion struct {
 func (m *ResponseUnion) Reset()         { *m = ResponseUnion{} }
 func (m *ResponseUnion) String() string { return proto.CompactTextString(m) }
 func (*ResponseUnion) ProtoMessage()    {}
-
-func (m *ResponseUnion) GetGet() *GetResponse {
-	if m != nil {
-		return m.Get
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetPut() *PutResponse {
-	if m != nil {
-		return m.Put
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetConditionalPut() *ConditionalPutResponse {
-	if m != nil {
-		return m.ConditionalPut
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetIncrement() *IncrementResponse {
-	if m != nil {
-		return m.Increment
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetDelete() *DeleteResponse {
-	if m != nil {
-		return m.Delete
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetDeleteRange() *DeleteRangeResponse {
-	if m != nil {
-		return m.DeleteRange
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetScan() *ScanResponse {
-	if m != nil {
-		return m.Scan
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetBeginTransaction() *BeginTransactionResponse {
-	if m != nil {
-		return m.BeginTransaction
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetEndTransaction() *EndTransactionResponse {
-	if m != nil {
-		return m.EndTransaction
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetAdminSplit() *AdminSplitResponse {
-	if m != nil {
-		return m.AdminSplit
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetAdminMerge() *AdminMergeResponse {
-	if m != nil {
-		return m.AdminMerge
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetHeartbeatTxn() *HeartbeatTxnResponse {
-	if m != nil {
-		return m.HeartbeatTxn
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetGc() *GCResponse {
-	if m != nil {
-		return m.Gc
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetPushTxn() *PushTxnResponse {
-	if m != nil {
-		return m.PushTxn
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetRangeLookup() *RangeLookupResponse {
-	if m != nil {
-		return m.RangeLookup
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetResolveIntent() *ResolveIntentResponse {
-	if m != nil {
-		return m.ResolveIntent
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetResolveIntentRange() *ResolveIntentRangeResponse {
-	if m != nil {
-		return m.ResolveIntentRange
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetMerge() *MergeResponse {
-	if m != nil {
-		return m.Merge
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetTruncateLog() *TruncateLogResponse {
-	if m != nil {
-		return m.TruncateLog
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetLeaderLease() *LeaderLeaseResponse {
-	if m != nil {
-		return m.LeaderLease
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetReverseScan() *ReverseScanResponse {
-	if m != nil {
-		return m.ReverseScan
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetNoop() *NoopResponse {
-	if m != nil {
-		return m.Noop
-	}
-	return nil
-}
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
 // information required for executing it.
@@ -1659,13 +1050,6 @@ type BatchRequest struct {
 func (m *BatchRequest) Reset()      { *m = BatchRequest{} }
 func (*BatchRequest) ProtoMessage() {}
 
-func (m *BatchRequest) GetRequests() []RequestUnion {
-	if m != nil {
-		return m.Requests
-	}
-	return nil
-}
-
 // A BatchResponse contains one or more responses, one per request
 // corresponding to the requests in the matching BatchRequest. The
 // error in the response header is set to the first error from the
@@ -1677,13 +1061,6 @@ type BatchResponse struct {
 
 func (m *BatchResponse) Reset()      { *m = BatchResponse{} }
 func (*BatchResponse) ProtoMessage() {}
-
-func (m *BatchResponse) GetResponses() []ResponseUnion {
-	if m != nil {
-		return m.Responses
-	}
-	return nil
-}
 
 type BatchResponse_Header struct {
 	// error is non-nil if an error occurred.
@@ -1705,27 +1082,6 @@ type BatchResponse_Header struct {
 func (m *BatchResponse_Header) Reset()         { *m = BatchResponse_Header{} }
 func (m *BatchResponse_Header) String() string { return proto.CompactTextString(m) }
 func (*BatchResponse_Header) ProtoMessage()    {}
-
-func (m *BatchResponse_Header) GetError() *Error {
-	if m != nil {
-		return m.Error
-	}
-	return nil
-}
-
-func (m *BatchResponse_Header) GetTimestamp() Timestamp {
-	if m != nil {
-		return m.Timestamp
-	}
-	return Timestamp{}
-}
-
-func (m *BatchResponse_Header) GetTxn() *Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return nil
-}
 
 func init() {
 	proto.RegisterEnum("cockroach.roachpb.ReadConsistencyType", ReadConsistencyType_name, ReadConsistencyType_value)

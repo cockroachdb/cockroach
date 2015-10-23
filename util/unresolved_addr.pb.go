@@ -35,20 +35,6 @@ type UnresolvedAddr struct {
 func (m *UnresolvedAddr) Reset()      { *m = UnresolvedAddr{} }
 func (*UnresolvedAddr) ProtoMessage() {}
 
-func (m *UnresolvedAddr) GetNetworkField() string {
-	if m != nil {
-		return m.NetworkField
-	}
-	return ""
-}
-
-func (m *UnresolvedAddr) GetAddressField() string {
-	if m != nil {
-		return m.AddressField
-	}
-	return ""
-}
-
 func (m *UnresolvedAddr) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

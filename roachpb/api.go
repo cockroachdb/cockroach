@@ -123,11 +123,11 @@ func combineError(a, b interface{}) error {
 // Combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
 // to merge their headers.
 func (rh *ResponseHeader) Combine(otherRH *ResponseHeader) error {
-	if rh != nil {
-		if ts := otherRH.GetTimestamp(); rh.Timestamp.Less(ts) {
+	if rh != nil && otherRH != nil {
+		if ts := otherRH.Timestamp; rh.Timestamp.Less(ts) {
 			rh.Timestamp = ts
 		}
-		if rh.Txn != nil && otherRH.GetTxn() == nil {
+		if rh.Txn != nil && otherRH.Txn == nil {
 			rh.Txn = nil
 		}
 	}
@@ -138,7 +138,7 @@ func (rh *ResponseHeader) Combine(otherRH *ResponseHeader) error {
 func (sr *ScanResponse) Combine(c Response) error {
 	otherSR := c.(*ScanResponse)
 	if sr != nil {
-		sr.Rows = append(sr.Rows, otherSR.GetRows()...)
+		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		if err := sr.Header().Combine(otherSR.Header()); err != nil {
 			return err
 		}
@@ -150,7 +150,7 @@ func (sr *ScanResponse) Combine(c Response) error {
 func (sr *ReverseScanResponse) Combine(c Response) error {
 	otherSR := c.(*ReverseScanResponse)
 	if sr != nil {
-		sr.Rows = append(sr.Rows, otherSR.GetRows()...)
+		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		if err := sr.Header().Combine(otherSR.Header()); err != nil {
 			return err
 		}
@@ -162,7 +162,7 @@ func (sr *ReverseScanResponse) Combine(c Response) error {
 func (dr *DeleteRangeResponse) Combine(c Response) error {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
-		dr.NumDeleted += otherDR.GetNumDeleted()
+		dr.NumDeleted += otherDR.NumDeleted
 		if err := dr.Header().Combine(otherDR.Header()); err != nil {
 			return err
 		}
@@ -245,7 +245,7 @@ type Bounded interface {
 
 // GetBound returns the MaxResults field in ScanRequest.
 func (sr *ScanRequest) GetBound() int64 {
-	return sr.GetMaxResults()
+	return sr.MaxResults
 }
 
 // SetBound sets the MaxResults field in ScanRequest.
@@ -255,7 +255,7 @@ func (sr *ScanRequest) SetBound(bound int64) {
 
 // GetBound returns the MaxResults field in ReverseScanRequest.
 func (sr *ReverseScanRequest) GetBound() int64 {
-	return sr.GetMaxResults()
+	return sr.MaxResults
 }
 
 // SetBound sets the MaxResults field in ReverseScanRequest.
@@ -449,7 +449,7 @@ func NewPut(key Key, value Value) Request {
 func NewConditionalPut(key Key, value, expValue Value) Request {
 	value.InitChecksum(key)
 	var expValuePtr *Value
-	if expValue.GetRawBytes() != nil {
+	if expValue.RawBytes != nil {
 		expValuePtr = &expValue
 		expValue.InitChecksum(key)
 	}

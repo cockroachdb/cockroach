@@ -566,8 +566,8 @@ void protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto() {
     "achpb.TransactionRestartB\004\310\336\037\000\022.\n\006detail"
     "\030\004 \001(\0132\036.cockroach.roachpb.ErrorDetail*;"
     "\n\022TransactionRestart\022\t\n\005ABORT\020\000\022\013\n\007BACKO"
-    "FF\020\001\022\r\n\tIMMEDIATE\020\002B\035Z\007roachpb\330\341\036\000\340\342\036\001\310\342"
-    "\036\001\320\342\036\001\220\343\036\000", 3130);
+    "FF\020\001\022\r\n\tIMMEDIATE\020\002B!Z\007roachpb\330\341\036\000\310\341\036\000\220\343"
+    "\036\000\310\342\036\001\340\342\036\001\320\342\036\001", 3134);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();

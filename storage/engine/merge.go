@@ -65,5 +65,5 @@ func MergeInternalTimeSeriesData(sources ...*roachpb.InternalTimeSeriesData) (
 	if err != nil {
 		return nil, err
 	}
-	return mergedTS, nil
+	return &mergedTS, nil
 }

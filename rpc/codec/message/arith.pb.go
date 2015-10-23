@@ -39,20 +39,6 @@ func (m *ArithRequest) Reset()         { *m = ArithRequest{} }
 func (m *ArithRequest) String() string { return proto.CompactTextString(m) }
 func (*ArithRequest) ProtoMessage()    {}
 
-func (m *ArithRequest) GetA() int32 {
-	if m != nil {
-		return m.A
-	}
-	return 0
-}
-
-func (m *ArithRequest) GetB() int32 {
-	if m != nil {
-		return m.B
-	}
-	return 0
-}
-
 type ArithResponse struct {
 	C int32 `protobuf:"varint,1,opt,name=c" json:"c"`
 }
@@ -60,13 +46,6 @@ type ArithResponse struct {
 func (m *ArithResponse) Reset()         { *m = ArithResponse{} }
 func (m *ArithResponse) String() string { return proto.CompactTextString(m) }
 func (*ArithResponse) ProtoMessage()    {}
-
-func (m *ArithResponse) GetC() int32 {
-	if m != nil {
-		return m.C
-	}
-	return 0
-}
 
 func (m *ArithRequest) Marshal() (data []byte, err error) {
 	size := m.Size()

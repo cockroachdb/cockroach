@@ -21,14 +21,16 @@ option go_package = "util";
 
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
 
 // / UnresolvedAddr is an unresolved version of net.Addr.
 message UnresolvedAddr {
   option (gogoproto.goproto_stringer) = false;
+
   optional string network_field = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "network"];
   optional string address_field = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "address"];
 }

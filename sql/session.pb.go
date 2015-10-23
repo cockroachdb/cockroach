@@ -60,34 +60,6 @@ func (m *Session) GetTimezone() isSession_Timezone {
 	return nil
 }
 
-func (m *Session) GetDatabase() string {
-	if m != nil {
-		return m.Database
-	}
-	return ""
-}
-
-func (m *Session) GetSyntax() int32 {
-	if m != nil {
-		return m.Syntax
-	}
-	return 0
-}
-
-func (m *Session) GetTxn() *Session_Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return nil
-}
-
-func (m *Session) GetMutatesSystemDB() bool {
-	if m != nil {
-		return m.MutatesSystemDB
-	}
-	return false
-}
-
 func (m *Session) GetLocation() string {
 	if x, ok := m.GetTimezone().(*Session_Location); ok {
 		return x.Location
@@ -159,20 +131,6 @@ type Session_Transaction struct {
 func (m *Session_Transaction) Reset()         { *m = Session_Transaction{} }
 func (m *Session_Transaction) String() string { return proto.CompactTextString(m) }
 func (*Session_Transaction) ProtoMessage()    {}
-
-func (m *Session_Transaction) GetTxn() cockroach_roachpb1.Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return cockroach_roachpb1.Transaction{}
-}
-
-func (m *Session_Transaction) GetTimestamp() cockroach_sql_driver.Datum_Timestamp {
-	if m != nil {
-		return m.Timestamp
-	}
-	return cockroach_sql_driver.Datum_Timestamp{}
-}
 
 func (m *Session) Marshal() (data []byte, err error) {
 	size := m.Size()

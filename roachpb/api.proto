@@ -24,10 +24,11 @@ import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
 
 // ClientCmdID provides a unique ID for client commands. Clients which
 // provide ClientCmdID gain operation idempotence. In other words,
@@ -54,6 +55,7 @@ message ClientCmdID {
 // during read operations.
 enum ReadConsistencyType {
   option (gogoproto.goproto_enum_prefix) = false;
+
   // CONSISTENT reads are guaranteed to read committed data; the
   // mechanism relies on clocks to determine lease expirations.
   CONSISTENT = 0;
@@ -593,6 +595,9 @@ message ResponseUnion {
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
 // information required for executing it.
 message Header {
+  // Getters are required for default values.
+  option (gogoproto.goproto_getters) = true;
+
   // timestamp specifies time at which read or writes should be
   // performed. If the timestamp is set to zero value, its value
   // is initialized to the wall time of the receiving node.
@@ -639,6 +644,7 @@ message Header {
 // the User and UserPriority fields.
 message BatchRequest {
   option (gogoproto.goproto_stringer) = false;
+
   optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
 }
@@ -649,6 +655,7 @@ message BatchRequest {
 // slice of responses, if applicable.
 message BatchResponse {
   option (gogoproto.goproto_stringer) = false;
+
   message Header {
     // error is non-nil if an error occurred.
     optional Error error = 1;

@@ -57,19 +57,20 @@ func checkEndTransactionTrigger(req roachpb.Request, _ roachpb.Header) error {
 		return nil
 	}
 
-	hasTrigger := args.GetInternalCommitTrigger().GetModifiedSpanTrigger().GetSystemDBSpan()
+	modifiedSpanTrigger := args.InternalCommitTrigger.GetModifiedSpanTrigger()
+	modifiedSystemSpan := modifiedSpanTrigger != nil && modifiedSpanTrigger.SystemDBSpan
 
 	var hasSystemKey bool
 	for _, it := range args.Intents {
-		addr := keys.Addr(it.GetKey())
+		addr := keys.Addr(it.Key)
 		if bytes.Compare(addr, keys.SystemDBSpan.Key) >= 0 && bytes.Compare(addr, keys.SystemDBSpan.EndKey) < 0 {
 			hasSystemKey = true
 			break
 		}
 	}
-	if hasSystemKey != hasTrigger {
+	if hasSystemKey != modifiedSystemSpan {
 		return util.Errorf("EndTransaction hasSystemKey=%t, but hasSystemDBTrigger=%t",
-			hasSystemKey, hasTrigger)
+			hasSystemKey, modifiedSystemSpan)
 	}
 
 	return nil

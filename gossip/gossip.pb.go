@@ -56,27 +56,6 @@ func (m *Request) Reset()         { *m = Request{} }
 func (m *Request) String() string { return proto.CompactTextString(m) }
 func (*Request) ProtoMessage()    {}
 
-func (m *Request) GetAddr() cockroach_util.UnresolvedAddr {
-	if m != nil {
-		return m.Addr
-	}
-	return cockroach_util.UnresolvedAddr{}
-}
-
-func (m *Request) GetLAddr() cockroach_util.UnresolvedAddr {
-	if m != nil {
-		return m.LAddr
-	}
-	return cockroach_util.UnresolvedAddr{}
-}
-
-func (m *Request) GetDelta() map[string]*Info {
-	if m != nil {
-		return m.Delta
-	}
-	return nil
-}
-
 // Response is returned from the Gossip.Gossip RPC.
 // Delta will be nil in the event that Alternate is set.
 type Response struct {
@@ -96,27 +75,6 @@ func (m *Response) Reset()         { *m = Response{} }
 func (m *Response) String() string { return proto.CompactTextString(m) }
 func (*Response) ProtoMessage()    {}
 
-func (m *Response) GetAddr() cockroach_util.UnresolvedAddr {
-	if m != nil {
-		return m.Addr
-	}
-	return cockroach_util.UnresolvedAddr{}
-}
-
-func (m *Response) GetAlternate() *cockroach_util.UnresolvedAddr {
-	if m != nil {
-		return m.Alternate
-	}
-	return nil
-}
-
-func (m *Response) GetDelta() map[string]*Info {
-	if m != nil {
-		return m.Delta
-	}
-	return nil
-}
-
 // Info is the basic unit of information traded over the
 // gossip network.
 type Info struct {
@@ -132,13 +90,6 @@ type Info struct {
 func (m *Info) Reset()         { *m = Info{} }
 func (m *Info) String() string { return proto.CompactTextString(m) }
 func (*Info) ProtoMessage()    {}
-
-func (m *Info) GetValue() cockroach_roachpb1.Value {
-	if m != nil {
-		return m.Value
-	}
-	return cockroach_roachpb1.Value{}
-}
 
 func (m *Request) Marshal() (data []byte, err error) {
 	size := m.Size()

@@ -248,8 +248,8 @@ void protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto() {
     "roachpb.RangeDescriptorB\004\310\336\037\000\022@\n\002KV\030\002 \003("
     "\0132,.cockroach.roachpb.RaftSnapshotData.K"
     "eyValueB\006\342\336\037\002KV\032&\n\010KeyValue\022\013\n\003key\030\001 \001(\014"
-    "\022\r\n\005value\030\002 \001(\014B\031Z\007roachpb\340\342\036\001\310\342\036\001\320\342\036\001\220\343"
-    "\036\000", 962);
+    "\022\r\n\005value\030\002 \001(\014B\035Z\007roachpb\310\341\036\000\220\343\036\000\310\342\036\001\340\342"
+    "\036\001\320\342\036\001", 966);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/internal.proto", &protobuf_RegisterTypes);
   RaftCommand::default_instance_ = new RaftCommand();

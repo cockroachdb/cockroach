@@ -392,11 +392,11 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	// resolved synchronously in the same batch. The remainder are collected
 	// and handed off to asynchronous processing.
 	desc := *r.Desc()
-	if wideDesc := args.GetInternalCommitTrigger().GetMergeTrigger().GetUpdatedDesc(); wideDesc.RangeID != 0 {
+	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
 		// which intents are local (note that for a split, we want to use the
 		// pre-split one instead because it's larger).
-		desc = wideDesc
+		desc = mergeTrigger.UpdatedDesc
 	}
 
 	var externalIntents []roachpb.Intent
@@ -473,7 +473,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 					return reply, nil, err
 				}
 			} else if ct.ModifiedSpanTrigger != nil {
-				if ct.ModifiedSpanTrigger.GetSystemDBSpan() {
+				if ct.ModifiedSpanTrigger.SystemDBSpan {
 					// Check if we need to gossip the system config.
 					batch.Defer(r.maybeGossipSystemConfig)
 				}
@@ -590,16 +590,16 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 		rangeCount = 1
 	}
 
-	var checkAndUnmarshal func(b []byte) (*roachpb.RangeDescriptor, error)
+	var checkAndUnmarshal func(roachpb.Value) (*roachpb.RangeDescriptor, error)
 
 	var kvs []roachpb.KeyValue // kv descriptor pairs in scan order
 	var intents []roachpb.Intent
 	if !args.Reverse {
 		// If scanning forward, there's no special "checking": Just decode the
 		// descriptor and return it.
-		checkAndUnmarshal = func(b []byte) (*roachpb.RangeDescriptor, error) {
+		checkAndUnmarshal = func(v roachpb.Value) (*roachpb.RangeDescriptor, error) {
 			var rd roachpb.RangeDescriptor
-			if err := proto.Unmarshal(b, &rd); err != nil {
+			if err := v.GetProto(&rd); err != nil {
 				return nil, err
 			}
 			return &rd, nil
@@ -642,9 +642,9 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 		// In this case, checkAndUnmarshal is more complicated: It needs
 		// to weed out descriptors from the forward scan above, which could
 		// return a result or an intent we're not supposed to return.
-		checkAndUnmarshal = func(b []byte) (*roachpb.RangeDescriptor, error) {
+		checkAndUnmarshal = func(v roachpb.Value) (*roachpb.RangeDescriptor, error) {
 			var r roachpb.RangeDescriptor
-			if err := proto.Unmarshal(b, &r); err != nil {
+			if err := v.GetProto(&r); err != nil {
 				return nil, err
 			}
 			if !keys.Addr(keys.RangeMetaKey(r.StartKey)).Less(key) {
@@ -711,7 +711,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 				// Intent is a deletion.
 				continue
 			}
-			rd, err := checkAndUnmarshal(val.GetRawBytes())
+			rd, err := checkAndUnmarshal(*val)
 			if err != nil {
 				return reply, nil, err
 			}
@@ -728,7 +728,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 	// Decode all scanned range descriptors which haven't been unmarshaled yet.
 	for _, kv := range kvs[len(rds):] {
 		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
-		rd, err := checkAndUnmarshal(kv.Value.GetRawBytes())
+		rd, err := checkAndUnmarshal(kv.Value)
 		if err != nil {
 			return reply, nil, err
 		}
@@ -949,7 +949,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	}
 
 	if !pusherWins {
-		err := roachpb.NewTransactionPushError(&args.PusherTxn, reply.PusheeTxn)
+		err := roachpb.NewTransactionPushError(args.PusherTxn, *reply.PusheeTxn)
 		if log.V(1) {
 			log.Info(err)
 		}
@@ -1388,7 +1388,7 @@ func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roach
 			// TODO(bdarnell): needs a test.
 			return util.Errorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
 		}
-		if !replicaSetsEqual(origLeftDesc.GetReplicas(), rightDesc.GetReplicas()) {
+		if !replicaSetsEqual(origLeftDesc.Replicas, rightDesc.Replicas) {
 			return util.Errorf("ranges not collocated")
 		}
 

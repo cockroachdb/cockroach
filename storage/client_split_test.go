@@ -246,16 +246,20 @@ func TestStoreRangeSplit(t *testing.T) {
 	gArgs := getArgs([]byte("c"))
 	if reply, err := client.SendWrapped(rg1(store), nil, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), content) {
-		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetRawBytes(), content)
+	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
+		t.Fatal(err)
+	} else if !bytes.Equal(replyBytes, content) {
+		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
 	}
 	gArgs = getArgs([]byte("x"))
 	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: newRng.Desc().RangeID,
 	}, &gArgs); err != nil {
 		t.Fatal(err)
-	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), content) {
-		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.GetRawBytes(), content)
+	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
+		t.Fatal(err)
+	} else if !bytes.Equal(replyBytes, content) {
+		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
 	}
 
 	// Send out an increment request copied from above (same ClientCmdID) which
@@ -516,7 +520,9 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	if err := store.DB().Txn(func(txn *client.Txn) error {
 		txn.SetSystemDBTrigger()
 		for _, kv := range sql.GetInitialSystemValues() {
-			if err := txn.Put(kv.Key, kv.Value.GetRawBytes()); err != nil {
+			// There are all kinds of different types here, so we can't use the
+			// typed getters.
+			if err := txn.Put(kv.Key, kv.Value.RawBytes); err != nil {
 				return err
 			}
 		}

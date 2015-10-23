@@ -72,27 +72,6 @@ type NotLeaderError struct {
 func (m *NotLeaderError) Reset()      { *m = NotLeaderError{} }
 func (*NotLeaderError) ProtoMessage() {}
 
-func (m *NotLeaderError) GetReplica() *ReplicaDescriptor {
-	if m != nil {
-		return m.Replica
-	}
-	return nil
-}
-
-func (m *NotLeaderError) GetLeader() *ReplicaDescriptor {
-	if m != nil {
-		return m.Leader
-	}
-	return nil
-}
-
-func (m *NotLeaderError) GetRangeID() RangeID {
-	if m != nil {
-		return m.RangeID
-	}
-	return 0
-}
-
 // A NodeUnavailableError indicates that the sending gateway can
 // not process requests at the time, and that the client should
 // retry the request with another peer.
@@ -111,13 +90,6 @@ type RangeNotFoundError struct {
 func (m *RangeNotFoundError) Reset()      { *m = RangeNotFoundError{} }
 func (*RangeNotFoundError) ProtoMessage() {}
 
-func (m *RangeNotFoundError) GetRangeID() RangeID {
-	if m != nil {
-		return m.RangeID
-	}
-	return 0
-}
-
 // A RangeKeyMismatchError indicates that a command was sent to a
 // range which did not contain the key(s) specified by the command.
 type RangeKeyMismatchError struct {
@@ -128,27 +100,6 @@ type RangeKeyMismatchError struct {
 
 func (m *RangeKeyMismatchError) Reset()      { *m = RangeKeyMismatchError{} }
 func (*RangeKeyMismatchError) ProtoMessage() {}
-
-func (m *RangeKeyMismatchError) GetRequestStartKey() Key {
-	if m != nil {
-		return m.RequestStartKey
-	}
-	return nil
-}
-
-func (m *RangeKeyMismatchError) GetRequestEndKey() Key {
-	if m != nil {
-		return m.RequestEndKey
-	}
-	return nil
-}
-
-func (m *RangeKeyMismatchError) GetRange() *RangeDescriptor {
-	if m != nil {
-		return m.Range
-	}
-	return nil
-}
 
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
 // encountered a versioned value at existing_timestamp within the uncertainty
@@ -164,34 +115,6 @@ type ReadWithinUncertaintyIntervalError struct {
 func (m *ReadWithinUncertaintyIntervalError) Reset()      { *m = ReadWithinUncertaintyIntervalError{} }
 func (*ReadWithinUncertaintyIntervalError) ProtoMessage() {}
 
-func (m *ReadWithinUncertaintyIntervalError) GetTimestamp() Timestamp {
-	if m != nil {
-		return m.Timestamp
-	}
-	return Timestamp{}
-}
-
-func (m *ReadWithinUncertaintyIntervalError) GetExistingTimestamp() Timestamp {
-	if m != nil {
-		return m.ExistingTimestamp
-	}
-	return Timestamp{}
-}
-
-func (m *ReadWithinUncertaintyIntervalError) GetNodeID() NodeID {
-	if m != nil {
-		return m.NodeID
-	}
-	return 0
-}
-
-func (m *ReadWithinUncertaintyIntervalError) GetTxn() Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return Transaction{}
-}
-
 // A TransactionAbortedError indicates that the transaction was
 // aborted by another concurrent transaction.
 type TransactionAbortedError struct {
@@ -200,13 +123,6 @@ type TransactionAbortedError struct {
 
 func (m *TransactionAbortedError) Reset()      { *m = TransactionAbortedError{} }
 func (*TransactionAbortedError) ProtoMessage() {}
-
-func (m *TransactionAbortedError) GetTxn() Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return Transaction{}
-}
 
 // A TransactionPushError indicates that the transaction could not
 // continue because it encountered a write intent from another
@@ -221,20 +137,6 @@ type TransactionPushError struct {
 func (m *TransactionPushError) Reset()      { *m = TransactionPushError{} }
 func (*TransactionPushError) ProtoMessage() {}
 
-func (m *TransactionPushError) GetTxn() *Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return nil
-}
-
-func (m *TransactionPushError) GetPusheeTxn() Transaction {
-	if m != nil {
-		return m.PusheeTxn
-	}
-	return Transaction{}
-}
-
 // A TransactionRetryError indicates that the transaction must be
 // retried, usually with an increased transaction timestamp. The
 // transaction struct to use is returned with the error.
@@ -244,13 +146,6 @@ type TransactionRetryError struct {
 
 func (m *TransactionRetryError) Reset()      { *m = TransactionRetryError{} }
 func (*TransactionRetryError) ProtoMessage() {}
-
-func (m *TransactionRetryError) GetTxn() Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return Transaction{}
-}
 
 // A TransactionStatusError indicates that the transaction status is
 // incompatible with the requested operation. This might mean the
@@ -265,20 +160,6 @@ type TransactionStatusError struct {
 
 func (m *TransactionStatusError) Reset()      { *m = TransactionStatusError{} }
 func (*TransactionStatusError) ProtoMessage() {}
-
-func (m *TransactionStatusError) GetTxn() Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return Transaction{}
-}
-
-func (m *TransactionStatusError) GetMsg() string {
-	if m != nil {
-		return m.Msg
-	}
-	return ""
-}
 
 // A WriteIntentError indicates that one or more write intent
 // belonging to another transaction were encountered leading to a
@@ -299,27 +180,6 @@ type WriteIntentError struct {
 func (m *WriteIntentError) Reset()      { *m = WriteIntentError{} }
 func (*WriteIntentError) ProtoMessage() {}
 
-func (m *WriteIntentError) GetIntents() []Intent {
-	if m != nil {
-		return m.Intents
-	}
-	return nil
-}
-
-func (m *WriteIntentError) GetResolved() bool {
-	if m != nil {
-		return m.Resolved
-	}
-	return false
-}
-
-func (m *WriteIntentError) GetIndex() *ErrPosition {
-	if m != nil {
-		return m.Index
-	}
-	return nil
-}
-
 // A WriteTooOldError indicates that a write encountered a versioned
 // value newer than its timestamp, making it impossible to rewrite
 // history. The write should be retried at existing_timestamp+1.
@@ -330,20 +190,6 @@ type WriteTooOldError struct {
 
 func (m *WriteTooOldError) Reset()      { *m = WriteTooOldError{} }
 func (*WriteTooOldError) ProtoMessage() {}
-
-func (m *WriteTooOldError) GetTimestamp() Timestamp {
-	if m != nil {
-		return m.Timestamp
-	}
-	return Timestamp{}
-}
-
-func (m *WriteTooOldError) GetExistingTimestamp() Timestamp {
-	if m != nil {
-		return m.ExistingTimestamp
-	}
-	return Timestamp{}
-}
 
 // An OpRequiresTxnError indicates that a command required to be
 // carried out in a transactional context but was not.
@@ -367,20 +213,6 @@ type ConditionFailedError struct {
 func (m *ConditionFailedError) Reset()      { *m = ConditionFailedError{} }
 func (*ConditionFailedError) ProtoMessage() {}
 
-func (m *ConditionFailedError) GetActualValue() *Value {
-	if m != nil {
-		return m.ActualValue
-	}
-	return nil
-}
-
-func (m *ConditionFailedError) GetIndex() *ErrPosition {
-	if m != nil {
-		return m.Index
-	}
-	return nil
-}
-
 // A LeaseRejectedError indicates that the requested replica could
 // not acquire the desired lease because of an existing leader lease.
 type LeaseRejectedError struct {
@@ -392,27 +224,6 @@ type LeaseRejectedError struct {
 func (m *LeaseRejectedError) Reset()      { *m = LeaseRejectedError{} }
 func (*LeaseRejectedError) ProtoMessage() {}
 
-func (m *LeaseRejectedError) GetMessage() string {
-	if m != nil {
-		return m.Message
-	}
-	return ""
-}
-
-func (m *LeaseRejectedError) GetRequested() Lease {
-	if m != nil {
-		return m.Requested
-	}
-	return Lease{}
-}
-
-func (m *LeaseRejectedError) GetExisting() Lease {
-	if m != nil {
-		return m.Existing
-	}
-	return Lease{}
-}
-
 // A SendError indicates that a message could not be delivered to
 // the desired recipient(s).
 type SendError struct {
@@ -422,20 +233,6 @@ type SendError struct {
 
 func (m *SendError) Reset()      { *m = SendError{} }
 func (*SendError) ProtoMessage() {}
-
-func (m *SendError) GetMessage() string {
-	if m != nil {
-		return m.Message
-	}
-	return ""
-}
-
-func (m *SendError) GetRetryable() bool {
-	if m != nil {
-		return m.Retryable
-	}
-	return false
-}
 
 // ErrorDetail is a union type containing all available errors.
 type ErrorDetail struct {
@@ -459,111 +256,6 @@ type ErrorDetail struct {
 func (m *ErrorDetail) Reset()      { *m = ErrorDetail{} }
 func (*ErrorDetail) ProtoMessage() {}
 
-func (m *ErrorDetail) GetNotLeader() *NotLeaderError {
-	if m != nil {
-		return m.NotLeader
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetRangeNotFound() *RangeNotFoundError {
-	if m != nil {
-		return m.RangeNotFound
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetRangeKeyMismatch() *RangeKeyMismatchError {
-	if m != nil {
-		return m.RangeKeyMismatch
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetReadWithinUncertaintyInterval() *ReadWithinUncertaintyIntervalError {
-	if m != nil {
-		return m.ReadWithinUncertaintyInterval
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetTransactionAborted() *TransactionAbortedError {
-	if m != nil {
-		return m.TransactionAborted
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetTransactionPush() *TransactionPushError {
-	if m != nil {
-		return m.TransactionPush
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetTransactionRetry() *TransactionRetryError {
-	if m != nil {
-		return m.TransactionRetry
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetTransactionStatus() *TransactionStatusError {
-	if m != nil {
-		return m.TransactionStatus
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetWriteIntent() *WriteIntentError {
-	if m != nil {
-		return m.WriteIntent
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetWriteTooOld() *WriteTooOldError {
-	if m != nil {
-		return m.WriteTooOld
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetOpRequiresTxn() *OpRequiresTxnError {
-	if m != nil {
-		return m.OpRequiresTxn
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetConditionFailed() *ConditionFailedError {
-	if m != nil {
-		return m.ConditionFailed
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetLeaseRejected() *LeaseRejectedError {
-	if m != nil {
-		return m.LeaseRejected
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetNodeUnavailable() *NodeUnavailableError {
-	if m != nil {
-		return m.NodeUnavailable
-	}
-	return nil
-}
-
-func (m *ErrorDetail) GetSend() *SendError {
-	if m != nil {
-		return m.Send
-	}
-	return nil
-}
-
 // ErrPosition describes the position of an error in a Batch. A simple nullable
 // primitive field would break compatibility with proto3, where primitive fields
 // are no longer allowed to be nullable.
@@ -573,13 +265,6 @@ type ErrPosition struct {
 
 func (m *ErrPosition) Reset()      { *m = ErrPosition{} }
 func (*ErrPosition) ProtoMessage() {}
-
-func (m *ErrPosition) GetIndex() int32 {
-	if m != nil {
-		return m.Index
-	}
-	return 0
-}
 
 // Error is a generic representation including a string message
 // and information about retryability.
@@ -599,34 +284,6 @@ type Error struct {
 
 func (m *Error) Reset()      { *m = Error{} }
 func (*Error) ProtoMessage() {}
-
-func (m *Error) GetMessage() string {
-	if m != nil {
-		return m.Message
-	}
-	return ""
-}
-
-func (m *Error) GetRetryable() bool {
-	if m != nil {
-		return m.Retryable
-	}
-	return false
-}
-
-func (m *Error) GetTransactionRestart() TransactionRestart {
-	if m != nil {
-		return m.TransactionRestart
-	}
-	return TransactionRestart_ABORT
-}
-
-func (m *Error) GetDetail() *ErrorDetail {
-	if m != nil {
-		return m.Detail
-	}
-	return nil
-}
 
 func init() {
 	proto.RegisterEnum("cockroach.roachpb.TransactionRestart", TransactionRestart_name, TransactionRestart_value)

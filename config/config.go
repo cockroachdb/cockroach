@@ -54,7 +54,7 @@ var (
 	// ZoneConfigHook is a function used to lookup a zone config given a table
 	// or database ID.
 	// This is also used by testing to simplify fake configs.
-	ZoneConfigHook func(*SystemConfig, uint32) (*ZoneConfig, error)
+	ZoneConfigHook func(SystemConfig, uint32) (*ZoneConfig, error)
 
 	// TestingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
@@ -67,7 +67,7 @@ var (
 
 // Validate verifies some ZoneConfig fields.
 // This should be used to validate user input when setting a new zone config.
-func (z *ZoneConfig) Validate() error {
+func (z ZoneConfig) Validate() error {
 	if len(z.ReplicaAttrs) == 0 {
 		return util.Errorf("attributes for at least one replica must be specified in zone config")
 	}
@@ -104,17 +104,16 @@ func ObjectIDForKey(key roachpb.RKey) (uint32, bool) {
 
 // GetValue searches the kv list for 'key' and returns its
 // raw byte value if found. ok is true only if the key is found.
-func (s *SystemConfig) GetValue(key roachpb.Key) ([]byte, bool) {
+func (s SystemConfig) GetValue(key roachpb.Key) *roachpb.Value {
 	kv, found := s.Get(key)
 	if !found {
-		return nil, false
+		return nil
 	}
-
-	return kv.Value.GetRawBytes(), true
+	return &kv.Value
 }
 
 // Get searches the kv list for 'key' and returns the key/value if found.
-func (s *SystemConfig) Get(key roachpb.Key) (roachpb.KeyValue, bool) {
+func (s SystemConfig) Get(key roachpb.Key) (roachpb.KeyValue, bool) {
 	index, found := s.GetIndex(key)
 	if !found {
 		return roachpb.KeyValue{}, false
@@ -125,11 +124,7 @@ func (s *SystemConfig) Get(key roachpb.Key) (roachpb.KeyValue, bool) {
 }
 
 // GetIndex searches the kv list for 'key' and returns its index if found.
-func (s *SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
-	if s == nil {
-		return 0, false
-	}
-
+func (s SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 	l := len(s.Values)
 	index := sort.Search(l, func(i int) bool {
 		return bytes.Compare(s.Values[i].Key, key) >= 0
@@ -142,7 +137,7 @@ func (s *SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 
 // GetLargestObjectID returns the largest object ID found in the config.
 // This could be either a table or a database.
-func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
+func (s SystemConfig) GetLargestObjectID() (uint32, error) {
 	testingLock.Lock()
 	hook := TestingLargestIDHook
 	testingLock.Unlock()
@@ -193,7 +188,7 @@ func (s *SystemConfig) GetLargestObjectID() (uint32, error) {
 
 // GetZoneConfigForKey looks up the zone config for the range containing 'key'.
 // It is the caller's responsibility to ensure that the range does not need to be split.
-func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error) {
+func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error) {
 	if objectID, ok := ObjectIDForKey(key); ok {
 		return s.GetZoneConfigForID(objectID)
 	}
@@ -203,7 +198,7 @@ func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error
 
 // GetZoneConfigForID looks up the zone config for the object (table or database)
 // with 'id'.
-func (s *SystemConfig) GetZoneConfigForID(id uint32) (*ZoneConfig, error) {
+func (s SystemConfig) GetZoneConfigForID(id uint32) (*ZoneConfig, error) {
 	testingLock.Lock()
 	hook := ZoneConfigHook
 	testingLock.Unlock()
@@ -220,7 +215,7 @@ func (s *SystemConfig) GetZoneConfigForID(id uint32) (*ZoneConfig, error) {
 // ComputeSplitKeys takes a start and end key and returns an array of keys
 // at which to split the span [start, end).
 // The only required splits are at each user table prefix.
-func (s *SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.RKey {
+func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.RKey {
 	if TestingDisableTableSplits {
 		return nil
 	}
@@ -275,6 +270,6 @@ func (s *SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb
 
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
 // to zone configs.
-func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
+func (s SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
 	return len(s.ComputeSplitKeys(startKey, endKey)) > 0
 }
