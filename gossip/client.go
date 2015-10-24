@@ -141,9 +141,9 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 		now := time.Now().UnixNano()
 		// Combine remote node's infostore delta with ours.
 		if infoCount := len(reply.Delta); infoCount > 0 {
-			if log.V(1) {
+			if log.V(2) {
 				log.Infof("gossip: received %s from %s", reply.Delta, c.addr)
-			} else {
+			} else if log.V(1) {
 				log.Infof("gossip: received %d info(s) from %s", infoCount, c.addr)
 			}
 		}
