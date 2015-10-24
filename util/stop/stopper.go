@@ -164,11 +164,9 @@ type TaskMap map[string]int
 // String implements fmt.Stringer and returns a sorted multi-line listing of
 // the TaskMap.
 func (tm TaskMap) String() string {
-	var totalNum int
 	var lines []string
 	for location, num := range tm {
 		lines = append(lines, fmt.Sprintf("%-6d %s", num, location))
-		totalNum += num
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(lines)))
 	return strings.Join(lines, "\n")

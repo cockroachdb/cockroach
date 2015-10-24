@@ -2,6 +2,7 @@ cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/cockroachdb/yacc
 cmd github.com/gogo/protobuf/protoc-gen-gogo
 cmd github.com/golang/lint/golint
+cmd github.com/gordonklaus/ineffassign
 cmd github.com/jteeuwen/go-bindata/go-bindata
 cmd github.com/kisielk/errcheck
 cmd github.com/opennota/check/cmd/varcheck
@@ -23,6 +24,7 @@ github.com/elazarl/go-bindata-assetfs d5cac425555ca5cf00694df246e04f05e6a55150
 github.com/gogo/protobuf 04145330265d088c218da8916c50eab3814c76a0
 github.com/golang/lint 32a87160691b3c96046c0c678fe57c5bef761456
 github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
+github.com/gordonklaus/ineffassign 9aa683dd54d8c4db65338563042a55588dd00e2b
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 github.com/jteeuwen/go-bindata bfe36d3254337b7cc18024805dfab2106613abdf
 github.com/julienschmidt/httprouter 77a895ad01ebc98a4dc95d8355bc825ce80a56f6

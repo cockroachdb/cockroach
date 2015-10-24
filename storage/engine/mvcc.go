@@ -1713,7 +1713,7 @@ func MVCCDecodeKey(encodedKey roachpb.EncodedKey) (roachpb.Key, roachpb.Timestam
 	if err != nil {
 		return nil, roachpb.Timestamp{}, false, err
 	}
-	tsBytes, logical, err = encoding.DecodeUint32Decreasing(tsBytes)
+	_, logical, err = encoding.DecodeUint32Decreasing(tsBytes)
 	if err != nil {
 		return nil, roachpb.Timestamp{}, false, err
 	}

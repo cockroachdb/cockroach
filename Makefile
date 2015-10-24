@@ -126,6 +126,8 @@ check:
 	@! go list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | \
 		grep -E ' (golang/protobuf/proto|log|path)$$' | \
 		grep -Ev '(base|security|sql/driver|util/(log|stop)): log$$'
+	@echo "ineffassign"
+	@! ineffassign . | grep -vF gossip/gossip.pb.go
 	@echo "errcheck"
 	@errcheck -ignore 'bytes:Write.*,io:Close,net:Close,net/http:Close,net/rpc:Close,os:Close,database/sql:Close' $(PKG)
 	@echo "vet"
