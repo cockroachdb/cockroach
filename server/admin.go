@@ -25,6 +25,9 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	// Register the net/trace endpoint with http.DefaultServeMux.
+	_ "golang.org/x/net/trace"
 	// This is imported for its side-effect of registering pprof
 	// endpoints with the http.DefaultServeMux.
 	_ "net/http/pprof"
