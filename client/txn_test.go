@@ -45,6 +45,8 @@ func newDB(sender Sender) *DB {
 	}
 }
 
+// TestSender mocks out some of the txn coordinator sender's
+// functionality. It responds to PutRequests using testPutResp.
 func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)) SenderFunc {
 	txnKey := roachpb.Key("test-txn")
 	txnID := []byte(uuid.NewUUID4())
@@ -68,9 +70,16 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 		}
 		var writing bool
 		status := roachpb.PENDING
-		if _, ok := ba.GetArg(roachpb.Put); ok {
-			br.Add(proto.Clone(testPutResp).(roachpb.Response))
-			writing = true
+		for i, req := range ba.Requests {
+			args := req.GetInner()
+			if _, ok := args.(*roachpb.PutRequest); ok {
+				if !br.Responses[i].SetValue(proto.Clone(testPutResp).(roachpb.Response)) {
+					panic("failed to set put response")
+				}
+			}
+			if roachpb.IsTransactionWrite(args) {
+				writing = true
+			}
 		}
 		if args, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			et := args.(*roachpb.EndTransactionRequest)
@@ -240,20 +249,65 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 // upon successful invocation of the retryable func.
 func TestCommitMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
+
 	var calls []roachpb.Method
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
+		if bt, ok := ba.GetArg(roachpb.BeginTransaction); ok && !bt.Header().Key.Equal(roachpb.Key("a")) {
+			t.Errorf("expected begin transaction key to be \"a\"; got %s", bt.Header().Key)
+		}
 		if et, ok := ba.GetArg(roachpb.EndTransaction); ok && !et.(*roachpb.EndTransactionRequest).Commit {
 			t.Errorf("expected commit to be true")
 		}
 		return ba.CreateReply(), nil
 	}, nil))
+
+	// Test all transactional write methods.
+	testArgs := []struct {
+		f         func(txn *Txn) error
+		expMethod roachpb.Method
+	}{
+		{func(txn *Txn) error { return txn.Put("a", "b") }, roachpb.Put},
+		{func(txn *Txn) error { return txn.CPut("a", "b", nil) }, roachpb.ConditionalPut},
+		{func(txn *Txn) error {
+			_, err := txn.Inc("a", 1)
+			return err
+		}, roachpb.Increment},
+		{func(txn *Txn) error { return txn.Del("a") }, roachpb.Delete},
+		{func(txn *Txn) error { return txn.DelRange("a", "b") }, roachpb.DeleteRange},
+	}
+	for i, test := range testArgs {
+		calls = []roachpb.Method{}
+		if err := db.Txn(func(txn *Txn) error {
+			return test.f(txn)
+		}); err != nil {
+			t.Errorf("%d: unexpected error on commit: %s", i, err)
+		}
+		expectedCalls := []roachpb.Method{roachpb.BeginTransaction, test.expMethod, roachpb.EndTransaction}
+		if !reflect.DeepEqual(expectedCalls, calls) {
+			t.Errorf("%d: expected %s, got %s", i, expectedCalls, calls)
+		}
+	}
+}
+
+// TestTxnInsertBeginTransaction verifies that a begin transaction
+// request is inserted just before the first mutating command.
+func TestTxnInsertBeginTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	var calls []roachpb.Method
+	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		calls = append(calls, ba.Methods()...)
+		return ba.CreateReply(), nil
+	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
+		if _, err := txn.Get("foo"); err != nil {
+			return err
+		}
 		return txn.Put("a", "b")
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
-	expectedCalls := []roachpb.Method{roachpb.Put, roachpb.EndTransaction}
+	expectedCalls := []roachpb.Method{roachpb.Get, roachpb.BeginTransaction, roachpb.Put, roachpb.EndTransaction}
 	if !reflect.DeepEqual(expectedCalls, calls) {
 		t.Errorf("expected %s, got %s", expectedCalls, calls)
 	}
@@ -306,7 +360,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	for _, success := range []bool{true, false} {
-		expCalls := []roachpb.Method{roachpb.Put, roachpb.EndTransaction}
+		expCalls := []roachpb.Method{roachpb.BeginTransaction, roachpb.Put, roachpb.EndTransaction}
 		var calls []roachpb.Method
 		db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			calls = append(calls, ba.Methods()...)
@@ -355,7 +409,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 	}); err == nil {
 		t.Error("expected error on abort")
 	}
-	expectedCalls := []roachpb.Method{roachpb.Put, roachpb.EndTransaction}
+	expectedCalls := []roachpb.Method{roachpb.BeginTransaction, roachpb.Put, roachpb.EndTransaction}
 	if !reflect.DeepEqual(expectedCalls, calls) {
 		t.Errorf("expected %s, got %s", expectedCalls, calls)
 	}

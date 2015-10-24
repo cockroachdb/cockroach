@@ -408,26 +408,42 @@ func (txn *Txn) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.
 		return &roachpb.BatchResponse{}, nil
 	}
 
-	lastReq := reqs[lastIndex]
-	// haveTxnWrite tracks intention to write. This is in contrast to
-	// txn.Proto.Writing, which is set by the coordinator when the first
-	// intent has been created, and which lives for the life of the
-	// transaction.
-	haveTxnWrite := roachpb.IsTransactionWrite(lastReq)
+	// firstWriteIndex is set to the index of the first command which is
+	// a transactional write. If != -1, this indicates an intention to
+	// write. This is in contrast to txn.Proto.Writing, which is set by
+	// the coordinator when the first intent has been created, and which
+	// lives for the life of the transaction.
+	firstWriteIndex := -1
+	var firstWriteKey roachpb.Key
 
-	for _, args := range reqs[:lastIndex] {
-		if _, ok := args.(*roachpb.EndTransactionRequest); ok {
-			return nil, roachpb.NewError(util.Errorf("%s sent as non-terminal call", args.Method()))
+	for i, args := range reqs {
+		if i < lastIndex {
+			if _, ok := args.(*roachpb.EndTransactionRequest); ok {
+				return nil, roachpb.NewError(util.Errorf("%s sent as non-terminal call", args.Method()))
+			}
 		}
-
-		if !haveTxnWrite {
-			haveTxnWrite = roachpb.IsTransactionWrite(args)
+		if roachpb.IsTransactionWrite(args) && firstWriteIndex == -1 {
+			firstWriteKey = args.Header().Key
+			firstWriteIndex = i
 		}
 	}
 
-	endTxnRequest, haveEndTxn := lastReq.(*roachpb.EndTransactionRequest)
+	haveTxnWrite := firstWriteIndex != -1
+	endTxnRequest, haveEndTxn := reqs[lastIndex].(*roachpb.EndTransactionRequest)
+	needBeginTxn := !txn.Proto.Writing && haveTxnWrite
 	needEndTxn := txn.Proto.Writing || haveTxnWrite
 	elideEndTxn := haveEndTxn && !needEndTxn
+
+	// If we're not yet writing in this txn, but intend to, insert a
+	// begin transaction request before the first write command.
+	if needBeginTxn {
+		bt := &roachpb.BeginTransactionRequest{
+			Span: roachpb.Span{
+				Key: firstWriteKey,
+			},
+		}
+		reqs = append(append(append([]roachpb.Request(nil), reqs[:firstWriteIndex]...), []roachpb.Request{bt}...), reqs[firstWriteIndex:]...)
+	}
 
 	if elideEndTxn {
 		reqs = reqs[:lastIndex]
@@ -443,6 +459,27 @@ func (txn *Txn) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.
 			txn.Proto.Status = roachpb.COMMITTED
 		} else {
 			txn.Proto.Status = roachpb.ABORTED
+		}
+	}
+
+	// If we inserted a begin transaction request, remove it here.
+	if needBeginTxn {
+		if br != nil && br.Responses != nil {
+			br.Responses = append(br.Responses[:firstWriteIndex], br.Responses[firstWriteIndex+1:]...)
+		}
+		// Handle case where inserted begin txn confused an indexed error.
+		if pErr != nil && pErr.Detail != nil {
+			if iErr, ok := pErr.Detail.GetValue().(roachpb.IndexedError); ok {
+				if idx, ok := iErr.ErrorIndex(); ok {
+					if idx == int32(firstWriteIndex) {
+						// An error was encountered on begin txn; disallow the indexing.
+						pErr = roachpb.NewError(util.Errorf("error on begin transaction: %s", pErr.Detail.GetValue().(error)))
+					} else if idx > int32(firstWriteIndex) {
+						// An error was encountered after begin txn; decrement index.
+						iErr.SetErrorIndex(idx - 1)
+					}
+				}
+			}
 		}
 	}
 	return br, pErr

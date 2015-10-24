@@ -32,11 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
 
 // teardownHeartbeats goes through the coordinator's active transactions and
@@ -71,40 +69,6 @@ func makeTS(walltime int64, logical int32) roachpb.Timestamp {
 	}
 }
 
-// newTxn begins a transaction. For testing purposes, this comes with a ID
-// pre-initialized, but with the Writing flag set to false.
-func newTxn(clock *hlc.Clock, baseKey roachpb.Key) *roachpb.Transaction {
-	f, l, fun := caller.Lookup(1)
-	name := fmt.Sprintf("%s:%d %s", f, l, fun)
-	txn := roachpb.NewTransaction("test", baseKey, 1, roachpb.SERIALIZABLE, clock.Now(), clock.MaxOffset().Nanoseconds())
-	txn.Name = name
-	return txn
-}
-
-// createPutRequest returns a ready-made request using the
-// specified key, value & txn ID.
-func createPutRequest(key roachpb.Key, value []byte, txn *roachpb.Transaction) (*roachpb.PutRequest, roachpb.Header) {
-	h := roachpb.Header{}
-	h.Txn = txn
-	return &roachpb.PutRequest{
-		Span: roachpb.Span{
-			Key: key,
-		},
-		Value: roachpb.MakeValueFromBytes(value),
-	}, h
-}
-
-func createDeleteRangeRequest(key, endKey roachpb.Key, txn *roachpb.Transaction) (*roachpb.DeleteRangeRequest, roachpb.Header) {
-	h := roachpb.Header{}
-	h.Txn = txn
-	return &roachpb.DeleteRangeRequest{
-		Span: roachpb.Span{
-			Key:    key,
-			EndKey: endKey,
-		},
-	}, h
-}
-
 // TestTxnCoordSenderAddRequest verifies adding a request creates a
 // transaction metadata and adding multiple requests with same
 // transaction ID updates the last update timestamp.
@@ -114,20 +78,18 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	txn := newTxn(s.Clock, roachpb.Key("a"))
-	put, h := createPutRequest(roachpb.Key("a"), []byte("value"), txn)
+	txn := client.NewTxn(*s.DB)
 
 	// Put request will create a new transaction.
-	reply, err := client.SendWrappedWith(s.Sender, nil, h, put)
-	if err != nil {
+	if err := txn.Put(roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	txnMeta, ok := s.Sender.txns[string(txn.ID)]
+	txnMeta, ok := s.Sender.txns[string(txn.Proto.ID)]
 	if !ok {
 		t.Fatal("expected a transaction to be created on coordinator")
 	}
-	if !reply.Header().Txn.Writing {
-		t.Fatal("response Txn is not marked as writing")
+	if !txn.Proto.Writing {
+		t.Fatal("txn is not marked as writing")
 	}
 	ts := atomic.LoadInt64(&txnMeta.lastUpdateNanos)
 
@@ -136,14 +98,13 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	s.Sender.Lock()
 	s.Manual.Set(1)
 	s.Sender.Unlock()
-	h.Txn.Writing = true
-	if _, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
+	if err := txn.Put(roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.Sender.txns) != 1 {
 		t.Errorf("expected length of transactions map to be 1; got %d", len(s.Sender.txns))
 	}
-	txnMeta = s.Sender.txns[string(txn.ID)]
+	txnMeta = s.Sender.txns[string(txn.Proto.ID)]
 	if lu := atomic.LoadInt64(&txnMeta.lastUpdateNanos); ts >= lu || lu != s.Manual.UnixNano() {
 		t.Errorf("expected last update time to advance; got %d", lu)
 	}
@@ -157,33 +118,27 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
+	txn := client.NewTxn(*s.DB)
+
+	// Put request will create a new transaction.
 	key := roachpb.Key("key")
-	reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
-		UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
-		Txn: &roachpb.Transaction{
-			Name:      "test txn",
-			Isolation: roachpb.SNAPSHOT,
-		},
-	}, &roachpb.PutRequest{
-		Span: roachpb.Span{
-			Key: key,
-		},
-	})
-	if err != nil {
+	txn.InternalSetPriority(10)
+	txn.Proto.Isolation = roachpb.SNAPSHOT
+	txn.Proto.Name = "test txn"
+	if err := txn.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	pr := reply.(*roachpb.PutResponse)
-	if pr.Txn.Name != "test txn" {
-		t.Errorf("expected txn name to be %q; got %q", "test txn", pr.Txn.Name)
+	if txn.Proto.Name != "test txn" {
+		t.Errorf("expected txn name to be %q; got %q", "test txn", txn.Proto.Name)
 	}
-	if pr.Txn.Priority != 10 {
-		t.Errorf("expected txn priority 10; got %d", pr.Txn.Priority)
+	if txn.Proto.Priority != 10 {
+		t.Errorf("expected txn priority 10; got %d", txn.Proto.Priority)
 	}
-	if !bytes.Equal(pr.Txn.Key, key) {
-		t.Errorf("expected txn Key to match %q != %q", key, pr.Txn.Key)
+	if !bytes.Equal(txn.Proto.Key, key) {
+		t.Errorf("expected txn Key to match %q != %q", key, txn.Proto.Key)
 	}
-	if pr.Txn.Isolation != roachpb.SNAPSHOT {
-		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", pr.Txn.Isolation)
+	if txn.Proto.Isolation != roachpb.SNAPSHOT {
+		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", txn.Proto.Isolation)
 	}
 }
 
@@ -195,22 +150,17 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
-		UserPriority: proto.Int32(-10), // negative user priority is translated into positive priority
-		Txn: &roachpb.Transaction{
-			Name:      "test txn",
-			Isolation: roachpb.SNAPSHOT,
-			Priority:  11,
-		},
-	}, &roachpb.PutRequest{
-		Span: roachpb.Span{
-			Key: roachpb.Key("key"),
-		},
-	})
-	if err != nil {
+	txn := client.NewTxn(*s.DB)
+
+	// Put request will create a new transaction.
+	key := roachpb.Key("key")
+	txn.InternalSetPriority(10)
+	txn.Proto.Isolation = roachpb.SNAPSHOT
+	txn.Proto.Priority = 11
+	if err := txn.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if prio := reply.(*roachpb.PutResponse).Txn.Priority; prio != 11 {
+	if prio := txn.Proto.Priority; prio != 11 {
 		t.Errorf("expected txn priority 11; got %d", prio)
 	}
 }
@@ -234,26 +184,23 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
-	txn := newTxn(s.Clock, roachpb.Key("a"))
 
+	txn := client.NewTxn(*s.DB)
 	for _, rng := range ranges {
 		if rng.end != nil {
-			delRangeReq, h := createDeleteRangeRequest(rng.start, rng.end, txn)
-			if _, err := client.SendWrappedWith(s.Sender, nil, h, delRangeReq); err != nil {
+			if err := txn.DelRange(rng.start, rng.end); err != nil {
 				t.Fatal(err)
 			}
 		} else {
-			putReq, h := createPutRequest(rng.start, []byte("value"), txn)
-			if _, err := client.SendWrappedWith(s.Sender, nil, h, putReq); err != nil {
+			if err := txn.Put(rng.start, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
 		}
-		txn.Writing = true // required for all but first req
 	}
 
 	// Verify that the transaction metadata contains only two entries
 	// in its "keys" interval cache. "a" and range "aa"-"c".
-	txnMeta, ok := s.Sender.txns[string(txn.ID)]
+	txnMeta, ok := s.Sender.txns[string(txn.Proto.ID)]
 	if !ok {
 		t.Fatalf("expected a transaction to be created on coordinator")
 	}
@@ -270,14 +217,13 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
 
-	txn1 := newTxn(s.Clock, roachpb.Key("a"))
-	txn2 := newTxn(s.Clock, roachpb.Key("b"))
-	put1, h := createPutRequest(roachpb.Key("a"), []byte("value"), txn1)
-	if _, err := client.SendWrappedWith(s.Sender, nil, h, put1); err != nil {
+	txn1 := client.NewTxn(*s.DB)
+	txn2 := client.NewTxn(*s.DB)
+
+	if err := txn1.Put(roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	put2, h := createPutRequest(roachpb.Key("b"), []byte("value"), txn2)
-	if _, err := client.SendWrappedWith(s.Sender, nil, h, put2); err != nil {
+	if err := txn2.Put(roachpb.Key("b"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -297,19 +243,16 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	// Set heartbeat interval to 1ms for testing.
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
-	initialTxn := newTxn(s.Clock, roachpb.Key("a"))
-	put, h := createPutRequest(roachpb.Key("a"), []byte("value"), initialTxn)
-	if reply, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
+	initialTxn := client.NewTxn(*s.DB)
+	if err := initialTxn.Put(roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
-	} else {
-		*initialTxn = *reply.Header().Txn
 	}
 
 	// Verify 3 heartbeats.
 	var heartbeatTS roachpb.Timestamp
 	for i := 0; i < 3; i++ {
 		if err := util.IsTrueWithin(func() bool {
-			ok, txn, err := getTxn(s.Sender, initialTxn)
+			ok, txn, err := getTxn(s.Sender, &initialTxn.Proto)
 			if !ok || err != nil {
 				return false
 			}
@@ -373,17 +316,12 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	txn := newTxn(s.Clock, roachpb.Key("a"))
 	key := roachpb.Key("a")
-	put, h := createPutRequest(key, []byte("value"), txn)
-	reply, err := client.SendWrappedWith(s.Sender, nil, h, put)
-	if err != nil {
+	txn := client.NewTxn(*s.DB)
+	if err := txn.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	pReply := reply.(*roachpb.PutResponse)
-	if _, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
-		Txn: pReply.Header().Txn,
-	}, &roachpb.EndTransactionRequest{Commit: true}); err != nil {
+	if err := txn.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	verifyCleanup(key, s.Sender, s.Eng, t)
@@ -398,44 +336,30 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 
 	// Create a transaction with intent at "a".
 	key := roachpb.Key("a")
-	txn := newTxn(s.Clock, key)
-	txn.Priority = 1
-	put, h := createPutRequest(key, []byte("value"), txn)
-	if reply, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
+	txn1 := client.NewTxn(*s.DB)
+	txn1.InternalSetPriority(1)
+	if err := txn1.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
-	} else {
-		txn = reply.Header().Txn
 	}
 
-	// Push the transaction to abort it.
-	txn2 := newTxn(s.Clock, key)
-	txn2.Priority = 2
-	pushArgs := &roachpb.PushTxnRequest{
-		Span: roachpb.Span{
-			Key: txn.Key,
-		},
-		Now:       s.Clock.Now(),
-		PusherTxn: *txn2,
-		PusheeTxn: *txn,
-		PushType:  roachpb.ABORT_TXN,
-	}
-	if _, err := client.SendWrapped(s.Sender, nil, pushArgs); err != nil {
+	// Push the transaction (by writing key "a" with higher priority) to abort it.
+	txn2 := client.NewTxn(*s.DB)
+	txn2.InternalSetPriority(2)
+	if err := txn2.Put(key, []byte("value2")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now end the transaction and verify we've cleanup up, even though
 	// end transaction failed.
-	etArgs := &roachpb.EndTransactionRequest{
-		Commit: true,
-	}
-	_, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
-		Txn: txn,
-	}, etArgs)
+	err := txn1.Commit()
 	switch err.(type) {
 	case *roachpb.TransactionAbortedError:
 		// Expected
 	default:
 		t.Fatalf("expected transaction aborted error; got %s", err)
+	}
+	if err := txn2.Commit(); err != nil {
+		t.Fatal(err)
 	}
 	verifyCleanup(key, s.Sender, s.Eng, t)
 }
@@ -450,9 +374,8 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	// Set heartbeat interval to 1ms for testing.
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
-	txn := newTxn(s.Clock, roachpb.Key("a"))
-	put, h := createPutRequest(roachpb.Key("a"), []byte("value"), txn)
-	if _, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
+	txn := client.NewTxn(*s.DB)
+	if err := txn.Put(roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -465,7 +388,7 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	if err := util.IsTrueWithin(func() bool {
 		// Locking the TxnCoordSender to prevent a data race.
 		s.Sender.Lock()
-		_, ok := s.Sender.txns[string(txn.ID)]
+		_, ok := s.Sender.txns[string(txn.Proto.ID)]
 		s.Sender.Unlock()
 		return !ok
 	}, 50*time.Millisecond); err != nil {
@@ -505,66 +428,49 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			makeTS(10, 10), makeTS(10, 10), false},
 	}
 
-	var testPutReq = &roachpb.PutRequest{
-		Span: roachpb.Span{
-			Key: roachpb.Key("test-key"),
-		},
-	}
-
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
 		ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			return nil, roachpb.NewError(test.err)
 		}), clock, false, nil, stopper)
-		var reply *roachpb.PutResponse
-		var err error
-		{
-			var r roachpb.Response
-			if r, err = client.SendWrappedWith(ts, nil, roachpb.Header{
-				UserPriority: proto.Int32(-1),
-				Txn: &roachpb.Transaction{
-					Name: "test txn",
-				},
-				Replica: roachpb.ReplicaDescriptor{
-					NodeID: 12345,
-				},
-			}, proto.Clone(testPutReq).(roachpb.Request)); err != nil {
-				t.Fatal(err)
-			}
-			reply = r.(*roachpb.PutResponse)
-		}
+		db := client.NewDB(ts)
+		txn := client.NewTxn(*db)
+		txn.InternalSetPriority(1)
+		txn.Proto.Name = "test txn"
+		err := txn.Put(roachpb.Key("test-key"), []byte("value"))
 		teardownHeartbeats(ts)
 		stopper.Stop()
 
 		if reflect.TypeOf(test.err) != reflect.TypeOf(err) {
 			t.Fatalf("%d: expected %T; got %T: %v", i, test.err, err, err)
 		}
-		if reply.Txn.Epoch != test.expEpoch {
+		if txn.Proto.Epoch != test.expEpoch {
 			t.Errorf("%d: expected epoch = %d; got %d",
-				i, test.expEpoch, reply.Txn.Epoch)
+				i, test.expEpoch, txn.Proto.Epoch)
 		}
-		if reply.Txn.Priority != test.expPri {
+		if txn.Proto.Priority != test.expPri {
 			t.Errorf("%d: expected priority = %d; got %d",
-				i, test.expPri, reply.Txn.Priority)
+				i, test.expPri, txn.Proto.Priority)
 		}
-		if !reply.Txn.Timestamp.Equal(test.expTS) {
+		if !txn.Proto.Timestamp.Equal(test.expTS) {
 			t.Errorf("%d: expected timestamp to be %s; got %s",
-				i, test.expTS, reply.Txn.Timestamp)
+				i, test.expTS, txn.Proto.Timestamp)
 		}
-		if !reply.Txn.OrigTimestamp.Equal(test.expOrigTS) {
+		if !txn.Proto.OrigTimestamp.Equal(test.expOrigTS) {
 			t.Errorf("%d: expected orig timestamp to be %s + 1; got %s",
-				i, test.expOrigTS, reply.Txn.OrigTimestamp)
+				i, test.expOrigTS, txn.Proto.OrigTimestamp)
 		}
-		if nodes := reply.Txn.CertainNodes.Nodes; (len(nodes) != 0) != test.nodeSeen {
+		if nodes := txn.Proto.CertainNodes.Nodes; (len(nodes) != 0) != test.nodeSeen {
 			t.Errorf("%d: expected nodeSeen=%t, but list of hosts is %v",
 				i, test.nodeSeen, nodes)
 		}
 	}
 }
 
-// TestTxnDrainingNode tests that pending transactions tasks' intents are resolved
-// if they commit while draining, and that a NodeUnavailableError is received
-// when attempting to run a new transaction on a draining node.
+// TestTxnDrainingNode tests that pending transactions tasks' intents
+// are resolved if they commit while draining, and that a
+// NodeUnavailableError is received when attempting to run a new
+// transaction on a draining node.
 func TestTxnDrainingNode(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
@@ -577,50 +483,30 @@ func TestTxnDrainingNode(t *testing.T) {
 		t.Fatal("stopper draining prematurely")
 	}
 
-	txn := newTxn(s.Clock, roachpb.Key("a"))
 	key := roachpb.Key("a")
-	beginTxn := func() {
-		put, h := createPutRequest(key, []byte("value"), txn)
-		if reply, err := client.SendWrappedWith(s.Sender, nil, h, put); err != nil {
-			t.Fatal(err)
-		} else {
-			txn = reply.Header().Txn
-		}
+	txn := client.NewTxn(*s.DB)
+	// Begin before draining.
+	if err := txn.Put(key, []byte("value")); err != nil {
+		t.Fatal(err)
 	}
-	endTxn := func() {
-		if _, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
-			Txn: txn,
-		}, &roachpb.EndTransactionRequest{
-			Commit: true}); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	beginTxn() // begin before draining
 	go func() {
 		s.Stopper.Stop()
 	}()
-
 	util.SucceedsWithin(t, time.Second, func() error {
 		if s.Stopper.RunTask(func() {}) {
 			return errors.New("stopper not yet draining")
 		}
 		return nil
 	})
-	endTxn()                               // commit after draining
+	// Commit after draining.
+	if err := txn.Commit(); err != nil {
+		t.Fatal(err)
+	}
 	verifyCleanup(key, s.Sender, s.Eng, t) // make sure intent gets resolved
 
 	// Attempt to start another transaction, but it should be too late.
-	key = roachpb.Key("key")
-	_, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
-		Txn: &roachpb.Transaction{
-			Name: "test txn",
-		},
-	}, &roachpb.PutRequest{
-		Span: roachpb.Span{
-			Key: key,
-		},
-	})
+	txn2 := client.NewTxn(*s.DB)
+	err := txn2.Put(key, []byte("value"))
 	if _, ok := err.(*roachpb.NodeUnavailableError); !ok {
 		teardownHeartbeats(s.Sender)
 		t.Fatal(err)
@@ -643,10 +529,10 @@ func TestTxnMultipleCoord(t *testing.T) {
 	}{
 		{roachpb.NewGet(roachpb.Key("a")), true, true},
 		{roachpb.NewGet(roachpb.Key("a")), false, true},
-		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), false, true},
-		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), true, false},
+		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), false, false}, // transactional write before begin
+		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), true, false},  // must have switched coordinators
 	} {
-		txn := newTxn(s.Clock, roachpb.Key("a"))
+		txn := roachpb.NewTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, s.Clock.Now(), s.Clock.MaxOffset().Nanoseconds())
 		txn.Writing = tc.writing
 		reply, err := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
 			Txn: txn,
@@ -700,9 +586,9 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	stopper.Stop()
 
 	var ba roachpb.BatchRequest
-	put := &roachpb.PutRequest{}
-	put.Key = roachpb.Key("test")
-	ba.Add(put)
+	key := roachpb.Key("test")
+	ba.Add(&roachpb.BeginTransactionRequest{Span: roachpb.Span{Key: key}})
+	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
 	ba.Add(&roachpb.EndTransactionRequest{})
 	ba.Txn = &roachpb.Transaction{Name: "test"}
 	_, pErr := ts.Send(context.Background(), ba)

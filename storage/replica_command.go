@@ -96,6 +96,10 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 		var resp roachpb.ReverseScanResponse
 		resp, intents, err = r.ReverseScan(batch, h, *tArgs)
 		reply = &resp
+	case *roachpb.BeginTransactionRequest:
+		var resp roachpb.BeginTransactionResponse
+		resp, err = r.BeginTransaction(batch, ms, h, *tArgs)
+		reply = &resp
 	case *roachpb.EndTransactionRequest:
 		var resp roachpb.EndTransactionResponse
 		resp, intents, err = r.EndTransaction(batch, ms, h, *tArgs)
@@ -141,7 +145,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	}
 
 	if log.V(2) {
-		log.Infof("executed %s command %+v: %+v", args.Method(), args, reply)
+		log.Infof("executed %s command %+v: %+v, err=%s", args.Method(), args, reply, err)
 	}
 
 	// Update the node clock with the serviced request. This maintains a
@@ -247,6 +251,53 @@ func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.Header, args roachp
 	return reply, intents, err
 }
 
+func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
+	if h.Txn == nil {
+		return util.Errorf("no transaction specified to HeartbeatTxn")
+	}
+	if !bytes.Equal(args.Header().Key, h.Txn.Key) {
+		return util.Errorf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
+	}
+	return nil
+}
+
+// BeginTransaction writes the initial transaction record. Fails in
+// the event that a transaction record is already written. This may
+// occur if a transaction is started with a batch containing writes
+// to different ranges, and the range containing the txn record fails
+// to receive the write batch before a heartbeat or txn push is
+// performed first and aborts the transaction.
+func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.BeginTransactionRequest) (roachpb.BeginTransactionResponse, error) {
+	var reply roachpb.BeginTransactionResponse
+
+	if err := verifyTransaction(h, &args); err != nil {
+		return reply, err
+	}
+	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
+
+	// Verify transaction does not already exist.
+	txn := roachpb.Transaction{}
+	if ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, &txn); err != nil {
+		return reply, err
+	} else if ok {
+		// Check whether someone has come in ahead and already aborted the
+		// txn.
+		if txn.Status == roachpb.ABORTED {
+			return reply, roachpb.NewTransactionAbortedError(&txn)
+		} else if txn.Status == roachpb.PENDING && h.Txn.Epoch > txn.Epoch {
+			// On a transaction retry there will be an extant txn record but
+			// this run should have an upgraded epoch. This is a pass
+			// through to set the new transaction record.
+		} else {
+			return reply, roachpb.NewTransactionStatusError(txn, "non-aborted transaction exists already")
+		}
+	}
+
+	// Write the txn record.
+	err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, h.Txn)
+	return reply, err
+}
+
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
 // TODO(tschottdorf): return nil reply on any error. The error itself
@@ -255,27 +306,19 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	var reply roachpb.EndTransactionResponse
 	ts := h.Timestamp // all we're going to use from the header.
 
-	if h.Txn == nil {
-		return reply, nil, util.Errorf("no transaction specified to EndTransaction")
-	}
-	if !bytes.Equal(args.Key, h.Txn.Key) {
-		return reply, nil, util.Errorf("request key %s should match txn key %s", args.Key, h.Txn.Key)
+	if err := verifyTransaction(h, &args); err != nil {
+		return reply, nil, err
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
-	// Fetch existing transaction if possible.
+	// Fetch existing transaction.
 	reply.Txn = &roachpb.Transaction{}
 	ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, reply.Txn)
 	if err != nil {
 		return reply, nil, err
-	}
-
-	if !ok {
-		// The transaction doesn't exist yet on disk; use the supplied version.
-		// The cloning shouldn't be strictly necessary since it's only passed
-		// to error constructors which itself make a copy, but let's be safe.
-		reply.Txn = h.Txn.Clone()
+	} else if !ok {
+		return reply, nil, util.Errorf("transaction does not exist: %s on store %d", h.Txn, r.rm.StoreID())
 	}
 
 	for i := range args.Intents {
@@ -715,11 +758,8 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roac
 	var reply roachpb.HeartbeatTxnResponse
 	ts := h.Timestamp // all we're going to use from the header.
 
-	if h.Txn == nil {
-		return reply, util.Errorf("no transaction specified to HeartbeatTxn")
-	}
-	if !bytes.Equal(args.Key, h.Txn.Key) {
-		return reply, util.Errorf("request key %s should match txn key %s", args.Key, h.Txn.Key)
+	if err := verifyTransaction(h, &args); err != nil {
+		return reply, err
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
@@ -728,11 +768,11 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roac
 	if ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, &txn); err != nil {
 		return reply, err
 	} else if !ok {
-		// If no existing transaction record was found, initialize to a
-		// shallow copy of the transaction in the request header. We copy
-		// to avoid mutating the original below.
-		// TODO(tschottdorf): double-check that we don't want a clone.
-		txn = *h.Txn
+		// If no existing transaction record was found, skip heartbeat.
+		// This could mean the heartbeat is a delayed relic or it could
+		// mean that the BeginTransaction call was delayed. In either
+		// case, there's no reason to persist a new transaction record.
+		return reply, util.Errorf("heartbeat for transaction %s failed; record not present", h.Txn)
 	}
 
 	if txn.Status == roachpb.PENDING {
@@ -811,7 +851,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	}
 	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
-	// Fetch existing transaction if possible.
+	// Fetch existing transaction; if missing, we're allowed to abort.
 	existTxn := &roachpb.Transaction{}
 	ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, existTxn)
@@ -848,13 +888,11 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 			reply.PusheeTxn.Priority = args.PusheeTxn.Priority
 		}
 	} else {
-		// Some sanity checks for case where we don't find a transaction record.
-		if args.PusheeTxn.Status != roachpb.PENDING {
-			return reply, roachpb.NewTransactionStatusError(args.PusherTxn,
-				fmt.Sprintf("no txn persisted, yet intent has status %s", args.PusheeTxn.Status))
-		}
-		// The transaction doesn't exist yet on disk; use the supplied version.
+		// The transaction doesn't exist yet on disk; we're allowed to abort it.
 		reply.PusheeTxn = args.PusheeTxn.Clone()
+		reply.PusheeTxn.Status = roachpb.ABORTED
+		err = engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, reply.PusheeTxn)
+		return reply, err
 	}
 
 	// If already committed or aborted, return success.
