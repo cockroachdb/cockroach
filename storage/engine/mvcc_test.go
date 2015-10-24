@@ -1005,10 +1005,18 @@ func TestMVCCScanInTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
-	err = MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, nil)
-	err = MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, txn1)
-	err = MVCCPut(engine, nil, testKey4, makeTS(1, 0), value4, nil)
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, txn1); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	kvs, _, err := MVCCScan(engine, testKey2, testKey4, 0, makeTS(1, 0), true, txn1)
 	if err != nil {
@@ -1022,8 +1030,7 @@ func TestMVCCScanInTxn(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	kvs, _, err = MVCCScan(engine, testKey2, testKey4, 0, makeTS(1, 0), true, nil)
-	if err == nil {
+	if _, _, err := MVCCScan(engine, testKey2, testKey4, 0, makeTS(1, 0), true, nil); err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 }
@@ -1264,17 +1271,18 @@ func TestMVCCConditionalPut(t *testing.T) {
 	}
 
 	// Move to an empty value. Will succeed.
-	err = MVCCConditionalPut(engine, nil, testKey1, clock.Now(), valueEmpty, &value1, nil)
-	if err != nil {
+	if err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), valueEmpty, &value1, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Now move to value2 from expected empty value.
-	err = MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value2, &valueEmpty, nil)
-	if err != nil {
+	if err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value2, &valueEmpty, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Verify we get value2 as expected.
 	value, _, err := MVCCGet(engine, testKey1, clock.Now(), true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !bytes.Equal(value2.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value1.GetRawBytes(), value.GetRawBytes())
@@ -1327,23 +1335,34 @@ func TestMVCCResolveTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	value, _, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, txn1)
-	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.GetRawBytes(), value.GetRawBytes())
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+		t.Fatal(err)
+	}
+	{
+		value, _, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, txn1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				value1.GetRawBytes(), value.GetRawBytes())
+		}
 	}
 
 	// Resolve will write with txn1's timestamp which is 0,1.
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1Commit)
-	if err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1Commit); err != nil {
 		t.Fatal(err)
 	}
 
-	value, _, err = MVCCGet(engine, testKey1, makeTS(0, 1), true, nil)
-	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.GetRawBytes(), value.GetRawBytes())
+	{
+		value, _, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				value1.GetRawBytes(), value.GetRawBytes())
+		}
 	}
 }
 
@@ -1601,22 +1620,31 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	err = MVCCPut(engine, nil, testKey2, makeTS(0, 1), value2, txn1e2)
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey2, makeTS(0, 1), value2, txn1e2); err != nil {
+		t.Fatal(err)
+	}
 	num, err := MVCCResolveWriteIntentRange(engine, nil, testKey1, testKey2.Next(), 2, makeTS(0, 1), txn1e2Commit)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if num != 2 {
 		t.Errorf("expected 2 rows resolved; got %d", num)
 	}
 
 	// Verify key1 is empty, as resolution with epoch 2 would have
 	// aborted the epoch 1 intent.
-	value, _, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, nil)
-	if value != nil || err != nil {
+	if value, _, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, nil); value != nil || err != nil {
 		t.Errorf("expected value nil, err nil; got %+v, %v", value, err)
 	}
 
 	// Key2 should be committed.
-	value, _, err = MVCCGet(engine, testKey2, makeTS(0, 1), true, nil)
+	value, _, err := MVCCGet(engine, testKey2, makeTS(0, 1), true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !bytes.Equal(value2.GetRawBytes(), value.GetRawBytes()) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value2.GetRawBytes(), value.GetRawBytes())
@@ -1740,10 +1768,18 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	err = MVCCPut(engine, nil, testKey2, makeTS(0, 1), value2, nil)
-	err = MVCCPut(engine, nil, testKey3, makeTS(0, 1), value3, txn2)
-	err = MVCCPut(engine, nil, testKey4, makeTS(0, 1), value4, txn1)
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey2, makeTS(0, 1), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey3, makeTS(0, 1), value3, txn2); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey4, makeTS(0, 1), value4, txn1); err != nil {
+		t.Fatal(err)
+	}
 
 	num, err := MVCCResolveWriteIntentRange(engine, nil, testKey1, testKey4.Next(), 0, makeTS(0, 1), txn1Commit)
 	if err != nil {
@@ -1753,28 +1789,48 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 		t.Fatalf("expected all keys to process for resolution, even though 2 are noops; got %d", num)
 	}
 
-	value, _, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, nil)
-	if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.GetRawBytes(), value.GetRawBytes())
+	{
+		value, _, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(value1.GetRawBytes(), value.GetRawBytes()) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				value1.GetRawBytes(), value.GetRawBytes())
+		}
 	}
 
-	value, _, err = MVCCGet(engine, testKey2, makeTS(0, 1), true, nil)
-	if !bytes.Equal(value2.GetRawBytes(), value.GetRawBytes()) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value2.GetRawBytes(), value.GetRawBytes())
+	{
+		value, _, err := MVCCGet(engine, testKey2, makeTS(0, 1), true, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(value2.GetRawBytes(), value.GetRawBytes()) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				value2.GetRawBytes(), value.GetRawBytes())
+		}
 	}
 
-	value, _, err = MVCCGet(engine, testKey3, makeTS(0, 1), true, txn2)
-	if !bytes.Equal(value3.GetRawBytes(), value.GetRawBytes()) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value3.GetRawBytes(), value.GetRawBytes())
+	{
+		value, _, err := MVCCGet(engine, testKey3, makeTS(0, 1), true, txn2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(value3.GetRawBytes(), value.GetRawBytes()) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				value3.GetRawBytes(), value.GetRawBytes())
+		}
 	}
 
-	value, _, err = MVCCGet(engine, testKey4, makeTS(0, 1), true, nil)
-	if !bytes.Equal(value4.GetRawBytes(), value.GetRawBytes()) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value4.GetRawBytes(), value.GetRawBytes())
+	{
+		value, _, err := MVCCGet(engine, testKey4, makeTS(0, 1), true, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(value4.GetRawBytes(), value.GetRawBytes()) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				value4.GetRawBytes(), value.GetRawBytes())
+		}
 	}
 }
 

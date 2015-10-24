@@ -72,6 +72,9 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	// Add a zone config for both the table and database.
 	buf, err := proto.Marshal(config.DefaultZoneConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
@@ -249,6 +252,9 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	// Add a zone config for the table.
 	buf, err := proto.Marshal(config.DefaultZoneConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, desc.ID, buf); err != nil {
 		t.Fatal(err)
 	}

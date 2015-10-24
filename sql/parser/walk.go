@@ -327,6 +327,6 @@ func (v *containsSubqueryVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 // containsSubquery returns true if the expression contains a subquery.
 func containsSubquery(expr Expr) bool {
 	v := containsSubqueryVisitor{containsSubquery: false}
-	expr = WalkExpr(&v, expr)
+	_ = WalkExpr(&v, expr)
 	return v.containsSubquery
 }

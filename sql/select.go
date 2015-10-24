@@ -893,10 +893,6 @@ func (v *applyConstraintsVisitor) Visit(expr parser.Expr, pre bool) (parser.Visi
 }
 
 func diffSorted(a, b parser.DTuple) parser.DTuple {
-	n := len(a)
-	if n > len(b) {
-		n = len(b)
-	}
 	var r parser.DTuple
 	for len(a) > 0 && len(b) > 0 {
 		switch a[0].Compare(b[0]) {

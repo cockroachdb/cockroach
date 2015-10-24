@@ -399,7 +399,7 @@ func (v *isConstVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 // (i.e. it does not contain a VariableExpr, QualifiedName, etc).
 func isConst(expr Expr) bool {
 	v := isConstVisitor{isConst: true}
-	expr = WalkExpr(&v, expr)
+	_ = WalkExpr(&v, expr)
 	return v.isConst
 }
 
@@ -427,6 +427,6 @@ func (v *containsVarsVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 // ContainsVars returns true if the expression contains any variables.
 func ContainsVars(expr Expr) bool {
 	v := containsVarsVisitor{containsVars: false}
-	expr = WalkExpr(&v, expr)
+	_ = WalkExpr(&v, expr)
 	return v.containsVars
 }

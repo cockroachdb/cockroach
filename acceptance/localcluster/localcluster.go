@@ -400,13 +400,14 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan 
 		// There is a very tiny race here: the signal handler might be closing the
 		// stopper simultaneously.
 		log.Errorf("stopping due to unexpected event: %+v", e)
-		r, err := l.client.ContainerLogs(e.Id, &dockerclient.LogOptions{
+		if r, err := l.client.ContainerLogs(e.Id, &dockerclient.LogOptions{
 			Stdout: true,
 			Stderr: true,
-		})
-		if err == nil {
-			defer r.Close()
-			_, err = io.Copy(os.Stderr, r)
+		}); err == nil {
+			if _, err := io.Copy(os.Stderr, r); err != nil {
+				log.Infof("error listing logs: %s", err)
+			}
+			r.Close()
 		}
 		close(l.stopper)
 	}

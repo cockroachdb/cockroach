@@ -417,7 +417,7 @@ func TestEncodeDecodeBytes(t *testing.T) {
 		}
 
 		enc = append(enc, []byte("remainder")...)
-		remainder, dec, err = DecodeBytes(enc, nil)
+		remainder, _, err = DecodeBytes(enc, nil)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -469,7 +469,7 @@ func TestEncodeDecodeBytesDecreasing(t *testing.T) {
 		}
 
 		enc = append(enc, []byte("remainder")...)
-		remainder, dec, err = DecodeBytesDecreasing(enc, nil)
+		remainder, _, err = DecodeBytesDecreasing(enc, nil)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -521,7 +521,7 @@ func TestEncodeDecodeString(t *testing.T) {
 		}
 
 		enc = append(enc, "remainder"...)
-		remainder, dec, err = DecodeString(enc, nil)
+		remainder, _, err = DecodeString(enc, nil)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -573,7 +573,7 @@ func TestEncodeDecodeStringDecreasing(t *testing.T) {
 		}
 
 		enc = append(enc, "remainder"...)
-		remainder, dec, err = DecodeStringDecreasing(enc, nil)
+		remainder, _, err = DecodeStringDecreasing(enc, nil)
 		if err != nil {
 			t.Error(err)
 			continue

@@ -47,7 +47,7 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
-		expr, funcs, err := extractAggregateFuncs(expr)
+		_, funcs, err := extractAggregateFuncs(expr)
 		if err != nil {
 			t.Fatal(err)
 		}
