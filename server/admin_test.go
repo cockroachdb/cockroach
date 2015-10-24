@@ -93,3 +93,28 @@ func TestAdminDebugPprof(t *testing.T) {
 		t.Errorf("expected %s to contain %s", body, exp)
 	}
 }
+
+// TestAdminDebugTrace verifies that the net/trace endpoints are available
+// via /debug/{requests,events}.
+func TestAdminNetTrace(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	tc := []struct {
+		segment, search string
+	}{
+		{"requests", "<title>/debug/requests</title>"},
+		{"events", "<title>events</title>"},
+	}
+
+	for _, c := range tc {
+		body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.ServingAddr() + debugEndpoint + c.segment)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(body, []byte(c.search)) {
+			t.Errorf("expected %s to be contained in %s", c.search, body)
+		}
+	}
+}

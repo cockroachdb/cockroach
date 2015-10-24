@@ -26,6 +26,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	ntrace "golang.org/x/net/trace"
+
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -78,6 +80,7 @@ type Trace struct {
 	Content []TraceItem
 	tracer  *Tracer // origin tracer for clock, publishing...
 	depth   int32
+	nTrace  ntrace.Trace
 }
 
 // Event adds an Epoch with zero duration to the Trace.
@@ -106,6 +109,7 @@ func (t *Trace) epoch(name string) func() {
 		panic("use of finalized Trace:\n" + t.String())
 	}
 	t.depth++
+	t.nTrace.LazyPrintf(name)
 	pos := t.add(name)
 	called := false
 	return func() {
@@ -115,6 +119,7 @@ func (t *Trace) epoch(name string) func() {
 		called = true
 		t.Content[pos].Duration = t.tracer.now().Sub(t.Content[pos].Timestamp)
 		t.depth--
+		t.nTrace.LazyPrintf(name + " [end]")
 	}
 }
 
@@ -137,6 +142,7 @@ func (t *Trace) Finalize() {
 	} else if log.V(2) {
 		log.Info(t)
 	}
+	t.nTrace.Finish()
 }
 
 func (t *Trace) add(name string) int {
@@ -224,6 +230,6 @@ func (t *Tracer) newTrace(id, name string) *Trace {
 		ID:     id,
 		Name:   name,
 		tracer: t,
+		nTrace: ntrace.New("req", name),
 	}
-
 }
