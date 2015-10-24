@@ -319,12 +319,12 @@ func (l *Cluster) createRoach(i int, cmd ...string) *Container {
 }
 
 func (l *Cluster) createCACert() {
-	log.Infof("creating ca")
+	log.Infof("creating ca in: %s", l.CertsDir)
 	maybePanic(security.RunCreateCACert(l.CertsDir, 512))
 }
 
 func (l *Cluster) createNodeCerts() {
-	log.Infof("creating node certs")
+	log.Infof("creating node certs in: %s", l.CertsDir)
 	nodes := []string{dockerIP().String()}
 	for i := 0; i < l.numNodes; i++ {
 		nodes = append(nodes, node(i))
