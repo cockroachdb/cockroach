@@ -25,13 +25,6 @@ func (m *EchoRequest) Reset()         { *m = EchoRequest{} }
 func (m *EchoRequest) String() string { return proto.CompactTextString(m) }
 func (*EchoRequest) ProtoMessage()    {}
 
-func (m *EchoRequest) GetMsg() string {
-	if m != nil {
-		return m.Msg
-	}
-	return ""
-}
-
 type EchoResponse struct {
 	Msg string `protobuf:"bytes,1,opt,name=msg" json:"msg"`
 }
@@ -39,13 +32,6 @@ type EchoResponse struct {
 func (m *EchoResponse) Reset()         { *m = EchoResponse{} }
 func (m *EchoResponse) String() string { return proto.CompactTextString(m) }
 func (*EchoResponse) ProtoMessage()    {}
-
-func (m *EchoResponse) GetMsg() string {
-	if m != nil {
-		return m.Msg
-	}
-	return ""
-}
 
 func (m *EchoRequest) Marshal() (data []byte, err error) {
 	size := m.Size()

@@ -1224,11 +1224,17 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
 	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
-		put, ok := args.(*roachpb.PutRequest)
-		if ok && bytes.Equal(put.Key, key) && bytes.Equal(put.Value.GetRawBytes(), []byte{1}) {
-			blockingStart <- struct{}{}
-			<-blockingDone
+		if put, ok := args.(*roachpb.PutRequest); ok {
+			putBytes, err := put.Value.GetBytes()
+			if err != nil {
+				return err
+			}
+			if bytes.Equal(put.Key, key) && bytes.Equal(putBytes, []byte{1}) {
+				blockingStart <- struct{}{}
+				<-blockingDone
+			}
 		}
+
 		return nil
 	}
 	cmd1Done := make(chan struct{})
@@ -2446,7 +2452,11 @@ func TestMerge(t *testing.T) {
 	if resp.Value == nil {
 		t.Fatal("GetResponse had nil value")
 	}
-	if a, e := resp.Value.GetRawBytes(), []byte(stringExpected); !bytes.Equal(a, e) {
+	a, err := resp.Value.GetBytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := []byte(stringExpected); !bytes.Equal(a, e) {
 		t.Errorf("Get did not return expected value: %s != %s", string(a), e)
 	}
 }
@@ -2581,9 +2591,11 @@ func TestConditionFailedError(t *testing.T) {
 	if cErr, ok := err.(*roachpb.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
 			err, err)
-	} else if v := cErr.ActualValue; v == nil || !bytes.Equal(v.GetRawBytes(), value) {
+	} else if valueBytes, err := cErr.ActualValue.GetBytes(); err != nil {
+		t.Fatal(err)
+	} else if cErr.ActualValue == nil || !bytes.Equal(valueBytes, value) {
 		t.Errorf("ConditionFailedError with bytes %q expected, but got %+v",
-			value, v)
+			value, cErr.ActualValue)
 	}
 }
 

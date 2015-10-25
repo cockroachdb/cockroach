@@ -272,11 +272,12 @@ func (*TransactionAbortedError) Transaction() *Transaction {
 // NewTransactionPushError initializes a new TransactionPushError.
 // Txn is the transaction which will be retried. Both arguments are copied.
 // Transactions.
-func NewTransactionPushError(txn, pusheeTxn *Transaction) *TransactionPushError {
-	if len(txn.GetID()) == 0 {
-		txn = nil
+func NewTransactionPushError(txn, pusheeTxn Transaction) *TransactionPushError {
+	err := &TransactionPushError{PusheeTxn: *pusheeTxn.Clone()}
+	if len(txn.ID) != 0 {
+		err.Txn = txn.Clone()
 	}
-	return &TransactionPushError{Txn: txn.Clone(), PusheeTxn: *pusheeTxn.Clone()}
+	return err
 }
 
 // Error formats error.

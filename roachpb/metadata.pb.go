@@ -27,13 +27,6 @@ type Attributes struct {
 func (m *Attributes) Reset()      { *m = Attributes{} }
 func (*Attributes) ProtoMessage() {}
 
-func (m *Attributes) GetAttrs() []string {
-	if m != nil {
-		return m.Attrs
-	}
-	return nil
-}
-
 // ReplicaDescriptor describes a replica location by node ID
 // (corresponds to a host:port via lookup on gossip network) and store
 // ID (identifies the device).
@@ -49,27 +42,6 @@ type ReplicaDescriptor struct {
 func (m *ReplicaDescriptor) Reset()         { *m = ReplicaDescriptor{} }
 func (m *ReplicaDescriptor) String() string { return proto.CompactTextString(m) }
 func (*ReplicaDescriptor) ProtoMessage()    {}
-
-func (m *ReplicaDescriptor) GetNodeID() NodeID {
-	if m != nil {
-		return m.NodeID
-	}
-	return 0
-}
-
-func (m *ReplicaDescriptor) GetStoreID() StoreID {
-	if m != nil {
-		return m.StoreID
-	}
-	return 0
-}
-
-func (m *ReplicaDescriptor) GetReplicaID() ReplicaID {
-	if m != nil {
-		return m.ReplicaID
-	}
-	return 0
-}
 
 // RangeDescriptor is the value stored in a range metadata key.
 // A range is described using an inclusive start key, a non-inclusive end key,
@@ -94,41 +66,6 @@ func (m *RangeDescriptor) Reset()         { *m = RangeDescriptor{} }
 func (m *RangeDescriptor) String() string { return proto.CompactTextString(m) }
 func (*RangeDescriptor) ProtoMessage()    {}
 
-func (m *RangeDescriptor) GetRangeID() RangeID {
-	if m != nil {
-		return m.RangeID
-	}
-	return 0
-}
-
-func (m *RangeDescriptor) GetStartKey() RKey {
-	if m != nil {
-		return m.StartKey
-	}
-	return nil
-}
-
-func (m *RangeDescriptor) GetEndKey() RKey {
-	if m != nil {
-		return m.EndKey
-	}
-	return nil
-}
-
-func (m *RangeDescriptor) GetReplicas() []ReplicaDescriptor {
-	if m != nil {
-		return m.Replicas
-	}
-	return nil
-}
-
-func (m *RangeDescriptor) GetNextReplicaID() ReplicaID {
-	if m != nil {
-		return m.NextReplicaID
-	}
-	return 0
-}
-
 // RangeTree holds the root node of the range tree.
 type RangeTree struct {
 	RootKey RKey `protobuf:"bytes,1,opt,name=root_key,casttype=RKey" json:"root_key,omitempty"`
@@ -137,13 +74,6 @@ type RangeTree struct {
 func (m *RangeTree) Reset()         { *m = RangeTree{} }
 func (m *RangeTree) String() string { return proto.CompactTextString(m) }
 func (*RangeTree) ProtoMessage()    {}
-
-func (m *RangeTree) GetRootKey() RKey {
-	if m != nil {
-		return m.RootKey
-	}
-	return nil
-}
 
 // RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
 type RangeTreeNode struct {
@@ -160,41 +90,6 @@ func (m *RangeTreeNode) Reset()         { *m = RangeTreeNode{} }
 func (m *RangeTreeNode) String() string { return proto.CompactTextString(m) }
 func (*RangeTreeNode) ProtoMessage()    {}
 
-func (m *RangeTreeNode) GetKey() RKey {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *RangeTreeNode) GetBlack() bool {
-	if m != nil {
-		return m.Black
-	}
-	return false
-}
-
-func (m *RangeTreeNode) GetParentKey() RKey {
-	if m != nil {
-		return m.ParentKey
-	}
-	return nil
-}
-
-func (m *RangeTreeNode) GetLeftKey() RKey {
-	if m != nil {
-		return m.LeftKey
-	}
-	return nil
-}
-
-func (m *RangeTreeNode) GetRightKey() RKey {
-	if m != nil {
-		return m.RightKey
-	}
-	return nil
-}
-
 // StoreCapacity contains capacity information for a storage device.
 type StoreCapacity struct {
 	Capacity   int64 `protobuf:"varint,1,opt,name=Capacity" json:"Capacity"`
@@ -206,27 +101,6 @@ func (m *StoreCapacity) Reset()         { *m = StoreCapacity{} }
 func (m *StoreCapacity) String() string { return proto.CompactTextString(m) }
 func (*StoreCapacity) ProtoMessage()    {}
 
-func (m *StoreCapacity) GetCapacity() int64 {
-	if m != nil {
-		return m.Capacity
-	}
-	return 0
-}
-
-func (m *StoreCapacity) GetAvailable() int64 {
-	if m != nil {
-		return m.Available
-	}
-	return 0
-}
-
-func (m *StoreCapacity) GetRangeCount() int32 {
-	if m != nil {
-		return m.RangeCount
-	}
-	return 0
-}
-
 // NodeDescriptor holds details on node physical/network topology.
 type NodeDescriptor struct {
 	NodeID  NodeID                        `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
@@ -237,27 +111,6 @@ type NodeDescriptor struct {
 func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
 func (m *NodeDescriptor) String() string { return proto.CompactTextString(m) }
 func (*NodeDescriptor) ProtoMessage()    {}
-
-func (m *NodeDescriptor) GetNodeID() NodeID {
-	if m != nil {
-		return m.NodeID
-	}
-	return 0
-}
-
-func (m *NodeDescriptor) GetAddress() cockroach_util.UnresolvedAddr {
-	if m != nil {
-		return m.Address
-	}
-	return cockroach_util.UnresolvedAddr{}
-}
-
-func (m *NodeDescriptor) GetAttrs() Attributes {
-	if m != nil {
-		return m.Attrs
-	}
-	return Attributes{}
-}
 
 // StoreDescriptor holds store information including store attributes, node
 // descriptor and store capacity.
@@ -271,34 +124,6 @@ type StoreDescriptor struct {
 func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
 func (m *StoreDescriptor) String() string { return proto.CompactTextString(m) }
 func (*StoreDescriptor) ProtoMessage()    {}
-
-func (m *StoreDescriptor) GetStoreID() StoreID {
-	if m != nil {
-		return m.StoreID
-	}
-	return 0
-}
-
-func (m *StoreDescriptor) GetAttrs() Attributes {
-	if m != nil {
-		return m.Attrs
-	}
-	return Attributes{}
-}
-
-func (m *StoreDescriptor) GetNode() NodeDescriptor {
-	if m != nil {
-		return m.Node
-	}
-	return NodeDescriptor{}
-}
-
-func (m *StoreDescriptor) GetCapacity() StoreCapacity {
-	if m != nil {
-		return m.Capacity
-	}
-	return StoreCapacity{}
-}
 
 func (m *Attributes) Marshal() (data []byte, err error) {
 	size := m.Size()

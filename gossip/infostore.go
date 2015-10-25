@@ -164,7 +164,11 @@ func (is *infoStore) addInfo(key string, i *info) error {
 	if i.seq > is.MaxSeq {
 		is.MaxSeq = i.seq
 	}
-	is.processCallbacks(key, i.Value.GetRawBytes())
+	bytes, err := i.Value.GetBytes()
+	if err != nil {
+		return err
+	}
+	is.processCallbacks(key, bytes)
 	return nil
 }
 
@@ -189,10 +193,14 @@ func (is *infoStore) maxHops() uint32 {
 func (is *infoStore) registerCallback(pattern string, method Callback) {
 	re := regexp.MustCompile(pattern)
 	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
-	infos := make(infoMap)
+	infosBytes := make(map[string][]byte)
 	if err := is.visitInfos(func(key string, i *info) error {
 		if re.MatchString(key) {
-			infos[key] = i
+			bytes, err := i.Value.GetBytes()
+			if err != nil {
+				return err
+			}
+			infosBytes[key] = bytes
 		}
 		return nil
 	}); err != nil {
@@ -200,8 +208,8 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 	}
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
-		for key, i := range infos {
-			method(key, i.Value.GetRawBytes())
+		for key, bytes := range infosBytes {
+			method(key, bytes)
 		}
 	}()
 }

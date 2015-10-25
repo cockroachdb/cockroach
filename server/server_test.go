@@ -550,8 +550,8 @@ func TestSystemDBGossip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, kv := range systemConfig.GetValues() {
-		if bytes.Equal(key, kv.GetKey()) {
+	for _, kv := range systemConfig.Values {
+		if bytes.Equal(key, kv.Key) {
 			val = &kv.Value
 		}
 	}
@@ -561,7 +561,7 @@ func TestSystemDBGossip(t *testing.T) {
 
 	// Make sure the returned value is valAt(2).
 	var got sql.DatabaseDescriptor
-	if err := proto.Unmarshal(val.GetRawBytes(), &got); err != nil {
+	if err := val.GetProto(&got); err != nil {
 		t.Fatal(err)
 	}
 	if got.ID != 2 {

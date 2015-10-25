@@ -47,13 +47,6 @@ func (m *GCPolicy) Reset()         { *m = GCPolicy{} }
 func (m *GCPolicy) String() string { return proto.CompactTextString(m) }
 func (*GCPolicy) ProtoMessage()    {}
 
-func (m *GCPolicy) GetTTLSeconds() int32 {
-	if m != nil {
-		return m.TTLSeconds
-	}
-	return 0
-}
-
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
 type ZoneConfig struct {
 	// ReplicaAttrs is a slice of Attributes, each describing required attributes
@@ -71,34 +64,6 @@ func (m *ZoneConfig) Reset()         { *m = ZoneConfig{} }
 func (m *ZoneConfig) String() string { return proto.CompactTextString(m) }
 func (*ZoneConfig) ProtoMessage()    {}
 
-func (m *ZoneConfig) GetReplicaAttrs() []cockroach_roachpb.Attributes {
-	if m != nil {
-		return m.ReplicaAttrs
-	}
-	return nil
-}
-
-func (m *ZoneConfig) GetRangeMinBytes() int64 {
-	if m != nil {
-		return m.RangeMinBytes
-	}
-	return 0
-}
-
-func (m *ZoneConfig) GetRangeMaxBytes() int64 {
-	if m != nil {
-		return m.RangeMaxBytes
-	}
-	return 0
-}
-
-func (m *ZoneConfig) GetGC() *GCPolicy {
-	if m != nil {
-		return m.GC
-	}
-	return nil
-}
-
 type SystemConfig struct {
 	Values []cockroach_roachpb1.KeyValue `protobuf:"bytes,1,rep,name=values" json:"values"`
 }
@@ -106,13 +71,6 @@ type SystemConfig struct {
 func (m *SystemConfig) Reset()         { *m = SystemConfig{} }
 func (m *SystemConfig) String() string { return proto.CompactTextString(m) }
 func (*SystemConfig) ProtoMessage()    {}
-
-func (m *SystemConfig) GetValues() []cockroach_roachpb1.KeyValue {
-	if m != nil {
-		return m.Values
-	}
-	return nil
-}
 
 func (m *GCPolicy) Marshal() (data []byte, err error) {
 	size := m.Size()

@@ -23,10 +23,11 @@ import "gogoproto/gogo.proto";
 import "cockroach/roachpb/data.proto";
 import "cockroach/sql/privilege.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
 
 message ColumnType {
   // These mirror the types supported by the sql/parser. See
@@ -91,6 +92,9 @@ message IndexDescriptor {
 // key. The TableDescriptor has a globally-unique ID, while its member
 // {Column,Index}Descriptors have locally-unique IDs.
 message TableDescriptor {
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
   optional string name = 1 [(gogoproto.nullable) = false];
   // The alias for the table. This is only used during query
   // processing and not stored persistently.
@@ -122,6 +126,9 @@ message TableDescriptor {
 // ID shared with the TableDescriptor ID.
 // Permissions are applied to all tables in the namespace.
 message DatabaseDescriptor {
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];

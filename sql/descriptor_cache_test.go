@@ -56,24 +56,21 @@ func forceNewConfig(t *testing.T, s *server.TestServer) (*config.SystemConfig, e
 	return waitForConfigChange(t, s)
 }
 
-func waitForConfigChange(t *testing.T, s *server.TestServer) (cfg *config.SystemConfig, err error) {
+func waitForConfigChange(t *testing.T, s *server.TestServer) (*config.SystemConfig, error) {
 	var foundDesc sql.DatabaseDescriptor
-	err = util.IsTrueWithin(func() bool {
-		cfg = s.Gossip().GetSystemConfig()
-		if cfg == nil {
-			return false
+	var cfg *config.SystemConfig
+	return cfg, util.IsTrueWithin(func() bool {
+		if cfg = s.Gossip().GetSystemConfig(); cfg != nil {
+			if val := cfg.GetValue(configDescKey); val != nil {
+				if err := val.GetProto(&foundDesc); err != nil {
+					t.Fatal(err)
+				}
+				return foundDesc.ID == configID
+			}
 		}
-		raw, ok := cfg.GetValue(configDescKey)
-		if !ok {
-			return false
-		}
-		if err2 := proto.Unmarshal(raw, &foundDesc); err2 != nil {
-			t.Fatalf("could not unmarshal raw value: %s", err2)
-			return false
-		}
-		return foundDesc.ID == configID
+
+		return false
 	}, 10*time.Second)
-	return
 }
 
 // TestDescriptorCacheSchemaMutation shows how the cache can hide

@@ -20,7 +20,6 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/gogo/protobuf/proto"
 )
 
 func init() {
@@ -30,11 +29,11 @@ func init() {
 }
 
 // GetZoneConfig returns the zone config for the object with 'id'.
-func GetZoneConfig(cfg *config.SystemConfig, id uint32) (*config.ZoneConfig, error) {
+func GetZoneConfig(cfg config.SystemConfig, id uint32) (*config.ZoneConfig, error) {
 	// Look in the zones table.
-	if val, ok := cfg.GetValue(MakeZoneKey(ID(id))); ok {
+	if zoneVal := cfg.GetValue(MakeZoneKey(ID(id))); zoneVal != nil {
 		zone := &config.ZoneConfig{}
-		if err := proto.Unmarshal(val, zone); err != nil {
+		if err := zoneVal.GetProto(zone); err != nil {
 			return nil, err
 		}
 		// We're done.
@@ -43,31 +42,30 @@ func GetZoneConfig(cfg *config.SystemConfig, id uint32) (*config.ZoneConfig, err
 
 	// No zone config for this ID. We need to figure out if it's a database
 	// or table. Lookup its descriptor.
-	rawDesc, ok := cfg.GetValue(MakeDescMetadataKey(ID(id)))
-	if !ok {
-		// No descriptor. This table/db could have been deleted,
-		// just return the default config.
-		return config.DefaultZoneConfig, nil
+	if descVal := cfg.GetValue(MakeDescMetadataKey(ID(id))); descVal != nil {
+		// Determine whether this is a database or table.
+		// TODO(marc): we need a better way of doing this. Options include:
+		// - add a type field on the descriptor table
+		// - separate descriptor tables for databases and tables
+		// - prebuild list of databases and tables in the system config
+		var dbDesc DatabaseDescriptor
+		if err := descVal.GetProto(&dbDesc); err == nil {
+			// parses as a database: return default config.
+			return config.DefaultZoneConfig, nil
+		}
+
+		var tableDesc TableDescriptor
+		if err := descVal.GetProto(&tableDesc); err != nil {
+			// does not parse as a table either: this means an entry in the
+			// descriptor table we're not familiar with.
+			return nil, util.Errorf("descriptor for object ID %d is not a table or database", id)
+		}
+
+		// This is a table descriptor. Lookup its parent database zone config.
+		return GetZoneConfig(cfg, uint32(tableDesc.ParentID))
 	}
 
-	// Determine whether this is a database or table.
-	// TODO(marc): we need a better way of doing this. Options include:
-	// - add a type field on the descriptor table
-	// - separate descriptor tables for databases and tables
-	// - prebuild list of databases and tables in the system config
-	var dbDesc DatabaseDescriptor
-	if err := proto.Unmarshal(rawDesc, &dbDesc); err == nil {
-		// parses as a database: return default config.
-		return config.DefaultZoneConfig, nil
-	}
-
-	var tableDesc TableDescriptor
-	if err := proto.Unmarshal(rawDesc, &tableDesc); err != nil {
-		// does not parse as a table either: this means an entry in the
-		// descriptor table we're not familiar with.
-		return nil, util.Errorf("descriptor for object ID %d is not a table or database", id)
-	}
-
-	// This is a table descriptor. Lookup its parent database zone config.
-	return GetZoneConfig(cfg, uint32(tableDesc.ParentID))
+	// No descriptor. This table/db could have been deleted,
+	// just return the default config.
+	return config.DefaultZoneConfig, nil
 }

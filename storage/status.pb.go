@@ -48,69 +48,6 @@ func (m *StoreStatus) Reset()         { *m = StoreStatus{} }
 func (m *StoreStatus) String() string { return proto.CompactTextString(m) }
 func (*StoreStatus) ProtoMessage()    {}
 
-func (m *StoreStatus) GetDesc() cockroach_roachpb.StoreDescriptor {
-	if m != nil {
-		return m.Desc
-	}
-	return cockroach_roachpb.StoreDescriptor{}
-}
-
-func (m *StoreStatus) GetNodeID() github_com_cockroachdb_cockroach_roachpb.NodeID {
-	if m != nil {
-		return m.NodeID
-	}
-	return 0
-}
-
-func (m *StoreStatus) GetRangeCount() int32 {
-	if m != nil {
-		return m.RangeCount
-	}
-	return 0
-}
-
-func (m *StoreStatus) GetStartedAt() int64 {
-	if m != nil {
-		return m.StartedAt
-	}
-	return 0
-}
-
-func (m *StoreStatus) GetUpdatedAt() int64 {
-	if m != nil {
-		return m.UpdatedAt
-	}
-	return 0
-}
-
-func (m *StoreStatus) GetStats() cockroach_storage_engine.MVCCStats {
-	if m != nil {
-		return m.Stats
-	}
-	return cockroach_storage_engine.MVCCStats{}
-}
-
-func (m *StoreStatus) GetLeaderRangeCount() int32 {
-	if m != nil {
-		return m.LeaderRangeCount
-	}
-	return 0
-}
-
-func (m *StoreStatus) GetReplicatedRangeCount() int32 {
-	if m != nil {
-		return m.ReplicatedRangeCount
-	}
-	return 0
-}
-
-func (m *StoreStatus) GetAvailableRangeCount() int32 {
-	if m != nil {
-		return m.AvailableRangeCount
-	}
-	return 0
-}
-
 func (m *StoreStatus) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

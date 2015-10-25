@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/gogo/protobuf/proto"
 )
 
 func plainKV(k, v string) roachpb.KeyValue {
@@ -100,38 +101,36 @@ func TestGet(t *testing.T) {
 		plainKV("d", "vald"),
 	}
 
+	aVal := roachpb.MakeValueFromString("vala")
+	bVal := roachpb.MakeValueFromString("valc")
+	cVal := roachpb.MakeValueFromString("vald")
+
 	testCases := []struct {
 		values []roachpb.KeyValue
 		key    string
-		found  bool
-		value  string
+		value  *roachpb.Value
 	}{
-		{emptyKeys, "a", false, ""},
-		{emptyKeys, "b", false, ""},
-		{emptyKeys, "c", false, ""},
-		{emptyKeys, "d", false, ""},
-		{emptyKeys, "e", false, ""},
+		{emptyKeys, "a", nil},
+		{emptyKeys, "b", nil},
+		{emptyKeys, "c", nil},
+		{emptyKeys, "d", nil},
+		{emptyKeys, "e", nil},
 
-		{someKeys, "", false, ""},
-		{someKeys, "b", false, ""},
-		{someKeys, "e", false, ""},
-		{someKeys, "a0", false, ""},
+		{someKeys, "", nil},
+		{someKeys, "b", nil},
+		{someKeys, "e", nil},
+		{someKeys, "a0", nil},
 
-		{someKeys, "a", true, "vala"},
-		{someKeys, "c", true, "valc"},
-		{someKeys, "d", true, "vald"},
+		{someKeys, "a", &aVal},
+		{someKeys, "c", &bVal},
+		{someKeys, "d", &cVal},
 	}
 
 	cfg := config.SystemConfig{}
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		val, found := cfg.GetValue([]byte(tc.key))
-		if found != tc.found {
-			t.Errorf("#%d: expected found=%t", tcNum, tc.found)
-			continue
-		}
-		if string(val) != tc.value {
-			t.Errorf("#%d: expected value=%s, found %s", tcNum, tc.value, string(val))
+		if val := cfg.GetValue([]byte(tc.key)); !proto.Equal(val, tc.value) {
+			t.Errorf("#%d: expected=%s, found=%s", tcNum, tc.value, val)
 		}
 	}
 }

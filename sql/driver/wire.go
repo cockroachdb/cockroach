@@ -127,6 +127,11 @@ func Timestamp(t time.Time) Datum_Timestamp {
 	}
 }
 
+// GetUser implements security.RequestWithUser.
+func (r Request) GetUser() string {
+	return r.User
+}
+
 // Method returns the method.
 func (Request) Method() Method {
 	return Execute

@@ -395,19 +395,18 @@ func MVCCSetRangeStats(engine Engine, rangeID roachpb.RangeID, ms *MVCCStats) er
 // invalid.
 func MVCCGetProto(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction, msg proto.Message) (bool, error) {
 	// TODO(tschottdorf) Consider returning skipped intents to the caller.
-	value, _, err := MVCCGet(engine, key, timestamp, consistent, txn)
-	found := value != nil && len(value.GetRawBytes()) > 0
+	value, _, mvccGetErr := MVCCGet(engine, key, timestamp, consistent, txn)
+	found := value != nil
 	// If we found a result, parse it regardless of the error returned by MVCCGet.
 	if found && msg != nil {
-		unmarshalErr := proto.Unmarshal(value.GetRawBytes(), msg)
 		// If the unmarshal failed, return its result. Otherwise, pass
 		// through the underlying error (which may be a WriteIntentError
 		// to be handled specially alongside the returned value).
-		if unmarshalErr != nil {
-			err = unmarshalErr
+		if err := value.GetProto(msg); err != nil {
+			return found, err
 		}
 	}
-	return found, err
+	return found, mvccGetErr
 }
 
 // MVCCPutProto sets the given key to the protobuf-serialized byte
@@ -897,7 +896,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 		// Now we're sure the top value is **our** intent.
 		// If what's there is what we intent to write, it's probably a
 		// retry on top of a half-executed batch.
-		if existVal != nil && bytes.Equal(value.GetRawBytes(), existVal.GetRawBytes()) {
+		if existVal != nil && bytes.Equal(value.RawBytes, existVal.RawBytes) {
 			return true
 		}
 		return false
@@ -918,7 +917,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 		// Handle check for existence when there is no key.
 		if existVal == nil {
 			return &roachpb.ConditionFailedError{}
-		} else if expValue.GetRawBytes() != nil && !bytes.Equal(expValue.GetRawBytes(), existVal.GetRawBytes()) {
+		} else if expValue.RawBytes != nil && !bytes.Equal(expValue.RawBytes, existVal.RawBytes) {
 			return &roachpb.ConditionFailedError{
 				ActualValue: existVal,
 			}
@@ -931,8 +930,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 // MVCCMerge implements a merge operation. Merge adds integer values,
 // concatenates undifferentiated byte slice values, and efficiently
 // combines time series observations if the roachpb.Value tag value
-// indicates the value byte slice is of type _CR_TS (the internal
-// cockroach time series data tag).
+// indicates the value byte slice is of type TIMESERIES.
 func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, value roachpb.Value) error {
 	if len(key) == 0 {
 		return emptyKeyError()
@@ -945,10 +943,11 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, value roachpb.Valu
 	if err != nil {
 		return err
 	}
-	if err = engine.Merge(metaKey, data); err != nil {
+	if err := engine.Merge(metaKey, data); err != nil {
 		return err
 	}
-	updateStatsOnMerge(ms, key, int64(len(value.GetRawBytes())))
+	// Every type flows through here, so we can't use the typed getters.
+	updateStatsOnMerge(ms, key, int64(len(value.RawBytes)))
 	return nil
 }
 

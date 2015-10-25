@@ -483,7 +483,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				return false, nil
 			}
 			var desc roachpb.RangeDescriptor
-			if err := proto.Unmarshal(kv.Value.GetRawBytes(), &desc); err != nil {
+			if err := kv.Value.GetProto(&desc); err != nil {
 				return false, err
 			}
 			rng, err := NewReplica(&desc, s)
@@ -1419,21 +1419,22 @@ func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd roachpb.RaftCommand) 
 	for _, union := range cmd.Cmd.Requests {
 		args := union.GetInner()
 		etr, ok := args.(*roachpb.EndTransactionRequest)
-		if ok && etr.InternalCommitTrigger != nil && etr.InternalCommitTrigger.ChangeReplicasTrigger != nil {
-			// TODO(tschottdorf): the real check is that EndTransaction needs
-			// to be the last element in the batch. Any caveats to solve before
-			// changing this?
-			if len(cmd.Cmd.Requests) != 1 {
-				panic("EndTransaction should only ever occur by itself in a batch")
+		if ok {
+			if crt := etr.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
+				// TODO(tschottdorf): the real check is that EndTransaction needs
+				// to be the last element in the batch. Any caveats to solve before
+				// changing this?
+				if len(cmd.Cmd.Requests) != 1 {
+					panic("EndTransaction should only ever occur by itself in a batch")
+				}
+				// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
+				// needs to understand it; it cannot simply be an opaque command.
+				log.Infof("changing raft replica %d for range %d", crt.Replica, cmd.RangeID)
+				return s.multiraft.ChangeGroupMembership(cmd.RangeID, string(idKey),
+					changeTypeInternalToRaft[crt.ChangeType],
+					crt.Replica,
+					data)
 			}
-			// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
-			// needs to understand it; it cannot simply be an opaque command.
-			crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
-			log.Infof("changing raft replica %d for range %d", crt.Replica, cmd.RangeID)
-			return s.multiraft.ChangeGroupMembership(cmd.RangeID, string(idKey),
-				changeTypeInternalToRaft[crt.ChangeType],
-				crt.Replica,
-				data)
 		}
 	}
 	return s.multiraft.SubmitCommand(cmd.RangeID, string(idKey), data)

@@ -918,8 +918,10 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		if test.resolvable {
 			if err != nil {
 				t.Errorf("%d: expected read to succeed: %s", i, err)
-			} else if gReply := firstReply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
-				t.Errorf("%d: expected bytes to be %q, got %q", i, "value1", gReply.Value.GetRawBytes())
+			} else if replyBytes, err := firstReply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
+				t.Fatal(err)
+			} else if !bytes.Equal(replyBytes, []byte("value1")) {
+				t.Errorf("%d: expected bytes to be %q, got %q", i, "value1", replyBytes)
 			}
 
 			// Finally, try to end the pushee's transaction; if we have
@@ -952,8 +954,10 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			if test.pusheeIso == roachpb.SNAPSHOT {
 				if err != nil {
 					t.Errorf("expected read to succeed: %s", err)
-				} else if gReply := firstReply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
-					t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.GetRawBytes())
+				} else if replyBytes, err := firstReply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
+					t.Fatal(err)
+				} else if !bytes.Equal(replyBytes, []byte("value1")) {
+					t.Errorf("expected bytes to be %q, got %q", "value1", replyBytes)
 				}
 			} else {
 				if err == nil {
@@ -1008,8 +1012,10 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	h.Timestamp = gTS
 	if reply, err := client.SendWrappedWith(store.testSender(), nil, h, &gArgs); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
-	} else if gReply := reply.(*roachpb.GetResponse); !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
-		t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.GetRawBytes())
+	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
+		t.Fatal(err)
+	} else if !bytes.Equal(replyBytes, []byte("value1")) {
+		t.Errorf("expected bytes to be %q, got %q", "value1", replyBytes)
 	}
 
 	// Finally, try to end the pushee's transaction; since it's got
@@ -1179,8 +1185,10 @@ func TestStoreReadInconsistent(t *testing.T) {
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
-		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value1")) {
-			t.Errorf("expected value %q, got %+v", []byte("value1"), gReply.Value)
+		} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
+			t.Fatal(err)
+		} else if !bytes.Equal(replyBytes, []byte("value1")) {
+			t.Errorf("expected value %q, got %+v", []byte("value1"), reply)
 		}
 		gArgs.Key = keyB
 
@@ -1199,8 +1207,12 @@ func TestStoreReadInconsistent(t *testing.T) {
 				ReadConsistency: roachpb.INCONSISTENT,
 			}, &gArgs); err != nil {
 				return util.Errorf("expected read to succeed: %s", err)
-			} else if gReply := reply.(*roachpb.GetResponse); gReply.Value == nil || !bytes.Equal(gReply.Value.GetRawBytes(), []byte("value2")) {
-				return util.Errorf("expected value %q, got %+v", []byte("value2"), gReply.Value)
+			} else if gReply := reply.(*roachpb.GetResponse).Value; gReply == nil {
+				return util.Errorf("value is nil")
+			} else if replyBytes, err := gReply.GetBytes(); err != nil {
+				return err
+			} else if !bytes.Equal(replyBytes, []byte("value2")) {
+				return util.Errorf("expected value %q, got %+v", []byte("value2"), reply)
 			}
 			return nil
 		})
@@ -1220,10 +1232,14 @@ func TestStoreReadInconsistent(t *testing.T) {
 			t.Errorf("expected key %q; got %q", keyA, key)
 		} else if key := sReply.Rows[1].Key; !key.Equal(keyB) {
 			t.Errorf("expected key %q; got %q", keyB, key)
-		} else if val := sReply.Rows[0].Value.GetRawBytes(); !bytes.Equal(val, []byte("value1")) {
-			t.Errorf("expected value %q, got %q", []byte("value1"), sReply.Rows[0].Value.GetRawBytes())
-		} else if val := sReply.Rows[1].Value.GetRawBytes(); !bytes.Equal(val, []byte("value2")) {
-			t.Errorf("expected value %q, got %q", []byte("value2"), sReply.Rows[1].Value.GetRawBytes())
+		} else if val1, err := sReply.Rows[0].Value.GetBytes(); err != nil {
+			t.Fatal(err)
+		} else if !bytes.Equal(val1, []byte("value1")) {
+			t.Errorf("expected value %q, got %q", []byte("value1"), val1)
+		} else if val2, err := sReply.Rows[1].Value.GetBytes(); err != nil {
+			t.Fatal(err)
+		} else if !bytes.Equal(val2, []byte("value2")) {
+			t.Errorf("expected value %q, got %q", []byte("value2"), val2)
 		}
 	}
 }

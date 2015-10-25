@@ -111,19 +111,19 @@ func (tm *testModel) assertModelCorrect() {
 				tm.t.Fatal(err)
 			}
 			if vModel, ok := tm.modelData[k]; !ok {
-				fmt.Fprintf(&buf, "\tKey %s/%s@%d, r:%d from actual data was not found in model", n, s, ts, r)
+				fmt.Fprintf(&buf, "\nKey %s/%s@%d, r:%d from actual data was not found in model", n, s, ts, r)
 			} else {
 				if !proto.Equal(&vActual, &vModel) {
-					fmt.Fprintf(&buf, "\tKey %s/%s@%d, r:%d differs between model and actual:", n, s, ts, r)
+					fmt.Fprintf(&buf, "\nKey %s/%s@%d, r:%d differs between model and actual:", n, s, ts, r)
 					if its, err := vActual.GetTimeseries(); err != nil {
-						fmt.Fprintf(&buf, "\tActual value is not a valid time series: %v", vActual)
+						fmt.Fprintf(&buf, "\nActual value is not a valid time series: %v", vActual)
 					} else {
-						fmt.Fprintf(&buf, "\tActual value: %v", its)
+						fmt.Fprintf(&buf, "\nActual value: %s", &its)
 					}
 					if its, err := vModel.GetTimeseries(); err != nil {
-						fmt.Fprintf(&buf, "\tModel value is not a valid time series: %v", vModel)
+						fmt.Fprintf(&buf, "\nModel value is not a valid time series: %v", vModel)
 					} else {
-						fmt.Fprintf(&buf, "\tModel value: %v", its)
+						fmt.Fprintf(&buf, "\nModel value: %s", &its)
 					}
 				}
 			}
@@ -174,7 +174,7 @@ func (tm *testModel) storeInModel(r Resolution, data TimeSeriesData) {
 			if err != nil {
 				tm.t.Fatalf("test could not extract time series from existing model value: %s", err.Error())
 			}
-			newTs, err = engine.MergeInternalTimeSeriesData(existingTs, idata)
+			newTs, err = engine.MergeInternalTimeSeriesData(&existingTs, idata)
 			if err != nil {
 				tm.t.Fatalf("test could not merge time series into model value: %s", err.Error())
 			}

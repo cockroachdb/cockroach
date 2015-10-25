@@ -325,8 +325,10 @@ func runMVCCGet(numVersions int, b *testing.B) {
 			ts := makeTS(walltime, 0)
 			if v, _, err := MVCCGet(rocksdb, key, ts, true, nil); err != nil {
 				b.Fatalf("failed get: %s", err)
-			} else if len(v.GetRawBytes()) != 1024 {
-				b.Fatalf("unexpected value size: %d", len(v.GetRawBytes()))
+			} else if valueBytes, err := v.GetBytes(); err != nil {
+				b.Fatal(err)
+			} else if len(valueBytes) != 1024 {
+				b.Fatalf("unexpected value size: %d", len(valueBytes))
 			}
 		}
 	})
@@ -470,9 +472,6 @@ func runMVCCMerge(value *roachpb.Value, numKeys int, b *testing.B) {
 			b.Fatal(err)
 		} else if val == nil {
 			continue
-		}
-		if testing.Verbose() {
-			fmt.Printf("%q: [%d]byte\n", key, len(val.GetRawBytes()))
 		}
 	}
 

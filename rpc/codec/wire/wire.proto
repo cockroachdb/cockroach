@@ -47,10 +47,11 @@ option go_package = "wire";
 
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
 
 enum CompressionType {
   NONE = 0;
@@ -68,7 +69,7 @@ message RequestHeader {
 
 message ResponseHeader {
   optional uint64 id = 1 [(gogoproto.nullable) = false];
-  optional string method = 2;
+  optional string method = 2 [(gogoproto.nullable) = false];
   optional string error = 3 [(gogoproto.nullable) = false];
   optional CompressionType compression = 4 [(gogoproto.nullable) = false];
   optional uint32 uncompressed_size = 5 [(gogoproto.nullable) = false];

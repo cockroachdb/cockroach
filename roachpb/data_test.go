@@ -292,6 +292,9 @@ func TestSetGetChecked(t *testing.T) {
 	if err := v.SetProto(&Value{}); err != nil {
 		t.Fatal(err)
 	}
+	if err := v.GetProto(&Value{}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := v.GetBytes(); err != nil {
 		t.Fatal(err)
 	}

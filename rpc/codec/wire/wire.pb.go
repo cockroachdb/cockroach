@@ -97,44 +97,9 @@ func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
 func (m *RequestHeader) String() string { return proto.CompactTextString(m) }
 func (*RequestHeader) ProtoMessage()    {}
 
-func (m *RequestHeader) GetId() uint64 {
-	if m != nil {
-		return m.Id
-	}
-	return 0
-}
-
-func (m *RequestHeader) GetMethod() string {
-	if m != nil && m.Method != nil {
-		return *m.Method
-	}
-	return ""
-}
-
-func (m *RequestHeader) GetMethodId() int32 {
-	if m != nil {
-		return m.MethodId
-	}
-	return 0
-}
-
-func (m *RequestHeader) GetCompression() CompressionType {
-	if m != nil {
-		return m.Compression
-	}
-	return CompressionType_NONE
-}
-
-func (m *RequestHeader) GetUncompressedSize() uint32 {
-	if m != nil {
-		return m.UncompressedSize
-	}
-	return 0
-}
-
 type ResponseHeader struct {
 	Id               uint64          `protobuf:"varint,1,opt,name=id" json:"id"`
-	Method           *string         `protobuf:"bytes,2,opt,name=method" json:"method,omitempty"`
+	Method           string          `protobuf:"bytes,2,opt,name=method" json:"method"`
 	Error            string          `protobuf:"bytes,3,opt,name=error" json:"error"`
 	Compression      CompressionType `protobuf:"varint,4,opt,name=compression,enum=cockroach.rpc.codec.wire.CompressionType" json:"compression"`
 	UncompressedSize uint32          `protobuf:"varint,5,opt,name=uncompressed_size" json:"uncompressed_size"`
@@ -143,41 +108,6 @@ type ResponseHeader struct {
 func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
 func (m *ResponseHeader) String() string { return proto.CompactTextString(m) }
 func (*ResponseHeader) ProtoMessage()    {}
-
-func (m *ResponseHeader) GetId() uint64 {
-	if m != nil {
-		return m.Id
-	}
-	return 0
-}
-
-func (m *ResponseHeader) GetMethod() string {
-	if m != nil && m.Method != nil {
-		return *m.Method
-	}
-	return ""
-}
-
-func (m *ResponseHeader) GetError() string {
-	if m != nil {
-		return m.Error
-	}
-	return ""
-}
-
-func (m *ResponseHeader) GetCompression() CompressionType {
-	if m != nil {
-		return m.Compression
-	}
-	return CompressionType_NONE
-}
-
-func (m *ResponseHeader) GetUncompressedSize() uint32 {
-	if m != nil {
-		return m.UncompressedSize
-	}
-	return 0
-}
 
 func init() {
 	proto.RegisterEnum("cockroach.rpc.codec.wire.CompressionType", CompressionType_name, CompressionType_value)
@@ -236,12 +166,10 @@ func (m *ResponseHeader) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintWire(data, i, uint64(m.Id))
-	if m.Method != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintWire(data, i, uint64(len(*m.Method)))
-		i += copy(data[i:], *m.Method)
-	}
+	data[i] = 0x12
+	i++
+	i = encodeVarintWire(data, i, uint64(len(m.Method)))
+	i += copy(data[i:], m.Method)
 	data[i] = 0x1a
 	i++
 	i = encodeVarintWire(data, i, uint64(len(m.Error)))
@@ -300,10 +228,8 @@ func (m *ResponseHeader) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovWire(uint64(m.Id))
-	if m.Method != nil {
-		l = len(*m.Method)
-		n += 1 + l + sovWire(uint64(l))
-	}
+	l = len(m.Method)
+	n += 1 + l + sovWire(uint64(l))
 	l = len(m.Error)
 	n += 1 + l + sovWire(uint64(l))
 	n += 1 + sovWire(uint64(m.Compression))
@@ -555,8 +481,7 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(data[iNdEx:postIndex])
-			m.Method = &s
+			m.Method = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {

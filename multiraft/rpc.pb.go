@@ -45,34 +45,6 @@ func (m *RaftMessageRequest) Reset()         { *m = RaftMessageRequest{} }
 func (m *RaftMessageRequest) String() string { return proto.CompactTextString(m) }
 func (*RaftMessageRequest) ProtoMessage()    {}
 
-func (m *RaftMessageRequest) GetGroupID() github_com_cockroachdb_cockroach_roachpb.RangeID {
-	if m != nil {
-		return m.GroupID
-	}
-	return 0
-}
-
-func (m *RaftMessageRequest) GetFromReplica() cockroach_roachpb.ReplicaDescriptor {
-	if m != nil {
-		return m.FromReplica
-	}
-	return cockroach_roachpb.ReplicaDescriptor{}
-}
-
-func (m *RaftMessageRequest) GetToReplica() cockroach_roachpb.ReplicaDescriptor {
-	if m != nil {
-		return m.ToReplica
-	}
-	return cockroach_roachpb.ReplicaDescriptor{}
-}
-
-func (m *RaftMessageRequest) GetMessage() raftpb.Message {
-	if m != nil {
-		return m.Message
-	}
-	return raftpb.Message{}
-}
-
 // RaftMessageResponse is an empty message returned by raft RPCs. If a
 // response is needed it will be sent as a separate message.
 type RaftMessageResponse struct {
@@ -95,27 +67,6 @@ type ConfChangeContext struct {
 func (m *ConfChangeContext) Reset()         { *m = ConfChangeContext{} }
 func (m *ConfChangeContext) String() string { return proto.CompactTextString(m) }
 func (*ConfChangeContext) ProtoMessage()    {}
-
-func (m *ConfChangeContext) GetCommandID() string {
-	if m != nil {
-		return m.CommandID
-	}
-	return ""
-}
-
-func (m *ConfChangeContext) GetPayload() []byte {
-	if m != nil {
-		return m.Payload
-	}
-	return nil
-}
-
-func (m *ConfChangeContext) GetReplica() cockroach_roachpb.ReplicaDescriptor {
-	if m != nil {
-		return m.Replica
-	}
-	return cockroach_roachpb.ReplicaDescriptor{}
-}
 
 func (m *RaftMessageRequest) Marshal() (data []byte, err error) {
 	size := m.Size()

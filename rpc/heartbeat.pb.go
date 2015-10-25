@@ -48,27 +48,6 @@ type RemoteOffset struct {
 func (m *RemoteOffset) Reset()      { *m = RemoteOffset{} }
 func (*RemoteOffset) ProtoMessage() {}
 
-func (m *RemoteOffset) GetOffset() int64 {
-	if m != nil {
-		return m.Offset
-	}
-	return 0
-}
-
-func (m *RemoteOffset) GetUncertainty() int64 {
-	if m != nil {
-		return m.Uncertainty
-	}
-	return 0
-}
-
-func (m *RemoteOffset) GetMeasuredAt() int64 {
-	if m != nil {
-		return m.MeasuredAt
-	}
-	return 0
-}
-
 // A PingRequest specifies the string to echo in response.
 // Fields are exported so that they will be serialized in the rpc call.
 type PingRequest struct {
@@ -84,27 +63,6 @@ func (m *PingRequest) Reset()         { *m = PingRequest{} }
 func (m *PingRequest) String() string { return proto.CompactTextString(m) }
 func (*PingRequest) ProtoMessage()    {}
 
-func (m *PingRequest) GetPing() string {
-	if m != nil {
-		return m.Ping
-	}
-	return ""
-}
-
-func (m *PingRequest) GetOffset() RemoteOffset {
-	if m != nil {
-		return m.Offset
-	}
-	return RemoteOffset{}
-}
-
-func (m *PingRequest) GetAddr() string {
-	if m != nil {
-		return m.Addr
-	}
-	return ""
-}
-
 // A PingResponse contains the echoed ping request string.
 type PingResponse struct {
 	// An echo of value sent with PingRequest.
@@ -115,20 +73,6 @@ type PingResponse struct {
 func (m *PingResponse) Reset()         { *m = PingResponse{} }
 func (m *PingResponse) String() string { return proto.CompactTextString(m) }
 func (*PingResponse) ProtoMessage()    {}
-
-func (m *PingResponse) GetPong() string {
-	if m != nil {
-		return m.Pong
-	}
-	return ""
-}
-
-func (m *PingResponse) GetServerTime() int64 {
-	if m != nil {
-		return m.ServerTime
-	}
-	return 0
-}
 
 func (m *RemoteOffset) Marshal() (data []byte, err error) {
 	size := m.Size()

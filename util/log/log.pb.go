@@ -57,97 +57,6 @@ func (m *LogEntry) Reset()         { *m = LogEntry{} }
 func (m *LogEntry) String() string { return proto.CompactTextString(m) }
 func (*LogEntry) ProtoMessage()    {}
 
-func (m *LogEntry) GetSeverity() int32 {
-	if m != nil {
-		return m.Severity
-	}
-	return 0
-}
-
-func (m *LogEntry) GetTime() int64 {
-	if m != nil {
-		return m.Time
-	}
-	return 0
-}
-
-func (m *LogEntry) GetThreadID() int32 {
-	if m != nil {
-		return m.ThreadID
-	}
-	return 0
-}
-
-func (m *LogEntry) GetFile() string {
-	if m != nil {
-		return m.File
-	}
-	return ""
-}
-
-func (m *LogEntry) GetLine() int32 {
-	if m != nil {
-		return m.Line
-	}
-	return 0
-}
-
-func (m *LogEntry) GetFormat() string {
-	if m != nil {
-		return m.Format
-	}
-	return ""
-}
-
-func (m *LogEntry) GetArgs() []LogEntry_Arg {
-	if m != nil {
-		return m.Args
-	}
-	return nil
-}
-
-func (m *LogEntry) GetNodeID() github_com_cockroachdb_cockroach_roachpb.NodeID {
-	if m != nil && m.NodeID != nil {
-		return *m.NodeID
-	}
-	return 0
-}
-
-func (m *LogEntry) GetStoreID() github_com_cockroachdb_cockroach_roachpb.StoreID {
-	if m != nil && m.StoreID != nil {
-		return *m.StoreID
-	}
-	return 0
-}
-
-func (m *LogEntry) GetRangeID() github_com_cockroachdb_cockroach_roachpb.RangeID {
-	if m != nil && m.RangeID != nil {
-		return *m.RangeID
-	}
-	return 0
-}
-
-func (m *LogEntry) GetMethod() github_com_cockroachdb_cockroach_roachpb.Method {
-	if m != nil && m.Method != nil {
-		return *m.Method
-	}
-	return 0
-}
-
-func (m *LogEntry) GetKey() github_com_cockroachdb_cockroach_roachpb.Key {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *LogEntry) GetStacks() []byte {
-	if m != nil {
-		return m.Stacks
-	}
-	return nil
-}
-
 // Log format arguments.
 type LogEntry_Arg struct {
 	Type string `protobuf:"bytes,1,opt,name=type" json:"type"`
@@ -159,27 +68,6 @@ type LogEntry_Arg struct {
 func (m *LogEntry_Arg) Reset()         { *m = LogEntry_Arg{} }
 func (m *LogEntry_Arg) String() string { return proto.CompactTextString(m) }
 func (*LogEntry_Arg) ProtoMessage()    {}
-
-func (m *LogEntry_Arg) GetType() string {
-	if m != nil {
-		return m.Type
-	}
-	return ""
-}
-
-func (m *LogEntry_Arg) GetStr() string {
-	if m != nil {
-		return m.Str
-	}
-	return ""
-}
-
-func (m *LogEntry_Arg) GetJson() []byte {
-	if m != nil {
-		return m.Json
-	}
-	return nil
-}
 
 func (m *LogEntry) Marshal() (data []byte, err error) {
 	size := m.Size()

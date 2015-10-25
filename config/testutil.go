@@ -26,7 +26,7 @@ import (
 var (
 	testingZoneConfig   map[uint32]*ZoneConfig
 	testingHasHook      bool
-	testingPreviousHook func(*SystemConfig, uint32) (*ZoneConfig, error)
+	testingPreviousHook func(SystemConfig, uint32) (*ZoneConfig, error)
 	testingLock         sync.Mutex
 )
 
@@ -78,7 +78,7 @@ func TestingSetZoneConfig(id uint32, zone *ZoneConfig) {
 	testingZoneConfig[id] = zone
 }
 
-func testingZoneConfigHook(_ *SystemConfig, id uint32) (*ZoneConfig, error) {
+func testingZoneConfigHook(_ SystemConfig, id uint32) (*ZoneConfig, error) {
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	if zone, ok := testingZoneConfig[id]; ok {

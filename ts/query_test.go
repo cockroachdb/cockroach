@@ -271,7 +271,7 @@ func (tm *testModel) assertQuery(name string, sources []string, agg *TimeSeriesQ
 				dataSpans[sourceName] = ds
 				expectedSources = append(expectedSources, sourceName)
 			}
-			if err := ds.addData(data); err != nil {
+			if err := ds.addData(&data); err != nil {
 				tm.t.Fatal(err)
 			}
 		}

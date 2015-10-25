@@ -23,10 +23,11 @@ option go_package = "roachpb";
 import "cockroach/roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
 
 // Timestamp represents a state of the hybrid logical clock.
 message Timestamp {
@@ -124,6 +125,7 @@ message MergeTrigger {
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
 enum ReplicaChangeType {
   option (gogoproto.goproto_enum_prefix) = false;
+
   ADD_REPLICA = 0;
   REMOVE_REPLICA = 1;
 }
@@ -151,6 +153,10 @@ message ModifiedSpanTrigger {
 // InternalCommitTrigger encapsulates all of the internal-only commit triggers.
 // Only one may be set.
 message InternalCommitTrigger {
+  // InternalCommitTrigger is always nullable, and these getters are
+  // nil-safe, which is often convenient.
+  option (gogoproto.goproto_getters) = true;
+
   optional SplitTrigger split_trigger = 1;
   optional MergeTrigger merge_trigger = 2;
   optional ChangeReplicasTrigger change_replicas_trigger = 3;
@@ -160,6 +166,7 @@ message InternalCommitTrigger {
 // IsolationType TODO(jiajia) Needs documentation.
 enum IsolationType {
   option (gogoproto.goproto_enum_prefix) = false;
+
   // SERIALIZABLE TODO(jiajia) Needs documentation.
   SERIALIZABLE = 0;
   // SNAPSHOT TODO(jiajia) Needs documentation.
@@ -169,6 +176,7 @@ enum IsolationType {
 // TransactionStatus specifies possible states for a transaction.
 enum TransactionStatus {
   option (gogoproto.goproto_enum_prefix) = false;
+
   // PENDING is the default state for a new transaction. Transactions
   // move from PENDING to one of COMMITTED or ABORTED. Mutations made
   // as part of a PENDING transactions are recorded as "intents" in
@@ -261,6 +269,7 @@ message Transaction {
 // expiration and lease holder.
 message Lease {
   option (gogoproto.goproto_stringer) = false;
+
   // The start is a timestamp at which the lease begins. This value
   // must be greater than the last lease expiration or this call will
   // fail.

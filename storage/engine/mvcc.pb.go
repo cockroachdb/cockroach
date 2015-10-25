@@ -43,20 +43,6 @@ func (m *MVCCValue) Reset()         { *m = MVCCValue{} }
 func (m *MVCCValue) String() string { return proto.CompactTextString(m) }
 func (*MVCCValue) ProtoMessage()    {}
 
-func (m *MVCCValue) GetDeleted() bool {
-	if m != nil {
-		return m.Deleted
-	}
-	return false
-}
-
-func (m *MVCCValue) GetValue() *cockroach_roachpb1.Value {
-	if m != nil {
-		return m.Value
-	}
-	return nil
-}
-
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 type MVCCMetadata struct {
 	Txn *cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
@@ -79,48 +65,6 @@ type MVCCMetadata struct {
 func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
 func (m *MVCCMetadata) String() string { return proto.CompactTextString(m) }
 func (*MVCCMetadata) ProtoMessage()    {}
-
-func (m *MVCCMetadata) GetTxn() *cockroach_roachpb1.Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return nil
-}
-
-func (m *MVCCMetadata) GetTimestamp() cockroach_roachpb1.Timestamp {
-	if m != nil {
-		return m.Timestamp
-	}
-	return cockroach_roachpb1.Timestamp{}
-}
-
-func (m *MVCCMetadata) GetDeleted() bool {
-	if m != nil {
-		return m.Deleted
-	}
-	return false
-}
-
-func (m *MVCCMetadata) GetKeyBytes() int64 {
-	if m != nil {
-		return m.KeyBytes
-	}
-	return 0
-}
-
-func (m *MVCCMetadata) GetValBytes() int64 {
-	if m != nil {
-		return m.ValBytes
-	}
-	return 0
-}
-
-func (m *MVCCMetadata) GetValue() *cockroach_roachpb1.Value {
-	if m != nil {
-		return m.Value
-	}
-	return nil
-}
 
 // MVCCStats tracks byte and instance counts for:
 //  - Live key/values (i.e. what a scan at current time will reveal;
@@ -151,97 +95,6 @@ type MVCCStats struct {
 func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
 func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCStats) ProtoMessage()    {}
-
-func (m *MVCCStats) GetLiveBytes() int64 {
-	if m != nil {
-		return m.LiveBytes
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetKeyBytes() int64 {
-	if m != nil {
-		return m.KeyBytes
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetValBytes() int64 {
-	if m != nil {
-		return m.ValBytes
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetIntentBytes() int64 {
-	if m != nil {
-		return m.IntentBytes
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetLiveCount() int64 {
-	if m != nil {
-		return m.LiveCount
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetKeyCount() int64 {
-	if m != nil {
-		return m.KeyCount
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetValCount() int64 {
-	if m != nil {
-		return m.ValCount
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetIntentCount() int64 {
-	if m != nil {
-		return m.IntentCount
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetIntentAge() int64 {
-	if m != nil {
-		return m.IntentAge
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetGCBytesAge() int64 {
-	if m != nil {
-		return m.GCBytesAge
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetSysBytes() int64 {
-	if m != nil {
-		return m.SysBytes
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetSysCount() int64 {
-	if m != nil {
-		return m.SysCount
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetLastUpdateNanos() int64 {
-	if m != nil {
-		return m.LastUpdateNanos
-	}
-	return 0
-}
 
 func (m *MVCCValue) Marshal() (data []byte, err error) {
 	size := m.Size()

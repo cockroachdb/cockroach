@@ -174,7 +174,11 @@ func TestEngineBatch(t *testing.T) {
 			if m.Value == nil {
 				return nil
 			}
-			return m.Value.GetRawBytes()
+			valueBytes, err := m.Value.GetBytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			return valueBytes
 		}
 
 		for i := 0; i < numShuffles; i++ {
@@ -225,8 +229,12 @@ func TestEngineBatch(t *testing.T) {
 				if err := iter.ValueProto(m); err != nil {
 					t.Fatal(err)
 				}
-				if !bytes.Equal(m.Value.GetRawBytes(), expectedValue) {
-					t.Errorf("%d: expected %s, but got %s", i, expectedValue, m.Value.GetRawBytes())
+				valueBytes, err := m.Value.GetBytes()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(valueBytes, expectedValue) {
+					t.Errorf("%d: expected %s, but got %s", i, expectedValue, valueBytes)
 				}
 			}
 			iter.Close()

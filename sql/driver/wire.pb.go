@@ -285,20 +285,6 @@ func (m *Datum_Timestamp) Reset()         { *m = Datum_Timestamp{} }
 func (m *Datum_Timestamp) String() string { return proto.CompactTextString(m) }
 func (*Datum_Timestamp) ProtoMessage()    {}
 
-func (m *Datum_Timestamp) GetSec() int64 {
-	if m != nil {
-		return m.Sec
-	}
-	return 0
-}
-
-func (m *Datum_Timestamp) GetNsec() uint32 {
-	if m != nil {
-		return m.Nsec
-	}
-	return 0
-}
-
 // An SQL request to cockroach. A transaction can consist of multiple
 // requests.
 type Request struct {
@@ -318,34 +304,6 @@ func (m *Request) Reset()         { *m = Request{} }
 func (m *Request) String() string { return proto.CompactTextString(m) }
 func (*Request) ProtoMessage()    {}
 
-func (m *Request) GetUser() string {
-	if m != nil {
-		return m.User
-	}
-	return ""
-}
-
-func (m *Request) GetSession() []byte {
-	if m != nil {
-		return m.Session
-	}
-	return nil
-}
-
-func (m *Request) GetSql() string {
-	if m != nil {
-		return m.Sql
-	}
-	return ""
-}
-
-func (m *Request) GetParams() []Datum {
-	if m != nil {
-		return m.Params
-	}
-	return nil
-}
-
 type Response struct {
 	// Setting that should be reflected back in all subsequent requests.
 	// When not set, future requests should continue to use existing settings.
@@ -358,20 +316,6 @@ type Response struct {
 func (m *Response) Reset()         { *m = Response{} }
 func (m *Response) String() string { return proto.CompactTextString(m) }
 func (*Response) ProtoMessage()    {}
-
-func (m *Response) GetSession() []byte {
-	if m != nil {
-		return m.Session
-	}
-	return nil
-}
-
-func (m *Response) GetResults() []Response_Result {
-	if m != nil {
-		return m.Results
-	}
-	return nil
-}
 
 // Result corresponds to the execution of a single SQL statement.
 type Response_Result struct {
@@ -413,13 +357,6 @@ func (m *Response_Result) GetUnion() isResponse_Result_Union {
 		return m.Union
 	}
 	return nil
-}
-
-func (m *Response_Result) GetError() string {
-	if m != nil && m.Error != nil {
-		return *m.Error
-	}
-	return ""
 }
 
 func (m *Response_Result) GetDDL() *Response_Result_DDL {
@@ -530,20 +467,6 @@ func (m *Response_Result_Rows) Reset()         { *m = Response_Result_Rows{} }
 func (m *Response_Result_Rows) String() string { return proto.CompactTextString(m) }
 func (*Response_Result_Rows) ProtoMessage()    {}
 
-func (m *Response_Result_Rows) GetColumns() []string {
-	if m != nil {
-		return m.Columns
-	}
-	return nil
-}
-
-func (m *Response_Result_Rows) GetRows() []Response_Result_Rows_Row {
-	if m != nil {
-		return m.Rows
-	}
-	return nil
-}
-
 // A Row is a collection of values representing a row in a result.
 type Response_Result_Rows_Row struct {
 	Values []Datum `protobuf:"bytes,1,rep,name=values" json:"values"`
@@ -552,13 +475,6 @@ type Response_Result_Rows_Row struct {
 func (m *Response_Result_Rows_Row) Reset()         { *m = Response_Result_Rows_Row{} }
 func (m *Response_Result_Rows_Row) String() string { return proto.CompactTextString(m) }
 func (*Response_Result_Rows_Row) ProtoMessage()    {}
-
-func (m *Response_Result_Rows_Row) GetValues() []Datum {
-	if m != nil {
-		return m.Values
-	}
-	return nil
-}
 
 func (m *Datum) Marshal() (data []byte, err error) {
 	size := m.Size()

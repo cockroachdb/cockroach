@@ -31,8 +31,8 @@ type replicaInfo struct {
 	NodeDesc *roachpb.NodeDescriptor
 }
 
-func (i *replicaInfo) attrs() []string {
-	return i.NodeDesc.GetAttrs().Attrs
+func (i replicaInfo) attrs() []string {
+	return i.NodeDesc.Attrs.Attrs
 }
 
 // A replicaSlice is a slice of replicaInfo.

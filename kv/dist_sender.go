@@ -601,7 +601,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				continue
 			case *roachpb.NotLeaderError:
 				trace.Event(fmt.Sprintf("reply error: %T", tErr))
-				newLeader := tErr.GetLeader()
+				newLeader := tErr.Leader
 				// Verify that leader is a known replica according to the
 				// descriptor. If not, we've got a stale replica; evict cache.
 				// Next, cache the new leader.

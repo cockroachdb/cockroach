@@ -29,27 +29,6 @@ func (m *RaftCommand) Reset()         { *m = RaftCommand{} }
 func (m *RaftCommand) String() string { return proto.CompactTextString(m) }
 func (*RaftCommand) ProtoMessage()    {}
 
-func (m *RaftCommand) GetRangeID() RangeID {
-	if m != nil {
-		return m.RangeID
-	}
-	return 0
-}
-
-func (m *RaftCommand) GetOriginReplica() ReplicaDescriptor {
-	if m != nil {
-		return m.OriginReplica
-	}
-	return ReplicaDescriptor{}
-}
-
-func (m *RaftCommand) GetCmd() BatchRequest {
-	if m != nil {
-		return m.Cmd
-	}
-	return BatchRequest{}
-}
-
 // InternalTimeSeriesData is a collection of data samples for some
 // measurable value, where each sample is taken over a uniform time
 // interval.
@@ -82,27 +61,6 @@ type InternalTimeSeriesData struct {
 func (m *InternalTimeSeriesData) Reset()         { *m = InternalTimeSeriesData{} }
 func (m *InternalTimeSeriesData) String() string { return proto.CompactTextString(m) }
 func (*InternalTimeSeriesData) ProtoMessage()    {}
-
-func (m *InternalTimeSeriesData) GetStartTimestampNanos() int64 {
-	if m != nil {
-		return m.StartTimestampNanos
-	}
-	return 0
-}
-
-func (m *InternalTimeSeriesData) GetSampleDurationNanos() int64 {
-	if m != nil {
-		return m.SampleDurationNanos
-	}
-	return 0
-}
-
-func (m *InternalTimeSeriesData) GetSamples() []*InternalTimeSeriesSample {
-	if m != nil {
-		return m.Samples
-	}
-	return nil
-}
 
 // A InternalTimeSeriesSample represents data gathered from multiple
 // measurements of a variable value over a given period of time. The
@@ -143,41 +101,6 @@ func (m *InternalTimeSeriesSample) Reset()         { *m = InternalTimeSeriesSamp
 func (m *InternalTimeSeriesSample) String() string { return proto.CompactTextString(m) }
 func (*InternalTimeSeriesSample) ProtoMessage()    {}
 
-func (m *InternalTimeSeriesSample) GetOffset() int32 {
-	if m != nil {
-		return m.Offset
-	}
-	return 0
-}
-
-func (m *InternalTimeSeriesSample) GetCount() uint32 {
-	if m != nil {
-		return m.Count
-	}
-	return 0
-}
-
-func (m *InternalTimeSeriesSample) GetSum() float64 {
-	if m != nil {
-		return m.Sum
-	}
-	return 0
-}
-
-func (m *InternalTimeSeriesSample) GetMax() float64 {
-	if m != nil && m.Max != nil {
-		return *m.Max
-	}
-	return 0
-}
-
-func (m *InternalTimeSeriesSample) GetMin() float64 {
-	if m != nil && m.Min != nil {
-		return *m.Min
-	}
-	return 0
-}
-
 // RaftTruncatedState contains metadata about the truncated portion of the raft log.
 // Raft requires access to the term of the last truncated log entry even after the
 // rest of the entry has been discarded.
@@ -192,20 +115,6 @@ func (m *RaftTruncatedState) Reset()         { *m = RaftTruncatedState{} }
 func (m *RaftTruncatedState) String() string { return proto.CompactTextString(m) }
 func (*RaftTruncatedState) ProtoMessage()    {}
 
-func (m *RaftTruncatedState) GetIndex() uint64 {
-	if m != nil {
-		return m.Index
-	}
-	return 0
-}
-
-func (m *RaftTruncatedState) GetTerm() uint64 {
-	if m != nil {
-		return m.Term
-	}
-	return 0
-}
-
 // RaftTombstone contains information about a replica that has been deleted.
 type RaftTombstone struct {
 	NextReplicaID ReplicaID `protobuf:"varint,1,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
@@ -214,13 +123,6 @@ type RaftTombstone struct {
 func (m *RaftTombstone) Reset()         { *m = RaftTombstone{} }
 func (m *RaftTombstone) String() string { return proto.CompactTextString(m) }
 func (*RaftTombstone) ProtoMessage()    {}
-
-func (m *RaftTombstone) GetNextReplicaID() ReplicaID {
-	if m != nil {
-		return m.NextReplicaID
-	}
-	return 0
-}
 
 // RaftSnapshotData is the payload of a raftpb.Snapshot. It contains a raw copy of
 // all of the range's data and metadata, including the raft log, response cache, etc.
@@ -234,20 +136,6 @@ func (m *RaftSnapshotData) Reset()         { *m = RaftSnapshotData{} }
 func (m *RaftSnapshotData) String() string { return proto.CompactTextString(m) }
 func (*RaftSnapshotData) ProtoMessage()    {}
 
-func (m *RaftSnapshotData) GetRangeDescriptor() RangeDescriptor {
-	if m != nil {
-		return m.RangeDescriptor
-	}
-	return RangeDescriptor{}
-}
-
-func (m *RaftSnapshotData) GetKV() []*RaftSnapshotData_KeyValue {
-	if m != nil {
-		return m.KV
-	}
-	return nil
-}
-
 type RaftSnapshotData_KeyValue struct {
 	Key   []byte `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
 	Value []byte `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
@@ -256,20 +144,6 @@ type RaftSnapshotData_KeyValue struct {
 func (m *RaftSnapshotData_KeyValue) Reset()         { *m = RaftSnapshotData_KeyValue{} }
 func (m *RaftSnapshotData_KeyValue) String() string { return proto.CompactTextString(m) }
 func (*RaftSnapshotData_KeyValue) ProtoMessage()    {}
-
-func (m *RaftSnapshotData_KeyValue) GetKey() []byte {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *RaftSnapshotData_KeyValue) GetValue() []byte {
-	if m != nil {
-		return m.Value
-	}
-	return nil
-}
 
 func (m *RaftCommand) Marshal() (data []byte, err error) {
 	size := m.Size()

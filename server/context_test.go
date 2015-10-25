@@ -40,9 +40,9 @@ func TestParseNodeAttributes(t *testing.T) {
 	if err := ctx.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
-	expected := []string{"attr1=val1", "attr2=val2"}
-	if !reflect.DeepEqual(ctx.NodeAttributes.GetAttrs(), expected) {
-		t.Fatalf("Unexpected attributes: %v", ctx.NodeAttributes.GetAttrs())
+
+	if a, e := ctx.NodeAttributes.Attrs, []string{"attr1=val1", "attr2=val2"}; !reflect.DeepEqual(a, e) {
+		t.Fatalf("expected attributes: %v, found: %v", e, a)
 	}
 }
 

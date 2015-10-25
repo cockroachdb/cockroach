@@ -87,20 +87,6 @@ func (m *TimeSeriesDatapoint) Reset()         { *m = TimeSeriesDatapoint{} }
 func (m *TimeSeriesDatapoint) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesDatapoint) ProtoMessage()    {}
 
-func (m *TimeSeriesDatapoint) GetTimestampNanos() int64 {
-	if m != nil {
-		return m.TimestampNanos
-	}
-	return 0
-}
-
-func (m *TimeSeriesDatapoint) GetValue() float64 {
-	if m != nil {
-		return m.Value
-	}
-	return 0
-}
-
 // TimeSeriesData is a set of measurements of a single named variable at
 // multiple points in time. This message contains a name and a source which, in
 // combination, uniquely identify the time series being measured. Measurement
@@ -119,27 +105,6 @@ func (m *TimeSeriesData) Reset()         { *m = TimeSeriesData{} }
 func (m *TimeSeriesData) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesData) ProtoMessage()    {}
 
-func (m *TimeSeriesData) GetName() string {
-	if m != nil {
-		return m.Name
-	}
-	return ""
-}
-
-func (m *TimeSeriesData) GetSource() string {
-	if m != nil {
-		return m.Source
-	}
-	return ""
-}
-
-func (m *TimeSeriesData) GetDatapoints() []*TimeSeriesDatapoint {
-	if m != nil {
-		return m.Datapoints
-	}
-	return nil
-}
-
 // TimeSeriesQueryRequest is the standard incoming time series query request
 // accepted from cockroach clients.
 type TimeSeriesQueryRequest struct {
@@ -157,27 +122,6 @@ type TimeSeriesQueryRequest struct {
 func (m *TimeSeriesQueryRequest) Reset()         { *m = TimeSeriesQueryRequest{} }
 func (m *TimeSeriesQueryRequest) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesQueryRequest) ProtoMessage()    {}
-
-func (m *TimeSeriesQueryRequest) GetStartNanos() int64 {
-	if m != nil {
-		return m.StartNanos
-	}
-	return 0
-}
-
-func (m *TimeSeriesQueryRequest) GetEndNanos() int64 {
-	if m != nil {
-		return m.EndNanos
-	}
-	return 0
-}
-
-func (m *TimeSeriesQueryRequest) GetQueries() []TimeSeriesQueryRequest_Query {
-	if m != nil {
-		return m.Queries
-	}
-	return nil
-}
 
 // Each Query defines a specific metric to query over the time span of
 // this request.
@@ -230,13 +174,6 @@ type TimeSeriesQueryResponse struct {
 func (m *TimeSeriesQueryResponse) Reset()         { *m = TimeSeriesQueryResponse{} }
 func (m *TimeSeriesQueryResponse) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesQueryResponse) ProtoMessage()    {}
-
-func (m *TimeSeriesQueryResponse) GetResults() []*TimeSeriesQueryResponse_Result {
-	if m != nil {
-		return m.Results
-	}
-	return nil
-}
 
 // Result is the data returned from a single metric query over a time span.
 type TimeSeriesQueryResponse_Result struct {

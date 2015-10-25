@@ -46,20 +46,6 @@ func (m *UserPrivileges) Reset()         { *m = UserPrivileges{} }
 func (m *UserPrivileges) String() string { return proto.CompactTextString(m) }
 func (*UserPrivileges) ProtoMessage()    {}
 
-func (m *UserPrivileges) GetUser() string {
-	if m != nil {
-		return m.User
-	}
-	return ""
-}
-
-func (m *UserPrivileges) GetPrivileges() uint32 {
-	if m != nil {
-		return m.Privileges
-	}
-	return 0
-}
-
 // PrivilegeDescriptor describes a list of users and attached
 // privileges. The list should be sorted by user for fast access.
 type PrivilegeDescriptor struct {
@@ -69,13 +55,6 @@ type PrivilegeDescriptor struct {
 func (m *PrivilegeDescriptor) Reset()         { *m = PrivilegeDescriptor{} }
 func (m *PrivilegeDescriptor) String() string { return proto.CompactTextString(m) }
 func (*PrivilegeDescriptor) ProtoMessage()    {}
-
-func (m *PrivilegeDescriptor) GetUsers() []*UserPrivileges {
-	if m != nil {
-		return m.Users
-	}
-	return nil
-}
 
 func (m *UserPrivileges) Marshal() (data []byte, err error) {
 	size := m.Size()
