@@ -978,21 +978,25 @@ func datumToString(datum Datum) (string, error) {
 	return "", fmt.Errorf("argument type unsupported: %s", datum.Type())
 }
 
+type regexpKey struct {
+	sqlPattern string
+	sqlFlags   string
+}
+
+func (k regexpKey) pattern() (string, error) {
+	return regexpEvalFlags(k.sqlPattern, k.sqlFlags)
+}
+
 var replaceSubRe = regexp.MustCompile(`\\[&1-9]`)
 
 func regexpReplace(ctx EvalContext, s, pattern, to, sqlFlags string) (Datum, error) {
-	pattern, global, err := regexpEvalFlags(pattern, sqlFlags)
-	if err != nil {
-		return nil, err
-	}
-
-	patternRe, err := ctx.ReCache.GetRegexp(pattern)
+	patternRe, err := ctx.ReCache.GetRegexp(regexpKey{pattern, sqlFlags})
 	if err != nil {
 		return nil, err
 	}
 
 	matchCount := 1
-	if global {
+	if strings.ContainsRune(sqlFlags, 'g') {
 		matchCount = -1
 	}
 
@@ -1056,16 +1060,14 @@ func regexpReplace(ctx EvalContext, s, pattern, to, sqlFlags string) (Datum, err
 // regexpEvalFlags evaluates the provided Postgres regexp flags in
 // accordance with their definitions provided at
 // http://www.postgresql.org/docs/9.0/static/functions-matching.html#POSIX-EMBEDDED-OPTIONS-TABLE.
-// It then returns an adjusted regexp pattern, and a flag specifying if more
-// than one match should be found or not.
-func regexpEvalFlags(pattern, sqlFlags string) (string, bool, error) {
-	global := false
+// It then returns an adjusted regexp pattern.
+func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 	goReFlags := map[rune]struct{}{'s': {}, 'm': {}}
 
 	for _, flag := range sqlFlags {
 		switch flag {
 		case 'g':
-			global = true
+			// Ignore for now, valid flag that should be handled elsewhere.
 		case 'i':
 			goReFlags['i'] = struct{}{}
 		case 'c':
@@ -1082,19 +1084,19 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, bool, error) {
 			delete(goReFlags, 's')
 			goReFlags['m'] = struct{}{}
 		default:
-			return "", false, fmt.Errorf("invalid regexp flag: %q", flag)
+			return "", fmt.Errorf("invalid regexp flag: %q", flag)
 		}
 	}
 
 	if len(goReFlags) == 0 {
-		return pattern, global, nil
+		return pattern, nil
 	}
 
 	var flagString bytes.Buffer
 	for flag := range goReFlags {
 		flagString.WriteRune(flag)
 	}
-	return fmt.Sprintf("(?%s:%s)", flagString.String(), pattern), global, nil
+	return fmt.Sprintf("(?%s:%s)", flagString.String(), pattern), nil
 }
 
 func round(x float64, n int64) (Datum, error) {

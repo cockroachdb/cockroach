@@ -446,13 +446,8 @@ var cmpOps = map[cmpArgs]cmpOp{
 
 	cmpArgs{Like, stringType, stringType}: {
 		fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
-			pattern := regexp.QuoteMeta(string(right.(DString)))
-			// Replace LIKE specific wildcards with standard wildcards
-			pattern = strings.Replace(pattern, "%", ".*", -1)
-			pattern = strings.Replace(pattern, "_", ".", -1)
-			pattern = anchorPattern(pattern, false)
-
-			re, err := ctx.ReCache.GetRegexp(pattern)
+			key := likeKey(right.(DString))
+			re, err := ctx.ReCache.GetRegexp(key)
 			if err != nil {
 				panic(fmt.Sprintf("LIKE regexp compilations should not fail: %v", err))
 			}
@@ -462,10 +457,8 @@ var cmpOps = map[cmpArgs]cmpOp{
 
 	cmpArgs{SimilarTo, stringType, stringType}: {
 		fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
-			pattern := SimilarEscape(string(right.(DString)))
-			pattern = anchorPattern(pattern, false)
-
-			re, err := ctx.ReCache.GetRegexp(pattern)
+			key := similarToKey(right.(DString))
+			re, err := ctx.ReCache.GetRegexp(key)
 			if err != nil {
 				return DBool(false), err
 			}
@@ -1285,6 +1278,23 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 	}
 
 	return DummyTimestamp, err
+}
+
+type likeKey string
+
+func (k likeKey) pattern() (string, error) {
+	pattern := regexp.QuoteMeta(string(k))
+	// Replace LIKE specific wildcards with standard wildcards
+	pattern = strings.Replace(pattern, "%", ".*", -1)
+	pattern = strings.Replace(pattern, "_", ".", -1)
+	return anchorPattern(pattern, false), nil
+}
+
+type similarToKey string
+
+func (k similarToKey) pattern() (string, error) {
+	pattern := SimilarEscape(string(k))
+	return anchorPattern(pattern, false), nil
 }
 
 // SimilarEscape converts a SQL:2008 regexp pattern to POSIX style, so it can

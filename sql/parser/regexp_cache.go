@@ -24,6 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/util/cache"
 )
 
+// regexpCacheKey allows cache keys to take the form of different types,
+// as long as they are comparable and can produce a pattern when needed
+// for regexp compilation. The pattern method will not be called until
+// after a cache lookup is performed and the result is a miss.
+type regexpCacheKey interface {
+	pattern() (string, error)
+}
+
 // A RegexpCache is a cache used to store compiled regular expressions.
 // The cache is safe for concurrent use by multiple goroutines. It is also
 // safe to use the cache through a nil reference, where it will act like a valid
@@ -48,14 +56,19 @@ func NewRegexpCache(size int) *RegexpCache {
 }
 
 // GetRegexp consults the cache for the regular expressions stored for
-// the given string pattern, compiling the pattern if it is not already
+// the given key, compiling the key's pattern if it is not already
 // in the cache.
-func (rc *RegexpCache) GetRegexp(pattern string) (*regexp.Regexp, error) {
+func (rc *RegexpCache) GetRegexp(key regexpCacheKey) (*regexp.Regexp, error) {
 	if rc != nil {
-		re := rc.lookup(pattern)
+		re := rc.lookup(key)
 		if re != nil {
 			return re, nil
 		}
+	}
+
+	pattern, err := key.pattern()
+	if err != nil {
+		return nil, err
 	}
 
 	re, err := regexp.Compile(pattern)
@@ -64,18 +77,18 @@ func (rc *RegexpCache) GetRegexp(pattern string) (*regexp.Regexp, error) {
 	}
 
 	if rc != nil {
-		rc.update(pattern, re)
+		rc.update(key, re)
 	}
 	return re, nil
 }
 
 // lookup checks for the regular expression in the cache in a
 // synchronized manner, returning it if it exists.
-func (rc *RegexpCache) lookup(pattern string) *regexp.Regexp {
+func (rc *RegexpCache) lookup(key regexpCacheKey) *regexp.Regexp {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
-	v, ok := rc.cache.Get(pattern)
-	if !ok || v == nil {
+	v, ok := rc.cache.Get(key)
+	if !ok {
 		return nil
 	}
 	return v.(*regexp.Regexp)
@@ -83,12 +96,12 @@ func (rc *RegexpCache) lookup(pattern string) *regexp.Regexp {
 
 // update invalidates the regular expression for the given pattern.
 // If a new regular expression is passed in, it is inserted into the cache.
-func (rc *RegexpCache) update(pattern string, re *regexp.Regexp) {
+func (rc *RegexpCache) update(key regexpCacheKey, re *regexp.Regexp) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
-	rc.cache.Del(pattern)
+	rc.cache.Del(key)
 	if re != nil {
-		rc.cache.Add(pattern, re)
+		rc.cache.Add(key, re)
 	}
 }
 
