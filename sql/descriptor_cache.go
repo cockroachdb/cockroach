@@ -77,24 +77,24 @@ func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, bool,
 
 // getCachedDescriptor looks for a database descriptor in the descriptor cache.
 func (p *planner) getCachedDescriptor(plainKey descriptorKey, descriptor descriptorProto) error {
-	kv, found := p.systemConfig.Get(plainKey.Key())
-	if !found {
+	plainVal := p.systemConfig.GetValue(plainKey.Key())
+	if plainVal == nil {
 		return fmt.Errorf("%s %q does not exist in system cache", descriptor.TypeName(), plainKey.Name())
 	}
 
-	id, err := kv.Value.GetInt()
+	id, err := plainVal.GetInt()
 	if err != nil {
 		return err
 	}
 
 	descKey := MakeDescMetadataKey(ID(id))
-	kv, found = p.systemConfig.Get(descKey)
-	if !found {
+	descVal := p.systemConfig.GetValue(descKey)
+	if descVal == nil {
 		return fmt.Errorf("%s %q has name entry, but no descriptor in system cache",
 			descriptor.TypeName(), plainKey.Name())
 	}
 
-	if err := kv.Value.GetProto(descriptor); err != nil {
+	if err := descVal.GetProto(descriptor); err != nil {
 		return err
 	}
 

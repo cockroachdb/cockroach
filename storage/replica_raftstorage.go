@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -192,26 +191,24 @@ func (r *Replica) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 		return 0, err
 	}
 	if v != nil {
-		bytes, err := v.GetBytes()
+		int64AppliedIndex, err := v.GetInt()
 		if err != nil {
 			return 0, err
 		}
-		// Cannot use v.GetInt() here because we need the precision of
-		// uint64; GetInt() is lossy.
-		_, appliedIndex, err = encoding.DecodeUint64(bytes)
-		if err != nil {
-			return 0, err
-		}
+		appliedIndex = uint64(int64AppliedIndex)
 	}
 	return appliedIndex, nil
 }
 
 // setAppliedIndex persists a new applied index.
 func setAppliedIndex(eng engine.Engine, rangeID roachpb.RangeID, appliedIndex uint64) error {
+	var value roachpb.Value
+	value.SetInt(int64(appliedIndex))
+
 	return engine.MVCCPut(eng, nil, /* stats */
 		keys.RaftAppliedIndexKey(rangeID),
 		roachpb.ZeroTimestamp,
-		roachpb.MakeValueFromBytes(encoding.EncodeUint64(nil, appliedIndex)),
+		value,
 		nil /* txn */)
 }
 
@@ -225,16 +222,11 @@ func (r *Replica) loadLastIndex() (uint64, error) {
 		return 0, err
 	}
 	if v != nil {
-		bytes, err := v.GetBytes()
+		int64LastIndex, err := v.GetInt()
 		if err != nil {
 			return 0, err
 		}
-		// Cannot use v.GetInt() here because we need the precision of
-		// uint64; GetInt() is lossy.
-		_, lastIndex, err = encoding.DecodeUint64(bytes)
-		if err != nil {
-			return 0, err
-		}
+		lastIndex = uint64(int64LastIndex)
 	} else {
 		// The log is empty, which means we are either starting from scratch
 		// or the entire log has been truncated away. raftTruncatedState
@@ -250,9 +242,13 @@ func (r *Replica) loadLastIndex() (uint64, error) {
 
 // setLastIndex persists a new last index.
 func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) error {
+	var value roachpb.Value
+	value.SetInt(int64(lastIndex))
+
 	return engine.MVCCPut(eng, nil, keys.RaftLastIndexKey(rangeID),
 		roachpb.ZeroTimestamp,
-		roachpb.MakeValueFromBytes(encoding.EncodeUint64(nil, lastIndex)), nil)
+		value,
+		nil /* txn */)
 }
 
 // Snapshot implements the raft.Storage interface.
