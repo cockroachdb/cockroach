@@ -22,8 +22,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/gogo/protobuf/proto"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
@@ -329,7 +331,7 @@ func (desc *TableDescriptor) Validate() error {
 		}
 	}
 	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(desc.GetID())
+	return desc.Privileges.Validate(desc.ID)
 }
 
 // AddColumn adds a column to the table.
@@ -398,6 +400,68 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 	return nil, util.Errorf("index-id \"%d\" does not exist", id)
 }
 
+func (desc *TableDescriptor) applyMutation(mutation TableDescriptor_Mutation) error {
+	switch m := mutation.Descriptor_.(type) {
+	case *TableDescriptor_Mutation_AddIndex:
+		if err := desc.AddIndex(*m.AddIndex, false); err != nil {
+			return err
+		}
+		if err := desc.AllocateIDs(); err != nil {
+			return err
+		}
+
+	case *TableDescriptor_Mutation_AddColumn:
+		desc.AddColumn(*m.AddColumn)
+		if err := desc.AllocateIDs(); err != nil {
+			return err
+		}
+
+	case *TableDescriptor_Mutation_DropIndex:
+		found := false
+		for i := range desc.Indexes {
+			if desc.Indexes[i].ID == m.DropIndex.ID {
+				desc.Indexes = append(desc.Indexes[:i], desc.Indexes[i+1:]...)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return util.Errorf("index %s not found in %s", m.DropIndex, desc)
+		}
+
+	case *TableDescriptor_Mutation_DropColumn:
+		panic("Not Implemented")
+
+	}
+	return nil
+}
+
+// Append the mutation to the table descriptor. Check that the application of the
+// mutation will not lead to some obvious errors. Note that a mutation can be in
+// conflict with the table data, and that can only be rejected when applying the
+// mutation; e.g. adding a unique constraint on a table column that is not unique.
+func (desc *TableDescriptor) appendMutation(mutation TableDescriptor_Mutation) error {
+	tableDesc := proto.Clone(desc).(*TableDescriptor)
+	for _, m := range desc.Mutations {
+		if err := tableDesc.applyMutation(*m); err != nil {
+			return err
+		}
+	}
+	if err := tableDesc.applyMutation(mutation); err != nil {
+		return err
+	}
+	desc.Mutations = append(desc.Mutations, &mutation)
+	return nil
+}
+
+func (desc *TableDescriptor) put(txn *client.Txn) error {
+	if err := txn.Put(MakeDescMetadataKey(desc.ID), desc); err != nil {
+		return err
+	}
+	txn.SetSystemDBTrigger()
+	return nil
+}
+
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.Kind {
@@ -446,5 +510,5 @@ func (desc *DatabaseDescriptor) Validate() error {
 		return fmt.Errorf("invalid database ID %d", desc.ID)
 	}
 	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(desc.GetID())
+	return desc.Privileges.Validate(desc.ID)
 }

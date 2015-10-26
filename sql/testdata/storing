@@ -47,6 +47,8 @@ SELECT a, b, c, d FROM t@c_idx
 statement ok
 CREATE INDEX d_idx ON t (d) STORING (a, b)
 
+sleep 1s
+
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@d_idx
 ----

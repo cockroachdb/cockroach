@@ -68,34 +68,23 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		return nil, err
 	}
 
-	indexDesc := IndexDescriptor{
-		Name:             string(n.Name),
-		Unique:           n.Unique,
-		ColumnNames:      n.Columns,
-		StoreColumnNames: n.Storing,
+	mutation := TableDescriptor_Mutation{
+		Descriptor_: &TableDescriptor_Mutation_AddIndex{
+			AddIndex: &IndexDescriptor{
+				Name:             string(n.Name),
+				Unique:           n.Unique,
+				ColumnNames:      n.Columns,
+				StoreColumnNames: n.Storing,
+			},
+		},
 	}
-	if err := tableDesc.AddIndex(indexDesc, false); err != nil {
+
+	if err := tableDesc.appendMutation(mutation); err != nil {
 		return nil, err
 	}
-
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := tableDesc.put(p.txn); err != nil {
 		return nil, err
 	}
-
-	// `indexDesc` changed on us when we called `tableDesc.AllocateIDs()`.
-	indexDesc = tableDesc.Indexes[len(tableDesc.Indexes)-1]
-
-	b, err := p.makeBackfillBatch(n.Table, tableDesc, indexDesc)
-	if err != nil {
-		return nil, err
-	}
-
-	b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
-
-	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(tableDesc, b, err)
-	}
-
 	return &valuesNode{}, nil
 }
 
