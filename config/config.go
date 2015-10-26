@@ -103,24 +103,23 @@ func ObjectIDForKey(key roachpb.RKey) (uint32, bool) {
 }
 
 // GetValue searches the kv list for 'key' and returns its
-// raw byte value if found. ok is true only if the key is found.
+// roachpb.Value if found.
 func (s SystemConfig) GetValue(key roachpb.Key) *roachpb.Value {
-	kv, found := s.Get(key)
-	if !found {
-		return nil
+	if kv := s.get(key); kv != nil {
+		return &kv.Value
 	}
-	return &kv.Value
+	return nil
 }
 
-// Get searches the kv list for 'key' and returns the key/value if found.
-func (s SystemConfig) Get(key roachpb.Key) (roachpb.KeyValue, bool) {
-	index, found := s.GetIndex(key)
-	if !found {
-		return roachpb.KeyValue{}, false
+// get searches the kv list for 'key' and returns its roachpb.KeyValue
+// if found.
+func (s SystemConfig) get(key roachpb.Key) *roachpb.KeyValue {
+	if index, found := s.GetIndex(key); found {
+		// TODO(marc): I'm pretty sure a Value returned by MVCCScan can
+		// never be nil. Should check.
+		return &s.Values[index]
 	}
-	// TODO(marc): I'm pretty sure a Value returned by MVCCScan can
-	// never be nil. Should check.
-	return s.Values[index], true
+	return nil
 }
 
 // GetIndex searches the kv list for 'key' and returns its index if found.
@@ -190,15 +189,15 @@ func (s SystemConfig) GetLargestObjectID() (uint32, error) {
 // It is the caller's responsibility to ensure that the range does not need to be split.
 func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error) {
 	if objectID, ok := ObjectIDForKey(key); ok {
-		return s.GetZoneConfigForID(objectID)
+		return s.getZoneConfigForID(objectID)
 	}
 	// Not in the structured data namespace.
 	return DefaultZoneConfig, nil
 }
 
-// GetZoneConfigForID looks up the zone config for the object (table or database)
+// getZoneConfigForID looks up the zone config for the object (table or database)
 // with 'id'.
-func (s SystemConfig) GetZoneConfigForID(id uint32) (*ZoneConfig, error) {
+func (s SystemConfig) getZoneConfigForID(id uint32) (*ZoneConfig, error) {
 	testingLock.Lock()
 	hook := ZoneConfigHook
 	testingLock.Unlock()
