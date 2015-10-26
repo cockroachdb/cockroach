@@ -385,11 +385,6 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	}
 	n.filter, n.err = n.resolveQNames(where.Expr)
 	if n.err == nil {
-		// Normalize the expression (this will also evaluate any branches that are
-		// constant).
-		n.filter, n.err = n.planner.evalCtx.NormalizeExpr(n.filter)
-	}
-	if n.err == nil {
 		var whereType parser.Datum
 		whereType, n.err = n.filter.TypeCheck()
 		if n.err == nil {
@@ -397,6 +392,11 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 				n.err = fmt.Errorf("argument of WHERE must be type %s, not type %s", parser.DummyBool.Type(), whereType.Type())
 			}
 		}
+	}
+	if n.err == nil {
+		// Normalize the expression (this will also evaluate any branches that are
+		// constant).
+		n.filter, n.err = n.planner.evalCtx.NormalizeExpr(n.filter)
 	}
 	if n.err == nil {
 		n.filter, n.err = n.planner.expandSubqueries(n.filter, 1)
@@ -514,7 +514,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	}
 	// Type check the expression to memoize operators and functions.
 	var normalized parser.Expr
-	if normalized, n.err = n.planner.evalCtx.NormalizeAndTypeCheckExpr(resolved); n.err != nil {
+	if normalized, n.err = n.planner.evalCtx.TypeCheckAndNormalizeExpr(resolved); n.err != nil {
 		return n.err
 	}
 	if normalized, n.err = n.planner.expandSubqueries(normalized, 1); n.err != nil {

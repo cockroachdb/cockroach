@@ -97,8 +97,12 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 				// The left side is const and the right side is a binary expression or a
 				// variable. Flip the comparison op so that the right side is const and
 				// the left side is a binary expression or variable.
-				expr.Operator = invertComparisonOp(expr.Operator)
-				expr.Left, expr.Right = expr.Right, expr.Left
+				// Create a new ComparisonExpr so the function cache isn't reused.
+				*expr = ComparisonExpr{
+					Operator: invertComparisonOp(expr.Operator),
+					Left:     expr.Right,
+					Right:    expr.Left,
+				}
 			} else if !isConst(expr.Right) {
 				return expr
 			}
@@ -121,6 +125,9 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 
 				switch left.Operator {
 				case Plus, Minus, Div:
+					// Clear the function caches; we're about to change stuff.
+					expr.fn.fn = nil
+					left.fn.fn = nil
 					expr.Left = left.Left
 					left.Left = expr.Right
 					if left.Operator == Plus {
@@ -130,8 +137,6 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 					} else {
 						left.Operator = Mult
 					}
-					// Clear the function cache now that we've changed the operator.
-					left.fn.fn = nil
 					expr.Right, v.err = left.Eval(v.ctx)
 					if v.err != nil {
 						return nil
@@ -152,6 +157,9 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 
 				switch left.Operator {
 				case Plus, Minus:
+					// Clear the function caches; we're about to change stuff.
+					expr.fn.fn = nil
+					left.fn.fn = nil
 					left.Right, expr.Right = expr.Right, left.Right
 					if left.Operator == Plus {
 						left.Operator = Minus
