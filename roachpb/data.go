@@ -654,12 +654,9 @@ func (t *Transaction) Update(o *Transaction) {
 	t.CertainNodes = NodeList{Nodes: append(Int32Slice(nil),
 		o.CertainNodes.Nodes...)}
 	t.UpgradePriority(o.Priority)
-	if t.Writing && !o.Writing {
-		// TODO(tschottdorf): false positives; see #2300.
-		// panic("r/w status regression")
-	} else {
-		t.Writing = o.Writing
-	}
+	// We can't assert against regression here since it can actually happen
+	// that we update from a transaction which isn't Writing.
+	t.Writing = t.Writing || o.Writing
 }
 
 // UpgradePriority sets transaction priority to the maximum of current

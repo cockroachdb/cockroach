@@ -121,6 +121,7 @@ func (br *BatchResponse) ResetAll() {
 // Combine implements the Combinable interface. It combines each slot of the
 // given request into the corresponding slot of the base response. The number
 // of slots must be equal and the respective slots must be combinable.
+// On error, the receiver BatchResponse is in an invalid state.
 // TODO(tschottdorf): write tests.
 func (br *BatchResponse) Combine(otherBatch *BatchResponse) error {
 	if len(otherBatch.Responses) != len(br.Responses) {
@@ -144,6 +145,8 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse) error {
 			br.Responses[i] = otherBatch.Responses[i]
 		}
 	}
+	br.Timestamp.Forward(otherBatch.Timestamp)
+	br.Txn.Update(otherBatch.Txn)
 	return nil
 }
 

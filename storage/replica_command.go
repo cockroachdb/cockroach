@@ -969,7 +969,6 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	}
 
 	// Persist the pushed transaction using zero timestamp for inline value.
-	reply.PusheeTxn.Writing = true // required; see comment on the proto
 	if err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, reply.PusheeTxn); err != nil {
 		return reply, err
 	}

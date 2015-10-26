@@ -577,7 +577,10 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	clock.SetMaxOffset(20)
 
 	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		return ba.CreateReply(), nil
+		br := ba.CreateReply()
+		br.Txn = ba.Txn.Clone()
+		br.Txn.Writing = true
+		return br, nil
 	}), clock, false, nil, stopper)
 
 	// Stop the stopper manually, prior to trying the transaction. This has the

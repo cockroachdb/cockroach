@@ -709,12 +709,22 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		txnMeta := tc.txns[id]
 		// For successful transactional requests, keep the written intents and
 		// the updated transaction record to be sent along with the reply.
-		// The transaction metadata is created with the first writing operation
-		// TODO(tschottdorf): already computed the intents prior to sending,
+		// The transaction metadata is created with the first writing operation.
+		// A tricky edge case is that of a transaction which "fails" on the
+		// first writing request, but actually manages to write some intents
+		// (for example, due to being multi-range). In this case, there will
+		// be an error, but the transaction will be marked as Writing and the
+		// coordinator must track the state, for the client's retry will be
+		// performed with a Writing transaction which the coordinator rejects
+		// unless it is tracking it (on top of it making sense to track it;
+		// after all, it **has** laid down intents and only the coordinator
+		// can augment a potential EndTransaction call).
 		// consider re-using those.
-		if intents := ba.GetIntents(); len(intents) > 0 && err == nil {
+		if intents := ba.GetIntents(); len(intents) > 0 && (err == nil || newTxn.Writing) {
 			if txnMeta == nil {
-				newTxn.Writing = true
+				if !newTxn.Writing {
+					panic("txn with intents marked as non-writing")
+				}
 				txnMeta = &txnMetadata{
 					txn:              *newTxn,
 					keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
@@ -726,8 +736,11 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				tc.txns[id] = txnMeta
 				// If the transaction is already over, there's no point in
 				// launching a one-off coordinator which will shut down right
-				// away.
-				if _, isEnding := ba.GetArg(roachpb.EndTransaction); !isEnding {
+				// away. If we ended up here with an error, we'll always start
+				// the coordinator - the transaction has laid down intents, so
+				// we expect it to be committed/aborted at some point in the
+				// future.
+				if _, isEnding := ba.GetArg(roachpb.EndTransaction); err != nil || !isEnding {
 					trace.Event("coordinator spawns")
 					if !tc.stopper.RunAsyncTask(func() {
 						tc.heartbeatLoop(id)
