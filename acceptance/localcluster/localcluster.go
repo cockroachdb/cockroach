@@ -49,6 +49,9 @@ var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before te
 var logDirectory = flag.String("l", "", "the directory to store log files, relative to where the test source")
 var pwd = filepath.Clean(os.ExpandEnv("${PWD}"))
 
+// keyLen is the length (in bits) of the generated CA and node certs.
+const keyLen = 1024
+
 func prettyJSON(v interface{}) string {
 	pretty, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -319,17 +322,17 @@ func (l *Cluster) createRoach(i int, cmd ...string) *Container {
 }
 
 func (l *Cluster) createCACert() {
-	log.Infof("creating ca in: %s", l.CertsDir)
-	maybePanic(security.RunCreateCACert(l.CertsDir, 512))
+	log.Infof("creating ca (%dbit) in: %s", keyLen, l.CertsDir)
+	maybePanic(security.RunCreateCACert(l.CertsDir, keyLen))
 }
 
 func (l *Cluster) createNodeCerts() {
-	log.Infof("creating node certs in: %s", l.CertsDir)
+	log.Infof("creating node (%dbit) certs in: %s", keyLen, l.CertsDir)
 	nodes := []string{dockerIP().String()}
 	for i := 0; i < l.numNodes; i++ {
 		nodes = append(nodes, node(i))
 	}
-	maybePanic(security.RunCreateNodeCert(l.CertsDir, 512, nodes))
+	maybePanic(security.RunCreateNodeCert(l.CertsDir, keyLen, nodes))
 }
 
 func (l *Cluster) startNode(i int) *Container {
