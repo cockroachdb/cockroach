@@ -25,17 +25,17 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// NormalizeAndTypeCheckExpr is a combination of NormalizeExpr and
-// TypeCheck(). It returns returns an error if either of
-// NormalizeExpr or TypeCheck() return one, and otherwise returns
-// the Expr returned by NormalizeExpr.
-func (ctx EvalContext) NormalizeAndTypeCheckExpr(expr Expr) (Expr, error) {
-	var err error
-	expr, err = ctx.NormalizeExpr(expr)
-	if err != nil {
+// TypeCheckAndNormalizeExpr is a combination of TypeCheck() and
+// ctx.NormalizeExpr(). It returns an error if either of TypeCheck() or
+// ctx.NormalizeExpr() return one, and otherwise returns the Expr
+// returned by ctx.NormalizeExpr().
+func (ctx EvalContext) TypeCheckAndNormalizeExpr(expr Expr) (Expr, error) {
+	if _, err := expr.TypeCheck(); err != nil {
 		return nil, err
 	}
-	_, err = expr.TypeCheck()
+
+	var err error
+	expr, err = ctx.NormalizeExpr(expr)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +357,27 @@ func (expr *QualifiedName) TypeCheck() (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr *RangeCond) TypeCheck() (Datum, error) {
-	return nil, util.Errorf("unhandled type %T", expr)
+	leftType, err := expr.Left.TypeCheck()
+	if err != nil {
+		return nil, err
+	}
+	fromType, err := expr.From.TypeCheck()
+	if err != nil {
+		return nil, err
+	}
+	toType, err := expr.To.TypeCheck()
+	if err != nil {
+		return nil, err
+	}
+
+	if _, _, err := typeCheckComparisonOp(GT, leftType, fromType); err != nil {
+		return nil, err
+	}
+	if _, _, err := typeCheckComparisonOp(LT, leftType, toType); err != nil {
+		return nil, err
+	}
+
+	return cmpOpResultType, nil
 }
 
 // TypeCheck implements the Expr interface.
