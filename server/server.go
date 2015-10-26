@@ -60,22 +60,23 @@ var (
 type Server struct {
 	ctx *Context
 
-	mux           *http.ServeMux
-	clock         *hlc.Clock
-	rpc           *rpc.Server
-	gossip        *gossip.Gossip
-	storePool     *storage.StorePool
-	db            *client.DB
-	kvDB          *kv.DBServer
-	sqlServer     sql.HTTPServer
-	node          *Node
-	recorder      *status.NodeStatusRecorder
-	admin         *adminServer
-	status        *statusServer
-	tsDB          *ts.DB
-	tsServer      *ts.Server
-	raftTransport multiraft.Transport
-	stopper       *stop.Stopper
+	mux                *http.ServeMux
+	clock              *hlc.Clock
+	rpc                *rpc.Server
+	gossip             *gossip.Gossip
+	storePool          *storage.StorePool
+	db                 *client.DB
+	kvDB               *kv.DBServer
+	sqlServer          sql.HTTPServer
+	tableLeaderCreator sql.TableLeaderCreator
+	node               *Node
+	recorder           *status.NodeStatusRecorder
+	admin              *adminServer
+	status             *statusServer
+	tsDB               *ts.DB
+	tsServer           *ts.Server
+	raftTransport      multiraft.Transport
+	stopper            *stop.Stopper
 }
 
 // NewServer creates a Server from a server.Context.
@@ -155,6 +156,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		},
 	}
 	s.node = NewNode(nCtx)
+	s.tableLeaderCreator.Start(s.stopper, s.gossip, s.node, s.db)
+
 	s.admin = newAdminServer(s.db, s.stopper)
 	s.status = newStatusServer(s.db, s.gossip, ctx)
 	s.tsDB = ts.NewDB(s.db)

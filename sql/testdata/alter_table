@@ -20,6 +20,8 @@ user root
 statement ok
 ALTER TABLE t ADD b INT
 
+sleep 1s
+
 query TTTT colnames
 SHOW COLUMNS FROM t
 ----
@@ -27,8 +29,13 @@ Field Type Null Default
 a     INT  true NULL
 b     INT  true NULL
 
+statement error duplicate column name: "b"
+ALTER TABLE t ADD b INT
+
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
+
+sleep 1s
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@foo
@@ -56,11 +63,30 @@ SELECT * FROM t
 statement ok
 ALTER TABLE t ADD c INT
 
+sleep 1s
+
 statement ok
 INSERT INTO t VALUES (2, 1, 1), (3, 2, 1)
 
-statement error duplicate key value \(c\)=\(1\) violates unique constraint "bar"
+query TTTTT colnames
+SHOW INDEX FROM t
+----
+Table Name    Unique Seq Column Storing
+t     primary true   1   a      false
+t     foo     true   1   b      false
+
+statement ok
 ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
+
+sleep 1s
+
+# constraint bar is not added
+query TTTTT colnames
+SHOW INDEX FROM t
+----
+Table Name    Unique Seq Column Storing
+t     primary true   1   a      false
+t     foo     true   1   b      false
 
 query II
 SELECT * FROM t
