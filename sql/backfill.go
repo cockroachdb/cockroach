@@ -19,6 +19,8 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -79,4 +81,139 @@ func (p *planner) makeBackfillBatch(tableName *parser.QualifiedName, tableDesc *
 	}
 
 	return b, row.Err()
+}
+
+// RunOneMutation runs the first queued mutation from the descriptor in the database.
+func RunOneMutation(db *client.DB, desc TableDescriptor, dbName string) error {
+	log.Info("maybe apply mutation")
+	tableName := desc.Name
+	err := db.Txn(func(txn *client.Txn) error {
+		p := planner{txn: txn, user: security.RootUser}
+		// Read the table descriptor from the database
+		tableDesc := &TableDescriptor{}
+		if err := p.getDescriptor(tableKey{desc.ParentID, tableName}, tableDesc); err != nil {
+			return err
+		}
+		if len(tableDesc.Mutations) == 0 {
+			return nil
+		}
+		log.Info("apply mutation")
+		mutation := tableDesc.Mutations[0]
+		tableDesc.Mutations = tableDesc.Mutations[1:]
+		if err := tableDesc.applyMutation(*mutation); err != nil {
+			return err
+		}
+		if indexDesc := mutation.GetAddIndex(); indexDesc != nil {
+			log.Infof("Attempt to Add index: %s", indexDesc.Name)
+			// `indexDesc` changed on us when we called `tableDesc.AllocateIDs()`.
+			if mutation.Primary {
+				indexDesc = &tableDesc.PrimaryIndex
+			} else {
+				indexDesc = &tableDesc.Indexes[len(tableDesc.Indexes)-1]
+			}
+
+			name := &parser.QualifiedName{Base: parser.Name(tableName)}
+			if err := name.NormalizeTableName(dbName); err != nil {
+				return err
+			}
+
+			b, err := p.makeBackfillBatch(name, tableDesc, *indexDesc)
+			if err != nil {
+				return err
+			}
+
+			b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
+			p.txn.SetSystemDBTrigger()
+
+			if err := p.txn.Run(&b); err != nil {
+				return convertBatchError(tableDesc, b, err)
+			}
+			log.Infof("Added index %s", indexDesc.Name)
+			return nil
+		}
+
+		if columnDesc := mutation.GetAddColumn(); columnDesc != nil {
+			log.Infof("Attempt to Add column: %s", columnDesc.Name)
+			name := &parser.QualifiedName{Base: parser.Name(tableName)}
+			if err := name.NormalizeTableName(dbName); err != nil {
+				return err
+			}
+
+			b, err := p.makeBackfillBatch(name, tableDesc)
+			if err != nil {
+				return err
+			}
+
+			b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
+			p.txn.SetSystemDBTrigger()
+
+			if err := p.txn.Run(&b); err != nil {
+				return convertBatchError(tableDesc, b, err)
+			}
+			log.Infof("Added column %s", columnDesc.Name)
+
+			return nil
+		}
+
+		if indexDesc := mutation.GetDropIndex(); indexDesc != nil {
+			log.Infof("Attempt to drop index %s", indexDesc.Name)
+
+			// delete index
+			indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, indexDesc.ID)
+
+			// Drop the index.
+			indexStartKey := roachpb.Key(indexPrefix)
+			indexEndKey := indexStartKey.PrefixEnd()
+			if log.V(2) {
+				log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))
+			}
+			b := client.Batch{}
+
+			b.DelRange(indexStartKey, indexEndKey)
+
+			descKey := MakeDescMetadataKey(tableDesc.GetID())
+			if err := tableDesc.Validate(); err != nil {
+				return err
+			}
+			b.Put(descKey, tableDesc)
+			p.txn.SetSystemDBTrigger()
+
+			if err := p.txn.Run(&b); err != nil {
+				return err
+			}
+			log.Infof("Dropped index %s", indexDesc.Name)
+			return nil
+		}
+		if columnDesc := mutation.GetDropColumn(); columnDesc != nil {
+			panic("Not Implemented")
+		}
+		panic("can't get here")
+	})
+	if err != nil {
+		if _, ok := err.(errUniquenessConstraintViolation); ok {
+			// irrecoverable error; delete all future mutations.
+			err := db.Txn(func(txn *client.Txn) error {
+				p := planner{txn: txn, user: security.RootUser}
+				// Read the table descriptor from the database
+				tableDesc := &TableDescriptor{}
+				if err := p.getDescriptor(tableKey{desc.ParentID, tableName}, tableDesc); err != nil {
+					return err
+				}
+				if len(tableDesc.Mutations) == 0 {
+					return nil
+				}
+
+				tableDesc.Mutations = nil
+				if err := txn.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc); err != nil {
+					return err
+				}
+				p.txn.SetSystemDBTrigger()
+
+				err := p.txn.Commit()
+				return err
+			})
+			return err
+		}
+	}
+	return err
 }

@@ -37,6 +37,8 @@ users bar     true   2   name   false
 statement ok
 DROP INDEX IF EXISTS users@foo
 
+sleep 1s
+
 query TTTTT colnames
 SHOW INDEX FROM users
 ----
@@ -59,6 +61,8 @@ user testuser
 
 statement ok
 DROP INDEX users@bar
+
+sleep 1s
 
 query TTTTT colnames
 SHOW INDEX FROM users

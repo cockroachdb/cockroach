@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/gogo/protobuf/proto"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
@@ -396,6 +397,61 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 		}
 	}
 	return nil, util.Errorf("index-id \"%d\" does not exist", id)
+}
+
+func (desc *TableDescriptor) applyMutation(mutation TableDescriptor_Mutation) error {
+	if indexDesc := mutation.GetAddIndex(); indexDesc != nil {
+		if err := desc.AddIndex(*indexDesc, mutation.Primary); err != nil {
+			return err
+		}
+		if err := desc.AllocateIDs(); err != nil {
+			return err
+		}
+	} else if columnDesc := mutation.GetAddColumn(); columnDesc != nil {
+		desc.AddColumn(*columnDesc)
+		if err := desc.AllocateIDs(); err != nil {
+			return err
+		}
+	} else if indexDesc := mutation.GetDropIndex(); indexDesc != nil {
+		found := false
+		for i := range desc.Indexes {
+			if desc.Indexes[i].ID == indexDesc.ID {
+				desc.Indexes = append(desc.Indexes[:i], desc.Indexes[i+1:]...)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return util.Errorf("index %s not found in %s", indexDesc, desc)
+		}
+	} else if columnDesc := mutation.GetDropColumn(); columnDesc != nil {
+		panic("Not Implemented")
+	}
+	return nil
+}
+
+// Make a copy of the table descriptor and apply all the outstanding
+// mutations along with the one passed in, to check that there are
+// no errors.
+func (desc *TableDescriptor) appendMutation(mutation TableDescriptor_Mutation) error {
+	p, err := proto.Marshal(desc)
+	if err != nil {
+		return err
+	}
+	var tableDesc TableDescriptor
+	if err := proto.Unmarshal(p, &tableDesc); err != nil {
+		return err
+	}
+	for _, m := range desc.Mutations {
+		if err := tableDesc.applyMutation(*m); err != nil {
+			return err
+		}
+	}
+	if err := tableDesc.applyMutation(mutation); err != nil {
+		return err
+	}
+	desc.Mutations = append(desc.Mutations, &mutation)
+	return nil
 }
 
 // SQLString returns the SQL string corresponding to the type.

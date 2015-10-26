@@ -63,8 +63,6 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		return nil, err
 	}
 
-	nextIndexID := tableDesc.NextIndexID
-
 	for _, cmd := range n.Cmds {
 		switch t := cmd.(type) {
 		case *parser.AlterTableAddColumn:
@@ -73,9 +71,13 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 			if err != nil {
 				return nil, err
 			}
-			tableDesc.AddColumn(*col)
+			mutation := TableDescriptor_Mutation{Descriptor_: &TableDescriptor_Mutation_AddColumn{AddColumn: col}}
+			if err := tableDesc.appendMutation(mutation); err != nil {
+				return nil, err
+			}
 			if idx != nil {
-				if err := tableDesc.AddIndex(*idx, d.PrimaryKey); err != nil {
+				mutation = TableDescriptor_Mutation{Descriptor_: &TableDescriptor_Mutation_AddIndex{AddIndex: idx}}
+				if err := tableDesc.appendMutation(mutation); err != nil {
 					return nil, err
 				}
 			}
@@ -83,13 +85,14 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		case *parser.AlterTableAddConstraint:
 			switch d := t.ConstraintDef.(type) {
 			case *parser.UniqueConstraintTableDef:
-				idx := IndexDescriptor{
+				idx := &IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
 					ColumnNames:      d.Columns,
 					StoreColumnNames: d.Storing,
 				}
-				if err := tableDesc.AddIndex(idx, d.PrimaryKey); err != nil {
+				mutation := TableDescriptor_Mutation{Descriptor_: &TableDescriptor_Mutation_AddIndex{AddIndex: idx}, Primary: d.PrimaryKey}
+				if err := tableDesc.appendMutation(mutation); err != nil {
 					return nil, err
 				}
 			default:
@@ -100,29 +103,13 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 			return nil, util.Errorf("unsupported alter cmd: %T", cmd)
 		}
 	}
-
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc); err != nil {
 		return nil, err
 	}
+	p.txn.SetSystemDBTrigger()
 
-	// These changed on us when we called `tableDesc.AllocateIDs()`.
-	var newIndexes []IndexDescriptor
-	for _, index := range append(tableDesc.Indexes, tableDesc.PrimaryIndex) {
-		if index.ID >= nextIndexID {
-			newIndexes = append(newIndexes, index)
-		}
-	}
-
-	b, err := p.makeBackfillBatch(n.Table, tableDesc, newIndexes...)
-	if err != nil {
+	if err := p.txn.Commit(); err != nil {
 		return nil, err
 	}
-
-	b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
-
-	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(tableDesc, b, err)
-	}
-
 	return &valuesNode{}, nil
 }

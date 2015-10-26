@@ -22,11 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // DropDatabase drops a database.
@@ -94,7 +91,6 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
-	b := client.Batch{}
 	for _, indexQualifiedName := range n.Names {
 		if err := indexQualifiedName.NormalizeTableName(p.session.Database); err != nil {
 			return nil, err
@@ -120,44 +116,32 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			return nil, err
 		}
 
-		indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, idx.ID)
-
-		// Delete the index.
-		indexStartKey := roachpb.Key(indexPrefix)
-		indexEndKey := indexStartKey.PrefixEnd()
-		if log.V(2) {
-			log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))
+		mutation := TableDescriptor_Mutation{
+			Descriptor_: &TableDescriptor_Mutation_DropIndex{
+				DropIndex: idx,
+			},
 		}
-		b.DelRange(indexStartKey, indexEndKey)
-
-		found := false
-		for i := range tableDesc.Indexes {
-			if &tableDesc.Indexes[i] == idx {
-				tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, util.Errorf("index %s not found in %s", idx, tableDesc)
-		}
-
-		descKey := MakeDescMetadataKey(tableDesc.GetID())
-		if err := tableDesc.Validate(); err != nil {
+		if err := tableDesc.appendMutation(mutation); err != nil {
 			return nil, err
 		}
+		descKey := MakeDescMetadataKey(tableDesc.GetID())
 		if err := p.txn.Put(descKey, tableDesc); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := p.txn.Run(&b); err != nil {
+	if err := p.txn.Commit(); err != nil {
 		return nil, err
 	}
-
 	return &valuesNode{}, nil
 }
 
+// TODO(vivek): Drop a table in a staged manner to allow safe leases
+// on the table. This will involve marking the table as deleted,
+// converting all operations to not run on deleted tables, and then
+// GC-ing the table once all leases have expired. The same should be
+// done for dropping a database.
+//
 // DropTable drops a table.
 // Privileges: DROP on table.
 //   Notes: postgres allows only the table owner to DROP a table.
