@@ -49,6 +49,12 @@ func (p *planner) Grant(n *parser.Grant) (planNode, error) {
 		return nil, err
 	}
 
+	if tableDesc, ok := descriptor.(*TableDescriptor); ok {
+		// TODO(pmattis): This is a hack. Remove when schema change operations work
+		// properly.
+		p.hackNoteSchemaChange(tableDesc)
+	}
+
 	// Now update the descriptor.
 	// TODO(marc): do this inside a transaction. This will be needed
 	// when modifying multiple descriptors in the same op.

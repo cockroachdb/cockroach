@@ -30,7 +30,7 @@ import (
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(n *parser.Delete) (planNode, error) {
-	tableDesc, err := p.getAliasedTableDesc(n.Table, false /* !allowCache */)
+	tableDesc, err := p.getAliasedTableLease(n.Table)
 	if err != nil {
 		return nil, err
 	}
