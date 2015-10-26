@@ -27,7 +27,7 @@ import (
 	"time"
 
 	// Register the net/trace endpoint with http.DefaultServeMux.
-	_ "golang.org/x/net/trace"
+	"golang.org/x/net/trace"
 	// This is imported for its side-effect of registering pprof
 	// endpoints with the http.DefaultServeMux.
 	_ "net/http/pprof"
@@ -36,6 +36,17 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+func init() {
+	// Tweak the authentication logic for the tracing endpoint.
+	// By default it's open for localhost only, but with Docker
+	// we want to get there from anywhere.
+	// TODO(mberhault): properly secure this once we require client certs.
+	trace.AuthRequest = func(_ *http.Request) (bool, bool) {
+		// Open-door policy except traces marked "sensitive".
+		return true, false
+	}
+}
 
 const (
 	// adminEndpoint is the prefix for RESTful endpoints used to
