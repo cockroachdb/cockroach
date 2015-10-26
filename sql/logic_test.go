@@ -352,6 +352,20 @@ SET DATABASE = test;
 			t.execQuery(query)
 			t.success(path)
 
+		case "sleep":
+			if len(fields) != 2 {
+				t.Fatalf("sleep command requires one argument, found: %v", fields)
+			}
+			if len(fields[1]) == 0 {
+				t.Fatal("sleep command requires a non-blank argument")
+			}
+
+			d, err := time.ParseDuration(fields[1])
+			if err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(d)
+
 		case "halt":
 			break
 
