@@ -90,6 +90,10 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		return nil, err
 	}
 
+	// TODO(pmattis): This is a hack. Remove when schema change operations work
+	// properly.
+	p.hackNoteSchemaChange(tableDesc)
+
 	b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
 
 	if err := p.txn.Run(&b); err != nil {

@@ -175,6 +175,76 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, e
 	return &desc, nil
 }
 
+// getTableLease acquires a lease for the specified table. The lease will be
+// released when the planner closes.
+func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, error) {
+	if err := qname.NormalizeTableName(p.session.Database); err != nil {
+		return nil, err
+	}
+
+	if qname.Database() == SystemDB.Name {
+		// We don't go through the normal lease mechanism for system tables. The
+		// system.lease table, in particular, is problematic because it is used for
+		// acquiring leases itself, creating a chicken&egg problem.
+		if tableDesc, ok := systemTables[qname.Table()]; ok {
+			return tableDesc, nil
+		}
+	}
+
+	tableID, err := p.getTableID(qname)
+	if err != nil {
+		return nil, err
+	}
+
+	if p.leases == nil {
+		p.leases = make(map[ID]*LeaseState)
+	}
+	if lease, ok := p.leases[tableID]; ok {
+		return &lease.TableDescriptor, nil
+	}
+
+	lease, err := p.leaseMgr.Acquire(p.txn, tableID, 0)
+	if err != nil {
+		return nil, err
+	}
+	p.leases[tableID] = lease
+	return &lease.TableDescriptor, nil
+}
+
+// getTableID retrieves the table ID for the specified table. It uses the
+// descriptor cache to perform lookups, falling back to the KV store when
+// necessary.
+func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
+	if err := qname.NormalizeTableName(p.session.Database); err != nil {
+		return 0, err
+	}
+
+	dbDesc, err := p.getCachedDatabaseDesc(qname.Database())
+	if err != nil {
+		dbDesc, err = p.getDatabaseDesc(qname.Database())
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	nameKey := tableKey{dbDesc.ID, qname.Table()}
+	if p.systemConfig != nil {
+		if nameVal := p.systemConfig.GetValue(nameKey.Key()); nameVal != nil {
+			id, err := nameVal.GetInt()
+			return ID(id), err
+		}
+	}
+
+	gr, err := p.txn.Get(nameKey.Key())
+	if err != nil {
+		return 0, err
+	}
+	if !gr.Exists() {
+		return 0, fmt.Errorf("table %q does not exist", nameKey.Name())
+	}
+	return ID(gr.ValueInt()), nil
+}
+
 func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNames, error) {
 	prefix := MakeNameMetadataKey(dbDesc.ID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)

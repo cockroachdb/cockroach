@@ -41,9 +41,10 @@ var errTransactionInProgress = errors.New("there is already a transaction in pro
 
 // An Executor executes SQL statements.
 type Executor struct {
-	db      client.DB
-	nodeID  uint32
-	reCache *parser.RegexpCache
+	db       client.DB
+	nodeID   uint32
+	reCache  *parser.RegexpCache
+	leaseMgr *LeaseManager
 
 	// System Config and mutex.
 	systemConfig   *config.SystemConfig
@@ -54,8 +55,9 @@ type Executor struct {
 // system config.
 func newExecutor(db client.DB, gossip *gossip.Gossip, clock *hlc.Clock) *Executor {
 	exec := &Executor{
-		db:      db,
-		reCache: parser.NewRegexpCache(512),
+		db:       db,
+		reCache:  parser.NewRegexpCache(512),
+		leaseMgr: NewLeaseManager(0, db, clock),
 	}
 	gossip.RegisterSystemConfigCallback(exec.updateSystemConfig)
 	return exec
@@ -63,7 +65,10 @@ func newExecutor(db client.DB, gossip *gossip.Gossip, clock *hlc.Clock) *Executo
 
 // SetNodeID sets the node ID for the SQL server.
 func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
+	// This method is called during node setup before any requests are received
+	// making it safe to perform without locking.
 	e.nodeID = uint32(nodeID)
+	e.leaseMgr.nodeID = e.nodeID
 }
 
 // updateSystemConfig is called whenever the system config gossip entry is updated.
@@ -84,14 +89,16 @@ func (e *Executor) getSystemConfig() *config.SystemConfig {
 // Execute the statement(s) in the given request and return a response.
 // On error, the returned integer is an HTTP error code.
 func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
-	planMaker := planner{
+	planMaker := &planner{
 		user: args.GetUser(),
 		evalCtx: parser.EvalContext{
 			NodeID:  e.nodeID,
 			ReCache: e.reCache,
 		},
+		leaseMgr:     e.leaseMgr,
 		systemConfig: e.getSystemConfig(),
 	}
+
 	// Pick up current session state.
 	if err := proto.Unmarshal(args.Session, &planMaker.session); err != nil {
 		return args.CreateReply(), http.StatusBadRequest, err
@@ -109,7 +116,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	reply := e.execStmts(args.Sql, parameters(args.Params), &planMaker)
+	reply := e.execStmts(args.Sql, parameters(args.Params), planMaker)
 
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
@@ -146,6 +153,12 @@ func (e *Executor) execStmts(sql string, params parameters, planMaker *planner) 
 			result = makeResultFromError(planMaker, err)
 		}
 		resp.Results = append(resp.Results, result)
+		// TODO(pmattis): Is this the correct time to be releasing leases acquired
+		// during execution of the statement?
+		//
+		// TODO(pmattis): Need to record the leases used by a transaction within
+		// the transaction state and restore it when the transaction is restored.
+		planMaker.releaseLeases(e.db)
 	}
 	return resp
 }

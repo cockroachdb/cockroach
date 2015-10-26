@@ -24,7 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
+
+type schemaInfo struct {
+	id      ID
+	version uint32
+}
 
 // planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution.
@@ -33,7 +39,13 @@ type planner struct {
 	session      Session
 	user         string
 	evalCtx      parser.EvalContext
+	leases       map[ID]*LeaseState
+	leaseMgr     *LeaseManager
 	systemConfig *config.SystemConfig
+
+	// TODO(pmattis): This is a hack to force updating to the latest version of a
+	// lease after a schema change operation such as CREATE INDEX.
+	modifiedSchemas []schemaInfo
 }
 
 func (p *planner) setTxn(txn *client.Txn, timestamp time.Time) {
@@ -174,10 +186,9 @@ func (p *planner) exec(sql string) (int, error) {
 	return count, plan.Err()
 }
 
-// getAliasedTableDesc looks up the table descriptor for an alias table expression.
-// NOTE: it looks it up in the descriptor cache, so this should only be called
-// from frequent ops (INSERT, SELECT, DELETE, UPDATE).
-func (p *planner) getAliasedTableDesc(n parser.TableExpr, allowCache bool) (*TableDescriptor, error) {
+// getAliasedTableLease looks up the table descriptor for an alias table
+// expression.
+func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, error) {
 	ate, ok := n.(*parser.AliasedTableExpr)
 	if !ok {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
@@ -186,22 +197,56 @@ func (p *planner) getAliasedTableDesc(n parser.TableExpr, allowCache bool) (*Tab
 	if !ok {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	var desc *TableDescriptor
-	var err error
-	if allowCache {
-		desc, _, err = p.getCachedTableDesc(table)
-	} else {
-		desc, err = p.getTableDesc(table)
-	}
+	leaseDesc, err := p.getTableLease(table)
 	if err != nil {
 		return nil, err
 	}
+	// Make a copy of the leased descriptor so that the caller can mutate it.
+	desc := &TableDescriptor{}
+	*desc = *leaseDesc
 	if ate.As != "" {
 		desc.Alias = string(ate.As)
 	} else {
 		desc.Alias = desc.Name
 	}
 	return desc, nil
+}
+
+func (p *planner) hackNoteSchemaChange(tableDesc *TableDescriptor) {
+	tableDesc.Version++
+	p.modifiedSchemas = append(p.modifiedSchemas, schemaInfo{tableDesc.ID, tableDesc.Version})
+}
+
+func (p *planner) releaseLeases(db client.DB) {
+	if p.leases != nil {
+		for _, lease := range p.leases {
+			if err := p.leaseMgr.Release(lease); err != nil {
+				log.Warning(err)
+			}
+		}
+		p.leases = nil
+	}
+
+	// TODO(pmattis): This is a hack. Remove when schema change operations work
+	// properly.
+	if p.modifiedSchemas != nil {
+		for _, d := range p.modifiedSchemas {
+			var lease *LeaseState
+			err := db.Txn(func(txn *client.Txn) error {
+				var err error
+				lease, err = p.leaseMgr.Acquire(txn, d.id, d.version)
+				return err
+			})
+			if err != nil {
+				log.Warning(err)
+				continue
+			}
+			if err := p.leaseMgr.Release(lease); err != nil {
+				log.Warning(err)
+			}
+		}
+		p.modifiedSchemas = nil
+	}
 }
 
 // planNode defines the interface for executing a query or portion of a query.

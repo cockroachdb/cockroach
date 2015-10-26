@@ -103,6 +103,14 @@ var (
 		keys.ZonesTableID:      privilege.ReadWriteData,
 	}
 
+	systemTables = map[string]*TableDescriptor{
+		NamespaceTable.Name:  &NamespaceTable,
+		DescriptorTable.Name: &DescriptorTable,
+		LeaseTable.Name:      &LeaseTable,
+		UsersTable.Name:      &UsersTable,
+		ZonesTable.Name:      &ZonesTable,
+	}
+
 	// NumUsedSystemIDs is only used in tests that need to know the
 	// number of system objects created at initialization.
 	// It gets automatically set to "number of created system tables"

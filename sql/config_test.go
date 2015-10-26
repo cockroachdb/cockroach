@@ -20,13 +20,59 @@ package sql_test
 import (
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
 )
+
+var configID = sql.ID(1)
+var configDescKey = sql.MakeDescMetadataKey(keys.MaxReservedDescID)
+
+// forceNewConfig forces a system config update by writing a bogus descriptor with an
+// incremented value inside. It then repeatedly fetches the gossip config until the
+// just-written descriptor is found.
+func forceNewConfig(t *testing.T, s *server.TestServer) (*config.SystemConfig, error) {
+	configID++
+	configDesc := sql.DatabaseDescriptor{
+		Name:       "sentinel",
+		ID:         configID,
+		Privileges: &sql.PrivilegeDescriptor{},
+	}
+
+	// This needs to be done in a transaction with the system trigger set.
+	if err := s.DB().Txn(func(txn *client.Txn) error {
+		txn.SetSystemDBTrigger()
+		return txn.Put(configDescKey, &configDesc)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return waitForConfigChange(t, s)
+}
+
+func waitForConfigChange(t *testing.T, s *server.TestServer) (*config.SystemConfig, error) {
+	var foundDesc sql.DatabaseDescriptor
+	var cfg *config.SystemConfig
+	return cfg, util.IsTrueWithin(func() bool {
+		if cfg = s.Gossip().GetSystemConfig(); cfg != nil {
+			if val := cfg.GetValue(configDescKey); val != nil {
+				if err := val.GetProto(&foundDesc); err != nil {
+					t.Fatal(err)
+				}
+				return foundDesc.ID == configID
+			}
+		}
+
+		return false
+	}, 10*time.Second)
+}
 
 // TestGetZoneConfig exercises config.GetZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {

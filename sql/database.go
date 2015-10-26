@@ -18,6 +18,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -50,4 +52,40 @@ func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, error) {
 		return nil, err
 	}
 	return &desc, nil
+}
+
+// getCachedDatabaseDesc looks up the database descriptor given its name in the
+// descriptor cache.
+func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error) {
+	if name == SystemDB.Name {
+		return &SystemDB, nil
+	}
+
+	nameKey := databaseKey{name}
+	var nameVal *roachpb.Value
+	if p.systemConfig != nil {
+		nameVal = p.systemConfig.GetValue(nameKey.Key())
+	}
+	if nameVal == nil {
+		return nil, fmt.Errorf("database %q does not exist in system cache", nameKey.Name())
+	}
+
+	id, err := nameVal.GetInt()
+	if err != nil {
+		return nil, err
+	}
+
+	descKey := MakeDescMetadataKey(ID(id))
+	descVal := p.systemConfig.GetValue(descKey)
+	if descVal == nil {
+		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache",
+			nameKey.Name())
+	}
+
+	desc := &DatabaseDescriptor{}
+	if err := descVal.GetProto(desc); err != nil {
+		return nil, err
+	}
+
+	return desc, desc.Validate()
 }

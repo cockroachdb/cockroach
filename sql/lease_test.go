@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
@@ -89,7 +90,13 @@ func (t *leaseTest) expectLeases(descID csql.ID, expected string) {
 }
 
 func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version uint32) (*csql.LeaseState, error) {
-	return t.node(nodeID).Acquire(descID, version)
+	var lease *csql.LeaseState
+	err := t.server.DB().Txn(func(txn *client.Txn) error {
+		var err error
+		lease, err = t.node(nodeID).Acquire(txn, descID, version)
+		return err
+	})
+	return lease, err
 }
 
 func (t *leaseTest) mustAcquire(nodeID uint32, descID csql.ID, version uint32) *csql.LeaseState {

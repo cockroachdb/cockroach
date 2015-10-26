@@ -84,48 +84,45 @@ func (s LeaseStore) jitteredLeaseDuration() time.Duration {
 }
 
 // Acquire a lease on the most recent version of a table descriptor.
-func (s LeaseStore) Acquire(tableID ID, minVersion uint32) (*LeaseState, error) {
+func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion uint32) (*LeaseState, error) {
 	lease := &LeaseState{}
 	lease.expiration = parser.DTimestamp{
 		Time: time.Unix(0, s.clock.Now().WallTime).Add(s.jitteredLeaseDuration()),
 	}
 
-	err := s.db.Txn(func(txn *client.Txn) error {
-		p := planner{txn: txn, user: security.RootUser}
+	p := planner{txn: txn, user: security.RootUser}
 
-		const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = %d`
-		sql := fmt.Sprintf(getDescriptor, tableID)
-		values, err := p.queryRow(sql)
-		if err != nil {
-			return err
-		}
-		if values == nil {
-			return util.Errorf("table ID %d not found", tableID)
-		}
-		if err := proto.Unmarshal([]byte(values[0].(parser.DBytes)), &lease.TableDescriptor); err != nil {
-			return err
-		}
+	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = %d`
+	sql := fmt.Sprintf(getDescriptor, tableID)
+	values, err := p.queryRow(sql)
+	if err != nil {
+		return nil, err
+	}
+	if values == nil {
+		return nil, util.Errorf("table ID %d not found", tableID)
+	}
+	if err := proto.Unmarshal([]byte(values[0].(parser.DBytes)), &lease.TableDescriptor); err != nil {
+		return nil, err
+	}
 
-		if err := lease.Validate(); err != nil {
-			return err
-		}
-		if lease.Version < minVersion {
-			return util.Errorf("version %d of table %d does not exist yet", minVersion, tableID)
-		}
+	if err := lease.Validate(); err != nil {
+		return nil, err
+	}
+	if lease.Version < minVersion {
+		return nil, util.Errorf("version %d of table %d does not exist yet", minVersion, tableID)
+	}
 
-		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
-			`VALUES (%d, %d, %d, '%s'::timestamp)`
-		sql = fmt.Sprintf(insertLease, lease.ID, lease.Version, s.nodeID, lease.expiration)
-		count, err := p.exec(sql)
-		if err != nil {
-			return err
-		}
-		if count != 1 {
-			return util.Errorf("%s: expected 1 result, found %d", sql, count)
-		}
-		return nil
-	})
-	return lease, err
+	const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
+		`VALUES (%d, %d, %d, '%s'::timestamp)`
+	sql = fmt.Sprintf(insertLease, lease.ID, lease.Version, s.nodeID, lease.expiration)
+	count, err := p.exec(sql)
+	if err != nil {
+		return nil, err
+	}
+	if count != 1 {
+		return nil, util.Errorf("%s: expected 1 result, found %d", sql, count)
+	}
+	return lease, nil
 }
 
 // Release a previously acquired table descriptor lease.
@@ -355,7 +352,7 @@ type tableState struct {
 	acquiring chan struct{}
 }
 
-func (t *tableState) acquire(version uint32, store LeaseStore) (*LeaseState, error) {
+func (t *tableState) acquire(txn *client.Txn, version uint32, store LeaseStore) (*LeaseState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -370,11 +367,17 @@ func (t *tableState) acquire(version uint32, store LeaseStore) (*LeaseState, err
 				// transaction will either finish before the lease expires or it will
 				// abort, which is what will happen if we returned an error here.
 				s.refcount++
+				if log.V(3) {
+					log.Infof("acquire: descID=%d version=%d refcount=%d", s.ID, s.Version, s.refcount)
+				}
 				return s, nil
 			}
 			minDesiredExpiration := store.clock.Now().GoTime().Add(minLeaseDuration)
 			if s.expiration.After(minDesiredExpiration) {
 				s.refcount++
+				if log.V(3) {
+					log.Infof("acquire: descID=%d version=%d refcount=%d", s.ID, s.Version, s.refcount)
+				}
 				return s, nil
 			}
 		} else if version != 0 {
@@ -392,7 +395,7 @@ func (t *tableState) acquire(version uint32, store LeaseStore) (*LeaseState, err
 			// There is no active lease acquisition so we'll go ahead and perform
 			// one.
 			t.acquiring = make(chan struct{})
-			s, err := t.acquireNodeLease(version, store)
+			s, err := t.acquireNodeLease(txn, version, store)
 			close(t.acquiring)
 			t.acquiring = nil
 			if err != nil {
@@ -414,12 +417,12 @@ func (t *tableState) acquireWait() {
 	<-acquiring
 }
 
-func (t *tableState) acquireNodeLease(version uint32, store LeaseStore) (*LeaseState, error) {
+func (t *tableState) acquireNodeLease(txn *client.Txn, version uint32, store LeaseStore) (*LeaseState, error) {
 	// We're called with mu locked, but need to unlock it during lease
 	// acquisition.
 	t.mu.Unlock()
 	defer t.mu.Lock()
-	return store.Acquire(t.id, version)
+	return store.Acquire(txn, t.id, version)
 }
 
 func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
@@ -430,6 +433,9 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 		return util.Errorf("table %d version %d not found", lease.ID, lease.Version)
 	}
 	s.refcount--
+	if log.V(3) {
+		log.Infof("release: descID=%d version=%d refcount=%d", s.ID, s.Version, s.refcount)
+	}
 	if s.refcount == 0 {
 		n := t.active.findNewest(0)
 		if s != n {
@@ -479,9 +485,9 @@ func NewLeaseManager(nodeID uint32, db client.DB, clock *hlc.Clock) *LeaseManage
 // non-zero the lease is grabbed for the specified version. Otherwise it is
 // grabbed for the most recent version of the descriptor that the lease manager
 // knows about.
-func (m *LeaseManager) Acquire(tableID ID, version uint32) (*LeaseState, error) {
+func (m *LeaseManager) Acquire(txn *client.Txn, tableID ID, version uint32) (*LeaseState, error) {
 	t := m.findTableState(tableID, true)
-	return t.acquire(version, m.LeaseStore)
+	return t.acquire(txn, version, m.LeaseStore)
 }
 
 // Release releases a previously acquired read lease.

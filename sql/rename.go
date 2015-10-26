@@ -210,6 +210,10 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, fmt.Errorf("index name %q already exists", n.NewName)
 	}
 
+	// TODO(pmattis): This is a hack. Remove when schema change operations work
+	// properly.
+	p.hackNoteSchemaChange(tableDesc)
+
 	idx.Name = newIdxName
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
@@ -289,6 +293,10 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		}
 	}
 	column.Name = newColName
+
+	// TODO(pmattis): This is a hack. Remove when schema change operations work
+	// properly.
+	p.hackNoteSchemaChange(tableDesc)
 
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
