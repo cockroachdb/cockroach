@@ -179,10 +179,20 @@ func TestDescriptorCache(t *testing.T) {
 		t.Fatalf("%s not found", test2NameKey)
 	}
 
+	// Marshal/UnMarshal config before writing to it below.
+	rawCfg, err := proto.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config config.SystemConfig
+	if err := proto.Unmarshal(rawCfg, &config); err != nil {
+		t.Fatal(err)
+	}
+
 	// Swap the namespace entries for the 'test1' and 'test2' tables in the system config.
 	// This means that "test.test1" will resolve to the object ID for test2, and vice-versa.
-	cfg.Values[test1Index].Value, cfg.Values[test2Index].Value =
-		cfg.Values[test2Index].Value, cfg.Values[test1Index].Value
+	config.Values[test1Index].Value, config.Values[test2Index].Value =
+		config.Values[test2Index].Value, config.Values[test1Index].Value
 	// Gossip it and wait. We increment the fake descriptor in the system config and
 	// wait for the callback to have it.
 	configID++
@@ -195,12 +205,12 @@ func TestDescriptorCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	configDescIndex, ok := cfg.GetIndex(configDescKey)
+	configDescIndex, ok := config.GetIndex(configDescKey)
 	if !ok {
 		t.Fatalf("%s not found", configDescKey)
 	}
-	cfg.Values[configDescIndex].Value.SetBytes(raw)
-	if err := s.Gossip().AddInfoProto(gossip.KeySystemConfig, cfg, 0); err != nil {
+	config.Values[configDescIndex].Value.SetBytes(raw)
+	if err := s.Gossip().AddInfoProto(gossip.KeySystemConfig, &config, 0); err != nil {
 		t.Fatal(err)
 	}
 
