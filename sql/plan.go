@@ -188,7 +188,7 @@ func (p *planner) getAliasedTableDesc(n parser.TableExpr, allowCache bool) (*Tab
 	}
 	var desc *TableDescriptor
 	var err error
-	if allowCache {
+	if allowCache && p.systemConfig != nil {
 		desc, _, err = p.getCachedTableDesc(table)
 	} else {
 		desc, err = p.getTableDesc(table)
