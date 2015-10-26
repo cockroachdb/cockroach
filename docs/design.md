@@ -503,10 +503,10 @@ causally related transactions to suffer temporal reverse. In other
 words, the following scenario is possible for a client without global
 ordering:
 
--   Start transaction T<sub>1</sub> to modify value `x` with commit time *s<sub>1</sub>*
+-   Start transaction T<sub>1</sub> to modify value `x` with commit time s<sub>1</sub>
 
 -   On commit of T<sub>1</sub>, start T<sub>2</sub> to modify value `y` with commit time
-    \> s<sub>2</sub>
+    s<sub>2</sub>
 
 -   Read `x` and `y` and discover that s<sub>1</sub> \> s<sub>2</sub> (**!**)
 
